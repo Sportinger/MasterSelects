@@ -2,11 +2,13 @@
 
 import { useEngine } from '../hooks/useEngine';
 import { useMixerStore } from '../stores/mixerStore';
+import { useDockStore } from '../stores/dockStore';
 import { useMIDI } from '../hooks/useMIDI';
 
 export function Toolbar() {
   const { isEngineReady, createOutputWindow } = useEngine();
   const { isPlaying, setPlaying, outputResolution, setResolution } = useMixerStore();
+  const { resetLayout } = useDockStore();
   const { isSupported: midiSupported, isEnabled: midiEnabled, enableMIDI, disableMIDI, devices } = useMIDI();
 
   const handleNewOutput = () => {
@@ -52,6 +54,12 @@ export function Toolbar() {
       <div className="toolbar-section">
         <button className="btn" onClick={handleNewOutput} disabled={!isEngineReady}>
           + Output Window
+        </button>
+      </div>
+
+      <div className="toolbar-section">
+        <button className="btn" onClick={resetLayout} title="Reset panel layout to default">
+          Reset Layout
         </button>
       </div>
 

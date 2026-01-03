@@ -22,50 +22,46 @@ import {
 } from '../utils/dockLayout';
 
 // Default layout configuration
+// Large Preview on top-left, Effects/Slots tabbed on right, Timeline at bottom
 const DEFAULT_LAYOUT: DockLayout = {
   root: {
     kind: 'split',
     id: 'root-split',
-    direction: 'horizontal',
-    ratio: 0.65,
+    direction: 'vertical',
+    ratio: 0.7,
     children: [
       {
         kind: 'split',
-        id: 'left-split',
-        direction: 'vertical',
-        ratio: 0.5,
+        id: 'top-split',
+        direction: 'horizontal',
+        ratio: 0.8,
         children: [
           {
             kind: 'tab-group',
-            id: 'slots-group',
-            panels: [{ id: 'slots', type: 'slots', title: 'Slots' }],
+            id: 'preview-group',
+            panels: [{ id: 'preview', type: 'preview', title: 'Preview' }],
             activeIndex: 0,
           },
           {
             kind: 'tab-group',
-            id: 'timeline-group',
-            panels: [{ id: 'timeline', type: 'timeline', title: 'Timeline' }],
+            id: 'right-group',
+            panels: [
+              { id: 'effects', type: 'effects', title: 'Effects' },
+              { id: 'slots', type: 'slots', title: 'Slots' },
+            ],
             activeIndex: 0,
           },
         ],
       },
       {
         kind: 'tab-group',
-        id: 'right-group',
-        panels: [{ id: 'effects', type: 'effects', title: 'Effects' }],
+        id: 'timeline-group',
+        panels: [{ id: 'timeline', type: 'timeline', title: 'Timeline' }],
         activeIndex: 0,
       },
     ],
   },
-  floatingPanels: [
-    {
-      id: 'floating-preview',
-      panel: { id: 'preview', type: 'preview', title: 'Preview' },
-      position: { x: 20, y: 70 },
-      size: { width: 400, height: 250 },
-      zIndex: 1000,
-    },
-  ],
+  floatingPanels: [],
 };
 
 const DEFAULT_DRAG_STATE: DockDragState = {

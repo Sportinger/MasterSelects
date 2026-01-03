@@ -1,5 +1,12 @@
 # CLAUDE.md
 
+## Workflow
+
+**Always commit and push after completing changes:**
+```bash
+git add . && git commit -m "description" && git push
+```
+
 ## Quick Start
 
 ```bash

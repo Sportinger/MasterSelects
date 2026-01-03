@@ -1,0 +1,306 @@
+/* Dock system styles */
+
+/* Container */
+.dock-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.dock-container.dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.dock-root {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Split pane */
+.dock-split {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dock-split.horizontal {
+  flex-direction: row;
+}
+
+.dock-split.vertical {
+  flex-direction: column;
+}
+
+.dock-split.resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.dock-split.vertical.resizing {
+  cursor: row-resize;
+}
+
+.dock-split-child {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Resize handle */
+.dock-resize-handle {
+  flex-shrink: 0;
+  background: var(--border-color);
+  transition: background 0.15s;
+}
+
+.dock-resize-handle.horizontal {
+  width: 4px;
+  cursor: col-resize;
+}
+
+.dock-resize-handle.vertical {
+  height: 4px;
+  cursor: row-resize;
+}
+
+.dock-resize-handle:hover,
+.dock-split.resizing .dock-resize-handle {
+  background: var(--accent);
+}
+
+/* Tab pane */
+.dock-tab-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-secondary);
+  position: relative;
+}
+
+.dock-tab-pane.drop-target {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Tab bar */
+.dock-tab-bar {
+  display: flex;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  min-height: 32px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.dock-tab-bar::-webkit-scrollbar {
+  height: 2px;
+}
+
+.dock-tab {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: grab;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+}
+
+.dock-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.dock-tab.active {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-bottom: 2px solid var(--accent);
+  margin-bottom: -1px;
+}
+
+.dock-tab.dragging {
+  opacity: 0.5;
+}
+
+.dock-tab-title {
+  font-weight: 500;
+}
+
+/* Panel content */
+.dock-panel-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Make child panels fill the space */
+.dock-panel-content > * {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Drop zone overlay */
+.dock-drop-overlay {
+  position: absolute;
+  background: rgba(0, 212, 255, 0.15);
+  border: 2px dashed var(--accent);
+  pointer-events: none;
+  z-index: 100;
+}
+
+.dock-drop-overlay.left {
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+}
+
+.dock-drop-overlay.right {
+  top: 0;
+  right: 0;
+  width: 50%;
+  height: 100%;
+}
+
+.dock-drop-overlay.top {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 50%;
+}
+
+.dock-drop-overlay.bottom {
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 50%;
+}
+
+.dock-drop-overlay.center {
+  top: 10%;
+  left: 10%;
+  right: 10%;
+  bottom: 10%;
+  width: auto;
+  height: auto;
+}
+
+/* Drag preview */
+.dock-drag-preview {
+  position: fixed;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-primary);
+  pointer-events: none;
+  z-index: 10000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Floating panel */
+.floating-panel {
+  position: fixed;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 200px;
+  min-height: 100px;
+}
+
+.floating-panel.dragging {
+  opacity: 0.9;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+}
+
+.floating-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  cursor: grab;
+  user-select: none;
+}
+
+.floating-panel-header:active {
+  cursor: grabbing;
+}
+
+.floating-panel-drag-handle {
+  color: var(--text-secondary);
+  font-size: 10px;
+  letter-spacing: -2px;
+}
+
+.floating-panel-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.floating-panel-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.floating-panel-content > * {
+  flex: 1;
+  min-height: 0;
+}
+
+.floating-panel-resize {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: se-resize;
+  background: linear-gradient(135deg, transparent 50%, var(--border-color) 50%);
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.floating-panel-resize:hover {
+  opacity: 1;
+}
+
+/* Panel placeholder */
+.panel-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
