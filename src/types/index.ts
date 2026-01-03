@@ -1,0 +1,127 @@
+// Core types for WebVJ Mixer
+
+export interface Layer {
+  id: string;
+  name: string;
+  visible: boolean;
+  opacity: number;
+  blendMode: BlendMode;
+  source: LayerSource | null;
+  effects: Effect[];
+  position: { x: number; y: number };
+  scale: { x: number; y: number };
+  rotation: number;
+}
+
+export type BlendMode =
+  | 'normal'
+  | 'add'
+  | 'multiply'
+  | 'screen'
+  | 'overlay'
+  | 'difference';
+
+export interface LayerSource {
+  type: 'video' | 'image' | 'camera' | 'color';
+  file?: File;
+  videoElement?: HTMLVideoElement;
+  imageElement?: HTMLImageElement;
+  color?: string;
+  texture?: GPUTexture;
+  // WebCodecs support for hardware-accelerated video decode
+  webCodecsPlayer?: import('../engine/WebCodecsPlayer').WebCodecsPlayer;
+  videoFrame?: VideoFrame;
+}
+
+export interface Effect {
+  id: string;
+  name: string;
+  type: EffectType;
+  enabled: boolean;
+  params: Record<string, number | boolean | string>;
+}
+
+export type EffectType =
+  | 'hue-shift'
+  | 'saturation'
+  | 'brightness'
+  | 'contrast'
+  | 'blur'
+  | 'pixelate'
+  | 'kaleidoscope'
+  | 'mirror'
+  | 'invert'
+  | 'rgb-split';
+
+export interface OutputWindow {
+  id: string;
+  name: string;
+  window: Window | null;
+  canvas: HTMLCanvasElement | null;
+  context: GPUCanvasContext | null;
+  isFullscreen: boolean;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  layers: Layer[];
+  outputResolution: { width: number; height: number };
+  fps: number;
+}
+
+export interface MIDIMapping {
+  channel: number;
+  control: number;
+  target: string;
+  min: number;
+  max: number;
+}
+
+export interface EngineStats {
+  fps: number;
+  frameTime: number;
+  gpuMemory: number;
+}
+
+// Timeline types
+export interface TimelineClip {
+  id: string;
+  trackId: string;
+  name: string;
+  file: File;
+  startTime: number;      // Start position on timeline (seconds)
+  duration: number;       // Clip duration (seconds)
+  inPoint: number;        // Trim in point within source (seconds)
+  outPoint: number;       // Trim out point within source (seconds)
+  source: {
+    type: 'video' | 'audio' | 'image';
+    videoElement?: HTMLVideoElement;
+    audioElement?: HTMLAudioElement;
+    imageElement?: HTMLImageElement;
+    naturalDuration?: number;
+  } | null;
+  thumbnails?: string[];  // Array of data URLs for filmstrip preview
+  linkedClipId?: string;  // ID of linked clip (e.g., audio linked to video)
+  waveform?: number[];    // Array of normalized amplitude values (0-1) for audio waveform
+}
+
+export interface TimelineTrack {
+  id: string;
+  name: string;
+  type: 'video' | 'audio';
+  height: number;
+  muted: boolean;
+  visible: boolean;
+}
+
+export interface TimelineState {
+  tracks: TimelineTrack[];
+  clips: TimelineClip[];
+  playheadPosition: number;  // Current time in seconds
+  duration: number;          // Total timeline duration
+  zoom: number;              // Pixels per second
+  scrollX: number;           // Horizontal scroll position
+  isPlaying: boolean;
+  selectedClipId: string | null;
+}

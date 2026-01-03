@@ -1,0 +1,1043 @@
+// WebGPU Rendering Engine for WebVJ Mixer - Optimized
+
+import type { Layer, BlendMode, OutputWindow, EngineStats } from '../types';
+import compositeShader from '../shaders/composite.wgsl?raw';
+import outputShader from '../shaders/output.wgsl?raw';
+
+const BLEND_MODE_MAP: Record<BlendMode, number> = {
+  normal: 0,
+  add: 1,
+  multiply: 2,
+  screen: 3,
+  overlay: 4,
+  difference: 5,
+};
+
+// Composite shader for external video textures (true zero-copy)
+const externalCompositeShader = `
+struct VertexOutput {
+  @builtin(position) position: vec4f,
+  @location(0) uv: vec2f,
+};
+
+struct LayerUniforms {
+  opacity: f32,
+  blendMode: u32,
+  posX: f32,
+  posY: f32,
+  scaleX: f32,
+  scaleY: f32,
+  rotation: f32,
+  sourceAspect: f32,  // source width / height
+  outputAspect: f32,  // output width / height (16:9 = 1.777)
+  _padding1: f32,
+  _padding2: f32,
+  _padding3: f32,
+};
+
+@vertex
+fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+  var positions = array<vec2f, 6>(
+    vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(-1.0, 1.0),
+    vec2f(-1.0, 1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0)
+  );
+  var uvs = array<vec2f, 6>(
+    vec2f(0.0, 1.0), vec2f(1.0, 1.0), vec2f(0.0, 0.0),
+    vec2f(0.0, 0.0), vec2f(1.0, 1.0), vec2f(1.0, 0.0)
+  );
+  var output: VertexOutput;
+  output.position = vec4f(positions[vertexIndex], 0.0, 1.0);
+  output.uv = uvs[vertexIndex];
+  return output;
+}
+
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var baseTexture: texture_2d<f32>;
+@group(0) @binding(2) var videoTexture: texture_external;
+@group(0) @binding(3) var<uniform> layer: LayerUniforms;
+
+fn blendNormal(base: vec3f, blend: vec3f) -> vec3f { return blend; }
+fn blendAdd(base: vec3f, blend: vec3f) -> vec3f { return min(base + blend, vec3f(1.0)); }
+fn blendMultiply(base: vec3f, blend: vec3f) -> vec3f { return base * blend; }
+fn blendScreen(base: vec3f, blend: vec3f) -> vec3f { return 1.0 - (1.0 - base) * (1.0 - blend); }
+fn blendDifference(base: vec3f, blend: vec3f) -> vec3f { return abs(base - blend); }
+
+@fragment
+fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
+  var uv = input.uv;
+  uv = uv - vec2f(0.5);
+
+  // Apply rotation
+  let cosR = cos(layer.rotation);
+  let sinR = sin(layer.rotation);
+  uv = vec2f(uv.x * cosR - uv.y * sinR, uv.x * sinR + uv.y * cosR);
+
+  // Apply user scale
+  uv = uv / vec2f(layer.scaleX, layer.scaleY);
+
+  // Aspect ratio correction: fit source into output while maintaining aspect ratio
+  let aspectRatio = layer.sourceAspect / layer.outputAspect;
+  if (aspectRatio > 1.0) {
+    // Source is wider than output - fit to width, letterbox top/bottom
+    uv.y = uv.y * aspectRatio;
+  } else {
+    // Source is taller than output - fit to height, letterbox left/right
+    uv.x = uv.x / aspectRatio;
+  }
+
+  uv = uv + vec2f(0.5) - vec2f(layer.posX, layer.posY);
+
+  let clampedUV = clamp(uv, vec2f(0.0), vec2f(1.0));
+  let baseColor = textureSample(baseTexture, texSampler, input.uv);
+  let layerColor = textureSampleBaseClampToEdge(videoTexture, texSampler, clampedUV);
+
+  let outOfBounds = uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0;
+  let maskAlpha = select(layerColor.a, 0.0, outOfBounds);
+
+  var blended: vec3f;
+  switch (layer.blendMode) {
+    case 0u: { blended = blendNormal(baseColor.rgb, layerColor.rgb); }
+    case 1u: { blended = blendAdd(baseColor.rgb, layerColor.rgb); }
+    case 2u: { blended = blendMultiply(baseColor.rgb, layerColor.rgb); }
+    case 3u: { blended = blendScreen(baseColor.rgb, layerColor.rgb); }
+    case 5u: { blended = blendDifference(baseColor.rgb, layerColor.rgb); }
+    default: { blended = layerColor.rgb; }
+  }
+
+  let alpha = maskAlpha * layer.opacity;
+  let result = mix(baseColor.rgb, blended, alpha);
+  return vec4f(result, max(baseColor.a, alpha));
+}
+`;
+
+export class WebGPUEngine {
+  private device: GPUDevice | null = null;
+  private adapter: GPUAdapter | null = null;
+
+  // Main preview canvas
+  private previewContext: GPUCanvasContext | null = null;
+
+  // Render targets - ping pong buffers
+  private pingTexture: GPUTexture | null = null;
+  private pongTexture: GPUTexture | null = null;
+  private blackTexture: GPUTexture | null = null;
+
+  // Cached texture views
+  private pingView: GPUTextureView | null = null;
+  private pongView: GPUTextureView | null = null;
+
+  // Pipelines
+  private compositePipeline: GPURenderPipeline | null = null;
+  private externalCompositePipeline: GPURenderPipeline | null = null;
+  private outputPipeline: GPURenderPipeline | null = null;
+
+  // Resources
+  private sampler: GPUSampler | null = null;
+  private layerUniformBuffer: GPUBuffer | null = null;
+
+  // Pre-allocated uniform data (12 floats = 48 bytes)
+  private uniformData = new Float32Array(12);
+
+  // Output windows
+  private outputWindows: Map<string, OutputWindow> = new Map();
+
+  // Stats
+  private frameCount = 0;
+  private fps = 0;
+  private fpsUpdateTime = 0;
+
+  // Video frame textures (rendered from external textures)
+  private videoFrameTextures: Map<string, GPUTexture> = new Map();
+  private videoFrameViews: Map<string, GPUTextureView> = new Map();
+
+  // Animation
+  private animationId: number | null = null;
+  private isRunning = false;
+  private isInitialized = false;
+  private initPromise: Promise<boolean> | null = null;
+
+  // Performance profiling
+  private profileData = {
+    importTexture: 0,
+    createBindGroup: 0,
+    renderPass: 0,
+    submit: 0,
+    total: 0,
+  };
+  private profileCounter = 0;
+  private lastProfileTime = 0;
+  private lastRenderCall = 0;
+
+  // Resolution
+  private outputWidth = 1920;
+  private outputHeight = 1080;
+
+  // Bind group layout cache
+  private compositeBindGroupLayout: GPUBindGroupLayout | null = null;
+  private externalCompositeBindGroupLayout: GPUBindGroupLayout | null = null;
+  private outputBindGroupLayout: GPUBindGroupLayout | null = null;
+
+  // Cached bind groups to avoid per-frame creation
+  private cachedCompositeBindGroups: Map<string, GPUBindGroup> = new Map();
+  private cachedOutputBindGroupPing: GPUBindGroup | null = null;
+  private cachedOutputBindGroupPong: GPUBindGroup | null = null;
+
+  // Per-layer uniform buffers (fixes the shared buffer bug!)
+  private layerUniformBuffers: Map<string, GPUBuffer> = new Map();
+
+  // Cached image texture views
+  private cachedImageViews: Map<GPUTexture, GPUTextureView> = new Map();
+
+  // Cached image textures (created from HTMLImageElement)
+  private imageTextures: Map<HTMLImageElement, GPUTexture> = new Map();
+
+  // Ring buffer for frame times (avoids O(n) shift)
+  private frameTimeBuffer = new Float32Array(60);
+  private frameTimeIndex = 0;
+  private frameTimeCount = 0;
+
+  async initialize(): Promise<boolean> {
+    // Prevent multiple initializations with promise-based lock
+    if (this.isInitialized && this.device) {
+      console.log('[WebGPU] Already initialized, skipping');
+      return true;
+    }
+
+    // If initialization is in progress, wait for it
+    if (this.initPromise) {
+      console.log('[WebGPU] Initialization in progress, waiting...');
+      return this.initPromise;
+    }
+
+    if (!navigator.gpu) {
+      console.error('WebGPU not supported');
+      return false;
+    }
+
+    // Create the initialization promise
+    this.initPromise = this.doInitialize();
+    return this.initPromise;
+  }
+
+  private async doInitialize(): Promise<boolean> {
+    try {
+      this.adapter = await navigator.gpu.requestAdapter({
+        powerPreference: 'high-performance',
+      });
+
+      if (!this.adapter) {
+        console.error('Failed to get GPU adapter');
+        return false;
+      }
+
+      this.device = await this.adapter.requestDevice({
+        requiredFeatures: [],
+        requiredLimits: {
+          maxTextureDimension2D: 4096,
+        },
+      });
+
+      this.device.lost.then((info) => {
+        console.error('WebGPU device lost:', info.message);
+        this.isInitialized = false;
+      });
+
+      await this.createResources();
+      this.isInitialized = true;
+      console.log('[WebGPU] Engine initialized successfully');
+      return true;
+    } catch (error) {
+      console.error('Failed to initialize WebGPU:', error);
+      this.initPromise = null;
+      return false;
+    }
+  }
+
+  private async createResources(): Promise<void> {
+    if (!this.device) return;
+
+    // Create sampler
+    this.sampler = this.device.createSampler({
+      magFilter: 'linear',
+      minFilter: 'linear',
+      addressModeU: 'clamp-to-edge',
+      addressModeV: 'clamp-to-edge',
+    });
+
+    // Create layer uniform buffer (48 bytes for 12 floats)
+    this.layerUniformBuffer = this.device.createBuffer({
+      size: 48,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    // Create black texture
+    this.blackTexture = this.device.createTexture({
+      size: [1, 1],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+
+    this.device.queue.writeTexture(
+      { texture: this.blackTexture },
+      new Uint8Array([0, 0, 0, 255]),
+      { bytesPerRow: 4 },
+      [1, 1]
+    );
+
+    this.createPingPongTextures();
+    await this.createPipelines();
+  }
+
+  private createPingPongTextures(): void {
+    if (!this.device) return;
+
+    this.pingTexture?.destroy();
+    this.pongTexture?.destroy();
+
+    this.pingTexture = this.device.createTexture({
+      size: [this.outputWidth, this.outputHeight],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+
+    this.pongTexture = this.device.createTexture({
+      size: [this.outputWidth, this.outputHeight],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+
+    // Cache views
+    this.pingView = this.pingTexture.createView();
+    this.pongView = this.pongTexture.createView();
+
+    // Invalidate bind group caches (they reference old textures)
+    this.cachedCompositeBindGroups.clear();
+    this.cachedOutputBindGroupPing = null;
+    this.cachedOutputBindGroupPong = null;
+  }
+
+  private async createPipelines(): Promise<void> {
+    if (!this.device) return;
+
+    // Composite bind group layout
+    this.compositeBindGroupLayout = this.device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+        { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+        { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+      ],
+    });
+
+    // Composite pipeline
+    const compositeModule = this.device.createShaderModule({ code: compositeShader });
+
+    this.compositePipeline = this.device.createRenderPipeline({
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [this.compositeBindGroupLayout],
+      }),
+      vertex: { module: compositeModule, entryPoint: 'vertexMain' },
+      fragment: {
+        module: compositeModule,
+        entryPoint: 'fragmentMain',
+        targets: [{ format: 'rgba8unorm' }],
+      },
+      primitive: { topology: 'triangle-list' },
+    });
+
+    // Output bind group layout
+    this.outputBindGroupLayout = this.device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+      ],
+    });
+
+    // Output pipeline
+    const outputModule = this.device.createShaderModule({ code: outputShader });
+
+    this.outputPipeline = this.device.createRenderPipeline({
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [this.outputBindGroupLayout],
+      }),
+      vertex: { module: outputModule, entryPoint: 'vertexMain' },
+      fragment: {
+        module: outputModule,
+        entryPoint: 'fragmentMain',
+        targets: [{ format: 'bgra8unorm' }],
+      },
+      primitive: { topology: 'triangle-list' },
+    });
+
+    // External composite pipeline (for direct video texture compositing - zero copy!)
+    this.externalCompositeBindGroupLayout = this.device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+        { binding: 2, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} },
+        { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+      ],
+    });
+
+    const externalCompositeModule = this.device.createShaderModule({ code: externalCompositeShader });
+
+    this.externalCompositePipeline = this.device.createRenderPipeline({
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [this.externalCompositeBindGroupLayout],
+      }),
+      vertex: { module: externalCompositeModule, entryPoint: 'vertexMain' },
+      fragment: {
+        module: externalCompositeModule,
+        entryPoint: 'fragmentMain',
+        targets: [{ format: 'rgba8unorm' }],
+      },
+      primitive: { topology: 'triangle-list' },
+    });
+  }
+
+  setPreviewCanvas(canvas: HTMLCanvasElement): void {
+    if (!this.device) return;
+
+    this.previewContext = canvas.getContext('webgpu');
+
+    if (this.previewContext) {
+      this.previewContext.configure({
+        device: this.device,
+        format: 'bgra8unorm',
+        alphaMode: 'premultiplied',
+      });
+    }
+  }
+
+  createOutputWindow(id: string, name: string): OutputWindow | null {
+    const outputWindow = window.open(
+      '',
+      `output_${id}`,
+      'width=960,height=540,menubar=no,toolbar=no,location=no,status=no'
+    );
+
+    if (!outputWindow) {
+      console.error('Failed to open output window (popup blocked?)');
+      return null;
+    }
+
+    outputWindow.document.title = `WebVJ Output - ${name}`;
+    outputWindow.document.body.style.cssText =
+      'margin:0;padding:0;background:#000;overflow:hidden;width:100vw;height:100vh;';
+
+    const canvas = outputWindow.document.createElement('canvas');
+    canvas.width = this.outputWidth;
+    canvas.height = this.outputHeight;
+    canvas.style.cssText = 'display:block;background:#000;';
+    outputWindow.document.body.appendChild(canvas);
+
+    // Aspect ratio locking
+    const aspectRatio = this.outputWidth / this.outputHeight;
+    let lastWidth = outputWindow.innerWidth;
+    let lastHeight = outputWindow.innerHeight;
+    let resizing = false;
+
+    const enforceAspectRatio = () => {
+      if (resizing) return;
+      resizing = true;
+
+      const currentWidth = outputWindow.innerWidth;
+      const currentHeight = outputWindow.innerHeight;
+
+      // Determine which dimension changed more
+      const widthDelta = Math.abs(currentWidth - lastWidth);
+      const heightDelta = Math.abs(currentHeight - lastHeight);
+
+      let newWidth: number;
+      let newHeight: number;
+
+      if (widthDelta >= heightDelta) {
+        // Width changed - adjust height to match
+        newWidth = currentWidth;
+        newHeight = Math.round(currentWidth / aspectRatio);
+      } else {
+        // Height changed - adjust width to match
+        newHeight = currentHeight;
+        newWidth = Math.round(currentHeight * aspectRatio);
+      }
+
+      // Resize window to enforce aspect ratio
+      if (newWidth !== currentWidth || newHeight !== currentHeight) {
+        outputWindow.resizeTo(newWidth + (outputWindow.outerWidth - currentWidth),
+                              newHeight + (outputWindow.outerHeight - currentHeight));
+      }
+
+      // Update canvas to fill window
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+
+      lastWidth = newWidth;
+      lastHeight = newHeight;
+
+      setTimeout(() => { resizing = false; }, 50);
+    };
+
+    // Initial setup
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+
+    // Enforce on resize
+    outputWindow.addEventListener('resize', enforceAspectRatio);
+
+    let context: GPUCanvasContext | null = null;
+
+    if (this.device) {
+      context = canvas.getContext('webgpu');
+      if (context) {
+        context.configure({
+          device: this.device,
+          format: 'bgra8unorm',
+          alphaMode: 'premultiplied',
+        });
+      }
+    }
+
+    const fullscreenBtn = outputWindow.document.createElement('button');
+    fullscreenBtn.textContent = 'Fullscreen';
+    fullscreenBtn.style.cssText =
+      'position:fixed;top:10px;right:10px;padding:8px 16px;cursor:pointer;z-index:1000;opacity:0.7;';
+    fullscreenBtn.onclick = () => {
+      canvas.requestFullscreen();
+    };
+    outputWindow.document.body.appendChild(fullscreenBtn);
+
+    // Hide button in fullscreen
+    outputWindow.document.addEventListener('fullscreenchange', () => {
+      fullscreenBtn.style.display = outputWindow.document.fullscreenElement ? 'none' : 'block';
+    });
+
+    outputWindow.onbeforeunload = () => {
+      this.outputWindows.delete(id);
+    };
+
+    const output: OutputWindow = {
+      id,
+      name,
+      window: outputWindow,
+      canvas,
+      context,
+      isFullscreen: false,
+    };
+
+    this.outputWindows.set(id, output);
+    return output;
+  }
+
+  closeOutputWindow(id: string): void {
+    const output = this.outputWindows.get(id);
+    if (output?.window) {
+      output.window.close();
+    }
+    this.outputWindows.delete(id);
+  }
+
+  // Create GPU texture from HTMLImageElement
+  createImageTexture(image: HTMLImageElement): GPUTexture | null {
+    if (!this.device || image.width === 0 || image.height === 0) return null;
+
+    // Check cache first
+    const cached = this.imageTextures.get(image);
+    if (cached) return cached;
+
+    try {
+      const texture = this.device.createTexture({
+        size: [image.width, image.height],
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+
+      this.device.queue.copyExternalImageToTexture(
+        { source: image },
+        { texture },
+        [image.width, image.height]
+      );
+
+      this.imageTextures.set(image, texture);
+      return texture;
+    } catch (e) {
+      console.error('Failed to create image texture:', e);
+      return null;
+    }
+  }
+
+  // Import external texture - true zero-copy from video decoder
+  // Supports both HTMLVideoElement and VideoFrame (from WebCodecs)
+  importVideoTexture(source: HTMLVideoElement | VideoFrame): GPUExternalTexture | null {
+    if (!this.device) return null;
+
+    // Check if source is valid
+    if (source instanceof HTMLVideoElement) {
+      if (source.readyState < 2 || source.videoWidth === 0 || source.videoHeight === 0) {
+        return null;
+      }
+    } else if (source instanceof VideoFrame) {
+      if (source.codedWidth === 0 || source.codedHeight === 0) {
+        return null;
+      }
+    } else {
+      return null;
+    }
+
+    try {
+      return this.device.importExternalTexture({ source });
+    } catch {
+      // Silently fail - video may not be ready yet
+      return null;
+    }
+  }
+
+  // Reusable layer data array to avoid allocations
+  private layerRenderData: Array<{
+    layer: Layer;
+    isVideo: boolean;
+    externalTexture: GPUExternalTexture | null;
+    textureView: GPUTextureView | null;
+    sourceWidth: number;
+    sourceHeight: number;
+  }> = [];
+
+  render(layers: Layer[]): void {
+    if (!this.device || !this.externalCompositePipeline || !this.outputPipeline) return;
+    if (!this.pingView || !this.pongView) return;
+
+    const t0 = performance.now();
+    const timeSinceLastRender = this.lastRenderCall > 0 ? t0 - this.lastRenderCall : 0;
+    this.lastRenderCall = t0;
+
+    // Reuse array, just clear it
+    this.layerRenderData.length = 0;
+
+    // Prepare layer data - import textures (reverse order: lower slots render on top)
+    const t1 = performance.now();
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const layer = layers[i];
+      if (!layer || !layer.visible || !layer.source) continue;
+
+      // Try WebCodecs VideoFrame first (if available)
+      if (layer.source.webCodecsPlayer) {
+        const frame = layer.source.webCodecsPlayer.getCurrentFrame();
+        if (frame) {
+          const extTex = this.importVideoTexture(frame);
+          if (extTex) {
+            this.layerRenderData.push({
+              layer,
+              isVideo: true,
+              externalTexture: extTex,
+              textureView: null,
+              sourceWidth: frame.displayWidth,
+              sourceHeight: frame.displayHeight,
+            });
+            continue;
+          }
+        }
+      }
+
+      // HTMLVideoElement (fallback or primary on Linux)
+      if (layer.source.videoElement) {
+        const video = layer.source.videoElement;
+        if (video.readyState >= 2) {
+          const extTex = this.importVideoTexture(video);
+          if (extTex) {
+            this.layerRenderData.push({
+              layer,
+              isVideo: true,
+              externalTexture: extTex,
+              textureView: null,
+              sourceWidth: video.videoWidth,
+              sourceHeight: video.videoHeight,
+            });
+            continue;
+          }
+        }
+      }
+
+      // Images
+      if (layer.source.imageElement) {
+        const img = layer.source.imageElement;
+        let texture = this.imageTextures.get(img);
+        if (!texture) {
+          texture = this.createImageTexture(img) ?? undefined;
+        }
+        if (texture) {
+          let imageView = this.cachedImageViews.get(texture);
+          if (!imageView) {
+            imageView = texture.createView();
+            this.cachedImageViews.set(texture, imageView);
+          }
+          this.layerRenderData.push({
+            layer,
+            isVideo: false,
+            externalTexture: null,
+            textureView: imageView,
+            sourceWidth: img.naturalWidth,
+            sourceHeight: img.naturalHeight,
+          });
+        }
+      }
+    }
+    this.profileData.importTexture = performance.now() - t1;
+
+    // Early exit if nothing to render - save CPU!
+    if (this.layerRenderData.length === 0) {
+      // Just clear the preview to black
+      if (this.previewContext) {
+        const commandEncoder = this.device.createCommandEncoder();
+        const pass = commandEncoder.beginRenderPass({
+          colorAttachments: [{
+            view: this.previewContext.getCurrentTexture().createView(),
+            clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            loadOp: 'clear',
+            storeOp: 'store',
+          }],
+        });
+        pass.end();
+        this.device.queue.submit([commandEncoder.finish()]);
+      }
+      this.lastLayerCount = 0;
+      return;
+    }
+
+    const t2 = performance.now();
+    const commandEncoder = this.device.createCommandEncoder();
+
+    // Ping-pong compositing
+    let readView = this.pingView;
+    let writeView = this.pongView;
+    let usePing = true;
+
+    // Clear first buffer
+    const clearPass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: readView,
+        clearValue: { r: 0, g: 0, b: 0, a: 1 },
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+    clearPass.end();
+
+    // Composite each visible layer
+    for (let i = 0; i < this.layerRenderData.length; i++) {
+      const data = this.layerRenderData[i];
+      const layer = data.layer;
+
+      // Get or create per-layer uniform buffer
+      let uniformBuffer = this.layerUniformBuffers.get(layer.id);
+      if (!uniformBuffer) {
+        uniformBuffer = this.device.createBuffer({
+          size: 48,
+          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+        this.layerUniformBuffers.set(layer.id, uniformBuffer);
+      }
+
+      // Calculate aspect ratios
+      const sourceAspect = data.sourceWidth / data.sourceHeight;
+      const outputAspect = this.outputWidth / this.outputHeight;
+
+      // Update uniforms
+      this.uniformData[0] = layer.opacity;
+      this.uniformData[1] = BLEND_MODE_MAP[layer.blendMode];
+      this.uniformData[2] = layer.position.x;
+      this.uniformData[3] = layer.position.y;
+      this.uniformData[4] = layer.scale.x;
+      this.uniformData[5] = layer.scale.y;
+      this.uniformData[6] = layer.rotation;
+      this.uniformData[7] = sourceAspect;
+      this.uniformData[8] = outputAspect;
+      this.uniformData[9] = 0;  // padding
+      this.uniformData[10] = 0; // padding
+      this.uniformData[11] = 0; // padding
+      this.device.queue.writeBuffer(uniformBuffer, 0, this.uniformData);
+
+      let pipeline: GPURenderPipeline;
+      let bindGroup: GPUBindGroup;
+
+      if (data.isVideo && data.externalTexture) {
+        // External textures are ephemeral - must create bind group each frame
+        pipeline = this.externalCompositePipeline!;
+        bindGroup = this.device.createBindGroup({
+          layout: this.externalCompositeBindGroupLayout!,
+          entries: [
+            { binding: 0, resource: this.sampler! },
+            { binding: 1, resource: readView },
+            { binding: 2, resource: data.externalTexture },
+            { binding: 3, resource: { buffer: uniformBuffer } },
+          ],
+        });
+      } else if (data.textureView) {
+        // Images can use cached bind groups
+        pipeline = this.compositePipeline!;
+        const bindGroupKey = `${layer.id}_${usePing ? 'ping' : 'pong'}`;
+        let cached = this.cachedCompositeBindGroups.get(bindGroupKey);
+        if (!cached) {
+          cached = this.device.createBindGroup({
+            layout: this.compositeBindGroupLayout!,
+            entries: [
+              { binding: 0, resource: this.sampler! },
+              { binding: 1, resource: readView },
+              { binding: 2, resource: data.textureView },
+              { binding: 3, resource: { buffer: uniformBuffer } },
+            ],
+          });
+          this.cachedCompositeBindGroups.set(bindGroupKey, cached);
+        }
+        bindGroup = cached;
+      } else {
+        continue;
+      }
+
+      const compositePass = commandEncoder.beginRenderPass({
+        colorAttachments: [{
+          view: writeView,
+          loadOp: 'clear',
+          storeOp: 'store',
+        }],
+      });
+      compositePass.setPipeline(pipeline);
+      compositePass.setBindGroup(0, bindGroup);
+      compositePass.draw(6);
+      compositePass.end();
+
+      // Swap buffers
+      const temp = readView;
+      readView = writeView;
+      writeView = temp;
+      usePing = !usePing;
+    }
+    this.profileData.renderPass = performance.now() - t2;
+
+    this.lastLayerCount = this.layerRenderData.length;
+
+    // Get cached output bind group
+    const finalIsPing = !usePing;
+    let outputBindGroup = finalIsPing ? this.cachedOutputBindGroupPing : this.cachedOutputBindGroupPong;
+    if (!outputBindGroup) {
+      outputBindGroup = this.device.createBindGroup({
+        layout: this.outputBindGroupLayout!,
+        entries: [
+          { binding: 0, resource: this.sampler! },
+          { binding: 1, resource: readView },
+        ],
+      });
+      if (finalIsPing) {
+        this.cachedOutputBindGroupPing = outputBindGroup;
+      } else {
+        this.cachedOutputBindGroupPong = outputBindGroup;
+      }
+    }
+
+    // Render to preview
+    if (this.previewContext) {
+      this.renderToCanvasCached(commandEncoder, this.previewContext, outputBindGroup);
+    }
+
+    // Render to output windows
+    for (const output of this.outputWindows.values()) {
+      if (output.context) {
+        this.renderToCanvasCached(commandEncoder, output.context, outputBindGroup);
+      }
+    }
+
+    const t3 = performance.now();
+    this.device.queue.submit([commandEncoder.finish()]);
+    this.profileData.submit = performance.now() - t3;
+
+    this.profileData.total = performance.now() - t0;
+
+    // Log profile every second (based on time, not frame count)
+    this.profileCounter++;
+    const now = performance.now();
+    if (now - this.lastProfileTime >= 1000) {
+      const actualFps = this.profileCounter;
+      this.profileCounter = 0;
+      this.lastProfileTime = now;
+      // timeSinceLastRender shows gap between frames (should be ~16ms for 60fps)
+      console.log(`[PROFILE] FPS=${actualFps} | gap=${timeSinceLastRender.toFixed(0)}ms | layers=${this.layerRenderData.length} | render=${this.profileData.total.toFixed(2)}ms`);
+    }
+
+    this.updateStats();
+  }
+
+  private renderToCanvasCached(
+    commandEncoder: GPUCommandEncoder,
+    context: GPUCanvasContext,
+    bindGroup: GPUBindGroup
+  ): void {
+    if (!this.outputPipeline) return;
+
+    const renderPass = commandEncoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: context.getCurrentTexture().createView(),
+          loadOp: 'clear',
+          storeOp: 'store',
+        },
+      ],
+    });
+
+    renderPass.setPipeline(this.outputPipeline);
+    renderPass.setBindGroup(0, bindGroup);
+    renderPass.draw(6);
+    renderPass.end();
+  }
+
+  // Performance tracking - optimized
+  private lastFrameStart = 0;
+  private statsCounter = 0;
+
+  private updateStats(): void {
+    this.frameCount++;
+    this.statsCounter++;
+
+    // Only calculate timing every 10 frames to reduce overhead
+    if (this.statsCounter >= 10) {
+      this.statsCounter = 0;
+      const now = performance.now();
+
+      if (this.lastFrameStart > 0) {
+        const frameTime = (now - this.lastFrameStart) / 10; // Average over 10 frames
+        this.frameTimeBuffer[this.frameTimeIndex] = frameTime;
+        this.frameTimeIndex = (this.frameTimeIndex + 1) % 60;
+        if (this.frameTimeCount < 60) this.frameTimeCount++;
+      }
+      this.lastFrameStart = now;
+
+      if (now - this.fpsUpdateTime >= 1000) {
+        this.fps = this.frameCount;
+        this.frameCount = 0;
+        this.fpsUpdateTime = now;
+      }
+    }
+  }
+
+  private lastLayerCount = 0;
+
+  getStats(): EngineStats {
+    let sum = 0;
+    for (let i = 0; i < this.frameTimeCount; i++) {
+      sum += this.frameTimeBuffer[i];
+    }
+    const avgFrameTime = this.frameTimeCount > 0 ? sum / this.frameTimeCount : 0;
+    return {
+      fps: this.fps,
+      frameTime: avgFrameTime,
+      gpuMemory: 0,
+    };
+  }
+
+  start(renderCallback: () => void): void {
+    if (this.isRunning) return;
+    this.isRunning = true;
+    console.log('[WebGPU] Starting render loop');
+
+    let frameStart = 0;
+    const loop = (timestamp: number) => {
+      if (!this.isRunning) return;
+
+      // Measure time since rAF was called
+      const rafDelay = frameStart > 0 ? timestamp - frameStart : 0;
+      frameStart = timestamp;
+
+      const callbackStart = performance.now();
+      renderCallback();
+      const callbackTime = performance.now() - callbackStart;
+
+      // Only log occasional slow frames (not every one)
+      if (rafDelay > 100) {
+        console.warn(`[RAF] Very slow frame: rafDelay=${rafDelay.toFixed(0)}ms`);
+      }
+
+      this.animationId = requestAnimationFrame(loop);
+    };
+
+    this.animationId = requestAnimationFrame(loop);
+  }
+
+  stop(): void {
+    this.isRunning = false;
+    if (this.animationId !== null) {
+      cancelAnimationFrame(this.animationId);
+      this.animationId = null;
+    }
+  }
+
+  setResolution(width: number, height: number): void {
+    this.outputWidth = width;
+    this.outputHeight = height;
+    this.createPingPongTextures();
+  }
+
+  getDevice(): GPUDevice | null {
+    return this.device;
+  }
+
+  destroy(): void {
+    this.stop();
+
+    for (const output of this.outputWindows.values()) {
+      output.window?.close();
+    }
+    this.outputWindows.clear();
+
+    this.pingTexture?.destroy();
+    this.pongTexture?.destroy();
+    this.blackTexture?.destroy();
+
+    for (const texture of this.videoFrameTextures.values()) {
+      texture.destroy();
+    }
+    this.videoFrameTextures.clear();
+    this.videoFrameViews.clear();
+
+    // Clear caches
+    this.cachedCompositeBindGroups.clear();
+    this.cachedOutputBindGroupPing = null;
+    this.cachedOutputBindGroupPong = null;
+    this.cachedImageViews.clear();
+
+    // Destroy image textures
+    for (const texture of this.imageTextures.values()) {
+      texture.destroy();
+    }
+    this.imageTextures.clear();
+
+    // Destroy per-layer uniform buffers
+    for (const buffer of this.layerUniformBuffers.values()) {
+      buffer.destroy();
+    }
+    this.layerUniformBuffers.clear();
+
+    this.layerUniformBuffer?.destroy();
+    this.device?.destroy();
+  }
+}
+
+// Preserve singleton across HMR to prevent multiple GPU device creation
+let engineInstance: WebGPUEngine;
+
+// Check if we're in a Vite HMR context
+declare const import_meta_hot: { data: Record<string, unknown> } | undefined;
+const hot = typeof import.meta !== 'undefined' ? (import.meta as { hot?: { data: Record<string, unknown> } }).hot : undefined;
+
+if (hot) {
+  // Preserve engine instance across HMR
+  const existing = hot.data.engine as WebGPUEngine | undefined;
+  if (existing) {
+    console.log('[WebGPU] Reusing existing engine instance from HMR');
+    engineInstance = existing;
+  } else {
+    console.log('[WebGPU] Creating new engine instance');
+    engineInstance = new WebGPUEngine();
+    hot.data.engine = engineInstance;
+  }
+} else {
+  engineInstance = new WebGPUEngine();
+}
+
+export const engine = engineInstance;
