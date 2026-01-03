@@ -1,164 +1,108 @@
-# CLAUDE.md - Development Guide
+# CLAUDE.md
 
-This file contains development insights and patterns for working with the WebVJ Mixer codebase.
-
-## Build & Run
+## Quick Start
 
 ```bash
-npm install    # Install dependencies
-npm run dev    # Start dev server (http://localhost:5173)
-npm run build  # Production build
-npm run lint   # Run ESLint
+npm install && npm run dev   # http://localhost:5173
+npm run build                 # Production build
+npm run lint                  # ESLint check
 ```
 
-## Architecture Overview
+## Key Files
 
-### Core Components
+| File | Purpose |
+|------|---------|
+| `src/engine/WebGPUEngine.ts` | GPU renderer singleton, ping-pong compositing |
+| `src/engine/WebCodecsPlayer.ts` | Hardware video decoding via WebCodecs |
+| `src/stores/mixerStore.ts` | Zustand state (layers, effects, grid) |
+| `src/shaders/*.wgsl` | WGSL shaders (composite, effects, output) |
 
-1. **WebGPUEngine** (`src/engine/WebGPUEngine.ts`)
-   - Singleton pattern with HMR preservation
-   - Ping-pong buffer compositing for layer blending
-   - External texture import for zero-copy video rendering
+## Critical Patterns
 
-2. **WebCodecsPlayer** (`src/engine/WebCodecsPlayer.ts`)
-   - Hardware-accelerated MP4 decoding via WebCodecs API
-   - Uses mp4box.js for demuxing
-   - Falls back to HTMLVideoElement when WebCodecs unavailable
+### HMR Singleton
 
-3. **MixerStore** (`src/stores/mixerStore.ts`)
-   - Zustand store with selector subscriptions
-   - Manages layers, effects, and engine state
-
-## Common Pitfalls & Solutions
-
-### HMR Double Initialization
-
-**Problem**: React StrictMode + Vite HMR causes multiple WebGPU device creation, leading to "TextureView is associated with [Device]" errors.
-
-**Solution**:
-- Use HMR-preserved singleton pattern in WebGPUEngine
-- Add initialization guards with promise locks
-- Use `useRef` guards in React hooks
+Engine must survive hot reloads to prevent "Device mismatch" errors:
 
 ```typescript
-// HMR singleton preservation
-const hot = (import.meta as any).hot;
+const hot = import.meta.hot;
 if (hot?.data?.engine) {
   engineInstance = hot.data.engine;
 } else {
   engineInstance = new WebGPUEngine();
-  if (hot) hot.data.engine = engineInstance;
+  hot.data.engine = engineInstance;
 }
 ```
 
-### Stale Closure in Async Callbacks
+### Stale Closure Fix
 
-**Problem**: Video/image loading callbacks capture stale `layers` state.
-
-**Solution**: Always use `get().layers` inside async callbacks:
+Always use `get().layers` inside async callbacks:
 
 ```typescript
-// Bad - stale closure
+// WRONG - stale closure
 const { layers } = get();
-video.onload = () => {
-  set({ layers: layers.map(...) }); // layers is stale!
-};
+video.onload = () => set({ layers: layers.map(...) });
 
-// Good - fresh state
+// CORRECT - fresh state
 video.onload = () => {
-  const currentLayers = get().layers;
-  set({ layers: currentLayers.map(...) });
+  const current = get().layers;
+  set({ layers: current.map(...) });
 };
 ```
 
-### Video Texture Timing
+### Video Ready State
 
-**Problem**: Video element not ready when trying to create texture.
-
-**Solution**: Wait for `canplaythrough` event, not just `loadeddata`:
+Wait for `canplaythrough`, not `loadeddata`:
 
 ```typescript
 video.addEventListener('canplaythrough', () => {
-  // Video is now ready for texture creation
+  // Video ready for texture creation
 }, { once: true });
-video.load();
 ```
 
-### WebCodecs Availability
+## Texture Types
 
-**Problem**: WebCodecs H.264 not supported on Linux.
+| Source | Texture Type |
+|--------|-------------|
+| Video (HTMLVideoElement) | `texture_external` (zero-copy) |
+| Video (WebCodecs VideoFrame) | `texture_external` (zero-copy) |
+| Image | `texture_2d<f32>` (copied once) |
 
-**Solution**: Check codec support and fall back gracefully:
+## Common Issues
+
+| Problem | Solution |
+|---------|----------|
+| 15fps on Linux | Enable Vulkan: `chrome://flags/#enable-vulkan` |
+| "Device mismatch" | HMR broke singleton - refresh page |
+| Black canvas | Check `readyState >= 2` before texture import |
+| WebCodecs fails | Falls back to HTMLVideoElement automatically |
+
+## Render Loop
+
+```
+useEngine hook
+    └─► engine.start(callback)
+            └─► requestAnimationFrame loop
+                    └─► engine.render(layers)
+                            ├─► Import external textures
+                            ├─► Ping-pong composite each layer
+                            └─► Output to canvas(es)
+```
+
+## Adding Effects
+
+1. Add shader in `src/shaders/effects.wgsl`
+2. Add params type and defaults in `mixerStore.ts:getDefaultEffectParams()`
+3. Add UI controls in `EffectsPanel.tsx`
+
+## Debugging
 
 ```typescript
-if ('VideoDecoder' in window && isMp4) {
-  const config = { codec: 'avc1.64001f', ... };
-  const support = await VideoDecoder.isConfigSupported(config);
-  if (!support.supported) {
-    // Fall back to HTMLVideoElement
-  }
-}
-```
+// Profile output (automatic, every 1s)
+// [PROFILE] FPS=60 | gap=16ms | layers=3 | render=2.50ms
 
-## Performance Debugging
+// Check GPU status
+chrome://gpu
 
-### Symptoms → Causes
-
-| Symptom | Likely Cause |
-|---------|--------------|
-| 15fps instead of 60fps | Vulkan disabled, ANGLE/OpenGL fallback |
-| "Device mismatch" errors | Multiple GPU device instances |
-| Black preview canvas | Texture creation failed, wrong texture format |
-| High CPU, low GPU | Video decoding on CPU, not hardware |
-
-### Diagnostic Steps
-
-1. Check `chrome://gpu` for WebGPU status and Vulkan support
-2. Add RAF timing logs to identify browser vs code bottleneck:
-   ```typescript
-   const rafStart = performance.now();
-   requestAnimationFrame(() => {
-     console.log(`RAF delay: ${performance.now() - rafStart}ms`);
-   });
-   ```
-3. Profile render pass timing separately from total frame time
-
-### Linux GPU Setup
-
-For best performance on Linux with AMD/Intel GPUs:
-
-1. Enable Vulkan: `chrome://flags/#enable-vulkan`
-2. Verify at `chrome://gpu`:
-   - "Vulkan: Enabled"
-   - "WebGPU: Hardware accelerated"
-
-## Shader Development
-
-Shaders are in WGSL format, embedded in WebGPUEngine.ts:
-
-- `compositeShader`: Layer blending with blend modes
-- `outputShader`: Final canvas output
-
-Key texture types:
-- `texture_external`: For video (zero-copy)
-- `texture_2d<f32>`: For images and render targets
-
-## Testing Video Sources
-
-Good test patterns:
-- MP4/H.264: Best compatibility
-- 1080p @ 30fps: Standard test case
-- Multiple videos: Tests compositing performance
-
-## File Structure
-
-```
-src/
-├── components/     # React UI components
-├── engine/         # WebGPU rendering engine
-│   ├── WebGPUEngine.ts
-│   └── WebCodecsPlayer.ts
-├── hooks/          # React hooks
-├── stores/         # Zustand state
-└── types/          # TypeScript definitions
+// Slow frame warnings (automatic)
+// [RAF] Very slow frame: rafDelay=150ms
 ```
