@@ -250,15 +250,23 @@ export function Timeline() {
   
   
   // Handle shift+mousewheel on track header to resize height
+  // Handle alt+mousewheel on track header to resize all tracks of same type
   const handleTrackHeaderWheel = (e: React.WheelEvent, trackId: string) => {
-    if (e.shiftKey) {
+    const track = tracks.find(t => t.id === trackId);
+    if (!track) return;
+
+    if (e.altKey) {
+      // Alt + mousewheel: scale all tracks of same type (video or audio)
       e.preventDefault();
       e.stopPropagation();
-      const track = tracks.find(t => t.id === trackId);
-      if (track) {
-        const delta = e.deltaY > 0 ? -10 : 10;
-        useTimelineStore.getState().setTrackHeight(trackId, track.height + delta);
-      }
+      const delta = e.deltaY > 0 ? -10 : 10;
+      useTimelineStore.getState().scaleTracksOfType(track.type, delta);
+    } else if (e.shiftKey) {
+      // Shift + mousewheel: scale individual track
+      e.preventDefault();
+      e.stopPropagation();
+      const delta = e.deltaY > 0 ? -10 : 10;
+      useTimelineStore.getState().setTrackHeight(trackId, track.height + delta);
     }
   };
 
@@ -566,9 +574,10 @@ export function Timeline() {
     }
   };
 
-  // Zoom with mouse wheel
+  // Zoom with mouse wheel (Ctrl or Alt)
   const handleWheel = (e: React.WheelEvent) => {
-    if (e.ctrlKey) {
+    if (e.ctrlKey || e.altKey) {
+      // Ctrl + mousewheel OR Alt + mousewheel: zoom timeline view
       e.preventDefault();
       const delta = e.deltaY > 0 ? -5 : 5;
       setZoom(zoom + delta);

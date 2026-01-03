@@ -104,6 +104,7 @@ interface TimelineStore {
   setTrackMuted: (id: string, muted: boolean) => void;
   setTrackVisible: (id: string, visible: boolean) => void;
   setTrackHeight: (id: string, height: number) => void;
+  scaleTracksOfType: (type: 'video' | 'audio', delta: number) => void;
 
 
 
@@ -191,11 +192,62 @@ export const useTimelineStore = create<TimelineStore>()(
       });
     },
 
+    scaleTracksOfType: (type, delta) => {
+      const { tracks } = get();
+      const tracksOfType = tracks.filter(t => t.type === type);
+
+      if (tracksOfType.length === 0) return;
+
+      // Find the max height among tracks of this type
+      const maxHeight = Math.max(...tracksOfType.map(t => t.height));
+
+      // First call: sync all to max height (if they differ)
+      // Subsequent calls: scale uniformly
+      const allSameHeight = tracksOfType.every(t => t.height === maxHeight);
+
+      if (!allSameHeight && delta !== 0) {
+        // Sync all to max height first
+        set({
+          tracks: tracks.map(t =>
+            t.type === type ? { ...t, height: maxHeight } : t
+          ),
+        });
+      } else {
+        // All already synced, scale uniformly
+        const newHeight = Math.max(30, Math.min(200, maxHeight + delta));
+        set({
+          tracks: tracks.map(t =>
+            t.type === type ? { ...t, height: newHeight } : t
+          ),
+        });
+      }
+    },
+
     // Clip actions
     addClip: async (trackId, file, startTime) => {
       const isVideo = file.type.startsWith('video/');
       const isAudio = file.type.startsWith('audio/');
       const isImage = file.type.startsWith('image/');
+
+      // Validate track type matches media type
+      const { tracks } = get();
+      const targetTrack = tracks.find(t => t.id === trackId);
+      if (!targetTrack) {
+        console.warn('[Timeline] Track not found:', trackId);
+        return;
+      }
+
+      // Video/image files can only go on video tracks
+      if ((isVideo || isImage) && targetTrack.type !== 'video') {
+        console.warn('[Timeline] Cannot add video/image to audio track');
+        return;
+      }
+
+      // Audio files can only go on audio tracks
+      if (isAudio && targetTrack.type !== 'audio') {
+        console.warn('[Timeline] Cannot add audio to video track');
+        return;
+      }
 
       const clipId = `clip-${Date.now()}`;
 
@@ -386,9 +438,28 @@ export const useTimelineStore = create<TimelineStore>()(
     },
 
     moveClip: (id, newStartTime, newTrackId, skipLinked = false) => {
-      const { clips, updateDuration } = get();
+      const { clips, tracks, updateDuration } = get();
       const movingClip = clips.find(c => c.id === id);
       if (!movingClip) return;
+
+      // Validate track type if changing tracks
+      if (newTrackId && newTrackId !== movingClip.trackId) {
+        const targetTrack = tracks.find(t => t.id === newTrackId);
+        const sourceType = movingClip.source?.type;
+
+        if (targetTrack && sourceType) {
+          // Video/image clips can only go on video tracks
+          if ((sourceType === 'video' || sourceType === 'image') && targetTrack.type !== 'video') {
+            console.warn('[Timeline] Cannot move video/image to audio track');
+            return;
+          }
+          // Audio clips can only go on audio tracks
+          if (sourceType === 'audio' && targetTrack.type !== 'audio') {
+            console.warn('[Timeline] Cannot move audio to video track');
+            return;
+          }
+        }
+      }
 
       // Calculate time delta to apply to linked clips
       const timeDelta = newStartTime - movingClip.startTime;
