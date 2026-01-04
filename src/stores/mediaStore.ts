@@ -54,6 +54,9 @@ interface MediaState {
   compositions: Composition[];
   folders: MediaFolder[];
 
+  // Active composition (the one being edited in timeline)
+  activeCompositionId: string | null;
+
   // Selection
   selectedIds: string[];
   expandedFolderIds: string[];
@@ -86,6 +89,11 @@ interface MediaState {
   // Getters
   getItemsByFolder: (folderId: string | null) => ProjectItem[];
   getItemById: (id: string) => ProjectItem | undefined;
+  getFileByName: (name: string) => MediaFile | undefined;
+
+  // Composition management
+  setActiveComposition: (id: string | null) => void;
+  getActiveComposition: () => Composition | undefined;
 }
 
 // Generate unique ID
@@ -176,13 +184,28 @@ async function getMediaInfo(file: File, type: 'video' | 'audio' | 'image'): Prom
   });
 }
 
+// Default composition created on first load
+const DEFAULT_COMPOSITION: Composition = {
+  id: 'comp-1',
+  name: 'Comp 1',
+  type: 'composition',
+  parentId: null,
+  createdAt: Date.now(),
+  width: 1920,
+  height: 1080,
+  frameRate: 30,
+  duration: 60,
+  backgroundColor: '#000000',
+};
+
 export const useMediaStore = create<MediaState>()(
   subscribeWithSelector(
     persist(
       (set, get) => ({
         files: [],
-        compositions: [],
+        compositions: [DEFAULT_COMPOSITION],
         folders: [],
+        activeCompositionId: 'comp-1',
         selectedIds: [],
         expandedFolderIds: [],
 
@@ -400,6 +423,20 @@ export const useMediaStore = create<MediaState>()(
             folders.find((f) => f.id === id)
           );
         },
+
+        getFileByName: (name: string) => {
+          const { files } = get();
+          return files.find((f) => f.name === name);
+        },
+
+        setActiveComposition: (id: string | null) => {
+          set({ activeCompositionId: id });
+        },
+
+        getActiveComposition: () => {
+          const { compositions, activeCompositionId } = get();
+          return compositions.find((c) => c.id === activeCompositionId);
+        },
       }),
       {
         name: 'webvj-media',
@@ -408,6 +445,7 @@ export const useMediaStore = create<MediaState>()(
           files: state.files.map(({ file, ...rest }) => rest),
           compositions: state.compositions,
           folders: state.folders,
+          activeCompositionId: state.activeCompositionId,
           expandedFolderIds: state.expandedFolderIds,
         }),
       }

@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import type { TimelineClip, TimelineTrack, ClipTransform, BlendMode } from '../types';
+import { useMediaStore } from './mediaStore';
 
 // Default transform for new clips
 const DEFAULT_TRANSFORM: ClipTransform = {
@@ -267,6 +268,13 @@ export const useTimelineStore = create<TimelineStore>()(
       if (isAudio && targetTrack.type !== 'audio') {
         console.warn('[Timeline] Cannot add audio to video track');
         return;
+      }
+
+      // Sync file to media store (if not already there)
+      const mediaStore = useMediaStore.getState();
+      if (!mediaStore.getFileByName(file.name)) {
+        await mediaStore.importFile(file);
+        console.log('[Timeline] Added file to media store:', file.name);
       }
 
       const clipId = `clip-${Date.now()}`;
