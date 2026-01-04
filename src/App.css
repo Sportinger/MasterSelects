@@ -1905,21 +1905,19 @@ input[type="checkbox"] {
   z-index: 90;
 }
 
-/* RAM Preview render progress indicator (animated during render) */
-.ram-preview-progress-indicator {
+/* RAM Preview progress text (during rendering) */
+.ram-preview-progress-text {
   position: absolute;
-  top: 0;
-  height: 4px;
-  background: linear-gradient(90deg, #fbbf24, #f59e0b);
-  opacity: 0.9;
+  top: 6px;
+  font-size: 10px;
+  font-weight: bold;
+  color: #22c55e;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 2px 6px;
+  border-radius: 3px;
   pointer-events: none;
-  z-index: 91;
-  animation: ram-progress-pulse 0.5s ease-in-out infinite alternate;
-}
-
-@keyframes ram-progress-pulse {
-  from { opacity: 0.7; }
-  to { opacity: 1; }
+  z-index: 95;
+  white-space: nowrap;
 }
 
 /* Playback cache indicator (green line for frames cached during playback) */

@@ -1483,31 +1483,20 @@ export function Timeline() {
             </>
           )}
 
-          {/* RAM Preview cached range indicator (green = cached) */}
-          {ramPreviewRange && (
+          {/* RAM Preview progress text (during rendering) */}
+          {isRamPreviewing && ramPreviewProgress !== null && (
             <div
-              className="ram-preview-indicator"
+              className="ram-preview-progress-text"
               style={{
-                left: timeToPixel(ramPreviewRange.start),
-                width: timeToPixel(ramPreviewRange.end - ramPreviewRange.start),
+                left: timeToPixel(playheadPosition) + 10,
               }}
-              title={`RAM Preview: ${formatTime(ramPreviewRange.start)} - ${formatTime(ramPreviewRange.end)}`}
-            />
+            >
+              {Math.round(ramPreviewProgress)}%
+            </div>
           )}
 
-          {/* RAM Preview render progress bar (during rendering) */}
-          {isRamPreviewing && ramPreviewProgress !== null && inPoint !== null && outPoint !== null && (
-            <div
-              className="ram-preview-progress-indicator"
-              style={{
-                left: timeToPixel(inPoint),
-                width: timeToPixel((outPoint - inPoint) * (ramPreviewProgress / 100)),
-              }}
-            />
-          )}
-
-          {/* Playback cached frames indicator (green line like After Effects) */}
-          {!ramPreviewRange && getCachedRanges().map((range, i) => (
+          {/* Cached frames indicator (green = frames in RAM) */}
+          {getCachedRanges().map((range, i) => (
             <div
               key={i}
               className="playback-cache-indicator"

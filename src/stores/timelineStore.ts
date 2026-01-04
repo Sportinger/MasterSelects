@@ -777,12 +777,14 @@ export const useTimelineStore = create<TimelineStore>()(
 
     // RAM Preview actions
     startRamPreview: async () => {
-      const { inPoint, outPoint, duration, clips, tracks, isRamPreviewing } = get();
+      const { inPoint, outPoint, duration, clips, tracks, isRamPreviewing, playheadPosition, addCachedFrame } = get();
       if (isRamPreviewing) return;
 
-      // Determine range to preview (use In/Out or full duration)
+      // Determine range to preview (use In/Out or clips extent)
       const start = inPoint ?? 0;
-      const end = outPoint ?? duration;
+      const end = outPoint ?? (clips.length > 0
+        ? Math.max(...clips.map(c => c.startTime + c.duration))
+        : duration);
 
       if (end <= start) return;
 
@@ -799,7 +801,37 @@ export const useTimelineStore = create<TimelineStore>()(
       });
 
       const fps = 30; // Preview at 30fps
-      const totalFrames = Math.ceil((end - start) * fps);
+      const frameInterval = 1 / fps;
+
+      // Generate frame times spreading outward from playhead
+      // Clamp playhead to the render range
+      const centerTime = Math.max(start, Math.min(end, playheadPosition));
+      const frameTimes: number[] = [];
+
+      // Add center frame first
+      frameTimes.push(centerTime);
+
+      // Alternate left and right from center
+      let offset = frameInterval;
+      while (true) {
+        const rightTime = centerTime + offset;
+        const leftTime = centerTime - offset;
+        let addedAny = false;
+
+        if (rightTime <= end) {
+          frameTimes.push(rightTime);
+          addedAny = true;
+        }
+        if (leftTime >= start) {
+          frameTimes.push(leftTime);
+          addedAny = true;
+        }
+
+        if (!addedAny) break;
+        offset += frameInterval;
+      }
+
+      const totalFrames = frameTimes.length;
       let cancelled = false;
 
       // Store cancel function
@@ -812,7 +844,7 @@ export const useTimelineStore = create<TimelineStore>()(
             break;
           }
 
-          const time = start + (frame / fps);
+          const time = frameTimes[frame];
 
           // Get clips at this time
           const clipsAtTime = clips.filter(c =>
@@ -893,27 +925,31 @@ export const useTimelineStore = create<TimelineStore>()(
           }
           await engine.cacheCompositeFrame(time);
 
-          // Update progress
+          // Add to cached frames set (shows green indicator immediately)
+          addCachedFrame(time);
+
+          // Update progress percentage
           const progress = ((frame + 1) / totalFrames) * 100;
           set({ ramPreviewProgress: progress });
 
-          // Yield to allow UI updates
-          if (frame % 5 === 0) {
+          // Yield to allow UI updates (every frame for smooth green dot updates)
+          if (frame % 3 === 0) {
             await new Promise(resolve => setTimeout(resolve, 0));
           }
         }
 
         if (!cancelled) {
+          // Set the preview range for cache hit detection
           set({
             ramPreviewRange: { start, end },
-            ramPreviewProgress: 100
+            ramPreviewProgress: null
           });
         }
       } catch (error) {
         console.error('[RAM Preview] Error:', error);
       } finally {
         engine.setGeneratingRamPreview(false);
-        set({ isRamPreviewing: false });
+        set({ isRamPreviewing: false, ramPreviewProgress: null });
       }
     },
 
