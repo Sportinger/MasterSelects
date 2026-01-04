@@ -64,25 +64,7 @@ export function DockContainer() {
             top: dragState.currentPos.y - dragState.dragOffset.y,
           }}
         >
-          🎯 {dragState.draggedPanel.title}
-        </div>
-      )}
-
-      {/* Debug: show drag state */}
-      {dragState.isDragging && (
-        <div style={{
-          position: 'fixed',
-          top: 10,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          background: '#00ff00',
-          color: '#000',
-          padding: '8px 16px',
-          borderRadius: 4,
-          fontWeight: 'bold',
-          zIndex: 99999,
-        }}>
-          DRAGGING: {dragState.draggedPanel?.title} @ {Math.round(dragState.currentPos.x)},{Math.round(dragState.currentPos.y)}
+          {dragState.draggedPanel.title}
         </div>
       )}
     </div>
