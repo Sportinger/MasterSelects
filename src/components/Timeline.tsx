@@ -814,33 +814,31 @@ export function Timeline() {
       const x = e.clientX - rect.left + scrollX;
       const startTime = pixelToTime(x);
 
-      // Check cache first for duration
+      // Check cache first for duration - find the file item (not always at index 0)
       let duration: number | undefined;
       const items = e.dataTransfer.items;
-      console.log('[DragEnter] items:', items?.length, 'types:', e.dataTransfer.types);
       if (items && items.length > 0) {
-        const item = items[0];
-        console.log('[DragEnter] item kind:', item.kind, 'type:', item.type);
-        if (item.kind === 'file') {
-          const file = item.getAsFile();
-          console.log('[DragEnter] file:', file?.name, file?.size, file?.type);
-          if (file && file.type.startsWith('video/')) {
-            const cacheKey = `${file.name}_${file.size}`;
-            if (dragDurationCacheRef.current?.url === cacheKey) {
-              // Use cached duration
-              duration = dragDurationCacheRef.current.duration;
-              console.log('[DragEnter] Using cached duration:', duration);
-            } else {
-              // Load duration in background, update state when ready
-              console.log('[DragEnter] Loading duration for:', file.name);
-              getVideoDurationQuick(file).then(dur => {
-                console.log('[DragEnter] Got duration:', dur);
-                if (dur) {
-                  dragDurationCacheRef.current = { url: cacheKey, duration: dur };
-                  // Update the externalDrag state with the loaded duration
-                  setExternalDrag(prev => prev ? { ...prev, duration: dur } : null);
-                }
-              });
+        // Find the file item in the list
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.kind === 'file') {
+            const file = item.getAsFile();
+            if (file && file.type.startsWith('video/')) {
+              const cacheKey = `${file.name}_${file.size}`;
+              if (dragDurationCacheRef.current?.url === cacheKey) {
+                // Use cached duration
+                duration = dragDurationCacheRef.current.duration;
+              } else {
+                // Load duration in background, update state when ready
+                getVideoDurationQuick(file).then(dur => {
+                  if (dur) {
+                    dragDurationCacheRef.current = { url: cacheKey, duration: dur };
+                    // Update the externalDrag state with the loaded duration
+                    setExternalDrag(prev => prev ? { ...prev, duration: dur } : null);
+                  }
+                });
+              }
+              break; // Found the file, stop searching
             }
           }
         }
