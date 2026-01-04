@@ -1107,43 +1107,55 @@ export function Timeline() {
         {/* Track headers */}
         <div className="track-headers">
           <div className="ruler-header">Time</div>
-          {tracks.map(track => (
-            <div
-              key={track.id}
-              className={`track-header ${track.type}`}
-              style={{ height: track.height }}
-              onWheel={(e) => handleTrackHeaderWheel(e, track.id)}
-            >
-              <span className="track-name">{track.name}</span>
-              <div className="track-controls">
-                {track.type === 'audio' && (
-                  <button
-                    className={`btn-icon ${track.muted ? 'muted' : ''}`}
-                    onClick={() => useTimelineStore.getState().setTrackMuted(track.id, !track.muted)}
-                    title={track.muted ? 'Unmute' : 'Mute'}
-                  >
-                    {track.muted ? '🔇' : '🔊'}
-                  </button>
-                )}
-                <button
-                  className={`btn-icon ${track.solo ? 'solo-active' : ''}`}
-                  onClick={() => useTimelineStore.getState().setTrackSolo(track.id, !track.solo)}
-                  title={track.solo ? 'Solo On' : 'Solo Off'}
+          {(() => {
+            // Check if any track of each type has solo enabled
+            const anyVideoSolo = tracks.some(t => t.type === 'video' && t.solo);
+            const anyAudioSolo = tracks.some(t => t.type === 'audio' && t.solo);
+
+            return tracks.map(track => {
+              // Determine if this track should be dimmed (another track of same type is solo'd, but not this one)
+              const isDimmed = (track.type === 'video' && anyVideoSolo && !track.solo) ||
+                               (track.type === 'audio' && anyAudioSolo && !track.solo);
+
+              return (
+                <div
+                  key={track.id}
+                  className={`track-header ${track.type} ${isDimmed ? 'dimmed' : ''}`}
+                  style={{ height: track.height }}
+                  onWheel={(e) => handleTrackHeaderWheel(e, track.id)}
                 >
-                  S
-                </button>
-                {track.type === 'video' && (
-                  <button
-                    className={`btn-icon ${!track.visible ? 'hidden' : ''}`}
-                    onClick={() => useTimelineStore.getState().setTrackVisible(track.id, !track.visible)}
-                    title={track.visible ? 'Hide' : 'Show'}
-                  >
-                    {track.visible ? '👁' : '👁‍🗨'}
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+                  <span className="track-name">{track.name}</span>
+                  <div className="track-controls">
+                    <button
+                      className={`btn-icon ${track.solo ? 'solo-active' : ''}`}
+                      onClick={() => useTimelineStore.getState().setTrackSolo(track.id, !track.solo)}
+                      title={track.solo ? 'Solo On' : 'Solo Off'}
+                    >
+                      S
+                    </button>
+                    {track.type === 'audio' && (
+                      <button
+                        className={`btn-icon ${track.muted ? 'muted' : ''}`}
+                        onClick={() => useTimelineStore.getState().setTrackMuted(track.id, !track.muted)}
+                        title={track.muted ? 'Unmute' : 'Mute'}
+                      >
+                        {track.muted ? '🔇' : '🔊'}
+                      </button>
+                    )}
+                    {track.type === 'video' && (
+                      <button
+                        className={`btn-icon ${!track.visible ? 'hidden' : ''}`}
+                        onClick={() => useTimelineStore.getState().setTrackVisible(track.id, !track.visible)}
+                        title={track.visible ? 'Hide' : 'Show'}
+                      >
+                        {track.visible ? '👁' : '👁‍🗨'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            });
+          })()}
         </div>
 
         {/* Timeline tracks */}
@@ -1160,10 +1172,17 @@ export function Timeline() {
           {renderTimeRuler()}
 
           {/* Track lanes */}
-          {tracks.map(track => (
+          {(() => {
+            const anyVideoSolo = tracks.some(t => t.type === 'video' && t.solo);
+            const anyAudioSolo = tracks.some(t => t.type === 'audio' && t.solo);
+
+            return tracks.map(track => {
+              const isDimmed = (track.type === 'video' && anyVideoSolo && !track.solo) ||
+                               (track.type === 'audio' && anyAudioSolo && !track.solo);
+              return (
             <div
               key={track.id}
-              className={`track-lane ${track.type} ${clipDrag?.currentTrackId === track.id ? 'drag-target' : ''} ${externalDrag?.trackId === track.id || externalDrag?.audioTrackId === track.id ? 'external-drag-target' : ''}`}
+              className={`track-lane ${track.type} ${isDimmed ? 'dimmed' : ''} ${clipDrag?.currentTrackId === track.id ? 'drag-target' : ''} ${externalDrag?.trackId === track.id || externalDrag?.audioTrackId === track.id ? 'external-drag-target' : ''}`}
               style={{ height: track.height }}
               onDrop={(e) => handleTrackDrop(e, track.id)}
               onDragOver={(e) => handleTrackDragOver(e, track.id)}
@@ -1209,7 +1228,9 @@ export function Timeline() {
                 </div>
               )}
             </div>
-          ))}
+              );
+            });
+          })()}
 
           {/* Preview for new audio track that will be created */}
           {externalDrag && externalDrag.isVideo && externalDrag.audioTrackId === '__new_audio_track__' && (

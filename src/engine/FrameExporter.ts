@@ -203,36 +203,12 @@ export class FrameExporter {
         await this.seekAllClipsToTime(time);
         const layers = this.buildLayersAtTime(time);
 
-        if (frame === 0) {
-          console.log(`[FrameExporter] First frame at time ${time}:`);
-          console.log(`  - Layers: ${layers.length}`, layers.map(l => l.name));
-          for (const layer of layers) {
-            if (layer.source?.videoElement) {
-              const v = layer.source.videoElement;
-              console.log(`  - Video: readyState=${v.readyState}, seeking=${v.seeking}, currentTime=${v.currentTime}, paused=${v.paused}`);
-            }
-          }
-        }
-
-        if (layers.length === 0) {
-          console.warn(`[FrameExporter] No layers at time ${time}`);
-        }
-
         engine.render(layers);
 
         const pixels = await engine.readPixels();
         if (!pixels) {
           console.error('[FrameExporter] Failed to read pixels at frame', frame);
           continue;
-        }
-
-        // Debug: check if pixels are all black
-        if (frame === 0) {
-          let nonZero = 0;
-          for (let i = 0; i < Math.min(pixels.length, 10000); i++) {
-            if (pixels[i] !== 0) nonZero++;
-          }
-          console.log(`[FrameExporter] First frame pixels check: ${nonZero} non-zero values in first 10000 bytes`);
         }
 
         await this.encoder.encodeFrame(pixels, frame);
