@@ -84,8 +84,10 @@ export function useEngine() {
         // Throttled to every 100ms (~10fps) to avoid performance impact
         // CRITICAL: Skip caching while user is dragging playhead - videos are seeking to
         // conflicting positions and would cache wrong frames
+        // Only cache if RAM Preview is enabled
         const now = performance.now();
-        if (timelinePlaying && !isDraggingPlayhead && now - lastCacheTime > 100) {
+        const ramPreviewEnabled = useTimelineStore.getState().ramPreviewEnabled;
+        if (ramPreviewEnabled && timelinePlaying && !isDraggingPlayhead && now - lastCacheTime > 100) {
           // Cache this frame asynchronously (don't block render loop)
           engine.cacheCompositeFrame(playheadPosition).catch(() => {});
           lastCacheTime = now;

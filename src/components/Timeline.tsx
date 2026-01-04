@@ -47,6 +47,8 @@ export function Timeline() {
     getCachedRanges,
     isDraggingPlayhead,
     setDraggingPlayhead,
+    ramPreviewEnabled,
+    toggleRamPreviewEnabled,
   } = useTimelineStore();
 
 
@@ -178,11 +180,12 @@ export function Timeline() {
     }
 
     // Don't auto-render if:
+    // - RAM Preview is disabled
     // - Currently playing
     // - Currently RAM previewing
     // - Scrubbing
     // - No clips on timeline
-    if (isPlaying || isRamPreviewing || isDraggingPlayhead || clips.length === 0) {
+    if (!ramPreviewEnabled || isPlaying || isRamPreviewing || isDraggingPlayhead || clips.length === 0) {
       return;
     }
 
@@ -206,7 +209,7 @@ export function Timeline() {
     idleTimerRef.current = setTimeout(() => {
       // Double-check conditions before starting
       const state = useTimelineStore.getState();
-      if (!state.isPlaying && !state.isRamPreviewing) {
+      if (state.ramPreviewEnabled && !state.isPlaying && !state.isRamPreviewing) {
         startRamPreview();
       }
     }, 2000);
@@ -217,7 +220,7 @@ export function Timeline() {
         idleTimerRef.current = null;
       }
     };
-  }, [isPlaying, isRamPreviewing, isDraggingPlayhead, inPoint, outPoint, ramPreviewRange, clips, startRamPreview]);
+  }, [ramPreviewEnabled, isPlaying, isRamPreviewing, isDraggingPlayhead, inPoint, outPoint, ramPreviewRange, clips, startRamPreview]);
 
   // Track last seek time to throttle during scrubbing
   const lastSeekRef = useRef<{ [clipId: string]: number }>({});
@@ -1272,7 +1275,16 @@ export function Timeline() {
           )}
         </div>
         <div className="timeline-ram-preview">
-          {isRamPreviewing ? (
+          <button
+            className={`btn btn-sm ${ramPreviewEnabled ? 'btn-active' : ''}`}
+            onClick={toggleRamPreviewEnabled}
+            title={ramPreviewEnabled
+              ? "RAM Preview ON - Auto-caches frames for instant scrubbing. Click to disable and clear cache."
+              : "RAM Preview OFF - Click to enable auto-caching for instant scrubbing"}
+          >
+            RAM {ramPreviewEnabled ? 'ON' : 'OFF'}
+          </button>
+          {isRamPreviewing && (
             <>
               <div className="ram-preview-progress">
                 <div
@@ -1283,29 +1295,10 @@ export function Timeline() {
               <button
                 className="btn btn-sm btn-danger"
                 onClick={cancelRamPreview}
-                title="Cancel RAM Preview"
+                title="Cancel current RAM Preview render"
               >
                 Cancel
               </button>
-            </>
-          ) : (
-            <>
-              <button
-                className={`btn btn-sm ${ramPreviewRange ? 'btn-active' : ''}`}
-                onClick={startRamPreview}
-                title="RAM Preview - Pre-render frames for instant scrubbing (uses In/Out range)"
-              >
-                RAM Preview
-              </button>
-              {ramPreviewRange && (
-                <button
-                  className="btn btn-sm"
-                  onClick={clearRamPreview}
-                  title="Clear RAM Preview cache"
-                >
-                  Clear
-                </button>
-              )}
             </>
           )}
         </div>

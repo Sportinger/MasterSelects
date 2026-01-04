@@ -122,9 +122,11 @@ interface TimelineStore {
   toggleLoopPlayback: () => void;
 
   // RAM Preview - pre-render frames to memory for instant scrubbing
+  ramPreviewEnabled: boolean;  // Master toggle for RAM Preview feature
   ramPreviewProgress: number | null;  // null = not previewing, 0-100 = progress
   ramPreviewRange: { start: number; end: number } | null;  // cached time range
   isRamPreviewing: boolean;
+  toggleRamPreviewEnabled: () => void;
   startRamPreview: () => Promise<void>;
   cancelRamPreview: () => void;
   clearRamPreview: () => void;
@@ -200,6 +202,7 @@ export const useTimelineStore = create<TimelineStore>()(
     inPoint: null,
     outPoint: null,
     loopPlayback: false,
+    ramPreviewEnabled: false,  // RAM Preview off by default
     ramPreviewProgress: null,
     ramPreviewRange: null,
     isRamPreviewing: false,
@@ -808,6 +811,22 @@ export const useTimelineStore = create<TimelineStore>()(
     },
 
     // RAM Preview actions
+    toggleRamPreviewEnabled: () => {
+      const { ramPreviewEnabled } = get();
+      if (ramPreviewEnabled) {
+        // Turning OFF - cancel any running preview and clear cache
+        set({ ramPreviewEnabled: false, isRamPreviewing: false, ramPreviewProgress: null });
+        import('../engine/WebGPUEngine').then(({ engine }) => {
+          engine.setGeneratingRamPreview(false);
+          engine.clearCompositeCache();
+        });
+        set({ ramPreviewRange: null, cachedFrameTimes: new Set() });
+      } else {
+        // Turning ON - enable automatic RAM preview
+        set({ ramPreviewEnabled: true });
+      }
+    },
+
     startRamPreview: async () => {
       const { inPoint, outPoint, duration, clips, tracks, isRamPreviewing, playheadPosition, addCachedFrame } = get();
       if (isRamPreviewing) return;
