@@ -490,24 +490,49 @@ export function Timeline() {
             video.pause();
           }
 
-          // Check if we already have this frame
+          // Check if we already have this frame in our local cache
           if (!cached || cached.frameIndex !== frameIndex) {
             // Start loading the frame if not already loading
             const loadKey = `${mediaFile.id}_${frameIndex}`;
             if (!proxyLoadingRef.current.has(loadKey)) {
               proxyLoadingRef.current.add(loadKey);
+
+              // Capture values for closure
+              const capturedLayerIndex = layerIndex;
+              const capturedTransform = clip.transform;
+              const capturedTrackVisible = isVideoTrackVisible(track);
+              const capturedClipName = clip.name;
+
               proxyFrameCache.getFrame(mediaFile.id, clipTime, proxyFps).then(image => {
                 proxyLoadingRef.current.delete(loadKey);
                 if (image) {
                   proxyFramesRef.current.set(cacheKey, { frameIndex, image });
-                  // Always trigger re-render when proxy frame loads (for instant scrubbing)
-                  useMixerStore.setState({}); // Force re-render
+
+                  // Directly update the layer with the new frame
+                  const currentLayers = useMixerStore.getState().layers;
+                  const updatedLayers = [...currentLayers];
+                  updatedLayers[capturedLayerIndex] = {
+                    id: `timeline_layer_${capturedLayerIndex}`,
+                    name: capturedClipName,
+                    visible: capturedTrackVisible,
+                    opacity: capturedTransform.opacity,
+                    blendMode: capturedTransform.blendMode,
+                    source: {
+                      type: 'image',
+                      imageElement: image,
+                    },
+                    effects: [],
+                    position: { x: capturedTransform.position.x, y: capturedTransform.position.y },
+                    scale: { x: capturedTransform.scale.x, y: capturedTransform.scale.y },
+                    rotation: capturedTransform.rotation.z * Math.PI / 180,
+                  };
+                  useMixerStore.setState({ layers: updatedLayers });
                 }
               });
             }
           }
 
-          // Use cached proxy frame - this should be the primary display method
+          // Use cached proxy frame if available
           const proxyImage = cached?.image;
           if (proxyImage) {
             const transform = clip.transform;
