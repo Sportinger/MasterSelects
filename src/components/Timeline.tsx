@@ -470,10 +470,15 @@ export function Timeline() {
         const proxyFps = mediaFile?.proxyFps || 30;
 
         if (useProxy && mediaFile) {
-          // Use proxy frames instead of video decode
+          // Use proxy frames instead of video decode - ALWAYS use proxy when available
           const frameIndex = Math.floor(clipTime * proxyFps);
           const cacheKey = `${mediaFile.id}_${clip.id}`;
           const cached = proxyFramesRef.current.get(cacheKey);
+
+          // Always pause video when using proxy mode - we don't need video decode
+          if (!video.paused) {
+            video.pause();
+          }
 
           // Check if we already have this frame
           if (!cached || cached.frameIndex !== frameIndex) {
@@ -485,17 +490,14 @@ export function Timeline() {
                 proxyLoadingRef.current.delete(loadKey);
                 if (image) {
                   proxyFramesRef.current.set(cacheKey, { frameIndex, image });
-                  // Trigger a re-render to use the new frame
-                  // Only force update if we're not playing (to avoid interrupting playback)
-                  if (!useTimelineStore.getState().isPlaying) {
-                    useMixerStore.setState({}); // Force re-render
-                  }
+                  // Always trigger re-render when proxy frame loads (for instant scrubbing)
+                  useMixerStore.setState({}); // Force re-render
                 }
               });
             }
           }
 
-          // Use cached proxy frame if available
+          // Use cached proxy frame - this should be the primary display method
           const proxyImage = cached?.image;
           if (proxyImage) {
             const transform = clip.transform;
@@ -528,44 +530,9 @@ export function Timeline() {
               };
               layersChanged = true;
             }
-
-            // Pause the video since we're using proxy frames (but keep it ready for fallback)
-            if (!video.paused) {
-              video.pause();
-            }
-          } else {
-            // Fall back to video while proxy frame is loading
-            // This ensures smooth playback even if proxy isn't loaded yet
-            if (isPlaying && video.paused) {
-              video.play().catch(() => {});
-            }
-
-            const transform = clip.transform;
-            const needsUpdate = !layer ||
-              layer.source?.videoElement !== video ||
-              layer.opacity !== transform.opacity ||
-              layer.blendMode !== transform.blendMode;
-
-            if (needsUpdate) {
-              newLayers[layerIndex] = {
-                id: `timeline_layer_${layerIndex}`,
-                name: clip.name,
-                visible: isVideoTrackVisible(track),
-                opacity: transform.opacity,
-                blendMode: transform.blendMode,
-                source: {
-                  type: 'video',
-                  videoElement: video,
-                  webCodecsPlayer: webCodecsPlayer,
-                },
-                effects: [],
-                position: { x: transform.position.x, y: transform.position.y },
-                scale: { x: transform.scale.x, y: transform.scale.y },
-                rotation: transform.rotation.z * Math.PI / 180,
-              };
-              layersChanged = true;
-            }
           }
+          // If proxy frame not loaded yet, keep showing the last frame (or black)
+          // Do NOT fall back to video - proxy mode means proxy only
         } else {
           // Original video playback (no proxy)
           // WebCodecsPlayer (if available) listens to video element events automatically
@@ -1433,7 +1400,12 @@ export function Timeline() {
 
     // Get proxy status for this clip's media file
     const mediaStore = useMediaStore.getState();
-    const mediaFile = mediaStore.files.find(f => f.name === clip.name || f.name === clip.name.replace(' (Audio)', ''));
+    // Look up by mediaFileId first (most reliable), then by name
+    const mediaFile = mediaStore.files.find(f =>
+      f.id === clip.source?.mediaFileId ||
+      f.name === clip.name ||
+      f.name === clip.name.replace(' (Audio)', '')
+    );
     const proxyProgress = mediaFile?.proxyProgress || 0;
     const proxyStatus = mediaFile?.proxyStatus;
     const isGeneratingProxy = proxyStatus === 'generating';

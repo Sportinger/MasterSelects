@@ -110,6 +110,7 @@ interface MediaState {
   initFromDB: () => Promise<void>;
   saveProject: (name?: string) => Promise<string>;
   loadProject: (projectId: string) => Promise<void>;
+  newProject: () => void;
   getProjectList: () => Promise<StoredProject[]>;
   deleteProject: (projectId: string) => Promise<void>;
   currentProjectId: string | null;
@@ -980,6 +981,48 @@ export const useMediaStore = create<MediaState>()(
             set({ isLoading: false });
             throw e;
           }
+        },
+
+        // Create a new empty project
+        newProject: () => {
+          // Clear timeline first
+          const timelineStore = useTimelineStore.getState();
+          timelineStore.clearTimeline();
+
+          // Create new default composition
+          const newCompId = `comp-${Date.now()}`;
+          const newComposition: Composition = {
+            id: newCompId,
+            name: 'Comp 1',
+            type: 'composition',
+            parentId: null,
+            createdAt: Date.now(),
+            width: 1920,
+            height: 1080,
+            frameRate: 30,
+            duration: 60,
+            backgroundColor: '#000000',
+          };
+
+          // Reset all state
+          set({
+            files: [],
+            compositions: [newComposition],
+            folders: [],
+            activeCompositionId: newCompId,
+            selectedIds: [],
+            expandedFolderIds: [],
+            currentProjectId: null,
+            currentProjectName: 'Untitled Project',
+            proxyEnabled: true,
+            proxyGenerationQueue: [],
+            currentlyGeneratingProxyId: null,
+          });
+
+          // Load the new composition's empty timeline
+          timelineStore.loadState(undefined);
+
+          console.log('[MediaStore] New project created');
         },
 
         // Get list of all projects

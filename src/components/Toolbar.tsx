@@ -17,6 +17,7 @@ export function Toolbar() {
     setProjectName,
     saveProject,
     loadProject,
+    newProject,
     getProjectList,
     deleteProject,
     isLoading,
@@ -61,6 +62,13 @@ export function Toolbar() {
     setIsEditingName(false);
   }, [editName, setProjectName]);
 
+  const handleNew = useCallback(() => {
+    if (confirm('Create a new project? Unsaved changes will be lost.')) {
+      newProject();
+      setShowProjectMenu(false);
+    }
+  }, [newProject]);
+
   const handleNewOutput = () => {
     const output = createOutputWindow(`Output ${Date.now()}`);
     if (output) {
@@ -102,13 +110,17 @@ export function Toolbar() {
           </span>
         )}
         <div className="project-buttons">
-          <button className="btn btn-sm" onClick={handleSave} disabled={isLoading}>
+          <button className="btn btn-sm" onClick={handleNew} disabled={isLoading} title="New Project">
+            New
+          </button>
+          <button className="btn btn-sm" onClick={handleSave} disabled={isLoading} title="Save Project">
             Save
           </button>
           <button
             className="btn btn-sm"
             onClick={() => setShowProjectMenu(!showProjectMenu)}
             disabled={isLoading}
+            title="Open Project"
           >
             {isLoading ? 'Loading...' : 'Open'}
           </button>
