@@ -156,3 +156,34 @@ export interface TimelineState {
   isPlaying: boolean;
   selectedClipId: string | null;
 }
+
+// Serializable clip data for storage (without DOM elements)
+export interface SerializableClip {
+  id: string;
+  trackId: string;
+  name: string;
+  mediaFileId: string;       // Reference to MediaFile in mediaStore
+  startTime: number;
+  duration: number;
+  inPoint: number;
+  outPoint: number;
+  sourceType: 'video' | 'audio' | 'image';
+  naturalDuration?: number;
+  thumbnails?: string[];
+  linkedClipId?: string;
+  waveform?: number[];
+  transform: ClipTransform;
+}
+
+// Serializable timeline data for composition storage
+export interface CompositionTimelineData {
+  tracks: TimelineTrack[];
+  clips: SerializableClip[];
+  playheadPosition: number;
+  duration: number;
+  zoom: number;
+  scrollX: number;
+  inPoint: number | null;
+  outPoint: number | null;
+  loopPlayback: boolean;
+}

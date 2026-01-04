@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import type { TimelineClip, TimelineTrack, ClipTransform, BlendMode } from '../types';
+import type { TimelineClip, TimelineTrack, ClipTransform, BlendMode, CompositionTimelineData, SerializableClip } from '../types';
 import { useMediaStore } from './mediaStore';
 import { WebCodecsPlayer } from '../engine/WebCodecsPlayer';
 
@@ -181,6 +181,11 @@ interface TimelineStore {
   findAvailableAudioTrack: (startTime: number, duration: number) => string;
   getSnappedPosition: (clipId: string, desiredStartTime: number, trackId: string) => { startTime: number; snapped: boolean };
   findNonOverlappingPosition: (clipId: string, desiredStartTime: number, trackId: string, duration: number) => number;
+
+  // Composition timeline save/load
+  getSerializableState: () => CompositionTimelineData;
+  loadState: (data: CompositionTimelineData | undefined) => Promise<void>;
+  clearTimeline: () => void;
 }
 
 const DEFAULT_TRACKS: TimelineTrack[] = [
@@ -1360,6 +1365,224 @@ export const useTimelineStore = create<TimelineStore>()(
 
       // As a fallback, return the desired position (shouldn't happen often)
       return Math.max(0, desiredStartTime);
+    },
+
+    // Get serializable timeline state for saving to composition
+    getSerializableState: (): CompositionTimelineData => {
+      const { tracks, clips, playheadPosition, duration, zoom, scrollX, inPoint, outPoint, loopPlayback } = get();
+
+      // Convert clips to serializable format (without DOM elements)
+      const serializableClips: SerializableClip[] = clips.map(clip => {
+        // Find the mediaFile ID by matching the file name in mediaStore
+        const mediaStore = useMediaStore.getState();
+        const mediaFile = mediaStore.files.find(f => f.name === clip.name || f.url === clip.file?.name);
+
+        return {
+          id: clip.id,
+          trackId: clip.trackId,
+          name: clip.name,
+          mediaFileId: mediaFile?.id || '', // Reference to media file
+          startTime: clip.startTime,
+          duration: clip.duration,
+          inPoint: clip.inPoint,
+          outPoint: clip.outPoint,
+          sourceType: clip.source?.type || 'video',
+          naturalDuration: clip.source?.naturalDuration,
+          thumbnails: clip.thumbnails,
+          linkedClipId: clip.linkedClipId,
+          waveform: clip.waveform,
+          transform: clip.transform,
+        };
+      });
+
+      return {
+        tracks,
+        clips: serializableClips,
+        playheadPosition,
+        duration,
+        zoom,
+        scrollX,
+        inPoint,
+        outPoint,
+        loopPlayback,
+      };
+    },
+
+    // Load timeline state from composition data
+    loadState: async (data: CompositionTimelineData | undefined) => {
+      const { pause, clearTimeline } = get();
+
+      // Stop playback
+      pause();
+
+      // Clear current timeline
+      clearTimeline();
+
+      if (!data) {
+        // No data - start with fresh default timeline
+        set({
+          tracks: DEFAULT_TRACKS.map(t => ({ ...t })),
+          clips: [],
+          playheadPosition: 0,
+          duration: 60,
+          zoom: 50,
+          scrollX: 0,
+          inPoint: null,
+          outPoint: null,
+          loopPlayback: false,
+          selectedClipId: null,
+        });
+        return;
+      }
+
+      // Restore tracks and basic state
+      set({
+        tracks: data.tracks.map(t => ({ ...t })),
+        clips: [], // We'll restore clips separately
+        playheadPosition: data.playheadPosition,
+        duration: data.duration,
+        zoom: data.zoom,
+        scrollX: data.scrollX,
+        inPoint: data.inPoint,
+        outPoint: data.outPoint,
+        loopPlayback: data.loopPlayback,
+        selectedClipId: null,
+      });
+
+      // Restore clips - need to recreate media elements from file references
+      const mediaStore = useMediaStore.getState();
+
+      for (const serializedClip of data.clips) {
+        // Find the media file
+        const mediaFile = mediaStore.files.find(f => f.id === serializedClip.mediaFileId);
+        if (!mediaFile || !mediaFile.file) {
+          console.warn('Could not find media file for clip:', serializedClip.name);
+          continue;
+        }
+
+        // Add the clip using the existing addClip function which handles media loading
+        // But we need to restore the specific settings, so we'll do it manually
+        const clip: TimelineClip = {
+          id: serializedClip.id,
+          trackId: serializedClip.trackId,
+          name: serializedClip.name,
+          file: mediaFile.file,
+          startTime: serializedClip.startTime,
+          duration: serializedClip.duration,
+          inPoint: serializedClip.inPoint,
+          outPoint: serializedClip.outPoint,
+          source: null, // Will be loaded
+          thumbnails: serializedClip.thumbnails,
+          linkedClipId: serializedClip.linkedClipId,
+          waveform: serializedClip.waveform,
+          transform: serializedClip.transform,
+          isLoading: true,
+        };
+
+        // Add clip to state
+        set(state => ({
+          clips: [...state.clips, clip],
+        }));
+
+        // Load media element async
+        const type = serializedClip.sourceType;
+        if (type === 'video') {
+          const video = document.createElement('video');
+          video.src = URL.createObjectURL(mediaFile.file);
+          video.muted = true;
+          video.playsInline = true;
+          video.preload = 'auto';
+
+          video.addEventListener('canplaythrough', () => {
+            set(state => ({
+              clips: state.clips.map(c =>
+                c.id === clip.id
+                  ? {
+                      ...c,
+                      source: {
+                        type: 'video',
+                        videoElement: video,
+                        naturalDuration: video.duration,
+                      },
+                      isLoading: false,
+                    }
+                  : c
+              ),
+            }));
+          }, { once: true });
+        } else if (type === 'audio') {
+          const audio = document.createElement('audio');
+          audio.src = URL.createObjectURL(mediaFile.file);
+          audio.preload = 'auto';
+
+          audio.addEventListener('canplaythrough', () => {
+            set(state => ({
+              clips: state.clips.map(c =>
+                c.id === clip.id
+                  ? {
+                      ...c,
+                      source: {
+                        type: 'audio',
+                        audioElement: audio,
+                        naturalDuration: audio.duration,
+                      },
+                      isLoading: false,
+                    }
+                  : c
+              ),
+            }));
+          }, { once: true });
+        } else if (type === 'image') {
+          const img = new Image();
+          img.src = URL.createObjectURL(mediaFile.file);
+
+          img.addEventListener('load', () => {
+            set(state => ({
+              clips: state.clips.map(c =>
+                c.id === clip.id
+                  ? {
+                      ...c,
+                      source: { type: 'image', imageElement: img },
+                      isLoading: false,
+                    }
+                  : c
+              ),
+            }));
+          }, { once: true });
+        }
+      }
+    },
+
+    // Clear all timeline data
+    clearTimeline: () => {
+      const { clips, pause } = get();
+
+      // Stop playback
+      pause();
+
+      // Clean up media elements
+      clips.forEach(clip => {
+        if (clip.source?.videoElement) {
+          clip.source.videoElement.pause();
+          clip.source.videoElement.src = '';
+        }
+        if (clip.source?.audioElement) {
+          clip.source.audioElement.pause();
+          clip.source.audioElement.src = '';
+        }
+        if (clip.source?.webCodecsPlayer) {
+          clip.source.webCodecsPlayer.destroy();
+        }
+      });
+
+      set({
+        clips: [],
+        selectedClipId: null,
+        cachedFrameTimes: new Set(),
+        ramPreviewProgress: null,
+        ramPreviewRange: null,
+        isRamPreviewing: false,
+      });
     },
   }))
 );

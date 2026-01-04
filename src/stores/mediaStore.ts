@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector, persist } from 'zustand/middleware';
+import { useTimelineStore } from './timelineStore';
 
 // Media item types
 export type MediaType = 'video' | 'audio' | 'image' | 'composition';
@@ -34,6 +35,7 @@ export interface Composition extends MediaItem {
   frameRate: number;
   duration: number; // In seconds
   backgroundColor: string;
+  timelineData?: import('../types').CompositionTimelineData; // Stored timeline state
 }
 
 // Folder for organization
@@ -432,7 +434,30 @@ export const useMediaStore = create<MediaState>()(
         },
 
         setActiveComposition: (id: string | null) => {
+          const { activeCompositionId, compositions } = get();
+          const timelineStore = useTimelineStore.getState();
+
+          // Save current timeline state to the current composition (if any)
+          if (activeCompositionId) {
+            const timelineData = timelineStore.getSerializableState();
+            set((state) => ({
+              compositions: state.compositions.map((c) =>
+                c.id === activeCompositionId ? { ...c, timelineData } : c
+              ),
+            }));
+          }
+
+          // Update active composition
           set({ activeCompositionId: id });
+
+          // Load timeline state from the new composition
+          if (id) {
+            const newComp = compositions.find((c) => c.id === id);
+            timelineStore.loadState(newComp?.timelineData);
+          } else {
+            // No composition selected - clear timeline
+            timelineStore.clearTimeline();
+          }
         },
 
         getActiveComposition: () => {
