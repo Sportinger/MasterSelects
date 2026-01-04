@@ -808,18 +808,24 @@ export function Timeline() {
       // Check cache first for duration
       let duration: number | undefined;
       const items = e.dataTransfer.items;
+      console.log('[DragEnter] items:', items?.length, 'types:', e.dataTransfer.types);
       if (items && items.length > 0) {
         const item = items[0];
+        console.log('[DragEnter] item kind:', item.kind, 'type:', item.type);
         if (item.kind === 'file') {
           const file = item.getAsFile();
+          console.log('[DragEnter] file:', file?.name, file?.size, file?.type);
           if (file && file.type.startsWith('video/')) {
             const cacheKey = `${file.name}_${file.size}`;
             if (dragDurationCacheRef.current?.url === cacheKey) {
               // Use cached duration
               duration = dragDurationCacheRef.current.duration;
+              console.log('[DragEnter] Using cached duration:', duration);
             } else {
               // Load duration in background, update state when ready
+              console.log('[DragEnter] Loading duration for:', file.name);
               getVideoDurationQuick(file).then(dur => {
+                console.log('[DragEnter] Got duration:', dur);
                 if (dur) {
                   dragDurationCacheRef.current = { url: cacheKey, duration: dur };
                   // Update the externalDrag state with the loaded duration
