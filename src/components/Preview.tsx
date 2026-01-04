@@ -27,7 +27,7 @@ export function Preview() {
   const dragStart = useRef({ x: 0, y: 0, layerPosX: 0, layerPosY: 0 });
 
   // Helper function to calculate layer bounding box in canvas coordinates
-  // This matches the shader's transform calculation
+  // This matches the shader's transform calculation exactly
   const calculateLayerBounds = useCallback((layer: Layer, canvasW: number, canvasH: number) => {
     // Get source dimensions
     let sourceWidth = outputResolution.width;
@@ -66,15 +66,15 @@ export function Preview() {
     displayHeight *= layer.scale.y;
 
     // Calculate center position
-    // In shader: position is subtracted from UV after centering
-    // position.x positive = layer moves right
-    // position.y positive = layer moves up (in our coordinate system)
     const centerX = canvasW / 2;
     const centerY = canvasH / 2;
 
-    // Position is in normalized coordinates (-1 to 1)
-    // Multiply by canvas size / 2 to get pixel offset
-    const posX = centerX + (layer.position.x * canvasW / 2);
+    // In shader: uv = uv + 0.5 - pos
+    // This means: posX > 0 moves image LEFT, posY > 0 moves image UP
+    // In screen coordinates (Y down positive):
+    // - posX > 0 → box moves LEFT (subtract from centerX)
+    // - posY > 0 → box moves UP (subtract from centerY)
+    const posX = centerX - (layer.position.x * canvasW / 2);
     const posY = centerY - (layer.position.y * canvasH / 2);
 
     return {
@@ -339,10 +339,12 @@ export function Preview() {
     const dx = e.clientX - dragStart.current.x;
     const dy = e.clientY - dragStart.current.y;
 
-    // Convert pixel movement to normalized position (-1 to 1)
+    // Convert pixel movement to normalized position change
+    // In shader: posX > 0 moves LEFT, posY > 0 moves UP
+    // So for natural drag (right = move right), we negate the delta
     // Account for view zoom
-    const normalizedDx = (dx / viewZoom) / (canvasSize.width / 2);
-    const normalizedDy = -(dy / viewZoom) / (canvasSize.height / 2); // Y is inverted
+    const normalizedDx = -(dx / viewZoom) / (canvasSize.width / 2);
+    const normalizedDy = -(dy / viewZoom) / (canvasSize.height / 2);
 
     const newPosX = dragStart.current.layerPosX + normalizedDx;
     const newPosY = dragStart.current.layerPosY + normalizedDy;
