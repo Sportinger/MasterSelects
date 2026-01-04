@@ -1284,23 +1284,6 @@ export function Timeline() {
           >
             RAM {ramPreviewEnabled ? 'ON' : 'OFF'}
           </button>
-          {isRamPreviewing && (
-            <>
-              <div className="ram-preview-progress">
-                <div
-                  className="ram-preview-progress-bar"
-                  style={{ width: `${ramPreviewProgress ?? 0}%` }}
-                />
-              </div>
-              <button
-                className="btn btn-sm btn-danger"
-                onClick={cancelRamPreview}
-                title="Cancel current RAM Preview render"
-              >
-                Cancel
-              </button>
-            </>
-          )}
         </div>
         <div className="timeline-tracks-controls">
           <button className="btn btn-sm" onClick={() => addTrack('video')}>+ Video Track</button>
