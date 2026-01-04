@@ -1208,6 +1208,9 @@ export class WebGPUEngine {
     }
     this.profileData.importTexture = performance.now() - t1;
 
+    // Update video flag for frame rate limiting
+    this.hasActiveVideo = this.layerRenderData.some(d => d.isVideo);
+
     // Early exit if nothing to render - save CPU!
     if (this.layerRenderData.length === 0) {
       // Just clear the preview to black
@@ -1592,6 +1595,15 @@ export class WebGPUEngine {
     return false;
   }
 
+  // Track if we have active video to enable frame limiting
+  private hasActiveVideo = false;
+  private lastRenderTime = 0;
+  private readonly VIDEO_FRAME_TIME = 33.33; // ~30fps when video is playing
+
+  setHasActiveVideo(hasVideo: boolean): void {
+    this.hasActiveVideo = hasVideo;
+  }
+
   start(renderCallback: () => void): void {
     if (this.isRunning) return;
     this.isRunning = true;
@@ -1606,6 +1618,18 @@ export class WebGPUEngine {
       // Measure time since last rAF callback
       const rafGap = lastTimestamp > 0 ? timestamp - lastTimestamp : 0;
       lastTimestamp = timestamp;
+
+      // Frame rate limiting when video is playing
+      // Skip frames to reduce importExternalTexture overhead
+      if (this.hasActiveVideo) {
+        const timeSinceLastRender = timestamp - this.lastRenderTime;
+        if (timeSinceLastRender < this.VIDEO_FRAME_TIME) {
+          // Skip this frame, schedule next
+          this.animationId = requestAnimationFrame(loop);
+          return;
+        }
+        this.lastRenderTime = timestamp;
+      }
 
       // Update RAF gap stat (smoothed)
       this.detailedStats.rafGap = this.detailedStats.rafGap * 0.9 + rafGap * 0.1;
