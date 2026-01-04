@@ -3,6 +3,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useTimelineStore } from '../stores/timelineStore';
 import { useMixerStore } from '../stores/mixerStore';
+import { useMediaStore } from '../stores/mediaStore';
 import { engine } from '../engine/WebGPUEngine';
 
 export function Timeline() {
@@ -51,6 +52,8 @@ export function Timeline() {
     toggleRamPreviewEnabled,
   } = useTimelineStore();
 
+  const { activeCompositionId, getActiveComposition } = useMediaStore();
+  const activeComposition = getActiveComposition();
 
   const timelineRef = useRef<HTMLDivElement>(null);
   const trackLanesRef = useRef<HTMLDivElement>(null);
@@ -1279,6 +1282,18 @@ export function Timeline() {
       </div>
     );
   };
+
+  // No active composition - show empty state
+  if (!activeComposition) {
+    return (
+      <div className="timeline-container timeline-empty">
+        <div className="timeline-empty-message">
+          <p>No composition open</p>
+          <p className="hint">Double-click a composition in the Media panel to open it</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`timeline-container ${clipDrag || clipTrim ? 'is-dragging' : ''}`}>

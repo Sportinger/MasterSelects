@@ -309,6 +309,8 @@ export const useMediaStore = create<MediaState>()(
           set((state) => ({
             compositions: state.compositions.filter((c) => c.id !== id),
             selectedIds: state.selectedIds.filter((sid) => sid !== id),
+            // Clear active composition if we're deleting it
+            activeCompositionId: state.activeCompositionId === id ? null : state.activeCompositionId,
           }));
         },
 

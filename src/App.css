@@ -1330,6 +1330,30 @@ input[type="checkbox"] {
   background: var(--bg-primary);
 }
 
+.timeline-container.timeline-empty {
+  justify-content: center;
+  align-items: center;
+}
+
+.timeline-empty-message {
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.timeline-empty-message p {
+  margin: 0;
+}
+
+.timeline-empty-message p:first-child {
+  font-size: 16px;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.timeline-empty-message .hint {
+  font-size: 13px;
+}
+
 .timeline-toolbar {
   display: flex;
   align-items: center;

@@ -24,6 +24,7 @@ export function MediaPanel() {
     addToSelection,
     clearSelection,
     getItemsByFolder,
+    setActiveComposition,
   } = useMediaStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -76,9 +77,9 @@ export function MediaPanel() {
       toggleFolderExpanded(item.id);
     } else if (item.type === 'composition') {
       // Open composition in timeline
-      console.log('Open composition:', item.name);
+      setActiveComposition(item.id);
     }
-  }, [toggleFolderExpanded]);
+  }, [toggleFolderExpanded, setActiveComposition]);
 
   // Context menu
   const handleContextMenu = useCallback((e: React.MouseEvent, itemId?: string) => {
