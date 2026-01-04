@@ -1351,6 +1351,11 @@ input[type="checkbox"] {
   background: linear-gradient(90deg, rgba(0, 255, 150, 0.1), transparent);
 }
 
+.track-header.dimmed,
+.track-lane.dimmed {
+  opacity: 0.4;
+}
+
 .track-name {
   font-size: 12px;
   font-weight: 500;
