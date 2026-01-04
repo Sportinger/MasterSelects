@@ -1030,7 +1030,8 @@ export class WebGPUEngine {
 
     this.lastLayerCount = this.layerRenderData.length;
     // Track which buffer has the final composited result (readView after loop)
-    this.lastRenderWasPing = !usePing;
+    // After swapping, readView contains the result. usePing tracks if readView is ping.
+    this.lastRenderWasPing = usePing;
 
     // Get cached output bind group
     const finalIsPing = !usePing;

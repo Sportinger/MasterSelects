@@ -123,6 +123,7 @@ export interface TimelineTrack {
   height: number;
   muted: boolean;
   visible: boolean;
+  solo: boolean;
 }
 
 export interface TimelineState {

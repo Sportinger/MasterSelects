@@ -226,6 +226,15 @@ export class FrameExporter {
           continue;
         }
 
+        // Debug: check if pixels are all black
+        if (frame === 0) {
+          let nonZero = 0;
+          for (let i = 0; i < Math.min(pixels.length, 10000); i++) {
+            if (pixels[i] !== 0) nonZero++;
+          }
+          console.log(`[FrameExporter] First frame pixels check: ${nonZero} non-zero values in first 10000 bytes`);
+        }
+
         await this.encoder.encodeFrame(pixels, frame);
 
         const frameTime = performance.now() - frameStart;
@@ -320,10 +329,20 @@ export class FrameExporter {
     const videoTracks = tracks.filter(t => t.type === 'video');
     const trackOrder = new Map(videoTracks.map((t, i) => [t.id, i]));
 
+    // Check if any video track has solo enabled
+    const anyVideoSolo = videoTracks.some(t => t.solo);
+
+    // Helper to determine effective visibility for a video track (respecting solo)
+    const isTrackVisible = (track: typeof videoTracks[0]) => {
+      if (!track.visible) return false;
+      if (anyVideoSolo) return track.solo;
+      return true;
+    };
+
     const sortedClips = clips
       .filter(clip => {
         const track = tracks.find(t => t.id === clip.trackId);
-        return track?.type === 'video' && track.visible;
+        return track?.type === 'video' && isTrackVisible(track);
       })
       .sort((a, b) => {
         const orderA = trackOrder.get(a.trackId) ?? 0;

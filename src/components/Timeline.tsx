@@ -168,6 +168,16 @@ export function Timeline() {
     // Get video tracks sorted by index (for layer order)
     const videoTracks = tracks.filter(t => t.type === 'video');
 
+    // Check if any video track has solo enabled
+    const anyVideoSolo = videoTracks.some(t => t.solo);
+
+    // Helper to determine effective visibility for a video track
+    const isVideoTrackVisible = (track: typeof videoTracks[0]) => {
+      if (!track.visible) return false;
+      if (anyVideoSolo) return track.solo;
+      return true;
+    };
+
     // Build new layers array atomically - don't setState inside loop!
     const newLayers = [...currentLayers];
     let layersChanged = false;
@@ -234,7 +244,7 @@ export function Timeline() {
           newLayers[layerIndex] = {
             id: `timeline_layer_${layerIndex}`,
             name: clip.name,
-            visible: track.visible,
+            visible: isVideoTrackVisible(track),
             opacity: transform.opacity,
             blendMode: transform.blendMode,
             source: {
@@ -266,7 +276,7 @@ export function Timeline() {
           newLayers[layerIndex] = {
             id: `timeline_layer_${layerIndex}`,
             name: clip.name,
-            visible: track.visible,
+            visible: isVideoTrackVisible(track),
             opacity: transform.opacity,
             blendMode: transform.blendMode,
             source: {
@@ -296,6 +306,17 @@ export function Timeline() {
 
     // Handle audio tracks - sync audio elements with playhead
     const audioTracks = tracks.filter(t => t.type === 'audio');
+
+    // Check if any audio track has solo enabled
+    const anyAudioSolo = audioTracks.some(t => t.solo);
+
+    // Helper to determine if an audio track should be muted (considering solo)
+    const isAudioTrackMuted = (track: typeof audioTracks[0]) => {
+      if (track.muted) return true;
+      if (anyAudioSolo) return !track.solo;
+      return false;
+    };
+
     audioTracks.forEach((track) => {
       const clip = clipsAtTime.find(c => c.trackId === track.id);
 
@@ -309,11 +330,12 @@ export function Timeline() {
           audio.currentTime = clipTime;
         }
 
-        // Handle mute state
-        audio.muted = track.muted;
+        // Handle mute state (including solo logic)
+        const effectivelyMuted = isAudioTrackMuted(track);
+        audio.muted = effectivelyMuted;
 
         // Play/pause audio based on timeline state (pause while scrubbing)
-        const shouldPlay = isPlaying && !track.muted && !isDraggingPlayhead;
+        const shouldPlay = isPlaying && !effectivelyMuted && !isDraggingPlayhead;
         if (shouldPlay && audio.paused) {
           audio.play().catch(() => {});
         } else if (!shouldPlay && !audio.paused) {
@@ -1094,12 +1116,21 @@ export function Timeline() {
             >
               <span className="track-name">{track.name}</span>
               <div className="track-controls">
+                {track.type === 'audio' && (
+                  <button
+                    className={`btn-icon ${track.muted ? 'muted' : ''}`}
+                    onClick={() => useTimelineStore.getState().setTrackMuted(track.id, !track.muted)}
+                    title={track.muted ? 'Unmute' : 'Mute'}
+                  >
+                    {track.muted ? '🔇' : '🔊'}
+                  </button>
+                )}
                 <button
-                  className={`btn-icon ${track.muted ? 'muted' : ''}`}
-                  onClick={() => useTimelineStore.getState().setTrackMuted(track.id, !track.muted)}
-                  title={track.muted ? 'Unmute' : 'Mute'}
+                  className={`btn-icon ${track.solo ? 'solo-active' : ''}`}
+                  onClick={() => useTimelineStore.getState().setTrackSolo(track.id, !track.solo)}
+                  title={track.solo ? 'Solo On' : 'Solo Off'}
                 >
-                  {track.muted ? '🔇' : '🔊'}
+                  S
                 </button>
                 {track.type === 'video' && (
                   <button

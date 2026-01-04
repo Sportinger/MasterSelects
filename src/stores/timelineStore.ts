@@ -125,6 +125,7 @@ interface TimelineStore {
   removeTrack: (id: string) => void;
   setTrackMuted: (id: string, muted: boolean) => void;
   setTrackVisible: (id: string, visible: boolean) => void;
+  setTrackSolo: (id: string, solo: boolean) => void;
   setTrackHeight: (id: string, height: number) => void;
   scaleTracksOfType: (type: 'video' | 'audio', delta: number) => void;
 
@@ -164,9 +165,9 @@ interface TimelineStore {
 }
 
 const DEFAULT_TRACKS: TimelineTrack[] = [
-  { id: 'video-1', name: 'Video 1', type: 'video', height: 60, muted: false, visible: true },
-  { id: 'video-2', name: 'Video 2', type: 'video', height: 60, muted: false, visible: true },
-  { id: 'audio-1', name: 'Audio', type: 'audio', height: 40, muted: false, visible: true },
+  { id: 'video-1', name: 'Video 1', type: 'video', height: 60, muted: false, visible: true, solo: false },
+  { id: 'video-2', name: 'Video 2', type: 'video', height: 60, muted: false, visible: true, solo: false },
+  { id: 'audio-1', name: 'Audio', type: 'audio', height: 40, muted: false, visible: true, solo: false },
 ];
 
 export const useTimelineStore = create<TimelineStore>()(
@@ -194,6 +195,7 @@ export const useTimelineStore = create<TimelineStore>()(
         height: type === 'video' ? 60 : 40,
         muted: false,
         visible: true,
+        solo: false,
       };
 
       // Video tracks: insert at TOP (before all existing video tracks)
@@ -229,7 +231,13 @@ export const useTimelineStore = create<TimelineStore>()(
       });
     },
 
-    
+    setTrackSolo: (id, solo) => {
+      const { tracks } = get();
+      set({
+        tracks: tracks.map(t => t.id === id ? { ...t, solo } : t),
+      });
+    },
+
     setTrackHeight: (id, height) => {
       const { tracks } = get();
       set({

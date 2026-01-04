@@ -1380,6 +1380,12 @@ input[type="checkbox"] {
   opacity: 0.3;
 }
 
+.btn-icon.solo-active {
+  color: #ffc107;
+  opacity: 1;
+  font-weight: bold;
+}
+
 /* Timeline tracks area */
 .timeline-tracks {
   flex: 1;
