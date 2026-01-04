@@ -142,11 +142,20 @@ export function Timeline() {
         toggleLoopPlayback();
         return;
       }
+
+      // Delete/Backspace: remove selected clip from timeline
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        if (selectedClipId) {
+          removeClip(selectedClipId);
+        }
+        return;
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPlaying, play, pause, setInPointAtPlayhead, setOutPointAtPlayhead, clearInOut, toggleLoopPlayback]);
+  }, [isPlaying, play, pause, setInPointAtPlayhead, setOutPointAtPlayhead, clearInOut, toggleLoopPlayback, selectedClipId, removeClip]);
 
   // Track last seek time to throttle during scrubbing
   const lastSeekRef = useRef<{ [clipId: string]: number }>({});
