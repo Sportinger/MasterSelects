@@ -196,6 +196,19 @@ export class WebGPUEngine {
   private frameTimeIndex = 0;
   private frameTimeCount = 0;
 
+  // === FRAME CACHING FOR SMOOTH SCRUBBING ===
+  // Last valid frame cache - keeps last frame visible during seeks
+  private lastFrameTextures: Map<HTMLVideoElement, GPUTexture> = new Map();
+  private lastFrameViews: Map<HTMLVideoElement, GPUTextureView> = new Map();
+  private lastFrameSizes: Map<HTMLVideoElement, { width: number; height: number }> = new Map();
+
+  // Scrubbing frame cache - pre-decoded frames for instant access
+  // Key: "videoSrc:frameTime" -> GPUTexture
+  private scrubbingCache: Map<string, GPUTexture> = new Map();
+  private scrubbingCacheViews: Map<string, GPUTextureView> = new Map();
+  private scrubbingCacheOrder: string[] = []; // LRU order
+  private maxScrubbingCacheFrames = 300; // ~10 seconds at 30fps, ~2.4GB VRAM at 1080p
+
   async initialize(): Promise<boolean> {
     // Prevent multiple initializations with promise-based lock
     if (this.isInitialized && this.device) {
@@ -597,6 +610,161 @@ export class WebGPUEngine {
     }
   }
 
+  // Capture current video frame to a persistent GPU texture (for last-frame cache)
+  private captureVideoFrame(video: HTMLVideoElement): void {
+    if (!this.device || video.videoWidth === 0 || video.videoHeight === 0) return;
+
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+
+    // Get or create texture for this video
+    let texture = this.lastFrameTextures.get(video);
+    const existingSize = this.lastFrameSizes.get(video);
+
+    // Recreate if size changed
+    if (!texture || !existingSize || existingSize.width !== width || existingSize.height !== height) {
+      texture?.destroy();
+      texture = this.device.createTexture({
+        size: [width, height],
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+      this.lastFrameTextures.set(video, texture);
+      this.lastFrameSizes.set(video, { width, height });
+      this.lastFrameViews.set(video, texture.createView());
+    }
+
+    // Copy current frame to texture
+    try {
+      this.device.queue.copyExternalImageToTexture(
+        { source: video },
+        { texture },
+        [width, height]
+      );
+    } catch {
+      // Video might not be ready - ignore
+    }
+  }
+
+  // Get last cached frame for a video (used during seeks)
+  private getLastFrame(video: HTMLVideoElement): { view: GPUTextureView; width: number; height: number } | null {
+    const view = this.lastFrameViews.get(video);
+    const size = this.lastFrameSizes.get(video);
+    if (view && size) {
+      return { view, width: size.width, height: size.height };
+    }
+    return null;
+  }
+
+  // === SCRUBBING FRAME CACHE ===
+  // Cache a frame at a specific time for instant scrubbing access
+  cacheFrameAtTime(video: HTMLVideoElement, time: number): void {
+    if (!this.device || video.videoWidth === 0 || video.readyState < 2) return;
+
+    const key = `${video.src}:${time.toFixed(3)}`;
+    if (this.scrubbingCache.has(key)) return; // Already cached
+
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+
+    // Create texture for this frame
+    const texture = this.device.createTexture({
+      size: [width, height],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+
+    try {
+      this.device.queue.copyExternalImageToTexture(
+        { source: video },
+        { texture },
+        [width, height]
+      );
+
+      // Add to cache
+      this.scrubbingCache.set(key, texture);
+      this.scrubbingCacheViews.set(key, texture.createView());
+      this.scrubbingCacheOrder.push(key);
+
+      // LRU eviction
+      while (this.scrubbingCacheOrder.length > this.maxScrubbingCacheFrames) {
+        const oldKey = this.scrubbingCacheOrder.shift()!;
+        const oldTexture = this.scrubbingCache.get(oldKey);
+        oldTexture?.destroy();
+        this.scrubbingCache.delete(oldKey);
+        this.scrubbingCacheViews.delete(oldKey);
+      }
+    } catch {
+      texture.destroy();
+    }
+  }
+
+  // Get cached frame for scrubbing
+  getCachedFrame(videoSrc: string, time: number): GPUTextureView | null {
+    const key = `${videoSrc}:${time.toFixed(3)}`;
+    const view = this.scrubbingCacheViews.get(key);
+    if (view) {
+      // Move to end of LRU list
+      const idx = this.scrubbingCacheOrder.indexOf(key);
+      if (idx > -1) {
+        this.scrubbingCacheOrder.splice(idx, 1);
+        this.scrubbingCacheOrder.push(key);
+      }
+      return view;
+    }
+    return null;
+  }
+
+  // Pre-cache frames around a time point for smooth scrubbing
+  preCacheFrames(video: HTMLVideoElement, centerTime: number, radiusSeconds: number = 2, fps: number = 30): void {
+    if (!this.device || !video.src) return;
+
+    const frameInterval = 1 / fps;
+    const startTime = Math.max(0, centerTime - radiusSeconds);
+    const endTime = Math.min(video.duration || 0, centerTime + radiusSeconds);
+
+    // Queue frames to cache (will be cached as video seeks to each position)
+    const framesToCache: number[] = [];
+    for (let t = startTime; t <= endTime; t += frameInterval) {
+      const key = `${video.src}:${t.toFixed(3)}`;
+      if (!this.scrubbingCache.has(key)) {
+        framesToCache.push(t);
+      }
+    }
+
+    // Return the list for external caching logic
+    return;
+  }
+
+  // Get scrubbing cache stats
+  getScrubbingCacheStats(): { count: number; maxCount: number } {
+    return {
+      count: this.scrubbingCache.size,
+      maxCount: this.maxScrubbingCacheFrames,
+    };
+  }
+
+  // Clear scrubbing cache for a specific video
+  clearScrubbingCache(videoSrc?: string): void {
+    if (videoSrc) {
+      // Clear only frames from this video
+      const keysToRemove = this.scrubbingCacheOrder.filter(k => k.startsWith(videoSrc));
+      keysToRemove.forEach(key => {
+        const texture = this.scrubbingCache.get(key);
+        texture?.destroy();
+        this.scrubbingCache.delete(key);
+        this.scrubbingCacheViews.delete(key);
+      });
+      this.scrubbingCacheOrder = this.scrubbingCacheOrder.filter(k => !k.startsWith(videoSrc));
+    } else {
+      // Clear all
+      this.scrubbingCache.forEach(t => t.destroy());
+      this.scrubbingCache.clear();
+      this.scrubbingCacheViews.clear();
+      this.scrubbingCacheOrder = [];
+    }
+  }
+
   // Reusable layer data array to avoid allocations
   private layerRenderData: Array<{
     layer: Layer;
@@ -649,6 +817,9 @@ export class WebGPUEngine {
         if (video.readyState >= 2) {
           const extTex = this.importVideoTexture(video);
           if (extTex) {
+            // Successfully got live frame - capture it for fallback during seeks
+            this.captureVideoFrame(video);
+
             this.layerRenderData.push({
               layer,
               isVideo: true,
@@ -656,6 +827,34 @@ export class WebGPUEngine {
               textureView: null,
               sourceWidth: video.videoWidth,
               sourceHeight: video.videoHeight,
+            });
+            continue;
+          } else {
+            // Import failed (likely seeking) - try to use last cached frame
+            const lastFrame = this.getLastFrame(video);
+            if (lastFrame) {
+              this.layerRenderData.push({
+                layer,
+                isVideo: false, // Use as static texture, not external
+                externalTexture: null,
+                textureView: lastFrame.view,
+                sourceWidth: lastFrame.width,
+                sourceHeight: lastFrame.height,
+              });
+              continue;
+            }
+          }
+        } else {
+          // Video not ready - try last frame cache
+          const lastFrame = this.getLastFrame(video);
+          if (lastFrame) {
+            this.layerRenderData.push({
+              layer,
+              isVideo: false,
+              externalTexture: null,
+              textureView: lastFrame.view,
+              sourceWidth: lastFrame.width,
+              sourceHeight: lastFrame.height,
             });
             continue;
           }
@@ -1018,6 +1217,17 @@ export class WebGPUEngine {
       buffer.destroy();
     }
     this.layerUniformBuffers.clear();
+
+    // Destroy last-frame cache textures
+    for (const texture of this.lastFrameTextures.values()) {
+      texture.destroy();
+    }
+    this.lastFrameTextures.clear();
+    this.lastFrameViews.clear();
+    this.lastFrameSizes.clear();
+
+    // Destroy scrubbing cache
+    this.clearScrubbingCache();
 
     this.layerUniformBuffer?.destroy();
     this.device?.destroy();

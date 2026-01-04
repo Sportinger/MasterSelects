@@ -3,6 +3,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useTimelineStore } from '../stores/timelineStore';
 import { useMixerStore } from '../stores/mixerStore';
+import { engine } from '../engine/WebGPUEngine';
 
 export function Timeline() {
   const {
@@ -156,6 +157,11 @@ export function Timeline() {
           video.play().catch(() => {});
         } else if (!isPlaying && !video.paused) {
           video.pause();
+        }
+
+        // Cache frame for smooth scrubbing (only when not seeking)
+        if (!video.seeking && video.readyState >= 2) {
+          engine.cacheFrameAtTime(video, clipTime);
         }
 
         // Check if layer needs update

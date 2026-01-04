@@ -124,11 +124,18 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     return () => {
       window.removeEventListener('mouseup', handleGlobalMouseUp);
       window.removeEventListener('mousemove', handleGlobalMouseMove);
+      // Don't clear timer here - it's managed by cancelHold and mouseDown
+    };
+  }, [holdProgress, cancelHold]);
+
+  // Cleanup timer on unmount only
+  useEffect(() => {
+    return () => {
       if (holdTimerRef.current) {
         clearTimeout(holdTimerRef.current);
       }
     };
-  }, [holdProgress, cancelHold]);
+  }, []);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!dragState.isDragging || !containerRef.current) return;
