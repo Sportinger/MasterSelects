@@ -241,11 +241,13 @@ export function Timeline() {
     pendingSeekRef.current = {};
   }, [isDraggingPlayhead, clips]);
 
+  // Track which clips are currently active (to detect clip changes)
+  const activeClipIdsRef = useRef<string>('');
+
   // Sync timeline playback with Preview - update mixer layers based on clips at playhead
   // IMPORTANT: This uses batched updates to prevent flickering from race conditions
   useEffect(() => {
     // CRITICAL: Skip video seeking during RAM Preview generation
-    // RAM Preview needs exclusive control of video element seeking to capture correct frames
     if (isRamPreviewing) {
       return;
     }
@@ -255,12 +257,29 @@ export function Timeline() {
         playheadPosition >= ramPreviewRange.start &&
         playheadPosition <= ramPreviewRange.end) {
       if (engine.renderCachedFrame(playheadPosition)) {
-        // Successfully rendered from cache, skip live rendering
         return;
       }
     }
 
     const clipsAtTime = getClipsAtTime(playheadPosition);
+
+    // During playback: MINIMAL WORK - just ensure videos are playing
+    // Skip ALL heavy React/state work - engine reads directly from video elements
+    if (isPlaying) {
+      clipsAtTime.forEach(clip => {
+        if (clip.source?.videoElement?.paused) {
+          clip.source.videoElement.play().catch(() => {});
+        }
+      });
+      // Only update layers once at start of playback, not every frame
+      if (activeClipIdsRef.current === '__playing__') {
+        return;
+      }
+      activeClipIdsRef.current = '__playing__';
+    } else {
+      activeClipIdsRef.current = '';
+    }
+
     const currentLayers = useMixerStore.getState().layers;
 
     // Get video tracks sorted by index (for layer order)
@@ -289,47 +308,54 @@ export function Timeline() {
         // Seek video to correct position within clip
         const clipTime = playheadPosition - clip.startTime + clip.inPoint;
         const video = clip.source.videoElement;
+        const webCodecsPlayer = clip.source.webCodecsPlayer;
         const timeDiff = Math.abs(video.currentTime - clipTime);
 
-        // Only seek if difference is significant
-        if (timeDiff > 0.05) {
-          const now = performance.now();
-          const lastSeek = lastSeekRef.current[clip.id] || 0;
-
-          // Throttle seeks during scrubbing - wait for previous seek to settle
-          if (isDraggingPlayhead && now - lastSeek < 80) {
-            // Store pending seek, will be applied when scrubbing stops
-            pendingSeekRef.current[clip.id] = clipTime;
-          } else {
-            // Use fastSeek during scrubbing for smoother experience (seeks to nearest keyframe)
-            if (isDraggingPlayhead && 'fastSeek' in video) {
-              video.fastSeek(clipTime);
-            } else {
-              video.currentTime = clipTime;
-            }
-            lastSeekRef.current[clip.id] = now;
-            delete pendingSeekRef.current[clip.id];
+        // WebCodecsPlayer (if available) listens to video element events automatically
+        // We just need to seek it when scrubbing
+        if (webCodecsPlayer) {
+          const wcTimeDiff = Math.abs(webCodecsPlayer.currentTime - clipTime);
+          if (wcTimeDiff > 0.05) {
+            webCodecsPlayer.seek(clipTime);
           }
         }
 
+        // Control HTMLVideoElement playback
         if (isPlaying && video.paused) {
           video.play().catch(() => {});
         } else if (!isPlaying && !video.paused) {
           video.pause();
         }
 
-        // Cache frame for smooth scrubbing (only during normal playback, throttled)
-        // Don't cache while scrubbing - the video is seeking and frames aren't reliable
-        const now = performance.now();
-        if (!isDraggingPlayhead && !video.seeking && video.readyState >= 2 && now - lastCacheTimeRef.current > 100) {
-          engine.cacheFrameAtTime(video, clipTime);
-          lastCacheTimeRef.current = now;
+        // During playback: DON'T seek - let video play naturally, we sync FROM it
+        // Only seek when scrubbing or paused
+        if (!isPlaying) {
+          const seekThreshold = isDraggingPlayhead ? 0.1 : 0.05;
+
+          if (timeDiff > seekThreshold) {
+            const now = performance.now();
+            const lastSeek = lastSeekRef.current[clip.id] || 0;
+
+            // Throttle seeks during scrubbing
+            if (isDraggingPlayhead && now - lastSeek < 80) {
+              pendingSeekRef.current[clip.id] = clipTime;
+            } else {
+              if (isDraggingPlayhead && 'fastSeek' in video) {
+                video.fastSeek(clipTime);
+              } else {
+                video.currentTime = clipTime;
+              }
+              lastSeekRef.current[clip.id] = now;
+              delete pendingSeekRef.current[clip.id];
+            }
+          }
         }
 
         // Check if layer needs update
         const transform = clip.transform;
         const needsUpdate = !layer ||
           layer.source?.videoElement !== video ||
+          layer.source?.webCodecsPlayer !== webCodecsPlayer ||
           layer.opacity !== transform.opacity ||
           layer.blendMode !== transform.blendMode ||
           layer.position.x !== transform.position.x ||
@@ -348,6 +374,7 @@ export function Timeline() {
             source: {
               type: 'video',
               videoElement: video,
+              webCodecsPlayer: webCodecsPlayer,
             },
             effects: [],
             position: { x: transform.position.x, y: transform.position.y },
@@ -458,43 +485,69 @@ export function Timeline() {
     return clips.filter(c => time >= c.startTime && time < c.startTime + c.duration);
   }, [clips]);
 
-  // Playback loop
+  // Playback loop - minimal work, just update UI playhead periodically
+  // Video plays independently via video.play(), we just read its time for UI
   useEffect(() => {
     if (!isPlaying) return;
 
-    let lastTime = performance.now();
-    let animationId: number;
+    let intervalId: ReturnType<typeof setInterval>;
+    let lastVideoTime = 0;
 
-    const tick = (now: number) => {
-      const delta = (now - lastTime) / 1000;
-      lastTime = now;
+    // Find the active video clip
+    const getActiveVideoClip = () => {
+      const state = useTimelineStore.getState();
+      const pos = state.playheadPosition;
+      for (const clip of state.clips) {
+        if (clip.source?.videoElement && pos >= clip.startTime && pos < clip.startTime + clip.duration) {
+          return clip;
+        }
+      }
+      return null;
+    };
 
-      const { playheadPosition, duration, inPoint, outPoint, loopPlayback, pause } = useTimelineStore.getState();
-      let newPosition = playheadPosition + delta;
-
-      // Determine effective end point (out point if set, otherwise duration)
+    // Update playhead from video time - run at low frequency (15fps) to minimize React work
+    const updatePlayhead = () => {
+      const state = useTimelineStore.getState();
+      const { duration, inPoint, outPoint, loopPlayback, pause } = state;
       const effectiveEnd = outPoint !== null ? outPoint : duration;
       const effectiveStart = inPoint !== null ? inPoint : 0;
 
+      const activeClip = getActiveVideoClip();
+      let newPosition: number;
+
+      if (activeClip?.source?.videoElement) {
+        const video = activeClip.source.videoElement;
+        newPosition = activeClip.startTime + video.currentTime - activeClip.inPoint;
+        lastVideoTime = video.currentTime;
+      } else {
+        // Fallback - increment by interval time
+        newPosition = state.playheadPosition + 0.066; // ~15fps
+      }
+
+      // Handle loop/end
       if (newPosition >= effectiveEnd) {
         if (loopPlayback) {
-          // Loop back to in point (or start)
           newPosition = effectiveStart;
+          const clip = getActiveVideoClip();
+          if (clip?.source?.videoElement) {
+            clip.source.videoElement.currentTime = clip.inPoint;
+          }
         } else {
-          // Stop at out point
           newPosition = effectiveEnd;
           pause();
           setPlayheadPosition(newPosition);
-          return; // Don't schedule next frame
+          return;
         }
       }
 
       setPlayheadPosition(newPosition);
-      animationId = requestAnimationFrame(tick);
     };
 
-    animationId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(animationId);
+    // Use setInterval instead of RAF - completely decoupled from render loop
+    // 15fps is enough for smooth playhead UI movement
+    intervalId = setInterval(updatePlayhead, 66);
+
+    return () => clearInterval(intervalId);
   }, [isPlaying, setPlayheadPosition]);
 
   // Time to pixel conversion

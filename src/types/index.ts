@@ -82,6 +82,25 @@ export interface EngineStats {
   fps: number;
   frameTime: number;
   gpuMemory: number;
+  // Detailed timing (ms)
+  timing: {
+    rafGap: number;        // Time between rAF callbacks (should be ~16.67ms for 60fps)
+    importTexture: number; // Time to import video textures
+    renderPass: number;    // Time for GPU render passes
+    submit: number;        // Time for GPU queue submit
+    total: number;         // Total render time
+  };
+  // Frame drop stats
+  drops: {
+    count: number;         // Total dropped frames this session
+    lastSecond: number;    // Drops in last second
+    reason: 'none' | 'slow_raf' | 'slow_render' | 'slow_import';
+  };
+  // Current frame info
+  layerCount: number;
+  targetFps: number;
+  // Decoder info
+  decoder: 'WebCodecs' | 'HTMLVideo' | 'none';
 }
 
 // Timeline types
@@ -107,6 +126,7 @@ export interface TimelineClip {
     videoElement?: HTMLVideoElement;
     audioElement?: HTMLAudioElement;
     imageElement?: HTMLImageElement;
+    webCodecsPlayer?: import('../engine/WebCodecsPlayer').WebCodecsPlayer;
     naturalDuration?: number;
   } | null;
   thumbnails?: string[];  // Array of data URLs for filmstrip preview

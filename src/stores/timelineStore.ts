@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import type { TimelineClip, TimelineTrack, ClipTransform, BlendMode } from '../types';
 import { useMediaStore } from './mediaStore';
+import { WebCodecsPlayer } from '../engine/WebCodecsPlayer';
 
 // Default transform for new clips
 const DEFAULT_TRANSFORM: ClipTransform = {
@@ -397,6 +398,7 @@ export const useTimelineStore = create<TimelineStore>()(
         updateDuration();
 
         // Now load media in background
+        // Always create HTMLVideoElement for thumbnails and fallback
         const video = document.createElement('video');
         video.src = URL.createObjectURL(file);
         video.preload = 'auto';
@@ -433,7 +435,7 @@ export const useTimelineStore = create<TimelineStore>()(
           }
         });
 
-        // Generate thumbnails
+        // Generate thumbnails (using HTMLVideoElement)
         let thumbnails: string[] = [];
         try {
           thumbnails = await generateThumbnails(video, naturalDuration);
@@ -444,9 +446,30 @@ export const useTimelineStore = create<TimelineStore>()(
 
         video.currentTime = 0;
 
-        // Final update with thumbnails and isLoading=false
+        // Wait for video to be ready again after seeking to 0
+        await new Promise<void>((resolve) => {
+          if (video.readyState >= 2) {
+            resolve();
+          } else {
+            video.onseeked = () => resolve();
+            // Fallback timeout
+            setTimeout(resolve, 500);
+          }
+        });
+
+        // WebCodecs Stream Mode disabled - captureStream() doesn't bypass video decode
+        // and adds overhead without real benefit. Using direct HTMLVideoElement with
+        // frame tracking (requestVideoFrameCallback) is more efficient.
+        const webCodecsPlayer: WebCodecsPlayer | null = null;
+
+        // Final update with thumbnails, WebCodecs player, and isLoading=false
         updateClip(clipId, {
-          source: { type: 'video', videoElement: video, naturalDuration },
+          source: {
+            type: 'video',
+            videoElement: video,
+            webCodecsPlayer: webCodecsPlayer ?? undefined,
+            naturalDuration,
+          },
           thumbnails,
           isLoading: false,
         });

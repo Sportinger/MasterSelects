@@ -77,9 +77,9 @@ export function useEngine() {
         // Render with snapshotted layers
         engine.render(frameLayers);
 
-        // Throttle stats updates to reduce React re-renders
+        // Throttle stats updates to reduce React re-renders (every 100ms for responsive display)
         const now = performance.now();
-        if (now - lastStatsUpdate > 500) {
+        if (now - lastStatsUpdate > 100) {
           useMixerStore.getState().setEngineStats(engine.getStats());
           lastStatsUpdate = now;
         }

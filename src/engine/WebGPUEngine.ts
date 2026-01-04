@@ -149,6 +149,22 @@ export class WebGPUEngine {
   private fps = 0;
   private fpsUpdateTime = 0;
 
+  // Detailed stats tracking
+  private detailedStats = {
+    rafGap: 0,
+    importTexture: 0,
+    renderPass: 0,
+    submit: 0,
+    total: 0,
+    dropsTotal: 0,
+    dropsLastSecond: 0,
+    dropsThisSecond: 0,
+    lastDropReason: 'none' as 'none' | 'slow_raf' | 'slow_render' | 'slow_import',
+    lastRafTime: 0,
+    decoder: 'none' as 'WebCodecs' | 'HTMLVideo' | 'HTMLVideo(cached)' | 'none',
+  };
+  private readonly TARGET_FRAME_TIME = 16.67; // 60fps target
+
   // Video frame textures (rendered from external textures)
   private videoFrameTextures: Map<string, GPUTexture> = new Map();
   private videoFrameViews: Map<string, GPUTextureView> = new Map();
@@ -207,6 +223,7 @@ export class WebGPUEngine {
   private lastFrameTextures: Map<HTMLVideoElement, GPUTexture> = new Map();
   private lastFrameViews: Map<HTMLVideoElement, GPUTextureView> = new Map();
   private lastFrameSizes: Map<HTMLVideoElement, { width: number; height: number }> = new Map();
+  private lastCaptureTime: Map<HTMLVideoElement, number> = new Map();
 
   // Scrubbing frame cache - pre-decoded frames for instant access
   // Key: "videoSrc:frameTime" -> GPUTexture
@@ -1043,6 +1060,7 @@ export class WebGPUEngine {
         if (frame) {
           const extTex = this.importVideoTexture(frame);
           if (extTex) {
+            this.detailedStats.decoder = 'WebCodecs';
             this.layerRenderData.push({
               layer,
               isVideo: true,
@@ -1056,15 +1074,62 @@ export class WebGPUEngine {
         }
       }
 
-      // HTMLVideoElement (fallback or primary on Linux)
+      // HTMLVideoElement - optimized with frame tracking
       if (layer.source.videoElement) {
         const video = layer.source.videoElement;
+
+        // Register video for frame tracking (idempotent)
+        this.registerVideo(video);
+
+        // Log video state occasionally for debugging
+        if (this.profileCounter === 0) {
+          console.log(`[VIDEO] readyState=${video.readyState} paused=${video.paused} seeking=${video.seeking}`);
+        }
+
         if (video.readyState >= 2) {
+          // Check if video has a new frame (uses requestVideoFrameCallback)
+          const newFrameAvailable = this.hasNewFrame(video);
+
+          if (newFrameAvailable) {
+            // New frame available - import external texture
+            const extTex = this.importVideoTexture(video);
+            if (extTex) {
+              // Always cache when we import a new frame (for no-new-frame renders)
+              this.captureVideoFrame(video);
+              this.detailedStats.decoder = 'HTMLVideo';
+
+              this.layerRenderData.push({
+                layer,
+                isVideo: true,
+                externalTexture: extTex,
+                textureView: null,
+                sourceWidth: video.videoWidth,
+                sourceHeight: video.videoHeight,
+              });
+              continue;
+            }
+          }
+
+          // No new frame OR import failed - use cached frame (skip expensive importExternalTexture)
+          const lastFrame = this.getLastFrame(video);
+          if (lastFrame) {
+            this.detailedStats.decoder = 'HTMLVideo(cached)';
+            this.layerRenderData.push({
+              layer,
+              isVideo: false,
+              externalTexture: null,
+              textureView: lastFrame.view,
+              sourceWidth: lastFrame.width,
+              sourceHeight: lastFrame.height,
+            });
+            continue;
+          }
+
+          // No cache available, try import anyway
           const extTex = this.importVideoTexture(video);
           if (extTex) {
-            // Successfully got live frame - capture it for fallback during seeks
             this.captureVideoFrame(video);
-
+            this.detailedStats.decoder = 'HTMLVideo';
             this.layerRenderData.push({
               layer,
               isVideo: true,
@@ -1074,20 +1139,6 @@ export class WebGPUEngine {
               sourceHeight: video.videoHeight,
             });
             continue;
-          } else {
-            // Import failed (likely seeking) - try to use last cached frame
-            const lastFrame = this.getLastFrame(video);
-            if (lastFrame) {
-              this.layerRenderData.push({
-                layer,
-                isVideo: false, // Use as static texture, not external
-                externalTexture: null,
-                textureView: lastFrame.view,
-                sourceWidth: lastFrame.width,
-                sourceHeight: lastFrame.height,
-              });
-              continue;
-            }
           }
         } else {
           // Video not ready - try last frame cache
@@ -1305,6 +1356,21 @@ export class WebGPUEngine {
 
     this.profileData.total = performance.now() - t0;
 
+    // Update detailed stats (smoothed averages)
+    this.detailedStats.importTexture = this.detailedStats.importTexture * 0.9 + this.profileData.importTexture * 0.1;
+    this.detailedStats.renderPass = this.detailedStats.renderPass * 0.9 + this.profileData.renderPass * 0.1;
+    this.detailedStats.submit = this.detailedStats.submit * 0.9 + this.profileData.submit * 0.1;
+    this.detailedStats.total = this.detailedStats.total * 0.9 + this.profileData.total * 0.1;
+
+    // Detect drops caused by slow render (if render takes > 1 frame time)
+    if (this.profileData.total > this.TARGET_FRAME_TIME) {
+      if (this.profileData.importTexture > this.TARGET_FRAME_TIME * 0.5) {
+        this.detailedStats.lastDropReason = 'slow_import';
+      } else {
+        this.detailedStats.lastDropReason = 'slow_render';
+      }
+    }
+
     // Log profile every second (based on time, not frame count)
     this.profileCounter++;
     const now = performance.now();
@@ -1312,8 +1378,22 @@ export class WebGPUEngine {
       const actualFps = this.profileCounter;
       this.profileCounter = 0;
       this.lastProfileTime = now;
-      // timeSinceLastRender shows gap between frames (should be ~16ms for 60fps)
-      console.log(`[PROFILE] FPS=${actualFps} | gap=${timeSinceLastRender.toFixed(0)}ms | layers=${this.layerRenderData.length} | render=${this.profileData.total.toFixed(2)}ms`);
+
+      // Calculate where time is being lost
+      const jsTime = this.profileData.total;
+      const gapTime = timeSinceLastRender;
+      const unaccountedTime = gapTime - jsTime; // Time lost outside our code
+
+      // Detailed breakdown with bottleneck indicator
+      let bottleneck = 'ok';
+      if (gapTime > 20) {
+        if (unaccountedTime > 15) bottleneck = 'BROWSER/DECODE';
+        else if (this.profileData.importTexture > 5) bottleneck = 'TEXTURE_IMPORT';
+        else if (this.profileData.renderPass > 5) bottleneck = 'GPU_RENDER';
+        else bottleneck = 'JS_OTHER';
+      }
+
+      console.log(`[PROFILE] FPS=${actualFps} | gap=${gapTime.toFixed(0)}ms | videos=${this.layerRenderData.filter(l => l.isVideo).length} | decoder=${this.detailedStats.decoder} | js=${jsTime.toFixed(1)}ms (import=${this.profileData.importTexture.toFixed(1)} rp=${this.profileData.renderPass.toFixed(1)}) | outside_js=${unaccountedTime.toFixed(0)}ms | drops=${this.detailedStats.dropsLastSecond}/s | ${bottleneck}`);
     }
 
     this.updateStats();
@@ -1383,7 +1463,108 @@ export class WebGPUEngine {
       fps: this.fps,
       frameTime: avgFrameTime,
       gpuMemory: 0,
+      timing: {
+        rafGap: this.detailedStats.rafGap,
+        importTexture: this.detailedStats.importTexture,
+        renderPass: this.detailedStats.renderPass,
+        submit: this.detailedStats.submit,
+        total: this.detailedStats.total,
+      },
+      drops: {
+        count: this.detailedStats.dropsTotal,
+        lastSecond: this.detailedStats.dropsLastSecond,
+        reason: this.detailedStats.lastDropReason,
+      },
+      layerCount: this.lastLayerCount,
+      targetFps: 60,
+      decoder: this.detailedStats.decoder,
     };
+  }
+
+  // Track active video for requestVideoFrameCallback
+  private activeVideo: HTMLVideoElement | null = null;
+  private videoFrameCallbackId: number | null = null;
+
+  // Track video frame readiness - only import texture when new frame is available
+  private videoFrameReady: Map<HTMLVideoElement, boolean> = new Map();
+  private videoLastTime: Map<HTMLVideoElement, number> = new Map();
+  private videoCallbackActive: Map<HTMLVideoElement, boolean> = new Map();
+
+  // Register a video to track frame readiness
+  registerVideo(video: HTMLVideoElement): void {
+    // Already fully registered
+    if (this.videoFrameReady.has(video) && this.videoCallbackActive.get(video)) {
+      // Re-register callback if video is playing but callback isn't active
+      if (!video.paused && !this.videoCallbackActive.get(video)) {
+        this.startVideoFrameCallback(video);
+      }
+      return;
+    }
+
+    this.videoFrameReady.set(video, true); // First frame is ready
+    this.videoLastTime.set(video, -1);
+    this.videoCallbackActive.set(video, false);
+
+    // Start frame callback if video is playing
+    if (!video.paused) {
+      this.startVideoFrameCallback(video);
+    }
+
+    // Listen for play event to restart callback
+    video.addEventListener('play', () => {
+      this.startVideoFrameCallback(video);
+    });
+  }
+
+  private startVideoFrameCallback(video: HTMLVideoElement): void {
+    if (!('requestVideoFrameCallback' in video)) return;
+    if (this.videoCallbackActive.get(video)) return;
+
+    this.videoCallbackActive.set(video, true);
+
+    const onFrame = () => {
+      this.videoFrameReady.set(video, true);
+      if (!video.paused) {
+        (video as any).requestVideoFrameCallback(onFrame);
+      } else {
+        this.videoCallbackActive.set(video, false);
+      }
+    };
+    (video as any).requestVideoFrameCallback(onFrame);
+  }
+
+  // Check if a new frame is available (for non-rVFC browsers, check currentTime)
+  private hasNewFrame(video: HTMLVideoElement): boolean {
+    const lastTime = this.videoLastTime.get(video) ?? -1;
+    const currentTime = video.currentTime;
+
+    // When video is paused, no new frames are being decoded
+    // Return true only if time changed (e.g., user seeked) or first frame
+    if (video.paused) {
+      if (lastTime === -1 || Math.abs(currentTime - lastTime) > 0.001) {
+        this.videoLastTime.set(video, currentTime);
+        return true;
+      }
+      return false; // Same frame, use cache
+    }
+
+    // Video is playing - use requestVideoFrameCallback if available
+    if ('requestVideoFrameCallback' in video) {
+      const ready = this.videoFrameReady.get(video) ?? false;
+      if (ready) {
+        this.videoFrameReady.set(video, false);
+        this.videoLastTime.set(video, currentTime);
+        return true;
+      }
+      return false;
+    }
+
+    // Fallback: check if time changed (at least 1ms difference for ~1000fps max)
+    if (Math.abs(currentTime - lastTime) > 0.001) {
+      this.videoLastTime.set(video, currentTime);
+      return true;
+    }
+    return false;
   }
 
   start(renderCallback: () => void): void {
@@ -1391,27 +1572,53 @@ export class WebGPUEngine {
     this.isRunning = true;
     console.log('[WebGPU] Starting render loop');
 
-    let frameStart = 0;
+    let lastTimestamp = 0;
+    let lastFpsReset = 0;
+
     const loop = (timestamp: number) => {
       if (!this.isRunning) return;
 
-      // Measure time since rAF was called
-      const rafDelay = frameStart > 0 ? timestamp - frameStart : 0;
-      frameStart = timestamp;
+      // Measure time since last rAF callback
+      const rafGap = lastTimestamp > 0 ? timestamp - lastTimestamp : 0;
+      lastTimestamp = timestamp;
 
-      const callbackStart = performance.now();
-      renderCallback();
-      const callbackTime = performance.now() - callbackStart;
+      // Update RAF gap stat (smoothed)
+      this.detailedStats.rafGap = this.detailedStats.rafGap * 0.9 + rafGap * 0.1;
 
-      // Only log occasional slow frames (not every one)
-      if (rafDelay > 100) {
-        console.warn(`[RAF] Very slow frame: rafDelay=${rafDelay.toFixed(0)}ms`);
+      // Detect frame drops based on RAF gap
+      // A drop is when we miss more than 1.5 frames (>25ms for 60fps)
+      if (rafGap > this.TARGET_FRAME_TIME * 1.5 && lastTimestamp > 0) {
+        const missedFrames = Math.floor(rafGap / this.TARGET_FRAME_TIME) - 1;
+        this.detailedStats.dropsTotal += missedFrames;
+        this.detailedStats.dropsThisSecond += missedFrames;
+        this.detailedStats.lastDropReason = 'slow_raf';
       }
+
+      // Reset per-second drop counter every second
+      if (timestamp - lastFpsReset >= 1000) {
+        this.detailedStats.dropsLastSecond = this.detailedStats.dropsThisSecond;
+        this.detailedStats.dropsThisSecond = 0;
+        lastFpsReset = timestamp;
+      }
+
+      renderCallback();
 
       this.animationId = requestAnimationFrame(loop);
     };
 
     this.animationId = requestAnimationFrame(loop);
+  }
+
+  // Set the active video to sync rendering with its frame delivery
+  setActiveVideo(video: HTMLVideoElement | null): void {
+    // Clean up old callback
+    if (this.activeVideo && this.videoFrameCallbackId !== null) {
+      if ('cancelVideoFrameCallback' in this.activeVideo) {
+        (this.activeVideo as any).cancelVideoFrameCallback(this.videoFrameCallbackId);
+      }
+      this.videoFrameCallbackId = null;
+    }
+    this.activeVideo = video;
   }
 
   stop(): void {
@@ -1536,6 +1743,7 @@ export class WebGPUEngine {
     this.lastFrameTextures.clear();
     this.lastFrameViews.clear();
     this.lastFrameSizes.clear();
+    this.lastCaptureTime.clear();
 
     // Destroy scrubbing cache
     this.clearScrubbingCache();

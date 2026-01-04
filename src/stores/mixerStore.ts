@@ -123,7 +123,16 @@ export const useMixerStore = create<MixerState>()(
     fps: 60,
 
     isEngineReady: false,
-    engineStats: { fps: 0, frameTime: 0, gpuMemory: 0 },
+    engineStats: {
+      fps: 0,
+      frameTime: 0,
+      gpuMemory: 0,
+      timing: { rafGap: 0, importTexture: 0, renderPass: 0, submit: 0, total: 0 },
+      drops: { count: 0, lastSecond: 0, reason: 'none' },
+      layerCount: 0,
+      targetFps: 60,
+      decoder: 'none',
+    },
 
     midiEnabled: false,
     midiMappings: [],

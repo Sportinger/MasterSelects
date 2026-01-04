@@ -1,10 +1,141 @@
 // Preview canvas component with After Effects-style editing overlay
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useEngine } from '../hooks/useEngine';
 import { useMixerStore } from '../stores/mixerStore';
 import { useTimelineStore } from '../stores/timelineStore';
-import type { Layer } from '../types';
+import type { Layer, EngineStats } from '../types';
+
+// Detailed stats overlay component
+function StatsOverlay({ stats, resolution, expanded, onToggle }: {
+  stats: EngineStats;
+  resolution: { width: number; height: number };
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const fpsColor = stats.fps >= 55 ? '#4f4' : stats.fps >= 30 ? '#ff4' : '#f44';
+  const dropColor = stats.drops.lastSecond > 0 ? '#f44' : '#4f4';
+  const decoderColor = stats.decoder === 'WebCodecs' ? '#4f4' : stats.decoder === 'HTMLVideo' ? '#fa4' : '#888';
+
+  // Determine bottleneck
+  const bottleneck = useMemo(() => {
+    const { timing } = stats;
+    if (timing.total < 10) return null;
+    if (timing.importTexture > timing.renderPass && timing.importTexture > timing.submit) {
+      return 'Video Import';
+    }
+    if (timing.renderPass > timing.submit) {
+      return 'GPU Render';
+    }
+    return 'GPU Submit';
+  }, [stats.timing]);
+
+  if (!expanded) {
+    return (
+      <div
+        className="preview-stats preview-stats-compact"
+        onClick={onToggle}
+        title="Click for detailed stats"
+      >
+        <span style={{ color: fpsColor, fontWeight: 'bold' }}>{stats.fps}</span>
+        <span style={{ opacity: 0.7 }}> FPS</span>
+        {stats.decoder !== 'none' && (
+          <span style={{ color: decoderColor, marginLeft: 6, fontSize: 9 }}>[{stats.decoder === 'WebCodecs' ? 'WC' : 'HTML'}]</span>
+        )}
+        {stats.drops.lastSecond > 0 && (
+          <span style={{ color: '#f44', marginLeft: 6 }}>▼{stats.drops.lastSecond}</span>
+        )}
+        <span style={{ opacity: 0.5, marginLeft: 8 }}>
+          {resolution.width}×{resolution.height}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="preview-stats preview-stats-expanded" onClick={onToggle}>
+      <div className="stats-header">
+        <span style={{ color: fpsColor, fontWeight: 'bold', fontSize: 18 }}>{stats.fps}</span>
+        <span style={{ opacity: 0.7 }}> / {stats.targetFps} FPS</span>
+        <span style={{ opacity: 0.5, marginLeft: 8, fontSize: 11 }}>
+          {resolution.width}×{resolution.height}
+        </span>
+      </div>
+
+      <div className="stats-section">
+        <div className="stats-row">
+          <span>Frame Gap</span>
+          <span style={{ color: stats.timing.rafGap > 20 ? '#ff4' : '#aaa' }}>
+            {stats.timing.rafGap.toFixed(1)}ms
+          </span>
+        </div>
+        <div className="stats-row">
+          <span>Render Total</span>
+          <span style={{ color: stats.timing.total > 12 ? '#ff4' : '#aaa' }}>
+            {stats.timing.total.toFixed(2)}ms
+          </span>
+        </div>
+      </div>
+
+      <div className="stats-section">
+        <div className="stats-label">Pipeline Breakdown</div>
+        <div className="stats-bar-container">
+          <div
+            className="stats-bar stats-bar-import"
+            style={{ width: `${Math.min(100, (stats.timing.importTexture / 16.67) * 100)}%` }}
+            title={`Import: ${stats.timing.importTexture.toFixed(2)}ms`}
+          />
+          <div
+            className="stats-bar stats-bar-render"
+            style={{ width: `${Math.min(100, (stats.timing.renderPass / 16.67) * 100)}%` }}
+            title={`Render: ${stats.timing.renderPass.toFixed(2)}ms`}
+          />
+          <div
+            className="stats-bar stats-bar-submit"
+            style={{ width: `${Math.min(100, (stats.timing.submit / 16.67) * 100)}%` }}
+            title={`Submit: ${stats.timing.submit.toFixed(2)}ms`}
+          />
+        </div>
+        <div className="stats-row" style={{ fontSize: 10, opacity: 0.6 }}>
+          <span>Import: {stats.timing.importTexture.toFixed(2)}ms</span>
+          <span>Render: {stats.timing.renderPass.toFixed(2)}ms</span>
+          <span>Submit: {stats.timing.submit.toFixed(2)}ms</span>
+        </div>
+      </div>
+
+      <div className="stats-section">
+        <div className="stats-row">
+          <span>Layers</span>
+          <span>{stats.layerCount}</span>
+        </div>
+        <div className="stats-row">
+          <span>Decoder</span>
+          <span style={{ color: decoderColor }}>{stats.decoder}</span>
+        </div>
+        <div className="stats-row">
+          <span style={{ color: dropColor }}>Drops (last sec)</span>
+          <span style={{ color: dropColor }}>{stats.drops.lastSecond}</span>
+        </div>
+        <div className="stats-row">
+          <span>Drops (total)</span>
+          <span>{stats.drops.count}</span>
+        </div>
+        {stats.drops.reason !== 'none' && (
+          <div className="stats-row">
+            <span>Last Drop Reason</span>
+            <span style={{ color: '#f44' }}>{stats.drops.reason.replace('_', ' ')}</span>
+          </div>
+        )}
+        {bottleneck && (
+          <div className="stats-row">
+            <span>Bottleneck</span>
+            <span style={{ color: '#ff4' }}>{bottleneck}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function Preview() {
   const { canvasRef, isEngineReady } = useEngine();
@@ -13,6 +144,9 @@ export function Preview() {
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 1920, height: 1080 });
+
+  // Stats overlay state
+  const [statsExpanded, setStatsExpanded] = useState(false);
 
   // Edit mode state
   const [editMode, setEditMode] = useState(false);
@@ -405,9 +539,12 @@ export function Preview() {
         )}
       </div>
 
-      <div className="preview-stats">
-        {engineStats.fps} FPS | {outputResolution.width}x{outputResolution.height}
-      </div>
+      <StatsOverlay
+        stats={engineStats}
+        resolution={outputResolution}
+        expanded={statsExpanded}
+        onToggle={() => setStatsExpanded(!statsExpanded)}
+      />
 
       <div className="preview-canvas-wrapper" style={viewTransform}>
         {!isEngineReady ? (
