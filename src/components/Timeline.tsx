@@ -256,13 +256,6 @@ export function Timeline() {
       return;
     }
 
-    // During playback: SKIP ALMOST ALL WORK after initial setup
-    // Videos play independently, engine reads from them directly
-    if (isPlaying && activeClipIdsRef.current === '__playing__') {
-      // Already set up - do nothing! This is the fast path.
-      return;
-    }
-
     // Try to use cached RAM Preview frame first (instant playback)
     if (ramPreviewRange &&
         playheadPosition >= ramPreviewRange.start &&
@@ -274,15 +267,37 @@ export function Timeline() {
 
     const clipsAtTime = getClipsAtTime(playheadPosition);
 
-    // Starting playback - minimal setup, then mark as playing
+    // Get current active clip IDs to detect clip boundary crossings
+    const currentActiveIds = clipsAtTime
+      .filter(c => c.source?.type === 'video' || c.source?.type === 'image' || c.isComposition)
+      .map(c => c.id)
+      .sort()
+      .join(',');
+
+    // During playback: skip layer sync if same clips are active (fast path)
+    // But MUST re-sync when clips change (clip boundaries crossed)
+    if (isPlaying && activeClipIdsRef.current.startsWith('playing:')) {
+      const prevActiveIds = activeClipIdsRef.current.slice(8); // Remove 'playing:' prefix
+      if (prevActiveIds === currentActiveIds) {
+        // Same clips active - skip layer sync, just ensure videos are playing
+        clipsAtTime.forEach(clip => {
+          if (clip.source?.videoElement?.paused) {
+            clip.source.videoElement.play().catch(() => {});
+          }
+        });
+        return;
+      }
+      // Clips changed - need to re-sync layers, continue below
+    }
+
+    // Update active clip tracking
     if (isPlaying) {
       clipsAtTime.forEach(clip => {
         if (clip.source?.videoElement?.paused) {
           clip.source.videoElement.play().catch(() => {});
         }
       });
-      activeClipIdsRef.current = '__playing__';
-      // Still need to set up layers initially, so continue below
+      activeClipIdsRef.current = 'playing:' + currentActiveIds;
     } else {
       activeClipIdsRef.current = '';
     }
