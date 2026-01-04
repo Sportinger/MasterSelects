@@ -44,6 +44,7 @@ export function Timeline() {
     startRamPreview,
     cancelRamPreview,
     clearRamPreview,
+    getCachedRanges,
   } = useTimelineStore();
 
 
@@ -156,6 +157,77 @@ export function Timeline() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isPlaying, play, pause, setInPointAtPlayhead, setOutPointAtPlayhead, clearInOut, toggleLoopPlayback, selectedClipId, removeClip]);
+
+  // Auto-start RAM Preview after 2 seconds of idle (like After Effects)
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastActivityRef = useRef<number>(Date.now());
+
+  // Reset idle timer on activity
+  useEffect(() => {
+    const resetIdleTimer = () => {
+      lastActivityRef.current = Date.now();
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
+    };
+
+    // Track user activity
+    window.addEventListener('mousemove', resetIdleTimer);
+    window.addEventListener('keydown', resetIdleTimer);
+    window.addEventListener('mousedown', resetIdleTimer);
+    window.addEventListener('wheel', resetIdleTimer);
+
+    return () => {
+      window.removeEventListener('mousemove', resetIdleTimer);
+      window.removeEventListener('keydown', resetIdleTimer);
+      window.removeEventListener('mousedown', resetIdleTimer);
+      window.removeEventListener('wheel', resetIdleTimer);
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
+  }, []);
+
+  // Check for idle state and auto-start RAM preview
+  useEffect(() => {
+    // Don't auto-render if:
+    // - Currently playing
+    // - Currently RAM previewing
+    // - Scrubbing
+    // - No in/out points set
+    // - Already have RAM preview for this range
+    if (isPlaying || isRamPreviewing || isDraggingPlayhead) {
+      return;
+    }
+
+    if (inPoint === null || outPoint === null) {
+      return;
+    }
+
+    // Check if we already have RAM preview for this exact range
+    if (ramPreviewRange &&
+        ramPreviewRange.start === inPoint &&
+        ramPreviewRange.end === outPoint) {
+      return;
+    }
+
+    // Start timer to auto-render after 2 seconds of idle
+    idleTimerRef.current = setTimeout(() => {
+      // Double-check conditions before starting
+      const state = useTimelineStore.getState();
+      if (!state.isPlaying && !state.isRamPreviewing &&
+          state.inPoint !== null && state.outPoint !== null) {
+        console.log('[RAM Preview] Auto-starting after idle');
+        startRamPreview();
+      }
+    }, 2000);
+
+    return () => {
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
+    };
+  }, [isPlaying, isRamPreviewing, isDraggingPlayhead, inPoint, outPoint, ramPreviewRange, startRamPreview]);
 
   // Track last seek time to throttle during scrubbing
   const lastSeekRef = useRef<{ [clipId: string]: number }>({});
@@ -1422,7 +1494,7 @@ export function Timeline() {
             </>
           )}
 
-          {/* RAM Preview cached range indicator */}
+          {/* RAM Preview cached range indicator (green = cached) */}
           {ramPreviewRange && (
             <div
               className="ram-preview-indicator"
@@ -1433,6 +1505,30 @@ export function Timeline() {
               title={`RAM Preview: ${formatTime(ramPreviewRange.start)} - ${formatTime(ramPreviewRange.end)}`}
             />
           )}
+
+          {/* RAM Preview render progress bar (during rendering) */}
+          {isRamPreviewing && ramPreviewProgress !== null && inPoint !== null && outPoint !== null && (
+            <div
+              className="ram-preview-progress-indicator"
+              style={{
+                left: timeToPixel(inPoint),
+                width: timeToPixel((outPoint - inPoint) * (ramPreviewProgress / 100)),
+              }}
+            />
+          )}
+
+          {/* Playback cached frames indicator (green line like After Effects) */}
+          {!ramPreviewRange && getCachedRanges().map((range, i) => (
+            <div
+              key={i}
+              className="playback-cache-indicator"
+              style={{
+                left: timeToPixel(range.start),
+                width: Math.max(2, timeToPixel(range.end - range.start)),
+              }}
+              title={`Cached: ${formatTime(range.start)} - ${formatTime(range.end)}`}
+            />
+          ))}
 
           {/* In point marker */}
           {inPoint !== null && (

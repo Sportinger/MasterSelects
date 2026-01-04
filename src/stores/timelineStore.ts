@@ -128,6 +128,11 @@ interface TimelineStore {
   cancelRamPreview: () => void;
   clearRamPreview: () => void;
 
+  // Playback frame caching (like After Effects' green line)
+  cachedFrameTimes: Set<number>;  // Set of quantized times that are cached
+  addCachedFrame: (time: number) => void;
+  getCachedRanges: () => Array<{ start: number; end: number }>;
+
   // Track actions
   addTrack: (type: 'video' | 'audio') => void;
   removeTrack: (id: string) => void;
@@ -194,6 +199,7 @@ export const useTimelineStore = create<TimelineStore>()(
     ramPreviewProgress: null,
     ramPreviewRange: null,
     isRamPreviewing: false,
+    cachedFrameTimes: new Set<number>(),
 
     // Track actions
     addTrack: (type) => {
@@ -920,7 +926,49 @@ export const useTimelineStore = create<TimelineStore>()(
     clearRamPreview: async () => {
       const { engine } = await import('../engine/WebGPUEngine');
       engine.clearCompositeCache();
-      set({ ramPreviewRange: null, ramPreviewProgress: null });
+      set({ ramPreviewRange: null, ramPreviewProgress: null, cachedFrameTimes: new Set() });
+    },
+
+    // Playback frame caching (green line like After Effects)
+    addCachedFrame: (time: number) => {
+      const quantized = Math.round(time * 30) / 30; // Quantize to 30fps
+      const { cachedFrameTimes } = get();
+      if (!cachedFrameTimes.has(quantized)) {
+        const newSet = new Set(cachedFrameTimes);
+        newSet.add(quantized);
+        set({ cachedFrameTimes: newSet });
+      }
+    },
+
+    getCachedRanges: () => {
+      const { cachedFrameTimes } = get();
+      if (cachedFrameTimes.size === 0) return [];
+
+      // Convert set to sorted array
+      const times = Array.from(cachedFrameTimes).sort((a, b) => a - b);
+      const ranges: Array<{ start: number; end: number }> = [];
+      const frameInterval = 1 / 30;
+      const gap = frameInterval * 2; // Allow gap of 2 frames
+
+      let rangeStart = times[0];
+      let rangeEnd = times[0];
+
+      for (let i = 1; i < times.length; i++) {
+        if (times[i] - rangeEnd <= gap) {
+          // Continue range
+          rangeEnd = times[i];
+        } else {
+          // End range and start new one
+          ranges.push({ start: rangeStart, end: rangeEnd + frameInterval });
+          rangeStart = times[i];
+          rangeEnd = times[i];
+        }
+      }
+
+      // Add final range
+      ranges.push({ start: rangeStart, end: rangeEnd + frameInterval });
+
+      return ranges;
     },
 
     // Utils

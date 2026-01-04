@@ -1894,7 +1894,7 @@ input[type="checkbox"] {
   background: #ff6666;
 }
 
-/* RAM Preview cached range indicator */
+/* RAM Preview cached range indicator (green = fully cached) */
 .ram-preview-indicator {
   position: absolute;
   top: 0;
@@ -1903,6 +1903,34 @@ input[type="checkbox"] {
   opacity: 0.8;
   pointer-events: none;
   z-index: 90;
+}
+
+/* RAM Preview render progress indicator (animated during render) */
+.ram-preview-progress-indicator {
+  position: absolute;
+  top: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #fbbf24, #f59e0b);
+  opacity: 0.9;
+  pointer-events: none;
+  z-index: 91;
+  animation: ram-progress-pulse 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes ram-progress-pulse {
+  from { opacity: 0.7; }
+  to { opacity: 1; }
+}
+
+/* Playback cache indicator (green line for frames cached during playback) */
+.playback-cache-indicator {
+  position: absolute;
+  top: 0;
+  height: 3px;
+  background: #22c55e;
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: 89;
 }
 
 /* Audio Waveform */

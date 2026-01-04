@@ -45,10 +45,13 @@ export function useEngine() {
     // Stats update throttle
     let lastStatsUpdate = 0;
 
+    // Track last cache time for throttled playback caching
+    let lastCacheTime = 0;
+
     const renderFrame = () => {
       try {
         // Check if we should use RAM Preview cached frame instead of live render
-        const { playheadPosition, ramPreviewRange } = useTimelineStore.getState();
+        const { playheadPosition, ramPreviewRange, isPlaying: timelinePlaying } = useTimelineStore.getState();
         if (ramPreviewRange &&
             playheadPosition >= ramPreviewRange.start &&
             playheadPosition <= ramPreviewRange.end) {
@@ -67,11 +70,26 @@ export function useEngine() {
         // since we only read from it, never modify)
         const frameLayers = layersSnapshot.slice();
 
+        // Skip if no layers to render
+        if (frameLayers.length === 0 || frameLayers.every(l => !l?.source)) {
+          return;
+        }
+
         // Render with snapshotted layers
         engine.render(frameLayers);
 
-        // Throttle stats updates to reduce React re-renders
+        // Cache frames during playback (like After Effects' green line)
+        // Throttled to every 100ms (~10fps) to avoid performance impact
         const now = performance.now();
+        if (timelinePlaying && now - lastCacheTime > 100) {
+          // Cache this frame asynchronously (don't block render loop)
+          engine.cacheCompositeFrame(playheadPosition).catch(() => {});
+          lastCacheTime = now;
+          // Update cached range in timeline store
+          useTimelineStore.getState().addCachedFrame(playheadPosition);
+        }
+
+        // Throttle stats updates to reduce React re-renders
         if (now - lastStatsUpdate > 500) {
           useMixerStore.getState().setEngineStats(engine.getStats());
           lastStatsUpdate = now;
