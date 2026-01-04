@@ -1189,13 +1189,9 @@ export class WebGPUEngine {
       // Images
       if (layer.source.imageElement) {
         const img = layer.source.imageElement;
-        const isNewImage = !this.imageTextures.has(img);
         let texture = this.imageTextures.get(img);
         if (!texture) {
           texture = this.createImageTexture(img) ?? undefined;
-          if (isNewImage) {
-            console.log('[Engine] New image texture:', img.naturalWidth, 'x', img.naturalHeight, 'created:', !!texture);
-          }
         }
         if (texture) {
           let imageView = this.cachedImageViews.get(texture);

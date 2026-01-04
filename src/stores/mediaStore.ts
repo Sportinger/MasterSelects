@@ -769,12 +769,45 @@ export const useMediaStore = create<MediaState>()(
             ),
           });
 
+          // Helper to save frames to IndexedDB
+          const saveFrame = async (frame: { id: string; mediaFileId: string; frameIndex: number; blob: Blob }) => {
+            await projectDB.saveProxyFrame(frame);
+          };
+
           try {
-            const result = await generateProxyFrames(
-              mediaFile,
-              (progress) => updateProxyProgress(mediaFileId, progress),
-              () => controller.cancelled
-            );
+            let result: { frameCount: number; fps: number } | null = null;
+
+            // Try GPU-accelerated generation first
+            try {
+              const { getProxyGenerator } = await import('../services/proxyGenerator');
+              const generator = getProxyGenerator();
+
+              console.log('[Proxy] Trying GPU-accelerated generation...');
+              result = await generator.generate(
+                mediaFile.file!,
+                mediaFileId,
+                (progress) => updateProxyProgress(mediaFileId, progress),
+                () => controller.cancelled,
+                saveFrame
+              );
+
+              if (result) {
+                console.log(`[Proxy] GPU generation completed: ${result.frameCount} frames`);
+              }
+            } catch (gpuError) {
+              console.warn('[Proxy] GPU generation failed, falling back to legacy:', gpuError);
+              result = null;
+            }
+
+            // Fall back to legacy method if GPU method failed or returned null
+            if (!result && !controller.cancelled) {
+              console.log('[Proxy] Using legacy generation method...');
+              result = await generateProxyFrames(
+                mediaFile,
+                (progress) => updateProxyProgress(mediaFileId, progress),
+                () => controller.cancelled
+              );
+            }
 
             if (result) {
               // Update media file with proxy info
@@ -785,8 +818,8 @@ export const useMediaStore = create<MediaState>()(
                         ...f,
                         proxyStatus: 'ready' as ProxyStatus,
                         proxyProgress: 100,
-                        proxyFrameCount: result.frameCount,
-                        proxyFps: result.fps,
+                        proxyFrameCount: result!.frameCount,
+                        proxyFps: result!.fps,
                       }
                     : f
                 ),
