@@ -16,7 +16,11 @@ export function DockTabPane({ group }: DockTabPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const tabBarRef = useRef<HTMLDivElement>(null);
   const holdTimerRef = useRef<number | null>(null);
-  const holdStartRef = useRef<{ panel: DockPanel; offset: { x: number; y: number } } | null>(null);
+  const holdStartRef = useRef<{
+    panel: DockPanel;
+    offset: { x: number; y: number };
+    mousePos: { x: number; y: number };
+  } | null>(null);
   const [holdingTabId, setHoldingTabId] = useState<string | null>(null);
   const [holdProgress, setHoldProgress] = useState<'idle' | 'holding' | 'ready' | 'fading'>('idle');
 
@@ -59,23 +63,27 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     // Set this tab as active
     setActiveTab(group.id, index);
 
-    // Store offset for when drag actually starts
+    // Store offset and mouse position for when drag actually starts
     const rect = (e.target as HTMLElement).getBoundingClientRect();
     const offset = {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
     };
+    const mousePos = { x: e.clientX, y: e.clientY };
 
     // Start hold animation
     setHoldingTabId(panel.id);
     setHoldProgress('holding');
-    holdStartRef.current = { panel, offset };
+    holdStartRef.current = { panel, offset, mousePos };
 
     // After hold duration, start the actual drag
     holdTimerRef.current = window.setTimeout(() => {
       if (holdStartRef.current) {
         setHoldProgress('ready');
-        startDrag(holdStartRef.current.panel, group.id, holdStartRef.current.offset);
+        const { panel: p, offset: o, mousePos: pos } = holdStartRef.current;
+        startDrag(p, group.id, o);
+        // Initialize drag position with stored mouse pos
+        updateDrag(pos, null);
         // Reset hold state after drag starts
         setTimeout(() => {
           setHoldProgress('idle');
@@ -83,7 +91,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
         }, 100);
       }
     }, HOLD_DURATION);
-  }, [group.id, setActiveTab, startDrag]);
+  }, [group.id, setActiveTab, startDrag, updateDrag]);
 
   const handleTabMouseUp = useCallback(() => {
     cancelHold();
@@ -96,7 +104,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     }
   }, [holdProgress, cancelHold]);
 
-  // Clean up timer on unmount and handle global mouseup
+  // Clean up timer on unmount and handle global mouse events during hold
   useEffect(() => {
     const handleGlobalMouseUp = () => {
       if (holdProgress === 'holding') {
@@ -104,11 +112,20 @@ export function DockTabPane({ group }: DockTabPaneProps) {
       }
     };
 
-    // Add global listener to catch mouseup anywhere
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      // Update stored mouse position during hold so drag starts at correct pos
+      if (holdProgress === 'holding' && holdStartRef.current) {
+        holdStartRef.current.mousePos = { x: e.clientX, y: e.clientY };
+      }
+    };
+
+    // Add global listeners
     window.addEventListener('mouseup', handleGlobalMouseUp);
+    window.addEventListener('mousemove', handleGlobalMouseMove);
 
     return () => {
       window.removeEventListener('mouseup', handleGlobalMouseUp);
+      window.removeEventListener('mousemove', handleGlobalMouseMove);
       if (holdTimerRef.current) {
         clearTimeout(holdTimerRef.current);
       }
