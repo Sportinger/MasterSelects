@@ -306,12 +306,97 @@ export function Timeline() {
     const newLayers = [...currentLayers];
     let layersChanged = false;
 
+    // Helper to get video element from a clip (handles nested compositions)
+    const getVideoFromClip = (clip: typeof clips[0], clipTime: number): { video: HTMLVideoElement | null; transform: typeof clip.transform } => {
+      // Handle nested composition clips
+      if (clip.isComposition && clip.nestedClips && clip.nestedClips.length > 0) {
+        // Find active clip in nested composition at the current nested time
+        const nestedTime = clipTime; // clipTime is already relative to the comp clip
+        const nestedVideoTracks = (clip.nestedTracks || []).filter(t => t.type === 'video' && t.visible);
+
+        // Find the topmost visible video clip at nestedTime
+        for (const nestedTrack of nestedVideoTracks) {
+          const nestedClip = clip.nestedClips.find(nc =>
+            nc.trackId === nestedTrack.id &&
+            nestedTime >= nc.startTime &&
+            nestedTime < nc.startTime + nc.duration &&
+            nc.source?.videoElement
+          );
+
+          if (nestedClip?.source?.videoElement) {
+            const nestedClipTime = nestedTime - nestedClip.startTime + nestedClip.inPoint;
+            const video = nestedClip.source.videoElement;
+
+            // Seek nested video
+            const timeDiff = Math.abs(video.currentTime - nestedClipTime);
+            if (timeDiff > 0.05) {
+              video.currentTime = nestedClipTime;
+            }
+
+            // Control playback
+            if (isPlaying && video.paused) {
+              video.play().catch(() => {});
+            } else if (!isPlaying && !video.paused) {
+              video.pause();
+            }
+
+            return { video, transform: clip.transform };
+          }
+        }
+        return { video: null, transform: clip.transform };
+      }
+
+      // Regular video clip
+      return { video: clip.source?.videoElement || null, transform: clip.transform };
+    };
+
     // Process each video layer and collect updates
     videoTracks.forEach((track, layerIndex) => {
       const clip = clipsAtTime.find(c => c.trackId === track.id);
       const layer = currentLayers[layerIndex];
 
-      if (clip?.source?.videoElement) {
+      // Handle composition clips with nested content
+      if (clip?.isComposition && clip.nestedClips && clip.nestedClips.length > 0) {
+        const clipTime = playheadPosition - clip.startTime + clip.inPoint;
+        const { video, transform } = getVideoFromClip(clip, clipTime);
+
+        if (video) {
+          const needsUpdate = !layer ||
+            layer.source?.videoElement !== video ||
+            layer.opacity !== transform.opacity ||
+            layer.blendMode !== transform.blendMode ||
+            layer.position.x !== transform.position.x ||
+            layer.position.y !== transform.position.y ||
+            layer.scale.x !== transform.scale.x ||
+            layer.scale.y !== transform.scale.y ||
+            layer.rotation !== (transform.rotation.z * Math.PI / 180);
+
+          if (needsUpdate) {
+            newLayers[layerIndex] = {
+              id: `timeline_layer_${layerIndex}`,
+              name: clip.name,
+              visible: isVideoTrackVisible(track),
+              opacity: transform.opacity,
+              blendMode: transform.blendMode,
+              source: {
+                type: 'video',
+                videoElement: video,
+              },
+              effects: [],
+              position: { x: transform.position.x, y: transform.position.y },
+              scale: { x: transform.scale.x, y: transform.scale.y },
+              rotation: transform.rotation.z * Math.PI / 180,
+            };
+            layersChanged = true;
+          }
+        } else {
+          // Nested comp has no video at this time - clear layer
+          if (layer?.source) {
+            newLayers[layerIndex] = undefined as any;
+            layersChanged = true;
+          }
+        }
+      } else if (clip?.source?.videoElement) {
         // Seek video to correct position within clip
         const clipTime = playheadPosition - clip.startTime + clip.inPoint;
         const video = clip.source.videoElement;

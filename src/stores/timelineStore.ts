@@ -632,7 +632,7 @@ export const useTimelineStore = create<TimelineStore>()(
     },
 
     // Add a composition as a clip (nested composition)
-    addCompClip: (trackId, composition, startTime) => {
+    addCompClip: async (trackId, composition, startTime) => {
       const { clips, updateDuration, findNonOverlappingPosition } = get();
 
       const clipId = `clip-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -640,6 +640,7 @@ export const useTimelineStore = create<TimelineStore>()(
       // Find non-overlapping position
       const finalStartTime = findNonOverlappingPosition(clipId, startTime, trackId, composition.duration);
 
+      // Create placeholder clip immediately (will be updated with nested content)
       const compClip: TimelineClip = {
         id: clipId,
         trackId,
@@ -654,13 +655,143 @@ export const useTimelineStore = create<TimelineStore>()(
           naturalDuration: composition.duration,
         },
         transform: { ...DEFAULT_TRANSFORM },
-        isLoading: false,
+        isLoading: true,
         isComposition: true,
         compositionId: composition.id,
+        nestedClips: [],
+        nestedTracks: [],
       };
 
       set({ clips: [...clips, compClip] });
       updateDuration();
+
+      // Load nested composition's clips in background
+      if (composition.timelineData) {
+        const mediaStore = useMediaStore.getState();
+        const nestedClips: TimelineClip[] = [];
+        const nestedTracks = composition.timelineData.tracks;
+
+        for (const serializedClip of composition.timelineData.clips) {
+          // Find the media file
+          const mediaFile = mediaStore.files.find(f => f.id === serializedClip.mediaFileId);
+          if (!mediaFile || !mediaFile.file) {
+            console.warn('[Nested Comp] Could not find media file for clip:', serializedClip.name);
+            continue;
+          }
+
+          // Create the clip with loading state
+          const nestedClip: TimelineClip = {
+            id: `nested-${clipId}-${serializedClip.id}`,
+            trackId: serializedClip.trackId,
+            name: serializedClip.name,
+            file: mediaFile.file,
+            startTime: serializedClip.startTime,
+            duration: serializedClip.duration,
+            inPoint: serializedClip.inPoint,
+            outPoint: serializedClip.outPoint,
+            source: null,
+            thumbnails: serializedClip.thumbnails,
+            linkedClipId: serializedClip.linkedClipId,
+            waveform: serializedClip.waveform,
+            transform: serializedClip.transform,
+            isLoading: true,
+          };
+
+          nestedClips.push(nestedClip);
+
+          // Load media element async
+          const type = serializedClip.sourceType;
+          const fileUrl = URL.createObjectURL(mediaFile.file);
+
+          if (type === 'video') {
+            const video = document.createElement('video');
+            video.src = fileUrl;
+            video.muted = true;
+            video.playsInline = true;
+            video.preload = 'auto';
+            video.crossOrigin = 'anonymous';
+
+            video.addEventListener('canplaythrough', () => {
+              nestedClip.source = {
+                type: 'video',
+                videoElement: video,
+                naturalDuration: video.duration,
+              };
+              nestedClip.isLoading = false;
+              // Trigger re-render by updating the parent clip
+              const currentClips = get().clips;
+              set({ clips: [...currentClips] });
+            }, { once: true });
+          } else if (type === 'audio') {
+            const audio = document.createElement('audio');
+            audio.src = fileUrl;
+            audio.preload = 'auto';
+
+            audio.addEventListener('canplaythrough', () => {
+              nestedClip.source = {
+                type: 'audio',
+                audioElement: audio,
+                naturalDuration: audio.duration,
+              };
+              nestedClip.isLoading = false;
+            }, { once: true });
+          } else if (type === 'image') {
+            const img = new Image();
+            img.src = fileUrl;
+
+            img.addEventListener('load', () => {
+              nestedClip.source = {
+                type: 'image',
+                imageElement: img,
+              };
+              nestedClip.isLoading = false;
+              const currentClips = get().clips;
+              set({ clips: [...currentClips] });
+            }, { once: true });
+          }
+        }
+
+        // Update the comp clip with nested data
+        const currentClips = get().clips;
+        set({
+          clips: currentClips.map(c =>
+            c.id === clipId
+              ? { ...c, nestedClips, nestedTracks, isLoading: false }
+              : c
+          ),
+        });
+
+        // Generate thumbnails from first video in nested comp
+        const firstVideoClip = nestedClips.find(c => c.file.type.startsWith('video/'));
+        if (firstVideoClip) {
+          // Wait a bit for video to load
+          setTimeout(async () => {
+            const video = firstVideoClip.source?.videoElement;
+            if (video && video.readyState >= 2) {
+              try {
+                const thumbnails = await generateThumbnails(video, composition.duration);
+                const updatedClips = get().clips;
+                set({
+                  clips: updatedClips.map(c =>
+                    c.id === clipId ? { ...c, thumbnails } : c
+                  ),
+                });
+              } catch (e) {
+                console.warn('[Nested Comp] Failed to generate thumbnails:', e);
+              }
+            }
+          }, 500);
+        }
+      } else {
+        // No timeline data - just mark as loaded
+        const currentClips = get().clips;
+        set({
+          clips: currentClips.map(c =>
+            c.id === clipId ? { ...c, isLoading: false } : c
+          ),
+        });
+      }
+
       get().invalidateCache();
     },
 

@@ -137,6 +137,8 @@ export interface TimelineClip {
   // Nested composition support
   isComposition?: boolean;  // True if this clip is a nested composition
   compositionId?: string;   // ID of the nested composition
+  nestedClips?: TimelineClip[];  // Loaded clips from the nested composition
+  nestedTracks?: TimelineTrack[];  // Tracks from the nested composition
 }
 
 export interface TimelineTrack {
