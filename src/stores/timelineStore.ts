@@ -120,6 +120,14 @@ interface TimelineStore {
   setLoopPlayback: (loop: boolean) => void;
   toggleLoopPlayback: () => void;
 
+  // RAM Preview - pre-render frames to memory for instant scrubbing
+  ramPreviewProgress: number | null;  // null = not previewing, 0-100 = progress
+  ramPreviewRange: { start: number; end: number } | null;  // cached time range
+  isRamPreviewing: boolean;
+  startRamPreview: () => Promise<void>;
+  cancelRamPreview: () => void;
+  clearRamPreview: () => void;
+
   // Track actions
   addTrack: (type: 'video' | 'audio') => void;
   removeTrack: (id: string) => void;
@@ -183,6 +191,9 @@ export const useTimelineStore = create<TimelineStore>()(
     inPoint: null,
     outPoint: null,
     loopPlayback: false,
+    ramPreviewProgress: null,
+    ramPreviewRange: null,
+    isRamPreviewing: false,
 
     // Track actions
     addTrack: (type) => {
@@ -756,6 +767,154 @@ export const useTimelineStore = create<TimelineStore>()(
 
     toggleLoopPlayback: () => {
       set({ loopPlayback: !get().loopPlayback });
+    },
+
+    // RAM Preview actions
+    startRamPreview: async () => {
+      const { inPoint, outPoint, duration, clips, tracks, isRamPreviewing } = get();
+      if (isRamPreviewing) return;
+
+      // Determine range to preview (use In/Out or full duration)
+      const start = inPoint ?? 0;
+      const end = outPoint ?? duration;
+
+      if (end <= start) return;
+
+      // Import engine dynamically to avoid circular dependency
+      const { engine } = await import('../engine/WebGPUEngine');
+
+      set({
+        isRamPreviewing: true,
+        ramPreviewProgress: 0,
+        ramPreviewRange: null
+      });
+
+      const fps = 30; // Preview at 30fps
+      const totalFrames = Math.ceil((end - start) * fps);
+      let cancelled = false;
+
+      // Store cancel function
+      const checkCancelled = () => !get().isRamPreviewing;
+
+      try {
+        for (let frame = 0; frame < totalFrames; frame++) {
+          if (checkCancelled()) {
+            cancelled = true;
+            break;
+          }
+
+          const time = start + (frame / fps);
+
+          // Get clips at this time
+          const clipsAtTime = clips.filter(c =>
+            time >= c.startTime && time < c.startTime + c.duration
+          );
+
+          // Build layers for this frame
+          const videoTracks = tracks.filter(t => t.type === 'video');
+          const layers: import('../types').Layer[] = [];
+
+          // Seek all videos and build layers
+          for (const clip of clipsAtTime) {
+            const track = tracks.find(t => t.id === clip.trackId);
+            if (!track?.visible || track.type !== 'video') continue;
+
+            if (clip.source?.type === 'video' && clip.source.videoElement) {
+              const video = clip.source.videoElement;
+              const clipTime = time - clip.startTime + clip.inPoint;
+
+              // Seek and wait
+              if (Math.abs(video.currentTime - clipTime) > 0.01) {
+                await new Promise<void>((resolve) => {
+                  const onSeeked = () => {
+                    video.removeEventListener('seeked', onSeeked);
+                    requestAnimationFrame(() => resolve());
+                  };
+                  video.addEventListener('seeked', onSeeked);
+                  video.currentTime = clipTime;
+                  setTimeout(() => {
+                    video.removeEventListener('seeked', onSeeked);
+                    resolve();
+                  }, 500);
+                });
+              }
+
+              // Add to layers
+              layers.push({
+                id: clip.id,
+                name: clip.name,
+                visible: true,
+                opacity: clip.transform.opacity,
+                blendMode: clip.transform.blendMode,
+                source: { type: 'video', videoElement: video },
+                effects: [],
+                position: { x: clip.transform.position.x, y: clip.transform.position.y },
+                scale: { x: clip.transform.scale.x, y: clip.transform.scale.y },
+                rotation: clip.transform.rotation.z * (Math.PI / 180),
+              });
+            } else if (clip.source?.type === 'image' && clip.source.imageElement) {
+              layers.push({
+                id: clip.id,
+                name: clip.name,
+                visible: true,
+                opacity: clip.transform.opacity,
+                blendMode: clip.transform.blendMode,
+                source: { type: 'image', imageElement: clip.source.imageElement },
+                effects: [],
+                position: { x: clip.transform.position.x, y: clip.transform.position.y },
+                scale: { x: clip.transform.scale.x, y: clip.transform.scale.y },
+                rotation: clip.transform.rotation.z * (Math.PI / 180),
+              });
+            }
+          }
+
+          // Sort layers by track order
+          const trackOrder = new Map(videoTracks.map((t, i) => [t.id, i]));
+          layers.sort((a, b) => {
+            const clipA = clipsAtTime.find(c => c.id === a.id);
+            const clipB = clipsAtTime.find(c => c.id === b.id);
+            const orderA = clipA ? (trackOrder.get(clipA.trackId) ?? 0) : 0;
+            const orderB = clipB ? (trackOrder.get(clipB.trackId) ?? 0) : 0;
+            return orderA - orderB;
+          });
+
+          // Render and cache this frame
+          if (layers.length > 0) {
+            engine.render(layers);
+          }
+          await engine.cacheCompositeFrame(time);
+
+          // Update progress
+          const progress = ((frame + 1) / totalFrames) * 100;
+          set({ ramPreviewProgress: progress });
+
+          // Yield to allow UI updates
+          if (frame % 5 === 0) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
+        }
+
+        if (!cancelled) {
+          set({
+            ramPreviewRange: { start, end },
+            ramPreviewProgress: 100
+          });
+        }
+      } catch (error) {
+        console.error('[RAM Preview] Error:', error);
+      } finally {
+        set({ isRamPreviewing: false });
+      }
+    },
+
+    cancelRamPreview: () => {
+      set({ isRamPreviewing: false, ramPreviewProgress: null });
+    },
+
+    clearRamPreview: async () => {
+      const { engine } = await import('../engine/WebGPUEngine');
+      engine.clearCompositeCache();
+      set({ ramPreviewRange: null, ramPreviewProgress: null });
     },
 
     // Utils

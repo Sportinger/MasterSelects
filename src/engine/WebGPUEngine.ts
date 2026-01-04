@@ -215,6 +215,12 @@ export class WebGPUEngine {
   private scrubbingCacheOrder: string[] = []; // LRU order
   private maxScrubbingCacheFrames = 300; // ~10 seconds at 30fps, ~2.4GB VRAM at 1080p
 
+  // RAM Preview cache - fully composited frames for instant playback
+  // Key: time (quantized to frame) -> ImageData (CPU-side for memory efficiency)
+  private compositeCache: Map<number, ImageData> = new Map();
+  private compositeCacheOrder: number[] = []; // LRU order
+  private maxCompositeCacheFrames = 900; // 30 seconds at 30fps
+
   async initialize(): Promise<boolean> {
     // Prevent multiple initializations with promise-based lock
     if (this.isInitialized && this.device) {
@@ -768,6 +774,146 @@ export class WebGPUEngine {
       this.scrubbingCache.clear();
       this.scrubbingCacheViews.clear();
       this.scrubbingCacheOrder = [];
+    }
+  }
+
+  // === RAM PREVIEW COMPOSITE CACHE ===
+  // Cache fully composited frames for instant scrubbing
+
+  // Quantize time to frame number at 30fps for cache key
+  private quantizeTime(time: number): number {
+    return Math.round(time * 30) / 30;
+  }
+
+  // Cache the current composited frame at a specific time
+  async cacheCompositeFrame(time: number): Promise<void> {
+    if (!this.device || !this.pingTexture || !this.pongTexture) return;
+
+    const key = this.quantizeTime(time);
+    if (this.compositeCache.has(key)) return; // Already cached
+
+    // Read pixels from current composite result
+    const pixels = await this.readPixels();
+    if (!pixels) return;
+
+    // Create ImageData for CPU-side storage
+    const imageData = new ImageData(
+      new Uint8ClampedArray(pixels),
+      this.outputWidth,
+      this.outputHeight
+    );
+
+    // Add to cache with LRU eviction
+    this.compositeCache.set(key, imageData);
+    this.compositeCacheOrder.push(key);
+
+    // Evict old frames if over limit
+    while (this.compositeCacheOrder.length > this.maxCompositeCacheFrames) {
+      const oldKey = this.compositeCacheOrder.shift()!;
+      this.compositeCache.delete(oldKey);
+    }
+  }
+
+  // Get cached composite frame if available
+  getCachedCompositeFrame(time: number): ImageData | null {
+    const key = this.quantizeTime(time);
+    const imageData = this.compositeCache.get(key);
+
+    if (imageData) {
+      // Move to end of LRU order
+      const idx = this.compositeCacheOrder.indexOf(key);
+      if (idx > -1) {
+        this.compositeCacheOrder.splice(idx, 1);
+        this.compositeCacheOrder.push(key);
+      }
+      return imageData;
+    }
+    return null;
+  }
+
+  // Check if a frame is cached
+  hasCompositeCacheFrame(time: number): boolean {
+    return this.compositeCache.has(this.quantizeTime(time));
+  }
+
+  // Clear composite cache
+  clearCompositeCache(): void {
+    this.compositeCache.clear();
+    this.compositeCacheOrder = [];
+    console.log('[WebGPU] Composite cache cleared');
+  }
+
+  // Get composite cache stats
+  getCompositeCacheStats(): { count: number; maxFrames: number; memoryMB: number } {
+    const count = this.compositeCache.size;
+    // Each frame is width * height * 4 bytes (RGBA)
+    const bytesPerFrame = this.outputWidth * this.outputHeight * 4;
+    const memoryMB = (count * bytesPerFrame) / (1024 * 1024);
+    return { count, maxFrames: this.maxCompositeCacheFrames, memoryMB };
+  }
+
+  // Render cached frame to preview canvas if available
+  // Returns true if cached frame was used, false if live render needed
+  renderCachedFrame(time: number): boolean {
+    const imageData = this.getCachedCompositeFrame(time);
+    if (!imageData || !this.previewContext) return false;
+
+    // Create a temporary canvas to convert ImageData to texture
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = imageData.width;
+    tempCanvas.height = imageData.height;
+    const ctx = tempCanvas.getContext('2d');
+    if (!ctx) return false;
+
+    ctx.putImageData(imageData, 0, 0);
+
+    // Now we need to draw this to the WebGPU preview
+    // We'll create a texture from the canvas and render it
+    if (!this.device) return false;
+
+    try {
+      // Copy the canvas to the preview context using WebGPU
+      const texture = this.device.createTexture({
+        size: [imageData.width, imageData.height],
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+
+      this.device.queue.copyExternalImageToTexture(
+        { source: tempCanvas },
+        { texture },
+        [imageData.width, imageData.height]
+      );
+
+      // Render texture to preview
+      const commandEncoder = this.device.createCommandEncoder();
+      const textureView = texture.createView();
+
+      // Create bind group for output
+      const bindGroup = this.device.createBindGroup({
+        layout: this.outputBindGroupLayout!,
+        entries: [
+          { binding: 0, resource: this.sampler! },
+          { binding: 1, resource: textureView },
+        ],
+      });
+
+      this.renderToCanvasCached(commandEncoder, this.previewContext, bindGroup);
+
+      // Also render to output windows
+      for (const output of this.outputWindows.values()) {
+        if (output.context) {
+          this.renderToCanvasCached(commandEncoder, output.context, bindGroup);
+        }
+      }
+
+      this.device.queue.submit([commandEncoder.finish()]);
+      texture.destroy();
+
+      return true;
+    } catch (e) {
+      console.warn('[WebGPU] Failed to render cached frame:', e);
+      return false;
     }
   }
 

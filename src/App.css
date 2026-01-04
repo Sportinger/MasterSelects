@@ -1843,6 +1843,48 @@ input[type="checkbox"] {
   box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
 }
 
+/* RAM Preview */
+.timeline-ram-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ram-preview-progress {
+  width: 80px;
+  height: 6px;
+  background: var(--bg-primary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.ram-preview-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+  border-radius: 3px;
+  transition: width 0.1s ease-out;
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #ff6666;
+}
+
+/* RAM Preview cached range indicator */
+.ram-preview-indicator {
+  position: absolute;
+  top: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+  opacity: 0.8;
+  pointer-events: none;
+  z-index: 90;
+}
+
 /* Audio Waveform */
 .clip-waveform {
   position: absolute;

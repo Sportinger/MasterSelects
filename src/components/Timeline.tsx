@@ -38,6 +38,12 @@ export function Timeline() {
     findNonOverlappingPosition,
     loopPlayback,
     toggleLoopPlayback,
+    ramPreviewProgress,
+    ramPreviewRange,
+    isRamPreviewing,
+    startRamPreview,
+    cancelRamPreview,
+    clearRamPreview,
   } = useTimelineStore();
 
 
@@ -85,8 +91,10 @@ export function Timeline() {
     y: number;
     audioTrackId?: string;  // Preview for linked audio clip
     isVideo?: boolean;      // Is the dragged file a video?
+    duration?: number;      // Actual duration of dragged file
   } | null>(null);
   const dragCounterRef = useRef(0); // Track drag enter/leave balance
+  const dragDurationCacheRef = useRef<{ url: string; duration: number } | null>(null); // Cache duration during drag
 
   // Keyboard shortcuts (global, works regardless of focus)
   useEffect(() => {
@@ -162,6 +170,16 @@ export function Timeline() {
   // Sync timeline playback with Preview - update mixer layers based on clips at playhead
   // IMPORTANT: This uses batched updates to prevent flickering from race conditions
   useEffect(() => {
+    // Try to use cached RAM Preview frame first (instant playback)
+    if (ramPreviewRange &&
+        playheadPosition >= ramPreviewRange.start &&
+        playheadPosition <= ramPreviewRange.end) {
+      if (engine.renderCachedFrame(playheadPosition)) {
+        // Successfully rendered from cache, skip live rendering
+        return;
+      }
+    }
+
     const clipsAtTime = getClipsAtTime(playheadPosition);
     const currentLayers = useMixerStore.getState().layers;
 
@@ -353,7 +371,7 @@ export function Timeline() {
         }
       }
     });
-  }, [playheadPosition, clips, tracks, isPlaying, isDraggingPlayhead]);
+  }, [playheadPosition, clips, tracks, isPlaying, isDraggingPlayhead, ramPreviewRange]);
 
   // Get clips at time helper
   const getClipsAtTime = useCallback((time: number) => {
@@ -742,8 +760,42 @@ export function Timeline() {
     };
   }, [clipTrim, clips, pixelToTime, trimClip, moveClip]);
 
+  // Quick duration check for dragged video files
+  const getVideoDurationQuick = async (file: File): Promise<number | null> => {
+    if (!file.type.startsWith('video/')) return null;
+
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+
+      const cleanup = () => {
+        URL.revokeObjectURL(video.src);
+        video.remove();
+      };
+
+      video.onloadedmetadata = () => {
+        const duration = video.duration;
+        cleanup();
+        resolve(isFinite(duration) ? duration : null);
+      };
+
+      video.onerror = () => {
+        cleanup();
+        resolve(null);
+      };
+
+      // Timeout after 500ms - we want this to be fast
+      setTimeout(() => {
+        cleanup();
+        resolve(null);
+      }, 500);
+
+      video.src = URL.createObjectURL(file);
+    });
+  };
+
   // Handle external file drag enter on track
-  const handleTrackDragEnter = (e: React.DragEvent, trackId: string) => {
+  const handleTrackDragEnter = async (e: React.DragEvent, trackId: string) => {
     e.preventDefault();
     dragCounterRef.current++;
 
@@ -752,7 +804,32 @@ export function Timeline() {
       const rect = e.currentTarget.getBoundingClientRect();
       const x = e.clientX - rect.left + scrollX;
       const startTime = pixelToTime(x);
-      setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY });
+
+      // Try to get file duration (works in some browsers during drag)
+      let duration: number | undefined;
+      const items = e.dataTransfer.items;
+      if (items && items.length > 0) {
+        const item = items[0];
+        if (item.kind === 'file') {
+          const file = item.getAsFile();
+          if (file && file.type.startsWith('video/')) {
+            // Check cache first
+            const cacheKey = `${file.name}_${file.size}`;
+            if (dragDurationCacheRef.current?.url === cacheKey) {
+              duration = dragDurationCacheRef.current.duration;
+            } else {
+              // Load duration async
+              const dur = await getVideoDurationQuick(file);
+              if (dur) {
+                duration = dur;
+                dragDurationCacheRef.current = { url: cacheKey, duration: dur };
+              }
+            }
+          }
+        }
+      }
+
+      setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration });
     }
   };
 
@@ -771,13 +848,14 @@ export function Timeline() {
       const targetTrack = tracks.find(t => t.id === trackId);
       const isVideoTrack = targetTrack?.type === 'video';
 
+      // Use cached duration from dragEnter or fallback to 5 seconds
+      const previewDuration = externalDrag?.duration ?? 5;
+
       // For video tracks, find an available audio track for the linked audio clip preview
-      // Use 5 seconds as estimated duration for preview
       let audioTrackId: string | undefined;
       if (isVideoTrack) {
-        const estimatedDuration = 5;
         const audioTracks = tracks.filter(t => t.type === 'audio');
-        const endTime = startTime + estimatedDuration;
+        const endTime = startTime + previewDuration;
 
         // Find first available audio track
         for (const aTrack of audioTracks) {
@@ -797,14 +875,15 @@ export function Timeline() {
         }
       }
 
-      setExternalDrag({
+      setExternalDrag(prev => ({
         trackId,
         startTime,
         x: e.clientX,
         y: e.clientY,
         audioTrackId,
-        isVideo: isVideoTrack
-      });
+        isVideo: isVideoTrack,
+        duration: prev?.duration  // Keep cached duration
+      }));
     }
   };
 
@@ -1096,6 +1175,44 @@ export function Timeline() {
             </button>
           )}
         </div>
+        <div className="timeline-ram-preview">
+          {isRamPreviewing ? (
+            <>
+              <div className="ram-preview-progress">
+                <div
+                  className="ram-preview-progress-bar"
+                  style={{ width: `${ramPreviewProgress ?? 0}%` }}
+                />
+              </div>
+              <button
+                className="btn btn-sm btn-danger"
+                onClick={cancelRamPreview}
+                title="Cancel RAM Preview"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                className={`btn btn-sm ${ramPreviewRange ? 'btn-active' : ''}`}
+                onClick={startRamPreview}
+                title="RAM Preview - Pre-render frames for instant scrubbing (uses In/Out range)"
+              >
+                RAM Preview
+              </button>
+              {ramPreviewRange && (
+                <button
+                  className="btn btn-sm"
+                  onClick={clearRamPreview}
+                  title="Clear RAM Preview cache"
+                >
+                  Clear
+                </button>
+              )}
+            </>
+          )}
+        </div>
         <div className="timeline-tracks-controls">
           <button className="btn btn-sm" onClick={() => addTrack('video')}>+ Video Track</button>
           <button className="btn btn-sm" onClick={() => addTrack('audio')}>+ Audio Track</button>
@@ -1284,6 +1401,18 @@ export function Timeline() {
                 />
               )}
             </>
+          )}
+
+          {/* RAM Preview cached range indicator */}
+          {ramPreviewRange && (
+            <div
+              className="ram-preview-indicator"
+              style={{
+                left: timeToPixel(ramPreviewRange.start),
+                width: timeToPixel(ramPreviewRange.end - ramPreviewRange.start),
+              }}
+              title={`RAM Preview: ${formatTime(ramPreviewRange.start)} - ${formatTime(ramPreviewRange.end)}`}
+            />
           )}
 
           {/* In point marker */}
