@@ -699,6 +699,50 @@ export class WebGPUEngine {
     return null;
   }
 
+  // Cleanup resources for a video that's no longer used
+  cleanupVideo(video: HTMLVideoElement): void {
+    // Destroy GPU textures
+    const texture = this.lastFrameTextures.get(video);
+    if (texture) {
+      texture.destroy();
+      this.lastFrameTextures.delete(video);
+    }
+    this.lastFrameViews.delete(video);
+    this.lastFrameSizes.delete(video);
+    this.lastCaptureTime.delete(video);
+
+    // Cleanup frame tracking
+    this.videoFrameReady.delete(video);
+    this.videoLastTime.delete(video);
+    this.videoCallbackActive.delete(video);
+
+    console.log('[WebGPU] Cleaned up video resources');
+  }
+
+  // Clear all caches (call periodically to prevent memory buildup)
+  clearCaches(): void {
+    // Clear scrubbing cache
+    for (const texture of this.scrubbingCache.values()) {
+      texture.destroy();
+    }
+    this.scrubbingCache.clear();
+    this.scrubbingCacheViews.clear();
+    this.scrubbingCacheOrder.length = 0;
+
+    // Clear composite cache
+    this.compositeCache.clear();
+    this.compositeCacheOrder.length = 0;
+
+    // Clear GPU frame cache
+    for (const entry of this.gpuFrameCache.values()) {
+      entry.texture.destroy();
+    }
+    this.gpuFrameCache.clear();
+    this.gpuFrameCacheOrder.length = 0;
+
+    console.log('[WebGPU] Cleared all caches');
+  }
+
   // === SCRUBBING FRAME CACHE ===
   // Cache a frame at a specific time for instant scrubbing access
   cacheFrameAtTime(video: HTMLVideoElement, time: number): void {
@@ -1078,39 +1122,36 @@ export class WebGPUEngine {
       if (layer.source.videoElement) {
         const video = layer.source.videoElement;
 
-        // Register video for frame tracking (idempotent)
-        this.registerVideo(video);
-
         // Log video state occasionally for debugging
         if (this.profileCounter === 0) {
-          console.log(`[VIDEO] readyState=${video.readyState} paused=${video.paused} seeking=${video.seeking}`);
+          console.log(`[VIDEO] ${video.videoWidth}x${video.videoHeight} readyState=${video.readyState} paused=${video.paused} seeking=${video.seeking} buffered=${video.buffered.length > 0 ? (video.buffered.end(0) - video.buffered.start(0)).toFixed(1) + 's' : '0s'}`);
         }
 
         if (video.readyState >= 2) {
-          // Check if video has a new frame (uses requestVideoFrameCallback)
-          const newFrameAvailable = this.hasNewFrame(video);
-
-          if (newFrameAvailable) {
-            // New frame available - import external texture
-            const extTex = this.importVideoTexture(video);
-            if (extTex) {
-              // Always cache when we import a new frame (for no-new-frame renders)
+          // Always try to import external texture (zero-copy GPU path)
+          const extTex = this.importVideoTexture(video);
+          if (extTex) {
+            // Cache frame occasionally for seek/pause fallback (not every frame)
+            const now = performance.now();
+            const lastCapture = this.lastCaptureTime.get(video) || 0;
+            if (now - lastCapture > 500) { // Cache every 500ms
               this.captureVideoFrame(video);
-              this.detailedStats.decoder = 'HTMLVideo';
-
-              this.layerRenderData.push({
-                layer,
-                isVideo: true,
-                externalTexture: extTex,
-                textureView: null,
-                sourceWidth: video.videoWidth,
-                sourceHeight: video.videoHeight,
-              });
-              continue;
+              this.lastCaptureTime.set(video, now);
             }
+            this.detailedStats.decoder = 'HTMLVideo';
+
+            this.layerRenderData.push({
+              layer,
+              isVideo: true,
+              externalTexture: extTex,
+              textureView: null,
+              sourceWidth: video.videoWidth,
+              sourceHeight: video.videoHeight,
+            });
+            continue;
           }
 
-          // No new frame OR import failed - use cached frame (skip expensive importExternalTexture)
+          // Import failed (seeking, not ready) - use cached frame
           const lastFrame = this.getLastFrame(video);
           if (lastFrame) {
             this.detailedStats.decoder = 'HTMLVideo(cached)';
@@ -1121,22 +1162,6 @@ export class WebGPUEngine {
               textureView: lastFrame.view,
               sourceWidth: lastFrame.width,
               sourceHeight: lastFrame.height,
-            });
-            continue;
-          }
-
-          // No cache available, try import anyway
-          const extTex = this.importVideoTexture(video);
-          if (extTex) {
-            this.captureVideoFrame(video);
-            this.detailedStats.decoder = 'HTMLVideo';
-            this.layerRenderData.push({
-              layer,
-              isVideo: true,
-              externalTexture: extTex,
-              textureView: null,
-              sourceWidth: video.videoWidth,
-              sourceHeight: video.videoHeight,
             });
             continue;
           }
