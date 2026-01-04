@@ -498,10 +498,35 @@ export function Timeline() {
             video.pause();
           }
 
-          // Check if we already have this frame in our local cache
-          if (!cached || cached.frameIndex !== frameIndex) {
-            // Start loading the frame if not already loading
-            const loadKey = `${mediaFile.id}_${frameIndex}`;
+          // Load proxy frame - use synchronous path if already cached in proxyFrameCache
+          const loadKey = `${mediaFile.id}_${frameIndex}`;
+
+          // Try to get frame from proxyFrameCache (might be sync if already cached)
+          const cachedInService = proxyFrameCache.getCachedFrame(mediaFile.id, frameIndex);
+
+          if (cachedInService) {
+            // Frame is already in the service cache - use it immediately
+            proxyFramesRef.current.set(cacheKey, { frameIndex, image: cachedInService });
+
+            const transform = clip.transform;
+            newLayers[layerIndex] = {
+              id: `timeline_layer_${layerIndex}`,
+              name: clip.name,
+              visible: isVideoTrackVisible(track),
+              opacity: transform.opacity,
+              blendMode: transform.blendMode,
+              source: {
+                type: 'image',
+                imageElement: cachedInService,
+              },
+              effects: [],
+              position: { x: transform.position.x, y: transform.position.y },
+              scale: { x: transform.scale.x, y: transform.scale.y },
+              rotation: transform.rotation.z * Math.PI / 180,
+            };
+            layersChanged = true;
+          } else if (!cached || cached.frameIndex !== frameIndex) {
+            // Need to load from IndexedDB
             if (!proxyLoadingRef.current.has(loadKey)) {
               proxyLoadingRef.current.add(loadKey);
 
@@ -538,22 +563,33 @@ export function Timeline() {
                 }
               });
             }
-          }
 
-          // Use cached proxy frame if available
-          const proxyImage = cached?.image;
-          if (proxyImage) {
+            // Use previous frame while loading (if available)
+            if (cached?.image) {
+              const transform = clip.transform;
+              newLayers[layerIndex] = {
+                id: `timeline_layer_${layerIndex}`,
+                name: clip.name,
+                visible: isVideoTrackVisible(track),
+                opacity: transform.opacity,
+                blendMode: transform.blendMode,
+                source: {
+                  type: 'image',
+                  imageElement: cached.image,
+                },
+                effects: [],
+                position: { x: transform.position.x, y: transform.position.y },
+                scale: { x: transform.scale.x, y: transform.scale.y },
+                rotation: transform.rotation.z * Math.PI / 180,
+              };
+              layersChanged = true;
+            }
+          } else if (cached?.image) {
+            // Same frame as before, just use it
             const transform = clip.transform;
             const needsUpdate = !layer ||
-              layer.source?.imageElement !== proxyImage ||
-              layer.source?.type !== 'image' ||
-              layer.opacity !== transform.opacity ||
-              layer.blendMode !== transform.blendMode ||
-              layer.position.x !== transform.position.x ||
-              layer.position.y !== transform.position.y ||
-              layer.scale.x !== transform.scale.x ||
-              layer.scale.y !== transform.scale.y ||
-              layer.rotation !== (transform.rotation.z * Math.PI / 180);
+              layer.source?.imageElement !== cached.image ||
+              layer.source?.type !== 'image';
 
             if (needsUpdate) {
               newLayers[layerIndex] = {
@@ -564,7 +600,7 @@ export function Timeline() {
                 blendMode: transform.blendMode,
                 source: {
                   type: 'image',
-                  imageElement: proxyImage,
+                  imageElement: cached.image,
                 },
                 effects: [],
                 position: { x: transform.position.x, y: transform.position.y },

@@ -25,6 +25,17 @@ class ProxyFrameCache {
     return `${mediaFileId}_${frameIndex}`;
   }
 
+  // Synchronously get a frame if it's already in memory cache
+  getCachedFrame(mediaFileId: string, frameIndex: number): HTMLImageElement | null {
+    const key = this.getKey(mediaFileId, frameIndex);
+    const cached = this.cache.get(key);
+    if (cached) {
+      cached.timestamp = Date.now(); // Update for LRU
+      return cached.image;
+    }
+    return null;
+  }
+
   // Get a frame from cache or load it
   async getFrame(mediaFileId: string, time: number, fps: number = 30): Promise<HTMLImageElement | null> {
     const frameIndex = Math.floor(time * fps);
