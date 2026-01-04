@@ -151,7 +151,7 @@ interface TimelineStore {
 
 
   // Clip actions
-  addClip: (trackId: string, file: File, startTime: number, estimatedDuration?: number) => Promise<void>;
+  addClip: (trackId: string, file: File, startTime: number, estimatedDuration?: number, mediaFileId?: string) => Promise<void>;
   addCompClip: (trackId: string, composition: import('./mediaStore').Composition, startTime: number) => void;
   removeClip: (id: string) => void;
   moveClip: (id: string, newStartTime: number, newTrackId?: string, skipLinked?: boolean) => void;
@@ -320,7 +320,7 @@ export const useTimelineStore = create<TimelineStore>()(
     },
 
     // Clip actions
-    addClip: async (trackId, file, startTime, providedDuration) => {
+    addClip: async (trackId, file, startTime, providedDuration, mediaFileId) => {
       const isVideo = file.type.startsWith('video/');
       const isAudio = file.type.startsWith('audio/');
       const isImage = file.type.startsWith('image/');
@@ -375,7 +375,7 @@ export const useTimelineStore = create<TimelineStore>()(
           duration: estimatedDuration,
           inPoint: 0,
           outPoint: estimatedDuration,
-          source: { type: 'video', naturalDuration: estimatedDuration },
+          source: { type: 'video', naturalDuration: estimatedDuration, mediaFileId },
           linkedClipId: audioTrackId ? audioClipId : undefined,
           transform: { ...DEFAULT_TRANSFORM },
           isLoading: true,
@@ -424,7 +424,7 @@ export const useTimelineStore = create<TimelineStore>()(
         updateClip(clipId, {
           duration: naturalDuration,
           outPoint: naturalDuration,
-          source: { type: 'video', videoElement: video, naturalDuration },
+          source: { type: 'video', videoElement: video, naturalDuration, mediaFileId },
         });
         if (audioTrackId && audioClipId) {
           updateClip(audioClipId, {
@@ -476,6 +476,7 @@ export const useTimelineStore = create<TimelineStore>()(
             videoElement: video,
             webCodecsPlayer: webCodecsPlayer ?? undefined,
             naturalDuration,
+            mediaFileId,
           },
           thumbnails,
           isLoading: false,

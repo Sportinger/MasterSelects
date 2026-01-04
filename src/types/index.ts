@@ -128,6 +128,7 @@ export interface TimelineClip {
     imageElement?: HTMLImageElement;
     webCodecsPlayer?: import('../engine/WebCodecsPlayer').WebCodecsPlayer;
     naturalDuration?: number;
+    mediaFileId?: string;  // Reference to MediaFile for proxy lookup
   } | null;
   thumbnails?: string[];  // Array of data URLs for filmstrip preview
   linkedClipId?: string;  // ID of linked clip (e.g., audio linked to video)

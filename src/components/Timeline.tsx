@@ -5,6 +5,7 @@ import { useTimelineStore } from '../stores/timelineStore';
 import { useMixerStore } from '../stores/mixerStore';
 import { useMediaStore } from '../stores/mediaStore';
 import { engine } from '../engine/WebGPUEngine';
+import { proxyFrameCache } from '../services/proxyFrameCache';
 
 export function Timeline() {
   const {
@@ -53,7 +54,7 @@ export function Timeline() {
     toggleRamPreviewEnabled,
   } = useTimelineStore();
 
-  const { activeCompositionId, getActiveComposition } = useMediaStore();
+  const { activeCompositionId, getActiveComposition, proxyEnabled, setProxyEnabled, files: mediaFiles, currentlyGeneratingProxyId } = useMediaStore();
   const activeComposition = getActiveComposition();
 
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -228,7 +229,7 @@ export function Timeline() {
 
   // Auto-generate proxies after 3 seconds of idle
   const proxyIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { proxyEnabled, getNextFileNeedingProxy, generateProxy, currentlyGeneratingProxyId } = useMediaStore();
+  const { getNextFileNeedingProxy, generateProxy } = useMediaStore();
 
   useEffect(() => {
     // Clear any existing timer
@@ -287,6 +288,10 @@ export function Timeline() {
 
   // Track which clips are currently active (to detect clip changes)
   const activeClipIdsRef = useRef<string>('');
+
+  // Track current proxy frames for each clip (for smooth proxy playback)
+  const proxyFramesRef = useRef<Map<string, { frameIndex: number; image: HTMLImageElement }>>(new Map());
+  const proxyLoadingRef = useRef<Set<string>>(new Set());
 
   // Sync timeline playback with Preview - update mixer layers based on clips at playhead
   // IMPORTANT: This uses batched updates to prevent flickering from race conditions
@@ -458,77 +463,183 @@ export function Timeline() {
         const webCodecsPlayer = clip.source.webCodecsPlayer;
         const timeDiff = Math.abs(video.currentTime - clipTime);
 
-        // WebCodecsPlayer (if available) listens to video element events automatically
-        // We just need to seek it when scrubbing
-        if (webCodecsPlayer) {
-          const wcTimeDiff = Math.abs(webCodecsPlayer.currentTime - clipTime);
-          if (wcTimeDiff > 0.05) {
-            webCodecsPlayer.seek(clipTime);
-          }
-        }
+        // Check if we should use proxy frames for this clip
+        const mediaStore = useMediaStore.getState();
+        const mediaFile = mediaStore.files.find(f => f.name === clip.name || clip.source?.mediaFileId === f.id);
+        const useProxy = mediaStore.proxyEnabled && mediaFile?.proxyStatus === 'ready' && mediaFile?.proxyFps;
+        const proxyFps = mediaFile?.proxyFps || 30;
 
-        // Control HTMLVideoElement playback
-        if (isPlaying && video.paused) {
-          video.play().catch(() => {});
-        } else if (!isPlaying && !video.paused) {
-          video.pause();
-        }
+        if (useProxy && mediaFile) {
+          // Use proxy frames instead of video decode
+          const frameIndex = Math.floor(clipTime * proxyFps);
+          const cacheKey = `${mediaFile.id}_${clip.id}`;
+          const cached = proxyFramesRef.current.get(cacheKey);
 
-        // During playback: DON'T seek - let video play naturally, we sync FROM it
-        // Only seek when scrubbing or paused
-        if (!isPlaying) {
-          const seekThreshold = isDraggingPlayhead ? 0.1 : 0.05;
-
-          if (timeDiff > seekThreshold) {
-            const now = performance.now();
-            const lastSeek = lastSeekRef.current[clip.id] || 0;
-
-            // Throttle seeks during scrubbing
-            if (isDraggingPlayhead && now - lastSeek < 80) {
-              pendingSeekRef.current[clip.id] = clipTime;
-            } else {
-              if (isDraggingPlayhead && 'fastSeek' in video) {
-                video.fastSeek(clipTime);
-              } else {
-                video.currentTime = clipTime;
-              }
-              lastSeekRef.current[clip.id] = now;
-              delete pendingSeekRef.current[clip.id];
+          // Check if we already have this frame
+          if (!cached || cached.frameIndex !== frameIndex) {
+            // Start loading the frame if not already loading
+            const loadKey = `${mediaFile.id}_${frameIndex}`;
+            if (!proxyLoadingRef.current.has(loadKey)) {
+              proxyLoadingRef.current.add(loadKey);
+              proxyFrameCache.getFrame(mediaFile.id, clipTime, proxyFps).then(image => {
+                proxyLoadingRef.current.delete(loadKey);
+                if (image) {
+                  proxyFramesRef.current.set(cacheKey, { frameIndex, image });
+                  // Trigger a re-render to use the new frame
+                  // Only force update if we're not playing (to avoid interrupting playback)
+                  if (!useTimelineStore.getState().isPlaying) {
+                    useMixerStore.setState({}); // Force re-render
+                  }
+                }
+              });
             }
           }
-        }
 
-        // Check if layer needs update
-        const transform = clip.transform;
-        const needsUpdate = !layer ||
-          layer.source?.videoElement !== video ||
-          layer.source?.webCodecsPlayer !== webCodecsPlayer ||
-          layer.opacity !== transform.opacity ||
-          layer.blendMode !== transform.blendMode ||
-          layer.position.x !== transform.position.x ||
-          layer.position.y !== transform.position.y ||
-          layer.scale.x !== transform.scale.x ||
-          layer.scale.y !== transform.scale.y ||
-          layer.rotation !== (transform.rotation.z * Math.PI / 180);
+          // Use cached proxy frame if available
+          const proxyImage = cached?.image;
+          if (proxyImage) {
+            const transform = clip.transform;
+            const needsUpdate = !layer ||
+              layer.source?.imageElement !== proxyImage ||
+              layer.source?.type !== 'image' ||
+              layer.opacity !== transform.opacity ||
+              layer.blendMode !== transform.blendMode ||
+              layer.position.x !== transform.position.x ||
+              layer.position.y !== transform.position.y ||
+              layer.scale.x !== transform.scale.x ||
+              layer.scale.y !== transform.scale.y ||
+              layer.rotation !== (transform.rotation.z * Math.PI / 180);
 
-        if (needsUpdate) {
-          newLayers[layerIndex] = {
-            id: `timeline_layer_${layerIndex}`,
-            name: clip.name,
-            visible: isVideoTrackVisible(track),
-            opacity: transform.opacity,
-            blendMode: transform.blendMode,
-            source: {
-              type: 'video',
-              videoElement: video,
-              webCodecsPlayer: webCodecsPlayer,
-            },
-            effects: [],
-            position: { x: transform.position.x, y: transform.position.y },
-            scale: { x: transform.scale.x, y: transform.scale.y },
-            rotation: transform.rotation.z * Math.PI / 180,
-          };
-          layersChanged = true;
+            if (needsUpdate) {
+              newLayers[layerIndex] = {
+                id: `timeline_layer_${layerIndex}`,
+                name: clip.name,
+                visible: isVideoTrackVisible(track),
+                opacity: transform.opacity,
+                blendMode: transform.blendMode,
+                source: {
+                  type: 'image',
+                  imageElement: proxyImage,
+                },
+                effects: [],
+                position: { x: transform.position.x, y: transform.position.y },
+                scale: { x: transform.scale.x, y: transform.scale.y },
+                rotation: transform.rotation.z * Math.PI / 180,
+              };
+              layersChanged = true;
+            }
+
+            // Pause the video since we're using proxy frames (but keep it ready for fallback)
+            if (!video.paused) {
+              video.pause();
+            }
+          } else {
+            // Fall back to video while proxy frame is loading
+            // This ensures smooth playback even if proxy isn't loaded yet
+            if (isPlaying && video.paused) {
+              video.play().catch(() => {});
+            }
+
+            const transform = clip.transform;
+            const needsUpdate = !layer ||
+              layer.source?.videoElement !== video ||
+              layer.opacity !== transform.opacity ||
+              layer.blendMode !== transform.blendMode;
+
+            if (needsUpdate) {
+              newLayers[layerIndex] = {
+                id: `timeline_layer_${layerIndex}`,
+                name: clip.name,
+                visible: isVideoTrackVisible(track),
+                opacity: transform.opacity,
+                blendMode: transform.blendMode,
+                source: {
+                  type: 'video',
+                  videoElement: video,
+                  webCodecsPlayer: webCodecsPlayer,
+                },
+                effects: [],
+                position: { x: transform.position.x, y: transform.position.y },
+                scale: { x: transform.scale.x, y: transform.scale.y },
+                rotation: transform.rotation.z * Math.PI / 180,
+              };
+              layersChanged = true;
+            }
+          }
+        } else {
+          // Original video playback (no proxy)
+          // WebCodecsPlayer (if available) listens to video element events automatically
+          // We just need to seek it when scrubbing
+          if (webCodecsPlayer) {
+            const wcTimeDiff = Math.abs(webCodecsPlayer.currentTime - clipTime);
+            if (wcTimeDiff > 0.05) {
+              webCodecsPlayer.seek(clipTime);
+            }
+          }
+
+          // Control HTMLVideoElement playback
+          if (isPlaying && video.paused) {
+            video.play().catch(() => {});
+          } else if (!isPlaying && !video.paused) {
+            video.pause();
+          }
+
+          // During playback: DON'T seek - let video play naturally, we sync FROM it
+          // Only seek when scrubbing or paused
+          if (!isPlaying) {
+            const seekThreshold = isDraggingPlayhead ? 0.1 : 0.05;
+
+            if (timeDiff > seekThreshold) {
+              const now = performance.now();
+              const lastSeek = lastSeekRef.current[clip.id] || 0;
+
+              // Throttle seeks during scrubbing
+              if (isDraggingPlayhead && now - lastSeek < 80) {
+                pendingSeekRef.current[clip.id] = clipTime;
+              } else {
+                if (isDraggingPlayhead && 'fastSeek' in video) {
+                  video.fastSeek(clipTime);
+                } else {
+                  video.currentTime = clipTime;
+                }
+                lastSeekRef.current[clip.id] = now;
+                delete pendingSeekRef.current[clip.id];
+              }
+            }
+          }
+
+          // Check if layer needs update
+          const transform = clip.transform;
+          const needsUpdate = !layer ||
+            layer.source?.videoElement !== video ||
+            layer.source?.webCodecsPlayer !== webCodecsPlayer ||
+            layer.opacity !== transform.opacity ||
+            layer.blendMode !== transform.blendMode ||
+            layer.position.x !== transform.position.x ||
+            layer.position.y !== transform.position.y ||
+            layer.scale.x !== transform.scale.x ||
+            layer.scale.y !== transform.scale.y ||
+            layer.rotation !== (transform.rotation.z * Math.PI / 180);
+
+          if (needsUpdate) {
+            newLayers[layerIndex] = {
+              id: `timeline_layer_${layerIndex}`,
+              name: clip.name,
+              visible: isVideoTrackVisible(track),
+              opacity: transform.opacity,
+              blendMode: transform.blendMode,
+              source: {
+                type: 'video',
+                videoElement: video,
+                webCodecsPlayer: webCodecsPlayer,
+              },
+              effects: [],
+              position: { x: transform.position.x, y: transform.position.y },
+              scale: { x: transform.scale.x, y: transform.scale.y },
+              rotation: transform.rotation.z * Math.PI / 180,
+            };
+            layersChanged = true;
+          }
         }
       } else if (clip?.source?.imageElement) {
         // Handle image clips
@@ -1246,7 +1357,8 @@ export function Timeline() {
         const rect = e.currentTarget.getBoundingClientRect();
         const x = e.clientX - rect.left + scrollX;
         const startTime = pixelToTime(x);
-        addClip(trackId, mediaFile.file, Math.max(0, startTime), mediaFile.duration);
+        // Pass mediaFileId for proxy frame lookup
+        addClip(trackId, mediaFile.file, Math.max(0, startTime), mediaFile.duration, mediaFileId);
         return;
       }
     }
@@ -1568,6 +1680,24 @@ export function Timeline() {
               : "RAM Preview OFF - Click to enable auto-caching for instant scrubbing"}
           >
             RAM {ramPreviewEnabled ? 'ON' : 'OFF'}
+          </button>
+          <button
+            className={`btn btn-sm ${proxyEnabled ? 'btn-active' : ''}`}
+            onClick={() => setProxyEnabled(!proxyEnabled)}
+            title={proxyEnabled ? 'Proxy enabled - using optimized frames' : 'Proxy disabled - using original video'}
+          >
+            {currentlyGeneratingProxyId ? (
+              <>⏳ Generating...</>
+            ) : (
+              <>
+                {proxyEnabled ? '🎬' : '🎥'} Proxy {proxyEnabled ? 'On' : 'Off'}
+                {mediaFiles.filter(f => f.proxyStatus === 'ready').length > 0 && (
+                  <span className="proxy-count">
+                    ({mediaFiles.filter(f => f.proxyStatus === 'ready').length})
+                  </span>
+                )}
+              </>
+            )}
           </button>
         </div>
         <div className="timeline-tracks-controls">
