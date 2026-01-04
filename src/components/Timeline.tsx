@@ -321,7 +321,17 @@ export function Timeline() {
 
     // During playback: skip layer sync if same clips are active (fast path)
     // But MUST re-sync when clips change (clip boundaries crossed)
-    if (isPlaying && activeClipIdsRef.current.startsWith('playing:')) {
+    // IMPORTANT: Don't skip if proxy is enabled - we need to update frames each tick
+    const mediaStoreState = useMediaStore.getState();
+    const hasActiveProxies = mediaStoreState.proxyEnabled &&
+      clipsAtTime.some(clip => {
+        const mediaFile = mediaStoreState.files.find(f =>
+          f.id === clip.source?.mediaFileId || f.name === clip.name
+        );
+        return mediaFile?.proxyStatus === 'ready';
+      });
+
+    if (isPlaying && !hasActiveProxies && activeClipIdsRef.current.startsWith('playing:')) {
       const prevActiveIds = activeClipIdsRef.current.slice(8); // Remove 'playing:' prefix
       if (prevActiveIds === currentActiveIds) {
         // Same clips active - skip layer sync, just ensure videos are playing
