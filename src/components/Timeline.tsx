@@ -1374,6 +1374,10 @@ export function Timeline() {
 
       // Check for snapping
       const { startTime: snappedTime, snapped } = getSnappedPosition(clipDrag.clipId, rawTime, newTrackId);
+      const effectiveTime = snapped ? snappedTime : rawTime;
+
+      // Update playhead to follow clip drag for live preview
+      setPlayheadPosition(Math.max(0, Math.min(effectiveTime, duration)));
 
       setClipDrag(prev => prev ? {
         ...prev,
@@ -1402,7 +1406,7 @@ export function Timeline() {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [clipDrag, tracks, scrollX, moveClip, pixelToTime, getSnappedPosition]);
+  }, [clipDrag, tracks, scrollX, moveClip, pixelToTime, getSnappedPosition, setPlayheadPosition, duration]);
 
   // Handle trim start (mousedown on trim handle)
   const handleTrimStart = (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => {
