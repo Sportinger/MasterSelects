@@ -1776,9 +1776,10 @@ export function Timeline() {
   const renderTrackPropertyLabels = (trackId: string) => {
     return (
       <div className="track-property-labels">
-        {/* Opacity label */}
-        <div className="property-label-row">
-          <span className="property-label">Opacity</span>
+        {/* Opacity label - use same structure as groups for alignment */}
+        <div className="property-group-header" style={{ cursor: 'default' }}>
+          <span className="property-group-arrow" style={{ visibility: 'hidden' }}>▶</span>
+          <span>Opacity</span>
         </div>
 
         {/* Position group */}
