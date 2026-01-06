@@ -1254,18 +1254,23 @@ export function Timeline() {
     };
   }, [markerDrag, scrollX, duration, inPoint, outPoint, setInPoint, setOutPoint]);
 
-  // Get all keyframe times for snapping
-  const getAllKeyframeTimes = useCallback(() => {
-    const keyframeTimes: number[] = [];
+  // Get all snap target times (keyframes + clip boundaries) for snapping
+  const getSnapTargetTimes = useCallback(() => {
+    const snapTimes: number[] = [];
     clips.forEach(clip => {
+      // Add clip start and end times
+      snapTimes.push(clip.startTime);
+      snapTimes.push(clip.startTime + clip.duration);
+
+      // Add keyframe times
       const clipKeyframes = getClipKeyframes(clip.id);
       clipKeyframes.forEach(kf => {
         // Absolute time = clip start + keyframe time within clip
         const absTime = clip.startTime + kf.time;
-        keyframeTimes.push(absTime);
+        snapTimes.push(absTime);
       });
     });
-    return keyframeTimes;
+    return snapTimes;
   }, [clips, getClipKeyframes]);
 
   useEffect(() => {
@@ -1277,24 +1282,24 @@ export function Timeline() {
       const x = e.clientX - rect.left + scrollX;
       let time = pixelToTime(x);
 
-      // Snap to keyframes when Shift is held
+      // Snap to keyframes and clip boundaries when Shift is held
       if (e.shiftKey) {
-        const keyframeTimes = getAllKeyframeTimes();
+        const snapTimes = getSnapTargetTimes();
         const snapThreshold = pixelToTime(10); // 10 pixels snap distance
 
-        let closestKeyframe: number | null = null;
+        let closestSnap: number | null = null;
         let closestDistance = Infinity;
 
-        for (const kfTime of keyframeTimes) {
-          const distance = Math.abs(time - kfTime);
+        for (const snapTime of snapTimes) {
+          const distance = Math.abs(time - snapTime);
           if (distance < closestDistance && distance < snapThreshold) {
             closestDistance = distance;
-            closestKeyframe = kfTime;
+            closestSnap = snapTime;
           }
         }
 
-        if (closestKeyframe !== null) {
-          time = closestKeyframe;
+        if (closestSnap !== null) {
+          time = closestSnap;
         }
       }
 
@@ -1311,7 +1316,7 @@ export function Timeline() {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDraggingPlayhead, scrollX, duration, setPlayheadPosition, pixelToTime, getAllKeyframeTimes]);
+  }, [isDraggingPlayhead, scrollX, duration, setPlayheadPosition, pixelToTime, getSnapTargetTimes]);
 
   // Premiere-style clip drag - mouse down on clip
   const handleClipMouseDown = (e: React.MouseEvent, clipId: string) => {
