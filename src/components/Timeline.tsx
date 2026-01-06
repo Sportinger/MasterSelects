@@ -508,7 +508,29 @@ export function Timeline() {
       }
     }
 
-    const clipsAtTime = getClipsAtTime(playheadPosition);
+    // Get clips at playhead, considering any clip being dragged at its temporary position
+    let clipsAtTime = getClipsAtTime(playheadPosition);
+
+    // If dragging a clip, use its temporary position for preview
+    if (clipDrag) {
+      const draggedClipId = clipDrag.clipId;
+      const tempStartTime = clipDrag.snappedTime ?? (clipDrag.currentX ?
+        Math.max(0, pixelToTime(clipDrag.currentX - (timelineRef.current?.getBoundingClientRect().left || 0) + scrollX - clipDrag.grabOffsetX)) :
+        null);
+
+      if (tempStartTime !== null) {
+        // Create modified clips array with dragged clip at temporary position
+        const modifiedClips = clips.map(c => {
+          if (c.id === draggedClipId) {
+            return { ...c, startTime: tempStartTime, trackId: clipDrag.currentTrackId };
+          }
+          return c;
+        });
+        clipsAtTime = modifiedClips.filter(c =>
+          playheadPosition >= c.startTime && playheadPosition < c.startTime + c.duration
+        );
+      }
+    }
 
     // Get current active clip IDs to detect clip boundary crossings
     const currentActiveIds = clipsAtTime
@@ -1041,7 +1063,7 @@ export function Timeline() {
         }
       }
     });
-  }, [playheadPosition, clips, tracks, isPlaying, isDraggingPlayhead, ramPreviewRange, isRamPreviewing, clipKeyframes]);
+  }, [playheadPosition, clips, tracks, isPlaying, isDraggingPlayhead, ramPreviewRange, isRamPreviewing, clipKeyframes, clipDrag, pixelToTime, scrollX]);
 
   // Get clips at time helper
   const getClipsAtTime = useCallback((time: number) => {
@@ -1374,10 +1396,6 @@ export function Timeline() {
 
       // Check for snapping
       const { startTime: snappedTime, snapped } = getSnappedPosition(clipDrag.clipId, rawTime, newTrackId);
-      const effectiveTime = snapped ? snappedTime : rawTime;
-
-      // Update playhead to follow clip drag for live preview
-      setPlayheadPosition(Math.max(0, Math.min(effectiveTime, duration)));
 
       setClipDrag(prev => prev ? {
         ...prev,
@@ -1406,7 +1424,7 @@ export function Timeline() {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [clipDrag, tracks, scrollX, moveClip, pixelToTime, getSnappedPosition, setPlayheadPosition, duration]);
+  }, [clipDrag, tracks, scrollX, moveClip, pixelToTime, getSnappedPosition]);
 
   // Handle trim start (mousedown on trim handle)
   const handleTrimStart = (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => {
