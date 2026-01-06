@@ -2071,32 +2071,32 @@ export function Timeline() {
 
   return (
     <div className={`timeline-container ${clipDrag || clipTrim ? 'is-dragging' : ''}`}>
-      {/* Composition tabs */}
-      <div className="timeline-tabs">
-        {openCompositions.map((comp) => (
-          <div
-            key={comp.id}
-            className={`timeline-tab ${comp.id === activeCompositionId ? 'active' : ''}`}
-            onClick={() => setActiveComposition(comp.id)}
-            title={comp.name}
-          >
-            <span className="timeline-tab-name">{comp.name}</span>
-            <button
-              className="timeline-tab-close"
-              onClick={(e) => {
-                e.stopPropagation();
-                closeCompositionTab(comp.id);
-              }}
-              title="Close tab"
-            >
-              ×
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {/* Timeline toolbar */}
+      {/* Timeline toolbar with tabs */}
       <div className="timeline-toolbar">
+        <div className="timeline-label">Timeline</div>
+        <div className="timeline-tabs">
+          {openCompositions.map((comp) => (
+            <div
+              key={comp.id}
+              className={`timeline-tab ${comp.id === activeCompositionId ? 'active' : ''}`}
+              onClick={() => setActiveComposition(comp.id)}
+              title={comp.name}
+            >
+              <span className="timeline-tab-name">{comp.name}</span>
+              <button
+                className="timeline-tab-close"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeCompositionTab(comp.id);
+                }}
+                title="Close tab"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="timeline-toolbar-spacer" />
         <div className="timeline-controls">
           <button className="btn btn-sm" onClick={stop} title="Stop">⏹</button>
           <button className={`btn btn-sm ${isPlaying ? 'btn-active' : ''}`} onClick={isPlaying ? pause : play}>

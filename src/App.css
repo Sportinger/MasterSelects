@@ -1485,23 +1485,32 @@ input[type="checkbox"] {
 .timeline-toolbar {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 4px 12px;
   background: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
+  min-height: 36px;
 }
 
-/* Composition tabs - like After Effects */
+.timeline-label {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding-right: 8px;
+  border-right: 1px solid var(--border-color);
+  cursor: grab;
+  user-select: none;
+}
+
+/* Composition tabs - inline in toolbar */
 .timeline-tabs {
   display: flex;
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border-color);
-  padding: 0 4px;
   gap: 2px;
-  flex-shrink: 0;
   overflow-x: auto;
   scrollbar-width: none;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 .timeline-tabs::-webkit-scrollbar {
@@ -1511,31 +1520,29 @@ input[type="checkbox"] {
 .timeline-tab {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px 6px 12px;
-  background: var(--bg-tertiary);
+  gap: 4px;
+  padding: 4px 6px 4px 10px;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
+  border-radius: 4px;
   cursor: pointer;
   font-size: 12px;
   color: var(--text-secondary);
-  min-width: 80px;
-  max-width: 180px;
-  margin-top: 4px;
+  min-width: 60px;
+  max-width: 150px;
   transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
 }
 
 .timeline-tab:hover {
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   color: var(--text-primary);
 }
 
 .timeline-tab.active {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  border-bottom: 1px solid var(--bg-tertiary);
-  margin-bottom: -1px;
+  background: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
   font-weight: 500;
 }
 
@@ -1550,14 +1557,14 @@ input[type="checkbox"] {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border: none;
   background: transparent;
-  color: var(--text-secondary);
+  color: inherit;
   cursor: pointer;
-  border-radius: 3px;
-  font-size: 14px;
+  border-radius: 2px;
+  font-size: 12px;
   line-height: 1;
   padding: 0;
   opacity: 0.6;
@@ -1566,12 +1573,15 @@ input[type="checkbox"] {
 
 .timeline-tab-close:hover {
   opacity: 1;
-  background: var(--bg-primary);
-  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.2);
 }
 
-.timeline-tab.active .timeline-tab-close {
-  opacity: 0.8;
+.timeline-tab.active .timeline-tab-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.timeline-toolbar-spacer {
+  flex: 1;
 }
 
 .timeline-controls {
