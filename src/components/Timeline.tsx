@@ -1220,6 +1220,20 @@ export function Timeline() {
     };
   }, [markerDrag, scrollX, duration, inPoint, outPoint, setInPoint, setOutPoint]);
 
+  // Get all keyframe times for snapping
+  const getAllKeyframeTimes = useCallback(() => {
+    const keyframeTimes: number[] = [];
+    clips.forEach(clip => {
+      const clipKeyframes = getClipKeyframes(clip.id);
+      clipKeyframes.forEach(kf => {
+        // Absolute time = clip start + keyframe time within clip
+        const absTime = clip.startTime + kf.time;
+        keyframeTimes.push(absTime);
+      });
+    });
+    return keyframeTimes;
+  }, [clips, getClipKeyframes]);
+
   useEffect(() => {
     if (!isDraggingPlayhead) return;
 
@@ -1227,7 +1241,29 @@ export function Timeline() {
       if (!timelineRef.current) return;
       const rect = timelineRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left + scrollX;
-      const time = pixelToTime(x);
+      let time = pixelToTime(x);
+
+      // Snap to keyframes when Shift is held
+      if (e.shiftKey) {
+        const keyframeTimes = getAllKeyframeTimes();
+        const snapThreshold = pixelToTime(10); // 10 pixels snap distance
+
+        let closestKeyframe: number | null = null;
+        let closestDistance = Infinity;
+
+        for (const kfTime of keyframeTimes) {
+          const distance = Math.abs(time - kfTime);
+          if (distance < closestDistance && distance < snapThreshold) {
+            closestDistance = distance;
+            closestKeyframe = kfTime;
+          }
+        }
+
+        if (closestKeyframe !== null) {
+          time = closestKeyframe;
+        }
+      }
+
       setPlayheadPosition(Math.max(0, Math.min(time, duration)));
     };
 
@@ -1241,7 +1277,7 @@ export function Timeline() {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDraggingPlayhead, scrollX, duration, setPlayheadPosition, pixelToTime]);
+  }, [isDraggingPlayhead, scrollX, duration, setPlayheadPosition, pixelToTime, getAllKeyframeTimes]);
 
   // Premiere-style clip drag - mouse down on clip
   const handleClipMouseDown = (e: React.MouseEvent, clipId: string) => {
