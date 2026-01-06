@@ -2006,6 +2006,8 @@ input[type="checkbox"] {
   width: 2px;
   z-index: 100;
   pointer-events: none;
+  /* Center the 2px line on the exact time position */
+  transform: translateX(-1px);
 }
 
 .playhead-head {
@@ -2013,6 +2015,7 @@ input[type="checkbox"] {
   height: 12px;
   background: var(--danger);
   border-radius: 2px;
+  /* Center the 12px head on the time position */
   transform: translateX(-5px);
   cursor: grab;
   pointer-events: auto;
