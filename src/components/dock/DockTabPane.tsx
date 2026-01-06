@@ -123,18 +123,6 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     }, HOLD_DURATION);
   }, [group.panels, group.id, setActiveComposition, startDrag]);
 
-  const handleCompTabMouseUp = useCallback(() => {
-    if (holdProgress === 'holding') {
-      cancelHold();
-    }
-  }, [holdProgress, cancelHold]);
-
-  const handleCompTabMouseLeave = useCallback(() => {
-    if (holdProgress === 'holding') {
-      cancelHold();
-    }
-  }, [holdProgress, cancelHold]);
-
   // Cancel any ongoing hold
   const cancelHold = useCallback(() => {
     if (holdTimerRef.current) {
@@ -156,6 +144,18 @@ export function DockTabPane({ group }: DockTabPaneProps) {
       setHoldingTabId(null);
     }
   }, [holdProgress]);
+
+  const handleCompTabMouseUp = useCallback(() => {
+    if (holdProgress === 'holding') {
+      cancelHold();
+    }
+  }, [holdProgress, cancelHold]);
+
+  const handleCompTabMouseLeave = useCallback(() => {
+    if (holdProgress === 'holding') {
+      cancelHold();
+    }
+  }, [holdProgress, cancelHold]);
 
   const handleTabClick = useCallback((index: number) => {
     setActiveTab(group.id, index);
@@ -298,34 +298,48 @@ export function DockTabPane({ group }: DockTabPaneProps) {
         {/* For timeline panels, show composition tabs instead */}
         {hasTimelinePanel && openCompositions.length > 0 ? (
           <>
-            {openCompositions.map((comp, index) => (
-              <div
-                key={comp.id}
-                className={`dock-tab ${comp.id === activeCompositionId ? 'active' : ''} ${
-                  draggedCompIndex === index ? 'dragging' : ''
-                } ${dropTargetIndex === index ? 'drop-target-tab' : ''}`}
-                onClick={() => setActiveComposition(comp.id)}
-                title={comp.name}
-                draggable
-                onDragStart={(e) => handleCompDragStart(e, index)}
-                onDragOver={(e) => handleCompDragOver(e, index)}
-                onDragLeave={handleCompDragLeave}
-                onDrop={(e) => handleCompDrop(e, index)}
-                onDragEnd={handleCompDragEnd}
-              >
-                <span className="dock-tab-title">{comp.name}</span>
-                <button
-                  className="dock-tab-close"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeCompositionTab(comp.id);
-                  }}
-                  title="Close"
+            {openCompositions.map((comp, index) => {
+              const isCompHolding = holdingTabId === comp.id && holdProgress === 'holding';
+              const isCompReady = holdingTabId === comp.id && holdProgress === 'ready';
+              const isCompFading = holdingTabId === comp.id && holdProgress === 'fading';
+              const isCompDragging = dragState.isDragging && dragState.draggedPanel?.type === 'timeline';
+
+              return (
+                <div
+                  key={comp.id}
+                  className={`dock-tab ${comp.id === activeCompositionId ? 'active' : ''} ${
+                    draggedCompIndex === index ? 'dragging' : ''
+                  } ${dropTargetIndex === index ? 'drop-target-tab' : ''} ${
+                    isCompHolding ? 'hold-glow' : ''
+                  } ${isCompReady ? 'hold-ready' : ''} ${isCompFading ? 'hold-fade' : ''} ${
+                    isCompDragging ? 'dragging' : ''
+                  }`}
+                  onClick={() => setActiveComposition(comp.id)}
+                  title={comp.name}
+                  draggable
+                  onDragStart={(e) => handleCompDragStart(e, index)}
+                  onDragOver={(e) => handleCompDragOver(e, index)}
+                  onDragLeave={handleCompDragLeave}
+                  onDrop={(e) => handleCompDrop(e, index)}
+                  onDragEnd={handleCompDragEnd}
+                  onMouseDown={(e) => handleCompTabMouseDown(e, comp.id)}
+                  onMouseUp={handleCompTabMouseUp}
+                  onMouseLeave={handleCompTabMouseLeave}
                 >
-                  ×
-                </button>
-              </div>
-            ))}
+                  <span className="dock-tab-title">{comp.name}</span>
+                  <button
+                    className="dock-tab-close"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeCompositionTab(comp.id);
+                    }}
+                    title="Close"
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
           </>
         ) : (
           /* Normal dock tabs for non-timeline panels */

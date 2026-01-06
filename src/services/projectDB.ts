@@ -52,6 +52,7 @@ export interface StoredProject {
     compositions: unknown[];
     folders: unknown[];
     activeCompositionId: string | null;
+    openCompositionIds?: string[];
     expandedFolderIds: string[];
     // Media file IDs (actual blobs stored separately)
     mediaFileIds: string[];
