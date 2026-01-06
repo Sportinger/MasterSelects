@@ -156,6 +156,8 @@ interface TimelineStore {
   removeClip: (id: string) => void;
   moveClip: (id: string, newStartTime: number, newTrackId?: string, skipLinked?: boolean) => void;
   trimClip: (id: string, inPoint: number, outPoint: number) => void;
+  splitClip: (clipId: string, splitTime: number) => void;
+  splitClipAtPlayhead: () => void;
   selectClip: (id: string | null) => void;
   updateClipTransform: (id: string, transform: Partial<ClipTransform>) => void;
 
@@ -894,6 +896,123 @@ export const useTimelineStore = create<TimelineStore>()(
       updateDuration();
       // Invalidate RAM preview cache - content changed
       get().invalidateCache();
+    },
+
+    // Split a clip into two parts at the specified time
+    splitClip: (clipId, splitTime) => {
+      const { clips, updateDuration, invalidateCache } = get();
+      const clip = clips.find(c => c.id === clipId);
+      if (!clip) return;
+
+      // Validate split time is within clip bounds (not at edges)
+      const clipEnd = clip.startTime + clip.duration;
+      if (splitTime <= clip.startTime || splitTime >= clipEnd) {
+        console.warn('[Timeline] Cannot split at edge or outside clip');
+        return;
+      }
+
+      // Calculate the duration of the first part
+      const firstPartDuration = splitTime - clip.startTime;
+      const secondPartDuration = clip.duration - firstPartDuration;
+
+      // Calculate the split point within the source media
+      const splitInSource = clip.inPoint + firstPartDuration;
+
+      const timestamp = Date.now();
+      const randomSuffix = Math.random().toString(36).substr(2, 5);
+
+      // Create the first clip (before split point)
+      const firstClip: TimelineClip = {
+        ...clip,
+        id: `clip-${timestamp}-${randomSuffix}-a`,
+        duration: firstPartDuration,
+        outPoint: splitInSource,
+        // Keep linkedClipId for now, will update after creating linked clips
+        linkedClipId: undefined,
+      };
+
+      // Create the second clip (after split point)
+      const secondClip: TimelineClip = {
+        ...clip,
+        id: `clip-${timestamp}-${randomSuffix}-b`,
+        startTime: splitTime,
+        duration: secondPartDuration,
+        inPoint: splitInSource,
+        linkedClipId: undefined,
+      };
+
+      // Build new clips array starting with non-affected clips
+      const newClips: TimelineClip[] = clips.filter(c => c.id !== clipId && c.id !== clip.linkedClipId);
+
+      // Handle linked clip (e.g., audio linked to video)
+      if (clip.linkedClipId) {
+        const linkedClip = clips.find(c => c.id === clip.linkedClipId);
+        if (linkedClip) {
+          // Create split versions of linked clip
+          const linkedFirstClip: TimelineClip = {
+            ...linkedClip,
+            id: `clip-${timestamp}-${randomSuffix}-linked-a`,
+            duration: firstPartDuration,
+            outPoint: linkedClip.inPoint + firstPartDuration,
+            linkedClipId: firstClip.id,
+          };
+
+          const linkedSecondClip: TimelineClip = {
+            ...linkedClip,
+            id: `clip-${timestamp}-${randomSuffix}-linked-b`,
+            startTime: splitTime,
+            duration: secondPartDuration,
+            inPoint: linkedClip.inPoint + firstPartDuration,
+            linkedClipId: secondClip.id,
+          };
+
+          // Update the main clips to reference their linked counterparts
+          firstClip.linkedClipId = linkedFirstClip.id;
+          secondClip.linkedClipId = linkedSecondClip.id;
+
+          newClips.push(linkedFirstClip, linkedSecondClip);
+        }
+      }
+
+      newClips.push(firstClip, secondClip);
+
+      set({
+        clips: newClips,
+        selectedClipId: secondClip.id, // Select the second clip after split
+      });
+
+      updateDuration();
+      invalidateCache();
+      console.log(`[Timeline] Split clip "${clip.name}" at ${splitTime.toFixed(2)}s`);
+    },
+
+    // Split the clip under the playhead (or selected clip if playhead is on it)
+    splitClipAtPlayhead: () => {
+      const { clips, playheadPosition, selectedClipId } = get();
+
+      // Find clips at the current playhead position
+      const clipsAtPlayhead = clips.filter(c =>
+        playheadPosition > c.startTime &&
+        playheadPosition < c.startTime + c.duration
+      );
+
+      if (clipsAtPlayhead.length === 0) {
+        console.warn('[Timeline] No clip at playhead position');
+        return;
+      }
+
+      // If selected clip is at playhead, split that one
+      // Otherwise, split the topmost video clip at playhead
+      let clipToSplit = clipsAtPlayhead.find(c => c.id === selectedClipId);
+      if (!clipToSplit) {
+        // Prefer video clips over audio clips
+        clipToSplit = clipsAtPlayhead.find(c => c.source?.type === 'video' || c.source?.type === 'image');
+        if (!clipToSplit) {
+          clipToSplit = clipsAtPlayhead[0];
+        }
+      }
+
+      get().splitClip(clipToSplit.id, playheadPosition);
     },
 
     selectClip: (id) => {

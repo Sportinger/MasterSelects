@@ -52,6 +52,7 @@ export function Timeline() {
     setDraggingPlayhead,
     ramPreviewEnabled,
     toggleRamPreviewEnabled,
+    splitClipAtPlayhead,
   } = useTimelineStore();
 
   const { activeCompositionId, getActiveComposition, proxyEnabled, setProxyEnabled, files: mediaFiles, currentlyGeneratingProxyId } = useMediaStore();
@@ -101,6 +102,13 @@ export function Timeline() {
     audioTrackId?: string;  // Preview for linked audio clip
     isVideo?: boolean;      // Is the dragged file a video?
     duration?: number;      // Actual duration of dragged file
+  } | null>(null);
+
+  // Context menu state for clip right-click
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    clipId: string;
   } | null>(null);
   const dragCounterRef = useRef(0); // Track drag enter/leave balance
   const dragDurationCacheRef = useRef<{ url: string; duration: number } | null>(null); // Cache duration during drag
@@ -160,11 +168,138 @@ export function Timeline() {
         }
         return;
       }
+
+      // C: Cut/split clip at playhead position
+      if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault();
+        splitClipAtPlayhead();
+        return;
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPlaying, play, pause, setInPointAtPlayhead, setOutPointAtPlayhead, clearInOut, toggleLoopPlayback, selectedClipId, removeClip]);
+  }, [isPlaying, play, pause, setInPointAtPlayhead, setOutPointAtPlayhead, clearInOut, toggleLoopPlayback, selectedClipId, removeClip, splitClipAtPlayhead]);
+
+  // Close context menu when clicking outside or pressing Escape
+  useEffect(() => {
+    if (!contextMenu) return;
+
+    const handleClickOutside = () => {
+      setContextMenu(null);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setContextMenu(null);
+      }
+    };
+
+    // Delay adding click listener to avoid immediate close
+    const timeoutId = setTimeout(() => {
+      window.addEventListener('click', handleClickOutside);
+    }, 0);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('click', handleClickOutside);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu]);
+
+  // Handle right-click on clip
+  const handleClipContextMenu = (e: React.MouseEvent, clipId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Select the clip on right-click
+    selectClip(clipId);
+
+    // Show context menu at mouse position
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      clipId,
+    });
+  };
+
+  // Get the media file for a clip (helper function)
+  const getMediaFileForClip = (clipId: string) => {
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip) return null;
+
+    const mediaStore = useMediaStore.getState();
+    return mediaStore.files.find(f =>
+      f.id === clip.source?.mediaFileId ||
+      f.name === clip.name ||
+      f.name === clip.name.replace(' (Audio)', '')
+    );
+  };
+
+  // Handle "Show in Explorer" action
+  const handleShowInExplorer = async (type: 'raw' | 'proxy') => {
+    if (!contextMenu) return;
+
+    const mediaFile = getMediaFileForClip(contextMenu.clipId);
+
+    if (!mediaFile) {
+      console.warn('[Timeline] Media file not found for clip');
+      setContextMenu(null);
+      return;
+    }
+
+    if (type === 'raw') {
+      // For raw files, we have the File object but not the path
+      // Create a download link as fallback
+      if (mediaFile.file) {
+        const url = URL.createObjectURL(mediaFile.file);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = mediaFile.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        console.log('[Timeline] Downloaded raw file:', mediaFile.name);
+      } else {
+        console.log('[Timeline] Show in Explorer (Raw):', mediaFile.name, '- File not available');
+      }
+    } else {
+      // For proxy, frames are stored in IndexedDB
+      if (mediaFile.proxyStatus === 'ready') {
+        console.log('[Timeline] Proxy available for:', mediaFile.name, '- Stored in IndexedDB');
+        // Could potentially export proxy frames here
+      } else {
+        console.log('[Timeline] No proxy available for:', mediaFile.name);
+      }
+    }
+
+    setContextMenu(null);
+  };
+
+  // Handle Start/Stop Proxy Generation
+  const handleProxyGeneration = (action: 'start' | 'stop') => {
+    if (!contextMenu) return;
+
+    const mediaFile = getMediaFileForClip(contextMenu.clipId);
+    if (!mediaFile) {
+      setContextMenu(null);
+      return;
+    }
+
+    const mediaStore = useMediaStore.getState();
+
+    if (action === 'start') {
+      mediaStore.generateProxy(mediaFile.id);
+      console.log('[Timeline] Starting proxy generation for:', mediaFile.name);
+    } else {
+      mediaStore.cancelProxyGeneration(mediaFile.id);
+      console.log('[Timeline] Cancelled proxy generation for:', mediaFile.name);
+    }
+
+    setContextMenu(null);
+  };
 
   // Auto-start RAM Preview after 2 seconds of idle (like After Effects)
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1628,6 +1763,7 @@ export function Timeline() {
         className={clipClass}
         style={{ left, width }}
         onMouseDown={(e) => handleClipMouseDown(e, clip.id)}
+        onContextMenu={(e) => handleClipContextMenu(e, clip.id)}
       >
         {/* Proxy progress bar */}
         {isGeneratingProxy && (
@@ -2031,6 +2167,101 @@ export function Timeline() {
           </div>
         </div>
       </div>
+
+      {/* Context Menu for clips */}
+      {contextMenu && (() => {
+        const mediaFile = getMediaFileForClip(contextMenu.clipId);
+        const clip = clips.find(c => c.id === contextMenu.clipId);
+        const isVideo = clip?.source?.type === 'video';
+        const isGenerating = mediaFile?.proxyStatus === 'generating';
+        const hasProxy = mediaFile?.proxyStatus === 'ready';
+
+        return (
+          <div
+            className="timeline-context-menu"
+            style={{
+              position: 'fixed',
+              left: contextMenu.x,
+              top: contextMenu.y,
+              zIndex: 10000,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Show in Explorer submenu - only for video clips */}
+            {isVideo && (
+              <div className="context-menu-item has-submenu">
+                <span>Show in Explorer</span>
+                <span className="submenu-arrow">▶</span>
+                <div className="context-submenu">
+                  <div
+                    className="context-menu-item"
+                    onClick={() => handleShowInExplorer('raw')}
+                  >
+                    Raw (Download)
+                  </div>
+                  <div
+                    className={`context-menu-item ${!hasProxy ? 'disabled' : ''}`}
+                    onClick={() => hasProxy && handleShowInExplorer('proxy')}
+                  >
+                    Proxy {!hasProxy && '(not available)'}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Proxy Generation - only for video clips */}
+            {isVideo && (
+              <>
+                <div className="context-menu-separator" />
+                {isGenerating ? (
+                  <div
+                    className="context-menu-item"
+                    onClick={() => handleProxyGeneration('stop')}
+                  >
+                    Stop Proxy Generation ({mediaFile?.proxyProgress || 0}%)
+                  </div>
+                ) : hasProxy ? (
+                  <div className="context-menu-item disabled">
+                    Proxy Ready
+                  </div>
+                ) : (
+                  <div
+                    className="context-menu-item"
+                    onClick={() => handleProxyGeneration('start')}
+                  >
+                    Generate Proxy
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Split clip option */}
+            <div className="context-menu-separator" />
+            <div
+              className="context-menu-item"
+              onClick={() => {
+                splitClipAtPlayhead();
+                setContextMenu(null);
+              }}
+            >
+              Split at Playhead (C)
+            </div>
+
+            {/* Delete clip option */}
+            <div
+              className="context-menu-item danger"
+              onClick={() => {
+                if (contextMenu.clipId) {
+                  removeClip(contextMenu.clipId);
+                }
+                setContextMenu(null);
+              }}
+            >
+              Delete Clip
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

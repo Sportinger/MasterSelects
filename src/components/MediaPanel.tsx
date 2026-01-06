@@ -25,6 +25,8 @@ export function MediaPanel() {
     clearSelection,
     getItemsByFolder,
     setActiveComposition,
+    generateProxy,
+    cancelProxyGeneration,
   } = useMediaStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -332,32 +334,126 @@ export function MediaPanel() {
       </div>
 
       {/* Context Menu */}
-      {contextMenu && (
-        <div
-          className="media-context-menu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-        >
-          <button onClick={handleImport}>Import Media...</button>
-          <button onClick={handleNewComposition}>New Composition</button>
-          <button onClick={handleNewFolder}>New Folder</button>
-          {contextMenu.itemId && (
-            <>
-              <div className="context-menu-divider" />
-              <button onClick={() => {
-                const item = files.find(f => f.id === contextMenu.itemId) ||
-                             compositions.find(c => c.id === contextMenu.itemId) ||
-                             folders.find(f => f.id === contextMenu.itemId);
-                if (item) startRename(item.id, item.name);
-              }}>
-                Rename
-              </button>
-              <button onClick={handleDelete} className="danger">
-                Delete
-              </button>
-            </>
-          )}
-        </div>
-      )}
+      {contextMenu && (() => {
+        const selectedItem = contextMenu.itemId
+          ? files.find(f => f.id === contextMenu.itemId) ||
+            compositions.find(c => c.id === contextMenu.itemId) ||
+            folders.find(f => f.id === contextMenu.itemId)
+          : null;
+        const isVideoFile = selectedItem && 'type' in selectedItem && selectedItem.type === 'video';
+        const mediaFile = isVideoFile ? (selectedItem as MediaFile) : null;
+        const isGenerating = mediaFile?.proxyStatus === 'generating';
+        const hasProxy = mediaFile?.proxyStatus === 'ready';
+
+        return (
+          <div
+            className="media-context-menu"
+            style={{
+              position: 'fixed',
+              left: contextMenu.x,
+              top: contextMenu.y,
+              zIndex: 10000,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="context-menu-item" onClick={handleImport}>
+              Import Media...
+            </div>
+            <div className="context-menu-item" onClick={handleNewComposition}>
+              New Composition
+            </div>
+            <div className="context-menu-item" onClick={handleNewFolder}>
+              New Folder
+            </div>
+            {contextMenu.itemId && (
+              <>
+                <div className="context-menu-separator" />
+                <div className="context-menu-item" onClick={() => {
+                  if (selectedItem) startRename(selectedItem.id, selectedItem.name);
+                }}>
+                  Rename
+                </div>
+
+                {/* Proxy Generation - only for video files */}
+                {isVideoFile && mediaFile && (
+                  <>
+                    <div className="context-menu-separator" />
+                    {isGenerating ? (
+                      <div
+                        className="context-menu-item"
+                        onClick={() => {
+                          cancelProxyGeneration(mediaFile.id);
+                          closeContextMenu();
+                        }}
+                      >
+                        Stop Proxy Generation ({mediaFile.proxyProgress || 0}%)
+                      </div>
+                    ) : hasProxy ? (
+                      <div className="context-menu-item disabled">
+                        Proxy Ready
+                      </div>
+                    ) : (
+                      <div
+                        className="context-menu-item"
+                        onClick={() => {
+                          generateProxy(mediaFile.id);
+                          closeContextMenu();
+                        }}
+                      >
+                        Generate Proxy
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Show in Explorer submenu - only for video files with file data */}
+                {isVideoFile && mediaFile?.file && (
+                  <div className="context-menu-item has-submenu">
+                    <span>Show in Explorer</span>
+                    <span className="submenu-arrow">▶</span>
+                    <div className="context-submenu">
+                      <div
+                        className="context-menu-item"
+                        onClick={() => {
+                          if (mediaFile.file) {
+                            const url = URL.createObjectURL(mediaFile.file);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = mediaFile.name;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                          }
+                          closeContextMenu();
+                        }}
+                      >
+                        Raw (Download)
+                      </div>
+                      <div
+                        className={`context-menu-item ${!hasProxy ? 'disabled' : ''}`}
+                        onClick={() => {
+                          if (hasProxy) {
+                            console.log('[MediaPanel] Proxy stored in IndexedDB');
+                          }
+                          closeContextMenu();
+                        }}
+                      >
+                        Proxy {!hasProxy && '(not available)'}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="context-menu-separator" />
+                <div className="context-menu-item danger" onClick={handleDelete}>
+                  Delete
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
