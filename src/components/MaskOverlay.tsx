@@ -1,8 +1,17 @@
 // MaskOverlay - SVG overlay for mask drawing and editing on preview canvas
 
-import { useRef, useCallback, useEffect, useMemo } from 'react';
+import { useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTimelineStore } from '../stores/timelineStore';
 import type { MaskVertex } from '../types';
+
+// Shape drawing state
+interface ShapeDrawState {
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+  isDrawing: boolean;
+}
 
 interface MaskOverlayProps {
   canvasWidth: number;
@@ -72,10 +81,20 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
     updateVertex,
     addVertex,
     closeMask,
+    addMask,
   } = useTimelineStore();
 
   const selectedClip = clips.find(c => c.id === selectedClipId);
   const activeMask = selectedClip?.masks?.find(m => m.id === activeMaskId);
+
+  // Shape drawing state for drag-to-draw modes
+  const [shapeDrawState, setShapeDrawState] = useState<ShapeDrawState>({
+    startX: 0,
+    startY: 0,
+    currentX: 0,
+    currentY: 0,
+    isDrawing: false,
+  });
 
   // Drag state
   const dragState = useRef<{
@@ -203,7 +222,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
 
   // Handle clicking on SVG background (add vertex in drawing mode, deselect in editing mode)
   const handleSvgClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    if (!selectedClip || !activeMask) return;
+    if (!selectedClip) return;
 
     const svg = svgRef.current;
     if (!svg) return;
@@ -212,7 +231,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
     const x = ((e.clientX - rect.left) / rect.width);
     const y = ((e.clientY - rect.top) / rect.height);
 
-    if (maskEditMode === 'drawing') {
+    if (maskEditMode === 'drawing' && activeMask) {
       // Add new vertex at click position
       addVertex(selectedClip.id, activeMask.id, {
         x,
@@ -220,11 +239,145 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
         handleIn: { x: 0, y: 0 },
         handleOut: { x: 0, y: 0 },
       });
-    } else if (maskEditMode === 'editing') {
+    } else if (maskEditMode === 'drawingPen') {
+      // Pen tool - create new mask and add first vertex, or add vertex to active mask
+      if (activeMask) {
+        addVertex(selectedClip.id, activeMask.id, {
+          x,
+          y,
+          handleIn: { x: 0, y: 0 },
+          handleOut: { x: 0, y: 0 },
+        });
+      } else {
+        // Create a new mask and switch to drawing mode
+        const maskId = addMask(selectedClip.id, { name: 'Pen Mask' });
+        useTimelineStore.getState().setActiveMask(selectedClip.id, maskId);
+        addVertex(selectedClip.id, maskId, {
+          x,
+          y,
+          handleIn: { x: 0, y: 0 },
+          handleOut: { x: 0, y: 0 },
+        });
+        setMaskEditMode('drawing');
+      }
+    } else if (maskEditMode === 'editing' && activeMask) {
       // Deselect all vertices when clicking on empty space
       deselectAllVertices();
     }
-  }, [selectedClip, activeMask, maskEditMode, addVertex, deselectAllVertices]);
+  }, [selectedClip, activeMask, maskEditMode, addVertex, addMask, deselectAllVertices, setMaskEditMode]);
+
+  // Handle mouse down for shape drawing (rectangle/ellipse)
+  const handleShapeMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (!selectedClip) return;
+    if (maskEditMode !== 'drawingRect' && maskEditMode !== 'drawingEllipse') return;
+
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const rect = svg.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+
+    setShapeDrawState({
+      startX: x,
+      startY: y,
+      currentX: x,
+      currentY: y,
+      isDrawing: true,
+    });
+
+    e.preventDefault();
+  }, [selectedClip, maskEditMode]);
+
+  // Handle mouse move for shape drawing
+  const handleShapeMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (!shapeDrawState.isDrawing) return;
+
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const rect = svg.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+
+    setShapeDrawState(prev => ({
+      ...prev,
+      currentX: x,
+      currentY: y,
+    }));
+  }, [shapeDrawState.isDrawing]);
+
+  // Handle mouse up for shape drawing - create the mask
+  const handleShapeMouseUp = useCallback(() => {
+    if (!shapeDrawState.isDrawing || !selectedClip) {
+      setShapeDrawState(prev => ({ ...prev, isDrawing: false }));
+      return;
+    }
+
+    const { startX, startY, currentX, currentY } = shapeDrawState;
+    const minX = Math.min(startX, currentX);
+    const maxX = Math.max(startX, currentX);
+    const minY = Math.min(startY, currentY);
+    const maxY = Math.max(startY, currentY);
+
+    // Minimum size check
+    if (maxX - minX < 0.01 || maxY - minY < 0.01) {
+      setShapeDrawState(prev => ({ ...prev, isDrawing: false }));
+      return;
+    }
+
+    let maskId: string;
+    let vertices: MaskVertex[];
+
+    if (maskEditMode === 'drawingRect') {
+      // Create rectangle vertices
+      maskId = addMask(selectedClip.id, { name: 'Rectangle Mask' });
+      vertices = [
+        { id: `v-${Date.now()}-1`, x: minX, y: minY, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } },
+        { id: `v-${Date.now()}-2`, x: maxX, y: minY, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } },
+        { id: `v-${Date.now()}-3`, x: maxX, y: maxY, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } },
+        { id: `v-${Date.now()}-4`, x: minX, y: maxY, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } },
+      ];
+    } else {
+      // Create ellipse vertices with bezier handles
+      maskId = addMask(selectedClip.id, { name: 'Ellipse Mask' });
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+      const rx = (maxX - minX) / 2;
+      const ry = (maxY - minY) / 2;
+      const k = 0.5523; // Bezier approximation constant
+
+      vertices = [
+        { id: `v-${Date.now()}-1`, x: cx, y: minY, handleIn: { x: -rx * k, y: 0 }, handleOut: { x: rx * k, y: 0 } },
+        { id: `v-${Date.now()}-2`, x: maxX, y: cy, handleIn: { x: 0, y: -ry * k }, handleOut: { x: 0, y: ry * k } },
+        { id: `v-${Date.now()}-3`, x: cx, y: maxY, handleIn: { x: rx * k, y: 0 }, handleOut: { x: -rx * k, y: 0 } },
+        { id: `v-${Date.now()}-4`, x: minX, y: cy, handleIn: { x: 0, y: ry * k }, handleOut: { x: 0, y: -ry * k } },
+      ];
+    }
+
+    // Update the mask with vertices and close it
+    const { clips } = useTimelineStore.getState();
+    const updatedClips = clips.map(c => {
+      if (c.id !== selectedClip.id) return c;
+      return {
+        ...c,
+        masks: (c.masks || []).map(m =>
+          m.id === maskId ? { ...m, vertices, closed: true } : m
+        ),
+      };
+    });
+    useTimelineStore.setState({ clips: updatedClips });
+    useTimelineStore.getState().setActiveMask(selectedClip.id, maskId);
+    setMaskEditMode('editing');
+
+    setShapeDrawState({
+      startX: 0,
+      startY: 0,
+      currentX: 0,
+      currentY: 0,
+      isDrawing: false,
+    });
+  }, [shapeDrawState, selectedClip, maskEditMode, addMask, setMaskEditMode]);
 
   // Handle clicking on first vertex to close path
   const handleFirstVertexClick = useCallback((e: React.MouseEvent) => {
@@ -241,8 +394,11 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (maskEditMode === 'drawing') {
-          setMaskEditMode('editing');
+        if (shapeDrawState.isDrawing) {
+          setShapeDrawState(prev => ({ ...prev, isDrawing: false }));
+        } else if (maskEditMode === 'drawing' || maskEditMode === 'drawingRect' ||
+                   maskEditMode === 'drawingEllipse' || maskEditMode === 'drawingPen') {
+          setMaskEditMode('none');
         } else if (maskEditMode === 'editing') {
           setMaskEditMode('none');
         }
@@ -260,15 +416,29 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [maskEditMode, setMaskEditMode, selectedVertexIds, selectedClip, activeMask]);
+  }, [maskEditMode, setMaskEditMode, selectedVertexIds, selectedClip, activeMask, shapeDrawState.isDrawing]);
 
-  // Don't render if not in mask editing mode or no active mask
-  if (maskEditMode === 'none' || !activeMask || !selectedClip) {
+  // Don't render if not in mask editing mode
+  // For shape drawing modes, we show even without an active mask
+  const isShapeDrawingMode = maskEditMode === 'drawingRect' || maskEditMode === 'drawingEllipse' || maskEditMode === 'drawingPen';
+  if (maskEditMode === 'none' || !selectedClip) {
+    return null;
+  }
+  if (!isShapeDrawingMode && !activeMask) {
     return null;
   }
 
   const vertexSize = 8;
   const handleSize = 6;
+
+  // Calculate cursor based on mode
+  const getCursor = () => {
+    if (maskEditMode === 'drawingRect' || maskEditMode === 'drawingEllipse' || maskEditMode === 'drawingPen') {
+      return 'crosshair';
+    }
+    if (maskEditMode === 'drawing') return 'crosshair';
+    return 'default';
+  };
 
   return (
     <svg
@@ -277,6 +447,10 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
       preserveAspectRatio="none"
       onClick={handleSvgClick}
+      onMouseDown={handleShapeMouseDown}
+      onMouseMove={handleShapeMouseMove}
+      onMouseUp={handleShapeMouseUp}
+      onMouseLeave={handleShapeMouseUp}
       style={{
         position: 'absolute',
         top: 0,
@@ -284,11 +458,43 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
         width: '100%',
         height: '100%',
         pointerEvents: 'auto',
-        cursor: maskEditMode === 'drawing' ? 'crosshair' : 'default',
+        cursor: getCursor(),
       }}
     >
+      {/* Shape preview while drawing */}
+      {shapeDrawState.isDrawing && (
+        <>
+          {maskEditMode === 'drawingRect' && (
+            <rect
+              x={Math.min(shapeDrawState.startX, shapeDrawState.currentX) * canvasWidth}
+              y={Math.min(shapeDrawState.startY, shapeDrawState.currentY) * canvasHeight}
+              width={Math.abs(shapeDrawState.currentX - shapeDrawState.startX) * canvasWidth}
+              height={Math.abs(shapeDrawState.currentY - shapeDrawState.startY) * canvasHeight}
+              fill="rgba(0, 212, 255, 0.15)"
+              stroke="#00d4ff"
+              strokeWidth="2"
+              strokeDasharray="5,5"
+              pointerEvents="none"
+            />
+          )}
+          {maskEditMode === 'drawingEllipse' && (
+            <ellipse
+              cx={(shapeDrawState.startX + shapeDrawState.currentX) / 2 * canvasWidth}
+              cy={(shapeDrawState.startY + shapeDrawState.currentY) / 2 * canvasHeight}
+              rx={Math.abs(shapeDrawState.currentX - shapeDrawState.startX) / 2 * canvasWidth}
+              ry={Math.abs(shapeDrawState.currentY - shapeDrawState.startY) / 2 * canvasHeight}
+              fill="rgba(0, 212, 255, 0.15)"
+              stroke="#00d4ff"
+              strokeWidth="2"
+              strokeDasharray="5,5"
+              pointerEvents="none"
+            />
+          )}
+        </>
+      )}
+
       {/* Mask path fill (semi-transparent) */}
-      {activeMask.closed && pathData && (
+      {activeMask?.closed && pathData && (
         <path
           d={pathData}
           fill={activeMask.inverted ? 'rgba(0, 212, 255, 0.1)' : 'rgba(0, 212, 255, 0.15)'}
@@ -298,7 +504,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       )}
 
       {/* Mask path stroke */}
-      {pathData && (
+      {activeMask && pathData && (
         <path
           d={pathData}
           fill="none"
@@ -392,9 +598,11 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
         fontFamily="sans-serif"
         pointerEvents="none"
       >
-        {maskEditMode === 'drawing'
-          ? 'Click to add points. Click first point to close. ESC to cancel.'
-          : 'Drag vertices to move. Del to delete. ESC to exit.'}
+        {maskEditMode === 'drawingRect' && 'Click and drag to draw rectangle. ESC to cancel.'}
+        {maskEditMode === 'drawingEllipse' && 'Click and drag to draw ellipse. ESC to cancel.'}
+        {maskEditMode === 'drawingPen' && 'Click to add points. Click first point to close. ESC to cancel.'}
+        {maskEditMode === 'drawing' && 'Click to add points. Click first point to close. ESC to cancel.'}
+        {maskEditMode === 'editing' && 'Drag vertices to move. Del to delete. ESC to exit.'}
       </text>
     </svg>
   );

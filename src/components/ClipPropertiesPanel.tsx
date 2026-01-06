@@ -334,9 +334,18 @@ export function ClipPropertiesPanel() {
     addEllipseMask,
     activeMaskId,
     setActiveMask,
+    maskEditMode,
+    setMaskEditMode,
   } = useTimelineStore();
   const selectedClip = clips.find(c => c.id === selectedClipId);
   const [showMaskMenu, setShowMaskMenu] = useState(false);
+
+  // Handle starting a shape drawing mode
+  const handleStartDrawMode = (mode: 'drawingRect' | 'drawingEllipse' | 'drawingPen') => {
+    if (selectedClip) {
+      setMaskEditMode(mode);
+    }
+  };
 
   if (!selectedClip) {
     return (
@@ -570,9 +579,63 @@ export function ClipPropertiesPanel() {
             </div>
           </div>
 
+          {/* Shape drawing tools */}
+          <div className="mask-shape-tools">
+            <button
+              className={`mask-tool-btn ${maskEditMode === 'drawingRect' ? 'active' : ''}`}
+              onClick={() => handleStartDrawMode('drawingRect')}
+              title="Draw Rectangle Mask (drag on preview)"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="18" height="18" rx="1" />
+              </svg>
+            </button>
+            <button
+              className={`mask-tool-btn ${maskEditMode === 'drawingEllipse' ? 'active' : ''}`}
+              onClick={() => handleStartDrawMode('drawingEllipse')}
+              title="Draw Ellipse Mask (drag on preview)"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                <ellipse cx="12" cy="12" rx="9" ry="9" />
+              </svg>
+            </button>
+            <button
+              className={`mask-tool-btn ${maskEditMode === 'drawingPen' ? 'active' : ''}`}
+              onClick={() => handleStartDrawMode('drawingPen')}
+              title="Pen Tool (click to add points)"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                <path d="M2 2l7.586 7.586" />
+                <circle cx="11" cy="11" r="2" />
+              </svg>
+            </button>
+            {maskEditMode !== 'none' && maskEditMode !== 'editing' && (
+              <button
+                className="mask-tool-btn cancel"
+                onClick={() => setMaskEditMode('none')}
+                title="Cancel drawing (ESC)"
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {maskEditMode !== 'none' && maskEditMode !== 'editing' && (
+            <div className="mask-draw-hint">
+              {maskEditMode === 'drawingRect' && 'Click and drag on preview to draw rectangle'}
+              {maskEditMode === 'drawingEllipse' && 'Click and drag on preview to draw ellipse'}
+              {maskEditMode === 'drawingPen' && 'Click to add points, click first point to close'}
+            </div>
+          )}
+
           {(!selectedClip.masks || selectedClip.masks.length === 0) ? (
             <div className="mask-empty">
-              No masks. Click "+ Add" to create one.
+              No masks. Use tools above or click "+ Add".
             </div>
           ) : (
             <div className="mask-list">

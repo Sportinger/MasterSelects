@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { engine } from '../engine/WebGPUEngine';
 import { useMixerStore } from '../stores/mixerStore';
 import { useTimelineStore } from '../stores/timelineStore';
+import { generateMaskTexture } from '../utils/maskRenderer';
 
 export function useEngine() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -36,6 +37,55 @@ export function useEngine() {
     if (isEngineReady && canvasRef.current) {
       engine.setPreviewCanvas(canvasRef.current);
     }
+  }, [isEngineReady]);
+
+  // Track mask changes and update engine mask textures
+  const maskVersionRef = useRef<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    if (!isEngineReady) return;
+
+    // Subscribe to clips changes
+    const unsubscribe = useTimelineStore.subscribe(
+      (state) => state.clips,
+      (clips) => {
+        const { outputResolution } = useMixerStore.getState();
+        const layers = useMixerStore.getState().layers;
+
+        // For each layer that maps to a clip with masks, update the mask texture
+        for (const layer of layers) {
+          // Find the clip that corresponds to this layer
+          const clip = clips.find(c => c.id === layer.id);
+
+          if (clip?.masks && clip.masks.length > 0) {
+            // Create a version string based on mask data
+            const maskVersion = JSON.stringify(clip.masks);
+            const prevVersion = maskVersionRef.current.get(clip.id);
+
+            // Only regenerate if masks changed
+            if (maskVersion !== prevVersion) {
+              maskVersionRef.current.set(clip.id, maskVersion);
+
+              // Generate mask texture
+              const maskImageData = generateMaskTexture(
+                clip.masks,
+                outputResolution.width,
+                outputResolution.height
+              );
+
+              // Update engine with new mask texture
+              engine.updateMaskTexture(layer.id, maskImageData);
+            }
+          } else if (clip && maskVersionRef.current.has(clip.id)) {
+            // Masks were removed, clear the mask texture
+            maskVersionRef.current.delete(clip.id);
+            engine.removeMaskTexture(layer.id);
+          }
+        }
+      }
+    );
+
+    return () => unsubscribe();
   }, [isEngineReady]);
 
   // Render loop - optimized with layer snapshotting to prevent flickering

@@ -225,10 +225,12 @@ interface TimelineStore {
   trackHasKeyframes: (trackId: string) => boolean;
 
   // Mask management
-  maskEditMode: 'none' | 'drawing' | 'editing';
+  maskEditMode: 'none' | 'drawing' | 'editing' | 'drawingRect' | 'drawingEllipse' | 'drawingPen';
   activeMaskId: string | null;
   selectedVertexIds: Set<string>;
-  setMaskEditMode: (mode: 'none' | 'drawing' | 'editing') => void;
+  maskDrawStart: { x: number; y: number } | null;  // Start point for drag-to-draw
+  setMaskEditMode: (mode: 'none' | 'drawing' | 'editing' | 'drawingRect' | 'drawingEllipse' | 'drawingPen') => void;
+  setMaskDrawStart: (point: { x: number; y: number } | null) => void;
   setActiveMask: (clipId: string | null, maskId: string | null) => void;
   selectVertex: (vertexId: string, addToSelection?: boolean) => void;
   deselectAllVertices: () => void;
@@ -285,9 +287,10 @@ export const useTimelineStore = create<TimelineStore>()(
     selectedKeyframeIds: new Set<string>(),
 
     // Mask state
-    maskEditMode: 'none' as 'none' | 'drawing' | 'editing',
+    maskEditMode: 'none' as 'none' | 'drawing' | 'editing' | 'drawingRect' | 'drawingEllipse' | 'drawingPen',
     activeMaskId: null as string | null,
     selectedVertexIds: new Set<string>(),
+    maskDrawStart: null as { x: number; y: number } | null,
 
     // Track actions
     addTrack: (type) => {
@@ -2435,10 +2438,14 @@ export const useTimelineStore = create<TimelineStore>()(
 
     // === MASK MANAGEMENT ===
     setMaskEditMode: (mode) => {
-      set({ maskEditMode: mode });
+      set({ maskEditMode: mode, maskDrawStart: null });
       if (mode === 'none') {
         set({ activeMaskId: null, selectedVertexIds: new Set() });
       }
+    },
+
+    setMaskDrawStart: (point) => {
+      set({ maskDrawStart: point });
     },
 
     setActiveMask: (clipId, maskId) => {
