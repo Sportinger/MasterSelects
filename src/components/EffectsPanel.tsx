@@ -3,14 +3,45 @@
 import { useMixerStore } from '../stores/mixerStore';
 import type { EffectType, BlendMode } from '../types';
 
-const BLEND_MODES: BlendMode[] = [
-  'normal',
-  'add',
-  'multiply',
-  'screen',
-  'overlay',
-  'difference',
+// Organized by category like After Effects
+const BLEND_MODE_GROUPS: { label: string; modes: BlendMode[] }[] = [
+  {
+    label: 'Normal',
+    modes: ['normal', 'dissolve', 'dancing-dissolve'],
+  },
+  {
+    label: 'Darken',
+    modes: ['darken', 'multiply', 'color-burn', 'classic-color-burn', 'linear-burn', 'darker-color'],
+  },
+  {
+    label: 'Lighten',
+    modes: ['add', 'lighten', 'screen', 'color-dodge', 'classic-color-dodge', 'linear-dodge', 'lighter-color'],
+  },
+  {
+    label: 'Contrast',
+    modes: ['overlay', 'soft-light', 'hard-light', 'linear-light', 'vivid-light', 'pin-light', 'hard-mix'],
+  },
+  {
+    label: 'Inversion',
+    modes: ['difference', 'classic-difference', 'exclusion', 'subtract', 'divide'],
+  },
+  {
+    label: 'Component',
+    modes: ['hue', 'saturation', 'color', 'luminosity'],
+  },
+  {
+    label: 'Stencil',
+    modes: ['stencil-alpha', 'stencil-luma', 'silhouette-alpha', 'silhouette-luma', 'alpha-add'],
+  },
 ];
+
+// Format blend mode name for display
+const formatBlendModeName = (mode: BlendMode): string => {
+  return mode
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
 
 const AVAILABLE_EFFECTS: { type: EffectType; name: string }[] = [
   { type: 'hue-shift', name: 'Hue Shift' },
@@ -88,10 +119,14 @@ export function EffectsPanel() {
             value={selectedLayer.blendMode}
             onChange={(e) => setLayerBlendMode(selectedLayer.id, e.target.value as BlendMode)}
           >
-            {BLEND_MODES.map((mode) => (
-              <option key={mode} value={mode}>
-                {mode}
-              </option>
+            {BLEND_MODE_GROUPS.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.modes.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {formatBlendModeName(mode)}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>

@@ -14,12 +14,50 @@ export interface Layer {
 }
 
 export type BlendMode =
+  // Normal
   | 'normal'
-  | 'add'
+  | 'dissolve'
+  | 'dancing-dissolve'
+  // Darken
+  | 'darken'
   | 'multiply'
+  | 'color-burn'
+  | 'classic-color-burn'
+  | 'linear-burn'
+  | 'darker-color'
+  // Lighten
+  | 'add'
+  | 'lighten'
   | 'screen'
+  | 'color-dodge'
+  | 'classic-color-dodge'
+  | 'linear-dodge'
+  | 'lighter-color'
+  // Contrast
   | 'overlay'
-  | 'difference';
+  | 'soft-light'
+  | 'hard-light'
+  | 'linear-light'
+  | 'vivid-light'
+  | 'pin-light'
+  | 'hard-mix'
+  // Inversion
+  | 'difference'
+  | 'classic-difference'
+  | 'exclusion'
+  | 'subtract'
+  | 'divide'
+  // Component
+  | 'hue'
+  | 'saturation'
+  | 'color'
+  | 'luminosity'
+  // Stencil
+  | 'stencil-alpha'
+  | 'stencil-luma'
+  | 'silhouette-alpha'
+  | 'silhouette-luma'
+  | 'alpha-add';
 
 export interface LayerSource {
   type: 'video' | 'image' | 'camera' | 'color';
@@ -179,6 +217,7 @@ export interface SerializableClip {
   linkedClipId?: string;
   waveform?: number[];
   transform: ClipTransform;
+  keyframes?: Keyframe[];    // Animation keyframes for this clip
   // Nested composition support
   isComposition?: boolean;
   compositionId?: string;
@@ -195,4 +234,22 @@ export interface CompositionTimelineData {
   inPoint: number | null;
   outPoint: number | null;
   loopPlayback: boolean;
+}
+
+// Keyframe animation types
+export type EasingType = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out';
+
+export type AnimatableProperty =
+  | 'opacity'
+  | 'position.x' | 'position.y' | 'position.z'
+  | 'scale.x' | 'scale.y'
+  | 'rotation.x' | 'rotation.y' | 'rotation.z';
+
+export interface Keyframe {
+  id: string;
+  clipId: string;
+  time: number;           // Time relative to clip start (seconds)
+  property: AnimatableProperty;
+  value: number;
+  easing: EasingType;     // Easing for interpolation TO the next keyframe
 }

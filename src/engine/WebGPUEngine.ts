@@ -5,12 +5,50 @@ import compositeShader from '../shaders/composite.wgsl?raw';
 import outputShader from '../shaders/output.wgsl?raw';
 
 const BLEND_MODE_MAP: Record<BlendMode, number> = {
-  normal: 0,
-  add: 1,
-  multiply: 2,
-  screen: 3,
-  overlay: 4,
-  difference: 5,
+  // Normal
+  'normal': 0,
+  'dissolve': 1,
+  'dancing-dissolve': 2,
+  // Darken
+  'darken': 3,
+  'multiply': 4,
+  'color-burn': 5,
+  'classic-color-burn': 6,
+  'linear-burn': 7,
+  'darker-color': 8,
+  // Lighten
+  'add': 9,
+  'lighten': 10,
+  'screen': 11,
+  'color-dodge': 12,
+  'classic-color-dodge': 13,
+  'linear-dodge': 14,
+  'lighter-color': 15,
+  // Contrast
+  'overlay': 16,
+  'soft-light': 17,
+  'hard-light': 18,
+  'linear-light': 19,
+  'vivid-light': 20,
+  'pin-light': 21,
+  'hard-mix': 22,
+  // Inversion
+  'difference': 23,
+  'classic-difference': 24,
+  'exclusion': 25,
+  'subtract': 26,
+  'divide': 27,
+  // Component
+  'hue': 28,
+  'saturation': 29,
+  'color': 30,
+  'luminosity': 31,
+  // Stencil
+  'stencil-alpha': 32,
+  'stencil-luma': 33,
+  'silhouette-alpha': 34,
+  'silhouette-luma': 35,
+  'alpha-add': 36,
 };
 
 // Composite shader for external video textures (true zero-copy)
@@ -28,9 +66,9 @@ struct LayerUniforms {
   scaleX: f32,
   scaleY: f32,
   rotation: f32,
-  sourceAspect: f32,  // source width / height
-  outputAspect: f32,  // output width / height (16:9 = 1.777)
-  _padding1: f32,
+  sourceAspect: f32,
+  outputAspect: f32,
+  time: f32,
   _padding2: f32,
   _padding3: f32,
 };
@@ -56,32 +94,199 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 @group(0) @binding(2) var videoTexture: texture_external;
 @group(0) @binding(3) var<uniform> layer: LayerUniforms;
 
+// ============ Utility Functions ============
+fn hash(p: vec2f) -> f32 {
+  var p3 = fract(vec3f(p.xyx) * 0.1031);
+  p3 = p3 + dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+fn getLuminosity(c: vec3f) -> f32 {
+  return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+}
+
+fn clipColor(c: vec3f) -> vec3f {
+  let l = getLuminosity(c);
+  let n = min(min(c.r, c.g), c.b);
+  let x = max(max(c.r, c.g), c.b);
+  var result = c;
+  if (n < 0.0) { result = l + (((c - l) * l) / (l - n)); }
+  if (x > 1.0) { result = l + (((c - l) * (1.0 - l)) / (x - l)); }
+  return result;
+}
+
+fn setLuminosity(c: vec3f, l: f32) -> vec3f {
+  let d = l - getLuminosity(c);
+  return clipColor(c + vec3f(d));
+}
+
+fn rgbToHsl(c: vec3f) -> vec3f {
+  let cMax = max(max(c.r, c.g), c.b);
+  let cMin = min(min(c.r, c.g), c.b);
+  let delta = cMax - cMin;
+  var h: f32 = 0.0;
+  var s: f32 = 0.0;
+  let l = (cMax + cMin) / 2.0;
+  if (delta > 0.0) {
+    s = select(delta / (2.0 - cMax - cMin), delta / (cMax + cMin), l < 0.5);
+    if (cMax == c.r) {
+      h = ((c.g - c.b) / delta) + select(0.0, 6.0, c.g < c.b);
+    } else if (cMax == c.g) {
+      h = ((c.b - c.r) / delta) + 2.0;
+    } else {
+      h = ((c.r - c.g) / delta) + 4.0;
+    }
+    h = h / 6.0;
+  }
+  return vec3f(h, s, l);
+}
+
+fn hueToRgb(p: f32, q: f32, t: f32) -> f32 {
+  var tt = t;
+  if (tt < 0.0) { tt = tt + 1.0; }
+  if (tt > 1.0) { tt = tt - 1.0; }
+  if (tt < 1.0/6.0) { return p + (q - p) * 6.0 * tt; }
+  if (tt < 1.0/2.0) { return q; }
+  if (tt < 2.0/3.0) { return p + (q - p) * (2.0/3.0 - tt) * 6.0; }
+  return p;
+}
+
+fn hslToRgb(hsl: vec3f) -> vec3f {
+  if (hsl.y == 0.0) { return vec3f(hsl.z); }
+  let q = select(hsl.z + hsl.y - hsl.z * hsl.y, hsl.z * (1.0 + hsl.y), hsl.z < 0.5);
+  let p = 2.0 * hsl.z - q;
+  return vec3f(
+    hueToRgb(p, q, hsl.x + 1.0/3.0),
+    hueToRgb(p, q, hsl.x),
+    hueToRgb(p, q, hsl.x - 1.0/3.0)
+  );
+}
+
+// ============ Blend Mode Functions ============
 fn blendNormal(base: vec3f, blend: vec3f) -> vec3f { return blend; }
-fn blendAdd(base: vec3f, blend: vec3f) -> vec3f { return min(base + blend, vec3f(1.0)); }
+fn blendDissolve(base: vec3f, blend: vec3f, uv: vec2f, opacity: f32) -> vec3f {
+  return select(base, blend, hash(uv * 1000.0) < opacity);
+}
+fn blendDancingDissolve(base: vec3f, blend: vec3f, uv: vec2f, opacity: f32, time: f32) -> vec3f {
+  return select(base, blend, hash(uv * 1000.0 + vec2f(time * 60.0)) < opacity);
+}
+fn blendDarken(base: vec3f, blend: vec3f) -> vec3f { return min(base, blend); }
 fn blendMultiply(base: vec3f, blend: vec3f) -> vec3f { return base * blend; }
+fn blendColorBurn(base: vec3f, blend: vec3f) -> vec3f {
+  return vec3f(
+    select(1.0 - min(1.0, (1.0 - base.r) / blend.r), 0.0, blend.r == 0.0),
+    select(1.0 - min(1.0, (1.0 - base.g) / blend.g), 0.0, blend.g == 0.0),
+    select(1.0 - min(1.0, (1.0 - base.b) / blend.b), 0.0, blend.b == 0.0)
+  );
+}
+fn blendClassicColorBurn(base: vec3f, blend: vec3f) -> vec3f {
+  return 1.0 - (1.0 - base) / max(blend, vec3f(0.001));
+}
+fn blendLinearBurn(base: vec3f, blend: vec3f) -> vec3f {
+  return max(base + blend - 1.0, vec3f(0.0));
+}
+fn blendDarkerColor(base: vec3f, blend: vec3f) -> vec3f {
+  return select(blend, base, getLuminosity(base) < getLuminosity(blend));
+}
+fn blendAdd(base: vec3f, blend: vec3f) -> vec3f { return min(base + blend, vec3f(1.0)); }
+fn blendLighten(base: vec3f, blend: vec3f) -> vec3f { return max(base, blend); }
 fn blendScreen(base: vec3f, blend: vec3f) -> vec3f { return 1.0 - (1.0 - base) * (1.0 - blend); }
+fn blendColorDodge(base: vec3f, blend: vec3f) -> vec3f {
+  return vec3f(
+    select(min(1.0, base.r / (1.0 - blend.r)), 1.0, blend.r == 1.0),
+    select(min(1.0, base.g / (1.0 - blend.g)), 1.0, blend.g == 1.0),
+    select(min(1.0, base.b / (1.0 - blend.b)), 1.0, blend.b == 1.0)
+  );
+}
+fn blendClassicColorDodge(base: vec3f, blend: vec3f) -> vec3f {
+  return base / max(1.0 - blend, vec3f(0.001));
+}
+fn blendLinearDodge(base: vec3f, blend: vec3f) -> vec3f { return min(base + blend, vec3f(1.0)); }
+fn blendLighterColor(base: vec3f, blend: vec3f) -> vec3f {
+  return select(blend, base, getLuminosity(base) > getLuminosity(blend));
+}
+fn blendOverlay(base: vec3f, blend: vec3f) -> vec3f {
+  return vec3f(
+    select(1.0 - 2.0 * (1.0 - base.r) * (1.0 - blend.r), 2.0 * base.r * blend.r, base.r < 0.5),
+    select(1.0 - 2.0 * (1.0 - base.g) * (1.0 - blend.g), 2.0 * base.g * blend.g, base.g < 0.5),
+    select(1.0 - 2.0 * (1.0 - base.b) * (1.0 - blend.b), 2.0 * base.b * blend.b, base.b < 0.5)
+  );
+}
+fn blendSoftLight(base: vec3f, blend: vec3f) -> vec3f {
+  let d = select(sqrt(base), ((16.0 * base - 12.0) * base + 4.0) * base, base <= vec3f(0.25));
+  return select(base + (2.0 * blend - 1.0) * (d - base), base - (1.0 - 2.0 * blend) * base * (1.0 - base), blend <= vec3f(0.5));
+}
+fn blendHardLight(base: vec3f, blend: vec3f) -> vec3f {
+  return vec3f(
+    select(1.0 - 2.0 * (1.0 - base.r) * (1.0 - blend.r), 2.0 * base.r * blend.r, blend.r < 0.5),
+    select(1.0 - 2.0 * (1.0 - base.g) * (1.0 - blend.g), 2.0 * base.g * blend.g, blend.g < 0.5),
+    select(1.0 - 2.0 * (1.0 - base.b) * (1.0 - blend.b), 2.0 * base.b * blend.b, blend.b < 0.5)
+  );
+}
+fn blendLinearLight(base: vec3f, blend: vec3f) -> vec3f {
+  return clamp(base + 2.0 * blend - 1.0, vec3f(0.0), vec3f(1.0));
+}
+fn blendVividLight(base: vec3f, blend: vec3f) -> vec3f {
+  return vec3f(
+    select(blendColorDodge(base, 2.0 * (blend - 0.5)).r, blendColorBurn(base, 2.0 * blend).r, blend.r <= 0.5),
+    select(blendColorDodge(base, 2.0 * (blend - 0.5)).g, blendColorBurn(base, 2.0 * blend).g, blend.g <= 0.5),
+    select(blendColorDodge(base, 2.0 * (blend - 0.5)).b, blendColorBurn(base, 2.0 * blend).b, blend.b <= 0.5)
+  );
+}
+fn blendPinLight(base: vec3f, blend: vec3f) -> vec3f {
+  return vec3f(
+    select(max(base.r, 2.0 * (blend.r - 0.5)), min(base.r, 2.0 * blend.r), blend.r <= 0.5),
+    select(max(base.g, 2.0 * (blend.g - 0.5)), min(base.g, 2.0 * blend.g), blend.g <= 0.5),
+    select(max(base.b, 2.0 * (blend.b - 0.5)), min(base.b, 2.0 * blend.b), blend.b <= 0.5)
+  );
+}
+fn blendHardMix(base: vec3f, blend: vec3f) -> vec3f {
+  return vec3f(
+    select(0.0, 1.0, base.r + blend.r >= 1.0),
+    select(0.0, 1.0, base.g + blend.g >= 1.0),
+    select(0.0, 1.0, base.b + blend.b >= 1.0)
+  );
+}
 fn blendDifference(base: vec3f, blend: vec3f) -> vec3f { return abs(base - blend); }
+fn blendClassicDifference(base: vec3f, blend: vec3f) -> vec3f { return abs(base - blend); }
+fn blendExclusion(base: vec3f, blend: vec3f) -> vec3f { return base + blend - 2.0 * base * blend; }
+fn blendSubtract(base: vec3f, blend: vec3f) -> vec3f { return max(base - blend, vec3f(0.0)); }
+fn blendDivide(base: vec3f, blend: vec3f) -> vec3f { return base / max(blend, vec3f(0.001)); }
+fn blendHue(base: vec3f, blend: vec3f) -> vec3f {
+  let baseHsl = rgbToHsl(base);
+  let blendHsl = rgbToHsl(blend);
+  return hslToRgb(vec3f(blendHsl.x, baseHsl.y, baseHsl.z));
+}
+fn blendSaturation(base: vec3f, blend: vec3f) -> vec3f {
+  let baseHsl = rgbToHsl(base);
+  let blendHsl = rgbToHsl(blend);
+  return hslToRgb(vec3f(baseHsl.x, blendHsl.y, baseHsl.z));
+}
+fn blendColor(base: vec3f, blend: vec3f) -> vec3f {
+  let baseHsl = rgbToHsl(base);
+  let blendHsl = rgbToHsl(blend);
+  return hslToRgb(vec3f(blendHsl.x, blendHsl.y, baseHsl.z));
+}
+fn blendLuminosity(base: vec3f, blend: vec3f) -> vec3f {
+  let baseHsl = rgbToHsl(base);
+  let blendHsl = rgbToHsl(blend);
+  return hslToRgb(vec3f(baseHsl.x, baseHsl.y, blendHsl.z));
+}
 
 @fragment
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   var uv = input.uv;
   uv = uv - vec2f(0.5);
 
-  // Apply rotation
   let cosR = cos(layer.rotation);
   let sinR = sin(layer.rotation);
   uv = vec2f(uv.x * cosR - uv.y * sinR, uv.x * sinR + uv.y * cosR);
-
-  // Apply user scale
   uv = uv / vec2f(layer.scaleX, layer.scaleY);
 
-  // Aspect ratio correction: fit source into output while maintaining aspect ratio
   let aspectRatio = layer.sourceAspect / layer.outputAspect;
   if (aspectRatio > 1.0) {
-    // Source is wider than output - fit to width, letterbox top/bottom
     uv.y = uv.y * aspectRatio;
   } else {
-    // Source is taller than output - fit to height, letterbox left/right
     uv.x = uv.x / aspectRatio;
   }
 
@@ -95,16 +300,57 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let maskAlpha = select(layerColor.a, 0.0, outOfBounds);
 
   var blended: vec3f;
+  var finalAlpha: f32 = maskAlpha * layer.opacity;
+
   switch (layer.blendMode) {
     case 0u: { blended = blendNormal(baseColor.rgb, layerColor.rgb); }
-    case 1u: { blended = blendAdd(baseColor.rgb, layerColor.rgb); }
-    case 2u: { blended = blendMultiply(baseColor.rgb, layerColor.rgb); }
-    case 3u: { blended = blendScreen(baseColor.rgb, layerColor.rgb); }
-    case 5u: { blended = blendDifference(baseColor.rgb, layerColor.rgb); }
+    case 1u: { blended = blendDissolve(baseColor.rgb, layerColor.rgb, input.uv, layer.opacity); finalAlpha = 1.0; }
+    case 2u: { blended = blendDancingDissolve(baseColor.rgb, layerColor.rgb, input.uv, layer.opacity, layer.time); finalAlpha = 1.0; }
+    case 3u: { blended = blendDarken(baseColor.rgb, layerColor.rgb); }
+    case 4u: { blended = blendMultiply(baseColor.rgb, layerColor.rgb); }
+    case 5u: { blended = blendColorBurn(baseColor.rgb, layerColor.rgb); }
+    case 6u: { blended = blendClassicColorBurn(baseColor.rgb, layerColor.rgb); }
+    case 7u: { blended = blendLinearBurn(baseColor.rgb, layerColor.rgb); }
+    case 8u: { blended = blendDarkerColor(baseColor.rgb, layerColor.rgb); }
+    case 9u: { blended = blendAdd(baseColor.rgb, layerColor.rgb); }
+    case 10u: { blended = blendLighten(baseColor.rgb, layerColor.rgb); }
+    case 11u: { blended = blendScreen(baseColor.rgb, layerColor.rgb); }
+    case 12u: { blended = blendColorDodge(baseColor.rgb, layerColor.rgb); }
+    case 13u: { blended = blendClassicColorDodge(baseColor.rgb, layerColor.rgb); }
+    case 14u: { blended = blendLinearDodge(baseColor.rgb, layerColor.rgb); }
+    case 15u: { blended = blendLighterColor(baseColor.rgb, layerColor.rgb); }
+    case 16u: { blended = blendOverlay(baseColor.rgb, layerColor.rgb); }
+    case 17u: { blended = blendSoftLight(baseColor.rgb, layerColor.rgb); }
+    case 18u: { blended = blendHardLight(baseColor.rgb, layerColor.rgb); }
+    case 19u: { blended = blendLinearLight(baseColor.rgb, layerColor.rgb); }
+    case 20u: { blended = blendVividLight(baseColor.rgb, layerColor.rgb); }
+    case 21u: { blended = blendPinLight(baseColor.rgb, layerColor.rgb); }
+    case 22u: { blended = blendHardMix(baseColor.rgb, layerColor.rgb); }
+    case 23u: { blended = blendDifference(baseColor.rgb, layerColor.rgb); }
+    case 24u: { blended = blendClassicDifference(baseColor.rgb, layerColor.rgb); }
+    case 25u: { blended = blendExclusion(baseColor.rgb, layerColor.rgb); }
+    case 26u: { blended = blendSubtract(baseColor.rgb, layerColor.rgb); }
+    case 27u: { blended = blendDivide(baseColor.rgb, layerColor.rgb); }
+    case 28u: { blended = blendHue(baseColor.rgb, layerColor.rgb); }
+    case 29u: { blended = blendSaturation(baseColor.rgb, layerColor.rgb); }
+    case 30u: { blended = blendColor(baseColor.rgb, layerColor.rgb); }
+    case 31u: { blended = blendLuminosity(baseColor.rgb, layerColor.rgb); }
+    case 32u: { blended = baseColor.rgb; finalAlpha = layerColor.a * layer.opacity; }
+    case 33u: { blended = baseColor.rgb; finalAlpha = getLuminosity(layerColor.rgb) * layer.opacity; }
+    case 34u: { blended = baseColor.rgb; finalAlpha = (1.0 - layerColor.a) * layer.opacity; }
+    case 35u: { blended = baseColor.rgb; finalAlpha = (1.0 - getLuminosity(layerColor.rgb)) * layer.opacity; }
+    case 36u: { blended = layerColor.rgb; finalAlpha = min(baseColor.a + layerColor.a * layer.opacity, 1.0); }
     default: { blended = layerColor.rgb; }
   }
 
-  let alpha = maskAlpha * layer.opacity;
+  if (layer.blendMode >= 32u && layer.blendMode <= 35u) {
+    return vec4f(blended * finalAlpha, finalAlpha);
+  }
+  if (layer.blendMode == 36u) {
+    return vec4f(mix(baseColor.rgb, blended, layerColor.a * layer.opacity), finalAlpha);
+  }
+
+  let alpha = select(finalAlpha, 0.0, outOfBounds);
   let result = mix(baseColor.rgb, blended, alpha);
   return vec4f(result, max(baseColor.a, alpha));
 }

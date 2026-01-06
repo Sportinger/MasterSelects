@@ -2,16 +2,86 @@
 
 import { useRef, useCallback } from 'react';
 import { useTimelineStore } from '../stores/timelineStore';
-import type { BlendMode } from '../types';
+import type { BlendMode, AnimatableProperty } from '../types';
 
-const BLEND_MODES: BlendMode[] = [
-  'normal',
-  'add',
-  'multiply',
-  'screen',
-  'overlay',
-  'difference',
+// Organized by category like After Effects
+const BLEND_MODE_GROUPS: { label: string; modes: BlendMode[] }[] = [
+  {
+    label: 'Normal',
+    modes: ['normal', 'dissolve', 'dancing-dissolve'],
+  },
+  {
+    label: 'Darken',
+    modes: ['darken', 'multiply', 'color-burn', 'classic-color-burn', 'linear-burn', 'darker-color'],
+  },
+  {
+    label: 'Lighten',
+    modes: ['add', 'lighten', 'screen', 'color-dodge', 'classic-color-dodge', 'linear-dodge', 'lighter-color'],
+  },
+  {
+    label: 'Contrast',
+    modes: ['overlay', 'soft-light', 'hard-light', 'linear-light', 'vivid-light', 'pin-light', 'hard-mix'],
+  },
+  {
+    label: 'Inversion',
+    modes: ['difference', 'classic-difference', 'exclusion', 'subtract', 'divide'],
+  },
+  {
+    label: 'Component',
+    modes: ['hue', 'saturation', 'color', 'luminosity'],
+  },
+  {
+    label: 'Stencil',
+    modes: ['stencil-alpha', 'stencil-luma', 'silhouette-alpha', 'silhouette-luma', 'alpha-add'],
+  },
 ];
+
+// Format blend mode name for display
+const formatBlendModeName = (mode: BlendMode): string => {
+  return mode
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
+// Keyframe toggle button component
+interface KeyframeToggleProps {
+  clipId: string;
+  property: AnimatableProperty;
+  value: number;
+}
+
+function KeyframeToggle({ clipId, property, value }: KeyframeToggleProps) {
+  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe } = useTimelineStore();
+
+  const recording = isRecording(clipId, property);
+  const hasKfs = hasKeyframes(clipId, property);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (!recording && !hasKfs) {
+      // Turning ON for first time - create initial keyframe
+      addKeyframe(clipId, property, value);
+    }
+    toggleKeyframeRecording(clipId, property);
+  };
+
+  return (
+    <button
+      className={`keyframe-toggle ${recording ? 'recording' : ''} ${hasKfs ? 'has-keyframes' : ''}`}
+      onClick={handleClick}
+      title={recording ? 'Stop recording keyframes' : hasKfs ? 'Enable keyframe recording' : 'Add keyframe'}
+    >
+      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="13" r="7" />
+        <line x1="12" y1="13" x2="12" y2="9" />
+        <line x1="12" y1="2" x2="12" y2="5" />
+        <line x1="9" y1="3" x2="15" y2="3" />
+      </svg>
+    </button>
+  );
+}
 
 // Precision slider with modifier key support
 // Shift = half speed, Ctrl = super slow (10x slower)
@@ -99,7 +169,7 @@ function PrecisionSlider({ min, max, step, value, onChange }: PrecisionSliderPro
 }
 
 export function ClipPropertiesPanel() {
-  const { clips, selectedClipId, updateClipTransform } = useTimelineStore();
+  const { clips, selectedClipId, setPropertyValue, playheadPosition, getInterpolatedTransform } = useTimelineStore();
   const selectedClip = clips.find(c => c.id === selectedClipId);
 
   if (!selectedClip) {
@@ -115,17 +185,20 @@ export function ClipPropertiesPanel() {
     );
   }
 
-  const { transform } = selectedClip;
+  // Get interpolated transform at current playhead position
+  const clipLocalTime = playheadPosition - selectedClip.startTime;
+  const transform = getInterpolatedTransform(selectedClip.id, clipLocalTime);
 
-  const updateTransform = (updates: Parameters<typeof updateClipTransform>[1]) => {
-    updateClipTransform(selectedClip.id, updates);
+  const handlePropertyChange = (property: AnimatableProperty, value: number) => {
+    setPropertyValue(selectedClip.id, property, value);
   };
 
   // Calculate uniform scale (average of X and Y)
   const uniformScale = (transform.scale.x + transform.scale.y) / 2;
 
   const handleUniformScaleChange = (value: number) => {
-    updateTransform({ scale: { x: value, y: value } });
+    handlePropertyChange('scale.x', value);
+    handlePropertyChange('scale.y', value);
   };
 
   return (
@@ -142,23 +215,33 @@ export function ClipPropertiesPanel() {
             <label>Blend Mode</label>
             <select
               value={transform.blendMode}
-              onChange={(e) => updateTransform({ blendMode: e.target.value as BlendMode })}
+              onChange={(e) => {
+                // Blend mode is not animatable, update directly
+                useTimelineStore.getState().updateClipTransform(selectedClip.id, {
+                  blendMode: e.target.value as BlendMode
+                });
+              }}
             >
-              {BLEND_MODES.map((mode) => (
-                <option key={mode} value={mode}>
-                  {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                </option>
+              {BLEND_MODE_GROUPS.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.modes.map((mode) => (
+                    <option key={mode} value={mode}>
+                      {formatBlendModeName(mode)}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>
           <div className="control-row">
+            <KeyframeToggle clipId={selectedClip.id} property="opacity" value={transform.opacity} />
             <label>Opacity</label>
             <PrecisionSlider
               min={0}
               max={1}
               step={0.0001}
               value={transform.opacity}
-              onChange={(v) => updateTransform({ opacity: v })}
+              onChange={(v) => handlePropertyChange('opacity', v)}
             />
             <span className="value">{(transform.opacity * 100).toFixed(1)}%</span>
           </div>
@@ -168,6 +251,7 @@ export function ClipPropertiesPanel() {
         <div className="properties-section">
           <h4>Scale</h4>
           <div className="control-row">
+            <span className="keyframe-toggle-placeholder" />
             <label>Uniform</label>
             <PrecisionSlider
               min={0.1}
@@ -179,24 +263,26 @@ export function ClipPropertiesPanel() {
             <span className="value">{uniformScale.toFixed(3)}</span>
           </div>
           <div className="control-row">
+            <KeyframeToggle clipId={selectedClip.id} property="scale.x" value={transform.scale.x} />
             <label>X</label>
             <PrecisionSlider
               min={0.1}
               max={3}
               step={0.0001}
               value={transform.scale.x}
-              onChange={(v) => updateTransform({ scale: { x: v } })}
+              onChange={(v) => handlePropertyChange('scale.x', v)}
             />
             <span className="value">{transform.scale.x.toFixed(3)}</span>
           </div>
           <div className="control-row">
+            <KeyframeToggle clipId={selectedClip.id} property="scale.y" value={transform.scale.y} />
             <label>Y</label>
             <PrecisionSlider
               min={0.1}
               max={3}
               step={0.0001}
               value={transform.scale.y}
-              onChange={(v) => updateTransform({ scale: { y: v } })}
+              onChange={(v) => handlePropertyChange('scale.y', v)}
             />
             <span className="value">{transform.scale.y.toFixed(3)}</span>
           </div>
@@ -206,35 +292,38 @@ export function ClipPropertiesPanel() {
         <div className="properties-section">
           <h4>Position</h4>
           <div className="control-row">
+            <KeyframeToggle clipId={selectedClip.id} property="position.x" value={transform.position.x} />
             <label>X</label>
             <PrecisionSlider
               min={-1}
               max={1}
               step={0.0001}
               value={transform.position.x}
-              onChange={(v) => updateTransform({ position: { x: v } })}
+              onChange={(v) => handlePropertyChange('position.x', v)}
             />
             <span className="value">{transform.position.x.toFixed(3)}</span>
           </div>
           <div className="control-row">
+            <KeyframeToggle clipId={selectedClip.id} property="position.y" value={transform.position.y} />
             <label>Y</label>
             <PrecisionSlider
               min={-1}
               max={1}
               step={0.0001}
               value={transform.position.y}
-              onChange={(v) => updateTransform({ position: { y: v } })}
+              onChange={(v) => handlePropertyChange('position.y', v)}
             />
             <span className="value">{transform.position.y.toFixed(3)}</span>
           </div>
           <div className="control-row">
+            <KeyframeToggle clipId={selectedClip.id} property="position.z" value={transform.position.z} />
             <label>Z</label>
             <PrecisionSlider
               min={-1}
               max={1}
               step={0.0001}
               value={transform.position.z}
-              onChange={(v) => updateTransform({ position: { z: v } })}
+              onChange={(v) => handlePropertyChange('position.z', v)}
             />
             <span className="value">{transform.position.z.toFixed(3)}</span>
           </div>
@@ -244,35 +333,38 @@ export function ClipPropertiesPanel() {
         <div className="properties-section">
           <h4>Rotation</h4>
           <div className="control-row">
+            <KeyframeToggle clipId={selectedClip.id} property="rotation.x" value={transform.rotation.x} />
             <label>X</label>
             <PrecisionSlider
               min={-180}
               max={180}
               step={0.01}
               value={transform.rotation.x}
-              onChange={(v) => updateTransform({ rotation: { x: v } })}
+              onChange={(v) => handlePropertyChange('rotation.x', v)}
             />
             <span className="value">{transform.rotation.x.toFixed(1)}°</span>
           </div>
           <div className="control-row">
+            <KeyframeToggle clipId={selectedClip.id} property="rotation.y" value={transform.rotation.y} />
             <label>Y</label>
             <PrecisionSlider
               min={-180}
               max={180}
               step={0.01}
               value={transform.rotation.y}
-              onChange={(v) => updateTransform({ rotation: { y: v } })}
+              onChange={(v) => handlePropertyChange('rotation.y', v)}
             />
             <span className="value">{transform.rotation.y.toFixed(1)}°</span>
           </div>
           <div className="control-row">
+            <KeyframeToggle clipId={selectedClip.id} property="rotation.z" value={transform.rotation.z} />
             <label>Z</label>
             <PrecisionSlider
               min={-180}
               max={180}
               step={0.01}
               value={transform.rotation.z}
-              onChange={(v) => updateTransform({ rotation: { z: v } })}
+              onChange={(v) => handlePropertyChange('rotation.z', v)}
             />
             <span className="value">{transform.rotation.z.toFixed(1)}°</span>
           </div>
@@ -282,13 +374,15 @@ export function ClipPropertiesPanel() {
         <div className="properties-actions">
           <button
             className="btn btn-sm"
-            onClick={() => updateTransform({
-              opacity: 1,
-              blendMode: 'normal',
-              position: { x: 0, y: 0, z: 0 },
-              scale: { x: 1, y: 1 },
-              rotation: { x: 0, y: 0, z: 0 },
-            })}
+            onClick={() => {
+              useTimelineStore.getState().updateClipTransform(selectedClip.id, {
+                opacity: 1,
+                blendMode: 'normal',
+                position: { x: 0, y: 0, z: 0 },
+                scale: { x: 1, y: 1 },
+                rotation: { x: 0, y: 0, z: 0 },
+              });
+            }}
           >
             Reset All
           </button>
