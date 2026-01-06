@@ -1492,6 +1492,18 @@ input[type="checkbox"] {
   flex-shrink: 0;
 }
 
+.timeline-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 12px;
+  border-right: 1px solid var(--border-color);
+}
+
 .timeline-controls {
   display: flex;
   gap: 4px;

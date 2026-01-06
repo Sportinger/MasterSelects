@@ -1892,19 +1892,6 @@ export function Timeline() {
         )}
         <div className="clip-content">
           {clip.isLoading && <div className="clip-loading-spinner" />}
-          {/* Expand arrow for keyframe properties - only for video/image clips */}
-          {clip.source?.type !== 'audio' && (
-            <span
-              className={`clip-expand-arrow ${isClipExpanded(clip.id) ? 'expanded' : ''} ${hasKeyframes(clip.id) ? 'has-keyframes' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleClipExpanded(clip.id);
-              }}
-              title={isClipExpanded(clip.id) ? 'Collapse properties' : 'Expand properties'}
-            >
-              ▶
-            </span>
-          )}
           <span className="clip-name">{clip.name}</span>
           <span className="clip-duration">{formatTime(displayDuration)}</span>
         </div>
@@ -1917,130 +1904,6 @@ export function Timeline() {
           className="trim-handle right"
           onMouseDown={(e) => handleTrimStart(e, clip.id, 'right')}
         />
-
-        {/* Keyframe property rows - only for video/image clips */}
-        {clip.source?.type !== 'audio' && isClipExpanded(clip.id) && (
-          <div className="clip-property-rows">
-            {/* Opacity property row */}
-            <div className="property-row">
-              <span className="property-label">Opacity</span>
-              <div className="keyframe-track">
-                <div className="keyframe-track-line" />
-                {renderKeyframeDiamonds(clip.id, 'opacity', displayDuration, width)}
-              </div>
-            </div>
-
-            {/* Position group */}
-            <div className="property-group">
-              <div
-                className="property-group-header"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  togglePropertyGroupExpanded(clip.id, 'position');
-                }}
-              >
-                <span className={`property-group-arrow ${isPropertyGroupExpanded(clip.id, 'position') ? 'expanded' : ''}`}>▶</span>
-                <span>Position</span>
-              </div>
-              {isPropertyGroupExpanded(clip.id, 'position') && (
-                <>
-                  <div className="property-row">
-                    <span className="property-label">X</span>
-                    <div className="keyframe-track">
-                      <div className="keyframe-track-line" />
-                      {renderKeyframeDiamonds(clip.id, 'position.x', displayDuration, width)}
-                    </div>
-                  </div>
-                  <div className="property-row">
-                    <span className="property-label">Y</span>
-                    <div className="keyframe-track">
-                      <div className="keyframe-track-line" />
-                      {renderKeyframeDiamonds(clip.id, 'position.y', displayDuration, width)}
-                    </div>
-                  </div>
-                  <div className="property-row">
-                    <span className="property-label">Z</span>
-                    <div className="keyframe-track">
-                      <div className="keyframe-track-line" />
-                      {renderKeyframeDiamonds(clip.id, 'position.z', displayDuration, width)}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Scale group */}
-            <div className="property-group">
-              <div
-                className="property-group-header"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  togglePropertyGroupExpanded(clip.id, 'scale');
-                }}
-              >
-                <span className={`property-group-arrow ${isPropertyGroupExpanded(clip.id, 'scale') ? 'expanded' : ''}`}>▶</span>
-                <span>Scale</span>
-              </div>
-              {isPropertyGroupExpanded(clip.id, 'scale') && (
-                <>
-                  <div className="property-row">
-                    <span className="property-label">X</span>
-                    <div className="keyframe-track">
-                      <div className="keyframe-track-line" />
-                      {renderKeyframeDiamonds(clip.id, 'scale.x', displayDuration, width)}
-                    </div>
-                  </div>
-                  <div className="property-row">
-                    <span className="property-label">Y</span>
-                    <div className="keyframe-track">
-                      <div className="keyframe-track-line" />
-                      {renderKeyframeDiamonds(clip.id, 'scale.y', displayDuration, width)}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Rotation group */}
-            <div className="property-group">
-              <div
-                className="property-group-header"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  togglePropertyGroupExpanded(clip.id, 'rotation');
-                }}
-              >
-                <span className={`property-group-arrow ${isPropertyGroupExpanded(clip.id, 'rotation') ? 'expanded' : ''}`}>▶</span>
-                <span>Rotation</span>
-              </div>
-              {isPropertyGroupExpanded(clip.id, 'rotation') && (
-                <>
-                  <div className="property-row">
-                    <span className="property-label">X</span>
-                    <div className="keyframe-track">
-                      <div className="keyframe-track-line" />
-                      {renderKeyframeDiamonds(clip.id, 'rotation.x', displayDuration, width)}
-                    </div>
-                  </div>
-                  <div className="property-row">
-                    <span className="property-label">Y</span>
-                    <div className="keyframe-track">
-                      <div className="keyframe-track-line" />
-                      {renderKeyframeDiamonds(clip.id, 'rotation.y', displayDuration, width)}
-                    </div>
-                  </div>
-                  <div className="property-row">
-                    <span className="property-label">Z</span>
-                    <div className="keyframe-track">
-                      <div className="keyframe-track-line" />
-                      {renderKeyframeDiamonds(clip.id, 'rotation.z', displayDuration, width)}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     );
   };
@@ -2061,6 +1924,9 @@ export function Timeline() {
     <div className={`timeline-container ${clipDrag || clipTrim ? 'is-dragging' : ''}`}>
       {/* Timeline toolbar */}
       <div className="timeline-toolbar">
+        <div className="timeline-title" title={activeComposition.name}>
+          {activeComposition.name}
+        </div>
         <div className="timeline-controls">
           <button className="btn btn-sm" onClick={stop} title="Stop">⏹</button>
           <button className={`btn btn-sm ${isPlaying ? 'btn-active' : ''}`} onClick={isPlaying ? pause : play}>
