@@ -47,12 +47,17 @@ export function DockTabPane({ group }: DockTabPaneProps) {
   const hasTimelinePanel = group.panels.some(p => p.type === 'timeline');
   const openCompositions = hasTimelinePanel ? getOpenCompositions() : [];
 
-  // Composition tab drag handlers
+  // Composition tab drag handlers (for reordering)
   const handleCompDragStart = useCallback((e: React.DragEvent, index: number) => {
+    // Only start reorder drag if not holding for dock drag
+    if (holdProgress !== 'idle') {
+      e.preventDefault();
+      return;
+    }
     setDraggedCompIndex(index);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', String(index));
-  }, []);
+  }, [holdProgress]);
 
   const handleCompDragOver = useCallback((e: React.DragEvent, index: number) => {
     e.preventDefault();
@@ -79,6 +84,56 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     setDraggedCompIndex(null);
     setDropTargetIndex(null);
   }, []);
+
+  // Hold-to-drag handler for composition tabs (to move the timeline panel)
+  const handleCompTabMouseDown = useCallback((e: React.MouseEvent, compId: string) => {
+    if (e.button !== 0) return;
+
+    // Find the timeline panel in this group
+    const timelinePanel = group.panels.find(p => p.type === 'timeline');
+    if (!timelinePanel) return;
+
+    // Set composition as active
+    setActiveComposition(compId);
+
+    // Store offset and mouse position for when dock drag actually starts
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    const offset = {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
+    const mousePos = { x: e.clientX, y: e.clientY };
+
+    // Start hold animation
+    setHoldingTabId(compId);
+    setHoldProgress('holding');
+    holdStartRef.current = { panel: timelinePanel, offset, mousePos };
+
+    // After hold duration, start the actual dock panel drag
+    holdTimerRef.current = window.setTimeout(() => {
+      if (holdStartRef.current) {
+        setHoldProgress('ready');
+        const { panel: p, offset: o, mousePos: pos } = holdStartRef.current;
+        startDrag(p, group.id, o, pos);
+        setTimeout(() => {
+          setHoldProgress('idle');
+          setHoldingTabId(null);
+        }, 100);
+      }
+    }, HOLD_DURATION);
+  }, [group.panels, group.id, setActiveComposition, startDrag]);
+
+  const handleCompTabMouseUp = useCallback(() => {
+    if (holdProgress === 'holding') {
+      cancelHold();
+    }
+  }, [holdProgress, cancelHold]);
+
+  const handleCompTabMouseLeave = useCallback(() => {
+    if (holdProgress === 'holding') {
+      cancelHold();
+    }
+  }, [holdProgress, cancelHold]);
 
   // Cancel any ongoing hold
   const cancelHold = useCallback(() => {

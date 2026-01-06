@@ -2555,8 +2555,8 @@ input[type="checkbox"] {
   width: 8px;
   height: 8px;
   background: #f59e0b;
-  /* Center diamond horizontally on keyframe time position - extra -5px for alignment */
-  transform: translateX(calc(-50% - 5px)) rotate(45deg) translateY(-50%);
+  /* Center diamond horizontally on keyframe time position */
+  transform: translateX(calc(-50% - 3px)) rotate(45deg) translateY(-50%);
   top: 50%;
   cursor: pointer;
   z-index: 5;
@@ -2566,7 +2566,7 @@ input[type="checkbox"] {
 .keyframe-diamond:hover {
   background: #fbbf24;
   box-shadow: 0 0 6px #f59e0b;
-  transform: translateX(calc(-50% - 5px)) rotate(45deg) translateY(-50%) scale(1.2);
+  transform: translateX(calc(-50% - 3px)) rotate(45deg) translateY(-50%) scale(1.2);
 }
 
 .keyframe-diamond.selected {
