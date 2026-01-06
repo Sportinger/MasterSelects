@@ -2,7 +2,25 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useTimelineStore } from '../stores/timelineStore';
-import type { AnimatableProperty } from '../types';
+import type { AnimatableProperty, BlendMode } from '../types';
+
+// All blend modes in order for cycling with Shift + "+"
+const ALL_BLEND_MODES: BlendMode[] = [
+  // Normal
+  'normal', 'dissolve', 'dancing-dissolve',
+  // Darken
+  'darken', 'multiply', 'color-burn', 'classic-color-burn', 'linear-burn', 'darker-color',
+  // Lighten
+  'add', 'lighten', 'screen', 'color-dodge', 'classic-color-dodge', 'linear-dodge', 'lighter-color',
+  // Contrast
+  'overlay', 'soft-light', 'hard-light', 'linear-light', 'vivid-light', 'pin-light', 'hard-mix',
+  // Inversion
+  'difference', 'classic-difference', 'exclusion', 'subtract', 'divide',
+  // Component
+  'hue', 'saturation', 'color', 'luminosity',
+  // Stencil
+  'stencil-alpha', 'stencil-luma', 'silhouette-alpha', 'silhouette-luma', 'alpha-add',
+];
 import { useMixerStore } from '../stores/mixerStore';
 import { useMediaStore } from '../stores/mediaStore';
 import { engine } from '../engine/WebGPUEngine';
@@ -54,6 +72,7 @@ export function Timeline() {
     ramPreviewEnabled,
     toggleRamPreviewEnabled,
     splitClipAtPlayhead,
+    updateClipTransform,
     getInterpolatedTransform,
     isClipExpanded,
     toggleClipExpanded,
@@ -194,11 +213,29 @@ export function Timeline() {
         splitClipAtPlayhead();
         return;
       }
+
+      // Shift + "+": Cycle through blend modes (forward)
+      // Shift + "-": Cycle through blend modes (backward)
+      if (e.shiftKey && (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_')) {
+        e.preventDefault();
+        if (selectedClipId) {
+          const clip = clips.find(c => c.id === selectedClipId);
+          if (clip) {
+            const currentMode = clip.transform.blendMode;
+            const currentIndex = ALL_BLEND_MODES.indexOf(currentMode);
+            const direction = (e.key === '+' || e.key === '=') ? 1 : -1;
+            const nextIndex = (currentIndex + direction + ALL_BLEND_MODES.length) % ALL_BLEND_MODES.length;
+            const nextMode = ALL_BLEND_MODES[nextIndex];
+            updateClipTransform(selectedClipId, { blendMode: nextMode });
+          }
+        }
+        return;
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPlaying, play, pause, setInPointAtPlayhead, setOutPointAtPlayhead, clearInOut, toggleLoopPlayback, selectedClipId, removeClip, splitClipAtPlayhead]);
+  }, [isPlaying, play, pause, setInPointAtPlayhead, setOutPointAtPlayhead, clearInOut, toggleLoopPlayback, selectedClipId, removeClip, splitClipAtPlayhead, clips, updateClipTransform]);
 
   // Close context menu when clicking outside or pressing Escape
   useEffect(() => {
