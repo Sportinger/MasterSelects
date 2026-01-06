@@ -295,51 +295,75 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     >
       {/* Tab bar - Ctrl+wheel here to zoom panel */}
       <div ref={tabBarRef} className="dock-tab-bar" title="Ctrl+Scroll to zoom | Hold to drag">
-        {/* For timeline panels, show composition tabs instead */}
+        {/* For timeline panels, show drag handle + composition tabs */}
         {hasTimelinePanel && openCompositions.length > 0 ? (
           <>
-            {openCompositions.map((comp, index) => {
-              const isCompHolding = holdingTabId === comp.id && holdProgress === 'holding';
-              const isCompReady = holdingTabId === comp.id && holdProgress === 'ready';
-              const isCompFading = holdingTabId === comp.id && holdProgress === 'fading';
-              const isCompDragging = dragState.isDragging && dragState.draggedPanel?.type === 'timeline';
-
-              return (
+            {/* Drag handle for repositioning the timeline panel */}
+            {(() => {
+              const timelinePanel = group.panels.find(p => p.type === 'timeline');
+              const isHandleHolding = holdingTabId === 'timeline-handle' && holdProgress === 'holding';
+              const isHandleReady = holdingTabId === 'timeline-handle' && holdProgress === 'ready';
+              const isHandleFading = holdingTabId === 'timeline-handle' && holdProgress === 'fading';
+              return timelinePanel ? (
                 <div
-                  key={comp.id}
-                  className={`dock-tab ${comp.id === activeCompositionId ? 'active' : ''} ${
-                    draggedCompIndex === index ? 'dragging' : ''
-                  } ${dropTargetIndex === index ? 'drop-target-tab' : ''} ${
-                    isCompHolding ? 'hold-glow' : ''
-                  } ${isCompReady ? 'hold-ready' : ''} ${isCompFading ? 'hold-fade' : ''} ${
-                    isCompDragging ? 'dragging' : ''
-                  }`}
-                  onClick={() => setActiveComposition(comp.id)}
-                  title={comp.name}
-                  draggable
-                  onDragStart={(e) => handleCompDragStart(e, index)}
-                  onDragOver={(e) => handleCompDragOver(e, index)}
-                  onDragLeave={handleCompDragLeave}
-                  onDrop={(e) => handleCompDrop(e, index)}
-                  onDragEnd={handleCompDragEnd}
-                  onMouseDown={(e) => handleCompTabMouseDown(e, comp.id)}
-                  onMouseUp={handleCompTabMouseUp}
-                  onMouseLeave={handleCompTabMouseLeave}
+                  className={`dock-tab-handle ${isHandleHolding ? 'hold-glow' : ''} ${isHandleReady ? 'hold-ready' : ''} ${isHandleFading ? 'hold-fade' : ''}`}
+                  title="Hold to reposition panel"
+                  onMouseDown={(e) => {
+                    if (e.button !== 0) return;
+                    const rect = (e.target as HTMLElement).getBoundingClientRect();
+                    const offset = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+                    const mousePos = { x: e.clientX, y: e.clientY };
+                    setHoldingTabId('timeline-handle');
+                    setHoldProgress('holding');
+                    holdStartRef.current = { panel: timelinePanel, offset, mousePos };
+                    holdTimerRef.current = window.setTimeout(() => {
+                      if (holdStartRef.current) {
+                        setHoldProgress('ready');
+                        const { panel: p, offset: o, mousePos: pos } = holdStartRef.current;
+                        startDrag(p, group.id, o, pos);
+                        setTimeout(() => {
+                          setHoldProgress('idle');
+                          setHoldingTabId(null);
+                        }, 100);
+                      }
+                    }, HOLD_DURATION);
+                  }}
+                  onMouseUp={() => { if (holdProgress === 'holding') cancelHold(); }}
+                  onMouseLeave={() => { if (holdProgress === 'holding') cancelHold(); }}
                 >
-                  <span className="dock-tab-title">{comp.name}</span>
-                  <button
-                    className="dock-tab-close"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      closeCompositionTab(comp.id);
-                    }}
-                    title="Close"
-                  >
-                    ×
-                  </button>
+                  ⋮⋮
                 </div>
-              );
-            })}
+              ) : null;
+            })()}
+            {/* Composition tabs - drag to reorder only */}
+            {openCompositions.map((comp, index) => (
+              <div
+                key={comp.id}
+                className={`dock-tab ${comp.id === activeCompositionId ? 'active' : ''} ${
+                  draggedCompIndex === index ? 'dragging' : ''
+                } ${dropTargetIndex === index ? 'drop-target-tab' : ''}`}
+                onClick={() => setActiveComposition(comp.id)}
+                title={comp.name}
+                draggable
+                onDragStart={(e) => handleCompDragStart(e, index)}
+                onDragOver={(e) => handleCompDragOver(e, index)}
+                onDragLeave={handleCompDragLeave}
+                onDrop={(e) => handleCompDrop(e, index)}
+                onDragEnd={handleCompDragEnd}
+              >
+                <span className="dock-tab-title">{comp.name}</span>
+                <button
+                  className="dock-tab-close"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeCompositionTab(comp.id);
+                  }}
+                  title="Close"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
           </>
         ) : (
           /* Normal dock tabs for non-timeline panels */

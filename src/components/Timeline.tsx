@@ -84,6 +84,7 @@ export function Timeline() {
     selectedKeyframeIds,
     hasKeyframes,
     trackHasKeyframes,
+    clipKeyframes,
   } = useTimelineStore();
 
   const {
@@ -1008,7 +1009,7 @@ export function Timeline() {
         }
       }
     });
-  }, [playheadPosition, clips, tracks, isPlaying, isDraggingPlayhead, ramPreviewRange, isRamPreviewing]);
+  }, [playheadPosition, clips, tracks, isPlaying, isDraggingPlayhead, ramPreviewRange, isRamPreviewing, clipKeyframes]);
 
   // Get clips at time helper
   const getClipsAtTime = useCallback((time: number) => {

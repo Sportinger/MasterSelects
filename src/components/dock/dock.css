@@ -104,6 +104,47 @@
   overflow-y: hidden;
 }
 
+/* Drag handle for repositioning panels */
+.dock-tab-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  height: 32px;
+  background: transparent;
+  border-right: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 10px;
+  letter-spacing: -2px;
+  cursor: grab;
+  user-select: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.dock-tab-handle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.dock-tab-handle:active {
+  cursor: grabbing;
+}
+
+.dock-tab-handle.hold-glow {
+  animation: holdGlow 500ms ease-out forwards;
+  cursor: grabbing;
+}
+
+.dock-tab-handle.hold-ready {
+  box-shadow: 0 0 16px 6px rgba(0, 212, 255, 0.8), inset 0 0 10px rgba(0, 212, 255, 0.3);
+  background: rgba(0, 212, 255, 0.2);
+  cursor: grabbing;
+}
+
+.dock-tab-handle.hold-fade {
+  animation: holdGlowFade 500ms ease-out forwards;
+}
+
 .dock-tab-bar::-webkit-scrollbar {
   height: 2px;
 }
