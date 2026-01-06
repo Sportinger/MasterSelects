@@ -761,19 +761,16 @@ export const useMediaStore = create<MediaState>()(
           }
 
           // If no proxy folder is set and File System Access API is supported, ask user to pick one
+          // We show the folder picker directly (user can cancel if they don't want to pick)
           if (fileSystemService.isSupported() && !fileSystemService.hasProxyFolder()) {
-            const userWantsToPickFolder = window.confirm(
-              'No proxy folder selected.\n\n' +
-              'Would you like to choose a folder to save proxy files?\n\n' +
-              'Click OK to select a folder, or Cancel to store proxies in browser storage only.'
-            );
-
-            if (userWantsToPickFolder) {
-              const handle = await fileSystemService.pickProxyFolder();
-              if (handle) {
-                set({ proxyFolderName: handle.name });
-                console.log('[Proxy] Proxy folder set to:', handle.name);
-              }
+            // Show folder picker - user can cancel to use browser storage instead
+            console.log('[Proxy] No proxy folder set, showing picker...');
+            const handle = await fileSystemService.pickProxyFolder();
+            if (handle) {
+              set({ proxyFolderName: handle.name });
+              console.log('[Proxy] Proxy folder set to:', handle.name);
+            } else {
+              console.log('[Proxy] User cancelled folder picker, using browser storage');
             }
           }
 
