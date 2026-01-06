@@ -2820,8 +2820,8 @@ input[type="checkbox"] {
   position: relative;
   width: 100%;
   box-sizing: border-box;
-  /* Ensure no offset from left edge */
-  margin: 0;
+  /* Align with left column */
+  margin-top: -1px;
   padding: 0;
 }
 
