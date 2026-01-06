@@ -43,14 +43,15 @@ struct LayerUniforms {
   sourceAspect: f32,  // source width / height
   outputAspect: f32,  // output width / height (16:9 = 1.777)
   time: f32,          // for animated effects like dancing dissolve
-  _padding2: f32,
-  _padding3: f32,
+  hasMask: u32,       // 0 or 1 - whether layer has a mask
+  maskInvert: u32,    // 0 or 1 - whether mask is inverted
 };
 
 @group(0) @binding(0) var texSampler: sampler;
 @group(0) @binding(1) var baseTexture: texture_2d<f32>;
 @group(0) @binding(2) var layerTexture: texture_2d<f32>;
 @group(0) @binding(3) var<uniform> layer: LayerUniforms;
+@group(0) @binding(4) var maskTexture: texture_2d<f32>;
 
 // ============ Utility Functions ============
 
@@ -518,6 +519,16 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
       finalAlpha = min(baseColor.a + layerColor.a * layer.opacity, 1.0);
     }
     default: { blended = layerColor.rgb; }
+  }
+
+  // Apply mask if present
+  if (layer.hasMask == 1u) {
+    let maskSample = textureSample(maskTexture, texSampler, clampedUV);
+    var maskValue = maskSample.r;  // Use red channel as grayscale mask
+    if (layer.maskInvert == 1u) {
+      maskValue = 1.0 - maskValue;
+    }
+    finalAlpha = finalAlpha * maskValue;
   }
 
   // For stencil/silhouette modes, handle differently

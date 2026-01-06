@@ -69,8 +69,8 @@ struct LayerUniforms {
   sourceAspect: f32,
   outputAspect: f32,
   time: f32,
-  _padding2: f32,
-  _padding3: f32,
+  hasMask: u32,
+  maskInvert: u32,
 };
 
 @vertex
@@ -93,6 +93,7 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 @group(0) @binding(1) var baseTexture: texture_2d<f32>;
 @group(0) @binding(2) var videoTexture: texture_external;
 @group(0) @binding(3) var<uniform> layer: LayerUniforms;
+@group(0) @binding(4) var maskTexture: texture_2d<f32>;
 
 // ============ Utility Functions ============
 fn hash(p: vec2f) -> f32 {
@@ -343,6 +344,16 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     default: { blended = layerColor.rgb; }
   }
 
+  // Apply mask if present
+  if (layer.hasMask == 1u) {
+    let maskSample = textureSample(maskTexture, texSampler, clampedUV);
+    var maskValue = maskSample.r;
+    if (layer.maskInvert == 1u) {
+      maskValue = 1.0 - maskValue;
+    }
+    finalAlpha = finalAlpha * maskValue;
+  }
+
   if (layer.blendMode >= 32u && layer.blendMode <= 35u) {
     return vec4f(blended * finalAlpha, finalAlpha);
   }
@@ -367,6 +378,12 @@ export class WebGPUEngine {
   private pingTexture: GPUTexture | null = null;
   private pongTexture: GPUTexture | null = null;
   private blackTexture: GPUTexture | null = null;
+  private whiteMaskTexture: GPUTexture | null = null;  // Fallback mask texture (fully white = no masking)
+  private whiteMaskView: GPUTextureView | null = null;
+
+  // Mask textures per layer
+  private maskTextures: Map<string, GPUTexture> = new Map();
+  private maskTextureViews: Map<string, GPUTextureView> = new Map();
 
   // Cached texture views
   private pingView: GPUTextureView | null = null;
@@ -586,6 +603,22 @@ export class WebGPUEngine {
       [1, 1]
     );
 
+    // Create white mask texture (fallback for layers without masks)
+    this.whiteMaskTexture = this.device.createTexture({
+      size: [1, 1],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+
+    this.device.queue.writeTexture(
+      { texture: this.whiteMaskTexture },
+      new Uint8Array([255, 255, 255, 255]),  // Pure white = fully visible
+      { bytesPerRow: 4 },
+      [1, 1]
+    );
+
+    this.whiteMaskView = this.whiteMaskTexture.createView();
+
     this.createPingPongTextures();
     await this.createPipelines();
   }
@@ -628,6 +661,7 @@ export class WebGPUEngine {
         { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
         { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: {} },
         { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+        { binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: {} },  // Mask texture
       ],
     });
 
@@ -678,6 +712,7 @@ export class WebGPUEngine {
         { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
         { binding: 2, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} },
         { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+        { binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: {} },  // Mask texture
       ],
     });
 
@@ -708,6 +743,54 @@ export class WebGPUEngine {
         format: 'bgra8unorm',
         alphaMode: 'premultiplied',
       });
+    }
+  }
+
+  // Update mask texture for a layer
+  updateMaskTexture(layerId: string, imageData: ImageData | null): void {
+    if (!this.device) return;
+
+    // Remove existing mask texture
+    const existingTexture = this.maskTextures.get(layerId);
+    if (existingTexture) {
+      existingTexture.destroy();
+      this.maskTextures.delete(layerId);
+      this.maskTextureViews.delete(layerId);
+    }
+
+    // If no imageData, layer will use white fallback (no masking)
+    if (!imageData) return;
+
+    // Create new mask texture
+    const maskTexture = this.device.createTexture({
+      size: [imageData.width, imageData.height],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+
+    // Upload mask data
+    this.device.queue.writeTexture(
+      { texture: maskTexture },
+      imageData.data,
+      {
+        bytesPerRow: imageData.width * 4,
+        rowsPerImage: imageData.height,
+      },
+      [imageData.width, imageData.height]
+    );
+
+    // Cache texture and view
+    this.maskTextures.set(layerId, maskTexture);
+    this.maskTextureViews.set(layerId, maskTexture.createView());
+  }
+
+  // Remove mask texture for a layer
+  removeMaskTexture(layerId: string): void {
+    const existingTexture = this.maskTextures.get(layerId);
+    if (existingTexture) {
+      existingTexture.destroy();
+      this.maskTextures.delete(layerId);
+      this.maskTextureViews.delete(layerId);
     }
   }
 
@@ -1519,6 +1602,10 @@ export class WebGPUEngine {
       const sourceAspect = data.sourceWidth / data.sourceHeight;
       const outputAspect = this.outputWidth / this.outputHeight;
 
+      // Get mask texture view for this layer (if any)
+      const maskTextureView = this.maskTextureViews.get(layer.id) || this.whiteMaskView!;
+      const hasMask = this.maskTextureViews.has(layer.id) ? 1 : 0;
+
       // Update uniforms
       this.uniformData[0] = layer.opacity;
       this.uniformDataU32[1] = BLEND_MODE_MAP[layer.blendMode]; // blendMode is u32 in shader
@@ -1529,9 +1616,9 @@ export class WebGPUEngine {
       this.uniformData[6] = layer.rotation;
       this.uniformData[7] = sourceAspect;
       this.uniformData[8] = outputAspect;
-      this.uniformData[9] = 0;  // padding
-      this.uniformData[10] = 0; // padding
-      this.uniformData[11] = 0; // padding
+      this.uniformData[9] = 0;  // time (for dissolve effects)
+      this.uniformDataU32[10] = hasMask;  // hasMask
+      this.uniformDataU32[11] = 0; // maskInvert (handled in mask texture generation)
       this.device.queue.writeBuffer(uniformBuffer, 0, this.uniformData);
 
       let pipeline: GPURenderPipeline;
@@ -1547,6 +1634,7 @@ export class WebGPUEngine {
             { binding: 1, resource: readView },
             { binding: 2, resource: data.externalTexture },
             { binding: 3, resource: { buffer: uniformBuffer } },
+            { binding: 4, resource: maskTextureView },
           ],
         });
       } else if (data.textureView) {
@@ -1561,6 +1649,7 @@ export class WebGPUEngine {
             { binding: 1, resource: readView },
             { binding: 2, resource: data.textureView },
             { binding: 3, resource: { buffer: uniformBuffer } },
+            { binding: 4, resource: maskTextureView },
           ],
         });
       } else {

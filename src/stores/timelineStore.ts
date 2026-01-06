@@ -2,10 +2,9 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import type { TimelineClip, TimelineTrack, ClipTransform, CompositionTimelineData, SerializableClip, Keyframe, AnimatableProperty, EasingType, ClipMask, MaskVertex, MaskMode } from '../types';
+import type { TimelineClip, TimelineTrack, ClipTransform, CompositionTimelineData, SerializableClip, Keyframe, AnimatableProperty, EasingType, ClipMask, MaskVertex } from '../types';
 import { useMediaStore } from './mediaStore';
 import { useMixerStore } from './mixerStore';
-import { WebCodecsPlayer } from '../engine/WebCodecsPlayer';
 import { getInterpolatedClipTransform, getKeyframeAtTime, hasKeyframesForProperty } from '../utils/keyframeInterpolation';
 
 // Default transform for new clips

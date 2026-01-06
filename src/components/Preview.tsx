@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useEngine } from '../hooks/useEngine';
 import { useMixerStore } from '../stores/mixerStore';
 import { useTimelineStore } from '../stores/timelineStore';
+import { MaskOverlay } from './MaskOverlay';
 import type { Layer, EngineStats } from '../types';
 
 // Detailed stats overlay component
@@ -140,7 +141,7 @@ function StatsOverlay({ stats, resolution, expanded, onToggle }: {
 export function Preview() {
   const { canvasRef, isEngineReady } = useEngine();
   const { engineStats, outputResolution, layers, selectedLayerId, selectLayer } = useMixerStore();
-  const { clips, selectedClipId, selectClip, updateClipTransform } = useTimelineStore();
+  const { clips, selectedClipId, selectClip, updateClipTransform, maskEditMode } = useTimelineStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 1920, height: 1080 });
@@ -579,6 +580,12 @@ export function Preview() {
                   height: canvasSize.height,
                   cursor: isDragging ? 'grabbing' : 'crosshair',
                 }}
+              />
+            )}
+            {maskEditMode !== 'none' && (
+              <MaskOverlay
+                canvasWidth={canvasSize.width}
+                canvasHeight={canvasSize.height}
               />
             )}
           </>

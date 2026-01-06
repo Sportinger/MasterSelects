@@ -3236,3 +3236,13 @@ input[type="checkbox"] {
   color: var(--text-secondary);
   margin-top: 4px;
 }
+
+/* ========== MASK OVERLAY STYLES ========== */
+.mask-overlay-svg {
+  pointer-events: auto;
+  z-index: 50;
+}
+
+.mask-overlay-svg text {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
