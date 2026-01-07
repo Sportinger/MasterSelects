@@ -1272,6 +1272,7 @@ export const useMediaStore = create<MediaState>()(
           compositions: state.compositions,
           folders: state.folders,
           activeCompositionId: state.activeCompositionId,
+          openCompositionIds: state.openCompositionIds,
           expandedFolderIds: state.expandedFolderIds,
           currentProjectId: state.currentProjectId,
           currentProjectName: state.currentProjectName,
@@ -1280,6 +1281,20 @@ export const useMediaStore = create<MediaState>()(
     )
   )
 );
+
+// Save current timeline to active composition (for persistence)
+function saveTimelineToActiveComposition() {
+  const { activeCompositionId } = useMediaStore.getState();
+  if (activeCompositionId) {
+    const timelineStore = useTimelineStore.getState();
+    const timelineData = timelineStore.getSerializableState();
+    useMediaStore.setState((state) => ({
+      compositions: state.compositions.map((c) =>
+        c.id === activeCompositionId ? { ...c, timelineData } : c
+      ),
+    }));
+  }
+}
 
 // Auto-initialize from IndexedDB on app load
 if (typeof window !== 'undefined') {
@@ -1295,6 +1310,27 @@ if (typeof window !== 'undefined') {
     }
 
     // Initialize media from IndexedDB
-    useMediaStore.getState().initFromDB();
+    await useMediaStore.getState().initFromDB();
+
+    // Restore active composition's timeline after media files are loaded
+    const { activeCompositionId, compositions } = useMediaStore.getState();
+    if (activeCompositionId) {
+      const activeComp = compositions.find((c) => c.id === activeCompositionId);
+      if (activeComp?.timelineData) {
+        console.log('[MediaStore] Restoring timeline for:', activeComp.name);
+        const timelineStore = useTimelineStore.getState();
+        await timelineStore.loadState(activeComp.timelineData);
+      }
+    }
   }, 100);
+
+  // Save timeline before page unload (for refresh/close)
+  window.addEventListener('beforeunload', () => {
+    saveTimelineToActiveComposition();
+  });
+
+  // Also save timeline periodically (every 30 seconds) as backup
+  setInterval(() => {
+    saveTimelineToActiveComposition();
+  }, 30000);
 }
