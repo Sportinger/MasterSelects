@@ -48,6 +48,7 @@ const AVAILABLE_EFFECTS: { type: EffectType; name: string }[] = [
   { type: 'brightness', name: 'Brightness' },
   { type: 'contrast', name: 'Contrast' },
   { type: 'saturation', name: 'Saturation' },
+  { type: 'levels', name: 'Levels' },
   { type: 'pixelate', name: 'Pixelate' },
   { type: 'kaleidoscope', name: 'Kaleidoscope' },
   { type: 'mirror', name: 'Mirror' },
@@ -390,6 +391,72 @@ function renderEffectParams(
               value={effect.params.angle as number}
               onChange={(e) => onChange({ angle: parseFloat(e.target.value) })}
             />
+          </div>
+        </>
+      );
+
+    case 'levels':
+      return (
+        <>
+          <div className="control-row">
+            <label>Input Black</label>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={effect.params.inputBlack as number}
+              onChange={(e) => onChange({ ...effect.params, inputBlack: parseFloat(e.target.value) })}
+            />
+            <span className="value">{(effect.params.inputBlack as number).toFixed(2)}</span>
+          </div>
+          <div className="control-row">
+            <label>Input White</label>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={effect.params.inputWhite as number}
+              onChange={(e) => onChange({ ...effect.params, inputWhite: parseFloat(e.target.value) })}
+            />
+            <span className="value">{(effect.params.inputWhite as number).toFixed(2)}</span>
+          </div>
+          <div className="control-row">
+            <label>Gamma</label>
+            <input
+              type="range"
+              min="0.1"
+              max="10"
+              step="0.1"
+              value={effect.params.gamma as number}
+              onChange={(e) => onChange({ ...effect.params, gamma: parseFloat(e.target.value) })}
+            />
+            <span className="value">{(effect.params.gamma as number).toFixed(2)}</span>
+          </div>
+          <div className="control-row">
+            <label>Output Black</label>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={effect.params.outputBlack as number}
+              onChange={(e) => onChange({ ...effect.params, outputBlack: parseFloat(e.target.value) })}
+            />
+            <span className="value">{(effect.params.outputBlack as number).toFixed(2)}</span>
+          </div>
+          <div className="control-row">
+            <label>Output White</label>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={effect.params.outputWhite as number}
+              onChange={(e) => onChange({ ...effect.params, outputWhite: parseFloat(e.target.value) })}
+            />
+            <span className="value">{(effect.params.outputWhite as number).toFixed(2)}</span>
           </div>
         </>
       );

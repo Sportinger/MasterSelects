@@ -1,8 +1,9 @@
 // WebGPU Rendering Engine for WebVJ Mixer - Optimized
 
-import type { Layer, BlendMode, OutputWindow, EngineStats } from '../types';
+import type { Layer, BlendMode, OutputWindow, EngineStats, Effect } from '../types';
 import compositeShader from '../shaders/composite.wgsl?raw';
 import outputShader from '../shaders/output.wgsl?raw';
+import effectsShader from '../shaders/effects.wgsl?raw';
 
 const BLEND_MODE_MAP: Record<BlendMode, number> = {
   // Normal
@@ -394,6 +395,10 @@ export class WebGPUEngine {
   private externalCompositePipeline: GPURenderPipeline | null = null;
   private outputPipeline: GPURenderPipeline | null = null;
 
+  // Effect pipelines
+  private effectPipelines: Map<string, GPURenderPipeline> = new Map();
+  private effectBindGroupLayouts: Map<string, GPUBindGroupLayout> = new Map();
+
   // Resources
   private sampler: GPUSampler | null = null;
   private layerUniformBuffer: GPUBuffer | null = null;
@@ -730,6 +735,60 @@ export class WebGPUEngine {
       },
       primitive: { topology: 'triangle-list' },
     });
+
+    // Create effect pipelines
+    await this.createEffectPipelines();
+  }
+
+  private async createEffectPipelines(): Promise<void> {
+    if (!this.device) return;
+
+    const effectModule = this.device.createShaderModule({ code: effectsShader });
+
+    // Define effect configurations: [entryPoint, needsUniform, uniformSize]
+    const effectConfigs: Record<string, [string, boolean, number]> = {
+      'hue-shift': ['hueShiftFragment', true, 16],
+      'brightness': ['colorAdjustFragment', true, 16],
+      'contrast': ['colorAdjustFragment', true, 16],
+      'saturation': ['colorAdjustFragment', true, 16],
+      'pixelate': ['pixelateFragment', true, 16],
+      'kaleidoscope': ['kaleidoscopeFragment', true, 16],
+      'mirror': ['mirrorFragment', true, 16],
+      'rgb-split': ['rgbSplitFragment', true, 16],
+      'invert': ['invertFragment', false, 0],
+      'levels': ['levelsFragment', true, 32],
+    };
+
+    for (const [effectType, [entryPoint, needsUniform, uniformSize]] of Object.entries(effectConfigs)) {
+      // Create bind group layout
+      const entries: GPUBindGroupLayoutEntry[] = [
+        { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+      ];
+
+      if (needsUniform) {
+        entries.push({ binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } });
+      }
+
+      const bindGroupLayout = this.device.createBindGroupLayout({ entries });
+      this.effectBindGroupLayouts.set(effectType, bindGroupLayout);
+
+      // Create pipeline
+      const pipeline = this.device.createRenderPipeline({
+        layout: this.device.createPipelineLayout({
+          bindGroupLayouts: [bindGroupLayout],
+        }),
+        vertex: { module: effectModule, entryPoint: 'vertexMain' },
+        fragment: {
+          module: effectModule,
+          entryPoint,
+          targets: [{ format: 'rgba8unorm' }],
+        },
+        primitive: { topology: 'triangle-list' },
+      });
+
+      this.effectPipelines.set(effectType, pipeline);
+    }
   }
 
   setPreviewCanvas(canvas: HTMLCanvasElement): void {

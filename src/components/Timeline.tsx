@@ -245,11 +245,33 @@ export function Timeline() {
         }
         return;
       }
+
+      // Arrow Left: Move playhead one frame backward
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (activeComposition) {
+          const frameDuration = 1 / activeComposition.frameRate;
+          const newPosition = Math.max(0, playheadPosition - frameDuration);
+          setPlayheadPosition(newPosition);
+        }
+        return;
+      }
+
+      // Arrow Right: Move playhead one frame forward
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (activeComposition) {
+          const frameDuration = 1 / activeComposition.frameRate;
+          const newPosition = Math.min(duration, playheadPosition + frameDuration);
+          setPlayheadPosition(newPosition);
+        }
+        return;
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPlaying, play, pause, setInPointAtPlayhead, setOutPointAtPlayhead, clearInOut, toggleLoopPlayback, selectedClipId, removeClip, splitClipAtPlayhead, clips, updateClipTransform]);
+  }, [isPlaying, play, pause, setInPointAtPlayhead, setOutPointAtPlayhead, clearInOut, toggleLoopPlayback, selectedClipId, removeClip, splitClipAtPlayhead, clips, updateClipTransform, activeComposition, playheadPosition, duration, setPlayheadPosition]);
 
   // Close context menu when clicking outside or pressing Escape
   useEffect(() => {
@@ -1280,7 +1302,7 @@ export function Timeline() {
     };
 
     document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp, { once: true });
+    document.addEventListener('mouseup', handleMouseUp);
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
@@ -1344,7 +1366,7 @@ export function Timeline() {
     };
 
     document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp, { once: true });
+    document.addEventListener('mouseup', handleMouseUp);
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
@@ -1429,7 +1451,7 @@ export function Timeline() {
     };
 
     document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp, { once: true });
+    document.addEventListener('mouseup', handleMouseUp);
   };
 
   // Handle trim start (mousedown on trim handle)
@@ -1535,7 +1557,7 @@ export function Timeline() {
     };
 
     document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp, { once: true });
+    document.addEventListener('mouseup', handleMouseUp);
   };
 
   // Quick duration check for dragged video files

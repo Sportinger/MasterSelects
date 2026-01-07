@@ -89,7 +89,8 @@ export type EffectType =
   | 'kaleidoscope'
   | 'mirror'
   | 'invert'
-  | 'rgb-split';
+  | 'rgb-split'
+  | 'levels';
 
 export interface OutputWindow {
   id: string;

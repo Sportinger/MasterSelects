@@ -756,6 +756,8 @@ function getDefaultEffectParams(type: string): Record<string, number | boolean |
       return {};
     case 'rgb-split':
       return { amount: 0.01, angle: 0 };
+    case 'levels':
+      return { inputBlack: 0, inputWhite: 1, gamma: 1, outputBlack: 0, outputWhite: 1 };
     default:
       return {};
   }
