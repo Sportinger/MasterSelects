@@ -66,12 +66,16 @@ struct LayerUniforms {
   posY: f32,
   scaleX: f32,
   scaleY: f32,
-  rotation: f32,
+  rotationZ: f32,
   sourceAspect: f32,
   outputAspect: f32,
   time: f32,
   hasMask: u32,
   maskInvert: u32,
+  rotationX: f32,
+  rotationY: f32,
+  perspective: f32,
+  _pad: f32,
 };
 
 @vertex
@@ -280,10 +284,6 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   // Calculate video UV coordinates with all transformations
   var uv = input.uv;
   uv = uv - vec2f(0.5);
-
-  let cosR = cos(layer.rotation);
-  let sinR = sin(layer.rotation);
-  uv = vec2f(uv.x * cosR - uv.y * sinR, uv.x * sinR + uv.y * cosR);
   uv = uv / vec2f(layer.scaleX, layer.scaleY);
 
   let aspectRatio = layer.sourceAspect / layer.outputAspect;
@@ -292,6 +292,35 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   } else {
     uv.x = uv.x / aspectRatio;
   }
+
+  // 3D rotation with perspective
+  var p = vec3f(uv.x, uv.y, 0.0);
+
+  // X rotation
+  if (abs(layer.rotationX) > 0.0001) {
+    let cosX = cos(layer.rotationX);
+    let sinX = sin(layer.rotationX);
+    p = vec3f(p.x, p.y * cosX - p.z * sinX, p.y * sinX + p.z * cosX);
+  }
+
+  // Y rotation
+  if (abs(layer.rotationY) > 0.0001) {
+    let cosY = cos(layer.rotationY);
+    let sinY = sin(layer.rotationY);
+    p = vec3f(p.x * cosY + p.z * sinY, p.y, -p.x * sinY + p.z * cosY);
+  }
+
+  // Z rotation
+  if (abs(layer.rotationZ) > 0.0001) {
+    let cosZ = cos(layer.rotationZ);
+    let sinZ = sin(layer.rotationZ);
+    p = vec3f(p.x * cosZ - p.y * sinZ, p.x * sinZ + p.y * cosZ, p.z);
+  }
+
+  // Perspective projection
+  let perspectiveDist = max(layer.perspective, 1.0);
+  let perspectiveScale = perspectiveDist / (perspectiveDist - p.z);
+  uv = vec2f(p.x * perspectiveScale, p.y * perspectiveScale);
 
   uv = uv + vec2f(0.5) - vec2f(layer.posX, layer.posY);
 
@@ -408,7 +437,7 @@ export class WebGPUEngine {
 
   // Pre-allocated uniform data (12 x 4 bytes = 48 bytes)
   // Using ArrayBuffer with typed views to handle mixed float/uint data
-  private uniformBuffer = new ArrayBuffer(48);
+  private uniformBuffer = new ArrayBuffer(64); // 16 floats for extended rotation support
   private uniformData = new Float32Array(this.uniformBuffer);
   private uniformDataU32 = new Uint32Array(this.uniformBuffer);
 
@@ -1659,7 +1688,7 @@ export class WebGPUEngine {
       let uniformBuffer = this.layerUniformBuffers.get(layer.id);
       if (!uniformBuffer) {
         uniformBuffer = this.device.createBuffer({
-          size: 48,
+          size: 64, // 16 floats for extended 3D rotation support
           usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
         this.layerUniformBuffers.set(layer.id, uniformBuffer);
@@ -1679,6 +1708,16 @@ export class WebGPUEngine {
         this.lastMaskDebugLog = Date.now();
       }
 
+      // Get rotation values (layer.rotation can be number or {x,y,z} object)
+      let rotX = 0, rotY = 0, rotZ = 0;
+      if (typeof layer.rotation === 'number') {
+        rotZ = layer.rotation;
+      } else if (layer.rotation && typeof layer.rotation === 'object') {
+        rotX = (layer.rotation as { x?: number; y?: number; z?: number }).x || 0;
+        rotY = (layer.rotation as { x?: number; y?: number; z?: number }).y || 0;
+        rotZ = (layer.rotation as { x?: number; y?: number; z?: number }).z || 0;
+      }
+
       // Update uniforms
       this.uniformData[0] = layer.opacity;
       this.uniformDataU32[1] = BLEND_MODE_MAP[layer.blendMode]; // blendMode is u32 in shader
@@ -1686,12 +1725,16 @@ export class WebGPUEngine {
       this.uniformData[3] = layer.position.y;
       this.uniformData[4] = layer.scale.x;
       this.uniformData[5] = layer.scale.y;
-      this.uniformData[6] = layer.rotation;
+      this.uniformData[6] = rotZ;         // rotationZ
       this.uniformData[7] = sourceAspect;
       this.uniformData[8] = outputAspect;
       this.uniformData[9] = 0;  // time (for dissolve effects)
       this.uniformDataU32[10] = hasMask;  // hasMask
       this.uniformDataU32[11] = 0; // maskInvert (handled in mask texture generation)
+      this.uniformData[12] = rotX;        // rotationX
+      this.uniformData[13] = rotY;        // rotationY
+      this.uniformData[14] = 3.0;         // perspective distance (fixed value for now)
+      this.uniformData[15] = 0;           // padding
       this.device.queue.writeBuffer(uniformBuffer, 0, this.uniformData);
 
       let pipeline: GPURenderPipeline;

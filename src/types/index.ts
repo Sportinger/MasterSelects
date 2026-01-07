@@ -10,7 +10,7 @@ export interface Layer {
   effects: Effect[];
   position: { x: number; y: number };
   scale: { x: number; y: number };
-  rotation: number;
+  rotation: number | { x: number; y: number; z: number };  // Single value (z only) or full 3D rotation
 }
 
 export type BlendMode =

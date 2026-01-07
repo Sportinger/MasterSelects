@@ -39,12 +39,16 @@ struct LayerUniforms {
   posY: f32,
   scaleX: f32,
   scaleY: f32,
-  rotation: f32,
+  rotationZ: f32,     // Z rotation in radians (2D rotation)
   sourceAspect: f32,  // source width / height
   outputAspect: f32,  // output width / height (16:9 = 1.777)
   time: f32,          // for animated effects like dancing dissolve
   hasMask: u32,       // 0 or 1 - whether layer has a mask
   maskInvert: u32,    // 0 or 1 - whether mask is inverted
+  rotationX: f32,     // X rotation in radians (tilt forward/back)
+  rotationY: f32,     // Y rotation in radians (turn left/right)
+  perspective: f32,   // Perspective distance (higher = less perspective)
+  _pad: f32,          // Padding for alignment
 };
 
 @group(0) @binding(0) var texSampler: sampler;
@@ -417,18 +421,10 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   // Apply transform to UV
   var uv = input.uv;
 
-  // Center, rotate, scale, then offset
+  // Center the UV coordinates
   uv = uv - vec2f(0.5);
 
-  // Apply rotation
-  let cosR = cos(layer.rotation);
-  let sinR = sin(layer.rotation);
-  uv = vec2f(
-    uv.x * cosR - uv.y * sinR,
-    uv.x * sinR + uv.y * cosR
-  );
-
-  // Apply user scale
+  // Apply user scale first
   uv = uv / vec2f(layer.scaleX, layer.scaleY);
 
   // Aspect ratio correction: fit source into output while maintaining aspect ratio
@@ -440,6 +436,48 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     // Source is taller than output - fit to height, letterbox left/right
     uv.x = uv.x / aspectRatio;
   }
+
+  // 3D rotation with perspective
+  // Convert to 3D point (z = 0 initially)
+  var p = vec3f(uv.x, uv.y, 0.0);
+
+  // Apply X rotation (tilt forward/back)
+  if (abs(layer.rotationX) > 0.0001) {
+    let cosX = cos(layer.rotationX);
+    let sinX = sin(layer.rotationX);
+    p = vec3f(
+      p.x,
+      p.y * cosX - p.z * sinX,
+      p.y * sinX + p.z * cosX
+    );
+  }
+
+  // Apply Y rotation (turn left/right)
+  if (abs(layer.rotationY) > 0.0001) {
+    let cosY = cos(layer.rotationY);
+    let sinY = sin(layer.rotationY);
+    p = vec3f(
+      p.x * cosY + p.z * sinY,
+      p.y,
+      -p.x * sinY + p.z * cosY
+    );
+  }
+
+  // Apply Z rotation (spin)
+  if (abs(layer.rotationZ) > 0.0001) {
+    let cosZ = cos(layer.rotationZ);
+    let sinZ = sin(layer.rotationZ);
+    p = vec3f(
+      p.x * cosZ - p.y * sinZ,
+      p.x * sinZ + p.y * cosZ,
+      p.z
+    );
+  }
+
+  // Apply perspective projection
+  let perspectiveDist = max(layer.perspective, 1.0);
+  let perspectiveScale = perspectiveDist / (perspectiveDist - p.z);
+  uv = vec2f(p.x * perspectiveScale, p.y * perspectiveScale);
 
   uv = uv + vec2f(0.5) - vec2f(layer.posX, layer.posY);
 

@@ -722,7 +722,9 @@ export function Timeline() {
             layer.position.y !== transform.position.y ||
             layer.scale.x !== transform.scale.x ||
             layer.scale.y !== transform.scale.y ||
-            layer.rotation !== (transform.rotation.z * Math.PI / 180) ||
+            (layer.rotation as any)?.z !== (transform.rotation.z * Math.PI / 180) ||
+            (layer.rotation as any)?.x !== (transform.rotation.x * Math.PI / 180) ||
+            (layer.rotation as any)?.y !== (transform.rotation.y * Math.PI / 180) ||
             effectsChanged(layer.effects, clip.effects);
 
           if (needsUpdate) {
@@ -739,7 +741,7 @@ export function Timeline() {
               effects: clip.effects || [],
               position: { x: transform.position.x, y: transform.position.y },
               scale: { x: transform.scale.x, y: transform.scale.y },
-              rotation: transform.rotation.z * Math.PI / 180,
+              rotation: { x: transform.rotation.x * Math.PI / 180, y: transform.rotation.y * Math.PI / 180, z: transform.rotation.z * Math.PI / 180 },
             };
             layersChanged = true;
           }
@@ -836,7 +838,7 @@ export function Timeline() {
               effects: clip.effects || [],
               position: { x: transform.position.x, y: transform.position.y },
               scale: { x: transform.scale.x, y: transform.scale.y },
-              rotation: transform.rotation.z * Math.PI / 180,
+              rotation: { x: transform.rotation.x * Math.PI / 180, y: transform.rotation.y * Math.PI / 180, z: transform.rotation.z * Math.PI / 180 },
             };
             layersChanged = true;
           } else if (!cached || cached.frameIndex !== frameIndex) {
@@ -872,7 +874,7 @@ export function Timeline() {
                     effects: capturedEffects,
                     position: { x: capturedTransform.position.x, y: capturedTransform.position.y },
                     scale: { x: capturedTransform.scale.x, y: capturedTransform.scale.y },
-                    rotation: capturedTransform.rotation.z * Math.PI / 180,
+                    rotation: { x: capturedTransform.rotation.x * Math.PI / 180, y: capturedTransform.rotation.y * Math.PI / 180, z: capturedTransform.rotation.z * Math.PI / 180 },
                   };
                   useMixerStore.setState({ layers: updatedLayers });
                 }
@@ -895,7 +897,7 @@ export function Timeline() {
                 effects: clip.effects || [],
                 position: { x: transform.position.x, y: transform.position.y },
                 scale: { x: transform.scale.x, y: transform.scale.y },
-                rotation: transform.rotation.z * Math.PI / 180,
+                rotation: { x: transform.rotation.x * Math.PI / 180, y: transform.rotation.y * Math.PI / 180, z: transform.rotation.z * Math.PI / 180 },
               };
               layersChanged = true;
             }
@@ -921,7 +923,7 @@ export function Timeline() {
                 effects: clip.effects || [],
                 position: { x: transform.position.x, y: transform.position.y },
                 scale: { x: transform.scale.x, y: transform.scale.y },
-                rotation: transform.rotation.z * Math.PI / 180,
+                rotation: { x: transform.rotation.x * Math.PI / 180, y: transform.rotation.y * Math.PI / 180, z: transform.rotation.z * Math.PI / 180 },
               };
               layersChanged = true;
             }
@@ -1001,7 +1003,9 @@ export function Timeline() {
             layer.position.y !== transform.position.y ||
             layer.scale.x !== transform.scale.x ||
             layer.scale.y !== transform.scale.y ||
-            layer.rotation !== (transform.rotation.z * Math.PI / 180) ||
+            (layer.rotation as any)?.z !== (transform.rotation.z * Math.PI / 180) ||
+            (layer.rotation as any)?.x !== (transform.rotation.x * Math.PI / 180) ||
+            (layer.rotation as any)?.y !== (transform.rotation.y * Math.PI / 180) ||
             effectsChanged(layer.effects, clip.effects);
 
           if (needsUpdate) {
@@ -1019,7 +1023,7 @@ export function Timeline() {
               effects: clip.effects || [],
               position: { x: transform.position.x, y: transform.position.y },
               scale: { x: transform.scale.x, y: transform.scale.y },
-              rotation: transform.rotation.z * Math.PI / 180,
+              rotation: { x: transform.rotation.x * Math.PI / 180, y: transform.rotation.y * Math.PI / 180, z: transform.rotation.z * Math.PI / 180 },
             };
             layersChanged = true;
           }
@@ -1037,7 +1041,9 @@ export function Timeline() {
           layer.position.y !== transform.position.y ||
           layer.scale.x !== transform.scale.x ||
           layer.scale.y !== transform.scale.y ||
-          layer.rotation !== (transform.rotation.z * Math.PI / 180) ||
+          (layer.rotation as any)?.z !== (transform.rotation.z * Math.PI / 180) ||
+            (layer.rotation as any)?.x !== (transform.rotation.x * Math.PI / 180) ||
+            (layer.rotation as any)?.y !== (transform.rotation.y * Math.PI / 180) ||
           effectsChanged(layer.effects, clip.effects);
 
         if (needsUpdate) {
@@ -1054,7 +1060,7 @@ export function Timeline() {
             effects: clip.effects || [],
             position: { x: transform.position.x, y: transform.position.y },
             scale: { x: transform.scale.x, y: transform.scale.y },
-            rotation: transform.rotation.z * Math.PI / 180,
+            rotation: { x: transform.rotation.x * Math.PI / 180, y: transform.rotation.y * Math.PI / 180, z: transform.rotation.z * Math.PI / 180 },
           };
           layersChanged = true;
         }
