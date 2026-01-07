@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import type { TimelineClip, TimelineTrack, ClipTransform, CompositionTimelineData, SerializableClip, Keyframe, AnimatableProperty, EasingType, ClipMask, MaskVertex } from '../types';
+import type { TimelineClip, TimelineTrack, ClipTransform, CompositionTimelineData, SerializableClip, Keyframe, AnimatableProperty, EasingType, ClipMask, MaskVertex, Effect, EffectType } from '../types';
 import { useMediaStore } from './mediaStore';
 import { useMixerStore } from './mixerStore';
 import { getInterpolatedClipTransform, getKeyframeAtTime, hasKeyframesForProperty } from '../utils/keyframeInterpolation';
@@ -161,6 +161,11 @@ interface TimelineStore {
   selectClip: (id: string | null) => void;
   updateClipTransform: (id: string, transform: Partial<ClipTransform>) => void;
   toggleClipReverse: (id: string) => void;
+
+  // Clip effect actions
+  addClipEffect: (clipId: string, effectType: string) => void;
+  removeClipEffect: (clipId: string, effectId: string) => void;
+  updateClipEffect: (clipId: string, effectId: string, params: Partial<Effect['params']>) => void;
 
   // Playback actions
   setPlayheadPosition: (position: number) => void;
@@ -454,6 +459,7 @@ export const useTimelineStore = create<TimelineStore>()(
           source: { type: 'video', naturalDuration: estimatedDuration, mediaFileId },
           linkedClipId: audioTrackId ? audioClipId : undefined,
           transform: { ...DEFAULT_TRANSFORM },
+          effects: [],
           isLoading: true,
         };
 
@@ -472,6 +478,7 @@ export const useTimelineStore = create<TimelineStore>()(
             source: { type: 'audio', naturalDuration: estimatedDuration },
             linkedClipId: clipId,
             transform: { ...DEFAULT_TRANSFORM },
+            effects: [],
             isLoading: true,
           };
           clipsToAdd.push(audioClip);
@@ -1136,6 +1143,52 @@ export const useTimelineStore = create<TimelineStore>()(
         }),
       });
       // Invalidate cache - reversed playback affects rendered output
+      get().invalidateCache();
+    },
+
+    // Clip effect actions
+    addClipEffect: (clipId, effectType) => {
+      const { clips } = get();
+      const effect: Effect = {
+        id: `effect_${Date.now()}`,
+        name: effectType,
+        type: effectType as EffectType,
+        enabled: true,
+        params: getDefaultEffectParams(effectType),
+      };
+
+      set({
+        clips: clips.map(c =>
+          c.id === clipId ? { ...c, effects: [...(c.effects || []), effect] } : c
+        ),
+      });
+      get().invalidateCache();
+    },
+
+    removeClipEffect: (clipId, effectId) => {
+      const { clips } = get();
+      set({
+        clips: clips.map(c =>
+          c.id === clipId ? { ...c, effects: c.effects.filter(e => e.id !== effectId) } : c
+        ),
+      });
+      get().invalidateCache();
+    },
+
+    updateClipEffect: (clipId, effectId, params) => {
+      const { clips } = get();
+      set({
+        clips: clips.map(c =>
+          c.id === clipId
+            ? {
+                ...c,
+                effects: c.effects.map(e =>
+                  e.id === effectId ? { ...e, params: { ...e.params, ...params } } : e
+                ),
+              }
+            : c
+        ),
+      });
       get().invalidateCache();
     },
 
@@ -2750,3 +2803,33 @@ export const useTimelineStore = create<TimelineStore>()(
     },
   }))
 );
+
+// Helper function to get default effect parameters
+function getDefaultEffectParams(type: string): Record<string, number | boolean | string> {
+  switch (type) {
+    case 'hue-shift':
+      return { shift: 0 };
+    case 'saturation':
+      return { amount: 1 };
+    case 'brightness':
+      return { amount: 0 };
+    case 'contrast':
+      return { amount: 1 };
+    case 'blur':
+      return { radius: 0 };
+    case 'pixelate':
+      return { size: 8 };
+    case 'kaleidoscope':
+      return { segments: 6, rotation: 0 };
+    case 'mirror':
+      return { horizontal: true, vertical: false };
+    case 'invert':
+      return {};
+    case 'rgb-split':
+      return { amount: 0.01, angle: 0 };
+    case 'levels':
+      return { inputBlack: 0, inputWhite: 1, gamma: 1, outputBlack: 0, outputWhite: 1 };
+    default:
+      return {};
+  }
+}

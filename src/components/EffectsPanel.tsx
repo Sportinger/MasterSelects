@@ -1,7 +1,8 @@
 // Effects panel component
 
 import { useMixerStore } from '../stores/mixerStore';
-import type { EffectType, BlendMode } from '../types';
+import { useTimelineStore } from '../stores/timelineStore';
+import type { EffectType, BlendMode, Effect } from '../types';
 
 // Organized by category like After Effects
 const BLEND_MODE_GROUPS: { label: string; modes: BlendMode[] }[] = [
@@ -57,11 +58,100 @@ const AVAILABLE_EFFECTS: { type: EffectType; name: string }[] = [
 ];
 
 export function EffectsPanel() {
-  const { layers, selectedLayerId, addEffect, removeEffect, updateEffect, setLayerOpacity, setLayerBlendMode } =
+  // Mixer store (for live mixing layers)
+  const { layers, selectedLayerId, addEffect: addLayerEffect, removeEffect: removeLayerEffect, updateEffect: updateLayerEffect, setLayerOpacity, setLayerBlendMode } =
     useMixerStore();
 
+  // Timeline store (for timeline clips)
+  const { clips, selectedClipId, addClipEffect, removeClipEffect, updateClipEffect, updateClipTransform } = useTimelineStore();
+
+  // Check if a timeline clip is selected first
+  const selectedClip = clips.find((c) => c.id === selectedClipId);
   const selectedLayer = layers.find((l) => l?.id === selectedLayerId);
 
+  // Timeline clip takes priority
+  if (selectedClip) {
+    return (
+      <div className="effects-panel">
+        <div className="panel-header">
+          <h3>Effects - {selectedClip.name}</h3>
+          <div className="effect-add">
+            <select
+              onChange={(e) => {
+                if (e.target.value) {
+                  addClipEffect(selectedClip.id, e.target.value);
+                  e.target.value = '';
+                }
+              }}
+              defaultValue=""
+            >
+              <option value="" disabled>
+                + Add Effect
+              </option>
+              {AVAILABLE_EFFECTS.map((effect) => (
+                <option key={effect.type} value={effect.type}>
+                  {effect.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="layer-settings">
+          <div className="control-row">
+            <label>Opacity</label>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={selectedClip.transform.opacity}
+              onChange={(e) => updateClipTransform(selectedClip.id, { opacity: parseFloat(e.target.value) })}
+            />
+            <span className="value">{(selectedClip.transform.opacity * 100).toFixed(0)}%</span>
+          </div>
+
+          <div className="control-row">
+            <label>Blend Mode</label>
+            <select
+              value={selectedClip.transform.blendMode}
+              onChange={(e) => updateClipTransform(selectedClip.id, { blendMode: e.target.value as BlendMode })}
+            >
+              {BLEND_MODE_GROUPS.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.modes.map((mode) => (
+                    <option key={mode} value={mode}>
+                      {formatBlendModeName(mode)}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {selectedClip.effects && selectedClip.effects.length > 0 ? (
+          <div className="effects-list">
+            {selectedClip.effects.map((effect) => (
+              <EffectItem
+                key={effect.id}
+                effect={effect}
+                onChange={(params) => updateClipEffect(selectedClip.id, effect.id, params)}
+                onRemove={() => removeClipEffect(selectedClip.id, effect.id)}
+                onToggle={() => updateClipEffect(selectedClip.id, effect.id, { enabled: !effect.enabled })}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="panel-empty">
+            <p>No effects applied</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Fall back to mixer layer
   if (!selectedLayer) {
     return (
       <div className="effects-panel">
@@ -69,7 +159,7 @@ export function EffectsPanel() {
           <h3>Effects</h3>
         </div>
         <div className="panel-empty">
-          <p>Select a layer to add effects</p>
+          <p>Select a layer or clip to add effects</p>
         </div>
       </div>
     );
@@ -83,7 +173,7 @@ export function EffectsPanel() {
           <select
             onChange={(e) => {
               if (e.target.value) {
-                addEffect(selectedLayer.id, e.target.value);
+                addLayerEffect(selectedLayer.id, e.target.value);
                 e.target.value = '';
               }
             }}
@@ -145,7 +235,7 @@ export function EffectsPanel() {
                 <span className="effect-name">{effect.name}</span>
                 <button
                   className="btn btn-sm btn-danger"
-                  onClick={() => removeEffect(selectedLayer.id, effect.id)}
+                  onClick={() => removeLayerEffect(selectedLayer.id, effect.id)}
                 >
                   ×
                 </button>
@@ -153,7 +243,7 @@ export function EffectsPanel() {
 
               <div className="effect-params">
                 {renderEffectParams(effect, (params) =>
-                  updateEffect(selectedLayer.id, effect.id, params)
+                  updateLayerEffect(selectedLayer.id, effect.id, params)
                 )}
               </div>
             </div>

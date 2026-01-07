@@ -173,6 +173,7 @@ export interface TimelineClip {
   linkedClipId?: string;  // ID of linked clip (e.g., audio linked to video)
   waveform?: number[];    // Array of normalized amplitude values (0-1) for audio waveform
   transform: ClipTransform;  // Visual transform properties
+  effects: Effect[];      // Effects applied to this clip
   isLoading?: boolean;    // True while media is being loaded
   reversed?: boolean;     // True if clip plays in reverse
   // Nested composition support
@@ -221,6 +222,7 @@ export interface SerializableClip {
   linkedClipId?: string;
   waveform?: number[];
   transform: ClipTransform;
+  effects: Effect[];         // Effects applied to this clip
   keyframes?: Keyframe[];    // Animation keyframes for this clip
   // Nested composition support
   isComposition?: boolean;
