@@ -346,8 +346,9 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   }
 
   // Apply mask if present
+  // Use input.uv (original fragment coordinates) not clampedUV (transformed video coordinates)
   if (layer.hasMask == 1u) {
-    let maskSample = textureSample(maskTexture, texSampler, clampedUV);
+    let maskSample = textureSample(maskTexture, texSampler, input.uv);
     var maskValue = maskSample.r;
     if (layer.maskInvert == 1u) {
       maskValue = 1.0 - maskValue;
