@@ -204,19 +204,10 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
     const vertex = activeMask.vertices.find(v => v.id === vertexId);
     if (!vertex) return;
 
-    // Select vertex (but don't use shift for multi-select when dragging vertex with shift)
-    // Shift+drag on vertex = move handles, so only multi-select when not dragging vertex
-    if (handleType !== 'vertex' || !e.shiftKey) {
-      selectVertex(vertexId, e.shiftKey && handleType !== 'vertex');
-    } else {
-      // For shift+vertex drag, just select this vertex
-      selectVertex(vertexId, false);
-    }
+    // Select vertex
+    selectVertex(vertexId, false);
 
-    // Check if this is Shift+drag on vertex (move both handles)
-    const isShiftDrag = handleType === 'vertex' && e.shiftKey;
-
-    // Start drag
+    // Start drag - store all initial positions
     dragState.current = {
       vertexId,
       handleType,
@@ -226,7 +217,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       startVertexY: vertex.y,
       startHandleX: handleType === 'handleIn' ? vertex.handleIn.x : vertex.handleOut.x,
       startHandleY: handleType === 'handleIn' ? vertex.handleIn.y : vertex.handleOut.y,
-      shiftDrag: isShiftDrag,
+      shiftDrag: false, // Will be checked dynamically in mousemove
       startHandleInX: vertex.handleIn.x,
       startHandleInY: vertex.handleIn.y,
       startHandleOutX: vertex.handleOut.x,
@@ -251,10 +242,16 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       const normalizedDx = dx / canvasWidth;
       const normalizedDy = dy / canvasHeight;
 
+      // Check shift key dynamically during drag
+      const isShiftPressed = moveEvent.shiftKey;
+
       if (dragState.current.handleType === 'vertex') {
-        if (dragState.current.shiftDrag) {
-          // Shift+drag: move both bezier handles together
+        if (isShiftPressed) {
+          // Shift pressed: move both bezier handles together (parallel)
+          // Vertex stays at its original position
           updateVertex(selectedClip.id, activeMask.id, dragState.current.vertexId, {
+            x: dragState.current.startVertexX, // Keep vertex at original position
+            y: dragState.current.startVertexY,
             handleIn: {
               x: dragState.current.startHandleInX + normalizedDx,
               y: dragState.current.startHandleInY + normalizedDy,
@@ -265,12 +262,20 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
             },
           });
         } else {
-          // Normal drag: move vertex position
+          // Normal drag: move vertex position, keep handles at original
           const newX = Math.max(0, Math.min(1, dragState.current.startVertexX + normalizedDx));
           const newY = Math.max(0, Math.min(1, dragState.current.startVertexY + normalizedDy));
           updateVertex(selectedClip.id, activeMask.id, dragState.current.vertexId, {
             x: newX,
             y: newY,
+            handleIn: {
+              x: dragState.current.startHandleInX,
+              y: dragState.current.startHandleInY,
+            },
+            handleOut: {
+              x: dragState.current.startHandleOutX,
+              y: dragState.current.startHandleOutY,
+            },
           });
         }
       } else {
