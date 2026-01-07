@@ -2471,55 +2471,108 @@ export const useTimelineStore = create<TimelineStore>()(
 
     // Calculate expanded track height based on visible property rows
     getExpandedTrackHeight: (trackId, baseHeight) => {
-      const { expandedTracks, expandedTrackPropertyGroups, clips, selectedClipId } = get();
+      const { expandedTracks, expandedTrackPropertyGroups, clips, selectedClipId, clipKeyframes } = get();
 
       if (!expandedTracks.has(trackId)) {
+        return baseHeight;
+      }
+
+      // Get the selected clip in this track
+      const trackClips = clips.filter(c => c.trackId === trackId);
+      const selectedTrackClip = trackClips.find(c => c.id === selectedClipId);
+
+      // If no clip is selected in this track, no property rows
+      if (!selectedTrackClip) {
+        return baseHeight;
+      }
+
+      const clipId = selectedTrackClip.id;
+      const keyframes = clipKeyframes.get(clipId) || [];
+
+      // Helper to check if a property has keyframes
+      const propertyHasKeyframes = (property: string): boolean => {
+        return keyframes.some(k => k.property === property);
+      };
+
+      // Check which property groups have keyframes
+      const hasOpacityKeyframes = propertyHasKeyframes('opacity');
+      const hasPositionXKeyframes = propertyHasKeyframes('position.x');
+      const hasPositionYKeyframes = propertyHasKeyframes('position.y');
+      const hasPositionZKeyframes = propertyHasKeyframes('position.z');
+      const hasPositionKeyframes = hasPositionXKeyframes || hasPositionYKeyframes || hasPositionZKeyframes;
+      const hasScaleXKeyframes = propertyHasKeyframes('scale.x');
+      const hasScaleYKeyframes = propertyHasKeyframes('scale.y');
+      const hasScaleKeyframes = hasScaleXKeyframes || hasScaleYKeyframes;
+      const hasRotationXKeyframes = propertyHasKeyframes('rotation.x');
+      const hasRotationYKeyframes = propertyHasKeyframes('rotation.y');
+      const hasRotationZKeyframes = propertyHasKeyframes('rotation.z');
+      const hasRotationKeyframes = hasRotationXKeyframes || hasRotationYKeyframes || hasRotationZKeyframes;
+
+      // Check for effect keyframes
+      const effectsWithKeyframes = selectedTrackClip.effects?.filter(effect => {
+        const numericParams = Object.keys(effect.params).filter(k => typeof effect.params[k] === 'number');
+        return numericParams.some(paramName => propertyHasKeyframes(`effect.${effect.id}.${paramName}`));
+      }) || [];
+
+      // If no keyframes at all, no property rows
+      if (!hasOpacityKeyframes && !hasPositionKeyframes && !hasScaleKeyframes && !hasRotationKeyframes && effectsWithKeyframes.length === 0) {
         return baseHeight;
       }
 
       const PROPERTY_ROW_HEIGHT = 18;
       const GROUP_HEADER_HEIGHT = 20;
       let extraHeight = 0;
-
-      // Opacity row (always visible when expanded)
-      extraHeight += PROPERTY_ROW_HEIGHT;
-
-      // Position group
-      extraHeight += GROUP_HEADER_HEIGHT;
       const trackGroups = expandedTrackPropertyGroups.get(trackId);
-      if (trackGroups?.has('position')) {
-        extraHeight += PROPERTY_ROW_HEIGHT * 3; // X, Y, Z
+
+      // Opacity row (only if has keyframes)
+      if (hasOpacityKeyframes) {
+        extraHeight += PROPERTY_ROW_HEIGHT;
       }
 
-      // Scale group
-      extraHeight += GROUP_HEADER_HEIGHT;
-      if (trackGroups?.has('scale')) {
-        extraHeight += PROPERTY_ROW_HEIGHT * 2; // X, Y
+      // Position group (only if has keyframes)
+      if (hasPositionKeyframes) {
+        extraHeight += GROUP_HEADER_HEIGHT;
+        if (trackGroups?.has('position')) {
+          if (hasPositionXKeyframes) extraHeight += PROPERTY_ROW_HEIGHT;
+          if (hasPositionYKeyframes) extraHeight += PROPERTY_ROW_HEIGHT;
+          if (hasPositionZKeyframes) extraHeight += PROPERTY_ROW_HEIGHT;
+        }
       }
 
-      // Rotation group
-      extraHeight += GROUP_HEADER_HEIGHT;
-      if (trackGroups?.has('rotation')) {
-        extraHeight += PROPERTY_ROW_HEIGHT * 3; // X, Y, Z
+      // Scale group (only if has keyframes)
+      if (hasScaleKeyframes) {
+        extraHeight += GROUP_HEADER_HEIGHT;
+        if (trackGroups?.has('scale')) {
+          if (hasScaleXKeyframes) extraHeight += PROPERTY_ROW_HEIGHT;
+          if (hasScaleYKeyframes) extraHeight += PROPERTY_ROW_HEIGHT;
+        }
       }
 
-      // Effects group - only if selected clip in this track has effects
-      const trackClips = clips.filter(c => c.trackId === trackId);
-      const selectedTrackClip = trackClips.find(c => c.id === selectedClipId);
-      if (selectedTrackClip?.effects && selectedTrackClip.effects.length > 0) {
+      // Rotation group (only if has keyframes)
+      if (hasRotationKeyframes) {
+        extraHeight += GROUP_HEADER_HEIGHT;
+        if (trackGroups?.has('rotation')) {
+          if (hasRotationXKeyframes) extraHeight += PROPERTY_ROW_HEIGHT;
+          if (hasRotationYKeyframes) extraHeight += PROPERTY_ROW_HEIGHT;
+          if (hasRotationZKeyframes) extraHeight += PROPERTY_ROW_HEIGHT;
+        }
+      }
+
+      // Effects group - only effects that have keyframes
+      if (effectsWithKeyframes.length > 0) {
         extraHeight += GROUP_HEADER_HEIGHT; // Effects group header
 
         if (trackGroups?.has('effects')) {
-          // Add height for each effect
-          for (const effect of selectedTrackClip.effects) {
+          // Add height for each effect with keyframes
+          for (const effect of effectsWithKeyframes) {
             extraHeight += GROUP_HEADER_HEIGHT; // Effect sub-group header
 
-            // If effect is expanded, add rows for each numeric parameter
+            // If effect is expanded, add rows for each keyframed parameter
             if (trackGroups?.has(`effect.${effect.id}`)) {
-              const numericParams = Object.keys(effect.params).filter(
-                k => typeof effect.params[k] === 'number'
-              );
-              extraHeight += PROPERTY_ROW_HEIGHT * numericParams.length;
+              const paramsWithKeyframes = Object.keys(effect.params)
+                .filter(k => typeof effect.params[k] === 'number')
+                .filter(paramName => propertyHasKeyframes(`effect.${effect.id}.${paramName}`));
+              extraHeight += PROPERTY_ROW_HEIGHT * paramsWithKeyframes.length;
             }
           }
         }
