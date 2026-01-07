@@ -70,19 +70,50 @@ export function useEngine() {
           // Find clip for this track at current time
           const clip = clipsAtTime.find(c => c.trackId === track.id);
 
-          if (clip?.masks && clip.masks.length > 0) {
-            // Create a version string based on mask data AND resolution
-            const maskVersion = `${JSON.stringify(clip.masks)}_${engineDimensions.width}x${engineDimensions.height}`;
+          if (clip?.masks && clip.masks.length > 0 && layer.source) {
+            // Get source dimensions for aspect ratio calculation
+            let sourceWidth = 1920, sourceHeight = 1080;
+            if (layer.source.type === 'video' && layer.source.videoElement) {
+              sourceWidth = layer.source.videoElement.videoWidth || 1920;
+              sourceHeight = layer.source.videoElement.videoHeight || 1080;
+            } else if (layer.source.type === 'image' && layer.source.imageElement) {
+              sourceWidth = layer.source.imageElement.naturalWidth || 1920;
+              sourceHeight = layer.source.imageElement.naturalHeight || 1080;
+            }
+
+            const sourceAspect = sourceWidth / sourceHeight;
+            const outputAspect = engineDimensions.width / engineDimensions.height;
+            const aspectRatio = sourceAspect / outputAspect;
+
+            // Create a version string based on mask data, resolution AND aspect ratio
+            const maskVersion = `${JSON.stringify(clip.masks)}_${engineDimensions.width}x${engineDimensions.height}_${aspectRatio.toFixed(4)}`;
             const cacheKey = `${clip.id}_${layer.id}`;
             const prevVersion = maskVersionRef.current.get(cacheKey);
 
-            // Only regenerate if masks changed or resolution changed
+            // Only regenerate if masks changed or resolution or aspect ratio changed
             if (maskVersion !== prevVersion) {
               maskVersionRef.current.set(cacheKey, maskVersion);
 
-              // Generate mask texture at engine render resolution
+              // Transform mask vertices to account for aspect ratio fitting
+              const transformedMasks = clip.masks.map(mask => ({
+                ...mask,
+                vertices: mask.vertices.map(v => {
+                  let x = v.x, y = v.y;
+                  // Apply inverse of video aspect ratio fitting
+                  if (aspectRatio > 1.0) {
+                    // Video is letterboxed - compress Y coordinates
+                    y = (y - 0.5) / aspectRatio + 0.5;
+                  } else {
+                    // Video is pillarboxed - compress X coordinates
+                    x = (x - 0.5) * aspectRatio + 0.5;
+                  }
+                  return { ...v, x, y };
+                })
+              }));
+
+              // Generate mask texture at engine render resolution with transformed vertices
               const maskImageData = generateMaskTexture(
-                clip.masks,
+                transformedMasks,
                 engineDimensions.width,
                 engineDimensions.height
               );
