@@ -7,13 +7,16 @@ import { useTimelineStore } from '../stores/timelineStore';
 import { useMediaStore } from '../stores/mediaStore';
 
 export function ExportPanel() {
-  const { duration, inPoint, outPoint } = useTimelineStore();
+  const { duration, inPoint, outPoint, playheadPosition } = useTimelineStore();
   const { getActiveComposition } = useMediaStore();
   const composition = getActiveComposition();
 
   // Export settings
   const [width, setWidth] = useState(composition?.width ?? 1920);
   const [height, setHeight] = useState(composition?.height ?? 1080);
+  const [customWidth, setCustomWidth] = useState(composition?.width ?? 1920);
+  const [customHeight, setCustomHeight] = useState(composition?.height ?? 1080);
+  const [useCustomResolution, setUseCustomResolution] = useState(false);
   const [fps, setFps] = useState(composition?.frameRate ?? 30);
   const [bitrate, setBitrate] = useState(15_000_000);
   const [useInOut, setUseInOut] = useState(true);
@@ -55,9 +58,12 @@ export function ExportPanel() {
     setError(null);
     setProgress(null);
 
+    const actualWidth = useCustomResolution ? customWidth : width;
+    const actualHeight = useCustomResolution ? customHeight : height;
+
     const exp = new FrameExporter({
-      width,
-      height,
+      width: actualWidth,
+      height: actualHeight,
       fps,
       codec: 'h264',
       bitrate,
@@ -81,7 +87,7 @@ export function ExportPanel() {
       setIsExporting(false);
       setExporter(null);
     }
-  }, [width, height, fps, bitrate, startTime, endTime, filename, isExporting]);
+  }, [width, height, customWidth, customHeight, useCustomResolution, fps, bitrate, startTime, endTime, filename, isExporting]);
 
   // Handle cancel
   const handleCancel = useCallback(() => {
@@ -91,6 +97,54 @@ export function ExportPanel() {
     setIsExporting(false);
     setExporter(null);
   }, [exporter]);
+
+  // Handle render current frame
+  const handleRenderFrame = useCallback(async () => {
+    const canvas = document.createElement('canvas');
+    const actualWidth = useCustomResolution ? customWidth : width;
+    const actualHeight = useCustomResolution ? customHeight : height;
+    canvas.width = actualWidth;
+    canvas.height = actualHeight;
+
+    const context = canvas.getContext('webgpu');
+    if (!context) {
+      setError('Failed to get WebGPU context');
+      return;
+    }
+
+    try {
+      // Configure canvas
+      const device = await (navigator.gpu as any).requestAdapter().then((adapter: any) => adapter.requestDevice());
+      context.configure({
+        device,
+        format: 'bgra8unorm',
+        alphaMode: 'premultiplied',
+      });
+
+      // Render current frame
+      // Note: This is a simplified version - in production you'd want to properly
+      // set up the engine to render to this canvas
+      // For now, let's just capture the preview canvas
+      const previewCanvas = document.querySelector('canvas');
+      if (previewCanvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(previewCanvas, 0, 0, actualWidth, actualHeight);
+        }
+      }
+
+      // Convert to PNG and download
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const frameName = `${filename}_frame_${Math.floor(playheadPosition * 1000)}.png`;
+          downloadBlob(blob, frameName);
+        }
+      }, 'image/png');
+    } catch (e) {
+      console.error('[ExportPanel] Frame render failed:', e);
+      setError(e instanceof Error ? e.message : 'Frame render failed');
+    }
+  }, [width, height, customWidth, customHeight, useCustomResolution, filename, playheadPosition]);
 
   // Format time as MM:SS.ff
   const formatTime = (seconds: number) => {
@@ -148,17 +202,65 @@ export function ExportPanel() {
           {/* Resolution */}
           <div className="control-row">
             <label>Resolution</label>
-            <select
-              value={`${width}x${height}`}
-              onChange={(e) => handleResolutionChange(e.target.value)}
-            >
-              {FrameExporter.getPresetResolutions().map(({ label, width: w, height: h }) => (
-                <option key={`${w}x${h}`} value={`${w}x${h}`}>
-                  {label}
-                </option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <select
+                value={useCustomResolution ? 'custom' : `${width}x${height}`}
+                onChange={(e) => {
+                  if (e.target.value === 'custom') {
+                    setUseCustomResolution(true);
+                  } else {
+                    setUseCustomResolution(false);
+                    handleResolutionChange(e.target.value);
+                  }
+                }}
+                disabled={useCustomResolution}
+                style={{ flex: 1 }}
+              >
+                {FrameExporter.getPresetResolutions().map(({ label, width: w, height: h }) => (
+                  <option key={`${w}x${h}`} value={`${w}x${h}`}>
+                    {label}
+                  </option>
+                ))}
+                <option value="custom">Custom...</option>
+              </select>
+              <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <input
+                  type="checkbox"
+                  checked={useCustomResolution}
+                  onChange={(e) => setUseCustomResolution(e.target.checked)}
+                />
+                Custom
+              </label>
+            </div>
           </div>
+
+          {/* Custom Resolution Inputs */}
+          {useCustomResolution && (
+            <div className="control-row">
+              <label>Custom Size</label>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  type="number"
+                  value={customWidth}
+                  onChange={(e) => setCustomWidth(Math.max(1, parseInt(e.target.value) || 1920))}
+                  placeholder="Width"
+                  min="1"
+                  max="7680"
+                  style={{ flex: 1 }}
+                />
+                <span>×</span>
+                <input
+                  type="number"
+                  value={customHeight}
+                  onChange={(e) => setCustomHeight(Math.max(1, parseInt(e.target.value) || 1080))}
+                  placeholder="Height"
+                  min="1"
+                  max="4320"
+                  style={{ flex: 1 }}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Frame Rate */}
           <div className="control-row">
@@ -212,13 +314,23 @@ export function ExportPanel() {
 
           {error && <div className="export-error">{error}</div>}
 
-          <button
-            className="btn export-start-btn"
-            onClick={handleExport}
-            disabled={endTime <= startTime}
-          >
-            Export Video
-          </button>
+          <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+            <button
+              className="btn"
+              onClick={handleRenderFrame}
+              style={{ flex: 1 }}
+            >
+              Render Current Frame
+            </button>
+            <button
+              className="btn export-start-btn"
+              onClick={handleExport}
+              disabled={endTime <= startTime}
+              style={{ flex: 1 }}
+            >
+              Export Video
+            </button>
+          </div>
         </div>
       ) : (
         <div className="export-progress-container">
