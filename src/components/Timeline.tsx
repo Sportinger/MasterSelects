@@ -1279,11 +1279,11 @@ export function Timeline() {
       setMarkerDrag(null);
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp, { once: true });
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
     };
   }, [markerDrag, scrollX, duration, inPoint, outPoint, setInPoint, setOutPoint]);
 
@@ -1343,11 +1343,11 @@ export function Timeline() {
       setDraggingPlayhead(false);
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp, { once: true });
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isDraggingPlayhead, scrollX, duration, setPlayheadPosition, pixelToTime, getSnapTargetTimes]);
 
@@ -1424,12 +1424,12 @@ export function Timeline() {
       }
       setClipDrag(null);
       clipDragRef.current = null;
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp, { once: true });
   };
 
   // Handle trim start (mousedown on trim handle)
@@ -1470,8 +1470,8 @@ export function Timeline() {
       if (!trim) {
         setClipTrim(null);
         clipTrimRef.current = null;
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
         return;
       }
 
@@ -1479,8 +1479,8 @@ export function Timeline() {
       if (!clipToTrim) {
         setClipTrim(null);
         clipTrimRef.current = null;
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
         return;
       }
 
@@ -1530,12 +1530,12 @@ export function Timeline() {
 
       setClipTrim(null);
       clipTrimRef.current = null;
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp, { once: true });
   };
 
   // Quick duration check for dragged video files
