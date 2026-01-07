@@ -623,7 +623,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       ref={svgRef}
       className="mask-overlay-svg"
       viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
-      preserveAspectRatio="none"
+      preserveAspectRatio="xMidYMid meet"
       onClick={handleSvgClick}
       onMouseDown={handleShapeMouseDown}
       onMouseMove={handleShapeMouseMove}
