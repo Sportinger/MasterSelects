@@ -485,13 +485,14 @@ export function Preview() {
     const normalizedDx = (dx / viewZoom) / (canvasSize.width / 2);
     const normalizedDy = (dy / viewZoom) / (canvasSize.height / 2);
 
-    // Box uses negated values (box formula: posX = center - layer.position.x)
+    // Box uses negated values (box formula: posX = center - layer.position.x * canvasW/2)
     const boxPosX = dragStart.current.layerPosX - normalizedDx;
     const boxPosY = dragStart.current.layerPosY - normalizedDy;
 
-    // Image uses direct values (shader formula: uv = uv + 0.5 - position)
-    const imagePosX = dragStart.current.layerPosX + normalizedDx;
-    const imagePosY = dragStart.current.layerPosY + normalizedDy;
+    // Image uses direct values but needs 2x scale to match box speed
+    // (box formula uses canvasW/2, image needs full movement)
+    const imagePosX = dragStart.current.layerPosX + normalizedDx * 2;
+    const imagePosY = dragStart.current.layerPosY + normalizedDy * 2;
 
     // Update current drag position for box visual feedback
     currentDragPos.current = { x: boxPosX, y: boxPosY };
