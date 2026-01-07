@@ -160,10 +160,11 @@ export function Preview() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragLayerId, setDragLayerId] = useState<string | null>(null);
   const dragStart = useRef({ x: 0, y: 0, layerPosX: 0, layerPosY: 0 });
+  const currentDragPos = useRef({ x: 0, y: 0 }); // Current drag position for immediate visual feedback
 
   // Helper function to calculate layer bounding box in canvas coordinates
   // This matches the shader's transform calculation exactly
-  const calculateLayerBounds = useCallback((layer: Layer, canvasW: number, canvasH: number) => {
+  const calculateLayerBounds = useCallback((layer: Layer, canvasW: number, canvasH: number, forcePos?: { x: number; y: number }) => {
     // Get source dimensions
     let sourceWidth = outputResolution.width;
     let sourceHeight = outputResolution.height;
@@ -204,13 +205,16 @@ export function Preview() {
     const centerX = canvasW / 2;
     const centerY = canvasH / 2;
 
+    // Use forced position if dragging (for immediate visual feedback), otherwise use layer position
+    const layerPos = forcePos || layer.position;
+
     // Position mapping: match the shader's visual output
     // Shader does: uv = uv + 0.5 - pos
-    // When pos.x > 0: uv decreases → samples from left side → image appears moved RIGHT
-    // When pos.y > 0: uv decreases → samples from top → image appears moved DOWN (in UV space = UP on screen)
-    // So box should move in SAME direction as position value
-    const posX = centerX + (layer.position.x * canvasW / 2);
-    const posY = centerY - (layer.position.y * canvasH / 2);
+    // When pos.x > 0: uv = ... - pos.x → samples from LEFT → image moves LEFT → box.x decreases
+    // When pos.y > 0: uv = ... - pos.y → samples from TOP → image moves UP → box.y decreases
+    // Both use SUBTRACT
+    const posX = centerX - (layerPos.x * canvasW / 2);
+    const posY = centerY - (layerPos.y * canvasH / 2);
 
     return {
       x: posX,
@@ -339,8 +343,11 @@ export function Preview() {
         const isSelected = layer.id === selectedLayerId ||
           clips.find(c => c.id === selectedClipId)?.name === layer.name;
 
+        // Use current drag position if this layer is being dragged (for immediate feedback)
+        const forcePos = (isDragging && layer.id === dragLayerId) ? currentDragPos.current : undefined;
+
         // Calculate bounding box using the helper function
-        const bounds = calculateLayerBounds(layer, canvasSize.width, canvasSize.height);
+        const bounds = calculateLayerBounds(layer, canvasSize.width, canvasSize.height, forcePos);
 
         // Save context for rotation
         ctx.save();
@@ -409,7 +416,7 @@ export function Preview() {
     });
 
     return () => cancelAnimationFrame(animId);
-  }, [editMode, layers, selectedLayerId, selectedClipId, clips, canvasSize, calculateLayerBounds]);
+  }, [editMode, layers, selectedLayerId, selectedClipId, clips, canvasSize, calculateLayerBounds, isDragging, dragLayerId]);
 
   // Find layer at mouse position
   const findLayerAtPosition = useCallback((x: number, y: number): Layer | null => {
@@ -476,16 +483,19 @@ export function Preview() {
 
     // Convert pixel movement to normalized position change
     // In shader: uv = uv + 0.5 - vec2f(posX, posY)
-    // When posX increases: uv decreases → samples from left → image moves RIGHT
-    // For natural drag (right = move right), NO negation on X
-    // Y is still inverted (screen Y down = UV Y up)
-    const normalizedDx = (dx / viewZoom) / (canvasSize.width / 2);
+    // When posX increases: final uv = ... - posX → uv decreases → samples from LEFT → image moves LEFT
+    // For natural drag (mouse right = image right), we NEGATE: posX should DECREASE
+    // Same for Y: posY increases → image moves DOWN (in UV = up on screen), so NEGATE
+    const normalizedDx = -(dx / viewZoom) / (canvasSize.width / 2);
     const normalizedDy = -(dy / viewZoom) / (canvasSize.height / 2);
 
     const newPosX = dragStart.current.layerPosX + normalizedDx;
     const newPosY = dragStart.current.layerPosY + normalizedDy;
 
-    console.log(`[Drag] dx=${dx.toFixed(0)}, normalizedDx=${normalizedDx.toFixed(3)}, oldPosX=${dragStart.current.layerPosX.toFixed(3)}, newPosX=${newPosX.toFixed(3)}`);
+    // Update current drag position for immediate visual feedback
+    currentDragPos.current = { x: newPosX, y: newPosY };
+
+    console.log(`[Drag] mouse dx=${dx.toFixed(0)}, normalized=${normalizedDx.toFixed(4)}, old=${dragStart.current.layerPosX.toFixed(4)}, new=${newPosX.toFixed(4)}`);
 
     // Find the corresponding clip and update its transform
     const layer = layers.find(l => l?.id === dragLayerId);
@@ -503,6 +513,7 @@ export function Preview() {
   const handleOverlayMouseUp = useCallback(() => {
     setIsDragging(false);
     setDragLayerId(null);
+    currentDragPos.current = { x: 0, y: 0 };
   }, []);
 
   // Calculate transform for zoomed/panned view
