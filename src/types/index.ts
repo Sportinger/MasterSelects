@@ -247,11 +247,38 @@ export interface CompositionTimelineData {
 // Keyframe animation types
 export type EasingType = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out';
 
-export type AnimatableProperty =
+// Transform properties that can be animated
+export type TransformProperty =
   | 'opacity'
   | 'position.x' | 'position.y' | 'position.z'
   | 'scale.x' | 'scale.y'
   | 'rotation.x' | 'rotation.y' | 'rotation.z';
+
+// Effect property format: effect.{effectId}.{paramName}
+// Example: effect.effect_123456.shift, effect.effect_123456.amount
+export type EffectProperty = `effect.${string}.${string}`;
+
+// Combined animatable property type
+export type AnimatableProperty = TransformProperty | EffectProperty;
+
+// Helper to check if a property is an effect property
+export function isEffectProperty(property: string): property is EffectProperty {
+  return property.startsWith('effect.');
+}
+
+// Helper to parse effect property into parts
+export function parseEffectProperty(property: EffectProperty): { effectId: string; paramName: string } | null {
+  const parts = property.split('.');
+  if (parts.length === 3 && parts[0] === 'effect') {
+    return { effectId: parts[1], paramName: parts[2] };
+  }
+  return null;
+}
+
+// Helper to create effect property string
+export function createEffectProperty(effectId: string, paramName: string): EffectProperty {
+  return `effect.${effectId}.${paramName}` as EffectProperty;
+}
 
 // Mask types for After Effects-style clip masking
 export interface MaskVertex {

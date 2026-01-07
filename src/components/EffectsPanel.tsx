@@ -2,7 +2,49 @@
 
 import { useMixerStore } from '../stores/mixerStore';
 import { useTimelineStore } from '../stores/timelineStore';
-import type { EffectType, BlendMode, Effect } from '../types';
+import type { EffectType, BlendMode } from '../types';
+import { createEffectProperty } from '../types';
+
+// Keyframe toggle button component for effects
+interface EffectKeyframeToggleProps {
+  clipId: string;
+  effectId: string;
+  paramName: string;
+  value: number;
+}
+
+function EffectKeyframeToggle({ clipId, effectId, paramName, value }: EffectKeyframeToggleProps) {
+  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe } = useTimelineStore();
+
+  const property = createEffectProperty(effectId, paramName);
+  const recording = isRecording(clipId, property);
+  const hasKfs = hasKeyframes(clipId, property);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (!recording && !hasKfs) {
+      // Turning ON for first time - create initial keyframe
+      addKeyframe(clipId, property, value);
+    }
+    toggleKeyframeRecording(clipId, property);
+  };
+
+  return (
+    <button
+      className={`keyframe-toggle ${recording ? 'recording' : ''} ${hasKfs ? 'has-keyframes' : ''}`}
+      onClick={handleClick}
+      title={recording ? 'Stop recording keyframes' : hasKfs ? 'Enable keyframe recording' : 'Add keyframe'}
+    >
+      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="13" r="7" />
+        <line x1="12" y1="13" x2="12" y2="9" />
+        <line x1="12" y1="2" x2="12" y2="5" />
+        <line x1="9" y1="3" x2="15" y2="3" />
+      </svg>
+    </button>
+  );
+}
 
 // Organized by category like After Effects
 const BLEND_MODE_GROUPS: { label: string; modes: BlendMode[] }[] = [
@@ -160,7 +202,8 @@ export function EffectsPanel() {
 
                 <div className="effect-params">
                   {renderEffectParams(effect, (params) =>
-                    updateClipEffect(selectedClip.id, effect.id, params)
+                    updateClipEffect(selectedClip.id, effect.id, params),
+                    selectedClip.id
                   )}
                 </div>
               </div>
@@ -358,18 +401,33 @@ function resetToDefault(
 }
 
 function renderEffectParams(
-  effect: { type: string; params: Record<string, number | boolean | string> },
-  onChange: (params: Record<string, number | boolean | string>) => void
+  effect: { id: string; type: string; params: Record<string, number | boolean | string> },
+  onChange: (params: Record<string, number | boolean | string>) => void,
+  clipId?: string // Optional - only provided for timeline clips (not mixer layers)
 ) {
   const handleContextMenu = (paramName: string) => (e: React.MouseEvent) => {
     e.preventDefault();
     resetToDefault(effect.type, paramName, effect.params, onChange);
   };
 
+  // Render keyframe toggle only for timeline clips
+  const renderKeyframeToggle = (paramName: string, value: number) => {
+    if (!clipId) return null;
+    return (
+      <EffectKeyframeToggle
+        clipId={clipId}
+        effectId={effect.id}
+        paramName={paramName}
+        value={value}
+      />
+    );
+  };
+
   switch (effect.type) {
     case 'hue-shift':
       return (
         <div className="control-row">
+          {renderKeyframeToggle('shift', effect.params.shift as number)}
           <label>Shift</label>
           <input
             type="range"
@@ -387,6 +445,7 @@ function renderEffectParams(
     case 'brightness':
       return (
         <div className="control-row">
+          {renderKeyframeToggle('amount', effect.params.amount as number)}
           <label>Amount</label>
           <input
             type="range"
@@ -404,6 +463,7 @@ function renderEffectParams(
     case 'contrast':
       return (
         <div className="control-row">
+          {renderKeyframeToggle('amount', effect.params.amount as number)}
           <label>Amount</label>
           <input
             type="range"
@@ -421,6 +481,7 @@ function renderEffectParams(
     case 'saturation':
       return (
         <div className="control-row">
+          {renderKeyframeToggle('amount', effect.params.amount as number)}
           <label>Amount</label>
           <input
             type="range"
@@ -438,6 +499,7 @@ function renderEffectParams(
     case 'pixelate':
       return (
         <div className="control-row">
+          {renderKeyframeToggle('size', effect.params.size as number)}
           <label>Size</label>
           <input
             type="range"
@@ -456,6 +518,7 @@ function renderEffectParams(
       return (
         <>
           <div className="control-row">
+            {renderKeyframeToggle('segments', effect.params.segments as number)}
             <label>Segments</label>
             <input
               type="range"
@@ -469,6 +532,7 @@ function renderEffectParams(
             />
           </div>
           <div className="control-row">
+            {renderKeyframeToggle('rotation', effect.params.rotation as number)}
             <label>Rotation</label>
             <input
               type="range"
@@ -514,6 +578,7 @@ function renderEffectParams(
       return (
         <>
           <div className="control-row">
+            {renderKeyframeToggle('amount', effect.params.amount as number)}
             <label>Amount</label>
             <input
               type="range"
@@ -527,6 +592,7 @@ function renderEffectParams(
             />
           </div>
           <div className="control-row">
+            {renderKeyframeToggle('angle', effect.params.angle as number)}
             <label>Angle</label>
             <input
               type="range"
@@ -546,6 +612,7 @@ function renderEffectParams(
       return (
         <>
           <div className="control-row">
+            {renderKeyframeToggle('inputBlack', effect.params.inputBlack as number)}
             <label>Input Black</label>
             <input
               type="range"
@@ -560,6 +627,7 @@ function renderEffectParams(
             <span className="value">{(effect.params.inputBlack as number).toFixed(2)}</span>
           </div>
           <div className="control-row">
+            {renderKeyframeToggle('inputWhite', effect.params.inputWhite as number)}
             <label>Input White</label>
             <input
               type="range"
@@ -574,6 +642,7 @@ function renderEffectParams(
             <span className="value">{(effect.params.inputWhite as number).toFixed(2)}</span>
           </div>
           <div className="control-row">
+            {renderKeyframeToggle('gamma', effect.params.gamma as number)}
             <label>Gamma</label>
             <input
               type="range"
@@ -588,6 +657,7 @@ function renderEffectParams(
             <span className="value">{(effect.params.gamma as number).toFixed(2)}</span>
           </div>
           <div className="control-row">
+            {renderKeyframeToggle('outputBlack', effect.params.outputBlack as number)}
             <label>Output Black</label>
             <input
               type="range"
@@ -602,6 +672,7 @@ function renderEffectParams(
             <span className="value">{(effect.params.outputBlack as number).toFixed(2)}</span>
           </div>
           <div className="control-row">
+            {renderKeyframeToggle('outputWhite', effect.params.outputWhite as number)}
             <label>Output White</label>
             <input
               type="range"

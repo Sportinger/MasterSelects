@@ -2,7 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useTimelineStore } from '../stores/timelineStore';
-import type { AnimatableProperty, BlendMode } from '../types';
+import type { AnimatableProperty, BlendMode, Effect } from '../types';
 
 // All blend modes in order for cycling with Shift + "+"
 const ALL_BLEND_MODES: BlendMode[] = [
@@ -1967,6 +1967,52 @@ export function Timeline() {
             </>
           )}
         </div>
+
+        {/* Effects group - show effects from selected clip in this track */}
+        {(() => {
+          const trackClips = clips.filter(c => c.trackId === trackId);
+          const selectedTrackClip = trackClips.find(c => c.id === selectedClipId);
+          if (!selectedTrackClip || !selectedTrackClip.effects || selectedTrackClip.effects.length === 0) {
+            return null;
+          }
+          return (
+            <div className="property-label-group">
+              <div
+                className="property-group-header"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleTrackPropertyGroupExpanded(trackId, 'effects');
+                }}
+              >
+                <span className={`property-group-arrow ${isTrackPropertyGroupExpanded(trackId, 'effects') ? 'expanded' : ''}`}>▶</span>
+                <span>Effects</span>
+              </div>
+              {isTrackPropertyGroupExpanded(trackId, 'effects') && selectedTrackClip.effects.map((effect) => (
+                <div key={effect.id} className="property-label-group nested">
+                  <div
+                    className="property-group-header sub"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleTrackPropertyGroupExpanded(trackId, `effect.${effect.id}`);
+                    }}
+                  >
+                    <span className={`property-group-arrow ${isTrackPropertyGroupExpanded(trackId, `effect.${effect.id}`) ? 'expanded' : ''}`}>▶</span>
+                    <span>{effect.name}</span>
+                  </div>
+                  {isTrackPropertyGroupExpanded(trackId, `effect.${effect.id}`) && (
+                    <>
+                      {Object.keys(effect.params).filter(k => typeof effect.params[k] === 'number').map((paramName) => (
+                        <div key={paramName} className="property-label-row sub">
+                          <span className="property-label">{paramName}</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
     );
   };
@@ -2059,6 +2105,37 @@ export function Timeline() {
             </>
           )}
         </div>
+
+        {/* Effects group tracks - show effects from selected clip in this track */}
+        {(() => {
+          const trackClips = clips.filter(c => c.trackId === trackId);
+          const selectedTrackClip = trackClips.find(c => c.id === selectedClipId);
+          if (!selectedTrackClip || !selectedTrackClip.effects || selectedTrackClip.effects.length === 0) {
+            return null;
+          }
+          return (
+            <div className="keyframe-track-group">
+              <div className="keyframe-track-row group-header" />
+              {isTrackPropertyGroupExpanded(trackId, 'effects') && selectedTrackClip.effects.map((effect) => (
+                <div key={effect.id} className="keyframe-track-group nested">
+                  <div className="keyframe-track-row group-header" />
+                  {isTrackPropertyGroupExpanded(trackId, `effect.${effect.id}`) && (
+                    <>
+                      {Object.keys(effect.params).filter(k => typeof effect.params[k] === 'number').map((paramName) => (
+                        <div key={paramName} className="keyframe-track-row">
+                          <div className="keyframe-track">
+                            <div className="keyframe-track-line" />
+                            {renderTrackKeyframeDiamonds(trackId, `effect.${effect.id}.${paramName}` as AnimatableProperty)}
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
     );
   };
