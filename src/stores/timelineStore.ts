@@ -5,7 +5,7 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import type { TimelineClip, TimelineTrack, ClipTransform, CompositionTimelineData, SerializableClip, Keyframe, AnimatableProperty, EasingType, ClipMask, MaskVertex, Effect, EffectType } from '../types';
 import { useMediaStore } from './mediaStore';
 import { useMixerStore } from './mixerStore';
-import { getInterpolatedClipTransform, getKeyframeAtTime, hasKeyframesForProperty } from '../utils/keyframeInterpolation';
+import { getInterpolatedClipTransform, getKeyframeAtTime, hasKeyframesForProperty, interpolateKeyframes } from '../utils/keyframeInterpolation';
 
 // Default transform for new clips
 const DEFAULT_TRANSFORM: ClipTransform = {
@@ -211,6 +211,7 @@ interface TimelineStore {
   moveKeyframe: (keyframeId: string, newTime: number) => void;
   getClipKeyframes: (clipId: string) => Keyframe[];
   getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
+  getInterpolatedEffects: (clipId: string, clipLocalTime: number) => Effect[];
   hasKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;
 
   // Keyframe recording mode
@@ -2307,6 +2308,51 @@ export const useTimelineStore = create<TimelineStore>()(
       }
 
       return getInterpolatedClipTransform(keyframes, clipLocalTime, clip.transform);
+    },
+
+    getInterpolatedEffects: (clipId, clipLocalTime) => {
+      const { clips, clipKeyframes } = get();
+      const clip = clips.find(c => c.id === clipId);
+      if (!clip || !clip.effects) {
+        return [];
+      }
+
+      const keyframes = clipKeyframes.get(clipId) || [];
+      if (keyframes.length === 0) {
+        return clip.effects;
+      }
+
+      // Filter keyframes that are effect keyframes
+      const effectKeyframes = keyframes.filter(k => k.property.startsWith('effect.'));
+
+      if (effectKeyframes.length === 0) {
+        return clip.effects;
+      }
+
+      // Clone effects and apply interpolated values
+      return clip.effects.map(effect => {
+        const newParams = { ...effect.params };
+
+        // Check each numeric parameter for keyframes
+        Object.keys(effect.params).forEach(paramName => {
+          if (typeof effect.params[paramName] !== 'number') return;
+
+          const propertyKey = `effect.${effect.id}.${paramName}`;
+          const paramKeyframes = effectKeyframes.filter(k => k.property === propertyKey);
+
+          if (paramKeyframes.length > 0) {
+            // Interpolate the value
+            newParams[paramName] = interpolateKeyframes(
+              keyframes,
+              propertyKey as AnimatableProperty,
+              clipLocalTime,
+              effect.params[paramName] as number
+            );
+          }
+        });
+
+        return { ...effect, params: newParams };
+      });
     },
 
     hasKeyframes: (clipId, property) => {

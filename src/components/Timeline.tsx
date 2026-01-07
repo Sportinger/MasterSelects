@@ -75,6 +75,7 @@ export function Timeline() {
     toggleClipReverse,
     updateClipTransform,
     getInterpolatedTransform,
+    getInterpolatedEffects,
     isTrackExpanded,
     toggleTrackExpanded,
     isTrackPropertyGroupExpanded,
@@ -652,10 +653,11 @@ export function Timeline() {
     };
 
     // Helper to get video element from a clip (handles nested compositions)
-    // Returns interpolated transform for keyframe animation support
-    const getVideoFromClip = (clip: typeof clips[0], clipTime: number): { video: HTMLVideoElement | null; transform: typeof clip.transform } => {
-      // Get interpolated transform for this clip at the current time
+    // Returns interpolated transform and effects for keyframe animation support
+    const getVideoFromClip = (clip: typeof clips[0], clipTime: number): { video: HTMLVideoElement | null; transform: typeof clip.transform; effects: Effect[] } => {
+      // Get interpolated transform and effects for this clip at the current time
       const interpolatedTransform = getInterpolatedTransform(clip.id, clipTime);
+      const interpolatedEffects = getInterpolatedEffects(clip.id, clipTime);
 
       // Handle nested composition clips
       if (clip.isComposition && clip.nestedClips && clip.nestedClips.length > 0) {
@@ -693,14 +695,14 @@ export function Timeline() {
               video.pause();
             }
 
-            return { video, transform: interpolatedTransform };
+            return { video, transform: interpolatedTransform, effects: interpolatedEffects };
           }
         }
-        return { video: null, transform: interpolatedTransform };
+        return { video: null, transform: interpolatedTransform, effects: interpolatedEffects };
       }
 
       // Regular video clip
-      return { video: clip.source?.videoElement || null, transform: interpolatedTransform };
+      return { video: clip.source?.videoElement || null, transform: interpolatedTransform, effects: interpolatedEffects };
     };
 
     // Process each video layer and collect updates
@@ -711,7 +713,7 @@ export function Timeline() {
       // Handle composition clips with nested content
       if (clip?.isComposition && clip.nestedClips && clip.nestedClips.length > 0) {
         const clipTime = playheadPosition - clip.startTime + clip.inPoint;
-        const { video, transform } = getVideoFromClip(clip, clipTime);
+        const { video, transform, effects } = getVideoFromClip(clip, clipTime);
 
         if (video) {
           const needsUpdate = !layer ||
@@ -725,7 +727,7 @@ export function Timeline() {
             (layer.rotation as any)?.z !== (transform.rotation.z * Math.PI / 180) ||
             (layer.rotation as any)?.x !== (transform.rotation.x * Math.PI / 180) ||
             (layer.rotation as any)?.y !== (transform.rotation.y * Math.PI / 180) ||
-            effectsChanged(layer.effects, clip.effects);
+            effectsChanged(layer.effects, effects);
 
           if (needsUpdate) {
             newLayers[layerIndex] = {
@@ -738,7 +740,7 @@ export function Timeline() {
                 type: 'video',
                 videoElement: video,
               },
-              effects: clip.effects || [],
+              effects: effects,
               position: { x: transform.position.x, y: transform.position.y },
               scale: { x: transform.scale.x, y: transform.scale.y },
               rotation: { x: transform.rotation.x * Math.PI / 180, y: transform.rotation.y * Math.PI / 180, z: transform.rotation.z * Math.PI / 180 },
@@ -820,6 +822,9 @@ export function Timeline() {
           // Pass fps to trigger preloading of upcoming frames
           const cachedInService = proxyFrameCache.getCachedFrame(mediaFile.id, frameIndex, proxyFps);
 
+          // Get interpolated effects for this clip
+          const interpolatedEffectsForProxy = getInterpolatedEffects(clip.id, keyframeLocalTime);
+
           if (cachedInService) {
             // Frame is already in the service cache - use it immediately
             proxyFramesRef.current.set(cacheKey, { frameIndex, image: cachedInService });
@@ -835,7 +840,7 @@ export function Timeline() {
                 type: 'image',
                 imageElement: cachedInService,
               },
-              effects: clip.effects || [],
+              effects: interpolatedEffectsForProxy,
               position: { x: transform.position.x, y: transform.position.y },
               scale: { x: transform.scale.x, y: transform.scale.y },
               rotation: { x: transform.rotation.x * Math.PI / 180, y: transform.rotation.y * Math.PI / 180, z: transform.rotation.z * Math.PI / 180 },
@@ -848,10 +853,10 @@ export function Timeline() {
 
               // Capture values for closure
               const capturedLayerIndex = layerIndex;
-              const capturedTransform = clip.transform;
+              const capturedTransform = getInterpolatedTransform(clip.id, keyframeLocalTime);
               const capturedTrackVisible = isVideoTrackVisible(track);
               const capturedClipName = clip.name;
-              const capturedEffects = clip.effects || [];
+              const capturedEffects = interpolatedEffectsForProxy;
 
               proxyFrameCache.getFrame(mediaFile.id, clipTime, proxyFps).then(image => {
                 proxyLoadingRef.current.delete(loadKey);
@@ -894,7 +899,7 @@ export function Timeline() {
                   type: 'image',
                   imageElement: cached.image,
                 },
-                effects: clip.effects || [],
+                effects: interpolatedEffectsForProxy,
                 position: { x: transform.position.x, y: transform.position.y },
                 scale: { x: transform.scale.x, y: transform.scale.y },
                 rotation: { x: transform.rotation.x * Math.PI / 180, y: transform.rotation.y * Math.PI / 180, z: transform.rotation.z * Math.PI / 180 },
@@ -907,7 +912,7 @@ export function Timeline() {
             const needsUpdate = !layer ||
               layer.source?.imageElement !== cached.image ||
               layer.source?.type !== 'image' ||
-              effectsChanged(layer.effects, clip.effects);
+              effectsChanged(layer.effects, interpolatedEffectsForProxy);
 
             if (needsUpdate) {
               newLayers[layerIndex] = {
@@ -920,7 +925,7 @@ export function Timeline() {
                   type: 'image',
                   imageElement: cached.image,
                 },
-                effects: clip.effects || [],
+                effects: interpolatedEffectsForProxy,
                 position: { x: transform.position.x, y: transform.position.y },
                 scale: { x: transform.scale.x, y: transform.scale.y },
                 rotation: { x: transform.rotation.x * Math.PI / 180, y: transform.rotation.y * Math.PI / 180, z: transform.rotation.z * Math.PI / 180 },
@@ -994,6 +999,7 @@ export function Timeline() {
 
           // Check if layer needs update
           const transform = getInterpolatedTransform(clip.id, keyframeLocalTime);
+          const videoInterpolatedEffects = getInterpolatedEffects(clip.id, keyframeLocalTime);
           const needsUpdate = !layer ||
             layer.source?.videoElement !== video ||
             layer.source?.webCodecsPlayer !== webCodecsPlayer ||
@@ -1006,7 +1012,7 @@ export function Timeline() {
             (layer.rotation as any)?.z !== (transform.rotation.z * Math.PI / 180) ||
             (layer.rotation as any)?.x !== (transform.rotation.x * Math.PI / 180) ||
             (layer.rotation as any)?.y !== (transform.rotation.y * Math.PI / 180) ||
-            effectsChanged(layer.effects, clip.effects);
+            effectsChanged(layer.effects, videoInterpolatedEffects);
 
           if (needsUpdate) {
             newLayers[layerIndex] = {
@@ -1020,7 +1026,7 @@ export function Timeline() {
                 videoElement: video,
                 webCodecsPlayer: webCodecsPlayer,
               },
-              effects: clip.effects || [],
+              effects: videoInterpolatedEffects,
               position: { x: transform.position.x, y: transform.position.y },
               scale: { x: transform.scale.x, y: transform.scale.y },
               rotation: { x: transform.rotation.x * Math.PI / 180, y: transform.rotation.y * Math.PI / 180, z: transform.rotation.z * Math.PI / 180 },
@@ -1033,6 +1039,7 @@ export function Timeline() {
         const img = clip.source.imageElement;
         const imageClipLocalTime = playheadPosition - clip.startTime;
         const transform = getInterpolatedTransform(clip.id, imageClipLocalTime);
+        const imageInterpolatedEffects = getInterpolatedEffects(clip.id, imageClipLocalTime);
         const needsUpdate = !layer ||
           layer.source?.imageElement !== img ||
           layer.opacity !== transform.opacity ||
@@ -1044,7 +1051,7 @@ export function Timeline() {
           (layer.rotation as any)?.z !== (transform.rotation.z * Math.PI / 180) ||
             (layer.rotation as any)?.x !== (transform.rotation.x * Math.PI / 180) ||
             (layer.rotation as any)?.y !== (transform.rotation.y * Math.PI / 180) ||
-          effectsChanged(layer.effects, clip.effects);
+          effectsChanged(layer.effects, imageInterpolatedEffects);
 
         if (needsUpdate) {
           newLayers[layerIndex] = {
@@ -1057,7 +1064,7 @@ export function Timeline() {
               type: 'image',
               imageElement: img,
             },
-            effects: clip.effects || [],
+            effects: imageInterpolatedEffects,
             position: { x: transform.position.x, y: transform.position.y },
             scale: { x: transform.scale.x, y: transform.scale.y },
             rotation: { x: transform.rotation.x * Math.PI / 180, y: transform.rotation.y * Math.PI / 180, z: transform.rotation.z * Math.PI / 180 },
