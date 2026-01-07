@@ -424,21 +424,14 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   // Center the UV coordinates
   uv = uv - vec2f(0.5);
 
-  // Apply user scale first
+  // Convert to square coordinate system for rotation (compensate for output aspect)
+  // This ensures rotation happens without distortion
+  uv.x = uv.x * layer.outputAspect;
+
+  // Apply user scale
   uv = uv / vec2f(layer.scaleX, layer.scaleY);
 
-  // Aspect ratio correction: fit source into output while maintaining aspect ratio
-  let aspectRatio = layer.sourceAspect / layer.outputAspect;
-  if (aspectRatio > 1.0) {
-    // Source is wider than output - fit to width, letterbox top/bottom
-    uv.y = uv.y * aspectRatio;
-  } else {
-    // Source is taller than output - fit to height, letterbox left/right
-    uv.x = uv.x / aspectRatio;
-  }
-
-  // 3D rotation with perspective
-  // Convert to 3D point (z = 0 initially)
+  // 3D rotation with perspective (in square coordinate space)
   var p = vec3f(uv.x, uv.y, 0.0);
 
   // Apply X rotation (tilt forward/back)
@@ -478,6 +471,17 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let perspectiveDist = max(layer.perspective, 1.0);
   let perspectiveScale = perspectiveDist / (perspectiveDist - p.z);
   uv = vec2f(p.x * perspectiveScale, p.y * perspectiveScale);
+
+  // Convert back from square coordinates
+  uv.x = uv.x / layer.outputAspect;
+
+  // Apply source aspect ratio correction (fit source into output)
+  let aspectRatio = layer.sourceAspect / layer.outputAspect;
+  if (aspectRatio > 1.0) {
+    uv.y = uv.y * aspectRatio;
+  } else {
+    uv.x = uv.x / aspectRatio;
+  }
 
   uv = uv + vec2f(0.5) - vec2f(layer.posX, layer.posY);
 

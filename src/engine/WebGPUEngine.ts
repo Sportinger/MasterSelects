@@ -284,16 +284,12 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   // Calculate video UV coordinates with all transformations
   var uv = input.uv;
   uv = uv - vec2f(0.5);
+
+  // Convert to square coordinate system for rotation
+  uv.x = uv.x * layer.outputAspect;
   uv = uv / vec2f(layer.scaleX, layer.scaleY);
 
-  let aspectRatio = layer.sourceAspect / layer.outputAspect;
-  if (aspectRatio > 1.0) {
-    uv.y = uv.y * aspectRatio;
-  } else {
-    uv.x = uv.x / aspectRatio;
-  }
-
-  // 3D rotation with perspective
+  // 3D rotation with perspective (in square coordinate space)
   var p = vec3f(uv.x, uv.y, 0.0);
 
   // X rotation
@@ -321,6 +317,17 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let perspectiveDist = max(layer.perspective, 1.0);
   let perspectiveScale = perspectiveDist / (perspectiveDist - p.z);
   uv = vec2f(p.x * perspectiveScale, p.y * perspectiveScale);
+
+  // Convert back from square coordinates
+  uv.x = uv.x / layer.outputAspect;
+
+  // Apply source aspect ratio correction
+  let aspectRatio = layer.sourceAspect / layer.outputAspect;
+  if (aspectRatio > 1.0) {
+    uv.y = uv.y * aspectRatio;
+  } else {
+    uv.x = uv.x / aspectRatio;
+  }
 
   uv = uv + vec2f(0.5) - vec2f(layer.posX, layer.posY);
 
