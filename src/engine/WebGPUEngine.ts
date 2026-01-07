@@ -277,6 +277,7 @@ fn blendLuminosity(base: vec3f, blend: vec3f) -> vec3f {
 
 @fragment
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
+  // Calculate video UV coordinates with all transformations
   var uv = input.uv;
   uv = uv - vec2f(0.5);
 
@@ -293,6 +294,16 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   }
 
   uv = uv + vec2f(0.5) - vec2f(layer.posX, layer.posY);
+
+  // Calculate mask UV - apply same aspect ratio fitting as video
+  // This ensures mask aligns with video content
+  var maskUV = input.uv - vec2f(0.5);
+  if (aspectRatio > 1.0) {
+    maskUV.y = maskUV.y * aspectRatio;
+  } else {
+    maskUV.x = maskUV.x / aspectRatio;
+  }
+  maskUV = maskUV + vec2f(0.5);
 
   let clampedUV = clamp(uv, vec2f(0.0), vec2f(1.0));
   let baseColor = textureSample(baseTexture, texSampler, input.uv);
@@ -346,9 +357,9 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   }
 
   // Apply mask if present
-  // Use input.uv (original fragment coordinates) not clampedUV (transformed video coordinates)
+  // Use maskUV (aspect-ratio-transformed coordinates) to align with video content
   if (layer.hasMask == 1u) {
-    let maskSample = textureSample(maskTexture, texSampler, input.uv);
+    let maskSample = textureSample(maskTexture, texSampler, clamp(maskUV, vec2f(0.0), vec2f(1.0)));
     var maskValue = maskSample.r;
     if (layer.maskInvert == 1u) {
       maskValue = 1.0 - maskValue;
