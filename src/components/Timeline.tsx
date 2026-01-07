@@ -715,7 +715,7 @@ export function Timeline() {
                 type: 'video',
                 videoElement: video,
               },
-              effects: [],
+              effects: clip.effects || [],
               position: { x: transform.position.x, y: transform.position.y },
               scale: { x: transform.scale.x, y: transform.scale.y },
               rotation: transform.rotation.z * Math.PI / 180,
@@ -812,7 +812,7 @@ export function Timeline() {
                 type: 'image',
                 imageElement: cachedInService,
               },
-              effects: [],
+              effects: clip.effects || [],
               position: { x: transform.position.x, y: transform.position.y },
               scale: { x: transform.scale.x, y: transform.scale.y },
               rotation: transform.rotation.z * Math.PI / 180,
@@ -828,6 +828,7 @@ export function Timeline() {
               const capturedTransform = clip.transform;
               const capturedTrackVisible = isVideoTrackVisible(track);
               const capturedClipName = clip.name;
+              const capturedEffects = clip.effects || [];
 
               proxyFrameCache.getFrame(mediaFile.id, clipTime, proxyFps).then(image => {
                 proxyLoadingRef.current.delete(loadKey);
@@ -847,7 +848,7 @@ export function Timeline() {
                       type: 'image',
                       imageElement: image,
                     },
-                    effects: [],
+                    effects: capturedEffects,
                     position: { x: capturedTransform.position.x, y: capturedTransform.position.y },
                     scale: { x: capturedTransform.scale.x, y: capturedTransform.scale.y },
                     rotation: capturedTransform.rotation.z * Math.PI / 180,
@@ -870,7 +871,7 @@ export function Timeline() {
                   type: 'image',
                   imageElement: cached.image,
                 },
-                effects: [],
+                effects: clip.effects || [],
                 position: { x: transform.position.x, y: transform.position.y },
                 scale: { x: transform.scale.x, y: transform.scale.y },
                 rotation: transform.rotation.z * Math.PI / 180,
@@ -895,7 +896,7 @@ export function Timeline() {
                   type: 'image',
                   imageElement: cached.image,
                 },
-                effects: [],
+                effects: clip.effects || [],
                 position: { x: transform.position.x, y: transform.position.y },
                 scale: { x: transform.scale.x, y: transform.scale.y },
                 rotation: transform.rotation.z * Math.PI / 180,
@@ -992,7 +993,7 @@ export function Timeline() {
                 videoElement: video,
                 webCodecsPlayer: webCodecsPlayer,
               },
-              effects: [],
+              effects: clip.effects || [],
               position: { x: transform.position.x, y: transform.position.y },
               scale: { x: transform.scale.x, y: transform.scale.y },
               rotation: transform.rotation.z * Math.PI / 180,
@@ -1026,7 +1027,7 @@ export function Timeline() {
               type: 'image',
               imageElement: img,
             },
-            effects: [],
+            effects: clip.effects || [],
             position: { x: transform.position.x, y: transform.position.y },
             scale: { x: transform.scale.x, y: transform.scale.y },
             rotation: transform.rotation.z * Math.PI / 180,
