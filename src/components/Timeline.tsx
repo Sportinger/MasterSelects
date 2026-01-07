@@ -1365,34 +1365,31 @@ export function Timeline() {
     const grabOffsetX = e.clientX - clipRect.left;
 
     selectClip(clipId);
-    setClipDrag({
+
+    // Set initial drag state
+    const initialDrag = {
       clipId,
       originalStartTime: clip.startTime,
       originalTrackId: clip.trackId,
       grabOffsetX,
       currentX: e.clientX,
       currentTrackId: clip.trackId,
-      snappedTime: null,
+      snappedTime: null as number | null,
       isSnapping: false,
-    });
-  };
+    };
+    setClipDrag(initialDrag);
+    clipDragRef.current = initialDrag;
 
-  // Handle clip dragging - use refs to avoid dependency issues
-  useEffect(() => {
-    if (!clipDrag) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
+    // Add event listeners immediately
+    const handleMouseMove = (moveEvent: MouseEvent) => {
       const drag = clipDragRef.current;
       if (!drag || !trackLanesRef.current || !timelineRef.current) return;
 
-      // Find which track the mouse is over
       const lanesRect = trackLanesRef.current.getBoundingClientRect();
-      const mouseY = e.clientY - lanesRect.top;
+      const mouseY = moveEvent.clientY - lanesRect.top;
 
-      // Calculate cumulative track positions
-      let currentY = 24; // Time ruler height
+      let currentY = 24;
       let newTrackId = drag.currentTrackId;
-
       for (const track of tracks) {
         if (mouseY >= currentY && mouseY < currentY + track.height) {
           newTrackId = track.id;
@@ -1401,45 +1398,39 @@ export function Timeline() {
         currentY += track.height;
       }
 
-      // Calculate current drag position in time
       const rect = timelineRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left + scrollX - drag.grabOffsetX;
+      const x = moveEvent.clientX - rect.left + scrollX - drag.grabOffsetX;
       const rawTime = Math.max(0, pixelToTime(x));
-
-      // Check for snapping
       const { startTime: snappedTime, snapped } = getSnappedPosition(drag.clipId, rawTime, newTrackId);
 
-      setClipDrag(prev => prev ? {
-        ...prev,
-        currentX: e.clientX,
+      const newDrag = {
+        ...drag,
+        currentX: moveEvent.clientX,
         currentTrackId: newTrackId,
         snappedTime: snapped ? snappedTime : null,
         isSnapping: snapped,
-      } : null);
+      };
+      setClipDrag(newDrag);
+      clipDragRef.current = newDrag;
     };
 
-    const handleMouseUp = (e: MouseEvent) => {
+    const handleMouseUp = (upEvent: MouseEvent) => {
       const drag = clipDragRef.current;
-      if (!drag || !timelineRef.current) return;
-
-      const rect = timelineRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left + scrollX - drag.grabOffsetX;
-      const newStartTime = Math.max(0, pixelToTime(x));
-
-      // Move clip to new position and track (store handles snapping and collision)
-      moveClip(drag.clipId, newStartTime, drag.currentTrackId);
+      if (drag && timelineRef.current) {
+        const rect = timelineRef.current.getBoundingClientRect();
+        const x = upEvent.clientX - rect.left + scrollX - drag.grabOffsetX;
+        const newStartTime = Math.max(0, pixelToTime(x));
+        moveClip(drag.clipId, newStartTime, drag.currentTrackId);
+      }
       setClipDrag(null);
+      clipDragRef.current = null;
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-    // Only re-run when clipDrag becomes truthy/falsy, not on every update
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [!!clipDrag, tracks, scrollX, moveClip, pixelToTime, getSnappedPosition]);
+  };
 
   // Handle trim start (mousedown on trim handle)
   const handleTrimStart = (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => {
@@ -1450,7 +1441,8 @@ export function Timeline() {
     if (!clip) return;
 
     selectClip(clipId);
-    setClipTrim({
+
+    const initialTrim = {
       clipId,
       edge,
       originalStartTime: clip.startTime,
@@ -1460,24 +1452,35 @@ export function Timeline() {
       startX: e.clientX,
       currentX: e.clientX,
       altKey: e.altKey,
-    });
-  };
+    };
+    setClipTrim(initialTrim);
+    clipTrimRef.current = initialTrim;
 
-  // Handle trim dragging - use refs to avoid dependency issues
-  useEffect(() => {
-    if (!clipTrim) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      setClipTrim(prev => prev ? { ...prev, currentX: e.clientX, altKey: e.altKey } : null);
+    // Add event listeners immediately
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const newTrim = clipTrimRef.current;
+      if (!newTrim) return;
+      const updated = { ...newTrim, currentX: moveEvent.clientX, altKey: moveEvent.altKey };
+      setClipTrim(updated);
+      clipTrimRef.current = updated;
     };
 
     const handleMouseUp = () => {
       const trim = clipTrimRef.current;
-      if (!trim) return;
-
-      const clip = clips.find(c => c.id === trim.clipId);
-      if (!clip) {
+      if (!trim) {
         setClipTrim(null);
+        clipTrimRef.current = null;
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+        return;
+      }
+
+      const clipToTrim = clips.find(c => c.id === trim.clipId);
+      if (!clipToTrim) {
+        setClipTrim(null);
+        clipTrimRef.current = null;
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
         return;
       }
 
@@ -1486,46 +1489,37 @@ export function Timeline() {
       const deltaTime = pixelToTime(deltaX);
 
       // Get source duration limit
-      const maxDuration = clip.source?.naturalDuration || clip.duration;
+      const maxDuration = clipToTrim.source?.naturalDuration || clipToTrim.duration;
 
       let newStartTime = trim.originalStartTime;
       let newInPoint = trim.originalInPoint;
       let newOutPoint = trim.originalOutPoint;
 
       if (trim.edge === 'left') {
-        // Trimming left edge - changes startTime and inPoint
-        const maxTrim = trim.originalDuration - 0.1; // Keep at least 0.1s
-        const minTrim = -trim.originalInPoint; // Can't go before source start
+        const maxTrim = trim.originalDuration - 0.1;
+        const minTrim = -trim.originalInPoint;
         const clampedDelta = Math.max(minTrim, Math.min(maxTrim, deltaTime));
-
         newStartTime = trim.originalStartTime + clampedDelta;
         newInPoint = trim.originalInPoint + clampedDelta;
       } else {
-        // Trimming right edge - changes outPoint only
-        const maxExtend = maxDuration - trim.originalOutPoint; // Can't go past source end
-        const minTrim = -(trim.originalDuration - 0.1); // Keep at least 0.1s
+        const maxExtend = maxDuration - trim.originalOutPoint;
+        const minTrim = -(trim.originalDuration - 0.1);
         const clampedDelta = Math.max(minTrim, Math.min(maxExtend, deltaTime));
-
         newOutPoint = trim.originalOutPoint + clampedDelta;
       }
 
-      // Apply trim to this clip
-      trimClip(clip.id, newInPoint, newOutPoint);
+      trimClip(clipToTrim.id, newInPoint, newOutPoint);
       if (trim.edge === 'left') {
-        // When Alt is held, skip moving linked clips
-        moveClip(clip.id, Math.max(0, newStartTime), clip.trackId, trim.altKey);
+        moveClip(clipToTrim.id, Math.max(0, newStartTime), clipToTrim.trackId, trim.altKey);
       }
 
-      // Also trim linked clip unless Alt was held
-      if (!trim.altKey && clip.linkedClipId) {
-        const linkedClip = clips.find(c => c.id === clip.linkedClipId);
+      if (!trim.altKey && clipToTrim.linkedClipId) {
+        const linkedClip = clips.find(c => c.id === clipToTrim.linkedClipId);
         if (linkedClip) {
           const linkedMaxDuration = linkedClip.source?.naturalDuration || linkedClip.duration;
-
           if (trim.edge === 'left') {
             const linkedNewInPoint = Math.max(0, Math.min(linkedMaxDuration - 0.1, newInPoint));
             trimClip(linkedClip.id, linkedNewInPoint, linkedClip.outPoint);
-            // skipLinked=true since we're manually handling the linked clip
             moveClip(linkedClip.id, Math.max(0, newStartTime), linkedClip.trackId, true);
           } else {
             const linkedNewOutPoint = Math.max(0.1, Math.min(linkedMaxDuration, newOutPoint));
@@ -1535,17 +1529,14 @@ export function Timeline() {
       }
 
       setClipTrim(null);
+      clipTrimRef.current = null;
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-    // Only re-run when clipTrim becomes truthy/falsy, not on every update
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [!!clipTrim, clips, pixelToTime, trimClip, moveClip]);
+  };
 
   // Quick duration check for dragged video files
   const getVideoDurationQuick = async (file: File): Promise<number | null> => {
