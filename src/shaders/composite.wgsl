@@ -578,13 +578,14 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   if (layer.hasMask == 1u) {
     var maskValue: f32;
 
-    // GPU blur for feather effect with quality levels
+    // GPU blur for feather effect with quality levels (1-100 mapped to low/med/high)
     if (layer.maskFeather > 0.5) {
       let maskDim = vec2f(textureDimensions(maskTexture));
       let texelSize = 1.0 / maskDim;
       let r = layer.maskFeather * texelSize;
 
-      if (layer.maskFeatherQuality == 2u) {
+      // Map quality 1-100: 1-33=low, 34-66=medium, 67-100=high
+      if (layer.maskFeatherQuality >= 67u) {
         // HIGH QUALITY: 25-tap blur (5x5 Gaussian kernel)
         var blur: f32 = 0.0;
         // Center
@@ -620,7 +621,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
         blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 1.5, -r.y * 1.5)).r * 0.0121;
         blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 1.5, -r.y * 1.5)).r * 0.0121;
         maskValue = blur;
-      } else if (layer.maskFeatherQuality == 1u) {
+      } else if (layer.maskFeatherQuality >= 34u) {
         // MEDIUM QUALITY: 17-tap blur
         var blur: f32 = 0.0;
         blur += textureSample(maskTexture, texSampler, input.uv).r * 0.185;
