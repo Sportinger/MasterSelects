@@ -120,7 +120,7 @@ export function EffectsPanel() {
     useMixerStore();
 
   // Timeline store (for timeline clips)
-  const { clips, selectedClipId, addClipEffect, removeClipEffect, updateClipEffect, updateClipTransform } = useTimelineStore();
+  const { clips, selectedClipId, addClipEffect, removeClipEffect, updateClipEffect, updateClipTransform, setPropertyValue, hasKeyframes } = useTimelineStore();
 
   // Check if a timeline clip is selected first
   const selectedClip = clips.find((c) => c.id === selectedClipId);
@@ -201,8 +201,19 @@ export function EffectsPanel() {
                 </div>
 
                 <div className="effect-params">
-                  {renderEffectParams(effect, (params) =>
-                    updateClipEffect(selectedClip.id, effect.id, params),
+                  {renderEffectParams(effect, (params) => {
+                    // For each parameter, check if it's numeric and use setPropertyValue
+                    // This ensures keyframes work correctly
+                    Object.entries(params).forEach(([paramName, value]) => {
+                      if (typeof value === 'number') {
+                        const property = `effect.${effect.id}.${paramName}` as any;
+                        setPropertyValue(selectedClip.id, property, value);
+                      } else {
+                        // Non-numeric params (like booleans) - update directly
+                        updateClipEffect(selectedClip.id, effect.id, { [paramName]: value });
+                      }
+                    });
+                  },
                     selectedClip.id
                   )}
                 </div>

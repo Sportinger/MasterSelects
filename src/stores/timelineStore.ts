@@ -2384,15 +2384,29 @@ export const useTimelineStore = create<TimelineStore>()(
     },
 
     setPropertyValue: (clipId, property, value) => {
-      const { isRecording, addKeyframe, updateClipTransform, clips } = get();
+      const { isRecording, addKeyframe, updateClipTransform, updateClipEffect, clips, hasKeyframes } = get();
 
-      if (isRecording(clipId, property)) {
-        // Recording mode - create/update keyframe
+      // Check if this property has keyframes (whether recording or not)
+      const propertyHasKeyframes = hasKeyframes(clipId, property);
+
+      if (isRecording(clipId, property) || propertyHasKeyframes) {
+        // Recording mode OR property already has keyframes - create/update keyframe
         addKeyframe(clipId, property, value);
       } else {
-        // Not recording - update static transform
+        // Not recording and no keyframes - update static value
         const clip = clips.find(c => c.id === clipId);
         if (!clip) return;
+
+        // Handle effect properties (format: effect.{effectId}.{paramName})
+        if (property.startsWith('effect.')) {
+          const parts = property.split('.');
+          if (parts.length === 3) {
+            const effectId = parts[1];
+            const paramName = parts[2];
+            updateClipEffect(clipId, effectId, { [paramName]: value });
+          }
+          return;
+        }
 
         // Build partial transform update from property path
         const transformUpdate: Partial<ClipTransform> = {};
@@ -2457,7 +2471,7 @@ export const useTimelineStore = create<TimelineStore>()(
 
     // Calculate expanded track height based on visible property rows
     getExpandedTrackHeight: (trackId, baseHeight) => {
-      const { expandedTracks, expandedTrackPropertyGroups } = get();
+      const { expandedTracks, expandedTrackPropertyGroups, clips, selectedClipId } = get();
 
       if (!expandedTracks.has(trackId)) {
         return baseHeight;
@@ -2487,6 +2501,28 @@ export const useTimelineStore = create<TimelineStore>()(
       extraHeight += GROUP_HEADER_HEIGHT;
       if (trackGroups?.has('rotation')) {
         extraHeight += PROPERTY_ROW_HEIGHT * 3; // X, Y, Z
+      }
+
+      // Effects group - only if selected clip in this track has effects
+      const trackClips = clips.filter(c => c.trackId === trackId);
+      const selectedTrackClip = trackClips.find(c => c.id === selectedClipId);
+      if (selectedTrackClip?.effects && selectedTrackClip.effects.length > 0) {
+        extraHeight += GROUP_HEADER_HEIGHT; // Effects group header
+
+        if (trackGroups?.has('effects')) {
+          // Add height for each effect
+          for (const effect of selectedTrackClip.effects) {
+            extraHeight += GROUP_HEADER_HEIGHT; // Effect sub-group header
+
+            // If effect is expanded, add rows for each numeric parameter
+            if (trackGroups?.has(`effect.${effect.id}`)) {
+              const numericParams = Object.keys(effect.params).filter(
+                k => typeof effect.params[k] === 'number'
+              );
+              extraHeight += PROPERTY_ROW_HEIGHT * numericParams.length;
+            }
+          }
+        }
       }
 
       return baseHeight + extraHeight;
