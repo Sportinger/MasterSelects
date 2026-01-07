@@ -475,10 +475,10 @@ export function Preview() {
 
     // Convert pixel movement to normalized position change
     // In shader: uv = uv + 0.5 - vec2f(posX, posY)
-    // So posX > 0 moves image RIGHT, posY > 0 moves image UP
-    // Screen Y goes down, UV Y goes up, so negate Y for natural drag
+    // So posX > 0 moves image LEFT (subtracts from uv), posY > 0 moves image UP
+    // For natural drag (right = move right), we negate BOTH axes
     // Account for view zoom
-    const normalizedDx = (dx / viewZoom) / (canvasSize.width / 2);
+    const normalizedDx = -(dx / viewZoom) / (canvasSize.width / 2);
     const normalizedDy = -(dy / viewZoom) / (canvasSize.height / 2);
 
     const newPosX = dragStart.current.layerPosX + normalizedDx;

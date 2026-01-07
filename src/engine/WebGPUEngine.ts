@@ -1740,7 +1740,7 @@ export class WebGPUEngine {
       this.uniformDataU32[11] = 0; // maskInvert (handled in mask texture generation)
       this.uniformData[12] = rotX;        // rotationX
       this.uniformData[13] = rotY;        // rotationY
-      this.uniformData[14] = 3.0;         // perspective distance (fixed value for now)
+      this.uniformData[14] = 1.5;         // perspective distance (lower = stronger 3D effect)
       this.uniformData[15] = 0;           // padding
       this.device.queue.writeBuffer(uniformBuffer, 0, this.uniformData);
 
