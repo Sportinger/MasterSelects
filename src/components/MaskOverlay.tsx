@@ -96,6 +96,9 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
     isDrawing: false,
   });
 
+  // Prevent click handler after shape draw completes
+  const justFinishedDrawing = useRef(false);
+
   // Drag state
   const dragState = useRef<{
     vertexId: string | null;
@@ -355,6 +358,12 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
   const handleSvgClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
     if (!selectedClip) return;
 
+    // Ignore click if we just finished drawing a shape (prevents unwanted clicks after mouseup)
+    if (justFinishedDrawing.current) {
+      justFinishedDrawing.current = false;
+      return;
+    }
+
     const svg = svgRef.current;
     if (!svg) return;
 
@@ -439,10 +448,16 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
   }, [shapeDrawState.isDrawing]);
 
   // Handle mouse up for shape drawing - create the mask
-  const handleShapeMouseUp = useCallback(() => {
+  const handleShapeMouseUp = useCallback((e?: React.MouseEvent) => {
     if (!shapeDrawState.isDrawing || !selectedClip) {
       setShapeDrawState(prev => ({ ...prev, isDrawing: false }));
       return;
+    }
+
+    // Prevent click event from firing after mouseup
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
     }
 
     const { startX, startY, currentX, currentY } = shapeDrawState;
@@ -508,6 +523,9 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       currentY: 0,
       isDrawing: false,
     });
+
+    // Prevent next click from being processed
+    justFinishedDrawing.current = true;
   }, [shapeDrawState, selectedClip, maskEditMode, addMask, setMaskEditMode]);
 
   // Handle clicking on first vertex to close path

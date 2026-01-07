@@ -107,16 +107,16 @@ export function useEngine() {
                 const centerG = maskImageData.data[centerIdx + 1];
                 const centerB = maskImageData.data[centerIdx + 2];
 
-                console.log(`[Mask] Generated mask texture for layer ${layer.id}: ${engineDimensions.width}x${engineDimensions.height}, aspectRatio: ${aspectRatio.toFixed(2)}, masks: ${transformedMasks.length}, center pixel RGB: ${centerR},${centerG},${centerB}`);
+                console.log(`[Mask] Generated mask texture for layer ${layer.id}: ${engineDimensions.width}x${engineDimensions.height}, masks: ${clip.masks.length}, center pixel RGB: ${centerR},${centerG},${centerB}`);
                 // Update engine with new mask texture
                 engine.updateMaskTexture(layer.id, maskImageData);
               } else {
                 console.warn(`[Mask] Failed to generate mask texture for layer ${layer.id}`);
               }
             }
-          } else {
-            // No masks or no clip, clear the mask texture for this layer
-            const cacheKey = `${clip?.id || 'none'}_${layer.id}`;
+          } else if (clip) {
+            // Clip exists but no masks, clear the mask texture for this layer
+            const cacheKey = `${clip.id}_${layer.id}`;
             if (maskVersionRef.current.has(cacheKey)) {
               maskVersionRef.current.delete(cacheKey);
               engine.removeMaskTexture(layer.id);
