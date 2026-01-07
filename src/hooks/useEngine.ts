@@ -45,26 +45,38 @@ export function useEngine() {
   useEffect(() => {
     if (!isEngineReady) return;
 
-    // Subscribe to clips changes
+    // Subscribe to both clips and playhead position changes
     const unsubscribe = useTimelineStore.subscribe(
-      (state) => state.clips,
-      (clips) => {
+      (state) => ({ clips: state.clips, playheadPosition: state.playheadPosition, tracks: state.tracks }),
+      ({ clips, playheadPosition, tracks }) => {
         const { outputResolution } = useMixerStore.getState();
         const layers = useMixerStore.getState().layers;
 
-        // For each layer that maps to a clip with masks, update the mask texture
-        for (const layer of layers) {
-          // Find the clip that corresponds to this layer
-          const clip = clips.find(c => c.id === layer.id);
+        // Find clips at current playhead position
+        const videoTracks = tracks.filter(t => t.type === 'video');
+        const clipsAtTime = clips.filter(c =>
+          playheadPosition >= c.startTime && playheadPosition < c.startTime + c.duration
+        );
+
+        // For each layer, find the corresponding clip
+        for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
+          const layer = layers[layerIndex];
+          const track = videoTracks[layerIndex];
+
+          if (!track) continue;
+
+          // Find clip for this track at current time
+          const clip = clipsAtTime.find(c => c.trackId === track.id);
 
           if (clip?.masks && clip.masks.length > 0) {
             // Create a version string based on mask data
             const maskVersion = JSON.stringify(clip.masks);
-            const prevVersion = maskVersionRef.current.get(clip.id);
+            const cacheKey = `${clip.id}_${layer.id}`;
+            const prevVersion = maskVersionRef.current.get(cacheKey);
 
             // Only regenerate if masks changed
             if (maskVersion !== prevVersion) {
-              maskVersionRef.current.set(clip.id, maskVersion);
+              maskVersionRef.current.set(cacheKey, maskVersion);
 
               // Generate mask texture
               const maskImageData = generateMaskTexture(
@@ -76,10 +88,13 @@ export function useEngine() {
               // Update engine with new mask texture
               engine.updateMaskTexture(layer.id, maskImageData);
             }
-          } else if (clip && maskVersionRef.current.has(clip.id)) {
-            // Masks were removed, clear the mask texture
-            maskVersionRef.current.delete(clip.id);
-            engine.removeMaskTexture(layer.id);
+          } else {
+            // No masks or no clip, clear the mask texture for this layer
+            const cacheKey = `${clip?.id || 'none'}_${layer.id}`;
+            if (maskVersionRef.current.has(cacheKey)) {
+              maskVersionRef.current.delete(cacheKey);
+              engine.removeMaskTexture(layer.id);
+            }
           }
         }
       }
