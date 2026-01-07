@@ -251,8 +251,11 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       if (isShiftPressed && !dragState.current.lastShiftState) {
         // Shift just pressed - save current mouse position and vertex position
         dragState.current.shiftStartX = moveEvent.clientX;
-        // Get current vertex position from store
-        const currentVertex = activeMask.vertices.find(v => v.id === dragState.current.vertexId);
+        // Get current vertex position from store (fresh read to avoid stale closure)
+        const { clips } = useTimelineStore.getState();
+        const clip = clips.find(c => c.id === selectedClip.id);
+        const mask = clip?.masks?.find(m => m.id === activeMask.id);
+        const currentVertex = mask?.vertices.find(v => v.id === dragState.current.vertexId);
         if (currentVertex) {
           dragState.current.shiftStartVertexX = currentVertex.x;
           dragState.current.shiftStartVertexY = currentVertex.y;
