@@ -631,6 +631,26 @@ export function Timeline() {
     const newLayers = [...currentLayers];
     let layersChanged = false;
 
+    // Helper to check if effects have changed
+    const effectsChanged = (layerEffects: Effect[] | undefined, clipEffects: Effect[] | undefined): boolean => {
+      const le = layerEffects || [];
+      const ce = clipEffects || [];
+      if (le.length !== ce.length) return true;
+      for (let i = 0; i < le.length; i++) {
+        if (le[i].id !== ce[i].id || le[i].enabled !== ce[i].enabled) return true;
+        // Check if params changed
+        const lp = le[i].params;
+        const cp = ce[i].params;
+        const lKeys = Object.keys(lp);
+        const cKeys = Object.keys(cp);
+        if (lKeys.length !== cKeys.length) return true;
+        for (const key of lKeys) {
+          if (lp[key] !== cp[key]) return true;
+        }
+      }
+      return false;
+    };
+
     // Helper to get video element from a clip (handles nested compositions)
     // Returns interpolated transform for keyframe animation support
     const getVideoFromClip = (clip: typeof clips[0], clipTime: number): { video: HTMLVideoElement | null; transform: typeof clip.transform } => {
@@ -702,7 +722,8 @@ export function Timeline() {
             layer.position.y !== transform.position.y ||
             layer.scale.x !== transform.scale.x ||
             layer.scale.y !== transform.scale.y ||
-            layer.rotation !== (transform.rotation.z * Math.PI / 180);
+            layer.rotation !== (transform.rotation.z * Math.PI / 180) ||
+            effectsChanged(layer.effects, clip.effects);
 
           if (needsUpdate) {
             newLayers[layerIndex] = {
@@ -883,7 +904,8 @@ export function Timeline() {
             const transform = getInterpolatedTransform(clip.id, keyframeLocalTime);
             const needsUpdate = !layer ||
               layer.source?.imageElement !== cached.image ||
-              layer.source?.type !== 'image';
+              layer.source?.type !== 'image' ||
+              effectsChanged(layer.effects, clip.effects);
 
             if (needsUpdate) {
               newLayers[layerIndex] = {
@@ -979,7 +1001,8 @@ export function Timeline() {
             layer.position.y !== transform.position.y ||
             layer.scale.x !== transform.scale.x ||
             layer.scale.y !== transform.scale.y ||
-            layer.rotation !== (transform.rotation.z * Math.PI / 180);
+            layer.rotation !== (transform.rotation.z * Math.PI / 180) ||
+            effectsChanged(layer.effects, clip.effects);
 
           if (needsUpdate) {
             newLayers[layerIndex] = {
@@ -1014,7 +1037,8 @@ export function Timeline() {
           layer.position.y !== transform.position.y ||
           layer.scale.x !== transform.scale.x ||
           layer.scale.y !== transform.scale.y ||
-          layer.rotation !== (transform.rotation.z * Math.PI / 180);
+          layer.rotation !== (transform.rotation.z * Math.PI / 180) ||
+          effectsChanged(layer.effects, clip.effects);
 
         if (needsUpdate) {
           newLayers[layerIndex] = {
