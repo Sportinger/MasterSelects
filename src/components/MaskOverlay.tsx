@@ -246,6 +246,10 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       const isShiftPressed = moveEvent.shiftKey;
 
       if (dragState.current.handleType === 'vertex') {
+        // Calculate current vertex position based on drag
+        const currentVertexX = Math.max(0, Math.min(1, dragState.current.startVertexX + normalizedDx));
+        const currentVertexY = Math.max(0, Math.min(1, dragState.current.startVertexY + normalizedDy));
+
         if (isShiftPressed) {
           // Shift pressed: scale both bezier handles along their original direction
           // This makes the curve smoother (longer handles) or sharper (shorter handles)
@@ -253,9 +257,10 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
           const scaleFactor = 1 + normalizedDx * 3; // Multiply by 3 for more sensitivity
 
           // Scale both handles - they stay on their original line but get longer/shorter
+          // Keep the vertex at its current dragged position
           updateVertex(selectedClip.id, activeMask.id, dragState.current.vertexId, {
-            x: dragState.current.startVertexX, // Keep vertex at original position
-            y: dragState.current.startVertexY,
+            x: currentVertexX,
+            y: currentVertexY,
             handleIn: {
               x: dragState.current.startHandleInX * scaleFactor,
               y: dragState.current.startHandleInY * scaleFactor,
@@ -267,11 +272,9 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
           });
         } else {
           // Normal drag: move vertex position, keep handles at original
-          const newX = Math.max(0, Math.min(1, dragState.current.startVertexX + normalizedDx));
-          const newY = Math.max(0, Math.min(1, dragState.current.startVertexY + normalizedDy));
           updateVertex(selectedClip.id, activeMask.id, dragState.current.vertexId, {
-            x: newX,
-            y: newY,
+            x: currentVertexX,
+            y: currentVertexY,
             handleIn: {
               x: dragState.current.startHandleInX,
               y: dragState.current.startHandleInY,
