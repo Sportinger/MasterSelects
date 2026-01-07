@@ -74,7 +74,6 @@ export function EffectsPanel() {
     return (
       <div className="effects-panel">
         <div className="panel-header">
-          <h3>Effects - {selectedClip.name}</h3>
           <div className="effect-add">
             <select
               onChange={(e) => {
@@ -133,13 +132,23 @@ export function EffectsPanel() {
         {selectedClip.effects && selectedClip.effects.length > 0 ? (
           <div className="effects-list">
             {selectedClip.effects.map((effect) => (
-              <EffectItem
-                key={effect.id}
-                effect={effect}
-                onChange={(params) => updateClipEffect(selectedClip.id, effect.id, params)}
-                onRemove={() => removeClipEffect(selectedClip.id, effect.id)}
-                onToggle={() => updateClipEffect(selectedClip.id, effect.id, { enabled: !effect.enabled })}
-              />
+              <div key={effect.id} className="effect-item">
+                <div className="effect-header">
+                  <span className="effect-name">{effect.name}</span>
+                  <button
+                    className="btn btn-sm btn-danger"
+                    onClick={() => removeClipEffect(selectedClip.id, effect.id)}
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div className="effect-params">
+                  {renderEffectParams(effect, (params) =>
+                    updateClipEffect(selectedClip.id, effect.id, params)
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         ) : (
@@ -155,9 +164,6 @@ export function EffectsPanel() {
   if (!selectedLayer) {
     return (
       <div className="effects-panel">
-        <div className="panel-header">
-          <h3>Effects</h3>
-        </div>
         <div className="panel-empty">
           <p>Select a layer or clip to add effects</p>
         </div>
@@ -168,7 +174,6 @@ export function EffectsPanel() {
   return (
     <div className="effects-panel">
       <div className="panel-header">
-        <h3>Effects - {selectedLayer.name}</h3>
         <div className="effect-add">
           <select
             onChange={(e) => {

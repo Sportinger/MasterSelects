@@ -478,7 +478,7 @@ export const useTimelineStore = create<TimelineStore>()(
             source: { type: 'audio', naturalDuration: estimatedDuration },
             linkedClipId: clipId,
             transform: { ...DEFAULT_TRANSFORM },
-            effects: [],
+          effects: [],
             isLoading: true,
           };
           clipsToAdd.push(audioClip);
@@ -608,6 +608,7 @@ export const useTimelineStore = create<TimelineStore>()(
           outPoint: estimatedDuration,
           source: { type: 'audio', naturalDuration: estimatedDuration },
           transform: { ...DEFAULT_TRANSFORM },
+          effects: [],
           isLoading: true,
         };
 
@@ -668,6 +669,7 @@ export const useTimelineStore = create<TimelineStore>()(
           outPoint: estimatedDuration,
           source: { type: 'image', naturalDuration: estimatedDuration },
           transform: { ...DEFAULT_TRANSFORM },
+          effects: [],
           isLoading: true,
         };
 
@@ -736,6 +738,7 @@ export const useTimelineStore = create<TimelineStore>()(
           naturalDuration: composition.duration,
         },
         transform: { ...DEFAULT_TRANSFORM },
+          effects: [],
         isLoading: true,
         isComposition: true,
         compositionId: composition.id,
@@ -775,6 +778,7 @@ export const useTimelineStore = create<TimelineStore>()(
             linkedClipId: serializedClip.linkedClipId,
             waveform: serializedClip.waveform,
             transform: serializedClip.transform,
+            effects: serializedClip.effects || [],
             isLoading: true,
           };
 
@@ -1941,6 +1945,7 @@ export const useTimelineStore = create<TimelineStore>()(
               },
               thumbnails: serializedClip.thumbnails,
               transform: serializedClip.transform,
+              effects: serializedClip.effects || [],
               isLoading: true,
               isComposition: true,
               compositionId: serializedClip.compositionId,
@@ -1974,6 +1979,7 @@ export const useTimelineStore = create<TimelineStore>()(
                   source: null,
                   thumbnails: nestedSerializedClip.thumbnails,
                   transform: nestedSerializedClip.transform,
+                  effects: nestedSerializedClip.effects || [],
                   isLoading: true,
                 };
 
@@ -2062,6 +2068,7 @@ export const useTimelineStore = create<TimelineStore>()(
           linkedClipId: serializedClip.linkedClipId,
           waveform: serializedClip.waveform,
           transform: serializedClip.transform,
+          effects: serializedClip.effects || [],
           isLoading: true,
           masks: serializedClip.masks,  // Restore masks
         };
