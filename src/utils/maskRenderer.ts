@@ -101,8 +101,14 @@ export function generateMaskTexture(
 
   const ctx = ensureMaskCanvas(width, height);
 
-  // Start with black (no visibility)
-  ctx.fillStyle = '#000000';
+  // Start with white (full visibility) if first mask is subtract/intersect,
+  // otherwise start with black (no visibility) for add mode
+  const firstMask = masks[0];
+  if (firstMask?.mode === 'subtract' || firstMask?.mode === 'intersect') {
+    ctx.fillStyle = '#ffffff';
+  } else {
+    ctx.fillStyle = '#000000';
+  }
   ctx.fillRect(0, 0, width, height);
 
   // Process each mask
