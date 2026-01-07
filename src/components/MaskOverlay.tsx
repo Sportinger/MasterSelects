@@ -19,35 +19,54 @@ interface MaskOverlayProps {
 }
 
 // Generate SVG path data from mask vertices using cubic bezier curves
-function generatePathData(vertices: MaskVertex[], closed: boolean): string {
+function generatePathData(
+  vertices: MaskVertex[],
+  closed: boolean,
+  positionX: number = 0,
+  positionY: number = 0,
+  canvasWidth: number = 1920,
+  canvasHeight: number = 1080
+): string {
   if (vertices.length < 2) return '';
 
   let d = '';
 
   for (let i = 0; i < vertices.length; i++) {
     const v = vertices[i];
+    // Apply position offset to vertices (normalized coords)
+    const vx = (v.x + positionX) * canvasWidth;
+    const vy = (v.y + positionY) * canvasHeight;
 
     if (i === 0) {
-      d += `M ${v.x} ${v.y}`;
+      d += `M ${vx} ${vy}`;
     } else {
       const prev = vertices[i - 1];
+      // Apply position offset to previous vertex
+      const prevX = (prev.x + positionX) * canvasWidth;
+      const prevY = (prev.y + positionY) * canvasHeight;
+
       // Cubic bezier: C cp1x,cp1y cp2x,cp2y x,y
-      const cp1x = prev.x + prev.handleOut.x;
-      const cp1y = prev.y + prev.handleOut.y;
-      const cp2x = v.x + v.handleIn.x;
-      const cp2y = v.y + v.handleIn.y;
-      d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${v.x},${v.y}`;
+      const cp1x = prevX + prev.handleOut.x * canvasWidth;
+      const cp1y = prevY + prev.handleOut.y * canvasHeight;
+      const cp2x = vx + v.handleIn.x * canvasWidth;
+      const cp2y = vy + v.handleIn.y * canvasHeight;
+      d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${vx},${vy}`;
     }
   }
 
   if (closed && vertices.length > 2) {
     const last = vertices[vertices.length - 1];
     const first = vertices[0];
-    const cp1x = last.x + last.handleOut.x;
-    const cp1y = last.y + last.handleOut.y;
-    const cp2x = first.x + first.handleIn.x;
-    const cp2y = first.y + first.handleIn.y;
-    d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${first.x},${first.y} Z`;
+    const lastX = (last.x + positionX) * canvasWidth;
+    const lastY = (last.y + positionY) * canvasHeight;
+    const firstX = (first.x + positionX) * canvasWidth;
+    const firstY = (first.y + positionY) * canvasHeight;
+
+    const cp1x = lastX + last.handleOut.x * canvasWidth;
+    const cp1y = lastY + last.handleOut.y * canvasHeight;
+    const cp2x = firstX + first.handleIn.x * canvasWidth;
+    const cp2y = firstY + first.handleIn.y * canvasHeight;
+    d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${firstX},${firstY} Z`;
   }
 
   return d;
@@ -144,12 +163,15 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
     startVertices: [],
   });
 
-  // Convert mask vertices to canvas coordinates for rendering
+  // Convert mask vertices to canvas coordinates for rendering (including position offset)
   const canvasVertices = useMemo(() => {
     if (!activeMask) return [];
+    const posX = activeMask.position?.x || 0;
+    const posY = activeMask.position?.y || 0;
+
     return activeMask.vertices.map(v => ({
       ...v,
-      ...normalizedToCanvas(v.x, v.y, canvasWidth, canvasHeight),
+      ...normalizedToCanvas(v.x + posX, v.y + posY, canvasWidth, canvasHeight),
       handleIn: normalizedToCanvas(v.handleIn.x, v.handleIn.y, canvasWidth, canvasHeight),
       handleOut: normalizedToCanvas(v.handleOut.x, v.handleOut.y, canvasWidth, canvasHeight),
     }));
@@ -157,9 +179,16 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
 
   // Generate path data for the active mask
   const pathData = useMemo(() => {
-    if (!activeMask || canvasVertices.length === 0) return '';
-    return generatePathData(canvasVertices, activeMask.closed);
-  }, [canvasVertices, activeMask]);
+    if (!activeMask) return '';
+    return generatePathData(
+      activeMask.vertices,
+      activeMask.closed,
+      activeMask.position?.x || 0,
+      activeMask.position?.y || 0,
+      canvasWidth,
+      canvasHeight
+    );
+  }, [activeMask, canvasWidth, canvasHeight]);
 
   // Handle vertex drag start
   const handleVertexMouseDown = useCallback((
