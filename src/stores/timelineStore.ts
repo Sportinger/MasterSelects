@@ -2684,6 +2684,7 @@ export const useTimelineStore = create<TimelineStore>()(
         closed: maskData?.closed ?? false,
         opacity: maskData?.opacity ?? 1,
         feather: maskData?.feather ?? 0,
+        featherQuality: maskData?.featherQuality ?? 1, // 0=low, 1=medium, 2=high
         inverted: maskData?.inverted ?? false,
         mode: maskData?.mode ?? 'add',
         expanded: maskData?.expanded ?? true,

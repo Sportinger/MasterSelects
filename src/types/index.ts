@@ -13,6 +13,7 @@ export interface Layer {
   rotation: number | { x: number; y: number; z: number };  // Single value (z only) or full 3D rotation
   // Mask properties (passed from timeline clip masks for GPU processing)
   maskFeather?: number;  // Blur radius in pixels (0-50), handled in GPU shader
+  maskFeatherQuality?: number;  // Blur quality: 0=low (9 samples), 1=medium (17), 2=high (25)
   maskInvert?: boolean;  // Whether to invert the mask, handled in GPU shader
 }
 
@@ -301,6 +302,7 @@ export interface ClipMask {
   closed: boolean;        // Is the path closed
   opacity: number;        // 0-1
   feather: number;        // Blur amount in pixels
+  featherQuality: number; // 0=low (fast), 1=medium, 2=high (smooth)
   inverted: boolean;
   mode: MaskMode;
   expanded: boolean;      // UI state - expanded in properties panel

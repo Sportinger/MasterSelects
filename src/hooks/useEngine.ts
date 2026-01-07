@@ -71,12 +71,13 @@ export function useEngine() {
           const clip = clipsAtTime.find(c => c.trackId === track.id);
 
           if (clip?.masks && clip.masks.length > 0 && layer.source) {
-            // Extract mask properties for GPU processing (feather/invert handled in shader)
+            // Extract mask properties for GPU processing (feather/quality/invert handled in shader)
             const maxFeather = Math.max(...clip.masks.map(m => m.feather));
+            const maxQuality = Math.max(...clip.masks.map(m => m.featherQuality ?? 1));
             const hasInverted = clip.masks.some(m => m.inverted);
 
             // Update layer with mask GPU properties (these are cheap uniform updates)
-            useMixerStore.getState().updateLayerMaskProps(layer.id, maxFeather, hasInverted);
+            useMixerStore.getState().updateLayerMaskProps(layer.id, maxFeather, maxQuality, hasInverted);
 
             // Create version string EXCLUDING feather/invert (they're GPU uniforms now)
             // Only include shape-affecting properties: vertices, position, opacity, mode, closed

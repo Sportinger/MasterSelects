@@ -76,6 +76,10 @@ struct LayerUniforms {
   rotationY: f32,
   perspective: f32,
   maskFeather: f32,
+  maskFeatherQuality: u32,
+  _pad1: f32,
+  _pad2: f32,
+  _pad3: f32,
 };
 
 @vertex
@@ -387,24 +391,76 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   if (layer.hasMask == 1u) {
     var maskValue: f32;
 
-    // GPU blur for feather effect - 9-tap Gaussian approximation
+    // GPU blur for feather effect with quality levels
     if (layer.maskFeather > 0.5) {
       let maskDim = vec2f(textureDimensions(maskTexture));
       let texelSize = 1.0 / maskDim;
-      let radius = layer.maskFeather * texelSize;
+      let r = layer.maskFeather * texelSize;
 
-      // 9-tap blur with Gaussian weights
-      var blurredMask: f32 = 0.0;
-      blurredMask += textureSample(maskTexture, texSampler, input.uv).r * 0.25;
-      blurredMask += textureSample(maskTexture, texSampler, input.uv + vec2f(radius.x, 0.0)).r * 0.125;
-      blurredMask += textureSample(maskTexture, texSampler, input.uv - vec2f(radius.x, 0.0)).r * 0.125;
-      blurredMask += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, radius.y)).r * 0.125;
-      blurredMask += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, radius.y)).r * 0.125;
-      blurredMask += textureSample(maskTexture, texSampler, input.uv + vec2f(radius.x, radius.y)).r * 0.0625;
-      blurredMask += textureSample(maskTexture, texSampler, input.uv - vec2f(radius.x, radius.y)).r * 0.0625;
-      blurredMask += textureSample(maskTexture, texSampler, input.uv + vec2f(radius.x, -radius.y)).r * 0.0625;
-      blurredMask += textureSample(maskTexture, texSampler, input.uv + vec2f(-radius.x, radius.y)).r * 0.0625;
-      maskValue = blurredMask;
+      if (layer.maskFeatherQuality == 2u) {
+        // HIGH QUALITY: 25-tap blur
+        var blur: f32 = 0.0;
+        blur += textureSample(maskTexture, texSampler, input.uv).r * 0.1525;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.5, 0.0)).r * 0.0912;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * 0.5, 0.0)).r * 0.0912;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * 0.5)).r * 0.0912;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * 0.5)).r * 0.0912;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x, 0.0)).r * 0.0608;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x, 0.0)).r * 0.0608;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y)).r * 0.0608;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y)).r * 0.0608;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.5, r.y * 0.5)).r * 0.0545;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.5, r.y * 0.5)).r * 0.0545;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.5, -r.y * 0.5)).r * 0.0545;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.5, -r.y * 0.5)).r * 0.0545;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x, r.y)).r * 0.0363;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x, r.y)).r * 0.0363;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x, -r.y)).r * 0.0363;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x, -r.y)).r * 0.0363;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 1.5, 0.0)).r * 0.0242;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * 1.5, 0.0)).r * 0.0242;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * 1.5)).r * 0.0242;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * 1.5)).r * 0.0242;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 1.5, r.y * 1.5)).r * 0.0121;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 1.5, r.y * 1.5)).r * 0.0121;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 1.5, -r.y * 1.5)).r * 0.0121;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 1.5, -r.y * 1.5)).r * 0.0121;
+        maskValue = blur;
+      } else if (layer.maskFeatherQuality == 1u) {
+        // MEDIUM QUALITY: 17-tap blur
+        var blur: f32 = 0.0;
+        blur += textureSample(maskTexture, texSampler, input.uv).r * 0.185;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.5, 0.0)).r * 0.09;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * 0.5, 0.0)).r * 0.09;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * 0.5)).r * 0.09;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * 0.5)).r * 0.09;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x, 0.0)).r * 0.065;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x, 0.0)).r * 0.065;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y)).r * 0.065;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y)).r * 0.065;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.5, r.y * 0.5)).r * 0.045;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.5, r.y * 0.5)).r * 0.045;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.5, -r.y * 0.5)).r * 0.045;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.5, -r.y * 0.5)).r * 0.045;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x, r.y)).r * 0.025;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x, r.y)).r * 0.025;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x, -r.y)).r * 0.025;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x, -r.y)).r * 0.025;
+        maskValue = blur;
+      } else {
+        // LOW QUALITY: 9-tap blur (fast)
+        var blur: f32 = 0.0;
+        blur += textureSample(maskTexture, texSampler, input.uv).r * 0.25;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x, 0.0)).r * 0.125;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x, 0.0)).r * 0.125;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y)).r * 0.125;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y)).r * 0.125;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x, r.y)).r * 0.0625;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x, r.y)).r * 0.0625;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x, -r.y)).r * 0.0625;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x, r.y)).r * 0.0625;
+        maskValue = blur;
+      }
     } else {
       maskValue = textureSample(maskTexture, texSampler, input.uv).r;
     }
@@ -465,9 +521,9 @@ export class WebGPUEngine {
   private sampler: GPUSampler | null = null;
   private layerUniformBuffer: GPUBuffer | null = null;
 
-  // Pre-allocated uniform data (12 x 4 bytes = 48 bytes)
+  // Pre-allocated uniform data for layer uniforms
   // Using ArrayBuffer with typed views to handle mixed float/uint data
-  private uniformBuffer = new ArrayBuffer(64); // 16 floats for extended rotation support
+  private uniformBuffer = new ArrayBuffer(80); // 20 floats for extended uniforms (including mask quality)
   private uniformData = new Float32Array(this.uniformBuffer);
   private uniformDataU32 = new Uint32Array(this.uniformBuffer);
 
@@ -1718,7 +1774,7 @@ export class WebGPUEngine {
       let uniformBuffer = this.layerUniformBuffers.get(layer.id);
       if (!uniformBuffer) {
         uniformBuffer = this.device.createBuffer({
-          size: 64, // 16 floats for extended 3D rotation support
+          size: 80, // 20 floats for extended uniforms (incl. mask quality)
           usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
         this.layerUniformBuffers.set(layer.id, uniformBuffer);
@@ -1765,6 +1821,10 @@ export class WebGPUEngine {
       this.uniformData[13] = rotY;        // rotationY
       this.uniformData[14] = 2.0;         // perspective distance (lower = stronger 3D effect)
       this.uniformData[15] = layer.maskFeather || 0;      // maskFeather (blur radius in pixels)
+      this.uniformDataU32[16] = layer.maskFeatherQuality || 0; // maskFeatherQuality (0=low, 1=med, 2=high)
+      this.uniformData[17] = 0;           // _pad1
+      this.uniformData[18] = 0;           // _pad2
+      this.uniformData[19] = 0;           // _pad3
       this.device.queue.writeBuffer(uniformBuffer, 0, this.uniformData);
 
       let pipeline: GPURenderPipeline;

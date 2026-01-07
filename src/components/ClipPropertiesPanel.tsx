@@ -345,6 +345,19 @@ function MaskItem({ clipId, mask, isActive, onSelect }: MaskItemProps) {
           </div>
 
           <div className="control-row">
+            <label>Quality</label>
+            <select
+              value={mask.featherQuality ?? 1}
+              onChange={(e) => updateMask(clipId, mask.id, { featherQuality: parseInt(e.target.value) })}
+              style={{ flex: 1 }}
+            >
+              <option value={0}>Low (fast)</option>
+              <option value={1}>Medium</option>
+              <option value={2}>High (smooth)</option>
+            </select>
+          </div>
+
+          <div className="control-row">
             <label>Position X</label>
             <PrecisionSlider
               min={-1}
