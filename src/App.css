@@ -49,11 +49,11 @@ input, textarea {
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 8px 16px;
+  gap: 0;
+  padding: 0 12px;
   background: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-color);
-  min-height: 48px;
+  min-height: 32px;
   flex-shrink: 0;
 }
 
@@ -61,16 +61,159 @@ input, textarea {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 0 12px;
+}
+
+.toolbar-spacer {
+  flex: 1;
 }
 
 .toolbar-right {
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .logo {
   font-weight: bold;
-  font-size: 16px;
+  font-size: 14px;
   color: var(--accent);
+  padding: 0 16px 0 4px;
+  border-right: 1px solid var(--border-color);
+  height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+/* Menu Bar */
+.menu-bar {
+  display: flex;
+  align-items: center;
+  height: 32px;
+}
+
+.menu-item {
+  position: relative;
+}
+
+.menu-trigger {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 6px 12px;
+  cursor: pointer;
+  height: 32px;
+  transition: background 0.1s, color 0.1s;
+}
+
+.menu-trigger:hover,
+.menu-trigger.active {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.menu-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 200px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 10000;
+  padding: 4px 0;
+}
+
+.menu-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.menu-option:hover {
+  background: var(--bg-hover);
+}
+
+.menu-option:disabled,
+.menu-option.disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.menu-option:disabled:hover,
+.menu-option.disabled:hover {
+  background: transparent;
+}
+
+.menu-option .shortcut {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-left: 24px;
+}
+
+.menu-option.checked {
+  color: var(--accent);
+}
+
+.menu-option.project-item {
+  padding-right: 8px;
+}
+
+.menu-option .delete-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.1s, background 0.1s;
+}
+
+.menu-option:hover .delete-btn {
+  opacity: 1;
+}
+
+.menu-option .delete-btn:hover {
+  background: rgba(255, 68, 68, 0.2);
+  color: var(--danger);
+}
+
+.menu-separator {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
+
+.menu-submenu {
+  padding: 0;
+}
+
+.menu-label {
+  display: block;
+  padding: 8px 16px 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.menu-empty {
+  display: block;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .status {
