@@ -28,6 +28,7 @@ import type {
   MarkerDragState,
   ExternalDragState,
   ContextMenuState,
+  MarqueeState,
 } from './types';
 
 export function Timeline() {
@@ -143,6 +144,11 @@ export function Timeline() {
 
   // Multicam dialog state
   const [multicamDialogOpen, setMulticamDialogOpen] = useState(false);
+
+  // Marquee selection state
+  const [marquee, setMarquee] = useState<MarqueeState | null>(null);
+  const marqueeRef = useRef(marquee);
+  marqueeRef.current = marquee;
 
   // Performance: Create lookup maps for O(1) clip/track access
   const clipMap = useMemo(() => new Map(clips.map(c => [c.id, c])), [clips]);
@@ -1421,6 +1427,140 @@ export function Timeline() {
     };
   }, [markerDrag, scrollX, duration, inPoint, outPoint, setInPoint, setOutPoint, pixelToTime]);
 
+  // Marquee selection: mouse down on empty area starts selection
+  const handleMarqueeMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      // Only start marquee on left mouse button and empty area
+      if (e.button !== 0) return;
+      // Don't start if clicking on a clip or interactive element
+      const target = e.target as HTMLElement;
+      if (
+        target.closest('.timeline-clip') ||
+        target.closest('.playhead') ||
+        target.closest('.in-out-marker') ||
+        target.closest('.trim-handle') ||
+        target.closest('.track-header')
+      ) {
+        return;
+      }
+
+      // Don't start if any other drag operation is in progress
+      if (clipDrag || clipTrim || markerDrag || isDraggingPlayhead) {
+        return;
+      }
+
+      const rect = trackLanesRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const startX = e.clientX - rect.left + scrollX;
+      const startY = e.clientY - rect.top;
+
+      // Clear selection unless shift is held
+      if (!e.shiftKey) {
+        selectClip(null, false);
+      }
+
+      setMarquee({
+        startX,
+        startY,
+        currentX: startX,
+        currentY: startY,
+        startScrollX: scrollX,
+      });
+
+      e.preventDefault();
+    },
+    [clipDrag, clipTrim, markerDrag, isDraggingPlayhead, scrollX, selectClip]
+  );
+
+  // Marquee selection: mouse move and mouse up handlers
+  useEffect(() => {
+    if (!marquee) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = trackLanesRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const currentX = e.clientX - rect.left + scrollX;
+      const currentY = e.clientY - rect.top;
+
+      setMarquee((prev) =>
+        prev ? { ...prev, currentX, currentY } : null
+      );
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      if (!marqueeRef.current) {
+        setMarquee(null);
+        return;
+      }
+
+      const m = marqueeRef.current;
+
+      // Calculate selection rectangle bounds (in pixels, accounting for scroll)
+      const left = Math.min(m.startX, m.currentX);
+      const right = Math.max(m.startX, m.currentX);
+      const top = Math.min(m.startY, m.currentY);
+      const bottom = Math.max(m.startY, m.currentY);
+
+      // Only select if rectangle has some size
+      if (right - left > 5 || bottom - top > 5) {
+        // Convert pixel bounds to time
+        const startTime = pixelToTime(left);
+        const endTime = pixelToTime(right);
+
+        // Calculate which tracks are covered by the rectangle
+        let currentY = 0;
+        const coveredTrackIds = new Set<string>();
+
+        for (const track of tracks) {
+          const trackHeight = getExpandedTrackHeight(track.id, track.height);
+          const trackTop = currentY;
+          const trackBottom = currentY + trackHeight;
+
+          // Check if rectangle overlaps with this track
+          if (bottom > trackTop && top < trackBottom) {
+            coveredTrackIds.add(track.id);
+          }
+
+          currentY += trackHeight;
+        }
+
+        // Find all clips that intersect with the selection rectangle
+        const clipsToSelect: string[] = [];
+
+        for (const clip of clips) {
+          // Check if clip's track is in covered tracks
+          if (!coveredTrackIds.has(clip.trackId)) continue;
+
+          // Check if clip's time range overlaps with selection time range
+          const clipEnd = clip.startTime + clip.duration;
+          if (clip.startTime < endTime && clipEnd > startTime) {
+            clipsToSelect.push(clip.id);
+          }
+        }
+
+        // Select all intersecting clips
+        if (clipsToSelect.length > 0) {
+          // If shift is held, add to selection
+          const addToSelection = e.shiftKey;
+          for (const clipId of clipsToSelect) {
+            selectClip(clipId, addToSelection || clipsToSelect.indexOf(clipId) > 0);
+          }
+        }
+      }
+
+      setMarquee(null);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [marquee, scrollX, pixelToTime, tracks, clips, selectClip, getExpandedTrackHeight]);
+
   // Get all snap target times
   const getSnapTargetTimes = useCallback(() => {
     const snapTimes: number[] = [];
@@ -2334,7 +2474,8 @@ export function Timeline() {
               (timelineRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
               (trackLanesRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
             }}
-            className={`timeline-tracks ${clipDrag ? 'dragging-clip' : ''}`}
+            className={`timeline-tracks ${clipDrag ? 'dragging-clip' : ''} ${marquee ? 'marquee-selecting' : ''}`}
+            onMouseDown={handleMarqueeMouseDown}
           >
             <div className="track-lanes-scroll" style={{ transform: `translateX(-${scrollX}px)` }}>
               {/* New Video Track drop zone - at TOP above video tracks */}
@@ -2540,6 +2681,19 @@ export function Timeline() {
               <div className="marker-line" />
             </div>
           )}
+
+              {/* Marquee selection rectangle */}
+              {marquee && (
+                <div
+                  className="marquee-selection"
+                  style={{
+                    left: Math.min(marquee.startX, marquee.currentX),
+                    top: Math.min(marquee.startY, marquee.currentY),
+                    width: Math.abs(marquee.currentX - marquee.startX),
+                    height: Math.abs(marquee.currentY - marquee.startY),
+                  }}
+                />
+              )}
 
             </div>{/* track-lanes-scroll */}
           </div>{/* timeline-tracks */}

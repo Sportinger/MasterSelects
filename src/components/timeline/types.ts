@@ -56,6 +56,15 @@ export interface ContextMenuState {
   clipId: string;
 }
 
+// Marquee selection state for rectangle selection
+export interface MarqueeState {
+  startX: number;      // Start X position relative to track-lanes
+  startY: number;      // Start Y position relative to track-lanes
+  currentX: number;    // Current X position
+  currentY: number;    // Current Y position
+  startScrollX: number; // ScrollX at the time of starting selection
+}
+
 // Props for TimelineRuler component
 export interface TimelineRulerProps {
   duration: number;

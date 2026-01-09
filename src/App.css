@@ -2067,6 +2067,20 @@ input[type="checkbox"] {
   user-select: none;
 }
 
+/* Marquee selection */
+.timeline-tracks.marquee-selecting {
+  cursor: crosshair;
+}
+
+.marquee-selection {
+  position: absolute;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.6);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 1000;
+}
+
 /* Disable all text selection in timeline */
 .timeline-container,
 .timeline-container * {
