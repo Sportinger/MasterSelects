@@ -38,6 +38,13 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
     });
   },
 
+  renameTrack: (id, name) => {
+    const { tracks } = get();
+    set({
+      tracks: tracks.map(t => t.id === id ? { ...t, name } : t),
+    });
+  },
+
   setTrackMuted: (id, muted) => {
     const { tracks } = get();
     set({

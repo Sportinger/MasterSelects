@@ -4,17 +4,15 @@ import React, { memo, useMemo } from 'react';
 import type { TimelineTrackProps } from './types';
 import type { AnimatableProperty } from '../../types';
 
-// Render keyframe tracks for timeline area (right column) - only show properties with keyframes
+// Render keyframe tracks for timeline area (right column) - flat list without folder structure
 function TrackPropertyTracks({
   trackId,
   selectedClip,
-  isTrackPropertyGroupExpanded,
   getClipKeyframes,
   renderKeyframeDiamonds,
 }: {
   trackId: string;
   selectedClip: { id: string; effects?: Array<{ id: string; name: string; params: Record<string, unknown> }> } | null;
-  isTrackPropertyGroupExpanded: (trackId: string, group: string) => boolean;
   getClipKeyframes: (clipId: string) => Array<{
     id: string;
     clipId: string;
@@ -27,7 +25,7 @@ function TrackPropertyTracks({
 }) {
   const clipId = selectedClip?.id;
 
-  // Memoize all keyframe property checks at once - O(n) once instead of O(n) per check
+  // Memoize all keyframe properties
   const keyframeProperties = useMemo(() => {
     if (!clipId) return new Set<string>();
     const props = new Set<string>();
@@ -36,196 +34,32 @@ function TrackPropertyTracks({
     return props;
   }, [clipId, getClipKeyframes]);
 
-  // Memoize effect filtering with the pre-computed keyframe properties
-  const effectsWithKeyframes = useMemo(() => {
-    if (!selectedClip?.effects) return [];
-
-    return selectedClip.effects.filter((effect) => {
-      const numericParams = Object.keys(effect.params).filter(
-        (k) => typeof effect.params[k] === 'number'
-      );
-      return numericParams.some((paramName) =>
-        keyframeProperties.has(`effect.${effect.id}.${paramName}`)
-      );
-    });
-  }, [selectedClip?.effects, keyframeProperties]);
-
-  // If no clip is selected in this track, show nothing
-  if (!selectedClip) {
+  // If no clip is selected in this track or no keyframes, show nothing
+  if (!selectedClip || keyframeProperties.size === 0) {
     return <div className="track-property-tracks" />;
   }
 
-  // Check which property groups have keyframes - O(1) lookups now
-  const hasOpacityKeyframes = keyframeProperties.has('opacity');
-  const hasPositionKeyframes =
-    keyframeProperties.has('position.x') ||
-    keyframeProperties.has('position.y') ||
-    keyframeProperties.has('position.z');
-  const hasScaleKeyframes =
-    keyframeProperties.has('scale.x') || keyframeProperties.has('scale.y');
-  const hasRotationKeyframes =
-    keyframeProperties.has('rotation.x') ||
-    keyframeProperties.has('rotation.y') ||
-    keyframeProperties.has('rotation.z');
-
-  // If no keyframes at all, show nothing
-  if (
-    !hasOpacityKeyframes &&
-    !hasPositionKeyframes &&
-    !hasScaleKeyframes &&
-    !hasRotationKeyframes &&
-    effectsWithKeyframes.length === 0
-  ) {
-    return <div className="track-property-tracks" />;
-  }
+  // Convert Set to sorted array for consistent ordering (matching the labels)
+  const sortedProperties = Array.from(keyframeProperties).sort((a, b) => {
+    const order = ['opacity', 'position.x', 'position.y', 'position.z', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z'];
+    const aIdx = order.indexOf(a);
+    const bIdx = order.indexOf(b);
+    if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+    if (aIdx !== -1) return -1;
+    if (bIdx !== -1) return 1;
+    return a.localeCompare(b);
+  });
 
   return (
     <div className="track-property-tracks">
-      {/* Opacity - only show if has keyframes */}
-      {hasOpacityKeyframes && (
-        <div className="keyframe-track-group">
-          <div className="keyframe-track-row group-header">
-            <div className="keyframe-track">
-              <div className="keyframe-track-line" />
-              {renderKeyframeDiamonds(trackId, 'opacity')}
-            </div>
+      {sortedProperties.map((prop) => (
+        <div key={prop} className="keyframe-track-row flat">
+          <div className="keyframe-track">
+            <div className="keyframe-track-line" />
+            {renderKeyframeDiamonds(trackId, prop as AnimatableProperty)}
           </div>
         </div>
-      )}
-
-      {/* Position group tracks - only show if has keyframes */}
-      {hasPositionKeyframes && (
-        <div className="keyframe-track-group">
-          <div className="keyframe-track-row group-header" />
-          {isTrackPropertyGroupExpanded(trackId, 'position') && (
-            <>
-              {keyframeProperties.has('position.x') && (
-                <div className="keyframe-track-row">
-                  <div className="keyframe-track">
-                    <div className="keyframe-track-line" />
-                    {renderKeyframeDiamonds(trackId, 'position.x')}
-                  </div>
-                </div>
-              )}
-              {keyframeProperties.has('position.y') && (
-                <div className="keyframe-track-row">
-                  <div className="keyframe-track">
-                    <div className="keyframe-track-line" />
-                    {renderKeyframeDiamonds(trackId, 'position.y')}
-                  </div>
-                </div>
-              )}
-              {keyframeProperties.has('position.z') && (
-                <div className="keyframe-track-row">
-                  <div className="keyframe-track">
-                    <div className="keyframe-track-line" />
-                    {renderKeyframeDiamonds(trackId, 'position.z')}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Scale group tracks - only show if has keyframes */}
-      {hasScaleKeyframes && (
-        <div className="keyframe-track-group">
-          <div className="keyframe-track-row group-header" />
-          {isTrackPropertyGroupExpanded(trackId, 'scale') && (
-            <>
-              {keyframeProperties.has('scale.x') && (
-                <div className="keyframe-track-row">
-                  <div className="keyframe-track">
-                    <div className="keyframe-track-line" />
-                    {renderKeyframeDiamonds(trackId, 'scale.x')}
-                  </div>
-                </div>
-              )}
-              {keyframeProperties.has('scale.y') && (
-                <div className="keyframe-track-row">
-                  <div className="keyframe-track">
-                    <div className="keyframe-track-line" />
-                    {renderKeyframeDiamonds(trackId, 'scale.y')}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Rotation group tracks - only show if has keyframes */}
-      {hasRotationKeyframes && (
-        <div className="keyframe-track-group">
-          <div className="keyframe-track-row group-header" />
-          {isTrackPropertyGroupExpanded(trackId, 'rotation') && (
-            <>
-              {keyframeProperties.has('rotation.x') && (
-                <div className="keyframe-track-row">
-                  <div className="keyframe-track">
-                    <div className="keyframe-track-line" />
-                    {renderKeyframeDiamonds(trackId, 'rotation.x')}
-                  </div>
-                </div>
-              )}
-              {keyframeProperties.has('rotation.y') && (
-                <div className="keyframe-track-row">
-                  <div className="keyframe-track">
-                    <div className="keyframe-track-line" />
-                    {renderKeyframeDiamonds(trackId, 'rotation.y')}
-                  </div>
-                </div>
-              )}
-              {keyframeProperties.has('rotation.z') && (
-                <div className="keyframe-track-row">
-                  <div className="keyframe-track">
-                    <div className="keyframe-track-line" />
-                    {renderKeyframeDiamonds(trackId, 'rotation.z')}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Effects group tracks - only show effects that have keyframes */}
-      {effectsWithKeyframes.length > 0 && (
-        <div className="keyframe-track-group">
-          <div className="keyframe-track-row group-header" />
-          {isTrackPropertyGroupExpanded(trackId, 'effects') &&
-            effectsWithKeyframes.map((effect) => {
-              // Only show params with keyframes
-              const paramsWithKeyframes = Object.keys(effect.params)
-                .filter((k) => typeof effect.params[k] === 'number')
-                .filter((paramName) =>
-                  keyframeProperties.has(`effect.${effect.id}.${paramName}`)
-                );
-
-              return (
-                <div key={effect.id} className="keyframe-track-group nested">
-                  <div className="keyframe-track-row group-header" />
-                  {isTrackPropertyGroupExpanded(trackId, `effect.${effect.id}`) && (
-                    <>
-                      {paramsWithKeyframes.map((paramName) => (
-                        <div key={paramName} className="keyframe-track-row">
-                          <div className="keyframe-track">
-                            <div className="keyframe-track-line" />
-                            {renderKeyframeDiamonds(
-                              trackId,
-                              `effect.${effect.id}.${paramName}` as AnimatableProperty
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </>
-                  )}
-                </div>
-              );
-            })}
-        </div>
-      )}
+      ))}
     </div>
   );
 }
@@ -246,7 +80,6 @@ function TimelineTrackComponent({
   onDragEnter,
   onDragLeave,
   renderClip,
-  isTrackPropertyGroupExpanded,
   getClipKeyframes,
   renderKeyframeDiamonds,
   timeToPixel,
@@ -315,7 +148,6 @@ function TimelineTrackComponent({
         <TrackPropertyTracks
           trackId={track.id}
           selectedClip={selectedTrackClip || null}
-          isTrackPropertyGroupExpanded={isTrackPropertyGroupExpanded}
           getClipKeyframes={getClipKeyframes}
           renderKeyframeDiamonds={renderKeyframeDiamonds}
         />

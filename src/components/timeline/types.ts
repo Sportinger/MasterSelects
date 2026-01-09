@@ -126,10 +126,9 @@ export interface TimelineHeaderProps {
   onToggleSolo: () => void;
   onToggleMuted: () => void;
   onToggleVisible: () => void;
+  onRenameTrack: (name: string) => void;
   onWheel: (e: React.WheelEvent) => void;
   // For property labels
-  isTrackPropertyGroupExpanded: (trackId: string, group: string) => boolean;
-  toggleTrackPropertyGroupExpanded: (trackId: string, group: string) => void;
   getClipKeyframes: (clipId: string) => Array<{
     id: string;
     clipId: string;
@@ -165,7 +164,6 @@ export interface TimelineTrackProps {
   onDragLeave: (e: React.DragEvent) => void;
   renderClip: (clip: TimelineClip, trackId: string) => React.ReactNode;
   // For keyframe tracks
-  isTrackPropertyGroupExpanded: (trackId: string, group: string) => boolean;
   getClipKeyframes: (clipId: string) => Array<{
     id: string;
     clipId: string;

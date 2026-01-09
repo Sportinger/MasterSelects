@@ -85,8 +85,6 @@ export function Timeline() {
     getInterpolatedEffects,
     isTrackExpanded,
     toggleTrackExpanded,
-    isTrackPropertyGroupExpanded,
-    toggleTrackPropertyGroupExpanded,
     getExpandedTrackHeight,
     getClipKeyframes,
     selectKeyframe,
@@ -2598,9 +2596,10 @@ export function Timeline() {
                   onToggleVisible={() =>
                     useTimelineStore.getState().setTrackVisible(track.id, !track.visible)
                   }
+                  onRenameTrack={(name) =>
+                    useTimelineStore.getState().renameTrack(track.id, name)
+                  }
                   onWheel={(e) => handleTrackHeaderWheel(e, track.id)}
-                  isTrackPropertyGroupExpanded={isTrackPropertyGroupExpanded}
-                  toggleTrackPropertyGroupExpanded={toggleTrackPropertyGroupExpanded}
                   getClipKeyframes={getClipKeyframes}
                 />
               );
@@ -2683,7 +2682,6 @@ export function Timeline() {
                 onDragEnter={(e) => handleTrackDragEnter(e, track.id)}
                 onDragLeave={handleTrackDragLeave}
                 renderClip={renderClip}
-                isTrackPropertyGroupExpanded={isTrackPropertyGroupExpanded}
                 getClipKeyframes={getClipKeyframes}
                 renderKeyframeDiamonds={renderKeyframeDiamonds}
                 timeToPixel={timeToPixel}

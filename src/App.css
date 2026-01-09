@@ -1833,6 +1833,19 @@ input[type="checkbox"] {
   font-size: 12px;
   font-weight: 500;
   color: var(--text-primary);
+  cursor: text;
+}
+
+.track-name-input {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--accent-timeline);
+  border-radius: 2px;
+  padding: 0 4px;
+  width: 80px;
+  outline: none;
 }
 
 .track-controls {
@@ -3472,6 +3485,11 @@ input[type="checkbox"] {
   padding-left: 20px;
 }
 
+.property-label-row.flat {
+  padding-left: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
 .property-label-group {
   border-bottom: 1px solid var(--border-color);
   box-sizing: border-box;
@@ -3507,6 +3525,10 @@ input[type="checkbox"] {
 
 .keyframe-track-row.group-header {
   background: var(--bg-tertiary);
+}
+
+.keyframe-track-row.flat {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .keyframe-track-group {

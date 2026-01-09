@@ -82,6 +82,7 @@ export interface TimelineState {
 export interface TrackActions {
   addTrack: (type: 'video' | 'audio') => string;
   removeTrack: (id: string) => void;
+  renameTrack: (id: string, name: string) => void;
   setTrackMuted: (id: string, muted: boolean) => void;
   setTrackVisible: (id: string, visible: boolean) => void;
   setTrackSolo: (id: string, solo: boolean) => void;
