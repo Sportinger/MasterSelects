@@ -265,7 +265,6 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
         // Composition IS nested and main playhead is within the nested clip
         // Calculate internal time: (main playhead - clip start) + clip's inPoint
         playheadTime = (mainPlayhead - nestedClip.startTime) + (nestedClip.inPoint || 0);
-        console.log(`[Preview ${panelId}] Nested comp sync: main=${mainPlayhead.toFixed(2)}, internal=${playheadTime.toFixed(2)}`);
       } else if (composition?.timelineData?.playheadPosition !== undefined) {
         // Not nested (or outside nested range) - use composition's own stored playhead
         playheadTime = composition.timelineData.playheadPosition;
