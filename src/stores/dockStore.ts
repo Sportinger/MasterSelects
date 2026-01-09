@@ -17,44 +17,58 @@ import {
 } from '../utils/dockLayout';
 
 // Default layout configuration
-// Large Preview on top-left, Effects/Slots tabbed on right, Timeline at bottom
+// 3-column layout: Media/Properties/AI Chat left, Preview center, Multi-Cam/Transcript/Analysis/Effects/Export right
+// Timeline at bottom
 const DEFAULT_LAYOUT: DockLayout = {
   root: {
     kind: 'split',
     id: 'root-split',
     direction: 'vertical',
-    ratio: 0.7,
+    ratio: 0.55, // Top section 55%, Timeline 45%
     children: [
       {
         kind: 'split',
         id: 'top-split',
         direction: 'horizontal',
-        ratio: 0.8,
+        ratio: 0.25, // Left column 25%
         children: [
           {
             kind: 'tab-group',
-            id: 'preview-group',
-            panels: [
-              { id: 'ai-chat', type: 'ai-chat', title: 'AI Chat' },
-              { id: 'preview', type: 'preview', title: 'Preview' },
-            ],
-            activeIndex: 0, // Default to AI Chat tab
-          },
-          {
-            kind: 'tab-group',
-            id: 'right-group',
+            id: 'left-group',
             panels: [
               { id: 'media', type: 'media', title: 'Media' },
-              { id: 'multicam', type: 'multicam', title: 'Multi-Cam' },
-              { id: 'transcript', type: 'transcript', title: 'Transcript' },
-              { id: 'analysis', type: 'analysis', title: 'Analysis' },
               { id: 'clip-properties', type: 'clip-properties', title: 'Properties' },
-              { id: 'effects', type: 'effects', title: 'Effects' },
-              { id: 'export', type: 'export', title: 'Export' },
-              // Slots panel disabled - uses same layer system as timeline, causing conflicts
-              // TODO: Create separate timelineLayers system for proper separation
+              { id: 'ai-chat', type: 'ai-chat', title: 'AI Chat' },
             ],
-            activeIndex: 0,
+            activeIndex: 0, // Media active
+          },
+          {
+            kind: 'split',
+            id: 'center-right-split',
+            direction: 'horizontal',
+            ratio: 0.73, // Center 73% of remaining (≈55% total), Right 27% (≈20% total)
+            children: [
+              {
+                kind: 'tab-group',
+                id: 'preview-group',
+                panels: [
+                  { id: 'preview', type: 'preview', title: 'Preview' },
+                ],
+                activeIndex: 0,
+              },
+              {
+                kind: 'tab-group',
+                id: 'right-group',
+                panels: [
+                  { id: 'multicam', type: 'multicam', title: 'Multi-Cam' },
+                  { id: 'transcript', type: 'transcript', title: 'Transcript' },
+                  { id: 'analysis', type: 'analysis', title: 'Analysis' },
+                  { id: 'effects', type: 'effects', title: 'Effects' },
+                  { id: 'export', type: 'export', title: 'Export' },
+                ],
+                activeIndex: 1, // Transcript active
+              },
+            ],
           },
         ],
       },

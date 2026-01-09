@@ -1744,6 +1744,7 @@ export function Timeline() {
         isSnapping: false,
         altKeyPressed: e.altKey, // Capture Alt state for independent drag
         forcingOverlap: false,
+        dragStartTime: Date.now(), // Track when drag started for track-change delay
       };
       setClipDrag(initialDrag);
       clipDragRef.current = initialDrag;
@@ -1755,11 +1756,17 @@ export function Timeline() {
         const lanesRect = trackLanesRef.current.getBoundingClientRect();
         const mouseY = moveEvent.clientY - lanesRect.top;
 
+        // Only allow track changes after 300ms of dragging (prevents accidental track switches)
+        const trackChangeAllowed = Date.now() - drag.dragStartTime >= 300;
+
         let currentY = 24;
-        let newTrackId = drag.currentTrackId;
+        let newTrackId = drag.currentTrackId; // Keep current track by default
         for (const track of tracks) {
           if (mouseY >= currentY && mouseY < currentY + track.height) {
-            newTrackId = track.id;
+            // Only change to a different track if the delay has passed
+            if (trackChangeAllowed || track.id === drag.originalTrackId) {
+              newTrackId = track.id;
+            }
             break;
           }
           currentY += track.height;

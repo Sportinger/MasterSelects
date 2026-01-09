@@ -14,6 +14,7 @@ export interface ClipDragState {
   isSnapping: boolean;         // Whether currently snapping
   altKeyPressed: boolean;      // If true, skip linked group movement (independent drag)
   forcingOverlap: boolean;     // If true, user has pushed through resistance and is forcing overlap
+  dragStartTime: number;       // Timestamp when drag started (for track-change delay)
 }
 
 // Clip trim state
