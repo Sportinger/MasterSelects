@@ -484,6 +484,7 @@ export function ClipPropertiesPanel() {
     setActiveMask,
     maskEditMode,
     setMaskEditMode,
+    updateClipTransform,
   } = useTimelineStore();
   const selectedClip = clips.find(c => c.id === selectedClipId);
   const [showMaskMenu, setShowMaskMenu] = useState(false);
@@ -540,7 +541,7 @@ export function ClipPropertiesPanel() {
               value={transform.blendMode}
               onChange={(e) => {
                 // Blend mode is not animatable, update directly
-                useTimelineStore.getState().updateClipTransform(selectedClip.id, {
+                updateClipTransform(selectedClip.id, {
                   blendMode: e.target.value as BlendMode
                 });
               }}
@@ -815,7 +816,7 @@ export function ClipPropertiesPanel() {
           <button
             className="btn btn-sm"
             onClick={() => {
-              useTimelineStore.getState().updateClipTransform(selectedClip.id, {
+              updateClipTransform(selectedClip.id, {
                 opacity: 1,
                 blendMode: 'normal',
                 position: { x: 0, y: 0, z: 0 },

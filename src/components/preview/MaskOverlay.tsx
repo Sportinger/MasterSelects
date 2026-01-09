@@ -101,6 +101,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
     addVertex,
     closeMask,
     addMask,
+    setActiveMask,
   } = useTimelineStore();
 
   const selectedClip = clips.find(c => c.id === selectedClipId);
@@ -453,7 +454,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       } else {
         // Create a new mask and switch to drawing mode
         const maskId = addMask(selectedClip.id, { name: 'Pen Mask' });
-        useTimelineStore.getState().setActiveMask(selectedClip.id, maskId);
+        setActiveMask(selectedClip.id, maskId);
         addVertex(selectedClip.id, maskId, {
           x,
           y,
@@ -575,7 +576,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       };
     });
     useTimelineStore.setState({ clips: updatedClips });
-    useTimelineStore.getState().setActiveMask(selectedClip.id, maskId);
+    setActiveMask(selectedClip.id, maskId);
     setMaskEditMode('editing');
 
     setShapeDrawState({

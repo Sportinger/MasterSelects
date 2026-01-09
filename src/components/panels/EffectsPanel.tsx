@@ -116,7 +116,7 @@ const EFFECT_DEFAULTS: Record<string, Record<string, number | boolean | string>>
 
 export function EffectsPanel() {
   // Mixer store (for live mixing layers)
-  const { layers, selectedLayerId, addEffect: addLayerEffect, removeEffect: removeLayerEffect, updateEffect: updateLayerEffect, setLayerOpacity, setLayerBlendMode } =
+  const { layers, selectedLayerId, addEffect: addLayerEffect, removeEffect: removeLayerEffect, updateEffect: updateLayerEffect, setLayerOpacity, setLayerBlendMode, setLayerTransform } =
     useMixerStore();
 
   // Timeline store (for timeline clips)
@@ -349,7 +349,7 @@ export function EffectsPanel() {
             step="0.01"
             value={selectedLayer.position.x}
             onChange={(e) =>
-              useMixerStore.getState().setLayerTransform(selectedLayer.id, {
+              setLayerTransform(selectedLayer.id, {
                 position: { x: parseFloat(e.target.value), y: selectedLayer.position.y },
               })
             }
@@ -365,7 +365,7 @@ export function EffectsPanel() {
             step="0.01"
             value={selectedLayer.position.y}
             onChange={(e) =>
-              useMixerStore.getState().setLayerTransform(selectedLayer.id, {
+              setLayerTransform(selectedLayer.id, {
                 position: { x: selectedLayer.position.x, y: parseFloat(e.target.value) },
               })
             }
@@ -382,7 +382,7 @@ export function EffectsPanel() {
             value={selectedLayer.scale.x}
             onChange={(e) => {
               const scale = parseFloat(e.target.value);
-              useMixerStore.getState().setLayerTransform(selectedLayer.id, {
+              setLayerTransform(selectedLayer.id, {
                 scale: { x: scale, y: scale },
               });
             }}
@@ -398,7 +398,7 @@ export function EffectsPanel() {
             step="0.01"
             value={typeof selectedLayer.rotation === 'number' ? selectedLayer.rotation : 0}
             onChange={(e) =>
-              useMixerStore.getState().setLayerTransform(selectedLayer.id, {
+              setLayerTransform(selectedLayer.id, {
                 rotation: parseFloat(e.target.value),
               })
             }

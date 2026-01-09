@@ -32,6 +32,7 @@ export function MediaPanel() {
     proxyFolderName,
     pickProxyFolder,
     showInExplorer,
+    activeCompositionId,
   } = useMediaStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -188,7 +189,7 @@ export function MediaPanel() {
     if (item.type === 'composition') {
       const comp = item as Composition;
       // Don't allow dragging comp into itself (check active comp)
-      const { activeCompositionId } = useMediaStore.getState();
+      // Using activeCompositionId from hook state since we subscribed to it
       if (comp.id === activeCompositionId) {
         e.preventDefault();
         return;
@@ -217,7 +218,7 @@ export function MediaPanel() {
     if (e.currentTarget instanceof HTMLElement) {
       e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
     }
-  }, []);
+  }, [activeCompositionId]);
 
   // Render a single item
   const renderItem = (item: ProjectItem, depth: number = 0) => {

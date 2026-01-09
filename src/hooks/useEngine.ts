@@ -3,15 +3,16 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { engine } from '../engine/WebGPUEngine';
 import { useMixerStore } from '../stores/mixerStore';
-import { useTimelineStore, type Mask } from '../stores/timeline';
+import { useTimelineStore } from '../stores/timeline';
+import type { ClipMask, MaskVertex } from '../types';
 import { generateMaskTexture } from '../utils/maskRenderer';
 
 // Create a stable hash of mask shapes only (excludes feather/invert which are GPU uniforms)
 // This is faster than JSON.stringify for shape comparison
-function getMaskShapeHash(masks: Mask[]): string {
+function getMaskShapeHash(masks: ClipMask[]): string {
   // Only include shape-affecting properties for hash
   return masks.map(m =>
-    `${m.vertices.map(v => `${v.x.toFixed(2)},${v.y.toFixed(2)}`).join(';')}|` +
+    `${m.vertices.map((v: MaskVertex) => `${v.x.toFixed(2)},${v.y.toFixed(2)}`).join(';')}|` +
     `${m.position.x.toFixed(2)},${m.position.y.toFixed(2)}|` +
     `${m.opacity.toFixed(2)}|${m.mode}|${m.closed}`
   ).join('||');
