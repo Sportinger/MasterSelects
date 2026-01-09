@@ -494,7 +494,13 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   }
 
   let alpha = select(finalAlpha, 0.0, outOfBounds);
-  let result = mix(baseColor.rgb, blended, alpha);
+  var result = mix(baseColor.rgb, blended, alpha);
+
+  // DEBUG: Tint red if posZ is non-zero
+  if (abs(layer.posZ) > 0.01) {
+    result = mix(result, vec3f(1.0, 0.0, 0.0), 0.3);
+  }
+
   return vec4f(result, max(baseColor.a, alpha));
 }
 `;
@@ -646,14 +652,9 @@ export class CompositorPipeline {
     this.uniformData[14] = 2.0;         // perspective distance (lower = stronger 3D effect)
     this.uniformData[15] = layer.maskFeather || 0;      // maskFeather (blur radius in pixels)
     this.uniformDataU32[16] = layer.maskFeatherQuality || 0; // maskFeatherQuality (0=low, 1=med, 2=high)
-    const posZ = layer.position.z ?? 0;
-    this.uniformData[17] = posZ;       // posZ (depth position)
+    this.uniformData[17] = layer.position.z ?? 0;       // posZ (depth position)
     this.uniformData[18] = 0;           // _pad2
     this.uniformData[19] = 0;           // _pad3
-
-    // Debug: Always log uniforms for first few frames
-    console.log(`[GPU] Layer ${layer.id}: posZ=${posZ}, position=`, layer.position, `uniformData[17]=${this.uniformData[17]}`);
-
     this.device.queue.writeBuffer(uniformBuffer, 0, this.uniformData);
   }
 
