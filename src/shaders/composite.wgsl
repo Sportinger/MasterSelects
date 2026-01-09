@@ -737,10 +737,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
 
   // Apply opacity and alpha blending with bounds mask
   let alpha = select(finalAlpha, 0.0, outOfBounds);
-  var result = mix(baseColor.rgb, blended, alpha);
-
-  // DEBUG: Always show posZ as red channel intensity
-  result.r = result.r + abs(layer.posZ);
+  let result = mix(baseColor.rgb, blended, alpha);
 
   return vec4f(result, max(baseColor.a, alpha));
 }
