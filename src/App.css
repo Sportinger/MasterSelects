@@ -1850,16 +1850,23 @@ input[type="checkbox"] {
 
 .track-controls {
   display: flex;
-  gap: 4px;
+  flex-direction: column;
+  gap: 1px;
+  margin-left: auto;
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .btn-icon {
   background: none;
   border: none;
-  font-size: 14px;
+  font-size: 10px;
   cursor: pointer;
   opacity: 0.7;
-  padding: 2px;
+  padding: 1px 3px;
+  line-height: 1;
 }
 
 .btn-icon:hover {
@@ -3458,6 +3465,7 @@ input[type="checkbox"] {
   padding: 0 8px;
   margin: 0;
   box-sizing: border-box;
+  position: relative;
 }
 
 .track-header-main {
