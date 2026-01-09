@@ -7,10 +7,11 @@
 git add . && git commit -m "description" && git push
 ```
 
-**Documentation: FEATURES.md pflegen!**
-- Bei jedem Commit mit neuen/geänderten Features: `FEATURES.md` aktualisieren
+**Documentation: docs/Features/ pflegen!**
+- Bei jedem Commit mit neuen/geänderten Features: `docs/Features/` aktualisieren
 - Falls ein bestehendes Feature auffällt, das noch nicht dokumentiert ist: hinzufügen
 - Das Feature-Handbuch dient als vollständige Referenz aller App-Funktionen
+- Main index: `docs/Features/README.md`
 
 ## Quick Start
 
@@ -32,11 +33,20 @@ src/
 │   │   ├── TimelineClip.tsx
 │   │   ├── TimelineKeyframes.tsx
 │   │   ├── TimelineControls.tsx
-│   │   └── TimelineHeader.tsx
+│   │   ├── TimelineHeader.tsx
+│   │   ├── CurveEditor.tsx     # Bezier keyframe editor
+│   │   ├── MulticamDialog.tsx  # Multicam setup dialog
+│   │   ├── PickWhip.tsx        # Expression linking
+│   │   └── ParentChildLink.tsx # Layer parenting
 │   ├── panels/             # Dock panel contents
+│   │   ├── PropertiesPanel.tsx  # Unified: Transform, Effects, Masks, Volume
 │   │   ├── MediaPanel.tsx
+│   │   ├── AIChatPanel.tsx
+│   │   ├── MultiCamPanel.tsx
+│   │   ├── TranscriptPanel.tsx
+│   │   ├── AnalysisPanel.tsx
 │   │   ├── LayerPanel.tsx
-│   │   ├── EffectsPanel.tsx
+│   │   ├── EffectsPanel.tsx     # Legacy, use PropertiesPanel
 │   │   └── ClipPropertiesPanel.tsx
 │   ├── preview/            # Preview & overlay
 │   │   ├── Preview.tsx
@@ -58,9 +68,12 @@ src/
 │   │   ├── clipSlice.ts
 │   │   ├── playbackSlice.ts
 │   │   ├── keyframeSlice.ts
-│   │   └── selectionSlice.ts
+│   │   ├── selectionSlice.ts
+│   │   └── maskSlice.ts    # Mask shapes and vertices
 │   ├── mediaStore.ts       # Media & video state
 │   ├── mixerStore.ts       # Layer, effect, grid state
+│   ├── multicamStore.ts    # Multicam sources and sync
+│   ├── settingsStore.ts    # App settings and preferences
 │   ├── dockStore.ts        # UI layout state
 │   └── historyStore.ts     # Undo/redo
 │
@@ -84,20 +97,35 @@ src/
 │   └── WebGPUEngine.ts     # Facade (orchestrates modules)
 │
 ├── shaders/                # WGSL shaders
-│   ├── composite.wgsl
-│   ├── effects.wgsl
-│   └── output.wgsl
+│   ├── composite.wgsl      # Layer compositing, 37 blend modes
+│   ├── effects.wgsl        # GPU effects
+│   ├── opticalflow.wgsl    # Motion analysis
+│   └── output.wgsl         # Final output
 │
 ├── hooks/
 │   ├── useEngine.ts
 │   ├── useGlobalHistory.ts
-│   └── useMIDI.ts
+│   ├── useMIDI.ts
+│   ├── useClipPanelSync.ts     # Auto-switch panels on clip select
+│   └── useContextMenuPosition.ts
 │
 └── services/
-    ├── proxyGenerator.ts
-    ├── projectDB.ts
-    ├── fileSystemService.ts
-    └── proxyFrameCache.ts
+    ├── projectDB.ts            # IndexedDB persistence
+    ├── fileSystemService.ts    # File System Access API
+    ├── proxyGenerator.ts       # GPU proxy generation
+    ├── proxyFrameCache.ts      # Proxy frame caching
+    ├── audioManager.ts         # Web Audio API, 10-band EQ
+    ├── audioSync.ts            # Cross-correlation sync
+    ├── audioAnalyzer.ts        # Audio level analysis
+    ├── aiTools.ts              # 50+ AI editing tools
+    ├── claudeService.ts        # Claude API integration
+    ├── whisperService.ts       # Transcription providers
+    ├── clipTranscriber.ts      # Clip transcription
+    ├── transcriptSync.ts       # Transcript synchronization
+    ├── clipAnalyzer.ts         # Clip analysis
+    ├── multicamAnalyzer.ts     # Multicam analysis
+    ├── compositionRenderer.ts  # Nested composition rendering
+    └── apiKeyManager.ts        # API key storage
 ```
 
 ## Critical Patterns
@@ -189,7 +217,7 @@ useEngine hook
 
 1. Add shader in `src/shaders/effects.wgsl`
 2. Add params type and defaults in `src/stores/timeline/utils.ts:getDefaultEffectParams()`
-3. Add UI controls in `src/components/panels/EffectsPanel.tsx`
+3. Add UI controls in `src/components/panels/PropertiesPanel.tsx` (Effects tab)
 
 ## Debugging
 
@@ -203,3 +231,26 @@ chrome://gpu
 // Slow frame warnings (automatic)
 // [RAF] Very slow frame: rafDelay=150ms
 ```
+
+## Panel System
+
+8 dockable panel types:
+- **Preview** - Composition canvas
+- **Timeline** - Multi-track editor
+- **Media** - Media browser
+- **Properties** - Unified clip editing (Transform, Effects, Masks, Volume)
+- **Export** - Render settings
+- **Multicam** - Camera sync
+- **AI Chat** - GPT assistant
+- **Slots** - Layer management
+
+## Key Features
+
+- **WebGPU** rendering with 60fps compositing
+- **37 blend modes** (all After Effects modes)
+- **9 GPU effects** with keyframe animation
+- **10-band EQ** with keyframe support
+- **Multicam sync** via audio cross-correlation
+- **AI tools** (50+) via OpenAI function calling
+- **4 transcription providers** (Local Whisper, OpenAI, AssemblyAI, Deepgram)
+- **H.264/VP9 export** via WebCodecs
