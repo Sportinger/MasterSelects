@@ -4,7 +4,15 @@
 import { useTimelineStore } from '../stores/timeline';
 import { useMediaStore } from '../stores/mediaStore';
 import { engine } from '../engine/WebGPUEngine';
+import { startBatch, endBatch, captureSnapshot } from '../stores/historyStore';
 import type { TimelineClip, TimelineTrack } from '../stores/timeline/types';
+
+// Tools that modify the timeline (need history tracking)
+const MODIFYING_TOOLS = new Set([
+  'splitClip', 'deleteClip', 'deleteClips', 'moveClip', 'trimClip',
+  'createTrack', 'deleteTrack', 'setTrackVisibility', 'setTrackMuted',
+  'cutRangesFromClip',
+]);
 
 // ============ TOOL DEFINITIONS (OpenAI Function Calling Format) ============
 
@@ -519,6 +527,38 @@ export async function executeAITool(toolName: string, args: Record<string, unkno
   const timelineStore = useTimelineStore.getState();
   const mediaStore = useMediaStore.getState();
 
+  // Track history for modifying operations
+  const isModifying = MODIFYING_TOOLS.has(toolName);
+  if (isModifying) {
+    startBatch(`AI: ${toolName}`);
+  }
+
+  try {
+    const result = await executeToolInternal(toolName, args, timelineStore, mediaStore);
+
+    if (isModifying) {
+      endBatch();
+    }
+
+    return result;
+  } catch (error) {
+    if (isModifying) {
+      endBatch();
+    }
+    console.error(`[AI Tool] Error executing ${toolName}:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  }
+}
+
+async function executeToolInternal(
+  toolName: string,
+  args: Record<string, unknown>,
+  timelineStore: ReturnType<typeof useTimelineStore.getState>,
+  mediaStore: ReturnType<typeof useMediaStore.getState>
+): Promise<ToolResult> {
   try {
     switch (toolName) {
       // === TIMELINE STATE ===
