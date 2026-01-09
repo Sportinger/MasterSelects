@@ -141,8 +141,34 @@ export function Toolbar() {
 
   return (
     <div className="toolbar">
-      {/* Logo */}
-      <span className="logo">MASterSelects</span>
+      {/* Project Name */}
+      <div className="toolbar-project">
+        {isEditingName ? (
+          <input
+            type="text"
+            className="project-name-input"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            onBlur={handleNameSubmit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleNameSubmit();
+              if (e.key === 'Escape') setIsEditingName(false);
+            }}
+            autoFocus
+          />
+        ) : (
+          <span
+            className="project-name"
+            onClick={() => {
+              setEditName(currentProjectName);
+              setIsEditingName(true);
+            }}
+            title="Click to rename project"
+          >
+            {currentProjectName}
+          </span>
+        )}
+      </div>
 
       {/* Menu Bar */}
       <div className="menu-bar" ref={menuBarRef}>
@@ -283,35 +309,6 @@ export function Toolbar() {
 
       {/* Spacer */}
       <div className="toolbar-spacer" />
-
-      {/* Project Name */}
-      <div className="toolbar-section project-section">
-        {isEditingName ? (
-          <input
-            type="text"
-            className="project-name-input"
-            value={editName}
-            onChange={(e) => setEditName(e.target.value)}
-            onBlur={handleNameSubmit}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleNameSubmit();
-              if (e.key === 'Escape') setIsEditingName(false);
-            }}
-            autoFocus
-          />
-        ) : (
-          <span
-            className="project-name"
-            onClick={() => {
-              setEditName(currentProjectName);
-              setIsEditingName(true);
-            }}
-            title="Click to rename project"
-          >
-            {currentProjectName}
-          </span>
-        )}
-      </div>
 
       {/* Status */}
       <div className="toolbar-section toolbar-right">

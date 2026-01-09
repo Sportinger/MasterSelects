@@ -72,15 +72,40 @@ input, textarea {
   margin-left: 0;
 }
 
-.logo {
-  font-weight: bold;
-  font-size: 14px;
-  color: var(--accent);
-  padding: 0 16px 0 4px;
-  border-right: 1px solid var(--border-color);
-  height: 32px;
+.toolbar-project {
   display: flex;
   align-items: center;
+  height: 32px;
+  padding: 0 12px 0 4px;
+  border-right: 1px solid var(--border-color);
+}
+
+.toolbar-project .project-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 3px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar-project .project-name:hover {
+  background: var(--bg-hover);
+}
+
+.toolbar-project .project-name-input {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--accent);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  width: 150px;
 }
 
 /* Menu Bar */
