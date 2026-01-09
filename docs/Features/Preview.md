@@ -10,6 +10,7 @@ WebGPU preview with RAM caching, multiple panels, and edit mode.
 
 - [Preview Panel](#preview-panel)
 - [Playback Controls](#playback-controls)
+- [Preview Quality](#preview-quality)
 - [RAM Preview](#ram-preview)
 - [Multiple Previews](#multiple-previews)
 - [Edit Mode](#edit-mode)
@@ -60,6 +61,61 @@ setOutPoint(time)        // Validates against inPoint
 clearInOut()             // Clear both markers
 setInPointAtPlayhead()   // Convenience method
 setOutPointAtPlayhead()  // Convenience method
+```
+
+---
+
+## Preview Quality
+
+Scale the internal render resolution for better performance on complex compositions or slower hardware.
+
+### Location
+View menu → Preview Quality
+
+### Options
+
+| Setting | Render Resolution | Performance | Memory |
+|---------|-------------------|-------------|--------|
+| **Full (100%)** | 1920×1080 | Baseline | 100% |
+| **Half (50%)** | 960×540 | 4× faster | 25% |
+| **Quarter (25%)** | 480×270 | 16× faster | 6% |
+
+### What Gets Scaled
+- Ping-pong composite buffers
+- RAM Preview cache frames
+- Scrubbing cache frames
+- All GPU shader operations
+
+### What Stays the Same
+- Output/export resolution (always full)
+- Aspect ratio
+- UI element sizes
+
+### Memory Savings at Half Resolution
+| Resource | Full (1080p) | Half (540p) | Savings |
+|----------|--------------|-------------|---------|
+| Scrubbing cache (300 frames) | ~2.4 GB | ~600 MB | 75% |
+| RAM Preview (900 frames) | ~7.2 GB | ~1.8 GB | 75% |
+| GPU frame cache (60 frames) | ~500 MB | ~125 MB | 75% |
+
+### When to Use Lower Quality
+- Complex compositions with many layers
+- Real-time effect adjustments
+- Slower hardware or integrated GPU
+- Large 4K source files
+- Timeline scrubbing responsiveness
+
+### Implementation
+```typescript
+// In settingsStore
+setPreviewQuality(quality: 1 | 0.5 | 0.25)
+
+// Applied in useEngine hook
+const scaledWidth = Math.round(outputResolution.width * previewQuality);
+const scaledHeight = Math.round(outputResolution.height * previewQuality);
+engine.setResolution(scaledWidth, scaledHeight);
+
+// Caches cleared automatically on quality change
 ```
 
 ---

@@ -167,6 +167,7 @@ UI Framework      Custom dockable panel system
 | Feature | Status | Details |
 |---------|--------|---------|
 | Real-time Preview | ✅ | 60fps GPU rendering |
+| Preview Quality | ✅ | Full/Half/Quarter resolution for performance |
 | RAM Preview | ✅ | 30fps cached playback, 900 frame limit |
 | Multiple Outputs | ✅ | Open multiple preview windows |
 | Edit Mode | ✅ | Direct manipulation in preview |

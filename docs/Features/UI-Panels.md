@@ -265,9 +265,25 @@ View menu → Resolution:
 | 16:10 | 1920×1200 |
 | 4:3 | 1024×768 |
 
+### Preview Quality
+View menu → Preview Quality:
+| Option | Render Size | Performance |
+|--------|-------------|-------------|
+| **Full (100%)** | 1920×1080 | Best quality |
+| **Half (50%)** | 960×540 | 4× faster, 75% less memory |
+| **Quarter (25%)** | 480×270 | 16× faster, 94% less memory |
+
+Preview Quality scales the internal render resolution while maintaining the output aspect ratio. Lower quality settings significantly reduce GPU workload and memory usage—ideal for complex compositions or slower hardware.
+
+**Memory Savings at Half Resolution:**
+- Ping-pong buffers: 75% reduction
+- RAM Preview cache: 75% reduction (7.2GB → 1.8GB)
+- Scrubbing cache: 75% reduction
+
 ### Setting Resolution
 ```typescript
 setResolution(width, height)
+setPreviewQuality(quality) // 1, 0.5, or 0.25
 ```
 
 ---
