@@ -95,6 +95,7 @@ export function Timeline() {
     addKeyframe,
     moveKeyframe,
     updateKeyframe,
+    removeKeyframe,
     setPropertyValue,
     thumbnailsEnabled,
     waveformsEnabled,
@@ -285,11 +286,17 @@ export function Timeline() {
         return;
       }
 
-      // Delete/Backspace: remove selected clips from timeline
+      // Delete/Backspace: remove selected keyframes first, then clips
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
+        // First check if any keyframes are selected
+        if (selectedKeyframeIds.size > 0) {
+          // Remove all selected keyframes
+          [...selectedKeyframeIds].forEach(keyframeId => removeKeyframe(keyframeId));
+          return;
+        }
+        // Otherwise remove selected clips
         if (selectedClipIds.size > 0) {
-          // Remove all selected clips
           [...selectedClipIds].forEach(clipId => removeClip(clipId));
         }
         return;
@@ -364,7 +371,9 @@ export function Timeline() {
     clearInOut,
     toggleLoopPlayback,
     selectedClipIds,
+    selectedKeyframeIds,
     removeClip,
+    removeKeyframe,
     splitClipAtPlayhead,
     clipMap,
     updateClipTransform,
