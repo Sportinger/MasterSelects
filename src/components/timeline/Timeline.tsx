@@ -2266,7 +2266,21 @@ export function Timeline() {
       if (e.ctrlKey || e.altKey) {
         e.preventDefault();
         const delta = e.deltaY > 0 ? -5 : 5;
-        setZoom(zoom + delta);
+        const newZoom = Math.max(5, Math.min(500, zoom + delta));
+
+        // Center on playhead when zooming
+        // Get the track lanes container width for accurate centering
+        const trackLanes = el.querySelector('.track-lanes');
+        const viewportWidth = trackLanes?.clientWidth ?? el.clientWidth - 120; // 120 = track headers width
+
+        // Calculate playhead position in pixels with new zoom
+        const playheadPixel = playheadPosition * newZoom;
+
+        // Calculate scrollX to center playhead in viewport
+        const newScrollX = Math.max(0, playheadPixel - viewportWidth / 2);
+
+        setZoom(newZoom);
+        setScrollX(newScrollX);
       } else {
         // Handle horizontal scroll (e.g., shift+scroll or trackpad horizontal)
         if (e.deltaX !== 0) {
@@ -2278,7 +2292,7 @@ export function Timeline() {
 
     el.addEventListener('wheel', handleWheel, { passive: false });
     return () => el.removeEventListener('wheel', handleWheel);
-  }, [zoom, scrollX, setZoom, setScrollX]);
+  }, [zoom, scrollX, playheadPosition, setZoom, setScrollX]);
 
   // Render keyframe diamonds
   const renderKeyframeDiamonds = useCallback(
