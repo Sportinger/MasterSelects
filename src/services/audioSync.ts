@@ -96,23 +96,52 @@ function normalizedCrossCorrelate(
   return { offset: bestOffset, correlation: bestCorrelation };
 }
 
+// Clip info for sync (includes time bounds)
+export interface ClipSyncInfo {
+  mediaFileId: string;
+  clipId: string;
+  inPoint: number;  // Start time within source file (seconds)
+  duration: number; // Duration of the clip (seconds)
+}
+
 class AudioSync {
-  // Cache fingerprints
+  // Cache fingerprints - key includes time range for trimmed clips
   private fingerprintCache = new Map<string, AudioFingerprint>();
 
   /**
-   * Get or generate fingerprint for a media file
+   * Generate cache key that includes time range
    */
-  private async getFingerprint(mediaFileId: string): Promise<AudioFingerprint | null> {
+  private getCacheKey(mediaFileId: string, startTime: number, duration: number): string {
+    return `${mediaFileId}-${startTime.toFixed(2)}-${duration.toFixed(2)}`;
+  }
+
+  /**
+   * Get or generate fingerprint for a media file (or portion of it)
+   * @param mediaFileId - ID of the media file
+   * @param startTime - Start time in seconds (for trimmed clips)
+   * @param duration - Duration to analyze in seconds
+   */
+  private async getFingerprint(
+    mediaFileId: string,
+    startTime: number = 0,
+    duration: number = 30
+  ): Promise<AudioFingerprint | null> {
+    const cacheKey = this.getCacheKey(mediaFileId, startTime, duration);
+
     // Check cache
-    if (this.fingerprintCache.has(mediaFileId)) {
-      return this.fingerprintCache.get(mediaFileId)!;
+    if (this.fingerprintCache.has(cacheKey)) {
+      return this.fingerprintCache.get(cacheKey)!;
     }
 
-    // Generate fingerprint
-    const fingerprint = await audioAnalyzer.generateFingerprint(mediaFileId);
+    // Generate fingerprint with time bounds
+    const fingerprint = await audioAnalyzer.generateFingerprint(
+      mediaFileId,
+      2000, // targetSampleRate
+      startTime,
+      duration
+    );
     if (fingerprint) {
-      this.fingerprintCache.set(mediaFileId, fingerprint);
+      this.fingerprintCache.set(cacheKey, fingerprint);
     }
     return fingerprint;
   }
@@ -159,8 +188,94 @@ class AudioSync {
   }
 
   /**
-   * Sync multiple cameras to a master camera.
-   * Returns a map of camera ID to offset in milliseconds.
+   * Sync multiple clips to a master clip using their audio.
+   * Uses clip inPoint and duration to analyze only the visible portion.
+   * Returns a map of clipId to offset in milliseconds.
+   */
+  async syncMultipleClips(
+    masterClip: ClipSyncInfo,
+    targetClips: ClipSyncInfo[],
+    onProgress?: (progress: number) => void
+  ): Promise<Map<string, number>> {
+    const offsets = new Map<string, number>();
+    offsets.set(masterClip.clipId, 0); // Master has zero offset
+
+    const totalSteps = targetClips.length + 1; // +1 for master fingerprint
+    let currentStep = 0;
+
+    const reportProgress = () => {
+      if (onProgress) {
+        onProgress(Math.round((currentStep / totalSteps) * 100));
+      }
+    };
+
+    // Generate master fingerprint using clip's time bounds
+    console.log(`[AudioSync] Generating master fingerprint (${masterClip.inPoint.toFixed(1)}s - ${(masterClip.inPoint + masterClip.duration).toFixed(1)}s)...`);
+    reportProgress();
+    const masterFp = await this.getFingerprint(
+      masterClip.mediaFileId,
+      masterClip.inPoint,
+      Math.min(masterClip.duration, 30) // Limit to 30s for performance
+    );
+    currentStep++;
+    reportProgress();
+
+    if (!masterFp) {
+      console.warn('[AudioSync] Could not generate master fingerprint');
+      return offsets;
+    }
+
+    // Process each target clip
+    for (let i = 0; i < targetClips.length; i++) {
+      const targetClip = targetClips[i];
+
+      console.log(`[AudioSync] Processing target ${i + 1}/${targetClips.length} (${targetClip.inPoint.toFixed(1)}s - ${(targetClip.inPoint + targetClip.duration).toFixed(1)}s)...`);
+
+      // Get target fingerprint using clip's time bounds
+      const targetFp = await this.getFingerprint(
+        targetClip.mediaFileId,
+        targetClip.inPoint,
+        Math.min(targetClip.duration, 30)
+      );
+
+      if (!targetFp) {
+        console.warn('[AudioSync] Could not generate fingerprint for clip', targetClip.clipId);
+        currentStep++;
+        reportProgress();
+        continue;
+      }
+
+      // Calculate max offset in samples (10 seconds - sufficient for most multicam)
+      const maxOffsetSamples = Math.floor(10 * masterFp.sampleRate);
+
+      // Perform cross-correlation
+      const result = normalizedCrossCorrelate(
+        masterFp.data,
+        targetFp.data,
+        maxOffsetSamples
+      );
+
+      // Convert offset from samples to milliseconds
+      // Also account for inPoint differences: if master starts at 5s and target at 10s,
+      // the base offset is already (10-5)*1000 = 5000ms
+      const correlationOffsetMs = (result.offset / masterFp.sampleRate) * 1000;
+      const inPointDifferenceMs = (targetClip.inPoint - masterClip.inPoint) * 1000;
+      const totalOffsetMs = correlationOffsetMs + inPointDifferenceMs;
+
+      offsets.set(targetClip.clipId, totalOffsetMs);
+
+      console.log(`[AudioSync] Offset for ${targetClip.clipId}: ${totalOffsetMs.toFixed(1)}ms (correlation: ${result.correlation.toFixed(4)}, inPoint diff: ${inPointDifferenceMs.toFixed(1)}ms)`);
+
+      currentStep++;
+      reportProgress();
+    }
+
+    return offsets;
+  }
+
+  /**
+   * Legacy method: Sync multiple cameras by mediaFileId only.
+   * Uses full files (first 30s). For backward compatibility.
    */
   async syncMultiple(
     masterMediaFileId: string,

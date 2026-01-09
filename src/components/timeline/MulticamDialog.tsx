@@ -77,7 +77,7 @@ export function MulticamDialog({ open, onClose, selectedClipIds }: MulticamDialo
       // Import audioSync service (singleton instance)
       const { audioSync } = await import('../../services/audioSync');
 
-      // Get media file IDs for clips with audio
+      // Get master clip info
       const masterClip = clipsWithAudio.find(c => c.id === masterClipId);
       if (!masterClip?.source?.mediaFileId) {
         setError('Master clip has no media file reference');
@@ -85,12 +85,24 @@ export function MulticamDialog({ open, onClose, selectedClipIds }: MulticamDialo
         return;
       }
 
-      const masterMediaFileId = masterClip.source.mediaFileId;
-      const targetMediaFileIds = clipsWithAudio
-        .filter(c => c.id !== masterClipId && c.source?.mediaFileId)
-        .map(c => c.source!.mediaFileId!);
+      // Build clip sync info with inPoint and duration for accurate sync
+      const masterSyncInfo = {
+        mediaFileId: masterClip.source.mediaFileId,
+        clipId: masterClip.id,
+        inPoint: masterClip.inPoint,
+        duration: masterClip.duration,
+      };
 
-      if (targetMediaFileIds.length === 0) {
+      const targetSyncInfos = clipsWithAudio
+        .filter(c => c.id !== masterClipId && c.source?.mediaFileId)
+        .map(c => ({
+          mediaFileId: c.source!.mediaFileId!,
+          clipId: c.id,
+          inPoint: c.inPoint,
+          duration: c.duration,
+        }));
+
+      if (targetSyncInfos.length === 0) {
         setError('No other clips with media file references found');
         setSyncing(false);
         return;
@@ -101,29 +113,13 @@ export function MulticamDialog({ open, onClose, selectedClipIds }: MulticamDialo
         setProgress(p);
       };
 
-      // Run sync - returns Map<mediaFileId, offsetInMs>
-      const mediaFileOffsets = await audioSync.syncMultiple(
-        masterMediaFileId,
-        targetMediaFileIds,
+      // Run sync with clip bounds - returns Map<clipId, offsetInMs>
+      // This uses only the trimmed portion of each clip for sync
+      const clipOffsets = await audioSync.syncMultipleClips(
+        masterSyncInfo,
+        targetSyncInfos,
         onProgress
       );
-
-      // Convert mediaFileId offsets to clipId offsets (all in milliseconds)
-      const clipOffsets = new Map<string, number>();
-
-      // Master clip has 0 offset
-      clipOffsets.set(masterClipId, 0);
-
-      // Map media file offsets to clip offsets
-      for (const clip of clipsWithAudio) {
-        if (clip.id === masterClipId) continue;
-
-        const mediaFileId = clip.source?.mediaFileId;
-        if (mediaFileId && mediaFileOffsets.has(mediaFileId)) {
-          const offsetMs = mediaFileOffsets.get(mediaFileId)!;
-          clipOffsets.set(clip.id, offsetMs);
-        }
-      }
 
       // Add clips without audio with their current relative position to master (convert to ms)
       for (const clip of clipsWithoutAudio) {

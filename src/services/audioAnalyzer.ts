@@ -103,11 +103,15 @@ class AudioAnalyzer {
   /**
    * Generate a fingerprint for audio sync comparison
    * Downsamples audio to a manageable size for cross-correlation
-   * Only analyzes first maxDurationSeconds for performance (default 30s)
+   * @param mediaFileId - ID of the media file
+   * @param targetSampleRate - Sample rate for downsampled fingerprint (default 2000Hz)
+   * @param startTimeSeconds - Start time in source file (default 0)
+   * @param maxDurationSeconds - Max duration to analyze from start time (default 30s)
    */
   async generateFingerprint(
     mediaFileId: string,
     targetSampleRate: number = 2000,  // Reduced from 8kHz for faster correlation
+    startTimeSeconds: number = 0,
     maxDurationSeconds: number = 30
   ): Promise<AudioFingerprint | null> {
     const audioBuffer = await this.extractAudioBuffer(mediaFileId);
@@ -116,12 +120,20 @@ class AudioAnalyzer {
     const originalSampleRate = audioBuffer.sampleRate;
     const fullChannelData = audioBuffer.getChannelData(0);
 
-    // Limit to first N seconds for performance
+    // Calculate sample range based on start time and max duration
+    const startSample = Math.floor(startTimeSeconds * originalSampleRate);
     const maxSamples = Math.floor(maxDurationSeconds * originalSampleRate);
-    const samplesToProcess = Math.min(fullChannelData.length, maxSamples);
-    const channelData = fullChannelData.subarray(0, samplesToProcess);
+    const endSample = Math.min(startSample + maxSamples, fullChannelData.length);
+    const samplesToProcess = endSample - startSample;
 
-    console.log(`[AudioAnalyzer] Processing first ${(samplesToProcess / originalSampleRate).toFixed(1)}s of audio (${samplesToProcess} samples)`);
+    if (samplesToProcess <= 0) {
+      console.warn(`[AudioAnalyzer] Invalid time range: start=${startTimeSeconds}s, duration=${maxDurationSeconds}s`);
+      return null;
+    }
+
+    const channelData = fullChannelData.subarray(startSample, endSample);
+
+    console.log(`[AudioAnalyzer] Processing ${(samplesToProcess / originalSampleRate).toFixed(1)}s of audio from ${startTimeSeconds.toFixed(1)}s (${samplesToProcess} samples)`);
 
     // Downsample by averaging
     const ratio = originalSampleRate / targetSampleRate;
