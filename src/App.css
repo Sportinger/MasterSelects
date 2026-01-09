@@ -3700,6 +3700,25 @@ input[type="checkbox"] {
   color: #000;
 }
 
+.preview-close-btn {
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.preview-close-btn:hover {
+  background: #c53030;
+  border-color: #c53030;
+  color: #fff;
+}
+
 .preview-overlay {
   position: absolute;
   top: 0;

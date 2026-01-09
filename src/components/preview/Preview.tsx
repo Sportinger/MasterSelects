@@ -7,6 +7,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useDockStore } from '../../stores/dockStore';
 import { MaskOverlay } from './MaskOverlay';
+import { compositionRenderer } from '../../services/compositionRenderer';
 import type { Layer, EngineStats } from '../../types';
 
 interface PreviewProps {
@@ -146,11 +147,11 @@ function StatsOverlay({ stats, resolution, expanded, onToggle }: {
 }
 
 export function Preview({ panelId, compositionId }: PreviewProps) {
-  const { isEngineReady, registerPreviewCanvas, unregisterPreviewCanvas } = useEngine();
+  const { isEngineReady, registerPreviewCanvas, unregisterPreviewCanvas, renderToPreviewCanvas } = useEngine();
   const { engineStats, outputResolution, layers, selectedLayerId, selectLayer } = useMixerStore();
   const { clips, selectedClipIds, selectClip, updateClipTransform, maskEditMode } = useTimelineStore();
   const { compositions, activeCompositionId } = useMediaStore();
-  const { addPreviewPanel, updatePanelData } = useDockStore();
+  const { addPreviewPanel, updatePanelData, closePanelById } = useDockStore();
 
   // Get first selected clip for preview
   const selectedClipId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
@@ -158,23 +159,81 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 1920, height: 1080 });
-
-  // Register canvas with engine when ready
-  useEffect(() => {
-    if (isEngineReady && canvasRef.current) {
-      registerPreviewCanvas(panelId, canvasRef.current);
-    }
-    return () => {
-      unregisterPreviewCanvas(panelId);
-    };
-  }, [isEngineReady, panelId, registerPreviewCanvas, unregisterPreviewCanvas]);
-
-  // Composition selector state
-  const [selectorOpen, setSelectorOpen] = useState(false);
+  const [compReady, setCompReady] = useState(false);
+  const animFrameRef = useRef<number | null>(null);
 
   // Determine which composition this preview is showing
   const displayedCompId = compositionId ?? activeCompositionId;
   const displayedComp = compositions.find(c => c.id === displayedCompId);
+
+  // Is this showing a non-active composition? (needs independent rendering)
+  const isIndependentComp = compositionId !== null && compositionId !== activeCompositionId;
+
+  // Register canvas with engine when ready (only for active comp previews)
+  useEffect(() => {
+    if (isEngineReady && canvasRef.current && !isIndependentComp) {
+      registerPreviewCanvas(panelId, canvasRef.current);
+    }
+    return () => {
+      if (!isIndependentComp) {
+        unregisterPreviewCanvas(panelId);
+      }
+    };
+  }, [isEngineReady, panelId, isIndependentComp, registerPreviewCanvas, unregisterPreviewCanvas]);
+
+  // For independent composition: prepare and render it
+  useEffect(() => {
+    if (!isIndependentComp || !compositionId || !isEngineReady || !canvasRef.current) {
+      setCompReady(false);
+      return;
+    }
+
+    // Register canvas for independent rendering
+    registerPreviewCanvas(panelId, canvasRef.current);
+
+    // Prepare the composition
+    compositionRenderer.prepareComposition(compositionId).then((ready) => {
+      setCompReady(ready);
+      if (ready) {
+        console.log(`[Preview ${panelId}] Composition ${compositionId} ready for rendering`);
+      }
+    });
+
+    return () => {
+      unregisterPreviewCanvas(panelId);
+      // Note: Don't dispose composition here - it might be used by other previews
+    };
+  }, [isIndependentComp, compositionId, isEngineReady, panelId, registerPreviewCanvas, unregisterPreviewCanvas]);
+
+  // Render loop for independent compositions
+  useEffect(() => {
+    if (!isIndependentComp || !compReady || !compositionId) {
+      return;
+    }
+
+    const renderFrame = () => {
+      // Evaluate composition at current playhead position (synced with main timeline)
+      const currentTime = useTimelineStore.getState().playheadPosition;
+      const evalLayers = compositionRenderer.evaluateAtTime(compositionId, currentTime);
+
+      if (evalLayers.length > 0) {
+        renderToPreviewCanvas(panelId, evalLayers as Layer[]);
+      }
+
+      animFrameRef.current = requestAnimationFrame(renderFrame);
+    };
+
+    animFrameRef.current = requestAnimationFrame(renderFrame);
+
+    return () => {
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+      }
+    };
+  }, [isIndependentComp, compReady, compositionId, panelId, renderToPreviewCanvas]);
+
+  // Composition selector state
+  const [selectorOpen, setSelectorOpen] = useState(false);
 
   // Stats overlay state
   const [statsExpanded, setStatsExpanded] = useState(false);
@@ -637,6 +696,13 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
           title="Add another preview panel"
         >
           +
+        </button>
+        <button
+          className="preview-close-btn"
+          onClick={() => closePanelById(panelId)}
+          title="Close this preview panel"
+        >
+          -
         </button>
       </div>
 

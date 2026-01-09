@@ -94,7 +94,7 @@ export interface DetailedStats {
   dropsThisSecond: number;
   lastDropReason: 'none' | 'slow_raf' | 'slow_render' | 'slow_import';
   lastRafTime: number;
-  decoder: 'WebCodecs' | 'HTMLVideo' | 'HTMLVideo(cached)' | 'none';
+  decoder: 'WebCodecs' | 'HTMLVideo' | 'HTMLVideo(cached)' | 'HTMLVideo(paused-cache)' | 'none';
 }
 
 // Profile data for performance tracking

@@ -1,9 +1,7 @@
 // CompositionRenderer - Evaluates any composition at a given time and returns renderable layers
 // This enables multiple previews showing different compositions simultaneously
 
-import type { Layer, LayerSource } from '../types';
-import type { CompositionTimelineData, TimelineClip, TimelineTrack } from '../stores/timeline/types';
-import type { Composition } from '../stores/mediaStore';
+import type { Layer, SerializableClip, TimelineTrack } from '../types';
 import { useMediaStore } from '../stores/mediaStore';
 
 // Source cache entry for a composition
@@ -70,20 +68,20 @@ class CompositionRendererService {
     const loadPromises: Promise<void>[] = [];
 
     for (const clip of clips) {
-      if (!clip.source) continue;
+      // SerializableClip uses mediaFileId and sourceType instead of source
+      if (!clip.mediaFileId) continue;
 
       // Find the media file
-      const mediaFileId = clip.source.mediaFileId;
-      const mediaFile = mediaFiles.find(f => f.id === mediaFileId);
+      const mediaFile = mediaFiles.find(f => f.id === clip.mediaFileId);
 
       if (!mediaFile?.file) {
         console.warn(`[CompositionRenderer] Media file not found for clip ${clip.id}`);
         continue;
       }
 
-      if (clip.source.type === 'video') {
+      if (clip.sourceType === 'video') {
         loadPromises.push(this.loadVideoSource(sources, clip, mediaFile.file));
-      } else if (clip.source.type === 'image') {
+      } else if (clip.sourceType === 'image') {
         loadPromises.push(this.loadImageSource(sources, clip, mediaFile.file));
       }
     }
@@ -102,7 +100,7 @@ class CompositionRendererService {
     return true;
   }
 
-  private loadVideoSource(sources: CompositionSources, clip: TimelineClip, file: File): Promise<void> {
+  private loadVideoSource(sources: CompositionSources, clip: SerializableClip, file: File): Promise<void> {
     return new Promise((resolve) => {
       const video = document.createElement('video');
       video.src = URL.createObjectURL(file);
@@ -118,7 +116,7 @@ class CompositionRendererService {
           type: 'video',
           videoElement: video,
           file,
-          naturalDuration: video.duration || clip.source?.naturalDuration || 0,
+          naturalDuration: video.duration || clip.naturalDuration || 0,
         });
         console.log(`[CompositionRenderer] Video loaded: ${file.name}`);
         resolve();
@@ -133,7 +131,7 @@ class CompositionRendererService {
     });
   }
 
-  private loadImageSource(sources: CompositionSources, clip: TimelineClip, file: File): Promise<void> {
+  private loadImageSource(sources: CompositionSources, clip: SerializableClip, file: File): Promise<void> {
     return new Promise((resolve) => {
       const img = new Image();
       img.src = URL.createObjectURL(file);
@@ -145,7 +143,7 @@ class CompositionRendererService {
           type: 'image',
           imageElement: img,
           file,
-          naturalDuration: clip.source?.naturalDuration || 5,
+          naturalDuration: clip.naturalDuration || 5,
         });
         console.log(`[CompositionRenderer] Image loaded: ${file.name}`);
         resolve();
@@ -179,7 +177,7 @@ class CompositionRendererService {
     const tracks = timelineData.tracks || [];
 
     // Find video tracks (in order for layering)
-    const videoTracks = tracks.filter(t => t.type === 'video');
+    const videoTracks = tracks.filter((t: TimelineTrack) => t.type === 'video');
 
     // Build layers from bottom to top (reverse track order)
     const layers: EvaluatedLayer[] = [];
@@ -188,7 +186,7 @@ class CompositionRendererService {
       const track = videoTracks[trackIndex];
 
       // Find clip at current time on this track
-      const clipAtTime = clips.find(c =>
+      const clipAtTime = clips.find((c: SerializableClip) =>
         c.trackId === track.id &&
         time >= c.startTime &&
         time < c.startTime + c.duration
@@ -205,7 +203,7 @@ class CompositionRendererService {
 
       // Seek video to correct time
       if (source.videoElement) {
-        const targetTime = clipAtTime.isReversed
+        const targetTime = clipAtTime.reversed
           ? source.naturalDuration - clipLocalTime
           : clipLocalTime;
 

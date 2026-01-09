@@ -108,6 +108,7 @@ interface DockState {
   setSplitRatio: (splitId: string, ratio: number) => void;
   movePanel: (panelId: string, sourceGroupId: string, target: DropTarget) => void;
   closePanel: (panelId: string, groupId: string) => void;
+  closePanelById: (panelId: string) => void;
 
   // Floating panel actions
   floatPanel: (panelId: string, groupId: string, position: { x: number; y: number }) => void;
@@ -201,6 +202,31 @@ export const useDockStore = create<DockState>()(
             root: collapseSingleChildSplits(newLayout.root),
           };
           set({ layout: newLayout });
+        },
+
+        closePanelById: (panelId) => {
+          const { layout } = get();
+          // First check floating panels
+          const floating = layout.floatingPanels.find(f => f.panel.id === panelId);
+          if (floating) {
+            set({
+              layout: {
+                ...layout,
+                floatingPanels: layout.floatingPanels.filter(f => f.panel.id !== panelId),
+              },
+            });
+            return;
+          }
+          // Find in docked panels
+          const groupId = findGroupIdByPanelId(layout.root, panelId);
+          if (groupId) {
+            let newLayout = removePanel(layout, panelId, groupId);
+            newLayout = {
+              ...newLayout,
+              root: collapseSingleChildSplits(newLayout.root),
+            };
+            set({ layout: newLayout });
+          }
         },
 
         floatPanel: (panelId, groupId, position) => {
@@ -591,6 +617,20 @@ function findPanelAndGroup(
   const left = findPanelAndGroup(node.children[0], panelType);
   if (left) return left;
   return findPanelAndGroup(node.children[1], panelType);
+}
+
+// Helper: Find a panel's group ID by panel ID
+function findGroupIdByPanelId(node: DockNode, panelId: string): string | null {
+  if (node.kind === 'tab-group') {
+    const panel = node.panels.find((p) => p.id === panelId);
+    if (panel) {
+      return node.id;
+    }
+    return null;
+  }
+  const left = findGroupIdByPanelId(node.children[0], panelId);
+  if (left) return left;
+  return findGroupIdByPanelId(node.children[1], panelId);
 }
 
 // Helper: Update panel data in layout

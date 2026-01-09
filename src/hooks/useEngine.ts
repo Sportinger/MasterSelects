@@ -274,6 +274,10 @@ export function useEngine() {
     engine.unregisterPreviewCanvas(id);
   }, []);
 
+  const renderToPreviewCanvas = useCallback((canvasId: string, layers: import('../types').Layer[]) => {
+    engine.renderToPreviewCanvas(canvasId, layers);
+  }, []);
+
   return {
     canvasRef,
     isEngineReady,
@@ -282,5 +286,6 @@ export function useEngine() {
     closeOutputWindow,
     registerPreviewCanvas,
     unregisterPreviewCanvas,
+    renderToPreviewCanvas,
   };
 }

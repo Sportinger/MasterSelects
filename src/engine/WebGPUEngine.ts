@@ -563,7 +563,6 @@ export class WebGPUEngine {
     if (!this.pingView || !this.pongView) return;
 
     const t0 = performance.now();
-    const timeSinceLastRender = this.lastRenderCall > 0 ? t0 - this.lastRenderCall : 0;
     this.lastRenderCall = t0;
 
     // Reuse array, just clear it
@@ -894,6 +893,168 @@ export class WebGPUEngine {
     }
 
     this.updateStats();
+  }
+
+  /**
+   * Render specific layers to a specific preview canvas
+   * Used for multi-composition preview where each preview shows different content
+   */
+  renderToPreviewCanvas(canvasId: string, layers: Layer[]): void {
+    const device = this.context.getDevice();
+    const canvasContext = this.previewCanvases.get(canvasId);
+
+    if (!device || !canvasContext || !this.compositorPipeline || !this.outputPipeline || !this.sampler) {
+      return;
+    }
+    if (!this.pingView || !this.pongView) return;
+
+    // Prepare layer data
+    const layerData: LayerRenderData[] = [];
+
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const layer = layers[i];
+      if (!layer || !layer.visible || !layer.source || layer.opacity === 0) continue;
+
+      // HTMLVideoElement
+      if (layer.source.videoElement) {
+        const video = layer.source.videoElement;
+        if (video.readyState >= 2) {
+          const extTex = this.textureManager?.importVideoTexture(video);
+          if (extTex) {
+            layerData.push({
+              layer,
+              isVideo: true,
+              externalTexture: extTex,
+              textureView: null,
+              sourceWidth: video.videoWidth,
+              sourceHeight: video.videoHeight,
+            });
+            continue;
+          }
+        }
+      }
+
+      // Image
+      if (layer.source.imageElement) {
+        const img = layer.source.imageElement;
+        let texture = this.textureManager?.getCachedImageTexture(img);
+        if (!texture) {
+          texture = this.textureManager?.createImageTexture(img) ?? undefined;
+        }
+        if (texture) {
+          const imageView = this.textureManager!.getImageView(texture);
+          layerData.push({
+            layer,
+            isVideo: false,
+            externalTexture: null,
+            textureView: imageView,
+            sourceWidth: img.naturalWidth,
+            sourceHeight: img.naturalHeight,
+          });
+        }
+      }
+    }
+
+    // If no layers, clear to black
+    if (layerData.length === 0) {
+      const commandEncoder = device.createCommandEncoder();
+      if (this.blackTexture) {
+        const blackView = this.blackTexture.createView();
+        const blackBindGroup = this.outputPipeline.createOutputBindGroup(this.sampler, blackView);
+        this.outputPipeline.renderToCanvas(commandEncoder, canvasContext, blackBindGroup);
+      }
+      device.queue.submit([commandEncoder.finish()]);
+      return;
+    }
+
+    const commandEncoder = device.createCommandEncoder();
+
+    // Ping-pong compositing (same pattern as main render)
+    let readView = this.pingView;
+    let writeView = this.pongView;
+    let usePing = true;
+
+    // Clear first buffer
+    const clearPass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: readView,
+        clearValue: { r: 0, g: 0, b: 0, a: 1 },
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+    clearPass.end();
+
+    // Composite each layer
+    for (let i = 0; i < layerData.length; i++) {
+      const data = layerData[i];
+      const layer = data.layer;
+
+      // Get or create per-layer uniform buffer
+      const uniformBuffer = this.compositorPipeline!.getOrCreateUniformBuffer(layer.id);
+
+      // Calculate aspect ratios
+      const sourceAspect = data.sourceWidth / data.sourceHeight;
+      const outputAspect = this.outputWidth / this.outputHeight;
+
+      // Get mask texture view for this layer
+      const hasMask = this.maskTextureManager?.hasMaskTexture(layer.id) ?? false;
+      const maskTextureView = this.maskTextureManager?.getMaskTextureView(layer.id) ??
+                             this.maskTextureManager?.getWhiteMaskView()!;
+
+      // Update uniforms
+      this.compositorPipeline!.updateLayerUniforms(layer, sourceAspect, outputAspect, hasMask, uniformBuffer);
+
+      let pipeline: GPURenderPipeline;
+      let bindGroup: GPUBindGroup;
+
+      if (data.isVideo && data.externalTexture) {
+        pipeline = this.compositorPipeline!.getExternalCompositePipeline()!;
+        bindGroup = this.compositorPipeline!.createExternalCompositeBindGroup(
+          this.sampler!,
+          readView,
+          data.externalTexture,
+          uniformBuffer,
+          maskTextureView
+        );
+      } else if (data.textureView) {
+        pipeline = this.compositorPipeline!.getCompositePipeline()!;
+        bindGroup = this.compositorPipeline!.createCompositeBindGroup(
+          this.sampler!,
+          readView,
+          data.textureView,
+          uniformBuffer,
+          maskTextureView
+        );
+      } else {
+        continue;
+      }
+
+      const compositePass = commandEncoder.beginRenderPass({
+        colorAttachments: [{
+          view: writeView,
+          loadOp: 'clear',
+          storeOp: 'store',
+        }],
+      });
+      compositePass.setPipeline(pipeline);
+      compositePass.setBindGroup(0, bindGroup);
+      compositePass.draw(6);
+      compositePass.end();
+
+      // Swap buffers
+      const temp = readView;
+      readView = writeView;
+      writeView = temp;
+      usePing = !usePing;
+    }
+
+    // Output to this specific canvas
+    const finalIsPing = !usePing;
+    const outputBindGroup = this.outputPipeline!.getOutputBindGroup(this.sampler!, readView, finalIsPing);
+    this.outputPipeline!.renderToCanvas(commandEncoder, canvasContext, outputBindGroup);
+
+    device.queue.submit([commandEncoder.finish()]);
   }
 
   private updateStats(): void {
