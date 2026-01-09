@@ -1529,14 +1529,21 @@ export function Timeline() {
       const startX = e.clientX - rect.left + scrollX;
       const startY = e.clientY - rect.top;
 
+      // Check if we're starting in the keyframe area
+      const isInKeyframeArea = target.closest('.keyframe-track-row') !== null;
+
       // Clear selection unless shift is held
+      // But if in keyframe area, keep clip selection to prevent keyframe rows from collapsing
       if (!e.shiftKey) {
-        selectClip(null, false);
+        if (!isInKeyframeArea) {
+          selectClip(null, false);
+        }
         deselectAllKeyframes();
       }
 
       // Store the initial selection (for shift+drag to add to it)
-      const initialSelection = e.shiftKey ? new Set(selectedClipIds) : new Set<string>();
+      // If in keyframe area, always preserve current clip selection
+      const initialSelection = (e.shiftKey || isInKeyframeArea) ? new Set(selectedClipIds) : new Set<string>();
       const initialKeyframeSelection = e.shiftKey ? new Set(selectedKeyframeIds) : new Set<string>();
 
       setMarquee({
@@ -2521,6 +2528,7 @@ export function Timeline() {
           clips={clips}
           selectedKeyframeIds={selectedKeyframeIds}
           clipKeyframes={clipKeyframes}
+          clipDrag={clipDrag}
           onSelectKeyframe={selectKeyframe}
           onMoveKeyframe={moveKeyframe}
           onUpdateKeyframe={updateKeyframe}
@@ -2529,7 +2537,7 @@ export function Timeline() {
         />
       );
     },
-    [clips, selectedKeyframeIds, clipKeyframes, selectKeyframe, moveKeyframe, updateKeyframe, timeToPixel, pixelToTime]
+    [clips, selectedKeyframeIds, clipKeyframes, clipDrag, selectKeyframe, moveKeyframe, updateKeyframe, timeToPixel, pixelToTime]
   );
 
   // Render a clip

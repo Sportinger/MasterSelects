@@ -223,6 +223,7 @@ export interface TimelineKeyframesProps {
     value: number;
     easing: string;
   }>>;
+  clipDrag: ClipDragState | null;
   onSelectKeyframe: (keyframeId: string, addToSelection: boolean) => void;
   onMoveKeyframe: (keyframeId: string, newTime: number) => void;
   onUpdateKeyframe: (keyframeId: string, updates: { easing?: string }) => void;

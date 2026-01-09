@@ -34,6 +34,7 @@ function TimelineKeyframesComponent({
   clips,
   selectedKeyframeIds,
   clipKeyframes,
+  clipDrag,
   onSelectKeyframe,
   onMoveKeyframe,
   onUpdateKeyframe,
@@ -65,24 +66,38 @@ function TimelineKeyframesComponent({
 
   // Get all keyframes once and group by clip/property
   // Now depends on clipKeyframes Map directly for proper reactivity
+  // Also depends on clipDrag to move keyframes in realtime when clip is dragged
   const allKeyframes = useMemo(() => {
     const result: KeyframeDisplay[] = [];
 
     trackClips.forEach((clip) => {
       const kfs = clipKeyframes.get(clip.id) || [];
+
+      // Calculate effective start time - use drag preview position if this clip is being dragged
+      let effectiveStartTime = clip.startTime;
+      if (clipDrag && clipDrag.clipId === clip.id) {
+        // Use snapped time if snapping, otherwise calculate from current drag position
+        if (clipDrag.snappedTime !== null) {
+          effectiveStartTime = clipDrag.snappedTime;
+        } else {
+          // Calculate from mouse position: currentX is mouse pos, grabOffsetX is where we grabbed the clip
+          effectiveStartTime = Math.max(0, pixelToTime(clipDrag.currentX - clipDrag.grabOffsetX));
+        }
+      }
+
       kfs
         .filter((k) => k.property === property)
         .forEach((kf) => {
           result.push({
             kf,
             clip,
-            absTime: clip.startTime + kf.time,
+            absTime: effectiveStartTime + kf.time,
           });
         });
     });
 
     return result;
-  }, [trackClips, property, clipKeyframes]);
+  }, [trackClips, property, clipKeyframes, clipDrag]);
 
   // Handle keyframe drag
   const handleMouseDown = useCallback((
