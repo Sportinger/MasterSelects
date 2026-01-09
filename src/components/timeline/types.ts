@@ -142,6 +142,7 @@ export interface TimelineHeaderProps {
   }>;
   // Keyframe controls
   getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
+  getInterpolatedEffects: (clipId: string, clipLocalTime: number) => Array<{ id: string; type: string; name: string; params: Record<string, unknown> }>;
   addKeyframe: (clipId: string, property: AnimatableProperty, value: number) => void;
   setPlayheadPosition: (time: number) => void;
   setPropertyValue: (clipId: string, property: AnimatableProperty, value: number) => void;

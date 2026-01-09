@@ -209,8 +209,8 @@ function TimelineTrackComponent({
             </div>
           )}
       </div>
-      {/* Property rows - only shown when track is expanded */}
-      {track.type === 'video' && isExpanded && (
+      {/* Property rows - only shown when track is expanded (for both video and audio) */}
+      {(track.type === 'video' || track.type === 'audio') && isExpanded && (
         <TrackPropertyTracks
           trackId={track.id}
           selectedClip={selectedTrackClip || null}

@@ -21,7 +21,22 @@ const getPropertyLabel = (prop: string): string => {
   if (labels[prop]) return labels[prop];
   if (prop.startsWith('effect.')) {
     const parts = prop.split('.');
-    return parts[parts.length - 1];
+    const paramName = parts[parts.length - 1];
+    // Audio effect friendly names
+    const audioLabels: Record<string, string> = {
+      'volume': 'Volume',
+      'band31': '31Hz',
+      'band62': '62Hz',
+      'band125': '125Hz',
+      'band250': '250Hz',
+      'band500': '500Hz',
+      'band1k': '1kHz',
+      'band2k': '2kHz',
+      'band4k': '4kHz',
+      'band8k': '8kHz',
+      'band16k': '16kHz',
+    };
+    return audioLabels[paramName] || paramName;
   }
   return prop;
 };
@@ -47,7 +62,29 @@ const formatValue = (value: number, prop: string): string => {
   if (prop === 'opacity') return (value * 100).toFixed(0) + '%';
   if (prop.startsWith('rotation')) return value.toFixed(1) + '°';
   if (prop.startsWith('scale')) return (value * 100).toFixed(0) + '%';
+  // Audio effect formatting
+  if (prop.includes('.volume')) return (value * 100).toFixed(0) + '%';
+  if (prop.includes('.band')) return (value > 0 ? '+' : '') + value.toFixed(1) + 'dB';
   return value.toFixed(1);
+};
+
+// Get value from effects for effect properties
+const getValueFromEffects = (
+  effects: Array<{ id: string; type: string; name: string; params: Record<string, unknown> }>,
+  prop: string
+): number => {
+  // Effect properties are formatted as "effect.{effectId}.{paramName}"
+  const parts = prop.split('.');
+  if (parts.length !== 3 || parts[0] !== 'effect') return 0;
+
+  const effectId = parts[1];
+  const paramName = parts[2];
+
+  const effect = effects.find(e => e.id === effectId);
+  if (!effect) return 0;
+
+  const value = effect.params[paramName];
+  return typeof value === 'number' ? value : 0;
 };
 
 // Single property row with value display and keyframe controls
@@ -59,6 +96,7 @@ function PropertyRow({
   keyframes,
   playheadPosition,
   getInterpolatedTransform,
+  getInterpolatedEffects,
   addKeyframe,
   setPlayheadPosition,
   setPropertyValue,
@@ -72,6 +110,7 @@ function PropertyRow({
   keyframes: Array<{ id: string; time: number; property: string; value: number; easing: string }>;
   playheadPosition: number;
   getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
+  getInterpolatedEffects: (clipId: string, clipLocalTime: number) => Array<{ id: string; type: string; name: string; params: Record<string, unknown> }>;
   addKeyframe: (clipId: string, property: AnimatableProperty, value: number) => void;
   setPlayheadPosition: (time: number) => void;
   setPropertyValue: (clipId: string, property: AnimatableProperty, value: number) => void;
@@ -94,9 +133,15 @@ function PropertyRow({
   // Get current interpolated value
   const currentValue = useMemo(() => {
     if (!isWithinClip) return 0;
+    // Effect properties use getInterpolatedEffects
+    if (prop.startsWith('effect.')) {
+      const effects = getInterpolatedEffects(clipId, clipLocalTime);
+      return getValueFromEffects(effects, prop);
+    }
+    // Transform properties use getInterpolatedTransform
     const transform = getInterpolatedTransform(clipId, clipLocalTime);
     return getValueFromTransform(transform, prop);
-  }, [clipId, clipLocalTime, isWithinClip, getInterpolatedTransform, prop]);
+  }, [clipId, clipLocalTime, isWithinClip, getInterpolatedTransform, getInterpolatedEffects, prop]);
 
   // Find prev/next keyframes relative to playhead
   const prevKeyframe = useMemo(() => {
@@ -122,6 +167,9 @@ function PropertyRow({
     if (prop.startsWith('scale')) return 0.005; // typically 0-2 range
     if (prop.startsWith('rotation')) return 0.5; // degrees
     if (prop.startsWith('position')) return 1; // pixels
+    // Audio effect properties
+    if (prop.includes('.volume')) return 0.005; // 0-1 range
+    if (prop.includes('.band')) return 0.1; // dB range (-12 to 12)
     return 0.1;
   };
 
@@ -131,6 +179,9 @@ function PropertyRow({
     if (prop.startsWith('scale')) return 1;
     if (prop.startsWith('rotation')) return 0;
     if (prop.startsWith('position')) return 0;
+    // Audio effect properties
+    if (prop.includes('.volume')) return 1; // 100%
+    if (prop.includes('.band')) return 0; // 0 dB (no boost/cut)
     return 0;
   };
 
@@ -253,6 +304,7 @@ function TrackPropertyLabels({
   clipKeyframes,
   playheadPosition,
   getInterpolatedTransform,
+  getInterpolatedEffects,
   addKeyframe,
   setPlayheadPosition,
   setPropertyValue,
@@ -264,6 +316,7 @@ function TrackPropertyLabels({
   clipKeyframes: Map<string, Array<{ id: string; clipId: string; time: number; property: AnimatableProperty; value: number; easing: string }>>;
   playheadPosition: number;
   getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
+  getInterpolatedEffects: (clipId: string, clipLocalTime: number) => Array<{ id: string; type: string; name: string; params: Record<string, unknown> }>;
   addKeyframe: (clipId: string, property: AnimatableProperty, value: number) => void;
   setPlayheadPosition: (time: number) => void;
   setPropertyValue: (clipId: string, property: AnimatableProperty, value: number) => void;
@@ -287,12 +340,28 @@ function TrackPropertyLabels({
 
   // Convert Set to sorted array for consistent ordering
   const sortedProperties = Array.from(keyframeProperties).sort((a, b) => {
-    const order = ['opacity', 'position.x', 'position.y', 'position.z', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z'];
-    const aIdx = order.indexOf(a);
-    const bIdx = order.indexOf(b);
+    // Transform properties order
+    const transformOrder = ['opacity', 'position.x', 'position.y', 'position.z', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z'];
+    // Audio effect properties order (volume first, then bands by frequency)
+    const audioParamOrder = ['volume', 'band31', 'band62', 'band125', 'band250', 'band500', 'band1k', 'band2k', 'band4k', 'band8k', 'band16k'];
+
+    const aIdx = transformOrder.indexOf(a);
+    const bIdx = transformOrder.indexOf(b);
     if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
     if (aIdx !== -1) return -1;
     if (bIdx !== -1) return 1;
+
+    // For effect properties, extract the param name and sort
+    if (a.startsWith('effect.') && b.startsWith('effect.')) {
+      const aParam = a.split('.').pop() || '';
+      const bParam = b.split('.').pop() || '';
+      const aAudioIdx = audioParamOrder.indexOf(aParam);
+      const bAudioIdx = audioParamOrder.indexOf(bParam);
+      if (aAudioIdx !== -1 && bAudioIdx !== -1) return aAudioIdx - bAudioIdx;
+      if (aAudioIdx !== -1) return -1;
+      if (bAudioIdx !== -1) return 1;
+    }
+
     return a.localeCompare(b);
   });
 
@@ -313,6 +382,7 @@ function TrackPropertyLabels({
             keyframes={keyframes}
             playheadPosition={playheadPosition}
             getInterpolatedTransform={getInterpolatedTransform}
+            getInterpolatedEffects={getInterpolatedEffects}
             addKeyframe={addKeyframe}
             setPlayheadPosition={setPlayheadPosition}
             setPropertyValue={setPropertyValue}
@@ -342,6 +412,7 @@ function TimelineHeaderComponent({
   onWheel,
   clipKeyframes,
   getInterpolatedTransform,
+  getInterpolatedEffects,
   addKeyframe,
   setPlayheadPosition,
   setPropertyValue,
@@ -396,7 +467,8 @@ function TimelineHeaderComponent({
     // Don't toggle if editing or if click was on a button
     if (isEditing) return;
     if ((e.target as HTMLElement).closest('.track-controls')) return;
-    if (track.type === 'video') {
+    // Both video and audio tracks can expand (if they have keyframes)
+    if (track.type === 'video' || (track.type === 'audio' && hasKeyframes)) {
       onToggleExpand();
     }
   };
@@ -411,12 +483,12 @@ function TimelineHeaderComponent({
     >
       <div
         className="track-header-top"
-        style={{ height: track.height, cursor: track.type === 'video' ? 'pointer' : 'default' }}
+        style={{ height: track.height, cursor: (track.type === 'video' || (track.type === 'audio' && hasKeyframes)) ? 'pointer' : 'default' }}
         onClick={handleHeaderClick}
       >
         <div className="track-header-main">
-          {/* Only video tracks get expand arrow */}
-          {track.type === 'video' && (
+          {/* Video tracks always get expand arrow, audio tracks get it when they have keyframes */}
+          {(track.type === 'video' || (track.type === 'audio' && hasKeyframes)) && (
             <span
               className={`track-expand-arrow ${isExpanded ? 'expanded' : ''} ${
                 hasKeyframes ? 'has-keyframes' : ''
@@ -475,14 +547,15 @@ function TimelineHeaderComponent({
           )}
         </div>
       </div>
-      {/* Property labels - shown when track is expanded */}
-      {track.type === 'video' && isExpanded && (
+      {/* Property labels - shown when track is expanded (for both video and audio with keyframes) */}
+      {(track.type === 'video' || track.type === 'audio') && isExpanded && (
         <TrackPropertyLabels
           trackId={track.id}
           selectedClip={selectedTrackClip || null}
           clipKeyframes={clipKeyframes}
           playheadPosition={playheadPosition}
           getInterpolatedTransform={getInterpolatedTransform}
+          getInterpolatedEffects={getInterpolatedEffects}
           addKeyframe={addKeyframe}
           setPlayheadPosition={setPlayheadPosition}
           setPropertyValue={setPropertyValue}

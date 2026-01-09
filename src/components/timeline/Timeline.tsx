@@ -2739,6 +2739,7 @@ export function Timeline() {
                   clipKeyframes={clipKeyframes}
                   getClipKeyframes={getClipKeyframes}
                   getInterpolatedTransform={getInterpolatedTransform}
+                  getInterpolatedEffects={getInterpolatedEffects}
                   addKeyframe={addKeyframe}
                   setPlayheadPosition={setPlayheadPosition}
                   setPropertyValue={setPropertyValue}
