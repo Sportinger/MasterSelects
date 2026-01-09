@@ -2427,13 +2427,15 @@ input[type="checkbox"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   margin-right: 4px;
   cursor: grab;
-  opacity: 0.6;
+  opacity: 0.7;
   transition: opacity 0.15s, transform 0.15s;
   flex-shrink: 0;
+  pointer-events: auto; /* Override parent's pointer-events: none */
+  color: #aaa;
 }
 
 .pick-whip:hover {
@@ -2884,6 +2886,13 @@ input[type="checkbox"] {
   justify-content: flex-start;
   background: linear-gradient(to bottom, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.2) 50%, transparent 100%);
   pointer-events: none;
+}
+
+.clip-name-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
 }
 
 .clip-name {

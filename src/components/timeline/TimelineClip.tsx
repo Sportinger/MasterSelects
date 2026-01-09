@@ -563,16 +563,18 @@ function TimelineClipComponent({
       )}
       <div className="clip-content">
         {clip.isLoading && <div className="clip-loading-spinner" />}
-        <PickWhip
-          clipId={clip.id}
-          clipName={clip.name}
-          parentClipId={clip.parentClipId}
-          parentClipName={parentClip?.name}
-          onSetParent={onSetClipParent}
-          onDragStart={onPickWhipDragStart}
-          onDragEnd={onPickWhipDragEnd}
-        />
-        <span className="clip-name">{clip.name}</span>
+        <div className="clip-name-row">
+          <PickWhip
+            clipId={clip.id}
+            clipName={clip.name}
+            parentClipId={clip.parentClipId}
+            parentClipName={parentClip?.name}
+            onSetParent={onSetClipParent}
+            onDragStart={onPickWhipDragStart}
+            onDragEnd={onPickWhipDragEnd}
+          />
+          <span className="clip-name">{clip.name}</span>
+        </div>
         <span className="clip-duration">{formatTime(displayDuration)}</span>
       </div>
       {/* Transcript word markers */}
