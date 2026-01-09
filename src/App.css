@@ -3681,6 +3681,68 @@ input[type="checkbox"] {
   color: #f59e0b;
 }
 
+.multicam-method-selector {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.method-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px;
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.method-option:hover:not(:has(input:disabled)) {
+  border-color: var(--accent);
+}
+
+.method-option.selected {
+  border-color: var(--accent);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.method-option:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.method-option input[type="radio"] {
+  display: none;
+}
+
+.method-option .method-icon {
+  font-size: 24px;
+}
+
+.method-option .method-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.method-option .method-count {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.transcript-word-count {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
 .multicam-warning {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.3);

@@ -86,6 +86,21 @@ export function MulticamDialog({ open, onClose, selectedClipIds }: MulticamDialo
     }
   }, [open, clipsWithAudio, transcriptSyncAvailable]);
 
+  // Update masterClipId when sync method changes
+  useEffect(() => {
+    if (syncMethod === 'audio') {
+      // Select first audio clip if current master isn't in audio list
+      if (!clipsWithAudio.find(c => c.id === masterClipId)) {
+        setMasterClipId(clipsWithAudio[0]?.id || null);
+      }
+    } else {
+      // Select first transcript clip if current master isn't in transcript list
+      if (!clipsWithTranscript.find(c => c.id === masterClipId)) {
+        setMasterClipId(clipsWithTranscript[0]?.id || null);
+      }
+    }
+  }, [syncMethod, clipsWithAudio, clipsWithTranscript, masterClipId]);
+
   // Handle sync and link
   const handleSyncAndLink = useCallback(async () => {
     // Validate based on sync method
@@ -249,41 +264,113 @@ export function MulticamDialog({ open, onClose, selectedClipIds }: MulticamDialo
         </div>
 
         <div className="multicam-dialog-content">
+          {/* Sync method selection */}
+          <div className="multicam-section">
+            <h3>Sync Method</h3>
+            <div className="multicam-method-selector">
+              <label className={`method-option ${syncMethod === 'audio' ? 'selected' : ''}`}>
+                <input
+                  type="radio"
+                  name="syncMethod"
+                  value="audio"
+                  checked={syncMethod === 'audio'}
+                  onChange={() => setSyncMethod('audio')}
+                  disabled={syncing || clipsWithAudio.length < 2}
+                />
+                <span className="method-icon">{'\uD83D\uDD0A'}</span>
+                <span className="method-label">Audio Waveform</span>
+                <span className="method-count">
+                  {clipsWithAudio.length >= 2 ? `${clipsWithAudio.length} clips` : 'Need 2+ clips'}
+                </span>
+              </label>
+              <label className={`method-option ${syncMethod === 'transcript' ? 'selected' : ''}`}>
+                <input
+                  type="radio"
+                  name="syncMethod"
+                  value="transcript"
+                  checked={syncMethod === 'transcript'}
+                  onChange={() => setSyncMethod('transcript')}
+                  disabled={syncing || !transcriptSyncAvailable}
+                />
+                <span className="method-icon">{'\uD83D\uDCDD'}</span>
+                <span className="method-label">Transcript Text</span>
+                <span className="method-count">
+                  {transcriptSyncAvailable ? `${clipsWithTranscript.length} clips` : 'Need 2+ transcribed'}
+                </span>
+              </label>
+            </div>
+          </div>
+
           {/* Master selection */}
           <div className="multicam-section">
-            <h3>Select Master Audio Track</h3>
+            <h3>Select Master {syncMethod === 'audio' ? 'Audio' : 'Transcript'} Track</h3>
             <p className="section-hint">
-              Other clips will be synchronized to this master track's audio.
+              {syncMethod === 'audio'
+                ? "Other clips will be synchronized to this master track's audio."
+                : "Other clips will be aligned to this master track's transcript."}
             </p>
 
-            {clipsWithAudio.length === 0 ? (
-              <div className="multicam-warning">
-                No clips with audio selected. At least 2 clips with audio are needed for sync.
-              </div>
+            {syncMethod === 'audio' ? (
+              clipsWithAudio.length === 0 ? (
+                <div className="multicam-warning">
+                  No clips with audio selected. At least 2 clips with audio are needed for sync.
+                </div>
+              ) : (
+                <div className="multicam-clip-list">
+                  {clipsWithAudio.map((clip) => (
+                    <label key={clip.id} className="multicam-clip-item">
+                      <input
+                        type="radio"
+                        name="masterClip"
+                        value={clip.id}
+                        checked={masterClipId === clip.id}
+                        onChange={() => setMasterClipId(clip.id)}
+                        disabled={syncing}
+                      />
+                      <span className="clip-icon">
+                        {clip.source?.type === 'audio' ? '\uD83D\uDD0A' : '\uD83C\uDFAC'}
+                      </span>
+                      <span className="clip-name" title={clip.name}>
+                        {clip.name}
+                      </span>
+                      {masterClipId === clip.id && (
+                        <span className="master-badge">Master</span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              )
             ) : (
-              <div className="multicam-clip-list">
-                {clipsWithAudio.map((clip) => (
-                  <label key={clip.id} className="multicam-clip-item">
-                    <input
-                      type="radio"
-                      name="masterClip"
-                      value={clip.id}
-                      checked={masterClipId === clip.id}
-                      onChange={() => setMasterClipId(clip.id)}
-                      disabled={syncing}
-                    />
-                    <span className="clip-icon">
-                      {clip.source?.type === 'audio' ? '\uD83D\uDD0A' : '\uD83C\uDFAC'}
-                    </span>
-                    <span className="clip-name" title={clip.name}>
-                      {clip.name}
-                    </span>
-                    {masterClipId === clip.id && (
-                      <span className="master-badge">Master</span>
-                    )}
-                  </label>
-                ))}
-              </div>
+              clipsWithTranscript.length === 0 ? (
+                <div className="multicam-warning">
+                  No clips with transcripts selected. Transcribe clips first using the context menu.
+                </div>
+              ) : (
+                <div className="multicam-clip-list">
+                  {clipsWithTranscript.map((clip) => (
+                    <label key={clip.id} className="multicam-clip-item">
+                      <input
+                        type="radio"
+                        name="masterClip"
+                        value={clip.id}
+                        checked={masterClipId === clip.id}
+                        onChange={() => setMasterClipId(clip.id)}
+                        disabled={syncing}
+                      />
+                      <span className="clip-icon">{'\uD83D\uDCDD'}</span>
+                      <span className="clip-name" title={clip.name}>
+                        {clip.name}
+                      </span>
+                      <span className="transcript-word-count">
+                        {clip.transcript?.length || 0} words
+                      </span>
+                      {masterClipId === clip.id && (
+                        <span className="master-badge">Master</span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              )
             )}
           </div>
 
@@ -340,7 +427,12 @@ export function MulticamDialog({ open, onClose, selectedClipIds }: MulticamDialo
           <button
             className="btn-sync"
             onClick={handleSyncAndLink}
-            disabled={syncing || clipsWithAudio.length < 2 || !masterClipId}
+            disabled={
+              syncing ||
+              !masterClipId ||
+              (syncMethod === 'audio' && clipsWithAudio.length < 2) ||
+              (syncMethod === 'transcript' && clipsWithTranscript.length < 2)
+            }
           >
             {syncing ? 'Syncing...' : 'Sync & Link'}
           </button>
