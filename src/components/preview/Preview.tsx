@@ -250,6 +250,9 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
 
     console.log(`[Preview ${panelId}] Starting independent render loop for composition: ${compositionId}`);
 
+    // Debug: log once per second
+    let lastDebugLog = 0;
+
     const renderFrame = () => {
       const mainPlayhead = useTimelineStore.getState().playheadPosition;
       const mainClips = useTimelineStore.getState().clips;
@@ -260,16 +263,26 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
       const nestedClip = mainClips.find(c => c.isComposition && c.compositionId === compositionId);
 
       let playheadTime: number;
+      let syncSource = 'default';
 
       if (nestedClip && mainPlayhead >= nestedClip.startTime && mainPlayhead < nestedClip.startTime + nestedClip.duration) {
         // Composition IS nested and main playhead is within the nested clip
         // Calculate internal time: (main playhead - clip start) + clip's inPoint
         playheadTime = (mainPlayhead - nestedClip.startTime) + (nestedClip.inPoint || 0);
+        syncSource = 'nested';
       } else if (composition?.timelineData?.playheadPosition !== undefined) {
         // Not nested (or outside nested range) - use composition's own stored playhead
         playheadTime = composition.timelineData.playheadPosition;
+        syncSource = 'stored';
       } else {
         playheadTime = 0;
+      }
+
+      // Debug log once per second
+      const now = Date.now();
+      if (now - lastDebugLog > 1000) {
+        lastDebugLog = now;
+        console.log(`[Preview ${panelId}] sync=${syncSource}, mainPlayhead=${mainPlayhead.toFixed(2)}, nestedClip=${nestedClip ? `start=${nestedClip.startTime.toFixed(2)}, inPoint=${nestedClip.inPoint?.toFixed(2)}` : 'null'}, result=${playheadTime.toFixed(2)}`);
       }
 
       // Evaluate this composition's timeline at the calculated time
