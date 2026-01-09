@@ -3,8 +3,19 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { engine } from '../engine/WebGPUEngine';
 import { useMixerStore } from '../stores/mixerStore';
-import { useTimelineStore } from '../stores/timeline';
+import { useTimelineStore, type Mask } from '../stores/timeline';
 import { generateMaskTexture } from '../utils/maskRenderer';
+
+// Create a stable hash of mask shapes only (excludes feather/invert which are GPU uniforms)
+// This is faster than JSON.stringify for shape comparison
+function getMaskShapeHash(masks: Mask[]): string {
+  // Only include shape-affecting properties for hash
+  return masks.map(m =>
+    `${m.vertices.map(v => `${v.x.toFixed(2)},${v.y.toFixed(2)}`).join(';')}|` +
+    `${m.position.x.toFixed(2)},${m.position.y.toFixed(2)}|` +
+    `${m.opacity.toFixed(2)}|${m.mode}|${m.closed}`
+  ).join('||');
+}
 
 export function useEngine() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -42,88 +53,104 @@ export function useEngine() {
   // Track mask changes and update engine mask textures
   const maskVersionRef = useRef<Map<string, string>>(new Map());
 
+  // Helper function to update mask textures - extracted to avoid duplication
+  const updateMaskTextures = useCallback(() => {
+    const { clips, playheadPosition, tracks } = useTimelineStore.getState();
+    const layers = useMixerStore.getState().layers;
+
+    // Get engine output dimensions (the actual render resolution)
+    const engineDimensions = engine.getOutputDimensions();
+
+    // Find clips at current playhead position
+    const videoTracks = tracks.filter(t => t.type === 'video');
+    const clipsAtTime = clips.filter(c =>
+      playheadPosition >= c.startTime && playheadPosition < c.startTime + c.duration
+    );
+
+    // For each layer, find the corresponding clip
+    for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
+      const layer = layers[layerIndex];
+      const track = videoTracks[layerIndex];
+
+      if (!track) continue;
+
+      // Find clip for this track at current time
+      const clip = clipsAtTime.find(c => c.trackId === track.id);
+
+      if (clip?.masks && clip.masks.length > 0 && layer.source) {
+        // Extract mask properties for GPU processing (feather/quality/invert handled in shader)
+        const maxFeather = Math.max(...clip.masks.map(m => m.feather));
+        const maxQuality = Math.max(...clip.masks.map(m => m.featherQuality ?? 1));
+        const hasInverted = clip.masks.some(m => m.inverted);
+
+        // Update layer with mask GPU properties (these are cheap uniform updates)
+        useMixerStore.getState().updateLayerMaskProps(layer.id, maxFeather, maxQuality, hasInverted);
+
+        // Create version string using fast hash (EXCLUDING feather/invert - they're GPU uniforms now)
+        // Only include shape-affecting properties: vertices, position, opacity, mode, closed
+        const maskVersion = `${getMaskShapeHash(clip.masks)}_${engineDimensions.width}x${engineDimensions.height}`;
+        const cacheKey = `${clip.id}_${layer.id}`;
+        const prevVersion = maskVersionRef.current.get(cacheKey);
+
+        // Only regenerate texture if mask SHAPE changed (not feather/invert)
+        if (maskVersion !== prevVersion) {
+          maskVersionRef.current.set(cacheKey, maskVersion);
+
+          // Generate mask texture at engine render resolution (no blur/invert - done in GPU)
+          const maskImageData = generateMaskTexture(
+            clip.masks,
+            engineDimensions.width,
+            engineDimensions.height
+          );
+
+          if (maskImageData) {
+            console.log(`[Mask] Generated mask texture for layer ${layer.id}: ${engineDimensions.width}x${engineDimensions.height}, masks: ${clip.masks.length}`);
+            engine.updateMaskTexture(layer.id, maskImageData);
+          } else {
+            console.warn(`[Mask] Failed to generate mask texture for layer ${layer.id}`);
+          }
+        }
+      } else if (clip) {
+        // Clip exists but no masks, clear the mask texture for this layer
+        const cacheKey = `${clip.id}_${layer.id}`;
+        if (maskVersionRef.current.has(cacheKey)) {
+          maskVersionRef.current.delete(cacheKey);
+          engine.removeMaskTexture(layer.id);
+        }
+      }
+    }
+  }, []);
+
   useEffect(() => {
     if (!isEngineReady) return;
 
-    // Subscribe to both clips and playhead position changes
-    const unsubscribe = useTimelineStore.subscribe(
-      (state) => ({ clips: state.clips, playheadPosition: state.playheadPosition, tracks: state.tracks }),
-      ({ clips, playheadPosition, tracks }) => {
-        const layers = useMixerStore.getState().layers;
-
-        // Get engine output dimensions (the actual render resolution)
-        const engineDimensions = engine.getOutputDimensions();
-
-        // Find clips at current playhead position
-        const videoTracks = tracks.filter(t => t.type === 'video');
-        const clipsAtTime = clips.filter(c =>
-          playheadPosition >= c.startTime && playheadPosition < c.startTime + c.duration
-        );
-
-        // For each layer, find the corresponding clip
-        for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
-          const layer = layers[layerIndex];
-          const track = videoTracks[layerIndex];
-
-          if (!track) continue;
-
-          // Find clip for this track at current time
-          const clip = clipsAtTime.find(c => c.trackId === track.id);
-
-          if (clip?.masks && clip.masks.length > 0 && layer.source) {
-            // Extract mask properties for GPU processing (feather/quality/invert handled in shader)
-            const maxFeather = Math.max(...clip.masks.map(m => m.feather));
-            const maxQuality = Math.max(...clip.masks.map(m => m.featherQuality ?? 1));
-            const hasInverted = clip.masks.some(m => m.inverted);
-
-            // Update layer with mask GPU properties (these are cheap uniform updates)
-            useMixerStore.getState().updateLayerMaskProps(layer.id, maxFeather, maxQuality, hasInverted);
-
-            // Create version string EXCLUDING feather/invert (they're GPU uniforms now)
-            // Only include shape-affecting properties: vertices, position, opacity, mode, closed
-            const shapeVersion = clip.masks.map(m => ({
-              vertices: m.vertices,
-              position: m.position,
-              opacity: m.opacity,
-              mode: m.mode,
-              closed: m.closed
-            }));
-            const maskVersion = `${JSON.stringify(shapeVersion)}_${engineDimensions.width}x${engineDimensions.height}`;
-            const cacheKey = `${clip.id}_${layer.id}`;
-            const prevVersion = maskVersionRef.current.get(cacheKey);
-
-            // Only regenerate texture if mask SHAPE changed (not feather/invert)
-            if (maskVersion !== prevVersion) {
-              maskVersionRef.current.set(cacheKey, maskVersion);
-
-              // Generate mask texture at engine render resolution (no blur/invert - done in GPU)
-              const maskImageData = generateMaskTexture(
-                clip.masks,
-                engineDimensions.width,
-                engineDimensions.height
-              );
-
-              if (maskImageData) {
-                console.log(`[Mask] Generated mask texture for layer ${layer.id}: ${engineDimensions.width}x${engineDimensions.height}, masks: ${clip.masks.length}`);
-                engine.updateMaskTexture(layer.id, maskImageData);
-              } else {
-                console.warn(`[Mask] Failed to generate mask texture for layer ${layer.id}`);
-              }
-            }
-          } else if (clip) {
-            // Clip exists but no masks, clear the mask texture for this layer
-            const cacheKey = `${clip.id}_${layer.id}`;
-            if (maskVersionRef.current.has(cacheKey)) {
-              maskVersionRef.current.delete(cacheKey);
-              engine.removeMaskTexture(layer.id);
-            }
-          }
-        }
-      }
+    // Subscribe to clips changes (mask shape updates)
+    // This runs when clips array changes (including mask modifications)
+    const unsubscribeClips = useTimelineStore.subscribe(
+      (state) => state.clips,
+      () => updateMaskTextures()
     );
 
-    return () => unsubscribe();
-  }, [isEngineReady]);
+    // Subscribe to playhead position changes separately
+    // This runs when scrubbing/playing to update which masks are visible
+    const unsubscribePlayhead = useTimelineStore.subscribe(
+      (state) => state.playheadPosition,
+      () => updateMaskTextures()
+    );
+
+    // Subscribe to tracks changes separately
+    // This runs when track structure changes (rare)
+    const unsubscribeTracks = useTimelineStore.subscribe(
+      (state) => state.tracks,
+      () => updateMaskTextures()
+    );
+
+    return () => {
+      unsubscribeClips();
+      unsubscribePlayhead();
+      unsubscribeTracks();
+    };
+  }, [isEngineReady, updateMaskTextures]);
 
   // Render loop - optimized with layer snapshotting to prevent flickering
   useEffect(() => {

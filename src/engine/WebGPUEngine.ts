@@ -113,6 +113,13 @@ export class WebGPUEngine {
   private ramPlaybackCanvas: HTMLCanvasElement | null = null;
   private ramPlaybackCtx: CanvasRenderingContext2D | null = null;
 
+  // Track video currentTime to skip texture import for unchanged frames
+  private lastVideoTime: Map<string, number> = new Map();
+  private cachedExternalTexture: Map<string, GPUExternalTexture> = new Map();
+
+  // Batched uniform buffer updates
+  private pendingUniformUpdates: Array<{buffer: GPUBuffer; data: Float32Array}> = [];
+
   constructor() {
     this.context = new WebGPUContext();
     this.videoFrameManager = new VideoFrameManager();
@@ -174,8 +181,9 @@ export class WebGPUEngine {
     this.pingView = this.pingTexture.createView();
     this.pongView = this.pongTexture.createView();
 
-    // Invalidate bind group caches
+    // Invalidate bind group caches (textures changed)
     this.outputPipeline?.invalidateCache();
+    this.compositorPipeline?.invalidateBindGroupCache();
   }
 
   private async createPipelines(): Promise<void> {
@@ -345,6 +353,12 @@ export class WebGPUEngine {
   cleanupVideo(video: HTMLVideoElement): void {
     this.scrubbingCache?.cleanupVideo(video);
     this.videoFrameManager.cleanupVideo(video);
+    // Clear video time tracking
+    const videoKey = video.src;
+    if (videoKey) {
+      this.lastVideoTime.delete(videoKey);
+      this.cachedExternalTexture.delete(videoKey);
+    }
     console.log('[WebGPU] Cleaned up video resources');
   }
 
@@ -557,6 +571,7 @@ export class WebGPUEngine {
       // HTMLVideoElement - optimized with frame tracking
       if (layer.source.videoElement) {
         const video = layer.source.videoElement;
+        const videoKey = video.src || layer.id;
 
         // Log video state occasionally for debugging
         if (this.profileCounter === 0) {
@@ -564,14 +579,26 @@ export class WebGPUEngine {
         }
 
         if (video.readyState >= 2) {
+          // Check if video time has changed since last frame (optimization for paused videos)
+          const lastTime = this.lastVideoTime.get(videoKey);
+          const currentTime = video.currentTime;
+          const videoTimeChanged = lastTime === undefined || Math.abs(currentTime - lastTime) > 0.001;
+
+          // Note: External textures must be re-imported each frame as they are ephemeral,
+          // but we track time to skip cache updates for unchanged frames
           const extTex = this.textureManager?.importVideoTexture(video);
           if (extTex) {
-            // Cache frame occasionally for seek/pause fallback
-            const now = performance.now();
-            const lastCapture = this.scrubbingCache?.getLastCaptureTime(video) || 0;
-            if (now - lastCapture > 500) {
-              this.scrubbingCache?.captureVideoFrame(video);
-              this.scrubbingCache?.setLastCaptureTime(video, now);
+            // Update time tracking
+            this.lastVideoTime.set(videoKey, currentTime);
+
+            // Cache frame occasionally for seek/pause fallback (only if time changed)
+            if (videoTimeChanged) {
+              const now = performance.now();
+              const lastCapture = this.scrubbingCache?.getLastCaptureTime(video) || 0;
+              if (now - lastCapture > 500) {
+                this.scrubbingCache?.captureVideoFrame(video);
+                this.scrubbingCache?.setLastCaptureTime(video, now);
+              }
             }
             this.detailedStats.decoder = 'HTMLVideo';
 
@@ -1030,6 +1057,11 @@ export class WebGPUEngine {
     this.effectsPipeline?.destroy();
     this.outputPipeline?.destroy();
     this.context.destroy();
+
+    // Clear optimization caches
+    this.lastVideoTime.clear();
+    this.cachedExternalTexture.clear();
+    this.pendingUniformUpdates.length = 0;
   }
 }
 

@@ -517,6 +517,10 @@ export class CompositorPipeline {
   // Per-layer uniform buffers
   private layerUniformBuffers: Map<string, GPUBuffer> = new Map();
 
+  // Bind group cache for static textures (images)
+  // Key format: "layerId:baseViewLabel:layerViewLabel:maskViewLabel"
+  private bindGroupCache: Map<string, GPUBindGroup> = new Map();
+
   constructor(device: GPUDevice) {
     this.device = device;
   }
@@ -647,14 +651,37 @@ export class CompositorPipeline {
     this.device.queue.writeBuffer(uniformBuffer, 0, this.uniformData);
   }
 
-  // Create bind group for regular textures
+  // Create bind group for regular textures (with caching for static images)
   createCompositeBindGroup(
     sampler: GPUSampler,
     baseView: GPUTextureView,
     layerView: GPUTextureView,
     uniformBuffer: GPUBuffer,
-    maskTextureView: GPUTextureView
+    maskTextureView: GPUTextureView,
+    layerId?: string,
+    isPingBase?: boolean
   ): GPUBindGroup {
+    // Try to use cache for static textures (images)
+    if (layerId !== undefined && isPingBase !== undefined) {
+      const cacheKey = `${layerId}:${isPingBase ? 'ping' : 'pong'}`;
+      let bindGroup = this.bindGroupCache.get(cacheKey);
+      if (!bindGroup) {
+        bindGroup = this.device.createBindGroup({
+          layout: this.compositeBindGroupLayout!,
+          entries: [
+            { binding: 0, resource: sampler },
+            { binding: 1, resource: baseView },
+            { binding: 2, resource: layerView },
+            { binding: 3, resource: { buffer: uniformBuffer } },
+            { binding: 4, resource: maskTextureView },
+          ],
+        });
+        this.bindGroupCache.set(cacheKey, bindGroup);
+      }
+      return bindGroup;
+    }
+
+    // No caching - create fresh bind group
     return this.device.createBindGroup({
       layout: this.compositeBindGroupLayout!,
       entries: [
@@ -687,11 +714,28 @@ export class CompositorPipeline {
     });
   }
 
+  // Invalidate bind group cache for a specific layer or all layers
+  invalidateBindGroupCache(layerId?: string): void {
+    if (layerId) {
+      // Clear only entries for this layer
+      for (const key of this.bindGroupCache.keys()) {
+        if (key.startsWith(layerId + ':')) {
+          this.bindGroupCache.delete(key);
+        }
+      }
+    } else {
+      this.bindGroupCache.clear();
+    }
+  }
+
   destroy(): void {
     // Destroy per-layer uniform buffers
     for (const buffer of this.layerUniformBuffers.values()) {
       buffer.destroy();
     }
     this.layerUniformBuffers.clear();
+
+    // Clear bind group cache
+    this.bindGroupCache.clear();
   }
 }
