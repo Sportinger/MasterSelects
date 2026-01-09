@@ -2,7 +2,7 @@
 
 [← Back to Index](./README.md)
 
-Dockable panel system with After Effects-style menu bar.
+Dockable panel system with After Effects-style menu bar and unified Properties panel.
 
 ---
 
@@ -11,6 +11,7 @@ Dockable panel system with After Effects-style menu bar.
 - [Menu Bar](#menu-bar)
 - [Panel System](#panel-system)
 - [Available Panels](#available-panels)
+- [Properties Panel](#properties-panel)
 - [Dock Layouts](#dock-layouts)
 - [MIDI Control](#midi-control)
 
@@ -74,69 +75,124 @@ Resolume-style visual feedback:
 
 ## Available Panels
 
+MASterSelects has 8 dockable panel types:
+
+| Panel | Purpose |
+|-------|---------|
+| **Preview** | Composition output canvas |
+| **Timeline** | Multi-track editor |
+| **Media** | Media browser and folders |
+| **Properties** | Unified clip editing (Transform, Effects, Masks, Volume) |
+| **Export** | Render settings and progress |
+| **Multicam** | Camera sync and EDL |
+| **AI Chat** | GPT-powered editing assistant |
+| **Slots** | Layer slot management |
+
 ### Preview Panel
 - Canvas for composition output
-- Composition selector
-- Edit mode toggle
-- Close button
-- Multiple panels supported
+- Composition selector dropdown
+- Edit mode toggle for direct manipulation
+- Multiple preview panels supported
+- Statistics overlay option
 
 ### Timeline Panel
-- Multi-track editor
-- Composition tabs
-- Playback controls
-- Ruler and tracks
+- Multi-track video/audio editor
+- Composition tabs for switching
+- Playback controls toolbar
+- Snap toggle button
+- Ruler with time display
+- Track headers with controls
 
 ### Media Panel
-- Media browser
-- Folder organization
+- Media browser with thumbnails
+- Folder organization tree
 - Composition list
-- Add dropdown
+- Add dropdown (Import, Composition, Folder)
+- Drag-to-timeline support
 
-### Effects Panel
-- Effect list
-- Parameter sliders
-- Blend mode selector
-
-### Clip Properties Panel
-- Transform controls
-- Position, Scale, Rotation
-- Opacity slider
-
-### AI Chat Panel
-- Chat interface
-- Model selector
-- Default tab position
-
-### Analysis Panel
-- Real-time values
-- Analysis graphs
-- Per-clip data
-
-### Audio Panel
-- Volume slider
-- 10-band EQ
-- Keyframe toggles
+### Properties Panel
+See [Properties Panel](#properties-panel) section below for details.
 
 ### Export Panel
-- Export settings
-- Resolution options
-- Progress indicator
-
-### Transcript Panel
-- Word-level transcript
-- Real-time highlighting
-- Editable entries
+- Codec selection (H.264, VP9)
+- Resolution presets
+- Frame rate options
+- Quality/bitrate settings
+- Progress indicator with ETA
+- Single frame export
 
 ### Multicam Panel
-- Camera management
-- Sync controls
+- Camera clip management
+- Audio-based sync controls
 - EDL generation
+- Group linking controls
 
-### Layer Panel
-- Layer list
+### AI Chat Panel
+- Chat interface with GPT-4
+- Model/provider selector
+- Context-aware editing commands
+- 50+ available tools
+
+### Slots Panel
+- Layer slot grid
 - Visibility toggles
-- Reordering
+- Effect status indicators
+
+---
+
+## Properties Panel
+
+The unified Properties panel consolidates clip editing into a single tabbed interface. It automatically adapts based on the selected clip type.
+
+### Video Clip Tabs
+
+| Tab | Contents |
+|-----|----------|
+| **Transform** | Position, Scale, Rotation, Opacity, Blend Mode |
+| **Effects** | GPU effects list with parameters |
+| **Masks** | Mask shapes with mode and feather controls |
+
+### Audio Clip Tabs
+
+| Tab | Contents |
+|-----|----------|
+| **Volume** | Volume slider + 10-band parametric EQ |
+| **Effects** | Audio effects (future expansion) |
+
+### Transform Tab Features
+- **Position**: X, Y, Z (depth) sliders
+- **Scale**: X, Y with link toggle
+- **Rotation**: X, Y, Z (3D rotation)
+- **Opacity**: 0-100% slider
+- **Blend Mode**: Dropdown with 37 modes grouped by category
+- Keyframe toggles on each property
+
+### Volume Tab Features
+- **Volume Slider**: -60dB to +12dB
+- **10-Band EQ**: 31Hz to 16kHz
+- **Per-Band Gain**: -12dB to +12dB
+- Keyframe toggles for animation
+- EQ automatically added on first use
+
+### Effects Tab Features
+- **Add Effect**: Dropdown with available effects
+- **Effect List**: Expandable sections
+- **Parameter Sliders**: With keyframe toggles
+- **Remove Button**: Per-effect deletion
+
+### Masks Tab Features
+- **Add Mask**: Rectangle, Ellipse, Pen tool
+- **Mask List**: With expand/collapse
+- **Mode Selector**: Add, Subtract, Intersect
+- **Feather Slider**: 0-100px GPU blur
+- **Expansion**: -100 to +100px
+- **Invert Toggle**: Flip mask selection
+- **Vertex Selection**: Edit mask points
+
+### Tab Title Display
+- Shows selected clip name in tab title
+- Example: "Properties - Interview_01.mp4"
+- Updates automatically on clip selection
 
 ---
 
@@ -147,11 +203,11 @@ Resolume-style visual feedback:
 ┌─────────────────────────────────────────┐
 │              Menu Bar                    │
 ├───────────┬─────────────────┬───────────┤
-│  Media    │                 │  Effects  │
+│  Media    │                 │Properties │
 │  Panel    │    Preview      │  Panel    │
 │           │                 │           │
-│  Layers   │                 │  Props    │
-│  Panel    │                 │  Panel    │
+│           │                 │           │
+│           │                 │           │
 ├───────────┴─────────────────┴───────────┤
 │              Timeline                    │
 └─────────────────────────────────────────┘
@@ -161,6 +217,7 @@ Resolume-style visual feedback:
 - Auto-saved to localStorage
 - Survives page refresh
 - Multiple preview panels preserved
+- Auto-cleanup of invalid panel types
 
 ### Layout Actions
 | Action | Location |
@@ -222,7 +279,7 @@ Edit menu → Settings
 
 ### Contents
 - API key management
-- Transcription provider
+- Transcription provider selection
 - Language selection
 - Thumbnail/waveform toggles
 
@@ -260,11 +317,13 @@ Top-right of toolbar:
 
 ## Related Features
 
-- [Timeline](./Timeline.md) - Timeline panel
-- [Preview](./Preview.md) - Preview panel
+- [Timeline](./Timeline.md) - Timeline panel details
+- [Preview](./Preview.md) - Preview panel details
 - [Media Panel](./Media-Panel.md) - Media browser
+- [Effects](./Effects.md) - Effect parameters
+- [Audio](./Audio.md) - Volume and EQ details
 - [Keyboard Shortcuts](./Keyboard-Shortcuts.md)
 
 ---
 
-*Source: `src/components/common/Toolbar.tsx`, `src/components/dock/`, `src/stores/dockStore.ts`*
+*Source: `src/components/panels/PropertiesPanel.tsx`, `src/components/dock/`, `src/stores/dockStore.ts`, `src/types/dock.ts`*

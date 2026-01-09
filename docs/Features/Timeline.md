@@ -76,7 +76,14 @@ scaleTracksOfType()  - Batch height adjustment
 
 ## Snapping & Resistance
 
+### Snap Toggle
+Toolbar button to enable/disable magnetic snapping:
+- Click magnet icon to toggle
+- Active state shows highlighted button
+- Tooltip shows current status
+
 ### Magnetic Snapping
+When enabled:
 - **Snap distance**: 0.1 seconds
 - **Snap points**: Clip edges, timeline start (0s)
 - Automatic edge-to-edge alignment

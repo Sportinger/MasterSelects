@@ -76,12 +76,15 @@ Each EQ band can be animated:
 }
 ```
 
-### Audio Panel UI
-When audio clip selected:
-- Volume slider (0-200%)
-- 10 vertical EQ sliders
-- Reset button (flattens all bands)
-- Keyframe toggles per parameter
+### Properties Panel - Volume Tab
+When an audio clip is selected, the Properties panel shows the Volume tab:
+- **Volume slider**: -60dB to +12dB (with keyframe toggle)
+- **10 vertical EQ sliders**: One per frequency band
+- **Reset button**: Flattens all bands to 0dB
+- **Keyframe toggles**: Per parameter for animation
+- EQ effect is automatically added on first use
+
+See [UI Panels - Properties Panel](./UI-Panels.md#properties-panel) for details.
 
 ---
 
@@ -283,4 +286,4 @@ interface EditDecision {
 
 ---
 
-*Source: `src/services/audioManager.ts`, `src/services/audioSync.ts`, `src/components/panels/AudioPanel.tsx`*
+*Source: `src/services/audioManager.ts`, `src/services/audioSync.ts`, `src/components/panels/PropertiesPanel.tsx`*

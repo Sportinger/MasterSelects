@@ -70,6 +70,7 @@ UI Framework      Custom dockable panel system
 | Multi-track Timeline | ✅ | Unlimited video and audio tracks |
 | Clip Operations | ✅ | Move, trim, split, delete, reverse |
 | Magnetic Snapping | ✅ | 0.1s snap distance with edge alignment |
+| Snap Toggle | ✅ | Toolbar button to enable/disable snapping |
 | Overlap Resistance | ✅ | 100px resistance with auto-trim |
 | Marquee Selection | ✅ | Rectangle selection with Shift modifier |
 | Linked Audio | ✅ | Video-audio linking with Alt+drag override |
@@ -205,7 +206,8 @@ UI Framework      Custom dockable panel system
 | Feature | Status | Details |
 |---------|--------|---------|
 | Dockable Panels | ✅ | Drag, resize, tab grouping |
-| 12 Panel Types | ✅ | Timeline, Preview, Media, Effects, etc. |
+| 8 Panel Types | ✅ | Preview, Timeline, Media, Properties, Export, Multicam, AI Chat, Slots |
+| Unified Properties Panel | ✅ | Transform, Effects, Masks, Volume tabs |
 | Menu Bar | ✅ | File, Edit, View, Output, Window |
 | Context Menus | ✅ | Right-click operations |
 | MIDI Control | ✅ | Web MIDI API integration |
