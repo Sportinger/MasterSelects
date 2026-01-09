@@ -380,6 +380,39 @@
   height: auto;
 }
 
+/* Tab slot indicators for precise tab insertion */
+.dock-tab-slots-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  pointer-events: none;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.3);
+  gap: 4px;
+}
+
+.dock-tab-slot {
+  width: 40px;
+  height: 24px;
+  border: 2px dashed var(--border-color);
+  border-radius: 4px;
+  background: transparent;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.dock-tab-slot.active {
+  border-color: var(--accent);
+  background: rgba(0, 212, 255, 0.25);
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
+  transform: scale(1.1);
+}
+
 /* Drag preview */
 .dock-drag-preview {
   position: fixed;

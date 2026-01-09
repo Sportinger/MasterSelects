@@ -253,18 +253,54 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     };
   }, []);
 
+  // Calculate tab insert index based on mouse position over tab bar
+  const calculateTabInsertIndex = useCallback((mouseX: number): number => {
+    if (!tabBarRef.current) return group.panels.length;
+
+    const tabBar = tabBarRef.current;
+    const tabs = tabBar.querySelectorAll('.dock-tab');
+    const tabBarRect = tabBar.getBoundingClientRect();
+
+    // Adjust for scroll position
+    const relativeX = mouseX - tabBarRect.left + tabBar.scrollLeft;
+
+    // Find the slot - check midpoint of each tab
+    let insertIndex = 0;
+    tabs.forEach((tab, index) => {
+      const tabEl = tab as HTMLElement;
+      const tabMidpoint = tabEl.offsetLeft + tabEl.offsetWidth / 2;
+      if (relativeX > tabMidpoint) {
+        insertIndex = index + 1;
+      }
+    });
+
+    return insertIndex;
+  }, [group.panels.length]);
+
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!dragState.isDragging || !containerRef.current) return;
     if (dragState.sourceGroupId === group.id && group.panels.length === 1) return;
 
     const rect = containerRef.current.getBoundingClientRect();
-    const position = calculateDropPosition(rect, e.clientX, e.clientY);
+    const tabBarRect = tabBarRef.current?.getBoundingClientRect();
+    let position = calculateDropPosition(rect, e.clientX, e.clientY);
+
+    // Check if hovering over tab bar area for center position
+    let tabInsertIndex: number | undefined;
+    if (tabBarRect && e.clientY >= tabBarRect.top && e.clientY <= tabBarRect.bottom) {
+      // Mouse is over tab bar - use center with specific insert index
+      position = 'center';
+      tabInsertIndex = calculateTabInsertIndex(e.clientX);
+    } else if (position === 'center') {
+      // Center but not over tab bar - insert at end
+      tabInsertIndex = group.panels.length;
+    }
 
     updateDrag(
       { x: e.clientX, y: e.clientY },
-      { groupId: group.id, position }
+      { groupId: group.id, position, tabInsertIndex }
     );
-  }, [dragState.isDragging, dragState.sourceGroupId, group.id, group.panels.length, updateDrag]);
+  }, [dragState.isDragging, dragState.sourceGroupId, group.id, group.panels.length, updateDrag, calculateTabInsertIndex]);
 
   const handleMouseLeave = useCallback(() => {
     if (dragState.isDragging && dragState.dropTarget?.groupId === group.id) {
@@ -463,8 +499,24 @@ export function DockTabPane({ group }: DockTabPaneProps) {
       </div>
 
       {/* Drop zone overlay */}
-      {isDropTarget && dropPosition && (
+      {isDropTarget && dropPosition && dropPosition !== 'center' && (
         <div className={`dock-drop-overlay ${dropPosition}`} />
+      )}
+
+      {/* Tab slot indicators when dragging to center/tabs */}
+      {isDropTarget && dropPosition === 'center' && (
+        <div className="dock-tab-slots-overlay">
+          {group.panels.map((_, index) => (
+            <div
+              key={`slot-${index}`}
+              className={`dock-tab-slot ${dragState.dropTarget?.tabInsertIndex === index ? 'active' : ''}`}
+            />
+          ))}
+          {/* Final slot after last tab */}
+          <div
+            className={`dock-tab-slot ${dragState.dropTarget?.tabInsertIndex === group.panels.length ? 'active' : ''}`}
+          />
+        </div>
       )}
     </div>
   );

@@ -52,6 +52,7 @@ export type DropPosition = 'center' | 'left' | 'right' | 'top' | 'bottom';
 export interface DropTarget {
   groupId: string;
   position: DropPosition;
+  tabInsertIndex?: number; // When position is 'center', which slot to insert at
 }
 
 // Drag state

@@ -90,11 +90,14 @@ function insertPanelInNode(node: DockNode, panel: DockPanel, target: DropTarget)
   if (node.id === target.groupId) {
     if (node.kind === 'tab-group') {
       if (target.position === 'center') {
-        // Add as new tab
+        // Add as new tab at specified index (or end if not specified)
+        const insertIndex = target.tabInsertIndex ?? node.panels.length;
+        const newPanels = [...node.panels];
+        newPanels.splice(insertIndex, 0, panel);
         return {
           ...node,
-          panels: [...node.panels, panel],
-          activeIndex: node.panels.length,
+          panels: newPanels,
+          activeIndex: insertIndex,
         };
       }
       // Split the group
