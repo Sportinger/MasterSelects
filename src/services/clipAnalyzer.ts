@@ -9,6 +9,7 @@ import {
   OpticalFlowAnalyzer,
   getOpticalFlowAnalyzer,
   resetOpticalFlowAnalyzer,
+  destroyOpticalFlowAnalyzer,
   type MotionResult,
 } from '../engine/analysis/OpticalFlowAnalyzer';
 import type { ClipAnalysis, FrameAnalysisData, AnalysisStatus } from '../types';
@@ -176,8 +177,16 @@ function detectFaceCount(_frame: ImageData): number {
 
 /**
  * Initialize GPU optical flow analyzer
+ * @param forceRecreate - If true, destroys and recreates the analyzer
  */
-async function initGPUAnalyzer(): Promise<boolean> {
+async function initGPUAnalyzer(forceRecreate = false): Promise<boolean> {
+  // If force recreate or no analyzer exists, destroy and create new
+  if (forceRecreate && flowAnalyzer) {
+    console.log('[ClipAnalyzer] Destroying existing GPU analyzer for fresh start');
+    destroyOpticalFlowAnalyzer();
+    flowAnalyzer = null;
+  }
+
   if (flowAnalyzer) return true;
 
   try {
@@ -194,6 +203,7 @@ async function initGPUAnalyzer(): Promise<boolean> {
   } catch (error) {
     console.warn('[ClipAnalyzer] Failed to init GPU analyzer, falling back to CPU:', error);
     useGPUAnalysis = false;
+    flowAnalyzer = null;
     return false;
   }
 }
@@ -349,7 +359,8 @@ export async function analyzeClip(clipId: string): Promise<void> {
     });
 
     // Try to initialize GPU optical flow analyzer
-    const gpuAvailable = useGPUAnalysis && await initGPUAnalyzer();
+    // Force recreate analyzer to ensure fresh state (avoids stale GPU errors)
+    const gpuAvailable = useGPUAnalysis && await initGPUAnalyzer(true);
     if (gpuAvailable) {
       console.log('[ClipAnalyzer] Using GPU optical flow analysis');
       resetOpticalFlowAnalyzer(); // Reset state for new clip
