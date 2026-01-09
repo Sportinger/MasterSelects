@@ -1,7 +1,7 @@
 // Timeline component - Main orchestrator for video editing timeline
 // Composes TimelineRuler, TimelineControls, TimelineHeader, TimelineTrack, TimelineClip, TimelineKeyframes
 
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
 import type { AnimatableProperty, Effect, TimelineClip as TimelineClipType } from '../../types';
 import { useMediaStore } from '../../stores/mediaStore';
@@ -130,6 +130,41 @@ export function Timeline() {
   const dragCounterRef = useRef(0);
   const dragDurationCacheRef = useRef<{ url: string; duration: number } | null>(null);
 
+  // Performance: Create lookup maps for O(1) clip/track access
+  const clipMap = useMemo(() => new Map(clips.map(c => [c.id, c])), [clips]);
+  const trackMap = useMemo(() => new Map(tracks.map(t => [t.id, t])), [tracks]);
+
+  // Performance: Memoize video/audio track filtering and solo state
+  const { videoTracks, audioTracks, anyVideoSolo, anyAudioSolo } = useMemo(() => {
+    const vTracks = tracks.filter(t => t.type === 'video');
+    const aTracks = tracks.filter(t => t.type === 'audio');
+    return {
+      videoTracks: vTracks,
+      audioTracks: aTracks,
+      anyVideoSolo: vTracks.some(t => t.solo),
+      anyAudioSolo: aTracks.some(t => t.solo),
+    };
+  }, [tracks]);
+
+  // Performance: Memoize track visibility check functions
+  const isVideoTrackVisible = useCallback((track: typeof tracks[0]) => {
+    if (!track.visible) return false;
+    if (anyVideoSolo) return track.solo;
+    return true;
+  }, [anyVideoSolo]);
+
+  const isAudioTrackMuted = useCallback((track: typeof tracks[0]) => {
+    if (track.muted) return true;
+    if (anyAudioSolo) return !track.solo;
+    return false;
+  }, [anyAudioSolo]);
+
+  // Performance: Memoize proxy-ready file count
+  const mediaFilesWithProxyCount = useMemo(
+    () => mediaFiles.filter((f) => f.proxyStatus === 'ready').length,
+    [mediaFiles]
+  );
+
   // Time conversion helpers
   const timeToPixel = useCallback((time: number) => time * zoom, [zoom]);
   const pixelToTime = useCallback((pixel: number) => pixel / zoom, [zoom]);
@@ -224,7 +259,7 @@ export function Timeline() {
       ) {
         e.preventDefault();
         if (selectedClipId) {
-          const clip = clips.find((c) => c.id === selectedClipId);
+          const clip = clipMap.get(selectedClipId);
           if (clip) {
             const currentMode = clip.transform.blendMode;
             const currentIndex = ALL_BLEND_MODES.indexOf(currentMode);
@@ -275,7 +310,7 @@ export function Timeline() {
     selectedClipId,
     removeClip,
     splitClipAtPlayhead,
-    clips,
+    clipMap,
     updateClipTransform,
     activeComposition,
     playheadPosition,
@@ -327,7 +362,7 @@ export function Timeline() {
   // Get the media file for a clip (helper function)
   const getMediaFileForClip = useCallback(
     (clipId: string) => {
-      const clip = clips.find((c) => c.id === clipId);
+      const clip = clipMap.get(clipId);
       if (!clip) return null;
 
       const mediaStore = useMediaStore.getState();
@@ -338,7 +373,7 @@ export function Timeline() {
           f.name === clip.name.replace(' (Audio)', '')
       );
     },
-    [clips]
+    [clipMap]
   );
 
   // Handle "Show in Explorer" action
@@ -522,13 +557,13 @@ export function Timeline() {
     if (isDraggingPlayhead) return;
 
     Object.entries(pendingSeekRef.current).forEach(([clipId, seekTime]) => {
-      const clip = clips.find((c) => c.id === clipId);
+      const clip = clipMap.get(clipId);
       if (clip?.source?.videoElement) {
         clip.source.videoElement.currentTime = seekTime;
       }
     });
     pendingSeekRef.current = {};
-  }, [isDraggingPlayhead, clips]);
+  }, [isDraggingPlayhead, clipMap]);
 
   // Track which clips are currently active (to detect clip changes)
   const activeClipIdsRef = useRef<string>('');
@@ -637,14 +672,7 @@ export function Timeline() {
     }
 
     const currentLayers = useMixerStore.getState().layers;
-    const videoTracks = tracks.filter((t) => t.type === 'video');
-    const anyVideoSolo = videoTracks.some((t) => t.solo);
-
-    const isVideoTrackVisible = (track: (typeof videoTracks)[0]) => {
-      if (!track.visible) return false;
-      if (anyVideoSolo) return track.solo;
-      return true;
-    };
+    // Use memoized videoTracks and isVideoTrackVisible from component scope
 
     const newLayers = [...currentLayers];
     let layersChanged = false;
@@ -1147,15 +1175,7 @@ export function Timeline() {
       useMixerStore.setState({ layers: newLayers });
     }
 
-    const audioTracks = tracks.filter((t) => t.type === 'audio');
-    const anyAudioSolo = audioTracks.some((t) => t.solo);
-
-    const isAudioTrackMuted = (track: (typeof audioTracks)[0]) => {
-      if (track.muted) return true;
-      if (anyAudioSolo) return !track.solo;
-      return false;
-    };
-
+    // Use memoized audioTracks and isAudioTrackMuted from component scope
     audioTracks.forEach((track) => {
       const clip = clipsAtTime.find((c) => c.trackId === track.id);
 
@@ -1203,6 +1223,10 @@ export function Timeline() {
     getClipsAtTime,
     getInterpolatedTransform,
     getInterpolatedEffects,
+    videoTracks,
+    audioTracks,
+    isVideoTrackVisible,
+    isAudioTrackMuted,
   ]);
 
   // Playback loop
@@ -1270,7 +1294,7 @@ export function Timeline() {
   // Handle shift+mousewheel on track header to resize height
   const handleTrackHeaderWheel = useCallback(
     (e: React.WheelEvent, trackId: string) => {
-      const track = tracks.find((t) => t.id === trackId);
+      const track = trackMap.get(trackId);
       if (!track) return;
 
       if (e.altKey) {
@@ -1285,7 +1309,7 @@ export function Timeline() {
         useTimelineStore.getState().setTrackHeight(trackId, track.height + delta);
       }
     },
-    [tracks]
+    [trackMap]
   );
 
   // Handle time ruler mousedown
@@ -1453,7 +1477,7 @@ export function Timeline() {
       e.stopPropagation();
       e.preventDefault();
 
-      const clip = clips.find((c) => c.id === clipId);
+      const clip = clipMap.get(clipId);
       if (!clip) return;
 
       const clipElement = e.currentTarget as HTMLElement;
@@ -1529,7 +1553,7 @@ export function Timeline() {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [clips, tracks, scrollX, pixelToTime, selectClip, getSnappedPosition, moveClip]
+    [clipMap, tracks, scrollX, pixelToTime, selectClip, getSnappedPosition, moveClip]
   );
 
   // Handle trim start
@@ -1538,7 +1562,7 @@ export function Timeline() {
       e.stopPropagation();
       e.preventDefault();
 
-      const clip = clips.find((c) => c.id === clipId);
+      const clip = clipMap.get(clipId);
       if (!clip) return;
 
       selectClip(clipId);
@@ -1579,7 +1603,7 @@ export function Timeline() {
           return;
         }
 
-        const clipToTrim = clips.find((c) => c.id === trim.clipId);
+        const clipToTrim = clipMap.get(trim.clipId);
         if (!clipToTrim) {
           setClipTrim(null);
           clipTrimRef.current = null;
@@ -1615,7 +1639,7 @@ export function Timeline() {
         }
 
         if (!trim.altKey && clipToTrim.linkedClipId) {
-          const linkedClip = clips.find((c) => c.id === clipToTrim.linkedClipId);
+          const linkedClip = clipMap.get(clipToTrim.linkedClipId);
           if (linkedClip) {
             const linkedMaxDuration =
               linkedClip.source?.naturalDuration || linkedClip.duration;
@@ -1650,7 +1674,7 @@ export function Timeline() {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [clips, pixelToTime, selectClip, trimClip, moveClip]
+    [clipMap, pixelToTime, selectClip, trimClip, moveClip]
   );
 
   // Quick duration check for dragged video files
@@ -1895,18 +1919,18 @@ export function Timeline() {
   // Render a clip
   const renderClip = useCallback(
     (clip: TimelineClipType, trackId: string) => {
-      const track = tracks.find((t) => t.id === trackId);
+      const track = trackMap.get(trackId);
       if (!track) return null;
 
       const isDragging = clipDrag?.clipId === clip.id;
       const isTrimming = clipTrim?.clipId === clip.id;
 
       const draggedClip = clipDrag
-        ? clips.find((c) => c.id === clipDrag.clipId)
-        : null;
+        ? clipMap.get(clipDrag.clipId)
+        : undefined;
       const trimmedClip = clipTrim
-        ? clips.find((c) => c.id === clipTrim.clipId)
-        : null;
+        ? clipMap.get(clipTrim.clipId)
+        : undefined;
 
       const isLinkedToDragging =
         clipDrag &&
@@ -1920,8 +1944,8 @@ export function Timeline() {
         (clip.linkedClipId === clipTrim.clipId ||
           trimmedClip.linkedClipId === clip.id);
 
-      const mediaStore = useMediaStore.getState();
-      const mediaFile = mediaStore.files.find(
+      // Use mediaFiles from hook state instead of getState() for render-time lookups
+      const mediaFile = mediaFiles.find(
         (f) =>
           f.id === clip.source?.mediaFileId ||
           f.name === clip.name ||
@@ -1960,7 +1984,8 @@ export function Timeline() {
       );
     },
     [
-      tracks,
+      trackMap,
+      clipMap,
       clips,
       selectedClipId,
       clipDrag,
@@ -1968,6 +1993,7 @@ export function Timeline() {
       zoom,
       scrollX,
       proxyEnabled,
+      mediaFiles,
       handleClipMouseDown,
       handleClipContextMenu,
       handleTrimStart,
@@ -1975,6 +2001,7 @@ export function Timeline() {
       timeToPixel,
       pixelToTime,
       formatTime,
+      tracks,
     ]
   );
 
@@ -1990,8 +2017,7 @@ export function Timeline() {
     );
   }
 
-  const anyVideoSolo = tracks.some((t) => t.type === 'video' && t.solo);
-  const anyAudioSolo = tracks.some((t) => t.type === 'audio' && t.solo);
+  // anyVideoSolo and anyAudioSolo are already memoized at the top of the component
 
   return (
     <div className={`timeline-container ${clipDrag || clipTrim ? 'is-dragging' : ''}`}>
@@ -2006,7 +2032,7 @@ export function Timeline() {
         ramPreviewEnabled={ramPreviewEnabled}
         proxyEnabled={proxyEnabled}
         currentlyGeneratingProxyId={currentlyGeneratingProxyId}
-        mediaFilesWithProxy={mediaFiles.filter((f) => f.proxyStatus === 'ready').length}
+        mediaFilesWithProxy={mediaFilesWithProxyCount}
         onPlay={play}
         onPause={pause}
         onStop={stop}
@@ -2236,7 +2262,7 @@ export function Timeline() {
       {contextMenu &&
         (() => {
           const mediaFile = getMediaFileForClip(contextMenu.clipId);
-          const clip = clips.find((c) => c.id === contextMenu.clipId);
+          const clip = clipMap.get(contextMenu.clipId);
           const isVideo = clip?.source?.type === 'video';
           const isGenerating = mediaFile?.proxyStatus === 'generating';
           const hasProxyContextMenu = mediaFile?.proxyStatus === 'ready';
