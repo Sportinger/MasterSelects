@@ -16,6 +16,7 @@ import { TimelineTrack } from './TimelineTrack';
 import { TimelineClip } from './TimelineClip';
 import { TimelineKeyframes } from './TimelineKeyframes';
 import { MulticamDialog } from './MulticamDialog';
+import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import {
   ALL_BLEND_MODES,
   RAM_PREVIEW_IDLE_DELAY,
@@ -139,6 +140,7 @@ export function Timeline() {
 
   // Context menu state for clip right-click
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const { menuRef: contextMenuRef, adjustedPosition: contextMenuPosition } = useContextMenuPosition(contextMenu);
   const dragCounterRef = useRef(0);
 
   // Transcript markers visibility toggle
@@ -2859,11 +2861,12 @@ export function Timeline() {
 
           return (
             <div
+              ref={contextMenuRef}
               className="timeline-context-menu"
               style={{
                 position: 'fixed',
-                left: contextMenu.x,
-                top: contextMenu.y,
+                left: contextMenuPosition?.x ?? contextMenu.x,
+                top: contextMenuPosition?.y ?? contextMenu.y,
                 zIndex: 10000,
               }}
               onClick={(e) => e.stopPropagation()}

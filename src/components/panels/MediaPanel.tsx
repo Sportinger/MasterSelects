@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { useMediaStore } from '../../stores/mediaStore';
 import type { MediaFile, Composition, ProjectItem } from '../../stores/mediaStore';
+import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 
 export function MediaPanel() {
   const {
@@ -40,6 +41,7 @@ export function MediaPanel() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; itemId?: string } | null>(null);
+  const { menuRef: contextMenuRef, adjustedPosition: contextMenuPosition } = useContextMenuPosition(contextMenu);
   const [settingsDialog, setSettingsDialog] = useState<{ compositionId: string; width: number; height: number; frameRate: number } | null>(null);
   const [addDropdownOpen, setAddDropdownOpen] = useState(false);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
@@ -536,11 +538,12 @@ export function MediaPanel() {
 
         return (
           <div
+            ref={contextMenuRef}
             className="media-context-menu"
             style={{
               position: 'fixed',
-              left: contextMenu.x,
-              top: contextMenu.y,
+              left: contextMenuPosition?.x ?? contextMenu.x,
+              top: contextMenuPosition?.y ?? contextMenu.y,
               zIndex: 10000,
             }}
             onClick={(e) => e.stopPropagation()}
