@@ -658,7 +658,6 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
             </button>
           </>
         )}
-        <div className="preview-controls-spacer" />
         <div className="preview-comp-dropdown-wrapper">
           <button
             className="preview-comp-dropdown-btn"
