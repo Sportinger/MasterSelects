@@ -8,31 +8,24 @@ import type { AnimatableProperty } from '../../types';
 function TrackPropertyTracks({
   trackId,
   selectedClip,
-  getClipKeyframes,
+  clipKeyframes,
   renderKeyframeDiamonds,
 }: {
   trackId: string;
   selectedClip: { id: string; effects?: Array<{ id: string; name: string; params: Record<string, unknown> }> } | null;
-  getClipKeyframes: (clipId: string) => Array<{
-    id: string;
-    clipId: string;
-    time: number;
-    property: AnimatableProperty;
-    value: number;
-    easing: string;
-  }>;
+  clipKeyframes: Map<string, Array<{ id: string; clipId: string; time: number; property: AnimatableProperty; value: number; easing: string }>>;
   renderKeyframeDiamonds: (trackId: string, property: AnimatableProperty) => React.ReactNode;
 }) {
   const clipId = selectedClip?.id;
 
-  // Memoize all keyframe properties
+  // Get keyframes for this clip - use clipKeyframes map to trigger re-render when keyframes change
   const keyframeProperties = useMemo(() => {
     if (!clipId) return new Set<string>();
     const props = new Set<string>();
-    const keyframes = getClipKeyframes(clipId);
+    const keyframes = clipKeyframes.get(clipId) || [];
     keyframes.forEach((kf) => props.add(kf.property));
     return props;
-  }, [clipId, getClipKeyframes]);
+  }, [clipId, clipKeyframes]);
 
   // If no clip is selected in this track or no keyframes, show nothing
   if (!selectedClip || keyframeProperties.size === 0) {
@@ -80,7 +73,7 @@ function TimelineTrackComponent({
   onDragEnter,
   onDragLeave,
   renderClip,
-  getClipKeyframes,
+  clipKeyframes,
   renderKeyframeDiamonds,
   timeToPixel,
 }: TimelineTrackProps) {
@@ -148,7 +141,7 @@ function TimelineTrackComponent({
         <TrackPropertyTracks
           trackId={track.id}
           selectedClip={selectedTrackClip || null}
-          getClipKeyframes={getClipKeyframes}
+          clipKeyframes={clipKeyframes}
           renderKeyframeDiamonds={renderKeyframeDiamonds}
         />
       )}

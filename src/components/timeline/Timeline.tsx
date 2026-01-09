@@ -92,6 +92,8 @@ export function Timeline() {
     hasKeyframes,
     trackHasKeyframes,
     clipKeyframes,
+    addKeyframe,
+    setPropertyValue,
     thumbnailsEnabled,
     waveformsEnabled,
     toggleThumbnailsEnabled,
@@ -2586,6 +2588,7 @@ export function Timeline() {
                   hasKeyframes={trackHasKeyframes(track.id)}
                   selectedClipIds={selectedClipIds}
                   clips={clips}
+                  playheadPosition={playheadPosition}
                   onToggleExpand={() => toggleTrackExpanded(track.id)}
                   onToggleSolo={() =>
                     useTimelineStore.getState().setTrackSolo(track.id, !track.solo)
@@ -2600,7 +2603,12 @@ export function Timeline() {
                     useTimelineStore.getState().renameTrack(track.id, name)
                   }
                   onWheel={(e) => handleTrackHeaderWheel(e, track.id)}
+                  clipKeyframes={clipKeyframes}
                   getClipKeyframes={getClipKeyframes}
+                  getInterpolatedTransform={getInterpolatedTransform}
+                  addKeyframe={addKeyframe}
+                  setPlayheadPosition={setPlayheadPosition}
+                  setPropertyValue={setPropertyValue}
                 />
               );
             })}
@@ -2682,7 +2690,7 @@ export function Timeline() {
                 onDragEnter={(e) => handleTrackDragEnter(e, track.id)}
                 onDragLeave={handleTrackDragLeave}
                 renderClip={renderClip}
-                getClipKeyframes={getClipKeyframes}
+                clipKeyframes={clipKeyframes}
                 renderKeyframeDiamonds={renderKeyframeDiamonds}
                 timeToPixel={timeToPixel}
                 pixelToTime={pixelToTime}

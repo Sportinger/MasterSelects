@@ -1,6 +1,6 @@
 // Timeline-specific types for component props
 
-import type { TimelineClip, TimelineTrack, AnimatableProperty } from '../../types';
+import type { TimelineClip, TimelineTrack, AnimatableProperty, ClipTransform } from '../../types';
 
 // Clip drag state (Premiere-style)
 export interface ClipDragState {
@@ -122,13 +122,15 @@ export interface TimelineHeaderProps {
   hasKeyframes: boolean;
   selectedClipIds: Set<string>;
   clips: TimelineClip[];
+  playheadPosition: number;
   onToggleExpand: () => void;
   onToggleSolo: () => void;
   onToggleMuted: () => void;
   onToggleVisible: () => void;
   onRenameTrack: (name: string) => void;
   onWheel: (e: React.WheelEvent) => void;
-  // For property labels
+  // For property labels - clipKeyframes map triggers re-render when keyframes change
+  clipKeyframes: Map<string, Array<{ id: string; clipId: string; time: number; property: AnimatableProperty; value: number; easing: string }>>;
   getClipKeyframes: (clipId: string) => Array<{
     id: string;
     clipId: string;
@@ -137,6 +139,11 @@ export interface TimelineHeaderProps {
     value: number;
     easing: string;
   }>;
+  // Keyframe controls
+  getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
+  addKeyframe: (clipId: string, property: AnimatableProperty, value: number) => void;
+  setPlayheadPosition: (time: number) => void;
+  setPropertyValue: (clipId: string, property: AnimatableProperty, value: number) => void;
 }
 
 // Props for TimelineTrack component
@@ -163,15 +170,8 @@ export interface TimelineTrackProps {
   onDragEnter: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
   renderClip: (clip: TimelineClip, trackId: string) => React.ReactNode;
-  // For keyframe tracks
-  getClipKeyframes: (clipId: string) => Array<{
-    id: string;
-    clipId: string;
-    time: number;
-    property: AnimatableProperty;
-    value: number;
-    easing: string;
-  }>;
+  // For keyframe tracks - clipKeyframes map triggers re-render when keyframes change
+  clipKeyframes: Map<string, Array<{ id: string; clipId: string; time: number; property: AnimatableProperty; value: number; easing: string }>>;
   renderKeyframeDiamonds: (trackId: string, property: AnimatableProperty) => React.ReactNode;
   timeToPixel: (time: number) => number;
   pixelToTime: (pixel: number) => number;

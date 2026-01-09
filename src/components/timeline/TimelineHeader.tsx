@@ -4,58 +4,230 @@ import { memo, useMemo, useState, useRef, useEffect } from 'react';
 import type { TimelineHeaderProps } from './types';
 import type { AnimatableProperty } from '../../types';
 
+import type { ClipTransform } from '../../types';
+
+// Get friendly names for properties
+const getPropertyLabel = (prop: string): string => {
+  const labels: Record<string, string> = {
+    'opacity': 'Opacity',
+    'position.x': 'Pos X',
+    'position.y': 'Pos Y',
+    'position.z': 'Pos Z',
+    'scale.x': 'Scale X',
+    'scale.y': 'Scale Y',
+    'rotation.x': 'Rot X',
+    'rotation.y': 'Rot Y',
+    'rotation.z': 'Rot Z',
+  };
+  if (labels[prop]) return labels[prop];
+  if (prop.startsWith('effect.')) {
+    const parts = prop.split('.');
+    return parts[parts.length - 1];
+  }
+  return prop;
+};
+
+// Get value from transform based on property path
+const getValueFromTransform = (transform: ClipTransform, prop: string): number => {
+  switch (prop) {
+    case 'opacity': return transform.opacity;
+    case 'position.x': return transform.position.x;
+    case 'position.y': return transform.position.y;
+    case 'position.z': return transform.position.z;
+    case 'scale.x': return transform.scale.x;
+    case 'scale.y': return transform.scale.y;
+    case 'rotation.x': return transform.rotation.x;
+    case 'rotation.y': return transform.rotation.y;
+    case 'rotation.z': return transform.rotation.z;
+    default: return 0;
+  }
+};
+
+// Format value for display
+const formatValue = (value: number, prop: string): string => {
+  if (prop === 'opacity') return (value * 100).toFixed(0) + '%';
+  if (prop.startsWith('rotation')) return value.toFixed(1) + '°';
+  if (prop.startsWith('scale')) return (value * 100).toFixed(0) + '%';
+  return value.toFixed(1);
+};
+
+// Single property row with value display and keyframe controls
+function PropertyRow({
+  prop,
+  clipId,
+  clip,
+  keyframes,
+  playheadPosition,
+  getInterpolatedTransform,
+  addKeyframe,
+  setPlayheadPosition,
+  setPropertyValue,
+}: {
+  prop: string;
+  clipId: string;
+  clip: { startTime: number; duration: number };
+  keyframes: Array<{ id: string; time: number; property: string; value: number }>;
+  playheadPosition: number;
+  getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
+  addKeyframe: (clipId: string, property: AnimatableProperty, value: number) => void;
+  setPlayheadPosition: (time: number) => void;
+  setPropertyValue: (clipId: string, property: AnimatableProperty, value: number) => void;
+}) {
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef({ y: 0, value: 0 });
+
+  // Get keyframes for this property only, sorted by time
+  const propKeyframes = useMemo(() =>
+    keyframes.filter(kf => kf.property === prop).sort((a, b) => a.time - b.time),
+    [keyframes, prop]
+  );
+
+  // Calculate clip-local time
+  const clipLocalTime = playheadPosition - clip.startTime;
+  const isWithinClip = clipLocalTime >= 0 && clipLocalTime <= clip.duration;
+
+  // Get current interpolated value
+  const currentValue = useMemo(() => {
+    if (!isWithinClip) return 0;
+    const transform = getInterpolatedTransform(clipId, clipLocalTime);
+    return getValueFromTransform(transform, prop);
+  }, [clipId, clipLocalTime, isWithinClip, getInterpolatedTransform, prop]);
+
+  // Find prev/next keyframes relative to playhead
+  const prevKeyframe = useMemo(() => {
+    for (let i = propKeyframes.length - 1; i >= 0; i--) {
+      if (propKeyframes[i].time < clipLocalTime) return propKeyframes[i];
+    }
+    return null;
+  }, [propKeyframes, clipLocalTime]);
+
+  const nextKeyframe = useMemo(() => {
+    for (const kf of propKeyframes) {
+      if (kf.time > clipLocalTime) return kf;
+    }
+    return null;
+  }, [propKeyframes, clipLocalTime]);
+
+  // Check if there's a keyframe at current time
+  const hasKeyframeAtPlayhead = propKeyframes.some(kf => Math.abs(kf.time - clipLocalTime) < 0.01);
+
+  // Handle value scrubbing (right-click drag)
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 2) return; // Right click only
+    e.preventDefault();
+    setIsDragging(true);
+    dragStart.current = { y: e.clientY, value: currentValue };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = dragStart.current.y - moveEvent.clientY;
+      let sensitivity = 0.01;
+      if (moveEvent.shiftKey && moveEvent.altKey) sensitivity = 0.001; // Slow mode
+      else if (moveEvent.shiftKey) sensitivity = 0.1; // Fast mode
+
+      const newValue = dragStart.current.value + deltaY * sensitivity;
+      setPropertyValue(clipId, prop as AnimatableProperty, newValue);
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // Jump to previous keyframe
+  const jumpToPrev = () => {
+    if (prevKeyframe) {
+      setPlayheadPosition(clip.startTime + prevKeyframe.time);
+    }
+  };
+
+  // Jump to next keyframe
+  const jumpToNext = () => {
+    if (nextKeyframe) {
+      setPlayheadPosition(clip.startTime + nextKeyframe.time);
+    }
+  };
+
+  // Add/toggle keyframe at current position
+  const toggleKeyframe = () => {
+    if (!isWithinClip) return;
+    addKeyframe(clipId, prop as AnimatableProperty, currentValue);
+  };
+
+  return (
+    <div className={`property-label-row flat ${isDragging ? 'dragging' : ''}`}>
+      <span className="property-label">{getPropertyLabel(prop)}</span>
+      <div className="property-keyframe-controls">
+        <button
+          className={`kf-nav-btn ${prevKeyframe ? '' : 'disabled'}`}
+          onClick={jumpToPrev}
+          title="Previous keyframe"
+        >
+          ◀
+        </button>
+        <button
+          className={`kf-add-btn ${hasKeyframeAtPlayhead ? 'has-keyframe' : ''}`}
+          onClick={toggleKeyframe}
+          title={hasKeyframeAtPlayhead ? 'Keyframe exists' : 'Add keyframe'}
+        >
+          ◆
+        </button>
+        <button
+          className={`kf-nav-btn ${nextKeyframe ? '' : 'disabled'}`}
+          onClick={jumpToNext}
+          title="Next keyframe"
+        >
+          ▶
+        </button>
+      </div>
+      <span
+        className="property-value"
+        onMouseDown={handleMouseDown}
+        onContextMenu={(e) => e.preventDefault()}
+        title="Right-drag to scrub (Shift+Alt for slow)"
+      >
+        {isWithinClip ? formatValue(currentValue, prop) : '—'}
+      </span>
+    </div>
+  );
+}
+
 // Render property labels for track header (left column) - flat list without folder structure
 function TrackPropertyLabels({
   selectedClip,
-  getClipKeyframes,
+  clipKeyframes,
+  playheadPosition,
+  getInterpolatedTransform,
+  addKeyframe,
+  setPlayheadPosition,
+  setPropertyValue,
 }: {
-  selectedClip: { id: string; effects?: Array<{ id: string; name: string; params: Record<string, unknown> }> } | null;
-  getClipKeyframes: (clipId: string) => Array<{
-    id: string;
-    clipId: string;
-    time: number;
-    property: AnimatableProperty;
-    value: number;
-    easing: string;
-  }>;
+  selectedClip: { id: string; startTime: number; duration: number; effects?: Array<{ id: string; name: string; params: Record<string, unknown> }> } | null;
+  clipKeyframes: Map<string, Array<{ id: string; clipId: string; time: number; property: AnimatableProperty; value: number; easing: string }>>;
+  playheadPosition: number;
+  getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
+  addKeyframe: (clipId: string, property: AnimatableProperty, value: number) => void;
+  setPlayheadPosition: (time: number) => void;
+  setPropertyValue: (clipId: string, property: AnimatableProperty, value: number) => void;
 }) {
   const clipId = selectedClip?.id;
+  const keyframes = clipId ? clipKeyframes.get(clipId) || [] : [];
 
-  // Memoize all keyframe properties
+  // Get keyframes for this clip - use clipKeyframes map to trigger re-render when keyframes change
   const keyframeProperties = useMemo(() => {
-    if (!clipId) return new Set<string>();
     const props = new Set<string>();
-    const keyframes = getClipKeyframes(clipId);
     keyframes.forEach((kf) => props.add(kf.property));
     return props;
-  }, [clipId, getClipKeyframes]);
+  }, [keyframes]);
 
   // If no clip is selected in this track, show nothing
   if (!selectedClip || keyframeProperties.size === 0) {
     return <div className="track-property-labels" />;
   }
-
-  // Get friendly names for properties
-  const getPropertyLabel = (prop: string): string => {
-    const labels: Record<string, string> = {
-      'opacity': 'Opacity',
-      'position.x': 'Pos X',
-      'position.y': 'Pos Y',
-      'position.z': 'Pos Z',
-      'scale.x': 'Scale X',
-      'scale.y': 'Scale Y',
-      'rotation.x': 'Rot X',
-      'rotation.y': 'Rot Y',
-      'rotation.z': 'Rot Z',
-    };
-    if (labels[prop]) return labels[prop];
-    // Handle effect properties: effect.{id}.{param} -> param name
-    if (prop.startsWith('effect.')) {
-      const parts = prop.split('.');
-      return parts[parts.length - 1];
-    }
-    return prop;
-  };
 
   // Convert Set to sorted array for consistent ordering
   const sortedProperties = Array.from(keyframeProperties).sort((a, b) => {
@@ -71,9 +243,18 @@ function TrackPropertyLabels({
   return (
     <div className="track-property-labels">
       {sortedProperties.map((prop) => (
-        <div key={prop} className="property-label-row flat">
-          <span className="property-label">{getPropertyLabel(prop)}</span>
-        </div>
+        <PropertyRow
+          key={prop}
+          prop={prop}
+          clipId={selectedClip.id}
+          clip={selectedClip}
+          keyframes={keyframes}
+          playheadPosition={playheadPosition}
+          getInterpolatedTransform={getInterpolatedTransform}
+          addKeyframe={addKeyframe}
+          setPlayheadPosition={setPlayheadPosition}
+          setPropertyValue={setPropertyValue}
+        />
       ))}
     </div>
   );
@@ -87,13 +268,18 @@ function TimelineHeaderComponent({
   hasKeyframes,
   selectedClipIds,
   clips,
+  playheadPosition,
   onToggleExpand,
   onToggleSolo,
   onToggleMuted,
   onToggleVisible,
   onRenameTrack,
   onWheel,
-  getClipKeyframes,
+  clipKeyframes,
+  getInterpolatedTransform,
+  addKeyframe,
+  setPlayheadPosition,
+  setPropertyValue,
 }: TimelineHeaderProps) {
   // Get the first selected clip in this track
   const trackClips = clips.filter((c) => c.trackId === track.id);
@@ -226,7 +412,12 @@ function TimelineHeaderComponent({
       {track.type === 'video' && isExpanded && (
         <TrackPropertyLabels
           selectedClip={selectedTrackClip || null}
-          getClipKeyframes={getClipKeyframes}
+          clipKeyframes={clipKeyframes}
+          playheadPosition={playheadPosition}
+          getInterpolatedTransform={getInterpolatedTransform}
+          addKeyframe={addKeyframe}
+          setPlayheadPosition={setPlayheadPosition}
+          setPropertyValue={setPropertyValue}
         />
       )}
     </div>

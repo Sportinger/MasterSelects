@@ -3488,6 +3488,72 @@ input[type="checkbox"] {
 .property-label-row.flat {
   padding-left: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.property-label-row.flat .property-label {
+  flex-shrink: 0;
+  min-width: 45px;
+}
+
+.property-label-row.flat.dragging {
+  background: rgba(0, 212, 255, 0.1);
+}
+
+.property-keyframe-controls {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: auto;
+}
+
+.kf-nav-btn, .kf-add-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 8px;
+  padding: 2px 3px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.1s;
+}
+
+.kf-nav-btn:hover, .kf-add-btn:hover {
+  opacity: 1;
+  color: var(--accent-timeline);
+}
+
+.kf-nav-btn.disabled {
+  opacity: 0.2;
+  cursor: default;
+}
+
+.kf-add-btn {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.kf-add-btn.has-keyframe {
+  color: var(--accent-timeline);
+  opacity: 1;
+}
+
+.property-value {
+  font-size: 9px;
+  color: var(--accent-timeline);
+  font-family: monospace;
+  min-width: 40px;
+  text-align: right;
+  cursor: ns-resize;
+  padding: 0 4px;
+  border-radius: 2px;
+  user-select: none;
+}
+
+.property-value:hover {
+  background: rgba(0, 212, 255, 0.1);
 }
 
 .property-label-group {

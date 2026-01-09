@@ -232,11 +232,14 @@ class CompositionRendererService {
       const timelineState = useTimelineStore.getState();
       clips = timelineState.clips;
       tracks = timelineState.tracks;
+      console.log(`[CompositionRenderer] evaluateAtTime: ACTIVE comp ${composition.name}, ${clips.length} clips, ${tracks.length} tracks, time=${time.toFixed(2)}`);
     } else if (composition.timelineData) {
       // Non-active composition - use serialized data
       clips = composition.timelineData.clips || [];
       tracks = composition.timelineData.tracks || [];
+      console.log(`[CompositionRenderer] evaluateAtTime: STORED comp ${composition.name}, ${clips.length} clips, ${tracks.length} tracks, time=${time.toFixed(2)}`);
     } else {
+      console.warn(`[CompositionRenderer] evaluateAtTime: comp ${composition.name} has NO timelineData!`);
       return [];
     }
 
