@@ -1811,9 +1811,10 @@ input[type="checkbox"] {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px;
+  padding: 0;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-tertiary);
+  position: relative;
 }
 
 .track-header.video {
@@ -3509,11 +3510,13 @@ input[type="checkbox"] {
 .track-header-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: 0 8px;
+  padding-right: 30px;
   margin: 0;
   box-sizing: border-box;
   position: relative;
+  width: 100%;
 }
 
 .track-header-main {
