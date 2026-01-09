@@ -171,10 +171,15 @@ function TimelineClipComponent({
 
   // Determine if this is an audio clip (check source type, MIME type, or extension as fallback)
   const audioExtensions = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'];
-  const fileExt = clip.file?.name?.split('.').pop()?.toLowerCase() || '';
+  const fileExt = (clip.file?.name || clip.name || '').split('.').pop()?.toLowerCase() || '';
   const isAudioClip = clip.source?.type === 'audio' ||
     clip.file?.type?.startsWith('audio/') ||
     audioExtensions.includes(fileExt);
+
+  // Debug: log detection
+  if (fileExt === 'wav' || clip.name?.includes('.wav')) {
+    console.log(`[TimelineClip] WAV detection: name="${clip.name}", source.type="${clip.source?.type}", fileExt="${fileExt}", isAudio=${isAudioClip}`);
+  }
 
 
   const isGeneratingProxy = proxyStatus === 'generating';
