@@ -500,10 +500,64 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
   },
 
   removeClip: (id) => {
-    const { clips, selectedClipId, updateDuration, invalidateCache } = get();
+    const { clips, selectedClipIds, updateDuration, invalidateCache } = get();
+
+    // Find the clip to clean up its resources
+    const clipToRemove = clips.find(c => c.id === id);
+    if (clipToRemove) {
+      // Clean up video/audio resources
+      if (clipToRemove.source?.type === 'video' && clipToRemove.source.videoElement) {
+        const video = clipToRemove.source.videoElement;
+        // Revoke blob URL to free memory
+        if (video.src && video.src.startsWith('blob:')) {
+          URL.revokeObjectURL(video.src);
+        }
+        // Pause and clear video
+        video.pause();
+        video.src = '';
+        video.load();
+        // Clean up engine caches
+        import('../../engine/WebGPUEngine').then(({ engine }) => {
+          engine.cleanupVideo(video);
+        });
+      }
+      if (clipToRemove.source?.type === 'audio' && clipToRemove.source.audioElement) {
+        const audio = clipToRemove.source.audioElement;
+        // Revoke blob URL to free memory
+        if (audio.src && audio.src.startsWith('blob:')) {
+          URL.revokeObjectURL(audio.src);
+        }
+        // Pause and clear audio
+        audio.pause();
+        audio.src = '';
+        audio.load();
+      }
+
+      // Also remove linked clip if exists
+      if (clipToRemove.linkedClipId) {
+        const linkedClip = clips.find(c => c.id === clipToRemove.linkedClipId);
+        if (linkedClip?.source?.type === 'audio' && linkedClip.source.audioElement) {
+          const audio = linkedClip.source.audioElement;
+          if (audio.src && audio.src.startsWith('blob:')) {
+            URL.revokeObjectURL(audio.src);
+          }
+          audio.pause();
+          audio.src = '';
+          audio.load();
+        }
+      }
+    }
+
+    // Remove from selection if selected
+    const newSelectedIds = new Set(selectedClipIds);
+    newSelectedIds.delete(id);
+    if (clipToRemove?.linkedClipId) {
+      newSelectedIds.delete(clipToRemove.linkedClipId);
+    }
+
     set({
-      clips: clips.filter(c => c.id !== id),
-      selectedClipId: selectedClipId === id ? null : selectedClipId,
+      clips: clips.filter(c => c.id !== id && c.id !== clipToRemove?.linkedClipId),
+      selectedClipIds: newSelectedIds,
     });
     updateDuration();
     // Invalidate RAM preview cache - content changed
@@ -717,10 +771,6 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
     }
 
     splitClip(clipToSplit.id, playheadPosition);
-  },
-
-  selectClip: (id) => {
-    set({ selectedClipId: id });
   },
 
   updateClipTransform: (id, transform) => {

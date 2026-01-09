@@ -244,6 +244,7 @@ export const useTimelineStore = create<TimelineStore>()(
             naturalDuration: clip.source?.naturalDuration,
             thumbnails: clip.thumbnails,
             linkedClipId: clip.linkedClipId,
+            linkedGroupId: clip.linkedGroupId,
             waveform: clip.waveform,
             transform: clip.transform,
             effects: clip.effects,
@@ -296,7 +297,7 @@ export const useTimelineStore = create<TimelineStore>()(
             inPoint: null,
             outPoint: null,
             loopPlayback: false,
-            selectedClipId: null,
+            selectedClipIds: new Set(),
           });
           return;
         }
@@ -312,7 +313,7 @@ export const useTimelineStore = create<TimelineStore>()(
           inPoint: data.inPoint,
           outPoint: data.outPoint,
           loopPlayback: data.loopPlayback,
-          selectedClipId: null,
+          selectedClipIds: new Set(),
           // Clear keyframe state
           clipKeyframes: new Map<string, Keyframe[]>(),
           keyframeRecordingEnabled: new Set<string>(),
@@ -476,6 +477,7 @@ export const useTimelineStore = create<TimelineStore>()(
             source: null, // Will be loaded
             thumbnails: serializedClip.thumbnails,
             linkedClipId: serializedClip.linkedClipId,
+            linkedGroupId: serializedClip.linkedGroupId,
             waveform: serializedClip.waveform,
             transform: serializedClip.transform,
             effects: serializedClip.effects || [],
@@ -592,7 +594,7 @@ export const useTimelineStore = create<TimelineStore>()(
 
         set({
           clips: [],
-          selectedClipId: null,
+          selectedClipIds: new Set(),
           cachedFrameTimes: new Set(),
           ramPreviewProgress: null,
           ramPreviewRange: null,
@@ -618,7 +620,7 @@ export const useTimelineStore = create<TimelineStore>()(
       scrollX: 0,
       isPlaying: false,
       isDraggingPlayhead: false,
-      selectedClipId: null as string | null,
+      selectedClipIds: new Set<string>(),
 
       // In/Out markers
       inPoint: null as number | null,

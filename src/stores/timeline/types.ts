@@ -43,7 +43,7 @@ export interface TimelineState {
   scrollX: number;
   isPlaying: boolean;
   isDraggingPlayhead: boolean;
-  selectedClipId: string | null;
+  selectedClipIds: Set<string>;
 
   // In/Out markers
   inPoint: number | null;
@@ -91,16 +91,18 @@ export interface ClipActions {
   addClip: (trackId: string, file: File, startTime: number, estimatedDuration?: number, mediaFileId?: string) => Promise<void>;
   addCompClip: (trackId: string, composition: Composition, startTime: number) => void;
   removeClip: (id: string) => void;
-  moveClip: (id: string, newStartTime: number, newTrackId?: string, skipLinked?: boolean) => void;
+  moveClip: (id: string, newStartTime: number, newTrackId?: string, skipLinked?: boolean, skipGroup?: boolean) => void;
   trimClip: (id: string, inPoint: number, outPoint: number) => void;
   splitClip: (clipId: string, splitTime: number) => void;
   splitClipAtPlayhead: () => void;
-  selectClip: (id: string | null) => void;
   updateClipTransform: (id: string, transform: Partial<ClipTransform>) => void;
   toggleClipReverse: (id: string) => void;
   addClipEffect: (clipId: string, effectType: string) => void;
   removeClipEffect: (clipId: string, effectId: string) => void;
   updateClipEffect: (clipId: string, effectId: string, params: Partial<Effect['params']>) => void;
+  // Multicam group linking
+  createLinkedGroup: (clipIds: string[], offsets: Map<string, number>) => void;
+  unlinkGroup: (clipId: string) => void;
 }
 
 // Playback actions interface
@@ -137,6 +139,13 @@ export interface RamPreviewActions {
 
 // Selection actions interface
 export interface SelectionActions {
+  // Clip selection (multi-select support)
+  selectClip: (id: string | null, addToSelection?: boolean) => void;
+  selectClips: (ids: string[]) => void;
+  addClipToSelection: (id: string) => void;
+  removeClipFromSelection: (id: string) => void;
+  clearClipSelection: () => void;
+  // Keyframe selection
   selectKeyframe: (keyframeId: string, addToSelection?: boolean) => void;
   deselectAllKeyframes: () => void;
   deleteSelectedKeyframes: () => void;

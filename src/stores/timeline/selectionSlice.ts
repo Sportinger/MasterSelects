@@ -3,6 +3,51 @@
 import type { SelectionActions, SliceCreator, Keyframe } from './types';
 
 export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) => ({
+  // Clip selection (multi-select support)
+  selectClip: (id, addToSelection = false) => {
+    const { selectedClipIds } = get();
+
+    if (id === null) {
+      set({ selectedClipIds: new Set() });
+      return;
+    }
+
+    if (addToSelection) {
+      const newSet = new Set(selectedClipIds);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      set({ selectedClipIds: newSet });
+    } else {
+      set({ selectedClipIds: new Set([id]) });
+    }
+  },
+
+  selectClips: (ids) => {
+    set({ selectedClipIds: new Set(ids) });
+  },
+
+  addClipToSelection: (id) => {
+    const { selectedClipIds } = get();
+    const newSet = new Set(selectedClipIds);
+    newSet.add(id);
+    set({ selectedClipIds: newSet });
+  },
+
+  removeClipFromSelection: (id) => {
+    const { selectedClipIds } = get();
+    const newSet = new Set(selectedClipIds);
+    newSet.delete(id);
+    set({ selectedClipIds: newSet });
+  },
+
+  clearClipSelection: () => {
+    set({ selectedClipIds: new Set() });
+  },
+
+  // Keyframe selection
   selectKeyframe: (keyframeId, addToSelection = false) => {
     const { selectedKeyframeIds } = get();
 

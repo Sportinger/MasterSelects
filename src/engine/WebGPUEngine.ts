@@ -546,7 +546,8 @@ export class WebGPUEngine {
     const t1 = performance.now();
     for (let i = layers.length - 1; i >= 0; i--) {
       const layer = layers[i];
-      if (!layer || !layer.visible || !layer.source) continue;
+      // Skip invisible layers and layers with zero opacity (saves GPU overhead)
+      if (!layer || !layer.visible || !layer.source || layer.opacity === 0) continue;
 
       // Try WebCodecs VideoFrame first (if available)
       if (layer.source.webCodecsPlayer) {
@@ -579,21 +580,36 @@ export class WebGPUEngine {
           const currentTime = video.currentTime;
           const videoTimeChanged = lastTime === undefined || Math.abs(currentTime - lastTime) > 0.001;
 
-          // Note: External textures must be re-imported each frame as they are ephemeral,
-          // but we track time to skip cache updates for unchanged frames
+          // OPTIMIZATION: If video time hasn't changed, use cached frame instead of re-importing
+          // This saves significant GPU overhead for paused videos
+          if (!videoTimeChanged) {
+            const lastFrame = this.scrubbingCache?.getLastFrame(video);
+            if (lastFrame) {
+              this.detailedStats.decoder = 'HTMLVideo(paused-cache)';
+              this.layerRenderData.push({
+                layer,
+                isVideo: false,
+                externalTexture: null,
+                textureView: lastFrame.view,
+                sourceWidth: lastFrame.width,
+                sourceHeight: lastFrame.height,
+              });
+              continue;
+            }
+          }
+
+          // Video time changed or no cache - import external texture
           const extTex = this.textureManager?.importVideoTexture(video);
           if (extTex) {
             // Update time tracking
             this.lastVideoTime.set(videoKey, currentTime);
 
-            // Cache frame occasionally for seek/pause fallback (only if time changed)
-            if (videoTimeChanged) {
-              const now = performance.now();
-              const lastCapture = this.scrubbingCache?.getLastCaptureTime(video) || 0;
-              if (now - lastCapture > 500) {
-                this.scrubbingCache?.captureVideoFrame(video);
-                this.scrubbingCache?.setLastCaptureTime(video, now);
-              }
+            // Cache frame for pause/seek fallback
+            const now = performance.now();
+            const lastCapture = this.scrubbingCache?.getLastCaptureTime(video) || 0;
+            if (now - lastCapture > 200) { // Cache more frequently for smoother pause
+              this.scrubbingCache?.captureVideoFrame(video);
+              this.scrubbingCache?.setLastCaptureTime(video, now);
             }
             this.detailedStats.decoder = 'HTMLVideo';
 

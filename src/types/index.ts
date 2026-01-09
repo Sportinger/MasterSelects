@@ -203,6 +203,7 @@ export interface TimelineClip {
   } | null;
   thumbnails?: string[];  // Array of data URLs for filmstrip preview
   linkedClipId?: string;  // ID of linked clip (e.g., audio linked to video)
+  linkedGroupId?: string; // ID of multicam group (clips synced together)
   waveform?: number[];    // Array of normalized amplitude values (0-1) for audio waveform
   transform: ClipTransform;  // Visual transform properties
   effects: Effect[];      // Effects applied to this clip
@@ -261,6 +262,7 @@ export interface SerializableClip {
   naturalDuration?: number;
   thumbnails?: string[];
   linkedClipId?: string;
+  linkedGroupId?: string;  // Multicam group ID
   waveform?: number[];
   transform: ClipTransform;
   effects: Effect[];         // Effects applied to this clip
