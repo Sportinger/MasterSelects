@@ -15,6 +15,8 @@ import { createPlaybackSlice } from './playbackSlice';
 import { createSelectionSlice } from './selectionSlice';
 import { createKeyframeSlice } from './keyframeSlice';
 import { createMaskSlice } from './maskSlice';
+import { projectDB } from '../../services/projectDB';
+import type { ClipAnalysis, FrameAnalysisData } from '../../types';
 
 // Re-export types for convenience
 export type { TimelineStore, TimelineClip, Keyframe } from './types';
@@ -411,6 +413,9 @@ export const useTimelineStore = create<TimelineStore>()(
             // Transcript data
             transcript: clip.transcript && clip.transcript.length > 0 ? clip.transcript : undefined,
             transcriptStatus: clip.transcriptStatus !== 'none' ? clip.transcriptStatus : undefined,
+            // Analysis data
+            analysis: clip.analysis,
+            analysisStatus: clip.analysisStatus !== 'none' ? clip.analysisStatus : undefined,
             // Playback
             reversed: clip.reversed || undefined,
           };
@@ -628,7 +633,11 @@ export const useTimelineStore = create<TimelineStore>()(
             duration: serializedClip.duration,
             inPoint: serializedClip.inPoint,
             outPoint: serializedClip.outPoint,
-            source: null, // Will be loaded
+            source: {
+              type: serializedClip.sourceType,
+              mediaFileId: serializedClip.mediaFileId, // Preserve mediaFileId for cache lookups
+              naturalDuration: serializedClip.naturalDuration,
+            },
             thumbnails: serializedClip.thumbnails,
             linkedClipId: serializedClip.linkedClipId,
             linkedGroupId: serializedClip.linkedGroupId,
@@ -640,6 +649,9 @@ export const useTimelineStore = create<TimelineStore>()(
             // Restore transcript data
             transcript: serializedClip.transcript,
             transcriptStatus: serializedClip.transcriptStatus || 'none',
+            // Restore analysis data
+            analysis: serializedClip.analysis,
+            analysisStatus: serializedClip.analysisStatus || 'none',
             // Restore playback settings
             reversed: serializedClip.reversed,
           };

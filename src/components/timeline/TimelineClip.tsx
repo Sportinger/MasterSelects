@@ -177,24 +177,42 @@ const AnalysisOverlay = memo(function AnalysisOverlay({
     ctx.fillStyle = 'rgba(34, 197, 94, 0.3)';
     ctx.fill();
 
-    // Draw the focus line on top
-    ctx.beginPath();
-    for (let i = 0; i < visibleFrames.length; i++) {
-      const frame = visibleFrames[i];
-      const frameInClip = frame.timestamp - clipInPoint;
-      const x = (frameInClip / clipDuration) * width;
-      const amplifiedFocus = Math.min(1, frame.focus * focusMultiplier);
-      const y = height - (amplifiedFocus * height * heightScale);
-
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    }
-    ctx.strokeStyle = 'rgba(34, 197, 94, 0.9)';
+    // Draw the focus line on top with gradient coloring based on threshold
+    // Green when good (high focus), red when bad (low focus)
+    const focusThreshold = 0.3; // Below this = red
     ctx.lineWidth = 1.5;
-    ctx.stroke();
+
+    for (let i = 0; i < visibleFrames.length - 1; i++) {
+      const frame = visibleFrames[i];
+      const nextFrame = visibleFrames[i + 1];
+
+      const frameInClip = frame.timestamp - clipInPoint;
+      const nextFrameInClip = nextFrame.timestamp - clipInPoint;
+
+      const x1 = (frameInClip / clipDuration) * width;
+      const x2 = (nextFrameInClip / clipDuration) * width;
+
+      const amplifiedFocus1 = Math.min(1, frame.focus * focusMultiplier);
+      const amplifiedFocus2 = Math.min(1, nextFrame.focus * focusMultiplier);
+
+      const y1 = height - (amplifiedFocus1 * height * heightScale);
+      const y2 = height - (amplifiedFocus2 * height * heightScale);
+
+      // Calculate color based on average value of segment
+      const avgFocus = (frame.focus + nextFrame.focus) / 2;
+      const t = Math.min(1, Math.max(0, (avgFocus - focusThreshold * 0.5) / (focusThreshold * 1.5)));
+
+      // Interpolate from red (low) to green (high)
+      const r = Math.round(239 - t * (239 - 34));   // 239 -> 34
+      const g = Math.round(68 + t * (197 - 68));    // 68 -> 197
+      const b = Math.round(68 + t * (94 - 68));     // 68 -> 94
+
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
+      ctx.stroke();
+    }
 
     // Draw filled area + line for Motion (blue) - from bottom
     // Use globalMotion (camera/scene motion) for display
@@ -225,26 +243,46 @@ const AnalysisOverlay = memo(function AnalysisOverlay({
     ctx.fillStyle = 'rgba(59, 130, 246, 0.25)';
     ctx.fill();
 
-    // Draw the motion line on top
-    ctx.beginPath();
-    for (let i = 0; i < visibleFrames.length; i++) {
-      const frame = visibleFrames[i];
-      const frameInClip = frame.timestamp - clipInPoint;
-      const x = (frameInClip / clipDuration) * width;
-      // Use globalMotion if available, fallback to total motion
-      const motionValue = frame.globalMotion ?? frame.motion;
-      const amplifiedMotion = Math.min(1, motionValue * motionMultiplier);
-      const y = height - (amplifiedMotion * height * heightScale);
-
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    }
-    ctx.strokeStyle = 'rgba(59, 130, 246, 0.8)';
+    // Draw the motion line on top with gradient coloring based on threshold
+    // Blue when stable (low motion), red when shaky (high motion)
+    const motionThreshold = 0.4; // Above this = red
     ctx.lineWidth = 1.5;
-    ctx.stroke();
+
+    for (let i = 0; i < visibleFrames.length - 1; i++) {
+      const frame = visibleFrames[i];
+      const nextFrame = visibleFrames[i + 1];
+
+      const frameInClip = frame.timestamp - clipInPoint;
+      const nextFrameInClip = nextFrame.timestamp - clipInPoint;
+
+      const x1 = (frameInClip / clipDuration) * width;
+      const x2 = (nextFrameInClip / clipDuration) * width;
+
+      const motionValue1 = frame.globalMotion ?? frame.motion;
+      const motionValue2 = nextFrame.globalMotion ?? nextFrame.motion;
+
+      const amplifiedMotion1 = Math.min(1, motionValue1 * motionMultiplier);
+      const amplifiedMotion2 = Math.min(1, motionValue2 * motionMultiplier);
+
+      const y1 = height - (amplifiedMotion1 * height * heightScale);
+      const y2 = height - (amplifiedMotion2 * height * heightScale);
+
+      // Calculate color based on average value of segment
+      // Higher motion = more red (inverted from focus)
+      const avgMotion = (motionValue1 + motionValue2) / 2;
+      const t = Math.min(1, Math.max(0, avgMotion / motionThreshold));
+
+      // Interpolate from blue (low/stable) to red (high/shaky)
+      const r = Math.round(59 + t * (239 - 59));    // 59 -> 239
+      const g = Math.round(130 - t * (130 - 68));   // 130 -> 68
+      const b = Math.round(246 - t * (246 - 68));   // 246 -> 68
+
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.8)`;
+      ctx.stroke();
+    }
 
     // Draw face indicators as small yellow dots at the top
     for (const frame of visibleFrames) {
