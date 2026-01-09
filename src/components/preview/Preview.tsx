@@ -242,7 +242,7 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
   }, [isIndependentComp, compositionId, isEngineReady, panelId]);
 
   // Render loop for independent compositions
-  // Uses the composition's OWN timeline data, completely decoupled from active timeline
+  // If this comp is nested in active timeline, sync to that. Otherwise use stored playhead.
   useEffect(() => {
     if (!isIndependentComp || !compReady || !compositionId) {
       return;
@@ -251,11 +251,29 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
     console.log(`[Preview ${panelId}] Starting independent render loop for composition: ${compositionId}`);
 
     const renderFrame = () => {
-      // Use the main playhead position to sync playback
-      // But evaluate THIS composition's timeline at that time
-      const playheadTime = useTimelineStore.getState().playheadPosition;
+      const mainPlayhead = useTimelineStore.getState().playheadPosition;
+      const mainClips = useTimelineStore.getState().clips;
+      const composition = compositions.find(c => c.id === compositionId);
 
-      // Evaluate this composition's own timeline data at the current time
+      // Check if this composition is nested in the active timeline
+      // If so, calculate internal time based on where the nest clip is placed
+      const nestedClip = mainClips.find(c => c.isComposition && c.compositionId === compositionId);
+
+      let playheadTime: number;
+
+      if (nestedClip && mainPlayhead >= nestedClip.startTime && mainPlayhead < nestedClip.startTime + nestedClip.duration) {
+        // Composition IS nested and main playhead is within the nested clip
+        // Calculate internal time: (main playhead - clip start) + clip's inPoint
+        playheadTime = (mainPlayhead - nestedClip.startTime) + (nestedClip.inPoint || 0);
+        console.log(`[Preview ${panelId}] Nested comp sync: main=${mainPlayhead.toFixed(2)}, internal=${playheadTime.toFixed(2)}`);
+      } else if (composition?.timelineData?.playheadPosition !== undefined) {
+        // Not nested (or outside nested range) - use composition's own stored playhead
+        playheadTime = composition.timelineData.playheadPosition;
+      } else {
+        playheadTime = 0;
+      }
+
+      // Evaluate this composition's timeline at the calculated time
       const evalLayers = compositionRenderer.evaluateAtTime(compositionId, playheadTime);
 
       if (evalLayers.length > 0) {
@@ -273,7 +291,7 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
         console.log(`[Preview ${panelId}] Stopped independent render loop`);
       }
     };
-  }, [isIndependentComp, compReady, compositionId, panelId, renderToPreviewCanvas]);
+  }, [isIndependentComp, compReady, compositionId, panelId, renderToPreviewCanvas, compositions]);
 
   // Composition selector state
   const [selectorOpen, setSelectorOpen] = useState(false);
