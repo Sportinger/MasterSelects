@@ -1543,7 +1543,9 @@ input[type="checkbox"] {
 .timeline-body {
   display: flex;
   flex: 1;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  align-items: flex-start;
 }
 
 /* Track headers */
@@ -1627,7 +1629,7 @@ input[type="checkbox"] {
   flex: 1;
   position: relative;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: visible;
 }
 
 .time-ruler {

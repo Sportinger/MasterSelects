@@ -1884,7 +1884,7 @@ export function Timeline() {
     [scrollX, pixelToTime, addCompClip, addClip, externalDrag]
   );
 
-  // Zoom with mouse wheel
+  // Zoom with mouse wheel, also handle vertical scroll
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
       if (e.ctrlKey || e.altKey) {
@@ -1892,7 +1892,11 @@ export function Timeline() {
         const delta = e.deltaY > 0 ? -5 : 5;
         setZoom(zoom + delta);
       } else {
-        setScrollX(scrollX + e.deltaX);
+        // Handle horizontal scroll (e.g., shift+scroll or trackpad horizontal)
+        if (e.deltaX !== 0) {
+          setScrollX(scrollX + e.deltaX);
+        }
+        // Vertical scroll is handled natively by the parent timeline-body container
       }
     },
     [zoom, scrollX, setZoom, setScrollX]
