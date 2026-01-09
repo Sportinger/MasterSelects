@@ -2776,23 +2776,19 @@ export function Timeline() {
                 />
               )}
 
-              {/* Playhead line - inside track-lanes-scroll to extend full height */}
-              <div
-                className="playhead-line"
-                style={{ left: timeToPixel(playheadPosition) }}
-              />
 
             </div>{/* track-lanes-scroll */}
           </div>{/* timeline-tracks */}
         </div>{/* timeline-content-row */}
 
-        {/* Playhead head - sticky at top */}
+        {/* Playhead - spans from ruler through all tracks */}
         <div
-          className="playhead-head-container"
+          className="playhead"
           style={{ left: timeToPixel(playheadPosition) - scrollX + 150 }}
           onMouseDown={handlePlayheadMouseDown}
         >
           <div className="playhead-head" />
+          <div className="playhead-line" />
         </div>
       </div>{/* timeline-body */}
 

@@ -2394,43 +2394,44 @@ input[type="checkbox"] {
 }
 
 /* Playhead */
-/* Playhead line - inside track-lanes-scroll, extends full track height */
-.playhead-line {
+.playhead {
   position: absolute;
   top: 0;
-  bottom: 0;
   width: 2px;
-  background: var(--danger);
-  z-index: 25;
+  min-height: 100%;
+  height: max-content;
+  z-index: 30;
   pointer-events: none;
   transform: translateX(-1px);
 }
 
-/* Playhead head container - sticky at top of timeline-body */
-.playhead-head-container {
-  position: sticky;
-  top: 0;
-  z-index: 35; /* Above everything */
-  pointer-events: none;
-  height: 0;
-  overflow: visible;
-}
-
 .playhead-head {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   background: var(--danger);
-  border-radius: 2px;
-  /* Center the 12px head on the time position */
-  transform: translateX(-5px);
+  border-radius: 3px;
+  transform: translateX(-6px);
   cursor: grab;
   pointer-events: auto;
-  position: relative;
+  position: sticky;
   top: 4px;
+  z-index: 35;
 }
 
 .playhead-head:hover {
   background: #ff6666;
+}
+
+.playhead-head:active {
+  cursor: grabbing;
+}
+
+.playhead-line {
+  width: 2px;
+  min-height: calc(100vh - 50px);
+  height: 100%;
+  background: var(--danger);
+  margin-top: -2px;
 }
 
 /* Snap indicator line */
