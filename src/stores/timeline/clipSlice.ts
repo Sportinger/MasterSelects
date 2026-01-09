@@ -190,7 +190,7 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
       const isLargeFile = file.size > LARGE_FILE_THRESHOLD;
 
       if (isLargeFile) {
-        console.log(`[Thumbnails] Skipping for large file (${(file.size / 1024 / 1024).toFixed(0)}MB): ${file.name}`);
+        console.log(`[Thumbnails/Waveform] Skipping for large file (${(file.size / 1024 / 1024).toFixed(0)}MB): ${file.name}`);
       }
 
       if (get().thumbnailsEnabled && !isLargeFile) {
@@ -240,7 +240,8 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
         });
 
         // Generate waveform in background (non-blocking) - only if enabled
-        if (get().waveformsEnabled && audioClipId) {
+        // Skip for large files (>500MB) as generateWaveform loads entire file into memory
+        if (get().waveformsEnabled && audioClipId && !isLargeFile) {
           // Mark waveform generation starting
           const clipsBefore = get().clips;
           set({
@@ -321,18 +322,28 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
 
       const naturalDuration = audio.duration || estimatedDuration;
 
-      // Mark clip as ready first (waveform will load in background)
+      // Check if this is a large file before setting waveform state
+      const LARGE_AUDIO_THRESHOLD = 500 * 1024 * 1024; // 500MB
+      const isLargeAudioFile = file.size > LARGE_AUDIO_THRESHOLD;
+
+      // Mark clip as ready first (waveform will load in background for small files)
       updateClip(clipId, {
         duration: naturalDuration,
         outPoint: naturalDuration,
         source: { type: 'audio', audioElement: audio, naturalDuration, mediaFileId },
         isLoading: false,
-        waveformGenerating: get().waveformsEnabled,
+        waveformGenerating: get().waveformsEnabled && !isLargeAudioFile,
         waveformProgress: 0,
       });
 
       // Generate waveform in background - only if enabled
-      if (get().waveformsEnabled) {
+      // Skip for large files (>500MB) as generateWaveform loads entire file into memory
+
+      if (isLargeAudioFile) {
+        console.log(`[Waveform] Skipping for large file (${(file.size / 1024 / 1024).toFixed(0)}MB): ${file.name}`);
+      }
+
+      if (get().waveformsEnabled && !isLargeAudioFile) {
         (async () => {
           try {
             console.log(`[Waveform] Starting generation for ${file.name}...`);
