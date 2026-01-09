@@ -2512,7 +2512,10 @@ export function Timeline() {
             className={`timeline-tracks ${clipDrag ? 'dragging-clip' : ''} ${marquee ? 'marquee-selecting' : ''}`}
             onMouseDown={handleMarqueeMouseDown}
           >
-            <div className="track-lanes-scroll" style={{ transform: `translateX(-${scrollX}px)` }}>
+            <div className="track-lanes-scroll" style={{
+              transform: `translateX(-${scrollX}px)`,
+              minWidth: Math.max(duration * zoom + 500, 2000), // Ensure background extends beyond visible content
+            }}>
               {/* New Video Track drop zone - at TOP above video tracks */}
               {externalDrag && (
                 <div

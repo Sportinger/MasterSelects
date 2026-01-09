@@ -1714,6 +1714,7 @@ input[type="checkbox"] {
   position: relative;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-secondary);
+  min-width: 100%;
 }
 
 .track-lane.video {
