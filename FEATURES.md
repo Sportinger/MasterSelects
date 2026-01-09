@@ -11,6 +11,7 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 - **Clip-Management**: Hinzufügen, Entfernen, Verschieben von Clips
 - **Clip-Trimming**: Links/Rechts-Kanten ziehen für In/Out-Points
 - **Linked Clips**: Audio/Video bleiben beim Verschieben synchron
+- **Overlap Resistance**: Magnetischer Widerstand beim Überlappen (Video + Audio)
 - **Clip-Splitting**: Clips teilen mit C-Taste (splittet ALLE Clips am Playhead, oder nur ausgewählte)
 - **Playhead**: Klicken zum Springen, Ziehen zum Scrubben
 - **Zoom**: Dynamischer Zoom mit Alt+Scroll-Rad (0.1 bis 200 px/s)
@@ -30,7 +31,7 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 - **Waveform-Anzeige**: Audio-Wellenformen auf Clips (Rechtsklick zum Generieren)
 - **Thumbnail-Strips**: Filmstreifen-Vorschau auf Video-Clips
 - **Compositions**: Verschachtelte Timelines als Clips
-- **Undo/Redo**: Vollständige History
+- **Undo/Redo**: Ctrl+Z / Ctrl+Shift+Z (oder Ctrl+Y)
 
 ---
 
