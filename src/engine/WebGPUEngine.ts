@@ -573,11 +573,6 @@ export class WebGPUEngine {
         const video = layer.source.videoElement;
         const videoKey = video.src || layer.id;
 
-        // Log video state occasionally for debugging
-        if (this.profileCounter === 0) {
-          console.log(`[VIDEO] ${video.videoWidth}x${video.videoHeight} readyState=${video.readyState} paused=${video.paused} seeking=${video.seeking} buffered=${video.buffered.length > 0 ? (video.buffered.end(0) - video.buffered.start(0)).toFixed(1) + 's' : '0s'}`);
-        }
-
         if (video.readyState >= 2) {
           // Check if video time has changed since last frame (optimization for paused videos)
           const lastTime = this.lastVideoTime.get(videoKey);
@@ -840,27 +835,12 @@ export class WebGPUEngine {
       }
     }
 
-    // Log profile every second
+    // Profile counter for internal use
     this.profileCounter++;
     const now = performance.now();
     if (now - this.lastProfileTime >= 1000) {
-      const actualFps = this.profileCounter;
       this.profileCounter = 0;
       this.lastProfileTime = now;
-
-      const jsTime = this.profileData.total;
-      const gapTime = timeSinceLastRender;
-      const unaccountedTime = gapTime - jsTime;
-
-      let bottleneck = 'ok';
-      if (gapTime > 20) {
-        if (unaccountedTime > 15) bottleneck = 'BROWSER/DECODE';
-        else if (this.profileData.importTexture > 5) bottleneck = 'TEXTURE_IMPORT';
-        else if (this.profileData.renderPass > 5) bottleneck = 'GPU_RENDER';
-        else bottleneck = 'JS_OTHER';
-      }
-
-      console.log(`[PROFILE] FPS=${actualFps} | gap=${gapTime.toFixed(0)}ms | videos=${this.layerRenderData.filter(l => l.isVideo).length} | decoder=${this.detailedStats.decoder} | js=${jsTime.toFixed(1)}ms (import=${this.profileData.importTexture.toFixed(1)} rp=${this.profileData.renderPass.toFixed(1)}) | outside_js=${unaccountedTime.toFixed(0)}ms | drops=${this.detailedStats.dropsLastSecond}/s | ${bottleneck}`);
     }
 
     this.updateStats();
