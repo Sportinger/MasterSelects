@@ -2,6 +2,7 @@
 // Handles transcription of individual clips using Whisper
 
 import { useTimelineStore } from '../stores/timeline';
+import { triggerTimelineSave } from '../stores/mediaStore';
 import type { TranscriptWord, TranscriptStatus } from '../types';
 
 /**
@@ -34,6 +35,9 @@ export async function transcribeClip(clipId: string): Promise<void> {
       progress: 100,
       words: transcript,
     });
+
+    // Save timeline immediately so transcript persists across refresh
+    triggerTimelineSave();
 
     console.log('[ClipTranscriber] Transcription complete for', clip.name, '-', transcript.length, 'words');
   } catch (error) {

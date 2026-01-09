@@ -1296,6 +1296,12 @@ function saveTimelineToActiveComposition() {
   }
 }
 
+// Export for external use (e.g., after transcription completes)
+export function triggerTimelineSave() {
+  saveTimelineToActiveComposition();
+  console.log('[MediaStore] Timeline saved to composition');
+}
+
 // Auto-initialize from IndexedDB on app load
 if (typeof window !== 'undefined') {
   // Delay init slightly to ensure store is ready
