@@ -1,6 +1,16 @@
 # MASterSelects
 
-A professional browser-based video compositor and timeline editor built with WebGPU. Designed for video editing, compositing, and multicam workflows with AI-powered tools.
+![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![License](https://img.shields.io/badge/license-Proprietary-red.svg)
+![Platform](https://img.shields.io/badge/platform-Browser-lightgrey.svg)
+![WebGPU](https://img.shields.io/badge/WebGPU-Powered-green.svg)
+![React](https://img.shields.io/badge/React-19.2-61DAFB.svg?logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6.svg?logo=typescript)
+![Vite](https://img.shields.io/badge/Vite-7.2-646CFF.svg?logo=vite)
+
+**Professional WebGPU Video Compositor & Timeline Editor**
+
+A browser-based video editing application with After Effects-style compositing, AI-powered workflows, and real-time GPU rendering. No plugins or installations required.
 
 ## Features
 
