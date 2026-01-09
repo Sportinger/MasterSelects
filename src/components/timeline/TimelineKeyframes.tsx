@@ -1,7 +1,13 @@
 // TimelineKeyframes component - Keyframe diamonds/handles
 
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import type { TimelineKeyframesProps } from './types';
+
+interface KeyframeDisplay {
+  kf: ReturnType<TimelineKeyframesProps['getClipKeyframes']>[0];
+  clip: TimelineKeyframesProps['clips'][0];
+  absTime: number;
+}
 
 function TimelineKeyframesComponent({
   trackId,
@@ -13,27 +19,38 @@ function TimelineKeyframesComponent({
   timeToPixel,
 }: TimelineKeyframesProps) {
   // Get all clips on this track
-  const trackClips = clips.filter((c) => c.trackId === trackId);
+  const trackClips = useMemo(
+    () => clips.filter((c) => c.trackId === trackId),
+    [clips, trackId]
+  );
 
-  // Collect all keyframes from all clips with their absolute positions
-  const allKeyframes: Array<{
-    kf: ReturnType<typeof getClipKeyframes>[0];
-    clip: typeof clips[0];
-    absTime: number;
-  }> = [];
+  // Get all keyframes once and group by clip/property - O(n) instead of O(n^2)
+  const allKeyframes = useMemo(() => {
+    const result: KeyframeDisplay[] = [];
+    const keyframesByClip = new Map<string, ReturnType<typeof getClipKeyframes>>();
 
-  trackClips.forEach((clip) => {
-    const clipKeyframes = getClipKeyframes(clip.id).filter(
-      (k) => k.property === property
-    );
-    clipKeyframes.forEach((kf) => {
-      allKeyframes.push({
-        kf,
-        clip,
-        absTime: clip.startTime + kf.time,
-      });
+    // Pre-group keyframes by clip ID for O(1) lookups
+    trackClips.forEach((clip) => {
+      const kfs = getClipKeyframes(clip.id);
+      keyframesByClip.set(clip.id, kfs);
     });
-  });
+
+    // Now iterate with O(1) lookups
+    trackClips.forEach((clip) => {
+      const clipKeyframes = keyframesByClip.get(clip.id) || [];
+      clipKeyframes
+        .filter((k) => k.property === property)
+        .forEach((kf) => {
+          result.push({
+            kf,
+            clip,
+            absTime: clip.startTime + kf.time,
+          });
+        });
+    });
+
+    return result;
+  }, [trackClips, property, getClipKeyframes]);
 
   return (
     <>

@@ -1,11 +1,11 @@
 // TimelineClip component - Clip rendering within tracks
 
-import { memo } from 'react';
+import { memo, useRef, useEffect } from 'react';
 import type { TimelineClipProps } from './types';
 import { THUMB_WIDTH } from './constants';
 
-// Render waveform for audio clips
-function Waveform({
+// Render waveform for audio clips using canvas for better performance
+const Waveform = memo(function Waveform({
   waveform,
   width,
   height,
@@ -14,30 +14,46 @@ function Waveform({
   width: number;
   height: number;
 }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !waveform || waveform.length === 0) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Set canvas size (account for device pixel ratio for sharpness)
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.scale(dpr, dpr);
+
+    // Clear
+    ctx.clearRect(0, 0, width, height);
+
+    // Draw waveform bars
+    const barWidth = width / waveform.length;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'; // Match existing .waveform-bar color for audio clips
+
+    waveform.forEach((value, i) => {
+      const barHeight = Math.max(2, value * (height - 8));
+      const x = i * barWidth;
+      const y = (height - barHeight) / 2;
+      ctx.fillRect(x, y, Math.max(1, barWidth - 1), barHeight);
+    });
+  }, [waveform, width, height]);
+
   if (!waveform || waveform.length === 0) return null;
 
-  const barWidth = Math.max(1, width / waveform.length);
-  const bars = waveform.map((value, i) => {
-    const barHeight = Math.max(2, value * (height - 8));
-    return (
-      <div
-        key={i}
-        className="waveform-bar"
-        style={{
-          left: i * barWidth,
-          height: barHeight,
-          width: Math.max(1, barWidth - 1),
-        }}
-      />
-    );
-  });
-
   return (
-    <div className="waveform-container" style={{ width, height }}>
-      {bars}
-    </div>
+    <canvas
+      ref={canvasRef}
+      className="waveform-canvas"
+      style={{ width, height }}
+    />
   );
-}
+});
 
 function TimelineClipComponent({
   clip,
