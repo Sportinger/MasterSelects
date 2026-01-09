@@ -436,9 +436,10 @@ export const useDockStore = create<DockState>()(
           };
 
           if (previewGroup) {
+            // Insert to the RIGHT of the preview group (side-by-side)
             const newLayout = insertPanelAtTarget(layout, newPanel, {
               groupId: 'preview-group',
-              position: 'center',
+              position: 'right',
             });
             set({ layout: newLayout });
           } else {
@@ -447,7 +448,7 @@ export const useDockStore = create<DockState>()(
             if (anyGroup) {
               const newLayout = insertPanelAtTarget(layout, newPanel, {
                 groupId: anyGroup.id,
-                position: 'center',
+                position: 'right',
               });
               set({ layout: newLayout });
             }

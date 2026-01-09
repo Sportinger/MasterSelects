@@ -146,7 +146,7 @@ function StatsOverlay({ stats, resolution, expanded, onToggle }: {
 }
 
 export function Preview({ panelId, compositionId }: PreviewProps) {
-  const { canvasRef, isEngineReady } = useEngine();
+  const { isEngineReady, registerPreviewCanvas, unregisterPreviewCanvas } = useEngine();
   const { engineStats, outputResolution, layers, selectedLayerId, selectLayer } = useMixerStore();
   const { clips, selectedClipIds, selectClip, updateClipTransform, maskEditMode } = useTimelineStore();
   const { compositions, activeCompositionId } = useMediaStore();
@@ -155,8 +155,19 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
   // Get first selected clip for preview
   const selectedClipId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
   const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 1920, height: 1080 });
+
+  // Register canvas with engine when ready
+  useEffect(() => {
+    if (isEngineReady && canvasRef.current) {
+      registerPreviewCanvas(panelId, canvasRef.current);
+    }
+    return () => {
+      unregisterPreviewCanvas(panelId);
+    };
+  }, [isEngineReady, panelId, registerPreviewCanvas, unregisterPreviewCanvas]);
 
   // Composition selector state
   const [selectorOpen, setSelectorOpen] = useState(false);

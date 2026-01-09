@@ -26,8 +26,11 @@ export class WebGPUEngine {
   private effectsPipeline: EffectsPipeline | null = null;
   private outputPipeline: OutputPipeline | null = null;
 
-  // Main preview canvas
+  // Main preview canvas (legacy - kept for backward compatibility)
   private previewContext: GPUCanvasContext | null = null;
+
+  // Multiple preview canvases (inline previews in dock panels)
+  private previewCanvases: Map<string, GPUCanvasContext> = new Map();
 
   // Render targets - ping pong buffers
   private pingTexture: GPUTexture | null = null;
@@ -194,6 +197,21 @@ export class WebGPUEngine {
 
   setPreviewCanvas(canvas: HTMLCanvasElement): void {
     this.previewContext = this.context.configureCanvas(canvas);
+  }
+
+  // === MULTIPLE PREVIEW CANVAS MANAGEMENT ===
+
+  registerPreviewCanvas(id: string, canvas: HTMLCanvasElement): void {
+    const context = this.context.configureCanvas(canvas);
+    if (context) {
+      this.previewCanvases.set(id, context);
+      console.log(`[Engine] Registered preview canvas: ${id}`);
+    }
+  }
+
+  unregisterPreviewCanvas(id: string): void {
+    this.previewCanvases.delete(id);
+    console.log(`[Engine] Unregistered preview canvas: ${id}`);
   }
 
   // === MASK TEXTURE MANAGEMENT ===
@@ -457,6 +475,10 @@ export class WebGPUEngine {
     if (gpuCached) {
       const commandEncoder = device.createCommandEncoder();
       this.outputPipeline.renderToCanvas(commandEncoder, this.previewContext, gpuCached.bindGroup);
+      // Render to all inline preview canvases
+      for (const previewCtx of this.previewCanvases.values()) {
+        this.outputPipeline.renderToCanvas(commandEncoder, previewCtx, gpuCached.bindGroup);
+      }
       for (const output of this.outputWindows.values()) {
         if (output.context) {
           this.outputPipeline.renderToCanvas(commandEncoder, output.context, gpuCached.bindGroup);
@@ -513,6 +535,11 @@ export class WebGPUEngine {
       // Render to preview
       const commandEncoder = device.createCommandEncoder();
       this.outputPipeline.renderToCanvas(commandEncoder, this.previewContext, bindGroup);
+
+      // Render to all inline preview canvases
+      for (const previewCtx of this.previewCanvases.values()) {
+        this.outputPipeline.renderToCanvas(commandEncoder, previewCtx, bindGroup);
+      }
 
       for (const output of this.outputWindows.values()) {
         if (output.context) {
@@ -819,6 +846,13 @@ export class WebGPUEngine {
     // Render to preview (skip during RAM preview generation)
     if (this.previewContext && !this.isGeneratingRamPreview) {
       this.outputPipeline!.renderToCanvas(commandEncoder, this.previewContext, outputBindGroup);
+    }
+
+    // Render to all inline preview canvases
+    if (!this.isGeneratingRamPreview) {
+      for (const previewCtx of this.previewCanvases.values()) {
+        this.outputPipeline!.renderToCanvas(commandEncoder, previewCtx, outputBindGroup);
+      }
     }
 
     // Render to output windows

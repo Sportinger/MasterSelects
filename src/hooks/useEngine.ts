@@ -266,11 +266,21 @@ export function useEngine() {
     engine.closeOutputWindow(id);
   }, []);
 
+  const registerPreviewCanvas = useCallback((id: string, canvas: HTMLCanvasElement) => {
+    engine.registerPreviewCanvas(id, canvas);
+  }, []);
+
+  const unregisterPreviewCanvas = useCallback((id: string) => {
+    engine.unregisterPreviewCanvas(id);
+  }, []);
+
   return {
     canvasRef,
     isEngineReady,
     isPlaying,
     createOutputWindow,
     closeOutputWindow,
+    registerPreviewCanvas,
+    unregisterPreviewCanvas,
   };
 }
