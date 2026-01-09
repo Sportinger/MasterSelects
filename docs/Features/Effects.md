@@ -2,23 +2,22 @@
 
 [← Back to Index](./README.md)
 
-GPU-accelerated visual effects including blend modes, transforms, and custom shaders.
+GPU-accelerated visual effects with 37 blend modes and 9 shader effects.
 
 ---
 
 ## Table of Contents
 
-- [Transform Effects](#transform-effects)
+- [Transform Properties](#transform-properties)
 - [Blend Modes](#blend-modes)
 - [GPU Effects](#gpu-effects)
 - [Effect Keyframes](#effect-keyframes)
-- [Effects Panel](#effects-panel)
 
 ---
 
-## Transform Effects
+## Transform Properties
 
-Every clip has built-in transform properties:
+Every clip has built-in transform properties (all keyframeable):
 
 ### Position
 | Property | Range | Default |
@@ -27,7 +26,7 @@ Every clip has built-in transform properties:
 | Y | -∞ to +∞ | 0 |
 | Z | -∞ to +∞ | 0 (depth) |
 
-Position Z enables 3D layer positioning - layers with higher Z appear closer.
+Position Z enables 3D layer positioning with perspective.
 
 ### Scale
 | Property | Range | Default |
@@ -35,8 +34,8 @@ Position Z enables 3D layer positioning - layers with higher Z appear closer.
 | X | 0% to ∞ | 100% |
 | Y | 0% to ∞ | 100% |
 
-### Rotation
-Full 3D rotation with perspective:
+### Rotation (3D)
+Full 3D rotation with configurable perspective:
 | Property | Range | Default |
 |----------|-------|---------|
 | X | -180° to 180° | 0° |
@@ -49,155 +48,198 @@ Full 3D rotation with perspective:
 | Opacity | 0% to 100% | 100% |
 
 ### Reset to Default
-- **Right-click** any property value to reset to default
-- Works on sliders and input fields
+- **Right-click** any property value → resets to default
 
 ---
 
 ## Blend Modes
 
-37 After Effects-style blend modes available:
+### 37 Blend Modes (All Implemented)
 
-### Normal Modes
-- **Normal** - Standard compositing
-- **Dissolve** - Random pixel dissolve
+#### Normal (3 modes)
+| Mode | Description |
+|------|-------------|
+| `normal` | Standard alpha blending |
+| `dissolve` | Random pixel dithering based on opacity |
+| `dancing-dissolve` | Animated dithering with time variation |
 
-### Darken Modes
-- Darken
-- Multiply
-- Color Burn
-- Linear Burn
-- Darker Color
+#### Darken (6 modes)
+| Mode | Description |
+|------|-------------|
+| `darken` | Minimum of base/blend |
+| `multiply` | Multiply RGB channels |
+| `color-burn` | Color burn intensity |
+| `classic-color-burn` | Alternative formula |
+| `linear-burn` | `max(base + blend - 1, 0)` |
+| `darker-color` | Picks darker by luminosity |
 
-### Lighten Modes
-- Lighten
-- Screen
-- Color Dodge
-- Linear Dodge (Add)
-- Lighter Color
+#### Lighten (7 modes)
+| Mode | Description |
+|------|-------------|
+| `add` | Clamped addition (linear dodge) |
+| `lighten` | Maximum of base/blend |
+| `screen` | `1 - (1-base)*(1-blend)` |
+| `color-dodge` | Color dodge intensity |
+| `classic-color-dodge` | Alternative formula |
+| `linear-dodge` | Same as add |
+| `lighter-color` | Picks lighter by luminosity |
 
-### Contrast Modes
-- Overlay
-- Soft Light
-- Hard Light
-- Vivid Light
-- Linear Light
-- Pin Light
-- Hard Mix
+#### Contrast (7 modes)
+| Mode | Description |
+|------|-------------|
+| `overlay` | Conditional multiply/screen |
+| `soft-light` | Softer version of overlay |
+| `hard-light` | Based on blend value |
+| `linear-light` | `clamp(base + 2*blend - 1, 0, 1)` |
+| `vivid-light` | Conditional dodge/burn |
+| `pin-light` | Min/max blend |
+| `hard-mix` | Binary threshold (0 or 1) |
 
-### Inversion Modes
-- Difference
-- Exclusion
-- Subtract
-- Divide
+#### Inversion (5 modes)
+| Mode | Description |
+|------|-------------|
+| `difference` | Absolute difference |
+| `classic-difference` | Same as difference |
+| `exclusion` | `base + blend - 2*base*blend` |
+| `subtract` | `max(base - blend, 0)` |
+| `divide` | `base / max(blend, 0.001)` |
 
-### Component Modes
-- Hue
-- Saturation
-- Color
-- Luminosity
+#### Component (4 modes)
+| Mode | Description |
+|------|-------------|
+| `hue` | Blend hue with base sat/lum |
+| `saturation` | Blend saturation with base hue/lum |
+| `color` | Blend hue/sat with base lum |
+| `luminosity` | Blend lum with base hue/sat |
 
-### Changing Blend Mode
-1. Select clip
-2. Open Clip Properties panel
-3. Choose blend mode from dropdown
+#### Stencil (5 modes)
+| Mode | Description |
+|------|-------------|
+| `stencil-alpha` | Layer alpha as opacity |
+| `stencil-luma` | Layer luminosity as opacity |
+| `silhouette-alpha` | Inverted layer alpha |
+| `silhouette-luma` | Inverted layer luminosity |
+| `alpha-add` | Additive alpha blending |
 
 ### Blend Mode Cycling
 - `Shift` + `+` cycles forward through modes
 - `Shift` + `-` cycles backward
-- Quick way to preview different modes
 
 ---
 
 ## GPU Effects
 
-Custom shader-based effects rendered on GPU.
+### 9 Implemented Effects
 
-### Available Effects
+#### 1. Hue Shift
+- **Parameter**: `shift` (0-1, wrapped)
+- **Shader**: RGB↔HSV conversion, hue rotation
 
-Effects are defined in WGSL shaders and controlled via parameters.
+#### 2. Brightness
+- **Parameter**: `amount` (-1 to +1)
+- **Shader**: Additive RGB adjustment
+
+#### 3. Contrast
+- **Parameter**: `amount` (0-3, default 1)
+- **Shader**: `(color - 0.5) * amount + 0.5`
+
+#### 4. Saturation
+- **Parameter**: `amount` (0-3, default 1)
+- **Shader**: Mix between grayscale and original
+
+#### 5. Pixelate
+- **Parameter**: `size` (1-64 pixels)
+- **Shader**: Floor-based pixel block sampling
+
+#### 6. Kaleidoscope
+- **Parameters**: `segments` (2-16), `rotation` (0-2π)
+- **Shader**: Polar coordinates + sector mirroring
+
+#### 7. Mirror
+- **Parameters**: `horizontal` (bool), `vertical` (bool)
+- **Shader**: Conditional UV flipping
+
+#### 8. RGB Split
+- **Parameters**: `amount` (0-0.1), `angle` (0-2π)
+- **Shader**: Offset color channel sampling
+
+#### 9. Levels
+- **Parameters**: `inputBlack`, `inputWhite`, `gamma` (0.1-10), `outputBlack`, `outputWhite`
+- **Shader**: Input remap → gamma → output remap
+
+#### 10. Invert
+- **No parameters**
+- **Shader**: `1.0 - color.rgb`
 
 ### Adding Effects
 1. Select clip
 2. Open Effects Panel
 3. Click effect to add
-
-### Effect Parameters
-Each effect has adjustable parameters:
-- Sliders for numeric values
-- Real-time preview updates
-- Right-click to reset to default
+4. Adjust parameters with sliders
 
 ### Effect Order
-Effects process in order listed:
-1. First effect applied to original
-2. Each subsequent effect applied to result
-3. Drag to reorder (if supported)
+Effects process in order listed (ping-pong rendering).
 
 ---
 
 ## Effect Keyframes
 
-Animate any effect parameter over time.
+### Keyframing Effect Parameters
+Each numeric effect parameter can be animated:
 
-### Adding Effect Keyframes
-1. Expand track to show effect properties
-2. Move playhead to desired time
-3. Click diamond icon next to parameter
-4. Keyframe added at current time
+```typescript
+// Property format
+`effect.{effectId}.{paramName}`
 
-### Interpolation
-- Same easing modes as transform keyframes
-- Linear, Ease In, Ease Out, Ease In-Out, Hold
-- Right-click keyframe for easing menu
+// Example: animate hue shift
+addKeyframe(clipId, 'effect.effect_xyz.shift', 0, 0);    // Start
+addKeyframe(clipId, 'effect.effect_xyz.shift', 1, 2);    // End at 2s
+```
+
+### Interpolated Effects
+```typescript
+getInterpolatedEffects(clipId, time)
+```
+Returns effect parameters with interpolated values at specific time.
 
 ### Timeline Display
 - Effect keyframes appear below transform properties
 - Grouped by effect name
 - Only parameters with keyframes shown
 
-### Example: Animated Blur
+---
+
+## GPU Pipeline
+
+### Effects Pipeline Architecture
 ```
-Time 0s: Blur = 0
-Time 1s: Blur = 50  (keyframe with Ease In)
-Time 2s: Blur = 0   (keyframe with Ease Out)
+Input Texture
+    ↓
+Effect 1 → Ping Buffer
+    ↓
+Effect 2 → Pong Buffer
+    ↓
+...
+    ↓
+Final Output
 ```
-Creates smooth blur in/out animation.
+
+### Per-Effect Resources
+- Shader module (from `effects.wgsl`)
+- Bind group layout
+- Render pipeline
+- Uniform buffer (16-32 bytes)
 
 ---
 
-## Effects Panel
+## Not Implemented
 
-### Panel Location
-- Accessible from View menu
-- Or dock panel tabs
-
-### Panel Contents
-- List of available effects
-- Click to add to selected clip
-- Shows current effects on clip
-
-### Modifying Effects
-- Adjust sliders for parameters
-- Changes apply in real-time
-- Works during playback
-
----
-
-## Effect Development
-
-### Adding Custom Effects
-1. Create shader in `src/shaders/effects.wgsl`
-2. Add params type in `src/stores/timeline/utils.ts`
-3. Add UI controls in `EffectsPanel.tsx`
-
-### Shader Structure
-```wgsl
-// Effect shader receives:
-// - Input texture
-// - Effect parameters as uniforms
-// - Outputs processed texture
-```
+- Blur effect (defined in types, no shader)
+- Motion blur
+- Glow/bloom
+- Color curves
+- Distortion effects
+- Particle effects
 
 ---
 
@@ -210,4 +252,4 @@ Creates smooth blur in/out animation.
 
 ---
 
-*Commits: 388428a through d63e381*
+*Source: `src/shaders/effects.wgsl` (243 lines), `src/shaders/composite.wgsl` (743 lines), `src/components/panels/EffectsPanel.tsx`*

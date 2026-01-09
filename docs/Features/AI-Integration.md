@@ -2,7 +2,7 @@
 
 [← Back to Index](./README.md)
 
-GPT-powered intelligent editing with timeline manipulation tools.
+GPT-powered editing with 50+ tools, transcription, and multicam EDL generation.
 
 ---
 
@@ -10,184 +10,245 @@ GPT-powered intelligent editing with timeline manipulation tools.
 
 - [AI Chat Panel](#ai-chat-panel)
 - [AI Editor Tools](#ai-editor-tools)
-- [Analysis Tools](#analysis-tools)
 - [Transcription](#transcription)
-- [Context Awareness](#context-awareness)
+- [Multicam EDL](#multicam-edl)
 - [Configuration](#configuration)
 
 ---
 
 ## AI Chat Panel
 
-Interactive chat interface for AI-assisted editing.
+### Location
+- Default tab in dock panels
+- View menu → AI Chat
 
-### Opening AI Chat
-- Default tab in dock
-- Or View menu → AI Chat
-- Middle mouse scroll to switch tabs
-
-### Chat Features
-- **Text selection** in messages enabled
-- **Dark gray** user messages
-- **Streaming** responses
+### Features
+- Interactive chat interface
+- Model selection dropdown
+- Conversation history
+- Clear chat button
+- Auto-scrolling
+- Tool execution indicators
 
 ### Available Models
-- GPT-5.2, GPT-5.1
-- GPT-4 variants
-- o3, o4 reasoning models
-- Uses `max_completion_tokens` for newer models
+```
+GPT-5.2 series (Dec 2025)
+GPT-5.1, GPT-5
+GPT-4.1, GPT-4o variants
+o3, o4-mini, o3-pro (reasoning)
+```
+
+### Editor Mode
+When enabled (default):
+- Includes timeline context in prompts
+- 50+ editing tools available
+- AI can manipulate timeline directly
 
 ---
 
 ## AI Editor Tools
 
-AI can manipulate timeline through function calling.
+### 50+ Tools Implemented
 
-### Available Tools
+#### Timeline State (3 tools)
+| Tool | Description |
+|------|-------------|
+| `getTimelineState` | Full timeline state (tracks, clips, playhead) |
+| `getClipDetails` | Detailed clip info + analysis + transcript |
+| `getClipsInTimeRange` | Find clips in time range |
 
-#### Clip Operations
-| Tool | Function |
-|------|----------|
-| `moveClip` | Move clip to new position/track |
-| `trimClip` | Adjust clip in/out points |
-| `splitClip` | Split clip at time |
-| `deleteClip` | Remove clip from timeline |
-| `cutRangesFromClip` | Batch remove sections |
-
-#### Track Operations
-| Tool | Function |
-|------|----------|
-| `addTrack` | Create new track |
-| `renameTrack` | Change track name |
-| `toggleTrackVisibility` | Show/hide track |
-
-#### Playback
-| Tool | Function |
-|------|----------|
+#### Playback (2 tools)
+| Tool | Description |
+|------|-------------|
 | `setPlayhead` | Move playhead to time |
-| `cutPreview` | Preview edit result |
+| `setInOutPoints` | Set in/out markers |
 
-### Batch Operations
-`cutRangesFromClip` enables removing multiple sections:
-```json
-{
-  "clipId": "abc123",
-  "ranges": [
-    {"start": 10, "end": 15},
-    {"start": 30, "end": 35}
-  ]
-}
+#### Clip Editing (6 tools)
+| Tool | Description |
+|------|-------------|
+| `splitClip` | Split at specific time |
+| `deleteClip` | Delete single clip |
+| `deleteClips` | Delete multiple clips |
+| `moveClip` | Move to new position/track |
+| `trimClip` | Adjust in/out points |
+| `cutRangesFromClip` | Remove multiple sections |
+
+#### Track Tools (4 tools)
+| Tool | Description |
+|------|-------------|
+| `createTrack` | Create video/audio track |
+| `deleteTrack` | Delete track and clips |
+| `setTrackVisibility` | Show/hide track |
+| `setTrackMuted` | Mute/unmute track |
+
+#### Visual Capture (2 tools)
+| Tool | Description |
+|------|-------------|
+| `captureFrame` | Export PNG at time |
+| `getFramesAtTimes` | Grid image at multiple times |
+
+#### Selection (2 tools)
+| Tool | Description |
+|------|-------------|
+| `selectClips` | Select clips by ID |
+| `clearSelection` | Clear selection |
+
+#### Analysis & Transcript (6 tools)
+| Tool | Description |
+|------|-------------|
+| `getClipAnalysis` | Motion/focus/brightness data |
+| `getClipTranscript` | Word-level transcript |
+| `findSilentSections` | Find silence gaps |
+| `findLowQualitySections` | Find blurry sections |
+| `startClipAnalysis` | Trigger background analysis |
+| `startClipTranscription` | Trigger transcription |
+
+#### Media Panel (7 tools)
+| Tool | Description |
+|------|-------------|
+| `getMediaItems` | Files, compositions, folders |
+| `createMediaFolder` | Create folder |
+| `renameMediaItem` | Rename item |
+| `deleteMediaItem` | Delete item |
+| `moveMediaItems` | Move to folder |
+| `createComposition` | Create new composition |
+| `selectMediaItems` | Select in panel |
+
+### Tool Execution Loop
+```
+1. User sends message
+2. System builds prompt with timeline context
+3. OpenAI API call with function calling
+4. If tool_calls returned → execute sequentially
+5. Collect results → send back to OpenAI
+6. Loop until no tool_calls (max 10 iterations)
+7. Display final response
 ```
 
 ### Undo Support
-- All AI edits are undoable
-- `Ctrl+Z` reverts AI changes
-- Full integration with history system
-
----
-
-## Analysis Tools
-
-AI can access clip analysis data.
-
-### Available Analysis Data
-- **Focus** - Sharpness/blur detection
-- **Motion** - Movement analysis
-- **Brightness** - Exposure levels
-- **Face count** - Face detection per frame
-
-### Using Analysis
-AI sees analysis data for context:
+All AI edits are undoable with `Ctrl+Z`:
+```typescript
+// History tracking for batch operations
+startHistoryBatch()
+// ... execute tools ...
+endHistoryBatch()
 ```
-"At timestamp 5.2s: focus=0.8, motion=0.3, faceCount=2"
-```
-
-Enables queries like:
-- "Find the sharpest moments"
-- "Cut sections with no faces"
-- "Find high-motion segments"
 
 ---
 
 ## Transcription
 
-AI can work with speech transcripts.
+### 4 Providers
 
-### Transcript-Based Editing
-- Word-level timestamps available
-- AI sees spoken content
-- Enables text-based editing
+#### Local Whisper (Browser)
+- Uses `@xenova/transformers`
+- `whisper-tiny` model
+- No API key needed
+- Runs in Web Worker
 
-### Example Commands
-- "Remove all 'um' and 'uh' moments"
-- "Cut to this speaker's parts"
-- "Find where they mention [topic]"
+#### OpenAI Whisper API
+```
+Endpoint: /v1/audio/transcriptions
+Model: whisper-1
+Format: verbose_json
+Granularity: word
+```
 
-### Transcription Tools
-| Tool | Function |
-|------|----------|
-| `getTranscript` | Retrieve clip transcript |
-| `transcribeClip` | Generate transcript |
+#### AssemblyAI
+```
+Upload: /v2/upload
+Transcribe: /v2/transcript
+Features: Speaker diarization
+Polling: 2-minute timeout
+```
+
+#### Deepgram
+```
+Endpoint: /v1/listen
+Model: nova-2
+Features: Punctuation, speaker diarization
+```
+
+### Transcript Format
+```typescript
+interface TranscriptEntry {
+  id: string;
+  start: number;   // ms
+  end: number;     // ms
+  text: string;
+  speaker?: string; // For diarization
+}
+```
+
+### Time Offset Handling
+For trimmed clips:
+```
+Clip inPoint = 5000ms
+Word timestamp = 3000ms (within trimmed audio)
+Final timestamp = 3000 + 5000 = 8000ms (timeline time)
+```
 
 ---
 
-## Context Awareness
+## Multicam EDL
 
-AI has full awareness of timeline state.
+### Claude API Integration
+```typescript
+// Endpoint
+https://api.anthropic.com/v1/messages
 
-### What AI Knows
+// Model
+claude-sonnet-4-20250514
 
-#### Selection State
-- Currently selected clips
-- Selected clip properties
-- Active composition
+// Max tokens
+4096
+```
 
-#### Timeline Structure
-- Track names and IDs
-- Clip names per track
-- Clip positions and durations
+### Edit Style Presets
+| Style | Description |
+|-------|-------------|
+| `podcast` | Cut to speaker, reaction shots, 3s min |
+| `interview` | Show speaker, cut for questions, 2s min |
+| `music` | Beat-driven, fast pacing, 1-2s min |
+| `documentary` | Long cuts (5+s), B-roll, wide establishing |
+| `custom` | User-provided instructions |
 
-#### Visible Range
-- Current view bounds
-- Playhead position
-- In/Out points
+### EDL Format
+```typescript
+interface EditDecision {
+  id: string;
+  start: number;        // ms
+  end: number;          // ms
+  cameraId: string;
+  reason?: string;
+  confidence?: number;  // 0-1
+}
+```
 
-### Smart Defaults
-- Operations target **selected clip** by default
-- Commands respect **visible range**
-- No need to specify obvious context
-
----
-
-## Media Panel Tools
-
-AI can manage media organization.
-
-### Available Tools
-| Tool | Function |
-|------|----------|
-| `createFolder` | Create media folder |
-| `moveToFolder` | Organize media |
-| `deleteMedia` | Remove from project |
-| `renameMedia` | Change media name |
+### Input Data
+Claude receives:
+- Camera info (names, roles)
+- Analysis data (motion, sharpness, faces)
+- Transcript with speaker identification
+- Audio levels
 
 ---
 
 ## Configuration
 
-### API Key Setup
-1. Open Settings dialog
-2. Enter OpenAI API key
-3. Key stored locally
+### API Keys
+Settings dialog → API Keys:
+- OpenAI API key (for chat + transcription)
+- Claude API key (for multicam EDL)
+- AssemblyAI key
+- Deepgram key
 
-### Model Selection
-- Choose model in chat interface
-- Different models for different needs
-- Newer models support extended tokens
+### Storage
+Keys stored in browser localStorage (encrypted for Claude).
 
 ---
 
-## Usage Tips
+## Usage Examples
 
 ### Effective Prompts
 ```
@@ -195,6 +256,7 @@ AI can manage media organization.
 "Trim the clip to just the talking parts"
 "Remove all segments where motion > 0.7"
 "Create a rough cut keeping only focused shots"
+"Split at all the 'um' and 'uh' moments"
 ```
 
 ### Iterative Editing
@@ -215,4 +277,4 @@ AI can manage media organization.
 
 ---
 
-*Commits: 86789b3 through d63e381*
+*Source: `src/components/panels/AIChatPanel.tsx`, `src/services/aiTools.ts`, `src/services/claudeService.ts`*

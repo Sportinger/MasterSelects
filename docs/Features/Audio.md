@@ -2,214 +2,275 @@
 
 [← Back to Index](./README.md)
 
-Audio track management, waveform visualization, and multicam synchronization.
+Audio processing with 10-band EQ, waveform visualization, and multicam synchronization.
 
 ---
 
 ## Table of Contents
 
 - [Audio Tracks](#audio-tracks)
+- [10-Band EQ](#10-band-eq)
 - [Waveforms](#waveforms)
 - [Multicam Sync](#multicam-sync)
-- [Audio Playback](#audio-playback)
-- [Linked Audio](#linked-audio)
+- [Transcription](#transcription)
+- [Audio Manager](#audio-manager)
 
 ---
 
 ## Audio Tracks
 
-### Track Types
-- **Audio tracks** at bottom of timeline
-- Separate from video tracks
-- Auto-created when needed
+### Track Configuration
+```typescript
+interface TimelineTrack {
+  type: 'video' | 'audio';
+  muted: boolean;
+  visible: boolean;
+  solo: boolean;
+}
+```
 
-### Track Restrictions
-- Audio files only drop on audio tracks
-- Video files cannot go on audio tracks
-- Visual indicators during drag
+### Default Setup
+- 2 video tracks
+- 1 audio track (at bottom)
+- New audio tracks created automatically when needed
 
-### Creating Audio Tracks
-- Auto-created when dropping audio
-- Or manually add via track controls
-- Position always below video tracks
+### Track Controls
+| Control | Function |
+|---------|----------|
+| **M** (Mute) | Silence track audio |
+| **S** (Solo) | Only play this track |
+| **Eye** | Toggle visibility |
+
+---
+
+## 10-Band EQ
+
+### Frequencies
+```
+31Hz, 62Hz, 125Hz, 250Hz, 500Hz, 1kHz, 2kHz, 4kHz, 8kHz, 16kHz
+```
+
+### Gain Range
+- **-12dB to +12dB** per band
+- Q factor: 1.4 (standard 10-band)
+
+### Implementation
+```typescript
+// Audio Manager chain
+Input → EQ Band 0-9 → Master Gain → Output
+
+// Methods
+setEQBand(bandIndex, gainDB)  - Adjust single band
+getEQBands()                   - Get all band values
+setAllEQBands(gains)           - Set multiple at once
+resetEQ()                      - Flatten to 0dB
+```
+
+### Keyframe Support
+Each EQ band can be animated:
+```typescript
+// Effect parameters stored per-clip
+{
+  band31: 0, band62: 0, band125: 0, band250: 0, band500: 0,
+  band1k: 0, band2k: 0, band4k: 0, band8k: 0, band16k: 0
+}
+```
+
+### Audio Panel UI
+When audio clip selected:
+- Volume slider (0-200%)
+- 10 vertical EQ sliders
+- Reset button (flattens all bands)
+- Keyframe toggles per parameter
 
 ---
 
 ## Waveforms
 
-### Automatic Generation
-- Generated when audio added
-- Runs in background
-- Progress indicator shown
+### Generation
+```typescript
+generateWaveform(file, samplesPerSecond = 50, onProgress?)
+```
 
-### Waveform Display
+- Uses Web Audio API
+- ~50 samples per second
+- Peak-based values for visual clarity
+- Normalized amplitude (0-1)
+- Dynamic sample count (200-10000)
+
+### Clip Integration
+```typescript
+interface TimelineClip {
+  waveform?: number[];        // Amplitude values
+  waveformGenerating?: boolean;
+  waveformProgress?: number;  // 0-100
+}
+```
+
+### Display
 - Canvas-based rendering (optimized)
-- 50 samples per second
-- Peak detection for accuracy
-
-### Waveform Features
 - Scales with zoom level
-- Downsampled to match pixel width
-- Handles long audio clips
-
-### Manual Generation
-For clips without waveform:
-1. Right-click audio clip
-2. Select "Generate Waveform"
-3. Progress shown in background
-
-### Toggle Generation
-In settings:
-- Enable/disable auto waveform generation
-- Useful for slow systems
-- Large files (>500MB) skip by default
-
-### Technical Details
-- Canvas limited for very long clips
-- Prevents memory issues
-- Maintains visual quality
+- Toggle: "Wave On/Off" in timeline controls
+- Skipped for files >4GB
 
 ---
 
 ## Multicam Sync
 
-Automatically synchronize audio between cameras.
+### Algorithm
+**Normalized cross-correlation** (Pearson coefficient):
+- Search range: ±10 seconds
+- Uses downsampled audio fingerprints (2000Hz)
+- Returns offset in milliseconds with confidence
 
-### How It Works
-1. Analyzes audio from each clip
-2. Cross-correlates waveforms
-3. Calculates time offset
-4. Aligns clips automatically
+### Methods
 
-### Using Multicam Sync
-1. Select clips to sync
-2. Right-click → "Sync Audio"
-3. Choose sync method
-4. Clips align automatically
+#### Two-File Sync
+```typescript
+findOffset(masterMediaFileId, targetMediaFileId, maxOffsetSeconds = 30)
+// Returns: offset in ms (positive = target delayed)
+```
 
-### Sync Methods
+#### Multicam Batch Sync
+```typescript
+syncMultipleClips(masterClip, targetClips, onProgress)
+// Accounts for clip in-points and durations
+// Returns: Map<clipId, offsetMs>
+```
 
-#### Audio-Based
-- Compares audio waveforms
-- Best for clips with same sound
-- Typical multicam scenario
+### Fingerprint Caching
+- Cache key: `${mediaFileId}-${startTime}-${duration}`
+- Prevents redundant processing
+- `clearCache()` for manual cleanup
 
-#### Transcript-Based
-- Uses speech content
-- Good for interviews
-- Requires transcription first
+### Audio Analysis
+```typescript
+// RMS level analysis
+analyzeLevels(mediaFileId, windowSizeMs = 100)
 
-### Performance Optimization
-- Only first 30 seconds analyzed
-- Cross-correlation optimized
-- Background processing
+// Audio fingerprinting
+generateFingerprint(mediaFileId, targetSampleRate = 2000, startTimeSeconds, maxDurationSeconds = 30)
 
-### Respecting Trim Bounds
-- Sync respects clip in/out points
-- Only trimmed portion analyzed
-- Accurate for pre-trimmed clips
-
----
-
-## Audio Playback
-
-### Sync with Video
-- Audio playback synced to timeline
-- Follows playhead position
-- Matches video frame rate
-
-### Mute/Solo Controls
-| Control | Function |
-|---------|----------|
-| **Mute** | Silence track audio |
-| **Solo** | Only play this track |
-
-### Solo Behavior
-- Dims non-solo tracks visually
-- Multiple tracks can be solo'd
-- Quick way to isolate audio
-
----
-
-## Linked Audio
-
-Video clips can have linked audio.
-
-### Linked Behavior
-- Audio moves with video clip
-- Maintains sync during drag
-- Split together with `C` key
-
-### Overlap Resistance
-When dragging linked clips:
-- 2.0 second resistance buffer
-- Prevents accidental overlap
-- Magnetic resistance effect
-
-### Breaking Links
-- Not yet implemented
-- Linked audio always follows video
+// Peak at timestamp
+getLevelAtTime(mediaFileId, timestampMs)
+```
 
 ---
 
 ## Transcription
 
-Generate text transcripts from audio.
+### Supported Providers
 
-### Local Transcription
-Uses Whisper model locally:
-1. Select clip
-2. Right-click → "Transcribe"
-3. Runs in Web Worker
+| Provider | Type | Features |
+|----------|------|----------|
+| **Local Whisper** | Browser | No API key needed |
+| **OpenAI Whisper** | Cloud | Fast, accurate |
+| **AssemblyAI** | Cloud | Speaker diarization |
+| **Deepgram** | Cloud | Real-time capable |
 
-### Transcription Features
-- **Language selection** (German default)
-- **Streaming results** during processing
-- **Word-level timestamps**
-- **Persistent storage** (survives refresh)
+### Languages Supported
+`de, en, es, fr, it, pt, nl, pl, ru, ja, zh, ko`
 
-### Transcript Panel
-When clip selected:
-- Shows word-by-word transcript
-- Real-time highlighting during playback
-- Words wrap properly
+### Clip Transcription
+```typescript
+// Transcribes trimmed portion only (inPoint to outPoint)
+transcribeClip(clipId, options)
 
-### Transcript Settings
-- Language selection
-- Model quality options
-- Anti-hallucination filters
+// Returns word-level transcript
+interface TranscriptEntry {
+  id: string;
+  start: number;   // ms
+  end: number;     // ms
+  text: string;
+}
+```
 
-### Delete Transcript
-Right-click clip → "Delete Transcript"
+### Web Worker Support
+- Transcription runs in background
+- Doesn't block UI
+- Progress callbacks (0-100%)
+
+### Transcript Storage
+```typescript
+interface TimelineClip {
+  transcript?: TranscriptEntry[];
+  transcriptStatus: 'none' | 'transcribing' | 'ready';
+}
+```
 
 ---
 
-## Clip Analysis
+## Audio Manager
 
-Analyze audio/video clips for editing.
+### Web Audio API Integration
+```typescript
+class AudioManager {
+  audioContext: AudioContext;
+  masterGain: GainNode;
+  eqFilters: BiquadFilterNode[]; // 10 bands
+}
+```
 
-### Analysis Types
-| Type | Description |
-|------|-------------|
-| **Focus** | Sharpness/blur |
-| **Motion** | Movement detection |
-| **Brightness** | Exposure levels |
-| **Face Count** | Faces per frame |
+### Methods
+```typescript
+init()                           // Initialize AudioContext
+connectMediaElement(element)     // Connect video/audio
+disconnectMediaElement(element)  // Cleanup
+setMasterVolume(volume)          // 0-1 range
+getMasterVolume()                // Get current
+destroy()                        // Cleanup resources
+```
 
-### Analysis Panel
-- Real-time values at playhead
-- Graph visualization
-- Gradient coloring by threshold
+### Autoplay Policy
+- Automatically resumes AudioContext
+- Handles browser autoplay restrictions
 
-### Analysis Graph
-- Shows values over time
-- Color-coded by quality
-- Amplified line display
+---
 
-### Cached Results
-- Analysis stored in IndexedDB
-- Persists across refresh
-- Cancel button during analysis
+## Multicam Panel
+
+### Features
+- Add/remove camera sources
+- **Master camera** designation for audio reference
+- Camera **role assignment** (wide, close-up, detail, custom)
+- Sync offset display per camera
+- Camera reordering
+
+### State Structure
+```typescript
+interface MultiCamSource {
+  id: string;
+  mediaFileId: string;
+  name: string;
+  role: 'wide' | 'closeup' | 'detail' | 'custom';
+  syncOffset: number;  // ms, relative to master
+  duration: number;    // ms
+}
+```
+
+### EDL Generation
+AI-powered edit decisions via Claude API:
+```typescript
+interface EditDecision {
+  start: number;        // ms
+  end: number;          // ms
+  cameraId: string;
+  reason?: string;
+  confidence?: number;  // 0-1
+}
+```
+
+---
+
+## Not Implemented
+
+- Audio compression/dynamics
+- Reverb/delay effects
+- Audio meters/spectrum display
+- Audio export with effects
+- Loudness normalization
+- Noise reduction
+- Real-time effect preview
 
 ---
 
@@ -222,4 +283,4 @@ Analyze audio/video clips for editing.
 
 ---
 
-*Commits: 71e2895 through d63e381*
+*Source: `src/services/audioManager.ts`, `src/services/audioSync.ts`, `src/components/panels/AudioPanel.tsx`*

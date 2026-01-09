@@ -2,147 +2,198 @@
 
 [← Back to Index](./README.md)
 
-Render compositions to video files or image sequences.
+Frame-by-frame video export with H.264/VP9 encoding.
 
 ---
 
 ## Table of Contents
 
 - [Export Panel](#export-panel)
-- [Export Options](#export-options)
-- [Frame Export](#frame-export)
+- [Export Settings](#export-settings)
 - [Export Process](#export-process)
+- [Frame Export](#frame-export)
 
 ---
 
 ## Export Panel
 
-### Opening Export Panel
+### Location
 - View menu → Export Panel
 - Or dock panel tabs
 
 ### Panel Contents
-- Format selection
-- Resolution settings
-- In/Out range
-- Export button
+- Resolution presets
+- Frame rate options
+- Quality/bitrate selection
+- Time range (In/Out)
+- Progress indicator
+- Export/Cancel buttons
 
 ---
 
-## Export Options
+## Export Settings
 
-### Resolution
+### Resolution Presets
+| Preset | Resolution |
+|--------|------------|
+| 4K | 3840×2160 |
+| 1080p | 1920×1080 |
+| 720p | 1280×720 |
+| 480p | 854×480 |
+| Custom | User-defined |
 
-| Option | Description |
-|--------|-------------|
-| **Composition** | Use composition resolution |
-| **Custom** | Set custom dimensions |
-| **Presets** | 720p, 1080p, 4K |
+### Frame Rate
+| Rate | Use Case |
+|------|----------|
+| 60fps | High motion |
+| 30fps | Standard |
+| 25fps | PAL |
+| 24fps | Film |
 
-### Range
+### Codec Options
+| Codec | Container | ID |
+|-------|-----------|-----|
+| H.264 | MP4 | avc1.640028 |
+| VP9 | WebM | vp09.00.10.08 |
 
-| Option | Description |
-|--------|-------------|
-| **Full** | Entire composition |
-| **In/Out** | Between markers |
-| **Custom** | Manual time range |
-
-### Format
-- WebM (VP9)
-- MP4 (if supported)
-- Image sequence
-
----
-
-## Frame Export
-
-### Render Current Frame
-Export single frame as image:
-1. Position playhead
-2. Click "Render Frame"
-3. Download PNG
-
-### Technical Details
-- Reads directly from GPU
-- Full resolution output
-- Proper GPU buffer handling
+### Quality Presets
+| Quality | Bitrate |
+|---------|---------|
+| Low | 5 Mbps |
+| Medium | 15 Mbps |
+| High | 25 Mbps |
+| Maximum | 35 Mbps |
 
 ---
 
 ## Export Process
 
-### Starting Export
-1. Configure settings
-2. Click "Export"
-3. Progress shown in panel
+### Pipeline
+```
+1. Seek all clips to frame time
+2. Build layer composition
+3. Render via GPU engine
+4. Read pixels (staging buffer)
+5. Create VideoFrame
+6. Encode frame
+7. Write to muxer
+8. Repeat for all frames
+```
 
-### Progress Indication
-- Frame counter
+### Progress Tracking
+- Frame counter: `X / Total`
 - Percentage complete
-- Estimated time remaining
+- ETA (30-frame moving average)
+- Cancel button
 
-### Export Pipeline
-1. Each frame rendered via GPU
-2. Encoded to video format
-3. Buffered for output
-4. Final file assembled
+### Video Seeking
+```typescript
+// Per-clip seeking with timeout
+- 1 second timeout per clip
+- Handles reversed clips
+- Respects track visibility
+- Respects solo settings
+```
 
-### Cancellation
-- Cancel button available
-- Stops at current frame
-- Partial file may exist
+### Key Frame Insertion
+Every 30 frames (configurable).
 
 ---
 
-## In/Out Points
+## Frame Export
 
-### Setting Points
-| Key | Action |
-|-----|--------|
+### Single Frame Export
+Export current frame as PNG:
+1. Position playhead
+2. Click "Render Frame"
+3. Downloads PNG file
+
+### Technical Details
+```typescript
+// FrameExporter.ts
+1. Call engine.render() at time
+2. Create staging buffer
+3. Copy texture to buffer
+4. Map buffer for read
+5. Create PNG blob
+6. Trigger download
+```
+
+---
+
+## Time Range
+
+### Full Export
+Exports entire composition duration.
+
+### In/Out Export
+Uses In/Out markers if set:
+```typescript
+startTime = inPoint ?? 0
+endTime = outPoint ?? duration
+```
+
+### Setting In/Out
+| Shortcut | Action |
+|----------|--------|
 | `I` | Set In point |
 | `O` | Set Out point |
-
-### Visual Markers
-- In/Out shown on ruler
-- Highlighted region
-- Used for playback loop
-
-### Export Range
-- Export respects In/Out points
-- Or override with custom range
-- Clear to export full composition
+| `X` | Clear both |
 
 ---
 
-## Quality Settings
+## Output
 
-### Video Quality
-- Bitrate control
-- Quality presets
-- Format-specific options
+### File Generation
+- MP4 container for H.264
+- WebM container for VP9
+- Uses `mp4-muxer` library
 
-### Encoding
-- Uses browser codecs
-- WebCodecs when available
-- Fallback to MediaRecorder
+### Download
+Automatic browser download when complete:
+```typescript
+const blob = muxer.finalize();
+const url = URL.createObjectURL(blob);
+// Trigger download
+```
 
 ---
 
-## Export Troubleshooting
+## Estimated File Size
+
+Panel shows estimated output size:
+```
+duration × frameRate × bitrate / 8
+```
+
+Example: 60s × 30fps × 15Mbps = ~112MB
+
+---
+
+## Troubleshooting
 
 ### Common Issues
 
 | Problem | Solution |
 |---------|----------|
 | Black frames | Check layer visibility |
-| No audio | Audio export not yet implemented |
-| Slow export | Reduce resolution or effects |
-| Export fails | Check browser codec support |
+| Slow export | Reduce resolution |
+| Export fails | Check codec support |
+| Large file | Reduce bitrate |
 
-### GPU Considerations
-- Export uses WebGPU rendering
-- Same quality as preview
-- Texture buffers properly tracked
+### Browser Compatibility
+- Requires WebCodecs API
+- Chrome/Edge recommended
+- Falls back gracefully
+
+---
+
+## Not Implemented
+
+- Audio export (video only)
+- ProRes/DNxHR codecs
+- Multi-pass encoding
+- Background export
 
 ---
 
@@ -151,8 +202,7 @@ Export single frame as image:
 - [Preview](./Preview.md) - Preview before export
 - [Timeline](./Timeline.md) - Set In/Out points
 - [GPU Engine](./GPU-Engine.md) - Rendering details
-- [Effects](./Effects.md) - Effect rendering
 
 ---
 
-*Commits: fa36b80 through d63e381*
+*Source: `src/engine/FrameExporter.ts`, `src/components/export/ExportPanel.tsx`*

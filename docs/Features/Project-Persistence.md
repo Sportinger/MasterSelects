@@ -2,7 +2,7 @@
 
 [← Back to Index](./README.md)
 
-Save and restore projects across browser sessions using IndexedDB.
+IndexedDB storage with auto-save and file handle persistence.
 
 ---
 
@@ -10,165 +10,244 @@ Save and restore projects across browser sessions using IndexedDB.
 
 - [Auto-Save](#auto-save)
 - [What Gets Saved](#what-gets-saved)
-- [Database Structure](#database-structure)
-- [New Project](#new-project)
+- [IndexedDB Structure](#indexeddb-structure)
+- [File System Access](#file-system-access)
+- [Project Management](#project-management)
 
 ---
 
 ## Auto-Save
 
-### Automatic Saving
-Project state saved automatically:
-- After timeline changes
+### Automatic Triggers
+- Every 30 seconds
+- On page unload (beforeunload)
+- When switching compositions
 - After transcription completes
-- After analysis data generated
-- On significant user actions
+- After analysis completes
 
-### Storage Location
-- Uses browser's IndexedDB
-- Persists across page refresh
-- Survives browser restart
+### Manual Save
+- `Ctrl+S` shortcut
+- File menu → Save
 
-### No Manual Save Required
+### No Data Loss
 - Changes saved immediately
-- No "Save" button needed
-- No risk of data loss
+- Survives page refresh
+- Survives browser restart
 
 ---
 
 ## What Gets Saved
 
-### Timeline Data
+### Project Data
+```typescript
+interface StoredProject {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  compositions: Composition[];
+  folders: Folder[];
+  mediaFileIds: string[];
+  openTabs: string[];
+  expandedFolders: string[];
+}
+```
+
+### Per Composition
 - All tracks and clips
 - Clip positions and durations
-- Trim points (in/out)
+- Trim points (inPoint/outPoint)
 - Transform properties
-
-### Compositions
-- All compositions
-- Nested composition structure
-- Composition settings
-- Tab order
-
-### Media References
-- Media file IDs
-- File associations
-- Folder organization
-- Original file paths
-
-### Clip Data
 - Keyframe animations
 - Effect parameters
 - Mask shapes
-- Blend modes
+
+### Media Files
+- File blobs stored in IndexedDB
+- Metadata (duration, dimensions)
+- Thumbnails
+- Waveform data
 
 ### Analysis Data
-- Focus analysis
+- Focus analysis per frame
 - Motion analysis
 - Brightness data
-- Face detection results
+- Cached in IndexedDB
 
 ### Transcripts
 - Word-level timestamps
+- Speaker identification
 - Language settings
-- Full transcript text
 
 ---
 
-## Database Structure
+## IndexedDB Structure
 
-### IndexedDB Schema
+### Database: MASterSelectsDB (v4)
+
+| Store | Contents |
+|-------|----------|
+| `mediaFiles` | File blobs + metadata |
+| `projects` | Project definitions |
+| `proxyFrames` | Proxy frame data (WebP) |
+| `fsHandles` | FileSystemHandles |
+| `analysisCache` | Clip analysis data |
+
+### Storage Flow
 ```
-MASterSelects DB
-├── projects
-│   └── Project data
-├── compositions
-│   └── Composition definitions
-├── clips
-│   └── Clip data with keyframes
-├── media
-│   └── Media file references
-├── analysis
-│   └── Clip analysis results
-└── transcripts
-    └── Transcript data
+User Action → Zustand Store → IndexedDB
+                    ↓
+Page Reload → IndexedDB → Zustand Store
 ```
 
-### Restoration Process
-1. Page loads
-2. IndexedDB queried
-3. State reconstructed
-4. Media files re-linked
-5. UI populated
+---
+
+## File System Access
+
+### Persistent File Handles
+When using File System Access API:
+```typescript
+// Stored in fsHandles store
+interface FSHandle {
+  fileId: string;
+  handle: FileSystemFileHandle;
+}
+```
+
+### Benefits
+- "Show in Explorer" works
+- Re-access files without re-import
+- Proxy folder persistence
+
+### Proxy Folder
+```typescript
+pickProxyFolder()           // User selects folder
+saveProxyFrame(id, index, blob) // Write frame
+getProxyFolderName()        // Display name
+```
 
 ---
 
-## New Project
+## Project Management
 
-### Creating New Project
-1. File menu → New Project
-2. Or "New Project" button
-3. Clears current state
-4. Starts fresh
+### New Project
+```typescript
+newProject()
+- Confirmation dialog
+- Clears all media
+- Creates default composition
+```
 
-### Warning
-- New project clears all data
-- No confirmation currently
-- Consider exporting first
+### Save Project
+```typescript
+saveProject(name?)
+- Serializes all state
+- Writes to IndexedDB
+- Updates timestamp
+```
 
----
+### Load Project
+```typescript
+loadProject(projectId)
+- Reads from IndexedDB
+- Reconstructs File objects
+- Restores blob URLs
+- Opens composition tabs
+```
 
-## Media File Handling
+### Recent Projects
+File menu shows up to 10 recent:
+- Sorted by last modified
+- Delete button on each
+- Click to load
 
-### File References
-- Media stored by reference
-- Original files stay on disk
-- File System Access API for paths
-
-### Re-linking Media
-If files moved:
-- Media shows as missing
-- Re-import required
-- New file ID assigned
-
-### Media File IDs
-- Each media has unique ID
-- Clips reference by ID
-- Survives project reload
+### Delete Project
+```typescript
+deleteProject(projectId)
+- Removes from IndexedDB
+- Cleans up media files
+```
 
 ---
 
 ## Layout Persistence
 
 ### Dock Layout
-- Panel positions saved
-- Tab arrangements saved
-- Panel sizes saved
-- Multiple previews preserved
+Separate from project data:
+- Panel positions
+- Tab arrangements
+- Panel sizes
+- Stored in localStorage
 
-### Storage
-- Uses localStorage
-- Separate from project data
-- Global across projects
+### Actions
+```typescript
+saveLayoutAsDefault()  // View menu
+resetLayout()          // View menu
+```
+
+---
+
+## Timeline Sync
+
+### Composition ↔ Timeline
+```typescript
+// On composition switch
+1. Save current timeline to composition.timelineData
+2. Load new composition's timelineData
+3. Restore tracks, clips, keyframes
+```
+
+### Auto-Sync Points
+- Switching compositions
+- Saving project
+- Before page unload
+- Every 30 seconds
+
+---
+
+## Data Migration
+
+### Version Handling
+```typescript
+// projectDB.ts
+const DB_VERSION = 4;
+
+// Migration on upgrade
+if (oldVersion < 4) {
+  // Add analysisCache store
+}
+```
 
 ---
 
 ## Troubleshooting
 
 ### Data Not Restoring
-1. Check browser IndexedDB
-2. Clear cache if corrupted
-3. Check console for errors
+1. Check DevTools → Application → IndexedDB
+2. Look for MASterSelectsDB
+3. Verify stores exist
+
+### Corrupted Data
+```javascript
+// Clear and start fresh
+indexedDB.deleteDatabase('MASterSelectsDB');
+```
 
 ### Missing Media
 - Re-import files
-- Check file paths
-- Verify file access permissions
+- Media stored as blob
+- Original file not needed after import
 
-### Reset Project
-- Clear IndexedDB manually
-- Or create new project
-- DevTools → Application → IndexedDB
+---
+
+## Memory vs Storage
+
+| Location | Contents |
+|----------|----------|
+| **Zustand (RAM)** | Active state, file references |
+| **IndexedDB** | Persistent blobs, projects |
+| **localStorage** | Dock layout, settings |
+| **File System** | Proxy folder (optional) |
 
 ---
 
@@ -181,4 +260,4 @@ If files moved:
 
 ---
 
-*Commits: d504a98 through d63e381*
+*Source: `src/services/projectDB.ts`, `src/services/fileSystemService.ts`, `src/stores/mediaStore.ts`*

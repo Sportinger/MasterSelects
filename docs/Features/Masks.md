@@ -2,168 +2,219 @@
 
 [← Back to Index](./README.md)
 
-Shape-based masking system with GPU-accelerated feathering.
+Vector mask system with GPU-accelerated feathering.
 
 ---
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Creating Masks](#creating-masks)
+- [Shape Tools](#shape-tools)
 - [Mask Modes](#mask-modes)
-- [Editing Masks](#editing-masks)
+- [Vertex Editing](#vertex-editing)
 - [Feathering](#feathering)
-- [Mask Controls](#mask-controls)
+- [Mask Properties](#mask-properties)
 
 ---
 
-## Overview
-
-Masks define visible regions of a clip using vector shapes. Multiple masks can be combined for complex cutouts.
-
-### Features
-- **Vector shapes** - Resolution independent
-- **Multiple masks** per clip
-- **GPU feathering** - Smooth, fast blur
-- **Add/Subtract modes** - Combine masks
-
----
-
-## Creating Masks
-
-### Shape Tools
-Draw shapes directly in preview:
-
-1. Select clip
-2. Choose shape tool
-3. Click and drag to draw
+## Shape Tools
 
 ### Available Shapes
-- **Rectangle** - Click-drag for corners
-- **Ellipse** - Click-drag for bounds
-- **Polygon** - Click points, double-click to close
-- **Bezier** - Click for points, drag for handles
 
-### Drag-to-Draw
-- Click starting point
-- Drag to define shape
-- Release to complete
-- Shape becomes editable
+| Shape | Creation | Notes |
+|-------|----------|-------|
+| **Rectangle** | Click-drag corners | Instant shape |
+| **Ellipse** | Click-drag bounds | Bezier approximation (k=0.5523) |
+| **Freehand** | Click vertices | Pen tool, double-click to close |
+| **Bezier Path** | Click + drag handles | Full cubic bezier |
+
+### Drawing Modes
+```typescript
+type MaskEditMode =
+  | 'none'
+  | 'drawing'
+  | 'editing'
+  | 'drawingRect'
+  | 'drawingEllipse'
+  | 'drawingPen'
+```
+
+### Creating Masks
+1. Select clip
+2. Choose shape tool from panel
+3. Draw in preview
+4. Shape becomes editable
 
 ---
 
 ## Mask Modes
 
-### Add Mode
+### Add Mode (Default)
 - Reveals area inside mask
 - Multiple Add masks combine (union)
-- Default mode for new masks
+- First mask shows only inside
 
 ### Subtract Mode
 - Hides area inside mask
 - Cuts holes in existing masks
 - Works as first mask (shows everything except)
 
-### Combining Modes
+### Intersect Mode
+- Shows only overlapping areas
+- Requires existing mask
+
+### Combining Example
 ```
-Mask 1 (Add): Large rectangle
+Mask 1 (Add):      Large rectangle
 Mask 2 (Subtract): Small circle
-Result: Rectangle with circular hole
+Result:            Rectangle with hole
 ```
 
 ---
 
-## Editing Masks
+## Vertex Editing
 
 ### Selection
-- Click mask path to select
-- Selected mask shows handles
-
-### Moving Masks
-- Drag mask center to move
-- Position updates in real-time
-- `Shift` + drag constrains to axis
-
-### Vertex Editing
 - Click vertex to select
-- Drag to move vertex
-- Bezier handles available
+- Selected shows as cyan square
+- Multiple selection supported
+
+### Moving
+- Drag vertex to reposition
+- Real-time preview update
 
 ### Bezier Handles
-- `Shift` + drag vertex for handle mode
-- Handles scale along their line
-- Smooth curves between points
+```typescript
+interface BezierHandle {
+  x: number;  // Time offset
+  y: number;  // Value offset
+}
+```
 
-### Hide Mask UI
-- Toggle eye icon to hide mask editing UI
-- Mask still applies, just hidden overlay
+- **In-handle**: Controls incoming curve
+- **Out-handle**: Controls outgoing curve
+- Drag each independently
+- `Shift + drag`: Scale both handles proportionally
+
+### Deleting Vertices
+- Select vertex
+- Press `Delete` or `Backspace`
 
 ---
 
 ## Feathering
 
-GPU-accelerated blur for soft mask edges.
+### GPU Blur Implementation
+3-tier quality system:
 
-### Feather Control
-- Slider from 1-100
-- Higher values = softer edges
+| Quality | Taps | Range |
+|---------|------|-------|
+| Low | 17-tap | 1-33 |
+| Medium | 33-tap | 34-66 |
+| High | 61-tap | 67-100 |
+
+### Blur Algorithm
+```
+Multi-ring sampling at radii:
+0.2r, 0.4r, 0.6r, 0.8r, 1.0r, 1.2r, 1.4r
+Weighted averaging for smooth edges
+```
+
+### Controls
+- **Feather slider**: 0-50 pixels
+- **Quality slider**: 1-100 (affects tap count)
 - Real-time preview
 
-### Feather Quality
-Quality slider affects blur smoothness:
-- Low: Faster, slight banding
-- High: Smoother, more processing
-
-### GPU Implementation
-- Feather processed entirely on GPU
-- No CPU texture upload needed
-- Smooth slider interaction
-
 ---
 
-## Mask Controls
-
-### Control Panel
-When clip with mask selected:
-- **Mode** dropdown (Add/Subtract)
-- **Feather** slider
-- **Quality** slider
-- **Delete** mask button
+## Mask Properties
 
 ### Per-Mask Settings
-Each mask has independent:
-- Shape vertices
-- Mode (Add/Subtract)
-- Feather amount
+```typescript
+interface ClipMask {
+  id: string;
+  mode: 'add' | 'subtract' | 'intersect';
+  opacity: number;      // 0-1
+  feather: number;      // 0-50 pixels
+  featherQuality: number; // 1-100
+  inverted: boolean;
+  position: { x: number; y: number };
+  vertices: MaskVertex[];
+  closed: boolean;
+}
+```
+
+### Mask Operations
+```typescript
+addMask(clipId)
+removeMask(clipId, maskId)
+updateMask(clipId, maskId, updates)
+reorderMasks(clipId, fromIndex, toIndex)
+```
+
+### Vertex Operations
+```typescript
+addVertex(clipId, maskId, vertex, index?)
+removeVertex(clipId, maskId, vertexId)
+updateVertex(clipId, maskId, vertexId, updates)
+closeMask(clipId, maskId)
+```
 
 ---
 
-## Coordinate Systems
+## Visual Feedback
 
-### Mask Coordinates
-- Masks defined in normalized coordinates
-- Transform with layer position/scale
+### Overlay Colors
+- **Blue dashed**: Unclosed path
+- **Cyan solid**: Closed path
+- **Red**: First vertex (in drawing mode)
+- **Orange**: Bezier handle lines
+- **Cyan squares**: Vertex points
+
+### Cursor States
+- **Crosshair**: Drawing modes
+- **Move**: Over mask fill
+- **Pointer**: Over handles
+
+### Instructions
+On-screen text shows current mode instructions.
+
+---
+
+## Rendering Pipeline
+
+### CPU Generation
+```typescript
+// maskRenderer.ts
+generateMaskTexture(masks, width, height)
+- Uses OffscreenCanvas with Canvas2D
+- Bezier paths via ctx.bezierCurveTo()
+- Composite operations for modes
+- Returns ImageData (RGBA)
+```
+
+### GPU Application
+```wgsl
+// composite.wgsl
+- Receives mask as texture_2d<f32>
+- Applies feather blur
+- Handles inversion
+- R channel = mask value
+```
+
+### Coordinate System
+- Normalized coordinates (0-1)
+- Transforms with layer position/scale
 - Applied in output frame space
-
-### Aspect Ratio
 - SVG overlay preserves aspect ratio
-- Coordinates match video dimensions
-- No Y-axis distortion
 
 ---
 
-## Technical Details
+## Not Implemented
 
-### Mask Rendering
-1. Mask shape rendered to texture
-2. Feather blur applied (GPU)
-3. Result used as alpha mask
-4. Applied during composition
-
-### Texture Generation
-- Uses engine render resolution
-- Vertices transformed before generation
-- Sampled in output frame space
+- Animated mask paths
+- Mask tracking
+- Rotobezier (auto-smooth)
+- Mask interpolation between shapes
 
 ---
 
@@ -176,4 +227,4 @@ Each mask has independent:
 
 ---
 
-*Commits: eeac396 through d63e381*
+*Source: `src/stores/timeline/maskSlice.ts`, `src/components/preview/MaskOverlay.tsx`, `src/utils/maskRenderer.ts`*

@@ -2,18 +2,7 @@
 
 [← Back to Index](./README.md)
 
-Complete reference of all keyboard shortcuts.
-
----
-
-## Table of Contents
-
-- [Playback](#playback)
-- [Timeline Navigation](#timeline-navigation)
-- [Selection](#selection)
-- [Editing](#editing)
-- [View](#view)
-- [Modifiers](#modifiers)
+Complete reference of all keyboard shortcuts (verified from codebase).
 
 ---
 
@@ -21,14 +10,11 @@ Complete reference of all keyboard shortcuts.
 
 | Shortcut | Action |
 |----------|--------|
-| `Space` | Play/Pause |
-| `←` | Previous frame |
-| `→` | Next frame |
-| `Home` | Go to start |
-| `End` | Go to end |
-| `I` | Set In point |
-| `O` | Set Out point |
-| `L` | Loop toggle |
+| `Space` | Play/Pause toggle |
+| `I` | Set In point at playhead |
+| `O` | Set Out point at playhead |
+| `X` | Clear In/Out points |
+| `L` | Toggle loop playback |
 
 ---
 
@@ -36,25 +22,10 @@ Complete reference of all keyboard shortcuts.
 
 | Shortcut | Action |
 |----------|--------|
-| `Alt + Scroll` | Zoom in/out (centered on playhead) |
-| `Shift + Scroll` | Horizontal scroll |
 | `Scroll` | Vertical scroll |
-| `Shift + Drag Playhead` | Snap to keyframes |
-
----
-
-## Selection
-
-| Shortcut | Action |
-|----------|--------|
-| `Click` | Select clip |
-| `Click Empty` | Deselect all |
-| `Drag Empty` | Marquee selection |
-| `Delete` | Delete selected |
-
-### Selection Priority
-- When keyframes selected: `Delete` removes keyframes
-- When clips selected: `Delete` removes clips
+| `Shift + Scroll` | Horizontal scroll |
+| `Alt + Scroll` | Zoom (centered on playhead) |
+| `←` / `→` | Frame-by-frame (if implemented) |
 
 ---
 
@@ -62,21 +33,53 @@ Complete reference of all keyboard shortcuts.
 
 | Shortcut | Action |
 |----------|--------|
-| `C` | Split clips at playhead |
-| `Delete` | Delete selected clips/keyframes |
-| `Ctrl + Z` | Undo |
-| `Ctrl + Shift + Z` | Redo |
-| `Ctrl + Y` | Redo (alternative) |
+| `C` | Split all clips at playhead |
+| `Delete` / `Backspace` | Delete selected (keyframes first, then clips) |
+| `Escape` | Deselect all |
 
 ---
 
-## View
+## Selection
+
+| Action | Method |
+|--------|--------|
+| Single select | Click clip |
+| Multi-select | `Ctrl + Click` |
+| Marquee select | Drag on empty area |
+| Extend marquee | `Shift + Drag` |
+| Deselect | Click empty or `Escape` |
+
+---
+
+## Keyframes
+
+| Action | Method |
+|--------|--------|
+| Select keyframe | Click diamond |
+| Multi-select | `Shift + Click` |
+| Fine drag | `Shift + Drag` (10x slower) |
+| Easing menu | Right-click keyframe |
+
+---
+
+## Blend Modes
 
 | Shortcut | Action |
 |----------|--------|
 | `Shift + +` | Next blend mode |
 | `Shift + -` | Previous blend mode |
-| `F` | Fit timeline to view |
+
+---
+
+## Project
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl + N` | New Project |
+| `Ctrl + S` | Save Project |
+| `Ctrl + O` | Open (shows file menu) |
+| `Ctrl + Z` | Undo |
+| `Ctrl + Shift + Z` | Redo |
 
 ---
 
@@ -85,75 +88,68 @@ Complete reference of all keyboard shortcuts.
 ### Shift Key
 | Context | Effect |
 |---------|--------|
-| Drag playhead | Snap to keyframes/clip edges |
-| Scroll | Horizontal scroll |
-| +/- keys | Cycle blend modes |
-| Drag vertex | Scale bezier handles |
+| + Scroll | Horizontal scroll |
+| + Drag playhead | Snap to keyframes |
+| + Drag keyframe | Fine control (10x slower) |
+| + `+`/`-` | Cycle blend modes |
+| + Marquee | Extend selection |
+| + Drag curve handle | Constrain horizontal |
 
 ### Alt Key
 | Context | Effect |
 |---------|--------|
-| Scroll | Zoom timeline |
+| + Scroll | Zoom timeline |
+| + Drag clip | Skip linked clip movement |
+| + Drag in group | Skip group movement |
 
 ### Ctrl/Cmd Key
 | Context | Effect |
 |---------|--------|
-| Z | Undo |
-| Shift + Z | Redo |
-| Y | Redo |
+| + Click | Add/remove from selection |
+| + `Z` | Undo |
+| + `Shift + Z` | Redo |
+| + `S` | Save |
+| + `N` | New Project |
 
 ---
 
 ## Context-Specific
 
-### In Timeline
-| Shortcut | Action |
-|----------|--------|
-| `C` | Split all clips at playhead |
-| Drag clip | Move clip |
-| Drag clip edge | Trim clip |
-
-### In Property Values
+### Property Values
 | Action | Effect |
 |--------|--------|
 | Left-click drag | Scrub value |
 | Right-click | Reset to default |
 
-### In Keyframe Area
+### Track Headers
 | Action | Effect |
 |--------|--------|
-| Click diamond | Select keyframe |
-| Drag diamond | Move keyframe |
-| Right-click | Easing menu |
-| Drag empty | Marquee select |
+| Double-click name | Edit track name |
+| Click Eye | Toggle visibility |
+| Click M | Toggle mute |
+| Click S | Toggle solo |
+| Click expand arrow | Show keyframe lanes |
 
-### In Preview Edit Mode
+### Clip Clips
+| Action | Effect |
+|--------|--------|
+| Drag center | Move clip |
+| Drag edges | Trim clip |
+| Right-click | Context menu |
+
+### Preview Edit Mode
 | Action | Effect |
 |--------|--------|
 | Drag center | Move layer |
 | Drag corner | Scale layer |
-| Drag outside | Rotate layer |
 
----
-
-## Track Controls
-
+### Curve Editor
 | Action | Effect |
 |--------|--------|
-| Click eye | Toggle visibility |
-| Click M | Toggle mute |
-| Click S | Toggle solo |
-| Double-click name | Edit track name |
-| Click expand | Show keyframes |
-
----
-
-## Panel Navigation
-
-| Shortcut | Action |
-|----------|--------|
-| Middle mouse scroll | Cycle tabs in panel |
-| Hold tab 500ms | Enable drag |
+| Drag keyframe | Move time + value |
+| `Shift + Drag` | Constrain axis |
+| Drag handle | Adjust bezier curve |
+| Click empty | Deselect |
 
 ---
 
@@ -162,20 +158,22 @@ Complete reference of all keyboard shortcuts.
 ```
 ┌─────────────────────────────────────────┐
 │           PLAYBACK                      │
-│  Space = Play    ←→ = Frame step       │
-│  I/O = In/Out    L = Loop               │
+│  Space = Play    I/O = In/Out points   │
+│  X = Clear I/O   L = Loop              │
 ├─────────────────────────────────────────┤
 │           EDITING                       │
-│  C = Split       Del = Delete           │
+│  C = Split       Del = Delete          │
 │  Ctrl+Z = Undo   Ctrl+Shift+Z = Redo   │
 ├─────────────────────────────────────────┤
+│           PROJECT                       │
+│  Ctrl+N = New    Ctrl+S = Save         │
+├─────────────────────────────────────────┤
 │           NAVIGATION                    │
-│  Alt+Scroll = Zoom                      │
-│  Shift+Scroll = H-Scroll                │
-│  Shift+Drag = Snap                      │
+│  Alt+Scroll = Zoom                     │
+│  Shift+Scroll = H-Scroll               │
 ├─────────────────────────────────────────┤
 │           BLEND MODES                   │
-│  Shift++ = Next   Shift+- = Previous   │
+│  Shift++ = Next  Shift+- = Previous    │
 └─────────────────────────────────────────┘
 ```
 
@@ -190,4 +188,4 @@ Complete reference of all keyboard shortcuts.
 
 ---
 
-*Compiled from all commits*
+*Compiled from codebase analysis*

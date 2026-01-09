@@ -2,7 +2,7 @@
 
 [← Back to Index](./README.md)
 
-Preview system with RAM caching, multiple panels, and real-time GPU rendering.
+WebGPU preview with RAM caching, multiple panels, and edit mode.
 
 ---
 
@@ -12,55 +12,55 @@ Preview system with RAM caching, multiple panels, and real-time GPU rendering.
 - [Playback Controls](#playback-controls)
 - [RAM Preview](#ram-preview)
 - [Multiple Previews](#multiple-previews)
-- [Scrubbing](#scrubbing)
 - [Edit Mode](#edit-mode)
+- [Statistics Overlay](#statistics-overlay)
 
 ---
 
 ## Preview Panel
 
-The Preview panel displays the rendered composition output.
-
 ### Features
 - **Real-time GPU rendering** via WebGPU
 - **Aspect ratio preserved** automatically
 - **Close button** to hide panel
-- **Composition selector** to view different compositions
+- **Composition selector** dropdown
+- **Edit mode** toggle
 
-### Resolution
-- Renders at composition resolution
-- Scales to fit panel size
-- Full resolution available in export
+### Canvas Registration
+```typescript
+registerPreviewCanvas()           // Main preview
+registerIndependentPreviewCanvas() // Additional previews
+unregisterPreviewCanvas()         // Cleanup
+```
 
 ---
 
 ## Playback Controls
 
-Located in timeline toolbar:
+### Timeline Toolbar Controls
 
-| Control | Function |
-|---------|----------|
-| **Play/Pause** | `Space` - Toggle playback |
-| **Stop** | Stop and return to start |
-| **Loop** | Toggle loop playback |
-| **Frame Back** | `←` - Previous frame |
-| **Frame Forward** | `→` - Next frame |
-| **Reverse** | Play backwards |
-
-### Loop Playback
-- Loops between In/Out points if set
-- Otherwise loops full composition
-- Toggle with loop button
-
-### Reverse Playback
-- Frame-by-frame backward playback
-- Keyframe mirroring for proper animation
-- Smooth reverse video playback
+| Control | Shortcut | Function |
+|---------|----------|----------|
+| **Stop** | - | Return to time 0 |
+| **Play/Pause** | `Space` | Toggle playback |
+| **Loop** | `L` | Toggle loop mode |
 
 ### In/Out Points
-- Set with `I` (In) and `O` (Out) keys
-- Defines playback and export range
-- Visual markers on ruler
+
+| Shortcut | Action |
+|----------|--------|
+| `I` | Set In point at playhead |
+| `O` | Set Out point at playhead |
+| `X` | Clear In/Out points |
+
+### Implementation
+```typescript
+setInPoint(time)         // Validates against outPoint
+setOutPoint(time)        // Validates against inPoint
+clearInOut()             // Clear both markers
+setInPointAtPlayhead()   // Convenience method
+setOutPointAtPlayhead()  // Convenience method
+```
 
 ---
 
@@ -68,126 +68,198 @@ Located in timeline toolbar:
 
 After Effects-style cached preview for smooth playback.
 
-### How It Works
-1. Toggle RAM Preview button
-2. System caches frames to GPU textures
-3. Playback uses cached frames (instant)
-4. Cache invalidated on changes
+### Configuration
+```typescript
+RAM_PREVIEW_FPS = 30        // Target frame rate
+FRAME_TOLERANCE = 0.04      // 40ms tolerance for seeks
+```
 
-### RAM Preview Behavior
-- **Renders outward** from current playhead position
-- **Progress indicator** shows caching status
-- **Auto-start** works without In/Out points
-- **Skips empty areas** for efficiency
+### Cache Limits
+| Cache Type | Max Frames | Purpose |
+|------------|------------|---------|
+| Scrubbing | 300 | Individual video frames |
+| Composite | 900 | Fully-rendered frames |
+| GPU | 60 | High-speed playback |
 
-### Cache Invalidation
-Cache clears automatically when:
-- Clip transforms change
-- Track visibility changes
-- Effects modified
-- Timeline structure changes
+### Algorithm
+1. Enable via "RAM ON/OFF" button
+2. Frames render **outward from playhead**
+3. Only caches frames where clips exist
+4. Skips empty areas
+5. 3-retry seeking with verification
 
-### Performance
-- Uses GPU texture cache
-- Instant scrubbing after caching
-- Reuses already-cached frames
-- Video paused during RAM Preview generation
+### Smart Seeking
+```typescript
+// Robust video seeking
+- Retries up to 3 times
+- Verifies position within FRAME_TOLERANCE
+- Handles reversed clips properly
+```
+
+### Cache Management
+```typescript
+toggleRamPreviewEnabled()  // Enable/disable
+startRamPreview()          // Begin caching
+cancelRamPreview()         // Stop caching
+clearRamPreview()          // Clear cache
+invalidateCache()          // On content change
+getCachedRanges()          // For green indicator
+```
+
+### Visual Indicator
+- Green bar on timeline shows cached ranges
+- Progress indicator during caching
+- 2-frame gap tolerance for ranges
 
 ---
 
 ## Multiple Previews
 
-Open multiple preview panels to view different compositions.
-
 ### Adding Preview Panels
-1. View menu → Add Preview Panel
-2. Or duplicate existing panel
+1. View menu → Panel visibility
+2. Or use "+" button in preview panel
 
 ### Composition Selection
 Each preview can show different composition:
-1. Use composition dropdown in panel
-2. Select composition to display
-3. Panel renders independently
+- Dropdown selector in panel
+- "Active" follows current composition
+- Or select specific saved composition
 
 ### Independent Rendering
-- Each panel has own canvas
-- Separate ping-pong buffers
-- Can show parent and nested comp simultaneously
+```typescript
+// Each panel has:
+- Own canvas
+- Own RAF loop
+- Own ping-pong buffers
+- Independent composition evaluation
+```
 
 ### Layout
 - Panels appear side-by-side
 - Drag to rearrange in dock
-- Save layout for persistence
-
----
-
-## Scrubbing
-
-### Timeline Scrubbing
-- Drag playhead for real-time preview
-- GPU renders each frame on demand
-- Smooth with frame caching enabled
-
-### Performance Optimization
-- Frame cache stores recent frames
-- Skips caching during active drag
-- Prevents glitchy frames during scrub
-
-### Value Scrubbing
-In properties panel:
-- Left-click drag on values to scrub
-- Real-time preview updates
-- Tooltip shows current value
+- Layout persists on save
 
 ---
 
 ## Edit Mode
 
-Toggle edit mode to interact with layer transforms directly in preview.
+### Enabling Edit Mode
+Click "Edit" button in preview panel.
 
-### Bounding Boxes
-- Shows bounding box for selected layer
-- Handles at corners and edges
-- Visual feedback for transforms
+### Layer Selection
+- Click layer to select
+- Bounding box appears
+- Handles at corners/edges
 
 ### Drag Operations
+| Action | Effect |
+|--------|--------|
+| Drag center | Move layer position |
+| Drag corner | Scale layer |
 
-| Drag | Action |
-|------|--------|
-| Center | Move layer position |
-| Corner | Scale layer |
-| Edge | Scale single axis |
-| Outside | Rotate layer |
+### Bounding Box
+```typescript
+calculateLayerBounds()
+- Accounts for transforms
+- Correct aspect ratio
+- Matches shader positioning
+```
 
-### Real-time Updates
-- Preview updates during drag
-- Position synced with properties panel
-- Changes reflected in timeline
-
----
-
-## Frame-by-Frame Navigation
-
-| Key | Action |
-|-----|--------|
-| `←` | Previous frame |
-| `→` | Next frame |
-| `Home` | Go to start |
-| `End` | Go to end |
+### Zoom & Pan
+| Action | Method |
+|--------|--------|
+| Zoom | `Shift + Scroll` |
+| Pan | `Alt + Drag` |
+| Reset | Reset button |
 
 ---
 
-## Playback Sync
+## Statistics Overlay
 
-### Video Sync
-- Videos seek to playhead position
-- Uses `requestVideoFrameCallback` for smooth playback
-- Falls back to standard playback if needed
+### Compact Mode
+- FPS (color-coded: green ≥55, yellow ≥30, red <30)
+- Decoder type (WebCodecs/HTMLVideo)
+- Frame drops this second
+- Output resolution
 
-### Nested Composition Sync
-- Parent timeline controls nested playback
-- Nested composition syncs to parent time
-- Recursive rendering for deep nesting
+### Expanded Mode (click to expand)
+- FPS / target FPS
+- Frame gap (RAF timing)
+- Render total time
+- Pipeline breakdown bars
+- Layer count
+- Decoder type
+- Drops (last second + total)
+- Last drop reason
+- Bottleneck identification
+
+### Bottleneck Detection
+```
+Video Import - GPU texture upload slow
+GPU Render - Compositing slow
+GPU Submit - Command submission slow
+```
+
+---
+
+## Frame Caching
+
+### ScrubbingCache Class
+
+#### Tier 1: Scrubbing Frame Cache
+```typescript
+cacheFrameAtTime(video, time)  // Cache single frame
+getCachedFrame(videoSrc, time) // Retrieve cached
+// LRU eviction, max 300 frames
+```
+
+#### Tier 2: Last Frame Cache
+```typescript
+captureVideoFrame(video)       // Persistent frame
+getLastFrame(video)            // During seeks
+// One per video element
+```
+
+#### Tier 3: RAM Preview Composite Cache
+```typescript
+cacheCompositeFrame(time, imageData)  // Composited frame
+getCachedCompositeFrame(time)         // Instant retrieval
+hasCompositeCacheFrame(time)          // Existence check
+// Max 900 frames, stored as ImageData
+```
+
+---
+
+## Composition Rendering
+
+### Service Methods
+```typescript
+prepareComposition(compositionId)
+- Loads all video/image sources
+- Waits for canplaythrough
+- Handles both active and saved compositions
+
+evaluateAtTime(compositionId, time)
+- Returns layers ready for rendering
+- Handles clip trimming
+- Handles reversed clips
+- Builds layer transforms
+- Automatic video seeking
+```
+
+---
+
+## Performance
+
+### Frame Rate
+- 60fps target for preview
+- 30fps limit when video playing
+- Frame drop detection (1.5x target)
+
+### Optimization
+- Skip caching during playhead drag
+- Reuse already-cached frames
+- Video paused during RAM Preview generation
 
 ---
 
@@ -200,4 +272,4 @@ Toggle edit mode to interact with layer transforms directly in preview.
 
 ---
 
-*Commits: 3d3b4fb through d63e381*
+*Source: `src/components/preview/Preview.tsx`, `src/stores/timeline/playbackSlice.ts`, `src/engine/texture/ScrubbingCache.ts`*

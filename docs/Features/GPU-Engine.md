@@ -2,17 +2,18 @@
 
 [← Back to Index](./README.md)
 
-WebGPU-powered rendering engine for hardware-accelerated compositing.
+WebGPU-powered rendering with zero-copy textures and optical flow analysis.
 
 ---
 
 ## Table of Contents
 
 - [Architecture](#architecture)
-- [Render Pipeline](#render-pipeline)
 - [Texture Management](#texture-management)
+- [Compositing Pipeline](#compositing-pipeline)
+- [Shader Capabilities](#shader-capabilities)
+- [Optical Flow](#optical-flow)
 - [Performance](#performance)
-- [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -21,18 +22,28 @@ WebGPU-powered rendering engine for hardware-accelerated compositing.
 ### Engine Structure
 ```
 WebGPUEngine (Facade)
-├── WebGPUContext      # GPU initialization
-├── CompositorPipeline # Layer compositing
-├── EffectsPipeline    # Effect processing
-├── OutputPipeline     # Final output
-├── TextureManager     # Texture handling
-├── MaskTextureManager # Mask generation
-└── ScrubbingCache     # Frame caching
+├── WebGPUContext       # GPU initialization
+├── CompositorPipeline  # Layer compositing
+├── EffectsPipeline     # Effect processing
+├── OutputPipeline      # Final output
+├── TextureManager      # Texture handling
+├── MaskTextureManager  # Mask generation
+├── ScrubbingCache      # Frame caching
+└── FrameExporter       # Video export
 ```
 
-### Singleton Pattern
-Engine survives hot module reload (HMR):
+### Initialization
 ```typescript
+// WebGPUContext.ts
+- GPU adapter: powerPreference: 'high-performance'
+- Device limits: maxTextureDimension2D: 4096
+- Canvas: bgra8unorm format, premultiplied alpha
+- Sampler: linear filtering, clamp-to-edge
+```
+
+### HMR Singleton
+```typescript
+// Survives hot module reload
 if (hot?.data?.engine) {
   engineInstance = hot.data.engine;
 } else {
@@ -40,189 +51,214 @@ if (hot?.data?.engine) {
   hot.data.engine = engineInstance;
 }
 ```
-Prevents "Device mismatch" errors during development.
-
----
-
-## Render Pipeline
-
-### Render Loop
-```
-useEngine hook
-    └─► engine.start(callback)
-            └─► requestAnimationFrame loop
-                    └─► engine.render(layers)
-                            ├─► Import external textures
-                            ├─► Ping-pong composite each layer
-                            └─► Output to canvas(es)
-```
-
-### Compositing
-1. Layers processed front-to-back
-2. Each layer blended onto composite
-3. Ping-pong buffers for intermediate results
-4. Final output to canvas
-
-### Texture Types
-| Source | Texture Type |
-|--------|-------------|
-| Video (HTMLVideoElement) | `texture_external` (zero-copy) |
-| Video (WebCodecs VideoFrame) | `texture_external` (zero-copy) |
-| Image | `texture_2d<f32>` (copied once) |
 
 ---
 
 ## Texture Management
 
-### External Textures
-- Video frames imported as external textures
-- Zero-copy GPU operation
-- Re-imported each frame
+### Texture Types
+| Source | Type | Copy |
+|--------|------|------|
+| HTMLVideoElement | `GPUExternalTexture` | Zero-copy |
+| VideoFrame (WebCodecs) | `GPUExternalTexture` | Zero-copy |
+| HTMLImageElement | `texture_2d<f32>` | Copy once |
+
+### Video Textures
+```typescript
+// Zero-copy import
+device.importExternalTexture({ source: video })
+
+// Requirements
+- readyState >= 2 (HAVE_CURRENT_DATA)
+- Not seeking
+- Fallback to cached frame on failure
+```
 
 ### Image Textures
-- Copied to GPU once
-- Bind groups recreated each frame
-- Uses `naturalWidth`/`naturalHeight`
+```typescript
+copyExternalImageToTexture(image, texture)
+- LRU cache with eviction
+- View caching
+- Uses naturalWidth/naturalHeight
+```
 
-### Mask Textures
-- Generated from vector shapes
-- Feather blur applied on GPU
-- Used as alpha channel
+---
 
-### Frame Cache
-- GPU texture cache for RAM Preview
-- Instant scrubbing after caching
-- Cache key includes layer state
+## Compositing Pipeline
+
+### Two Render Pipelines
+1. **Standard Composite** - Image textures (`texture_2d<f32>`)
+2. **External Composite** - Video textures (`texture_external`)
+
+### Layer Transforms (GPU)
+```wgsl
+// Uniform structure (80 bytes)
+position: vec3<f32>     // X, Y, Z depth
+scale: vec2<f32>        // X, Y
+rotation: vec3<f32>     // X, Y, Z (radians)
+opacity: f32
+blendMode: u32          // 0-36
+aspectRatio: f32
+perspectiveDistance: f32
+```
+
+### 3D Rotation
+- Full X, Y, Z rotation
+- Configurable perspective distance
+- Z-depth affects apparent scale
+
+### Ping-Pong Rendering
+```
+Layer 1 → Composite onto Ping
+Layer 2 → Composite onto Pong
+Layer 3 → Composite onto Ping
+...
+Final → Output to Canvas
+```
+
+---
+
+## Shader Capabilities
+
+### Total WGSL Code: 1,352 lines
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `composite.wgsl` | 743 | Blending + 37 modes |
+| `effects.wgsl` | 243 | 9 GPU effects |
+| `opticalflow.wgsl` | 326 | Motion analysis |
+| `output.wgsl` | 40 | Passthrough |
+
+### Blend Mode Implementation
+All 37 modes in switch statement:
+- HSL/RGB conversion helpers
+- Luminosity calculations (BT.601)
+- Stencil/silhouette operations
+
+### Effect Shaders
+Per-effect entry points with uniform buffers.
+
+---
+
+## Optical Flow
+
+### GPU Motion Detection
+```wgsl
+// opticalflow.wgsl compute shaders
+1. Grayscale conversion (BT.601)
+2. Gaussian blur 5x5 (sigma=1.0)
+3. Pyramid downsampling (3 levels)
+4. Spatial gradients (Ix, Iy)
+5. Temporal gradient (It)
+6. Lucas-Kanade solver
+7. Statistics aggregation
+```
+
+### Analysis Resolution
+160×90 pixels (fast, sufficient for statistics)
+
+### Motion Metrics
+```typescript
+interface MotionStats {
+  meanMagnitude: number;    // 0-1 normalized
+  directionCoherence: number; // Global vs local
+  coverageRatio: number;    // Motion density
+}
+```
+
+### Thresholds
+| Detection | Value |
+|-----------|-------|
+| Motion | 0.5 magnitude |
+| Scene cut | 8.0 magnitude + 0.7 coverage |
+| Global coherence | 0.6 |
 
 ---
 
 ## Performance
 
-### Target Performance
-- 60fps real-time preview
-- Efficient GPU utilization
-- Minimal CPU overhead
+### Frame Rate Targets
+- **Preview**: 60fps target
+- **During video playback**: 30fps limit
+- **Frame drop detection**: 1.5x target time
 
-### Optimizations
-
-#### Layer Updates
-- Check if layer `needsUpdate`
-- Skip unchanged layers
-- Includes position.z in update check
-
-#### Video Playback
-- `requestVideoFrameCallback` for sync
-- Early return fast path
-- Rate limited to 30fps during playback
-
-#### Memory Management
-- Frame cache limits
-- Texture cleanup
-- Leak prevention in render loop
-
-### Profiling
-Automatic profile output:
-```
-[PROFILE] FPS=60 | gap=16ms | layers=3 | render=2.50ms
+### Statistics Tracking
+```typescript
+interface RenderStats {
+  fps: number;
+  frameGap: number;
+  layerCount: number;
+  importTime: number;
+  renderTime: number;
+  submitTime: number;
+  dropsThisSecond: number;
+  dropsTotal: number;
+}
 ```
 
-### Slow Frame Detection
+### Bottleneck Identification
+- **Video Import** - Texture upload slow
+- **GPU Render** - Compositing slow
+- **GPU Submit** - Command submission slow
+
+---
+
+## Video Decoding
+
+### 3 Decoding Modes
+```typescript
+// WebCodecsPlayer.ts
+1. Simple Mode - Direct VideoFrame extraction
+2. MP4Box Mode - Demux + WebCodecs decode
+3. Stream Mode - MediaStreamTrackProcessor
 ```
-[RAF] Very slow frame: rafDelay=150ms
+
+### Fallback Chain
+```
+WebCodecs → HTMLVideoElement
 ```
 
 ---
 
-## Shaders
+## Export Pipeline
 
-### Shader Files
-Located in `src/shaders/`:
-- `composite.wgsl` - Layer compositing
-- `effects.wgsl` - Visual effects
-- `output.wgsl` - Final output
+### FrameExporter
+```typescript
+// Frame-by-frame export
+1. Seek all clips to time
+2. Build layer composition
+3. Render via engine.render()
+4. Read pixels (staging buffer)
+5. Encode VideoFrame
+6. Mux to container
+```
 
-### Adding Effects
-1. Add shader code in `effects.wgsl`
-2. Add params in `utils.ts:getDefaultEffectParams()`
-3. Add UI in `EffectsPanel.tsx`
+### Codec Support
+| Codec | Container | ID |
+|-------|-----------|-----|
+| H.264 | MP4 | avc1.640028 |
+| VP9 | WebM | vp09.00.10.08 |
 
-### Shader Inputs
-- Input textures
-- Transform uniforms
-- Effect parameters
-- Blend mode
+### Settings
+- Resolution: 480p to 4K
+- Frame rate: 24-60 fps
+- Bitrate: 5-35 Mbps
 
 ---
 
 ## Troubleshooting
 
-### Common Issues
-
 | Problem | Solution |
 |---------|----------|
 | 15fps on Linux | Enable Vulkan: `chrome://flags/#enable-vulkan` |
 | "Device mismatch" | HMR broke singleton - refresh page |
-| Black canvas | Check `readyState >= 2` before texture import |
-| WebCodecs fails | Falls back to HTMLVideoElement automatically |
+| Black canvas | Check `readyState >= 2` |
+| WebCodecs fails | Falls back to HTMLVideoElement |
 
 ### GPU Status
-Check in Chrome:
 ```
 chrome://gpu
 ```
-
-### Video Ready State
-Always wait for `canplaythrough`:
-```typescript
-video.addEventListener('canplaythrough', () => {
-  // Video ready for texture creation
-}, { once: true });
-```
-
-### Stale Closures
-Use fresh state in callbacks:
-```typescript
-// WRONG - stale closure
-const { layers } = get();
-video.onload = () => set({ layers: layers.map(...) });
-
-// CORRECT - fresh state
-video.onload = () => {
-  const current = get().layers;
-  set({ layers: current.map(...) });
-};
-```
-
----
-
-## Multiple Canvases
-
-### Independent Rendering
-Multiple preview panels supported:
-- Separate canvas registration
-- Independent ping-pong buffers
-- Proper cleanup on unmount
-
-### Canvas Management
-- Register canvas with engine
-- Each canvas renders composition
-- Cleanup on panel close
-
----
-
-## WebCodecs Integration
-
-### Video Decoding
-When available, uses WebCodecs:
-- Hardware-accelerated decode
-- Direct GPU upload
-- Falls back to HTMLVideoElement
-
-### Proxy Frames
-For large files:
-- Proxy frames generated
-- Used during preview
-- Full-res for export
 
 ---
 
@@ -235,4 +271,4 @@ For large files:
 
 ---
 
-*Commits: d6e130c through d63e381*
+*Source: `src/engine/WebGPUEngine.ts`, `src/engine/pipeline/`, `src/shaders/`*

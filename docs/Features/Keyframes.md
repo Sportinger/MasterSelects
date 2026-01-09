@@ -2,34 +2,42 @@
 
 [← Back to Index](./README.md)
 
-The keyframe animation system enables property animation over time with multiple interpolation modes.
+The keyframe animation system enables property animation over time with bezier curve editing.
 
 ---
 
 ## Table of Contents
 
-- [Overview](#overview)
+- [Animatable Properties](#animatable-properties)
 - [Creating Keyframes](#creating-keyframes)
 - [Editing Keyframes](#editing-keyframes)
-- [Interpolation & Easing](#interpolation--easing)
-- [Selection](#selection)
-- [Keyframe Display](#keyframe-display)
+- [Easing Modes](#easing-modes)
+- [Curve Editor](#curve-editor)
+- [Recording Mode](#recording-mode)
 
 ---
 
-## Overview
+## Animatable Properties
 
-Keyframes define property values at specific points in time. The system interpolates values between keyframes for smooth animation.
+### Transform Properties (9 total)
+| Property | Range | Default |
+|----------|-------|---------|
+| `opacity` | 0-1 | 1 |
+| `position.x` | -∞ to +∞ | 0 |
+| `position.y` | -∞ to +∞ | 0 |
+| `position.z` | -∞ to +∞ | 0 (depth) |
+| `scale.x` | 0 to ∞ | 1 |
+| `scale.y` | 0 to ∞ | 1 |
+| `rotation.x` | degrees | 0 |
+| `rotation.y` | degrees | 0 |
+| `rotation.z` | degrees | 0 |
 
-### Animatable Properties
-
-| Category | Properties |
-|----------|------------|
-| **Position** | X, Y, Z (depth) |
-| **Scale** | X, Y |
-| **Rotation** | X, Y, Z (3D rotation) |
-| **Opacity** | 0-100% |
-| **Effects** | All effect parameters |
+### Effect Properties
+Any numeric effect parameter can be keyframed:
+```
+effect.{effectId}.{paramName}
+```
+Example: `effect.effect_123.shift` for hue shift animation
 
 ---
 
@@ -37,131 +45,183 @@ Keyframes define property values at specific points in time. The system interpol
 
 ### Method 1: Property Row Controls
 1. Expand track to show properties
-2. Click diamond icon next to property name
-3. Keyframe added at current playhead position
+2. Click diamond icon (◇) next to property
+3. Keyframe added at current playhead
 
-### Method 2: Value Change
-1. Move playhead to desired time
-2. Change property value in Clip Properties panel
-3. Keyframe auto-created if animation enabled
+### Method 2: Value Change with Recording
+1. Enable recording mode (toggle button)
+2. Move playhead to desired time
+3. Change property value
+4. Keyframe auto-created
 
-### Method 3: Context Menu
-1. Right-click on property row
-2. Select "Add Keyframe"
+### Keyframe Data Structure
+```typescript
+interface Keyframe {
+  id: string;           // kf_{timestamp}_{random}
+  clipId: string;       // Reference to clip
+  time: number;         // Relative to clip start (seconds)
+  property: string;     // e.g., 'opacity', 'position.x'
+  value: number;        // Interpolated value
+  easing: EasingType;   // Interpolation mode
+  handleIn?: BezierHandle;   // Custom in-tangent
+  handleOut?: BezierHandle;  // Custom out-tangent
+}
+```
 
 ---
 
 ## Editing Keyframes
 
 ### Moving Keyframes
-- **Drag** keyframe diamond horizontally to change time
-- **Live preview** updates as you drag
-- Movement synced with clip if clip is also being dragged
+- **Drag** keyframe diamond horizontally
+- **Shift+drag** for fine control (10x slower)
+- Clamped to clip duration [0, clipDuration]
+- Live preview updates during drag
 
 ### Changing Values
 1. Position playhead on keyframe
-2. Adjust property value in properties panel
-3. Keyframe value updates
+2. Adjust value in Clip Properties panel
+3. Keyframe value updates automatically
 
 ### Deleting Keyframes
 - Select keyframe(s)
 - Press `Delete` key
 - Or right-click → Delete
 
-### Reset to Default
-- **Right-click** on property value → resets to default
-- Works on any property slider or value
+### Batch Operations
+```typescript
+addKeyframe(clipId, property, value, time?, easing)
+removeKeyframe(keyframeId)
+updateKeyframe(keyframeId, updates)
+moveKeyframe(keyframeId, newTime)
+deleteSelectedKeyframes()
+```
 
 ---
 
-## Interpolation & Easing
+## Easing Modes
 
-### Easing Modes
-Access via right-click context menu on keyframe:
+### Available Modes (5 total)
 
-| Mode | Icon | Behavior |
-|------|------|----------|
-| **Linear** | Diamond | Constant rate of change |
-| **Ease In** | ◀ pointed | Slow start, fast end |
-| **Ease Out** | ▶ pointed | Fast start, slow end |
-| **Ease In-Out** | ◆ pointed both | Slow start and end |
-| **Hold** | Square | No interpolation (step) |
+| Mode | Bezier Points | Behavior |
+|------|---------------|----------|
+| `linear` | [0,0] → [1,1] | Constant rate |
+| `ease-in` | [0.42,0] → [1,1] | Slow start |
+| `ease-out` | [0,0] → [0.58,1] | Slow end |
+| `ease-in-out` | [0.42,0] → [0.58,1] | Smooth both |
+| `bezier` | Custom handles | User-defined |
 
-### Visual Differentiation
-- Each easing mode shows unique diamond shape
-- Easy to identify animation style at a glance
+### Visual Indicators
+Each easing mode shows unique diamond shape:
+- Linear: ◇ regular diamond
+- Ease In: ◀ left-pointed
+- Ease Out: ▶ right-pointed
+- Ease In-Out: ◆ filled
+- Bezier: custom shape
 
 ### Setting Easing
 1. Right-click keyframe
-2. Select easing mode from context menu
-3. Visual indicator updates immediately
+2. Select easing from context menu
+3. Or modify bezier handles in curve editor
 
 ---
 
-## Selection
+## Curve Editor
 
-### Single Selection
-- Click keyframe diamond
+### Opening the Curve Editor
+1. Expand track to show properties
+2. Click curve icon next to property
+3. Editor appears below property row
 
-### Marquee Selection
-- Drag rectangle in keyframe area
-- Selects all keyframes within bounds
-- Auto-expands video tracks to show keyframes
-- Live feedback during drag
+### Features
+- **SVG-based** with grid background
+- **Bezier curves** drawn between keyframes
+- **Value range** auto-computed with padding
 
-### Multi-Selection Behavior
-- Selected keyframes highlighted
-- `Delete` removes all selected
-- Drag moves all selected together
+### Keyframe Manipulation
+| Action | Effect |
+|--------|--------|
+| Click+drag point | Move time and value |
+| Shift+drag | Constrain to horizontal or vertical |
+| Click empty | Deselect all |
 
-### Selection Priority
-When keyframes are selected:
-- `Delete` key removes keyframes (not clips)
-- Clip selection preserved during keyframe selection
+### Bezier Handle Editing
+- In-handle: controls incoming curve (x ≤ 0)
+- Out-handle: controls outgoing curve (x ≥ 0)
+- Shift+drag handle: constrain to horizontal
+
+### Grid System
+- Horizontal: time axis (from timeline scroll)
+- Vertical: value axis (auto-scaled)
+- Major/minor grid lines with labels
 
 ---
 
-## Keyframe Display
+## Recording Mode
 
-### Expanded Tracks
-Click expand arrow on track to show:
+### Enabling Recording
+```typescript
+toggleKeyframeRecording(clipId, property)
+```
+- Format: `{clipId}:{property}` in Set
+- Visual indicator when active
+
+### Behavior When Recording
+- Property changes create/update keyframes at playhead
+- Existing keyframe at time → updates value
+- No keyframe at time → creates new one
+
+### Without Recording
+- Property changes update static clip values
+- No keyframes created automatically
+
+---
+
+## Interpolation Algorithm
+
+### Between Keyframes
+1. Calculate normalized time `t` between keyframes
+2. Apply easing function to get eased time
+3. Linear interpolate value: `v1 + (v2 - v1) * easedT`
+
+### Bezier Interpolation
+Uses cubic Bezier with Newton-Raphson solver:
+- 10 iterations
+- Epsilon: 0.0001
+- Solves for X to get eased time
+
+### Edge Cases
+- No keyframes → returns default value
+- Single keyframe → returns its value
+- Before first → returns first value
+- After last → returns last value
+
+---
+
+## Constants
+
+```typescript
+PROPERTY_ROW_HEIGHT = 18px
+CURVE_EDITOR_HEIGHT = 250px
+BEZIER_HANDLE_SIZE = 8px
+KEYFRAME_TOLERANCE = 0.01s (10ms)
+```
+
+---
+
+## Track Expansion
+
+### Expanded Track Shows
 - Property groups (Position, Scale, Rotation, Opacity)
-- Individual property lanes with keyframe diamonds
-- Only properties with keyframes are shown
+- Individual property lanes with diamonds
+- Only properties with keyframes displayed
 
-### Flattened Display
-- All keyframes visible in single expanded area
-- Clean, organized layout
-- Track height adjusts automatically
-
-### Property Groups
+### Height Calculation
 ```
-▼ Position
-  ├─ X ────────◆──────◆────────
-  ├─ Y ────◆────────────◆──────
-  └─ Z ──────────◆─────────────
-▼ Scale
-  ├─ X ────◆──────────◆────────
-  └─ Y ────◆──────────◆────────
-▼ Rotation
-  └─ Z ────────◆───────────────
-▼ Opacity
-  └─ ──────◆──────────◆────────
+baseHeight
++ (propertyCount × PROPERTY_ROW_HEIGHT)
++ (expandedCurves × CURVE_EDITOR_HEIGHT)
 ```
-
-### Effects Keyframes
-- Effect parameters appear as additional groups
-- Same keyframe controls as transform properties
-- See [Effects](./Effects.md#keyframes)
-
----
-
-## Playhead Snapping
-
-When `Shift` is held:
-- Playhead snaps to nearest keyframe
-- Also snaps to clip start/end points
-- Helps precise positioning
 
 ---
 
@@ -174,4 +234,4 @@ When `Shift` is held:
 
 ---
 
-*Commits: dca5e09 through d63e381*
+*Source: `src/stores/timeline/keyframeSlice.ts`, `src/utils/keyframeInterpolation.ts`, `src/components/timeline/CurveEditor.tsx`*

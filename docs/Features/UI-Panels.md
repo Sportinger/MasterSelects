@@ -2,77 +2,147 @@
 
 [← Back to Index](./README.md)
 
-Dockable panel system, menu bar, and workspace layouts.
+Dockable panel system with After Effects-style menu bar.
 
 ---
 
 ## Table of Contents
 
-- [Panel System](#panel-system)
 - [Menu Bar](#menu-bar)
+- [Panel System](#panel-system)
+- [Available Panels](#available-panels)
 - [Dock Layouts](#dock-layouts)
-- [Panel Types](#panel-types)
-- [Workspace](#workspace)
+- [MIDI Control](#midi-control)
+
+---
+
+## Menu Bar
+
+### Structure
+| Menu | Contents |
+|------|----------|
+| **File** | New, Save, Open Recent |
+| **Edit** | Copy, Paste, Settings |
+| **View** | Panels, Resolution, Layout |
+| **Output** | New Output Window, Active Outputs |
+| **Window** | MIDI Control |
+
+### Keyboard Shortcuts
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+N` | New Project |
+| `Ctrl+S` | Save Project |
+| `Ctrl+O` | Open (shows menu) |
+
+### Project Name
+- Displayed at left of menu bar
+- Click to edit/rename
+- Updates on save
 
 ---
 
 ## Panel System
 
-### Dockable Panels
+### Dockable Behavior
 All panels can be:
 - Dragged to rearrange
 - Grouped in tabs
 - Resized
 - Closed/opened
 
-### Tab Behavior
-- Click tab to activate
-- Middle mouse scroll to cycle tabs
-- Hold-to-drag (500ms) for reordering
+### Tab Controls
+| Action | Method |
+|--------|--------|
+| Switch tab | Click |
+| Cycle tabs | Middle mouse scroll |
+| Drag tab | Hold 500ms + drag |
 
 ### Hold-to-Drag
+```
 1. Click and hold tab for 500ms
 2. Glow animation indicates ready
 3. Drag to new position
 4. Drop to place
+```
 
 ### Tab Slot Indicators
 Resolume-style visual feedback:
 - Shows valid drop locations
 - Highlights target slot
-- Guides panel placement
 
 ---
 
-## Menu Bar
+## Available Panels
 
-After Effects-style menu bar at top.
+### Preview Panel
+- Canvas for composition output
+- Composition selector
+- Edit mode toggle
+- Close button
+- Multiple panels supported
 
-### Menu Structure
-| Menu | Contents |
-|------|----------|
-| **File** | New, Save, Export |
-| **Edit** | Undo, Redo, Cut, Copy, Paste |
-| **View** | Panel visibility, layouts |
-| **Composition** | Settings, duration |
+### Timeline Panel
+- Multi-track editor
+- Composition tabs
+- Playback controls
+- Ruler and tracks
 
-### Project Name
-- Displayed at left of menu bar
-- Logo removed for cleaner look
-- Indicates current project
+### Media Panel
+- Media browser
+- Folder organization
+- Composition list
+- Add dropdown
 
-### Panel Visibility Toggles
-View menu contains checkboxes for each panel:
-- Toggle panels on/off
-- Quick access to any panel
-- Persisted in layout
+### Effects Panel
+- Effect list
+- Parameter sliders
+- Blend mode selector
+
+### Clip Properties Panel
+- Transform controls
+- Position, Scale, Rotation
+- Opacity slider
+
+### AI Chat Panel
+- Chat interface
+- Model selector
+- Default tab position
+
+### Analysis Panel
+- Real-time values
+- Analysis graphs
+- Per-clip data
+
+### Audio Panel
+- Volume slider
+- 10-band EQ
+- Keyframe toggles
+
+### Export Panel
+- Export settings
+- Resolution options
+- Progress indicator
+
+### Transcript Panel
+- Word-level transcript
+- Real-time highlighting
+- Editable entries
+
+### Multicam Panel
+- Camera management
+- Sync controls
+- EDL generation
+
+### Layer Panel
+- Layer list
+- Visibility toggles
+- Reordering
 
 ---
 
 ## Dock Layouts
 
-### Default Layout
-3-column configuration:
+### Default Layout (3-column)
 ```
 ┌─────────────────────────────────────────┐
 │              Menu Bar                    │
@@ -87,131 +157,114 @@ View menu contains checkboxes for each panel:
 └─────────────────────────────────────────┘
 ```
 
-### Saving Layouts
-- Layout auto-saved to localStorage
+### Layout Persistence
+- Auto-saved to localStorage
 - Survives page refresh
 - Multiple preview panels preserved
 
-### Minimum Panel Sizes
-- Panels have minimum dimensions
-- Prevents collapsing too small
-- Maintains usability
+### Layout Actions
+| Action | Location |
+|--------|----------|
+| Save as Default | View menu |
+| Reset Layout | View menu |
+
+### Panel Visibility
+View menu → Panels:
+- Checkbox for each panel type
+- Toggle panels on/off
 
 ---
 
-## Panel Types
+## MIDI Control
 
-### Preview Panel
-- Canvas for composition output
-- Composition selector dropdown
-- Close button
-- Edit mode toggle
+### Enabling MIDI
+Window menu → MIDI Control
 
-### Timeline Panel
-- Multi-track editor
-- Composition tabs
-- Playback controls
-- Ruler and tracks
+### Requirements
+- Browser Web MIDI API support
+- MIDI device connected
+- Permission granted
 
-### Media Panel
-- Media browser
-- Folder organization
-- Composition list
-- Add button/dropdown
+### Status Display
+```
+✓ MIDI Control (N devices)
+```
 
-### Effects Panel
-- Effect list
-- Parameter controls
-- Add effect buttons
-
-### Clip Properties Panel
-- Transform controls
-- Position, Scale, Rotation
-- Opacity slider
-- Blend mode selector
-
-### AI Chat Panel
-- Chat interface
-- Model selector
-- Message history
-- Default tab position
-
-### Analysis Panel
-- Real-time values
-- Analysis graphs
-- Per-clip data
-
-### Export Panel
-- Export settings
-- Resolution options
-- Format selection
-- Export button
+### Device Discovery
+- Automatic device detection
+- Shows device count when enabled
 
 ---
 
-## Workspace
+## Resolution Settings
 
-### Context Menus
-- Right-click for context menus
+### Output Resolution
+View menu → Resolution:
+| Preset | Dimensions |
+|--------|------------|
+| 1080p | 1920×1080 |
+| 720p | 1280×720 |
+| 4K | 3840×2160 |
+| 16:10 | 1920×1200 |
+| 4:3 | 1024×768 |
+
+### Setting Resolution
+```typescript
+setResolution(width, height)
+```
+
+---
+
+## Settings Dialog
+
+### Opening
+Edit menu → Settings
+
+### Contents
+- API key management
+- Transcription provider
+- Language selection
+- Thumbnail/waveform toggles
+
+### Storage
+Settings persisted in localStorage.
+
+---
+
+## Status Indicator
+
+### WebGPU Status
+Top-right of toolbar:
+```
+● WebGPU Ready  (green)
+○ Loading...    (gray)
+```
+
+---
+
+## Context Menus
+
+### Behavior
+- Right-click to open
 - Stay within viewport bounds
-- Solid backgrounds for readability
-
-### Dropdown Menus
-- Stay visible properly
-- Account for screen edges
+- Solid backgrounds
 - Close on outside click
 
-### Accent Colors
-- Main accent: Grey
-- Timeline selection: Blue
-- Consistent throughout UI
-
-### Toolbar
-Combined toolbar row:
-- Composition tabs
-- Playback controls
-- Zoom controls
-- Fit button
-
----
-
-## Scrolling Behavior
-
-### Timeline Scrolling
-| Input | Action |
-|-------|--------|
-| Scroll wheel | Vertical scroll |
-| Shift + Scroll | Horizontal scroll |
-| Alt + Scroll | Zoom (centered on playhead) |
-
-### Panel Scrolling
-- Standard scroll in panels
-- Overflow handled gracefully
-- Smooth scrolling
-
----
-
-## Sticky Elements
-
-### Timeline Header
-- Sticky when scrolling vertically
-- Track names always visible
-- Controls accessible
-
-### Playhead
-- Extends into header row
-- Always visible position
-- Clear time reference
+### Common Options
+- Rename
+- Delete
+- Settings
+- Context-specific actions
 
 ---
 
 ## Related Features
 
-- [Timeline](./Timeline.md) - Timeline panel details
-- [Preview](./Preview.md) - Preview panel details
+- [Timeline](./Timeline.md) - Timeline panel
+- [Preview](./Preview.md) - Preview panel
 - [Media Panel](./Media-Panel.md) - Media browser
 - [Keyboard Shortcuts](./Keyboard-Shortcuts.md)
 
 ---
 
-*Commits: 5d141c4 through d63e381*
+*Source: `src/components/common/Toolbar.tsx`, `src/components/dock/`, `src/stores/dockStore.ts`*

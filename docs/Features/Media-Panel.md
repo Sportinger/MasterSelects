@@ -2,7 +2,7 @@
 
 [← Back to Index](./README.md)
 
-Import, organize, and manage media assets and compositions.
+Import, organize, and manage media assets with folder structure and proxy generation.
 
 ---
 
@@ -11,8 +11,8 @@ Import, organize, and manage media assets and compositions.
 - [Importing Media](#importing-media)
 - [Folder Organization](#folder-organization)
 - [Compositions](#compositions)
-- [Media Properties](#media-properties)
-- [Drag and Drop](#drag-and-drop)
+- [Proxy Generation](#proxy-generation)
+- [Context Menu](#context-menu)
 
 ---
 
@@ -20,26 +20,17 @@ Import, organize, and manage media assets and compositions.
 
 ### Supported Formats
 
-#### Video
-- MP4, WebM, MOV
-- Most browser-supported codecs
-- Proxy generation for large files
-
-#### Audio
-- WAV, MP3, AAC, OGG
-- Up to 4GB file size
-- Waveform generation
-
-#### Images
-- PNG, JPG, GIF, WebP
-- Static images become clips
-- Duration configurable
+| Type | Formats |
+|------|---------|
+| **Video** | MP4, WebM, MOV |
+| **Audio** | WAV, MP3, AAC, OGG (up to 4GB) |
+| **Image** | PNG, JPG, GIF, WebP |
 
 ### Import Methods
 
 #### Add Dropdown
-1. Click "Add" button in Media Panel
-2. Select file type
+1. Click "Add" button
+2. Select: Import Media, New Composition, New Folder
 3. Choose files from picker
 
 #### Drag and Drop
@@ -47,84 +38,159 @@ Import, organize, and manage media assets and compositions.
 - Multiple files supported
 - Auto-organizes by type
 
+### File System Access API
+When supported (Chrome/Edge):
+- Native file picker
+- Persistent file handles
+- Path information available
+
 ### Large File Handling
-- Files >500MB skip thumbnail/waveform generation
-- Preserves performance
-- Can manually trigger generation later
+| Size | Behavior |
+|------|----------|
+| < 500MB | Full thumbnails/waveforms |
+| > 500MB | Skip auto-generation |
+| > 4GB | Audio waveform skipped |
 
 ---
 
 ## Folder Organization
 
 ### Creating Folders
-1. Click "Add" → "New Folder"
-2. Or right-click → "New Folder"
+1. Add dropdown → New Folder
+2. Or right-click → New Folder
 3. Name the folder
 
-### Organizing Media
-- **Drag and drop** media into folders
-- Nest folders for hierarchy
-- Collapse/expand folder tree
-
 ### Folder Features
-- Visual folder icons
-- Expandable tree view
-- Context menu operations
+- **Nested folders** supported
+- **Drag-and-drop** items into folders
+- **Expand/collapse** tree view
+- **Cycle detection** prevents invalid nesting
+
+### Operations
+```typescript
+createFolder(name, parentId?)  // Create folder
+removeFolder(id)               // Delete (moves children to parent)
+renameFolder(id, name)         // Rename
+toggleFolderExpanded(id)       // Toggle expand
+moveToFolder(itemIds[], folderId) // Move items
+```
 
 ---
 
 ## Compositions
 
 ### Creating Compositions
-1. Click `+` button in Media Panel
-2. Set composition name
-3. Set duration
-4. Composition appears in panel
+1. Add dropdown → Composition
+2. Configure settings:
+   - Name
+   - Width (1-7680)
+   - Height (1-4320)
+   - Frame rate
 
-### Composition Properties
-- **Name** - Display name
-- **Duration** - Length in seconds (editable)
-- **Resolution** - Output dimensions
+### Frame Rate Options
+```
+23.976, 24, 25, 29.97, 30, 50, 59.94, 60 fps
+```
 
-### Composition Settings Dialog
-Access via right-click → "Composition Settings":
-- Edit duration
-- Change resolution
-- Rename composition
+### Composition Operations
+```typescript
+createComposition(name, settings?)
+duplicateComposition(id)        // Creates "Name Copy"
+removeComposition(id)
+updateComposition(id, updates)
+openCompositionTab(id)          // Edit in timeline
+closeCompositionTab(id)
+```
 
 ### Nested Compositions
 - Drag composition to timeline
-- Creates composition clip
 - Double-click to edit contents
 - Changes reflect in parent
 
 ---
 
-## Media Properties
+## Proxy Generation
 
-### Viewing Properties
-Select media item to see:
-- File name
-- Duration
-- Resolution
-- File size
-- Format
+### GPU-Accelerated Proxies
+For large video files:
+1. Right-click video
+2. Select "Generate Proxy"
+3. Choose storage folder (first time)
 
-### Thumbnails
-- Generated automatically for video
-- Shows first frame
-- Skipped for files >500MB
+### Proxy Settings
+```typescript
+FPS: 30
+Quality: 0.92 (WebP)
+Max width: 1920px (maintains aspect)
+```
 
-### Waveforms
-- Generated for audio files
-- Toggle in settings
-- Stored locally
+### Storage Options
+- **IndexedDB** - Browser storage
+- **File System** - External folder (via File System Access API)
+
+### Progress Tracking
+```typescript
+interface MediaFile {
+  proxyStatus: 'none' | 'generating' | 'ready' | 'error';
+  proxyProgress: number; // 0-100
+}
+```
+
+### Visual Indicators
+| Badge | Meaning |
+|-------|---------|
+| **P** | Proxy ready |
+| **⏳ X%** | Generating |
 
 ---
 
-## Drag and Drop
+## Context Menu
 
-### To Timeline
+### Media Files
+- Rename
+- Delete
+- Generate Proxy / Stop Proxy / Proxy Ready
+- Show in Explorer → Raw / Proxy
+
+### Compositions
+- Rename
+- Composition Settings
+- Duplicate
+- Delete
+
+### Folders
+- Rename
+- Delete
+
+---
+
+## Media Properties
+
+### Displayed Info
+- Thumbnail (video/image)
+- Duration (mm:ss)
+- Dimensions (W×H)
+- File name
+
+### Metadata
+```typescript
+interface MediaFile {
+  id: string;
+  name: string;
+  file: File;
+  type: 'video' | 'audio' | 'image';
+  duration?: number;
+  width?: number;
+  height?: number;
+  thumbnailUrl?: string;
+}
+```
+
+---
+
+## Drag to Timeline
+
+### Process
 1. Select media in panel
 2. Drag to timeline
 3. Drop on track or empty area
@@ -132,65 +198,40 @@ Select media item to see:
 ### Drop Behavior
 - Creates clip from media
 - Uses actual video duration
-- Shows loading preview during drop
+- Shows loading preview
 
 ### Track Type Enforcement
-- Video/images → Video tracks only
-- Audio → Audio tracks only
-- Prevents incorrect track placement
-
-### From File System
-- Drag files from OS file manager
-- Drops into Media Panel
-- Also works directly to Timeline
+| Media Type | Allowed Tracks |
+|------------|----------------|
+| Video/Image | Video tracks only |
+| Audio | Audio tracks only |
 
 ---
 
-## Context Menu
-
-Right-click media for options:
-
-| Option | Function |
-|--------|----------|
-| Rename | Change display name |
-| Delete | Remove from project |
-| Move to Folder | Organize media |
-| Generate Waveform | For audio files |
-| Composition Settings | For compositions |
-
----
-
-## Proxy System
-
-### Proxy Generation
-For large video files:
-1. Right-click video
-2. Select "Generate Proxy"
-3. Choose storage folder
-
-### Proxy Folder
-- First-time prompts for folder selection
-- Uses File System Access API
-- Stores proxy files externally
-
-### Proxy Usage
-- Editor uses proxy for preview
-- Full-res used for export
-- Seamless switching
-
----
-
-## Project Persistence
+## Project Integration
 
 ### Auto-Save
-- Media references saved to IndexedDB
-- Survives page refresh
-- Includes folder structure
+Media references saved with project to IndexedDB.
+
+### Restoration
+On project load:
+- Media files reconstructed from IndexedDB
+- Blob URLs regenerated
+- Folder structure restored
 
 ### Media File IDs
 - Each media has unique ID
 - Clips reference media by ID
-- Enables restore on reload
+- Survives project reload
+
+---
+
+## Not Implemented
+
+- Cloud storage integration
+- Asset library across projects
+- Batch import settings
+- Media relinking dialog
 
 ---
 
@@ -198,9 +239,9 @@ For large video files:
 
 - [Timeline](./Timeline.md) - Using media in edits
 - [Audio](./Audio.md) - Audio media handling
+- [Project Persistence](./Project-Persistence.md) - Saving
 - [Export](./Export.md) - Rendering output
-- [UI Panels](./UI-Panels.md) - Panel system
 
 ---
 
-*Commits: d6e130c through d63e381*
+*Source: `src/components/panels/MediaPanel.tsx`, `src/stores/mediaStore.ts`*
