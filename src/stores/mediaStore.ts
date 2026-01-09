@@ -426,7 +426,7 @@ export const useMediaStore = create<MediaState>()(
         currentProjectName: 'Untitled Project',
         isLoading: false,
         // Proxy system state
-        proxyEnabled: true, // Use proxies for preview by default
+        proxyEnabled: false, // Proxies disabled by default
         proxyGenerationQueue: [],
         currentlyGeneratingProxyId: null,
 
@@ -1242,7 +1242,7 @@ export const useMediaStore = create<MediaState>()(
             expandedFolderIds: [],
             currentProjectId: null,
             currentProjectName: 'Untitled Project',
-            proxyEnabled: true,
+            proxyEnabled: false,
             proxyGenerationQueue: [],
             currentlyGeneratingProxyId: null,
           });
