@@ -224,7 +224,7 @@ export const useTimelineStore = create<TimelineStore>()(
         const { clips } = get();
         const movingClip = clips.find(c => c.id === clipId);
 
-        // Get other clips on the same track (excluding the moving clip and its linked clip)
+        // Get other clips on the TARGET track (excluding the moving clip and its linked clip)
         const otherClips = clips.filter(c =>
           c.trackId === trackId &&
           c.id !== clipId &&
@@ -232,6 +232,8 @@ export const useTimelineStore = create<TimelineStore>()(
         ).sort((a, b) => a.startTime - b.startTime);
 
         const desiredEndTime = desiredStartTime + duration;
+
+        console.log('[Resistance] Checking track:', trackId, 'otherClips:', otherClips.length, 'desiredTime:', desiredStartTime, '-', desiredEndTime);
 
         // Find if desired position overlaps with any clip
         let overlappingClip: TimelineClip | null = null;

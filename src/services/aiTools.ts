@@ -400,6 +400,36 @@ export const AI_TOOLS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'findLowQualitySections',
+      description: 'Find sections in a clip where focus, motion, or brightness is below a threshold. Useful for finding blurry/unfocused parts to cut.',
+      parameters: {
+        type: 'object',
+        properties: {
+          clipId: {
+            type: 'string',
+            description: 'The ID of the clip to analyze',
+          },
+          metric: {
+            type: 'string',
+            enum: ['focus', 'motion', 'brightness'],
+            description: 'Which metric to check (default: focus)',
+          },
+          threshold: {
+            type: 'number',
+            description: 'Threshold value 0-1. Sections BELOW this value are returned. (default: 0.7)',
+          },
+          minDuration: {
+            type: 'number',
+            description: 'Minimum section duration in seconds to include (default: 0.5)',
+          },
+        },
+        required: ['clipId'],
+      },
+    },
+  },
 ];
 
 // ============ TOOL HANDLERS ============
@@ -424,7 +454,7 @@ function formatClipInfo(clip: TimelineClip, track: TimelineTrack | undefined) {
     inPoint: clip.inPoint,
     outPoint: clip.outPoint,
     sourceType: clip.source.type,
-    hasAnalysis: clip.analysisStatus === 'complete',
+    hasAnalysis: clip.analysisStatus === 'ready',
     hasTranscript: !!clip.transcript?.segments?.length,
     // Transform info
     transform: clip.transform,
@@ -766,7 +796,7 @@ export async function executeAITool(toolName: string, args: Record<string, unkno
           return { success: false, error: `Clip not found: ${clipId}` };
         }
 
-        if (clip.analysisStatus !== 'complete' || !clip.analysis) {
+        if (clip.analysisStatus !== 'ready' || !clip.analysis) {
           return {
             success: true,
             data: {
@@ -783,6 +813,7 @@ export async function executeAITool(toolName: string, args: Record<string, unkno
         const frames = clip.analysis.frames;
         const avgMotion = frames.reduce((sum, f) => sum + f.motion, 0) / frames.length;
         const avgBrightness = frames.reduce((sum, f) => sum + f.brightness, 0) / frames.length;
+        const avgFocus = frames.reduce((sum, f) => sum + (f.focus || 0), 0) / frames.length;
         const totalFaces = frames.reduce((sum, f) => sum + (f.faces || 0), 0);
 
         return {
@@ -794,8 +825,11 @@ export async function executeAITool(toolName: string, args: Record<string, unkno
             summary: {
               averageMotion: avgMotion,
               averageBrightness: avgBrightness,
+              averageFocus: avgFocus,
               maxMotion: Math.max(...frames.map(f => f.motion)),
               minMotion: Math.min(...frames.map(f => f.motion)),
+              maxFocus: Math.max(...frames.map(f => f.focus || 0)),
+              minFocus: Math.min(...frames.map(f => f.focus || 0)),
               totalFacesDetected: totalFaces,
             },
             // Include detailed frame data for specific queries
@@ -803,6 +837,7 @@ export async function executeAITool(toolName: string, args: Record<string, unkno
               time: f.time,
               motion: f.motion,
               brightness: f.brightness,
+              focus: f.focus || 0,
               faces: f.faces || 0,
             })),
           },
@@ -913,6 +948,96 @@ export async function executeAITool(toolName: string, args: Record<string, unkno
             silentSections: timelineSilentSections,
             totalSilentTime: silentSections.reduce((sum, s) => sum + s.duration, 0),
             count: silentSections.length,
+          },
+        };
+      }
+
+      case 'findLowQualitySections': {
+        const clipId = args.clipId as string;
+        const metric = (args.metric as string) || 'focus';
+        const threshold = (args.threshold as number) ?? 0.7;
+        const minDuration = (args.minDuration as number) || 0.5;
+
+        const clip = timelineStore.clips.find(c => c.id === clipId);
+        if (!clip) {
+          return { success: false, error: `Clip not found: ${clipId}` };
+        }
+
+        if (clip.analysisStatus !== 'ready' || !clip.analysis?.frames?.length) {
+          return {
+            success: false,
+            error: 'No analysis data available. Run analysis on this clip first.',
+          };
+        }
+
+        const frames = clip.analysis.frames;
+        const lowQualitySections: Array<{ start: number; end: number; duration: number; avgValue: number }> = [];
+
+        // Find contiguous sections below threshold
+        let sectionStart: number | null = null;
+        let sectionValues: number[] = [];
+
+        for (let i = 0; i < frames.length; i++) {
+          const frame = frames[i];
+          const value = metric === 'focus' ? (frame.focus || 0)
+                      : metric === 'motion' ? frame.motion
+                      : frame.brightness;
+
+          if (value < threshold) {
+            if (sectionStart === null) {
+              sectionStart = frame.time;
+            }
+            sectionValues.push(value);
+          } else {
+            // End of low quality section
+            if (sectionStart !== null) {
+              const sectionEnd = frames[i - 1]?.time ?? frame.time;
+              const sectionDuration = sectionEnd - sectionStart;
+              if (sectionDuration >= minDuration) {
+                lowQualitySections.push({
+                  start: sectionStart,
+                  end: sectionEnd,
+                  duration: sectionDuration,
+                  avgValue: sectionValues.reduce((a, b) => a + b, 0) / sectionValues.length,
+                });
+              }
+              sectionStart = null;
+              sectionValues = [];
+            }
+          }
+        }
+
+        // Handle section at the end
+        if (sectionStart !== null) {
+          const sectionEnd = frames[frames.length - 1].time;
+          const sectionDuration = sectionEnd - sectionStart;
+          if (sectionDuration >= minDuration) {
+            lowQualitySections.push({
+              start: sectionStart,
+              end: sectionEnd,
+              duration: sectionDuration,
+              avgValue: sectionValues.reduce((a, b) => a + b, 0) / sectionValues.length,
+            });
+          }
+        }
+
+        // Convert to timeline time
+        const timelineSections = lowQualitySections.map(s => ({
+          ...s,
+          timelineStart: clip.startTime + s.start,
+          timelineEnd: clip.startTime + s.end,
+        }));
+
+        return {
+          success: true,
+          data: {
+            clipId,
+            metric,
+            threshold,
+            minDuration,
+            sections: timelineSections,
+            totalLowQualityTime: lowQualitySections.reduce((sum, s) => sum + s.duration, 0),
+            count: lowQualitySections.length,
           },
         };
       }
