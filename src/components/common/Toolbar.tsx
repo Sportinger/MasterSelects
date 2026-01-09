@@ -234,12 +234,17 @@ export function Toolbar() {
           </button>
           {openMenu === 'edit' && (
             <div className="menu-dropdown">
-              <button className="menu-option" onClick={() => { openSettings(); closeMenu(); }}>
-                <span>Settings...</span>
+              <button className="menu-option" onClick={() => { document.execCommand('copy'); closeMenu(); }}>
+                <span>Copy</span>
+                <span className="shortcut">Ctrl+C</span>
+              </button>
+              <button className="menu-option" onClick={() => { document.execCommand('paste'); closeMenu(); }}>
+                <span>Paste</span>
+                <span className="shortcut">Ctrl+V</span>
               </button>
               <div className="menu-separator" />
-              <button className="menu-option" onClick={() => { resetLayout(); closeMenu(); }}>
-                <span>Reset Layout</span>
+              <button className="menu-option" onClick={() => { openSettings(); closeMenu(); }}>
+                <span>Settings...</span>
               </button>
             </div>
           )}
@@ -300,6 +305,9 @@ export function Toolbar() {
               <div className="menu-separator" />
               <button className="menu-option" onClick={() => { saveLayoutAsDefault(); closeMenu(); }}>
                 <span>Save Layout as Default</span>
+              </button>
+              <button className="menu-option" onClick={() => { resetLayout(); closeMenu(); }}>
+                <span>Reset Layout</span>
               </button>
             </div>
           )}
