@@ -461,9 +461,13 @@ export const useDockStore = create<DockState>()(
           // Find the panel in the layout and activate it
           const result = findPanelAndGroup(layout.root, type);
           if (result) {
-            const panelIndex = result.group.panels.findIndex(p => p.type === type);
-            if (panelIndex >= 0) {
-              setActiveTab(result.groupId, panelIndex);
+            // Find the actual tab group to get the panel index
+            const group = findTabGroupById(layout.root, result.groupId);
+            if (group) {
+              const panelIndex = group.panels.findIndex(p => p.type === type);
+              if (panelIndex >= 0) {
+                setActiveTab(result.groupId, panelIndex);
+              }
             }
           }
 

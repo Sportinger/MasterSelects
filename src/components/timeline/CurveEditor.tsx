@@ -250,6 +250,30 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
     });
   }, [sortedKeyframes]);
 
+  // Handle right-click on bezier handle - reset to default
+  const handleHandleContextMenu = useCallback((e: React.MouseEvent, kf: Keyframe, handleType: 'in' | 'out') => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const kfIndex = sortedKeyframes.findIndex(k => k.id === kf.id);
+    const prevKf = kfIndex > 0 ? sortedKeyframes[kfIndex - 1] : null;
+    const nextKf = kfIndex < sortedKeyframes.length - 1 ? sortedKeyframes[kfIndex + 1] : null;
+
+    // Calculate default handle position (1/3 of the distance to neighboring keyframe)
+    let defaultHandle: BezierHandle;
+    if (handleType === 'in') {
+      const defaultX = prevKf ? -(kf.time - prevKf.time) / 3 : -0.1;
+      const defaultY = prevKf ? -(kf.value - prevKf.value) / 3 : 0;
+      defaultHandle = { x: defaultX, y: defaultY };
+    } else {
+      const defaultX = nextKf ? (nextKf.time - kf.time) / 3 : 0.1;
+      const defaultY = nextKf ? (nextKf.value - kf.value) / 3 : 0;
+      defaultHandle = { x: defaultX, y: defaultY };
+    }
+
+    onUpdateBezierHandle(kf.id, handleType, defaultHandle);
+  }, [sortedKeyframes, onUpdateBezierHandle]);
+
   // Handle mouse move
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!dragState) return;
@@ -449,6 +473,7 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
                 r={BEZIER_HANDLE_SIZE / 2}
                 className="curve-editor-handle"
                 onMouseDown={(e) => handleHandleMouseDown(e, kf, 'in')}
+                onContextMenu={(e) => handleHandleContextMenu(e, kf, 'in')}
               />
             )}
             {showHandleOut && (
@@ -458,6 +483,7 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
                 r={BEZIER_HANDLE_SIZE / 2}
                 className="curve-editor-handle"
                 onMouseDown={(e) => handleHandleMouseDown(e, kf, 'out')}
+                onContextMenu={(e) => handleHandleContextMenu(e, kf, 'out')}
               />
             )}
 
