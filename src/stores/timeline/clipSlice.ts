@@ -165,11 +165,14 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
           const currentClips = get().clips;
           set({
             clips: currentClips.map(c => {
-              if (c.id !== clipId) return c;
+              if (c.id !== clipId || !c.source) return c;
               return {
                 ...c,
                 source: {
-                  ...c.source,
+                  type: c.source.type,
+                  videoElement: c.source.videoElement,
+                  naturalDuration: c.source.naturalDuration,
+                  mediaFileId: c.source.mediaFileId,
                   webCodecsPlayer,
                 },
               };
