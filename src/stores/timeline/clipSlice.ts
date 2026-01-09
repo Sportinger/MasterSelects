@@ -8,9 +8,17 @@ import { generateWaveform, generateThumbnails, getDefaultEffectParams } from './
 
 export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
   addClip: async (trackId, file, startTime, providedDuration, mediaFileId) => {
-    const isVideo = file.type.startsWith('video/');
-    const isAudio = file.type.startsWith('audio/');
-    const isImage = file.type.startsWith('image/');
+    // Detect file type - use MIME type with fallback to extension
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const audioExtensions = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'];
+    const videoExtensions = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'wmv', 'm4v', 'flv'];
+    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
+
+    const isVideo = file.type.startsWith('video/') || videoExtensions.includes(ext);
+    const isAudio = file.type.startsWith('audio/') || audioExtensions.includes(ext);
+    const isImage = file.type.startsWith('image/') || imageExtensions.includes(ext);
+
+    console.log(`[Timeline] Adding file: ${file.name}, type: ${file.type}, ext: ${ext}, isAudio: ${isAudio}, isVideo: ${isVideo}`);
 
     // Validate track type matches media type
     const { tracks } = get();
