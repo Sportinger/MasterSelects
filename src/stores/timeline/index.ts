@@ -223,6 +223,7 @@ export const useTimelineStore = create<TimelineStore>()(
       getPositionWithResistance: (clipId: string, desiredStartTime: number, trackId: string, duration: number) => {
         const { clips } = get();
         const movingClip = clips.find(c => c.id === clipId);
+        const originalStartTime = movingClip?.startTime ?? desiredStartTime;
 
         // Get other clips on the TARGET track (excluding the moving clip and its linked clip)
         const otherClips = clips.filter(c =>
@@ -233,13 +234,10 @@ export const useTimelineStore = create<TimelineStore>()(
 
         const desiredEndTime = desiredStartTime + duration;
 
-        console.log('[Resistance] Checking track:', trackId, 'otherClips:', otherClips.length, 'desiredTime:', desiredStartTime, '-', desiredEndTime);
-
-        // Find if desired position overlaps with any clip
+        // Find the clip that would be overlapped
         let overlappingClip: TimelineClip | null = null;
         for (const clip of otherClips) {
           const clipEnd = clip.startTime + clip.duration;
-          // Check if time ranges overlap
           if (!(desiredEndTime <= clip.startTime || desiredStartTime >= clipEnd)) {
             overlappingClip = clip;
             break;
@@ -251,51 +249,35 @@ export const useTimelineStore = create<TimelineStore>()(
           return { startTime: Math.max(0, desiredStartTime), forcingOverlap: false };
         }
 
-        // There's an overlap - apply resistance based on nearest edge
         const overlappingEnd = overlappingClip.startTime + overlappingClip.duration;
 
-        // Calculate distance to each edge of the overlapping clip
-        const distToLeftEdge = Math.abs(desiredEndTime - overlappingClip.startTime);
-        const distToRightEdge = Math.abs(desiredStartTime - overlappingEnd);
+        // Calculate which non-overlapping position is closer (before or after the other clip)
+        const snapBeforePosition = overlappingClip.startTime - duration; // Place our clip END at other clip START
+        const snapAfterPosition = overlappingEnd; // Place our clip START at other clip END
 
-        // Find which edge is closer and use that for resistance
-        const nearestEdgeIsLeft = distToLeftEdge < distToRightEdge;
+        const distToSnapBefore = Math.abs(desiredStartTime - snapBeforePosition);
+        const distToSnapAfter = Math.abs(desiredStartTime - snapAfterPosition);
 
-        console.log('[Resistance] Overlap detected!', {
-          movingClip: movingClip?.name,
-          overlappingWith: overlappingClip.name,
-          nearestEdge: nearestEdgeIsLeft ? 'LEFT' : 'RIGHT',
-          distToLeftEdge,
-          distToRightEdge,
+        // Choose the closer snap position
+        const snapToPosition = distToSnapBefore < distToSnapAfter ? snapBeforePosition : snapAfterPosition;
+        const distToSnap = Math.min(distToSnapBefore, distToSnapAfter);
+
+        console.log('[Resistance] Overlap!', {
+          clip: movingClip?.name,
+          with: overlappingClip.name,
+          snapTo: snapToPosition.toFixed(2),
+          distToSnap: distToSnap.toFixed(2),
           threshold: OVERLAP_RESISTANCE_SECONDS,
         });
 
-        if (nearestEdgeIsLeft) {
-          // Nearest edge is the left (start) of the overlapping clip
-          // User's clip end is overlapping with the start of the other clip
-          if (distToLeftEdge < OVERLAP_RESISTANCE_SECONDS) {
-            // Within resistance zone - snap clip end to other clip's start
-            const snappedStart = Math.max(0, overlappingClip.startTime - duration);
-            console.log('[Resistance] RESISTING at LEFT edge! Snapping to:', snappedStart);
-            return { startTime: snappedStart, forcingOverlap: false };
-          } else {
-            // User has broken through resistance - allow overlap
-            console.log('[Resistance] BREAKTHROUGH at LEFT edge!');
-            return { startTime: Math.max(0, desiredStartTime), forcingOverlap: true };
-          }
+        // If the user hasn't dragged far enough past the snap point, resist (snap back)
+        if (distToSnap < OVERLAP_RESISTANCE_SECONDS) {
+          console.log('[Resistance] RESISTING! Snapping to:', snapToPosition.toFixed(2));
+          return { startTime: Math.max(0, snapToPosition), forcingOverlap: false };
         } else {
-          // Nearest edge is the right (end) of the overlapping clip
-          // User's clip start is overlapping with the end of the other clip
-          if (distToRightEdge < OVERLAP_RESISTANCE_SECONDS) {
-            // Within resistance zone - snap clip start to other clip's end
-            const snappedStart = Math.max(0, overlappingEnd);
-            console.log('[Resistance] RESISTING at RIGHT edge! Snapping to:', snappedStart);
-            return { startTime: snappedStart, forcingOverlap: false };
-          } else {
-            // User has broken through resistance - allow overlap
-            console.log('[Resistance] BREAKTHROUGH at RIGHT edge!');
-            return { startTime: Math.max(0, desiredStartTime), forcingOverlap: true };
-          }
+          // User has pushed through the resistance - allow overlap
+          console.log('[Resistance] BREAKTHROUGH! Allowing overlap');
+          return { startTime: Math.max(0, desiredStartTime), forcingOverlap: true };
         }
       },
 
