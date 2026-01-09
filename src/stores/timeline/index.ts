@@ -661,6 +661,32 @@ export const useTimelineStore = create<TimelineStore>()(
             clips: [...state.clips, clip],
           }));
 
+          // Check for cached analysis if clip doesn't have analysis but has mediaFileId
+          if (!serializedClip.analysis && serializedClip.mediaFileId) {
+            projectDB.getAnalysis(
+              serializedClip.mediaFileId,
+              serializedClip.inPoint,
+              serializedClip.outPoint
+            ).then(cachedAnalysis => {
+              if (cachedAnalysis) {
+                console.log('[Timeline] Loaded analysis from cache for:', serializedClip.name);
+                const analysis: ClipAnalysis = {
+                  frames: cachedAnalysis.frames as FrameAnalysisData[],
+                  sampleInterval: cachedAnalysis.sampleInterval,
+                };
+                set(state => ({
+                  clips: state.clips.map(c =>
+                    c.id === clip.id
+                      ? { ...c, analysis, analysisStatus: 'ready' as const }
+                      : c
+                  ),
+                }));
+              }
+            }).catch(err => {
+              console.warn('[Timeline] Failed to load cached analysis:', err);
+            });
+          }
+
           // Load media element async
           const type = serializedClip.sourceType;
           const fileUrl = URL.createObjectURL(mediaFile.file);
