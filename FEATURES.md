@@ -13,7 +13,8 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 - **Linked Clips**: Audio/Video bleiben beim Verschieben synchron
 - **Clip-Splitting**: Clips teilen mit C-Taste (splittet ALLE Clips am Playhead, oder nur ausgewählte)
 - **Playhead**: Klicken zum Springen, Ziehen zum Scrubben
-- **Zoom**: Dynamischer Zoom mit Scroll-Rad
+- **Zoom**: Dynamischer Zoom mit Alt+Scroll-Rad (0.1 bis 200 px/s)
+- **Fit Button**: Zoom anpassen um ganze Komposition zu sehen
 - **Track-Höhe**: Individuelle Track-Höhen anpassbar
 - **Track Solo/Mute**: Audio-Tracks stumm schalten oder solo hören
 
