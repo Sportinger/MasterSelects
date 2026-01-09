@@ -171,30 +171,66 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
   // If compositionId is set to ANY value, use independent render loop with that composition's data
   const isIndependentComp = compositionId !== null;
 
-  // Register canvas with engine when ready (only for active comp previews)
+  // Track which registration mode is active to properly clean up on change
+  const registrationModeRef = useRef<'main' | 'independent' | null>(null);
+
+  // Register/unregister canvas based on mode
+  // CRITICAL: Must properly clean up when switching between modes to prevent
+  // canvas being in both maps (which causes main loop to override independent render)
   useEffect(() => {
-    if (isEngineReady && canvasRef.current && !isIndependentComp) {
-      registerPreviewCanvas(panelId, canvasRef.current);
+    if (!isEngineReady || !canvasRef.current) {
+      return;
     }
+
+    // Determine target mode
+    const targetMode = isIndependentComp ? 'independent' : 'main';
+    const currentMode = registrationModeRef.current;
+
+    // If mode hasn't changed and we're already registered, nothing to do
+    if (currentMode === targetMode) {
+      return;
+    }
+
+    // Clean up previous registration
+    if (currentMode === 'main') {
+      console.log(`[Preview ${panelId}] Unregistering from main canvas map`);
+      unregisterPreviewCanvas(panelId);
+    } else if (currentMode === 'independent') {
+      console.log(`[Preview ${panelId}] Unregistering from independent canvas map`);
+      unregisterIndependentPreviewCanvas(panelId);
+    }
+
+    // Register with new mode
+    if (targetMode === 'main') {
+      console.log(`[Preview ${panelId}] Registering with main canvas map (Active mode)`);
+      registerPreviewCanvas(panelId, canvasRef.current);
+    } else {
+      console.log(`[Preview ${panelId}] Registering with independent canvas map (composition: ${compositionId})`);
+      registerIndependentPreviewCanvas(panelId, canvasRef.current);
+    }
+
+    registrationModeRef.current = targetMode;
+
+    // Cleanup on unmount
     return () => {
-      if (!isIndependentComp) {
+      const mode = registrationModeRef.current;
+      if (mode === 'main') {
         unregisterPreviewCanvas(panelId);
+      } else if (mode === 'independent') {
+        unregisterIndependentPreviewCanvas(panelId);
       }
+      registrationModeRef.current = null;
     };
-  }, [isEngineReady, panelId, isIndependentComp, registerPreviewCanvas, unregisterPreviewCanvas]);
+  }, [isEngineReady, isIndependentComp, panelId, compositionId, registerPreviewCanvas, unregisterPreviewCanvas, registerIndependentPreviewCanvas, unregisterIndependentPreviewCanvas]);
 
-  // For independent composition: prepare and render it
+  // For independent composition: prepare it for rendering
   useEffect(() => {
-    console.log(`[Preview ${panelId}] Independent effect - isIndependentComp: ${isIndependentComp}, compositionId: ${compositionId}, isEngineReady: ${isEngineReady}`);
-
-    if (!isIndependentComp || !compositionId || !isEngineReady || !canvasRef.current) {
+    if (!isIndependentComp || !compositionId || !isEngineReady) {
       setCompReady(false);
       return;
     }
 
-    // Register canvas for INDEPENDENT rendering (NOT rendered by main loop)
-    registerIndependentPreviewCanvas(panelId, canvasRef.current);
-    console.log(`[Preview ${panelId}] Registered independent canvas, preparing composition...`);
+    console.log(`[Preview ${panelId}] Preparing composition: ${compositionId}`);
 
     // Prepare the composition
     compositionRenderer.prepareComposition(compositionId).then((ready) => {
@@ -202,11 +238,8 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
       setCompReady(ready);
     });
 
-    return () => {
-      unregisterIndependentPreviewCanvas(panelId);
-      // Note: Don't dispose composition here - it might be used by other previews
-    };
-  }, [isIndependentComp, compositionId, isEngineReady, panelId, registerIndependentPreviewCanvas, unregisterIndependentPreviewCanvas]);
+    // Note: Don't dispose composition here - it might be used by other previews
+  }, [isIndependentComp, compositionId, isEngineReady, panelId]);
 
   // Render loop for independent compositions
   // Uses the composition's OWN timeline data, completely decoupled from active timeline
