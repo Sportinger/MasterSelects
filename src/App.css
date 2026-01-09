@@ -3537,10 +3537,15 @@ input[type="checkbox"] {
   position: absolute;
   top: 8px;
   left: 8px;
+  right: 8px;
   display: flex;
   align-items: center;
   gap: 8px;
   z-index: 20;
+}
+
+.preview-controls-spacer {
+  flex: 1;
 }
 
 .preview-edit-btn {

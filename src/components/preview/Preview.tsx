@@ -637,7 +637,7 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
       onMouseLeave={handleMouseUp}
       style={{ cursor: isPanning ? 'grabbing' : (editMode ? 'crosshair' : 'default') }}
     >
-      {/* Edit mode toggle button */}
+      {/* Controls bar */}
       <div className="preview-controls">
         <button
           className={`preview-edit-btn ${editMode ? 'active' : ''}`}
@@ -658,10 +658,7 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
             </button>
           </>
         )}
-      </div>
-
-      {/* Composition selector and add preview button */}
-      <div className="preview-comp-selector">
+        <div className="preview-controls-spacer" />
         <div className="preview-comp-dropdown-wrapper">
           <button
             className="preview-comp-dropdown-btn"
