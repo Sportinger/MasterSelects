@@ -141,44 +141,78 @@ WGSL fragment shaders in `effects.wgsl`:
 
 ```
 src/
+├── components/
+│   ├── timeline/            # Timeline editor (modular)
+│   │   ├── Timeline.tsx     # Main orchestrator
+│   │   ├── TimelineRuler.tsx
+│   │   ├── TimelineTrack.tsx
+│   │   ├── TimelineClip.tsx
+│   │   ├── TimelineKeyframes.tsx
+│   │   ├── TimelineControls.tsx
+│   │   └── TimelineHeader.tsx
+│   ├── panels/              # Dock panel contents
+│   │   ├── MediaPanel.tsx   # Media browser
+│   │   ├── LayerPanel.tsx   # Slot grid UI
+│   │   ├── EffectsPanel.tsx # Effect controls
+│   │   └── ClipPropertiesPanel.tsx
+│   ├── preview/
+│   │   ├── Preview.tsx      # WebGPU canvas
+│   │   └── MaskOverlay.tsx  # Mask editing
+│   ├── export/
+│   │   ├── ExportDialog.tsx
+│   │   └── ExportPanel.tsx
+│   ├── common/
+│   │   └── Toolbar.tsx
+│   └── dock/                # Dockable panel system
+│
 ├── engine/
-│   ├── WebGPUEngine.ts      # Core GPU renderer (1000+ lines)
-│   │   ├── Singleton with HMR preservation
-│   │   ├── Ping-pong buffer management
-│   │   ├── Pipeline creation (composite, external, output)
-│   │   ├── Bind group caching
-│   │   └── Per-layer uniform buffers
-│   │
-│   └── WebCodecsPlayer.ts   # Hardware video decoder
-│       ├── MP4Box integration
-│       ├── VideoDecoder configuration
-│       ├── Frame extraction & timing
-│       └── Seek support
+│   ├── core/                # GPU initialization
+│   │   ├── WebGPUContext.ts
+│   │   └── types.ts
+│   ├── pipeline/            # Render pipelines
+│   │   ├── CompositorPipeline.ts
+│   │   ├── EffectsPipeline.ts
+│   │   └── OutputPipeline.ts
+│   ├── texture/             # Texture management
+│   │   ├── TextureManager.ts
+│   │   ├── MaskTextureManager.ts
+│   │   └── ScrubbingCache.ts
+│   ├── video/
+│   │   ├── VideoFrameManager.ts
+│   │   └── WebCodecsPlayer.ts
+│   ├── export/
+│   │   └── FrameExporter.ts
+│   └── WebGPUEngine.ts      # Facade orchestrating modules
 │
 ├── stores/
-│   ├── mixerStore.ts        # Main application state
-│   │   ├── Layer CRUD operations
-│   │   ├── Grid management
-│   │   ├── Slot groups
-│   │   └── MIDI mappings
-│   │
-│   └── timelineStore.ts     # Timeline editing state
+│   ├── timeline/            # Timeline state (Zustand slices)
+│   │   ├── index.ts         # Combined store
+│   │   ├── types.ts
+│   │   ├── constants.ts
+│   │   ├── trackSlice.ts
+│   │   ├── clipSlice.ts
+│   │   ├── playbackSlice.ts
+│   │   └── keyframeSlice.ts
+│   ├── mixerStore.ts        # Layer, effect, grid state
+│   ├── mediaStore.ts        # Media browser state
+│   ├── dockStore.ts         # UI layout state
+│   └── historyStore.ts      # Undo/redo
 │
 ├── shaders/
 │   ├── composite.wgsl       # Layer blending shader
 │   ├── effects.wgsl         # Effect processing shaders
 │   └── output.wgsl          # Final canvas output
 │
-├── components/
-│   ├── Preview.tsx          # WebGPU canvas display
-│   ├── LayerPanel.tsx       # Slot grid UI
-│   ├── EffectsPanel.tsx     # Effect parameter controls
-│   ├── Toolbar.tsx          # Top toolbar
-│   └── dock/                # Dockable panel system
-│
 ├── hooks/
 │   ├── useEngine.ts         # WebGPU lifecycle
+│   ├── useGlobalHistory.ts  # Global undo/redo
 │   └── useMIDI.ts           # MIDI input handling
+│
+├── services/
+│   ├── proxyGenerator.ts    # Low-res proxy generation
+│   ├── projectDB.ts         # IndexedDB operations
+│   ├── fileSystemService.ts # File System Access API
+│   └── proxyFrameCache.ts   # Frame caching
 │
 └── types/
     ├── index.ts             # Core type definitions

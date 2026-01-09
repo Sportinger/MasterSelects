@@ -15,14 +15,85 @@ npm run build                 # Production build
 npm run lint                  # ESLint check
 ```
 
-## Key Files
+## Project Structure
 
-| File | Purpose |
-|------|---------|
-| `src/engine/WebGPUEngine.ts` | GPU renderer singleton, ping-pong compositing |
-| `src/engine/WebCodecsPlayer.ts` | Hardware video decoding via WebCodecs |
-| `src/stores/mixerStore.ts` | Zustand state (layers, effects, grid) |
-| `src/shaders/*.wgsl` | WGSL shaders (composite, effects, output) |
+```
+src/
+├── components/
+│   ├── timeline/           # Timeline editor components
+│   │   ├── Timeline.tsx    # Main orchestrator
+│   │   ├── TimelineRuler.tsx
+│   │   ├── TimelineTrack.tsx
+│   │   ├── TimelineClip.tsx
+│   │   ├── TimelineKeyframes.tsx
+│   │   ├── TimelineControls.tsx
+│   │   └── TimelineHeader.tsx
+│   ├── panels/             # Dock panel contents
+│   │   ├── MediaPanel.tsx
+│   │   ├── LayerPanel.tsx
+│   │   ├── EffectsPanel.tsx
+│   │   └── ClipPropertiesPanel.tsx
+│   ├── preview/            # Preview & overlay
+│   │   ├── Preview.tsx
+│   │   └── MaskOverlay.tsx
+│   ├── export/             # Export functionality
+│   │   ├── ExportDialog.tsx
+│   │   └── ExportPanel.tsx
+│   ├── common/             # Shared components
+│   │   └── Toolbar.tsx
+│   └── dock/               # Dockable panel system
+│
+├── stores/
+│   ├── timeline/           # Timeline state (slices)
+│   │   ├── index.ts        # Main store export
+│   │   ├── types.ts        # Timeline types
+│   │   ├── constants.ts    # Default values
+│   │   ├── utils.ts        # Helper functions
+│   │   ├── trackSlice.ts
+│   │   ├── clipSlice.ts
+│   │   ├── playbackSlice.ts
+│   │   ├── keyframeSlice.ts
+│   │   └── selectionSlice.ts
+│   ├── mediaStore.ts       # Media & video state
+│   ├── mixerStore.ts       # Layer, effect, grid state
+│   ├── dockStore.ts        # UI layout state
+│   └── historyStore.ts     # Undo/redo
+│
+├── engine/
+│   ├── core/               # GPU initialization
+│   │   ├── WebGPUContext.ts
+│   │   └── types.ts
+│   ├── pipeline/           # Render pipelines
+│   │   ├── CompositorPipeline.ts
+│   │   ├── EffectsPipeline.ts
+│   │   └── OutputPipeline.ts
+│   ├── texture/            # Texture management
+│   │   ├── TextureManager.ts
+│   │   ├── MaskTextureManager.ts
+│   │   └── ScrubbingCache.ts
+│   ├── video/              # Video handling
+│   │   ├── VideoFrameManager.ts
+│   │   └── WebCodecsPlayer.ts
+│   ├── export/
+│   │   └── FrameExporter.ts
+│   └── WebGPUEngine.ts     # Facade (orchestrates modules)
+│
+├── shaders/                # WGSL shaders
+│   ├── composite.wgsl
+│   ├── effects.wgsl
+│   └── output.wgsl
+│
+├── hooks/
+│   ├── useEngine.ts
+│   ├── useGlobalHistory.ts
+│   └── useMIDI.ts
+│
+└── services/
+    ├── proxyGenerator.ts
+    ├── projectDB.ts
+    ├── fileSystemService.ts
+    └── proxyFrameCache.ts
+```
 
 ## Critical Patterns
 
@@ -66,6 +137,20 @@ video.addEventListener('canplaythrough', () => {
 }, { once: true });
 ```
 
+### Zustand Slice Pattern
+
+Store slices follow this pattern:
+
+```typescript
+export const createSlice: SliceCreator<Actions> = (set, get) => ({
+  actionName: (params) => {
+    const state = get();
+    // ... logic
+    set({ /* updates */ });
+  },
+});
+```
+
 ## Texture Types
 
 | Source | Texture Type |
@@ -98,8 +183,8 @@ useEngine hook
 ## Adding Effects
 
 1. Add shader in `src/shaders/effects.wgsl`
-2. Add params type and defaults in `mixerStore.ts:getDefaultEffectParams()`
-3. Add UI controls in `EffectsPanel.tsx`
+2. Add params type and defaults in `src/stores/timeline/utils.ts:getDefaultEffectParams()`
+3. Add UI controls in `src/components/panels/EffectsPanel.tsx`
 
 ## Debugging
 
