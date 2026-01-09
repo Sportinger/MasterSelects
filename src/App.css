@@ -1992,9 +1992,19 @@ input[type="checkbox"] {
 
 .waveform-progress {
   height: 100%;
-  background: linear-gradient(90deg, #ef4444, #f87171);
-  transition: width 0.2s ease-out;
+  background: linear-gradient(90deg, #ef4444, #f87171, #ef4444);
+  background-size: 200% 100%;
+  animation: waveform-progress-pulse 1s ease-in-out infinite;
   box-shadow: 0 0 4px rgba(239, 68, 68, 0.6);
+}
+
+@keyframes waveform-progress-pulse {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
 }
 
 /* Audio clip generating waveform */

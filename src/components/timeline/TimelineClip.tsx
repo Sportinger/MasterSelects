@@ -264,6 +264,7 @@ function TimelineClipComponent({
     hasKeyframes(clip.id) ? 'has-keyframes' : '',
     clip.reversed ? 'reversed' : '',
     clip.transcriptStatus === 'ready' ? 'has-transcript' : '',
+    clip.waveformGenerating ? 'generating-waveform' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -300,6 +301,12 @@ function TimelineClipComponent({
       {isInLinkedGroup && (
         <div className="clip-linked-group-badge" title="Multicam linked group">
           {'\u26D3'}
+        </div>
+      )}
+      {/* Waveform generation progress indicator */}
+      {clip.waveformGenerating && (
+        <div className="clip-waveform-indicator">
+          <div className="waveform-progress" style={{ width: `${clip.waveformProgress || 50}%` }} />
         </div>
       )}
       {/* Audio waveform */}

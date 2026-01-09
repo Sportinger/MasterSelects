@@ -113,6 +113,7 @@ export function Timeline() {
   const openCompositions = getOpenCompositions();
 
   const timelineRef = useRef<HTMLDivElement>(null);
+  const timelineBodyRef = useRef<HTMLDivElement>(null);
   const trackLanesRef = useRef<HTMLDivElement>(null);
 
   // Premiere-style clip dragging state
@@ -1920,8 +1921,12 @@ export function Timeline() {
   );
 
   // Zoom with mouse wheel, also handle vertical scroll
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
+  // Use native event listener with { passive: false } to allow preventDefault
+  useEffect(() => {
+    const el = timelineBodyRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.altKey) {
         e.preventDefault();
         const delta = e.deltaY > 0 ? -5 : 5;
@@ -1933,9 +1938,11 @@ export function Timeline() {
         }
         // Vertical scroll is handled natively by the parent timeline-body container
       }
-    },
-    [zoom, scrollX, setZoom, setScrollX]
-  );
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [zoom, scrollX, setZoom, setScrollX]);
 
   // Render keyframe diamonds
   const renderKeyframeDiamonds = useCallback(
@@ -2096,7 +2103,7 @@ export function Timeline() {
         formatTime={formatTime}
       />
 
-      <div className="timeline-body" onWheel={handleWheel}>
+      <div className="timeline-body" ref={timelineBodyRef}>
         <div className="timeline-header-row">
           <div className="ruler-header">Time</div>
           <div className="time-ruler-wrapper">
