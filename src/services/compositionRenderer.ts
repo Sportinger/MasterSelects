@@ -215,14 +215,30 @@ class CompositionRendererService {
 
     sources.lastAccessTime = Date.now();
 
+    const { activeCompositionId } = useMediaStore.getState();
     const composition = useMediaStore.getState().compositions.find(c => c.id === compositionId);
-    if (!composition?.timelineData) {
+    if (!composition) {
       return [];
     }
 
-    const timelineData = composition.timelineData;
-    const clips = timelineData.clips || [];
-    const tracks = timelineData.tracks || [];
+    // Check if this is the active composition
+    const isActiveComp = compositionId === activeCompositionId;
+
+    let clips: (SerializableClip | TimelineClip)[];
+    let tracks: TimelineTrack[];
+
+    if (isActiveComp) {
+      // Active composition - use live data from timeline store
+      const timelineState = useTimelineStore.getState();
+      clips = timelineState.clips;
+      tracks = timelineState.tracks;
+    } else if (composition.timelineData) {
+      // Non-active composition - use serialized data
+      clips = composition.timelineData.clips || [];
+      tracks = composition.timelineData.tracks || [];
+    } else {
+      return [];
+    }
 
     // Find video tracks (in order for layering)
     const videoTracks = tracks.filter((t: TimelineTrack) => t.type === 'video');
@@ -234,7 +250,7 @@ class CompositionRendererService {
       const track = videoTracks[trackIndex];
 
       // Find clip at current time on this track
-      const clipAtTime = clips.find((c: SerializableClip) =>
+      const clipAtTime = clips.find((c) =>
         c.trackId === track.id &&
         time >= c.startTime &&
         time < c.startTime + c.duration
