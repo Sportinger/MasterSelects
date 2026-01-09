@@ -1948,20 +1948,86 @@ input[type="checkbox"] {
   box-shadow: 0 0 4px rgba(168, 85, 247, 0.6);
 }
 
-/* Analysis overlay */
+/* Analysis overlay - full height graph */
 .clip-analysis-overlay {
   position: absolute;
-  bottom: 3px;
+  top: 18px; /* Below clip name */
+  bottom: 4px;
   left: 0;
   right: 0;
-  height: 12px;
-  z-index: 5;
+  z-index: 3;
   pointer-events: none;
+  overflow: hidden;
 }
 
 .analysis-overlay-canvas {
   display: block;
-  border-radius: 2px;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+}
+
+/* Real-time position indicator on analysis overlay */
+.analysis-position-indicator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.analysis-indicator-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+}
+
+.analysis-indicator-values {
+  position: absolute;
+  top: -16px;
+  left: 4px;
+  display: flex;
+  gap: 6px;
+  font-size: 9px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.analysis-indicator-values .focus-value {
+  color: #4ade80;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+
+.analysis-indicator-values .motion-value {
+  color: #60a5fa;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+
+/* Analysis legend labels on clip */
+.analysis-legend-labels {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  display: flex;
+  gap: 8px;
+  font-size: 8px;
+  font-weight: 500;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.analysis-legend-labels .legend-focus {
+  color: #4ade80;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
+}
+
+.analysis-legend-labels .legend-motion {
+  color: #60a5fa;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
 }
 
 /* Analyzing progress indicator */

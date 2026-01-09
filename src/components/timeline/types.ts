@@ -63,6 +63,7 @@ export interface MarqueeState {
   currentX: number;    // Current X position
   currentY: number;    // Current Y position
   startScrollX: number; // ScrollX at the time of starting selection
+  initialSelection: Set<string>; // Clips that were selected before marquee started (for shift+drag)
 }
 
 // Props for TimelineRuler component

@@ -4,6 +4,7 @@ import { memo, useRef, useEffect } from 'react';
 import type { TimelineClipProps } from './types';
 import { THUMB_WIDTH } from './constants';
 import type { ClipAnalysis } from '../../types';
+import { useTimelineStore } from '../../stores/timeline';
 
 // Render waveform for audio clips using canvas for better performance
 const Waveform = memo(function Waveform({
@@ -77,19 +78,48 @@ const Waveform = memo(function Waveform({
   );
 });
 
-// Render analysis overlay (focus, motion, face indicators)
+// Render analysis overlay as line graphs (focus, motion) with real-time position indicator
 const AnalysisOverlay = memo(function AnalysisOverlay({
   analysis,
   clipDuration,
   clipInPoint,
+  clipStartTime,
   width,
+  height: containerHeight,
 }: {
   analysis: ClipAnalysis;
   clipDuration: number;
   clipInPoint: number;
+  clipStartTime: number;
   width: number;
+  height: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const indicatorRef = useRef<HTMLDivElement>(null);
+
+  // Subscribe to playhead position for real-time indicator
+  const playheadPosition = useTimelineStore((state) => state.playheadPosition);
+
+  // Calculate if playhead is within this clip
+  const playheadInClip = playheadPosition >= clipStartTime && playheadPosition < clipStartTime + clipDuration;
+  const relativePlayhead = playheadPosition - clipStartTime; // Time within clip
+  const playheadX = playheadInClip ? (relativePlayhead / clipDuration) * width : -1;
+
+  // Find current analysis values at playhead
+  const currentValues = playheadInClip ? (() => {
+    const sourceTime = clipInPoint + relativePlayhead;
+    // Find nearest frame
+    let nearest = analysis.frames[0];
+    let minDiff = Math.abs(nearest?.timestamp - sourceTime);
+    for (const frame of analysis.frames) {
+      const diff = Math.abs(frame.timestamp - sourceTime);
+      if (diff < minDiff) {
+        minDiff = diff;
+        nearest = frame;
+      }
+    }
+    return nearest;
+  })() : null;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -99,51 +129,152 @@ const AnalysisOverlay = memo(function AnalysisOverlay({
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const height = 12; // Fixed height for overlay
+    const height = containerHeight;
     canvas.width = width * dpr;
     canvas.height = height * dpr;
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
 
-    const barHeight = 4;
+    // Filter frames within clip range and sort by timestamp
+    const visibleFrames = analysis.frames
+      .filter(frame => {
+        const frameInClip = frame.timestamp - clipInPoint;
+        return frameInClip >= 0 && frameInClip <= clipDuration;
+      })
+      .sort((a, b) => a.timestamp - b.timestamp);
 
-    // Draw bars for each frame in the visible clip range
-    for (const frame of analysis.frames) {
-      // Frame timestamp is relative to source, adjust for clip's inPoint
+    if (visibleFrames.length < 2) return;
+
+    // Draw filled area + line for Focus (green) - from bottom
+    ctx.beginPath();
+    ctx.moveTo(0, height); // Start at bottom-left
+
+    for (let i = 0; i < visibleFrames.length; i++) {
+      const frame = visibleFrames[i];
       const frameInClip = frame.timestamp - clipInPoint;
-      if (frameInClip < 0 || frameInClip > clipDuration) continue;
-
       const x = (frameInClip / clipDuration) * width;
-      const barWidth = Math.max(2, (analysis.sampleInterval / 1000 / clipDuration) * width);
+      // Focus: 0 = bottom, 1 = top (inverted Y)
+      const y = height - (frame.focus * height * 0.8); // Use 80% of height
 
-      // Focus bar (green) - top row
-      if (frame.focus > 0.3) {
-        ctx.fillStyle = `rgba(34, 197, 94, ${frame.focus})`;
-        ctx.fillRect(x, 0, barWidth, barHeight);
-      }
-
-      // Motion bar (blue) - middle row
-      if (frame.motion > 0.1) {
-        ctx.fillStyle = `rgba(59, 130, 246, ${frame.motion})`;
-        ctx.fillRect(x, barHeight, barWidth, barHeight);
-      }
-
-      // Face indicator (yellow) - bottom row
-      if (frame.faceCount > 0) {
-        ctx.fillStyle = `rgba(234, 179, 8, 0.8)`;
-        ctx.fillRect(x, barHeight * 2, barWidth, barHeight);
+      if (i === 0) {
+        ctx.lineTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
       }
     }
-  }, [analysis, clipDuration, clipInPoint, width]);
+
+    // Close the path to bottom-right
+    const lastFrame = visibleFrames[visibleFrames.length - 1];
+    const lastX = ((lastFrame.timestamp - clipInPoint) / clipDuration) * width;
+    ctx.lineTo(lastX, height);
+    ctx.closePath();
+
+    // Fill with semi-transparent green
+    ctx.fillStyle = 'rgba(34, 197, 94, 0.25)';
+    ctx.fill();
+
+    // Draw the focus line on top
+    ctx.beginPath();
+    for (let i = 0; i < visibleFrames.length; i++) {
+      const frame = visibleFrames[i];
+      const frameInClip = frame.timestamp - clipInPoint;
+      const x = (frameInClip / clipDuration) * width;
+      const y = height - (frame.focus * height * 0.8);
+
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.strokeStyle = 'rgba(34, 197, 94, 0.8)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Draw filled area + line for Motion (blue) - from bottom
+    ctx.beginPath();
+    ctx.moveTo(0, height);
+
+    for (let i = 0; i < visibleFrames.length; i++) {
+      const frame = visibleFrames[i];
+      const frameInClip = frame.timestamp - clipInPoint;
+      const x = (frameInClip / clipDuration) * width;
+      // Motion: 0 = bottom, 1 = top
+      const y = height - (frame.motion * height * 0.8);
+
+      if (i === 0) {
+        ctx.lineTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+
+    ctx.lineTo(lastX, height);
+    ctx.closePath();
+
+    // Fill with semi-transparent blue
+    ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
+    ctx.fill();
+
+    // Draw the motion line on top
+    ctx.beginPath();
+    for (let i = 0; i < visibleFrames.length; i++) {
+      const frame = visibleFrames[i];
+      const frameInClip = frame.timestamp - clipInPoint;
+      const x = (frameInClip / clipDuration) * width;
+      const y = height - (frame.motion * height * 0.8);
+
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.strokeStyle = 'rgba(59, 130, 246, 0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Draw face indicators as small yellow dots at the top
+    for (const frame of visibleFrames) {
+      if (frame.faceCount > 0) {
+        const frameInClip = frame.timestamp - clipInPoint;
+        const x = (frameInClip / clipDuration) * width;
+        ctx.beginPath();
+        ctx.arc(x, 4, 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(234, 179, 8, 0.9)';
+        ctx.fill();
+      }
+    }
+  }, [analysis, clipDuration, clipInPoint, width, containerHeight]);
 
   if (!analysis?.frames.length) return null;
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="analysis-overlay-canvas"
-      style={{ width, height: 12 }}
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        className="analysis-overlay-canvas"
+        style={{ width, height: containerHeight }}
+      />
+      {/* Real-time position indicator */}
+      {playheadInClip && currentValues && (
+        <div
+          ref={indicatorRef}
+          className="analysis-position-indicator"
+          style={{ left: playheadX }}
+        >
+          <div className="analysis-indicator-line" />
+          <div className="analysis-indicator-values">
+            <span className="focus-value" title="Focus/Sharpness">
+              {Math.round(currentValues.focus * 100)}%
+            </span>
+            <span className="motion-value" title="Motion">
+              {Math.round(currentValues.motion * 100)}%
+            </span>
+          </div>
+        </div>
+      )}
+    </>
   );
 });
 
@@ -413,16 +544,24 @@ function TimelineClipComponent({
           <div className="transcribing-progress" style={{ width: `${clip.transcriptProgress || 0}%` }} />
         </div>
       )}
-      {/* Analysis overlay */}
+      {/* Analysis overlay - graph showing focus/motion */}
       {clip.analysis && clip.analysisStatus === 'ready' && (
-        <div className="clip-analysis-overlay">
-          <AnalysisOverlay
-            analysis={clip.analysis}
-            clipDuration={displayDuration}
-            clipInPoint={clip.inPoint}
-            width={width}
-          />
-        </div>
+        <>
+          <div className="analysis-legend-labels">
+            <span className="legend-focus">Focus</span>
+            <span className="legend-motion">Motion</span>
+          </div>
+          <div className="clip-analysis-overlay">
+            <AnalysisOverlay
+              analysis={clip.analysis}
+              clipDuration={displayDuration}
+              clipInPoint={clip.inPoint}
+              clipStartTime={displayStartTime}
+              width={width}
+              height={Math.max(24, track.height - 24)}
+            />
+          </div>
+        </>
       )}
       {/* Analyzing indicator */}
       {clip.analysisStatus === 'analyzing' && (

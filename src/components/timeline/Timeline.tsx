@@ -1460,17 +1460,64 @@ export function Timeline() {
         selectClip(null, false);
       }
 
+      // Store the initial selection (for shift+drag to add to it)
+      const initialSelection = e.shiftKey ? new Set(selectedClipIds) : new Set<string>();
+
       setMarquee({
         startX,
         startY,
         currentX: startX,
         currentY: startY,
         startScrollX: scrollX,
+        initialSelection,
       });
 
       e.preventDefault();
     },
-    [clipDrag, clipTrim, markerDrag, isDraggingPlayhead, scrollX, selectClip]
+    [clipDrag, clipTrim, markerDrag, isDraggingPlayhead, scrollX, selectClip, selectedClipIds]
+  );
+
+  // Helper: Calculate which clips intersect with a rectangle
+  const getClipsInRect = useCallback(
+    (left: number, right: number, top: number, bottom: number): Set<string> => {
+      const result = new Set<string>();
+
+      // Convert pixel bounds to time
+      const startTime = pixelToTime(left);
+      const endTime = pixelToTime(right);
+
+      // Calculate which tracks are covered by the rectangle
+      let currentY = 0;
+      const coveredTrackIds = new Set<string>();
+
+      for (const track of tracks) {
+        const trackHeight = getExpandedTrackHeight(track.id, track.height);
+        const trackTop = currentY;
+        const trackBottom = currentY + trackHeight;
+
+        // Check if rectangle overlaps with this track
+        if (bottom > trackTop && top < trackBottom) {
+          coveredTrackIds.add(track.id);
+        }
+
+        currentY += trackHeight;
+      }
+
+      // Find all clips that intersect with the selection rectangle
+      for (const clip of clips) {
+        // Check if clip's track is in covered tracks
+        if (!coveredTrackIds.has(clip.trackId)) continue;
+
+        // Check if clip's time range overlaps with selection time range
+        const clipEnd = clip.startTime + clip.duration;
+        if (clip.startTime < endTime && clipEnd > startTime) {
+          result.add(clip.id);
+        }
+      }
+
+      return result;
+    },
+    [pixelToTime, tracks, clips, getExpandedTrackHeight]
   );
 
   // Marquee selection: mouse move and mouse up handlers
@@ -1484,72 +1531,46 @@ export function Timeline() {
       const currentX = e.clientX - rect.left + scrollX;
       const currentY = e.clientY - rect.top;
 
+      // Update marquee position
       setMarquee((prev) =>
         prev ? { ...prev, currentX, currentY } : null
       );
+
+      // Calculate rectangle bounds
+      const m = marqueeRef.current;
+      if (!m) return;
+
+      const left = Math.min(m.startX, currentX);
+      const right = Math.max(m.startX, currentX);
+      const top = Math.min(m.startY, currentY);
+      const bottom = Math.max(m.startY, currentY);
+
+      // Get clips that intersect with the rectangle
+      const intersectingClips = getClipsInRect(left, right, top, bottom);
+
+      // Combine with initial selection (for shift+drag)
+      const newSelection = new Set([...m.initialSelection, ...intersectingClips]);
+
+      // Update selection: first clear, then select all
+      // We need to set the exact selection, so clear first if needed
+      const currentSelection = useTimelineStore.getState().selectedClipIds;
+
+      // Check if selection changed
+      const selectionChanged =
+        newSelection.size !== currentSelection.size ||
+        [...newSelection].some(id => !currentSelection.has(id));
+
+      if (selectionChanged) {
+        // Clear and rebuild selection
+        selectClip(null, false);
+        for (const clipId of newSelection) {
+          selectClip(clipId, true);
+        }
+      }
     };
 
-    const handleMouseUp = (e: MouseEvent) => {
-      if (!marqueeRef.current) {
-        setMarquee(null);
-        return;
-      }
-
-      const m = marqueeRef.current;
-
-      // Calculate selection rectangle bounds (in pixels, accounting for scroll)
-      const left = Math.min(m.startX, m.currentX);
-      const right = Math.max(m.startX, m.currentX);
-      const top = Math.min(m.startY, m.currentY);
-      const bottom = Math.max(m.startY, m.currentY);
-
-      // Only select if rectangle has some size
-      if (right - left > 5 || bottom - top > 5) {
-        // Convert pixel bounds to time
-        const startTime = pixelToTime(left);
-        const endTime = pixelToTime(right);
-
-        // Calculate which tracks are covered by the rectangle
-        let currentY = 0;
-        const coveredTrackIds = new Set<string>();
-
-        for (const track of tracks) {
-          const trackHeight = getExpandedTrackHeight(track.id, track.height);
-          const trackTop = currentY;
-          const trackBottom = currentY + trackHeight;
-
-          // Check if rectangle overlaps with this track
-          if (bottom > trackTop && top < trackBottom) {
-            coveredTrackIds.add(track.id);
-          }
-
-          currentY += trackHeight;
-        }
-
-        // Find all clips that intersect with the selection rectangle
-        const clipsToSelect: string[] = [];
-
-        for (const clip of clips) {
-          // Check if clip's track is in covered tracks
-          if (!coveredTrackIds.has(clip.trackId)) continue;
-
-          // Check if clip's time range overlaps with selection time range
-          const clipEnd = clip.startTime + clip.duration;
-          if (clip.startTime < endTime && clipEnd > startTime) {
-            clipsToSelect.push(clip.id);
-          }
-        }
-
-        // Select all intersecting clips
-        if (clipsToSelect.length > 0) {
-          // If shift is held, add to selection
-          const addToSelection = e.shiftKey;
-          for (const clipId of clipsToSelect) {
-            selectClip(clipId, addToSelection || clipsToSelect.indexOf(clipId) > 0);
-          }
-        }
-      }
-
+    const handleMouseUp = () => {
+      // Selection is already applied live, just clear marquee
       setMarquee(null);
     };
 
@@ -1559,7 +1580,7 @@ export function Timeline() {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [marquee, scrollX, pixelToTime, tracks, clips, selectClip, getExpandedTrackHeight]);
+  }, [marquee, scrollX, selectClip, getClipsInRect]);
 
   // Get all snap target times
   const getSnapTargetTimes = useCallback(() => {
