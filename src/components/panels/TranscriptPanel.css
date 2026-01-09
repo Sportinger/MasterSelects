@@ -7,6 +7,7 @@
   background: var(--bg-secondary, #1a1a1a);
   color: var(--text-primary, #e0e0e0);
   font-size: 13px;
+  overflow: hidden;
 }
 
 .transcript-header {
@@ -184,6 +185,7 @@
 .transcript-content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 8px 0;
 }
 
@@ -208,6 +210,7 @@
 .transcript-block {
   padding: 10px 12px;
   border-bottom: 1px solid var(--border-color, #2a2a2a);
+  overflow: hidden;
 }
 
 .transcript-block-header {
@@ -238,6 +241,9 @@
 /* Words container */
 .transcript-words {
   line-height: 1.8;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
 }
 
 /* Individual word styling */
