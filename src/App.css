@@ -1840,6 +1840,68 @@ input[type="checkbox"] {
   to { transform: rotate(360deg); }
 }
 
+/* Transcript word markers */
+.clip-transcript-markers {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.transcript-marker {
+  position: absolute;
+  bottom: 0;
+  height: 4px;
+  background: #fbbf24;
+  border-radius: 1px 1px 0 0;
+  opacity: 0.9;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: opacity 0.1s, height 0.1s;
+}
+
+.transcript-marker:hover {
+  opacity: 1;
+  height: 6px;
+  background: #f59e0b;
+}
+
+/* Transcribing progress indicator */
+.clip-transcribing-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 6;
+}
+
+.transcribing-progress {
+  height: 100%;
+  background: linear-gradient(90deg, #a855f7, #d946ef);
+  transition: width 0.2s ease-out;
+  box-shadow: 0 0 4px rgba(168, 85, 247, 0.6);
+}
+
+/* Clip with transcript indicator */
+.timeline-clip.has-transcript::before {
+  content: 'T';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  background: #a855f7;
+  color: #fff;
+  font-size: 8px;
+  font-weight: bold;
+  padding: 1px 3px;
+  border-radius: 2px;
+  z-index: 10;
+}
+
 .timeline-clip.image {
   background: linear-gradient(180deg, #9333ea, #7c3aed);
   border: 1px solid #a855f7;

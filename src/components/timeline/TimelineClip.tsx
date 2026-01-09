@@ -1,8 +1,9 @@
 // TimelineClip component - Clip rendering within tracks
 
-import { memo, useRef, useEffect } from 'react';
+import { memo, useRef, useEffect, useMemo } from 'react';
 import type { TimelineClipProps } from './types';
 import { THUMB_WIDTH } from './constants';
+import type { TranscriptWord } from '../../types';
 
 // Render waveform for audio clips using canvas for better performance
 const Waveform = memo(function Waveform({
@@ -72,6 +73,7 @@ function TimelineClipComponent({
   proxyEnabled,
   proxyStatus,
   proxyProgress,
+  showTranscriptMarkers,
   onMouseDown,
   onContextMenu,
   onTrimStart,
@@ -189,6 +191,7 @@ function TimelineClipComponent({
     isGeneratingProxy ? 'generating-proxy' : '',
     hasKeyframes(clip.id) ? 'has-keyframes' : '',
     clip.reversed ? 'reversed' : '',
+    clip.transcriptStatus === 'ready' ? 'has-transcript' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -256,6 +259,45 @@ function TimelineClipComponent({
         <span className="clip-name">{clip.name}</span>
         <span className="clip-duration">{formatTime(displayDuration)}</span>
       </div>
+      {/* Transcript word markers */}
+      {showTranscriptMarkers && clip.transcript && clip.transcript.length > 0 && (
+        <div className="clip-transcript-markers">
+          {clip.transcript.map((word) => {
+            // Word times are relative to clip's inPoint
+            const wordStartInClip = word.start - clip.inPoint;
+            const wordEndInClip = word.end - clip.inPoint;
+
+            // Only show markers that are visible within the clip's current trim
+            if (wordEndInClip < 0 || wordStartInClip > displayDuration) {
+              return null;
+            }
+
+            // Calculate marker position and width
+            const markerStart = Math.max(0, wordStartInClip);
+            const markerEnd = Math.min(displayDuration, wordEndInClip);
+            const markerLeft = (markerStart / displayDuration) * 100;
+            const markerWidth = ((markerEnd - markerStart) / displayDuration) * 100;
+
+            return (
+              <div
+                key={word.id}
+                className="transcript-marker"
+                style={{
+                  left: `${markerLeft}%`,
+                  width: `${Math.max(0.5, markerWidth)}%`,
+                }}
+                title={word.text}
+              />
+            );
+          })}
+        </div>
+      )}
+      {/* Transcribing indicator */}
+      {clip.transcriptStatus === 'transcribing' && (
+        <div className="clip-transcribing-indicator">
+          <div className="transcribing-progress" style={{ width: `${clip.transcriptProgress || 0}%` }} />
+        </div>
+      )}
       {/* Trim handles */}
       <div
         className="trim-handle left"

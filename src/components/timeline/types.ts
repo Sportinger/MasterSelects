@@ -74,6 +74,7 @@ export interface TimelineControlsProps {
   proxyEnabled: boolean;
   currentlyGeneratingProxyId: string | null;
   mediaFilesWithProxy: number;
+  showTranscriptMarkers: boolean;
   onPlay: () => void;
   onPause: () => void;
   onStop: () => void;
@@ -84,6 +85,7 @@ export interface TimelineControlsProps {
   onClearInOut: () => void;
   onToggleRamPreview: () => void;
   onToggleProxy: () => void;
+  onToggleTranscriptMarkers: () => void;
   onAddVideoTrack: () => void;
   onAddAudioTrack: () => void;
   formatTime: (seconds: number) => string;
@@ -175,6 +177,7 @@ export interface TimelineClipProps {
   proxyEnabled: boolean;
   proxyStatus: 'none' | 'generating' | 'ready' | 'error' | undefined;
   proxyProgress: number;
+  showTranscriptMarkers: boolean;
   onMouseDown: (e: React.MouseEvent) => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onTrimStart: (e: React.MouseEvent, edge: 'left' | 'right') => void;

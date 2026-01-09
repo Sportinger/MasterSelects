@@ -1,7 +1,7 @@
 // Dock system type definitions
 
 // Panel types that can be docked
-export type PanelType = 'preview' | 'effects' | 'timeline' | 'slots' | 'clip-properties' | 'media' | 'export' | 'multicam';
+export type PanelType = 'preview' | 'effects' | 'timeline' | 'slots' | 'clip-properties' | 'media' | 'export' | 'multicam' | 'transcript';
 
 // A panel instance
 export interface DockPanel {
@@ -129,6 +129,13 @@ export const PANEL_CONFIGS: Record<PanelType, PanelConfig> = {
     title: 'Multi-Cam',
     minWidth: 300,
     minHeight: 400,
+    closable: false,
+  },
+  transcript: {
+    type: 'transcript',
+    title: 'Transcript',
+    minWidth: 280,
+    minHeight: 200,
     closable: false,
   },
 };

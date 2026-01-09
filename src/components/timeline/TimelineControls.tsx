@@ -15,6 +15,7 @@ function TimelineControlsComponent({
   proxyEnabled,
   currentlyGeneratingProxyId,
   mediaFilesWithProxy,
+  showTranscriptMarkers,
   onPlay,
   onPause,
   onStop,
@@ -25,6 +26,7 @@ function TimelineControlsComponent({
   onClearInOut,
   onToggleRamPreview,
   onToggleProxy,
+  onToggleTranscriptMarkers,
   onAddVideoTrack,
   onAddAudioTrack,
   formatTime,
@@ -120,6 +122,17 @@ function TimelineControlsComponent({
               )}
             </>
           )}
+        </button>
+        <button
+          className={`btn btn-sm ${showTranscriptMarkers ? 'btn-active' : ''}`}
+          onClick={onToggleTranscriptMarkers}
+          title={
+            showTranscriptMarkers
+              ? 'Transcript markers visible - click to hide'
+              : 'Transcript markers hidden - click to show'
+          }
+        >
+          T {showTranscriptMarkers ? 'On' : 'Off'}
         </button>
       </div>
       <div className="timeline-tracks-controls">

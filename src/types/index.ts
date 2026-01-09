@@ -155,6 +155,19 @@ export interface ClipTransform {
   rotation: { x: number; y: number; z: number };  // degrees
 }
 
+// Transcript word/chunk for speech-to-text
+export interface TranscriptWord {
+  id: string;
+  text: string;
+  start: number;        // Start time in seconds (relative to clip source)
+  end: number;          // End time in seconds (relative to clip source)
+  confidence?: number;  // 0-1 confidence score
+  speaker?: string;     // Speaker label if diarization available
+}
+
+// Transcript status
+export type TranscriptStatus = 'none' | 'transcribing' | 'ready' | 'error';
+
 export interface TimelineClip {
   id: string;
   trackId: string;
@@ -187,6 +200,10 @@ export interface TimelineClip {
   nestedTracks?: TimelineTrack[];  // Tracks from the nested composition
   // Mask support
   masks?: ClipMask[];     // Array of masks applied to this clip
+  // Transcript support
+  transcript?: TranscriptWord[];  // Speech-to-text transcript
+  transcriptStatus?: TranscriptStatus;  // Transcription status
+  transcriptProgress?: number;  // 0-100 progress
 }
 
 export interface TimelineTrack {

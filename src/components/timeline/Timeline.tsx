@@ -128,6 +128,9 @@ export function Timeline() {
   // Context menu state for clip right-click
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const dragCounterRef = useRef(0);
+
+  // Transcript markers visibility toggle
+  const [showTranscriptMarkers, setShowTranscriptMarkers] = useState(true);
   const dragDurationCacheRef = useRef<{ url: string; duration: number } | null>(null);
 
   // Performance: Create lookup maps for O(1) clip/track access
@@ -1977,6 +1980,7 @@ export function Timeline() {
           proxyEnabled={proxyEnabled}
           proxyStatus={mediaFile?.proxyStatus}
           proxyProgress={mediaFile?.proxyProgress || 0}
+          showTranscriptMarkers={showTranscriptMarkers}
           onMouseDown={(e) => handleClipMouseDown(e, clip.id)}
           onContextMenu={(e) => handleClipContextMenu(e, clip.id)}
           onTrimStart={(e, edge) => handleTrimStart(e, clip.id, edge)}
@@ -1998,6 +2002,7 @@ export function Timeline() {
       scrollX,
       proxyEnabled,
       mediaFiles,
+      showTranscriptMarkers,
       handleClipMouseDown,
       handleClipContextMenu,
       handleTrimStart,
@@ -2037,6 +2042,7 @@ export function Timeline() {
         proxyEnabled={proxyEnabled}
         currentlyGeneratingProxyId={currentlyGeneratingProxyId}
         mediaFilesWithProxy={mediaFilesWithProxyCount}
+        showTranscriptMarkers={showTranscriptMarkers}
         onPlay={play}
         onPause={pause}
         onStop={stop}
@@ -2047,6 +2053,7 @@ export function Timeline() {
         onClearInOut={clearInOut}
         onToggleRamPreview={toggleRamPreviewEnabled}
         onToggleProxy={() => setProxyEnabled(!proxyEnabled)}
+        onToggleTranscriptMarkers={() => setShowTranscriptMarkers(!showTranscriptMarkers)}
         onAddVideoTrack={() => addTrack('video')}
         onAddAudioTrack={() => addTrack('audio')}
         formatTime={formatTime}
@@ -2360,6 +2367,29 @@ export function Timeline() {
                 </div>
               )}
 
+              {(isVideo || clip?.source?.type === 'audio') && (
+                <>
+                  <div className="context-menu-separator" />
+                  <div
+                    className={`context-menu-item ${clip?.transcriptStatus === 'transcribing' ? 'disabled' : ''}`}
+                    onClick={async () => {
+                      if (contextMenu.clipId && clip?.transcriptStatus !== 'transcribing') {
+                        const { transcribeClip } = await import('../../services/clipTranscriber');
+                        transcribeClip(contextMenu.clipId);
+                      }
+                      setContextMenu(null);
+                    }}
+                  >
+                    {clip?.transcriptStatus === 'transcribing'
+                      ? `Transcribing... ${clip?.transcriptProgress || 0}%`
+                      : clip?.transcriptStatus === 'ready'
+                      ? 'Re-transcribe'
+                      : 'Transcribe'}
+                  </div>
+                </>
+              )}
+
+              <div className="context-menu-separator" />
               <div
                 className="context-menu-item danger"
                 onClick={() => {
