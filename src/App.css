@@ -1467,35 +1467,39 @@ input, textarea {
 
 .properties-tabs {
   display: flex;
-  gap: 0;
-  background: var(--bg-secondary);
+  background: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-color);
-  padding: 0 8px;
+  min-height: 32px;
+  flex-shrink: 0;
 }
 
 .properties-tabs .tab-btn {
-  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  height: 32px;
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-right: 1px solid var(--border-color);
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
 }
 
 .properties-tabs .tab-btn:hover {
+  background: var(--bg-hover);
   color: var(--text-primary);
-  background: var(--bg-tertiary);
 }
 
 .properties-tabs .tab-btn.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-bottom: 2px solid var(--accent);
+  margin-bottom: -1px;
 }
 
 .properties-tabs .tab-btn .badge {
