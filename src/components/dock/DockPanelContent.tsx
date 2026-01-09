@@ -2,7 +2,7 @@
 
 import type { DockPanel, PreviewPanelData } from '../../types/dock';
 import { Preview } from '../preview';
-import { PropertiesPanel, LayerPanel, MediaPanel, MultiCamPanel, AIChatPanel } from '../panels';
+import { EffectsPanel, PropertiesPanel, LayerPanel, MediaPanel, MultiCamPanel, TranscriptPanel, AnalysisPanel, AIChatPanel } from '../panels';
 import { ExportPanel } from '../export';
 import { Timeline } from '../timeline';
 
@@ -15,6 +15,8 @@ export function DockPanelContent({ panel }: DockPanelContentProps) {
     case 'preview':
       const previewData = panel.data as PreviewPanelData | undefined;
       return <Preview panelId={panel.id} compositionId={previewData?.compositionId ?? null} />;
+    case 'effects':
+      return <EffectsPanel />;
     case 'export':
       return <ExportPanel />;
     case 'clip-properties':
@@ -27,6 +29,10 @@ export function DockPanelContent({ panel }: DockPanelContentProps) {
       return <MediaPanel />;
     case 'multicam':
       return <MultiCamPanel />;
+    case 'transcript':
+      return <TranscriptPanel />;
+    case 'analysis':
+      return <AnalysisPanel />;
     case 'ai-chat':
       return <AIChatPanel />;
     default:

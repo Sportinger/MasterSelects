@@ -84,6 +84,7 @@ export interface TimelineControlsProps {
   playheadPosition: number;
   duration: number;
   zoom: number;
+  snappingEnabled: boolean;
   inPoint: number | null;
   outPoint: number | null;
   ramPreviewEnabled: boolean;
@@ -98,6 +99,7 @@ export interface TimelineControlsProps {
   onStop: () => void;
   onToggleLoop: () => void;
   onSetZoom: (zoom: number) => void;
+  onToggleSnapping: () => void;
   onSetInPoint: () => void;
   onSetOutPoint: () => void;
   onClearInOut: () => void;

@@ -43,6 +43,7 @@ export interface TimelineState {
   duration: number;
   zoom: number;
   scrollX: number;
+  snappingEnabled: boolean;
   isPlaying: boolean;
   isDraggingPlayhead: boolean;
   selectedClipIds: Set<string>;
@@ -122,6 +123,7 @@ export interface PlaybackActions {
   pause: () => void;
   stop: () => void;
   setZoom: (zoom: number) => void;
+  toggleSnapping: () => void;
   setScrollX: (scrollX: number) => void;
   setInPoint: (time: number | null) => void;
   setOutPoint: (time: number | null) => void;

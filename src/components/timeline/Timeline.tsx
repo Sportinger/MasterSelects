@@ -41,6 +41,8 @@ export function Timeline() {
     duration,
     zoom,
     scrollX,
+    snappingEnabled,
+    toggleSnapping,
     isPlaying,
     selectedClipIds,
     inPoint,
@@ -2659,6 +2661,7 @@ export function Timeline() {
         playheadPosition={playheadPosition}
         duration={duration}
         zoom={zoom}
+        snappingEnabled={snappingEnabled}
         inPoint={inPoint}
         outPoint={outPoint}
         ramPreviewEnabled={ramPreviewEnabled}
@@ -2673,6 +2676,7 @@ export function Timeline() {
         onStop={stop}
         onToggleLoop={toggleLoopPlayback}
         onSetZoom={handleSetZoom}
+        onToggleSnapping={toggleSnapping}
         onSetInPoint={setInPointAtPlayhead}
         onSetOutPoint={setOutPointAtPlayhead}
         onClearInOut={clearInOut}

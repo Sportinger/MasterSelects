@@ -81,9 +81,12 @@ export const useTimelineStore = create<TimelineStore>()(
       },
 
       getSnappedPosition: (clipId: string, desiredStartTime: number, trackId: string) => {
-        const { clips } = get();
+        const { clips, snappingEnabled } = get();
         const movingClip = clips.find(c => c.id === clipId);
         if (!movingClip) return { startTime: desiredStartTime, snapped: false };
+
+        // If snapping is disabled, return the desired position without snapping
+        if (!snappingEnabled) return { startTime: Math.max(0, desiredStartTime), snapped: false };
 
         const clipDuration = movingClip.duration;
         const desiredEndTime = desiredStartTime + clipDuration;
@@ -812,6 +815,7 @@ export const useTimelineStore = create<TimelineStore>()(
       duration: 60,
       zoom: 50,
       scrollX: 0,
+      snappingEnabled: true,
       isPlaying: false,
       isDraggingPlayhead: false,
       selectedClipIds: new Set<string>(),

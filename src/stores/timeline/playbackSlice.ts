@@ -36,6 +36,10 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
     set({ zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom)) });
   },
 
+  toggleSnapping: () => {
+    set((state) => ({ snappingEnabled: !state.snappingEnabled }));
+  },
+
   setScrollX: (scrollX) => {
     set({ scrollX: Math.max(0, scrollX) });
   },

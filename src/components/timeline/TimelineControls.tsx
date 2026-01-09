@@ -9,6 +9,7 @@ function TimelineControlsComponent({
   playheadPosition,
   duration,
   zoom,
+  snappingEnabled,
   inPoint,
   outPoint,
   ramPreviewEnabled,
@@ -23,6 +24,7 @@ function TimelineControlsComponent({
   onStop,
   onToggleLoop,
   onSetZoom,
+  onToggleSnapping,
   onSetInPoint,
   onSetOutPoint,
   onClearInOut,
@@ -117,6 +119,16 @@ function TimelineControlsComponent({
         )}
       </div>
       <div className="timeline-zoom">
+        <button
+          className={`btn btn-sm btn-icon ${snappingEnabled ? 'btn-active' : ''}`}
+          onClick={onToggleSnapping}
+          title={snappingEnabled ? 'Snapping enabled - clips snap to edges' : 'Snapping disabled - free positioning'}
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 2L12 6M12 18L12 22M2 12L6 12M18 12L22 12" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </button>
         <button className="btn btn-sm" onClick={() => onSetZoom(zoom - 10)} title="Zoom out">
           {'\u2212'}
         </button>
