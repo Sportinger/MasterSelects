@@ -529,10 +529,6 @@ export function ClipPropertiesPanel() {
 
   return (
     <div className="clip-properties-panel">
-      <div className="panel-header">
-        <h3>{selectedClip.name}</h3>
-      </div>
-
       <div className="properties-content">
         {/* Blend Mode & Opacity */}
         <div className="properties-section">

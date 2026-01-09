@@ -1,11 +1,18 @@
 // Tab group container with tab bar and panel content
 
-import { useCallback, useRef, useEffect, useState } from 'react';
+import { useCallback, useRef, useEffect, useState, useMemo } from 'react';
 import type { DockTabGroup, DockPanel } from '../../types/dock';
 import { useDockStore } from '../../stores/dockStore';
 import { useMediaStore } from '../../stores/mediaStore';
+import { useTimelineStore } from '../../stores/timeline';
 import { DockPanelContent } from './DockPanelContent';
 import { calculateDropPosition } from '../../utils/dockLayout';
+
+// Truncate text with ellipsis
+const truncateText = (text: string, maxLength: number): string => {
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength - 2) + '..';
+};
 
 const HOLD_DURATION = 500; // ms to hold before drag starts
 
@@ -33,6 +40,15 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     closeCompositionTab,
     reorderCompositionTabs
   } = useMediaStore();
+  const { clips, selectedClipIds } = useTimelineStore();
+
+  // Get selected clip name for dynamic tab titles (Properties/Audio panels)
+  const selectedClipName = useMemo(() => {
+    if (selectedClipIds.size === 0) return null;
+    const clipId = [...selectedClipIds][0];
+    const clip = clips.find(c => c.id === clipId);
+    return clip?.name || null;
+  }, [clips, selectedClipIds]);
 
   // State for dragging composition tabs
   const [draggedCompIndex, setDraggedCompIndex] = useState<number | null>(null);
@@ -464,6 +480,12 @@ export function DockTabPane({ group }: DockTabPaneProps) {
             const isFading = holdingTabId === panel.id && holdProgress === 'fading';
             const isDragging = dragState.isDragging && dragState.draggedPanel?.id === panel.id;
 
+            // Dynamic tab title for clip-properties and audio panels
+            let tabTitle = panel.title;
+            if ((panel.type === 'clip-properties' || panel.type === 'audio') && selectedClipName) {
+              tabTitle = truncateText(selectedClipName, 18);
+            }
+
             return (
               <div
                 key={panel.id}
@@ -474,8 +496,9 @@ export function DockTabPane({ group }: DockTabPaneProps) {
                 onMouseDown={(e) => handleTabMouseDown(e, panel, index)}
                 onMouseUp={handleTabMouseUp}
                 onMouseLeave={handleTabMouseLeave}
+                title={panel.type === 'clip-properties' || panel.type === 'audio' ? selectedClipName || panel.title : panel.title}
               >
-                <span className="dock-tab-title">{panel.title}</span>
+                <span className="dock-tab-title">{tabTitle}</span>
               </div>
             );
           })

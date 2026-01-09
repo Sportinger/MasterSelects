@@ -153,10 +153,6 @@ export function AudioPanel() {
 
   return (
     <div className="audio-panel">
-      <div className="audio-clip-info">
-        <span className="audio-clip-name">{selectedClip.name}</span>
-      </div>
-
       {/* Volume Section */}
       <div className="audio-section">
         <div className="audio-section-header">
