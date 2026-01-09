@@ -817,11 +817,6 @@ export function PropertiesPanel() {
 
   return (
     <div className="properties-panel">
-      <div className="panel-header">
-        <h3>{selectedClip.name}</h3>
-        <span className="clip-type-badge">{isAudioClip ? 'Audio' : 'Video'}</span>
-      </div>
-
       <div className="properties-tabs">
         {isAudioClip ? (
           <>
