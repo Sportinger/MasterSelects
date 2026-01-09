@@ -1,6 +1,6 @@
 // TimelineHeader component - Track headers (left side)
 
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import type { TimelineHeaderProps } from './types';
 import type { AnimatableProperty } from '../../types';
 
@@ -10,34 +10,49 @@ function TrackPropertyLabels({
   selectedClip,
   isTrackPropertyGroupExpanded,
   toggleTrackPropertyGroupExpanded,
-  hasPropertyKeyframes,
+  getClipKeyframes,
 }: {
   trackId: string;
   selectedClip: { id: string; effects?: Array<{ id: string; name: string; params: Record<string, unknown> }> } | null;
   isTrackPropertyGroupExpanded: (trackId: string, group: string) => boolean;
   toggleTrackPropertyGroupExpanded: (trackId: string, group: string) => void;
-  hasPropertyKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;
+  getClipKeyframes: (clipId: string) => Array<{
+    id: string;
+    clipId: string;
+    time: number;
+    property: AnimatableProperty;
+    value: number;
+    easing: string;
+  }>;
 }) {
+  const clipId = selectedClip?.id;
+
+  // Memoize all keyframe property checks at once - O(n) once instead of O(n) per check
+  const keyframeProperties = useMemo(() => {
+    if (!clipId) return new Set<string>();
+    const props = new Set<string>();
+    const keyframes = getClipKeyframes(clipId);
+    keyframes.forEach((kf) => props.add(kf.property));
+    return props;
+  }, [clipId, getClipKeyframes]);
+
   // If no clip is selected in this track, show nothing
   if (!selectedClip) {
     return <div className="track-property-labels" />;
   }
 
-  const clipId = selectedClip.id;
-
-  // Check which property groups have keyframes
-  const hasOpacityKeyframes = hasPropertyKeyframes(clipId, 'opacity');
+  // Check which property groups have keyframes - O(1) lookups now
+  const hasOpacityKeyframes = keyframeProperties.has('opacity');
   const hasPositionKeyframes =
-    hasPropertyKeyframes(clipId, 'position.x') ||
-    hasPropertyKeyframes(clipId, 'position.y') ||
-    hasPropertyKeyframes(clipId, 'position.z');
+    keyframeProperties.has('position.x') ||
+    keyframeProperties.has('position.y') ||
+    keyframeProperties.has('position.z');
   const hasScaleKeyframes =
-    hasPropertyKeyframes(clipId, 'scale.x') ||
-    hasPropertyKeyframes(clipId, 'scale.y');
+    keyframeProperties.has('scale.x') || keyframeProperties.has('scale.y');
   const hasRotationKeyframes =
-    hasPropertyKeyframes(clipId, 'rotation.x') ||
-    hasPropertyKeyframes(clipId, 'rotation.y') ||
-    hasPropertyKeyframes(clipId, 'rotation.z');
+    keyframeProperties.has('rotation.x') ||
+    keyframeProperties.has('rotation.y') ||
+    keyframeProperties.has('rotation.z');
 
   // Check for effect keyframes - which effects have at least one keyframed parameter
   const effectsWithKeyframes =
@@ -46,10 +61,7 @@ function TrackPropertyLabels({
         (k) => typeof effect.params[k] === 'number'
       );
       return numericParams.some((paramName) =>
-        hasPropertyKeyframes(
-          clipId,
-          `effect.${effect.id}.${paramName}` as AnimatableProperty
-        )
+        keyframeProperties.has(`effect.${effect.id}.${paramName}`)
       );
     }) || [];
 
@@ -104,17 +116,17 @@ function TrackPropertyLabels({
           </div>
           {isTrackPropertyGroupExpanded(trackId, 'position') && (
             <>
-              {hasPropertyKeyframes(clipId, 'position.x') && (
+              {keyframeProperties.has('position.x') && (
                 <div className="property-label-row sub">
                   <span className="property-label">X</span>
                 </div>
               )}
-              {hasPropertyKeyframes(clipId, 'position.y') && (
+              {keyframeProperties.has('position.y') && (
                 <div className="property-label-row sub">
                   <span className="property-label">Y</span>
                 </div>
               )}
-              {hasPropertyKeyframes(clipId, 'position.z') && (
+              {keyframeProperties.has('position.z') && (
                 <div className="property-label-row sub">
                   <span className="property-label">Z</span>
                 </div>
@@ -145,12 +157,12 @@ function TrackPropertyLabels({
           </div>
           {isTrackPropertyGroupExpanded(trackId, 'scale') && (
             <>
-              {hasPropertyKeyframes(clipId, 'scale.x') && (
+              {keyframeProperties.has('scale.x') && (
                 <div className="property-label-row sub">
                   <span className="property-label">X</span>
                 </div>
               )}
-              {hasPropertyKeyframes(clipId, 'scale.y') && (
+              {keyframeProperties.has('scale.y') && (
                 <div className="property-label-row sub">
                   <span className="property-label">Y</span>
                 </div>
@@ -183,17 +195,17 @@ function TrackPropertyLabels({
           </div>
           {isTrackPropertyGroupExpanded(trackId, 'rotation') && (
             <>
-              {hasPropertyKeyframes(clipId, 'rotation.x') && (
+              {keyframeProperties.has('rotation.x') && (
                 <div className="property-label-row sub">
                   <span className="property-label">X</span>
                 </div>
               )}
-              {hasPropertyKeyframes(clipId, 'rotation.y') && (
+              {keyframeProperties.has('rotation.y') && (
                 <div className="property-label-row sub">
                   <span className="property-label">Y</span>
                 </div>
               )}
-              {hasPropertyKeyframes(clipId, 'rotation.z') && (
+              {keyframeProperties.has('rotation.z') && (
                 <div className="property-label-row sub">
                   <span className="property-label">Z</span>
                 </div>
@@ -230,10 +242,7 @@ function TrackPropertyLabels({
               const paramsWithKeyframes = Object.keys(effect.params)
                 .filter((k) => typeof effect.params[k] === 'number')
                 .filter((paramName) =>
-                  hasPropertyKeyframes(
-                    clipId,
-                    `effect.${effect.id}.${paramName}` as AnimatableProperty
-                  )
+                  keyframeProperties.has(`effect.${effect.id}.${paramName}`)
                 );
 
               return (
@@ -298,7 +307,7 @@ function TimelineHeaderComponent({
   onWheel,
   isTrackPropertyGroupExpanded,
   toggleTrackPropertyGroupExpanded,
-  hasPropertyKeyframes,
+  getClipKeyframes,
 }: TimelineHeaderProps) {
   // Get the selected clip in this track
   const trackClips = clips.filter((c) => c.trackId === track.id);
@@ -366,7 +375,7 @@ function TimelineHeaderComponent({
           selectedClip={selectedTrackClip || null}
           isTrackPropertyGroupExpanded={isTrackPropertyGroupExpanded}
           toggleTrackPropertyGroupExpanded={toggleTrackPropertyGroupExpanded}
-          hasPropertyKeyframes={hasPropertyKeyframes}
+          getClipKeyframes={getClipKeyframes}
         />
       )}
     </div>

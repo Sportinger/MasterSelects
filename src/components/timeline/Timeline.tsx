@@ -2081,7 +2081,7 @@ export function Timeline() {
                 onWheel={(e) => handleTrackHeaderWheel(e, track.id)}
                 isTrackPropertyGroupExpanded={isTrackPropertyGroupExpanded}
                 toggleTrackPropertyGroupExpanded={toggleTrackPropertyGroupExpanded}
-                hasPropertyKeyframes={hasKeyframes}
+                getClipKeyframes={getClipKeyframes}
               />
             );
           })}
@@ -2140,7 +2140,7 @@ export function Timeline() {
                 onDragLeave={handleTrackDragLeave}
                 renderClip={renderClip}
                 isTrackPropertyGroupExpanded={isTrackPropertyGroupExpanded}
-                hasPropertyKeyframes={hasKeyframes}
+                getClipKeyframes={getClipKeyframes}
                 renderKeyframeDiamonds={renderKeyframeDiamonds}
                 timeToPixel={timeToPixel}
                 pixelToTime={pixelToTime}

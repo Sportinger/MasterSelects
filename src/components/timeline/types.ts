@@ -106,7 +106,14 @@ export interface TimelineHeaderProps {
   // For property labels
   isTrackPropertyGroupExpanded: (trackId: string, group: string) => boolean;
   toggleTrackPropertyGroupExpanded: (trackId: string, group: string) => void;
-  hasPropertyKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;
+  getClipKeyframes: (clipId: string) => Array<{
+    id: string;
+    clipId: string;
+    time: number;
+    property: AnimatableProperty;
+    value: number;
+    easing: string;
+  }>;
 }
 
 // Props for TimelineTrack component
@@ -135,7 +142,14 @@ export interface TimelineTrackProps {
   renderClip: (clip: TimelineClip, trackId: string) => React.ReactNode;
   // For keyframe tracks
   isTrackPropertyGroupExpanded: (trackId: string, group: string) => boolean;
-  hasPropertyKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;
+  getClipKeyframes: (clipId: string) => Array<{
+    id: string;
+    clipId: string;
+    time: number;
+    property: AnimatableProperty;
+    value: number;
+    easing: string;
+  }>;
   renderKeyframeDiamonds: (trackId: string, property: AnimatableProperty) => React.ReactNode;
   timeToPixel: (time: number) => number;
   pixelToTime: (pixel: number) => number;
