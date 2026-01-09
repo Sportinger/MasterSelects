@@ -82,7 +82,6 @@ export class WebGPUEngine {
   };
   private profileCounter = 0;
   private lastProfileTime = 0;
-  private lastRenderCall = 0;
 
   // Resolution
   private outputWidth = 1920;
@@ -563,7 +562,6 @@ export class WebGPUEngine {
     if (!this.pingView || !this.pongView) return;
 
     const t0 = performance.now();
-    this.lastRenderCall = t0;
 
     // Reuse array, just clear it
     this.layerRenderData.length = 0;
