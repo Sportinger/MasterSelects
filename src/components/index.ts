@@ -1,8 +1,7 @@
 // Component exports
-export { Preview } from './Preview';
-export { LayerPanel } from './LayerPanel';
-export { EffectsPanel } from './EffectsPanel';
-export { ExportPanel } from './ExportPanel';
-export { ClipPropertiesPanel } from './ClipPropertiesPanel';
-export { Toolbar } from './Toolbar';
+// Re-export from subfolders
+export { Preview, MaskOverlay } from './preview';
+export { LayerPanel, EffectsPanel, ClipPropertiesPanel, MediaPanel } from './panels';
+export { ExportPanel, ExportDialog } from './export';
+export { Toolbar } from './common';
 export { Timeline } from './timeline';

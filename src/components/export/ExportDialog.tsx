@@ -2,10 +2,10 @@
 // After Effects-style precise rendering
 
 import { useState, useEffect, useCallback } from 'react';
-import { FrameExporter, downloadBlob } from '../engine/FrameExporter';
-import type { ExportProgress } from '../engine/FrameExporter';
-import { useTimelineStore } from '../stores/timeline';
-import { useMediaStore } from '../stores/mediaStore';
+import { FrameExporter, downloadBlob } from '../../engine/FrameExporter';
+import type { ExportProgress } from '../../engine/FrameExporter';
+import { useTimelineStore } from '../../stores/timeline';
+import { useMediaStore } from '../../stores/mediaStore';
 
 interface ExportDialogProps {
   onClose: () => void;

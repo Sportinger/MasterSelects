@@ -1,9 +1,9 @@
 // Effects panel component
 
-import { useMixerStore } from '../stores/mixerStore';
-import { useTimelineStore } from '../stores/timeline';
-import type { EffectType, BlendMode } from '../types';
-import { createEffectProperty } from '../types';
+import { useMixerStore } from '../../stores/mixerStore';
+import { useTimelineStore } from '../../stores/timeline';
+import type { EffectType, BlendMode } from '../../types';
+import { createEffectProperty } from '../../types';
 
 // Keyframe toggle button component for effects
 interface EffectKeyframeToggleProps {
@@ -120,7 +120,7 @@ export function EffectsPanel() {
     useMixerStore();
 
   // Timeline store (for timeline clips)
-  const { clips, selectedClipId, addClipEffect, removeClipEffect, updateClipEffect, updateClipTransform, setPropertyValue, hasKeyframes, getInterpolatedEffects, playheadPosition } = useTimelineStore();
+  const { clips, selectedClipId, addClipEffect, removeClipEffect, updateClipEffect, updateClipTransform, setPropertyValue, getInterpolatedEffects, playheadPosition } = useTimelineStore();
 
   // Check if a timeline clip is selected first
   const selectedClip = clips.find((c) => c.id === selectedClipId);
@@ -396,14 +396,14 @@ export function EffectsPanel() {
             min="0"
             max={Math.PI * 2}
             step="0.01"
-            value={selectedLayer.rotation}
+            value={typeof selectedLayer.rotation === 'number' ? selectedLayer.rotation : 0}
             onChange={(e) =>
               useMixerStore.getState().setLayerTransform(selectedLayer.id, {
                 rotation: parseFloat(e.target.value),
               })
             }
           />
-          <span>{Math.round((selectedLayer.rotation * 180) / Math.PI)}°</span>
+          <span>{Math.round(((typeof selectedLayer.rotation === 'number' ? selectedLayer.rotation : 0) * 180) / Math.PI)}°</span>
         </div>
       </div>
     </div>

@@ -1,12 +1,12 @@
 // Toolbar component
 
 import { useState, useEffect, useCallback } from 'react';
-import { useEngine } from '../hooks/useEngine';
-import { useMixerStore } from '../stores/mixerStore';
-import { useDockStore } from '../stores/dockStore';
-import { useMediaStore } from '../stores/mediaStore';
-import { useMIDI } from '../hooks/useMIDI';
-import type { StoredProject } from '../services/projectDB';
+import { useEngine } from '../../hooks/useEngine';
+import { useMixerStore } from '../../stores/mixerStore';
+import { useDockStore } from '../../stores/dockStore';
+import { useMediaStore } from '../../stores/mediaStore';
+import { useMIDI } from '../../hooks/useMIDI';
+import type { StoredProject } from '../../services/projectDB';
 
 export function Toolbar() {
   const { isEngineReady, createOutputWindow } = useEngine();

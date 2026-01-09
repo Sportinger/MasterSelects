@@ -1,11 +1,11 @@
 // Preview canvas component with After Effects-style editing overlay
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { useEngine } from '../hooks/useEngine';
-import { useMixerStore } from '../stores/mixerStore';
-import { useTimelineStore } from '../stores/timeline';
+import { useEngine } from '../../hooks/useEngine';
+import { useMixerStore } from '../../stores/mixerStore';
+import { useTimelineStore } from '../../stores/timeline';
 import { MaskOverlay } from './MaskOverlay';
-import type { Layer, EngineStats } from '../types';
+import type { Layer, EngineStats } from '../../types';
 
 // Detailed stats overlay component
 function StatsOverlay({ stats, resolution, expanded, onToggle }: {
@@ -216,12 +216,15 @@ export function Preview() {
     const posX = centerX - (layerPos.x * canvasW / 2);
     const posY = centerY - (layerPos.y * canvasH / 2);
 
+    // Extract rotation value - if it's an object, use z rotation
+    const rotationValue = typeof layer.rotation === 'number' ? layer.rotation : layer.rotation.z;
+
     return {
       x: posX,
       y: posY,
       width: displayWidth,
       height: displayHeight,
-      rotation: layer.rotation,
+      rotation: rotationValue,
     };
   }, [outputResolution]);
 

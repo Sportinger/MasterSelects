@@ -1,13 +1,10 @@
 // Maps panel type to actual component
 
 import type { PanelType } from '../../types/dock';
-import { Preview } from '../Preview';
-import { EffectsPanel } from '../EffectsPanel';
-import { ExportPanel } from '../ExportPanel';
-import { ClipPropertiesPanel } from '../ClipPropertiesPanel';
-import { LayerPanel } from '../LayerPanel';
+import { Preview } from '../preview';
+import { EffectsPanel, ClipPropertiesPanel, LayerPanel, MediaPanel } from '../panels';
+import { ExportPanel } from '../export';
 import { Timeline } from '../timeline';
-import { MediaPanel } from '../MediaPanel';
 
 interface DockPanelContentProps {
   type: PanelType;

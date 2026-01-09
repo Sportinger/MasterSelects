@@ -1,8 +1,8 @@
 // Media Panel - Project browser like After Effects
 
 import { useCallback, useRef, useState } from 'react';
-import { useMediaStore } from '../stores/mediaStore';
-import type { MediaFile, Composition, ProjectItem } from '../stores/mediaStore';
+import { useMediaStore } from '../../stores/mediaStore';
+import type { MediaFile, Composition, ProjectItem } from '../../stores/mediaStore';
 
 export function MediaPanel() {
   const {
@@ -225,8 +225,8 @@ export function MediaPanel() {
     const isSelected = selectedIds.includes(item.id);
     const isRenaming = renamingId === item.id;
     const isExpanded = isFolder && expandedFolderIds.includes(item.id);
-    const isMediaFile = !isFolder && item.type !== 'composition';
-    const isComposition = item.type === 'composition';
+    const isMediaFile = !isFolder && 'type' in item && item.type !== 'composition';
+    const isComposition = 'type' in item && item.type === 'composition';
     const hasFile = isMediaFile && 'file' in item && !!(item as MediaFile).file;
     // Compositions are always draggable, media files only if they have the blob
     const canDrag = isComposition || hasFile;

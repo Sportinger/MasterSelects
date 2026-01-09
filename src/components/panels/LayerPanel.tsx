@@ -1,8 +1,8 @@
 // Slots panel component - dynamic grid with drag & drop
 
 import { useState, useCallback, Fragment } from 'react';
-import { useMixerStore } from '../stores/mixerStore';
-import { openFilePicker } from '../utils/fileLoader';
+import { useMixerStore } from '../../stores/mixerStore';
+import { openFilePicker } from '../../utils/fileLoader';
 
 type DropZone = 'full' | 'left' | 'right';
 
@@ -16,14 +16,12 @@ export function LayerPanel() {
     swapSlots,
     triggerColumn,
     triggerRow,
-    triggerSlot,
     gridColumns,
     gridRows,
     setGridColumns,
     setGridRows,
     slotGroups,
     duplicateSlot,
-    findNextFreeSlot,
     createSlotGroup,
     moveGroup,
   } = useMixerStore();
