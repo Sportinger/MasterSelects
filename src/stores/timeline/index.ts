@@ -632,6 +632,10 @@ export const useTimelineStore = create<TimelineStore>()(
       isRamPreviewing: false,
       cachedFrameTimes: new Set<number>(),
 
+      // Performance toggles (enabled by default)
+      thumbnailsEnabled: true,
+      waveformsEnabled: true,
+
       // Keyframe animation state
       clipKeyframes: new Map<string, Keyframe[]>(),
       keyframeRecordingEnabled: new Set<string>(),

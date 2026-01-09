@@ -57,6 +57,10 @@ export interface TimelineState {
   isRamPreviewing: boolean;
   cachedFrameTimes: Set<number>;
 
+  // Performance toggles
+  thumbnailsEnabled: boolean;
+  waveformsEnabled: boolean;
+
   // Keyframe animation state
   clipKeyframes: Map<string, Keyframe[]>;
   keyframeRecordingEnabled: Set<string>;
@@ -126,6 +130,9 @@ export interface RamPreviewActions {
   addCachedFrame: (time: number) => void;
   getCachedRanges: () => Array<{ start: number; end: number }>;
   invalidateCache: () => void;
+  // Performance toggles
+  toggleThumbnailsEnabled: () => void;
+  toggleWaveformsEnabled: () => void;
 }
 
 // Selection actions interface

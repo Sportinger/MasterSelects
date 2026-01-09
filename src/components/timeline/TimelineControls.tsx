@@ -16,6 +16,8 @@ function TimelineControlsComponent({
   currentlyGeneratingProxyId,
   mediaFilesWithProxy,
   showTranscriptMarkers,
+  thumbnailsEnabled,
+  waveformsEnabled,
   onPlay,
   onPause,
   onStop,
@@ -27,6 +29,8 @@ function TimelineControlsComponent({
   onToggleRamPreview,
   onToggleProxy,
   onToggleTranscriptMarkers,
+  onToggleThumbnails,
+  onToggleWaveforms,
   onAddVideoTrack,
   onAddAudioTrack,
   formatTime,
@@ -133,6 +137,28 @@ function TimelineControlsComponent({
           }
         >
           T {showTranscriptMarkers ? 'On' : 'Off'}
+        </button>
+        <button
+          className={`btn btn-sm ${thumbnailsEnabled ? 'btn-active' : ''}`}
+          onClick={onToggleThumbnails}
+          title={
+            thumbnailsEnabled
+              ? 'Thumbnails enabled - generating thumbnails for clips'
+              : 'Thumbnails disabled - improves performance for long videos'
+          }
+        >
+          Thumb {thumbnailsEnabled ? 'On' : 'Off'}
+        </button>
+        <button
+          className={`btn btn-sm ${waveformsEnabled ? 'btn-active' : ''}`}
+          onClick={onToggleWaveforms}
+          title={
+            waveformsEnabled
+              ? 'Waveforms enabled - generating audio waveforms'
+              : 'Waveforms disabled - improves performance for long audio'
+          }
+        >
+          Wave {waveformsEnabled ? 'On' : 'Off'}
         </button>
       </div>
       <div className="timeline-tracks-controls">

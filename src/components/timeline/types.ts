@@ -75,6 +75,8 @@ export interface TimelineControlsProps {
   currentlyGeneratingProxyId: string | null;
   mediaFilesWithProxy: number;
   showTranscriptMarkers: boolean;
+  thumbnailsEnabled: boolean;
+  waveformsEnabled: boolean;
   onPlay: () => void;
   onPause: () => void;
   onStop: () => void;
@@ -86,6 +88,8 @@ export interface TimelineControlsProps {
   onToggleRamPreview: () => void;
   onToggleProxy: () => void;
   onToggleTranscriptMarkers: () => void;
+  onToggleThumbnails: () => void;
+  onToggleWaveforms: () => void;
   onAddVideoTrack: () => void;
   onAddAudioTrack: () => void;
   formatTime: (seconds: number) => string;

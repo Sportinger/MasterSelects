@@ -88,6 +88,10 @@ export function Timeline() {
     hasKeyframes,
     trackHasKeyframes,
     clipKeyframes,
+    thumbnailsEnabled,
+    waveformsEnabled,
+    toggleThumbnailsEnabled,
+    toggleWaveformsEnabled,
   } = useTimelineStore();
 
   const {
@@ -2043,6 +2047,8 @@ export function Timeline() {
         currentlyGeneratingProxyId={currentlyGeneratingProxyId}
         mediaFilesWithProxy={mediaFilesWithProxyCount}
         showTranscriptMarkers={showTranscriptMarkers}
+        thumbnailsEnabled={thumbnailsEnabled}
+        waveformsEnabled={waveformsEnabled}
         onPlay={play}
         onPause={pause}
         onStop={stop}
@@ -2054,6 +2060,8 @@ export function Timeline() {
         onToggleRamPreview={toggleRamPreviewEnabled}
         onToggleProxy={() => setProxyEnabled(!proxyEnabled)}
         onToggleTranscriptMarkers={() => setShowTranscriptMarkers(!showTranscriptMarkers)}
+        onToggleThumbnails={toggleThumbnailsEnabled}
+        onToggleWaveforms={toggleWaveformsEnabled}
         onAddVideoTrack={() => addTrack('video')}
         onAddAudioTrack={() => addTrack('audio')}
         formatTime={formatTime}

@@ -194,12 +194,13 @@ export async function transcribeClip(clipId: string, language: string = 'de'): P
       await new Promise(resolve => setTimeout(resolve, 0));
 
       try {
+        // English-only models don't support language/task parameters
+        const isEnglishOnly = language === 'en';
         const result = await model(segmentData, {
           return_timestamps: 'word',
           chunk_length_s: 30,
           stride_length_s: 5,
-          language: language,
-          task: 'transcribe',
+          ...(isEnglishOnly ? {} : { language, task: 'transcribe' }),
         });
 
         // Process chunks

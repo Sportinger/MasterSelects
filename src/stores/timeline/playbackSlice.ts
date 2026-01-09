@@ -437,4 +437,13 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
     // Clear cached frame times
     set({ cachedFrameTimes: new Set(), ramPreviewRange: null, ramPreviewProgress: null });
   },
+
+  // Performance toggles
+  toggleThumbnailsEnabled: () => {
+    set({ thumbnailsEnabled: !get().thumbnailsEnabled });
+  },
+
+  toggleWaveformsEnabled: () => {
+    set({ waveformsEnabled: !get().waveformsEnabled });
+  },
 });

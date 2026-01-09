@@ -133,34 +133,39 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
         isLoading: false,
       });
 
-      // Generate thumbnails in background (non-blocking)
-      (async () => {
-        try {
-          // Wait for video to be ready for thumbnails
-          await new Promise<void>((resolve) => {
-            if (video.readyState >= 2) {
-              resolve();
-            } else {
-              video.oncanplay = () => resolve();
-              setTimeout(resolve, 2000); // Timeout fallback
-            }
-          });
+      // Generate thumbnails in background (non-blocking) - only if enabled
+      if (get().thumbnailsEnabled) {
+        (async () => {
+          try {
+            // Wait for video to be ready for thumbnails
+            await new Promise<void>((resolve) => {
+              if (video.readyState >= 2) {
+                resolve();
+              } else {
+                video.oncanplay = () => resolve();
+                setTimeout(resolve, 2000); // Timeout fallback
+              }
+            });
 
-          const thumbnails = await generateThumbnails(video, naturalDuration);
-          console.log(`[Timeline] Generated ${thumbnails.length} thumbnails for ${file.name}`);
+            // Check again in case toggle was turned off while waiting
+            if (!get().thumbnailsEnabled) return;
 
-          // Update clip with thumbnails
-          const currentClips = get().clips;
-          set({
-            clips: currentClips.map(c => c.id === clipId ? { ...c, thumbnails } : c)
-          });
+            const thumbnails = await generateThumbnails(video, naturalDuration);
+            console.log(`[Timeline] Generated ${thumbnails.length} thumbnails for ${file.name}`);
 
-          // Seek back to start
-          video.currentTime = 0;
-        } catch (e) {
-          console.warn('Failed to generate thumbnails:', e);
-        }
-      })();
+            // Update clip with thumbnails
+            const currentClips = get().clips;
+            set({
+              clips: currentClips.map(c => c.id === clipId ? { ...c, thumbnails } : c)
+            });
+
+            // Seek back to start
+            video.currentTime = 0;
+          } catch (e) {
+            console.warn('Failed to generate thumbnails:', e);
+          }
+        })();
+      }
 
       // Load audio - make it ready immediately, waveform loads in background
       if (audioTrackId && audioClipId) {
@@ -174,18 +179,23 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
           isLoading: false,
         });
 
-        // Generate waveform in background (non-blocking)
-        (async () => {
-          try {
-            const audioWaveform = await generateWaveform(file);
-            const currentClips = get().clips;
-            set({
-              clips: currentClips.map(c => c.id === audioClipId ? { ...c, waveform: audioWaveform } : c)
-            });
-          } catch (e) {
-            console.warn('Failed to generate waveform:', e);
-          }
-        })();
+        // Generate waveform in background (non-blocking) - only if enabled
+        if (get().waveformsEnabled) {
+          (async () => {
+            try {
+              // Check again before expensive operation
+              if (!get().waveformsEnabled) return;
+
+              const audioWaveform = await generateWaveform(file);
+              const currentClips = get().clips;
+              set({
+                clips: currentClips.map(c => c.id === audioClipId ? { ...c, waveform: audioWaveform } : c)
+              });
+            } catch (e) {
+              console.warn('Failed to generate waveform:', e);
+            }
+          })();
+        }
       }
 
       // Sync to media store
@@ -233,12 +243,14 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
 
       const naturalDuration = audio.duration || estimatedDuration;
 
-      // Generate waveform
+      // Generate waveform - only if enabled
       let waveform: number[] = [];
-      try {
-        waveform = await generateWaveform(file);
-      } catch (e) {
-        console.warn('Failed to generate waveform:', e);
+      if (get().waveformsEnabled) {
+        try {
+          waveform = await generateWaveform(file);
+        } catch (e) {
+          console.warn('Failed to generate waveform:', e);
+        }
       }
 
       updateClip(clipId, {
@@ -452,11 +464,12 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
         ),
       });
 
-      // Generate thumbnails from first video in nested comp
+      // Generate thumbnails from first video in nested comp - only if enabled
       const firstVideoClip = nestedClips.find(c => c.file.type.startsWith('video/'));
-      if (firstVideoClip) {
+      if (firstVideoClip && get().thumbnailsEnabled) {
         // Wait a bit for video to load
         setTimeout(async () => {
+          if (!get().thumbnailsEnabled) return;
           const video = firstVideoClip.source?.videoElement;
           if (video && video.readyState >= 2) {
             try {
