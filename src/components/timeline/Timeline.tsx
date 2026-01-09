@@ -1815,19 +1815,51 @@ export function Timeline() {
   const handleTrackDragOver = useCallback(
     (e: React.DragEvent, trackId: string) => {
       e.preventDefault();
-      e.dataTransfer.dropEffect = 'copy';
 
       const isCompDrag = e.dataTransfer.types.includes('application/x-composition-id');
       const isMediaPanelDrag = e.dataTransfer.types.includes('application/x-media-file-id');
       const isFileDrag = e.dataTransfer.types.includes('Files');
 
+      const targetTrack = tracks.find((t) => t.id === trackId);
+      const isVideoTrack = targetTrack?.type === 'video';
+
+      // Check if dragged content is audio-only
+      const audioExtensions = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'];
+      let isDraggingAudio = false;
+
+      if (isMediaPanelDrag) {
+        const mediaFileId = e.dataTransfer.getData('application/x-media-file-id');
+        if (mediaFileId) {
+          const mediaStore = useMediaStore.getState();
+          const mediaFile = mediaStore.files.find((f) => f.id === mediaFileId);
+          const fileExt = mediaFile?.file?.name?.split('.').pop()?.toLowerCase() || '';
+          if (mediaFile?.file?.type?.startsWith('audio/') || audioExtensions.includes(fileExt)) {
+            isDraggingAudio = true;
+          }
+        }
+      } else if (isFileDrag && e.dataTransfer.items.length > 0) {
+        // Check external file drag
+        const item = e.dataTransfer.items[0];
+        if (item.type.startsWith('audio/')) {
+          isDraggingAudio = true;
+        }
+      }
+
+      // Audio files can only go on audio tracks
+      if (isDraggingAudio && isVideoTrack) {
+        e.dataTransfer.dropEffect = 'none';
+        return;
+      }
+
+      // Video/image files should not go on audio tracks (they need video tracks)
+      // But we allow the drag to show where the linked audio would go
+
+      e.dataTransfer.dropEffect = 'copy';
+
       if ((isCompDrag || isMediaPanelDrag || isFileDrag) && timelineRef.current) {
         const rect = timelineRef.current.getBoundingClientRect();
         const x = e.clientX - rect.left + scrollX;
         const startTime = pixelToTime(x);
-
-        const targetTrack = tracks.find((t) => t.id === trackId);
-        const isVideoTrack = targetTrack?.type === 'video';
 
         const previewDuration =
           externalDrag?.duration ?? dragDurationCacheRef.current?.duration ?? 5;
@@ -1860,6 +1892,7 @@ export function Timeline() {
           y: e.clientY,
           audioTrackId,
           isVideo: isVideoTrack,
+          isAudio: isDraggingAudio,
           duration: prev?.duration ?? dragDurationCacheRef.current?.duration,
         }));
       }
@@ -1882,6 +1915,43 @@ export function Timeline() {
     (e: React.DragEvent, trackType: 'video' | 'audio') => {
       e.preventDefault();
       e.stopPropagation();
+
+      const isMediaPanelDrag = e.dataTransfer.types.includes('application/x-media-file-id');
+      const isFileDrag = e.dataTransfer.types.includes('Files');
+
+      // Check if dragged content is audio-only
+      const audioExtensions = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'];
+      let isDraggingAudio = false;
+
+      if (isMediaPanelDrag) {
+        const mediaFileId = e.dataTransfer.getData('application/x-media-file-id');
+        if (mediaFileId) {
+          const mediaStore = useMediaStore.getState();
+          const mediaFile = mediaStore.files.find((f) => f.id === mediaFileId);
+          const fileExt = mediaFile?.file?.name?.split('.').pop()?.toLowerCase() || '';
+          if (mediaFile?.file?.type?.startsWith('audio/') || audioExtensions.includes(fileExt)) {
+            isDraggingAudio = true;
+          }
+        }
+      } else if (isFileDrag && e.dataTransfer.items.length > 0) {
+        const item = e.dataTransfer.items[0];
+        if (item.type.startsWith('audio/')) {
+          isDraggingAudio = true;
+        }
+      }
+
+      // Audio files can only go on audio track zone
+      if (isDraggingAudio && trackType === 'video') {
+        e.dataTransfer.dropEffect = 'none';
+        return;
+      }
+
+      // Video/image files should go on video track zone
+      if (!isDraggingAudio && trackType === 'audio') {
+        e.dataTransfer.dropEffect = 'none';
+        return;
+      }
+
       e.dataTransfer.dropEffect = 'copy';
 
       if (timelineRef.current) {
@@ -1916,7 +1986,46 @@ export function Timeline() {
       dragCounterRef.current = 0;
       setExternalDrag(null);
 
-      // Create a new track first
+      // Helper to check if file is audio
+      const audioExtensions = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'];
+      const isAudioFile = (file: File) => {
+        const fileExt = file.name?.split('.').pop()?.toLowerCase() || '';
+        return file.type.startsWith('audio/') || audioExtensions.includes(fileExt);
+      };
+
+      // Validate file type matches track type BEFORE creating track
+      const mediaFileId = e.dataTransfer.getData('application/x-media-file-id');
+      if (mediaFileId) {
+        const mediaStore = useMediaStore.getState();
+        const mediaFile = mediaStore.files.find((f) => f.id === mediaFileId);
+        if (mediaFile?.file) {
+          const isAudio = isAudioFile(mediaFile.file);
+          if (isAudio && trackType === 'video') {
+            console.warn('[Timeline] Cannot drop audio file on video track zone');
+            return;
+          }
+          if (!isAudio && trackType === 'audio') {
+            console.warn('[Timeline] Cannot drop video/image file on audio track zone');
+            return;
+          }
+        }
+      }
+
+      // Validate external file drop
+      if (e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+        const isAudio = isAudioFile(file);
+        if (isAudio && trackType === 'video') {
+          console.warn('[Timeline] Cannot drop audio file on video track zone');
+          return;
+        }
+        if (!isAudio && !file.type.startsWith('audio/') && trackType === 'audio') {
+          console.warn('[Timeline] Cannot drop video/image file on audio track zone');
+          return;
+        }
+      }
+
+      // Create a new track
       const newTrackId = addTrack(trackType);
       if (!newTrackId) return;
 
@@ -1938,7 +2047,6 @@ export function Timeline() {
       }
 
       // Handle media panel drag
-      const mediaFileId = e.dataTransfer.getData('application/x-media-file-id');
       if (mediaFileId) {
         const mediaStore = useMediaStore.getState();
         const mediaFile = mediaStore.files.find((f) => f.id === mediaFileId);
@@ -1977,6 +2085,10 @@ export function Timeline() {
       dragCounterRef.current = 0;
       setExternalDrag(null);
 
+      // Get target track type
+      const targetTrack = tracks.find((t) => t.id === trackId);
+      const isVideoTrack = targetTrack?.type === 'video';
+
       const compositionId = e.dataTransfer.getData('application/x-composition-id');
       if (compositionId) {
         const mediaStore = useMediaStore.getState();
@@ -1995,6 +2107,17 @@ export function Timeline() {
         const mediaStore = useMediaStore.getState();
         const mediaFile = mediaStore.files.find((f) => f.id === mediaFileId);
         if (mediaFile?.file) {
+          // Check if trying to drop audio on video track
+          const isAudioFile = mediaFile.file.type?.startsWith('audio/') ||
+            ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a'].includes(
+              mediaFile.file.name?.split('.').pop()?.toLowerCase() || ''
+            );
+
+          if (isAudioFile && isVideoTrack) {
+            console.warn('[Timeline] Cannot drop audio file on video track');
+            return;
+          }
+
           const rect = e.currentTarget.getBoundingClientRect();
           const x = e.clientX - rect.left + scrollX;
           const startTime = pixelToTime(x);
@@ -2010,6 +2133,16 @@ export function Timeline() {
           file.type.startsWith('audio/') ||
           file.type.startsWith('image/')
         ) {
+          // Check if trying to drop audio file on video track
+          const audioExtensions = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'];
+          const fileExt = file.name?.split('.').pop()?.toLowerCase() || '';
+          const isAudioFile = file.type.startsWith('audio/') || audioExtensions.includes(fileExt);
+
+          if (isAudioFile && isVideoTrack) {
+            console.warn('[Timeline] Cannot drop audio file on video track');
+            return;
+          }
+
           const rect = e.currentTarget.getBoundingClientRect();
           const x = e.clientX - rect.left + scrollX;
           const startTime = pixelToTime(x);
@@ -2021,7 +2154,7 @@ export function Timeline() {
         }
       }
     },
-    [scrollX, pixelToTime, addCompClip, addClip, externalDrag]
+    [scrollX, pixelToTime, addCompClip, addClip, externalDrag, tracks]
   );
 
   // Zoom with mouse wheel, also handle vertical scroll
