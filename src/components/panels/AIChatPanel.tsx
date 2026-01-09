@@ -1,7 +1,8 @@
-// AI Chat Panel - Simple chat interface using OpenAI API
+// AI Chat Panel - Chat interface with timeline editing tools using OpenAI API
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { AI_TOOLS, executeAITool, getQuickTimelineSummary } from '../../services/aiTools';
 import './AIChatPanel.css';
 
 // Available OpenAI models
@@ -30,11 +31,51 @@ const OPENAI_MODELS = [
   { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
 ];
 
+// System prompt for editor mode
+const EDITOR_SYSTEM_PROMPT = `You are an AI video editing assistant with direct access to the timeline. You can:
+
+- View and analyze the timeline state (tracks, clips, playhead position)
+- Get detailed clip information including analysis data and transcripts
+- Split, delete, move, and trim clips
+- Create and manage video/audio tracks
+- Capture frames from the composition
+- Find silent sections in clips based on transcripts
+
+IMPORTANT GUIDELINES:
+1. Always call getTimelineState first to understand the current timeline before making changes
+2. When the user asks to "cut" something, use splitClip to divide clips and deleteClip to remove unwanted sections
+3. Provide clear feedback about what actions you're taking
+4. If analysis or transcript data isn't available for a clip, inform the user they need to run analysis first
+5. Be precise with time values - they are in seconds
+6. When making multiple edits, process them in order from END to START of timeline to avoid position shifts
+
+Current timeline summary: `;
+
 interface Message {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'tool';
   content: string;
   timestamp: Date;
+  toolCalls?: ToolCall[];
+  toolName?: string;
+  isToolResult?: boolean;
+}
+
+interface ToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+interface APIMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string | null;
+  tool_calls?: Array<{
+    id: string;
+    type: 'function';
+    function: { name: string; arguments: string };
+  }>;
+  tool_call_id?: string;
 }
 
 export function AIChatPanel() {
@@ -44,25 +85,122 @@ export function AIChatPanel() {
   const [isLoading, setIsLoading] = useState(false);
   const [model, setModel] = useState('gpt-5.1');
   const [error, setError] = useState<string | null>(null);
+  const [editorMode, setEditorMode] = useState(true); // Enable tools by default
+  const [currentToolAction, setCurrentToolAction] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, currentToolAction]);
 
   // Check if API key is available
   const hasApiKey = !!apiKeys.openai;
 
-  // Send message to OpenAI
+  // Build API messages from chat history
+  const buildAPIMessages = useCallback((userContent: string): APIMessage[] => {
+    const apiMessages: APIMessage[] = [];
+
+    // Add system prompt in editor mode
+    if (editorMode) {
+      apiMessages.push({
+        role: 'system',
+        content: EDITOR_SYSTEM_PROMPT + getQuickTimelineSummary(),
+      });
+    }
+
+    // Add conversation history
+    for (const msg of messages) {
+      if (msg.role === 'user') {
+        apiMessages.push({ role: 'user', content: msg.content });
+      } else if (msg.role === 'assistant') {
+        if (msg.toolCalls && msg.toolCalls.length > 0) {
+          apiMessages.push({
+            role: 'assistant',
+            content: msg.content || null,
+            tool_calls: msg.toolCalls.map(tc => ({
+              id: tc.id,
+              type: 'function' as const,
+              function: { name: tc.name, arguments: tc.arguments },
+            })),
+          });
+        } else {
+          apiMessages.push({ role: 'assistant', content: msg.content });
+        }
+      } else if (msg.role === 'tool' && msg.toolName) {
+        apiMessages.push({
+          role: 'tool',
+          content: msg.content,
+          tool_call_id: msg.id,
+        });
+      }
+    }
+
+    // Add new user message
+    apiMessages.push({ role: 'user', content: userContent });
+
+    return apiMessages;
+  }, [messages, editorMode]);
+
+  // Call OpenAI API
+  const callOpenAI = useCallback(async (apiMessages: APIMessage[]): Promise<{
+    content: string | null;
+    toolCalls: ToolCall[];
+  }> => {
+    const requestBody: Record<string, unknown> = {
+      model,
+      messages: apiMessages,
+      max_tokens: 4096,
+    };
+
+    // Add tools in editor mode
+    if (editorMode) {
+      requestBody.tools = AI_TOOLS;
+      requestBody.tool_choice = 'auto';
+    }
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKeys.openai}`,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error?.message || `API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const choice = data.choices?.[0];
+
+    const toolCalls: ToolCall[] = (choice?.message?.tool_calls || []).map((tc: {
+      id: string;
+      function: { name: string; arguments: string };
+    }) => ({
+      id: tc.id,
+      name: tc.function.name,
+      arguments: tc.function.arguments,
+    }));
+
+    return {
+      content: choice?.message?.content || null,
+      toolCalls,
+    };
+  }, [model, editorMode, apiKeys.openai]);
+
+  // Send message to OpenAI (with tool calling loop)
   const sendMessage = useCallback(async () => {
     if (!input.trim() || !hasApiKey || isLoading) return;
 
+    const userContent = input.trim();
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: input.trim(),
+      content: userContent,
       timestamp: new Date(),
     };
 
@@ -72,44 +210,94 @@ export function AIChatPanel() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKeys.openai}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            ...messages.map(m => ({ role: m.role, content: m.content })),
-            { role: 'user', content: userMessage.content },
-          ],
-          max_tokens: 2048,
-        }),
-      });
+      const apiMessages = buildAPIMessages(userContent);
+      let iterationCount = 0;
+      const maxIterations = 10; // Prevent infinite loops
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || `API error: ${response.status}`);
+      while (iterationCount < maxIterations) {
+        iterationCount++;
+
+        const { content, toolCalls } = await callOpenAI(apiMessages);
+
+        if (toolCalls.length === 0) {
+          // No tool calls - add final assistant message
+          if (content) {
+            const assistantMessage: Message = {
+              id: `assistant-${Date.now()}`,
+              role: 'assistant',
+              content,
+              timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, assistantMessage]);
+          }
+          break;
+        }
+
+        // Handle tool calls
+        const assistantMessage: Message = {
+          id: `assistant-${Date.now()}-${iterationCount}`,
+          role: 'assistant',
+          content: content || '',
+          timestamp: new Date(),
+          toolCalls,
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+
+        // Add assistant message to API messages
+        apiMessages.push({
+          role: 'assistant',
+          content: content || null,
+          tool_calls: toolCalls.map(tc => ({
+            id: tc.id,
+            type: 'function' as const,
+            function: { name: tc.name, arguments: tc.arguments },
+          })),
+        });
+
+        // Execute each tool call
+        for (const toolCall of toolCalls) {
+          setCurrentToolAction(`Executing: ${toolCall.name}`);
+
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(toolCall.arguments);
+          } catch {
+            args = {};
+          }
+
+          const result = await executeAITool(toolCall.name, args);
+
+          const toolResultMessage: Message = {
+            id: toolCall.id,
+            role: 'tool',
+            content: JSON.stringify(result, null, 2),
+            timestamp: new Date(),
+            toolName: toolCall.name,
+            isToolResult: true,
+          };
+          setMessages(prev => [...prev, toolResultMessage]);
+
+          // Add tool result to API messages
+          apiMessages.push({
+            role: 'tool',
+            content: JSON.stringify(result),
+            tool_call_id: toolCall.id,
+          });
+        }
+
+        setCurrentToolAction(null);
       }
 
-      const data = await response.json();
-      const assistantContent = data.choices?.[0]?.message?.content || 'No response';
-
-      const assistantMessage: Message = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: assistantContent,
-        timestamp: new Date(),
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
+      if (iterationCount >= maxIterations) {
+        setError('Too many tool iterations - stopping to prevent infinite loop');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
     } finally {
       setIsLoading(false);
+      setCurrentToolAction(null);
     }
-  }, [input, hasApiKey, isLoading, model, messages, apiKeys.openai]);
+  }, [input, hasApiKey, isLoading, buildAPIMessages, callOpenAI]);
 
   // Handle key press
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -130,7 +318,7 @@ export function AIChatPanel() {
     return (
       <div className="ai-chat-panel">
         <div className="ai-chat-header">
-          <h2>AI Chat</h2>
+          <h2>AI Editor</h2>
         </div>
         <div className="ai-chat-empty">
           <div className="ai-chat-no-key">
@@ -149,8 +337,17 @@ export function AIChatPanel() {
     <div className="ai-chat-panel">
       {/* Header */}
       <div className="ai-chat-header">
-        <h2>AI Chat</h2>
+        <h2>AI Editor</h2>
         <div className="ai-chat-controls">
+          <label className="editor-mode-toggle" title="Enable timeline editing tools">
+            <input
+              type="checkbox"
+              checked={editorMode}
+              onChange={(e) => setEditorMode(e.target.checked)}
+              disabled={isLoading}
+            />
+            <span className="toggle-label">Tools</span>
+          </label>
           <select
             className="model-select"
             value={model}
@@ -176,25 +373,82 @@ export function AIChatPanel() {
       <div className="ai-chat-messages">
         {messages.length === 0 ? (
           <div className="ai-chat-welcome">
-            <p>Start a conversation with AI</p>
-            <span className="welcome-hint">Using {OPENAI_MODELS.find(m => m.id === model)?.name}</span>
+            <p>{editorMode ? 'AI Editor Ready' : 'Start a conversation'}</p>
+            <span className="welcome-hint">
+              {editorMode
+                ? 'Ask me to edit your timeline - cut clips, remove silence, etc.'
+                : `Using ${OPENAI_MODELS.find(m => m.id === model)?.name}`}
+            </span>
           </div>
         ) : (
-          messages.map(msg => (
-            <div key={msg.id} className={`ai-chat-message ${msg.role}`}>
-              <div className="message-header">
-                <span className="message-role">{msg.role === 'user' ? 'You' : 'AI'}</span>
-                <span className="message-time">
-                  {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
+          messages.map(msg => {
+            // Tool result messages - show compact
+            if (msg.isToolResult) {
+              return (
+                <div key={msg.id} className="ai-chat-message tool-result">
+                  <div className="tool-result-header">
+                    <span className="tool-icon">🔧</span>
+                    <span className="tool-name">{msg.toolName}</span>
+                  </div>
+                  <pre className="tool-result-content">
+                    {msg.content.length > 500
+                      ? msg.content.substring(0, 500) + '...'
+                      : msg.content}
+                  </pre>
+                </div>
+              );
+            }
+
+            // Assistant message with tool calls
+            if (msg.role === 'assistant' && msg.toolCalls && msg.toolCalls.length > 0) {
+              return (
+                <div key={msg.id} className="ai-chat-message assistant">
+                  <div className="message-header">
+                    <span className="message-role">AI</span>
+                    <span className="message-time">
+                      {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  {msg.content && (
+                    <div className="message-content">
+                      {msg.content.split('\n').map((line, i) => (
+                        <p key={i}>{line || '\u00A0'}</p>
+                      ))}
+                    </div>
+                  )}
+                  <div className="tool-calls">
+                    {msg.toolCalls.map(tc => (
+                      <div key={tc.id} className="tool-call">
+                        <span className="tool-call-name">{tc.name}</span>
+                        <span className="tool-call-args">
+                          {tc.arguments.length > 100
+                            ? tc.arguments.substring(0, 100) + '...'
+                            : tc.arguments}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+
+            // Regular user/assistant message
+            return (
+              <div key={msg.id} className={`ai-chat-message ${msg.role}`}>
+                <div className="message-header">
+                  <span className="message-role">{msg.role === 'user' ? 'You' : 'AI'}</span>
+                  <span className="message-time">
+                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <div className="message-content">
+                  {msg.content.split('\n').map((line, i) => (
+                    <p key={i}>{line || '\u00A0'}</p>
+                  ))}
+                </div>
               </div>
-              <div className="message-content">
-                {msg.content.split('\n').map((line, i) => (
-                  <p key={i}>{line || '\u00A0'}</p>
-                ))}
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
         {isLoading && (
           <div className="ai-chat-message assistant loading">
@@ -202,9 +456,13 @@ export function AIChatPanel() {
               <span className="message-role">AI</span>
             </div>
             <div className="message-content">
-              <span className="typing-indicator">
-                <span></span><span></span><span></span>
-              </span>
+              {currentToolAction ? (
+                <span className="tool-action">{currentToolAction}</span>
+              ) : (
+                <span className="typing-indicator">
+                  <span></span><span></span><span></span>
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -225,7 +483,9 @@ export function AIChatPanel() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type a message... (Enter to send)"
+          placeholder={editorMode
+            ? "e.g., 'Remove all silent parts' or 'Split clip at 5 seconds'"
+            : "Type a message... (Enter to send)"}
           disabled={isLoading}
           rows={2}
         />

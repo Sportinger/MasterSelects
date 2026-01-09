@@ -283,3 +283,112 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Editor Mode Toggle */
+.editor-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.editor-mode-toggle input {
+  cursor: pointer;
+}
+
+.editor-mode-toggle .toggle-label {
+  user-select: none;
+}
+
+.editor-mode-toggle input:checked + .toggle-label {
+  color: var(--accent);
+}
+
+/* Tool Calls Display */
+.tool-calls {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tool-call {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  border-left: 2px solid var(--accent);
+}
+
+.tool-call-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  font-family: monospace;
+}
+
+.tool-call-args {
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-family: monospace;
+  word-break: break-all;
+}
+
+/* Tool Result Messages */
+.ai-chat-message.tool-result {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-color);
+  padding: 8px;
+  max-width: 95%;
+  align-self: center;
+}
+
+.tool-result-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+.tool-icon {
+  font-size: 12px;
+}
+
+.tool-name {
+  font-weight: 600;
+  color: var(--accent);
+  font-family: monospace;
+}
+
+.tool-result-content {
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--text-secondary);
+  margin: 0;
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  overflow-x: auto;
+  max-height: 150px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Tool Action Indicator */
+.tool-action {
+  font-size: 12px;
+  color: var(--accent);
+  font-style: italic;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
