@@ -2030,6 +2030,12 @@ input[type="checkbox"] {
   text-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
 }
 
+.analysis-legend-labels .legend-progress {
+  color: #fbbf24;
+  font-weight: bold;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
+}
+
 /* Analyzing progress indicator */
 .clip-analyzing-indicator {
   position: absolute;

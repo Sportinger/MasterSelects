@@ -556,12 +556,15 @@ function TimelineClipComponent({
           <div className="transcribing-progress" style={{ width: `${clip.transcriptProgress || 0}%` }} />
         </div>
       )}
-      {/* Analysis overlay - graph showing focus/motion */}
-      {clip.analysis && clip.analysisStatus === 'ready' && (
+      {/* Analysis overlay - graph showing focus/motion (renders during analysis and when ready) */}
+      {clip.analysis && (clip.analysisStatus === 'ready' || clip.analysisStatus === 'analyzing') && (
         <>
           <div className="analysis-legend-labels">
             <span className="legend-focus">Focus</span>
             <span className="legend-motion">Motion</span>
+            {clip.analysisStatus === 'analyzing' && (
+              <span className="legend-progress">{clip.analysisProgress || 0}%</span>
+            )}
           </div>
           <div className="clip-analysis-overlay">
             <AnalysisOverlay
@@ -575,7 +578,7 @@ function TimelineClipComponent({
           </div>
         </>
       )}
-      {/* Analyzing indicator */}
+      {/* Analyzing indicator (thin progress bar at bottom) */}
       {clip.analysisStatus === 'analyzing' && (
         <div className="clip-analyzing-indicator">
           <div className="analyzing-progress" style={{ width: `${clip.analysisProgress || 0}%` }} />
