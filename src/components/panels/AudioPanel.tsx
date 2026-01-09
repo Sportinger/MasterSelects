@@ -56,7 +56,7 @@ export function AudioPanel() {
     tracks,
     selectedClipIds,
     addClipEffect,
-    updateClipEffect,
+    setPropertyValue,
     getInterpolatedEffects,
     playheadPosition,
   } = useTimelineStore();
@@ -109,27 +109,28 @@ export function AudioPanel() {
     return freq >= 1000 ? `${freq / 1000}k` : `${freq}`;
   };
 
-  // Handle volume change
+  // Handle volume change - uses setPropertyValue for keyframe support
   const handleVolumeChange = (value: number) => {
     if (!selectedClip || !effectValues.volumeEffectId) return;
-    updateClipEffect(selectedClip.id, effectValues.volumeEffectId, { volume: value });
+    const property = createEffectProperty(effectValues.volumeEffectId, 'volume');
+    setPropertyValue(selectedClip.id, property, value);
   };
 
-  // Handle EQ band change
+  // Handle EQ band change - uses setPropertyValue for keyframe support
   const handleEQChange = (bandIndex: number, value: number) => {
     if (!selectedClip || !effectValues.eqEffectId) return;
     const paramName = EQ_BAND_PARAMS[bandIndex];
-    updateClipEffect(selectedClip.id, effectValues.eqEffectId, { [paramName]: value });
+    const property = createEffectProperty(effectValues.eqEffectId, paramName);
+    setPropertyValue(selectedClip.id, property, value);
   };
 
-  // Reset EQ to flat
+  // Reset EQ to flat - uses setPropertyValue for each band
   const handleResetEQ = () => {
     if (!selectedClip || !effectValues.eqEffectId) return;
-    const resetParams: Record<string, number> = {};
     EQ_BAND_PARAMS.forEach(param => {
-      resetParams[param] = 0;
+      const property = createEffectProperty(effectValues.eqEffectId!, param);
+      setPropertyValue(selectedClip.id, property, 0);
     });
-    updateClipEffect(selectedClip.id, effectValues.eqEffectId, resetParams);
   };
 
   // No audio clip selected
