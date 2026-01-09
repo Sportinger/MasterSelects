@@ -96,6 +96,7 @@ export function Timeline() {
     waveformsEnabled,
     toggleThumbnailsEnabled,
     toggleWaveformsEnabled,
+    generateWaveformForClip,
   } = useTimelineStore();
 
   const {
@@ -2869,6 +2870,28 @@ export function Timeline() {
                 >
                   {clip?.reversed ? '\u2713 ' : ''}Reverse Playback
                 </div>
+              )}
+
+              {/* Generate Waveform option for audio clips */}
+              {clip?.source?.type === 'audio' && (
+                <>
+                  <div className="context-menu-separator" />
+                  <div
+                    className={`context-menu-item ${clip?.waveformGenerating ? 'disabled' : ''}`}
+                    onClick={() => {
+                      if (contextMenu.clipId && !clip?.waveformGenerating) {
+                        generateWaveformForClip(contextMenu.clipId);
+                      }
+                      setContextMenu(null);
+                    }}
+                  >
+                    {clip?.waveformGenerating
+                      ? `Generating Waveform... ${clip?.waveformProgress || 0}%`
+                      : clip?.waveform && clip.waveform.length > 0
+                      ? 'Regenerate Waveform'
+                      : 'Generate Waveform'}
+                  </div>
+                </>
               )}
 
               {(isVideo || clip?.source?.type === 'audio') && (

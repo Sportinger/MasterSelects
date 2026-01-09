@@ -1073,4 +1073,64 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
     invalidateCache();
     console.log(`[Multicam] Unlinked group ${groupId}`);
   },
+
+  generateWaveformForClip: async (clipId: string) => {
+    const { clips } = get();
+    const clip = clips.find(c => c.id === clipId);
+
+    if (!clip?.file) {
+      console.warn('[Waveform] No file found for clip:', clipId);
+      return;
+    }
+
+    // Check if already generating
+    if (clip.waveformGenerating) {
+      console.log('[Waveform] Already generating for clip:', clipId);
+      return;
+    }
+
+    // Mark as generating
+    set({
+      clips: get().clips.map(c =>
+        c.id === clipId ? { ...c, waveformGenerating: true, waveformProgress: 0 } : c
+      ),
+    });
+
+    console.log(`[Waveform] Starting generation for ${clip.file.name}`);
+
+    try {
+      const waveform = await generateWaveform(
+        clip.file,
+        50, // samples per second
+        (progress, partialWaveform) => {
+          // Update progress and partial waveform in real-time
+          set({
+            clips: get().clips.map(c =>
+              c.id === clipId
+                ? { ...c, waveformProgress: progress, waveform: partialWaveform }
+                : c
+            ),
+          });
+        }
+      );
+
+      console.log(`[Waveform] Complete: ${waveform.length} samples for ${clip.file.name}`);
+
+      // Final update with complete waveform
+      set({
+        clips: get().clips.map(c =>
+          c.id === clipId
+            ? { ...c, waveform, waveformGenerating: false, waveformProgress: 100 }
+            : c
+        ),
+      });
+    } catch (e) {
+      console.error('[Waveform] Failed to generate:', e);
+      set({
+        clips: get().clips.map(c =>
+          c.id === clipId ? { ...c, waveformGenerating: false } : c
+        ),
+      });
+    }
+  },
 });

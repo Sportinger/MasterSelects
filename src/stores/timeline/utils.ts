@@ -20,7 +20,12 @@ export function seekVideo(video: HTMLVideoElement, time: number): Promise<void> 
 
 // Generate waveform data from audio file
 // Uses ~50 samples per second for good visual resolution
-export async function generateWaveform(file: File, samplesPerSecond: number = 50): Promise<number[]> {
+// Supports optional progress callback for real-time updates
+export async function generateWaveform(
+  file: File,
+  samplesPerSecond: number = 50,
+  onProgress?: (progress: number, partialWaveform: number[]) => void
+): Promise<number[]> {
   try {
     const audioContext = new AudioContext();
     const arrayBuffer = await file.arrayBuffer();
@@ -28,13 +33,13 @@ export async function generateWaveform(file: File, samplesPerSecond: number = 50
 
     const channelData = audioBuffer.getChannelData(0); // Use first channel
     const duration = audioBuffer.duration;
-    const sampleRate = audioBuffer.sampleRate;
 
     // Calculate samples based on duration (more samples for longer files)
     const sampleCount = Math.max(200, Math.min(10000, Math.floor(duration * samplesPerSecond)));
     const blockSize = Math.floor(channelData.length / sampleCount);
 
     const samples: number[] = [];
+    let runningMax = 0;
 
     for (let i = 0; i < sampleCount; i++) {
       const start = i * blockSize;
@@ -48,9 +53,22 @@ export async function generateWaveform(file: File, samplesPerSecond: number = 50
       }
 
       samples.push(peak);
+      if (peak > runningMax) runningMax = peak;
+
+      // Report progress with normalized partial waveform every 5%
+      if (onProgress && (i % Math.max(1, Math.floor(sampleCount / 20)) === 0 || i === sampleCount - 1)) {
+        const progress = Math.round(((i + 1) / sampleCount) * 100);
+        // Normalize partial waveform with running max
+        const normalizedPartial = runningMax > 0
+          ? samples.map(s => s / runningMax)
+          : samples;
+        onProgress(progress, normalizedPartial);
+        // Yield to UI
+        await new Promise(r => setTimeout(r, 0));
+      }
     }
 
-    // Normalize to 0-1 range
+    // Final normalization to 0-1 range
     const max = Math.max(...samples);
     await audioContext.close();
 

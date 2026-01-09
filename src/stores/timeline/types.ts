@@ -103,6 +103,8 @@ export interface ClipActions {
   // Multicam group linking
   createLinkedGroup: (clipIds: string[], offsets: Map<string, number>) => void;
   unlinkGroup: (clipId: string) => void;
+  // Waveform generation
+  generateWaveformForClip: (clipId: string) => Promise<void>;
 }
 
 // Playback actions interface

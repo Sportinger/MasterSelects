@@ -597,7 +597,8 @@ function TimelineClipComponent({
         </div>
       )}
       {/* Analysis overlay - graph showing focus/motion (renders during analysis and when ready) */}
-      {clip.analysis && (clip.analysisStatus === 'ready' || clip.analysisStatus === 'analyzing') && (
+      {/* Only show analysis overlay for video clips, not audio */}
+      {!isAudioClip && clip.analysis && (clip.analysisStatus === 'ready' || clip.analysisStatus === 'analyzing') && (
         <>
           <div className="analysis-legend-labels">
             <span className="legend-focus">Focus</span>
