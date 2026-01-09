@@ -1767,202 +1767,67 @@ export function Timeline() {
       const x = e.clientX - rect.left + scrollX;
       const startTime = pixelToTime(x);
 
-      // Helper to detect audio files
-      const audioExtensions = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'];
-
-      // Get target track type
-      const targetTrack = tracks.find((t) => t.id === trackId);
-      const isVideoTrack = targetTrack?.type === 'video';
-
       if (e.dataTransfer.types.includes('application/x-composition-id')) {
-        setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration: 5, isVideo: true, isAudio: false });
+        setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration: 5, isVideo: true });
         return;
       }
 
       if (e.dataTransfer.types.includes('application/x-media-file-id')) {
-        // Check if it's an audio file from media panel
-        const mediaFileId = e.dataTransfer.getData('application/x-media-file-id');
-        let isAudio = false;
-        if (mediaFileId) {
-          const mediaStore = useMediaStore.getState();
-          const mediaFile = mediaStore.files.find((f) => f.id === mediaFileId);
-          const fileExt = mediaFile?.file?.name?.split('.').pop()?.toLowerCase() || '';
-          isAudio = mediaFile?.file?.type?.startsWith('audio/') || audioExtensions.includes(fileExt);
-        }
-        // Don't update trackId if dragging audio over video track - use first audio track instead
-        if (isAudio && isVideoTrack) {
-          const firstAudioTrack = tracks.find((t) => t.type === 'audio');
-          setExternalDrag((prev) => ({
-            trackId: prev?.trackId ?? firstAudioTrack?.id ?? trackId,
-            startTime,
-            x: e.clientX,
-            y: e.clientY,
-            duration: prev?.duration ?? 5,
-            isAudio: true,
-            isVideo: false,
-          }));
-          return;
-        }
-        // Don't update trackId if dragging video/image over audio track - use first video track instead
-        const isAudioTrack = targetTrack?.type === 'audio';
-        if (!isAudio && isAudioTrack) {
-          const firstVideoTrack = tracks.find((t) => t.type === 'video');
-          setExternalDrag((prev) => ({
-            trackId: prev?.trackId ?? firstVideoTrack?.id ?? trackId,
-            startTime,
-            x: e.clientX,
-            y: e.clientY,
-            duration: prev?.duration ?? 5,
-            isAudio: false,
-            isVideo: true,
-          }));
-          return;
-        }
-        setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration: 5, isVideo: !isAudio, isAudio });
+        setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration: 5, isVideo: true });
         return;
       }
 
       if (e.dataTransfer.types.includes('Files')) {
         let dur: number | undefined;
-        let isAudio = false;
         const items = e.dataTransfer.items;
         if (items && items.length > 0) {
           for (let i = 0; i < items.length; i++) {
             const item = items[i];
             if (item.kind === 'file') {
               const file = item.getAsFile();
-              if (file) {
-                // Check if audio file
-                if (file.type.startsWith('audio/')) {
-                  isAudio = true;
-                  break;
+              if (file && file.type.startsWith('video/')) {
+                const cacheKey = `${file.name}_${file.size}`;
+                if (dragDurationCacheRef.current?.url === cacheKey) {
+                  dur = dragDurationCacheRef.current.duration;
+                } else {
+                  getVideoDurationQuick(file).then((d) => {
+                    if (d) {
+                      dragDurationCacheRef.current = { url: cacheKey, duration: d };
+                      setExternalDrag((prev) =>
+                        prev ? { ...prev, duration: d } : null
+                      );
+                    }
+                  });
                 }
-                // Check video file for duration
-                if (file.type.startsWith('video/')) {
-                  const cacheKey = `${file.name}_${file.size}`;
-                  if (dragDurationCacheRef.current?.url === cacheKey) {
-                    dur = dragDurationCacheRef.current.duration;
-                  } else {
-                    getVideoDurationQuick(file).then((d) => {
-                      if (d) {
-                        dragDurationCacheRef.current = { url: cacheKey, duration: d };
-                        setExternalDrag((prev) =>
-                          prev ? { ...prev, duration: d } : null
-                        );
-                      }
-                    });
-                  }
-                  break;
-                }
+                break;
               }
             }
           }
         }
 
-        // Don't update trackId if dragging audio over video track - use first audio track instead
-        if (isAudio && isVideoTrack) {
-          const firstAudioTrack = tracks.find((t) => t.type === 'audio');
-          setExternalDrag((prev) => ({
-            trackId: prev?.trackId ?? firstAudioTrack?.id ?? trackId,
-            startTime,
-            x: e.clientX,
-            y: e.clientY,
-            duration: prev?.duration ?? dur,
-            isAudio: true,
-            isVideo: false,
-          }));
-          return;
-        }
-
-        // Don't update trackId if dragging video/image over audio track - use first video track instead
-        const isAudioTrack = targetTrack?.type === 'audio';
-        if (!isAudio && isAudioTrack) {
-          const firstVideoTrack = tracks.find((t) => t.type === 'video');
-          setExternalDrag((prev) => ({
-            trackId: prev?.trackId ?? firstVideoTrack?.id ?? trackId,
-            startTime,
-            x: e.clientX,
-            y: e.clientY,
-            duration: prev?.duration ?? dur,
-            isAudio: false,
-            isVideo: true,
-          }));
-          return;
-        }
-
-        setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration: dur, isVideo: !isAudio, isAudio });
+        setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration: dur });
       }
     },
-    [scrollX, pixelToTime, tracks]
+    [scrollX, pixelToTime]
   );
 
   // Handle external file drag over track
   const handleTrackDragOver = useCallback(
     (e: React.DragEvent, trackId: string) => {
       e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
 
       const isCompDrag = e.dataTransfer.types.includes('application/x-composition-id');
       const isMediaPanelDrag = e.dataTransfer.types.includes('application/x-media-file-id');
       const isFileDrag = e.dataTransfer.types.includes('Files');
 
-      const targetTrack = tracks.find((t) => t.id === trackId);
-      const isVideoTrack = targetTrack?.type === 'video';
-
-      // Use existing externalDrag state to know if dragging audio
-      // (getData() doesn't work during dragover, only during drop)
-      const isDraggingAudio = externalDrag?.isAudio ?? false;
-
-      // Audio files can only go on audio tracks
-      if (isDraggingAudio && isVideoTrack) {
-        e.dataTransfer.dropEffect = 'none';
-        // Still update position for preview on audio tracks
-        if (timelineRef.current) {
-          const rect = timelineRef.current.getBoundingClientRect();
-          const x = e.clientX - rect.left + scrollX;
-          const startTime = pixelToTime(x);
-          const firstAudioTrack = tracks.find((t) => t.type === 'audio');
-          setExternalDrag((prev) => ({
-            trackId: prev?.trackId ?? firstAudioTrack?.id ?? trackId,
-            startTime,
-            x: e.clientX,
-            y: e.clientY,
-            isAudio: true,
-            isVideo: false,
-            duration: prev?.duration ?? dragDurationCacheRef.current?.duration,
-          }));
-        }
-        return;
-      }
-
-      // Video/image files should not go on audio tracks
-      const isAudioTrack = targetTrack?.type === 'audio';
-      if (!isDraggingAudio && isAudioTrack) {
-        e.dataTransfer.dropEffect = 'none';
-        // Still update position for preview on video tracks
-        if (timelineRef.current) {
-          const rect = timelineRef.current.getBoundingClientRect();
-          const x = e.clientX - rect.left + scrollX;
-          const startTime = pixelToTime(x);
-          const firstVideoTrack = tracks.find((t) => t.type === 'video');
-          setExternalDrag((prev) => ({
-            trackId: prev?.trackId ?? firstVideoTrack?.id ?? trackId,
-            startTime,
-            x: e.clientX,
-            y: e.clientY,
-            isAudio: false,
-            isVideo: true,
-            duration: prev?.duration ?? dragDurationCacheRef.current?.duration,
-          }));
-        }
-        return;
-      }
-
-      e.dataTransfer.dropEffect = 'copy';
-
       if ((isCompDrag || isMediaPanelDrag || isFileDrag) && timelineRef.current) {
         const rect = timelineRef.current.getBoundingClientRect();
         const x = e.clientX - rect.left + scrollX;
         const startTime = pixelToTime(x);
+
+        const targetTrack = tracks.find((t) => t.id === trackId);
+        const isVideoTrack = targetTrack?.type === 'video';
 
         const previewDuration =
           externalDrag?.duration ?? dragDurationCacheRef.current?.duration ?? 5;
@@ -1995,7 +1860,6 @@ export function Timeline() {
           y: e.clientY,
           audioTrackId,
           isVideo: isVideoTrack,
-          isAudio: isDraggingAudio,
           duration: prev?.duration ?? dragDurationCacheRef.current?.duration,
         }));
       }
@@ -2018,23 +1882,6 @@ export function Timeline() {
     (e: React.DragEvent, trackType: 'video' | 'audio') => {
       e.preventDefault();
       e.stopPropagation();
-
-      // Use existing externalDrag state to know if dragging audio
-      // (getData() doesn't work during dragover, only during drop)
-      const isDraggingAudio = externalDrag?.isAudio ?? false;
-
-      // Audio files can only go on audio track zone
-      if (isDraggingAudio && trackType === 'video') {
-        e.dataTransfer.dropEffect = 'none';
-        return;
-      }
-
-      // Video/image files should go on video track zone
-      if (!isDraggingAudio && trackType === 'audio') {
-        e.dataTransfer.dropEffect = 'none';
-        return;
-      }
-
       e.dataTransfer.dropEffect = 'copy';
 
       if (timelineRef.current) {
@@ -2049,13 +1896,12 @@ export function Timeline() {
           y: e.clientY,
           duration: prev?.duration ?? dragDurationCacheRef.current?.duration ?? 5,
           newTrackType: trackType,
-          // Preserve the actual file type from previous state
-          isVideo: prev?.isVideo ?? (trackType === 'video'),
-          isAudio: prev?.isAudio ?? (trackType === 'audio'),
+          isVideo: trackType === 'video',
+          isAudio: trackType === 'audio',
         }));
       }
     },
-    [scrollX, pixelToTime, externalDrag]
+    [scrollX, pixelToTime]
   );
 
   // Handle drop on "new track" zone - creates new track and adds clip
@@ -2073,8 +1919,8 @@ export function Timeline() {
       // Helper to check if file is audio
       const audioExtensions = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'];
       const isAudioFile = (file: File) => {
-        const fileExt = file.name?.split('.').pop()?.toLowerCase() || '';
-        return file.type.startsWith('audio/') || audioExtensions.includes(fileExt);
+        const ext = file.name?.split('.').pop()?.toLowerCase() || '';
+        return file.type.startsWith('audio/') || audioExtensions.includes(ext);
       };
 
       // Validate file type matches track type BEFORE creating track
@@ -2083,28 +1929,27 @@ export function Timeline() {
         const mediaStore = useMediaStore.getState();
         const mediaFile = mediaStore.files.find((f) => f.id === mediaFileId);
         if (mediaFile?.file) {
-          const isAudio = isAudioFile(mediaFile.file);
-          if (isAudio && trackType === 'video') {
-            console.warn('[Timeline] Cannot drop audio file on video track zone');
+          const fileIsAudio = isAudioFile(mediaFile.file);
+          if (fileIsAudio && trackType === 'video') {
+            console.log('[Timeline] Audio files can only be dropped on audio tracks');
             return;
           }
-          if (!isAudio && trackType === 'audio') {
-            console.warn('[Timeline] Cannot drop video/image file on audio track zone');
+          if (!fileIsAudio && trackType === 'audio') {
+            console.log('[Timeline] Video/image files can only be dropped on video tracks');
             return;
           }
         }
       }
 
-      // Validate external file drop
       if (e.dataTransfer.files.length > 0) {
         const file = e.dataTransfer.files[0];
-        const isAudio = isAudioFile(file);
-        if (isAudio && trackType === 'video') {
-          console.warn('[Timeline] Cannot drop audio file on video track zone');
+        const fileIsAudio = isAudioFile(file);
+        if (fileIsAudio && trackType === 'video') {
+          console.log('[Timeline] Audio files can only be dropped on audio tracks');
           return;
         }
-        if (!isAudio && !file.type.startsWith('audio/') && trackType === 'audio') {
-          console.warn('[Timeline] Cannot drop video/image file on audio track zone');
+        if (!fileIsAudio && trackType === 'audio') {
+          console.log('[Timeline] Video/image files can only be dropped on video tracks');
           return;
         }
       }
@@ -2169,9 +2014,17 @@ export function Timeline() {
       dragCounterRef.current = 0;
       setExternalDrag(null);
 
-      // Get target track type
+      // Get track type for validation
       const targetTrack = tracks.find((t) => t.id === trackId);
       const isVideoTrack = targetTrack?.type === 'video';
+      const isAudioTrack = targetTrack?.type === 'audio';
+
+      // Helper to check if file is audio
+      const audioExtensions = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'];
+      const isAudioFile = (file: File) => {
+        const ext = file.name?.split('.').pop()?.toLowerCase() || '';
+        return file.type.startsWith('audio/') || audioExtensions.includes(ext);
+      };
 
       const compositionId = e.dataTransfer.getData('application/x-composition-id');
       if (compositionId) {
@@ -2186,24 +2039,19 @@ export function Timeline() {
         }
       }
 
-      const isAudioTrack = targetTrack?.type === 'audio';
-
       const mediaFileId = e.dataTransfer.getData('application/x-media-file-id');
       if (mediaFileId) {
         const mediaStore = useMediaStore.getState();
         const mediaFile = mediaStore.files.find((f) => f.id === mediaFileId);
         if (mediaFile?.file) {
-          // Check if trying to drop audio on video track or video on audio track
-          const audioExtensions = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'];
-          const fileExt = mediaFile.file.name?.split('.').pop()?.toLowerCase() || '';
-          const isAudioFile = mediaFile.file.type?.startsWith('audio/') || audioExtensions.includes(fileExt);
-
-          if (isAudioFile && isVideoTrack) {
-            console.warn('[Timeline] Cannot drop audio file on video track');
+          // Simple validation: audio files only on audio tracks, video/image only on video tracks
+          const fileIsAudio = isAudioFile(mediaFile.file);
+          if (fileIsAudio && isVideoTrack) {
+            console.log('[Timeline] Audio files can only be dropped on audio tracks');
             return;
           }
-          if (!isAudioFile && isAudioTrack) {
-            console.warn('[Timeline] Cannot drop video/image file on audio track');
+          if (!fileIsAudio && isAudioTrack) {
+            console.log('[Timeline] Video/image files can only be dropped on video tracks');
             return;
           }
 
@@ -2222,17 +2070,14 @@ export function Timeline() {
           file.type.startsWith('audio/') ||
           file.type.startsWith('image/')
         ) {
-          // Check if trying to drop audio file on video track or video on audio track
-          const audioExtensions = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'];
-          const fileExt = file.name?.split('.').pop()?.toLowerCase() || '';
-          const isAudioFile = file.type.startsWith('audio/') || audioExtensions.includes(fileExt);
-
-          if (isAudioFile && isVideoTrack) {
-            console.warn('[Timeline] Cannot drop audio file on video track');
+          // Simple validation: audio files only on audio tracks, video/image only on video tracks
+          const fileIsAudio = isAudioFile(file);
+          if (fileIsAudio && isVideoTrack) {
+            console.log('[Timeline] Audio files can only be dropped on audio tracks');
             return;
           }
-          if (!isAudioFile && isAudioTrack) {
-            console.warn('[Timeline] Cannot drop video/image file on audio track');
+          if (!fileIsAudio && isAudioTrack) {
+            console.log('[Timeline] Video/image files can only be dropped on video tracks');
             return;
           }
 
@@ -2259,10 +2104,8 @@ export function Timeline() {
     const handleWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.altKey) {
         e.preventDefault();
-        // Proportional zoom for smooth, consistent feel
-        const zoomFactor = 1.08; // 8% change per scroll step
-        const newZoom = e.deltaY > 0 ? zoom / zoomFactor : zoom * zoomFactor;
-        setZoom(newZoom);
+        const delta = e.deltaY > 0 ? -5 : 5;
+        setZoom(zoom + delta);
       } else {
         // Handle horizontal scroll (e.g., shift+scroll or trackpad horizontal)
         if (e.deltaX !== 0) {
@@ -2494,8 +2337,8 @@ export function Timeline() {
             className={`timeline-tracks ${clipDrag ? 'dragging-clip' : ''}`}
           >
             <div className="track-lanes-scroll" style={{ transform: `translateX(-${scrollX}px)` }}>
-              {/* New Video Track drop zone - at TOP above video tracks (only for non-audio files) */}
-              {externalDrag && !externalDrag.isAudio && (
+              {/* New Video Track drop zone - at TOP above video tracks */}
+              {externalDrag && (
                 <div
                   className={`new-track-drop-zone video ${externalDrag.newTrackType === 'video' ? 'active' : ''}`}
                   onDragOver={(e) => handleNewTrackDragOver(e, 'video')}
@@ -2587,8 +2430,8 @@ export function Timeline() {
               </div>
             )}
 
-          {/* New Audio Track drop zone - at BOTTOM below audio tracks (only for audio files) */}
-          {externalDrag && externalDrag.isAudio && (
+          {/* New Audio Track drop zone - at BOTTOM below audio tracks */}
+          {externalDrag && (
             <div
               className={`new-track-drop-zone audio ${externalDrag.newTrackType === 'audio' ? 'active' : ''}`}
               onDragOver={(e) => handleNewTrackDragOver(e, 'audio')}
