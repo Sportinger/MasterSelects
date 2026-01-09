@@ -17,9 +17,14 @@ const Waveform = memo(function Waveform({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  console.log(`[Waveform] Rendering: width=${width}, height=${height}, samples=${waveform?.length}`);
+
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !waveform || waveform.length === 0 || width <= 0) return;
+    if (!canvas || !waveform || waveform.length === 0 || width <= 0) {
+      console.log(`[Waveform] Early exit: canvas=${!!canvas}, waveform=${waveform?.length}, width=${width}`);
+      return;
+    }
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -305,6 +310,8 @@ function TimelineClipComponent({
       waveformLength: clip.waveform?.length,
       waveformGenerating: clip.waveformGenerating,
       clipClass,
+      trackHeight: track.height,
+      clipWidth: width,
     });
   }
 
@@ -349,6 +356,13 @@ function TimelineClipComponent({
         </div>
       )}
       {/* Audio waveform */}
+      {(() => {
+        const shouldRenderWaveform = isAudioClip && clip.waveform && clip.waveform.length > 0;
+        if (clip.name?.toLowerCase().includes('.wav')) {
+          console.log(`[TimelineClip] Waveform render check:`, { shouldRenderWaveform, isAudioClip, waveformLength: clip.waveform?.length, width });
+        }
+        return null;
+      })()}
       {isAudioClip && clip.waveform && clip.waveform.length > 0 && (
         <div className="clip-waveform">
           <Waveform

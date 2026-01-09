@@ -103,16 +103,25 @@ class AudioAnalyzer {
   /**
    * Generate a fingerprint for audio sync comparison
    * Downsamples audio to a manageable size for cross-correlation
+   * Only analyzes first maxDurationSeconds for performance (default 30s)
    */
   async generateFingerprint(
     mediaFileId: string,
-    targetSampleRate: number = 8000
+    targetSampleRate: number = 8000,
+    maxDurationSeconds: number = 30
   ): Promise<AudioFingerprint | null> {
     const audioBuffer = await this.extractAudioBuffer(mediaFileId);
     if (!audioBuffer) return null;
 
     const originalSampleRate = audioBuffer.sampleRate;
-    const channelData = audioBuffer.getChannelData(0);
+    const fullChannelData = audioBuffer.getChannelData(0);
+
+    // Limit to first N seconds for performance
+    const maxSamples = Math.floor(maxDurationSeconds * originalSampleRate);
+    const samplesToProcess = Math.min(fullChannelData.length, maxSamples);
+    const channelData = fullChannelData.subarray(0, samplesToProcess);
+
+    console.log(`[AudioAnalyzer] Processing first ${(samplesToProcess / originalSampleRate).toFixed(1)}s of audio (${samplesToProcess} samples)`);
 
     // Downsample by averaging
     const ratio = originalSampleRate / targetSampleRate;

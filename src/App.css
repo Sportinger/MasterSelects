@@ -1745,6 +1745,9 @@ input[type="checkbox"] {
   cursor: grab;
   overflow: hidden;
   transition: box-shadow 0.15s;
+  /* Fallback background in case type class is missing */
+  background: linear-gradient(180deg, #374151, #1f2937);
+  border: 1px solid #4b5563;
 }
 
 .timeline-clip.video {
