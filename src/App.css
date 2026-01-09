@@ -3641,7 +3641,7 @@ input[type="checkbox"] {
 .preview-comp-dropdown {
   position: absolute;
   top: 100%;
-  right: 0;
+  left: 0;
   margin-top: 4px;
   min-width: 160px;
   background: var(--bg-tertiary);

@@ -1,8 +1,9 @@
 // CompositionRenderer - Evaluates any composition at a given time and returns renderable layers
 // This enables multiple previews showing different compositions simultaneously
 
-import type { Layer, SerializableClip, TimelineTrack } from '../types';
+import type { Layer, SerializableClip, TimelineTrack, TimelineClip } from '../types';
 import { useMediaStore } from '../stores/mediaStore';
+import { useTimelineStore } from '../stores/timeline';
 
 // Source cache entry for a composition
 interface CompositionSources {
@@ -43,13 +44,31 @@ class CompositionRendererService {
       return true;
     }
 
+    const { activeCompositionId } = useMediaStore.getState();
     const composition = useMediaStore.getState().compositions.find(c => c.id === compositionId);
-    if (!composition || !composition.timelineData) {
-      console.warn(`[CompositionRenderer] Composition ${compositionId} not found or has no timeline data`);
+
+    if (!composition) {
+      console.warn(`[CompositionRenderer] Composition ${compositionId} not found`);
       return false;
     }
 
-    console.log(`[CompositionRenderer] Preparing composition: ${composition.name}`);
+    // Check if this is the active composition - use timeline store data
+    const isActiveComp = compositionId === activeCompositionId;
+
+    let clips: (SerializableClip | TimelineClip)[];
+
+    if (isActiveComp) {
+      // Active composition - use live data from timeline store
+      clips = useTimelineStore.getState().clips;
+      console.log(`[CompositionRenderer] Preparing ACTIVE composition: ${composition.name} (${clips.length} clips from timeline store)`);
+    } else if (composition.timelineData) {
+      // Non-active composition - use serialized data
+      clips = composition.timelineData.clips || [];
+      console.log(`[CompositionRenderer] Preparing composition: ${composition.name} (${clips.length} clips from timelineData)`);
+    } else {
+      console.warn(`[CompositionRenderer] Composition ${compositionId} has no timeline data`);
+      return false;
+    }
 
     const sources: CompositionSources = {
       compositionId,
@@ -60,29 +79,58 @@ class CompositionRendererService {
 
     this.compositionSources.set(compositionId, sources);
 
-    const timelineData = composition.timelineData;
-    const clips = timelineData.clips || [];
     const mediaFiles = useMediaStore.getState().files;
 
     // Load sources for all video/image clips
     const loadPromises: Promise<void>[] = [];
 
     for (const clip of clips) {
-      // SerializableClip uses mediaFileId and sourceType instead of source
-      if (!clip.mediaFileId) continue;
+      // Handle both TimelineClip (active) and SerializableClip (stored)
+      const timelineClip = clip as TimelineClip;
+      const serializableClip = clip as SerializableClip;
+
+      // Get source type - TimelineClip has source.type, SerializableClip has sourceType
+      const sourceType = timelineClip.source?.type || serializableClip.sourceType;
+
+      // Get media file ID
+      const mediaFileId = timelineClip.source?.mediaFileId || serializableClip.mediaFileId;
+
+      if (!mediaFileId) {
+        // For active composition, the video/image elements are already loaded
+        if (isActiveComp && timelineClip.source) {
+          if (sourceType === 'video' && timelineClip.source.videoElement) {
+            sources.clipSources.set(clip.id, {
+              clipId: clip.id,
+              type: 'video',
+              videoElement: timelineClip.source.videoElement,
+              file: timelineClip.file,
+              naturalDuration: timelineClip.source.naturalDuration || timelineClip.source.videoElement.duration || 0,
+            });
+          } else if (sourceType === 'image' && timelineClip.source.imageElement) {
+            sources.clipSources.set(clip.id, {
+              clipId: clip.id,
+              type: 'image',
+              imageElement: timelineClip.source.imageElement,
+              file: timelineClip.file,
+              naturalDuration: timelineClip.source.naturalDuration || 5,
+            });
+          }
+        }
+        continue;
+      }
 
       // Find the media file
-      const mediaFile = mediaFiles.find(f => f.id === clip.mediaFileId);
+      const mediaFile = mediaFiles.find(f => f.id === mediaFileId);
 
       if (!mediaFile?.file) {
         console.warn(`[CompositionRenderer] Media file not found for clip ${clip.id}`);
         continue;
       }
 
-      if (clip.sourceType === 'video') {
-        loadPromises.push(this.loadVideoSource(sources, clip, mediaFile.file));
-      } else if (clip.sourceType === 'image') {
-        loadPromises.push(this.loadImageSource(sources, clip, mediaFile.file));
+      if (sourceType === 'video') {
+        loadPromises.push(this.loadVideoSource(sources, serializableClip, mediaFile.file));
+      } else if (sourceType === 'image') {
+        loadPromises.push(this.loadImageSource(sources, serializableClip, mediaFile.file));
       }
     }
 
