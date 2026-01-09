@@ -21,6 +21,10 @@ export const DEFAULT_TRACKS: TimelineTrack[] = [
 // Snap threshold in seconds (clips will snap when within this distance)
 export const SNAP_THRESHOLD_SECONDS = 0.1;
 
+// Resistance threshold - how far past a clip edge the user must drag to "break through"
+// and be allowed to overlap (in seconds)
+export const OVERLAP_RESISTANCE_SECONDS = 0.3;
+
 // Property row heights for expanded tracks
 export const PROPERTY_ROW_HEIGHT = 18;
 export const GROUP_HEADER_HEIGHT = 20;

@@ -676,7 +676,7 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
   },
 
   moveClip: (id, newStartTime, newTrackId, skipLinked = false, skipGroup = false) => {
-    const { clips, tracks, updateDuration, getSnappedPosition, findNonOverlappingPosition, invalidateCache } = get();
+    const { clips, tracks, updateDuration, getSnappedPosition, getPositionWithResistance, trimOverlappingClips, invalidateCache } = get();
     const movingClip = clips.find(c => c.id === id);
     if (!movingClip) return;
 
@@ -704,22 +704,30 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
     // Apply snapping first
     const { startTime: snappedTime } = getSnappedPosition(id, newStartTime, targetTrackId);
 
-    // Then find non-overlapping position
-    const finalStartTime = findNonOverlappingPosition(id, snappedTime, targetTrackId, movingClip.duration);
+    // Use resistance-based positioning - allows overlap if user pushes through
+    const { startTime: finalStartTime, forcingOverlap } = getPositionWithResistance(
+      id,
+      snappedTime,
+      targetTrackId,
+      movingClip.duration
+    );
 
     // Calculate time delta to apply to linked clips
     const timeDelta = finalStartTime - movingClip.startTime;
 
-    // For linked clip (1:1 video-audio pair), also find non-overlapping position
+    // For linked clip (1:1 video-audio pair), also calculate position with resistance
     const linkedClip = clips.find(c => c.id === movingClip.linkedClipId || c.linkedClipId === id);
     let linkedFinalTime = linkedClip ? linkedClip.startTime + timeDelta : 0;
+    let linkedForcingOverlap = false;
     if (linkedClip && !skipLinked) {
-      linkedFinalTime = findNonOverlappingPosition(
+      const linkedResult = getPositionWithResistance(
         linkedClip.id,
         linkedClip.startTime + timeDelta,
         linkedClip.trackId,
         linkedClip.duration
       );
+      linkedFinalTime = linkedResult.startTime;
+      linkedForcingOverlap = linkedResult.forcingOverlap;
     }
 
     // For linked group (multicam), find all clips in the group
@@ -747,7 +755,7 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
         }
         // Move group clips (multicam) - unless skipGroup is true (Alt+drag)
         if (!skipGroup && groupClips.some(gc => gc.id === c.id)) {
-          const groupClipNewTime = findNonOverlappingPosition(
+          const groupResult = getPositionWithResistance(
             c.id,
             c.startTime + timeDelta,
             c.trackId,
@@ -755,12 +763,21 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
           );
           return {
             ...c,
-            startTime: Math.max(0, groupClipNewTime),
+            startTime: Math.max(0, groupResult.startTime),
           };
         }
         return c;
       }),
     });
+
+    // If user forced overlap, trim the underlying clips
+    if (forcingOverlap) {
+      trimOverlappingClips(id, finalStartTime, targetTrackId, movingClip.duration);
+    }
+    if (linkedForcingOverlap && linkedClip && !skipLinked) {
+      trimOverlappingClips(linkedClip.id, linkedFinalTime, linkedClip.trackId, linkedClip.duration);
+    }
+
     updateDuration();
     // Invalidate RAM preview cache - content changed
     invalidateCache();

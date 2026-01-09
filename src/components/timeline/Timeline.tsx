@@ -62,6 +62,7 @@ export function Timeline() {
     setOutPointAtPlayhead,
     clearInOut,
     getSnappedPosition,
+    getPositionWithResistance,
     loopPlayback,
     toggleLoopPlayback,
     ramPreviewProgress,
@@ -1525,6 +1526,7 @@ export function Timeline() {
         snappedTime: null,
         isSnapping: false,
         altKeyPressed: e.altKey, // Capture Alt state for independent drag
+        forcingOverlap: false,
       };
       setClipDrag(initialDrag);
       clipDragRef.current = initialDrag;
@@ -1549,19 +1551,32 @@ export function Timeline() {
         const rect = timelineRef.current.getBoundingClientRect();
         const x = moveEvent.clientX - rect.left + scrollX - drag.grabOffsetX;
         const rawTime = Math.max(0, pixelToTime(x));
+
+        // First check for edge snapping
         const { startTime: snappedTime, snapped } = getSnappedPosition(
           drag.clipId,
           rawTime,
           newTrackId
         );
 
+        // Then apply resistance for overlap prevention
+        const draggedClip = clipMap.get(drag.clipId);
+        const clipDuration = draggedClip?.duration || 0;
+        const { startTime: resistedTime, forcingOverlap } = getPositionWithResistance(
+          drag.clipId,
+          snapped ? snappedTime : rawTime,
+          newTrackId,
+          clipDuration
+        );
+
         const newDrag: ClipDragState = {
           ...drag,
           currentX: moveEvent.clientX,
           currentTrackId: newTrackId,
-          snappedTime: snapped ? snappedTime : null,
-          isSnapping: snapped,
+          snappedTime: resistedTime,
+          isSnapping: snapped && !forcingOverlap,
           altKeyPressed: moveEvent.altKey, // Update Alt state dynamically
+          forcingOverlap,
         };
         setClipDrag(newDrag);
         clipDragRef.current = newDrag;
@@ -1585,7 +1600,7 @@ export function Timeline() {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [clipMap, tracks, scrollX, pixelToTime, selectClip, selectedClipIds, getSnappedPosition, moveClip]
+    [clipMap, tracks, scrollX, pixelToTime, selectClip, selectedClipIds, getSnappedPosition, getPositionWithResistance, moveClip]
   );
 
   // Handle trim start

@@ -237,11 +237,11 @@ function TimelineClipComponent({
 
   const width = timeToPixel(displayDuration);
 
-  // Calculate position - if dragging, use snapped position if available
+  // Calculate position - if dragging, use the computed position (with snapping/resistance)
   let left = timeToPixel(displayStartTime);
   if (isDragging && clipDrag && timelineRef.current) {
-    // Use snapped time if snapping, otherwise raw position
-    if (clipDrag.isSnapping && clipDrag.snappedTime !== null) {
+    // Always use snappedTime when available - it contains the position with snapping and resistance applied
+    if (clipDrag.snappedTime !== null) {
       left = timeToPixel(clipDrag.snappedTime);
     } else {
       const rect = timelineRef.current.getBoundingClientRect();
@@ -249,9 +249,9 @@ function TimelineClipComponent({
       left = Math.max(0, x);
     }
   } else if (isLinkedToDragging && clipDrag && timelineRef.current && draggedClip) {
-    // Move linked clip in sync - use snapped position if available
+    // Move linked clip in sync - use computed position (snapped + resistance) if available
     let newDragTime: number;
-    if (clipDrag.isSnapping && clipDrag.snappedTime !== null) {
+    if (clipDrag.snappedTime !== null) {
       newDragTime = clipDrag.snappedTime;
     } else {
       const rect = timelineRef.current.getBoundingClientRect();
@@ -288,6 +288,7 @@ function TimelineClipComponent({
     isLinkedToDragging ? 'linked-dragging' : '',
     isTrimming ? 'trimming' : '',
     isLinkedToTrimming ? 'linked-trimming' : '',
+    isDragging && clipDrag?.forcingOverlap ? 'forcing-overlap' : '',
     clipTypeClass,
     clip.isLoading ? 'loading' : '',
     hasProxy ? 'has-proxy' : '',

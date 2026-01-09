@@ -2056,6 +2056,11 @@ input[type="checkbox"] {
   z-index: 99;
 }
 
+/* Visual feedback when forcing overlap - red glow to indicate clip will be trimmed */
+.timeline-clip.forcing-overlap {
+  box-shadow: 0 0 0 2px #ef4444, 0 4px 12px rgba(239, 68, 68, 0.5);
+}
+
 /* Premiere-style drag feedback */
 .timeline-tracks.dragging-clip {
   cursor: grabbing;

@@ -5,7 +5,7 @@ import { subscribeWithSelector } from 'zustand/middleware';
 
 import type { TimelineStore, TimelineUtils, TimelineClip, Keyframe, CompositionTimelineData } from './types';
 import type { SerializableClip } from '../../types';
-import { DEFAULT_TRACKS, SNAP_THRESHOLD_SECONDS } from './constants';
+import { DEFAULT_TRACKS, SNAP_THRESHOLD_SECONDS, OVERLAP_RESISTANCE_SECONDS } from './constants';
 import { useMediaStore } from '../mediaStore';
 import { useMixerStore } from '../mixerStore';
 
@@ -211,6 +211,160 @@ export const useTimelineStore = create<TimelineStore>()(
 
         // As a fallback, return the desired position (shouldn't happen often)
         return Math.max(0, desiredStartTime);
+      },
+
+      // Apply magnetic resistance at clip edges during drag
+      // Returns position with resistance applied, and whether user has "broken through" to force overlap
+      getPositionWithResistance: (clipId: string, desiredStartTime: number, trackId: string, duration: number) => {
+        const { clips } = get();
+        const movingClip = clips.find(c => c.id === clipId);
+
+        // Get other clips on the same track (excluding the moving clip and its linked clip)
+        const otherClips = clips.filter(c =>
+          c.trackId === trackId &&
+          c.id !== clipId &&
+          (movingClip ? c.id !== movingClip.linkedClipId && c.linkedClipId !== clipId : true)
+        ).sort((a, b) => a.startTime - b.startTime);
+
+        const desiredEndTime = desiredStartTime + duration;
+
+        // Find if desired position overlaps with any clip
+        let overlappingClip: TimelineClip | null = null;
+        for (const clip of otherClips) {
+          const clipEnd = clip.startTime + clip.duration;
+          // Check if time ranges overlap
+          if (!(desiredEndTime <= clip.startTime || desiredStartTime >= clipEnd)) {
+            overlappingClip = clip;
+            break;
+          }
+        }
+
+        // No overlap - return desired position
+        if (!overlappingClip) {
+          return { startTime: Math.max(0, desiredStartTime), forcingOverlap: false };
+        }
+
+        // There's an overlap - apply resistance
+        const overlappingEnd = overlappingClip.startTime + overlappingClip.duration;
+
+        // Check which edge is closer and calculate resistance
+        const distToStart = desiredEndTime - overlappingClip.startTime; // How far into the clip from left
+        const distToEnd = overlappingEnd - desiredStartTime; // How far into the clip from right
+
+        // Determine if user is trying to enter from left or right
+        const enteringFromLeft = distToStart < distToEnd;
+
+        if (enteringFromLeft) {
+          // User approaching from left - their clip end is past the other clip's start
+          const penetrationDepth = desiredEndTime - overlappingClip.startTime;
+
+          if (penetrationDepth < OVERLAP_RESISTANCE_SECONDS) {
+            // Within resistance zone - snap to edge (clip end at other clip's start)
+            return { startTime: Math.max(0, overlappingClip.startTime - duration), forcingOverlap: false };
+          } else {
+            // User has broken through resistance - allow overlap
+            return { startTime: Math.max(0, desiredStartTime), forcingOverlap: true };
+          }
+        } else {
+          // User approaching from right - their clip start is before the other clip's end
+          const penetrationDepth = overlappingEnd - desiredStartTime;
+
+          if (penetrationDepth < OVERLAP_RESISTANCE_SECONDS) {
+            // Within resistance zone - snap to edge (clip start at other clip's end)
+            return { startTime: Math.max(0, overlappingEnd), forcingOverlap: false };
+          } else {
+            // User has broken through resistance - allow overlap
+            return { startTime: Math.max(0, desiredStartTime), forcingOverlap: true };
+          }
+        }
+      },
+
+      // Trim any clips that the placed clip overlaps with
+      trimOverlappingClips: (clipId: string, startTime: number, trackId: string, duration: number) => {
+        const { clips, invalidateCache } = get();
+        const movingClip = clips.find(c => c.id === clipId);
+
+        // Get other clips on the same track (excluding the moving clip and its linked clip)
+        const otherClips = clips.filter(c =>
+          c.trackId === trackId &&
+          c.id !== clipId &&
+          (movingClip ? c.id !== movingClip.linkedClipId && c.linkedClipId !== clipId : true)
+        );
+
+        const endTime = startTime + duration;
+        const clipsToModify: { id: string; action: 'trim-start' | 'trim-end' | 'delete' | 'split'; trimAmount?: number; splitTime?: number }[] = [];
+
+        for (const clip of otherClips) {
+          const clipEnd = clip.startTime + clip.duration;
+
+          // Check if this clip overlaps with the placed clip
+          if (!(endTime <= clip.startTime || startTime >= clipEnd)) {
+            // There's overlap - determine how to handle it
+
+            // Case 1: Placed clip completely covers this clip -> delete it
+            if (startTime <= clip.startTime && endTime >= clipEnd) {
+              clipsToModify.push({ id: clip.id, action: 'delete' });
+            }
+            // Case 2: Placed clip covers the start of this clip -> trim start
+            else if (startTime <= clip.startTime && endTime < clipEnd) {
+              const trimAmount = endTime - clip.startTime;
+              clipsToModify.push({ id: clip.id, action: 'trim-start', trimAmount });
+            }
+            // Case 3: Placed clip covers the end of this clip -> trim end
+            else if (startTime > clip.startTime && endTime >= clipEnd) {
+              const trimAmount = clipEnd - startTime;
+              clipsToModify.push({ id: clip.id, action: 'trim-end', trimAmount });
+            }
+            // Case 4: Placed clip is in the middle of this clip -> split and trim
+            else if (startTime > clip.startTime && endTime < clipEnd) {
+              // For now, just trim the end at the placed clip's start
+              // (the "hole" in the middle - user can manually handle this)
+              clipsToModify.push({ id: clip.id, action: 'trim-end', trimAmount: clipEnd - startTime });
+            }
+          }
+        }
+
+        // Apply modifications
+        if (clipsToModify.length === 0) return;
+
+        const clipIdsToDelete = new Set(clipsToModify.filter(m => m.action === 'delete').map(m => m.id));
+
+        set({
+          clips: clips
+            .filter(c => !clipIdsToDelete.has(c.id))
+            .map(c => {
+              const modification = clipsToModify.find(m => m.id === c.id);
+              if (!modification || modification.action === 'delete') return c;
+
+              if (modification.action === 'trim-start' && modification.trimAmount) {
+                // Trim start: move startTime forward, adjust inPoint
+                const newStartTime = c.startTime + modification.trimAmount;
+                const newInPoint = c.inPoint + modification.trimAmount;
+                const newDuration = c.duration - modification.trimAmount;
+                return {
+                  ...c,
+                  startTime: newStartTime,
+                  inPoint: newInPoint,
+                  duration: newDuration,
+                };
+              }
+
+              if (modification.action === 'trim-end' && modification.trimAmount) {
+                // Trim end: reduce duration and outPoint
+                const newDuration = c.duration - modification.trimAmount;
+                const newOutPoint = c.outPoint - modification.trimAmount;
+                return {
+                  ...c,
+                  duration: newDuration,
+                  outPoint: newOutPoint,
+                };
+              }
+
+              return c;
+            }),
+        });
+
+        invalidateCache();
       },
 
       // Get serializable timeline state for saving to composition
