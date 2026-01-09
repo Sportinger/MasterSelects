@@ -1,4 +1,5 @@
 // Transcript Panel - Premiere Pro-style speech-to-text transcript viewer
+// Shows individual words with real-time highlighting during playback
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
@@ -9,49 +10,75 @@ import './TranscriptPanel.css';
 // Sub-components
 // =============================================================================
 
-interface TranscriptEntryProps {
-  words: TranscriptWord[];
-  speaker: string;
-  startTime: number;
-  endTime: number;
+interface WordProps {
+  word: TranscriptWord;
   isActive: boolean;
+  isHighlighted: boolean;
   onClick: (time: number) => void;
 }
 
-function TranscriptEntry({
-  words,
+function Word({ word, isActive, isHighlighted, onClick }: WordProps) {
+  return (
+    <span
+      className={`transcript-word ${isActive ? 'active' : ''} ${isHighlighted ? 'highlighted' : ''}`}
+      onClick={() => onClick(word.start)}
+      title={`${formatTime(word.start)} - ${formatTime(word.end)}`}
+    >
+      {word.text}
+    </span>
+  );
+}
+
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  const ms = Math.floor((seconds % 1) * 100);
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+}
+
+interface SpeakerBlockProps {
+  speaker: string;
+  startTime: number;
+  endTime: number;
+  words: TranscriptWord[];
+  currentWordId: string | null;
+  searchQuery: string;
+  onClick: (time: number) => void;
+}
+
+function SpeakerBlock({
   speaker,
   startTime,
   endTime,
-  isActive,
+  words,
+  currentWordId,
+  searchQuery,
   onClick,
-}: TranscriptEntryProps) {
-  const formatTime = (seconds: number) => {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-    const frames = Math.floor((seconds % 1) * 30); // Assuming 30fps
-
-    if (hrs > 0) {
-      return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}:${frames.toString().padStart(2, '0')}`;
-    }
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}:${frames.toString().padStart(2, '0')}`;
-  };
-
-  const text = words.map(w => w.text).join(' ');
+}: SpeakerBlockProps) {
+  const query = searchQuery.toLowerCase();
 
   return (
-    <div
-      className={`transcript-entry ${isActive ? 'active' : ''}`}
-      onClick={() => onClick(startTime)}
-    >
-      <div className="transcript-entry-header">
+    <div className="transcript-block">
+      <div className="transcript-block-header">
         <span className="transcript-speaker">{speaker}</span>
         <span className="transcript-time">
           {formatTime(startTime)} - {formatTime(endTime)}
         </span>
       </div>
-      <div className="transcript-text">{text}</div>
+      <div className="transcript-words">
+        {words.map((word) => {
+          const isHighlighted = query && word.text.toLowerCase().includes(query);
+          return (
+            <Word
+              key={word.id}
+              word={word}
+              isActive={word.id === currentWordId}
+              isHighlighted={!!isHighlighted}
+              onClick={onClick}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -64,6 +91,7 @@ export function TranscriptPanel() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showMarkersGlobal, setShowMarkersGlobal] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
+  const activeWordRef = useRef<HTMLSpanElement | null>(null);
 
   // Timeline store
   const {
@@ -87,74 +115,99 @@ export function TranscriptPanel() {
   const transcriptStatus = selectedClip?.transcriptStatus ?? 'none';
   const transcriptProgress = selectedClip?.transcriptProgress ?? 0;
 
-  // Group words into sentences/paragraphs by speaker and gaps
-  const groupedTranscript = useMemo(() => {
+  // Calculate clip-local time for word matching
+  const clipLocalTime = useMemo(() => {
+    if (!selectedClip) return -1;
+    return playheadPosition - selectedClip.startTime + selectedClip.inPoint;
+  }, [selectedClip, playheadPosition]);
+
+  // Find current word based on playhead position
+  const currentWordId = useMemo(() => {
+    if (clipLocalTime < 0 || transcript.length === 0) return null;
+
+    // Binary search for current word
+    let left = 0;
+    let right = transcript.length - 1;
+
+    while (left <= right) {
+      const mid = Math.floor((left + right) / 2);
+      const word = transcript[mid];
+
+      if (clipLocalTime >= word.start && clipLocalTime <= word.end) {
+        return word.id;
+      } else if (clipLocalTime < word.start) {
+        right = mid - 1;
+      } else {
+        left = mid + 1;
+      }
+    }
+
+    // If not exactly in a word, find nearest
+    for (const word of transcript) {
+      if (clipLocalTime >= word.start && clipLocalTime <= word.end) {
+        return word.id;
+      }
+    }
+
+    return null;
+  }, [transcript, clipLocalTime]);
+
+  // Group words into speaker blocks (by speaker and time gaps)
+  const speakerBlocks = useMemo(() => {
     if (transcript.length === 0) return [];
 
-    const groups: Array<{
+    const blocks: Array<{
       speaker: string;
       startTime: number;
       endTime: number;
       words: TranscriptWord[];
     }> = [];
 
-    let currentGroup: typeof groups[0] | null = null;
+    let currentBlock: typeof blocks[0] | null = null;
 
     for (const word of transcript) {
       const speaker = word.speaker || 'Speaker 1';
 
-      // Start new group if speaker changes or gap > 2 seconds
+      // Start new block if speaker changes or gap > 2 seconds
       if (
-        !currentGroup ||
-        currentGroup.speaker !== speaker ||
-        word.start - currentGroup.endTime > 2
+        !currentBlock ||
+        currentBlock.speaker !== speaker ||
+        word.start - currentBlock.endTime > 2
       ) {
-        if (currentGroup) {
-          groups.push(currentGroup);
+        if (currentBlock) {
+          blocks.push(currentBlock);
         }
-        currentGroup = {
+        currentBlock = {
           speaker,
           startTime: word.start,
           endTime: word.end,
           words: [word],
         };
       } else {
-        currentGroup.words.push(word);
-        currentGroup.endTime = word.end;
+        currentBlock.words.push(word);
+        currentBlock.endTime = word.end;
       }
     }
 
-    if (currentGroup) {
-      groups.push(currentGroup);
+    if (currentBlock) {
+      blocks.push(currentBlock);
     }
 
-    return groups;
+    return blocks;
   }, [transcript]);
 
-  // Filter by search query
-  const filteredGroups = useMemo(() => {
-    if (!searchQuery.trim()) return groupedTranscript;
+  // Filter blocks by search query
+  const filteredBlocks = useMemo(() => {
+    if (!searchQuery.trim()) return speakerBlocks;
 
     const query = searchQuery.toLowerCase();
-    return groupedTranscript.filter(group =>
-      group.words.some(w => w.text.toLowerCase().includes(query))
+    return speakerBlocks.filter(block =>
+      block.words.some(w => w.text.toLowerCase().includes(query))
     );
-  }, [groupedTranscript, searchQuery]);
+  }, [speakerBlocks, searchQuery]);
 
-  // Find active group based on playhead
-  const activeGroupIndex = useMemo(() => {
-    if (!selectedClip) return -1;
-
-    // Convert timeline position to clip-local time
-    const clipLocalTime = playheadPosition - selectedClip.startTime + selectedClip.inPoint;
-
-    return filteredGroups.findIndex(
-      group => clipLocalTime >= group.startTime && clipLocalTime <= group.endTime
-    );
-  }, [filteredGroups, playheadPosition, selectedClip]);
-
-  // Handle click on transcript entry - seek to that time
-  const handleEntryClick = useCallback((sourceTime: number) => {
+  // Handle click on word - seek to that time
+  const handleWordClick = useCallback((sourceTime: number) => {
     if (!selectedClip) return;
 
     // Convert source time to timeline position
@@ -162,15 +215,15 @@ export function TranscriptPanel() {
     setPlayheadPosition(Math.max(0, timelinePosition));
   }, [selectedClip, setPlayheadPosition]);
 
-  // Auto-scroll to active entry
+  // Auto-scroll to active word
   useEffect(() => {
-    if (activeGroupIndex >= 0 && containerRef.current) {
-      const activeElement = containerRef.current.querySelector('.transcript-entry.active');
+    if (currentWordId && containerRef.current) {
+      const activeElement = containerRef.current.querySelector('.transcript-word.active');
       if (activeElement) {
-        activeElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        activeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }
-  }, [activeGroupIndex]);
+  }, [currentWordId]);
 
   // Handle transcribe button click
   const handleTranscribe = useCallback(async () => {
@@ -285,7 +338,7 @@ export function TranscriptPanel() {
 
       {/* Transcript content */}
       <div className="transcript-content" ref={containerRef}>
-        {filteredGroups.length === 0 ? (
+        {filteredBlocks.length === 0 ? (
           <div className="transcript-empty">
             {transcript.length === 0 ? (
               <p>No transcript available. Click "Transcribe" to generate.</p>
@@ -294,15 +347,16 @@ export function TranscriptPanel() {
             )}
           </div>
         ) : (
-          filteredGroups.map((group, index) => (
-            <TranscriptEntry
-              key={`${group.startTime}-${index}`}
-              words={group.words}
-              speaker={group.speaker}
-              startTime={group.startTime}
-              endTime={group.endTime}
-              isActive={index === activeGroupIndex}
-              onClick={handleEntryClick}
+          filteredBlocks.map((block, index) => (
+            <SpeakerBlock
+              key={`${block.startTime}-${index}`}
+              speaker={block.speaker}
+              startTime={block.startTime}
+              endTime={block.endTime}
+              words={block.words}
+              currentWordId={currentWordId}
+              searchQuery={searchQuery}
+              onClick={handleWordClick}
             />
           ))
         )}
@@ -311,7 +365,7 @@ export function TranscriptPanel() {
       {/* Footer */}
       <div className="transcript-footer">
         <span className="transcript-hint">
-          Click entry to seek. Right-click clip to transcribe.
+          Click word to seek. Right-click clip to transcribe.
         </span>
       </div>
     </div>

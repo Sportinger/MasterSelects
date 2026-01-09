@@ -204,7 +204,85 @@
   font-size: 12px;
 }
 
-/* Transcript entries */
+/* Transcript blocks (speaker sections) */
+.transcript-block {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color, #2a2a2a);
+}
+
+.transcript-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.transcript-speaker {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary, #888);
+}
+
+.transcript-speaker::before {
+  content: '...';
+  margin-right: 6px;
+  letter-spacing: 2px;
+}
+
+.transcript-time {
+  font-size: 10px;
+  color: var(--text-secondary, #666);
+  font-family: monospace;
+}
+
+/* Words container */
+.transcript-words {
+  line-height: 1.8;
+}
+
+/* Individual word styling */
+.transcript-word {
+  display: inline;
+  padding: 2px 3px;
+  margin: 1px;
+  border-radius: 3px;
+  font-size: 13px;
+  color: var(--text-primary, #e0e0e0);
+  cursor: pointer;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+.transcript-word:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Active word (current playhead position) */
+.transcript-word.active {
+  background: #fbbf24;
+  color: #000;
+  font-weight: 600;
+  border-radius: 3px;
+  animation: word-pulse 0.5s ease;
+}
+
+@keyframes word-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+/* Highlighted word (search match) */
+.transcript-word.highlighted {
+  background: rgba(251, 191, 36, 0.3);
+  color: #fbbf24;
+}
+
+.transcript-word.highlighted.active {
+  background: #fbbf24;
+  color: #000;
+}
+
+/* Legacy support for old transcript-entry class */
 .transcript-entry {
   padding: 10px 12px;
   border-bottom: 1px solid var(--border-color, #2a2a2a);
@@ -226,24 +304,6 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 6px;
-}
-
-.transcript-speaker {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary, #888);
-}
-
-.transcript-speaker::before {
-  content: '...';
-  margin-right: 6px;
-  letter-spacing: 2px;
-}
-
-.transcript-time {
-  font-size: 10px;
-  color: var(--text-secondary, #666);
-  font-family: monospace;
 }
 
 .transcript-text {

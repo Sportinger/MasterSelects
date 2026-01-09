@@ -137,45 +137,82 @@ async function transcribeFile(
 
   onProgress(50);
 
-  // Run transcription
+  // Run transcription with word-level timestamps
   const result = await transcriber(audioData, {
     return_timestamps: 'word',
     chunk_length_s: 30,
     stride_length_s: 5,
+    language: 'en',
+    task: 'transcribe',
   });
 
+  console.log('[ClipTranscriber] Raw result:', result);
   onProgress(95);
 
   // Convert result to TranscriptWord array
   const words: TranscriptWord[] = [];
+  let wordIndex = 0;
 
   if (result.chunks && result.chunks.length > 0) {
-    for (let i = 0; i < result.chunks.length; i++) {
-      const chunk = result.chunks[i];
-      const text = chunk.text?.trim();
-      if (!text) continue;
+    for (const chunk of result.chunks) {
+      const chunkText = chunk.text?.trim();
+      if (!chunkText) continue;
 
-      words.push({
-        id: `word-${i}`,
-        text,
-        start: chunk.timestamp[0] ?? 0,
-        end: chunk.timestamp[1] ?? chunk.timestamp[0] + 0.5,
-        confidence: 1, // Whisper doesn't provide per-word confidence
-        speaker: 'Speaker 1', // TODO: Add speaker diarization
-      });
+      const chunkStart = chunk.timestamp[0] ?? 0;
+      const chunkEnd = chunk.timestamp[1] ?? chunkStart + 0.5;
+
+      // Check if chunk contains multiple words (split by spaces)
+      const chunkWords = chunkText.split(/\s+/).filter(w => w.length > 0);
+
+      if (chunkWords.length === 1) {
+        // Single word chunk - use as-is
+        words.push({
+          id: `word-${wordIndex++}`,
+          text: chunkText,
+          start: chunkStart,
+          end: chunkEnd,
+          confidence: 1,
+          speaker: 'Speaker 1',
+        });
+      } else {
+        // Multiple words in chunk - distribute time evenly
+        const duration = chunkEnd - chunkStart;
+        const wordDuration = duration / chunkWords.length;
+
+        for (let i = 0; i < chunkWords.length; i++) {
+          const wordStart = chunkStart + (i * wordDuration);
+          const wordEnd = wordStart + wordDuration;
+
+          words.push({
+            id: `word-${wordIndex++}`,
+            text: chunkWords[i],
+            start: wordStart,
+            end: wordEnd,
+            confidence: 1,
+            speaker: 'Speaker 1',
+          });
+        }
+      }
     }
   } else if (result.text) {
-    // Fallback: single word for entire transcript
-    words.push({
-      id: 'word-0',
-      text: result.text.trim(),
-      start: 0,
-      end: audioBuffer.duration,
-      confidence: 1,
-      speaker: 'Speaker 1',
-    });
+    // Fallback: split text into words and distribute evenly
+    const allWords = result.text.trim().split(/\s+/).filter((w: string) => w.length > 0);
+    const totalDuration = audioBuffer.duration;
+    const wordDuration = totalDuration / allWords.length;
+
+    for (let i = 0; i < allWords.length; i++) {
+      words.push({
+        id: `word-${i}`,
+        text: allWords[i],
+        start: i * wordDuration,
+        end: (i + 1) * wordDuration,
+        confidence: 1,
+        speaker: 'Speaker 1',
+      });
+    }
   }
 
+  console.log('[ClipTranscriber] Parsed', words.length, 'words');
   onProgress(100);
   return words;
 }
