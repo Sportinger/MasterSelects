@@ -3,7 +3,9 @@
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
-import type { TimelineClip } from '../../types';
+import type { TimelineClip, TranscriptWord } from '../../types';
+
+type SyncMethod = 'audio' | 'transcript';
 
 interface MulticamDialogProps {
   open: boolean;
@@ -18,6 +20,7 @@ export function MulticamDialog({ open, onClose, selectedClipIds }: MulticamDialo
   const [syncing, setSyncing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [syncMethod, setSyncMethod] = useState<SyncMethod>('audio');
 
   // Get selected clips
   const selectedClips = useMemo(() => {
@@ -45,6 +48,25 @@ export function MulticamDialog({ open, onClose, selectedClipIds }: MulticamDialo
     return { clipsWithAudio: withAudio, clipsWithoutAudio: withoutAudio };
   }, [selectedClips]);
 
+  // Categorize clips: with transcript vs without
+  const { clipsWithTranscript, clipsWithoutTranscript } = useMemo(() => {
+    const withTranscript: TimelineClip[] = [];
+    const withoutTranscript: TimelineClip[] = [];
+
+    for (const clip of selectedClips) {
+      if (clip.transcript && clip.transcript.length > 0) {
+        withTranscript.push(clip);
+      } else {
+        withoutTranscript.push(clip);
+      }
+    }
+
+    return { clipsWithTranscript: withTranscript, clipsWithoutTranscript: withoutTranscript };
+  }, [selectedClips]);
+
+  // Check if transcript sync is available (need at least 2 clips with transcripts)
+  const transcriptSyncAvailable = clipsWithTranscript.length >= 2;
+
   // Auto-select first clip with audio as master
   useEffect(() => {
     if (open && clipsWithAudio.length > 0 && !masterClipId) {
@@ -59,14 +81,24 @@ export function MulticamDialog({ open, onClose, selectedClipIds }: MulticamDialo
       setProgress(0);
       setSyncing(false);
       setMasterClipId(clipsWithAudio[0]?.id || null);
+      // Default to transcript sync if available and no audio, otherwise audio
+      setSyncMethod(transcriptSyncAvailable && clipsWithAudio.length < 2 ? 'transcript' : 'audio');
     }
-  }, [open, clipsWithAudio]);
+  }, [open, clipsWithAudio, transcriptSyncAvailable]);
 
   // Handle sync and link
   const handleSyncAndLink = useCallback(async () => {
-    if (!masterClipId || clipsWithAudio.length < 2) {
-      setError('Need at least 2 clips with audio to sync');
-      return;
+    // Validate based on sync method
+    if (syncMethod === 'audio') {
+      if (!masterClipId || clipsWithAudio.length < 2) {
+        setError('Need at least 2 clips with audio to sync');
+        return;
+      }
+    } else {
+      if (!masterClipId || clipsWithTranscript.length < 2) {
+        setError('Need at least 2 clips with transcripts to sync');
+        return;
+      }
     }
 
     setSyncing(true);
@@ -74,61 +106,118 @@ export function MulticamDialog({ open, onClose, selectedClipIds }: MulticamDialo
     setProgress(0);
 
     try {
-      // Import audioSync service (singleton instance)
-      const { audioSync } = await import('../../services/audioSync');
+      let clipOffsets: Map<string, number>;
 
-      // Get master clip info
-      const masterClip = clipsWithAudio.find(c => c.id === masterClipId);
-      if (!masterClip?.source?.mediaFileId) {
-        setError('Master clip has no media file reference');
-        setSyncing(false);
-        return;
-      }
+      if (syncMethod === 'transcript') {
+        // Transcript-based sync
+        const { syncClipsByTranscript } = await import('../../services/transcriptSync');
 
-      // Build clip sync info with inPoint and duration for accurate sync
-      const masterSyncInfo = {
-        mediaFileId: masterClip.source.mediaFileId,
-        clipId: masterClip.id,
-        inPoint: masterClip.inPoint,
-        duration: masterClip.duration,
-      };
+        // Get master clip
+        const masterClip = clipsWithTranscript.find(c => c.id === masterClipId);
+        if (!masterClip?.transcript) {
+          setError('Master clip has no transcript');
+          setSyncing(false);
+          return;
+        }
 
-      const targetSyncInfos = clipsWithAudio
-        .filter(c => c.id !== masterClipId && c.source?.mediaFileId)
-        .map(c => ({
-          mediaFileId: c.source!.mediaFileId!,
-          clipId: c.id,
-          inPoint: c.inPoint,
-          duration: c.duration,
-        }));
+        setProgress(20);
 
-      if (targetSyncInfos.length === 0) {
-        setError('No other clips with media file references found');
-        setSyncing(false);
-        return;
-      }
+        // Build target clips with transcripts
+        const targetClips = clipsWithTranscript
+          .filter(c => c.id !== masterClipId && c.transcript && c.transcript.length > 0)
+          .map(c => ({
+            clipId: c.id,
+            transcript: c.transcript as TranscriptWord[],
+          }));
 
-      // Progress callback
-      const onProgress = (p: number) => {
-        setProgress(p);
-      };
+        if (targetClips.length === 0) {
+          setError('No other clips with transcripts found');
+          setSyncing(false);
+          return;
+        }
 
-      // Run sync with clip bounds - returns Map<clipId, offsetInMs>
-      // This uses only the trimmed portion of each clip for sync
-      const clipOffsets = await audioSync.syncMultipleClips(
-        masterSyncInfo,
-        targetSyncInfos,
-        onProgress
-      );
+        setProgress(40);
 
-      // Add clips without audio with their current relative position to master (convert to ms)
-      for (const clip of clipsWithoutAudio) {
-        const currentOffsetMs = (clip.startTime - masterClip.startTime) * 1000;
-        clipOffsets.set(clip.id, currentOffsetMs);
+        // Run transcript sync
+        const syncResults = syncClipsByTranscript(
+          masterClipId,
+          masterClip.transcript,
+          targetClips
+        );
+
+        setProgress(80);
+
+        // Convert to simple offset map
+        clipOffsets = new Map<string, number>();
+        for (const [clipId, result] of syncResults) {
+          clipOffsets.set(clipId, result.offsetMs);
+          if (result.confidence < 0.3 && clipId !== masterClipId) {
+            console.warn(`[MulticamDialog] Low confidence sync for ${clipId}: ${(result.confidence * 100).toFixed(1)}%`);
+          }
+        }
+
+        // Add clips without transcript with their current relative position to master
+        for (const clip of clipsWithoutTranscript) {
+          const currentOffsetMs = (clip.startTime - masterClip.startTime) * 1000;
+          clipOffsets.set(clip.id, currentOffsetMs);
+        }
+
+      } else {
+        // Audio-based sync
+        const { audioSync } = await import('../../services/audioSync');
+
+        // Get master clip info
+        const masterClip = clipsWithAudio.find(c => c.id === masterClipId);
+        if (!masterClip?.source?.mediaFileId) {
+          setError('Master clip has no media file reference');
+          setSyncing(false);
+          return;
+        }
+
+        // Build clip sync info with inPoint and duration for accurate sync
+        const masterSyncInfo = {
+          mediaFileId: masterClip.source.mediaFileId,
+          clipId: masterClip.id,
+          inPoint: masterClip.inPoint,
+          duration: masterClip.duration,
+        };
+
+        const targetSyncInfos = clipsWithAudio
+          .filter(c => c.id !== masterClipId && c.source?.mediaFileId)
+          .map(c => ({
+            mediaFileId: c.source!.mediaFileId!,
+            clipId: c.id,
+            inPoint: c.inPoint,
+            duration: c.duration,
+          }));
+
+        if (targetSyncInfos.length === 0) {
+          setError('No other clips with media file references found');
+          setSyncing(false);
+          return;
+        }
+
+        // Progress callback
+        const onProgress = (p: number) => {
+          setProgress(p);
+        };
+
+        // Run sync with clip bounds - returns Map<clipId, offsetInMs>
+        clipOffsets = await audioSync.syncMultipleClips(
+          masterSyncInfo,
+          targetSyncInfos,
+          onProgress
+        );
+
+        // Add clips without audio with their current relative position to master
+        for (const clip of clipsWithoutAudio) {
+          const currentOffsetMs = (clip.startTime - masterClip.startTime) * 1000;
+          clipOffsets.set(clip.id, currentOffsetMs);
+        }
       }
 
       // Create linked group with all clips
-      const allClipIds = [...clipsWithAudio.map(c => c.id), ...clipsWithoutAudio.map(c => c.id)];
+      const allClipIds = selectedClips.map(c => c.id);
       createLinkedGroup(allClipIds, clipOffsets);
 
       setProgress(100);
@@ -138,7 +227,7 @@ export function MulticamDialog({ open, onClose, selectedClipIds }: MulticamDialo
       setError(err instanceof Error ? err.message : 'Unknown error during sync');
       setSyncing(false);
     }
-  }, [masterClipId, clipsWithAudio, clipsWithoutAudio, createLinkedGroup, onClose]);
+  }, [masterClipId, syncMethod, clipsWithAudio, clipsWithTranscript, clipsWithoutAudio, clipsWithoutTranscript, selectedClips, createLinkedGroup, onClose]);
 
   // Handle close
   const handleClose = useCallback(() => {

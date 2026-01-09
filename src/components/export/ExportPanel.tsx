@@ -5,6 +5,7 @@ import { FrameExporter, downloadBlob } from '../../engine/FrameExporter';
 import type { ExportProgress } from '../../engine/FrameExporter';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
+import { engine } from '../../engine/WebGPUEngine';
 
 export function ExportPanel() {
   const { duration, inPoint, outPoint, playheadPosition } = useTimelineStore();
@@ -100,46 +101,61 @@ export function ExportPanel() {
 
   // Handle render current frame
   const handleRenderFrame = useCallback(async () => {
-    const canvas = document.createElement('canvas');
-    const actualWidth = useCustomResolution ? customWidth : width;
-    const actualHeight = useCustomResolution ? customHeight : height;
-    canvas.width = actualWidth;
-    canvas.height = actualHeight;
-
-    const context = canvas.getContext('webgpu');
-    if (!context) {
-      setError('Failed to get WebGPU context');
-      return;
-    }
-
     try {
-      // Configure canvas
-      const device = await (navigator.gpu as any).requestAdapter().then((adapter: any) => adapter.requestDevice());
-      context.configure({
-        device,
-        format: 'bgra8unorm',
-        alphaMode: 'premultiplied',
-      });
-
-      // Render current frame
-      // Note: This is a simplified version - in production you'd want to properly
-      // set up the engine to render to this canvas
-      // For now, let's just capture the preview canvas
-      const previewCanvas = document.querySelector('canvas');
-      if (previewCanvas) {
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(previewCanvas, 0, 0, actualWidth, actualHeight);
-        }
+      // Read pixels from the engine's composited frame
+      const pixels = await engine.readPixels();
+      if (!pixels) {
+        setError('Failed to read frame from GPU');
+        return;
       }
 
-      // Convert to PNG and download
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const frameName = `${filename}_frame_${Math.floor(playheadPosition * 1000)}.png`;
-          downloadBlob(blob, frameName);
+      // Get the engine's output dimensions (this is what was actually rendered)
+      const { width: engineWidth, height: engineHeight } = engine.getOutputDimensions();
+
+      // Create ImageData from the pixels
+      const imageData = new ImageData(pixels, engineWidth, engineHeight);
+
+      // Create a canvas to draw the image
+      const canvas = document.createElement('canvas');
+      canvas.width = engineWidth;
+      canvas.height = engineHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        setError('Failed to create canvas context');
+        return;
+      }
+
+      // Draw the image data
+      ctx.putImageData(imageData, 0, 0);
+
+      // If custom resolution is different, scale to target size
+      const actualWidth = useCustomResolution ? customWidth : width;
+      const actualHeight = useCustomResolution ? customHeight : height;
+
+      if (actualWidth !== engineWidth || actualHeight !== engineHeight) {
+        // Create a scaled canvas
+        const scaledCanvas = document.createElement('canvas');
+        scaledCanvas.width = actualWidth;
+        scaledCanvas.height = actualHeight;
+        const scaledCtx = scaledCanvas.getContext('2d');
+        if (scaledCtx) {
+          scaledCtx.drawImage(canvas, 0, 0, actualWidth, actualHeight);
+          scaledCanvas.toBlob((blob) => {
+            if (blob) {
+              const frameName = `${filename}_frame_${Math.floor(playheadPosition * 1000)}.png`;
+              downloadBlob(blob, frameName);
+            }
+          }, 'image/png');
         }
-      }, 'image/png');
+      } else {
+        // Export at native resolution
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const frameName = `${filename}_frame_${Math.floor(playheadPosition * 1000)}.png`;
+            downloadBlob(blob, frameName);
+          }
+        }, 'image/png');
+      }
     } catch (e) {
       console.error('[ExportPanel] Frame render failed:', e);
       setError(e instanceof Error ? e.message : 'Frame render failed');
