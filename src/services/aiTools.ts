@@ -480,6 +480,8 @@ function formatTrackInfo(track: TimelineTrack, clips: TimelineClip[]) {
       startTime: c.startTime,
       endTime: c.startTime + c.duration,
       duration: c.duration,
+      hasAnalysis: c.analysisStatus === 'ready',
+      hasTranscript: !!c.transcript?.segments?.length,
     })),
   };
 }
@@ -492,10 +494,29 @@ export async function executeAITool(toolName: string, args: Record<string, unkno
     switch (toolName) {
       // === TIMELINE STATE ===
       case 'getTimelineState': {
-        const { tracks, clips, playheadPosition, duration, inPoint, outPoint, zoom } = timelineStore;
+        const { tracks, clips, playheadPosition, duration, inPoint, outPoint, zoom, selectedClipIds } = timelineStore;
 
         const videoTracks = tracks.filter(t => t.type === 'video').map(t => formatTrackInfo(t, clips));
         const audioTracks = tracks.filter(t => t.type === 'audio').map(t => formatTrackInfo(t, clips));
+
+        // Get details of selected clips
+        const selectedClipIdsArray = Array.from(selectedClipIds);
+        const selectedClips = selectedClipIdsArray.map(id => {
+          const clip = clips.find(c => c.id === id);
+          if (!clip) return null;
+          const track = tracks.find(t => t.id === clip.trackId);
+          return {
+            id: clip.id,
+            name: clip.name,
+            trackId: clip.trackId,
+            trackName: track?.name || 'Unknown',
+            startTime: clip.startTime,
+            endTime: clip.startTime + clip.duration,
+            duration: clip.duration,
+            hasAnalysis: clip.analysisStatus === 'ready',
+            hasTranscript: !!clip.transcript?.segments?.length,
+          };
+        }).filter(Boolean);
 
         return {
           success: true,
@@ -506,9 +527,13 @@ export async function executeAITool(toolName: string, args: Record<string, unkno
             outPoint,
             zoom,
             totalClips: clips.length,
+            // Selected clips info
+            selectedClipIds: selectedClipIdsArray,
+            selectedClips,
+            hasSelection: selectedClipIdsArray.length > 0,
+            // Tracks with their clips
             videoTracks,
             audioTracks,
-            selectedClipIds: Array.from(timelineStore.selectedClipIds),
           },
         };
       }
@@ -1056,12 +1081,26 @@ export async function executeAITool(toolName: string, args: Record<string, unkno
 
 // Helper to get a quick summary for AI context
 export function getQuickTimelineSummary(): string {
-  const { tracks, clips, playheadPosition, duration } = useTimelineStore.getState();
+  const { tracks, clips, playheadPosition, duration, selectedClipIds } = useTimelineStore.getState();
 
   const videoTracks = tracks.filter(t => t.type === 'video');
   const audioTracks = tracks.filter(t => t.type === 'audio');
   const videoClips = clips.filter(c => videoTracks.some(t => t.id === c.trackId));
   const audioClips = clips.filter(c => audioTracks.some(t => t.id === c.trackId));
 
-  return `Timeline: ${videoTracks.length} video tracks (${videoClips.length} clips), ${audioTracks.length} audio tracks (${audioClips.length} clips). Playhead at ${playheadPosition.toFixed(2)}s, duration ${duration.toFixed(2)}s.`;
+  // Selected clip info
+  const selectedCount = selectedClipIds.size;
+  let selectedInfo = '';
+  if (selectedCount > 0) {
+    const selectedClip = clips.find(c => selectedClipIds.has(c.id));
+    if (selectedClip) {
+      const track = tracks.find(t => t.id === selectedClip.trackId);
+      selectedInfo = ` Selected: "${selectedClip.name}" on ${track?.name || 'unknown track'}.`;
+      if (selectedCount > 1) {
+        selectedInfo = ` ${selectedCount} clips selected, first: "${selectedClip.name}" on ${track?.name || 'unknown track'}.`;
+      }
+    }
+  }
+
+  return `Timeline: ${videoTracks.length} video tracks (${videoClips.length} clips), ${audioTracks.length} audio tracks (${audioClips.length} clips). Playhead at ${playheadPosition.toFixed(2)}s, duration ${duration.toFixed(2)}s.${selectedInfo}`;
 }
