@@ -7,11 +7,14 @@ import { engine } from '../engine/WebGPUEngine';
 import { startBatch, endBatch, captureSnapshot } from '../stores/historyStore';
 import type { TimelineClip, TimelineTrack } from '../stores/timeline/types';
 
-// Tools that modify the timeline (need history tracking)
+// Tools that modify the timeline or media (need history tracking)
 const MODIFYING_TOOLS = new Set([
   'splitClip', 'deleteClip', 'deleteClips', 'moveClip', 'trimClip',
   'createTrack', 'deleteTrack', 'setTrackVisibility', 'setTrackMuted',
   'cutRangesFromClip',
+  // Media tools
+  'createMediaFolder', 'renameMediaItem', 'deleteMediaItem', 'moveMediaItems',
+  'createComposition',
 ]);
 
 // ============ TOOL DEFINITIONS (OpenAI Function Calling Format) ============
@@ -545,6 +548,157 @@ export const AI_TOOLS = [
           },
         },
         required: ['times'],
+      },
+    },
+  },
+
+  // === MEDIA PANEL TOOLS ===
+  {
+    type: 'function' as const,
+    function: {
+      name: 'getMediaItems',
+      description: 'Get all items in the media panel: files (video, audio, image), compositions, and folders. Useful for understanding project structure.',
+      parameters: {
+        type: 'object',
+        properties: {
+          folderId: {
+            type: 'string',
+            description: 'Get items in a specific folder. Omit or null for root level items.',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'createMediaFolder',
+      description: 'Create a new folder in the media panel for organizing files.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Name of the new folder',
+          },
+          parentFolderId: {
+            type: 'string',
+            description: 'ID of parent folder (omit for root level)',
+          },
+        },
+        required: ['name'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'renameMediaItem',
+      description: 'Rename a media item (file, folder, or composition).',
+      parameters: {
+        type: 'object',
+        properties: {
+          itemId: {
+            type: 'string',
+            description: 'ID of the item to rename',
+          },
+          newName: {
+            type: 'string',
+            description: 'New name for the item',
+          },
+        },
+        required: ['itemId', 'newName'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'deleteMediaItem',
+      description: 'Delete a media item (file, folder, or composition). Warning: Folders delete all contents.',
+      parameters: {
+        type: 'object',
+        properties: {
+          itemId: {
+            type: 'string',
+            description: 'ID of the item to delete',
+          },
+        },
+        required: ['itemId'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'moveMediaItems',
+      description: 'Move media items to a different folder.',
+      parameters: {
+        type: 'object',
+        properties: {
+          itemIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of item IDs to move',
+          },
+          targetFolderId: {
+            type: 'string',
+            description: 'ID of target folder (omit or null to move to root)',
+          },
+        },
+        required: ['itemIds'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'createComposition',
+      description: 'Create a new composition (timeline sequence).',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Name of the composition',
+          },
+          width: {
+            type: 'number',
+            description: 'Width in pixels (default: 1920)',
+          },
+          height: {
+            type: 'number',
+            description: 'Height in pixels (default: 1080)',
+          },
+          frameRate: {
+            type: 'number',
+            description: 'Frame rate (default: 30)',
+          },
+          duration: {
+            type: 'number',
+            description: 'Duration in seconds (default: 60)',
+          },
+        },
+        required: ['name'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'selectMediaItems',
+      description: 'Select items in the media panel.',
+      parameters: {
+        type: 'object',
+        properties: {
+          itemIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of item IDs to select',
+          },
+        },
+        required: ['itemIds'],
       },
     },
   },
@@ -1545,6 +1699,170 @@ async function executeToolInternal(
             columns,
             ...gridResult.data,
           },
+        };
+      }
+
+      // === MEDIA PANEL TOOLS ===
+      case 'getMediaItems': {
+        const folderId = (args.folderId as string | undefined) || null;
+        const { files, compositions, folders } = mediaStore;
+
+        // Filter by folder
+        const folderFiles = files.filter(f => f.parentId === folderId);
+        const folderComps = compositions.filter(c => c.parentId === folderId);
+        const subFolders = folders.filter(f => f.parentId === folderId);
+
+        return {
+          success: true,
+          data: {
+            folderId: folderId || 'root',
+            folders: subFolders.map(f => ({
+              id: f.id,
+              name: f.name,
+              type: 'folder',
+              isExpanded: f.isExpanded,
+            })),
+            files: folderFiles.map(f => ({
+              id: f.id,
+              name: f.name,
+              type: f.type,
+              duration: f.duration,
+              width: f.width,
+              height: f.height,
+            })),
+            compositions: folderComps.map(c => ({
+              id: c.id,
+              name: c.name,
+              type: 'composition',
+              width: c.width,
+              height: c.height,
+              duration: c.duration,
+              frameRate: c.frameRate,
+            })),
+            totalItems: subFolders.length + folderFiles.length + folderComps.length,
+            // Also include all folders for reference
+            allFolders: folders.map(f => ({ id: f.id, name: f.name, parentId: f.parentId })),
+          },
+        };
+      }
+
+      case 'createMediaFolder': {
+        const name = args.name as string;
+        const parentFolderId = (args.parentFolderId as string | undefined) || null;
+
+        const folder = mediaStore.createFolder(name, parentFolderId);
+
+        return {
+          success: true,
+          data: {
+            folderId: folder.id,
+            folderName: folder.name,
+            parentId: parentFolderId,
+          },
+        };
+      }
+
+      case 'renameMediaItem': {
+        const itemId = args.itemId as string;
+        const newName = args.newName as string;
+
+        // Try to find the item in files, compositions, or folders
+        const file = mediaStore.files.find(f => f.id === itemId);
+        const comp = mediaStore.compositions.find(c => c.id === itemId);
+        const folder = mediaStore.folders.find(f => f.id === itemId);
+
+        if (file) {
+          mediaStore.renameFile(itemId, newName);
+          return { success: true, data: { itemId, newName, type: 'file' } };
+        } else if (comp) {
+          mediaStore.updateComposition(itemId, { name: newName });
+          return { success: true, data: { itemId, newName, type: 'composition' } };
+        } else if (folder) {
+          mediaStore.renameFolder(itemId, newName);
+          return { success: true, data: { itemId, newName, type: 'folder' } };
+        }
+
+        return { success: false, error: `Item not found: ${itemId}` };
+      }
+
+      case 'deleteMediaItem': {
+        const itemId = args.itemId as string;
+
+        const file = mediaStore.files.find(f => f.id === itemId);
+        const comp = mediaStore.compositions.find(c => c.id === itemId);
+        const folder = mediaStore.folders.find(f => f.id === itemId);
+
+        if (file) {
+          mediaStore.removeFile(itemId);
+          return { success: true, data: { itemId, deletedName: file.name, type: 'file' } };
+        } else if (comp) {
+          mediaStore.removeComposition(itemId);
+          return { success: true, data: { itemId, deletedName: comp.name, type: 'composition' } };
+        } else if (folder) {
+          mediaStore.removeFolder(itemId);
+          return { success: true, data: { itemId, deletedName: folder.name, type: 'folder', note: 'All contents also deleted' } };
+        }
+
+        return { success: false, error: `Item not found: ${itemId}` };
+      }
+
+      case 'moveMediaItems': {
+        const itemIds = args.itemIds as string[];
+        const targetFolderId = (args.targetFolderId as string | undefined) || null;
+
+        // Verify target folder exists (if not root)
+        if (targetFolderId !== null) {
+          const targetFolder = mediaStore.folders.find(f => f.id === targetFolderId);
+          if (!targetFolder) {
+            return { success: false, error: `Target folder not found: ${targetFolderId}` };
+          }
+        }
+
+        mediaStore.moveToFolder(itemIds, targetFolderId);
+
+        return {
+          success: true,
+          data: {
+            movedIds: itemIds,
+            targetFolderId: targetFolderId || 'root',
+            itemCount: itemIds.length,
+          },
+        };
+      }
+
+      case 'createComposition': {
+        const name = args.name as string;
+        const width = (args.width as number) || 1920;
+        const height = (args.height as number) || 1080;
+        const frameRate = (args.frameRate as number) || 30;
+        const duration = (args.duration as number) || 60;
+
+        const comp = mediaStore.createComposition(name, {
+          width,
+          height,
+          frameRate,
+          duration,
+        });
+
+        return {
+          success: true,
+          data: {
+            compositionId: comp.id,
+            name: comp.name,
+            width: comp.width,
+            height: comp.height,
+            frameRate: comp.frameRate,
+            duration: comp.duration,
+          },
+        };
+      }
+
+      case 'selectMediaItems': {
+        const itemIds = args.itemIds as string[];
+        mediaStore.setSelection(itemIds);
+        return {
+          success: true,
+          data: { selectedIds: itemIds, count: itemIds.length },
         };
       }
 
