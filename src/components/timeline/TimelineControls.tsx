@@ -132,7 +132,6 @@ function TimelineControlsComponent({
         <button className="btn btn-sm" onClick={() => onSetZoom(zoom - 10)} title="Zoom out">
           {'\u2212'}
         </button>
-        <span>{Math.round(zoom * 10) / 10}px/s</span>
         <button className="btn btn-sm" onClick={() => onSetZoom(zoom + 10)} title="Zoom in">
           +
         </button>
