@@ -279,10 +279,15 @@ function TimelineTrackComponent({
           clips
             .filter((c) => c.id === clipDrag.clipId)
             .map((clip) => renderClip(clip, track.id))}
-        {/* External file drag preview - video clip */}
-        {externalDrag && externalDrag.trackId === track.id && (
+        {/* External file drag preview - only show on compatible track types */}
+        {externalDrag &&
+          externalDrag.trackId === track.id &&
+          // Don't show audio preview on video tracks
+          !(externalDrag.isAudio && track.type === 'video') &&
+          // Don't show video/image preview on audio tracks (linked audio shown separately)
+          !(externalDrag.isVideo && track.type === 'audio') && (
           <div
-            className="timeline-clip-preview"
+            className={`timeline-clip-preview ${track.type === 'audio' ? 'audio' : ''}`}
             style={{
               left: timeToPixel(externalDrag.startTime),
               width: timeToPixel(externalDrag.duration ?? 5),
@@ -293,9 +298,10 @@ function TimelineTrackComponent({
             </div>
           </div>
         )}
-        {/* External file drag preview - linked audio clip */}
+        {/* External file drag preview - linked audio clip for video files */}
         {externalDrag &&
           externalDrag.isVideo &&
+          !externalDrag.isAudio &&
           externalDrag.audioTrackId === track.id && (
             <div
               className="timeline-clip-preview audio"
