@@ -1,20 +1,17 @@
 // Clip Transcriber Service
 // Handles transcription of individual clips using Whisper
 
-import { pipeline, env } from '@xenova/transformers';
 import { useTimelineStore } from '../stores/timeline';
 import { triggerTimelineSave } from '../stores/mediaStore';
 import type { TranscriptWord, TranscriptStatus } from '../types';
-
-// Configure transformers.js
-env.allowLocalModels = false;
-env.useBrowserCache = true;
 
 // Transcriber instance (cached)
 let transcriber: any = null;
 let loadedModel: string | null = null;
 let isTranscribing = false;
 let shouldCancel = false;
+let transformersLoaded = false;
+let pipelineFn: any = null;
 
 interface TranscriptChunk {
   text: string;
@@ -29,6 +26,22 @@ function getModelName(language: string): string {
     return 'Xenova/whisper-tiny.en';
   }
   return 'Xenova/whisper-tiny';
+}
+
+/**
+ * Load transformers.js library dynamically
+ */
+async function loadTransformers(): Promise<void> {
+  if (transformersLoaded) return;
+
+  const transformers = await import('@xenova/transformers');
+
+  // Configure environment
+  transformers.env.allowLocalModels = false;
+  transformers.env.useBrowserCache = true;
+
+  pipelineFn = transformers.pipeline;
+  transformersLoaded = true;
 }
 
 /**
@@ -53,7 +66,10 @@ async function loadModel(
   onProgress(0, `Loading Whisper model (${langName})...`);
 
   try {
-    transcriber = await pipeline(
+    // Load transformers.js dynamically
+    await loadTransformers();
+
+    transcriber = await pipelineFn(
       'automatic-speech-recognition',
       modelName,
       {

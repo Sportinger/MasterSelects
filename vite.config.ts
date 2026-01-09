@@ -26,10 +26,7 @@ export default defineConfig({
     esbuildOptions: {
       target: 'esnext',
     },
-    // Exclude transformers.js from pre-bundling (it has dynamic imports)
-    exclude: ['@xenova/transformers'],
-  },
-  worker: {
-    format: 'es',
+    // Exclude transformers.js and onnxruntime from pre-bundling
+    exclude: ['@xenova/transformers', 'onnxruntime-web'],
   },
 })
