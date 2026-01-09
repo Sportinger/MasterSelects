@@ -11,6 +11,8 @@ import type {
   FloatingPanel,
   PanelType,
   DockTabGroup,
+  PanelData,
+  PreviewPanelData,
 } from '../types/dock';
 import { PANEL_CONFIGS } from '../types/dock';
 import {
@@ -130,6 +132,10 @@ interface DockState {
   togglePanelType: (type: PanelType) => void;
   showPanelType: (type: PanelType) => void;
   hidePanelType: (type: PanelType) => void;
+
+  // Multiple preview panels
+  addPreviewPanel: (compositionId: string | null) => void;
+  updatePanelData: (panelId: string, data: Partial<import('../types/dock').PanelData>) => void;
 
   // Layout management
   resetLayout: () => void;
@@ -415,6 +421,44 @@ export const useDockStore = create<DockState>()(
           }
         },
 
+        addPreviewPanel: (compositionId) => {
+          const { layout } = get();
+
+          // Find the preview-group to add to
+          const previewGroup = findTabGroupById(layout.root, 'preview-group');
+          const newPanelId = `preview-${Date.now()}`;
+          const newPanel: DockPanel = {
+            id: newPanelId,
+            type: 'preview',
+            title: 'Preview',
+            data: { compositionId } as PreviewPanelData,
+          };
+
+          if (previewGroup) {
+            const newLayout = insertPanelAtTarget(layout, newPanel, {
+              groupId: 'preview-group',
+              position: 'center',
+            });
+            set({ layout: newLayout });
+          } else {
+            // Fallback: find any tab group or create floating
+            const anyGroup = findFirstTabGroup(layout.root);
+            if (anyGroup) {
+              const newLayout = insertPanelAtTarget(layout, newPanel, {
+                groupId: anyGroup.id,
+                position: 'center',
+              });
+              set({ layout: newLayout });
+            }
+          }
+        },
+
+        updatePanelData: (panelId, data) => {
+          set((state) => ({
+            layout: updatePanelDataInLayout(state.layout, panelId, data),
+          }));
+        },
+
         resetLayout: () => {
           set({ layout: DEFAULT_LAYOUT, maxZIndex: 1000 });
         },
@@ -529,4 +573,47 @@ function findPanelAndGroup(
   const left = findPanelAndGroup(node.children[0], panelType);
   if (left) return left;
   return findPanelAndGroup(node.children[1], panelType);
+}
+
+// Helper: Update panel data in layout
+function updatePanelDataInLayout(
+  layout: DockLayout,
+  panelId: string,
+  data: Partial<PanelData>
+): DockLayout {
+  return {
+    ...layout,
+    root: updatePanelDataInNode(layout.root, panelId, data),
+    floatingPanels: layout.floatingPanels.map((f) =>
+      f.panel.id === panelId
+        ? { ...f, panel: { ...f.panel, data: { ...f.panel.data, ...data } as PanelData } }
+        : f
+    ),
+  };
+}
+
+function updatePanelDataInNode(
+  node: DockNode,
+  panelId: string,
+  data: Partial<PanelData>
+): DockNode {
+  if (node.kind === 'tab-group') {
+    const panelIndex = node.panels.findIndex((p) => p.id === panelId);
+    if (panelIndex >= 0) {
+      const newPanels = [...node.panels];
+      newPanels[panelIndex] = {
+        ...newPanels[panelIndex],
+        data: { ...newPanels[panelIndex].data, ...data } as PanelData,
+      };
+      return { ...node, panels: newPanels };
+    }
+    return node;
+  }
+  return {
+    ...node,
+    children: [
+      updatePanelDataInNode(node.children[0], panelId, data),
+      updatePanelDataInNode(node.children[1], panelId, data),
+    ] as [DockNode, DockNode],
+  };
 }

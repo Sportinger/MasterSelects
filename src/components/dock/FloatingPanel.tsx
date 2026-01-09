@@ -96,7 +96,7 @@ export function FloatingPanel({ floating }: FloatingPanelProps) {
         <span className="floating-panel-title">{floating.panel.title}</span>
       </div>
       <div className="floating-panel-content">
-        <DockPanelContent type={floating.panel.type} />
+        <DockPanelContent panel={floating.panel} />
       </div>
       <div className="floating-panel-resize" onMouseDown={handleResizeMouseDown} />
     </div>

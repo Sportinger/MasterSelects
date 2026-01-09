@@ -3,11 +3,19 @@
 // Panel types that can be docked
 export type PanelType = 'preview' | 'effects' | 'timeline' | 'slots' | 'clip-properties' | 'media' | 'export' | 'multicam' | 'transcript' | 'analysis' | 'ai-chat';
 
+// Panel-specific data for configurable panels
+export interface PreviewPanelData {
+  compositionId: string | null; // null = active composition
+}
+
+export type PanelData = PreviewPanelData;
+
 // A panel instance
 export interface DockPanel {
   id: string;
   type: PanelType;
   title: string;
+  data?: PanelData; // Optional panel-specific configuration
 }
 
 // A group of tabbed panels

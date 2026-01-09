@@ -1,19 +1,20 @@
 // Maps panel type to actual component
 
-import type { PanelType } from '../../types/dock';
+import type { DockPanel, PreviewPanelData } from '../../types/dock';
 import { Preview } from '../preview';
 import { EffectsPanel, ClipPropertiesPanel, LayerPanel, MediaPanel, MultiCamPanel, TranscriptPanel, AnalysisPanel, AIChatPanel } from '../panels';
 import { ExportPanel } from '../export';
 import { Timeline } from '../timeline';
 
 interface DockPanelContentProps {
-  type: PanelType;
+  panel: DockPanel;
 }
 
-export function DockPanelContent({ type }: DockPanelContentProps) {
-  switch (type) {
+export function DockPanelContent({ panel }: DockPanelContentProps) {
+  switch (panel.type) {
     case 'preview':
-      return <Preview />;
+      const previewData = panel.data as PreviewPanelData | undefined;
+      return <Preview panelId={panel.id} compositionId={previewData?.compositionId ?? null} />;
     case 'effects':
       return <EffectsPanel />;
     case 'export':
@@ -35,6 +36,6 @@ export function DockPanelContent({ type }: DockPanelContentProps) {
     case 'ai-chat':
       return <AIChatPanel />;
     default:
-      return <div className="panel-placeholder">Unknown panel: {type}</div>;
+      return <div className="panel-placeholder">Unknown panel: {panel.type}</div>;
   }
 }

@@ -8,8 +8,10 @@
   --border-color: #333;
   --text-primary: #f0f0f0;
   --text-secondary: #888;
-  --accent: #00d4ff;
-  --accent-hover: #00b8e6;
+  --accent: #888;
+  --accent-hover: #aaa;
+  --accent-timeline: #00d4ff;
+  --accent-timeline-hover: #00b8e6;
   --danger: #ff4444;
   --success: #44ff44;
   --warning: #ffaa00;
@@ -2312,7 +2314,7 @@ input[type="checkbox"] {
 }
 
 .timeline-clip.selected {
-  box-shadow: 0 0 0 2px var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-timeline);
 }
 
 .timeline-clip.dragging {

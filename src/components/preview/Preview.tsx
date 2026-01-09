@@ -4,8 +4,15 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useEngine } from '../../hooks/useEngine';
 import { useMixerStore } from '../../stores/mixerStore';
 import { useTimelineStore } from '../../stores/timeline';
+import { useMediaStore } from '../../stores/mediaStore';
+import { useDockStore } from '../../stores/dockStore';
 import { MaskOverlay } from './MaskOverlay';
 import type { Layer, EngineStats } from '../../types';
+
+interface PreviewProps {
+  panelId: string;
+  compositionId: string | null; // null = active composition
+}
 
 // Detailed stats overlay component
 function StatsOverlay({ stats, resolution, expanded, onToggle }: {
@@ -138,15 +145,26 @@ function StatsOverlay({ stats, resolution, expanded, onToggle }: {
   );
 }
 
-export function Preview() {
+export function Preview({ panelId, compositionId }: PreviewProps) {
   const { canvasRef, isEngineReady } = useEngine();
   const { engineStats, outputResolution, layers, selectedLayerId, selectLayer } = useMixerStore();
   const { clips, selectedClipIds, selectClip, updateClipTransform, maskEditMode } = useTimelineStore();
+  const { compositions, activeCompositionId } = useMediaStore();
+  const { addPreviewPanel, updatePanelData } = useDockStore();
+
   // Get first selected clip for preview
   const selectedClipId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 1920, height: 1080 });
+
+  // Composition selector state
+  const [selectorOpen, setSelectorOpen] = useState(false);
+
+  // Determine which composition this preview is showing
+  const displayedCompId = compositionId ?? activeCompositionId;
+  const displayedComp = compositions.find(c => c.id === displayedCompId);
+  const isActiveComp = compositionId === null || compositionId === activeCompositionId;
 
   // Stats overlay state
   const [statsExpanded, setStatsExpanded] = useState(false);
