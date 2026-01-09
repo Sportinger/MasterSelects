@@ -3273,7 +3273,8 @@ input[type="checkbox"] {
   top: 50%;
   cursor: pointer;
   z-index: 5;
-  transition: all 0.1s ease;
+  /* Only transition visual properties, not position (left) - for smooth clip dragging */
+  transition: background 0.1s ease, box-shadow 0.1s ease, transform 0.1s ease;
 }
 
 .keyframe-diamond:hover {

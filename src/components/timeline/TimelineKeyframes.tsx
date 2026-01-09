@@ -248,4 +248,5 @@ function TimelineKeyframesComponent({
   );
 }
 
-export const TimelineKeyframes = memo(TimelineKeyframesComponent);
+// Don't use memo here - we need immediate re-renders when clipDrag changes for smooth keyframe movement
+export const TimelineKeyframes = TimelineKeyframesComponent;
