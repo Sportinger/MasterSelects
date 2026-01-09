@@ -73,7 +73,7 @@ export function useEngine() {
       const layer = layers[layerIndex];
       const track = videoTracks[layerIndex];
 
-      if (!track) continue;
+      if (!track || !layer) continue;
 
       // Find clip for this track at current time
       const clip = clipsAtTime.find(c => c.trackId === track.id);
@@ -111,7 +111,7 @@ export function useEngine() {
             console.warn(`[Mask] Failed to generate mask texture for layer ${layer.id}`);
           }
         }
-      } else if (clip) {
+      } else if (clip && clip.id) {
         // Clip exists but no masks, clear the mask texture for this layer
         const cacheKey = `${clip.id}_${layer.id}`;
         if (maskVersionRef.current.has(cacheKey)) {
