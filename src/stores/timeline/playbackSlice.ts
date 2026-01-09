@@ -2,7 +2,7 @@
 
 import type { PlaybackActions, RamPreviewActions, SliceCreator } from './types';
 import type { Layer } from '../../types';
-import { RAM_PREVIEW_FPS, FRAME_TOLERANCE } from './constants';
+import { RAM_PREVIEW_FPS, FRAME_TOLERANCE, MIN_ZOOM, MAX_ZOOM } from './constants';
 import { quantizeTime } from './utils';
 
 // Combined playback and RAM preview actions
@@ -33,7 +33,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
 
   // View actions
   setZoom: (zoom) => {
-    set({ zoom: Math.max(10, Math.min(200, zoom)) });
+    set({ zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom)) });
   },
 
   setScrollX: (scrollX) => {

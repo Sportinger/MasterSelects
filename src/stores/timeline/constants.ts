@@ -33,8 +33,9 @@ export const GROUP_HEADER_HEIGHT = 20;
 export const DEFAULT_TIMELINE_DURATION = 60;
 export const DEFAULT_IMAGE_DURATION = 5;
 
-// Zoom limits
-export const MIN_ZOOM = 10;
+// Zoom limits (pixels per second)
+// MIN_ZOOM = 1 allows viewing ~1000 seconds in a 1000px wide timeline
+export const MIN_ZOOM = 1;
 export const MAX_ZOOM = 200;
 
 // Track height limits
