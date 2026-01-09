@@ -35,6 +35,40 @@ function supportsWordTimestamps(language: string): boolean {
   return language === 'en';
 }
 
+/**
+ * Detect repetitive/hallucinated text
+ */
+function isRepetitiveText(text: string): boolean {
+  const words = text.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+  if (words.length < 4) return false;
+
+  // Check for repeated phrases (3+ words repeating)
+  for (let phraseLen = 2; phraseLen <= 4; phraseLen++) {
+    const phrases: Record<string, number> = {};
+    for (let i = 0; i <= words.length - phraseLen; i++) {
+      const phrase = words.slice(i, i + phraseLen).join(' ');
+      phrases[phrase] = (phrases[phrase] || 0) + 1;
+    }
+
+    // If any phrase repeats more than 3 times, it's repetitive
+    for (const count of Object.values(phrases)) {
+      if (count > 3) return true;
+    }
+  }
+
+  // Check if same word repeats more than 50% of the text
+  const wordCounts: Record<string, number> = {};
+  for (const word of words) {
+    wordCounts[word] = (wordCounts[word] || 0) + 1;
+  }
+
+  for (const count of Object.values(wordCounts)) {
+    if (count > words.length * 0.5 && count > 4) return true;
+  }
+
+  return false;
+}
+
 async function loadModel(
   language: string,
   onProgress: (progress: number, message: string) => void
@@ -116,6 +150,11 @@ async function transcribe(
         return_timestamps: useWordTimestamps ? 'word' : true,
         chunk_length_s: 30,
         stride_length_s: 5,
+        // Anti-hallucination settings
+        no_repeat_ngram_size: 3,
+        condition_on_previous_text: false,
+        compression_ratio_threshold: 2.4,
+        logprob_threshold: -1.0,
         ...(isEnglishOnly ? {} : { language, task: 'transcribe' }),
       });
 
@@ -124,6 +163,12 @@ async function transcribe(
       for (const chunk of chunks) {
         const chunkText = chunk.text?.trim();
         if (!chunkText) continue;
+
+        // Skip repetitive/hallucinated chunks
+        if (isRepetitiveText(chunkText)) {
+          console.log('[Transcribe Worker] Skipping repetitive chunk:', chunkText.slice(0, 50));
+          continue;
+        }
 
         const chunkStart = (chunk.timestamp[0] ?? 0) + segmentStartTime;
         const chunkEnd = (chunk.timestamp[1] ?? chunkStart + 0.5) + segmentStartTime;
