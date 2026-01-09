@@ -483,6 +483,147 @@ class ProjectDatabase {
       request.onerror = () => reject(request.error);
     });
   }
+
+  // ============ Analysis Cache ============
+
+  /**
+   * Generate a range key for analysis cache
+   * @param inPoint Start time in seconds
+   * @param outPoint End time in seconds
+   */
+  private getAnalysisRangeKey(inPoint: number, outPoint: number): string {
+    return `${inPoint.toFixed(2)}-${outPoint.toFixed(2)}`;
+  }
+
+  /**
+   * Save analysis data for a media file
+   * @param mediaFileId The media file ID
+   * @param inPoint Start time of analyzed range
+   * @param outPoint End time of analyzed range
+   * @param frames The analysis frame data
+   * @param sampleInterval Sample interval in milliseconds
+   */
+  async saveAnalysis(
+    mediaFileId: string,
+    inPoint: number,
+    outPoint: number,
+    frames: StoredAnalysis['analyses'][string]['frames'],
+    sampleInterval: number
+  ): Promise<void> {
+    const db = await this.init();
+    const rangeKey = this.getAnalysisRangeKey(inPoint, outPoint);
+
+    // First, get existing analysis data for this media file
+    const existing = await this.getAnalysisRecord(mediaFileId);
+
+    const record: StoredAnalysis = existing || {
+      mediaFileId,
+      analyses: {},
+    };
+
+    // Add or update the analysis for this range
+    record.analyses[rangeKey] = {
+      frames,
+      sampleInterval,
+      createdAt: Date.now(),
+    };
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.ANALYSIS_CACHE, 'readwrite');
+      const store = transaction.objectStore(STORES.ANALYSIS_CACHE);
+      const request = store.put(record);
+
+      request.onsuccess = () => {
+        console.log(`[ProjectDB] Saved analysis for ${mediaFileId} (range: ${rangeKey})`);
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
+   * Get analysis record for a media file
+   */
+  private async getAnalysisRecord(mediaFileId: string): Promise<StoredAnalysis | undefined> {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.ANALYSIS_CACHE, 'readonly');
+      const store = transaction.objectStore(STORES.ANALYSIS_CACHE);
+      const request = store.get(mediaFileId);
+
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
+   * Get cached analysis for a specific time range
+   * @param mediaFileId The media file ID
+   * @param inPoint Start time of analyzed range
+   * @param outPoint End time of analyzed range
+   * @returns The cached analysis or undefined if not found
+   */
+  async getAnalysis(
+    mediaFileId: string,
+    inPoint: number,
+    outPoint: number
+  ): Promise<StoredAnalysis['analyses'][string] | undefined> {
+    const record = await this.getAnalysisRecord(mediaFileId);
+    if (!record) return undefined;
+
+    const rangeKey = this.getAnalysisRangeKey(inPoint, outPoint);
+    return record.analyses[rangeKey];
+  }
+
+  /**
+   * Check if analysis exists for a specific time range
+   */
+  async hasAnalysis(mediaFileId: string, inPoint: number, outPoint: number): Promise<boolean> {
+    const analysis = await this.getAnalysis(mediaFileId, inPoint, outPoint);
+    return !!analysis;
+  }
+
+  /**
+   * Get all cached analysis ranges for a media file
+   */
+  async getAnalysisRanges(mediaFileId: string): Promise<string[]> {
+    const record = await this.getAnalysisRecord(mediaFileId);
+    if (!record) return [];
+    return Object.keys(record.analyses);
+  }
+
+  /**
+   * Delete all cached analysis for a media file
+   */
+  async deleteAnalysis(mediaFileId: string): Promise<void> {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.ANALYSIS_CACHE, 'readwrite');
+      const store = transaction.objectStore(STORES.ANALYSIS_CACHE);
+      const request = store.delete(mediaFileId);
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
+   * Clear all cached analysis data
+   */
+  async clearAllAnalysis(): Promise<void> {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.ANALYSIS_CACHE, 'readwrite');
+      const store = transaction.objectStore(STORES.ANALYSIS_CACHE);
+      const request = store.clear();
+
+      request.onsuccess = () => {
+        console.log('[ProjectDB] All analysis cache cleared');
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
 }
 
 // Singleton instance

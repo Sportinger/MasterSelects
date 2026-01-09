@@ -3,6 +3,7 @@
 
 import { useTimelineStore } from '../stores/timeline';
 import { triggerTimelineSave } from '../stores/mediaStore';
+import { projectDB } from './projectDB';
 import type { ClipAnalysis, FrameAnalysisData, AnalysisStatus } from '../types';
 
 // Analysis sample interval in milliseconds
@@ -257,6 +258,38 @@ export async function analyzeClip(clipId: string): Promise<void> {
   // Update status to analyzing
   updateClipAnalysis(clipId, { status: 'analyzing', progress: 0 });
 
+  // Check for cached analysis first
+  const mediaFileId = clip.source?.mediaFileId;
+  const inPoint = clip.inPoint ?? 0;
+  const outPoint = clip.outPoint ?? clip.duration;
+
+  if (mediaFileId) {
+    try {
+      const cachedAnalysis = await projectDB.getAnalysis(mediaFileId, inPoint, outPoint);
+      if (cachedAnalysis) {
+        console.log('[ClipAnalyzer] Found cached analysis, loading...');
+
+        const analysis: ClipAnalysis = {
+          frames: cachedAnalysis.frames as FrameAnalysisData[],
+          sampleInterval: cachedAnalysis.sampleInterval,
+        };
+
+        updateClipAnalysis(clipId, {
+          status: 'ready',
+          progress: 100,
+          analysis,
+        });
+
+        triggerTimelineSave();
+        isAnalyzing = false;
+        currentClipId = null;
+        return;
+      }
+    } catch (err) {
+      console.warn('[ClipAnalyzer] Failed to check cache:', err);
+    }
+  }
+
   let videoUrl: string | null = null;
 
   try {
@@ -329,9 +362,15 @@ export async function analyzeClip(clipId: string): Promise<void> {
 
       previousFrame = frame;
 
-      // Update progress
+      // Update progress and analysis data in real-time
       const progress = Math.round(((i + 1) / totalSamples) * 100);
-      updateClipAnalysis(clipId, { progress });
+
+      // Update with current frames for real-time graph rendering
+      const partialAnalysis: ClipAnalysis = {
+        frames: [...frames],
+        sampleInterval: SAMPLE_INTERVAL_MS,
+      };
+      updateClipAnalysis(clipId, { progress, analysis: partialAnalysis });
 
       // Yield to UI every 5 frames
       if (i % 5 === 0) {
@@ -357,6 +396,22 @@ export async function analyzeClip(clipId: string): Promise<void> {
       progress: 100,
       analysis,
     });
+
+    // Save to cache if we have a mediaFileId
+    if (mediaFileId) {
+      try {
+        await projectDB.saveAnalysis(
+          mediaFileId,
+          analysisStartTime,
+          analysisEndTime,
+          frames,
+          SAMPLE_INTERVAL_MS
+        );
+        console.log('[ClipAnalyzer] Analysis saved to cache');
+      } catch (err) {
+        console.warn('[ClipAnalyzer] Failed to save to cache:', err);
+      }
+    }
 
     triggerTimelineSave();
     console.log('[ClipAnalyzer] Done:', frames.length, 'frames analyzed');
