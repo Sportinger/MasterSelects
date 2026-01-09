@@ -81,7 +81,7 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
           duration: estimatedDuration,
           inPoint: 0,
           outPoint: estimatedDuration,
-          source: { type: 'audio', naturalDuration: estimatedDuration },
+          source: { type: 'audio', naturalDuration: estimatedDuration, mediaFileId },
           linkedClipId: clipId,
           transform: { ...DEFAULT_TRANSFORM },
           effects: [],
@@ -176,7 +176,7 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
 
         // Mark audio clip as ready immediately
         updateClip(audioClipId, {
-          source: { type: 'audio', audioElement: audioFromVideo, naturalDuration },
+          source: { type: 'audio', audioElement: audioFromVideo, naturalDuration, mediaFileId },
           isLoading: false,
         });
 
@@ -241,7 +241,7 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
         duration: estimatedDuration,
         inPoint: 0,
         outPoint: estimatedDuration,
-        source: { type: 'audio', naturalDuration: estimatedDuration },
+        source: { type: 'audio', naturalDuration: estimatedDuration, mediaFileId },
         transform: { ...DEFAULT_TRANSFORM },
         effects: [],
         isLoading: true,
@@ -266,7 +266,7 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
       updateClip(clipId, {
         duration: naturalDuration,
         outPoint: naturalDuration,
-        source: { type: 'audio', audioElement: audio, naturalDuration },
+        source: { type: 'audio', audioElement: audio, naturalDuration, mediaFileId },
         isLoading: false,
         waveformGenerating: get().waveformsEnabled,
         waveformProgress: 0,
