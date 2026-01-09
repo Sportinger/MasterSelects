@@ -39,7 +39,7 @@ export async function transcribeClip(clipId: string): Promise<void> {
     // Save timeline immediately so transcript persists across refresh
     triggerTimelineSave();
 
-    console.log('[ClipTranscriber] Transcription complete for', clip.name, '-', transcript.length, 'words');
+    console.log('[Transcribe] Done:', transcript.length, 'words');
   } catch (error) {
     console.error('[ClipTranscriber] Transcription failed:', error);
     updateClipTranscript(clipId, {
@@ -95,6 +95,7 @@ async function transcribeFile(
 
   // Convert to float32 array at 16kHz for Whisper
   const audioData = await resampleAudio(audioBuffer, 16000);
+  console.log('[Transcribe] Audio:', audioBuffer.duration.toFixed(1) + 's, samples:', audioData.length);
   onProgress(25);
 
   // Dynamically import transformers.js
@@ -120,19 +121,13 @@ async function transcribeFile(
   onProgress(30);
 
   // Load Whisper model
-  console.log('[ClipTranscriber] Loading Whisper model...');
   const transcriber = await pipeline(
     'automatic-speech-recognition',
-    'Xenova/whisper-tiny.en', // Use English-only model (smaller, faster)
+    'Xenova/whisper-tiny.en',
     {
       progress_callback: (data: any) => {
         if (data.status === 'progress' && data.progress) {
-          // Model loading progress (30-50%)
-          const modelProgress = 30 + (data.progress * 0.2);
-          onProgress(Math.round(modelProgress));
-        }
-        if (data.status === 'ready') {
-          console.log('[ClipTranscriber] Whisper model ready');
+          onProgress(Math.round(30 + (data.progress * 0.2)));
         }
       },
       revision: 'main',
@@ -141,19 +136,17 @@ async function transcribeFile(
 
   onProgress(50);
 
-  // Run transcription with word-level timestamps
+  // First try simple transcription
+  const simpleResult = await transcriber(audioData, { return_timestamps: true });
+  console.log('[Transcribe] Simple:', simpleResult.text?.slice(0, 100) || '(empty)');
+
+  // Then try word-level timestamps
   const result = await transcriber(audioData, {
     return_timestamps: 'word',
     chunk_length_s: 30,
     stride_length_s: 5,
-    language: 'en',
-    task: 'transcribe',
   });
-
-  console.log('[ClipTranscriber] Raw result:', JSON.stringify(result, null, 2));
-  console.log('[ClipTranscriber] Result keys:', Object.keys(result));
-  console.log('[ClipTranscriber] Has chunks:', !!result.chunks, 'length:', result.chunks?.length);
-  console.log('[ClipTranscriber] Has text:', !!result.text);
+  console.log('[Transcribe] Words:', result.chunks?.length || 0, 'text:', result.text?.slice(0, 50) || '(empty)');
   onProgress(95);
 
   // Convert result to TranscriptWord array
@@ -209,7 +202,7 @@ async function transcribeFile(
   // Fallback: if no chunks but have text, split it
   const textResult = result.text || result.output?.text || '';
   if (words.length === 0 && textResult) {
-    console.log('[ClipTranscriber] Using text fallback:', textResult);
+    console.log('[Transcribe] Using text fallback');
     const allWords = textResult.trim().split(/\s+/).filter((w: string) => w.length > 0);
     const totalDuration = audioBuffer.duration;
     const wordDuration = totalDuration / allWords.length;
@@ -226,7 +219,7 @@ async function transcribeFile(
     }
   }
 
-  console.log('[ClipTranscriber] Parsed', words.length, 'words');
+  console.log('[Transcribe] Final:', words.length, 'words');
   onProgress(100);
   return words;
 }

@@ -3,7 +3,7 @@
 import { memo, useRef, useEffect, useMemo } from 'react';
 import type { TimelineClipProps } from './types';
 import { THUMB_WIDTH } from './constants';
-import type { TranscriptWord } from '../../types';
+import type { TranscriptWord, ClipAnalysis } from '../../types';
 
 // Render waveform for audio clips using canvas for better performance
 const Waveform = memo(function Waveform({
@@ -52,6 +52,76 @@ const Waveform = memo(function Waveform({
       ref={canvasRef}
       className="waveform-canvas"
       style={{ width, height }}
+    />
+  );
+});
+
+// Render analysis overlay (focus, motion, face indicators)
+const AnalysisOverlay = memo(function AnalysisOverlay({
+  analysis,
+  clipDuration,
+  clipInPoint,
+  width,
+}: {
+  analysis: ClipAnalysis;
+  clipDuration: number;
+  clipInPoint: number;
+  width: number;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !analysis?.frames.length) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const height = 12; // Fixed height for overlay
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+
+    const barHeight = 4;
+
+    // Draw bars for each frame in the visible clip range
+    for (const frame of analysis.frames) {
+      // Frame timestamp is relative to source, adjust for clip's inPoint
+      const frameInClip = frame.timestamp - clipInPoint;
+      if (frameInClip < 0 || frameInClip > clipDuration) continue;
+
+      const x = (frameInClip / clipDuration) * width;
+      const barWidth = Math.max(2, (analysis.sampleInterval / 1000 / clipDuration) * width);
+
+      // Focus bar (green) - top row
+      if (frame.focus > 0.3) {
+        ctx.fillStyle = `rgba(34, 197, 94, ${frame.focus})`;
+        ctx.fillRect(x, 0, barWidth, barHeight);
+      }
+
+      // Motion bar (blue) - middle row
+      if (frame.motion > 0.1) {
+        ctx.fillStyle = `rgba(59, 130, 246, ${frame.motion})`;
+        ctx.fillRect(x, barHeight, barWidth, barHeight);
+      }
+
+      // Face indicator (yellow) - bottom row
+      if (frame.faceCount > 0) {
+        ctx.fillStyle = `rgba(234, 179, 8, 0.8)`;
+        ctx.fillRect(x, barHeight * 2, barWidth, barHeight);
+      }
+    }
+  }, [analysis, clipDuration, clipInPoint, width]);
+
+  if (!analysis?.frames.length) return null;
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="analysis-overlay-canvas"
+      style={{ width, height: 12 }}
     />
   );
 });
@@ -296,6 +366,23 @@ function TimelineClipComponent({
       {clip.transcriptStatus === 'transcribing' && (
         <div className="clip-transcribing-indicator">
           <div className="transcribing-progress" style={{ width: `${clip.transcriptProgress || 0}%` }} />
+        </div>
+      )}
+      {/* Analysis overlay */}
+      {clip.analysis && clip.analysisStatus === 'ready' && (
+        <div className="clip-analysis-overlay">
+          <AnalysisOverlay
+            analysis={clip.analysis}
+            clipDuration={displayDuration}
+            clipInPoint={clip.inPoint}
+            width={width}
+          />
+        </div>
+      )}
+      {/* Analyzing indicator */}
+      {clip.analysisStatus === 'analyzing' && (
+        <div className="clip-analyzing-indicator">
+          <div className="analyzing-progress" style={{ width: `${clip.analysisProgress || 0}%` }} />
         </div>
       )}
       {/* Trim handles */}

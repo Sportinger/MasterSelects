@@ -2,7 +2,7 @@
 
 import type { PanelType } from '../../types/dock';
 import { Preview } from '../preview';
-import { EffectsPanel, ClipPropertiesPanel, LayerPanel, MediaPanel, MultiCamPanel, TranscriptPanel } from '../panels';
+import { EffectsPanel, ClipPropertiesPanel, LayerPanel, MediaPanel, MultiCamPanel, TranscriptPanel, AnalysisPanel } from '../panels';
 import { ExportPanel } from '../export';
 import { Timeline } from '../timeline';
 
@@ -30,6 +30,8 @@ export function DockPanelContent({ type }: DockPanelContentProps) {
       return <MultiCamPanel />;
     case 'transcript':
       return <TranscriptPanel />;
+    case 'analysis':
+      return <AnalysisPanel />;
     default:
       return <div className="panel-placeholder">Unknown panel: {type}</div>;
   }

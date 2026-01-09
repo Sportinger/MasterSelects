@@ -5,3 +5,4 @@ export { EffectsPanel } from './EffectsPanel';
 export { ClipPropertiesPanel } from './ClipPropertiesPanel';
 export { MultiCamPanel } from './MultiCamPanel';
 export { TranscriptPanel } from './TranscriptPanel';
+export { AnalysisPanel } from './AnalysisPanel';

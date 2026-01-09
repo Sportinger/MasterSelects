@@ -168,6 +168,21 @@ export interface TranscriptWord {
 // Transcript status
 export type TranscriptStatus = 'none' | 'transcribing' | 'ready' | 'error';
 
+// Analysis types for focus/motion/face detection
+export type AnalysisStatus = 'none' | 'analyzing' | 'ready' | 'error';
+
+export interface FrameAnalysisData {
+  timestamp: number;      // Time in seconds (relative to clip source)
+  motion: number;         // 0-1 motion score
+  focus: number;          // 0-1 focus/sharpness score
+  faceCount: number;      // Number of faces detected
+}
+
+export interface ClipAnalysis {
+  frames: FrameAnalysisData[];
+  sampleInterval: number; // Milliseconds between samples
+}
+
 export interface TimelineClip {
   id: string;
   trackId: string;
@@ -204,6 +219,10 @@ export interface TimelineClip {
   transcript?: TranscriptWord[];  // Speech-to-text transcript
   transcriptStatus?: TranscriptStatus;  // Transcription status
   transcriptProgress?: number;  // 0-100 progress
+  // Analysis support (focus/motion/face)
+  analysis?: ClipAnalysis;
+  analysisStatus?: AnalysisStatus;
+  analysisProgress?: number;  // 0-100 progress
 }
 
 export interface TimelineTrack {
@@ -253,6 +272,9 @@ export interface SerializableClip {
   // Transcript data
   transcript?: TranscriptWord[];
   transcriptStatus?: TranscriptStatus;
+  // Analysis data
+  analysis?: ClipAnalysis;
+  analysisStatus?: AnalysisStatus;
   // Playback
   reversed?: boolean;
 }
