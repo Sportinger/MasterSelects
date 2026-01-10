@@ -12,7 +12,7 @@
 
 export { AudioExtractor, audioExtractor } from './AudioExtractor';
 export { AudioEncoderWrapper, getRecommendedAudioBitrate, AUDIO_CODEC_INFO } from './AudioEncoder';
-export type { AudioEncoderSettings, EncodedAudioResult, AudioEncoderProgressCallback } from './AudioEncoder';
+export type { AudioEncoderSettings, EncodedAudioResult, AudioEncoderProgressCallback, AudioCodec } from './AudioEncoder';
 export { AudioMixer, audioMixer } from './AudioMixer';
 export type { AudioTrackData, MixerSettings, MixProgress, MixProgressCallback } from './AudioMixer';
 export { TimeStretchProcessor, timeStretchProcessor } from './TimeStretchProcessor';

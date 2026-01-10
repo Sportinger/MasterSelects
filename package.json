@@ -17,6 +17,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "soundtouch-ts": "^1.1.1",
+    "webm-muxer": "^5.1.4",
     "zustand": "^5.0.9"
   },
   "devDependencies": {

@@ -1,11 +1,12 @@
 // Frame-by-frame exporter for precise video rendering
 // Combines VideoEncoder and FrameExporter in one file to avoid import issues
 
-import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
+import { Muxer as Mp4Muxer, ArrayBufferTarget as Mp4Target } from 'mp4-muxer';
+import { Muxer as WebmMuxer, ArrayBufferTarget as WebmTarget } from 'webm-muxer';
 import { engine } from './WebGPUEngine';
 import { useTimelineStore } from '../stores/timeline';
 import type { Layer } from '../types';
-import { AudioExportPipeline, type AudioExportProgress, type EncodedAudioResult } from './audio';
+import { AudioExportPipeline, type AudioExportProgress, type EncodedAudioResult, AudioEncoderWrapper, type AudioCodec } from './audio';
 
 // ============ TYPES ============
 
@@ -41,13 +42,17 @@ export interface FullExportSettings extends ExportSettings {
 
 // ============ VIDEO ENCODER ============
 
+type MuxerType = Mp4Muxer<Mp4Target> | WebmMuxer<WebmTarget>;
+
 class VideoEncoderWrapper {
   private encoder: VideoEncoder | null = null;
-  private muxer: Muxer<ArrayBufferTarget> | null = null;
+  private muxer: MuxerType | null = null;
   private settings: ExportSettings;
   private encodedFrameCount = 0;
   private isClosed = false;
   private hasAudio = false;
+  private audioCodec: AudioCodec = 'aac';
+  private containerFormat: 'mp4' | 'webm' = 'mp4';
 
   constructor(settings: ExportSettings) {
     this.settings = settings;
@@ -60,7 +65,22 @@ class VideoEncoderWrapper {
       return false;
     }
 
-    const codecString = this.settings.codec === 'h264'
+    // Detect audio codec if audio is enabled
+    if (this.hasAudio) {
+      const detectedCodec = await AudioEncoderWrapper.detectSupportedCodec();
+      if (detectedCodec) {
+        this.audioCodec = detectedCodec.codec;
+        // Use WebM container for Opus, MP4 for AAC
+        this.containerFormat = detectedCodec.codec === 'opus' ? 'webm' : 'mp4';
+      } else {
+        console.warn('[VideoEncoder] No audio codec supported, disabling audio');
+        this.hasAudio = false;
+      }
+    }
+
+    // Force VP9 for WebM container (H.264 not supported in WebM)
+    const effectiveVideoCodec = this.containerFormat === 'webm' ? 'vp9' : this.settings.codec;
+    const codecString = effectiveVideoCodec === 'h264'
       ? 'avc1.640028'
       : 'vp09.00.10.08';
 
@@ -82,32 +102,63 @@ class VideoEncoderWrapper {
       return false;
     }
 
-    // Configure muxer with video and optionally audio
-    if (this.hasAudio) {
-      this.muxer = new Muxer({
-        target: new ArrayBufferTarget(),
-        video: {
-          codec: this.settings.codec === 'h264' ? 'avc' : 'vp9',
-          width: this.settings.width,
-          height: this.settings.height,
-        },
-        audio: {
-          codec: 'aac',
-          sampleRate: this.settings.audioSampleRate ?? 48000,
-          numberOfChannels: 2,
-        },
-        fastStart: 'in-memory',
-      });
+    // Create appropriate muxer based on container format
+    if (this.containerFormat === 'webm') {
+      // WebM muxer for Opus audio
+      if (this.hasAudio) {
+        this.muxer = new WebmMuxer({
+          target: new WebmTarget(),
+          video: {
+            codec: 'V_VP9',
+            width: this.settings.width,
+            height: this.settings.height,
+          },
+          audio: {
+            codec: 'A_OPUS',
+            sampleRate: this.settings.audioSampleRate ?? 48000,
+            numberOfChannels: 2,
+          },
+        });
+      } else {
+        this.muxer = new WebmMuxer({
+          target: new WebmTarget(),
+          video: {
+            codec: 'V_VP9',
+            width: this.settings.width,
+            height: this.settings.height,
+          },
+        });
+      }
+      console.log(`[VideoEncoder] Using WebM container with ${this.hasAudio ? 'Opus' : 'no'} audio`);
     } else {
-      this.muxer = new Muxer({
-        target: new ArrayBufferTarget(),
-        video: {
-          codec: this.settings.codec === 'h264' ? 'avc' : 'vp9',
-          width: this.settings.width,
-          height: this.settings.height,
-        },
-        fastStart: 'in-memory',
-      });
+      // MP4 muxer for AAC audio
+      if (this.hasAudio) {
+        this.muxer = new Mp4Muxer({
+          target: new Mp4Target(),
+          video: {
+            codec: effectiveVideoCodec === 'h264' ? 'avc' : 'vp9',
+            width: this.settings.width,
+            height: this.settings.height,
+          },
+          audio: {
+            codec: 'aac',
+            sampleRate: this.settings.audioSampleRate ?? 48000,
+            numberOfChannels: 2,
+          },
+          fastStart: 'in-memory',
+        });
+      } else {
+        this.muxer = new Mp4Muxer({
+          target: new Mp4Target(),
+          video: {
+            codec: effectiveVideoCodec === 'h264' ? 'avc' : 'vp9',
+            width: this.settings.width,
+            height: this.settings.height,
+          },
+          fastStart: 'in-memory',
+        });
+      }
+      console.log(`[VideoEncoder] Using MP4 container with ${this.hasAudio ? 'AAC' : 'no'} audio`);
     }
 
     this.encoder = new VideoEncoder({
@@ -132,8 +183,16 @@ class VideoEncoderWrapper {
       bitrateMode: 'variable',
     });
 
-    console.log(`[VideoEncoder] Initialized: ${this.settings.width}x${this.settings.height} @ ${this.settings.fps}fps`);
+    console.log(`[VideoEncoder] Initialized: ${this.settings.width}x${this.settings.height} @ ${this.settings.fps}fps (${effectiveVideoCodec.toUpperCase()})`);
     return true;
+  }
+
+  getContainerFormat(): 'mp4' | 'webm' {
+    return this.containerFormat;
+  }
+
+  getAudioCodec(): AudioCodec {
+    return this.audioCodec;
   }
 
   async encodeFrame(pixels: Uint8ClampedArray, frameIndex: number): Promise<void> {
@@ -192,9 +251,9 @@ class VideoEncoderWrapper {
     this.muxer.finalize();
 
     const { buffer } = this.muxer.target;
-    const mimeType = this.settings.codec === 'h264' ? 'video/mp4' : 'video/webm';
+    const mimeType = this.containerFormat === 'webm' ? 'video/webm' : 'video/mp4';
 
-    console.log(`[VideoEncoder] Finished: ${this.encodedFrameCount} frames, ${(buffer.byteLength / 1024 / 1024).toFixed(2)}MB`);
+    console.log(`[VideoEncoder] Finished: ${this.encodedFrameCount} frames, ${(buffer.byteLength / 1024 / 1024).toFixed(2)}MB (${this.containerFormat.toUpperCase()})`);
     return new Blob([buffer], { type: mimeType });
   }
 

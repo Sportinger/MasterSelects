@@ -1,17 +1,21 @@
 /**
- * AudioEncoder - Encode AudioBuffer to AAC using WebCodecs
+ * AudioEncoder - Encode AudioBuffer to AAC or Opus using WebCodecs
  *
  * Features:
- * - AAC-LC encoding via WebCodecs AudioEncoder
+ * - AAC-LC encoding via WebCodecs AudioEncoder (MP4 container)
+ * - Opus encoding as fallback for Linux (WebM container)
  * - Chunked encoding for memory efficiency
  * - Progress callbacks
- * - Fallback detection for unsupported browsers
+ * - Automatic codec selection based on browser support
  */
+
+export type AudioCodec = 'aac' | 'opus';
 
 export interface AudioEncoderSettings {
   sampleRate: number;      // 44100 or 48000
   numberOfChannels: number; // 1 or 2
   bitrate: number;         // 128000 - 320000
+  codec?: AudioCodec;      // 'aac' or 'opus' (auto-detected if not specified)
 }
 
 export interface EncodedAudioResult {
@@ -19,6 +23,8 @@ export interface EncodedAudioResult {
   metadata: EncodedAudioChunkMetadata[];
   duration: number;
   settings: AudioEncoderSettings;
+  codec: AudioCodec;
+  codecString: string; // e.g. 'mp4a.40.2' or 'opus'
 }
 
 export type AudioEncoderProgressCallback = (progress: {
@@ -36,19 +42,30 @@ export class AudioEncoderWrapper {
   private isClosed = false;
   private onProgress: AudioEncoderProgressCallback | null = null;
   private totalSamples = 0;
+  private activeCodec: AudioCodec = 'aac';
+  private activeCodecString: string = 'mp4a.40.2';
 
   constructor(settings: AudioEncoderSettings) {
     this.settings = {
       sampleRate: settings.sampleRate || 48000,
       numberOfChannels: settings.numberOfChannels || 2,
       bitrate: settings.bitrate || 256000,
+      codec: settings.codec, // Can be undefined for auto-detect
     };
+  }
+
+  /**
+   * Check if any audio encoding is supported (AAC or Opus)
+   */
+  static async isSupported(): Promise<boolean> {
+    const result = await AudioEncoderWrapper.detectSupportedCodec();
+    return result !== null;
   }
 
   /**
    * Check if AAC encoding is supported
    */
-  static async isSupported(): Promise<boolean> {
+  static async isAACSupported(): Promise<boolean> {
     if (!('AudioEncoder' in window)) {
       return false;
     }
@@ -67,6 +84,47 @@ export class AudioEncoderWrapper {
   }
 
   /**
+   * Check if Opus encoding is supported
+   */
+  static async isOpusSupported(): Promise<boolean> {
+    if (!('AudioEncoder' in window)) {
+      return false;
+    }
+
+    try {
+      const support = await AudioEncoder.isConfigSupported({
+        codec: 'opus',
+        sampleRate: 48000,
+        numberOfChannels: 2,
+        bitrate: 128000,
+      });
+      return support.supported === true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Detect which codec is supported (prefers AAC, falls back to Opus)
+   */
+  static async detectSupportedCodec(): Promise<{ codec: AudioCodec; codecString: string } | null> {
+    if (await AudioEncoderWrapper.isAACSupported()) {
+      return { codec: 'aac', codecString: 'mp4a.40.2' };
+    }
+    if (await AudioEncoderWrapper.isOpusSupported()) {
+      return { codec: 'opus', codecString: 'opus' };
+    }
+    return null;
+  }
+
+  /**
+   * Get the active codec being used
+   */
+  getActiveCodec(): { codec: AudioCodec; codecString: string } {
+    return { codec: this.activeCodec, codecString: this.activeCodecString };
+  }
+
+  /**
    * Initialize the encoder
    */
   async init(): Promise<boolean> {
@@ -75,17 +133,46 @@ export class AudioEncoderWrapper {
       return false;
     }
 
+    // Determine which codec to use
+    let codecToUse: { codec: AudioCodec; codecString: string } | null = null;
+
+    if (this.settings.codec === 'aac') {
+      if (await AudioEncoderWrapper.isAACSupported()) {
+        codecToUse = { codec: 'aac', codecString: 'mp4a.40.2' };
+      }
+    } else if (this.settings.codec === 'opus') {
+      if (await AudioEncoderWrapper.isOpusSupported()) {
+        codecToUse = { codec: 'opus', codecString: 'opus' };
+      }
+    } else {
+      // Auto-detect: prefer AAC, fall back to Opus
+      codecToUse = await AudioEncoderWrapper.detectSupportedCodec();
+    }
+
+    if (!codecToUse) {
+      console.error('[AudioEncoder] No supported audio codec found (tried AAC and Opus)');
+      return false;
+    }
+
+    this.activeCodec = codecToUse.codec;
+    this.activeCodecString = codecToUse.codecString;
+
+    // Adjust bitrate for Opus (it uses lower bitrates than AAC for same quality)
+    const bitrate = this.activeCodec === 'opus'
+      ? Math.min(this.settings.bitrate, 192000) // Opus max recommended is 192kbps
+      : this.settings.bitrate;
+
     const config: AudioEncoderConfig = {
-      codec: 'mp4a.40.2', // AAC-LC
+      codec: this.activeCodecString,
       sampleRate: this.settings.sampleRate,
       numberOfChannels: this.settings.numberOfChannels,
-      bitrate: this.settings.bitrate,
+      bitrate: bitrate,
     };
 
     try {
       const support = await AudioEncoder.isConfigSupported(config);
       if (!support.supported) {
-        console.error('[AudioEncoder] AAC configuration not supported');
+        console.error(`[AudioEncoder] ${this.activeCodec.toUpperCase()} configuration not supported`);
         return false;
       }
     } catch (e) {
@@ -100,7 +187,7 @@ export class AudioEncoderWrapper {
 
     try {
       this.encoder.configure(config);
-      console.log(`[AudioEncoder] Initialized: ${this.settings.sampleRate}Hz, ${this.settings.numberOfChannels}ch, ${this.settings.bitrate / 1000}kbps`);
+      console.log(`[AudioEncoder] Initialized with ${this.activeCodec.toUpperCase()}: ${this.settings.sampleRate}Hz, ${this.settings.numberOfChannels}ch, ${bitrate / 1000}kbps`);
       return true;
     } catch (e) {
       console.error('[AudioEncoder] Configure failed:', e);
@@ -236,13 +323,15 @@ export class AudioEncoderWrapper {
 
     const duration = this.totalSamples / this.settings.sampleRate;
 
-    console.log(`[AudioEncoder] Finalized: ${this.chunks.length} chunks, ${duration.toFixed(2)}s`);
+    console.log(`[AudioEncoder] Finalized: ${this.chunks.length} chunks, ${duration.toFixed(2)}s (${this.activeCodec.toUpperCase()})`);
 
     return {
       chunks: this.chunks,
       metadata: this.metadata,
       duration,
       settings: this.settings,
+      codec: this.activeCodec,
+      codecString: this.activeCodecString,
     };
   }
 
@@ -317,5 +406,13 @@ export const AUDIO_CODEC_INFO = {
     description: 'Advanced Audio Coding - universal compatibility',
     bitrateRange: { min: 64000, max: 320000 },
     sampleRates: [44100, 48000],
+  },
+  opus: {
+    name: 'Opus',
+    codec: 'opus',
+    container: 'webm',
+    description: 'Open source codec - great quality at low bitrates',
+    bitrateRange: { min: 32000, max: 192000 },
+    sampleRates: [48000],
   },
 } as const;

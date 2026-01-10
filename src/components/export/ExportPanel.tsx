@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { FrameExporter, downloadBlob } from '../../engine/FrameExporter';
 import type { ExportProgress } from '../../engine/FrameExporter';
-import { AudioExportPipeline } from '../../engine/audio';
+import { AudioExportPipeline, AudioEncoderWrapper, type AudioCodec } from '../../engine/audio';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { engine } from '../../engine/WebGPUEngine';
@@ -39,14 +39,21 @@ export function ExportPanel() {
   // Check WebCodecs support
   const [isSupported, setIsSupported] = useState(true);
   const [isAudioSupported, setIsAudioSupported] = useState(true);
+  const [audioCodec, setAudioCodec] = useState<AudioCodec | null>(null);
+  const [containerFormat, setContainerFormat] = useState<'mp4' | 'webm'>('mp4');
   useEffect(() => {
     setIsSupported(FrameExporter.isSupported());
-    // Check audio encoder support
-    AudioExportPipeline.isSupported().then(supported => {
-      setIsAudioSupported(supported);
-      if (!supported) {
+    // Check audio encoder support and detect codec
+    AudioEncoderWrapper.detectSupportedCodec().then(result => {
+      if (result) {
+        setIsAudioSupported(true);
+        setAudioCodec(result.codec);
+        setContainerFormat(result.codec === 'opus' ? 'webm' : 'mp4');
+        console.log(`[ExportPanel] Audio codec detected: ${result.codec.toUpperCase()}`);
+      } else {
+        setIsAudioSupported(false);
         setIncludeAudio(false);
-        console.warn('[ExportPanel] AAC audio encoding not supported in this browser');
+        console.warn('[ExportPanel] No audio encoding supported in this browser');
       }
     });
   }, []);
@@ -78,11 +85,15 @@ export function ExportPanel() {
     const actualWidth = useCustomResolution ? customWidth : width;
     const actualHeight = useCustomResolution ? customHeight : height;
 
+    // Use VP9 for WebM container (H.264 not supported in WebM)
+    const videoCodec = (includeAudio && containerFormat === 'webm') ? 'vp9' : 'h264';
+    const fileExtension = (includeAudio && containerFormat === 'webm') ? 'webm' : 'mp4';
+
     const exp = new FrameExporter({
       width: actualWidth,
       height: actualHeight,
       fps,
-      codec: 'h264',
+      codec: videoCodec,
       bitrate,
       startTime,
       endTime,
@@ -100,7 +111,7 @@ export function ExportPanel() {
       });
 
       if (blob) {
-        downloadBlob(blob, `${filename}.mp4`);
+        downloadBlob(blob, `${filename}.${fileExtension}`);
       }
     } catch (e) {
       console.error('[ExportPanel] Export failed:', e);
@@ -109,7 +120,7 @@ export function ExportPanel() {
       setIsExporting(false);
       setExporter(null);
     }
-  }, [width, height, customWidth, customHeight, useCustomResolution, fps, bitrate, startTime, endTime, filename, isExporting, includeAudio, audioSampleRate, audioBitrate, normalizeAudio]);
+  }, [width, height, customWidth, customHeight, useCustomResolution, fps, bitrate, startTime, endTime, filename, isExporting, includeAudio, audioSampleRate, audioBitrate, normalizeAudio, containerFormat]);
 
   // Handle cancel
   const handleCancel = useCallback(() => {
@@ -162,16 +173,18 @@ export function ExportPanel() {
       );
 
       if (audioResult && audioResult.chunks.length > 0) {
-        // Convert AAC chunks to a downloadable file
-        // For standalone audio, we need to create an audio container
+        // Convert audio chunks to a downloadable file
+        // Use the codec from the result to determine mime type and extension
         const audioBlobs: Blob[] = [];
         for (const chunk of audioResult.chunks) {
           const buffer = new ArrayBuffer(chunk.byteLength);
           chunk.copyTo(buffer);
           audioBlobs.push(new Blob([buffer]));
         }
-        const audioBlob = new Blob(audioBlobs, { type: 'audio/aac' });
-        downloadBlob(audioBlob, `${filename}.aac`);
+        const mimeType = audioResult.codec === 'opus' ? 'audio/ogg' : 'audio/aac';
+        const extension = audioResult.codec === 'opus' ? 'ogg' : 'aac';
+        const audioBlob = new Blob(audioBlobs, { type: mimeType });
+        downloadBlob(audioBlob, `${filename}.${extension}`);
       } else {
         setError('No audio clips found in the selected range');
       }
@@ -302,7 +315,7 @@ export function ExportPanel() {
           onClick={handleExportAudioOnly}
           disabled={isExporting || endTime <= startTime || !isAudioSupported}
           style={{ flex: 1 }}
-          title={!isAudioSupported ? 'AAC encoding not supported in this browser' : ''}
+          title={!isAudioSupported ? 'Audio encoding not supported in this browser' : `Export as ${audioCodec?.toUpperCase() || 'audio'}`}
         >
           Export Audio
         </button>
@@ -324,7 +337,7 @@ export function ExportPanel() {
                 onChange={(e) => setFilename(e.target.value)}
                 placeholder="export"
               />
-              <span className="export-extension">.mp4</span>
+              <span className="export-extension">.{includeAudio && containerFormat === 'webm' ? 'webm' : 'mp4'}</span>
             </div>
           </div>
 
@@ -435,7 +448,7 @@ export function ExportPanel() {
                   onChange={(e) => setIncludeAudio(e.target.checked)}
                   disabled={!isAudioSupported}
                 />
-                Include Audio (AAC)
+                Include Audio ({audioCodec?.toUpperCase() || 'AAC'})
               </label>
               {!isAudioSupported && (
                 <span style={{ color: 'var(--warning)', fontSize: '11px', marginLeft: '8px' }}>

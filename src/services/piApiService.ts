@@ -252,6 +252,71 @@ class PiApiService {
     return !!this.apiKey;
   }
 
+  // Upload image to ImgBB (free image hosting with CORS support)
+  private async uploadToImgBB(dataUrl: string): Promise<string> {
+    // Extract base64 data without prefix
+    const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+
+    // ImgBB free API (no key required for anonymous uploads)
+    const formData = new FormData();
+    formData.append('image', base64);
+
+    console.log('[PiAPI] Uploading image to ImgBB...');
+
+    const response = await fetch('https://api.imgbb.com/1/upload?key=d36eb6591370ae7f9089d85875571358', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const result = await response.json();
+
+    if (!result.success) {
+      console.error('[PiAPI] ImgBB upload error:', result);
+      throw new Error('Failed to upload image: ' + (result.error?.message || 'Unknown error'));
+    }
+
+    console.log('[PiAPI] Image uploaded:', result.data.url);
+    return result.data.url;
+  }
+
+  // Compress image to reduce size for inline base64 (max ~1MB target)
+  private async compressImage(dataUrl: string, maxWidth = 1280, quality = 0.8): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        // Calculate new dimensions
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = Math.round(height * (maxWidth / width));
+          width = maxWidth;
+        }
+
+        // Create canvas and draw resized image
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Failed to get canvas context'));
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Convert to JPEG with compression
+        const compressed = canvas.toDataURL('image/jpeg', quality);
+        const sizeKB = Math.round((compressed.length * 0.75) / 1024);
+        console.log(`[PiAPI] Compressed image: ${img.width}x${img.height} -> ${width}x${height}, ~${sizeKB}KB`);
+
+        resolve(compressed);
+      };
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = dataUrl;
+    });
+  }
+
   // Upload image and get URL (required for video generation)
   async uploadImage(base64Data: string): Promise<string> {
     if (!this.hasApiKey()) {
@@ -381,14 +446,16 @@ class PiApiService {
         input.image_tail_url = params.imageTailUrl;
       }
 
-      return {
+      const body = {
         model: 'kling',
-        task_type: taskType === 'text_to_video' ? 'video_generation' : 'video_generation',
+        task_type: 'video_generation',
         input,
         config: {
           service_mode: 'public',
         },
       };
+      console.log('[PiAPI] Request body:', JSON.stringify(body, null, 2));
+      return body;
     }
 
     // Luma Dream Machine
@@ -483,19 +550,21 @@ class PiApiService {
   }
 
   async createImageToVideo(params: ImageToVideoParams): Promise<string> {
-    // Upload images first to get URLs (PiAPI requires hosted URLs)
+    // Upload images to get URLs (PiAPI requires hosted URLs, not base64)
     let imageUrl: string | undefined;
     let imageTailUrl: string | undefined;
 
     if (params.startImageUrl) {
-      console.log('[PiAPI] Uploading start image...');
-      imageUrl = await this.uploadImage(params.startImageUrl);
+      const compressed = await this.compressImage(params.startImageUrl);
+      imageUrl = await this.uploadToImgBB(compressed);
     }
 
     if (params.endImageUrl) {
-      console.log('[PiAPI] Uploading end image...');
-      imageTailUrl = await this.uploadImage(params.endImageUrl);
+      const compressed = await this.compressImage(params.endImageUrl);
+      imageTailUrl = await this.uploadToImgBB(compressed);
     }
+
+    console.log('[PiAPI] Creating image-to-video with hosted URLs:', { imageUrl, imageTailUrl });
 
     const body = this.buildRequestBody(
       params.provider,
