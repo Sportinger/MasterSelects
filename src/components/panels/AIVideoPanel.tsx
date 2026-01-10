@@ -13,6 +13,7 @@ import {
   KLING_MODES,
   KLING_CAMERA_CONTROLS,
   getAspectRatioDimensions,
+  calculateCreditCost,
   type KlingTask,
   type TextToVideoParams,
   type ImageToVideoParams,

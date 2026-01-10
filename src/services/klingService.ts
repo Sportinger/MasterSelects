@@ -50,6 +50,52 @@ export const KLING_CAMERA_CONTROLS = [
   { value: 'left_turn_forward', label: 'Left Turn Forward' },
 ] as const;
 
+// Pricing in credits (based on official Kling API pricing 2025)
+// Structure: model -> mode -> duration -> credits
+export const KLING_PRICING: Record<string, Record<string, Record<number, number>>> = {
+  // v2.5 and v2.6 use turbo pricing
+  'kling-v2-6': {
+    'std': { 5: 1.5, 10: 3 },
+    'pro': { 5: 2.5, 10: 5 },
+  },
+  'kling-v2-5': {
+    'std': { 5: 1.5, 10: 3 },
+    'pro': { 5: 2.5, 10: 5 },
+  },
+  // v2.1 and v2.0 use standard pricing
+  'kling-v2-1': {
+    'std': { 5: 2, 10: 4 },
+    'pro': { 5: 3.5, 10: 7 },
+  },
+  'kling-v2-0': {
+    'std': { 5: 2, 10: 4 },
+    'pro': { 5: 3.5, 10: 7 },
+  },
+  // v1.x uses legacy pricing (similar to v2.1)
+  'kling-v1-6': {
+    'std': { 5: 2, 10: 4 },
+    'pro': { 5: 3.5, 10: 7 },
+  },
+  'kling-v1-5': {
+    'std': { 5: 2, 10: 4 },
+    'pro': { 5: 3.5, 10: 7 },
+  },
+  'kling-v1': {
+    'std': { 5: 2, 10: 4 },
+    'pro': { 5: 3.5, 10: 7 },
+  },
+};
+
+// Calculate credit cost for a generation
+export function calculateCreditCost(model: string, mode: string, duration: number): number {
+  const modelPricing = KLING_PRICING[model];
+  if (!modelPricing) {
+    // Default to v2.1 pricing if model not found
+    return KLING_PRICING['kling-v2-1'][mode]?.[duration] ?? 2;
+  }
+  return modelPricing[mode]?.[duration] ?? 2;
+}
+
 // Task status types
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
 

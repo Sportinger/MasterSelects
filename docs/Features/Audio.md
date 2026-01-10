@@ -300,13 +300,52 @@ interface EditDecision {
 
 ---
 
+## Audio Export
+
+Audio is exported alongside video with full effect processing.
+
+### Export Pipeline
+```
+1. Extract audio from clips (AudioExtractor)
+2. Apply speed/pitch changes (TimeStretchProcessor)
+3. Render EQ and volume with keyframes (AudioEffectRenderer)
+4. Mix all tracks (AudioMixer)
+5. Encode to AAC (AudioEncoder)
+6. Mux with video
+```
+
+### Export Settings
+| Setting | Options |
+|---------|---------|
+| **Sample Rate** | 48kHz (video standard), 44.1kHz (CD) |
+| **Bitrate** | 128-320 kbps |
+| **Normalize** | Peak normalize (prevent clipping) |
+
+### Time Stretch Processing
+- Uses **SoundTouchJS** for pitch-preserved tempo changes
+- Handles keyframed speed values
+- Accurate to keyframe timing via integration
+
+### Effect Rendering
+- Offline rendering via `OfflineAudioContext`
+- Sample-accurate keyframe automation
+- 10-band EQ with animated gains
+- Volume automation with bezier curves
+
+### Track Handling
+- Respects track mute/solo settings
+- Overlapping clips sum correctly
+- Peak normalization optional
+
+See [Export](./Export.md) for full export documentation.
+
+---
+
 ## Not Implemented
 
 - Audio compression/dynamics
 - Reverb/delay effects
 - Audio meters/spectrum display
-- **Audio export** (currently video-only export)
-- Audio export with speed/pitch changes
 - Loudness normalization
 - Noise reduction
 - Real-time effect preview
@@ -322,4 +361,4 @@ interface EditDecision {
 
 ---
 
-*Source: `src/services/audioManager.ts`, `src/services/audioSync.ts`, `src/components/panels/PropertiesPanel.tsx`*
+*Source: `src/services/audioManager.ts`, `src/services/audioSync.ts`, `src/engine/audio/`, `src/components/panels/PropertiesPanel.tsx`*

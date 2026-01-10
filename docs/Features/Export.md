@@ -10,6 +10,7 @@ Frame-by-frame video export with H.264/VP9 encoding.
 
 - [Export Panel](#export-panel)
 - [Export Settings](#export-settings)
+- [Audio Settings](#audio-settings)
 - [Export Process](#export-process)
 - [Frame Export](#frame-export)
 
@@ -66,10 +67,48 @@ Frame-by-frame video export with H.264/VP9 encoding.
 
 ---
 
+## Audio Settings
+
+### Include Audio
+Checkbox to enable audio export (default: enabled).
+
+### Sample Rate
+| Rate | Description |
+|------|-------------|
+| 48 kHz | Video standard (recommended) |
+| 44.1 kHz | CD quality |
+
+### Audio Quality (Bitrate)
+| Quality | Bitrate |
+|---------|---------|
+| Good | 128 kbps |
+| Better | 192 kbps |
+| High Quality | 256 kbps |
+| Maximum | 320 kbps |
+
+### Normalize
+Peak normalize to prevent clipping. Reduces gain if mixed audio exceeds 0dB.
+
+### Audio Processing
+When audio is exported:
+1. **Extraction**: Audio decoded from source files
+2. **Speed/Pitch**: SoundTouchJS applies tempo changes with pitch preservation
+3. **Effects**: EQ and volume rendered with keyframe automation
+4. **Mixing**: All tracks mixed, respecting mute/solo
+5. **Encoding**: AAC-LC via WebCodecs
+
+### Codec
+| Codec | Container | Description |
+|-------|-----------|-------------|
+| AAC-LC | MP4 | mp4a.40.2 - Universal compatibility |
+
+---
+
 ## Export Process
 
 ### Pipeline
 ```
+Video Phase (70% of progress):
 1. Seek all clips to frame time
 2. Build layer composition
 3. Render via GPU engine
@@ -78,6 +117,14 @@ Frame-by-frame video export with H.264/VP9 encoding.
 6. Encode frame
 7. Write to muxer
 8. Repeat for all frames
+
+Audio Phase (30% of progress):
+1. Extract audio from all clips
+2. Apply speed/pitch processing
+3. Render EQ and volume effects
+4. Mix all tracks
+5. Encode to AAC
+6. Add audio chunks to muxer
 ```
 
 ### Progress Tracking
@@ -190,10 +237,10 @@ Example: 60s × 30fps × 15Mbps = ~112MB
 
 ## Not Implemented
 
-- Audio export (video only)
 - ProRes/DNxHR codecs
 - Multi-pass encoding
 - Background export
+- Opus/FLAC audio codecs
 
 ---
 
@@ -205,4 +252,4 @@ Example: 60s × 30fps × 15Mbps = ~112MB
 
 ---
 
-*Source: `src/engine/FrameExporter.ts`, `src/components/export/ExportPanel.tsx`*
+*Source: `src/engine/FrameExporter.ts`, `src/engine/audio/`, `src/components/export/ExportDialog.tsx`*
