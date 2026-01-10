@@ -749,13 +749,28 @@ export function AIVideoPanel() {
             <span>Add to timeline when complete</span>
           </label>
 
+          {/* Credit Info */}
+          <div className="credit-info">
+            <span className="credit-cost">
+              Cost: {calculateCreditCost(model, mode, duration)} credits
+            </span>
+            <a
+              href="https://klingai.com/global/dev/model-api/resource-packages"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="credit-link"
+            >
+              Check Balance
+            </a>
+          </div>
+
           {/* Generate Button */}
           <button
             className="btn-generate"
             onClick={generateVideo}
             disabled={isGenerating || !prompt.trim()}
           >
-            {isGenerating ? 'Starting...' : 'Generate Video'}
+            {isGenerating ? 'Starting...' : `Generate (${calculateCreditCost(model, mode, duration)} credits)`}
           </button>
 
           {/* Error */}

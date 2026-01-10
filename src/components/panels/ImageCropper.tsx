@@ -160,6 +160,12 @@ export function ImageCropper({
     if (disabled || !imageUrl) return;
     if (e.button !== 0) return; // Only left click
 
+    // Don't capture if clicking on a button
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'BUTTON' || target.closest('button')) {
+      return;
+    }
+
     e.preventDefault();
     containerRef.current?.requestPointerLock();
   }, [disabled, imageUrl]);

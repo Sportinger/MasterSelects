@@ -483,6 +483,31 @@
   color: var(--text-secondary);
 }
 
+/* Credit Info */
+.credit-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.credit-cost {
+  color: var(--text-secondary);
+}
+
+.credit-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 11px;
+}
+
+.credit-link:hover {
+  text-decoration: underline;
+}
+
 /* Generate Button */
 .btn-generate {
   width: 100%;
