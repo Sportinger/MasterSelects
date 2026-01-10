@@ -125,7 +125,7 @@ export interface ClipActions {
 export interface PlaybackActions {
   setPlayheadPosition: (position: number) => void;
   setDraggingPlayhead: (dragging: boolean) => void;
-  play: () => void;
+  play: () => Promise<void>;
   pause: () => void;
   stop: () => void;
   setZoom: (zoom: number) => void;

@@ -19,7 +19,83 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
     set({ isDraggingPlayhead: dragging });
   },
 
-  play: () => {
+  play: async () => {
+    const { clips, playheadPosition, tracks } = get();
+
+    // Find all video clips at current playhead position that need to be ready
+    const clipsAtPlayhead = clips.filter(clip => {
+      const isAtPlayhead = playheadPosition >= clip.startTime &&
+                           playheadPosition < clip.startTime + clip.duration;
+      const hasVideo = clip.source?.videoElement;
+      return isAtPlayhead && hasVideo;
+    });
+
+    // Also check nested composition clips
+    const nestedVideos: HTMLVideoElement[] = [];
+    for (const clip of clips) {
+      if (clip.isComposition && clip.nestedClips) {
+        const isAtPlayhead = playheadPosition >= clip.startTime &&
+                             playheadPosition < clip.startTime + clip.duration;
+        if (isAtPlayhead) {
+          const compTime = playheadPosition - clip.startTime + clip.inPoint;
+          for (const nestedClip of clip.nestedClips) {
+            if (nestedClip.source?.videoElement) {
+              const isNestedAtTime = compTime >= nestedClip.startTime &&
+                                     compTime < nestedClip.startTime + nestedClip.duration;
+              if (isNestedAtTime) {
+                nestedVideos.push(nestedClip.source.videoElement);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Collect all videos that need to be ready
+    const videosToCheck = [
+      ...clipsAtPlayhead.map(c => c.source!.videoElement!),
+      ...nestedVideos
+    ];
+
+    if (videosToCheck.length > 0) {
+      // Wait for all videos to be ready (readyState >= 3 means HAVE_FUTURE_DATA)
+      const waitForReady = async (video: HTMLVideoElement): Promise<void> => {
+        if (video.readyState >= 3) return;
+
+        return new Promise((resolve) => {
+          const checkReady = () => {
+            if (video.readyState >= 3) {
+              resolve();
+              return;
+            }
+            // Trigger buffering by briefly playing
+            video.play().then(() => {
+              setTimeout(() => {
+                video.pause();
+                if (video.readyState >= 3) {
+                  resolve();
+                } else {
+                  // Check again after a short delay
+                  setTimeout(checkReady, 50);
+                }
+              }, 50);
+            }).catch(() => {
+              // If play fails, just wait for canplaythrough
+              video.addEventListener('canplaythrough', () => resolve(), { once: true });
+              setTimeout(resolve, 500); // Timeout fallback
+            });
+          };
+          checkReady();
+        });
+      };
+
+      // Wait for all videos in parallel with a timeout
+      await Promise.race([
+        Promise.all(videosToCheck.map(waitForReady)),
+        new Promise(resolve => setTimeout(resolve, 1000)) // Max 1 second wait
+      ]);
+    }
+
     set({ isPlaying: true });
   },
 
