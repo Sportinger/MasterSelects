@@ -1356,8 +1356,8 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
     const { clips } = get();
     const clip = clips.find(c => c.id === clipId);
 
-    if (!clip?.file) {
-      console.warn('[Waveform] No file found for clip:', clipId);
+    if (!clip) {
+      console.warn('[Waveform] Clip not found:', clipId);
       return;
     }
 
@@ -1374,25 +1374,74 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
       ),
     });
 
-    console.log(`[Waveform] Starting generation for ${clip.file.name}`);
+    console.log(`[Waveform] Starting generation for ${clip.name}`);
 
     try {
-      const waveform = await generateWaveform(
-        clip.file,
-        50, // samples per second
-        (progress, partialWaveform) => {
-          // Update progress and partial waveform in real-time
+      let waveform: number[];
+
+      // Handle composition audio clips differently - use mixdown buffer
+      if (clip.isComposition && clip.compositionId) {
+        // For composition clips, regenerate mixdown and extract waveform
+        const { compositionAudioMixer } = await import('../../services/compositionAudioMixer');
+        const { generateWaveformFromBuffer } = await import('./utils');
+
+        console.log(`[Waveform] Generating mixdown for composition ${clip.name}...`);
+        const mixdownResult = await compositionAudioMixer.mixdownComposition(clip.compositionId);
+
+        if (mixdownResult && mixdownResult.hasAudio) {
+          waveform = mixdownResult.waveform;
+          // Also update the mixdown buffer and audio element
+          const mixdownAudio = compositionAudioMixer.createAudioElement(mixdownResult.buffer);
           set({
             clips: get().clips.map(c =>
               c.id === clipId
-                ? { ...c, waveformProgress: progress, waveform: partialWaveform }
+                ? {
+                    ...c,
+                    source: {
+                      type: 'audio' as const,
+                      audioElement: mixdownAudio,
+                      naturalDuration: mixdownResult.duration,
+                    },
+                    mixdownBuffer: mixdownResult.buffer,
+                    hasMixdownAudio: true,
+                  }
                 : c
             ),
           });
+        } else if (clip.mixdownBuffer) {
+          // Use existing mixdown buffer
+          waveform = generateWaveformFromBuffer(clip.mixdownBuffer, 50);
+        } else {
+          // No audio - generate flat waveform
+          waveform = new Array(Math.max(1, Math.floor(clip.duration * 50))).fill(0);
         }
-      );
+      } else if (!clip.file) {
+        console.warn('[Waveform] No file found for clip:', clipId);
+        set({
+          clips: get().clips.map(c =>
+            c.id === clipId ? { ...c, waveformGenerating: false } : c
+          ),
+        });
+        return;
+      } else {
+        // Regular audio/video clip - decode from file
+        waveform = await generateWaveform(
+          clip.file,
+          50, // samples per second
+          (progress, partialWaveform) => {
+            // Update progress and partial waveform in real-time
+            set({
+              clips: get().clips.map(c =>
+                c.id === clipId
+                  ? { ...c, waveformProgress: progress, waveform: partialWaveform }
+                  : c
+              ),
+            });
+          }
+        );
+      }
 
-      console.log(`[Waveform] Complete: ${waveform.length} samples for ${clip.file.name}`);
+      console.log(`[Waveform] Complete: ${waveform.length} samples for ${clip.name}`);
 
       // Final update with complete waveform
       set({
