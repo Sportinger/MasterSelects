@@ -501,7 +501,85 @@ export const useTimelineStore = create<TimelineStore>()(
           if (serializedClip.isComposition && serializedClip.compositionId) {
             const composition = mediaStore.compositions.find(c => c.id === serializedClip.compositionId);
             if (composition) {
-              // Create comp clip manually to restore specific settings
+              // Check if this is a composition AUDIO clip (linked audio for nested comp)
+              if (serializedClip.sourceType === 'audio') {
+                // Create composition audio clip - will regenerate mixdown
+                const compAudioClip: TimelineClip = {
+                  id: serializedClip.id,
+                  trackId: serializedClip.trackId,
+                  name: serializedClip.name,
+                  file: new File([], serializedClip.name),
+                  startTime: serializedClip.startTime,
+                  duration: serializedClip.duration,
+                  inPoint: serializedClip.inPoint,
+                  outPoint: serializedClip.outPoint,
+                  source: {
+                    type: 'audio',
+                    audioElement: document.createElement('audio'),
+                    naturalDuration: serializedClip.duration,
+                  },
+                  linkedClipId: serializedClip.linkedClipId,
+                  waveform: serializedClip.waveform || [],
+                  transform: serializedClip.transform,
+                  effects: serializedClip.effects || [],
+                  isLoading: false,
+                  isComposition: true,
+                  compositionId: serializedClip.compositionId,
+                };
+
+                // Add clip to state
+                set(state => ({
+                  clips: [...state.clips, compAudioClip],
+                }));
+
+                // Regenerate audio mixdown in background
+                import('../services/compositionAudioMixer').then(async ({ compositionAudioMixer }) => {
+                  try {
+                    console.log(`[loadState] Regenerating audio mixdown for ${composition.name}...`);
+                    const mixdownResult = await compositionAudioMixer.mixdownComposition(composition.id);
+
+                    if (mixdownResult && mixdownResult.hasAudio) {
+                      const mixdownAudio = compositionAudioMixer.createAudioElement(mixdownResult.buffer);
+                      mixdownAudio.preload = 'auto';
+
+                      set(state => ({
+                        clips: state.clips.map(c =>
+                          c.id === compAudioClip.id
+                            ? {
+                                ...c,
+                                source: {
+                                  type: 'audio' as const,
+                                  audioElement: mixdownAudio,
+                                  naturalDuration: mixdownResult.duration,
+                                },
+                                waveform: mixdownResult.waveform,
+                                mixdownBuffer: mixdownResult.buffer,
+                                hasMixdownAudio: true,
+                              }
+                            : c
+                        ),
+                      }));
+                      console.log(`[loadState] Audio mixdown restored for ${composition.name}`);
+                    } else {
+                      // No audio - generate flat waveform
+                      const flatWaveform = new Array(Math.max(1, Math.floor(serializedClip.duration * 50))).fill(0);
+                      set(state => ({
+                        clips: state.clips.map(c =>
+                          c.id === compAudioClip.id
+                            ? { ...c, waveform: flatWaveform, hasMixdownAudio: false }
+                            : c
+                        ),
+                      }));
+                    }
+                  } catch (e) {
+                    console.error('[loadState] Failed to regenerate audio mixdown:', e);
+                  }
+                });
+
+                continue;
+              }
+
+              // Create comp VIDEO clip manually to restore specific settings
               const compClip: TimelineClip = {
                 id: serializedClip.id,
                 trackId: serializedClip.trackId,
@@ -516,6 +594,7 @@ export const useTimelineStore = create<TimelineStore>()(
                   naturalDuration: serializedClip.duration,
                 },
                 thumbnails: serializedClip.thumbnails,
+                linkedClipId: serializedClip.linkedClipId,
                 transform: serializedClip.transform,
                 effects: serializedClip.effects || [],
                 isLoading: true,
