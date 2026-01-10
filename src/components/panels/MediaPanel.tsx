@@ -46,6 +46,7 @@ export function MediaPanel() {
   const [addDropdownOpen, setAddDropdownOpen] = useState(false);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [internalDragId, setInternalDragId] = useState<string | null>(null);
+  const [isExternalDragOver, setIsExternalDragOver] = useState(false);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -81,6 +82,27 @@ export function MediaPanel() {
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+
+    // Check if this is an external file drag (from OS file explorer)
+    const hasFiles = e.dataTransfer.types.includes('Files');
+    const isInternalDrag = e.dataTransfer.types.includes('application/x-media-panel-item');
+
+    if (hasFiles && !isInternalDrag) {
+      e.dataTransfer.dropEffect = 'copy';
+      setIsExternalDragOver(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only reset if leaving the panel entirely (not just entering a child)
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setIsExternalDragOver(false);
+    }
   }, []);
 
   // Handle item selection
@@ -310,20 +332,23 @@ export function MediaPanel() {
     setInternalDragId(null);
   }, [folders, selectedIds, moveToFolder]);
 
-  // Handle drop on root (move out of folder)
+  // Handle drop on root (move out of folder or external file import)
   const handleRootDrop = useCallback((e: React.DragEvent) => {
-    // Only handle internal drags
+    e.preventDefault();
+    e.stopPropagation();
+    setIsExternalDragOver(false);
+
+    // Check if this is an external file drop
     if (!e.dataTransfer.types.includes('application/x-media-panel-item')) {
       // External file drop - import
       if (e.dataTransfer.files.length > 0) {
+        console.log('[MediaPanel] Importing', e.dataTransfer.files.length, 'files from external drop');
         importFiles(e.dataTransfer.files);
       }
       return;
     }
 
-    e.preventDefault();
-    e.stopPropagation();
-
+    // Internal drag - move to root
     const itemId = e.dataTransfer.getData('application/x-media-panel-item');
     if (itemId) {
       const itemsToMove = selectedIds.includes(itemId) ? selectedIds : [itemId];
@@ -445,9 +470,10 @@ export function MediaPanel() {
 
   return (
     <div
-      className="media-panel"
+      className={`media-panel ${isExternalDragOver ? 'drop-target' : ''}`}
       onDrop={handleRootDrop}
       onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
       onClick={() => { contextMenu && closeContextMenu(); }}
     >
       {/* Header */}
