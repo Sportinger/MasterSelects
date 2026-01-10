@@ -261,16 +261,23 @@ export function Timeline() {
   // Keyboard shortcuts (global, works regardless of focus)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only handle if not typing in an input
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      ) {
+      // Only handle if not typing in a text input
+      const isTextInput =
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target instanceof HTMLInputElement &&
+          e.target.type !== 'range' &&
+          e.target.type !== 'checkbox' &&
+          e.target.type !== 'radio');
+
+      if (isTextInput) {
         return;
       }
 
-      // Space: toggle play/pause
+      // Space: toggle play/pause (also blur any focused slider/checkbox)
       if (e.code === 'Space' || e.key === ' ') {
+        if (e.target instanceof HTMLInputElement) {
+          e.target.blur();
+        }
         e.preventDefault();
         if (isPlaying) {
           pause();
