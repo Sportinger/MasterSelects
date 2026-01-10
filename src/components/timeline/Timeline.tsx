@@ -909,10 +909,11 @@ export function Timeline() {
         // Keyframe interpolation uses timeline-local time
         const keyframeLocalTime = clipLocalTime;
         // Calculate source time using speed integration (handles keyframes)
-        const defaultSpeed = clip.speed ?? (clip.reversed ? -1 : 1);
         const sourceTime = getSourceTimeForClip(clip.id, clipLocalTime);
-        // Determine start point based on playback direction
-        const startPoint = defaultSpeed >= 0 ? clip.inPoint : clip.outPoint;
+        // Determine start point based on INITIAL speed (speed at t=0), not clip.speed
+        // This is important when keyframes change speed throughout the clip
+        const initialSpeed = getInterpolatedSpeed(clip.id, 0);
+        const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
         const clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
         const video = clip.source.videoElement;
         const webCodecsPlayer = clip.source.webCodecsPlayer;

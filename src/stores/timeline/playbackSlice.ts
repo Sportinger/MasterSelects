@@ -315,10 +315,11 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
             const video = clip.source.videoElement;
             const clipLocalTime = time - clip.startTime;
             // Calculate source time using speed integration (handles keyframes)
-            const defaultSpeed = clip.speed ?? (clip.reversed ? -1 : 1);
             const sourceTime = get().getSourceTimeForClip(clip.id, clipLocalTime);
-            // Determine start point based on playback direction
-            const startPoint = defaultSpeed >= 0 ? clip.inPoint : clip.outPoint;
+            // Determine start point based on INITIAL speed (speed at t=0), not clip.speed
+            // This is important when keyframes change speed throughout the clip
+            const initialSpeed = get().getInterpolatedSpeed(clip.id, 0);
+            const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
             const clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
 
             // Robust seek with verification and retry
@@ -422,9 +423,10 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
             const video = clip.source.videoElement;
             const localTime = time - clip.startTime;
             // Use speed integration for expected time (must match seek logic above)
-            const defaultSpeed = clip.speed ?? (clip.reversed ? -1 : 1);
             const sourceTime = get().getSourceTimeForClip(clip.id, localTime);
-            const startPoint = defaultSpeed >= 0 ? clip.inPoint : clip.outPoint;
+            // Must match seek logic: use initial speed for start point
+            const initialSpeed = get().getInterpolatedSpeed(clip.id, 0);
+            const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
             const expectedTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
             if (Math.abs(video.currentTime - expectedTime) > FRAME_TOLERANCE) {
               allPositionsCorrect = false;
