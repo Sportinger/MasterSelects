@@ -226,6 +226,19 @@ export function useEngine() {
           currentPlayhead >= c.startTime && currentPlayhead < c.startTime + c.duration
         );
 
+        // Check if there are ANY video clips at the current playhead position
+        // If not, render black (empty frame) regardless of what's in mixerStore layers
+        const videoClipsAtTime = clipsAtTime.filter(c => {
+          const track = tracks.find(t => t.id === c.trackId);
+          return track?.type === 'video';
+        });
+
+        if (videoClipsAtTime.length === 0) {
+          // No video clips at current position - render black
+          engine.render([]);
+          return;
+        }
+
         // Get engine output dimensions for mask generation
         const engineDimensions = engine.getOutputDimensions();
 
