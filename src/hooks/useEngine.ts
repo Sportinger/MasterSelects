@@ -230,6 +230,7 @@ export function useEngine() {
         const engineDimensions = engine.getOutputDimensions();
 
         // Create frame layers with FRESH mask properties from clips (not stale store state)
+        // CRITICAL: Only include layers that have clips at the current playhead position
         const frameLayers = layersSnapshot.map((layer, layerIndex) => {
           if (!layer) return layer;
 
@@ -238,8 +239,14 @@ export function useEngine() {
 
           const clip = clipsAtTime.find(c => c.trackId === track.id);
 
+          // If no clip at current time for this track, return layer without source
+          // This ensures preview shows black when playhead is over empty space
+          if (!clip) {
+            return { ...layer, source: null };
+          }
+
           // Extract mask properties directly from clip at render time
-          if (clip?.masks && clip.masks.length > 0) {
+          if (clip.masks && clip.masks.length > 0) {
             // CRITICAL: Ensure mask texture exists BEFORE rendering this frame
             // This prevents the race condition where first frame renders without mask
             if (!engine.hasMaskTexture(layer.id)) {
