@@ -118,6 +118,7 @@ export function Timeline() {
     setTrackParent,
     getSourceTimeForClip,
     getInterpolatedSpeed,
+    addTextClip,
   } = useTimelineStore();
 
   const {
@@ -3101,6 +3102,13 @@ export function Timeline() {
         onToggleWaveforms={toggleWaveformsEnabled}
         onAddVideoTrack={() => addTrack('video')}
         onAddAudioTrack={() => addTrack('audio')}
+        onAddTextClip={() => {
+          // Add text clip at playhead position on topmost video track
+          const videoTrack = tracks.find(t => t.type === 'video');
+          if (videoTrack) {
+            addTextClip(videoTrack.id, playheadPosition);
+          }
+        }}
         onSetDuration={setDuration}
         onFitToWindow={handleFitToWindow}
         formatTime={formatTime}

@@ -1,10 +1,12 @@
 // Clip-related actions slice
 
-import type { TimelineClip, TimelineTrack, Effect, EffectType } from '../../types';
+import type { TimelineClip, TimelineTrack, Effect, EffectType, TextClipProperties } from '../../types';
 import type { ClipActions, SliceCreator, Composition } from './types';
 import { useMediaStore } from '../mediaStore';
-import { DEFAULT_TRANSFORM } from './constants';
+import { DEFAULT_TRANSFORM, DEFAULT_TEXT_PROPERTIES, DEFAULT_TEXT_DURATION } from './constants';
 import { generateWaveform, generateThumbnails, getDefaultEffectParams } from './utils';
+import { textRenderer } from '../../services/textRenderer';
+import { googleFontsService } from '../../services/googleFontsService';
 import { WebCodecsPlayer } from '../../engine/WebCodecsPlayer';
 
 export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
@@ -1224,6 +1226,94 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
       }),
     });
     // Invalidate cache - transform affects rendered output
+    invalidateCache();
+  },
+
+  // ========== TEXT CLIP ACTIONS ==========
+
+  addTextClip: async (trackId, startTime, duration = DEFAULT_TEXT_DURATION) => {
+    const { clips, tracks, updateDuration, invalidateCache } = get();
+    const track = tracks.find(t => t.id === trackId);
+
+    // Text clips can only go on video tracks
+    if (!track || track.type !== 'video') {
+      console.warn('[Timeline] Text clips can only be added to video tracks');
+      return null;
+    }
+
+    const clipId = `clip-text-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Pre-load the default font
+    await googleFontsService.loadFont(DEFAULT_TEXT_PROPERTIES.fontFamily, DEFAULT_TEXT_PROPERTIES.fontWeight);
+
+    // Create canvas for text rendering
+    const canvas = textRenderer.createCanvas(1920, 1080);
+
+    // Initial render with default text
+    textRenderer.render(DEFAULT_TEXT_PROPERTIES, canvas);
+
+    const textClip: TimelineClip = {
+      id: clipId,
+      trackId,
+      name: 'Text',
+      file: new File([], 'text-clip.txt', { type: 'text/plain' }), // Placeholder file
+      startTime,
+      duration,
+      inPoint: 0,
+      outPoint: duration,
+      source: {
+        type: 'text',
+        textCanvas: canvas,
+        naturalDuration: duration,
+      },
+      transform: { ...DEFAULT_TRANSFORM },
+      effects: [],
+      textProperties: { ...DEFAULT_TEXT_PROPERTIES },
+      isLoading: false,
+    };
+
+    set({ clips: [...clips, textClip] });
+    updateDuration();
+    invalidateCache();
+
+    console.log(`[Timeline] Created text clip: ${clipId}`);
+    return clipId;
+  },
+
+  updateTextProperties: (clipId, props) => {
+    const { clips, invalidateCache } = get();
+
+    set({
+      clips: clips.map(c => {
+        if (c.id !== clipId || !c.textProperties) return c;
+
+        const newProps: TextClipProperties = { ...c.textProperties, ...props };
+
+        // Load font if changed
+        if (props.fontFamily || props.fontWeight) {
+          googleFontsService.loadFont(
+            props.fontFamily || c.textProperties.fontFamily,
+            props.fontWeight || c.textProperties.fontWeight
+          );
+        }
+
+        // Re-render text to canvas
+        const canvas = c.source?.textCanvas || textRenderer.createCanvas(1920, 1080);
+        textRenderer.render(newProps, canvas);
+
+        return {
+          ...c,
+          textProperties: newProps,
+          source: {
+            ...c.source!,
+            textCanvas: canvas,
+          },
+          // Update name to reflect text content (first 20 chars)
+          name: newProps.text.substring(0, 20) || 'Text',
+        };
+      }),
+    });
+
     invalidateCache();
   },
 

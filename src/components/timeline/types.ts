@@ -110,6 +110,7 @@ export interface TimelineControlsProps {
   onToggleWaveforms: () => void;
   onAddVideoTrack: () => void;
   onAddAudioTrack: () => void;
+  onAddTextClip: () => void;
   onSetDuration: (duration: number) => void;
   onFitToWindow: () => void;
   formatTime: (seconds: number) => string;

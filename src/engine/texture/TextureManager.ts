@@ -50,6 +50,34 @@ export class TextureManager {
     }
   }
 
+  // Create GPU texture from HTMLCanvasElement (for text clips)
+  // Note: Not cached because canvas content can change
+  createCanvasTexture(canvas: HTMLCanvasElement): GPUTexture | null {
+    const width = canvas.width;
+    const height = canvas.height;
+
+    if (width === 0 || height === 0) return null;
+
+    try {
+      const texture = this.device.createTexture({
+        size: [width, height],
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+
+      this.device.queue.copyExternalImageToTexture(
+        { source: canvas },
+        { texture },
+        [width, height]
+      );
+
+      return texture;
+    } catch (e) {
+      console.error('Failed to create canvas texture:', e);
+      return null;
+    }
+  }
+
   // Get or create a view for a texture
   getImageView(texture: GPUTexture): GPUTextureView {
     let view = this.cachedImageViews.get(texture);

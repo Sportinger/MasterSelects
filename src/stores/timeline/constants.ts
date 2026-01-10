@@ -1,6 +1,6 @@
 // Timeline store constants and default values
 
-import type { ClipTransform, TimelineTrack } from '../../types';
+import type { ClipTransform, TimelineTrack, TextClipProperties } from '../../types';
 
 // Default transform for new clips
 export const DEFAULT_TRANSFORM: ClipTransform = {
@@ -52,3 +52,30 @@ export const RAM_PREVIEW_FPS = 30;
 
 // Frame tolerance for position verification (at 30fps)
 export const FRAME_TOLERANCE = 0.04;
+
+// Default text clip duration
+export const DEFAULT_TEXT_DURATION = 5;
+
+// Default text properties for new text clips
+export const DEFAULT_TEXT_PROPERTIES: TextClipProperties = {
+  text: 'Enter text',
+  fontFamily: 'Roboto',
+  fontSize: 72,
+  fontWeight: 400,
+  fontStyle: 'normal',
+  color: '#ffffff',
+  textAlign: 'center',
+  verticalAlign: 'middle',
+  lineHeight: 1.2,
+  letterSpacing: 0,
+  strokeEnabled: false,
+  strokeColor: '#000000',
+  strokeWidth: 2,
+  shadowEnabled: false,
+  shadowColor: 'rgba(0, 0, 0, 0.5)',
+  shadowOffsetX: 4,
+  shadowOffsetY: 4,
+  shadowBlur: 8,
+  pathEnabled: false,
+  pathPoints: [],
+};

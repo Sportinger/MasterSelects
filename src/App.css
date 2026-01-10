@@ -1714,6 +1714,100 @@ input, textarea {
   text-align: right;
 }
 
+/* Text Tab (embedded in PropertiesPanel) */
+.text-tab {
+  display: flex;
+  flex-direction: column;
+}
+
+.text-tab .text-content-input {
+  width: 100%;
+  min-height: 80px;
+  padding: 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.text-tab .text-content-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.text-tab .button-group {
+  display: flex;
+  gap: 2px;
+}
+
+.text-tab .button-group button {
+  flex: 1;
+  padding: 6px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.text-tab .button-group button:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.text-tab .button-group button:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.text-tab .button-group button:not(:first-child) {
+  border-left: none;
+}
+
+.text-tab .button-group button:hover {
+  background: var(--bg-hover);
+}
+
+.text-tab .button-group button.active {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+}
+
+.text-tab .unit {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-left: 4px;
+}
+
+.text-tab .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.text-tab .checkbox-label input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.text-tab .text-preview {
+  padding: 16px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  min-height: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Analysis Tab (embedded in PropertiesPanel) */
 .properties-tab-content.analysis-tab {
   display: flex;
@@ -2599,6 +2693,34 @@ input[type="checkbox"] {
 .timeline-clip.audio {
   background: linear-gradient(180deg, #16a34a, #15803d);
   border: 1px solid #22c55e;
+}
+
+.timeline-clip.text {
+  background: linear-gradient(180deg, #9333ea, #7c3aed);
+  border: 1px solid #a855f7;
+}
+
+.timeline-clip.text .clip-content {
+  background: linear-gradient(180deg, rgba(147, 51, 234, 0.9), rgba(124, 58, 237, 0.85));
+}
+
+.clip-text-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: bold;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.timeline-clip.loading.text {
+  background: rgba(147, 51, 234, 0.3) !important;
+  border-color: rgba(168, 85, 247, 0.8) !important;
 }
 
 /* Loading state for clips - dashed style like drag preview */

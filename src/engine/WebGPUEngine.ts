@@ -750,6 +750,24 @@ export class WebGPUEngine {
         }
       }
 
+      // Text clips - render canvas to texture
+      if (layer.source.textCanvas) {
+        const canvas = layer.source.textCanvas;
+        const texture = this.textureManager?.createCanvasTexture(canvas);
+        if (texture) {
+          const textView = this.textureManager!.getImageView(texture);
+          this.layerRenderData.push({
+            layer,
+            isVideo: false,
+            externalTexture: null,
+            textureView: textView,
+            sourceWidth: canvas.width,
+            sourceHeight: canvas.height,
+          });
+          continue;
+        }
+      }
+
       // Nested compositions - will be pre-rendered below
       if (layer.source.nestedComposition) {
         const nestedComp = layer.source.nestedComposition;
@@ -1056,6 +1074,23 @@ export class WebGPUEngine {
           });
         }
       }
+
+      // Text canvas
+      if (layer.source.textCanvas) {
+        const canvas = layer.source.textCanvas;
+        const texture = this.textureManager?.createCanvasTexture(canvas);
+        if (texture) {
+          const textView = this.textureManager!.getImageView(texture);
+          layerData.push({
+            layer,
+            isVideo: false,
+            externalTexture: null,
+            textureView: textView,
+            sourceWidth: canvas.width,
+            sourceHeight: canvas.height,
+          });
+        }
+      }
     }
 
     // If no layers, clear to black
@@ -1267,6 +1302,23 @@ export class WebGPUEngine {
             textureView: imageView,
             sourceWidth: img.naturalWidth,
             sourceHeight: img.naturalHeight,
+          });
+        }
+      }
+
+      // Text canvas
+      if (layer.source.textCanvas) {
+        const canvas = layer.source.textCanvas;
+        const texture = this.textureManager?.createCanvasTexture(canvas);
+        if (texture) {
+          const textView = this.textureManager!.getImageView(texture);
+          nestedLayerData.push({
+            layer,
+            isVideo: false,
+            externalTexture: null,
+            textureView: textView,
+            sourceWidth: canvas.width,
+            sourceHeight: canvas.height,
           });
         }
       }

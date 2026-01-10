@@ -35,6 +35,7 @@ function TimelineControlsComponent({
   onToggleWaveforms,
   onAddVideoTrack,
   onAddAudioTrack,
+  onAddTextClip,
   onSetDuration,
   onFitToWindow,
   formatTime,
@@ -239,6 +240,9 @@ function TimelineControlsComponent({
         </button>
         <button className="btn btn-sm" onClick={onAddAudioTrack}>
           + Audio Track
+        </button>
+        <button className="btn btn-sm" onClick={onAddTextClip} title="Add text clip at playhead">
+          + Text
         </button>
       </div>
     </div>

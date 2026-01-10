@@ -64,7 +64,7 @@ export type BlendMode =
   | 'alpha-add';
 
 export interface LayerSource {
-  type: 'video' | 'image' | 'camera' | 'color';
+  type: 'video' | 'image' | 'camera' | 'color' | 'text';
   file?: File;
   videoElement?: HTMLVideoElement;
   imageElement?: HTMLImageElement;
@@ -75,6 +75,9 @@ export interface LayerSource {
   videoFrame?: VideoFrame;
   // Nested composition support - pre-rendered layers from nested comp
   nestedComposition?: NestedCompositionData;
+  // Text clip support
+  textCanvas?: HTMLCanvasElement;
+  textProperties?: TextClipProperties;
 }
 
 // Data for pre-rendering nested compositions
@@ -83,6 +86,45 @@ export interface NestedCompositionData {
   layers: Layer[];  // Layers from the nested composition to be pre-rendered
   width: number;
   height: number;
+}
+
+// Text clip typography properties
+export interface TextClipProperties {
+  // Content
+  text: string;
+
+  // Typography
+  fontFamily: string;           // e.g., 'Roboto', 'Open Sans'
+  fontSize: number;             // in pixels
+  fontWeight: number;           // 100-900
+  fontStyle: 'normal' | 'italic';
+
+  // Color
+  color: string;                // hex or rgba
+
+  // Alignment
+  textAlign: 'left' | 'center' | 'right';
+  verticalAlign: 'top' | 'middle' | 'bottom';
+
+  // Spacing
+  lineHeight: number;           // multiplier (1.2 = 120%)
+  letterSpacing: number;        // pixels
+
+  // Stroke (outline)
+  strokeEnabled: boolean;
+  strokeColor: string;
+  strokeWidth: number;          // pixels
+
+  // Shadow
+  shadowEnabled: boolean;
+  shadowColor: string;
+  shadowOffsetX: number;        // pixels
+  shadowOffsetY: number;
+  shadowBlur: number;           // pixels
+
+  // Text on Path (bezier curve)
+  pathEnabled: boolean;
+  pathPoints: { x: number; y: number; handleIn: { x: number; y: number }; handleOut: { x: number; y: number } }[];
 }
 
 export interface Effect {
@@ -220,13 +262,14 @@ export interface TimelineClip {
   inPoint: number;        // Trim in point within source (seconds)
   outPoint: number;       // Trim out point within source (seconds)
   source: {
-    type: 'video' | 'audio' | 'image';
+    type: 'video' | 'audio' | 'image' | 'text';
     videoElement?: HTMLVideoElement;
     audioElement?: HTMLAudioElement;
     imageElement?: HTMLImageElement;
     webCodecsPlayer?: import('../engine/WebCodecsPlayer').WebCodecsPlayer;
     naturalDuration?: number;
     mediaFileId?: string;  // Reference to MediaFile for proxy lookup
+    textCanvas?: HTMLCanvasElement;  // Pre-rendered text canvas for text clips
   } | null;
   thumbnails?: string[];  // Array of data URLs for filmstrip preview
   linkedClipId?: string;  // ID of linked clip (e.g., audio linked to video)
@@ -263,6 +306,8 @@ export interface TimelineClip {
   analysis?: ClipAnalysis;
   analysisStatus?: AnalysisStatus;
   analysisProgress?: number;  // 0-100 progress
+  // Text clip support
+  textProperties?: TextClipProperties;
 }
 
 export interface TimelineTrack {
@@ -297,7 +342,7 @@ export interface SerializableClip {
   duration: number;
   inPoint: number;
   outPoint: number;
-  sourceType: 'video' | 'audio' | 'image';
+  sourceType: 'video' | 'audio' | 'image' | 'text';
   naturalDuration?: number;
   thumbnails?: string[];
   linkedClipId?: string;
@@ -321,6 +366,8 @@ export interface SerializableClip {
   reversed?: boolean;
   speed?: number;         // Playback speed (default 1.0)
   preservesPitch?: boolean;  // Keep pitch when speed changes (default true)
+  // Text clip support
+  textProperties?: TextClipProperties;
 }
 
 // Serializable timeline data for composition storage

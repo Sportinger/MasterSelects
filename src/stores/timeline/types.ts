@@ -11,7 +11,8 @@ import type {
   BezierHandle,
   ClipMask,
   MaskVertex,
-  Effect
+  Effect,
+  TextClipProperties
 } from '../../types';
 import type { Composition } from '../mediaStore';
 
@@ -29,6 +30,7 @@ export type {
   MaskVertex,
   Effect,
   Composition,
+  TextClipProperties,
 };
 
 // Mask edit mode types
@@ -121,6 +123,9 @@ export interface ClipActions {
   getClipChildren: (clipId: string) => TimelineClip[];
   // Audio pitch preservation
   setClipPreservesPitch: (clipId: string, preservesPitch: boolean) => void;
+  // Text clip actions
+  addTextClip: (trackId: string, startTime: number, duration?: number) => Promise<string | null>;
+  updateTextProperties: (clipId: string, props: Partial<TextClipProperties>) => void;
 }
 
 // Playback actions interface

@@ -6,6 +6,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import type { BlendMode, AnimatableProperty, MaskMode, ClipMask, EffectType, TranscriptWord, FrameAnalysisData } from '../../types';
 import { createEffectProperty } from '../../types';
 import { EQ_FREQUENCIES } from '../../services/audioManager';
+import { TextTab } from './TextTab';
 
 // EQ band parameter names
 const EQ_BAND_PARAMS = ['band31', 'band62', 'band125', 'band250', 'band500', 'band1k', 'band2k', 'band4k', 'band8k', 'band16k'];
@@ -205,7 +206,7 @@ function DraggableNumber({ value, onChange, defaultValue, sensitivity = 2, decim
 // ============================================
 // TAB TYPE
 // ============================================
-type PropertiesTab = 'transform' | 'effects' | 'masks' | 'volume' | 'transcript' | 'analysis';
+type PropertiesTab = 'transform' | 'effects' | 'masks' | 'volume' | 'transcript' | 'analysis' | 'text';
 
 // ============================================
 // TRANSFORM TAB
@@ -1124,18 +1125,23 @@ export function PropertiesPanel() {
   const selectedTrack = selectedClip ? tracks.find(t => t.id === selectedClip.trackId) : null;
   const isAudioClip = selectedTrack?.type === 'audio';
 
-  // Reset tab when switching between audio/video clips
+  // Check if it's a text clip
+  const isTextClip = selectedClip?.source?.type === 'text';
+
+  // Reset tab when switching between audio/video/text clips
   useEffect(() => {
     if (selectedClipId && selectedClipId !== lastClipId) {
       setLastClipId(selectedClipId);
       // Set appropriate default tab based on clip type
-      if (isAudioClip && (activeTab === 'transform' || activeTab === 'masks')) {
+      if (isTextClip) {
+        setActiveTab('text');
+      } else if (isAudioClip && (activeTab === 'transform' || activeTab === 'masks' || activeTab === 'text')) {
         setActiveTab('volume');
-      } else if (!isAudioClip && activeTab === 'volume') {
+      } else if (!isAudioClip && !isTextClip && (activeTab === 'volume' || activeTab === 'text')) {
         setActiveTab('transform');
       }
     }
-  }, [selectedClipId, isAudioClip, lastClipId, activeTab]);
+  }, [selectedClipId, isAudioClip, isTextClip, lastClipId, activeTab]);
 
   if (!selectedClip) {
     return (
@@ -1166,6 +1172,17 @@ export function PropertiesPanel() {
               Transcript {selectedClip.transcript && selectedClip.transcript.length > 0 && <span className="badge">{selectedClip.transcript.length}</span>}
             </button>
           </>
+        ) : isTextClip ? (
+          <>
+            <button className={`tab-btn ${activeTab === 'text' ? 'active' : ''}`} onClick={() => setActiveTab('text')}>Text</button>
+            <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>Transform</button>
+            <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => setActiveTab('effects')}>
+              Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
+            </button>
+            <button className={`tab-btn ${activeTab === 'masks' ? 'active' : ''}`} onClick={() => setActiveTab('masks')}>
+              Masks {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
+            </button>
+          </>
         ) : (
           <>
             <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>Transform</button>
@@ -1186,6 +1203,9 @@ export function PropertiesPanel() {
       </div>
 
       <div className="properties-content">
+        {activeTab === 'text' && isTextClip && selectedClip.textProperties && (
+          <TextTab clipId={selectedClip.id} textProperties={selectedClip.textProperties} />
+        )}
         {activeTab === 'transform' && !isAudioClip && <TransformTab clipId={selectedClip.id} transform={transform} speed={interpolatedSpeed} />}
         {activeTab === 'volume' && isAudioClip && <VolumeTab clipId={selectedClip.id} effects={selectedClip.effects || []} />}
         {activeTab === 'effects' && <EffectsTab clipId={selectedClip.id} effects={selectedClip.effects || []} />}

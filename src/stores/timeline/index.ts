@@ -415,6 +415,8 @@ export const useTimelineStore = create<TimelineStore>()(
             analysisStatus: clip.analysisStatus !== 'none' ? clip.analysisStatus : undefined,
             // Playback
             reversed: clip.reversed || undefined,
+            // Text clip support
+            textProperties: clip.textProperties,
           };
         });
 
@@ -724,6 +726,50 @@ export const useTimelineStore = create<TimelineStore>()(
             } else {
               console.warn('Could not find composition for clip:', serializedClip.name);
             }
+            continue;
+          }
+
+          // Text clips - restore from textProperties
+          if (serializedClip.sourceType === 'text' && serializedClip.textProperties) {
+            const { textRenderer } = await import('../../services/textRenderer');
+            const { googleFontsService } = await import('../../services/googleFontsService');
+
+            // Load the font first
+            await googleFontsService.loadFont(
+              serializedClip.textProperties.fontFamily,
+              serializedClip.textProperties.fontWeight
+            );
+
+            // Render text to canvas
+            const textCanvas = textRenderer.render(serializedClip.textProperties);
+
+            const textClip: TimelineClip = {
+              id: serializedClip.id,
+              trackId: serializedClip.trackId,
+              name: serializedClip.name,
+              file: new File([], 'text-clip.txt', { type: 'text/plain' }),
+              startTime: serializedClip.startTime,
+              duration: serializedClip.duration,
+              inPoint: serializedClip.inPoint,
+              outPoint: serializedClip.outPoint,
+              source: {
+                type: 'text',
+                textCanvas,
+                naturalDuration: serializedClip.duration,
+              },
+              transform: serializedClip.transform,
+              effects: serializedClip.effects || [],
+              masks: serializedClip.masks,
+              textProperties: serializedClip.textProperties,
+              isLoading: false,
+            };
+
+            // Add clip to state
+            set(state => ({
+              clips: [...state.clips, textClip],
+            }));
+
+            console.log(`[loadState] Restored text clip: ${serializedClip.name}`);
             continue;
           }
 

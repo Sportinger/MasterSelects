@@ -388,6 +388,9 @@ function TimelineClipComponent({
     clip.file?.type?.startsWith('audio/') ||
     audioExtensions.includes(fileExt);
 
+  // Determine if this is a text clip
+  const isTextClip = clip.source?.type === 'text';
+
   const isGeneratingProxy = proxyStatus === 'generating';
   const hasProxy = proxyStatus === 'ready';
 
@@ -490,8 +493,8 @@ function TimelineClipComponent({
     return null;
   }
 
-  // Determine clip type class (audio, video, or image)
-  const clipTypeClass = isAudioClip ? 'audio' : (clip.source?.type || 'video');
+  // Determine clip type class (audio, video, text, or image)
+  const clipTypeClass = isTextClip ? 'text' : isAudioClip ? 'audio' : (clip.source?.type || 'video');
 
   const clipClass = [
     'timeline-clip',
@@ -620,7 +623,10 @@ function TimelineClipComponent({
       <div className="clip-content">
         {clip.isLoading && <div className="clip-loading-spinner" />}
         <div className="clip-name-row">
-          <span className="clip-name">{clip.name}</span>
+          {isTextClip && (
+            <span className="clip-text-icon" title="Text Clip">T</span>
+          )}
+          <span className="clip-name">{isTextClip && clip.textProperties ? clip.textProperties.text.slice(0, 30) || 'Text' : clip.name}</span>
           <PickWhip
             clipId={clip.id}
             clipName={clip.name}
