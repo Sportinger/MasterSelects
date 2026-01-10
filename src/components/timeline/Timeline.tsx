@@ -1335,13 +1335,16 @@ export function Timeline() {
         const shouldPlay = isPlaying && !effectivelyMuted && !isDraggingPlayhead && absSpeed > 0.1;
 
         if (shouldPlay) {
-          // Sync audio if drifted more than 50ms (tighter sync for smoother playback)
-          if (Math.abs(timeDiff) > 0.05) {
+          // Only sync audio on significant drift (>200ms) to avoid constant glitches
+          // Small drifts are acceptable - constantly re-seeking causes audio pops
+          if (Math.abs(timeDiff) > 0.2) {
             audio.currentTime = clipTime;
           }
 
-          // Ensure audio is playing
+          // Ensure audio is playing - sync on start
           if (audio.paused) {
+            // Initial sync when starting playback
+            audio.currentTime = clipTime;
             audio.play().catch((err) => {
               console.warn('[Audio] Failed to play:', err.message);
               hasAudioError = true;
