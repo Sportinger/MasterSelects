@@ -265,23 +265,33 @@
   color: var(--text-secondary);
 }
 
-.image-cropper .clear-image {
+.image-cropper .cropper-buttons {
   position: absolute;
   top: 4px;
   right: 4px;
+  display: flex;
+  gap: 4px;
+  z-index: 10;
+}
+
+.image-cropper .fit-image,
+.image-cropper .clear-image {
   width: 20px;
   height: 20px;
   background: rgba(0, 0, 0, 0.7);
   border: none;
-  border-radius: 50%;
+  border-radius: 4px;
   color: white;
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10;
+}
+
+.image-cropper .fit-image:hover {
+  background: var(--accent);
 }
 
 .image-cropper .clear-image:hover {

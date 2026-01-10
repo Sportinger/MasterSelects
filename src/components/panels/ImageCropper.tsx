@@ -219,15 +219,29 @@ export function ImageCropper({
                 draggable={false}
               />
             </div>
-            <button
-              className="clear-image"
-              onClick={(e) => {
-                e.stopPropagation();
-                onClear();
-              }}
-            >
-              ×
-            </button>
+            <div className="cropper-buttons">
+              <button
+                className="fit-image"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOffset({ x: 0, y: 0 });
+                  setScale(1);
+                }}
+                title="Fit image"
+              >
+                ⊡
+              </button>
+              <button
+                className="clear-image"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClear();
+                }}
+                title="Remove image"
+              >
+                ×
+              </button>
+            </div>
             {scale > 1 && (
               <div className="zoom-indicator">{Math.round(scale * 100)}%</div>
             )}
