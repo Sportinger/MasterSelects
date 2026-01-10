@@ -23,6 +23,9 @@ export function ExportPanel() {
   const { outputResolution, setResolution } = useMixerStore();
   const composition = getActiveComposition();
 
+  // Info tooltip state
+  const [showResolutionInfo, setShowResolutionInfo] = useState(false);
+
   // Export settings
   const [width, setWidth] = useState(composition?.width ?? 1920);
   const [height, setHeight] = useState(composition?.height ?? 1080);
@@ -218,11 +221,18 @@ export function ExportPanel() {
             <div className="control-row">
               <label>
                 Resolution
-                <span
-                  className="info-icon"
-                  title="Sets the canvas size for preview and rendering. Affects GPU buffer size and default export dimensions. Use lower resolution for better performance on complex compositions."
-                >
-                  i
+                <span className="info-icon-wrapper">
+                  <span
+                    className="info-icon"
+                    onClick={() => setShowResolutionInfo(!showResolutionInfo)}
+                  >
+                    i
+                  </span>
+                  {showResolutionInfo && (
+                    <div className="info-tooltip">
+                      Sets the canvas size for preview and rendering. Affects GPU buffer size and default export dimensions.
+                    </div>
+                  )}
                 </span>
               </label>
               <select
