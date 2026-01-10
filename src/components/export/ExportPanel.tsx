@@ -285,7 +285,7 @@ export function ExportPanel() {
   return (
     <div className="export-panel">
       {/* Action Buttons - Always visible at top */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', padding: '0 12px' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', padding: '12px 12px 0' }}>
         <button
           className="btn"
           onClick={handleRenderFrame}
