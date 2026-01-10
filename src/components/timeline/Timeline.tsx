@@ -1397,12 +1397,33 @@ export function Timeline() {
       if (clip.isComposition && clip.mixdownAudio && clip.hasMixdownAudio) {
         const audio = clip.mixdownAudio;
         const clipLocalTime = playheadPosition - clip.startTime;
-        const clipTime = Math.max(0, Math.min(clip.duration, clipLocalTime));
+
+        // Get current speed for this clip (accounts for keyframes)
+        const currentSpeed = getInterpolatedSpeed(clip.id, clipLocalTime);
+        const absSpeed = Math.abs(currentSpeed);
+
+        // Calculate source time using speed integration (like regular audio)
+        const sourceTime = getSourceTimeForClip(clip.id, clipLocalTime);
+        const initialSpeed = getInterpolatedSpeed(clip.id, 0);
+        const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
+        const clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
 
         // Find the track this clip is on
         const track = videoTracks.find(t => t.id === clip.trackId);
         const effectivelyMuted = track ? !isVideoTrackVisible(track) : false;
         audio.muted = effectivelyMuted;
+
+        // Set playback rate for speed effect
+        const targetRate = absSpeed > 0.1 ? absSpeed : 1;
+        if (Math.abs(audio.playbackRate - targetRate) > 0.01) {
+          audio.playbackRate = Math.max(0.25, Math.min(4, targetRate));
+        }
+
+        // Set preservesPitch based on clip setting
+        const shouldPreservePitch = clip.preservesPitch !== false;
+        if ((audio as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch !== shouldPreservePitch) {
+          (audio as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch = shouldPreservePitch;
+        }
 
         const timeDiff = audio.currentTime - clipTime;
 
@@ -1411,7 +1432,7 @@ export function Timeline() {
           maxAudioDrift = Math.abs(timeDiff);
         }
 
-        const shouldPlay = isPlaying && !effectivelyMuted && !isDraggingPlayhead;
+        const shouldPlay = isPlaying && !effectivelyMuted && !isDraggingPlayhead && absSpeed > 0.1;
 
         if (shouldPlay) {
           // Only sync audio on significant drift to avoid pops
