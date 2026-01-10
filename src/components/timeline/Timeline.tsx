@@ -1321,13 +1321,40 @@ export function Timeline() {
     isAudioTrackMuted,
   ]);
 
-  // Preload upcoming video clips - seek videos a few seconds before playhead hits them
+  // Preload upcoming video clips - seek videos and force buffering before playhead hits them
   // This prevents stuttering when playback transitions to a new clip
   useEffect(() => {
     if (!isPlaying || isDraggingPlayhead) return;
 
     const LOOKAHEAD_TIME = 2.0; // Look 2 seconds ahead
     const lookaheadPosition = playheadPosition + LOOKAHEAD_TIME;
+
+    // Helper to preload a video element - seeks and forces buffering
+    const preloadVideo = (video: HTMLVideoElement, targetTime: number, clipName: string) => {
+      const timeDiff = Math.abs(video.currentTime - targetTime);
+
+      // Only preload if significantly different (avoid repeated preloading)
+      if (timeDiff > 0.1) {
+        video.currentTime = Math.max(0, targetTime);
+
+        // Force buffer by briefly playing then pausing
+        // This triggers the browser to actually fetch the video data
+        const wasPlaying = !video.paused;
+        if (!wasPlaying) {
+          video.play()
+            .then(() => {
+              // Immediately pause after play starts buffering
+              setTimeout(() => {
+                if (!wasPlaying) video.pause();
+              }, 50);
+            })
+            .catch(() => {
+              // Ignore play errors (e.g., autoplay policy)
+            });
+        }
+        // console.log(`[Preload] Pre-buffering ${clipName} at ${targetTime.toFixed(2)}s`);
+      }
+    };
 
     // Find clips that will start playing soon (not currently playing, but will be soon)
     const upcomingClips = clips.filter(clip => {
@@ -1338,18 +1365,10 @@ export function Timeline() {
       return startsInLookahead && hasVideo;
     });
 
-    // Pre-seek upcoming regular clips
+    // Pre-buffer upcoming regular clips
     for (const clip of upcomingClips) {
       if (clip.source?.videoElement) {
-        const video = clip.source.videoElement;
-        const targetTime = clip.inPoint;
-        const timeDiff = Math.abs(video.currentTime - targetTime);
-
-        // Only seek if significantly different (avoid micro-seeks)
-        if (timeDiff > 0.1) {
-          video.currentTime = targetTime;
-          // console.log(`[Preload] Pre-seeking ${clip.name} to ${targetTime.toFixed(2)}s`);
-        }
+        preloadVideo(clip.source.videoElement, clip.inPoint, clip.name);
       }
     }
 
@@ -1371,17 +1390,12 @@ export function Timeline() {
 
         // Check if this nested clip would be playing at comp start
         if (compStartTime >= nestedClip.startTime && compStartTime < nestedClip.startTime + nestedClip.duration) {
-          const video = nestedClip.source.videoElement;
           const nestedLocalTime = compStartTime - nestedClip.startTime;
           const targetTime = nestedClip.reversed
             ? nestedClip.outPoint - nestedLocalTime
             : nestedLocalTime + nestedClip.inPoint;
 
-          const timeDiff = Math.abs(video.currentTime - targetTime);
-          if (timeDiff > 0.1) {
-            video.currentTime = Math.max(0, targetTime);
-            // console.log(`[Preload] Pre-seeking nested ${nestedClip.name} to ${targetTime.toFixed(2)}s`);
-          }
+          preloadVideo(nestedClip.source.videoElement, targetTime, nestedClip.name);
         }
       }
     }
