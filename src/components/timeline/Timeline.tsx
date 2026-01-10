@@ -8,6 +8,7 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { useMixerStore } from '../../stores/mixerStore';
 import { engine } from '../../engine/WebGPUEngine';
 import { proxyFrameCache } from '../../services/proxyFrameCache';
+import { audioManager, audioStatusTracker } from '../../services/audioManager';
 
 import { TimelineRuler } from './TimelineRuler';
 import { TimelineControls } from './TimelineControls';
@@ -17,6 +18,7 @@ import { TimelineClip } from './TimelineClip';
 import { TimelineKeyframes } from './TimelineKeyframes';
 import { MulticamDialog } from './MulticamDialog';
 import { ParentChildLink } from './ParentChildLink';
+import { PhysicsCable } from './PhysicsCable';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import {
   ALL_BLEND_MODES,
@@ -1267,31 +1269,61 @@ export function Timeline() {
       useMixerStore.setState({ layers: newLayers });
     }
 
-    // Use memoized audioTracks and isAudioTrackMuted from component scope
+    // Audio sync with status tracking
+    // Audio is treated as master clock - always try to keep it playing correctly
+    let audioPlayingCount = 0;
+    let maxAudioDrift = 0;
+    let hasAudioError = false;
+
+    // Resume audio context if needed (browser autoplay policy)
+    if (isPlaying && !isDraggingPlayhead) {
+      audioManager.resume().catch(() => {});
+    }
+
     audioTracks.forEach((track) => {
       const clip = clipsAtTime.find((c) => c.trackId === track.id);
 
       if (clip?.source?.audioElement) {
         const audio = clip.source.audioElement;
         const clipTime = playheadPosition - clip.startTime + clip.inPoint;
-        const timeDiff = Math.abs(audio.currentTime - clipTime);
+        const timeDiff = audio.currentTime - clipTime;
 
-        if (timeDiff > 0.1 && !isDraggingPlayhead) {
-          audio.currentTime = clipTime;
+        // Track drift for stats
+        if (Math.abs(timeDiff) > maxAudioDrift) {
+          maxAudioDrift = Math.abs(timeDiff);
         }
 
         const effectivelyMuted = isAudioTrackMuted(track);
         audio.muted = effectivelyMuted;
 
         const shouldPlay = isPlaying && !effectivelyMuted && !isDraggingPlayhead;
-        if (shouldPlay && audio.paused) {
-          audio.play().catch(() => {});
-        } else if (!shouldPlay && !audio.paused) {
-          audio.pause();
+
+        if (shouldPlay) {
+          // Sync audio if drifted more than 100ms
+          if (Math.abs(timeDiff) > 0.1) {
+            audio.currentTime = clipTime;
+          }
+
+          // Ensure audio is playing
+          if (audio.paused) {
+            audio.play().catch((err) => {
+              console.warn('[Audio] Failed to play:', err.message);
+              hasAudioError = true;
+            });
+          }
+
+          if (!audio.paused && !effectivelyMuted) {
+            audioPlayingCount++;
+          }
+        } else {
+          if (!audio.paused) {
+            audio.pause();
+          }
         }
       }
     });
 
+    // Pause audio clips that are no longer at playhead
     clips.forEach((clip) => {
       if (clip.source?.audioElement) {
         const isAtPlayhead = clipsAtTime.some((c) => c.id === clip.id);
@@ -1300,6 +1332,9 @@ export function Timeline() {
         }
       }
     });
+
+    // Update audio status for stats display
+    audioStatusTracker.updateStatus(audioPlayingCount, maxAudioDrift, hasAudioError);
   }, [
     playheadPosition,
     clips,
@@ -3284,7 +3319,7 @@ export function Timeline() {
         </div>
       </div>{/* timeline-body */}
 
-      {/* Pick whip drag line */}
+      {/* Pick whip drag line - physics cable */}
       {pickWhipDrag && (
         <svg
           className="pick-whip-drag-overlay"
@@ -3298,20 +3333,12 @@ export function Timeline() {
             zIndex: 9999,
           }}
         >
-          <line
-            x1={pickWhipDrag.startX}
-            y1={pickWhipDrag.startY}
-            x2={pickWhipDrag.currentX}
-            y2={pickWhipDrag.currentY}
-            stroke="var(--accent)"
-            strokeWidth="2"
-            strokeDasharray="5 3"
-          />
-          <circle
-            cx={pickWhipDrag.currentX}
-            cy={pickWhipDrag.currentY}
-            r="6"
-            fill="var(--accent)"
+          <PhysicsCable
+            startX={pickWhipDrag.startX}
+            startY={pickWhipDrag.startY}
+            endX={pickWhipDrag.currentX}
+            endY={pickWhipDrag.currentY}
+            isPreview={true}
           />
         </svg>
       )}

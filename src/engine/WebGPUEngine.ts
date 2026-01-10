@@ -10,6 +10,7 @@ import { CompositorPipeline } from './pipeline/CompositorPipeline';
 import { EffectsPipeline } from './pipeline/EffectsPipeline';
 import { OutputPipeline } from './pipeline/OutputPipeline';
 import { VideoFrameManager } from './video/VideoFrameManager';
+import { audioStatusTracker } from '../services/audioManager';
 
 export class WebGPUEngine {
   // Core context
@@ -1167,6 +1168,7 @@ export class WebGPUEngine {
       layerCount: this.lastLayerCount,
       targetFps: 60,
       decoder: this.detailedStats.decoder,
+      audio: audioStatusTracker.getStatus(),
     };
   }
 

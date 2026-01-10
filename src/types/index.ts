@@ -152,6 +152,12 @@ export interface EngineStats {
   targetFps: number;
   // Decoder info
   decoder: 'WebCodecs' | 'HTMLVideo' | 'HTMLVideo(cached)' | 'HTMLVideo(paused-cache)' | 'none';
+  // Audio status
+  audio: {
+    playing: number;       // Number of audio elements currently playing
+    drift: number;         // Max audio drift from expected time in ms
+    status: 'sync' | 'drift' | 'silent' | 'error';
+  };
 }
 
 // Timeline types

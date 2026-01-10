@@ -5,6 +5,13 @@ export interface EQBand {
   gain: number; // -12 to +12 dB
 }
 
+// Audio playback status for stats display
+export interface AudioStatus {
+  playing: number;       // Number of audio elements currently playing
+  drift: number;         // Max audio drift from expected time in ms
+  status: 'sync' | 'drift' | 'silent' | 'error';
+}
+
 // 10-band EQ standard frequencies
 export const EQ_FREQUENCIES = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 
@@ -176,7 +183,57 @@ class AudioManager {
   isInitialized(): boolean {
     return this.initialized;
   }
+
+  // Get AudioContext time for sync
+  getCurrentTime(): number {
+    return this.audioContext?.currentTime ?? 0;
+  }
+
+  // Resume audio context if suspended
+  async resume(): Promise<void> {
+    if (this.audioContext?.state === 'suspended') {
+      await this.audioContext.resume();
+    }
+  }
 }
 
-// Singleton instance
+// Audio status tracker for stats display
+class AudioStatusTracker {
+  private currentStatus: AudioStatus = {
+    playing: 0,
+    drift: 0,
+    status: 'silent'
+  };
+
+  // Update status from audio sync loop
+  updateStatus(playing: number, maxDrift: number, hasError: boolean): void {
+    this.currentStatus.playing = playing;
+    this.currentStatus.drift = Math.round(maxDrift * 1000); // Convert to ms
+
+    if (hasError) {
+      this.currentStatus.status = 'error';
+    } else if (playing === 0) {
+      this.currentStatus.status = 'silent';
+    } else if (Math.abs(maxDrift) > 0.1) { // More than 100ms drift
+      this.currentStatus.status = 'drift';
+    } else {
+      this.currentStatus.status = 'sync';
+    }
+  }
+
+  getStatus(): AudioStatus {
+    return { ...this.currentStatus };
+  }
+
+  reset(): void {
+    this.currentStatus = {
+      playing: 0,
+      drift: 0,
+      status: 'silent'
+    };
+  }
+}
+
+// Singleton instances
 export const audioManager = new AudioManager();
+export const audioStatusTracker = new AudioStatusTracker();

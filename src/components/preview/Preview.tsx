@@ -55,6 +55,16 @@ function StatsOverlay({ stats, resolution, expanded, onToggle }: {
         {stats.drops.lastSecond > 0 && (
           <span style={{ color: '#f44', marginLeft: 6 }}>▼{stats.drops.lastSecond}</span>
         )}
+        {stats.audio.status !== 'silent' && (
+          <span style={{
+            marginLeft: 6,
+            color: stats.audio.status === 'sync' ? '#4f4'
+              : stats.audio.status === 'drift' ? '#ff4'
+              : '#f44'
+          }}>
+            🔊{stats.audio.status === 'drift' ? `(${stats.audio.drift}ms)` : ''}
+          </span>
+        )}
         <span style={{ opacity: 0.5, marginLeft: 8 }}>
           {resolution.width}×{resolution.height}
         </span>
@@ -140,6 +150,39 @@ function StatsOverlay({ stats, resolution, expanded, onToggle }: {
           <div className="stats-row">
             <span>Bottleneck</span>
             <span style={{ color: '#ff4' }}>{bottleneck}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Audio Status Section */}
+      <div className="stats-section">
+        <div className="stats-label">Audio</div>
+        <div className="stats-row">
+          <span>Status</span>
+          <span style={{
+            color: stats.audio.status === 'sync' ? '#4f4'
+              : stats.audio.status === 'drift' ? '#ff4'
+              : stats.audio.status === 'error' ? '#f44'
+              : '#888'
+          }}>
+            {stats.audio.status === 'sync' ? '● Sync'
+              : stats.audio.status === 'drift' ? '◐ Drift'
+              : stats.audio.status === 'error' ? '✕ Error'
+              : '○ Silent'}
+          </span>
+        </div>
+        {stats.audio.playing > 0 && (
+          <div className="stats-row">
+            <span>Playing</span>
+            <span>{stats.audio.playing} track{stats.audio.playing !== 1 ? 's' : ''}</span>
+          </div>
+        )}
+        {stats.audio.drift > 0 && (
+          <div className="stats-row">
+            <span>Drift</span>
+            <span style={{ color: stats.audio.drift > 100 ? '#f44' : stats.audio.drift > 50 ? '#ff4' : '#aaa' }}>
+              {stats.audio.drift}ms
+            </span>
           </div>
         )}
       </div>
