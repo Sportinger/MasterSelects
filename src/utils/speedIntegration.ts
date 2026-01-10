@@ -148,6 +148,7 @@ export function calculateTotalSourceTime(
  * with the specified speed keyframes. This is the inverse of calculateSourceTime.
  *
  * Uses binary search since the integral is monotonic (assuming positive speeds).
+ * For negative speeds, we use absolute values since duration is always positive.
  *
  * @param keyframes - All keyframes for the clip
  * @param sourceDuration - The source duration to consume
@@ -168,19 +169,20 @@ export function calculateTimelineDuration(
     .filter(k => k.property === 'speed')
     .sort((a, b) => a.time - b.time);
 
-  // No keyframes - simple division
+  // No keyframes - simple division using absolute speed
   if (speedKeyframes.length === 0) {
-    return Math.abs(defaultSpeed) > 0.001 ? sourceDuration / Math.abs(defaultSpeed) : Infinity;
+    const absSpeed = Math.abs(defaultSpeed);
+    return absSpeed > 0.001 ? sourceDuration / absSpeed : sourceDuration * 1000; // Cap at 1000x duration
   }
 
-  // Binary search for the timeline duration that produces the target source time
-  // Start with a reasonable range
+  // For keyframes, use binary search with absolute source time
+  // (negative speed means reverse, but duration is still positive)
   let low = 0;
-  let high = sourceDuration * 10; // Generous upper bound (assumes speed >= 0.1x average)
+  let high = sourceDuration * 20; // Generous upper bound
 
   for (let i = 0; i < maxIterations; i++) {
     const mid = (low + high) / 2;
-    const sourceTimeAtMid = calculateSourceTime(keyframes, mid, defaultSpeed);
+    const sourceTimeAtMid = Math.abs(calculateSourceTime(keyframes, mid, defaultSpeed));
 
     if (Math.abs(sourceTimeAtMid - sourceDuration) < 0.001) {
       return mid;

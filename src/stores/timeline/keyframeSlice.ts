@@ -9,7 +9,7 @@ import {
   interpolateKeyframes
 } from '../../utils/keyframeInterpolation';
 import { composeTransforms } from '../../utils/transformComposition';
-import { calculateSourceTime, getSpeedAtTime } from '../../utils/speedIntegration';
+import { calculateSourceTime, getSpeedAtTime, calculateTimelineDuration } from '../../utils/speedIntegration';
 
 export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => ({
   addKeyframe: (clipId, property, value, time, easing = 'linear') => {
@@ -256,6 +256,21 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     if (isRecording(clipId, property) || propertyHasKeyframes) {
       // Recording mode OR property already has keyframes - create/update keyframe
       addKeyframe(clipId, property, value);
+      // Also update clip.speed and recalculate duration
+      if (property === 'speed') {
+        const { invalidateCache, clipKeyframes, updateDuration } = get();
+        const clip = clips.find(c => c.id === clipId);
+        if (clip) {
+          const keyframes = clipKeyframes.get(clipId) || [];
+          const sourceDuration = clip.outPoint - clip.inPoint;
+          const newDuration = calculateTimelineDuration(keyframes, sourceDuration, value);
+          set({
+            clips: clips.map(c => c.id === clipId ? { ...c, speed: value, duration: newDuration } : c)
+          });
+          updateDuration(); // Update timeline duration
+        }
+        invalidateCache();
+      }
     } else {
       // Not recording and no keyframes - update static value
       const clip = clips.find(c => c.id === clipId);
@@ -274,10 +289,15 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
 
       // Handle speed property (directly on clip, not transform)
       if (property === 'speed') {
-        const { invalidateCache } = get();
+        const { invalidateCache, updateDuration } = get();
+        const sourceDuration = clip.outPoint - clip.inPoint;
+        // For constant speed (no keyframes): duration = sourceDuration / |speed|
+        const absSpeed = Math.abs(value) || 0.01; // Avoid division by zero
+        const newDuration = sourceDuration / absSpeed;
         set({
-          clips: clips.map(c => c.id === clipId ? { ...c, speed: value } : c)
+          clips: clips.map(c => c.id === clipId ? { ...c, speed: value, duration: newDuration } : c)
         });
+        updateDuration(); // Update timeline duration
         invalidateCache();
         return;
       }
