@@ -572,32 +572,7 @@ function TimelineHeaderComponent({
           )}
         </div>
         <div className="track-controls">
-          <button
-            className={`btn-icon ${track.solo ? 'solo-active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); onToggleSolo(); }}
-            title={track.solo ? 'Solo On' : 'Solo Off'}
-          >
-            S
-          </button>
-          {track.type === 'audio' && (
-            <button
-              className={`btn-icon ${track.muted ? 'muted' : ''}`}
-              onClick={(e) => { e.stopPropagation(); onToggleMuted(); }}
-              title={track.muted ? 'Unmute' : 'Mute'}
-            >
-              {track.muted ? '\uD83D\uDD07' : '\uD83D\uDD0A'}
-            </button>
-          )}
-          {track.type === 'video' && (
-            <button
-              className={`btn-icon ${!track.visible ? 'hidden' : ''}`}
-              onClick={(e) => { e.stopPropagation(); onToggleVisible(); }}
-              title={track.visible ? 'Hide' : 'Show'}
-            >
-              {track.visible ? '\uD83D\uDC41' : '\uD83D\uDC41\u200D\uD83D\uDDE8'}
-            </button>
-          )}
-          {/* Pick Whip for layer parenting */}
+          {/* Pick Whip for layer parenting - before other controls */}
           {track.type === 'video' && (
             <div
               ref={pickWhipRef}
@@ -639,6 +614,31 @@ function TimelineHeaderComponent({
                 )}
               </svg>
             </div>
+          )}
+          <button
+            className={`btn-icon ${track.solo ? 'solo-active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); onToggleSolo(); }}
+            title={track.solo ? 'Solo On' : 'Solo Off'}
+          >
+            S
+          </button>
+          {track.type === 'audio' && (
+            <button
+              className={`btn-icon ${track.muted ? 'muted' : ''}`}
+              onClick={(e) => { e.stopPropagation(); onToggleMuted(); }}
+              title={track.muted ? 'Unmute' : 'Mute'}
+            >
+              {track.muted ? '\uD83D\uDD07' : '\uD83D\uDD0A'}
+            </button>
+          )}
+          {track.type === 'video' && (
+            <button
+              className={`btn-icon ${!track.visible ? 'hidden' : ''}`}
+              onClick={(e) => { e.stopPropagation(); onToggleVisible(); }}
+              title={track.visible ? 'Hide' : 'Show'}
+            >
+              {track.visible ? '\uD83D\uDC41' : '\uD83D\uDC41\u200D\uD83D\uDDE8'}
+            </button>
           )}
         </div>
       </div>

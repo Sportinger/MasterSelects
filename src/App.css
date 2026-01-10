@@ -2698,20 +2698,21 @@ input[type="checkbox"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin-right: 4px;
+  width: 16px;
+  height: 16px;
+  margin-left: 6px;
   cursor: grab;
-  opacity: 0.7;
+  opacity: 0.8;
   transition: opacity 0.15s, transform 0.15s;
   flex-shrink: 0;
   pointer-events: auto; /* Override parent's pointer-events: none */
-  color: #aaa;
+  color: #e5c07b; /* Yellow/gold color */
 }
 
 .pick-whip:hover {
   opacity: 1;
-  transform: scale(1.1);
+  transform: scale(1.15);
+  color: #f0d090;
 }
 
 .pick-whip.dragging {
@@ -2721,7 +2722,7 @@ input[type="checkbox"] {
 
 .pick-whip.has-parent {
   opacity: 1;
-  color: var(--accent);
+  color: #98c379; /* Green when connected */
 }
 
 .pick-whip.has-parent:hover {

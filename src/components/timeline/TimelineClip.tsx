@@ -601,6 +601,7 @@ function TimelineClipComponent({
       <div className="clip-content">
         {clip.isLoading && <div className="clip-loading-spinner" />}
         <div className="clip-name-row">
+          <span className="clip-name">{clip.name}</span>
           <PickWhip
             clipId={clip.id}
             clipName={clip.name}
@@ -610,7 +611,6 @@ function TimelineClipComponent({
             onDragStart={onPickWhipDragStart}
             onDragEnd={onPickWhipDragEnd}
           />
-          <span className="clip-name">{clip.name}</span>
         </div>
         <span className="clip-duration">{formatTime(displayDuration)}</span>
       </div>
