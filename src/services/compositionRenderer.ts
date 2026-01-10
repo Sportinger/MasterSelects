@@ -12,6 +12,7 @@ interface CompositionSources {
     clipId: string;
     type: 'video' | 'image' | 'audio';
     videoElement?: HTMLVideoElement;
+    webCodecsPlayer?: import('../engine/WebCodecsPlayer').WebCodecsPlayer;
     imageElement?: HTMLImageElement;
     file: File;
     naturalDuration: number;
@@ -103,6 +104,7 @@ class CompositionRendererService {
               clipId: clip.id,
               type: 'video',
               videoElement: timelineClip.source.videoElement,
+              webCodecsPlayer: timelineClip.source.webCodecsPlayer, // Pass through WebCodecsPlayer for hardware decoding
               file: timelineClip.file,
               naturalDuration: timelineClip.source.naturalDuration || timelineClip.source.videoElement.duration || 0,
             });
@@ -295,7 +297,12 @@ class CompositionRendererService {
         opacity: transform.opacity ?? 1,
         blendMode: 'normal',
         source: source.videoElement
-          ? { type: 'video', file: source.file, videoElement: source.videoElement }
+          ? {
+              type: 'video',
+              file: source.file,
+              videoElement: source.videoElement,
+              webCodecsPlayer: source.webCodecsPlayer, // Pass through WebCodecsPlayer for hardware decoding
+            }
           : source.imageElement
           ? { type: 'image', file: source.file, imageElement: source.imageElement }
           : null,
