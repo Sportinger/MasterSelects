@@ -5,6 +5,7 @@ import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 import { engine } from './WebGPUEngine';
 import { useTimelineStore } from '../stores/timeline';
 import type { Layer } from '../types';
+import { AudioExportPipeline, type AudioExportProgress, type EncodedAudioResult } from './audio';
 
 // ============ TYPES ============
 
@@ -16,14 +17,22 @@ export interface ExportSettings {
   bitrate: number;
   startTime: number;
   endTime: number;
+  // Audio settings
+  includeAudio?: boolean;
+  audioSampleRate?: 44100 | 48000;
+  audioBitrate?: number;  // 128000 - 320000
+  normalizeAudio?: boolean;
 }
 
 export interface ExportProgress {
+  phase: 'video' | 'audio' | 'muxing';
   currentFrame: number;
   totalFrames: number;
   percent: number;
   estimatedTimeRemaining: number;
   currentTime: number;
+  audioPhase?: AudioExportProgress['phase'];
+  audioPercent?: number;
 }
 
 export interface FullExportSettings extends ExportSettings {
@@ -38,9 +47,11 @@ class VideoEncoderWrapper {
   private settings: ExportSettings;
   private encodedFrameCount = 0;
   private isClosed = false;
+  private hasAudio = false;
 
   constructor(settings: ExportSettings) {
     this.settings = settings;
+    this.hasAudio = settings.includeAudio ?? false;
   }
 
   async init(): Promise<boolean> {
@@ -71,15 +82,33 @@ class VideoEncoderWrapper {
       return false;
     }
 
-    this.muxer = new Muxer({
-      target: new ArrayBufferTarget(),
-      video: {
-        codec: this.settings.codec === 'h264' ? 'avc' : 'vp9',
-        width: this.settings.width,
-        height: this.settings.height,
-      },
-      fastStart: 'in-memory',
-    });
+    // Configure muxer with video and optionally audio
+    if (this.hasAudio) {
+      this.muxer = new Muxer({
+        target: new ArrayBufferTarget(),
+        video: {
+          codec: this.settings.codec === 'h264' ? 'avc' : 'vp9',
+          width: this.settings.width,
+          height: this.settings.height,
+        },
+        audio: {
+          codec: 'aac',
+          sampleRate: this.settings.audioSampleRate ?? 48000,
+          numberOfChannels: 2,
+        },
+        fastStart: 'in-memory',
+      });
+    } else {
+      this.muxer = new Muxer({
+        target: new ArrayBufferTarget(),
+        video: {
+          codec: this.settings.codec === 'h264' ? 'avc' : 'vp9',
+          width: this.settings.width,
+          height: this.settings.height,
+        },
+        fastStart: 'in-memory',
+      });
+    }
 
     this.encoder = new VideoEncoder({
       output: (chunk, meta) => {
@@ -132,6 +161,26 @@ class VideoEncoderWrapper {
     }
   }
 
+  /**
+   * Add encoded audio chunks to the muxer
+   */
+  addAudioChunks(audioResult: EncodedAudioResult): void {
+    if (!this.muxer || !this.hasAudio) {
+      console.warn('[VideoEncoder] Cannot add audio: muxer not ready or audio not enabled');
+      return;
+    }
+
+    console.log(`[VideoEncoder] Adding ${audioResult.chunks.length} audio chunks`);
+
+    for (let i = 0; i < audioResult.chunks.length; i++) {
+      const chunk = audioResult.chunks[i];
+      const meta = audioResult.metadata[i];
+      this.muxer.addAudioChunk(chunk, meta);
+    }
+
+    console.log(`[VideoEncoder] Audio chunks added successfully`);
+  }
+
   async finish(): Promise<Blob> {
     if (!this.encoder || !this.muxer) {
       throw new Error('Encoder not initialized');
@@ -164,6 +213,7 @@ class VideoEncoderWrapper {
 export class FrameExporter {
   private settings: FullExportSettings;
   private encoder: VideoEncoderWrapper | null = null;
+  private audioPipeline: AudioExportPipeline | null = null;
   private isCancelled = false;
   private frameTimes: number[] = [];
 
@@ -172,11 +222,11 @@ export class FrameExporter {
   }
 
   async export(onProgress: (progress: ExportProgress) => void): Promise<Blob | null> {
-    const { fps, startTime, endTime, width, height } = this.settings;
+    const { fps, startTime, endTime, width, height, includeAudio } = this.settings;
     const frameDuration = 1 / fps;
     const totalFrames = Math.ceil((endTime - startTime) * fps);
 
-    console.log(`[FrameExporter] Starting export: ${width}x${height} @ ${fps}fps, ${totalFrames} frames`);
+    console.log(`[FrameExporter] Starting export: ${width}x${height} @ ${fps}fps, ${totalFrames} frames, audio: ${includeAudio ? 'yes' : 'no'}`);
 
     this.encoder = new VideoEncoderWrapper(this.settings);
     const initialized = await this.encoder.init();
@@ -185,14 +235,25 @@ export class FrameExporter {
       return null;
     }
 
+    // Initialize audio pipeline if audio is enabled
+    if (includeAudio) {
+      this.audioPipeline = new AudioExportPipeline({
+        sampleRate: this.settings.audioSampleRate ?? 48000,
+        bitrate: this.settings.audioBitrate ?? 256000,
+        normalize: this.settings.normalizeAudio ?? false,
+      });
+    }
+
     const originalDimensions = engine.getOutputDimensions();
     engine.setResolution(width, height);
 
     try {
+      // Phase 1: Encode video frames
       for (let frame = 0; frame < totalFrames; frame++) {
         if (this.isCancelled) {
           console.log('[FrameExporter] Export cancelled');
           this.encoder.cancel();
+          this.audioPipeline?.cancel();
           engine.setResolution(originalDimensions.width, originalDimensions.height);
           return null;
         }
@@ -219,15 +280,59 @@ export class FrameExporter {
 
         const avgFrameTime = this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length;
         const remainingFrames = totalFrames - frame - 1;
+        // If audio is included, video is ~70% of total work
+        const videoWeight = includeAudio ? 0.7 : 1.0;
+        const videoPercent = ((frame + 1) / totalFrames) * 100 * videoWeight;
         const estimatedTimeRemaining = (remainingFrames * avgFrameTime) / 1000;
 
         onProgress({
+          phase: 'video',
           currentFrame: frame + 1,
           totalFrames,
-          percent: ((frame + 1) / totalFrames) * 100,
+          percent: videoPercent,
           estimatedTimeRemaining,
           currentTime: time,
         });
+      }
+
+      // Phase 2: Export audio if enabled
+      let audioResult: EncodedAudioResult | null = null;
+      if (includeAudio && this.audioPipeline) {
+        if (this.isCancelled) {
+          engine.setResolution(originalDimensions.width, originalDimensions.height);
+          return null;
+        }
+
+        console.log('[FrameExporter] Starting audio export...');
+
+        audioResult = await this.audioPipeline.exportAudio(
+          startTime,
+          endTime,
+          (audioProgress) => {
+            if (this.isCancelled) return;
+
+            // Audio is ~30% of total work (70-100%)
+            const audioPercent = 70 + (audioProgress.percent * 0.3);
+
+            onProgress({
+              phase: 'audio',
+              currentFrame: totalFrames,
+              totalFrames,
+              percent: audioPercent,
+              estimatedTimeRemaining: 0, // Hard to estimate for audio
+              currentTime: endTime,
+              audioPhase: audioProgress.phase,
+              audioPercent: audioProgress.percent,
+            });
+          }
+        );
+
+        // Add audio chunks to muxer if we have audio
+        if (audioResult && audioResult.chunks.length > 0) {
+          this.encoder.addAudioChunks(audioResult);
+        } else {
+          console.log('[FrameExporter] No audio to add (no audio clips in range or export failed)');
+        }
       }
 
       const blob = await this.encoder.finish();
@@ -243,6 +348,7 @@ export class FrameExporter {
 
   cancel(): void {
     this.isCancelled = true;
+    this.audioPipeline?.cancel();
   }
 
   private async seekAllClipsToTime(time: number): Promise<void> {

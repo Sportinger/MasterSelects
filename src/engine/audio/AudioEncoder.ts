@@ -167,7 +167,7 @@ export class AudioEncoderWrapper {
         numberOfFrames: numSamples,
         numberOfChannels: buffer.numberOfChannels,
         timestamp,
-        data: frameData,
+        data: frameData.buffer as ArrayBuffer,
       });
 
       // Encode

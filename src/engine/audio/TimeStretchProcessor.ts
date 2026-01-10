@@ -11,7 +11,7 @@
  * - Chunked processing for memory efficiency
  */
 
-import { SoundTouch, SimpleFilter } from 'soundtouch-ts';
+import { SoundTouch } from 'soundtouch-ts';
 import type { Keyframe } from '../../types';
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
 
@@ -28,12 +28,6 @@ export interface TimeStretchProgress {
 }
 
 export type TimeStretchProgressCallback = (progress: TimeStretchProgress) => void;
-
-// Speed keyframe for internal use
-interface SpeedPoint {
-  time: number;
-  speed: number;
-}
 
 export class TimeStretchProcessor {
   private settings: TimeStretchSettings;
@@ -273,21 +267,9 @@ export class TimeStretchProcessor {
     sampleRate: number,
     channels: number
   ): Promise<Float32Array[]> {
-    const soundtouch = new SoundTouch();
+    const soundtouch = new SoundTouch(sampleRate);
     soundtouch.tempo = speed;
     soundtouch.pitch = 1.0; // Keep pitch
-
-    // Configure quality
-    switch (this.settings.quality) {
-      case 'fast':
-        soundtouch.setParameter(0, 8); // SEQUENCE_MS
-        soundtouch.setParameter(1, 4); // SEEKWINDOW_MS
-        break;
-      case 'high':
-        soundtouch.setParameter(0, 82); // SEQUENCE_MS
-        soundtouch.setParameter(1, 28); // SEEKWINDOW_MS
-        break;
-    }
 
     // Create interleaved input
     const length = segments[0].length;
@@ -298,37 +280,31 @@ export class TimeStretchProcessor {
       }
     }
 
-    // Create simple filter for processing
-    const filter = new SimpleFilter(
-      {
-        extract: (target: Float32Array, numFrames: number, position: number) => {
-          const start = position * channels;
-          const framesToCopy = Math.min(numFrames, Math.floor((interleaved.length - start) / channels));
-          for (let i = 0; i < framesToCopy * channels; i++) {
-            target[i] = interleaved[start + i] || 0;
-          }
-          return framesToCopy;
-        },
-      },
-      soundtouch
-    );
+    // Put samples into input buffer
+    soundtouch.inputBuffer.putSamples(interleaved);
 
-    // Process and collect output
+    // Process all input
+    soundtouch.process();
+
+    // Collect output
     const outputLength = Math.ceil(length / speed);
     const outputInterleaved = new Float32Array(outputLength * channels);
 
     let outputPos = 0;
     const chunkSize = 4096;
-    const chunk = new Float32Array(chunkSize * channels);
 
-    while (outputPos < outputLength) {
-      const framesRead = filter.extract(chunk, chunkSize);
-      if (framesRead === 0) break;
+    while (soundtouch.outputBuffer.frameCount > 0) {
+      soundtouch.process();
+      const framesToReceive = Math.min(chunkSize, soundtouch.outputBuffer.frameCount);
+      if (framesToReceive <= 0) break;
 
-      for (let i = 0; i < framesRead * channels && outputPos * channels + i < outputInterleaved.length; i++) {
+      const chunk = new Float32Array(framesToReceive * channels);
+      soundtouch.outputBuffer.receiveSamples(chunk, framesToReceive);
+
+      for (let i = 0; i < framesToReceive * channels && outputPos * channels + i < outputInterleaved.length; i++) {
         outputInterleaved[outputPos * channels + i] = chunk[i];
       }
-      outputPos += framesRead;
+      outputPos += framesToReceive;
     }
 
     // De-interleave output

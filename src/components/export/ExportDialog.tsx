@@ -25,6 +25,12 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
   const [endTime, setEndTime] = useState(duration);
   const [filename, setFilename] = useState('export');
 
+  // Audio settings
+  const [includeAudio, setIncludeAudio] = useState(true);
+  const [audioSampleRate, setAudioSampleRate] = useState<44100 | 48000>(48000);
+  const [audioBitrate, setAudioBitrate] = useState(256000);
+  const [normalizeAudio, setNormalizeAudio] = useState(false);
+
   // Export state
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState<ExportProgress | null>(null);
@@ -65,6 +71,11 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
       bitrate,
       startTime,
       endTime,
+      // Audio settings
+      includeAudio,
+      audioSampleRate,
+      audioBitrate,
+      normalizeAudio,
     });
     setExporter(exp);
 
@@ -84,7 +95,7 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
       setIsExporting(false);
       setExporter(null);
     }
-  }, [width, height, fps, bitrate, startTime, endTime, filename, isExporting, onClose]);
+  }, [width, height, fps, bitrate, startTime, endTime, filename, isExporting, onClose, includeAudio, audioSampleRate, audioBitrate, normalizeAudio]);
 
   // Handle cancel
   const handleCancel = useCallback(() => {
@@ -221,6 +232,71 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
                 </div>
               </div>
 
+              {/* Audio Section */}
+              <div className="export-section-header">Audio</div>
+
+              {/* Include Audio */}
+              <div className="export-row">
+                <label>Include Audio</label>
+                <div className="export-checkbox-group">
+                  <input
+                    type="checkbox"
+                    id="includeAudio"
+                    checked={includeAudio}
+                    onChange={(e) => setIncludeAudio(e.target.checked)}
+                  />
+                  <label htmlFor="includeAudio" className="checkbox-label">
+                    Export audio tracks (AAC)
+                  </label>
+                </div>
+              </div>
+
+              {includeAudio && (
+                <>
+                  {/* Audio Sample Rate */}
+                  <div className="export-row">
+                    <label>Sample Rate</label>
+                    <select
+                      value={audioSampleRate}
+                      onChange={(e) => setAudioSampleRate(Number(e.target.value) as 44100 | 48000)}
+                    >
+                      <option value={48000}>48 kHz (Video Standard)</option>
+                      <option value={44100}>44.1 kHz (CD Quality)</option>
+                    </select>
+                  </div>
+
+                  {/* Audio Bitrate */}
+                  <div className="export-row">
+                    <label>Audio Quality</label>
+                    <select
+                      value={audioBitrate}
+                      onChange={(e) => setAudioBitrate(Number(e.target.value))}
+                    >
+                      <option value={128000}>128 kbps (Good)</option>
+                      <option value={192000}>192 kbps (Better)</option>
+                      <option value={256000}>256 kbps (High Quality)</option>
+                      <option value={320000}>320 kbps (Maximum)</option>
+                    </select>
+                  </div>
+
+                  {/* Normalize Audio */}
+                  <div className="export-row">
+                    <label>Normalize</label>
+                    <div className="export-checkbox-group">
+                      <input
+                        type="checkbox"
+                        id="normalizeAudio"
+                        checked={normalizeAudio}
+                        onChange={(e) => setNormalizeAudio(e.target.checked)}
+                      />
+                      <label htmlFor="normalizeAudio" className="checkbox-label">
+                        Peak normalize (prevent clipping)
+                      </label>
+                    </div>
+                  </div>
+                </>
+              )}
+
               {/* Summary */}
               <div className="export-summary">
                 <div>Duration: {formatTime(endTime - startTime)}</div>
@@ -243,6 +319,18 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
         ) : (
           <>
             <div className="export-progress">
+              {/* Phase indicator */}
+              <div className="export-phase">
+                {progress?.phase === 'video' && 'Encoding video frames...'}
+                {progress?.phase === 'audio' && (
+                  <>
+                    Processing audio: {progress.audioPhase}
+                    {progress.audioPhase && ` (${progress.audioPercent}%)`}
+                  </>
+                )}
+                {progress?.phase === 'muxing' && 'Finalizing...'}
+              </div>
+
               <div className="export-progress-bar">
                 <div
                   className="export-progress-fill"
@@ -250,12 +338,16 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
                 />
               </div>
               <div className="export-progress-info">
-                <span>
-                  Frame {progress?.currentFrame ?? 0} / {progress?.totalFrames ?? 0}
-                </span>
+                {progress?.phase === 'video' ? (
+                  <span>
+                    Frame {progress?.currentFrame ?? 0} / {progress?.totalFrames ?? 0}
+                  </span>
+                ) : (
+                  <span>Audio processing</span>
+                )}
                 <span>{(progress?.percent ?? 0).toFixed(1)}%</span>
               </div>
-              {progress && progress.estimatedTimeRemaining > 0 && (
+              {progress && progress.phase === 'video' && progress.estimatedTimeRemaining > 0 && (
                 <div className="export-eta">
                   ETA: {formatTime(progress.estimatedTimeRemaining)}
                 </div>
@@ -382,6 +474,44 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
           gap: 4px;
           font-size: 13px;
           color: var(--text-secondary);
+        }
+
+        .export-section-header {
+          margin-top: 16px;
+          margin-bottom: 4px;
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text-secondary);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .export-checkbox-group {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .export-checkbox-group input[type="checkbox"] {
+          width: 16px;
+          height: 16px;
+          accent-color: var(--accent);
+          cursor: pointer;
+        }
+
+        .export-checkbox-group .checkbox-label {
+          width: auto;
+          color: var(--text-primary);
+          font-size: 13px;
+          cursor: pointer;
+        }
+
+        .export-phase {
+          margin-bottom: 12px;
+          font-size: 14px;
+          color: var(--text-primary);
+          font-weight: 500;
         }
 
         .export-error {

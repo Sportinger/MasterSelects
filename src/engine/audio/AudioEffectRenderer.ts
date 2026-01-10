@@ -12,7 +12,6 @@
  */
 
 import type { Keyframe, Effect, AnimatableProperty } from '../../types';
-import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
 
 // Standard 10-band EQ frequencies
 export const EQ_FREQUENCIES = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];

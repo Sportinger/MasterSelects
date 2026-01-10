@@ -170,7 +170,7 @@ export class AudioMixer {
     }
 
     // Ensure stereo
-    if (buffer.numberOfChannels === 1 && context.numberOfChannels === 2) {
+    if (buffer.numberOfChannels === 1 && this.settings.numberOfChannels === 2) {
       buffer = this.convertToStereo(buffer);
     }
 

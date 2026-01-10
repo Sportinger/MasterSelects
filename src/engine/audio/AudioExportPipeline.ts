@@ -364,6 +364,9 @@ export class AudioExportPipeline {
       const track = tracks.find(t => t.id === clip.trackId);
       if (!track) continue;
 
+      // Skip if track is muted, or if solo mode is active and this track isn't soloed
+      if (track.muted || (hasSolo && !track.solo)) continue;
+
       trackData.push({
         clipId: clip.id,
         buffer,

@@ -319,13 +319,18 @@ export class AudioExtractor {
  * Custom error for audio extraction failures
  */
 export class AudioExtractionError extends Error {
+  readonly fileName: string;
+  readonly recoverable: boolean;
+
   constructor(
     message: string,
-    public readonly fileName: string,
-    public readonly recoverable: boolean = false
+    fileName: string,
+    recoverable: boolean = false
   ) {
     super(message);
     this.name = 'AudioExtractionError';
+    this.fileName = fileName;
+    this.recoverable = recoverable;
   }
 }
 
