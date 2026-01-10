@@ -37,6 +37,12 @@ export function ExportPanel() {
   const [useInOut, setUseInOut] = useState(true);
   const [filename, setFilename] = useState('export');
 
+  // Audio settings
+  const [includeAudio, setIncludeAudio] = useState(true);
+  const [audioSampleRate, setAudioSampleRate] = useState<44100 | 48000>(48000);
+  const [audioBitrate, setAudioBitrate] = useState(256000);
+  const [normalizeAudio, setNormalizeAudio] = useState(false);
+
   // Export state
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState<ExportProgress | null>(null);
@@ -84,6 +90,11 @@ export function ExportPanel() {
       bitrate,
       startTime,
       endTime,
+      // Audio settings
+      includeAudio,
+      audioSampleRate,
+      audioBitrate,
+      normalizeAudio,
     });
     setExporter(exp);
 
@@ -102,7 +113,7 @@ export function ExportPanel() {
       setIsExporting(false);
       setExporter(null);
     }
-  }, [width, height, customWidth, customHeight, useCustomResolution, fps, bitrate, startTime, endTime, filename, isExporting]);
+  }, [width, height, customWidth, customHeight, useCustomResolution, fps, bitrate, startTime, endTime, filename, isExporting, includeAudio, audioSampleRate, audioBitrate, normalizeAudio]);
 
   // Handle cancel
   const handleCancel = useCallback(() => {
@@ -361,6 +372,70 @@ export function ExportPanel() {
               <option value={35_000_000}>Maximum (35 Mbps)</option>
             </select>
           </div>
+          </div>
+
+          {/* Audio Settings */}
+          <div className="export-section">
+            <div className="export-section-header">Audio</div>
+
+            {/* Include Audio */}
+            <div className="control-row">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={includeAudio}
+                  onChange={(e) => setIncludeAudio(e.target.checked)}
+                />
+                Include Audio (AAC)
+              </label>
+            </div>
+
+            {includeAudio && (
+              <>
+                {/* Sample Rate */}
+                <div className="control-row">
+                  <label>Sample Rate</label>
+                  <select
+                    value={audioSampleRate}
+                    onChange={(e) => setAudioSampleRate(Number(e.target.value) as 44100 | 48000)}
+                  >
+                    <option value={48000}>48 kHz (Video)</option>
+                    <option value={44100}>44.1 kHz (CD)</option>
+                  </select>
+                </div>
+
+                {/* Audio Quality */}
+                <div className="control-row">
+                  <label>Audio Quality</label>
+                  <select
+                    value={audioBitrate}
+                    onChange={(e) => setAudioBitrate(Number(e.target.value))}
+                  >
+                    <option value={128000}>128 kbps</option>
+                    <option value={192000}>192 kbps</option>
+                    <option value={256000}>256 kbps (High)</option>
+                    <option value={320000}>320 kbps (Max)</option>
+                  </select>
+                </div>
+
+                {/* Normalize */}
+                <div className="control-row">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={normalizeAudio}
+                      onChange={(e) => setNormalizeAudio(e.target.checked)}
+                    />
+                    Normalize (prevent clipping)
+                  </label>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Range Settings */}
+          <div className="export-section">
+            <div className="export-section-header">Range</div>
 
           {/* Use In/Out markers */}
           <div className="control-row">
@@ -380,6 +455,7 @@ export function ExportPanel() {
             <div>Duration: {formatTime(endTime - startTime)}</div>
             <div>Frames: {Math.ceil((endTime - startTime) * fps)}</div>
             <div>Est. Size: {estimatedSize()}</div>
+          </div>
           </div>
 
           {error && <div className="export-error">{error}</div>}
@@ -401,10 +477,18 @@ export function ExportPanel() {
               Export Video
             </button>
           </div>
-          </div>
         </div>
       ) : (
         <div className="export-progress-container">
+          {/* Phase indicator */}
+          <div style={{ marginBottom: '12px', fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
+            {progress?.phase === 'video' && 'Encoding video frames...'}
+            {progress?.phase === 'audio' && (
+              <>Processing audio: {progress.audioPhase} ({progress.audioPercent}%)</>
+            )}
+            {progress?.phase === 'muxing' && 'Finalizing...'}
+          </div>
+
           <div className="export-progress-bar">
             <div
               className="export-progress-fill"
@@ -412,10 +496,14 @@ export function ExportPanel() {
             />
           </div>
           <div className="export-progress-info">
-            <span>Frame {progress?.currentFrame ?? 0} / {progress?.totalFrames ?? 0}</span>
+            {progress?.phase === 'video' ? (
+              <span>Frame {progress?.currentFrame ?? 0} / {progress?.totalFrames ?? 0}</span>
+            ) : (
+              <span>Audio processing</span>
+            )}
             <span>{(progress?.percent ?? 0).toFixed(1)}%</span>
           </div>
-          {progress && progress.estimatedTimeRemaining > 0 && (
+          {progress && progress.phase === 'video' && progress.estimatedTimeRemaining > 0 && (
             <div className="export-eta">
               ETA: {formatTime(progress.estimatedTimeRemaining)}
             </div>
