@@ -14,7 +14,8 @@ interface APIKeys {
   openai: string;
   assemblyai: string;
   deepgram: string;
-  kling: string;
+  klingAccessKey: string;
+  klingSecretKey: string;
 }
 
 interface SettingsState {
@@ -52,7 +53,8 @@ export const useSettingsStore = create<SettingsState>()(
         openai: '',
         assemblyai: '',
         deepgram: '',
-        kling: '',
+        klingAccessKey: '',
+        klingSecretKey: '',
       },
       transcriptionProvider: 'local',
       previewQuality: 1, // Full quality by default

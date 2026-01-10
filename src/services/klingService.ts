@@ -1,7 +1,9 @@
 // Kling AI Video Generation Service
 // Supports text-to-video and image-to-video generation via official Kling API
+// Uses JWT authentication with Access Key (AK) and Secret Key (SK)
 
 const BASE_URL = 'https://api.klingai.com';
+const TOKEN_EXPIRATION = 1800; // 30 minutes in seconds
 
 // Available models
 export const KLING_MODELS = [
@@ -98,15 +100,93 @@ interface TaskStatusResponse {
   };
 }
 
-class KlingService {
-  private apiKey: string = '';
+// Base64URL encoding (no padding, URL-safe)
+function base64UrlEncode(data: string): string {
+  const base64 = btoa(data);
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 
-  setApiKey(key: string) {
-    this.apiKey = key;
+// HMAC-SHA256 signing
+async function hmacSha256(key: string, data: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(key);
+  const dataToSign = encoder.encode(data);
+
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, dataToSign);
+  const signatureArray = new Uint8Array(signature);
+
+  // Convert to base64url
+  let binary = '';
+  for (let i = 0; i < signatureArray.length; i++) {
+    binary += String.fromCharCode(signatureArray[i]);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+class KlingService {
+  private accessKey: string = '';
+  private secretKey: string = '';
+  private cachedToken: string | null = null;
+  private tokenExpiry: number = 0;
+
+  setCredentials(accessKey: string, secretKey: string) {
+    this.accessKey = accessKey;
+    this.secretKey = secretKey;
+    // Clear cached token when credentials change
+    this.cachedToken = null;
+    this.tokenExpiry = 0;
   }
 
-  hasApiKey(): boolean {
-    return !!this.apiKey;
+  hasCredentials(): boolean {
+    return !!this.accessKey && !!this.secretKey;
+  }
+
+  // Generate JWT token from AK/SK
+  private async generateToken(): Promise<string> {
+    // Check if we have a valid cached token
+    const now = Math.floor(Date.now() / 1000);
+    if (this.cachedToken && this.tokenExpiry > now + 60) {
+      // Token still valid for at least 60 more seconds
+      return this.cachedToken;
+    }
+
+    // JWT Header
+    const header = {
+      alg: 'HS256',
+      typ: 'JWT'
+    };
+
+    // JWT Payload
+    const payload = {
+      iss: this.accessKey,
+      exp: now + TOKEN_EXPIRATION,
+      nbf: now - 5 // Allow 5 seconds clock skew
+    };
+
+    // Encode header and payload
+    const headerEncoded = base64UrlEncode(JSON.stringify(header));
+    const payloadEncoded = base64UrlEncode(JSON.stringify(payload));
+
+    // Create signature
+    const dataToSign = `${headerEncoded}.${payloadEncoded}`;
+    const signature = await hmacSha256(this.secretKey, dataToSign);
+
+    // Combine to create JWT
+    const token = `${dataToSign}.${signature}`;
+
+    // Cache the token
+    this.cachedToken = token;
+    this.tokenExpiry = now + TOKEN_EXPIRATION;
+
+    return token;
   }
 
   private async request<T>(
@@ -114,15 +194,17 @@ class KlingService {
     method: 'GET' | 'POST' = 'GET',
     body?: object
   ): Promise<T> {
-    if (!this.apiKey) {
-      throw new Error('Kling API key not set');
+    if (!this.hasCredentials()) {
+      throw new Error('Kling API credentials not set');
     }
+
+    const token = await this.generateToken();
 
     const response = await fetch(`${BASE_URL}${endpoint}`, {
       method,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`,
+        'Authorization': `Bearer ${token}`,
       },
       body: body ? JSON.stringify(body) : undefined,
     });

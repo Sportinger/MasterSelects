@@ -68,15 +68,15 @@ export function AIVideoPanel() {
   const startImageRef = useRef<HTMLDivElement>(null);
   const endImageRef = useRef<HTMLDivElement>(null);
 
-  // Check if API key is available
-  const hasApiKey = !!apiKeys.kling;
+  // Check if API credentials are available
+  const hasApiKey = !!apiKeys.klingAccessKey && !!apiKeys.klingSecretKey;
 
-  // Set API key when it changes
+  // Set credentials when they change
   useEffect(() => {
-    if (apiKeys.kling) {
-      klingService.setApiKey(apiKeys.kling);
+    if (apiKeys.klingAccessKey && apiKeys.klingSecretKey) {
+      klingService.setCredentials(apiKeys.klingAccessKey, apiKeys.klingSecretKey);
     }
-  }, [apiKeys.kling]);
+  }, [apiKeys.klingAccessKey, apiKeys.klingSecretKey]);
 
   // Handle file drop
   const handleFileDrop = useCallback((
@@ -220,7 +220,7 @@ export function AIVideoPanel() {
     setJobs(prev => prev.filter(j => j.id !== jobId));
   }, []);
 
-  // Render empty state if no API key
+  // Render empty state if no API credentials
   if (!hasApiKey) {
     return (
       <div className="ai-video-panel">
@@ -230,7 +230,7 @@ export function AIVideoPanel() {
         <div className="ai-video-empty">
           <div className="ai-video-no-key">
             <span className="no-key-icon">🎬</span>
-            <p>Kling API key required</p>
+            <p>Kling Access Key + Secret Key required</p>
             <button className="btn-settings" onClick={openSettings}>
               Open Settings
             </button>

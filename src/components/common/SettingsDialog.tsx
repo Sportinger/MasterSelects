@@ -21,7 +21,8 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
     openai: false,
     assemblyai: false,
     deepgram: false,
-    kling: false,
+    klingAccessKey: false,
+    klingSecretKey: false,
   });
 
   const handleSave = useCallback(() => {
@@ -197,23 +198,46 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
           {/* AI Video Generation */}
           <div className="settings-section">
             <h3>AI Video Generation</h3>
+            <p className="settings-hint">
+              Kling uses Access Key + Secret Key for JWT authentication.
+            </p>
 
-            {/* Kling */}
+            {/* Kling Access Key */}
             <div className="api-key-row">
-              <label>Kling AI API Key</label>
+              <label>Kling Access Key (AK)</label>
               <div className="api-key-input">
                 <input
-                  type={showKeys.kling ? 'text' : 'password'}
-                  value={localKeys.kling}
-                  onChange={(e) => handleKeyChange('kling', e.target.value)}
-                  placeholder="Enter API key..."
+                  type={showKeys.klingAccessKey ? 'text' : 'password'}
+                  value={localKeys.klingAccessKey}
+                  onChange={(e) => handleKeyChange('klingAccessKey', e.target.value)}
+                  placeholder="Enter Access Key..."
                 />
                 <button
                   className="toggle-visibility"
-                  onClick={() => toggleShowKey('kling')}
-                  title={showKeys.kling ? 'Hide' : 'Show'}
+                  onClick={() => toggleShowKey('klingAccessKey')}
+                  title={showKeys.klingAccessKey ? 'Hide' : 'Show'}
                 >
-                  {showKeys.kling ? '🙈' : '👁'}
+                  {showKeys.klingAccessKey ? '🙈' : '👁'}
+                </button>
+              </div>
+            </div>
+
+            {/* Kling Secret Key */}
+            <div className="api-key-row">
+              <label>Kling Secret Key (SK)</label>
+              <div className="api-key-input">
+                <input
+                  type={showKeys.klingSecretKey ? 'text' : 'password'}
+                  value={localKeys.klingSecretKey}
+                  onChange={(e) => handleKeyChange('klingSecretKey', e.target.value)}
+                  placeholder="Enter Secret Key..."
+                />
+                <button
+                  className="toggle-visibility"
+                  onClick={() => toggleShowKey('klingSecretKey')}
+                  title={showKeys.klingSecretKey ? 'Hide' : 'Show'}
+                >
+                  {showKeys.klingSecretKey ? '🙈' : '👁'}
                 </button>
               </div>
               <a
@@ -222,7 +246,7 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Get API Key →
+                Get API Keys →
               </a>
             </div>
           </div>
