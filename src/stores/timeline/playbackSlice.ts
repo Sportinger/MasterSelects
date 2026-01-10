@@ -421,9 +421,11 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
           if (clip.source?.type === 'video' && clip.source.videoElement) {
             const video = clip.source.videoElement;
             const localTime = time - clip.startTime;
-            const expectedTime = clip.reversed
-              ? clip.outPoint - localTime
-              : localTime + clip.inPoint;
+            // Use speed integration for expected time (must match seek logic above)
+            const defaultSpeed = clip.speed ?? (clip.reversed ? -1 : 1);
+            const sourceTime = get().getSourceTimeForClip(clip.id, localTime);
+            const startPoint = defaultSpeed >= 0 ? clip.inPoint : clip.outPoint;
+            const expectedTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
             if (Math.abs(video.currentTime - expectedTime) > FRAME_TOLERANCE) {
               allPositionsCorrect = false;
               break;
