@@ -65,6 +65,29 @@ scaleTracksOfType()  - Batch height adjustment
 - Scale (X, Y)
 - Rotation (X, Y, Z) - full 3D with perspective
 - Opacity (0-100%)
+- **Speed** (-400% to 400%)
+
+### Speed Control
+The Speed property controls playback rate with full keyframe support:
+
+| Speed Value | Effect |
+|-------------|--------|
+| 100% | Normal playback |
+| 50% | Slow motion (2x longer) |
+| 200% | Fast forward (2x faster) |
+| 0% | Freeze frame |
+| -100% | Reverse playback |
+
+**Features:**
+- Keyframeable with bezier curves for smooth ramps
+- Negative values play backwards
+- Works with RAM Preview
+- Speed changes affect source time through integration
+
+**Implementation:**
+- Source time = integral of speed curve over clip duration
+- Supports smooth transitions between speeds
+- Handles direction changes (forward to reverse)
 
 ### Linked Clips
 - Video clips can have linked audio

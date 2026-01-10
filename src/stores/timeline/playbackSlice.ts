@@ -314,10 +314,12 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
           if (clip.source?.type === 'video' && clip.source.videoElement) {
             const video = clip.source.videoElement;
             const clipLocalTime = time - clip.startTime;
-            // Handle reversed clips
-            const clipTime = clip.reversed
-              ? clip.outPoint - clipLocalTime
-              : clipLocalTime + clip.inPoint;
+            // Calculate source time using speed integration (handles keyframes)
+            const defaultSpeed = clip.speed ?? (clip.reversed ? -1 : 1);
+            const sourceTime = get().getSourceTimeForClip(clip.id, clipLocalTime);
+            // Determine start point based on playback direction
+            const startPoint = defaultSpeed >= 0 ? clip.inPoint : clip.outPoint;
+            const clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
 
             // Robust seek with verification and retry
             const seekWithVerify = async (targetTime: number, maxRetries = 3): Promise<boolean> => {

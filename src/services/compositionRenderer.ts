@@ -4,6 +4,7 @@
 import type { Layer, SerializableClip, TimelineTrack, TimelineClip } from '../types';
 import { useMediaStore } from '../stores/mediaStore';
 import { useTimelineStore } from '../stores/timeline';
+import { calculateSourceTime } from '../utils/speedIntegration';
 
 // Source cache entry for a composition
 interface CompositionSources {
@@ -265,18 +266,20 @@ class CompositionRendererService {
       const source = sources.clipSources.get(clipAtTime.id);
       if (!source) continue;
 
-      // Calculate clip-local time (accounting for inPoint and speed)
-      const clipLocalTime = (time - clipAtTime.startTime) + (clipAtTime.inPoint || 0);
+      // Calculate clip-local time (on timeline, relative to clip start)
+      const timelineLocalTime = time - clipAtTime.startTime;
+      // Calculate source time using speed (nested comps don't have keyframes, use default speed)
+      const defaultSpeed = clipAtTime.speed ?? (clipAtTime.reversed ? -1 : 1);
+      const sourceTime = calculateSourceTime([], timelineLocalTime, defaultSpeed);
+      // Determine start point based on playback direction
+      const startPoint = defaultSpeed >= 0 ? (clipAtTime.inPoint || 0) : (clipAtTime.outPoint || source.naturalDuration);
+      const clipTime = Math.max(0, Math.min(source.naturalDuration, startPoint + sourceTime));
 
       // Seek video to correct time
       if (source.videoElement) {
-        const targetTime = clipAtTime.reversed
-          ? source.naturalDuration - clipLocalTime
-          : clipLocalTime;
-
         // Only seek if significantly different (avoid micro-seeks)
-        if (Math.abs(source.videoElement.currentTime - targetTime) > 0.05) {
-          source.videoElement.currentTime = Math.max(0, Math.min(targetTime, source.naturalDuration));
+        if (Math.abs(source.videoElement.currentTime - clipTime) > 0.05) {
+          source.videoElement.currentTime = clipTime;
         }
       }
 

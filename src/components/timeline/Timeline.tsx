@@ -116,6 +116,7 @@ export function Timeline() {
     setDuration,
     setClipParent,
     setTrackParent,
+    getSourceTimeForClip,
   } = useTimelineStore();
 
   const {
@@ -905,12 +906,14 @@ export function Timeline() {
         }
       } else if (clip?.source?.videoElement) {
         const clipLocalTime = playheadPosition - clip.startTime;
-        const keyframeLocalTime = clip.reversed
-          ? clip.duration - clipLocalTime
-          : clipLocalTime;
-        const clipTime = clip.reversed
-          ? clip.outPoint - clipLocalTime
-          : clipLocalTime + clip.inPoint;
+        // Keyframe interpolation uses timeline-local time
+        const keyframeLocalTime = clipLocalTime;
+        // Calculate source time using speed integration (handles keyframes)
+        const defaultSpeed = clip.speed ?? (clip.reversed ? -1 : 1);
+        const sourceTime = getSourceTimeForClip(clip.id, clipLocalTime);
+        // Determine start point based on playback direction
+        const startPoint = defaultSpeed >= 0 ? clip.inPoint : clip.outPoint;
+        const clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
         const video = clip.source.videoElement;
         const webCodecsPlayer = clip.source.webCodecsPlayer;
         const timeDiff = Math.abs(video.currentTime - clipTime);

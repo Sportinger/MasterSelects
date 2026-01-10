@@ -219,9 +219,10 @@ interface TransformTabProps {
     scale: { x: number; y: number };
     rotation: { x: number; y: number; z: number };
   };
+  speed?: number;
 }
 
-function TransformTab({ clipId, transform }: TransformTabProps) {
+function TransformTab({ clipId, transform, speed = 1 }: TransformTabProps) {
   const { setPropertyValue, updateClipTransform } = useTimelineStore();
 
   const handlePropertyChange = (property: AnimatableProperty, value: number) => {
@@ -260,6 +261,18 @@ function TransformTab({ clipId, transform }: TransformTabProps) {
           <PrecisionSlider min={0} max={1} step={0.0001} value={transform.opacity}
             onChange={(v) => handlePropertyChange('opacity', v)} defaultValue={1} />
           <span className="value">{(transform.opacity * 100).toFixed(1)}%</span>
+        </div>
+      </div>
+
+      {/* Time/Speed */}
+      <div className="properties-section">
+        <h4>Time</h4>
+        <div className="control-row">
+          <KeyframeToggle clipId={clipId} property="speed" value={speed} />
+          <label>Speed</label>
+          <PrecisionSlider min={-4} max={4} step={0.01} value={speed}
+            onChange={(v) => handlePropertyChange('speed', v)} defaultValue={1} />
+          <span className="value">{(speed * 100).toFixed(0)}%</span>
         </div>
       </div>
 
@@ -1153,7 +1166,7 @@ export function PropertiesPanel() {
       </div>
 
       <div className="properties-content">
-        {activeTab === 'transform' && !isAudioClip && <TransformTab clipId={selectedClip.id} transform={transform} />}
+        {activeTab === 'transform' && !isAudioClip && <TransformTab clipId={selectedClip.id} transform={transform} speed={selectedClip.speed} />}
         {activeTab === 'volume' && isAudioClip && <VolumeTab clipId={selectedClip.id} effects={selectedClip.effects || []} />}
         {activeTab === 'effects' && <EffectsTab clipId={selectedClip.id} effects={selectedClip.effects || []} />}
         {activeTab === 'masks' && !isAudioClip && <MasksTab clipId={selectedClip.id} masks={selectedClip.masks} />}

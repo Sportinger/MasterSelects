@@ -178,6 +178,8 @@ export interface KeyframeActions {
   getClipKeyframes: (clipId: string) => Keyframe[];
   getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
   getInterpolatedEffects: (clipId: string, clipLocalTime: number) => Effect[];
+  getInterpolatedSpeed: (clipId: string, clipLocalTime: number) => number;
+  getSourceTimeForClip: (clipId: string, clipLocalTime: number) => number;
   hasKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;
   toggleKeyframeRecording: (clipId: string, property: AnimatableProperty) => void;
   isRecording: (clipId: string, property: AnimatableProperty) => boolean;

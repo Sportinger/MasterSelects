@@ -272,6 +272,16 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
         return;
       }
 
+      // Handle speed property (directly on clip, not transform)
+      if (property === 'speed') {
+        const { invalidateCache } = get();
+        set({
+          clips: clips.map(c => c.id === clipId ? { ...c, speed: value } : c)
+        });
+        invalidateCache();
+        return;
+      }
+
       // Build partial transform update from property path
       const transformUpdate: Partial<ClipTransform> = {};
 
