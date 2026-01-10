@@ -14,6 +14,7 @@ import {
   type VideoTask,
   type TextToVideoParams,
   type ImageToVideoParams,
+  type AccountInfo,
 } from '../../services/piApiService';
 import { ImageCropper, exportCroppedImage, type CropData } from './ImageCropper';
 import './AIVideoPanel.css';
@@ -171,15 +172,36 @@ export function AIVideoPanel() {
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
 
+  // Account balance
+  const [accountInfo, setAccountInfo] = useState<AccountInfo | null>(null);
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
+
   // Check if API credentials are available
   const hasApiKey = !!apiKeys.piapi;
 
-  // Set API key when it changes
+  // Fetch account balance
+  const fetchAccountBalance = useCallback(async () => {
+    if (!apiKeys.piapi) return;
+
+    setIsLoadingBalance(true);
+    try {
+      const info = await piApiService.getAccountInfo();
+      setAccountInfo(info);
+    } catch (err) {
+      console.error('Failed to fetch account balance:', err);
+      // Don't show error to user, just log it
+    } finally {
+      setIsLoadingBalance(false);
+    }
+  }, [apiKeys.piapi]);
+
+  // Set API key when it changes and fetch balance
   useEffect(() => {
     if (apiKeys.piapi) {
       piApiService.setApiKey(apiKeys.piapi);
+      fetchAccountBalance();
     }
-  }, [apiKeys.piapi]);
+  }, [apiKeys.piapi, fetchAccountBalance]);
 
   // Update version when provider changes
   useEffect(() => {
@@ -753,17 +775,28 @@ export function AIVideoPanel() {
 
           {/* Credit Info */}
           <div className="credit-info">
+            <div className="credit-balance">
+              {accountInfo ? (
+                <span className="balance-amount">
+                  Balance: ${accountInfo.creditsUsd.toFixed(2)}
+                </span>
+              ) : (
+                <span className="balance-loading">
+                  {isLoadingBalance ? 'Loading...' : 'Balance: --'}
+                </span>
+              )}
+              <button
+                className="btn-refresh-balance"
+                onClick={fetchAccountBalance}
+                disabled={isLoadingBalance}
+                title="Refresh balance"
+              >
+                {isLoadingBalance ? '...' : '↻'}
+              </button>
+            </div>
             <span className="credit-cost">
               Est. cost: ~${currentCost.toFixed(2)}
             </span>
-            <a
-              href="https://piapi.ai/workspace/billing"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="credit-link"
-            >
-              Check Balance
-            </a>
           </div>
 
           {/* Generate Button */}

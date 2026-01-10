@@ -503,6 +503,42 @@
   font-size: 12px;
 }
 
+.credit-balance {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.balance-amount {
+  color: var(--success, #22c55e);
+  font-weight: 500;
+}
+
+.balance-loading {
+  color: var(--text-secondary);
+}
+
+.btn-refresh-balance {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+
+.btn-refresh-balance:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.btn-refresh-balance:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .credit-cost {
   color: var(--text-secondary);
 }

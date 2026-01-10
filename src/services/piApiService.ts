@@ -217,6 +217,13 @@ export interface ImageToVideoParams {
   cfgScale?: number;
 }
 
+export interface AccountInfo {
+  accountName: string;
+  accountId: string;
+  credits: number;
+  creditsUsd: number;
+}
+
 interface PiApiResponse {
   code: number;
   message: string;
@@ -534,6 +541,37 @@ class PiApiService {
     }
 
     throw new Error('Task timed out after 10 minutes');
+  }
+
+  // Get account info including balance
+  async getAccountInfo(): Promise<AccountInfo> {
+    if (!this.hasApiKey()) {
+      throw new Error('PiAPI key not set');
+    }
+
+    const response = await fetch(`${BASE_URL}/api/account/v1/info`, {
+      method: 'GET',
+      headers: {
+        'x-api-key': this.apiKey,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[PiAPI] Account info error:', errorText);
+      throw new Error(`Failed to get account info: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('[PiAPI] Account info:', result);
+
+    // Parse response - field names may vary
+    return {
+      accountName: result.data?.account_name || result.account_name || '',
+      accountId: result.data?.account_id || result.account_id || '',
+      credits: result.data?.credits || result.credits || 0,
+      creditsUsd: result.data?.equivalent_in_usd || result.equivalent_in_usd || 0,
+    };
   }
 }
 
