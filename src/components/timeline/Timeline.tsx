@@ -118,7 +118,7 @@ export function Timeline() {
   const {
     getActiveComposition,
     getOpenCompositions,
-    openComposition,
+    openCompositionTab,
     proxyEnabled,
     setProxyEnabled,
     files: mediaFiles,
@@ -2003,13 +2003,13 @@ export function Timeline() {
       const clip = clipMap.get(clipId);
       if (!clip) return;
 
-      // If this clip is a composition, open it
+      // If this clip is a composition, open it in a new tab and switch to it
       if (clip.isComposition && clip.compositionId) {
         console.log('[Timeline] Double-click on composition clip, opening:', clip.compositionId);
-        openComposition(clip.compositionId);
+        openCompositionTab(clip.compositionId);
       }
     },
-    [clipMap, openComposition]
+    [clipMap, openCompositionTab]
   );
 
   // Handle trim start
