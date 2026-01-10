@@ -12,10 +12,12 @@ import {
   KLING_ASPECT_RATIOS,
   KLING_MODES,
   KLING_CAMERA_CONTROLS,
+  getAspectRatioDimensions,
   type KlingTask,
   type TextToVideoParams,
   type ImageToVideoParams,
 } from '../../services/klingService';
+import { ImageCropper, exportCroppedImage, type CropData } from './ImageCropper';
 import './AIVideoPanel.css';
 
 // Available AI video services
@@ -131,8 +133,8 @@ export function AIVideoPanel() {
   const [service, setService] = useState<string>('kling');
   const [model, setModel] = useState<string>(KLING_MODELS[3].id); // Default to v2.0
 
-  // Generation type
-  const [generationType, setGenerationType] = useState<GenerationType>('text-to-video');
+  // Generation type (default to image-to-video)
+  const [generationType, setGenerationType] = useState<GenerationType>('image-to-video');
 
   // Common parameters
   const [prompt, setPrompt] = useState('');
@@ -146,8 +148,13 @@ export function AIVideoPanel() {
   // Image-to-video specific
   const [startImage, setStartImage] = useState<File | null>(null);
   const [startImagePreview, setStartImagePreview] = useState<string | null>(null);
+  const [startCropData, setStartCropData] = useState<CropData>({ offsetX: 0, offsetY: 0, scale: 1 });
   const [endImage, setEndImage] = useState<File | null>(null);
   const [endImagePreview, setEndImagePreview] = useState<string | null>(null);
+  const [endCropData, setEndCropData] = useState<CropData>({ offsetX: 0, offsetY: 0, scale: 1 });
+
+  // Get current aspect ratio dimensions
+  const aspectDimensions = getAspectRatioDimensions(aspectRatio);
 
   // Timeline integration options
   const [addToTimeline, setAddToTimeline] = useState(true);
@@ -161,10 +168,6 @@ export function AIVideoPanel() {
   // History playback
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
-
-  // Refs for drag-drop
-  const startImageRef = useRef<HTMLDivElement>(null);
-  const endImageRef = useRef<HTMLDivElement>(null);
 
   // Check if API credentials are available
   const hasApiKey = !!apiKeys.klingAccessKey && !!apiKeys.klingSecretKey;
@@ -181,79 +184,110 @@ export function AIVideoPanel() {
     saveHistory(history);
   }, [history]);
 
-  // Handle file drop
-  const handleFileDrop = useCallback((
-    e: React.DragEvent<HTMLDivElement>,
-    setFile: (file: File | null) => void,
-    setPreview: (url: string | null) => void
-  ) => {
+  // Handle file drop for start image
+  const handleStartDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-
     const file = e.dataTransfer.files[0];
     if (file && file.type.startsWith('image/')) {
-      setFile(file);
+      setStartImage(file);
       const reader = new FileReader();
-      reader.onload = () => {
-        setPreview(reader.result as string);
-      };
+      reader.onload = () => setStartImagePreview(reader.result as string);
       reader.readAsDataURL(file);
     }
   }, []);
 
-  // Handle file input change
-  const handleFileChange = useCallback((
-    e: React.ChangeEvent<HTMLInputElement>,
-    setFile: (file: File | null) => void,
-    setPreview: (url: string | null) => void
-  ) => {
-    const file = e.target.files?.[0];
+  // Handle file drop for end image
+  const handleEndDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer.files[0];
     if (file && file.type.startsWith('image/')) {
-      setFile(file);
+      setEndImage(file);
       const reader = new FileReader();
-      reader.onload = () => {
-        setPreview(reader.result as string);
-      };
+      reader.onload = () => setEndImagePreview(reader.result as string);
       reader.readAsDataURL(file);
     }
   }, []);
 
-  // Clear image
-  const clearImage = useCallback((
-    setFile: (file: File | null) => void,
-    setPreview: (url: string | null) => void
-  ) => {
-    setFile(null);
-    setPreview(null);
+  // Open file picker for start image
+  const openStartFilePicker = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file && file.type.startsWith('image/')) {
+        setStartImage(file);
+        const reader = new FileReader();
+        reader.onload = () => setStartImagePreview(reader.result as string);
+        reader.readAsDataURL(file);
+      }
+    };
+    input.click();
   }, []);
 
-  // Use current frame from timeline
-  const useCurrentFrame = useCallback(async (
-    setPreview: (url: string | null) => void
-  ) => {
+  // Open file picker for end image
+  const openEndFilePicker = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file && file.type.startsWith('image/')) {
+        setEndImage(file);
+        const reader = new FileReader();
+        reader.onload = () => setEndImagePreview(reader.result as string);
+        reader.readAsDataURL(file);
+      }
+    };
+    input.click();
+  }, []);
+
+  // Clear start image
+  const clearStartImage = useCallback(() => {
+    setStartImage(null);
+    setStartImagePreview(null);
+    setStartCropData({ offsetX: 0, offsetY: 0, scale: 1 });
+  }, []);
+
+  // Clear end image
+  const clearEndImage = useCallback(() => {
+    setEndImage(null);
+    setEndImagePreview(null);
+    setEndCropData({ offsetX: 0, offsetY: 0, scale: 1 });
+  }, []);
+
+  // Use current frame from timeline for start
+  const useCurrentFrameStart = useCallback(async () => {
     const dataUrl = await captureCurrentFrame();
     if (dataUrl) {
-      setPreview(dataUrl);
-      // Convert data URL to File for upload
+      setStartImagePreview(dataUrl);
       const response = await fetch(dataUrl);
       const blob = await response.blob();
-      const file = new File([blob], `frame-${Date.now()}.png`, { type: 'image/png' });
-      if (setPreview === setStartImagePreview) {
-        setStartImage(file);
-      } else {
-        setEndImage(file);
-      }
+      setStartImage(new File([blob], `frame-${Date.now()}.png`, { type: 'image/png' }));
+      setStartCropData({ offsetX: 0, offsetY: 0, scale: 1 });
     }
   }, []);
 
-  // Upload image to get URL (returns data URL for now)
-  const uploadImage = async (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
+  // Use current frame from timeline for end
+  const useCurrentFrameEnd = useCallback(async () => {
+    const dataUrl = await captureCurrentFrame();
+    if (dataUrl) {
+      setEndImagePreview(dataUrl);
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      setEndImage(new File([blob], `frame-${Date.now()}.png`, { type: 'image/png' }));
+      setEndCropData({ offsetX: 0, offsetY: 0, scale: 1 });
+    }
+  }, []);
+
+  // Export cropped image for API upload
+  const getCroppedImageUrl = async (
+    imagePreview: string,
+    cropData: CropData
+  ): Promise<string> => {
+    return exportCroppedImage(imagePreview, cropData, aspectDimensions, 1280);
   };
 
   // Import video to media panel and optionally add to timeline
@@ -345,7 +379,7 @@ export function AIVideoPanel() {
 
         taskId = await klingService.createTextToVideo(params);
       } else {
-        // Image-to-video
+        // Image-to-video - use cropped images
         const params: ImageToVideoParams = {
           prompt: prompt.trim(),
           negativePrompt: negativePrompt.trim() || undefined,
@@ -353,8 +387,8 @@ export function AIVideoPanel() {
           duration,
           mode,
           cfgScale,
-          startImageUrl: startImage ? await uploadImage(startImage) : undefined,
-          endImageUrl: endImage ? await uploadImage(endImage) : undefined,
+          startImageUrl: startImagePreview ? await getCroppedImageUrl(startImagePreview, startCropData) : undefined,
+          endImageUrl: endImagePreview ? await getCroppedImageUrl(endImagePreview, endCropData) : undefined,
         };
 
         taskId = await klingService.createImageToVideo(params);
@@ -538,99 +572,52 @@ export function AIVideoPanel() {
             </button>
           </div>
 
-          {/* Image Drop Zones (only for image-to-video) */}
+          {/* Image-to-Video: Aspect Ratio + Image Croppers */}
           {generationType === 'image-to-video' && (
-            <div className="image-inputs">
-              <div className="image-input-group">
-                <label>Start Frame</label>
-                <div
-                  ref={startImageRef}
-                  className={`image-drop-zone ${startImagePreview ? 'has-image' : ''}`}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => handleFileDrop(e, setStartImage, setStartImagePreview)}
-                  onClick={() => {
-                    const input = document.createElement('input');
-                    input.type = 'file';
-                    input.accept = 'image/*';
-                    input.onchange = (e) => handleFileChange(
-                      e as unknown as React.ChangeEvent<HTMLInputElement>,
-                      setStartImage,
-                      setStartImagePreview
-                    );
-                    input.click();
-                  }}
-                >
-                  {startImagePreview ? (
-                    <>
-                      <img src={startImagePreview} alt="Start frame" />
-                      <button
-                        className="clear-image"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          clearImage(setStartImage, setStartImagePreview);
-                        }}
-                      >
-                        x
-                      </button>
-                    </>
-                  ) : (
-                    <span className="drop-hint">Drop or click</span>
-                  )}
+            <>
+              {/* Aspect Ratio Selection */}
+              <div className="aspect-ratio-row">
+                <label>Aspect Ratio</label>
+                <div className="aspect-ratio-options">
+                  {KLING_ASPECT_RATIOS.map(ar => (
+                    <button
+                      key={ar.value}
+                      className={`aspect-btn ${aspectRatio === ar.value ? 'active' : ''}`}
+                      onClick={() => setAspectRatio(ar.value)}
+                      disabled={isGenerating}
+                    >
+                      {ar.value}
+                    </button>
+                  ))}
                 </div>
-                <button
-                  className="btn-use-current"
-                  onClick={() => useCurrentFrame(setStartImagePreview)}
-                  disabled={isGenerating}
-                >
-                  Use Current Frame
-                </button>
               </div>
 
-              <div className="image-input-group">
-                <label>End Frame (optional)</label>
-                <div
-                  ref={endImageRef}
-                  className={`image-drop-zone ${endImagePreview ? 'has-image' : ''}`}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => handleFileDrop(e, setEndImage, setEndImagePreview)}
-                  onClick={() => {
-                    const input = document.createElement('input');
-                    input.type = 'file';
-                    input.accept = 'image/*';
-                    input.onchange = (e) => handleFileChange(
-                      e as unknown as React.ChangeEvent<HTMLInputElement>,
-                      setEndImage,
-                      setEndImagePreview
-                    );
-                    input.click();
-                  }}
-                >
-                  {endImagePreview ? (
-                    <>
-                      <img src={endImagePreview} alt="End frame" />
-                      <button
-                        className="clear-image"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          clearImage(setEndImage, setEndImagePreview);
-                        }}
-                      >
-                        x
-                      </button>
-                    </>
-                  ) : (
-                    <span className="drop-hint">Drop or click</span>
-                  )}
-                </div>
-                <button
-                  className="btn-use-current"
-                  onClick={() => useCurrentFrame(setEndImagePreview)}
+              {/* Image Croppers */}
+              <div className="image-inputs">
+                <ImageCropper
+                  label="Start Frame"
+                  imageUrl={startImagePreview}
+                  aspectRatio={aspectDimensions}
+                  onClear={clearStartImage}
+                  onCropChange={setStartCropData}
                   disabled={isGenerating}
-                >
-                  Use Current Frame
-                </button>
+                  onDropOrClick={openStartFilePicker}
+                  onDrop={handleStartDrop}
+                  onUseCurrentFrame={useCurrentFrameStart}
+                />
+                <ImageCropper
+                  label="End Frame (optional)"
+                  imageUrl={endImagePreview}
+                  aspectRatio={aspectDimensions}
+                  onClear={clearEndImage}
+                  onCropChange={setEndCropData}
+                  disabled={isGenerating}
+                  onDropOrClick={openEndFilePicker}
+                  onDrop={handleEndDrop}
+                  onUseCurrentFrame={useCurrentFrameEnd}
+                />
               </div>
-            </div>
+            </>
           )}
 
           {/* Prompt Input */}
