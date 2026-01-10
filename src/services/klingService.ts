@@ -6,11 +6,13 @@ const BASE_URL = 'https://api.klingai.com';
 const TOKEN_EXPIRATION = 1800; // 30 minutes in seconds
 
 // Available models (latest: 2.6 with native audio)
+// Model names must match official API: kling-v2-6, kling-v2-5-turbo, etc.
 export const KLING_MODELS = [
   { id: 'kling-v2-6', name: 'Kling v2.6', description: 'Latest - Native audio generation' },
-  { id: 'kling-v2-5', name: 'Kling v2.5', description: 'Fast turbo mode' },
+  { id: 'kling-v2-5-turbo', name: 'Kling v2.5 Turbo', description: 'Fast turbo mode' },
   { id: 'kling-v2-1', name: 'Kling v2.1', description: 'Stable release' },
-  { id: 'kling-v2-0', name: 'Kling v2.0', description: 'Previous generation' },
+  { id: 'kling-v2-1-master', name: 'Kling v2.1 Master', description: 'Master quality' },
+  { id: 'kling-v2-master', name: 'Kling v2.0 Master', description: 'Previous master' },
   { id: 'kling-v1-6', name: 'Kling v1.6', description: 'Legacy' },
   { id: 'kling-v1-5', name: 'Kling v1.5', description: 'Legacy' },
   { id: 'kling-v1', name: 'Kling v1.0', description: 'Legacy' },
@@ -50,28 +52,35 @@ export const KLING_CAMERA_CONTROLS = [
   { value: 'left_turn_forward', label: 'Left Turn Forward' },
 ] as const;
 
-// Pricing in credits (based on official Kling API pricing 2025)
+// Pricing in credits (based on official Kling API pricing 2025/2026)
 // Structure: model -> mode -> duration -> credits
 export const KLING_PRICING: Record<string, Record<string, Record<number, number>>> = {
-  // v2.5 and v2.6 use turbo pricing
+  // v2.6 - latest with audio
   'kling-v2-6': {
     'std': { 5: 1.5, 10: 3 },
     'pro': { 5: 2.5, 10: 5 },
   },
-  'kling-v2-5': {
+  // v2.5 turbo - fast generation
+  'kling-v2-5-turbo': {
     'std': { 5: 1.5, 10: 3 },
     'pro': { 5: 2.5, 10: 5 },
   },
-  // v2.1 and v2.0 use standard pricing
+  // v2.1 standard
   'kling-v2-1': {
     'std': { 5: 2, 10: 4 },
     'pro': { 5: 3.5, 10: 7 },
   },
-  'kling-v2-0': {
+  // v2.1 master - higher quality
+  'kling-v2-1-master': {
+    'std': { 5: 2.5, 10: 5 },
+    'pro': { 5: 4, 10: 8 },
+  },
+  // v2.0 master
+  'kling-v2-master': {
     'std': { 5: 2, 10: 4 },
     'pro': { 5: 3.5, 10: 7 },
   },
-  // v1.x uses legacy pricing (similar to v2.1)
+  // v1.x legacy pricing
   'kling-v1-6': {
     'std': { 5: 2, 10: 4 },
     'pro': { 5: 3.5, 10: 7 },

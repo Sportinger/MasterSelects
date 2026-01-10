@@ -284,10 +284,6 @@ export function ExportPanel() {
 
   return (
     <div className="export-panel">
-      <div className="panel-header">
-        <h3>Export</h3>
-      </div>
-
       {/* Action Buttons - Always visible at top */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', padding: '0 12px' }}>
         <button
