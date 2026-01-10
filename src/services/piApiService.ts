@@ -3,6 +3,7 @@
 // Docs: https://piapi.ai/docs/overview
 
 const BASE_URL = 'https://api.piapi.ai';
+const UPLOAD_URL = 'https://upload.theapi.app/api/ephemeral_resource';
 const MODELS_CACHE_KEY = 'piapi-video-models';
 const MODELS_CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -251,6 +252,53 @@ class PiApiService {
     return !!this.apiKey;
   }
 
+  // Upload image and get URL (required for video generation)
+  async uploadImage(base64Data: string): Promise<string> {
+    if (!this.hasApiKey()) {
+      throw new Error('PiAPI key not set');
+    }
+
+    // Strip data URL prefix if present
+    let fileData = base64Data;
+    let fileName = 'image.png';
+
+    const match = base64Data.match(/^data:([^;]+);base64,(.+)$/);
+    if (match) {
+      const mimeType = match[1];
+      fileData = match[2];
+      // Determine extension from mime type
+      if (mimeType.includes('jpeg') || mimeType.includes('jpg')) {
+        fileName = 'image.jpg';
+      } else if (mimeType.includes('webp')) {
+        fileName = 'image.webp';
+      }
+    }
+
+    console.log('[PiAPI] Uploading image, size:', Math.round(fileData.length / 1024), 'KB');
+
+    const response = await fetch(UPLOAD_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': this.apiKey,
+      },
+      body: JSON.stringify({
+        file_name: fileName,
+        file_data: fileData,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || result.code !== 200) {
+      console.error('[PiAPI] Upload error:', result);
+      throw new Error(`Failed to upload image: ${result.message || response.status}`);
+    }
+
+    console.log('[PiAPI] Image uploaded:', result.data?.url);
+    return result.data?.url;
+  }
+
   private async request<T = PiApiResponse>(
     endpoint: string,
     method: 'GET' | 'POST' = 'GET',
@@ -324,7 +372,7 @@ class PiApiService {
         input.negative_prompt = params.negativePrompt;
       }
       if (params.cfgScale !== undefined) {
-        input.cfg_scale = params.cfgScale;
+        input.cfg_scale = String(params.cfgScale);
       }
       if (params.imageUrl) {
         input.image_url = params.imageUrl;
@@ -435,25 +483,19 @@ class PiApiService {
   }
 
   async createImageToVideo(params: ImageToVideoParams): Promise<string> {
-    // Process images - if data URL, keep as is (PiAPI accepts base64)
-    let imageUrl = params.startImageUrl;
-    let imageTailUrl = params.endImageUrl;
+    // Upload images first to get URLs (PiAPI requires hosted URLs)
+    let imageUrl: string | undefined;
+    let imageTailUrl: string | undefined;
 
-    // For PiAPI, we can send the full data URL or just base64
-    // Let's strip prefix for consistency
-    const stripPrefix = (url: string | undefined): string | undefined => {
-      if (!url) return undefined;
-      // If it's a data URL, extract just the base64 part
-      const match = url.match(/^data:[^;]+;base64,(.+)$/);
-      if (match) {
-        // Return with prefix for PiAPI (they accept data URLs)
-        return url;
-      }
-      return url;
-    };
+    if (params.startImageUrl) {
+      console.log('[PiAPI] Uploading start image...');
+      imageUrl = await this.uploadImage(params.startImageUrl);
+    }
 
-    imageUrl = stripPrefix(imageUrl);
-    imageTailUrl = stripPrefix(imageTailUrl);
+    if (params.endImageUrl) {
+      console.log('[PiAPI] Uploading end image...');
+      imageTailUrl = await this.uploadImage(params.endImageUrl);
+    }
 
     const body = this.buildRequestBody(
       params.provider,
@@ -549,7 +591,7 @@ class PiApiService {
       throw new Error('PiAPI key not set');
     }
 
-    const response = await fetch(`${BASE_URL}/api/account/v1/info`, {
+    const response = await fetch(`${BASE_URL}/account/info`, {
       method: 'GET',
       headers: {
         'x-api-key': this.apiKey,
