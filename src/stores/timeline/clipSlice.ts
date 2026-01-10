@@ -525,13 +525,43 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
           video.preload = 'auto';
           video.crossOrigin = 'anonymous';
 
-          video.addEventListener('canplaythrough', () => {
+          video.addEventListener('canplaythrough', async () => {
+            // Set up basic video source first
             nestedClip.source = {
               type: 'video',
               videoElement: video,
               naturalDuration: video.duration,
             };
             nestedClip.isLoading = false;
+
+            // Initialize WebCodecsPlayer for hardware-accelerated decoding
+            const hasWebCodecs = 'VideoDecoder' in window && 'VideoFrame' in window;
+            if (hasWebCodecs) {
+              try {
+                const { WebCodecsPlayer } = await import('../../engine/WebCodecsPlayer');
+                console.log(`[Nested Comp] Initializing WebCodecsPlayer for ${mediaFile.file.name}...`);
+
+                const webCodecsPlayer = new WebCodecsPlayer({
+                  loop: false,
+                  useSimpleMode: true,
+                  onError: (error) => {
+                    console.warn('[Nested Comp] WebCodecs error:', error.message);
+                  },
+                });
+
+                webCodecsPlayer.attachToVideoElement(video);
+                console.log(`[Nested Comp] WebCodecsPlayer ready for ${mediaFile.file.name}`);
+
+                // Update nested clip source with webCodecsPlayer
+                nestedClip.source = {
+                  ...nestedClip.source,
+                  webCodecsPlayer,
+                };
+              } catch (err) {
+                console.warn('[Nested Comp] WebCodecsPlayer init failed, using HTMLVideoElement:', err);
+              }
+            }
+
             // Trigger re-render by updating the parent clip
             const currentClips = get().clips;
             set({ clips: [...currentClips] });

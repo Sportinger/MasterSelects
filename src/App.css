@@ -1249,15 +1249,24 @@ input, textarea {
 }
 
 .info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
   font-size: 11px;
   font-style: italic;
   font-family: Georgia, serif;
   color: #666;
   cursor: pointer;
+  border-radius: 50%;
+  transition: all 0.2s ease;
 }
 
 .info-icon:hover {
-  color: #999;
+  color: #aaa;
+  background: rgba(255, 255, 255, 0.08);
+  transform: scale(1.1);
 }
 
 .info-tooltip {

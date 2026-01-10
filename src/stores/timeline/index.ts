@@ -569,13 +569,43 @@ export const useTimelineStore = create<TimelineStore>()(
                     video.preload = 'auto';
                     video.crossOrigin = 'anonymous';
 
-                    video.addEventListener('canplaythrough', () => {
+                    video.addEventListener('canplaythrough', async () => {
+                      // Set up basic video source first
                       nestedClip.source = {
                         type: 'video',
                         videoElement: video,
                         naturalDuration: video.duration,
                       };
                       nestedClip.isLoading = false;
+
+                      // Initialize WebCodecsPlayer for hardware-accelerated decoding
+                      const hasWebCodecs = 'VideoDecoder' in window && 'VideoFrame' in window;
+                      if (hasWebCodecs) {
+                        try {
+                          const { WebCodecsPlayer } = await import('../../engine/WebCodecsPlayer');
+                          console.log(`[Nested Comp Load] Initializing WebCodecsPlayer for ${nestedMediaFile.file.name}...`);
+
+                          const webCodecsPlayer = new WebCodecsPlayer({
+                            loop: false,
+                            useSimpleMode: true,
+                            onError: (error) => {
+                              console.warn('[Nested Comp Load] WebCodecs error:', error.message);
+                            },
+                          });
+
+                          webCodecsPlayer.attachToVideoElement(video);
+                          console.log(`[Nested Comp Load] WebCodecsPlayer ready for ${nestedMediaFile.file.name}`);
+
+                          // Update nested clip source with webCodecsPlayer
+                          nestedClip.source = {
+                            ...nestedClip.source,
+                            webCodecsPlayer,
+                          };
+                        } catch (err) {
+                          console.warn('[Nested Comp Load] WebCodecsPlayer init failed:', err);
+                        }
+                      }
+
                       // Trigger update
                       const currentClips = get().clips;
                       set({ clips: [...currentClips] });
