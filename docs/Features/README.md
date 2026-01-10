@@ -52,6 +52,7 @@ UI Framework      Custom dockable panel system
 | [AI Integration](./AI-Integration.md) | 50+ AI tools, transcription, intelligent editing |
 | [Media Panel](./Media-Panel.md) | Import, folder organization, compositions |
 | [Audio](./Audio.md) | 10-band EQ, waveforms, multicam sync |
+| [Text Clips](./Text-Clips.md) | Typography, 50 Google Fonts, stroke, shadow |
 | [Export](./Export.md) | H.264/VP9 encoding, frame-by-frame rendering |
 | [UI & Panels](./UI-Panels.md) | Dockable panels, layouts, menus, MIDI control |
 | [GPU Engine](./GPU-Engine.md) | WebGPU architecture, optical flow, texture management |
@@ -78,6 +79,21 @@ UI Framework      Custom dockable panel system
 | Composition Tabs | ✅ | Multiple open compositions with tab navigation |
 | Track Controls | ✅ | Visibility, mute, solo, expand |
 | Playback Looping | ✅ | In/Out points with loop mode |
+
+### Text Clips
+
+| Feature | Status | Details |
+|---------|--------|---------|
+| Text Overlays | ✅ | Add text clips to timeline with "+ Text" button |
+| Google Fonts | ✅ | 50 popular fonts dynamically loaded |
+| Typography | ✅ | Font size, weight (100-900), style (normal/italic) |
+| Alignment | ✅ | Horizontal (L/C/R) and vertical (T/M/B) alignment |
+| Spacing | ✅ | Line height and letter spacing controls |
+| Stroke (Outline) | ✅ | Configurable color and width |
+| Drop Shadow | ✅ | Color, offset X/Y, blur radius |
+| GPU Rendering | ✅ | Canvas2D → GPU texture for full compositing |
+| Animations | ✅ | All transforms and effects work with text |
+| Serialization | ✅ | Text clips saved/restored with projects |
 
 ### Keyframe Animation
 
