@@ -51,16 +51,25 @@ export function Toolbar() {
   const menuBarRef = useRef<HTMLDivElement>(null);
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Update project name from service
+  // Update project name from service - check periodically for changes
   useEffect(() => {
-    const data = projectFileService.getProjectData();
-    if (data) {
-      setProjectName(data.name);
-      setIsProjectOpen(true);
-    } else {
-      setProjectName('No Project Open');
-      setIsProjectOpen(false);
-    }
+    const updateProjectState = () => {
+      const data = projectFileService.getProjectData();
+      if (data) {
+        setProjectName(data.name);
+        setIsProjectOpen(true);
+        setNeedsPermission(false);
+      } else {
+        setProjectName('No Project Open');
+        setIsProjectOpen(false);
+      }
+    };
+
+    updateProjectState();
+
+    // Check for project changes every 500ms (handles WelcomeOverlay creating project)
+    const interval = setInterval(updateProjectState, 500);
+    return () => clearInterval(interval);
   }, []);
 
   // Try to restore last project on mount

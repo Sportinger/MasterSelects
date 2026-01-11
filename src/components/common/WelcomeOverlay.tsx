@@ -1,8 +1,9 @@
 // WelcomeOverlay - First-time user welcome with folder picker
-// Shows on first load to ask for proxy/analysis data storage folder
+// Shows on first load to ask for project storage folder
 
 import { useState, useCallback, useEffect } from 'react';
-import { pickProxyFolder, getProxyFolderName, isFileSystemAccessSupported, initFileSystemService } from '../../services/fileSystemService';
+import { isFileSystemAccessSupported } from '../../services/fileSystemService';
+import { projectFileService } from '../../services/projectFileService';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 interface WelcomeOverlayProps {
@@ -23,17 +24,34 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
     setError(null);
 
     try {
-      const handle = await pickProxyFolder();
+      // Let user pick where to store projects
+      const handle = await (window as any).showDirectoryPicker({
+        mode: 'readwrite',
+        startIn: 'documents',
+      });
+
       if (handle) {
         setSelectedFolder(handle.name);
-        // Auto-close after folder selection
-        setIsClosing(true);
-        useSettingsStore.getState().setHasCompletedSetup(true);
-        setTimeout(() => {
-          onComplete();
-        }, 200);
+
+        // Create "Untitled" project in the selected folder
+        const success = await projectFileService.createProjectInFolder(handle, 'Untitled');
+
+        if (success) {
+          // Auto-close after project creation
+          setIsClosing(true);
+          useSettingsStore.getState().setHasCompletedSetup(true);
+          setTimeout(() => {
+            onComplete();
+          }, 200);
+        } else {
+          setError('Failed to create project. Please try again.');
+        }
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e.name === 'AbortError') {
+        // User cancelled - not an error
+        return;
+      }
       console.error('[WelcomeOverlay] Failed to select folder:', e);
       setError('Failed to select folder. Please try again.');
     } finally {
@@ -51,11 +69,14 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
     }, 200);
   }, [onComplete, isClosing]);
 
-  // Restore folder handle from IndexedDB on mount
+  // Check if there's already an open project
   useEffect(() => {
-    initFileSystemService().then(() => {
-      setSelectedFolder(getProxyFolderName());
-    });
+    if (projectFileService.isProjectOpen()) {
+      const projectData = projectFileService.getProjectData();
+      if (projectData) {
+        setSelectedFolder(projectData.name);
+      }
+    }
   }, []);
 
   // Handle Enter key to continue
@@ -93,13 +114,14 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
         {/* Folder Selection Card */}
         <div className="welcome-folder-card">
           <div className="welcome-folder-card-header">
-            <span className="welcome-folder-card-label">Proxy Storage</span>
-            <span className="welcome-folder-card-optional">optional</span>
+            <span className="welcome-folder-card-label">Project Folder</span>
+            <span className="welcome-folder-card-optional">required</span>
           </div>
 
           {!isSupported ? (
             <p className="welcome-note">
-              Using browser memory for proxy files.
+              Your browser does not support local file storage.
+              Please use Chrome, Edge, or another Chromium-based browser.
             </p>
           ) : (
             <button
@@ -120,8 +142,8 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
                   </>
                 ) : (
                   <>
-                    <span className="welcome-folder-name">{isSelecting ? 'Opening...' : 'Choose folder'}</span>
-                    <span className="welcome-folder-change">For faster editing</span>
+                    <span className="welcome-folder-name">{isSelecting ? 'Creating project...' : 'Choose folder'}</span>
+                    <span className="welcome-folder-change">Where to store your projects</span>
                   </>
                 )}
               </div>
