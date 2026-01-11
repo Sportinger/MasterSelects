@@ -862,11 +862,11 @@ export class WebGPUEngine {
     let writeView = this.pongView;
     let usePing = true;
 
-    // Clear first buffer
+    // Clear first buffer to transparent (allows transparency grid to work)
     const clearPass = commandEncoder.beginRenderPass({
       colorAttachments: [{
         view: readView,
-        clearValue: { r: 0, g: 0, b: 0, a: 1 },
+        clearValue: { r: 0, g: 0, b: 0, a: 0 },
         loadOp: 'clear',
         storeOp: 'store',
       }],
@@ -1126,11 +1126,11 @@ export class WebGPUEngine {
     let writeView = this.independentPongView!;
     let usePing = true;
 
-    // Clear first buffer
+    // Clear first buffer to transparent (allows transparency grid to work)
     const clearPass = commandEncoder.beginRenderPass({
       colorAttachments: [{
         view: readView,
-        clearValue: { r: 0, g: 0, b: 0, a: 1 },
+        clearValue: { r: 0, g: 0, b: 0, a: 0 },
         loadOp: 'clear',
         storeOp: 'store',
       }],
