@@ -424,6 +424,17 @@ export class FrameExporter {
     const tracks = useTimelineStore.getState().tracks;
     const seekPromises: Promise<void>[] = [];
 
+    // Debug: log clips found at this time (only first frame)
+    if (time < 0.1) {
+      console.log(`[FrameExporter] Clips at time ${time.toFixed(3)}:`, clips.map(c => ({
+        name: c.name,
+        isComposition: c.isComposition,
+        hasVideoElement: !!c.source?.videoElement,
+        sourceType: c.source?.type,
+        trackId: c.trackId,
+      })));
+    }
+
     for (const clip of clips) {
       const track = tracks.find(t => t.id === clip.trackId);
       if (!track?.visible) continue;
@@ -453,13 +464,24 @@ export class FrameExporter {
       if (clip.source?.type === 'video' && clip.source.videoElement) {
         const video = clip.source.videoElement;
         const clipLocalTime = time - clip.startTime;
-        // Calculate source time using speed integration (handles keyframes)
-        const sourceTime = useTimelineStore.getState().getSourceTimeForClip(clip.id, clipLocalTime);
-        // Determine start point based on INITIAL speed (speed at t=0), not clip.speed
-        // This is important when keyframes change speed throughout the clip
-        const initialSpeed = useTimelineStore.getState().getInterpolatedSpeed(clip.id, 0);
-        const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
-        const clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
+
+        // Simple calculation matching nested clip approach
+        // For clips with speed keyframes, use the store's calculation
+        let clipTime: number;
+        try {
+          const sourceTime = useTimelineStore.getState().getSourceTimeForClip(clip.id, clipLocalTime);
+          const initialSpeed = useTimelineStore.getState().getInterpolatedSpeed(clip.id, 0);
+          const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
+          clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
+        } catch (e) {
+          // Fallback to simple calculation if speed functions fail
+          clipTime = clip.reversed
+            ? clip.outPoint - clipLocalTime
+            : clipLocalTime + clip.inPoint;
+          clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, clipTime));
+        }
+
+        console.log(`[FrameExporter] Seeking clip "${clip.name}" to ${clipTime.toFixed(3)}s (local: ${clipLocalTime.toFixed(3)}s)`);
         seekPromises.push(this.seekVideo(video, clipTime));
       }
     }
