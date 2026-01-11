@@ -698,8 +698,13 @@ input, textarea {
   background: #000;
 }
 
-/* Checkerboard pattern for transparency visualization */
+/* Dark grey background around canvas when transparency grid is enabled */
 .preview-canvas-wrapper.show-transparency-grid {
+  background: #1a1a1a;
+}
+
+/* Checkerboard pattern on canvas itself for transparency visualization */
+.preview-canvas-wrapper.show-transparency-grid .preview-canvas {
   background-color: #404040;
   background-image:
     linear-gradient(45deg, #303030 25%, transparent 25%),
@@ -708,11 +713,6 @@ input, textarea {
     linear-gradient(-45deg, transparent 75%, #303030 75%);
   background-size: 16px 16px;
   background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
-}
-
-/* Make canvas transparent so checkerboard shows through */
-.preview-canvas-wrapper.show-transparency-grid .preview-canvas {
-  background: transparent;
 }
 
 .preview-canvas {
