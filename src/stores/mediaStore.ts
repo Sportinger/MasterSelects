@@ -235,10 +235,20 @@ function getContainerFormat(fileName: string): string {
 // Try to parse FPS from filename (common patterns like "25fps", "_30p", etc.)
 function parseFpsFromFilename(fileName: string): number | undefined {
   // Match patterns like "25fps", "30fps", "24p", "60p", "29.97fps"
-  const fpsMatch = fileName.match(/[_\-\s\(](\d+(?:\.\d+)?)\s*(?:fps|p)[\s\)\-_\.]/i);
-  if (fpsMatch) {
-    const fps = parseFloat(fpsMatch[1]);
-    if (fps > 0 && fps <= 240) return fps;
+  // More flexible: look for number followed by fps/p anywhere in filename
+  const patterns = [
+    /[_\-\s\(](\d{2}(?:\.\d+)?)\s*fps/i,  // _25fps, -30fps, (24fps
+    /[_\-\s\(](\d{2}(?:\.\d+)?)\s*p[_\-\s\)\.]/i,  // _24p_, -30p.
+    /(\d{2}(?:\.\d+)?)fps/i,  // 25fps anywhere
+  ];
+
+  for (const pattern of patterns) {
+    const match = fileName.match(pattern);
+    if (match) {
+      const fps = parseFloat(match[1]);
+      // Valid FPS range: 10-240 (excludes resolution like 1080p)
+      if (fps >= 10 && fps <= 240) return fps;
+    }
   }
   return undefined;
 }
@@ -313,56 +323,8 @@ async function getMediaInfo(file: File, type: 'video' | 'audio' | 'image'): Prom
       const video = document.createElement('video');
       video.src = URL.createObjectURL(file);
       video.onloadedmetadata = () => {
-        // Try to get FPS from filename first
-        let fps = parseFpsFromFilename(file.name);
-
-        // If not found, try to estimate from video (this is approximate)
-        if (!fps && video.duration > 0) {
-          // Use requestVideoFrameCallback if available for accurate FPS
-          if ('requestVideoFrameCallback' in video) {
-            let frameCount = 0;
-            let startTime = 0;
-            const countFrames = (now: number, metadata: { presentedFrames: number }) => {
-              if (frameCount === 0) {
-                startTime = now;
-              }
-              frameCount++;
-              if (frameCount >= 10 && now - startTime > 100) {
-                // Estimate FPS from counted frames
-                fps = Math.round((frameCount / ((now - startTime) / 1000)) * 10) / 10;
-                resolve({
-                  width: video.videoWidth,
-                  height: video.videoHeight,
-                  duration: video.duration,
-                  fps,
-                  codec,
-                  container,
-                  fileSize,
-                });
-                URL.revokeObjectURL(video.src);
-                video.pause();
-                return;
-              }
-              (video as any).requestVideoFrameCallback(countFrames);
-            };
-            video.muted = true;
-            video.play().then(() => {
-              (video as any).requestVideoFrameCallback(countFrames);
-            }).catch(() => {
-              // Fallback if autoplay blocked
-              resolve({
-                width: video.videoWidth,
-                height: video.videoHeight,
-                duration: video.duration,
-                codec,
-                container,
-                fileSize,
-              });
-              URL.revokeObjectURL(video.src);
-            });
-            return;
-          }
-        }
+        // Try to get FPS from filename
+        const fps = parseFpsFromFilename(file.name);
 
         resolve({
           width: video.videoWidth,
