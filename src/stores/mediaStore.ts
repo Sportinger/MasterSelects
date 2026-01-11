@@ -865,18 +865,14 @@ export const useMediaStore = create<MediaState>()(
 
           console.log(`[Proxy] Starting generation for ${mediaFile.name}...`);
 
-          // If no proxy folder is set and File System Access API is supported, ask user to pick one
-          // We show the folder picker directly (user can cancel if they don't want to pick)
-          if (fileSystemService.isSupported() && !fileSystemService.hasProxyFolder()) {
-            // Show folder picker - user can cancel to use browser storage instead
-            console.log('[Proxy] No proxy folder set, showing picker...');
-            const handle = await fileSystemService.pickProxyFolder();
-            if (handle) {
-              set({ proxyFolderName: handle.name });
-              console.log('[Proxy] Proxy folder set to:', handle.name);
-            } else {
-              console.log('[Proxy] User cancelled folder picker, using browser storage');
-            }
+          // Check where to store proxies:
+          // 1. If project is open → use project's Proxy/ folder (no prompt needed)
+          // 2. If no project → proxies go to IndexedDB (browser storage)
+          if (projectFileService.isProjectOpen()) {
+            const projectName = projectFileService.getProjectData()?.name;
+            console.log(`[Proxy] Using project folder: ${projectName}/Proxy/`);
+          } else {
+            console.log('[Proxy] No project open, using browser storage for proxies');
           }
 
           // Check if proxy already exists
@@ -910,17 +906,12 @@ export const useMediaStore = create<MediaState>()(
 
           // Helper to save frames to storage
           const saveFrame = async (frame: { id: string; mediaFileId: string; frameIndex: number; blob: Blob }) => {
-            // Save to project folder if a project is open (primary)
+            // Save to project folder if a project is open (primary storage)
             if (projectFileService.isProjectOpen()) {
               await projectFileService.saveProxyFrame(frame.mediaFileId, frame.frameIndex, frame.blob);
-            }
-
-            // Also save to IndexedDB as cache/fallback
-            await projectDB.saveProxyFrame(frame);
-
-            // Legacy: also save to file system service if folder is selected
-            if (fileSystemService.hasProxyFolder()) {
-              await fileSystemService.saveProxyFrame(frame.mediaFileId, frame.frameIndex, frame.blob);
+            } else {
+              // No project open - use IndexedDB as fallback
+              await projectDB.saveProxyFrame(frame);
             }
           };
 

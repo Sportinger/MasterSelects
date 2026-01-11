@@ -6,6 +6,7 @@ import type { TimelineClip, MediaFile } from '../../types';
 import type { ContextMenuState } from './types';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { useMediaStore } from '../../stores/mediaStore';
+import { projectFileService } from '../../services/projectFileService';
 
 interface TimelineContextMenuProps {
   contextMenu: ContextMenuState | null;
@@ -24,10 +25,8 @@ interface TimelineContextMenuProps {
   generateWaveformForClip: (clipId: string) => void;
   setMulticamDialogOpen: (open: boolean) => void;
 
-  // Proxy
-  proxyFolderName: string | null;
+  // File explorer
   showInExplorer: (type: 'raw' | 'proxy', fileId: string) => Promise<{ success: boolean; message: string }>;
-  pickProxyFolder: () => Promise<void>;
 }
 
 export function TimelineContextMenu({
@@ -42,9 +41,7 @@ export function TimelineContextMenu({
   unlinkGroup,
   generateWaveformForClip,
   setMulticamDialogOpen,
-  proxyFolderName,
   showInExplorer,
-  pickProxyFolder,
 }: TimelineContextMenuProps) {
   const { menuRef: contextMenuRef, adjustedPosition: contextMenuPosition } = useContextMenuPosition(contextMenu);
 
@@ -123,12 +120,6 @@ export function TimelineContextMenu({
       }
     }
 
-    setContextMenu(null);
-  };
-
-  // Handle Set Proxy Folder
-  const handleSetProxyFolder = async () => {
-    await pickProxyFolder();
     setContextMenu(null);
   };
 
@@ -212,8 +203,8 @@ export function TimelineContextMenu({
               Proxy{' '}
               {!hasProxy
                 ? '(not available)'
-                : proxyFolderName
-                ? `(${proxyFolderName})`
+                : projectFileService.isProjectOpen()
+                ? `(${projectFileService.getProjectData()?.name}/Proxy)`
                 : '(IndexedDB)'}
             </div>
           </div>
@@ -240,10 +231,6 @@ export function TimelineContextMenu({
               Generate Proxy
             </div>
           )}
-
-          <div className="context-menu-item" onClick={handleSetProxyFolder}>
-            Set Proxy Folder... {proxyFolderName && `(${proxyFolderName})`}
-          </div>
         </>
       )}
 

@@ -136,8 +136,6 @@ export function Timeline() {
     setProxyEnabled,
     files: mediaFiles,
     currentlyGeneratingProxyId,
-    proxyFolderName,
-    pickProxyFolder,
     showInExplorer,
     getNextFileNeedingProxy,
     generateProxy,
@@ -1844,9 +1842,7 @@ export function Timeline() {
         unlinkGroup={unlinkGroup}
         generateWaveformForClip={generateWaveformForClip}
         setMulticamDialogOpen={setMulticamDialogOpen}
-        proxyFolderName={proxyFolderName}
         showInExplorer={showInExplorer}
-        pickProxyFolder={pickProxyFolder}
       />
 
       {/* Multicam Dialog */}
