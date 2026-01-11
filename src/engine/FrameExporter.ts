@@ -499,42 +499,52 @@ export class FrameExporter {
     return new Promise((resolve) => {
       const targetTime = Math.max(0, Math.min(time, video.duration || 0));
 
-      // If already at correct time and ready, resolve immediately
-      if (Math.abs(video.currentTime - targetTime) < 0.01 && !video.seeking && video.readyState >= 3) {
-        resolve();
-        return;
-      }
-
       const timeout = setTimeout(() => {
         console.warn('[FrameExporter] Seek timeout at', targetTime);
         resolve();
-      }, 2000); // Increased timeout
+      }, 2000);
+
+      // Use requestVideoFrameCallback if available - guarantees frame is decoded
+      const waitForFrame = () => {
+        if ('requestVideoFrameCallback' in video) {
+          (video as any).requestVideoFrameCallback(() => {
+            clearTimeout(timeout);
+            resolve();
+          });
+        } else {
+          // Fallback: wait for readyState and extra frames
+          let retries = 0;
+          const maxRetries = 30;
+          const vid = video as HTMLVideoElement; // Type assertion for closure
+
+          const waitForReady = () => {
+            retries++;
+            if (!vid.seeking && vid.readyState >= 3) {
+              clearTimeout(timeout);
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => resolve());
+              });
+            } else if (retries < maxRetries) {
+              requestAnimationFrame(waitForReady);
+            } else {
+              clearTimeout(timeout);
+              resolve();
+            }
+          };
+          waitForReady();
+        }
+      };
+
+      // If already at correct time with frame ready, still wait for one frame callback
+      // to ensure the GPU has the latest frame
+      if (Math.abs(video.currentTime - targetTime) < 0.01 && !video.seeking && video.readyState >= 3) {
+        waitForFrame();
+        return;
+      }
 
       const onSeeked = () => {
-        clearTimeout(timeout);
         video.removeEventListener('seeked', onSeeked);
-
-        // Wait for video to be fully ready with decoded frame data
-        // readyState 3 = HAVE_FUTURE_DATA (enough to render current frame)
-        // readyState 4 = HAVE_ENOUGH_DATA (can play through)
-        let retries = 0;
-        const maxRetries = 60; // ~1 second at 60fps
-
-        const waitForReady = () => {
-          retries++;
-          if (!video.seeking && video.readyState >= 3) {
-            // Give browser extra time to decode frame
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => resolve());
-            });
-          } else if (retries < maxRetries) {
-            requestAnimationFrame(waitForReady);
-          } else {
-            console.warn('[FrameExporter] Video not ready after seek, proceeding anyway');
-            resolve();
-          }
-        };
-        waitForReady();
+        waitForFrame();
       };
 
       video.addEventListener('seeked', onSeeked);
