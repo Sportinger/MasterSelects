@@ -92,7 +92,13 @@ export function useClipTrim({
 
         const deltaX = trim.currentX - trim.startX;
         const deltaTime = pixelToTime(deltaX);
-        const maxDuration = clipToTrim.source?.naturalDuration || clipToTrim.duration;
+
+        // Text, image, and color clips can be extended infinitely (no natural duration limit)
+        const sourceType = clipToTrim.source?.type;
+        const isInfiniteClip = sourceType === 'text' || sourceType === 'image' || sourceType === 'color';
+        const maxDuration = isInfiniteClip
+          ? Number.MAX_SAFE_INTEGER
+          : (clipToTrim.source?.naturalDuration || clipToTrim.duration);
 
         let newStartTime = trim.originalStartTime;
         let newInPoint = trim.originalInPoint;
@@ -100,7 +106,11 @@ export function useClipTrim({
 
         if (trim.edge === 'left') {
           const maxTrim = trim.originalDuration - 0.1;
-          const minTrim = -trim.originalInPoint;
+          // For infinite clips (text/image/color), allow extending left up to timeline start (0)
+          // For video/audio, limit to existing in-point (can't reveal non-existent media)
+          const minTrim = isInfiniteClip
+            ? -trim.originalStartTime  // Can extend left until startTime reaches 0
+            : -trim.originalInPoint;
           const clampedDelta = Math.max(minTrim, Math.min(maxTrim, deltaTime));
           newStartTime = trim.originalStartTime + clampedDelta;
           newInPoint = trim.originalInPoint + clampedDelta;
