@@ -695,12 +695,7 @@ input, textarea {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #000;
-}
-
-/* Dark grey background around canvas when transparency grid is enabled */
-.preview-canvas-wrapper.show-transparency-grid {
-  background: #1a1a1a;
+  background: #111;
 }
 
 /* Checkerboard pattern on canvas itself for transparency visualization */
