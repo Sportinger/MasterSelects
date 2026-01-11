@@ -454,12 +454,17 @@ export class FrameExporter {
           // Check if nested clip is active at this time
           if (nestedTime >= nestedClip.startTime && nestedTime < nestedClip.startTime + nestedClip.duration) {
             if (nestedClip.source?.videoElement) {
-              const video = nestedClip.source.videoElement;
               const nestedLocalTime = nestedTime - nestedClip.startTime;
               const nestedClipTime = nestedClip.reversed
                 ? nestedClip.outPoint - nestedLocalTime
                 : nestedLocalTime + nestedClip.inPoint;
-              seekPromises.push(this.seekVideo(video, nestedClipTime));
+
+              // Prefer WebCodecs async seek for guaranteed frame accuracy
+              if (nestedClip.source.webCodecsPlayer) {
+                seekPromises.push(nestedClip.source.webCodecsPlayer.seekAsync(nestedClipTime));
+              } else {
+                seekPromises.push(this.seekVideo(nestedClip.source.videoElement, nestedClipTime));
+              }
             }
           }
         }
@@ -468,7 +473,6 @@ export class FrameExporter {
 
       // Handle regular video clips
       if (clip.source?.type === 'video' && clip.source.videoElement) {
-        const video = clip.source.videoElement;
         const clipLocalTime = time - clip.startTime;
 
         // Simple calculation matching nested clip approach
@@ -487,8 +491,13 @@ export class FrameExporter {
           clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, clipTime));
         }
 
-        console.log(`[FrameExporter] Seeking clip "${clip.name}" to ${clipTime.toFixed(3)}s (local: ${clipLocalTime.toFixed(3)}s)`);
-        seekPromises.push(this.seekVideo(video, clipTime));
+        // Prefer WebCodecs async seek for guaranteed frame accuracy
+        if (clip.source.webCodecsPlayer) {
+          seekPromises.push(clip.source.webCodecsPlayer.seekAsync(clipTime));
+        } else {
+          console.log(`[FrameExporter] Seeking clip "${clip.name}" to ${clipTime.toFixed(3)}s (local: ${clipLocalTime.toFixed(3)}s)`);
+          seekPromises.push(this.seekVideo(clip.source.videoElement, clipTime));
+        }
       }
     }
 

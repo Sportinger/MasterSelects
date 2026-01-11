@@ -682,6 +682,96 @@ export class WebCodecsPlayer {
     this.sampleIndex = targetIndex + 1;
   }
 
+  /**
+   * Async seek that waits for the frame to be decoded
+   * Use this for export where we need guaranteed frame accuracy
+   */
+  async seekAsync(timeSeconds: number): Promise<void> {
+    // Simple mode: seek video element and wait for frame
+    if (this.useSimpleMode && this.videoElement) {
+      return new Promise<void>((resolve) => {
+        const video = this.videoElement!;
+
+        const onSeeked = () => {
+          video.removeEventListener('seeked', onSeeked);
+          // Wait for video frame callback to ensure frame is decoded
+          if ('requestVideoFrameCallback' in video) {
+            (video as any).requestVideoFrameCallback(() => {
+              this.captureCurrentFrame();
+              resolve();
+            });
+          } else {
+            this.captureCurrentFrame();
+            // Give extra time for frame decode
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => resolve());
+            });
+          }
+        };
+
+        if (Math.abs(video.currentTime - timeSeconds) < 0.01 && !video.seeking) {
+          // Already at position, just capture frame
+          if ('requestVideoFrameCallback' in video) {
+            (video as any).requestVideoFrameCallback(() => {
+              this.captureCurrentFrame();
+              resolve();
+            });
+          } else {
+            this.captureCurrentFrame();
+            resolve();
+          }
+          return;
+        }
+
+        video.addEventListener('seeked', onSeeked);
+        video.currentTime = timeSeconds;
+      });
+    }
+
+    // Full mode: decode and flush
+    if (!this.videoTrack || this.samples.length === 0 || !this.decoder) {
+      return;
+    }
+
+    const targetTime = timeSeconds * this.videoTrack.timescale;
+
+    // Find the nearest keyframe before the target time
+    let keyframeIndex = 0;
+    let targetIndex = 0;
+    for (let i = 0; i < this.samples.length; i++) {
+      if (this.samples[i].cts > targetTime) break;
+      targetIndex = i;
+      if (this.samples[i].is_sync) {
+        keyframeIndex = i;
+      }
+    }
+
+    // Reset decoder
+    this.decoder.reset();
+    this.decoder.configure(this.codecConfig!);
+
+    // Decode from keyframe up to target frame
+    for (let i = keyframeIndex; i <= targetIndex; i++) {
+      const sample = this.samples[i];
+      const chunk = new EncodedVideoChunk({
+        type: sample.is_sync ? 'key' : 'delta',
+        timestamp: (sample.cts * 1_000_000) / sample.timescale,
+        duration: (sample.duration * 1_000_000) / sample.timescale,
+        data: sample.data,
+      });
+      try {
+        this.decoder.decode(chunk);
+      } catch {
+        // Skip decode errors
+      }
+    }
+
+    // Flush to ensure all frames are decoded
+    await this.decoder.flush();
+
+    this.sampleIndex = targetIndex + 1;
+  }
+
   get duration(): number {
     if (this.useSimpleMode && this.videoElement) {
       return this.videoElement.duration || 0;
