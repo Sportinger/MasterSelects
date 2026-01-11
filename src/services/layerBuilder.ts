@@ -352,9 +352,24 @@ class LayerBuilderService {
         const shouldPlay = isPlaying && !effectivelyMuted && !isDraggingPlayhead && absSpeed > 0.1;
 
         if (shouldPlay) {
-          // Only sync audio on significant drift (>200ms) to avoid pops/glitches
-          if (Math.abs(timeDiff) > 0.2) {
+          // Gradual drift correction using playback rate adjustment
+          // This is smoother than hard seeking for small drifts
+          const absDrift = Math.abs(timeDiff);
+
+          if (absDrift > 0.2) {
+            // Large drift (>200ms): hard seek to resync
             audio.currentTime = clipTime;
+            audio.playbackRate = Math.max(0.25, Math.min(4, targetRate)); // Reset rate
+          } else if (absDrift > 0.05) {
+            // Small drift (50-200ms): adjust playback rate to gradually catch up
+            // If audio is behind (timeDiff < 0), speed up slightly
+            // If audio is ahead (timeDiff > 0), slow down slightly
+            const correction = timeDiff > 0 ? -0.02 : 0.02; // 2% rate adjustment
+            const correctedRate = targetRate * (1 + correction);
+            audio.playbackRate = Math.max(0.25, Math.min(4, correctedRate));
+          } else {
+            // Drift < 50ms: acceptable, use normal rate
+            audio.playbackRate = Math.max(0.25, Math.min(4, targetRate));
           }
 
           if (audio.paused) {
@@ -409,9 +424,6 @@ class LayerBuilderService {
         audio.muted = effectivelyMuted;
 
         const targetRate = absSpeed > 0.1 ? absSpeed : 1;
-        if (Math.abs(audio.playbackRate - targetRate) > 0.01) {
-          audio.playbackRate = Math.max(0.25, Math.min(4, targetRate));
-        }
 
         const shouldPreservePitch = clip.preservesPitch !== false;
         if ((audio as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch !== shouldPreservePitch) {
@@ -426,9 +438,21 @@ class LayerBuilderService {
         const shouldPlay = isPlaying && !effectivelyMuted && !isDraggingPlayhead && absSpeed > 0.1;
 
         if (shouldPlay) {
-          // Only sync on significant drift (>200ms) to avoid pops/glitches
-          if (Math.abs(timeDiff) > 0.2) {
+          // Gradual drift correction using playback rate adjustment
+          const absDrift = Math.abs(timeDiff);
+
+          if (absDrift > 0.2) {
+            // Large drift (>200ms): hard seek to resync
             audio.currentTime = clipTime;
+            audio.playbackRate = Math.max(0.25, Math.min(4, targetRate));
+          } else if (absDrift > 0.05) {
+            // Small drift (50-200ms): adjust playback rate to catch up
+            const correction = timeDiff > 0 ? -0.02 : 0.02;
+            const correctedRate = targetRate * (1 + correction);
+            audio.playbackRate = Math.max(0.25, Math.min(4, correctedRate));
+          } else {
+            // Drift < 50ms: acceptable
+            audio.playbackRate = Math.max(0.25, Math.min(4, targetRate));
           }
 
           if (audio.paused) {
