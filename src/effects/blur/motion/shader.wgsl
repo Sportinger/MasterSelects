@@ -1,10 +1,10 @@
-// Motion Blur Effect Shader
+// Motion Blur Effect Shader - High Quality
 
 struct MotionBlurParams {
   amount: f32,
   angle: f32,
-  _p1: f32,
-  _p2: f32,
+  quality: f32,
+  _pad: f32,
 };
 
 @group(0) @binding(0) var texSampler: sampler;
@@ -13,16 +13,26 @@ struct MotionBlurParams {
 
 @fragment
 fn motionBlurFragment(input: VertexOutput) -> @location(0) vec4f {
+  if (params.amount < 0.001) {
+    return textureSample(inputTex, texSampler, input.uv);
+  }
+
   let direction = vec2f(cos(params.angle), sin(params.angle));
+  let samples = i32(params.quality * 12.0); // 12-36 samples
 
   var color = vec4f(0.0);
-  let samples = 16;
+  var totalWeight = 0.0;
 
   for (var i = 0; i < samples; i++) {
     let t = (f32(i) / f32(samples - 1) - 0.5) * 2.0;
     let offset = direction * t * params.amount;
-    color += textureSample(inputTex, texSampler, input.uv + offset);
+
+    // Gaussian-like weight (center samples weighted more)
+    let weight = exp(-t * t * 2.0);
+
+    color += textureSample(inputTex, texSampler, input.uv + offset) * weight;
+    totalWeight += weight;
   }
 
-  return color / f32(samples);
+  return color / totalWeight;
 }

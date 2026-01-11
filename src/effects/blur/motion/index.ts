@@ -1,4 +1,4 @@
-// Motion Blur Effect
+// Motion Blur Effect - High Quality
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
@@ -18,8 +18,8 @@ export const motionBlur: EffectDefinition = {
       label: 'Amount',
       default: 0.05,
       min: 0,
-      max: 0.2,
-      step: 0.001,
+      max: 0.3,
+      step: 0.005,
       animatable: true,
     },
     angle: {
@@ -31,13 +31,23 @@ export const motionBlur: EffectDefinition = {
       step: 0.01,
       animatable: true,
     },
+    quality: {
+      type: 'number',
+      label: 'Quality',
+      default: 2,
+      min: 1,
+      max: 3,
+      step: 1,
+      animatable: false,
+    },
   },
 
   packUniforms: (params) => {
     return new Float32Array([
       params.amount as number || 0.05,
       params.angle as number || 0,
-      0, 0,
+      params.quality as number || 2,
+      0,
     ]);
   },
 };

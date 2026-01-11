@@ -1,10 +1,10 @@
-// Radial Blur Effect Shader
+// Radial Blur Effect Shader - High Quality
 
 struct RadialBlurParams {
   amount: f32,
   centerX: f32,
   centerY: f32,
-  _pad: f32,
+  quality: f32,
 };
 
 @group(0) @binding(0) var texSampler: sampler;
@@ -17,15 +17,25 @@ fn radialBlurFragment(input: VertexOutput) -> @location(0) vec4f {
   let dir = input.uv - center;
   let dist = length(dir);
 
-  var color = vec4f(0.0);
-  let samples = 16;
-  let amount = params.amount * 0.1;
-
-  for (var i = 0; i < samples; i++) {
-    let scale = 1.0 - amount * (f32(i) / f32(samples)) * dist;
-    let samplePos = center + dir * scale;
-    color += textureSample(inputTex, texSampler, samplePos);
+  if (params.amount < 0.01) {
+    return textureSample(inputTex, texSampler, input.uv);
   }
 
-  return color / f32(samples);
+  var color = vec4f(0.0);
+  let samples = i32(params.quality * 16.0); // 16-48 samples based on quality
+  let amount = params.amount * 0.2;
+
+  var totalWeight = 0.0;
+
+  for (var i = 0; i < samples; i++) {
+    let t = f32(i) / f32(samples - 1);
+    let scale = 1.0 - amount * t * dist;
+    let weight = 1.0 - t * 0.5; // Weight decreases towards outer samples
+
+    let samplePos = center + dir * scale;
+    color += textureSample(inputTex, texSampler, samplePos) * weight;
+    totalWeight += weight;
+  }
+
+  return color / totalWeight;
 }
