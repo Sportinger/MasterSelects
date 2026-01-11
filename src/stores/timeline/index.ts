@@ -599,6 +599,7 @@ export const useTimelineStore = create<TimelineStore>()(
                 linkedClipId: serializedClip.linkedClipId,
                 transform: serializedClip.transform,
                 effects: serializedClip.effects || [],
+                masks: serializedClip.masks || [],  // Restore masks for composition clips
                 isLoading: true,
                 isComposition: true,
                 compositionId: serializedClip.compositionId,

@@ -103,7 +103,7 @@ class LayerBuilderService {
             height: compHeight,
           };
 
-          layers[layerIndex] = {
+          const nestedCompLayer: Layer = {
             id: `${activeCompId}_layer_${layerIndex}`,
             name: clip.name,
             visible: true,
@@ -122,6 +122,14 @@ class LayerBuilderService {
               z: (interpolatedTransform.rotation.z * Math.PI) / 180,
             },
           };
+
+          // Add mask properties if nested comp clip has masks
+          if (clip.masks && clip.masks.length > 0) {
+            nestedCompLayer.maskClipId = clip.id;
+            nestedCompLayer.maskInvert = clip.masks.some(m => m.inverted);
+          }
+
+          layers[layerIndex] = nestedCompLayer;
         }
       } else if (clip?.source?.videoElement) {
         // Handle video clip
@@ -146,7 +154,7 @@ class LayerBuilderService {
         const transform = getInterpolatedTransform(clip.id, imageClipLocalTime);
         const imageInterpolatedEffects = getInterpolatedEffects(clip.id, imageClipLocalTime);
 
-        layers[layerIndex] = {
+        const imageLayer: Layer = {
           id: `${activeCompId}_layer_${layerIndex}`,
           name: clip.name,
           visible: true,
@@ -165,13 +173,21 @@ class LayerBuilderService {
             z: (transform.rotation.z * Math.PI) / 180,
           },
         };
+
+        // Add mask properties if image clip has masks
+        if (clip.masks && clip.masks.length > 0) {
+          imageLayer.maskClipId = clip.id;
+          imageLayer.maskInvert = clip.masks.some(m => m.inverted);
+        }
+
+        layers[layerIndex] = imageLayer;
       } else if (clip?.source?.textCanvas) {
         // Handle text clip
         const textClipLocalTime = playheadPosition - clip.startTime;
         const transform = getInterpolatedTransform(clip.id, textClipLocalTime);
         const textInterpolatedEffects = getInterpolatedEffects(clip.id, textClipLocalTime);
 
-        layers[layerIndex] = {
+        const textLayer: Layer = {
           id: `${activeCompId}_layer_${layerIndex}`,
           name: clip.name,
           visible: true,
@@ -190,6 +206,14 @@ class LayerBuilderService {
             z: (transform.rotation.z * Math.PI) / 180,
           },
         };
+
+        // Add mask properties if text clip has masks
+        if (clip.masks && clip.masks.length > 0) {
+          textLayer.maskClipId = clip.id;
+          textLayer.maskInvert = clip.masks.some(m => m.inverted);
+        }
+
+        layers[layerIndex] = textLayer;
       }
     });
 
