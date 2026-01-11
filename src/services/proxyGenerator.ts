@@ -201,6 +201,16 @@ class ProxyGeneratorGPU {
           return;
         }
 
+        // Log GPU info for verification
+        const adapterInfo = (device as any).adapterInfo;
+        console.log('%c[ProxyGen] 🎮 GPU ACCELERATION ACTIVE', 'color: #00ff00; font-weight: bold; font-size: 14px');
+        console.log('[ProxyGen] GPU Device:', {
+          vendor: adapterInfo?.vendor || 'unknown',
+          architecture: adapterInfo?.architecture || 'unknown',
+          device: adapterInfo?.device || 'unknown',
+          description: adapterInfo?.description || 'WebGPU Device',
+        });
+
         // Load file with MP4Box
         const loaded = await this.loadWithMP4Box(file);
         if (!loaded) {
@@ -421,6 +431,12 @@ class ProxyGeneratorGPU {
     // Sort frame indices
     const sortedIndices = Array.from(this.decodedFrames.keys()).sort((a, b) => a - b);
 
+    // Performance tracking
+    const startTime = performance.now();
+    let totalGpuTime = 0;
+    let totalEncodeTime = 0;
+    let batchCount = 0;
+
     // Process frames in batches
     let batchStart = 0;
     const dbBatch: { id: string; mediaFileId: string; frameIndex: number; blob: Blob }[] = [];
@@ -446,8 +462,14 @@ class ProxyGeneratorGPU {
 
       if (batchFrames.length > 0) {
         try {
-          // GPU batch resize
+          batchCount++;
+
+          // GPU batch resize with timing
+          const gpuStart = performance.now();
           const pixelArrays = await this.resizePipeline.processBatch(batchFrames);
+          const gpuEnd = performance.now();
+          const gpuTime = gpuEnd - gpuStart;
+          totalGpuTime += gpuTime;
 
           // Close video frames after GPU processing
           for (const frame of batchFrames) {
@@ -455,11 +477,20 @@ class ProxyGeneratorGPU {
           }
 
           // Encode all frames in parallel using workers
+          const encodeStart = performance.now();
           const encodePromises = pixelArrays.map((pixels, i) =>
             this.encodeFrameAsync(batchFrameIndices[i], pixels)
           );
 
           const blobs = await Promise.all(encodePromises);
+          const encodeEnd = performance.now();
+          const encodeTime = encodeEnd - encodeStart;
+          totalEncodeTime += encodeTime;
+
+          // Log batch performance (every 5 batches to avoid spam)
+          if (batchCount % 5 === 0 || batchCount === 1) {
+            console.log(`[ProxyGen] Batch ${batchCount}: GPU=${gpuTime.toFixed(1)}ms, Encode=${encodeTime.toFixed(1)}ms, Frames=${batchFrames.length}`);
+          }
 
           // Add to DB batch
           for (let i = 0; i < blobs.length; i++) {
@@ -510,7 +541,21 @@ class ProxyGeneratorGPU {
     if (this.isCancelled) {
       this.resolveGeneration?.(null);
     } else {
-      console.log(`[ProxyGen] Completed: ${this.processedFrames} frames processed`);
+      const totalTime = performance.now() - startTime;
+      const fps = this.processedFrames / (totalTime / 1000);
+
+      console.log('%c[ProxyGen] ✅ GPU Processing Complete', 'color: #00ff00; font-weight: bold');
+      console.log('[ProxyGen] Performance Summary:', {
+        totalFrames: this.processedFrames,
+        totalBatches: batchCount,
+        totalTime: `${(totalTime / 1000).toFixed(1)}s`,
+        framesPerSecond: fps.toFixed(1),
+        gpuTime: `${(totalGpuTime / 1000).toFixed(2)}s (${((totalGpuTime / totalTime) * 100).toFixed(1)}%)`,
+        encodeTime: `${(totalEncodeTime / 1000).toFixed(2)}s (${((totalEncodeTime / totalTime) * 100).toFixed(1)}%)`,
+        avgGpuPerBatch: `${(totalGpuTime / batchCount).toFixed(1)}ms`,
+        avgGpuPerFrame: `${(totalGpuTime / this.processedFrames).toFixed(2)}ms`,
+      });
+
       this.resolveGeneration?.({
         frameCount: this.processedFrames,
         fps: PROXY_FPS,

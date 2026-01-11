@@ -101,7 +101,7 @@ export class ProxyResizePipeline {
       },
     });
 
-    console.log('[ProxyResizePipeline] Pipeline created');
+    console.log('[ProxyResizePipeline] GPU render pipeline created (texture_external → rgba8unorm)');
   }
 
   /**
@@ -146,7 +146,14 @@ export class ProxyResizePipeline {
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
     });
 
-    console.log(`[ProxyResizePipeline] Atlas initialized: ${this.atlasWidth}x${this.atlasHeight} (${BATCH_SIZE} frames of ${this.frameWidth}x${this.frameHeight})`);
+    const atlasSizeMB = (this.atlasWidth * this.atlasHeight * 4) / (1024 * 1024);
+    console.log(`[ProxyResizePipeline] GPU Atlas initialized:`, {
+      atlasSize: `${this.atlasWidth}x${this.atlasHeight}`,
+      frameSize: `${this.frameWidth}x${this.frameHeight}`,
+      framesPerBatch: BATCH_SIZE,
+      gpuMemory: `${atlasSizeMB.toFixed(1)} MB`,
+      format: 'rgba8unorm',
+    });
   }
 
   /**
