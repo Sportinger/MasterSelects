@@ -6,6 +6,7 @@ import { useTimelineStore } from './timeline';
 import { projectDB, type StoredMediaFile, type StoredProject } from '../services/projectDB';
 import { fileSystemService } from '../services/fileSystemService';
 import { engine } from '../engine/WebGPUEngine';
+import { compositionRenderer } from '../services/compositionRenderer';
 
 // Media item types
 export type MediaType = 'video' | 'audio' | 'image' | 'composition';
@@ -732,6 +733,8 @@ export const useMediaStore = create<MediaState>()(
                 c.id === activeCompositionId ? { ...c, timelineData } : c
               ),
             }));
+            // Invalidate the composition's cached sources since timelineData changed
+            compositionRenderer.invalidateComposition(activeCompositionId);
           }
 
           // Update active composition

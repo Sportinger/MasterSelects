@@ -421,6 +421,36 @@ class CompositionRendererService {
       }
     }
   }
+
+  /**
+   * Invalidate a composition's cache so it gets re-prepared on next use
+   * Call this when a composition's timelineData changes
+   */
+  invalidateComposition(compositionId: string): void {
+    const sources = this.compositionSources.get(compositionId);
+    if (sources) {
+      console.log(`[CompositionRenderer] Invalidating composition: ${compositionId}`);
+      // Mark as not ready - will be re-prepared on next access
+      sources.isReady = false;
+      // Clear cached clip sources (they may be stale)
+      sources.clipSources.clear();
+    }
+  }
+
+  /**
+   * Invalidate all non-active compositions
+   * Call this when switching active compositions (timelineData may have changed)
+   */
+  invalidateAllExceptActive(): void {
+    const { activeCompositionId } = useMediaStore.getState();
+    for (const [id, sources] of this.compositionSources.entries()) {
+      if (id !== activeCompositionId) {
+        sources.isReady = false;
+        sources.clipSources.clear();
+      }
+    }
+    console.log(`[CompositionRenderer] Invalidated all non-active compositions`);
+  }
 }
 
 // Singleton instance
