@@ -285,6 +285,21 @@ input, textarea {
   color: var(--text-secondary);
 }
 
+.menu-sublabel {
+  display: block;
+  padding: 6px 16px 2px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.menu-subseparator {
+  height: 1px;
+  margin: 4px 12px;
+  background: var(--border-color);
+}
+
 .project-name.no-project {
   color: var(--text-secondary);
   cursor: default;

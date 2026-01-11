@@ -8,6 +8,7 @@ import { PANEL_CONFIGS, type PanelType } from '../../types/dock';
 import { useSettingsStore, type PreviewQuality, type AutosaveInterval } from '../../stores/settingsStore';
 import { useMIDI } from '../../hooks/useMIDI';
 import { SettingsDialog } from './SettingsDialog';
+import { SavedToast } from './SavedToast';
 import { projectFileService } from '../../services/projectFileService';
 import {
   createNewProject,
@@ -31,7 +32,12 @@ export function Toolbar() {
   }, [isEngineReady, setPlaying]);
   const { resetLayout, isPanelTypeVisible, togglePanelType, saveLayoutAsDefault } = useDockStore();
   const { isSupported: midiSupported, isEnabled: midiEnabled, enableMIDI, disableMIDI, devices } = useMIDI();
-  const { isSettingsOpen, openSettings, closeSettings, previewQuality, setPreviewQuality } = useSettingsStore();
+  const {
+    isSettingsOpen, openSettings, closeSettings,
+    previewQuality, setPreviewQuality,
+    autosaveEnabled, setAutosaveEnabled,
+    autosaveInterval, setAutosaveInterval
+  } = useSettingsStore();
 
   const [openMenu, setOpenMenu] = useState<MenuId>(null);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -41,7 +47,9 @@ export function Toolbar() {
   const [isLoading, setIsLoading] = useState(false);
   const [needsPermission, setNeedsPermission] = useState(false);
   const [pendingProjectName, setPendingProjectName] = useState<string | null>(null);
+  const [showSavedToast, setShowSavedToast] = useState(false);
   const menuBarRef = useRef<HTMLDivElement>(null);
+  const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Update project name from service
   useEffect(() => {
@@ -118,7 +126,7 @@ export function Toolbar() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(async (showToast = true) => {
     if (!projectFileService.isProjectOpen()) {
       // No project open, prompt to create one
       const name = prompt('Enter project name:', 'New Project');
@@ -128,14 +136,45 @@ export function Toolbar() {
       if (success) {
         setProjectName(name);
         setIsProjectOpen(true);
+        if (showToast) setShowSavedToast(true);
       }
       setIsLoading(false);
     } else {
       // Save current project with store synchronization
       await saveCurrentProject();
+      if (showToast) setShowSavedToast(true);
     }
     setOpenMenu(null);
   }, []);
+
+  // Autosave effect
+  useEffect(() => {
+    // Clear existing timer
+    if (autosaveTimerRef.current) {
+      clearInterval(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+
+    // Set up new timer if autosave is enabled and project is open
+    if (autosaveEnabled && isProjectOpen) {
+      const intervalMs = autosaveInterval * 60 * 1000; // Convert minutes to milliseconds
+      console.log(`[Autosave] Enabled with ${autosaveInterval} minute interval`);
+
+      autosaveTimerRef.current = setInterval(async () => {
+        if (projectFileService.isProjectOpen() && projectFileService.hasUnsavedChanges()) {
+          console.log('[Autosave] Saving project...');
+          await saveCurrentProject();
+          setShowSavedToast(true);
+        }
+      }, intervalMs);
+    }
+
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearInterval(autosaveTimerRef.current);
+      }
+    };
+  }, [autosaveEnabled, autosaveInterval, isProjectOpen]);
 
   const handleOpen = useCallback(async () => {
     if (projectFileService.hasUnsavedChanges()) {
@@ -306,6 +345,33 @@ export function Toolbar() {
                   </div>
                 </>
               )}
+              <div className="menu-separator" />
+              <div className="menu-submenu">
+                <span className="menu-label">Autosave</span>
+                <button
+                  className={`menu-option ${autosaveEnabled ? 'checked' : ''}`}
+                  onClick={() => { setAutosaveEnabled(!autosaveEnabled); }}
+                >
+                  <span>{autosaveEnabled ? '✓ ' : '   '}Enable Autosave</span>
+                </button>
+                <div className="menu-subseparator" />
+                <span className="menu-sublabel">Interval</span>
+                {([
+                  { value: 1 as AutosaveInterval, label: '1 minute' },
+                  { value: 2 as AutosaveInterval, label: '2 minutes' },
+                  { value: 5 as AutosaveInterval, label: '5 minutes' },
+                  { value: 10 as AutosaveInterval, label: '10 minutes' },
+                ]).map(({ value, label }) => (
+                  <button
+                    key={value}
+                    className={`menu-option ${autosaveInterval === value ? 'checked' : ''}`}
+                    onClick={() => { setAutosaveInterval(value); }}
+                    disabled={!autosaveEnabled}
+                  >
+                    <span>{autosaveInterval === value ? '✓ ' : '   '}{label}</span>
+                  </button>
+                ))}
+              </div>
               <div className="menu-separator" />
               <button
                 className="menu-option"
@@ -514,6 +580,9 @@ export function Toolbar() {
 
       {/* Settings Dialog */}
       {isSettingsOpen && <SettingsDialog onClose={closeSettings} />}
+
+      {/* Saved Toast */}
+      <SavedToast visible={showSavedToast} onHide={() => setShowSavedToast(false)} />
     </div>
   );
 }
