@@ -941,11 +941,24 @@ class LayerBuilderService {
             }
           }
 
-          // During playback in proxy mode: skip layer if frame not cached
-          // Don't fall back to video - it's paused and would show wrong frame
-          // The preloading will catch up within a few frames
+          // Frame not in cache - use last rendered frame to prevent flicker
+          // This shows a brief "stale frame" instead of flashing/disappearing
+          const cached = this.proxyFramesRef.get(cacheKey);
+          if (cached?.image) {
+            const proxyLayer: Layer = {
+              ...baseLayer,
+              source: {
+                type: 'image',
+                imageElement: cached.image,
+              },
+            } as Layer;
+            layers.push(proxyLayer);
+            continue;
+          }
+
+          // No cached frame at all - skip during playback to avoid video conflicts
           if (isPlaying) {
-            continue; // Skip this layer for this frame
+            continue;
           }
 
           // During scrubbing: check if video is ready for fallback
