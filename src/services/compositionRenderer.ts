@@ -5,7 +5,7 @@ import type { Layer, SerializableClip, TimelineTrack, TimelineClip } from '../ty
 import { useMediaStore } from '../stores/mediaStore';
 import { useTimelineStore } from '../stores/timeline';
 import { calculateSourceTime } from '../utils/speedIntegration';
-import { textRenderer } from '../utils/textRenderer';
+import { textRenderer } from './textRenderer';
 
 // Source cache entry for a composition
 interface CompositionSources {
