@@ -189,11 +189,13 @@ export function Timeline() {
     inPoint,
     outPoint,
     isRamPreviewing,
+    isPlaying,
     setPlayheadPosition,
     setDraggingPlayhead,
     setInPoint,
     setOutPoint,
     cancelRamPreview,
+    pause,
     pixelToTime,
   });
 

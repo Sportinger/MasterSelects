@@ -14,6 +14,7 @@ interface UsePlayheadDragProps {
   inPoint: number | null;
   outPoint: number | null;
   isRamPreviewing: boolean;
+  isPlaying: boolean;
 
   // Actions
   setPlayheadPosition: (time: number) => void;
@@ -21,6 +22,7 @@ interface UsePlayheadDragProps {
   setInPoint: (time: number | null) => void;
   setOutPoint: (time: number | null) => void;
   cancelRamPreview: () => void;
+  pause: () => void;
   pixelToTime: (pixel: number) => number;
 }
 
@@ -38,11 +40,13 @@ export function usePlayheadDrag({
   inPoint,
   outPoint,
   isRamPreviewing,
+  isPlaying,
   setPlayheadPosition,
   setDraggingPlayhead,
   setInPoint,
   setOutPoint,
   cancelRamPreview,
+  pause,
   pixelToTime,
 }: UsePlayheadDragProps): UsePlayheadDragReturn {
   // In/Out marker drag state
@@ -54,6 +58,11 @@ export function usePlayheadDrag({
       if (e.button !== 0) return;
       e.stopPropagation();
       e.preventDefault();
+
+      // Pause playback when user clicks on ruler (like Premiere/DaVinci)
+      if (isPlaying) {
+        pause();
+      }
 
       if (isRamPreviewing) {
         cancelRamPreview();
@@ -67,6 +76,8 @@ export function usePlayheadDrag({
       setDraggingPlayhead(true);
     },
     [
+      isPlaying,
+      pause,
       isRamPreviewing,
       cancelRamPreview,
       scrollX,
@@ -81,12 +92,18 @@ export function usePlayheadDrag({
   const handlePlayheadMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
+
+      // Pause playback when user drags playhead (like Premiere/DaVinci)
+      if (isPlaying) {
+        pause();
+      }
+
       if (isRamPreviewing) {
         cancelRamPreview();
       }
       setDraggingPlayhead(true);
     },
-    [isRamPreviewing, cancelRamPreview, setDraggingPlayhead]
+    [isPlaying, pause, isRamPreviewing, cancelRamPreview, setDraggingPlayhead]
   );
 
   // Handle In/Out marker drag
