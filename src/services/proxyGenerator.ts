@@ -293,8 +293,21 @@ class ProxyGeneratorGPU {
 
         console.log(`[ProxyGen] Detected codec: ${codecString}, expecting ${expectedSamples} samples...`);
 
+        // Get AVC description (SPS/PPS) for H.264
+        let description: Uint8Array | undefined;
+        if (codecString.startsWith('avc1')) {
+          const avcC = trak?.mdia?.minf?.stbl?.stsd?.entries?.[0]?.avcC;
+          if (avcC) {
+            // Create avcC box as Uint8Array for VideoDecoder description
+            const stream = new (MP4Box as any).DataStream(undefined, 0, (MP4Box as any).DataStream.BIG_ENDIAN);
+            avcC.write(stream);
+            description = new Uint8Array(stream.buffer, 8); // Skip box header
+            console.log(`[ProxyGen] Got AVC description: ${description.length} bytes`);
+          }
+        }
+
         // Try to find a supported codec configuration
-        const config = await this.findSupportedCodec(codecString, track.video.width, track.video.height);
+        const config = await this.findSupportedCodec(codecString, track.video.width, track.video.height, description);
         if (!config) {
           console.warn('[ProxyGen] No supported codec configuration found');
           resolve(false);
@@ -423,7 +436,8 @@ class ProxyGeneratorGPU {
   private async findSupportedCodec(
     baseCodec: string,
     width: number,
-    height: number
+    height: number,
+    description?: Uint8Array
   ): Promise<VideoDecoderConfig | null> {
     // Common H.264 codec strings to try
     const h264Fallbacks = [
@@ -441,6 +455,9 @@ class ProxyGeneratorGPU {
     const codecsToTry = baseCodec.startsWith('avc1') ? h264Fallbacks : [baseCodec];
 
     console.log(`[ProxyGen] Testing ${codecsToTry.length} codec configurations for ${width}x${height}...`);
+    if (description) {
+      console.log(`[ProxyGen] Using AVC description (${description.length} bytes) for H.264 decoding`);
+    }
 
     // Try without specifying hardwareAcceleration (let browser decide)
     for (const codec of codecsToTry) {
@@ -448,6 +465,8 @@ class ProxyGeneratorGPU {
         codec,
         codedWidth: width,
         codedHeight: height,
+        // Include description for AVC/H.264 (required for proper decoding)
+        ...(description && { description }),
       };
 
       try {
