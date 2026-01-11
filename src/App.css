@@ -6081,21 +6081,33 @@ input[type="checkbox"] {
   }
 }
 
-/* Privacy Badge */
-.welcome-badge {
-  display: inline-flex;
+/* Privacy Tagline */
+.welcome-tagline {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px 6px 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.5);
-  letter-spacing: 0.3px;
-  margin-bottom: 32px;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  margin-bottom: 28px;
   animation: welcome-fade-in 0.4s ease-out 1.0s both;
+}
+
+.welcome-tag-local {
+  color: #ff6b6b;
+}
+
+.welcome-tag-private {
+  color: #4dabf7;
+}
+
+.welcome-tag-free {
+  color: #51cf66;
+}
+
+.welcome-tag-dot {
+  color: rgba(255, 255, 255, 0.2);
+  font-weight: 400;
 }
 
 @keyframes welcome-fade-in {
@@ -6107,10 +6119,6 @@ input[type="checkbox"] {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-.welcome-badge svg {
-  opacity: 0.6;
 }
 
 /* Title */
