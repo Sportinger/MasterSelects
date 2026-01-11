@@ -1,0 +1,935 @@
+// Project File Service
+// Handles all project file/folder operations on the local filesystem
+// Uses File System Access API for full local storage
+
+import { projectDB } from './projectDB';
+
+// ============================================
+// PROJECT STRUCTURE TYPES
+// ============================================
+
+export interface ProjectFile {
+  version: 1;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+
+  // Project settings
+  settings: {
+    width: number;
+    height: number;
+    frameRate: number;
+    sampleRate: number;
+  };
+
+  // Media references (paths relative to project folder or absolute)
+  media: ProjectMediaFile[];
+
+  // Compositions (timelines)
+  compositions: ProjectComposition[];
+
+  // Folders for organization
+  folders: ProjectFolder[];
+
+  // Active state
+  activeCompositionId: string | null;
+  openCompositionIds: string[];
+  expandedFolderIds: string[];
+}
+
+export interface ProjectMediaFile {
+  id: string;
+  name: string;
+  type: 'video' | 'audio' | 'image';
+
+  // Path to original file (absolute or relative to Raw/)
+  sourcePath: string;
+
+  // Metadata
+  duration?: number;
+  width?: number;
+  height?: number;
+  frameRate?: number;
+
+  // Proxy status
+  hasProxy: boolean;
+
+  // Folder organization
+  folderId: string | null;
+
+  // Timestamps
+  importedAt: string;
+}
+
+export interface ProjectComposition {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  frameRate: number;
+  duration: number;
+  backgroundColor: string;
+  folderId: string | null;
+
+  // Tracks and clips
+  tracks: ProjectTrack[];
+  clips: ProjectClip[];
+
+  // Markers
+  markers: ProjectMarker[];
+}
+
+export interface ProjectTrack {
+  id: string;
+  name: string;
+  type: 'video' | 'audio';
+  height: number;
+  locked: boolean;
+  visible: boolean;
+  muted: boolean;
+  solo: boolean;
+}
+
+export interface ProjectClip {
+  id: string;
+  trackId: string;
+  mediaId: string; // Reference to ProjectMediaFile.id
+
+  // Timeline position
+  startTime: number;
+  duration: number;
+
+  // Source trimming
+  inPoint: number;
+  outPoint: number;
+
+  // Transform
+  transform: {
+    x: number;
+    y: number;
+    z: number;
+    scaleX: number;
+    scaleY: number;
+    rotation: number;
+    rotationX: number;
+    rotationY: number;
+    anchorX: number;
+    anchorY: number;
+    opacity: number;
+    blendMode: string;
+  };
+
+  // Effects
+  effects: ProjectEffect[];
+
+  // Masks
+  masks: ProjectMask[];
+
+  // Keyframes
+  keyframes: ProjectKeyframe[];
+
+  // Audio
+  volume: number;
+  audioEnabled: boolean;
+
+  // Flags
+  reversed: boolean;
+  disabled: boolean;
+}
+
+export interface ProjectEffect {
+  id: string;
+  type: string;
+  name: string;
+  enabled: boolean;
+  params: Record<string, number | boolean | string>;
+}
+
+export interface ProjectMask {
+  id: string;
+  name: string;
+  mode: 'add' | 'subtract' | 'intersect';
+  inverted: boolean;
+  opacity: number;
+  feather: number;
+  featherQuality: number;
+  visible: boolean;
+  closed: boolean;
+  vertices: Array<{
+    x: number;
+    y: number;
+    inTangent: { x: number; y: number };
+    outTangent: { x: number; y: number };
+  }>;
+  position: { x: number; y: number };
+}
+
+export interface ProjectKeyframe {
+  id: string;
+  property: string;
+  time: number;
+  value: number;
+  easing: string;
+  bezierHandles?: {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+  };
+}
+
+export interface ProjectMarker {
+  id: string;
+  time: number;
+  name: string;
+  color: string;
+  duration: number;
+}
+
+export interface ProjectFolder {
+  id: string;
+  name: string;
+  parentId: string | null;
+  color?: string;
+}
+
+// ============================================
+// PROJECT FOLDER STRUCTURE
+// ============================================
+
+const PROJECT_FOLDERS = {
+  RAW: 'Raw',
+  PROXY: 'Proxy',
+  ANALYSIS: 'Analysis',
+  TRANSCRIPTS: 'Transcripts',
+  CACHE: 'Cache',
+  CACHE_THUMBNAILS: 'Cache/thumbnails',
+  CACHE_WAVEFORMS: 'Cache/waveforms',
+  RENDERS: 'Renders',
+} as const;
+
+// ============================================
+// PROJECT FILE SERVICE
+// ============================================
+
+class ProjectFileService {
+  private projectHandle: FileSystemDirectoryHandle | null = null;
+  private projectPath: string | null = null;
+  private projectData: ProjectFile | null = null;
+  private isDirty = false;
+  private autoSaveInterval: number | null = null;
+
+  // Check if File System Access API is supported
+  isSupported(): boolean {
+    return 'showDirectoryPicker' in window && 'showSaveFilePicker' in window;
+  }
+
+  // Get current project handle
+  getProjectHandle(): FileSystemDirectoryHandle | null {
+    return this.projectHandle;
+  }
+
+  // Get current project data
+  getProjectData(): ProjectFile | null {
+    return this.projectData;
+  }
+
+  // Check if project is open
+  isProjectOpen(): boolean {
+    return this.projectHandle !== null && this.projectData !== null;
+  }
+
+  // Check if project has unsaved changes
+  hasUnsavedChanges(): boolean {
+    return this.isDirty;
+  }
+
+  // Mark project as dirty (has changes)
+  markDirty(): void {
+    this.isDirty = true;
+  }
+
+  // ============================================
+  // PROJECT OPERATIONS
+  // ============================================
+
+  /**
+   * Create a new project
+   */
+  async createProject(name: string): Promise<boolean> {
+    if (!this.isSupported()) {
+      console.error('[ProjectFile] File System Access API not supported');
+      return false;
+    }
+
+    try {
+      // Let user pick where to save the project
+      const handle = await (window as any).showDirectoryPicker({
+        mode: 'readwrite',
+        startIn: 'documents',
+      });
+
+      // Create project subfolder
+      const projectFolder = await handle.getDirectoryHandle(name, { create: true });
+
+      // Create all subfolders
+      await this.createProjectFolders(projectFolder);
+
+      // Create initial project.json
+      const initialProject: ProjectFile = {
+        version: 1,
+        name,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        settings: {
+          width: 1920,
+          height: 1080,
+          frameRate: 30,
+          sampleRate: 48000,
+        },
+        media: [],
+        compositions: [{
+          id: `comp-${Date.now()}`,
+          name: 'Main Comp',
+          width: 1920,
+          height: 1080,
+          frameRate: 30,
+          duration: 60,
+          backgroundColor: '#000000',
+          folderId: null,
+          tracks: [
+            { id: 'track-v1', name: 'Video 1', type: 'video', height: 60, locked: false, visible: true, muted: false, solo: false },
+            { id: 'track-a1', name: 'Audio 1', type: 'audio', height: 40, locked: false, visible: true, muted: false, solo: false },
+          ],
+          clips: [],
+          markers: [],
+        }],
+        folders: [],
+        activeCompositionId: null,
+        openCompositionIds: [],
+        expandedFolderIds: [],
+      };
+
+      // Save project.json
+      await this.writeProjectJson(projectFolder, initialProject);
+
+      // Set as current project
+      this.projectHandle = projectFolder;
+      this.projectPath = name;
+      this.projectData = initialProject;
+      this.isDirty = false;
+
+      // Store as last opened project
+      await this.storeLastProject(projectFolder);
+
+      // Start auto-save
+      this.startAutoSave();
+
+      console.log(`[ProjectFile] Created project: ${name}`);
+      return true;
+    } catch (e: any) {
+      if (e.name === 'AbortError') {
+        return false; // User cancelled
+      }
+      console.error('[ProjectFile] Failed to create project:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Open an existing project (by selecting folder)
+   */
+  async openProject(): Promise<boolean> {
+    if (!this.isSupported()) {
+      console.error('[ProjectFile] File System Access API not supported');
+      return false;
+    }
+
+    try {
+      // Let user pick the project folder
+      const handle = await (window as any).showDirectoryPicker({
+        mode: 'readwrite',
+        startIn: 'documents',
+      });
+
+      return await this.loadProject(handle);
+    } catch (e: any) {
+      if (e.name === 'AbortError') {
+        return false; // User cancelled
+      }
+      console.error('[ProjectFile] Failed to open project:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Load project from a directory handle
+   */
+  async loadProject(handle: FileSystemDirectoryHandle): Promise<boolean> {
+    try {
+      // Read project.json
+      const projectFile = await handle.getFileHandle('project.json');
+      const file = await projectFile.getFile();
+      const content = await file.text();
+      const projectData = JSON.parse(content) as ProjectFile;
+
+      // Validate version
+      if (projectData.version !== 1) {
+        console.error('[ProjectFile] Unsupported project version:', projectData.version);
+        return false;
+      }
+
+      // Ensure all folders exist
+      await this.createProjectFolders(handle);
+
+      // Set as current project
+      this.projectHandle = handle;
+      this.projectPath = handle.name;
+      this.projectData = projectData;
+      this.isDirty = false;
+
+      // Store as last opened project
+      await this.storeLastProject(handle);
+
+      // Start auto-save
+      this.startAutoSave();
+
+      console.log(`[ProjectFile] Opened project: ${projectData.name}`);
+      return true;
+    } catch (e) {
+      console.error('[ProjectFile] Failed to load project:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Save the current project
+   */
+  async saveProject(): Promise<boolean> {
+    if (!this.projectHandle || !this.projectData) {
+      console.error('[ProjectFile] No project open');
+      return false;
+    }
+
+    try {
+      this.projectData.updatedAt = new Date().toISOString();
+      await this.writeProjectJson(this.projectHandle, this.projectData);
+      this.isDirty = false;
+      console.log('[ProjectFile] Project saved');
+      return true;
+    } catch (e) {
+      console.error('[ProjectFile] Failed to save project:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Close the current project
+   */
+  closeProject(): void {
+    this.stopAutoSave();
+    this.projectHandle = null;
+    this.projectPath = null;
+    this.projectData = null;
+    this.isDirty = false;
+    console.log('[ProjectFile] Project closed');
+  }
+
+  // ============================================
+  // FILE OPERATIONS
+  // ============================================
+
+  /**
+   * Get a file handle from a project subfolder
+   */
+  async getFileHandle(
+    subFolder: keyof typeof PROJECT_FOLDERS,
+    fileName: string,
+    create = false
+  ): Promise<FileSystemFileHandle | null> {
+    if (!this.projectHandle) return null;
+
+    try {
+      const folderPath = PROJECT_FOLDERS[subFolder];
+      let folder = this.projectHandle;
+
+      // Navigate to subfolder
+      for (const part of folderPath.split('/')) {
+        folder = await folder.getDirectoryHandle(part, { create });
+      }
+
+      return await folder.getFileHandle(fileName, { create });
+    } catch (e) {
+      if (!create) return null;
+      throw e;
+    }
+  }
+
+  /**
+   * Write a file to a project subfolder
+   */
+  async writeFile(
+    subFolder: keyof typeof PROJECT_FOLDERS,
+    fileName: string,
+    content: Blob | string
+  ): Promise<boolean> {
+    try {
+      const handle = await this.getFileHandle(subFolder, fileName, true);
+      if (!handle) return false;
+
+      const writable = await handle.createWritable();
+      await writable.write(content);
+      await writable.close();
+      return true;
+    } catch (e) {
+      console.error(`[ProjectFile] Failed to write ${subFolder}/${fileName}:`, e);
+      return false;
+    }
+  }
+
+  /**
+   * Read a file from a project subfolder
+   */
+  async readFile(
+    subFolder: keyof typeof PROJECT_FOLDERS,
+    fileName: string
+  ): Promise<File | null> {
+    try {
+      const handle = await this.getFileHandle(subFolder, fileName);
+      if (!handle) return null;
+      return await handle.getFile();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * Check if a file exists in a project subfolder
+   */
+  async fileExists(
+    subFolder: keyof typeof PROJECT_FOLDERS,
+    fileName: string
+  ): Promise<boolean> {
+    const handle = await this.getFileHandle(subFolder, fileName);
+    return handle !== null;
+  }
+
+  /**
+   * Delete a file from a project subfolder
+   */
+  async deleteFile(
+    subFolder: keyof typeof PROJECT_FOLDERS,
+    fileName: string
+  ): Promise<boolean> {
+    if (!this.projectHandle) return false;
+
+    try {
+      const folderPath = PROJECT_FOLDERS[subFolder];
+      let folder = this.projectHandle;
+
+      for (const part of folderPath.split('/')) {
+        folder = await folder.getDirectoryHandle(part);
+      }
+
+      await folder.removeEntry(fileName);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * List files in a project subfolder
+   */
+  async listFiles(subFolder: keyof typeof PROJECT_FOLDERS): Promise<string[]> {
+    if (!this.projectHandle) return [];
+
+    try {
+      const folderPath = PROJECT_FOLDERS[subFolder];
+      let folder = this.projectHandle;
+
+      for (const part of folderPath.split('/')) {
+        folder = await folder.getDirectoryHandle(part);
+      }
+
+      const files: string[] = [];
+      for await (const entry of (folder as any).values()) {
+        if (entry.kind === 'file') {
+          files.push(entry.name);
+        }
+      }
+      return files;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // ============================================
+  // MEDIA OPERATIONS
+  // ============================================
+
+  /**
+   * Import media file (creates reference, doesn't copy)
+   */
+  async importMediaFile(file: File, fileHandle?: FileSystemFileHandle): Promise<ProjectMediaFile | null> {
+    if (!this.projectData) return null;
+
+    const id = `media-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Determine file type
+    let type: 'video' | 'audio' | 'image' = 'video';
+    if (file.type.startsWith('audio/')) type = 'audio';
+    else if (file.type.startsWith('image/')) type = 'image';
+
+    // Get source path (if available from File System Access API)
+    let sourcePath = file.name;
+    if (fileHandle) {
+      // Store the handle for later access
+      // Note: We can't get the full path, but we can store the handle
+      sourcePath = fileHandle.name;
+    }
+
+    const mediaFile: ProjectMediaFile = {
+      id,
+      name: file.name,
+      type,
+      sourcePath,
+      hasProxy: false,
+      folderId: null,
+      importedAt: new Date().toISOString(),
+    };
+
+    // Get metadata (will be filled in async)
+    if (type === 'video' || type === 'audio') {
+      // Create temp URL to get duration
+      const url = URL.createObjectURL(file);
+      const media = type === 'video' ? document.createElement('video') : document.createElement('audio');
+
+      await new Promise<void>((resolve) => {
+        media.onloadedmetadata = () => {
+          mediaFile.duration = media.duration;
+          if (type === 'video' && media instanceof HTMLVideoElement) {
+            mediaFile.width = media.videoWidth;
+            mediaFile.height = media.videoHeight;
+          }
+          URL.revokeObjectURL(url);
+          resolve();
+        };
+        media.onerror = () => {
+          URL.revokeObjectURL(url);
+          resolve();
+        };
+        media.src = url;
+      });
+    } else if (type === 'image') {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+
+      await new Promise<void>((resolve) => {
+        img.onload = () => {
+          mediaFile.width = img.naturalWidth;
+          mediaFile.height = img.naturalHeight;
+          URL.revokeObjectURL(url);
+          resolve();
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          resolve();
+        };
+        img.src = url;
+      });
+    }
+
+    // Add to project
+    this.projectData.media.push(mediaFile);
+    this.markDirty();
+
+    return mediaFile;
+  }
+
+  // ============================================
+  // THUMBNAIL & WAVEFORM OPERATIONS
+  // ============================================
+
+  /**
+   * Save thumbnail for a media file
+   */
+  async saveThumbnail(mediaId: string, blob: Blob): Promise<boolean> {
+    return this.writeFile('CACHE_THUMBNAILS', `${mediaId}.jpg`, blob);
+  }
+
+  /**
+   * Get thumbnail for a media file
+   */
+  async getThumbnail(mediaId: string): Promise<Blob | null> {
+    const file = await this.readFile('CACHE_THUMBNAILS', `${mediaId}.jpg`);
+    return file;
+  }
+
+  /**
+   * Save waveform data for a media file
+   */
+  async saveWaveform(mediaId: string, waveformData: Float32Array): Promise<boolean> {
+    const blob = new Blob([waveformData.buffer], { type: 'application/octet-stream' });
+    return this.writeFile('CACHE_WAVEFORMS', `${mediaId}.waveform`, blob);
+  }
+
+  /**
+   * Get waveform data for a media file
+   */
+  async getWaveform(mediaId: string): Promise<Float32Array | null> {
+    const file = await this.readFile('CACHE_WAVEFORMS', `${mediaId}.waveform`);
+    if (!file) return null;
+
+    const buffer = await file.arrayBuffer();
+    return new Float32Array(buffer);
+  }
+
+  // ============================================
+  // PROXY OPERATIONS
+  // ============================================
+
+  /**
+   * Save proxy frame
+   */
+  async saveProxyFrame(mediaId: string, frameIndex: number, blob: Blob): Promise<boolean> {
+    if (!this.projectHandle) return false;
+
+    try {
+      // Get or create media subfolder in Proxy/
+      const proxyFolder = await this.projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY, { create: true });
+      const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId, { create: true });
+
+      const fileName = `frame_${frameIndex.toString().padStart(6, '0')}.webp`;
+      const fileHandle = await mediaFolder.getFileHandle(fileName, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return true;
+    } catch (e) {
+      console.error('[ProjectFile] Failed to save proxy frame:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Get proxy frame
+   */
+  async getProxyFrame(mediaId: string, frameIndex: number): Promise<Blob | null> {
+    if (!this.projectHandle) return null;
+
+    try {
+      const proxyFolder = await this.projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
+      const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
+      const fileName = `frame_${frameIndex.toString().padStart(6, '0')}.webp`;
+      const fileHandle = await mediaFolder.getFileHandle(fileName);
+      return await fileHandle.getFile();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * Check if proxy exists for media
+   */
+  async hasProxy(mediaId: string): Promise<boolean> {
+    if (!this.projectHandle) return false;
+
+    try {
+      const proxyFolder = await this.projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
+      await proxyFolder.getDirectoryHandle(mediaId);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // ============================================
+  // ANALYSIS OPERATIONS
+  // ============================================
+
+  /**
+   * Save analysis data for a media file
+   */
+  async saveAnalysis(mediaId: string, analysisData: unknown): Promise<boolean> {
+    const json = JSON.stringify(analysisData, null, 2);
+    return this.writeFile('ANALYSIS', `${mediaId}.json`, json);
+  }
+
+  /**
+   * Get analysis data for a media file
+   */
+  async getAnalysis(mediaId: string): Promise<unknown | null> {
+    const file = await this.readFile('ANALYSIS', `${mediaId}.json`);
+    if (!file) return null;
+
+    try {
+      const text = await file.text();
+      return JSON.parse(text);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ============================================
+  // TRANSCRIPT OPERATIONS
+  // ============================================
+
+  /**
+   * Save transcript for a media file
+   */
+  async saveTranscript(mediaId: string, transcript: unknown): Promise<boolean> {
+    const json = JSON.stringify(transcript, null, 2);
+    return this.writeFile('TRANSCRIPTS', `${mediaId}.json`, json);
+  }
+
+  /**
+   * Get transcript for a media file
+   */
+  async getTranscript(mediaId: string): Promise<unknown | null> {
+    const file = await this.readFile('TRANSCRIPTS', `${mediaId}.json`);
+    if (!file) return null;
+
+    try {
+      const text = await file.text();
+      return JSON.parse(text);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ============================================
+  // HELPER METHODS
+  // ============================================
+
+  /**
+   * Create all project subfolders
+   */
+  private async createProjectFolders(handle: FileSystemDirectoryHandle): Promise<void> {
+    const folders = [
+      PROJECT_FOLDERS.RAW,
+      PROJECT_FOLDERS.PROXY,
+      PROJECT_FOLDERS.ANALYSIS,
+      PROJECT_FOLDERS.TRANSCRIPTS,
+      PROJECT_FOLDERS.CACHE,
+      PROJECT_FOLDERS.CACHE_THUMBNAILS,
+      PROJECT_FOLDERS.CACHE_WAVEFORMS,
+      PROJECT_FOLDERS.RENDERS,
+    ];
+
+    for (const folderPath of folders) {
+      let folder = handle;
+      for (const part of folderPath.split('/')) {
+        folder = await folder.getDirectoryHandle(part, { create: true });
+      }
+    }
+  }
+
+  /**
+   * Write project.json to disk
+   */
+  private async writeProjectJson(handle: FileSystemDirectoryHandle, data: ProjectFile): Promise<void> {
+    const fileHandle = await handle.getFileHandle('project.json', { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(data, null, 2));
+    await writable.close();
+  }
+
+  /**
+   * Store last opened project in IndexedDB
+   */
+  private async storeLastProject(handle: FileSystemDirectoryHandle): Promise<void> {
+    try {
+      await projectDB.storeHandle('lastProject', handle);
+    } catch (e) {
+      console.warn('[ProjectFile] Failed to store last project:', e);
+    }
+  }
+
+  /**
+   * Try to restore last opened project
+   */
+  async restoreLastProject(): Promise<boolean> {
+    try {
+      const handle = await projectDB.getStoredHandle('lastProject');
+      if (!handle || handle.kind !== 'directory') return false;
+
+      // Request permission
+      const permission = await handle.queryPermission({ mode: 'readwrite' });
+      if (permission !== 'granted') {
+        const result = await handle.requestPermission({ mode: 'readwrite' });
+        if (result !== 'granted') return false;
+      }
+
+      return await this.loadProject(handle as FileSystemDirectoryHandle);
+    } catch (e) {
+      console.warn('[ProjectFile] Failed to restore last project:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Start auto-save interval
+   */
+  private startAutoSave(): void {
+    this.stopAutoSave();
+    this.autoSaveInterval = window.setInterval(() => {
+      if (this.isDirty) {
+        this.saveProject();
+      }
+    }, 30000); // Auto-save every 30 seconds
+  }
+
+  /**
+   * Stop auto-save interval
+   */
+  private stopAutoSave(): void {
+    if (this.autoSaveInterval !== null) {
+      clearInterval(this.autoSaveInterval);
+      this.autoSaveInterval = null;
+    }
+  }
+
+  // ============================================
+  // UPDATE PROJECT DATA
+  // ============================================
+
+  /**
+   * Update project data (from stores)
+   */
+  updateProjectData(updates: Partial<ProjectFile>): void {
+    if (!this.projectData) return;
+    Object.assign(this.projectData, updates);
+    this.markDirty();
+  }
+
+  /**
+   * Update media list
+   */
+  updateMedia(media: ProjectMediaFile[]): void {
+    if (!this.projectData) return;
+    this.projectData.media = media;
+    this.markDirty();
+  }
+
+  /**
+   * Update compositions
+   */
+  updateCompositions(compositions: ProjectComposition[]): void {
+    if (!this.projectData) return;
+    this.projectData.compositions = compositions;
+    this.markDirty();
+  }
+
+  /**
+   * Update folders
+   */
+  updateFolders(folders: ProjectFolder[]): void {
+    if (!this.projectData) return;
+    this.projectData.folders = folders;
+    this.markDirty();
+  }
+}
+
+// Singleton instance
+export const projectFileService = new ProjectFileService();
