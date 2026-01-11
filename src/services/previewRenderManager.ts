@@ -224,8 +224,25 @@ class PreviewRenderManagerService {
       this.nestedCompCache.clear();
     }
 
+    const isMainPlaying = useTimelineStore.getState().isPlaying;
+    const mainPlayhead = useTimelineStore.getState().playheadPosition;
+
     for (const preview of this.registeredPreviews.values()) {
       if (!preview.isReady) continue;
+
+      // Check if this composition is nested and currently being rendered by the main loop
+      // If so, skip independent rendering to avoid video frame conflicts
+      const nestedInfo = this.getNestedCompInfo(preview.compositionId);
+      if (isMainPlaying && nestedInfo) {
+        const clipStart = nestedInfo.clipStartTime;
+        const clipEnd = clipStart + nestedInfo.clipDuration;
+
+        // If main playhead is within this nested clip's range, skip rendering
+        // The main loop is already rendering this composition as part of the parent
+        if (mainPlayhead >= clipStart && mainPlayhead < clipEnd) {
+          continue;
+        }
+      }
 
       // Calculate playhead time for this composition
       const { time: playheadTime } = this.calculatePlayheadTime(preview.compositionId);
