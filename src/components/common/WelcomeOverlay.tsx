@@ -11,6 +11,7 @@ interface WelcomeOverlayProps {
 
 export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
   const [isSelecting, setIsSelecting] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,9 +36,14 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
   }, [isSelecting]);
 
   const handleContinue = useCallback(() => {
+    if (isClosing) return;
+    setIsClosing(true);
     useSettingsStore.getState().setHasCompletedSetup(true);
-    onComplete();
-  }, [onComplete]);
+    // Wait for exit animation to complete
+    setTimeout(() => {
+      onComplete();
+    }, 200);
+  }, [onComplete, isClosing]);
 
   // Restore folder handle from IndexedDB on mount
   useEffect(() => {
@@ -59,7 +65,7 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
 
 
   return (
-    <div className="welcome-overlay-backdrop">
+    <div className={`welcome-overlay-backdrop ${isClosing ? 'closing' : ''}`}>
       <div className="welcome-overlay">
         {/* Privacy badge */}
         <div className="welcome-badge">

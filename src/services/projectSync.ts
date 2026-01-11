@@ -5,14 +5,10 @@ import { useMediaStore, type MediaFile, type Composition, type MediaFolder } fro
 import { useTimelineStore } from '../stores/timeline';
 import {
   projectFileService,
-  type ProjectFile,
   type ProjectMediaFile,
   type ProjectComposition,
   type ProjectTrack,
   type ProjectClip,
-  type ProjectEffect,
-  type ProjectMask,
-  type ProjectKeyframe,
   type ProjectMarker,
   type ProjectFolder,
 } from './projectFileService';
@@ -121,14 +117,8 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       disabled: c.disabled || false,
     }));
 
-    // Convert markers
-    const markers: ProjectMarker[] = (timelineData?.markers || []).map((m: any) => ({
-      id: m.id,
-      time: m.time,
-      name: m.name || '',
-      color: m.color || '#ffffff',
-      duration: m.duration || 0,
-    }));
+    // Note: markers not currently stored in CompositionTimelineData
+    const markers: ProjectMarker[] = [];
 
     return {
       id: comp.id,

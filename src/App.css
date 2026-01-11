@@ -6029,6 +6029,18 @@ input[type="checkbox"] {
   justify-content: center;
   z-index: 10002;
   backdrop-filter: blur(20px);
+  transition: background 0.2s ease-in, backdrop-filter 0.2s ease-in;
+}
+
+.welcome-overlay-backdrop.closing {
+  background: rgba(0, 0, 0, 0);
+  backdrop-filter: blur(0px);
+}
+
+.welcome-overlay-backdrop.closing .welcome-overlay {
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity 0.2s ease-in, transform 0.2s ease-in;
 }
 
 .welcome-overlay {
