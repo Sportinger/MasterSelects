@@ -198,100 +198,31 @@ export function useEngine() {
     const renderFrame = () => {
       try {
         // Use high-frequency playhead position during playback
-        const timelineState = useTimelineStore.getState();
         const currentPlayhead = playheadState.isUsingInternalPosition
           ? playheadState.position
-          : timelineState.playheadPosition;
+          : useTimelineStore.getState().playheadPosition;
 
         // Always try to use cached frame first (works even during RAM preview rendering)
         if (engine.renderCachedFrame(currentPlayhead)) {
-          // Successfully rendered cached frame, skip live render
           return;
         }
 
-        // CRITICAL: Skip live rendering during RAM Preview generation
-        if (timelineState.isRamPreviewing) {
+        // Skip live rendering during RAM Preview generation
+        if (useTimelineStore.getState().isRamPreviewing) {
           return;
         }
 
-        // PERFORMANCE OPTIMIZATION: Build layers directly from stores
-        // This bypasses the React effect in useLayerSync, eliminating:
-        // 1. React effect comparison overhead every frame
-        // 2. useMixerStore.setState() calls that trigger re-renders
-        // 3. Stale closure issues with React hooks
+        // Build layers directly from stores (single source of truth)
         const layers = layerBuilder.buildLayersFromStore();
 
-        // Sync video and audio elements (play/pause/seek) - runs in RAF, not React effect
+        // Sync video and audio elements
         layerBuilder.syncVideoElements();
         layerBuilder.syncAudioElements();
 
-        // Get clips and tracks to extract mask properties at render time
-        const { clips, tracks } = timelineState;
-        const videoTracks = tracks.filter(t => t.type === 'video');
-        const clipsAtTime = clips.filter(c =>
-          currentPlayhead >= c.startTime && currentPlayhead < c.startTime + c.duration
-        );
+        // Render layers (layerBuilder already handles mask properties)
+        engine.render(layers);
 
-        // Check if there are ANY video clips at the current playhead position
-        const videoClipsAtTime = clipsAtTime.filter(c => {
-          const track = tracks.find(t => t.id === c.trackId);
-          return track?.type === 'video';
-        });
-
-        if (videoClipsAtTime.length === 0) {
-          // No video clips at current position - render black
-          engine.render([]);
-          return;
-        }
-
-        // Get engine output dimensions for mask generation
-        const engineDimensions = engine.getOutputDimensions();
-
-        // Add mask properties to layers
-        const frameLayers = layers.map((layer, layerIndex) => {
-          if (!layer) return layer;
-
-          const track = videoTracks[layerIndex];
-          if (!track) return layer;
-
-          const clip = clipsAtTime.find(c => c.trackId === track.id);
-
-          if (!clip) {
-            return { ...layer, source: null };
-          }
-
-          // Extract mask properties directly from clip at render time
-          if (clip.masks && clip.masks.length > 0) {
-            if (!engine.hasMaskTexture(layer.id)) {
-              const maskImageData = generateMaskTexture(
-                clip.masks,
-                engineDimensions.width,
-                engineDimensions.height
-              );
-              if (maskImageData) {
-                engine.updateMaskTexture(layer.id, maskImageData);
-              }
-            }
-
-            const maxFeather = Math.max(...clip.masks.map(m => m.feather));
-            const maxQuality = Math.max(...clip.masks.map(m => m.featherQuality ?? 50));
-            const hasInverted = clip.masks.some(m => m.inverted);
-
-            return {
-              ...layer,
-              maskFeather: maxFeather,
-              maskFeatherQuality: maxQuality,
-              maskInvert: hasInverted
-            };
-          }
-
-          return layer;
-        });
-
-        // Render with built layers
-        engine.render(frameLayers);
-
-        // Throttle stats updates to reduce React re-renders (every 100ms)
+        // Throttle stats updates (every 100ms)
         const now = performance.now();
         if (now - lastStatsUpdate > 100) {
           useMixerStore.getState().setEngineStats(engine.getStats());
