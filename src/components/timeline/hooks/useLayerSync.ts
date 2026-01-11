@@ -807,6 +807,9 @@ export function useLayerSync({
 
     if (layersChanged) {
       useMixerStore.setState({ layers: newLayers });
+      // Trigger one-shot render when paused (render loop not running)
+      // This ensures text edits, property changes, etc. update the preview immediately
+      engine.render(newLayers);
     }
 
     // Audio sync with status tracking
