@@ -3,10 +3,76 @@
  * Part of PropertiesPanel
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { TextClipProperties } from '../../types';
 import { useTimelineStore } from '../../stores/timeline';
 import { googleFontsService, POPULAR_FONTS } from '../../services/googleFontsService';
+
+// Draggable number input component for quick value adjustments
+interface DraggableNumberProps {
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  label: string;
+}
+
+function DraggableNumber({ value, onChange, min = 8, max = 500, step = 1, unit = 'px', label }: DraggableNumberProps) {
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{ x: number; value: number } | null>(null);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // Don't start drag if clicking on the input itself
+    if ((e.target as HTMLElement).tagName === 'INPUT') return;
+
+    e.preventDefault();
+    setIsDragging(true);
+    dragStartRef.current = { x: e.clientX, value };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!dragStartRef.current) return;
+      const delta = moveEvent.clientX - dragStartRef.current.x;
+      // Adjust sensitivity based on step size
+      const sensitivity = step < 1 ? 0.5 : (step >= 10 ? 5 : 1);
+      const newValue = dragStartRef.current.value + Math.round(delta / sensitivity) * step;
+      const clampedValue = Math.max(min, Math.min(max, newValue));
+      onChange(clampedValue);
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      dragStartRef.current = null;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [value, onChange, min, max, step]);
+
+  return (
+    <div className="control-row">
+      <label
+        className={`draggable-label ${isDragging ? 'dragging' : ''}`}
+        onMouseDown={handleMouseDown}
+        style={{ cursor: 'ew-resize', userSelect: 'none' }}
+      >
+        {label}
+      </label>
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => onChange(Math.max(min, Math.min(max, parseInt(e.target.value) || min)))}
+        min={min}
+        max={max}
+        step={step}
+      />
+      <span className="unit">{unit}</span>
+    </div>
+  );
+}
 
 interface TextTabProps {
   clipId: string;
@@ -82,18 +148,16 @@ export function TextTab({ clipId, textProperties }: TextTabProps) {
           </select>
         </div>
 
-        {/* Font Size */}
-        <div className="control-row">
-          <label>Size</label>
-          <input
-            type="number"
-            value={textProperties.fontSize}
-            onChange={(e) => updateProp('fontSize', parseInt(e.target.value) || 72)}
-            min={8}
-            max={500}
-          />
-          <span className="unit">px</span>
-        </div>
+        {/* Font Size - Draggable */}
+        <DraggableNumber
+          label="Size"
+          value={textProperties.fontSize}
+          onChange={(v) => updateProp('fontSize', v)}
+          min={8}
+          max={500}
+          step={1}
+          unit="px"
+        />
 
         {/* Font Weight */}
         <div className="control-row">

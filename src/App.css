@@ -1820,6 +1820,25 @@ input, textarea {
   white-space: nowrap;
 }
 
+/* Draggable number label - click and drag to adjust value */
+.draggable-label {
+  cursor: ew-resize !important;
+  user-select: none;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: background-color 0.15s ease;
+}
+
+.draggable-label:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent-color);
+}
+
+.draggable-label.dragging {
+  background: var(--accent-color);
+  color: white;
+}
+
 /* Analysis Tab (embedded in PropertiesPanel) */
 .properties-tab-content.analysis-tab {
   display: flex;
