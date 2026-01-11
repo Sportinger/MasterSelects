@@ -300,6 +300,42 @@ input, textarea {
   background: var(--border-color);
 }
 
+/* Nested submenu (flyout) styles */
+.menu-item-with-submenu {
+  position: relative;
+}
+
+.menu-item-with-submenu > .menu-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.menu-item-with-submenu > .menu-option::after {
+  content: '▶';
+  font-size: 8px;
+  color: var(--text-muted);
+  margin-left: 12px;
+}
+
+.menu-nested-submenu {
+  display: none;
+  position: absolute;
+  left: 100%;
+  top: -4px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  min-width: 140px;
+  padding: 4px 0;
+  z-index: 1001;
+}
+
+.menu-item-with-submenu:hover > .menu-nested-submenu {
+  display: block;
+}
+
 .project-name.no-project {
   color: var(--text-secondary);
   cursor: default;

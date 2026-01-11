@@ -289,7 +289,7 @@ class ProjectFileService {
   // ============================================
 
   /**
-   * Create a new project
+   * Create a new project (asks user to pick folder)
    */
   async createProject(name: string): Promise<boolean> {
     if (!this.isSupported()) {
@@ -307,6 +307,41 @@ class ProjectFileService {
       // Create project subfolder
       const projectFolder = await handle.getDirectoryHandle(name, { create: true });
 
+      return await this.initializeProject(projectFolder, name);
+    } catch (e: any) {
+      if (e.name === 'AbortError') {
+        return false; // User cancelled
+      }
+      console.error('[ProjectFile] Failed to create project:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Create a new project directly in the given folder handle
+   * Used when user already selected a folder (e.g., from WelcomeOverlay)
+   */
+  async createProjectInFolder(handle: FileSystemDirectoryHandle, name: string): Promise<boolean> {
+    if (!this.isSupported()) {
+      console.error('[ProjectFile] File System Access API not supported');
+      return false;
+    }
+
+    try {
+      // Create project subfolder inside the selected folder
+      const projectFolder = await handle.getDirectoryHandle(name, { create: true });
+      return await this.initializeProject(projectFolder, name);
+    } catch (e: any) {
+      console.error('[ProjectFile] Failed to create project in folder:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Initialize a project in the given folder (creates structure and project.json)
+   */
+  private async initializeProject(projectFolder: FileSystemDirectoryHandle, name: string): Promise<boolean> {
+    try {
       // Create all subfolders
       await this.createProjectFolders(projectFolder);
 
@@ -362,11 +397,8 @@ class ProjectFileService {
 
       console.log(`[ProjectFile] Created project: ${name}`);
       return true;
-    } catch (e: any) {
-      if (e.name === 'AbortError') {
-        return false; // User cancelled
-      }
-      console.error('[ProjectFile] Failed to create project:', e);
+    } catch (e) {
+      console.error('[ProjectFile] Failed to initialize project:', e);
       return false;
     }
   }

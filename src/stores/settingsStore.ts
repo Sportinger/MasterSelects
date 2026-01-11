@@ -1,8 +1,8 @@
 // Settings store for API keys and app configuration
-// Persisted to localStorage
+// NO browser storage - settings are stored in project folder
 
 import { create } from 'zustand';
-import { persist, subscribeWithSelector } from 'zustand/middleware';
+import { subscribeWithSelector } from 'zustand/middleware';
 
 // Transcription provider options
 export type TranscriptionProvider = 'local' | 'openai' | 'assemblyai' | 'deepgram';
@@ -63,8 +63,7 @@ interface SettingsState {
 
 export const useSettingsStore = create<SettingsState>()(
   subscribeWithSelector(
-    persist(
-      (set, get) => ({
+    (set, get) => ({
       // Initial state
       apiKeys: {
         openai: '',
@@ -130,19 +129,6 @@ export const useSettingsStore = create<SettingsState>()(
       hasApiKey: (provider) => {
         return !!get().apiKeys[provider];
       },
-    }),
-      {
-        name: 'masterselects-settings',
-        partialize: (state) => ({
-          apiKeys: state.apiKeys,
-          transcriptionProvider: state.transcriptionProvider,
-          previewQuality: state.previewQuality,
-          showTransparencyGrid: state.showTransparencyGrid,
-          autosaveEnabled: state.autosaveEnabled,
-          autosaveInterval: state.autosaveInterval,
-          hasCompletedSetup: state.hasCompletedSetup,
-        }),
-      }
-    )
+    })
   )
 );

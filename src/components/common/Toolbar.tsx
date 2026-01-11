@@ -349,31 +349,35 @@ export function Toolbar() {
                 </>
               )}
               <div className="menu-separator" />
-              <div className="menu-submenu">
-                <span className="menu-label">Autosave</span>
-                <button
-                  className={`menu-option ${autosaveEnabled ? 'checked' : ''}`}
-                  onClick={() => { setAutosaveEnabled(!autosaveEnabled); }}
-                >
-                  <span>{autosaveEnabled ? '✓ ' : '   '}Enable Autosave</span>
+              <div className="menu-item-with-submenu">
+                <button className="menu-option">
+                  <span>Autosave</span>
                 </button>
-                <div className="menu-subseparator" />
-                <span className="menu-sublabel">Interval</span>
-                {([
-                  { value: 1 as AutosaveInterval, label: '1 minute' },
-                  { value: 2 as AutosaveInterval, label: '2 minutes' },
-                  { value: 5 as AutosaveInterval, label: '5 minutes' },
-                  { value: 10 as AutosaveInterval, label: '10 minutes' },
-                ]).map(({ value, label }) => (
+                <div className="menu-nested-submenu">
                   <button
-                    key={value}
-                    className={`menu-option ${autosaveInterval === value ? 'checked' : ''}`}
-                    onClick={() => { setAutosaveInterval(value); }}
-                    disabled={!autosaveEnabled}
+                    className={`menu-option ${autosaveEnabled ? 'checked' : ''}`}
+                    onClick={() => { setAutosaveEnabled(!autosaveEnabled); }}
                   >
-                    <span>{autosaveInterval === value ? '✓ ' : '   '}{label}</span>
+                    <span>{autosaveEnabled ? '✓ ' : '   '}Enable Autosave</span>
                   </button>
-                ))}
+                  <div className="menu-separator" />
+                  <span className="menu-sublabel">Interval</span>
+                  {([
+                    { value: 1 as AutosaveInterval, label: '1 minute' },
+                    { value: 2 as AutosaveInterval, label: '2 minutes' },
+                    { value: 5 as AutosaveInterval, label: '5 minutes' },
+                    { value: 10 as AutosaveInterval, label: '10 minutes' },
+                  ]).map(({ value, label }) => (
+                    <button
+                      key={value}
+                      className={`menu-option ${autosaveInterval === value ? 'checked' : ''}`}
+                      onClick={() => { setAutosaveInterval(value); }}
+                      disabled={!autosaveEnabled}
+                    >
+                      <span>{autosaveInterval === value ? '✓ ' : '   '}{label}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="menu-separator" />
               <button
