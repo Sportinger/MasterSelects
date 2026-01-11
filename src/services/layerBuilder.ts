@@ -12,6 +12,10 @@ class LayerBuilderService {
   private proxyFramesRef: Map<string, { frameIndex: number; image: HTMLImageElement }> = new Map();
   private proxyLoadingRef: Set<string> = new Set();
 
+  // Audio sync throttling - don't sync every frame to avoid glitches
+  private lastAudioSyncTime = 0;
+  private readonly AUDIO_SYNC_INTERVAL = 100; // Only check audio sync every 100ms
+
   /**
    * Build layers for the current frame - called directly from render loop
    * Gets all data from stores directly, no React overhead
@@ -240,8 +244,16 @@ class LayerBuilderService {
   /**
    * Sync audio elements to current playhead - call this from render loop
    * Handles audio play/pause/seek and drift tracking
+   * THROTTLED to avoid audio glitches from constant seeking
    */
   syncAudioElements(): void {
+    // Throttle audio sync to avoid glitches - only run every AUDIO_SYNC_INTERVAL ms
+    const now = performance.now();
+    if (now - this.lastAudioSyncTime < this.AUDIO_SYNC_INTERVAL) {
+      return;
+    }
+    this.lastAudioSyncTime = now;
+
     const timelineState = useTimelineStore.getState();
     const {
       playheadPosition,
@@ -321,8 +333,8 @@ class LayerBuilderService {
         const shouldPlay = isPlaying && !effectivelyMuted && !isDraggingPlayhead && absSpeed > 0.1;
 
         if (shouldPlay) {
-          // Only sync audio on significant drift (>100ms) to reduce pops - was 200ms
-          if (Math.abs(timeDiff) > 0.1) {
+          // Only sync audio on significant drift (>200ms) to avoid pops/glitches
+          if (Math.abs(timeDiff) > 0.2) {
             audio.currentTime = clipTime;
           }
 
@@ -395,7 +407,8 @@ class LayerBuilderService {
         const shouldPlay = isPlaying && !effectivelyMuted && !isDraggingPlayhead && absSpeed > 0.1;
 
         if (shouldPlay) {
-          if (Math.abs(timeDiff) > 0.1) {
+          // Only sync on significant drift (>200ms) to avoid pops/glitches
+          if (Math.abs(timeDiff) > 0.2) {
             audio.currentTime = clipTime;
           }
 
