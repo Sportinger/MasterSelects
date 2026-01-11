@@ -6023,7 +6023,7 @@ input[type="checkbox"] {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -6046,6 +6046,18 @@ input[type="checkbox"] {
     0 0 0 1px rgba(255, 255, 255, 0.02),
     0 40px 80px rgba(0, 0, 0, 0.5),
     0 0 120px rgba(0, 0, 0, 0.3);
+  animation: welcome-overlay-in 0.3s ease-out;
+}
+
+@keyframes welcome-overlay-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* Privacy Badge */
@@ -6062,6 +6074,18 @@ input[type="checkbox"] {
   color: rgba(255, 255, 255, 0.5);
   letter-spacing: 0.3px;
   margin-bottom: 32px;
+  animation: welcome-fade-in 0.4s ease-out 0.1s both;
+}
+
+@keyframes welcome-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .welcome-badge svg {
@@ -6075,14 +6099,41 @@ input[type="checkbox"] {
   font-weight: 700;
   letter-spacing: -1.5px;
   line-height: 1;
+  overflow: hidden;
 }
 
 .welcome-title-master {
   color: #fff;
+  display: inline-block;
+  animation: welcome-title-master-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
+}
+
+@keyframes welcome-title-master-in {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .welcome-title-selects {
   color: rgba(255, 255, 255, 0.7);
+  display: inline-block;
+  animation: welcome-title-selects-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both;
+}
+
+@keyframes welcome-title-selects-in {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .welcome-subtitle {
@@ -6091,12 +6142,25 @@ input[type="checkbox"] {
   color: rgba(255, 255, 255, 0.35);
   font-weight: 400;
   letter-spacing: 0.2px;
+  animation: welcome-fade-up 0.4s ease-out 0.35s both;
+}
+
+@keyframes welcome-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Folder Card */
 .welcome-folder-card {
   width: 100%;
   margin-bottom: 24px;
+  animation: welcome-fade-up 0.4s ease-out 0.4s both;
 }
 
 .welcome-folder-card-header {
@@ -6222,6 +6286,7 @@ input[type="checkbox"] {
   font-size: 13px;
   font-weight: 500;
   transition: all 0.2s ease;
+  animation: welcome-fade-up 0.4s ease-out 0.5s both;
 }
 
 .welcome-enter:hover {

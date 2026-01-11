@@ -5,11 +5,17 @@ import { useEngine } from '../../hooks/useEngine';
 import { useMixerStore } from '../../stores/mixerStore';
 import { useDockStore } from '../../stores/dockStore';
 import { PANEL_CONFIGS, type PanelType } from '../../types/dock';
-import { useMediaStore } from '../../stores/mediaStore';
 import { useSettingsStore, type PreviewQuality } from '../../stores/settingsStore';
 import { useMIDI } from '../../hooks/useMIDI';
 import { SettingsDialog } from './SettingsDialog';
 import { projectFileService } from '../../services/projectFileService';
+import {
+  createNewProject,
+  openExistingProject,
+  saveCurrentProject,
+  loadProjectToStores,
+  setupAutoSync,
+} from '../../services/projectSync';
 
 type MenuId = 'file' | 'edit' | 'view' | 'output' | 'window' | null;
 
@@ -24,7 +30,6 @@ export function Toolbar() {
     }
   }, [isEngineReady, setPlaying]);
   const { resetLayout, isPanelTypeVisible, togglePanelType, saveLayoutAsDefault } = useDockStore();
-  const { newProject: newProjectLegacy } = useMediaStore();
   const { isSupported: midiSupported, isEnabled: midiEnabled, enableMIDI, disableMIDI, devices } = useMIDI();
   const { isSettingsOpen, openSettings, closeSettings, previewQuality, setPreviewQuality } = useSettingsStore();
 
@@ -54,6 +59,8 @@ export function Toolbar() {
       setIsLoading(true);
       const restored = await projectFileService.restoreLastProject();
       if (restored) {
+        // Load project data into stores
+        await loadProjectToStores();
         const data = projectFileService.getProjectData();
         if (data) {
           setProjectName(data.name);
@@ -61,6 +68,9 @@ export function Toolbar() {
         }
       }
       setIsLoading(false);
+
+      // Setup auto-sync after initialization
+      setupAutoSync();
     };
     restoreProject();
   }, []);
@@ -108,18 +118,18 @@ export function Toolbar() {
       const name = prompt('Enter project name:', 'New Project');
       if (!name) return;
       setIsLoading(true);
-      const success = await projectFileService.createProject(name);
+      const success = await createNewProject(name);
       if (success) {
         setProjectName(name);
         setIsProjectOpen(true);
-        newProjectLegacy(); // Reset legacy stores
       }
       setIsLoading(false);
     } else {
-      await projectFileService.saveProject();
+      // Save current project with store synchronization
+      await saveCurrentProject();
     }
     setOpenMenu(null);
-  }, [newProjectLegacy]);
+  }, []);
 
   const handleOpen = useCallback(async () => {
     if (projectFileService.hasUnsavedChanges()) {
@@ -128,19 +138,17 @@ export function Toolbar() {
       }
     }
     setIsLoading(true);
-    const success = await projectFileService.openProject();
+    const success = await openExistingProject();
     if (success) {
       const data = projectFileService.getProjectData();
       if (data) {
         setProjectName(data.name);
         setIsProjectOpen(true);
-        newProjectLegacy(); // Reset legacy stores, then load project data
-        // TODO: Load project data into stores
       }
     }
     setIsLoading(false);
     setOpenMenu(null);
-  }, [newProjectLegacy]);
+  }, []);
 
   const handleNameSubmit = useCallback(() => {
     if (editName.trim()) {
@@ -165,16 +173,14 @@ export function Toolbar() {
     if (!name) return;
 
     setIsLoading(true);
-    projectFileService.closeProject();
-    const success = await projectFileService.createProject(name);
+    const success = await createNewProject(name);
     if (success) {
       setProjectName(name);
       setIsProjectOpen(true);
-      newProjectLegacy(); // Reset legacy stores
     }
     setIsLoading(false);
     setOpenMenu(null);
-  }, [newProjectLegacy]);
+  }, []);
 
   const handleNewOutput = useCallback(() => {
     const output = createOutputWindow(`Output ${Date.now()}`);
