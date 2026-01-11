@@ -206,7 +206,10 @@ const PROJECT_FOLDERS = {
   CACHE_THUMBNAILS: 'Cache/thumbnails',
   CACHE_WAVEFORMS: 'Cache/waveforms',
   RENDERS: 'Renders',
+  BACKUPS: 'Backups',
 } as const;
+
+const MAX_BACKUPS = 20;
 
 // ============================================
 // PROJECT FILE SERVICE
@@ -847,6 +850,7 @@ class ProjectFileService {
       PROJECT_FOLDERS.CACHE_THUMBNAILS,
       PROJECT_FOLDERS.CACHE_WAVEFORMS,
       PROJECT_FOLDERS.RENDERS,
+      PROJECT_FOLDERS.BACKUPS,
     ];
 
     for (const folderPath of folders) {
