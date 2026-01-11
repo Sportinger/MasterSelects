@@ -9,14 +9,13 @@ import type { ClipMask, MaskVertex } from '../types';
 import { generateMaskTexture } from '../utils/maskRenderer';
 import { layerBuilder, playheadState } from '../services/layerBuilder';
 
-// Create a stable hash of mask shapes only (excludes feather/invert which are GPU uniforms)
-// This is faster than JSON.stringify for shape comparison
+// Create a stable hash of mask properties (including feather since blur is CPU-side now)
+// This is faster than JSON.stringify for comparison
 function getMaskShapeHash(masks: ClipMask[]): string {
-  // Only include shape-affecting properties for hash
   return masks.map(m =>
     `${m.vertices.map((v: MaskVertex) => `${v.x.toFixed(2)},${v.y.toFixed(2)}`).join(';')}|` +
     `${m.position.x.toFixed(2)},${m.position.y.toFixed(2)}|` +
-    `${m.opacity.toFixed(2)}|${m.mode}|${m.closed}`
+    `${m.opacity.toFixed(2)}|${m.mode}|${m.closed}|${(m.feather || 0).toFixed(1)}`
   ).join('||');
 }
 

@@ -575,61 +575,12 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   }
 
   // Apply mask if present
+  // Mask texture is already blurred on CPU using Canvas2D's optimized blur filter
   // Sample mask in output frame space (input.uv), not layer space
   if (layer.hasMask == 1u) {
-    var maskValue: f32;
+    var maskValue = textureSample(maskTexture, texSampler, input.uv).r;
 
-    // High-quality Gaussian blur for smooth feather
-    if (layer.maskFeather > 0.5) {
-      let maskDim = vec2f(textureDimensions(maskTexture));
-      let texelSize = 1.0 / maskDim;
-
-      // Feather radius in pixels - this is the blur radius
-      let featherRadius = layer.maskFeather;
-
-      // Sigma for Gaussian - rule of thumb: radius = 3*sigma covers 99.7% of the bell curve
-      let sigma = featherRadius / 3.0;
-
-      // Quality controls pixels-per-sample: lower = more samples = smoother
-      // Quality 1: sample every 4 pixels (fast)
-      // Quality 100: sample every 1 pixel (smoothest, heavy)
-      let quality = f32(layer.maskFeatherQuality);
-      let pixelsPerSample = max(1.0, 4.0 - quality * 0.03); // 4.0 down to 1.0
-
-      // Calculate kernel radius based on feather size and quality
-      // This ensures we cover the full blur area with appropriate density
-      let kernelRadius = i32(featherRadius / pixelsPerSample);
-      let clampedRadius = min(kernelRadius, 127); // Cap at 127 to prevent GPU timeout
-
-      // Step size in UV space - one sample every pixelsPerSample texels
-      let stepSize = texelSize * pixelsPerSample;
-
-      var blur: f32 = 0.0;
-      var totalWeight: f32 = 0.0;
-
-      // Gaussian kernel sampling - sample across the full blur radius
-      for (var y: i32 = -clampedRadius; y <= clampedRadius; y = y + 1) {
-        for (var x: i32 = -clampedRadius; x <= clampedRadius; x = x + 1) {
-          // Offset in UV space
-          let offset = vec2f(f32(x), f32(y)) * stepSize;
-
-          // Distance in pixel units for Gaussian weight calculation
-          let pixelDist = f32(x * x + y * y) * pixelsPerSample * pixelsPerSample;
-
-          // Gaussian weight: exp(-dist²/(2σ²))
-          let weight = exp(-pixelDist / (2.0 * sigma * sigma + 0.001));
-
-          blur += textureSample(maskTexture, texSampler, input.uv + offset).r * weight;
-          totalWeight += weight;
-        }
-      }
-
-      maskValue = blur / totalWeight;
-    } else {
-      maskValue = textureSample(maskTexture, texSampler, input.uv).r;
-    }
-
-    // Apply inversion in shader (not CPU)
+    // Apply inversion in shader
     if (layer.maskInvert == 1u) {
       maskValue = 1.0 - maskValue;
     }

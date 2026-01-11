@@ -101,6 +101,9 @@ export function generateMaskTexture(
 
   const ctx = ensureMaskCanvas(width, height);
 
+  // Get max feather for blur (apply blur on CPU for smooth results)
+  const maxFeather = Math.max(...masks.map(m => m.feather || 0));
+
   // Start with white (full visibility) if first mask is subtract/intersect,
   // otherwise start with black (no visibility) for add mode
   const firstMask = masks[0];
@@ -143,9 +146,25 @@ export function generateMaskTexture(
     ctx.restore();
   }
 
-  // NOTE: Feather (blur) and inversion are now handled in GPU shader for performance
-  // This generates the raw mask shape only - the shader applies blur via texture sampling
-  // and inversion via uniform flag
+  // Apply feather blur on CPU using Canvas2D's optimized blur filter
+  // This produces much smoother results than GPU sampling
+  if (maxFeather > 0.5) {
+    // Get the current mask image
+    const maskData = ctx.getImageData(0, 0, width, height);
+
+    // Clear and apply blur filter
+    ctx.clearRect(0, 0, width, height);
+    ctx.filter = `blur(${maxFeather}px)`;
+
+    // Create temporary canvas to hold the mask for blur
+    const tempCanvas = new OffscreenCanvas(width, height);
+    const tempCtx = tempCanvas.getContext('2d')!;
+    tempCtx.putImageData(maskData, 0, 0);
+
+    // Draw blurred version
+    ctx.drawImage(tempCanvas, 0, 0);
+    ctx.filter = 'none';
+  }
 
   return ctx.getImageData(0, 0, width, height);
 }
