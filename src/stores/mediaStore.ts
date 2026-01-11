@@ -594,23 +594,34 @@ export const useMediaStore = create<MediaState>()(
 
           // Check for existing thumbnail by hash
           let finalThumbnailUrl = thumbnailUrl;
-          if (fileHash && thumbnailUrl) {
-            const existingThumb = await projectDB.getThumbnail(fileHash);
-            if (existingThumb) {
-              // Reuse existing thumbnail
-              finalThumbnailUrl = URL.createObjectURL(existingThumb.blob);
-              console.log('[MediaStore] Reusing existing thumbnail for hash:', fileHash.slice(0, 8));
-            } else {
-              // Save new thumbnail by hash
-              if (thumbnailUrl.startsWith('data:')) {
-                const response = await fetch(thumbnailUrl);
-                const thumbBlob = await response.blob();
-                await projectDB.saveThumbnail({
-                  fileHash,
-                  blob: thumbBlob,
-                  createdAt: Date.now(),
-                });
+          if (fileHash) {
+            try {
+              const existingThumb = await projectDB.getThumbnail(fileHash);
+              if (existingThumb && existingThumb.blob && existingThumb.blob.size > 0) {
+                // Reuse existing thumbnail
+                finalThumbnailUrl = URL.createObjectURL(existingThumb.blob);
+                console.log('[MediaStore] Reusing existing thumbnail for hash:', fileHash.slice(0, 8));
+              } else if (thumbnailUrl) {
+                // Save new thumbnail by hash
+                let thumbBlob: Blob | null = null;
+                if (thumbnailUrl.startsWith('data:')) {
+                  const response = await fetch(thumbnailUrl);
+                  thumbBlob = await response.blob();
+                } else if (thumbnailUrl.startsWith('blob:')) {
+                  const response = await fetch(thumbnailUrl);
+                  thumbBlob = await response.blob();
+                }
+                if (thumbBlob && thumbBlob.size > 0) {
+                  await projectDB.saveThumbnail({
+                    fileHash,
+                    blob: thumbBlob,
+                    createdAt: Date.now(),
+                  });
+                }
               }
+            } catch (e) {
+              console.warn('[MediaStore] Thumbnail dedup error, using original:', e);
+              // Keep original thumbnailUrl
             }
           }
 
@@ -1199,19 +1210,31 @@ export const useMediaStore = create<MediaState>()(
 
             // Check for existing thumbnail by hash
             let finalThumbnailUrl = thumbnailUrl;
-            if (fileHash && thumbnailUrl) {
-              const existingThumb = await projectDB.getThumbnail(fileHash);
-              if (existingThumb) {
-                finalThumbnailUrl = URL.createObjectURL(existingThumb.blob);
-                console.log('[MediaStore] Reusing existing thumbnail for hash:', fileHash.slice(0, 8));
-              } else if (thumbnailUrl.startsWith('data:')) {
-                const response = await fetch(thumbnailUrl);
-                const thumbBlob = await response.blob();
-                await projectDB.saveThumbnail({
-                  fileHash,
-                  blob: thumbBlob,
-                  createdAt: Date.now(),
-                });
+            if (fileHash) {
+              try {
+                const existingThumb = await projectDB.getThumbnail(fileHash);
+                if (existingThumb && existingThumb.blob && existingThumb.blob.size > 0) {
+                  finalThumbnailUrl = URL.createObjectURL(existingThumb.blob);
+                  console.log('[MediaStore] Reusing existing thumbnail for hash:', fileHash.slice(0, 8));
+                } else if (thumbnailUrl) {
+                  let thumbBlob: Blob | null = null;
+                  if (thumbnailUrl.startsWith('data:')) {
+                    const response = await fetch(thumbnailUrl);
+                    thumbBlob = await response.blob();
+                  } else if (thumbnailUrl.startsWith('blob:')) {
+                    const response = await fetch(thumbnailUrl);
+                    thumbBlob = await response.blob();
+                  }
+                  if (thumbBlob && thumbBlob.size > 0) {
+                    await projectDB.saveThumbnail({
+                      fileHash,
+                      blob: thumbBlob,
+                      createdAt: Date.now(),
+                    });
+                  }
+                }
+              } catch (e) {
+                console.warn('[MediaStore] Thumbnail dedup error, using original:', e);
               }
             }
 
