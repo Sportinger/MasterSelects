@@ -562,7 +562,7 @@ class LayerBuilderService {
         const transform = getInterpolatedTransform(clip.id, keyframeLocalTime);
         const interpolatedEffects = getInterpolatedEffects(clip.id, keyframeLocalTime);
 
-        return {
+        const proxyLayer: Layer = {
           id: `${activeCompId}_layer_${layerIndex}`,
           name: clip.name,
           visible: true,
@@ -581,6 +581,14 @@ class LayerBuilderService {
             z: (transform.rotation.z * Math.PI) / 180,
           },
         };
+
+        // Add mask properties if clip has masks
+        if (clip.masks && clip.masks.length > 0) {
+          proxyLayer.maskClipId = clip.id;
+          proxyLayer.maskInvert = clip.masks.some(m => m.inverted);
+        }
+
+        return proxyLayer;
       }
 
       // Use cached proxy frame if available while loading new one
@@ -589,7 +597,7 @@ class LayerBuilderService {
         const transform = getInterpolatedTransform(clip.id, keyframeLocalTime);
         const interpolatedEffects = getInterpolatedEffects(clip.id, keyframeLocalTime);
 
-        return {
+        const cachedProxyLayer: Layer = {
           id: `${activeCompId}_layer_${layerIndex}`,
           name: clip.name,
           visible: true,
@@ -608,6 +616,14 @@ class LayerBuilderService {
             z: (transform.rotation.z * Math.PI) / 180,
           },
         };
+
+        // Add mask properties if clip has masks
+        if (clip.masks && clip.masks.length > 0) {
+          cachedProxyLayer.maskClipId = clip.id;
+          cachedProxyLayer.maskInvert = clip.masks.some(m => m.inverted);
+        }
+
+        return cachedProxyLayer;
       }
     }
 
