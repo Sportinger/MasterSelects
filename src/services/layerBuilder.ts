@@ -32,6 +32,11 @@ class LayerBuilderService {
   // Debug frame counter for throttled logging
   private debugFrameCount = 0;
 
+  // Lookahead preloading throttle
+  private lastLookaheadTime = 0;
+  private readonly LOOKAHEAD_INTERVAL = 200; // Check for upcoming nested comps every 200ms
+  private readonly LOOKAHEAD_SECONDS = 1.5; // Look 1.5 seconds ahead
+
   /**
    * Build layers for the current frame - called directly from render loop
    * Gets all data from stores directly, no React overhead
@@ -217,7 +222,86 @@ class LayerBuilderService {
       }
     });
 
+    // Preload proxy frames for upcoming nested compositions during playback
+    if (isPlaying) {
+      this.preloadUpcomingNestedCompFrames(clips, playheadPosition);
+    }
+
     return layers;
+  }
+
+  /**
+   * Preload proxy frames for nested compositions that will be active soon
+   * Called during playback to ensure smooth entry into nested comps
+   */
+  private preloadUpcomingNestedCompFrames(clips: TimelineClip[], playheadPosition: number): void {
+    const now = performance.now();
+
+    // Throttle to avoid checking every frame
+    if (now - this.lastLookaheadTime < this.LOOKAHEAD_INTERVAL) {
+      return;
+    }
+    this.lastLookaheadTime = now;
+
+    const mediaStore = useMediaStore.getState();
+    if (!mediaStore.proxyEnabled) return;
+
+    const lookaheadEnd = playheadPosition + this.LOOKAHEAD_SECONDS;
+
+    // Find nested composition clips that will be active within lookahead window
+    const upcomingNestedComps = clips.filter(clip =>
+      clip.isComposition &&
+      clip.nestedClips &&
+      clip.nestedClips.length > 0 &&
+      clip.startTime > playheadPosition && // Not yet active
+      clip.startTime < lookaheadEnd // But will be soon
+    );
+
+    for (const nestedCompClip of upcomingNestedComps) {
+      if (!nestedCompClip.nestedClips) continue;
+
+      // Calculate the time within the nested comp when it starts
+      const nestedStartTime = nestedCompClip.inPoint || 0;
+
+      // Preload frames for each video clip in the nested composition
+      for (const nestedClip of nestedCompClip.nestedClips) {
+        if (!nestedClip.source?.videoElement) continue;
+
+        // Check if this nested clip is active at the nested comp's start time
+        if (nestedStartTime < nestedClip.startTime ||
+            nestedStartTime >= nestedClip.startTime + nestedClip.duration) {
+          continue;
+        }
+
+        // Find media file for this nested clip
+        const nestedMediaFile = mediaStore.files.find(f =>
+          f.id === nestedClip.source?.mediaFileId ||
+          f.name === nestedClip.file?.name ||
+          f.name === nestedClip.name
+        );
+
+        if (!nestedMediaFile?.proxyFps) continue;
+        if (nestedMediaFile.proxyStatus !== 'ready' &&
+            nestedMediaFile.proxyStatus !== 'generating') continue;
+
+        // Calculate which frame to preload
+        const nestedLocalTime = nestedStartTime - nestedClip.startTime;
+        const nestedClipTime = nestedClip.reversed
+          ? nestedClip.outPoint - nestedLocalTime
+          : nestedLocalTime + nestedClip.inPoint;
+
+        const proxyFps = nestedMediaFile.proxyFps;
+        const frameIndex = Math.floor(nestedClipTime * proxyFps);
+
+        // Trigger preloading by calling getCachedFrame (it preloads even if miss)
+        proxyFrameCache.getCachedFrame(nestedMediaFile.id, frameIndex, proxyFps);
+
+        // Also preload a few frames ahead for smoother playback
+        for (let i = 1; i <= 5; i++) {
+          proxyFrameCache.getCachedFrame(nestedMediaFile.id, frameIndex + i, proxyFps);
+        }
+      }
+    }
   }
 
   /**
