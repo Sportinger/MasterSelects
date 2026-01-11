@@ -348,7 +348,10 @@ class ProjectFileService {
       // Create all subfolders
       await this.createProjectFolders(projectFolder);
 
-      // Create initial project.json
+      // Create Main Comp with unique ID
+      const mainCompId = `comp-${Date.now()}`;
+
+      // Create initial project.json with Main Comp open by default
       const initialProject: ProjectFile = {
         version: 1,
         name,
@@ -362,7 +365,7 @@ class ProjectFileService {
         },
         media: [],
         compositions: [{
-          id: `comp-${Date.now()}`,
+          id: mainCompId,
           name: 'Main Comp',
           width: 1920,
           height: 1080,
@@ -378,8 +381,8 @@ class ProjectFileService {
           markers: [],
         }],
         folders: [],
-        activeCompositionId: null,
-        openCompositionIds: [],
+        activeCompositionId: mainCompId,
+        openCompositionIds: [mainCompId],
         expandedFolderIds: [],
       };
 
