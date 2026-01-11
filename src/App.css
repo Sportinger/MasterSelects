@@ -6030,7 +6030,7 @@ input[type="checkbox"] {
   z-index: 10002;
   backdrop-filter: blur(10px);
   transition: backdrop-filter 0.2s ease-in;
-  animation: welcome-backdrop-in 0.5s ease-out;
+  animation: welcome-backdrop-in 0.4s ease-in-out 0.5s both;
 }
 
 @keyframes welcome-backdrop-in {
@@ -6067,7 +6067,7 @@ input[type="checkbox"] {
     0 0 0 1px rgba(255, 255, 255, 0.02),
     0 40px 80px rgba(0, 0, 0, 0.5),
     0 0 120px rgba(0, 0, 0, 0.3);
-  animation: welcome-overlay-in 0.3s ease-out;
+  animation: welcome-overlay-in 0.3s ease-out 0.9s both;
 }
 
 @keyframes welcome-overlay-in {
@@ -6095,7 +6095,7 @@ input[type="checkbox"] {
   color: rgba(255, 255, 255, 0.5);
   letter-spacing: 0.3px;
   margin-bottom: 32px;
-  animation: welcome-fade-in 0.4s ease-out 0.1s both;
+  animation: welcome-fade-in 0.4s ease-out 1.0s both;
 }
 
 @keyframes welcome-fade-in {
@@ -6126,7 +6126,7 @@ input[type="checkbox"] {
 .welcome-title-master {
   color: #fff;
   display: inline-block;
-  animation: welcome-title-master-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
+  animation: welcome-title-master-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) 1.05s both;
 }
 
 @keyframes welcome-title-master-in {
@@ -6143,7 +6143,7 @@ input[type="checkbox"] {
 .welcome-title-selects {
   color: rgba(255, 255, 255, 0.7);
   display: inline-block;
-  animation: welcome-title-selects-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both;
+  animation: welcome-title-selects-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) 1.15s both;
 }
 
 @keyframes welcome-title-selects-in {
@@ -6163,7 +6163,7 @@ input[type="checkbox"] {
   color: rgba(255, 255, 255, 0.35);
   font-weight: 400;
   letter-spacing: 0.2px;
-  animation: welcome-fade-up 0.4s ease-out 0.35s both;
+  animation: welcome-fade-up 0.4s ease-out 1.25s both;
 }
 
 @keyframes welcome-fade-up {
@@ -6181,7 +6181,7 @@ input[type="checkbox"] {
 .welcome-folder-card {
   width: 100%;
   margin-bottom: 24px;
-  animation: welcome-fade-up 0.4s ease-out 0.4s both;
+  animation: welcome-fade-up 0.4s ease-out 1.3s both;
 }
 
 .welcome-folder-card-header {
@@ -6307,7 +6307,7 @@ input[type="checkbox"] {
   font-size: 13px;
   font-weight: 500;
   transition: all 0.2s ease;
-  animation: welcome-fade-up 0.4s ease-out 0.5s both;
+  animation: welcome-fade-up 0.4s ease-out 1.4s both;
 }
 
 .welcome-enter:hover {
