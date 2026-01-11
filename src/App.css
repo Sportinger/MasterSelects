@@ -6030,6 +6030,18 @@ input[type="checkbox"] {
   z-index: 10002;
   backdrop-filter: blur(20px);
   transition: background 0.2s ease-in, backdrop-filter 0.2s ease-in;
+  animation: welcome-backdrop-in 0.5s ease-out;
+}
+
+@keyframes welcome-backdrop-in {
+  from {
+    background: rgba(0, 0, 0, 0);
+    backdrop-filter: blur(0px);
+  }
+  to {
+    background: rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(20px);
+  }
 }
 
 .welcome-overlay-backdrop.closing {
