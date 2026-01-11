@@ -1,7 +1,7 @@
 // SavedToast - Center screen notification for save actions
 // Shows a brief "Saved" message in yellow when project is saved
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 interface SavedToastProps {
   visible: boolean;
@@ -9,32 +9,31 @@ interface SavedToastProps {
 }
 
 export function SavedToast({ visible, onHide }: SavedToastProps) {
-  const [isExiting, setIsExiting] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (visible) {
-      setIsExiting(false);
-      // Start exit animation after brief display (400ms)
-      const exitTimer = setTimeout(() => {
-        setIsExiting(true);
-      }, 400);
-
-      // Hide completely after fade out animation (400ms + 200ms = 600ms)
-      const hideTimer = setTimeout(() => {
+      // Clear any existing timer
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+      // Auto-hide after 600ms (animation handles the fade)
+      timerRef.current = setTimeout(() => {
         onHide();
       }, 600);
-
-      return () => {
-        clearTimeout(exitTimer);
-        clearTimeout(hideTimer);
-      };
     }
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
   }, [visible, onHide]);
 
   if (!visible) return null;
 
   return (
-    <div className={`saved-toast ${isExiting ? 'exiting' : ''}`}>
+    <div className="saved-toast">
       Saved
     </div>
   );

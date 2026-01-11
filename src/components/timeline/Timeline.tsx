@@ -705,10 +705,14 @@ export function Timeline() {
     timelineBodyRef: timelineBodyRef,
     zoom,
     scrollX,
+    scrollY,
     duration,
     playheadPosition,
+    contentHeight,
+    viewportHeight,
     setZoom,
     setScrollX,
+    setScrollY,
   });
 
   // Get all snap target times
@@ -1421,19 +1425,21 @@ export function Timeline() {
       />
 
       <div className="timeline-body" ref={timelineBodyRef}>
-        <div className="timeline-header-row">
-          <div className="ruler-header">Time</div>
-          <div className="time-ruler-wrapper">
-            <TimelineRuler
-              duration={duration}
-              zoom={zoom}
-              scrollX={scrollX}
-              onRulerMouseDown={handleRulerMouseDown}
-              formatTime={formatTime}
-            />
+        <div className="timeline-body-content">
+          <div className="timeline-header-row">
+            <div className="ruler-header">Time</div>
+            <div className="time-ruler-wrapper">
+              <TimelineRuler
+                duration={duration}
+                zoom={zoom}
+                scrollX={scrollX}
+                onRulerMouseDown={handleRulerMouseDown}
+                formatTime={formatTime}
+              />
+            </div>
           </div>
-        </div>
-        <div className="timeline-content-row">
+          <div className="timeline-scroll-wrapper" ref={scrollWrapperRef}>
+            <div className="timeline-content-row" ref={contentRef} style={{ transform: `translateY(-${scrollY}px)` }}>
           <div className="track-headers">
             {tracks.map((track) => {
               const isDimmed =
@@ -1790,17 +1796,27 @@ export function Timeline() {
 
             </div>{/* track-lanes-scroll */}
           </div>{/* timeline-tracks */}
-        </div>{/* timeline-content-row */}
+            </div>{/* timeline-content-row */}
+          </div>{/* timeline-scroll-wrapper */}
 
-        {/* Playhead - spans from ruler through all tracks */}
-        <div
-          className="playhead"
-          style={{ left: timeToPixel(playheadPosition) - scrollX + 150 }}
-          onMouseDown={handlePlayheadMouseDown}
-        >
-          <div className="playhead-head" />
-          <div className="playhead-line" />
-        </div>
+          {/* Playhead - spans from ruler through all tracks */}
+          <div
+            className="playhead"
+            style={{ left: timeToPixel(playheadPosition) - scrollX + 150 }}
+            onMouseDown={handlePlayheadMouseDown}
+          >
+            <div className="playhead-head" />
+            <div className="playhead-line" />
+          </div>
+        </div>{/* timeline-body-content */}
+
+        {/* Vertical Scrollbar */}
+        <VerticalScrollbar
+          scrollY={scrollY}
+          contentHeight={contentHeight}
+          viewportHeight={viewportHeight}
+          onScrollChange={setScrollY}
+        />
       </div>{/* timeline-body */}
 
       {/* Timeline Navigator - horizontal scrollbar with zoom handles */}

@@ -11,12 +11,16 @@ interface UseTimelineZoomProps {
   // State
   zoom: number;
   scrollX: number;
+  scrollY: number;
   duration: number;
   playheadPosition: number;
+  contentHeight: number;
+  viewportHeight: number;
 
   // Actions
   setZoom: (zoom: number) => void;
   setScrollX: (scrollX: number) => void;
+  setScrollY: (scrollY: number) => void;
 }
 
 interface UseTimelineZoomReturn {
@@ -28,10 +32,14 @@ export function useTimelineZoom({
   timelineBodyRef,
   zoom,
   scrollX,
+  scrollY,
   duration,
   playheadPosition,
+  contentHeight,
+  viewportHeight,
   setZoom,
   setScrollX,
+  setScrollY,
 }: UseTimelineZoomProps): UseTimelineZoomReturn {
   // Fit composition to window - calculate zoom to show entire duration
   const handleFitToWindow = useCallback(() => {
@@ -103,13 +111,18 @@ export function useTimelineZoom({
         if (e.deltaX !== 0) {
           setScrollX(Math.max(0, scrollX + e.deltaX));
         }
-        // Vertical scroll is handled natively by the parent timeline-body container
+        // Handle vertical scroll with custom scrollbar
+        if (e.deltaY !== 0 && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+          e.preventDefault();
+          const maxScrollY = Math.max(0, contentHeight - viewportHeight);
+          setScrollY(Math.max(0, Math.min(maxScrollY, scrollY + e.deltaY)));
+        }
       }
     };
 
     el.addEventListener('wheel', handleWheel, { passive: false });
     return () => el.removeEventListener('wheel', handleWheel);
-  }, [timelineBodyRef, zoom, scrollX, playheadPosition, duration, setZoom, setScrollX]);
+  }, [timelineBodyRef, zoom, scrollX, scrollY, playheadPosition, duration, contentHeight, viewportHeight, setZoom, setScrollX, setScrollY]);
 
   return {
     handleSetZoom,
