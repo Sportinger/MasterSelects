@@ -63,19 +63,49 @@ const workerCode = `
   self.onmessage = async function(e) {
     const { frameIndex, pixels, width, height, quality } = e.data;
 
-    // Create ImageData from raw pixels
-    const imageData = new ImageData(new Uint8ClampedArray(pixels), width, height);
+    try {
+      // Validate input
+      if (!pixels || pixels.byteLength === 0) {
+        throw new Error('Empty pixel data');
+      }
 
-    // Create OffscreenCanvas and draw ImageData
-    const canvas = new OffscreenCanvas(width, height);
-    const ctx = canvas.getContext('2d');
-    ctx.putImageData(imageData, 0, 0);
+      const expectedSize = width * height * 4;
+      if (pixels.byteLength !== expectedSize) {
+        throw new Error('Pixel data size mismatch: got ' + pixels.byteLength + ', expected ' + expectedSize);
+      }
 
-    // Encode to WebP
-    const blob = await canvas.convertToBlob({ type: 'image/webp', quality });
+      if (width <= 0 || height <= 0) {
+        throw new Error('Invalid dimensions: ' + width + 'x' + height);
+      }
 
-    // Send back the result
-    self.postMessage({ frameIndex, blob });
+      // Create ImageData from raw pixels
+      const imageData = new ImageData(new Uint8ClampedArray(pixels), width, height);
+
+      // Create OffscreenCanvas and draw ImageData
+      const canvas = new OffscreenCanvas(width, height);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('Failed to get 2d context');
+      }
+      ctx.putImageData(imageData, 0, 0);
+
+      // Encode to WebP with fallback to PNG
+      let blob;
+      try {
+        blob = await canvas.convertToBlob({ type: 'image/webp', quality });
+      } catch (webpErr) {
+        // Fallback to PNG if WebP fails
+        console.warn('[Worker] WebP encoding failed, trying PNG for frame ' + frameIndex);
+        blob = await canvas.convertToBlob({ type: 'image/png' });
+      }
+
+      // Send back the result
+      self.postMessage({ frameIndex, blob });
+    } catch (err) {
+      console.error('[Worker] Frame ' + frameIndex + ' encoding error:', err.message);
+      // Send error back to main thread
+      self.postMessage({ frameIndex, error: err.message });
+    }
   };
 `;
 
@@ -127,12 +157,22 @@ class ProxyGeneratorGPU {
     console.log(`[ProxyGen] Initialized ${WORKER_POOL_SIZE} encoding workers`);
   }
 
-  private handleWorkerMessage(workerIndex: number, data: { frameIndex: number; blob: Blob }) {
+  private handleWorkerMessage(workerIndex: number, data: { frameIndex: number; blob?: Blob; error?: string }) {
     this.workerBusy[workerIndex] = false;
 
     const pending = this.pendingFrames.get(data.frameIndex);
     if (pending) {
-      pending.resolve(data.blob);
+      if (data.error) {
+        // Log error but don't reject - just skip this frame
+        console.warn(`[ProxyGen] Worker failed to encode frame ${data.frameIndex}: ${data.error}`);
+        // Create a tiny placeholder blob
+        pending.resolve(new Blob([], { type: 'image/webp' }));
+      } else if (data.blob) {
+        pending.resolve(data.blob);
+      } else {
+        console.warn(`[ProxyGen] Worker returned no data for frame ${data.frameIndex}`);
+        pending.resolve(new Blob([], { type: 'image/webp' }));
+      }
       this.pendingFrames.delete(data.frameIndex);
     }
 
@@ -731,11 +771,19 @@ class ProxyGeneratorGPU {
             frame.close();
           }
 
-          // Encode all frames in parallel using workers
+          // Validate and encode frames in parallel using workers
           const encodeStart = performance.now();
-          const encodePromises = pixelArrays.map((pixels, i) =>
-            this.encodeFrameAsync(batchFrameIndices[i], pixels)
-          );
+          const expectedPixelSize = this.outputWidth * this.outputHeight * 4;
+
+          const encodePromises = pixelArrays.map((pixels, i) => {
+            // Validate pixel data
+            if (!pixels || pixels.byteLength !== expectedPixelSize) {
+              console.warn(`[ProxyGen] Invalid pixel data for frame ${batchFrameIndices[i]}: got ${pixels?.byteLength || 0}, expected ${expectedPixelSize}`);
+              // Return empty blob for invalid frames
+              return Promise.resolve(new Blob([], { type: 'image/webp' }));
+            }
+            return this.encodeFrameAsync(batchFrameIndices[i], pixels);
+          });
 
           const blobs = await Promise.all(encodePromises);
           const encodeEnd = performance.now();
@@ -747,15 +795,20 @@ class ProxyGeneratorGPU {
             console.log(`[ProxyGen] Batch ${batchCount}: GPU=${gpuTime.toFixed(1)}ms, Encode=${encodeTime.toFixed(1)}ms, Frames=${batchFrames.length}`);
           }
 
-          // Add to DB batch
+          // Add to DB batch (skip empty blobs from failed frames)
+          let validFrames = 0;
           for (let i = 0; i < blobs.length; i++) {
-            const frameIndex = batchFrameIndices[i];
-            const frameId = `${mediaFileId}_${frameIndex.toString().padStart(6, '0')}`;
-            dbBatch.push({ id: frameId, mediaFileId, frameIndex, blob: blobs[i] });
-            this.decodedFrames.delete(frameIndex);
+            const blob = blobs[i];
+            if (blob && blob.size > 0) {
+              const frameIndex = batchFrameIndices[i];
+              const frameId = `${mediaFileId}_${frameIndex.toString().padStart(6, '0')}`;
+              dbBatch.push({ id: frameId, mediaFileId, frameIndex, blob });
+              validFrames++;
+            }
+            this.decodedFrames.delete(batchFrameIndices[i]);
           }
 
-          this.processedFrames += batchFrames.length;
+          this.processedFrames += validFrames;
           this.onProgress?.(Math.round((this.processedFrames / this.totalFrames) * 100));
 
           // Save DB batch periodically
