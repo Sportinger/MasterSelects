@@ -244,9 +244,14 @@ class LayerBuilderService {
     this.lastLookaheadTime = now;
 
     const mediaStore = useMediaStore.getState();
-    if (!mediaStore.proxyEnabled) return;
-
     const lookaheadEnd = playheadPosition + this.LOOKAHEAD_SECONDS;
+
+    // Pre-seek WebCodecs decoders for non-proxy mode
+    // This primes the decoder so the first frame is ready when needed
+    if (!mediaStore.proxyEnabled) {
+      this.primeUpcomingNestedCompVideos(clips, playheadPosition, lookaheadEnd);
+      return;
+    }
 
     // Find nested composition clips that will be active within lookahead window
     const upcomingNestedComps = clips.filter(clip =>
@@ -300,6 +305,77 @@ class LayerBuilderService {
           proxyFrameCache.getCachedFrame(nestedMediaFile.id, frameIndex + i, proxyFps);
         }
       }
+    }
+  }
+
+  // Track which nested comp videos have been primed to avoid repeated seeks
+  private primedNestedVideos: Set<string> = new Set();
+
+  /**
+   * Pre-seek WebCodecs decoders for upcoming nested compositions (non-proxy mode)
+   * This ensures the first frame is decoded and ready when the playhead enters
+   */
+  private primeUpcomingNestedCompVideos(
+    clips: TimelineClip[],
+    playheadPosition: number,
+    lookaheadEnd: number
+  ): void {
+    // Find nested composition clips that will be active within lookahead window
+    const upcomingNestedComps = clips.filter(clip =>
+      clip.isComposition &&
+      clip.nestedClips &&
+      clip.nestedClips.length > 0 &&
+      clip.startTime > playheadPosition && // Not yet active
+      clip.startTime < lookaheadEnd // But will be soon
+    );
+
+    for (const nestedCompClip of upcomingNestedComps) {
+      if (!nestedCompClip.nestedClips) continue;
+
+      // Calculate the time within the nested comp when it starts
+      const nestedStartTime = nestedCompClip.inPoint || 0;
+
+      // Pre-seek each video clip in the nested composition
+      for (const nestedClip of nestedCompClip.nestedClips) {
+        if (!nestedClip.source?.videoElement) continue;
+
+        // Check if this nested clip is active at the nested comp's start time
+        if (nestedStartTime < nestedClip.startTime ||
+            nestedStartTime >= nestedClip.startTime + nestedClip.duration) {
+          continue;
+        }
+
+        // Create a unique key for this clip to track if already primed
+        const primeKey = `${nestedCompClip.id}_${nestedClip.id}`;
+        if (this.primedNestedVideos.has(primeKey)) {
+          continue; // Already primed
+        }
+
+        // Calculate the target seek time
+        const nestedLocalTime = nestedStartTime - nestedClip.startTime;
+        const nestedClipTime = nestedClip.reversed
+          ? nestedClip.outPoint - nestedLocalTime
+          : nestedLocalTime + nestedClip.inPoint;
+
+        // Prime using WebCodecs async seek if available (fire and forget)
+        if (nestedClip.source.webCodecsPlayer) {
+          console.log(`[LayerBuilder] Priming nested video "${nestedClip.name}" at ${nestedClipTime.toFixed(2)}s`);
+          nestedClip.source.webCodecsPlayer.seekAsync(nestedClipTime).then(() => {
+            this.primedNestedVideos.add(primeKey);
+          });
+        } else {
+          // Fallback: just seek the video element
+          const video = nestedClip.source.videoElement;
+          video.currentTime = nestedClipTime;
+          this.primedNestedVideos.add(primeKey);
+        }
+      }
+    }
+
+    // Clean up old primed entries when playhead moves past them
+    // Reset when playhead moves backwards significantly (e.g., loop or scrub)
+    if (this.primedNestedVideos.size > 100) {
+      this.primedNestedVideos.clear();
     }
   }
 
