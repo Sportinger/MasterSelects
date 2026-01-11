@@ -5,7 +5,8 @@ import { Muxer as Mp4Muxer, ArrayBufferTarget as Mp4Target } from 'mp4-muxer';
 import { Muxer as WebmMuxer, ArrayBufferTarget as WebmTarget } from 'webm-muxer';
 import { engine } from './WebGPUEngine';
 import { useTimelineStore } from '../stores/timeline';
-import type { Layer } from '../types';
+import { useMediaStore } from '../stores/mediaStore';
+import type { Layer, TimelineClip, NestedCompositionData } from '../types';
 import { AudioExportPipeline, type AudioExportProgress, type EncodedAudioResult, AudioEncoderWrapper, type AudioCodec } from './audio';
 
 // ============ TYPES ============
@@ -419,6 +420,28 @@ export class FrameExporter {
       const track = tracks.find(t => t.id === clip.trackId);
       if (!track?.visible) continue;
 
+      // Handle nested composition clips
+      if (clip.isComposition && clip.nestedClips && clip.nestedTracks) {
+        const clipLocalTime = time - clip.startTime;
+        const nestedTime = clipLocalTime + (clip.inPoint || 0);
+
+        for (const nestedClip of clip.nestedClips) {
+          // Check if nested clip is active at this time
+          if (nestedTime >= nestedClip.startTime && nestedTime < nestedClip.startTime + nestedClip.duration) {
+            if (nestedClip.source?.videoElement) {
+              const video = nestedClip.source.videoElement;
+              const nestedLocalTime = nestedTime - nestedClip.startTime;
+              const nestedClipTime = nestedClip.reversed
+                ? nestedClip.outPoint - nestedLocalTime
+                : nestedLocalTime + nestedClip.inPoint;
+              seekPromises.push(this.seekVideo(video, nestedClipTime));
+            }
+          }
+        }
+        continue;
+      }
+
+      // Handle regular video clips
       if (clip.source?.type === 'video' && clip.source.videoElement) {
         const video = clip.source.videoElement;
         const clipLocalTime = time - clip.startTime;
@@ -470,57 +493,229 @@ export class FrameExporter {
   }
 
   private buildLayersAtTime(time: number): Layer[] {
-    const clips = useTimelineStore.getState().getClipsAtTime(time);
-    const tracks = useTimelineStore.getState().tracks;
+    const timelineState = useTimelineStore.getState();
+    const { clips, tracks, getInterpolatedTransform, getInterpolatedEffects } = timelineState;
     const layers: Layer[] = [];
 
     const videoTracks = tracks.filter(t => t.type === 'video');
-    const trackOrder = new Map(videoTracks.map((t, i) => [t.id, i]));
-
-    // Check if any video track has solo enabled
     const anyVideoSolo = videoTracks.some(t => t.solo);
 
-    // Helper to determine effective visibility for a video track (respecting solo)
     const isTrackVisible = (track: typeof videoTracks[0]) => {
       if (!track.visible) return false;
       if (anyVideoSolo) return track.solo;
       return true;
     };
 
-    const sortedClips = clips
-      .filter(clip => {
-        const track = tracks.find(t => t.id === clip.trackId);
-        return track?.type === 'video' && isTrackVisible(track);
-      })
-      .sort((a, b) => {
-        const orderA = trackOrder.get(a.trackId) ?? 0;
-        const orderB = trackOrder.get(b.trackId) ?? 0;
-        return orderA - orderB;
-      });
+    // Get clips at current time
+    const clipsAtTime = clips.filter(
+      c => time >= c.startTime && time < c.startTime + c.duration
+    );
 
-    for (const clip of sortedClips) {
-      if (!clip.source) continue;
+    // Build layers in track order (bottom to top)
+    for (let trackIndex = 0; trackIndex < videoTracks.length; trackIndex++) {
+      const track = videoTracks[trackIndex];
+      if (!isTrackVisible(track)) continue;
 
-      const layer: Layer = {
-        id: clip.id,
-        name: clip.name,
-        visible: true,
-        opacity: clip.transform.opacity,
-        blendMode: clip.transform.blendMode,
-        source: null,
-        effects: [],
-        position: { x: clip.transform.position.x, y: clip.transform.position.y, z: clip.transform.position.z },
-        scale: { x: clip.transform.scale.x, y: clip.transform.scale.y },
-        rotation: { x: clip.transform.rotation.x * (Math.PI / 180), y: clip.transform.rotation.y * (Math.PI / 180), z: clip.transform.rotation.z * (Math.PI / 180) },
-      };
+      const clip = clipsAtTime.find(c => c.trackId === track.id);
+      if (!clip) continue;
 
-      if (clip.source.type === 'video' && clip.source.videoElement) {
-        layer.source = { type: 'video', videoElement: clip.source.videoElement };
-      } else if (clip.source.type === 'image' && clip.source.imageElement) {
-        layer.source = { type: 'image', imageElement: clip.source.imageElement };
+      const clipLocalTime = time - clip.startTime;
+      const transform = getInterpolatedTransform(clip.id, clipLocalTime);
+      const effects = getInterpolatedEffects(clip.id, clipLocalTime);
+
+      // Handle nested compositions
+      if (clip.isComposition && clip.nestedClips && clip.nestedClips.length > 0) {
+        const nestedLayers = this.buildNestedLayersForExport(clip, clipLocalTime + (clip.inPoint || 0));
+
+        if (nestedLayers.length > 0) {
+          const composition = useMediaStore.getState().compositions.find(c => c.id === clip.compositionId);
+          const compWidth = composition?.width || 1920;
+          const compHeight = composition?.height || 1080;
+
+          const nestedCompData: NestedCompositionData = {
+            compositionId: clip.compositionId || clip.id,
+            layers: nestedLayers,
+            width: compWidth,
+            height: compHeight,
+          };
+
+          layers.push({
+            id: `export_layer_${trackIndex}`,
+            name: clip.name,
+            visible: true,
+            opacity: transform.opacity,
+            blendMode: transform.blendMode,
+            source: {
+              type: 'video',
+              nestedComposition: nestedCompData,
+            },
+            effects,
+            position: { x: transform.position.x, y: transform.position.y, z: transform.position.z },
+            scale: { x: transform.scale.x, y: transform.scale.y },
+            rotation: {
+              x: transform.rotation.x * (Math.PI / 180),
+              y: transform.rotation.y * (Math.PI / 180),
+              z: transform.rotation.z * (Math.PI / 180),
+            },
+          });
+        }
+        continue;
       }
 
-      if (layer.source) layers.push(layer);
+      // Handle video clips
+      if (clip.source?.type === 'video' && clip.source.videoElement) {
+        layers.push({
+          id: `export_layer_${trackIndex}`,
+          name: clip.name,
+          visible: true,
+          opacity: transform.opacity,
+          blendMode: transform.blendMode,
+          source: {
+            type: 'video',
+            videoElement: clip.source.videoElement,
+            webCodecsPlayer: clip.source.webCodecsPlayer,
+          },
+          effects,
+          position: { x: transform.position.x, y: transform.position.y, z: transform.position.z },
+          scale: { x: transform.scale.x, y: transform.scale.y },
+          rotation: {
+            x: transform.rotation.x * (Math.PI / 180),
+            y: transform.rotation.y * (Math.PI / 180),
+            z: transform.rotation.z * (Math.PI / 180),
+          },
+        });
+      }
+      // Handle image clips
+      else if (clip.source?.type === 'image' && clip.source.imageElement) {
+        layers.push({
+          id: `export_layer_${trackIndex}`,
+          name: clip.name,
+          visible: true,
+          opacity: transform.opacity,
+          blendMode: transform.blendMode,
+          source: { type: 'image', imageElement: clip.source.imageElement },
+          effects,
+          position: { x: transform.position.x, y: transform.position.y, z: transform.position.z },
+          scale: { x: transform.scale.x, y: transform.scale.y },
+          rotation: {
+            x: transform.rotation.x * (Math.PI / 180),
+            y: transform.rotation.y * (Math.PI / 180),
+            z: transform.rotation.z * (Math.PI / 180),
+          },
+        });
+      }
+      // Handle text clips
+      else if (clip.source?.type === 'text' && clip.source.textCanvas) {
+        layers.push({
+          id: `export_layer_${trackIndex}`,
+          name: clip.name,
+          visible: true,
+          opacity: transform.opacity,
+          blendMode: transform.blendMode,
+          source: { type: 'text', textCanvas: clip.source.textCanvas },
+          effects,
+          position: { x: transform.position.x, y: transform.position.y, z: transform.position.z },
+          scale: { x: transform.scale.x, y: transform.scale.y },
+          rotation: {
+            x: transform.rotation.x * (Math.PI / 180),
+            y: transform.rotation.y * (Math.PI / 180),
+            z: transform.rotation.z * (Math.PI / 180),
+          },
+        });
+      }
+    }
+
+    return layers;
+  }
+
+  /**
+   * Build layers for a nested composition at export time
+   */
+  private buildNestedLayersForExport(clip: TimelineClip, nestedTime: number): Layer[] {
+    if (!clip.nestedClips || !clip.nestedTracks) return [];
+
+    const nestedVideoTracks = clip.nestedTracks.filter(t => t.type === 'video' && t.visible);
+    const layers: Layer[] = [];
+
+    for (let i = nestedVideoTracks.length - 1; i >= 0; i--) {
+      const nestedTrack = nestedVideoTracks[i];
+      const nestedClip = clip.nestedClips.find(
+        nc =>
+          nc.trackId === nestedTrack.id &&
+          nestedTime >= nc.startTime &&
+          nestedTime < nc.startTime + nc.duration
+      );
+
+      if (!nestedClip) continue;
+
+      const nestedLocalTime = nestedTime - nestedClip.startTime;
+      const nestedClipTime = nestedClip.reversed
+        ? nestedClip.outPoint - nestedLocalTime
+        : nestedLocalTime + nestedClip.inPoint;
+
+      const transform = nestedClip.transform || {
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+        opacity: 1,
+        blendMode: 'normal' as const,
+      };
+
+      const baseLayer = {
+        id: `nested-export-${nestedClip.id}`,
+        name: nestedClip.name,
+        visible: true,
+        opacity: transform.opacity ?? 1,
+        blendMode: transform.blendMode || 'normal',
+        effects: nestedClip.effects || [],
+        position: {
+          x: transform.position?.x || 0,
+          y: transform.position?.y || 0,
+          z: transform.position?.z || 0,
+        },
+        scale: {
+          x: transform.scale?.x ?? 1,
+          y: transform.scale?.y ?? 1,
+        },
+        rotation: {
+          x: ((transform.rotation?.x || 0) * Math.PI) / 180,
+          y: ((transform.rotation?.y || 0) * Math.PI) / 180,
+          z: ((transform.rotation?.z || 0) * Math.PI) / 180,
+        },
+      };
+
+      // Seek nested video to correct time
+      if (nestedClip.source?.videoElement) {
+        const video = nestedClip.source.videoElement;
+        if (Math.abs(video.currentTime - nestedClipTime) > 0.01) {
+          video.currentTime = nestedClipTime;
+        }
+
+        layers.push({
+          ...baseLayer,
+          source: {
+            type: 'video',
+            videoElement: video,
+            webCodecsPlayer: nestedClip.source.webCodecsPlayer,
+          },
+        } as Layer);
+      } else if (nestedClip.source?.imageElement) {
+        layers.push({
+          ...baseLayer,
+          source: {
+            type: 'image',
+            imageElement: nestedClip.source.imageElement,
+          },
+        } as Layer);
+      } else if (nestedClip.source?.textCanvas) {
+        layers.push({
+          ...baseLayer,
+          source: {
+            type: 'text',
+            textCanvas: nestedClip.source.textCanvas,
+          },
+        } as Layer);
+      }
     }
 
     return layers;
