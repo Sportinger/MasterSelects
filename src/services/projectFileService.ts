@@ -328,6 +328,9 @@ class ProjectFileService {
     }
 
     try {
+      // Store the parent folder so we can recreate project if deleted
+      await projectDB.storeHandle('projectsFolder', handle);
+
       // Create project subfolder inside the selected folder
       const projectFolder = await handle.getDirectoryHandle(name, { create: true });
       return await this.initializeProject(projectFolder, name);
@@ -1001,8 +1004,16 @@ class ProjectFileService {
       // Check permission silently (no popup)
       const permission = await handle.queryPermission({ mode: 'readwrite' });
       if (permission === 'granted') {
-        // Permission already granted, load project
-        return await this.loadProject(handle as FileSystemDirectoryHandle);
+        // Permission already granted, try to load project
+        const loaded = await this.loadProject(handle as FileSystemDirectoryHandle);
+
+        if (!loaded) {
+          // Project doesn't exist (was deleted) - try to recreate from parent folder
+          console.log('[ProjectFile] Project not found, trying to recreate...');
+          return await this.recreateProjectFromParent();
+        }
+
+        return loaded;
       } else {
         // Permission not granted - store handle for later, show UI prompt
         this.pendingHandle = handle as FileSystemDirectoryHandle;
@@ -1012,6 +1023,42 @@ class ProjectFileService {
       }
     } catch (e) {
       console.warn('[ProjectFile] Failed to restore last project:', e);
+      // Try to recreate from parent folder
+      return await this.recreateProjectFromParent();
+    }
+  }
+
+  /**
+   * Recreate "Untitled" project from stored parent folder
+   * Used when project was deleted but we still have the parent folder handle
+   */
+  private async recreateProjectFromParent(): Promise<boolean> {
+    try {
+      const parentHandle = await projectDB.getStoredHandle('projectsFolder');
+      if (!parentHandle || parentHandle.kind !== 'directory') {
+        console.log('[ProjectFile] No parent folder stored, cannot recreate');
+        return false;
+      }
+
+      // Check permission for parent folder
+      const permission = await parentHandle.queryPermission({ mode: 'readwrite' });
+      if (permission !== 'granted') {
+        // Need permission - store for later
+        this.pendingHandle = parentHandle as FileSystemDirectoryHandle;
+        this.permissionNeeded = true;
+        console.log('[ProjectFile] Permission needed for parent folder');
+        return false;
+      }
+
+      // Recreate "Untitled" project
+      console.log('[ProjectFile] Recreating Untitled project...');
+      const success = await this.createProjectInFolder(parentHandle as FileSystemDirectoryHandle, 'Untitled');
+      if (success) {
+        console.log('[ProjectFile] Successfully recreated Untitled project');
+      }
+      return success;
+    } catch (e) {
+      console.warn('[ProjectFile] Failed to recreate project from parent:', e);
       return false;
     }
   }
