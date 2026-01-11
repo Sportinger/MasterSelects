@@ -706,61 +706,52 @@ class LayerBuilderService {
         blendMode: 'normal' as const,
       };
 
+      // Build base layer properties
+      const baseLayer = {
+        id: `nested-layer-${nestedClip.id}`,
+        name: nestedClip.name,
+        visible: true,
+        opacity: transform.opacity ?? 1,
+        blendMode: transform.blendMode || 'normal',
+        effects: nestedClip.effects || [],
+        position: {
+          x: transform.position?.x || 0,
+          y: transform.position?.y || 0,
+          z: transform.position?.z || 0,
+        },
+        scale: {
+          x: transform.scale?.x ?? 1,
+          y: transform.scale?.y ?? 1,
+        },
+        rotation: {
+          x: ((transform.rotation?.x || 0) * Math.PI) / 180,
+          y: ((transform.rotation?.y || 0) * Math.PI) / 180,
+          z: ((transform.rotation?.z || 0) * Math.PI) / 180,
+        },
+        // Add mask properties if nested clip has masks
+        ...(nestedClip.masks && nestedClip.masks.length > 0 ? {
+          maskClipId: nestedClip.id,
+          maskInvert: nestedClip.masks.some(m => m.inverted),
+        } : {}),
+      };
+
       if (nestedClip.source?.videoElement) {
         layers.push({
-          id: `nested-layer-${nestedClip.id}`,
-          name: nestedClip.name,
-          visible: true,
-          opacity: transform.opacity ?? 1,
-          blendMode: transform.blendMode || 'normal',
+          ...baseLayer,
           source: {
             type: 'video',
             videoElement: nestedClip.source.videoElement,
             webCodecsPlayer: nestedClip.source.webCodecsPlayer,
           },
-          effects: nestedClip.effects || [],
-          position: {
-            x: transform.position?.x || 0,
-            y: transform.position?.y || 0,
-            z: transform.position?.z || 0,
-          },
-          scale: {
-            x: transform.scale?.x ?? 1,
-            y: transform.scale?.y ?? 1,
-          },
-          rotation: {
-            x: ((transform.rotation?.x || 0) * Math.PI) / 180,
-            y: ((transform.rotation?.y || 0) * Math.PI) / 180,
-            z: ((transform.rotation?.z || 0) * Math.PI) / 180,
-          },
-        });
+        } as Layer);
       } else if (nestedClip.source?.imageElement) {
         layers.push({
-          id: `nested-layer-${nestedClip.id}`,
-          name: nestedClip.name,
-          visible: true,
-          opacity: transform.opacity ?? 1,
-          blendMode: transform.blendMode || 'normal',
+          ...baseLayer,
           source: {
             type: 'image',
             imageElement: nestedClip.source.imageElement,
           },
-          effects: nestedClip.effects || [],
-          position: {
-            x: transform.position?.x || 0,
-            y: transform.position?.y || 0,
-            z: transform.position?.z || 0,
-          },
-          scale: {
-            x: transform.scale?.x ?? 1,
-            y: transform.scale?.y ?? 1,
-          },
-          rotation: {
-            x: ((transform.rotation?.x || 0) * Math.PI) / 180,
-            y: ((transform.rotation?.y || 0) * Math.PI) / 180,
-            z: ((transform.rotation?.z || 0) * Math.PI) / 180,
-          },
-        });
+        } as Layer);
       }
     }
 

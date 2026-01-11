@@ -92,6 +92,42 @@ export function useEngine() {
   // Track mask changes and update engine mask textures
   const maskVersionRef = useRef<Map<string, string>>(new Map());
 
+  // Helper function to process a single clip's mask
+  const processClipMask = useCallback((clip: { id: string; masks?: import('../types').ClipMask[] }, engineDimensions: { width: number; height: number }) => {
+    if (clip.masks && clip.masks.length > 0) {
+      // Create version string - includes feather since blur is applied on CPU
+      const maskVersion = `${getMaskShapeHash(clip.masks)}_${engineDimensions.width}x${engineDimensions.height}`;
+      const cacheKey = clip.id;
+      const prevVersion = maskVersionRef.current.get(cacheKey);
+
+      // Regenerate texture if mask properties changed (shape, feather, etc.)
+      if (maskVersion !== prevVersion) {
+        maskVersionRef.current.set(cacheKey, maskVersion);
+
+        // Generate mask texture at engine render resolution (blur applied on CPU)
+        const maskImageData = generateMaskTexture(
+          clip.masks,
+          engineDimensions.width,
+          engineDimensions.height
+        );
+
+        if (maskImageData) {
+          console.log(`[Mask] Generated mask texture for clip ${clip.id}: ${engineDimensions.width}x${engineDimensions.height}, masks: ${clip.masks.length}`);
+          engine.updateMaskTexture(clip.id, maskImageData);
+        } else {
+          console.warn(`[Mask] Failed to generate mask texture for clip ${clip.id}`);
+        }
+      }
+    } else if (clip.id) {
+      // Clip exists but no masks, clear the mask texture
+      const cacheKey = clip.id;
+      if (maskVersionRef.current.has(cacheKey)) {
+        maskVersionRef.current.delete(cacheKey);
+        engine.removeMaskTexture(clip.id);
+      }
+    }
+  }, []);
+
   // Helper function to update mask textures - extracted to avoid duplication
   const updateMaskTextures = useCallback(() => {
     const { clips, playheadPosition, tracks } = useTimelineStore.getState();
@@ -116,40 +152,23 @@ export function useEngine() {
       // Find clip for this track at current time
       const clip = clipsAtTime.find(c => c.trackId === track.id);
 
-      if (clip?.masks && clip.masks.length > 0) {
-        // Create version string - includes feather since blur is applied on CPU
-        const maskVersion = `${getMaskShapeHash(clip.masks)}_${engineDimensions.width}x${engineDimensions.height}`;
-        const cacheKey = clip.id; // Use clip ID for consistent lookup across systems
-        const prevVersion = maskVersionRef.current.get(cacheKey);
+      if (clip) {
+        // Process main clip's mask
+        processClipMask(clip, engineDimensions);
 
-        // Regenerate texture if mask properties changed (shape, feather, etc.)
-        if (maskVersion !== prevVersion) {
-          maskVersionRef.current.set(cacheKey, maskVersion);
-
-          // Generate mask texture at engine render resolution (blur applied on CPU)
-          const maskImageData = generateMaskTexture(
-            clip.masks,
-            engineDimensions.width,
-            engineDimensions.height
-          );
-
-          if (maskImageData) {
-            console.log(`[Mask] Generated mask texture for clip ${clip.id}: ${engineDimensions.width}x${engineDimensions.height}, masks: ${clip.masks.length}`);
-            engine.updateMaskTexture(clip.id, maskImageData);
-          } else {
-            console.warn(`[Mask] Failed to generate mask texture for clip ${clip.id}`);
+        // Process nested clips' masks if this is a nested composition
+        if (clip.nestedClips && clip.nestedClips.length > 0) {
+          const clipTime = playheadPosition - clip.startTime;
+          for (const nestedClip of clip.nestedClips) {
+            // Check if nested clip is active at current time within the nested comp
+            if (clipTime >= nestedClip.startTime && clipTime < nestedClip.startTime + nestedClip.duration) {
+              processClipMask(nestedClip, engineDimensions);
+            }
           }
-        }
-      } else if (clip && clip.id) {
-        // Clip exists but no masks, clear the mask texture
-        const cacheKey = clip.id;
-        if (maskVersionRef.current.has(cacheKey)) {
-          maskVersionRef.current.delete(cacheKey);
-          engine.removeMaskTexture(clip.id);
         }
       }
     }
-  }, []);
+  }, [processClipMask]);
 
   useEffect(() => {
     if (!isEngineReady) return;
