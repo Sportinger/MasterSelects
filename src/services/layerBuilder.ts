@@ -12,6 +12,7 @@ import { audioManager, audioStatusTracker } from './audioManager';
 export const playheadState = {
   position: 0,
   isUsingInternalPosition: false, // true during playback, false when paused
+  playbackJustStarted: false, // true for first few frames after playback starts
 };
 
 class LayerBuilderService {
@@ -22,6 +23,9 @@ class LayerBuilderService {
   // Audio sync throttling - don't sync every frame to avoid glitches
   private lastAudioSyncTime = 0;
   private readonly AUDIO_SYNC_INTERVAL = 50; // Check audio sync every 50ms (balance between drift and glitches)
+
+  // Track playback start for initial sync
+  private playbackStartFrames = 0;
 
   /**
    * Build layers for the current frame - called directly from render loop
@@ -262,10 +266,21 @@ class LayerBuilderService {
    * THROTTLED to avoid audio glitches from constant seeking
    */
   syncAudioElements(): void {
-    // Throttle audio sync to avoid glitches - only run every AUDIO_SYNC_INTERVAL ms
     const now = performance.now();
-    if (now - this.lastAudioSyncTime < this.AUDIO_SYNC_INTERVAL) {
-      return;
+
+    // Handle playback start - force immediate sync for first 10 frames
+    if (playheadState.playbackJustStarted) {
+      this.playbackStartFrames++;
+      if (this.playbackStartFrames > 10) {
+        playheadState.playbackJustStarted = false;
+        this.playbackStartFrames = 0;
+      }
+      // Don't throttle during startup - we need to sync immediately
+    } else {
+      // Throttle audio sync to avoid glitches - only run every AUDIO_SYNC_INTERVAL ms
+      if (now - this.lastAudioSyncTime < this.AUDIO_SYNC_INTERVAL) {
+        return;
+      }
     }
     this.lastAudioSyncTime = now;
 
@@ -283,6 +298,9 @@ class LayerBuilderService {
     const playheadPosition = playheadState.isUsingInternalPosition
       ? playheadState.position
       : timelineState.playheadPosition;
+
+    // Force hard sync on playback start
+    const forceHardSync = playheadState.playbackJustStarted;
 
     const audioTracks = tracks.filter(t => t.type === 'audio');
     const videoTracks = tracks.filter(t => t.type === 'video');
@@ -356,19 +374,19 @@ class LayerBuilderService {
           // This is smoother than hard seeking for small drifts
           const absDrift = Math.abs(timeDiff);
 
-          if (absDrift > 0.2) {
-            // Large drift (>200ms): hard seek to resync
+          if (forceHardSync || absDrift > 0.15) {
+            // Force sync on playback start OR large drift (>150ms): hard seek to resync
             audio.currentTime = clipTime;
-            audio.playbackRate = Math.max(0.25, Math.min(4, targetRate)); // Reset rate
-          } else if (absDrift > 0.05) {
-            // Small drift (50-200ms): adjust playback rate to gradually catch up
-            // If audio is behind (timeDiff < 0), speed up slightly
-            // If audio is ahead (timeDiff > 0), slow down slightly
-            const correction = timeDiff > 0 ? -0.02 : 0.02; // 2% rate adjustment
+            audio.playbackRate = Math.max(0.25, Math.min(4, targetRate));
+          } else if (absDrift > 0.03) {
+            // Drift 30-150ms: adjust playback rate proportionally
+            // Scale correction based on drift amount (3% to 10%)
+            const correctionFactor = Math.min(0.10, absDrift * 0.5); // Up to 10% correction
+            const correction = timeDiff > 0 ? -correctionFactor : correctionFactor;
             const correctedRate = targetRate * (1 + correction);
             audio.playbackRate = Math.max(0.25, Math.min(4, correctedRate));
           } else {
-            // Drift < 50ms: acceptable, use normal rate
+            // Drift < 30ms: acceptable, use normal rate
             audio.playbackRate = Math.max(0.25, Math.min(4, targetRate));
           }
 
@@ -441,17 +459,18 @@ class LayerBuilderService {
           // Gradual drift correction using playback rate adjustment
           const absDrift = Math.abs(timeDiff);
 
-          if (absDrift > 0.2) {
-            // Large drift (>200ms): hard seek to resync
+          if (forceHardSync || absDrift > 0.15) {
+            // Force sync on playback start OR large drift (>150ms): hard seek
             audio.currentTime = clipTime;
             audio.playbackRate = Math.max(0.25, Math.min(4, targetRate));
-          } else if (absDrift > 0.05) {
-            // Small drift (50-200ms): adjust playback rate to catch up
-            const correction = timeDiff > 0 ? -0.02 : 0.02;
+          } else if (absDrift > 0.03) {
+            // Drift 30-150ms: adjust playback rate proportionally
+            const correctionFactor = Math.min(0.10, absDrift * 0.5);
+            const correction = timeDiff > 0 ? -correctionFactor : correctionFactor;
             const correctedRate = targetRate * (1 + correction);
             audio.playbackRate = Math.max(0.25, Math.min(4, correctedRate));
           } else {
-            // Drift < 50ms: acceptable
+            // Drift < 30ms: acceptable
             audio.playbackRate = Math.max(0.25, Math.min(4, targetRate));
           }
 

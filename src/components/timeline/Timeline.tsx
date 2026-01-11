@@ -575,6 +575,7 @@ export function Timeline() {
     // Initialize internal position from store and enable high-frequency mode
     playheadState.position = useTimelineStore.getState().playheadPosition;
     playheadState.isUsingInternalPosition = true;
+    playheadState.playbackJustStarted = true; // Signal for initial audio sync
 
     const getActiveVideoClip = () => {
       const state = useTimelineStore.getState();
