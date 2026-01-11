@@ -21,8 +21,8 @@ import { ParentChildLink } from './ParentChildLink';
 import { PhysicsCable } from './PhysicsCable';
 import { TimelineNavigator } from './TimelineNavigator';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
+import { useTimelineKeyboard } from './hooks/useTimelineKeyboard';
 import {
-  ALL_BLEND_MODES,
   RAM_PREVIEW_IDLE_DELAY,
   PROXY_IDLE_DELAY,
   DURATION_CHECK_TIMEOUT,
@@ -259,140 +259,8 @@ export function Timeline() {
     [clips]
   );
 
-  // Keyboard shortcuts (global, works regardless of focus)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Only handle if not typing in a text input
-      const isTextInput =
-        e.target instanceof HTMLTextAreaElement ||
-        (e.target instanceof HTMLInputElement &&
-          e.target.type !== 'range' &&
-          e.target.type !== 'checkbox' &&
-          e.target.type !== 'radio');
-
-      if (isTextInput) {
-        return;
-      }
-
-      // Space: toggle play/pause (also blur any focused slider/checkbox)
-      if (e.code === 'Space' || e.key === ' ') {
-        if (e.target instanceof HTMLInputElement) {
-          e.target.blur();
-        }
-        e.preventDefault();
-        if (isPlaying) {
-          pause();
-        } else {
-          play();
-        }
-        return;
-      }
-
-      // I: set In point at playhead
-      if (e.key === 'i' || e.key === 'I') {
-        e.preventDefault();
-        setInPointAtPlayhead();
-        return;
-      }
-
-      // O: set Out point at playhead
-      if (e.key === 'o' || e.key === 'O') {
-        e.preventDefault();
-        setOutPointAtPlayhead();
-        return;
-      }
-
-      // X: clear In/Out points
-      if (e.key === 'x' || e.key === 'X') {
-        e.preventDefault();
-        clearInOut();
-        return;
-      }
-
-      // L: toggle loop playback
-      if (e.key === 'l' || e.key === 'L') {
-        e.preventDefault();
-        toggleLoopPlayback();
-        return;
-      }
-
-      // Delete/Backspace: remove selected keyframes first, then clips
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        e.preventDefault();
-        // First check if any keyframes are selected
-        if (selectedKeyframeIds.size > 0) {
-          // Remove all selected keyframes
-          [...selectedKeyframeIds].forEach(keyframeId => removeKeyframe(keyframeId));
-          return;
-        }
-        // Otherwise remove selected clips
-        if (selectedClipIds.size > 0) {
-          [...selectedClipIds].forEach(clipId => removeClip(clipId));
-        }
-        return;
-      }
-
-      // C: Cut/split clip at playhead position
-      if (e.key === 'c' || e.key === 'C') {
-        e.preventDefault();
-        splitClipAtPlayhead();
-        return;
-      }
-
-      // Shift + "+": Cycle through blend modes (forward)
-      // Shift + "-": Cycle through blend modes (backward)
-      if (
-        e.shiftKey &&
-        (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_')
-      ) {
-        e.preventDefault();
-        // Apply to first selected clip
-        const firstSelectedId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
-        if (firstSelectedId) {
-          const clip = clipMap.get(firstSelectedId);
-          if (clip) {
-            const currentMode = clip.transform.blendMode;
-            const currentIndex = ALL_BLEND_MODES.indexOf(currentMode);
-            const direction = e.key === '+' || e.key === '=' ? 1 : -1;
-            const nextIndex =
-              (currentIndex + direction + ALL_BLEND_MODES.length) %
-              ALL_BLEND_MODES.length;
-            const nextMode = ALL_BLEND_MODES[nextIndex];
-            // Apply to all selected clips
-            [...selectedClipIds].forEach(clipId => {
-              updateClipTransform(clipId, { blendMode: nextMode });
-            });
-          }
-        }
-        return;
-      }
-
-      // Arrow Left: Move playhead one frame backward
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        if (activeComposition) {
-          const frameDuration = 1 / activeComposition.frameRate;
-          const newPosition = Math.max(0, playheadPosition - frameDuration);
-          setPlayheadPosition(newPosition);
-        }
-        return;
-      }
-
-      // Arrow Right: Move playhead one frame forward
-      if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        if (activeComposition) {
-          const frameDuration = 1 / activeComposition.frameRate;
-          const newPosition = Math.min(duration, playheadPosition + frameDuration);
-          setPlayheadPosition(newPosition);
-        }
-        return;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
+  // Keyboard shortcuts - extracted to hook
+  useTimelineKeyboard({
     isPlaying,
     play,
     pause,
@@ -405,13 +273,13 @@ export function Timeline() {
     removeClip,
     removeKeyframe,
     splitClipAtPlayhead,
-    clipMap,
     updateClipTransform,
+    clipMap,
     activeComposition,
     playheadPosition,
     duration,
     setPlayheadPosition,
-  ]);
+  });
 
   // Close context menu when clicking outside or pressing Escape
   useEffect(() => {
