@@ -207,14 +207,23 @@ export function Toolbar() {
     setOpenMenu(null);
   }, []);
 
-  const handleNameSubmit = useCallback(() => {
+  const handleNameSubmit = useCallback(async () => {
     if (editName.trim()) {
       const newName = editName.trim();
-      setProjectName(newName);
-      // Update project data in service
       const data = projectFileService.getProjectData();
-      if (data) {
-        projectFileService.updateProjectData({ name: newName });
+
+      // Only rename if name actually changed
+      if (data && newName !== data.name) {
+        setIsLoading(true);
+        const success = await projectFileService.renameProject(newName);
+        if (success) {
+          setProjectName(newName);
+          setShowSavedToast(true);
+        } else {
+          // Revert to old name on failure
+          setEditName(data.name);
+        }
+        setIsLoading(false);
       }
     }
     setIsEditingName(false);

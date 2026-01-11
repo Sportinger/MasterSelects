@@ -1107,6 +1107,120 @@ class ProjectFileService {
   }
 
   // ============================================
+  // RENAME PROJECT (INCLUDING FOLDER)
+  // ============================================
+
+  /**
+   * Rename the project and its folder on disk
+   * @param newName The new project name
+   * @returns true if successful, false otherwise
+   */
+  async renameProject(newName: string): Promise<boolean> {
+    if (!this.projectHandle || !this.projectData) {
+      console.error('[ProjectFile] No project open');
+      return false;
+    }
+
+    // Validate new name
+    const trimmedName = newName.trim();
+    if (!trimmedName || trimmedName === this.projectData.name) {
+      return false;
+    }
+
+    // Check for invalid characters in folder name
+    const invalidChars = /[<>:"/\\|?*]/;
+    if (invalidChars.test(trimmedName)) {
+      console.error('[ProjectFile] Invalid characters in project name');
+      return false;
+    }
+
+    try {
+      // Get the parent folder handle
+      const parentHandle = await projectDB.getStoredHandle('projectsFolder');
+      if (!parentHandle || parentHandle.kind !== 'directory') {
+        // Try to get parent by other means - this shouldn't happen normally
+        console.error('[ProjectFile] Cannot rename: parent folder handle not available');
+        // Fall back to just renaming in project.json
+        this.projectData.name = trimmedName;
+        this.markDirty();
+        await this.saveProject();
+        return true;
+      }
+
+      const parentDir = parentHandle as FileSystemDirectoryHandle;
+
+      // Check if new folder name already exists
+      try {
+        await parentDir.getDirectoryHandle(trimmedName, { create: false });
+        console.error('[ProjectFile] Folder with that name already exists');
+        return false;
+      } catch {
+        // Good - folder doesn't exist
+      }
+
+      const oldName = this.projectHandle.name;
+
+      // Create new folder
+      const newFolder = await parentDir.getDirectoryHandle(trimmedName, { create: true });
+
+      // Copy all contents recursively
+      await this.copyDirectoryContents(this.projectHandle, newFolder);
+
+      // Update project.json in the new folder with new name
+      this.projectData.name = trimmedName;
+      this.projectData.updatedAt = new Date().toISOString();
+      await this.writeProjectJson(newFolder, this.projectData);
+
+      // Update our handle to point to new folder
+      const oldHandle = this.projectHandle;
+      this.projectHandle = newFolder;
+      this.projectPath = trimmedName;
+
+      // Update stored handles
+      await projectDB.storeHandle('lastProject', newFolder);
+
+      // Delete old folder (after everything is copied)
+      try {
+        await parentDir.removeEntry(oldName, { recursive: true });
+        console.log(`[ProjectFile] Deleted old folder: ${oldName}`);
+      } catch (e) {
+        console.warn('[ProjectFile] Failed to delete old folder:', e);
+        // Not critical - new folder is already working
+      }
+
+      this.isDirty = false;
+      console.log(`[ProjectFile] Project renamed from "${oldName}" to "${trimmedName}"`);
+      return true;
+    } catch (e) {
+      console.error('[ProjectFile] Failed to rename project:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Copy all contents from one directory to another (recursive)
+   */
+  private async copyDirectoryContents(
+    source: FileSystemDirectoryHandle,
+    target: FileSystemDirectoryHandle
+  ): Promise<void> {
+    for await (const entry of (source as any).values()) {
+      if (entry.kind === 'file') {
+        // Copy file
+        const sourceFile = await entry.getFile();
+        const targetFile = await target.getFileHandle(entry.name, { create: true });
+        const writable = await targetFile.createWritable();
+        await writable.write(sourceFile);
+        await writable.close();
+      } else if (entry.kind === 'directory') {
+        // Create subdirectory and copy contents recursively
+        const subDir = await target.getDirectoryHandle(entry.name, { create: true });
+        await this.copyDirectoryContents(entry, subDir);
+      }
+    }
+  }
+
+  // ============================================
   // UPDATE PROJECT DATA
   // ============================================
 

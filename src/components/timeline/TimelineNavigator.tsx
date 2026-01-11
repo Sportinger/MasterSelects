@@ -29,6 +29,8 @@ export function TimelineNavigator({
   const [dragStartX, setDragStartX] = useState(0);
   const [dragStartScrollX, setDragStartScrollX] = useState(0);
   const [dragStartZoom, setDragStartZoom] = useState(0);
+  const [dragStartThumbLeft, setDragStartThumbLeft] = useState(0);
+  const [dragStartThumbWidth, setDragStartThumbWidth] = useState(0);
 
   // Calculate thumb position and size
   const totalContentWidth = duration * zoom;
@@ -50,7 +52,9 @@ export function TimelineNavigator({
     setDragStartX(e.clientX);
     setDragStartScrollX(scrollX);
     setDragStartZoom(zoom);
-  }, [scrollX, zoom]);
+    setDragStartThumbLeft(thumbLeft);
+    setDragStartThumbWidth(thumbWidth);
+  }, [scrollX, zoom, thumbLeft, thumbWidth]);
 
   const handleTrackClick = useCallback((e: React.MouseEvent) => {
     if (!trackRef.current || isDragging) return;
@@ -81,10 +85,13 @@ export function TimelineNavigator({
         const newScrollX = dragStartScrollX + deltaRatio * maxScrollX;
         onScrollChange(Math.max(0, Math.min(maxScrollX, newScrollX)));
       } else if (isDragging === 'left') {
-        // Resize from left = zoom and scroll
-        // Drag left (negative delta) = zoom out (see more) = smaller zoom value
-        const zoomDelta = deltaX * 0.01;
-        const newZoom = Math.max(minZoom, Math.min(maxZoom, dragStartZoom + zoomDelta * dragStartZoom));
+        // Resize from left - handle follows mouse 1:1
+        // New thumb width = original width minus the delta (drag left = wider thumb)
+        const newThumbWidth = Math.max(40, dragStartThumbWidth - deltaX);
+
+        // Calculate zoom from thumb width: thumbWidth = (viewportWidth / (duration * zoom)) * trackWidth
+        // Rearranged: zoom = viewportWidth * trackWidth / (duration * thumbWidth)
+        const newZoom = Math.max(minZoom, Math.min(maxZoom, (viewportWidth * trackWidth) / (duration * newThumbWidth)));
         onZoomChange(newZoom);
 
         // Adjust scroll to keep right edge stable
@@ -94,10 +101,12 @@ export function TimelineNavigator({
         const newScrollX = Math.max(0, Math.min(newMaxScrollX, rightEdge * (newZoom / dragStartZoom) - viewportWidth));
         onScrollChange(newScrollX);
       } else if (isDragging === 'right') {
-        // Resize from right = zoom
-        // Drag right (positive delta) = zoom out (see more) = smaller zoom value
-        const zoomDelta = -deltaX * 0.01;
-        const newZoom = Math.max(minZoom, Math.min(maxZoom, dragStartZoom + zoomDelta * dragStartZoom));
+        // Resize from right - handle follows mouse 1:1
+        // New thumb width = original width plus the delta (drag right = wider thumb)
+        const newThumbWidth = Math.max(40, dragStartThumbWidth + deltaX);
+
+        // Calculate zoom from thumb width
+        const newZoom = Math.max(minZoom, Math.min(maxZoom, (viewportWidth * trackWidth) / (duration * newThumbWidth)));
         onZoomChange(newZoom);
 
         // Keep left edge stable
@@ -119,7 +128,7 @@ export function TimelineNavigator({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, dragStartX, dragStartScrollX, dragStartZoom, thumbWidth, maxScrollX, duration, viewportWidth, minZoom, maxZoom, onScrollChange, onZoomChange]);
+  }, [isDragging, dragStartX, dragStartScrollX, dragStartZoom, dragStartThumbWidth, thumbWidth, trackWidth, maxScrollX, duration, viewportWidth, minZoom, maxZoom, onScrollChange, onZoomChange]);
 
   return (
     <div className="timeline-navigator">
