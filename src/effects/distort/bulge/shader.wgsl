@@ -17,17 +17,17 @@ fn bulgeFragment(input: VertexOutput) -> @location(0) vec4f {
   let delta = input.uv - center;
   let dist = length(delta);
 
-  if (dist < params.radius && dist > 0.0) {
-    let normalizedDist = dist / params.radius;
+  // Calculate bulged UV unconditionally to satisfy uniform control flow
+  let safeDist = max(dist, 0.0001); // Avoid division by zero
+  let normalizedDist = safeDist / params.radius;
+  let factor = pow(normalizedDist, params.amount);
+  let newDist = factor * params.radius;
+  let direction = delta / safeDist; // normalize without branch
+  let bulgedUV = center + direction * newDist;
 
-    // Bulge/pinch factor
-    let factor = pow(normalizedDist, params.amount);
+  // Use select to choose UV based on whether we're in the effect radius
+  let inRadius = dist < params.radius && dist > 0.0;
+  let finalUV = select(input.uv, bulgedUV, inRadius);
 
-    let newDist = factor * params.radius;
-    let direction = normalize(delta);
-
-    return textureSample(inputTex, texSampler, center + direction * newDist);
-  }
-
-  return textureSample(inputTex, texSampler, input.uv);
+  return textureSample(inputTex, texSampler, finalUV);
 }

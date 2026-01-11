@@ -17,19 +17,22 @@ fn twirlFragment(input: VertexOutput) -> @location(0) vec4f {
   let delta = input.uv - center;
   let dist = length(delta);
 
-  if (dist < params.radius) {
-    let factor = 1.0 - (dist / params.radius);
-    let angle = params.amount * factor * factor;
+  // Calculate twirled UV unconditionally to satisfy uniform control flow
+  let safeRadius = max(params.radius, 0.0001); // Avoid division by zero
+  let factor = 1.0 - min(dist / safeRadius, 1.0);
+  let angle = params.amount * factor * factor;
 
-    let s = sin(angle);
-    let c = cos(angle);
-    let rotated = vec2f(
-      delta.x * c - delta.y * s,
-      delta.x * s + delta.y * c
-    );
+  let s = sin(angle);
+  let c = cos(angle);
+  let rotated = vec2f(
+    delta.x * c - delta.y * s,
+    delta.x * s + delta.y * c
+  );
+  let twirledUV = center + rotated;
 
-    return textureSample(inputTex, texSampler, center + rotated);
-  }
+  // Use select to choose UV based on whether we're in the effect radius
+  let inRadius = dist < params.radius;
+  let finalUV = select(input.uv, twirledUV, inRadius);
 
-  return textureSample(inputTex, texSampler, input.uv);
+  return textureSample(inputTex, texSampler, finalUV);
 }
