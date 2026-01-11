@@ -188,16 +188,14 @@ class ProxyGeneratorGPU {
       try {
         // Check for WebCodecs support
         if (!('VideoDecoder' in window)) {
-          console.warn('[ProxyGen] WebCodecs not supported, falling back to legacy method');
-          resolve(null); // Signal to use fallback
+          reject(new Error('WebCodecs VideoDecoder not available in this browser'));
           return;
         }
 
         // Check for WebGPU support
         const device = engine.getDevice();
         if (!device) {
-          console.warn('[ProxyGen] WebGPU not available, falling back to legacy method');
-          resolve(null);
+          reject(new Error('WebGPU device not available'));
           return;
         }
 
@@ -214,8 +212,7 @@ class ProxyGeneratorGPU {
         // Load file with MP4Box
         const loaded = await this.loadWithMP4Box(file);
         if (!loaded) {
-          console.warn('[ProxyGen] Failed to parse video, falling back to legacy method');
-          resolve(null);
+          reject(new Error('Failed to parse video file or no supported codec found'));
           return;
         }
 

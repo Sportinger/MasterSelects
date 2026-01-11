@@ -873,36 +873,23 @@ export const useMediaStore = create<MediaState>()(
           try {
             let result: { frameCount: number; fps: number } | null = null;
 
-            // Try GPU-accelerated generation first
-            try {
-              const { getProxyGenerator } = await import('../services/proxyGenerator');
-              const generator = getProxyGenerator();
+            // GPU-accelerated generation (WebCodecs + WebGPU)
+            const { getProxyGenerator } = await import('../services/proxyGenerator');
+            const generator = getProxyGenerator();
 
-              console.log('[Proxy] Trying GPU-accelerated generation...');
-              result = await generator.generate(
-                mediaFile.file!,
-                mediaFileId,
-                (progress) => updateProxyProgress(mediaFileId, progress),
-                () => controller.cancelled,
-                saveFrame
-              );
+            console.log('[Proxy] Starting GPU-accelerated generation...');
+            result = await generator.generate(
+              mediaFile.file!,
+              mediaFileId,
+              (progress) => updateProxyProgress(mediaFileId, progress),
+              () => controller.cancelled,
+              saveFrame
+            );
 
-              if (result) {
-                console.log(`[Proxy] GPU generation completed: ${result.frameCount} frames`);
-              }
-            } catch (gpuError) {
-              console.warn('[Proxy] GPU generation failed, falling back to legacy:', gpuError);
-              result = null;
-            }
-
-            // Fall back to legacy method if GPU method failed or returned null
-            if (!result && !controller.cancelled) {
-              console.log('[Proxy] Using legacy generation method...');
-              result = await generateProxyFrames(
-                mediaFile,
-                (progress) => updateProxyProgress(mediaFileId, progress),
-                () => controller.cancelled
-              );
+            if (result) {
+              console.log(`[Proxy] GPU generation completed: ${result.frameCount} frames`);
+            } else if (!controller.cancelled) {
+              console.error('[Proxy] GPU generation failed - no result returned');
             }
 
             if (result) {
