@@ -76,22 +76,31 @@ export function useTimelineZoom({
         const delta = e.deltaY > 0 ? -zoomFactor : zoomFactor;
         const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom + delta));
 
+        // Calculate max scroll to prevent scrolling past duration
+        const maxScrollX = Math.max(0, duration * newZoom - viewportWidth);
+
         // Calculate playhead position in pixels with new zoom
         const playheadPixel = playheadPosition * newZoom;
 
-        // Calculate scrollX to center playhead in viewport
-        const newScrollX = Math.max(0, playheadPixel - viewportWidth / 2);
+        // Calculate scrollX to center playhead in viewport, clamped to valid range
+        const newScrollX = Math.max(0, Math.min(maxScrollX, playheadPixel - viewportWidth / 2));
 
         setZoom(newZoom);
         setScrollX(newScrollX);
       } else if (e.shiftKey) {
         // Shift+scroll = horizontal scroll (use deltaY since mouse wheel is vertical)
         e.preventDefault();
-        setScrollX(Math.max(0, scrollX + e.deltaY));
+        const trackLanes = el.querySelector('.track-lanes');
+        const viewportWidth = trackLanes?.clientWidth ?? el.clientWidth - 120;
+        const maxScrollX = Math.max(0, duration * zoom - viewportWidth);
+        setScrollX(Math.max(0, Math.min(maxScrollX, scrollX + e.deltaY)));
       } else {
         // Handle horizontal scroll (e.g., trackpad horizontal gesture)
         if (e.deltaX !== 0) {
-          setScrollX(Math.max(0, scrollX + e.deltaX));
+          const trackLanes = el.querySelector('.track-lanes');
+          const viewportWidth = trackLanes?.clientWidth ?? el.clientWidth - 120;
+          const maxScrollX = Math.max(0, duration * zoom - viewportWidth);
+          setScrollX(Math.max(0, Math.min(maxScrollX, scrollX + e.deltaX)));
         }
         // Handle vertical scroll with custom scrollbar
         if (e.deltaY !== 0 && !e.shiftKey && !e.ctrlKey && !e.altKey) {
