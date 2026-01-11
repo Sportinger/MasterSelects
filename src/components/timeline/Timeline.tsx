@@ -25,6 +25,7 @@ import { useTimelineZoom } from './hooks/useTimelineZoom';
 import { usePlayheadDrag } from './hooks/usePlayheadDrag';
 import { TimelineContextMenu, useClipContextMenu } from './TimelineContextMenu';
 import { useMarqueeSelection } from './hooks/useMarqueeSelection';
+import { useClipTrim } from './hooks/useClipTrim';
 import {
   RAM_PREVIEW_IDLE_DELAY,
   PROXY_IDLE_DELAY,
@@ -150,10 +151,14 @@ export function Timeline() {
   const clipDragRef = useRef(clipDrag);
   clipDragRef.current = clipDrag;
 
-  // Clip trimming state
-  const [clipTrim, setClipTrim] = useState<ClipTrimState | null>(null);
-  const clipTrimRef = useRef(clipTrim);
-  clipTrimRef.current = clipTrim;
+  // Clip trimming - extracted to hook
+  const { clipTrim, clipTrimRef, handleTrimStart } = useClipTrim({
+    clipMap,
+    selectClip,
+    trimClip,
+    moveClip,
+    pixelToTime,
+  });
 
   // Playhead and marker dragging - extracted to hook
   const { markerDrag, handleRulerMouseDown, handlePlayheadMouseDown, handleMarkerMouseDown } = usePlayheadDrag({
@@ -1757,127 +1762,6 @@ export function Timeline() {
       }
     },
     [clipMap, openCompositionTab]
-  );
-
-  // Handle trim start
-  const handleTrimStart = useCallback(
-    (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => {
-      e.stopPropagation();
-      e.preventDefault();
-
-      const clip = clipMap.get(clipId);
-      if (!clip) return;
-
-      selectClip(clipId);
-
-      const initialTrim: ClipTrimState = {
-        clipId,
-        edge,
-        originalStartTime: clip.startTime,
-        originalDuration: clip.duration,
-        originalInPoint: clip.inPoint,
-        originalOutPoint: clip.outPoint,
-        startX: e.clientX,
-        currentX: e.clientX,
-        altKey: e.altKey,
-      };
-      setClipTrim(initialTrim);
-      clipTrimRef.current = initialTrim;
-
-      const handleMouseMove = (moveEvent: MouseEvent) => {
-        const newTrim = clipTrimRef.current;
-        if (!newTrim) return;
-        const updated = {
-          ...newTrim,
-          currentX: moveEvent.clientX,
-          altKey: moveEvent.altKey,
-        };
-        setClipTrim(updated);
-        clipTrimRef.current = updated;
-      };
-
-      const handleMouseUp = () => {
-        const trim = clipTrimRef.current;
-        if (!trim) {
-          setClipTrim(null);
-          clipTrimRef.current = null;
-          document.removeEventListener('mousemove', handleMouseMove);
-          document.removeEventListener('mouseup', handleMouseUp);
-          return;
-        }
-
-        const clipToTrim = clipMap.get(trim.clipId);
-        if (!clipToTrim) {
-          setClipTrim(null);
-          clipTrimRef.current = null;
-          document.removeEventListener('mousemove', handleMouseMove);
-          document.removeEventListener('mouseup', handleMouseUp);
-          return;
-        }
-
-        const deltaX = trim.currentX - trim.startX;
-        const deltaTime = pixelToTime(deltaX);
-        const maxDuration = clipToTrim.source?.naturalDuration || clipToTrim.duration;
-
-        let newStartTime = trim.originalStartTime;
-        let newInPoint = trim.originalInPoint;
-        let newOutPoint = trim.originalOutPoint;
-
-        if (trim.edge === 'left') {
-          const maxTrim = trim.originalDuration - 0.1;
-          const minTrim = -trim.originalInPoint;
-          const clampedDelta = Math.max(minTrim, Math.min(maxTrim, deltaTime));
-          newStartTime = trim.originalStartTime + clampedDelta;
-          newInPoint = trim.originalInPoint + clampedDelta;
-        } else {
-          const maxExtend = maxDuration - trim.originalOutPoint;
-          const minTrim = -(trim.originalDuration - 0.1);
-          const clampedDelta = Math.max(minTrim, Math.min(maxExtend, deltaTime));
-          newOutPoint = trim.originalOutPoint + clampedDelta;
-        }
-
-        trimClip(clipToTrim.id, newInPoint, newOutPoint);
-        if (trim.edge === 'left') {
-          moveClip(clipToTrim.id, Math.max(0, newStartTime), clipToTrim.trackId, trim.altKey);
-        }
-
-        if (!trim.altKey && clipToTrim.linkedClipId) {
-          const linkedClip = clipMap.get(clipToTrim.linkedClipId);
-          if (linkedClip) {
-            const linkedMaxDuration =
-              linkedClip.source?.naturalDuration || linkedClip.duration;
-            if (trim.edge === 'left') {
-              const linkedNewInPoint = Math.max(
-                0,
-                Math.min(linkedMaxDuration - 0.1, newInPoint)
-              );
-              trimClip(linkedClip.id, linkedNewInPoint, linkedClip.outPoint);
-              moveClip(
-                linkedClip.id,
-                Math.max(0, newStartTime),
-                linkedClip.trackId,
-                true
-              );
-            } else {
-              const linkedNewOutPoint = Math.max(
-                0.1,
-                Math.min(linkedMaxDuration, newOutPoint)
-              );
-              trimClip(linkedClip.id, linkedClip.inPoint, linkedNewOutPoint);
-            }
-          }
-        }
-
-        setClipTrim(null);
-        clipTrimRef.current = null;
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-    },
-    [clipMap, pixelToTime, selectClip, trimClip, moveClip]
   );
 
   // Quick duration check for dragged video files
