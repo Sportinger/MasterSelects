@@ -469,11 +469,22 @@ export function Timeline() {
 
   // Preload upcoming video clips - seek videos and force buffering before playhead hits them
   // This prevents stuttering when playback transitions to a new clip
+  // PERFORMANCE: Throttled to run every 500ms instead of every frame
+  const lastPreloadCheckRef = useRef(0);
   useEffect(() => {
     if (!isPlaying || isDraggingPlayhead) return;
 
+    // Throttle preload checks to every 500ms (no need to check every frame for 2s lookahead)
+    const now = performance.now();
+    if (now - lastPreloadCheckRef.current < 500) return;
+    lastPreloadCheckRef.current = now;
+
     const LOOKAHEAD_TIME = 2.0; // Look 2 seconds ahead
-    const lookaheadPosition = playheadPosition + LOOKAHEAD_TIME;
+    // Use high-frequency playhead position during playback
+    const currentPosition = playheadState.isUsingInternalPosition
+      ? playheadState.position
+      : playheadPosition;
+    const lookaheadPosition = currentPosition + LOOKAHEAD_TIME;
 
     // Helper to preload a video element - seeks and forces buffering
     const preloadVideo = (video: HTMLVideoElement, targetTime: number, _clipName: string) => {
@@ -505,7 +516,7 @@ export function Timeline() {
     // Find clips that will start playing soon (not currently playing, but will be soon)
     const upcomingClips = clips.filter(clip => {
       // Clip starts after current position but within lookahead window
-      const startsInLookahead = clip.startTime > playheadPosition && clip.startTime <= lookaheadPosition;
+      const startsInLookahead = clip.startTime > currentPosition && clip.startTime <= lookaheadPosition;
       // Has a video element to preload
       const hasVideo = clip.source?.videoElement;
       return startsInLookahead && hasVideo;
@@ -520,7 +531,7 @@ export function Timeline() {
 
     // Also preload nested composition clips
     const upcomingNestedClips = clips.filter(clip => {
-      const startsInLookahead = clip.startTime > playheadPosition && clip.startTime <= lookaheadPosition;
+      const startsInLookahead = clip.startTime > currentPosition && clip.startTime <= lookaheadPosition;
       const hasNestedClips = clip.isComposition && clip.nestedClips && clip.nestedClips.length > 0;
       return startsInLookahead && hasNestedClips;
     });
