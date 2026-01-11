@@ -6,6 +6,8 @@ import { useTimelineStore } from '../stores/timeline';
 import { useMediaStore } from '../stores/mediaStore';
 import { proxyFrameCache } from './proxyFrameCache';
 import { audioManager, audioStatusTracker } from './audioManager';
+import { generateMaskTexture } from '../utils/maskRenderer';
+import { engine } from '../engine/WebGPUEngine';
 
 // High-frequency playhead position - updated every frame by playback loop
 // This avoids store updates which trigger subscriber cascades
@@ -601,7 +603,7 @@ class LayerBuilderService {
     const transform = getInterpolatedTransform(clip.id, keyframeLocalTime);
     const videoInterpolatedEffects = getInterpolatedEffects(clip.id, keyframeLocalTime);
 
-    return {
+    const layer: Layer = {
       id: `timeline_layer_${layerIndex}`,
       name: clip.name,
       visible: true,
@@ -621,6 +623,30 @@ class LayerBuilderService {
         z: (transform.rotation.z * Math.PI) / 180,
       },
     };
+
+    // Add mask properties if clip has masks
+    if (clip.masks && clip.masks.length > 0) {
+      const engineDimensions = engine.getOutputDimensions();
+
+      // Generate mask texture if not already cached
+      if (!engine.hasMaskTexture(layer.id)) {
+        const maskImageData = generateMaskTexture(
+          clip.masks,
+          engineDimensions.width,
+          engineDimensions.height
+        );
+        if (maskImageData) {
+          engine.updateMaskTexture(layer.id, maskImageData);
+        }
+      }
+
+      // Add mask properties to layer
+      layer.maskFeather = Math.max(...clip.masks.map(m => m.feather));
+      layer.maskFeatherQuality = Math.max(...clip.masks.map(m => m.featherQuality ?? 50));
+      layer.maskInvert = clip.masks.some(m => m.inverted);
+    }
+
+    return layer;
   }
 
   /**
