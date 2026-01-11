@@ -413,26 +413,6 @@ class ProxyGeneratorGPU {
       }
     }
 
-    // Try without hardware acceleration
-    for (const codec of codecsToTry) {
-      const config: VideoDecoderConfig = {
-        codec,
-        codedWidth: width,
-        codedHeight: height,
-        hardwareAcceleration: 'prefer-software',
-      };
-
-      try {
-        const support = await VideoDecoder.isConfigSupported(config);
-        if (support.supported) {
-          console.log(`[ProxyGen] Found supported codec (software): ${codec}`);
-          return config;
-        }
-      } catch (e) {
-        // Codec check failed, try next
-      }
-    }
-
     console.warn(`[ProxyGen] No supported codec found for ${baseCodec}`);
     return null;
   }
