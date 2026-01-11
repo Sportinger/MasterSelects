@@ -34,8 +34,8 @@ class LayerBuilderService {
 
   // Lookahead preloading throttle
   private lastLookaheadTime = 0;
-  private readonly LOOKAHEAD_INTERVAL = 200; // Check for upcoming nested comps every 200ms
-  private readonly LOOKAHEAD_SECONDS = 1.5; // Look 1.5 seconds ahead
+  private readonly LOOKAHEAD_INTERVAL = 100; // Check for upcoming nested comps every 100ms
+  private readonly LOOKAHEAD_SECONDS = 3.0; // Look 3 seconds ahead for more preload time
 
   /**
    * Build layers for the current frame - called directly from render loop
@@ -294,10 +294,9 @@ class LayerBuilderService {
         const frameIndex = Math.floor(nestedClipTime * proxyFps);
 
         // Trigger preloading by calling getCachedFrame (it preloads even if miss)
-        proxyFrameCache.getCachedFrame(nestedMediaFile.id, frameIndex, proxyFps);
-
-        // Also preload a few frames ahead for smoother playback
-        for (let i = 1; i <= 5; i++) {
+        // Preload 60 frames (2 seconds at 30fps) for smooth playback start
+        const framesToPreload = Math.min(60, Math.ceil(proxyFps * 2));
+        for (let i = 0; i < framesToPreload; i++) {
           proxyFrameCache.getCachedFrame(nestedMediaFile.id, frameIndex + i, proxyFps);
         }
       }

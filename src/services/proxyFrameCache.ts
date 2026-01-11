@@ -4,8 +4,8 @@ import { projectDB } from './projectDB';
 
 // Cache settings
 const MAX_CACHE_SIZE = 300; // Maximum frames to keep in memory (10s at 30fps)
-const PRELOAD_AHEAD_FRAMES = 10; // Preload this many frames ahead for smooth scrubbing
-const PARALLEL_LOAD_COUNT = 4; // Load this many frames in parallel for faster preload
+const PRELOAD_AHEAD_FRAMES = 30; // Preload this many frames ahead for smooth playback (1s at 30fps)
+const PARALLEL_LOAD_COUNT = 8; // Load this many frames in parallel for faster preload
 
 // Frame cache entry
 interface CachedFrame {
