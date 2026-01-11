@@ -1436,7 +1436,10 @@ export class WebGPUEngine {
       }
     }
 
-    // Copy final result to the composition texture
+    // Copy final result to the composition texture using GPU texture copy
+    // We need to determine which ping-pong texture has the final result
+    // readView contains the final composited image after all layers
+    // Use a composite pass with passthrough to copy to compTexture (same format: rgba8unorm)
     const copyPass = commandEncoder.beginRenderPass({
       colorAttachments: [{
         view: compTexture.view,
@@ -1444,9 +1447,30 @@ export class WebGPUEngine {
         storeOp: 'store',
       }],
     });
-    // Use output pipeline to copy from readView to compTexture
-    const copyBindGroup = this.outputPipeline!.getOutputBindGroup(this.sampler!, readView, true);
-    copyPass.setPipeline(this.outputPipeline!.getOutputPipeline()!);
+    // Use compositor pipeline (rgba8unorm) for copy - create a passthrough bind group
+    const copyUniformBuffer = this.compositorPipeline!.getOrCreateUniformBuffer(`nested-copy-${compositionId}`);
+    // Set up passthrough layer uniforms (opacity=1, blendMode=normal, no transform)
+    const passthroughLayer: Layer = {
+      id: 'passthrough',
+      name: 'passthrough',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      source: { type: 'image' },
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: { x: 0, y: 0, z: 0 },
+    };
+    this.compositorPipeline!.updateLayerUniforms(passthroughLayer, 1, 1, false, copyUniformBuffer);
+    const copyBindGroup = this.compositorPipeline!.createCompositeBindGroup(
+      this.sampler!,
+      readView, // base texture (will be overwritten)
+      readView, // layer texture (source to copy)
+      copyUniformBuffer,
+      this.maskTextureManager!.getWhiteMaskView()!
+    );
+    copyPass.setPipeline(this.compositorPipeline!.getCompositePipeline()!);
     copyPass.setBindGroup(0, copyBindGroup);
     copyPass.draw(6);
     copyPass.end();
