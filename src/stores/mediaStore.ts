@@ -5,6 +5,7 @@ import { subscribeWithSelector, persist } from 'zustand/middleware';
 import { useTimelineStore } from './timeline';
 import { projectDB, type StoredMediaFile, type StoredProject } from '../services/projectDB';
 import { fileSystemService } from '../services/fileSystemService';
+import { engine } from '../engine/WebGPUEngine';
 
 // Media item types
 export type MediaType = 'video' | 'audio' | 'image' | 'composition';
@@ -1161,6 +1162,9 @@ export const useMediaStore = create<MediaState>()(
             const timelineStore = useTimelineStore.getState();
             timelineStore.clearTimeline();
 
+            // Clear the render frame (removes old project's last frame)
+            engine.clearFrame();
+
             // Restore state
             set({
               files,
@@ -1204,6 +1208,9 @@ export const useMediaStore = create<MediaState>()(
           // Clear timeline first
           const timelineStore = useTimelineStore.getState();
           timelineStore.clearTimeline();
+
+          // Clear the render frame (removes old project's last frame)
+          engine.clearFrame();
 
           // Create new default composition
           const newCompId = `comp-${Date.now()}`;

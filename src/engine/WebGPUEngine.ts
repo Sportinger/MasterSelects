@@ -1643,6 +1643,49 @@ export class WebGPUEngine {
     this.showTransparencyGrid = show;
   }
 
+  // Clear the frame buffer (useful when loading a new project)
+  clearFrame(): void {
+    const device = this.context.getDevice();
+    if (!device || !this.pingView || !this.pongView) return;
+
+    const commandEncoder = device.createCommandEncoder();
+
+    // Clear both ping and pong textures to transparent
+    const clearPing = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: this.pingView,
+        clearValue: { r: 0, g: 0, b: 0, a: 0 },
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+    clearPing.end();
+
+    const clearPong = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: this.pongView,
+        clearValue: { r: 0, g: 0, b: 0, a: 0 },
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+    clearPong.end();
+
+    // Update uniforms and render cleared frame to canvases
+    this.outputPipeline?.updateUniforms(this.showTransparencyGrid, this.outputWidth, this.outputHeight);
+    const outputBindGroup = this.outputPipeline?.createOutputBindGroup(this.sampler!, this.pingView);
+    if (outputBindGroup) {
+      if (this.previewContext) {
+        this.outputPipeline!.renderToCanvas(commandEncoder, this.previewContext, outputBindGroup);
+      }
+      for (const previewCtx of this.previewCanvases.values()) {
+        this.outputPipeline!.renderToCanvas(commandEncoder, previewCtx, outputBindGroup);
+      }
+    }
+
+    device.queue.submit([commandEncoder.finish()]);
+  }
+
   getDevice(): GPUDevice | null {
     return this.context.getDevice();
   }
