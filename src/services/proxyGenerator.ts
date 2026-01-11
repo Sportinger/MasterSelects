@@ -299,10 +299,23 @@ class ProxyGeneratorGPU {
           const avcC = trak?.mdia?.minf?.stbl?.stsd?.entries?.[0]?.avcC;
           if (avcC) {
             // Create avcC box as Uint8Array for VideoDecoder description
+            // The description should be the raw avcC content (without box header)
             const stream = new (MP4Box as any).DataStream(undefined, 0, (MP4Box as any).DataStream.BIG_ENDIAN);
             avcC.write(stream);
-            description = new Uint8Array(stream.buffer, 8); // Skip box header
-            console.log(`[ProxyGen] Got AVC description: ${description.length} bytes`);
+            // stream.position tells us how many bytes were actually written
+            // Skip 8 bytes for box header (4 bytes size + 4 bytes 'avcC' type)
+            const totalWritten = stream.position || stream.buffer.byteLength;
+            if (totalWritten > 8) {
+              description = new Uint8Array(stream.buffer.slice(8, totalWritten));
+              console.log(`[ProxyGen] Got AVC description: ${description.length} bytes (from ${totalWritten} total)`);
+              // Log first few bytes for debugging
+              const hex = Array.from(description.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+              console.log(`[ProxyGen] AVC description starts with: ${hex}`);
+            } else {
+              console.warn(`[ProxyGen] avcC box too small: ${totalWritten} bytes`);
+            }
+          } else {
+            console.warn('[ProxyGen] No avcC box found in track');
           }
         }
 
@@ -487,13 +500,32 @@ class ProxyGeneratorGPU {
   private initDecoder() {
     if (!this.codecConfig) return;
 
+    let decodedCount = 0;
+    let errorCount = 0;
+
     this.decoder = new VideoDecoder({
-      output: (frame) => this.handleDecodedFrame(frame),
-      error: (error) => console.error('[ProxyGen] Decoder error:', error),
+      output: (frame) => {
+        decodedCount++;
+        this.handleDecodedFrame(frame);
+      },
+      error: (error) => {
+        errorCount++;
+        console.error('[ProxyGen] Decoder error:', error);
+      },
     });
 
     this.decoder.configure(this.codecConfig);
-    console.log('[ProxyGen] Decoder configured:', this.codecConfig.codec);
+    console.log('[ProxyGen] Decoder configured:', {
+      codec: this.codecConfig.codec,
+      size: `${this.codecConfig.codedWidth}x${this.codecConfig.codedHeight}`,
+      hasDescription: !!this.codecConfig.description,
+      descriptionSize: this.codecConfig.description ?
+        (this.codecConfig.description as Uint8Array).byteLength : 0,
+    });
+
+    // Store counters for later logging
+    (this.decoder as any)._decodedCount = () => decodedCount;
+    (this.decoder as any)._errorCount = () => errorCount;
   }
 
   private handleDecodedFrame(frame: VideoFrame) {
@@ -515,9 +547,13 @@ class ProxyGeneratorGPU {
   ): Promise<void> {
     if (!this.decoder || !this.resizePipeline) return;
 
-    console.log(`[ProxyGen] Decoding ${this.samples.length} samples with GPU batch processing...`);
+    // Count keyframes for diagnostics
+    const keyframeCount = this.samples.filter(s => s.is_sync).length;
+    const deltaCount = this.samples.length - keyframeCount;
+    console.log(`[ProxyGen] Decoding ${this.samples.length} samples (${keyframeCount} keyframes, ${deltaCount} delta frames)...`);
 
     // Decode all samples first
+    let decodeErrors = 0;
     for (const sample of this.samples) {
       if (this.checkCancelled?.()) {
         this.isCancelled = true;
@@ -531,12 +567,34 @@ class ProxyGeneratorGPU {
         data: sample.data,
       });
 
-      this.decoder.decode(chunk);
+      try {
+        this.decoder.decode(chunk);
+      } catch (e) {
+        decodeErrors++;
+        if (decodeErrors <= 5) {
+          console.error(`[ProxyGen] Decode error on sample ${sample.number}:`, e);
+        }
+      }
     }
 
     // Wait for decoder to finish
     await this.decoder.flush();
-    console.log(`[ProxyGen] Decoded ${this.decodedFrames.size} frames, starting GPU batch processing...`);
+
+    // Log decoder stats
+    const decoderCounts = {
+      samplesProcessed: this.samples.length,
+      framesDecoded: (this.decoder as any)._decodedCount?.() || 'unknown',
+      decoderErrors: (this.decoder as any)._errorCount?.() || 'unknown',
+      syncDecodeErrors: decodeErrors,
+      framesStored: this.decodedFrames.size,
+    };
+    console.log(`[ProxyGen] Decoder stats:`, decoderCounts);
+
+    if (this.decodedFrames.size < this.samples.length * 0.5) {
+      console.warn(`[ProxyGen] ⚠️ Only ${this.decodedFrames.size}/${this.samples.length} frames decoded - possible codec config issue`);
+    }
+
+    console.log(`[ProxyGen] Starting GPU batch processing on ${this.decodedFrames.size} frames...`);
 
     // Sort frame indices
     const sortedIndices = Array.from(this.decodedFrames.keys()).sort((a, b) => a - b);
