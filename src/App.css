@@ -710,6 +710,11 @@ input, textarea {
   background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
 }
 
+/* Make canvas transparent so checkerboard shows through */
+.preview-canvas-wrapper.show-transparency-grid .preview-canvas {
+  background: transparent;
+}
+
 .preview-canvas {
   max-width: 100%;
   max-height: 100%;
