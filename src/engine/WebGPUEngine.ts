@@ -1227,6 +1227,10 @@ export class WebGPUEngine {
     const canvasContext = this.independentPreviewCanvases.get(canvasId);
 
     if (!device || !canvasContext || !this.outputPipeline || !this.sampler || !this.pingView || !this.pongView) {
+      // Debug: Log why we're failing
+      if (!canvasContext) {
+        console.log(`[copyMainOutput] Canvas ${canvasId} not in independentPreviewCanvases. Available: ${Array.from(this.independentPreviewCanvases.keys()).join(', ')}`);
+      }
       return false;
     }
 
