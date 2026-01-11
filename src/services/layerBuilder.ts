@@ -29,6 +29,9 @@ class LayerBuilderService {
   // Track playback start for initial sync
   private playbackStartFrames = 0;
 
+  // Debug frame counter for throttled logging
+  private debugFrameCount = 0;
+
   /**
    * Build layers for the current frame - called directly from render loop
    * Gets all data from stores directly, no React overhead
@@ -666,6 +669,16 @@ class LayerBuilderService {
 
     const nestedVideoTracks = clip.nestedTracks.filter(t => t.type === 'video' && t.visible);
     const layers: Layer[] = [];
+
+    // Debug: Log nested composition state
+    if (this.debugFrameCount++ % 60 === 0) {
+      console.log(`[NestedComp] clipTime=${clipTime.toFixed(2)}, tracks=${nestedVideoTracks.length}, clips=${clip.nestedClips.length}`);
+      clip.nestedClips.forEach(nc => {
+        const hasVideo = !!nc.source?.videoElement;
+        const readyState = nc.source?.videoElement?.readyState ?? -1;
+        console.log(`  - ${nc.name}: hasVideo=${hasVideo}, readyState=${readyState}, startTime=${nc.startTime}, duration=${nc.duration}`);
+      });
+    }
 
     for (let i = nestedVideoTracks.length - 1; i >= 0; i--) {
       const nestedTrack = nestedVideoTracks[i];
