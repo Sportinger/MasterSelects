@@ -716,8 +716,8 @@ function MaskItem({ clipId, mask, isActive, onSelect }: MaskItemProps) {
             <DraggableNumber value={mask.feather} onChange={(v) => updateMask(clipId, mask.id, { feather: v })}
               defaultValue={0} sensitivity={1} decimals={1} suffix="px" /></div>
           <div className="control-row"><label>Quality</label>
-            <DraggableNumber value={mask.featherQuality ?? 50} onChange={(v) => updateMask(clipId, mask.id, { featherQuality: Math.max(1, Math.round(v)) })}
-              defaultValue={50} sensitivity={1} decimals={0} /></div>
+            <DraggableNumber value={mask.featherQuality ?? 50} onChange={(v) => updateMask(clipId, mask.id, { featherQuality: Math.min(100, Math.max(1, Math.round(v))) })}
+              defaultValue={50} min={1} max={100} sensitivity={1} decimals={0} /></div>
           <div className="control-row"><label>Position X</label>
             <DraggableNumber value={mask.position.x} onChange={(v) => updateMask(clipId, mask.id, { position: { ...mask.position, x: v } })}
               defaultValue={0} sensitivity={100} decimals={3} /></div>

@@ -579,140 +579,176 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   if (layer.hasMask == 1u) {
     var maskValue: f32;
 
-    // GPU blur for feather effect with quality levels (1-100 mapped to low/med/high)
+    // GPU blur for feather effect - quality 1-100 controls number of sample rings (1-10)
     if (layer.maskFeather > 0.5) {
       let maskDim = vec2f(textureDimensions(maskTexture));
       let texelSize = 1.0 / maskDim;
       let r = layer.maskFeather * texelSize;
 
-      // Quality 1-100 controls number of blur iterations
-      // Higher quality = more samples at finer intervals = smoother blur
-      let q = f32(layer.maskFeatherQuality) / 100.0;
+      // Quality 1-100 maps to 1-10 rings. Each ring adds 8 samples.
+      // rings = clamp(quality / 10, 1, 10)
+      let quality = layer.maskFeatherQuality;
 
-      // HIGH QUALITY (67-100): 61-tap blur with dense sampling
-      if (layer.maskFeatherQuality >= 67u) {
-        var blur: f32 = 0.0;
-        // Center
-        blur += textureSample(maskTexture, texSampler, input.uv).r * 0.08;
-        // Ring at 0.2r (8 samples)
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.2, 0.0)).r * 0.04;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * 0.2, 0.0)).r * 0.04;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * 0.2)).r * 0.04;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * 0.2)).r * 0.04;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.14, r.y * 0.14)).r * 0.03;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.14, r.y * 0.14)).r * 0.03;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.14, -r.y * 0.14)).r * 0.03;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.14, -r.y * 0.14)).r * 0.03;
-        // Ring at 0.4r (8 samples)
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.4, 0.0)).r * 0.035;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * 0.4, 0.0)).r * 0.035;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * 0.4)).r * 0.035;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * 0.4)).r * 0.035;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.28, r.y * 0.28)).r * 0.028;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.28, r.y * 0.28)).r * 0.028;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.28, -r.y * 0.28)).r * 0.028;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.28, -r.y * 0.28)).r * 0.028;
-        // Ring at 0.6r (8 samples)
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.6, 0.0)).r * 0.03;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * 0.6, 0.0)).r * 0.03;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * 0.6)).r * 0.03;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * 0.6)).r * 0.03;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.42, r.y * 0.42)).r * 0.024;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.42, r.y * 0.42)).r * 0.024;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.42, -r.y * 0.42)).r * 0.024;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.42, -r.y * 0.42)).r * 0.024;
-        // Ring at 0.8r (8 samples)
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.8, 0.0)).r * 0.025;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * 0.8, 0.0)).r * 0.025;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * 0.8)).r * 0.025;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * 0.8)).r * 0.025;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.56, r.y * 0.56)).r * 0.02;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.56, r.y * 0.56)).r * 0.02;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.56, -r.y * 0.56)).r * 0.02;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.56, -r.y * 0.56)).r * 0.02;
-        // Ring at 1.0r (8 samples)
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x, 0.0)).r * 0.02;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x, 0.0)).r * 0.02;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y)).r * 0.02;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y)).r * 0.02;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.7, r.y * 0.7)).r * 0.016;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.7, r.y * 0.7)).r * 0.016;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.7, -r.y * 0.7)).r * 0.016;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.7, -r.y * 0.7)).r * 0.016;
-        // Ring at 1.2r (8 samples)
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 1.2, 0.0)).r * 0.012;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * 1.2, 0.0)).r * 0.012;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * 1.2)).r * 0.012;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * 1.2)).r * 0.012;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.85, r.y * 0.85)).r * 0.01;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.85, r.y * 0.85)).r * 0.01;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.85, -r.y * 0.85)).r * 0.01;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.85, -r.y * 0.85)).r * 0.01;
-        // Ring at 1.4r (4 samples)
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 1.4, 0.0)).r * 0.008;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * 1.4, 0.0)).r * 0.008;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * 1.4)).r * 0.008;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * 1.4)).r * 0.008;
-        maskValue = blur;
-      } else if (layer.maskFeatherQuality >= 34u) {
-        // MEDIUM QUALITY: 33-tap blur
-        var blur: f32 = 0.0;
-        blur += textureSample(maskTexture, texSampler, input.uv).r * 0.12;
-        // Ring at 0.33r
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.33, 0.0)).r * 0.06;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * 0.33, 0.0)).r * 0.06;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * 0.33)).r * 0.06;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * 0.33)).r * 0.06;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.23, r.y * 0.23)).r * 0.045;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.23, r.y * 0.23)).r * 0.045;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.23, -r.y * 0.23)).r * 0.045;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.23, -r.y * 0.23)).r * 0.045;
-        // Ring at 0.66r
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.66, 0.0)).r * 0.045;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * 0.66, 0.0)).r * 0.045;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * 0.66)).r * 0.045;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * 0.66)).r * 0.045;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.47, r.y * 0.47)).r * 0.035;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.47, r.y * 0.47)).r * 0.035;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.47, -r.y * 0.47)).r * 0.035;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.47, -r.y * 0.47)).r * 0.035;
-        // Ring at 1.0r
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x, 0.0)).r * 0.03;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x, 0.0)).r * 0.03;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y)).r * 0.03;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y)).r * 0.03;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.7, r.y * 0.7)).r * 0.024;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.7, r.y * 0.7)).r * 0.024;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.7, -r.y * 0.7)).r * 0.024;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.7, -r.y * 0.7)).r * 0.024;
-        // Ring at 1.33r
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 1.33, 0.0)).r * 0.015;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * 1.33, 0.0)).r * 0.015;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * 1.33)).r * 0.015;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * 1.33)).r * 0.015;
-        maskValue = blur;
-      } else {
-        // LOW QUALITY: 17-tap blur (fast)
-        var blur: f32 = 0.0;
-        blur += textureSample(maskTexture, texSampler, input.uv).r * 0.18;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.5, 0.0)).r * 0.08;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * 0.5, 0.0)).r * 0.08;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * 0.5)).r * 0.08;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * 0.5)).r * 0.08;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x, 0.0)).r * 0.06;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x, 0.0)).r * 0.06;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y)).r * 0.06;
-        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y)).r * 0.06;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.35, r.y * 0.35)).r * 0.04;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.35, r.y * 0.35)).r * 0.04;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.35, -r.y * 0.35)).r * 0.04;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.35, -r.y * 0.35)).r * 0.04;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.7, r.y * 0.7)).r * 0.03;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.7, r.y * 0.7)).r * 0.03;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * 0.7, -r.y * 0.7)).r * 0.03;
-        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(-r.x * 0.7, -r.y * 0.7)).r * 0.03;
-        maskValue = blur;
+      var blur: f32 = 0.0;
+      var totalWeight: f32 = 0.0;
+
+      // Center sample (always included)
+      let centerWeight = 0.15;
+      blur += textureSample(maskTexture, texSampler, input.uv).r * centerWeight;
+      totalWeight += centerWeight;
+
+      // Ring 1 at 0.1r (quality >= 10)
+      if (quality >= 10u) {
+        let w = 0.12;
+        let d = 0.1;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        totalWeight += w * 8.0;
       }
+
+      // Ring 2 at 0.2r (quality >= 20)
+      if (quality >= 20u) {
+        let w = 0.11;
+        let d = 0.2;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        totalWeight += w * 8.0;
+      }
+
+      // Ring 3 at 0.35r (quality >= 30)
+      if (quality >= 30u) {
+        let w = 0.10;
+        let d = 0.35;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        totalWeight += w * 8.0;
+      }
+
+      // Ring 4 at 0.5r (quality >= 40)
+      if (quality >= 40u) {
+        let w = 0.09;
+        let d = 0.5;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        totalWeight += w * 8.0;
+      }
+
+      // Ring 5 at 0.65r (quality >= 50)
+      if (quality >= 50u) {
+        let w = 0.08;
+        let d = 0.65;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        totalWeight += w * 8.0;
+      }
+
+      // Ring 6 at 0.8r (quality >= 60)
+      if (quality >= 60u) {
+        let w = 0.07;
+        let d = 0.8;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        totalWeight += w * 8.0;
+      }
+
+      // Ring 7 at 0.95r (quality >= 70)
+      if (quality >= 70u) {
+        let w = 0.06;
+        let d = 0.95;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        totalWeight += w * 8.0;
+      }
+
+      // Ring 8 at 1.1r (quality >= 80)
+      if (quality >= 80u) {
+        let w = 0.05;
+        let d = 1.1;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        totalWeight += w * 8.0;
+      }
+
+      // Ring 9 at 1.25r (quality >= 90)
+      if (quality >= 90u) {
+        let w = 0.04;
+        let d = 1.25;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        totalWeight += w * 8.0;
+      }
+
+      // Ring 10 at 1.4r (quality >= 100)
+      if (quality >= 100u) {
+        let w = 0.03;
+        let d = 1.4;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d, 0.0)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(0.0, r.y * d)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv + vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        blur += textureSample(maskTexture, texSampler, input.uv - vec2f(r.x * d * 0.707, -r.y * d * 0.707)).r * w;
+        totalWeight += w * 8.0;
+      }
+
+      // Normalize by total weight
+      maskValue = blur / totalWeight;
     } else {
       maskValue = textureSample(maskTexture, texSampler, input.uv).r;
     }
