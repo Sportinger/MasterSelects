@@ -449,7 +449,14 @@ export function MediaPanel() {
           )}
           {'proxyStatus' in item && item.proxyStatus === 'generating' && (
             <span className="media-item-proxy-generating" title={`Generating proxy: ${(item as MediaFile).proxyProgress || 0}%`}>
-              ⏳ {(item as MediaFile).proxyProgress || 0}%
+              <span className="proxy-fill-badge">
+                <span className="proxy-fill-bg">P</span>
+                <span
+                  className="proxy-fill-progress"
+                  style={{ height: `${(item as MediaFile).proxyProgress || 0}%` }}
+                >P</span>
+              </span>
+              <span className="proxy-percent">{(item as MediaFile).proxyProgress || 0}%</span>
             </span>
           )}
         </div>

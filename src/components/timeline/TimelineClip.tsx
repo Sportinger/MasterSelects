@@ -530,17 +530,21 @@ function TimelineClipComponent({
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
     >
-      {/* Proxy progress bar */}
+      {/* Proxy generating indicator - fill badge */}
       {isGeneratingProxy && (
-        <div className="clip-proxy-progress">
-          <div
-            className="clip-proxy-progress-bar"
-            style={{ width: `${proxyProgress}%` }}
-          />
+        <div className="clip-proxy-generating" title={`Generating proxy: ${proxyProgress}%`}>
+          <span className="proxy-fill-badge">
+            <span className="proxy-fill-bg">P</span>
+            <span
+              className="proxy-fill-progress"
+              style={{ height: `${proxyProgress}%` }}
+            >P</span>
+          </span>
+          <span className="proxy-percent">{proxyProgress}%</span>
         </div>
       )}
       {/* Proxy ready indicator */}
-      {hasProxy && proxyEnabled && (
+      {hasProxy && proxyEnabled && !isGeneratingProxy && (
         <div className="clip-proxy-badge" title="Proxy ready">
           P
         </div>

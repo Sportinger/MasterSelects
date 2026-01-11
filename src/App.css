@@ -3024,6 +3024,60 @@ input[type="checkbox"] {
   z-index: 10;
 }
 
+/* Proxy generating indicator with fill animation */
+.clip-proxy-generating {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  z-index: 10;
+}
+
+.clip-proxy-generating .proxy-percent {
+  font-size: 8px;
+  color: #fbbf24;
+  font-weight: bold;
+}
+
+/* Proxy fill badge - shared styles */
+.proxy-fill-badge {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  overflow: hidden;
+  font-size: 9px;
+  font-weight: bold;
+  line-height: 14px;
+  text-align: center;
+}
+
+.proxy-fill-bg {
+  position: absolute;
+  inset: 0;
+  background: rgba(251, 191, 36, 0.2);
+  color: rgba(251, 191, 36, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.proxy-fill-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fbbf24;
+  color: #000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+  transition: height 0.3s ease-out;
+}
+
 .timeline-clip.has-proxy {
   border-color: #22c55e !important;
 }
@@ -4252,10 +4306,17 @@ input[type="checkbox"] {
 }
 
 .media-item-proxy-generating {
-  color: #fbbf24;
-  font-size: 9px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin-left: 4px;
   flex-shrink: 0;
+}
+
+.media-item-proxy-generating .proxy-percent {
+  font-size: 9px;
+  color: #fbbf24;
+  font-weight: bold;
 }
 
 .media-folder-children {
