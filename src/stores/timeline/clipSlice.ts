@@ -1349,8 +1349,9 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
           );
         }
 
-        // Re-render text to canvas
-        const canvas = c.source?.textCanvas || textRenderer.createCanvas(1920, 1080);
+        // Create new canvas for re-render (ensures GPU texture cache is invalidated)
+        // The TextureManager caches by canvas reference, so a new canvas = new texture upload
+        const canvas = textRenderer.createCanvas(1920, 1080);
         textRenderer.render(newProps, canvas);
 
         return {

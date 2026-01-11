@@ -899,33 +899,37 @@ class LayerBuilderService {
             continue; // Skip direct video playback
           }
 
-          // Try nearest cached frame for scrubbing fallback
-          const nearestFrame = proxyFrameCache.getNearestCachedFrame(nestedMediaFile.id, frameIndex);
-          if (nearestFrame) {
-            this.proxyFramesRef.set(cacheKey, { frameIndex, image: nearestFrame });
-            const proxyLayer: Layer = {
-              ...baseLayer,
-              source: {
-                type: 'image',
-                imageElement: nearestFrame,
-              },
-            } as Layer;
-            layers.push(proxyLayer);
-            continue; // Skip direct video playback
-          }
+          // During playback: skip to video fallback if exact frame not cached
+          // During scrubbing: use nearest cached frame for smooth scrubbing
+          if (!isPlaying) {
+            // Try nearest cached frame for scrubbing fallback
+            const nearestFrame = proxyFrameCache.getNearestCachedFrame(nestedMediaFile.id, frameIndex);
+            if (nearestFrame) {
+              this.proxyFramesRef.set(cacheKey, { frameIndex, image: nearestFrame });
+              const proxyLayer: Layer = {
+                ...baseLayer,
+                source: {
+                  type: 'image',
+                  imageElement: nearestFrame,
+                },
+              } as Layer;
+              layers.push(proxyLayer);
+              continue; // Skip direct video playback
+            }
 
-          // Use cached proxy frame if available while loading new one
-          const cached = this.proxyFramesRef.get(cacheKey);
-          if (cached?.image) {
-            const proxyLayer: Layer = {
-              ...baseLayer,
-              source: {
-                type: 'image',
-                imageElement: cached.image,
-              },
-            } as Layer;
-            layers.push(proxyLayer);
-            continue; // Skip direct video playback
+            // Use cached proxy frame if available while loading new one
+            const cached = this.proxyFramesRef.get(cacheKey);
+            if (cached?.image) {
+              const proxyLayer: Layer = {
+                ...baseLayer,
+                source: {
+                  type: 'image',
+                  imageElement: cached.image,
+                },
+              } as Layer;
+              layers.push(proxyLayer);
+              continue; // Skip direct video playback
+            }
           }
 
           // No cached proxy frame yet - check if video is ready for fallback
