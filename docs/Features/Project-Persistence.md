@@ -9,6 +9,7 @@ IndexedDB storage with auto-save and file handle persistence.
 ## Table of Contents
 
 - [Auto-Save](#auto-save)
+- [Backup System](#backup-system)
 - [What Gets Saved](#what-gets-saved)
 - [IndexedDB Structure](#indexeddb-structure)
 - [File System Access](#file-system-access)
@@ -18,8 +19,16 @@ IndexedDB storage with auto-save and file handle persistence.
 
 ## Auto-Save
 
+### Autosave Configuration
+Access via **File → Autosave** submenu:
+
+| Setting | Options | Default |
+|---------|---------|---------|
+| Enable Autosave | On/Off | Off |
+| Interval | 1, 2, 5, 10 minutes | 5 min |
+
 ### Automatic Triggers
-- Every 30 seconds
+- Configurable interval (1-10 minutes)
 - On page unload (beforeunload)
 - When switching compositions
 - After transcription completes
@@ -28,11 +37,44 @@ IndexedDB storage with auto-save and file handle persistence.
 ### Manual Save
 - `Ctrl+S` shortcut
 - File menu → Save
+- Shows yellow "Saved" toast in center of screen
 
 ### No Data Loss
 - Changes saved immediately
 - Survives page refresh
 - Survives browser restart
+
+---
+
+## Backup System
+
+### How It Works
+Before each **autosave**, the current project file is automatically backed up:
+1. Copy current `project.json` to `Backups/` folder
+2. Name format: `project_2026-01-11_14-30-00.json`
+3. Then save to main `project.json`
+
+### Backup Storage
+```
+ProjectFolder/
+├── project.json          # Current project
+├── Backups/
+│   ├── project_2026-01-11_14-00-00.json
+│   ├── project_2026-01-11_14-05-00.json
+│   └── ... (last 20 backups)
+```
+
+### Automatic Cleanup
+- Keeps only the **last 20 backups**
+- Oldest backups automatically deleted
+- Sorted by file timestamp
+
+### Restoring from Backup
+1. Navigate to `ProjectFolder/Backups/`
+2. Find backup by timestamp
+3. Rename to `project.json`
+4. Replace main `project.json`
+5. Reopen project
 
 ---
 
