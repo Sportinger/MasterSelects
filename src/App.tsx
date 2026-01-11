@@ -1,12 +1,12 @@
 // WebVJ Mixer - Main Application
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Toolbar } from './components';
 import { DockContainer } from './components/dock';
 import { WelcomeOverlay } from './components/common/WelcomeOverlay';
 import { useGlobalHistory } from './hooks/useGlobalHistory';
 import { useClipPanelSync } from './hooks/useClipPanelSync';
-import { useSettingsStore } from './stores/settingsStore';
+import { projectDB } from './services/projectDB';
 import './App.css';
 
 function App() {
@@ -16,15 +16,26 @@ function App() {
   // Auto-switch panels based on clip selection
   useClipPanelSync();
 
-  // Check if setup has been completed (persisted in settings store)
-  const hasCompletedSetup = useSettingsStore((s) => s.hasCompletedSetup);
+  // Check if there's a stored project in IndexedDB (the only allowed browser storage)
+  const [isChecking, setIsChecking] = useState(true);
+  const [hasStoredProject, setHasStoredProject] = useState(false);
   const [manuallyDismissed, setManuallyDismissed] = useState(false);
 
-  // Show welcome if setup not completed and not manually dismissed this session
-  const showWelcome = !hasCompletedSetup && !manuallyDismissed;
+  // Check for stored project on mount
+  useEffect(() => {
+    projectDB.hasLastProject().then((hasProject) => {
+      setHasStoredProject(hasProject);
+      setIsChecking(false);
+    });
+  }, []);
+
+  // Show welcome if no stored project and not manually dismissed this session
+  // Don't show while checking to avoid flash
+  const showWelcome = !isChecking && !hasStoredProject && !manuallyDismissed;
 
   const handleWelcomeComplete = useCallback(() => {
     setManuallyDismissed(true);
+    setHasStoredProject(true); // Project was just created
   }, []);
 
   return (

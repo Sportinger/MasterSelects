@@ -4,7 +4,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { isFileSystemAccessSupported } from '../../services/fileSystemService';
 import { projectFileService } from '../../services/projectFileService';
-import { useSettingsStore } from '../../stores/settingsStore';
 
 interface WelcomeOverlayProps {
   onComplete: () => void;
@@ -39,7 +38,6 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
         if (success) {
           // Auto-close after project creation
           setIsClosing(true);
-          useSettingsStore.getState().setHasCompletedSetup(true);
           setTimeout(() => {
             onComplete();
           }, 200);
@@ -62,7 +60,6 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
   const handleContinue = useCallback(() => {
     if (isClosing) return;
     setIsClosing(true);
-    useSettingsStore.getState().setHasCompletedSetup(true);
     // Wait for exit animation to complete
     setTimeout(() => {
       onComplete();

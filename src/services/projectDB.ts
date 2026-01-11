@@ -484,6 +484,16 @@ class ProjectDatabase {
     });
   }
 
+  // Check if there's a stored last project handle (for determining if welcome overlay should show)
+  async hasLastProject(): Promise<boolean> {
+    try {
+      const handle = await this.getStoredHandle('lastProject');
+      return handle !== null;
+    } catch {
+      return false;
+    }
+  }
+
   // ============ Analysis Cache ============
 
   /**
