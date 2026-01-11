@@ -198,7 +198,10 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
   const { clips, selectedClipIds, selectClip, updateClipTransform, maskEditMode } = useTimelineStore();
   const { compositions, activeCompositionId } = useMediaStore();
   const { addPreviewPanel, updatePanelData, closePanelById } = useDockStore();
-  const { previewQuality, setPreviewQuality, showTransparencyGrid, setShowTransparencyGrid } = useSettingsStore();
+  const { previewQuality, setPreviewQuality } = useSettingsStore();
+
+  // Per-preview transparency grid toggle (independent for each preview panel)
+  const [showTransparencyGrid, setShowTransparencyGrid] = useState(false);
 
   // Get first selected clip for preview
   const selectedClipId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;

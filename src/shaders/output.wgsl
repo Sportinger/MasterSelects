@@ -44,13 +44,7 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 
 @fragment
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
-  let color = textureSample(inputTexture, texSampler, input.uv);
-
-  // If transparency grid is enabled, preserve alpha so CSS checkerboard shows through
-  if (uniforms.showTransparencyGrid == 1u) {
-    return color;  // Pass through with alpha intact
-  }
-
-  // No transparency grid - composite over black (premultiplied alpha)
-  return vec4f(color.rgb * color.a, 1.0);
+  // Always pass through with alpha intact
+  // Each preview handles its background via CSS (checkerboard or black)
+  return textureSample(inputTexture, texSampler, input.uv);
 }
