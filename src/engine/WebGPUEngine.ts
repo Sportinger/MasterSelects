@@ -882,13 +882,14 @@ export class WebGPUEngine {
       const sourceAspect = data.sourceWidth / data.sourceHeight;
       const outputAspect = this.outputWidth / this.outputHeight;
 
-      // Get mask texture view for this layer
-      const hasMask = this.maskTextureManager?.hasMaskTexture(layer.id) ?? false;
-      const maskTextureView = this.maskTextureManager?.getMaskTextureView(layer.id) ??
+      // Get mask texture view for this layer (use maskClipId if available, fallback to layer.id)
+      const maskLookupId = layer.maskClipId || layer.id;
+      const hasMask = this.maskTextureManager?.hasMaskTexture(maskLookupId) ?? false;
+      const maskTextureView = this.maskTextureManager?.getMaskTextureView(maskLookupId) ??
                              this.maskTextureManager?.getWhiteMaskView()!;
 
       // Debug logging for mask state
-      this.maskTextureManager?.logMaskState(layer.id, hasMask);
+      this.maskTextureManager?.logMaskState(maskLookupId, hasMask);
 
       // Update uniforms
       this.compositorPipeline!.updateLayerUniforms(layer, sourceAspect, outputAspect, hasMask, uniformBuffer);
@@ -1142,9 +1143,10 @@ export class WebGPUEngine {
       const sourceAspect = data.sourceWidth / data.sourceHeight;
       const outputAspect = this.outputWidth / this.outputHeight;
 
-      // Get mask texture view for this layer
-      const hasMask = this.maskTextureManager?.hasMaskTexture(layer.id) ?? false;
-      const maskTextureView = this.maskTextureManager?.getMaskTextureView(layer.id) ??
+      // Get mask texture view for this layer (use maskClipId if available, fallback to layer.id)
+      const maskLookupId = layer.maskClipId || layer.id;
+      const hasMask = this.maskTextureManager?.hasMaskTexture(maskLookupId) ?? false;
+      const maskTextureView = this.maskTextureManager?.getMaskTextureView(maskLookupId) ??
                              this.maskTextureManager?.getWhiteMaskView()!;
 
       // Update uniforms
@@ -1372,9 +1374,10 @@ export class WebGPUEngine {
       const uniformBuffer = this.compositorPipeline!.getOrCreateUniformBuffer(`nested-${compositionId}-${layer.id}`);
       const sourceAspect = data.sourceWidth / data.sourceHeight;
 
-      // Get mask texture view (use white mask if none)
-      const hasMask = this.maskTextureManager?.hasMaskTexture(layer.id) ?? false;
-      const maskTextureView = this.maskTextureManager?.getMaskTextureView(layer.id) ??
+      // Get mask texture view (use maskClipId if available, fallback to layer.id)
+      const maskLookupId = layer.maskClipId || layer.id;
+      const hasMask = this.maskTextureManager?.hasMaskTexture(maskLookupId) ?? false;
+      const maskTextureView = this.maskTextureManager?.getMaskTextureView(maskLookupId) ??
                              this.maskTextureManager?.getWhiteMaskView()!;
 
       this.compositorPipeline!.updateLayerUniforms(layer, sourceAspect, nestedOutputAspect, hasMask, uniformBuffer);

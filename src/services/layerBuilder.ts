@@ -638,23 +638,10 @@ class LayerBuilderService {
 
     // Add mask properties if clip has masks
     if (clip.masks && clip.masks.length > 0) {
-      const engineDimensions = engine.getOutputDimensions();
+      // Store clip ID on layer for mask texture lookup (consistent across systems)
+      layer.maskClipId = clip.id;
 
-      // Generate mask texture if not already cached
-      if (!engine.hasMaskTexture(layer.id)) {
-        const maskImageData = generateMaskTexture(
-          clip.masks,
-          engineDimensions.width,
-          engineDimensions.height
-        );
-        if (maskImageData) {
-          engine.updateMaskTexture(layer.id, maskImageData);
-        }
-      }
-
-      // Add mask properties to layer
-      layer.maskFeather = Math.max(...clip.masks.map(m => m.feather));
-      layer.maskFeatherQuality = Math.max(...clip.masks.map(m => m.featherQuality ?? 50));
+      // Add mask properties to layer (invert is handled in shader)
       layer.maskInvert = clip.masks.some(m => m.inverted);
     }
 

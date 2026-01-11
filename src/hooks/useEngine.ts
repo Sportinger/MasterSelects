@@ -116,26 +116,17 @@ export function useEngine() {
       // Find clip for this track at current time
       const clip = clipsAtTime.find(c => c.trackId === track.id);
 
-      if (clip?.masks && clip.masks.length > 0 && layer.source) {
-        // Extract mask properties for GPU processing (feather/quality/invert handled in shader)
-        const maxFeather = Math.max(...clip.masks.map(m => m.feather));
-        const maxQuality = Math.max(...clip.masks.map(m => m.featherQuality ?? 1));
-        const hasInverted = clip.masks.some(m => m.inverted);
-
-        // Update layer with mask GPU properties (these are cheap uniform updates)
-        useMixerStore.getState().updateLayerMaskProps(layer.id, maxFeather, maxQuality, hasInverted);
-
-        // Create version string using fast hash (EXCLUDING feather/invert - they're GPU uniforms now)
-        // Only include shape-affecting properties: vertices, position, opacity, mode, closed
+      if (clip?.masks && clip.masks.length > 0) {
+        // Create version string - includes feather since blur is applied on CPU
         const maskVersion = `${getMaskShapeHash(clip.masks)}_${engineDimensions.width}x${engineDimensions.height}`;
-        const cacheKey = `${clip.id}_${layer.id}`;
+        const cacheKey = clip.id; // Use clip ID for consistent lookup across systems
         const prevVersion = maskVersionRef.current.get(cacheKey);
 
-        // Only regenerate texture if mask SHAPE changed (not feather/invert)
+        // Regenerate texture if mask properties changed (shape, feather, etc.)
         if (maskVersion !== prevVersion) {
           maskVersionRef.current.set(cacheKey, maskVersion);
 
-          // Generate mask texture at engine render resolution (no blur/invert - done in GPU)
+          // Generate mask texture at engine render resolution (blur applied on CPU)
           const maskImageData = generateMaskTexture(
             clip.masks,
             engineDimensions.width,
@@ -143,18 +134,18 @@ export function useEngine() {
           );
 
           if (maskImageData) {
-            console.log(`[Mask] Generated mask texture for layer ${layer.id}: ${engineDimensions.width}x${engineDimensions.height}, masks: ${clip.masks.length}`);
-            engine.updateMaskTexture(layer.id, maskImageData);
+            console.log(`[Mask] Generated mask texture for clip ${clip.id}: ${engineDimensions.width}x${engineDimensions.height}, masks: ${clip.masks.length}`);
+            engine.updateMaskTexture(clip.id, maskImageData);
           } else {
-            console.warn(`[Mask] Failed to generate mask texture for layer ${layer.id}`);
+            console.warn(`[Mask] Failed to generate mask texture for clip ${clip.id}`);
           }
         }
       } else if (clip && clip.id) {
-        // Clip exists but no masks, clear the mask texture for this layer
-        const cacheKey = `${clip.id}_${layer.id}`;
+        // Clip exists but no masks, clear the mask texture
+        const cacheKey = clip.id;
         if (maskVersionRef.current.has(cacheKey)) {
           maskVersionRef.current.delete(cacheKey);
-          engine.removeMaskTexture(layer.id);
+          engine.removeMaskTexture(clip.id);
         }
       }
     }
