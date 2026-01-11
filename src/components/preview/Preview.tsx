@@ -613,13 +613,20 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
 
     draw();
 
-    // Redraw on animation frame for smooth updates
-    const animId = requestAnimationFrame(function loop() {
-      draw();
-      requestAnimationFrame(loop);
-    });
+    // Only use RAF loop during active dragging for smooth updates
+    // Otherwise, a single draw() is enough since we re-render on dependency changes
+    let animId: number | null = null;
+    if (isDragging) {
+      const loop = () => {
+        draw();
+        animId = requestAnimationFrame(loop);
+      };
+      animId = requestAnimationFrame(loop);
+    }
 
-    return () => cancelAnimationFrame(animId);
+    return () => {
+      if (animId !== null) cancelAnimationFrame(animId);
+    };
   }, [editMode, layers, selectedLayerId, selectedClipIds, clips, canvasSize, calculateLayerBounds, isDragging, dragLayerId]);
 
   // Find layer at mouse position
