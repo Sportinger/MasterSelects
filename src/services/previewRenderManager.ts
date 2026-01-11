@@ -253,16 +253,14 @@ class PreviewRenderManagerService {
       if (!preview.isReady) continue;
 
       // OPTIMIZATION 1: If this preview shows the ACTIVE composition,
-      // just copy the main render's output (no need to render twice)
+      // use the cached texture from main render (avoids timing issues with ping/pong)
       if (preview.compositionId === activeCompId) {
-        console.log(`[PreviewManager] Preview ${preview.panelId} matches active comp ${activeCompId}, attempting copy...`);
-        if (engine.copyMainOutputToPreview(preview.panelId)) {
-          console.log(`[PreviewManager] Copy succeeded for ${preview.panelId}`);
+        // Use the cached active comp texture (stable, not affected by RAF timing)
+        if (engine.copyNestedCompTextureToPreview(preview.panelId, activeCompId)) {
           preview.lastRenderTime = now;
           continue; // Success - skip independent rendering
         }
-        console.log(`[PreviewManager] Copy failed for ${preview.panelId}, falling through to independent render`);
-        // If copy failed, fall through to independent rendering
+        // If no cached texture yet, fall through to independent rendering
       }
 
       // OPTIMIZATION 2: If this composition is nested and currently being rendered by main loop,
