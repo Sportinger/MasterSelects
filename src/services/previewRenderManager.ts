@@ -148,15 +148,14 @@ class PreviewRenderManagerService {
         return { time: compositionTime, syncSource: 'nested' };
       }
 
-      // If main timeline is playing but playhead is before the nested clip,
-      // show the composition at its in-point (ready to start)
-      if (isMainPlaying && mainPlayhead < clipStart) {
+      // If playhead is before the nested clip, show at in-point
+      // (whether playing or scrubbing - always stay synced to parent)
+      if (mainPlayhead < clipStart) {
         return { time: nestedInfo.clipInPoint, syncSource: 'nested' };
       }
 
-      // If main timeline is playing but playhead is after the nested clip,
-      // show the composition at its out-point (where it ended)
-      if (isMainPlaying && mainPlayhead >= clipEnd) {
+      // If playhead is after the nested clip, show at out-point
+      if (mainPlayhead >= clipEnd) {
         return { time: nestedInfo.clipOutPoint, syncSource: 'nested' };
       }
     }
@@ -277,9 +276,9 @@ class PreviewRenderManagerService {
           // Try to copy the pre-rendered nested comp texture to this preview
           if (engine.copyNestedCompTextureToPreview(preview.panelId, preview.compositionId)) {
             preview.lastRenderTime = now;
+            continue; // Success - skip independent rendering
           }
-          // Skip independent rendering - either we copied the texture or main loop hasn't rendered yet
-          continue;
+          // Copy failed (texture not ready yet) - fall through to independent rendering
         }
       }
 
