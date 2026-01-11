@@ -123,13 +123,15 @@ class PreviewRenderManagerService {
   /**
    * Calculate the playhead time for a composition
    * If nested in active timeline and main playhead is within the clip, sync to it
+   * If active composition is nested in this composition, sync from child to parent
    * Otherwise, use the composition's own stored playhead
    */
-  private calculatePlayheadTime(compositionId: string): { time: number; syncSource: 'nested' | 'stored' | 'default' } {
+  private calculatePlayheadTime(compositionId: string): { time: number; syncSource: 'nested' | 'reverse-nested' | 'stored' | 'default' } {
     const mainPlayhead = useTimelineStore.getState().playheadPosition;
     const isMainPlaying = useTimelineStore.getState().isPlaying;
+    const activeCompId = useMediaStore.getState().activeCompositionId;
 
-    // Check if this composition is nested in active timeline
+    // Case 1: Check if this composition is nested in active timeline (child preview while parent is active)
     const nestedInfo = this.getNestedCompInfo(compositionId);
 
     if (nestedInfo) {
@@ -156,6 +158,26 @@ class PreviewRenderManagerService {
       // show the composition at its out-point (where it ended)
       if (isMainPlaying && mainPlayhead >= clipEnd) {
         return { time: nestedInfo.clipOutPoint, syncSource: 'nested' };
+      }
+    }
+
+    // Case 2: Check if the ACTIVE composition is nested in THIS composition (parent preview while child is active)
+    // This enables parent preview to update when playing the child composition
+    if (activeCompId && activeCompId !== compositionId) {
+      const composition = useMediaStore.getState().compositions.find(c => c.id === compositionId);
+      if (composition?.timelineData?.clips) {
+        const childClip = composition.timelineData.clips.find(
+          (c: { isComposition?: boolean; compositionId?: string }) =>
+            c.isComposition && c.compositionId === activeCompId
+        );
+        if (childClip) {
+          const clipStart = childClip.startTime;
+          const inPoint = childClip.inPoint || 0;
+          // Calculate parent's playhead from child's playhead
+          // parentTime = clipStart + (childPlayhead - inPoint)
+          const parentTime = clipStart + (mainPlayhead - inPoint);
+          return { time: parentTime, syncSource: 'reverse-nested' };
+        }
       }
     }
 

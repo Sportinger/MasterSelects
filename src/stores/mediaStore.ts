@@ -683,8 +683,46 @@ export const useMediaStore = create<MediaState>()(
         },
 
         setActiveComposition: (id: string | null) => {
-          const { activeCompositionId } = get();
+          const { activeCompositionId, compositions } = get();
           const timelineStore = useTimelineStore.getState();
+          const currentPlayhead = timelineStore.playheadPosition;
+          const currentClips = timelineStore.clips;
+
+          // Calculate synced playhead for nested composition switch
+          let syncedPlayhead: number | null = null;
+
+          if (activeCompositionId && id) {
+            // Check if new comp (id) is nested in current comp (activeCompositionId)
+            const nestedClip = currentClips.find(
+              (c) => c.isComposition && c.compositionId === id
+            );
+            if (nestedClip) {
+              const clipStart = nestedClip.startTime;
+              const clipEnd = clipStart + nestedClip.duration;
+              const inPoint = nestedClip.inPoint || 0;
+
+              // If current playhead is within the nested clip's range
+              if (currentPlayhead >= clipStart && currentPlayhead < clipEnd) {
+                // Calculate the child composition's playhead
+                syncedPlayhead = (currentPlayhead - clipStart) + inPoint;
+              }
+            }
+
+            // Check reverse: if current comp is nested in the new comp
+            const newComp = compositions.find((c) => c.id === id);
+            if (newComp?.timelineData?.clips) {
+              const parentClip = newComp.timelineData.clips.find(
+                (c: { isComposition?: boolean; compositionId?: string }) =>
+                  c.isComposition && c.compositionId === activeCompositionId
+              );
+              if (parentClip) {
+                const clipStart = parentClip.startTime;
+                const inPoint = parentClip.inPoint || 0;
+                // Calculate parent's playhead from child's current playhead
+                syncedPlayhead = clipStart + (currentPlayhead - inPoint);
+              }
+            }
+          }
 
           // Save current timeline state to the current composition (if any)
           if (activeCompositionId) {
@@ -705,6 +743,11 @@ export const useMediaStore = create<MediaState>()(
             const freshCompositions = get().compositions;
             const newComp = freshCompositions.find((c) => c.id === id);
             timelineStore.loadState(newComp?.timelineData);
+
+            // Apply synced playhead if we calculated one
+            if (syncedPlayhead !== null && syncedPlayhead >= 0) {
+              timelineStore.setPlayheadPosition(syncedPlayhead);
+            }
           } else {
             // No composition selected - clear timeline
             timelineStore.clearTimeline();
