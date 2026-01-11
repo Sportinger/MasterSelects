@@ -4225,13 +4225,15 @@ input[type="checkbox"] {
 /* Resize handle for name column */
 .media-col-resize-handle {
   position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
+  right: -1px;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
   cursor: col-resize;
-  background: transparent;
+  background: var(--border-color);
+  border-radius: 1px;
   transition: background 0.15s;
+  z-index: 5;
 }
 
 .media-col-resize-handle:hover,
@@ -4244,6 +4246,7 @@ input[type="checkbox"] {
   cursor: grab;
   user-select: none;
   transition: background 0.1s, opacity 0.1s;
+  position: relative;
 }
 
 .media-column-headers .media-col:active {
