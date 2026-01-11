@@ -828,7 +828,7 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
         onToggle={() => setStatsExpanded(!statsExpanded)}
       />
 
-      <div className="preview-canvas-wrapper" style={viewTransform}>
+      <div className={`preview-canvas-wrapper ${showTransparencyGrid ? 'show-transparency-grid' : ''}`} style={viewTransform}>
         {!isEngineReady ? (
           <div className="loading">
             <div className="loading-spinner" />

@@ -1,7 +1,7 @@
-// Output shader with optional transparency grid (checkerboard pattern)
+// Output shader - passes through with alpha for CSS checkerboard background
 
 struct OutputUniforms {
-  showTransparencyGrid: u32,  // 1 = show checkerboard, 0 = black background
+  showTransparencyGrid: u32,  // 1 = preserve alpha for CSS checkerboard, 0 = composite over black
   outputWidth: f32,
   outputHeight: f32,
   _padding: f32,
@@ -42,31 +42,15 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 @group(0) @binding(1) var inputTexture: texture_2d<f32>;
 @group(0) @binding(2) var<uniform> uniforms: OutputUniforms;
 
-// Generate checkerboard pattern for transparency visualization
-// Uses screen position so grid stays same size regardless of viewport scaling
-fn checkerboard(screenPos: vec2f) -> vec3f {
-  // 8x8 screen pixel squares (fixed size on screen)
-  let squareSize = 8.0;
-  let checker = floor(screenPos.x / squareSize) + floor(screenPos.y / squareSize);
-  let isLight = (i32(checker) % 2) == 0;
-
-  // Light gray and dark gray
-  return select(vec3f(0.3, 0.3, 0.3), vec3f(0.5, 0.5, 0.5), isLight);
-}
-
 @fragment
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let color = textureSample(inputTexture, texSampler, input.uv);
 
-  // If transparency grid is enabled and there's transparency, blend with checkerboard
-  if (uniforms.showTransparencyGrid == 1u && color.a < 1.0) {
-    // Use screen position (input.position.xy) for consistent grid size
-    let checker = checkerboard(input.position.xy);
-    // Blend: checkerboard * (1 - alpha) + color * alpha
-    let blended = checker * (1.0 - color.a) + color.rgb * color.a;
-    return vec4f(blended, 1.0);
+  // If transparency grid is enabled, preserve alpha so CSS checkerboard shows through
+  if (uniforms.showTransparencyGrid == 1u) {
+    return color;  // Pass through with alpha intact
   }
 
-  // No transparency grid - composite over black
+  // No transparency grid - composite over black (premultiplied alpha)
   return vec4f(color.rgb * color.a, 1.0);
 }
