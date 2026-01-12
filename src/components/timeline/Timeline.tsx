@@ -1161,6 +1161,10 @@ export function Timeline() {
       if (items && items.length > 0) {
         const item = items[0];
         if (item.kind === 'file') {
+          // Capture rect before async operations (e.currentTarget becomes null after await)
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = e.clientX - rect.left + scrollX;
+          const startTime = Math.max(0, pixelToTime(x));
           const mediaStore = useMediaStore.getState();
 
           // Try to get file handle (File System Access API)
@@ -1183,10 +1187,7 @@ export function Timeline() {
 
                   const imported = await mediaStore.importFilesWithHandles([{ file, handle }]);
                   if (imported.length > 0) {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const x = e.clientX - rect.left + scrollX;
-                    const startTime = pixelToTime(x);
-                    addClip(trackId, file, Math.max(0, startTime), cachedDuration, imported[0].id);
+                    addClip(trackId, file, startTime, cachedDuration, imported[0].id);
                     console.log('[Timeline] Imported file with handle:', file.name);
                   }
                   return;
@@ -1210,11 +1211,8 @@ export function Timeline() {
               return;
             }
 
-            const rect = e.currentTarget.getBoundingClientRect();
-            const x = e.clientX - rect.left + scrollX;
-            const startTime = pixelToTime(x);
             const importedFile = await mediaStore.importFile(file);
-            addClip(trackId, file, Math.max(0, startTime), cachedDuration, importedFile?.id);
+            addClip(trackId, file, startTime, cachedDuration, importedFile?.id);
           }
         }
       }
