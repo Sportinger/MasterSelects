@@ -118,7 +118,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
         vertices: m.vertices || [],
         position: m.position || { x: 0, y: 0 },
       })),
-      keyframes: [], // Keyframes stored separately in timeline
+      keyframes: c.keyframes || [], // Preserve keyframes from clip
       volume: c.volume ?? 1,
       audioEnabled: c.audioEnabled !== false,
       reversed: c.reversed || false,
@@ -285,6 +285,7 @@ function convertProjectCompositionToStore(projectComps: ProjectComposition[]): C
         transform: c.transform,
         effects: c.effects,
         masks: c.masks,
+        keyframes: c.keyframes || [], // Restore keyframes
         volume: c.volume,
         audioEnabled: c.audioEnabled,
         reversed: c.reversed,
