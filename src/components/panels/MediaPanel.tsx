@@ -5,6 +5,7 @@ import { useMediaStore } from '../../stores/mediaStore';
 import type { MediaFile, Composition, ProjectItem } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
+import { RelinkDialog } from '../common/RelinkDialog';
 
 // Column definitions
 type ColumnId = 'name' | 'duration' | 'resolution' | 'fps' | 'container' | 'codec' | 'size';
@@ -57,7 +58,6 @@ export function MediaPanel() {
     renameFile,
     renameFolder,
     reloadFile,
-    reloadAllFiles,
     toggleFolderExpanded,
     setSelection,
     addToSelection,
@@ -697,11 +697,8 @@ export function MediaPanel() {
   const filesNeedReload = files.some(f => !f.file);
   const filesNeedReloadCount = files.filter(f => !f.file).length;
 
-  // Handle reload all
-  const handleReloadAll = useCallback(async () => {
-    const reloaded = await reloadAllFiles();
-    console.log(`[MediaPanel] Reloaded ${reloaded} files`);
-  }, [reloadAllFiles]);
+  // Relink dialog state
+  const [showRelinkDialog, setShowRelinkDialog] = useState(false);
 
   return (
     <div
@@ -719,8 +716,8 @@ export function MediaPanel() {
           {filesNeedReload && (
             <button
               className="btn btn-sm btn-reload-all"
-              onClick={handleReloadAll}
-              title={`Relink ${filesNeedReloadCount} missing file${filesNeedReloadCount > 1 ? 's' : ''} - select a folder to scan`}
+              onClick={() => setShowRelinkDialog(true)}
+              title={`Restore access to ${filesNeedReloadCount} file${filesNeedReloadCount > 1 ? 's' : ''}`}
             >
               Relink ({filesNeedReloadCount})
             </button>
@@ -1145,6 +1142,11 @@ export function MediaPanel() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Relink Dialog */}
+      {showRelinkDialog && (
+        <RelinkDialog onClose={() => setShowRelinkDialog(false)} />
       )}
     </div>
   );

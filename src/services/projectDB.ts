@@ -568,6 +568,19 @@ class ProjectDatabase {
     });
   }
 
+  // List all stored handle keys (for debugging)
+  async listHandleKeys(): Promise<string[]> {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.FS_HANDLES, 'readonly');
+      const store = transaction.objectStore(STORES.FS_HANDLES);
+      const request = store.getAllKeys();
+
+      request.onsuccess = () => resolve(request.result as string[]);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
   // Get all stored handles
   async getAllHandles(): Promise<Array<{ key: string; handle: FileSystemHandle }>> {
     const db = await this.init();
