@@ -17,6 +17,7 @@ import {
   loadProjectToStores,
   setupAutoSync,
 } from '../../services/projectSync';
+import { APP_VERSION } from '../../version';
 
 type MenuId = 'file' | 'edit' | 'view' | 'output' | 'window' | null;
 
@@ -624,6 +625,7 @@ export function Toolbar() {
 
       {/* Status */}
       <div className="toolbar-section toolbar-right">
+        <span className="version">v{APP_VERSION}</span>
         <span className={`status ${isEngineReady ? 'ready' : 'loading'}`}>
           {isEngineReady ? '● WebGPU Ready' : '○ Loading...'}
         </span>

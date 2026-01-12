@@ -2,6 +2,16 @@
 
 ## Workflow
 
+**WICHTIG: Version bei JEDEM Commit erhöhen!**
+```bash
+# 1. Version in src/version.ts erhöhen (z.B. 1.0.1 -> 1.0.2)
+# 2. Dann commit und push
+```
+- Datei: `src/version.ts`
+- Format: `MAJOR.MINOR.PATCH`
+- Bei jedem Commit: PATCH um 1 erhöhen (z.B. 1.0.1 -> 1.0.2)
+- Version wird oben rechts neben "WebGPU Ready" angezeigt
+
 **Always commit and push after completing changes:**
 ```bash
 git add . && git commit -m "description" && git push

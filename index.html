@@ -18,6 +18,25 @@
   <body>
     <div id="root"></div>
     <script>
+      // Version check - force reload on version change
+      (function() {
+        var CURRENT_VERSION = '__APP_VERSION__'; // Replaced by Vite during build
+        var storedVersion = localStorage.getItem('app_version');
+        if (storedVersion && storedVersion !== CURRENT_VERSION && CURRENT_VERSION !== '__APP_VERSION__') {
+          console.log('[Version] Update detected:', storedVersion, '->', CURRENT_VERSION);
+          localStorage.setItem('app_version', CURRENT_VERSION);
+          // Clear caches and reload
+          if ('caches' in window) {
+            caches.keys().then(function(names) {
+              names.forEach(function(name) { caches.delete(name); });
+            });
+          }
+          window.location.reload(true);
+        } else if (CURRENT_VERSION !== '__APP_VERSION__') {
+          localStorage.setItem('app_version', CURRENT_VERSION);
+        }
+      })();
+
       // This runs BEFORE any modules load
       if (window.location.search.includes('reset=true')) {
         localStorage.clear();

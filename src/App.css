@@ -74,6 +74,13 @@ input, textarea {
   margin-left: 0;
 }
 
+.toolbar-right .version {
+  color: var(--text-secondary);
+  font-size: 11px;
+  margin-right: 12px;
+  opacity: 0.7;
+}
+
 .toolbar-project {
   display: flex;
   align-items: center;
