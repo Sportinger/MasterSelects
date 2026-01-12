@@ -63,7 +63,6 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
   // Typewriter state
   const [typewriterParts, setTypewriterParts] = useState<Array<{ text: string; class: string }>>([]);
   const [showCursor, setShowCursor] = useState(true);
-  const [typewriterDone, setTypewriterDone] = useState(false);
 
   const isSupported = isFileSystemAccessSupported();
   const browser = useMemo(() => detectBrowser(), []);
@@ -154,12 +153,11 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
 
   // Cursor blink
   useEffect(() => {
-    if (typewriterDone) return;
     const interval = setInterval(() => {
       setShowCursor(prev => !prev);
     }, 530);
     return () => clearInterval(interval);
-  }, [typewriterDone]);
+  }, []);
 
   const handleSelectFolder = useCallback(async () => {
     if (isSelecting || isClosing) return;
