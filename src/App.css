@@ -6547,54 +6547,6 @@ input[type="checkbox"] {
   opacity: 1;
 }
 
-/* Shimmer effect after typewriter completes */
-.welcome-tagline.shimmer {
-  position: relative;
-}
-
-.welcome-tagline.shimmer span:not(.welcome-cursor) {
-  position: relative;
-  background-clip: text;
-  -webkit-background-clip: text;
-}
-
-.welcome-tagline.shimmer::before {
-  content: '';
-  position: absolute;
-  top: -2px;
-  left: 0;
-  right: 0;
-  bottom: -2px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    transparent 35%,
-    rgba(255, 255, 255, 0.6) 50%,
-    transparent 65%,
-    transparent 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1s ease-in-out forwards;
-  animation-delay: 0.15s;
-  pointer-events: none;
-  mix-blend-mode: overlay;
-  border-radius: 4px;
-  opacity: 0;
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: 100% 0;
-    opacity: 1;
-  }
-  80% {
-    opacity: 1;
-  }
-  100% {
-    background-position: -100% 0;
-    opacity: 0;
-  }
-}
 
 @keyframes welcome-fade-in {
   from {

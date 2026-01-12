@@ -41,10 +41,10 @@ interface WelcomeOverlayProps {
 const TYPEWRITER_SEQUENCE = [
   { action: 'type', text: 'Local', class: 'local' },
   { action: 'pause', duration: 400 },
-  { action: 'type', text: ' · ', class: 'dot' },
+  { action: 'type', text: '  ·  ', class: 'dot' },
   { action: 'type', text: 'Private', class: 'private' },
   { action: 'pause', duration: 350 },
-  { action: 'type', text: ' · ', class: 'dot' },
+  { action: 'type', text: '  ·  ', class: 'dot' },
   { action: 'type', text: 'Tre', class: 'free' },  // Typo!
   { action: 'pause', duration: 280 },
   { action: 'delete', count: 3 },                   // Delete "Tre"
@@ -72,9 +72,15 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
   useEffect(() => {
     let step = 0;
     let charIndex = 0;
-    let timeout: ReturnType<typeof setTimeout>;
     let deleteCount = 0;
     let cancelled = false;
+    const timeouts: ReturnType<typeof setTimeout>[] = [];
+
+    const scheduleNext = (fn: () => void, delay: number) => {
+      const t = setTimeout(fn, delay);
+      timeouts.push(t);
+      return t;
+    };
 
     const randomDelay = (base: number, variance: number) =>
       base + Math.random() * variance - variance / 2;
@@ -86,7 +92,6 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
 
       if (action.action === 'type' && action.text) {
         if (charIndex < action.text.length) {
-          // Type one character
           const char = action.text[charIndex];
           setTypewriterParts(prev => {
             const newParts = [...prev];
@@ -99,16 +104,15 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
             return newParts;
           });
           charIndex++;
-          timeout = setTimeout(processStep, randomDelay(75, 45));
+          scheduleNext(processStep, randomDelay(75, 45));
         } else {
-          // Move to next step
           step++;
           charIndex = 0;
-          timeout = setTimeout(processStep, randomDelay(30, 20));
+          scheduleNext(processStep, randomDelay(30, 20));
         }
       } else if (action.action === 'pause') {
         step++;
-        timeout = setTimeout(processStep, action.duration);
+        scheduleNext(processStep, action.duration || 300);
       } else if (action.action === 'delete') {
         const toDelete = action.count || 1;
         if (deleteCount < toDelete) {
@@ -124,31 +128,27 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
             return newParts;
           });
           deleteCount++;
-          timeout = setTimeout(processStep, randomDelay(50, 25));
+          scheduleNext(processStep, randomDelay(50, 25));
         } else {
           step++;
           deleteCount = 0;
-          timeout = setTimeout(processStep, randomDelay(30, 20));
+          scheduleNext(processStep, randomDelay(30, 20));
         }
       } else if (action.action === 'done') {
         setShowCursor(false);
-        setTimeout(() => {
-          if (!cancelled) setTypewriterDone(true);
-        }, 100);
       }
     };
 
     // Reset state for fresh start (handles Strict Mode remount)
     setTypewriterParts([]);
-    setTypewriterDone(false);
     setShowCursor(true);
 
     // Start after overlay fade-in
-    timeout = setTimeout(processStep, 800);
+    scheduleNext(processStep, 800);
 
     return () => {
       cancelled = true;
-      clearTimeout(timeout);
+      timeouts.forEach(t => clearTimeout(t));
     };
   }, []);
 
@@ -271,7 +271,7 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
     <div className={`welcome-overlay-backdrop ${isClosing ? 'closing' : ''}`}>
       <div className="welcome-overlay">
         {/* Privacy tagline - Typewriter effect */}
-        <div className={`welcome-tagline ${typewriterDone ? 'shimmer' : ''}`}>
+        <div className="welcome-tagline">
           {typewriterParts.map((part, i) => (
             <span key={i} className={`welcome-tag-${part.class}`}>{part.text}</span>
           ))}

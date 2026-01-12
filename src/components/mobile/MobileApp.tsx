@@ -80,10 +80,10 @@ export function MobileApp() {
               <line x1="12" y1="18" x2="12.01" y2="18"/>
             </svg>
             <span className="welcome-browser-warning-label" style={{ color: '#fbbf24' }}>Mobile Version</span>
-            <span className="welcome-browser-warning-name">In Entwicklung</span>
+            <span className="welcome-browser-warning-name">Work in Progress</span>
             <span className="welcome-browser-warning-desc">
-              Die Mobile-Version ist noch rudimentär implementiert.
-              Für das volle Editing-Erlebnis bitte einen Desktop-Browser verwenden.
+              The mobile version is still under development with limited functionality.
+              For the full editing experience, please use a desktop browser.
             </span>
 
             <div style={{
@@ -96,7 +96,7 @@ export function MobileApp() {
             }}>
               <div><span style={{ color: '#4ade80' }}>✓</span> Preview</div>
               <div><span style={{ color: '#4ade80' }}>✓</span> Timeline (basic)</div>
-              <div><span style={{ color: '#fbbf24' }}>◐</span> Touch-Gesten</div>
+              <div><span style={{ color: '#fbbf24' }}>◐</span> Touch Gestures</div>
               <div><span style={{ color: '#666' }}>○</span> Effects</div>
               <div><span style={{ color: '#666' }}>○</span> Export</div>
             </div>
@@ -109,7 +109,7 @@ export function MobileApp() {
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M5 12h14M12 5l7 7-7 7"/>
               </svg>
-              Trotzdem testen
+              Try Anyway
             </button>
           </div>
         </div>
