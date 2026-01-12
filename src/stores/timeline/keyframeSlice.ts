@@ -121,11 +121,31 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
       return { ...DEFAULT_TRANSFORM };
     }
 
+    // Ensure clip.transform exists and has all properties (handles loaded compositions with incomplete data)
+    const baseTransform: ClipTransform = {
+      opacity: clip.transform?.opacity ?? DEFAULT_TRANSFORM.opacity,
+      blendMode: clip.transform?.blendMode ?? DEFAULT_TRANSFORM.blendMode,
+      position: {
+        x: clip.transform?.position?.x ?? DEFAULT_TRANSFORM.position.x,
+        y: clip.transform?.position?.y ?? DEFAULT_TRANSFORM.position.y,
+        z: clip.transform?.position?.z ?? DEFAULT_TRANSFORM.position.z,
+      },
+      scale: {
+        x: clip.transform?.scale?.x ?? DEFAULT_TRANSFORM.scale.x,
+        y: clip.transform?.scale?.y ?? DEFAULT_TRANSFORM.scale.y,
+      },
+      rotation: {
+        x: clip.transform?.rotation?.x ?? DEFAULT_TRANSFORM.rotation.x,
+        y: clip.transform?.rotation?.y ?? DEFAULT_TRANSFORM.rotation.y,
+        z: clip.transform?.rotation?.z ?? DEFAULT_TRANSFORM.rotation.z,
+      },
+    };
+
     // Get this clip's own transform (with keyframe interpolation)
     const keyframes = clipKeyframes.get(clipId) || [];
     const ownTransform = keyframes.length === 0
-      ? clip.transform
-      : getInterpolatedClipTransform(keyframes, clipLocalTime, clip.transform);
+      ? baseTransform
+      : getInterpolatedClipTransform(keyframes, clipLocalTime, baseTransform);
 
     // If clip has a parent, compose with parent's transform
     if (clip.parentClipId) {
