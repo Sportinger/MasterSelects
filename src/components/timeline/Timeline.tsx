@@ -1057,18 +1057,39 @@ export function Timeline() {
         }
       }
 
-      // Handle external file drop
-      if (e.dataTransfer.files.length > 0) {
-        const file = e.dataTransfer.files[0];
-        if (
-          file.type.startsWith('video/') ||
-          file.type.startsWith('audio/') ||
-          file.type.startsWith('image/')
-        ) {
+      // Handle external file drop - try to get file handle for persistence
+      const items = e.dataTransfer.items;
+      if (items && items.length > 0) {
+        const item = items[0];
+        if (item.kind === 'file') {
           const mediaStore = useMediaStore.getState();
-          const importedFile = await mediaStore.importFile(file);
-          const newMediaFileId = importedFile?.id;
-          addClip(newTrackId, file, startTime, cachedDuration, newMediaFileId);
+
+          // Try to get file handle (File System Access API)
+          if ('getAsFileSystemHandle' in item) {
+            try {
+              const handle = await (item as any).getAsFileSystemHandle();
+              if (handle && handle.kind === 'file') {
+                const file = await handle.getFile();
+                if (file.type.startsWith('video/') || file.type.startsWith('audio/') || file.type.startsWith('image/')) {
+                  const imported = await mediaStore.importFilesWithHandles([{ file, handle }]);
+                  if (imported.length > 0) {
+                    addClip(newTrackId, file, startTime, cachedDuration, imported[0].id);
+                    console.log('[Timeline] Imported file with handle:', file.name);
+                  }
+                  return;
+                }
+              }
+            } catch (err) {
+              console.warn('[Timeline] Could not get file handle, falling back:', err);
+            }
+          }
+
+          // Fallback to regular file (no handle)
+          const file = item.getAsFile();
+          if (file && (file.type.startsWith('video/') || file.type.startsWith('audio/') || file.type.startsWith('image/'))) {
+            const importedFile = await mediaStore.importFile(file);
+            addClip(newTrackId, file, startTime, cachedDuration, importedFile?.id);
+          }
         }
       }
     },
@@ -1135,32 +1156,66 @@ export function Timeline() {
         }
       }
 
-      if (e.dataTransfer.files.length > 0) {
-        const file = e.dataTransfer.files[0];
-        if (
-          file.type.startsWith('video/') ||
-          file.type.startsWith('audio/') ||
-          file.type.startsWith('image/')
-        ) {
-          // Simple validation: audio files only on audio tracks, video/image only on video tracks
-          const fileIsAudio = isAudioFile(file);
-          if (fileIsAudio && isVideoTrack) {
-            console.log('[Timeline] Audio files can only be dropped on audio tracks');
-            return;
-          }
-          if (!fileIsAudio && isAudioTrack) {
-            console.log('[Timeline] Video/image files can only be dropped on video tracks');
-            return;
+      // Handle external file drop - try to get file handle for persistence
+      const items = e.dataTransfer.items;
+      if (items && items.length > 0) {
+        const item = items[0];
+        if (item.kind === 'file') {
+          const mediaStore = useMediaStore.getState();
+
+          // Try to get file handle (File System Access API)
+          if ('getAsFileSystemHandle' in item) {
+            try {
+              const handle = await (item as any).getAsFileSystemHandle();
+              if (handle && handle.kind === 'file') {
+                const file = await handle.getFile();
+                if (file.type.startsWith('video/') || file.type.startsWith('audio/') || file.type.startsWith('image/')) {
+                  // Validate track type
+                  const fileIsAudio = isAudioFile(file);
+                  if (fileIsAudio && isVideoTrack) {
+                    console.log('[Timeline] Audio files can only be dropped on audio tracks');
+                    return;
+                  }
+                  if (!fileIsAudio && isAudioTrack) {
+                    console.log('[Timeline] Video/image files can only be dropped on video tracks');
+                    return;
+                  }
+
+                  const imported = await mediaStore.importFilesWithHandles([{ file, handle }]);
+                  if (imported.length > 0) {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const x = e.clientX - rect.left + scrollX;
+                    const startTime = pixelToTime(x);
+                    addClip(trackId, file, Math.max(0, startTime), cachedDuration, imported[0].id);
+                    console.log('[Timeline] Imported file with handle:', file.name);
+                  }
+                  return;
+                }
+              }
+            } catch (err) {
+              console.warn('[Timeline] Could not get file handle, falling back:', err);
+            }
           }
 
-          const rect = e.currentTarget.getBoundingClientRect();
-          const x = e.clientX - rect.left + scrollX;
-          const startTime = pixelToTime(x);
-          // Import file to media store first to get mediaFileId (needed for multicam sync)
-          const mediaStore = useMediaStore.getState();
-          const importedFile = await mediaStore.importFile(file);
-          const newMediaFileId = importedFile?.id;
-          addClip(trackId, file, Math.max(0, startTime), cachedDuration, newMediaFileId);
+          // Fallback to regular file (no handle)
+          const file = item.getAsFile();
+          if (file && (file.type.startsWith('video/') || file.type.startsWith('audio/') || file.type.startsWith('image/'))) {
+            const fileIsAudio = isAudioFile(file);
+            if (fileIsAudio && isVideoTrack) {
+              console.log('[Timeline] Audio files can only be dropped on audio tracks');
+              return;
+            }
+            if (!fileIsAudio && isAudioTrack) {
+              console.log('[Timeline] Video/image files can only be dropped on video tracks');
+              return;
+            }
+
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = e.clientX - rect.left + scrollX;
+            const startTime = pixelToTime(x);
+            const importedFile = await mediaStore.importFile(file);
+            addClip(trackId, file, Math.max(0, startTime), cachedDuration, importedFile?.id);
+          }
         }
       }
     },

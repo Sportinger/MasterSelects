@@ -435,17 +435,61 @@ export function MediaPanel() {
   }, [folders, selectedIds, moveToFolder]);
 
   // Handle drop on root (move out of folder or external file import)
-  const handleRootDrop = useCallback((e: React.DragEvent) => {
+  const handleRootDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsExternalDragOver(false);
 
     // Check if this is an external file drop
     if (!e.dataTransfer.types.includes('application/x-media-panel-item')) {
-      // External file drop - import
-      if (e.dataTransfer.files.length > 0) {
-        console.log('[MediaPanel] Importing', e.dataTransfer.files.length, 'files from external drop');
-        importFiles(e.dataTransfer.files);
+      // External file drop - try to get file handles for persistence
+      const items = e.dataTransfer.items;
+      if (items && items.length > 0) {
+        const filesWithHandles: Array<{ file: File; handle: FileSystemFileHandle }> = [];
+        const filesWithoutHandles: File[] = [];
+
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.kind === 'file') {
+            // Try to get file handle (File System Access API)
+            if ('getAsFileSystemHandle' in item) {
+              try {
+                const handle = await (item as any).getAsFileSystemHandle();
+                if (handle && handle.kind === 'file') {
+                  const file = await handle.getFile();
+                  filesWithHandles.push({ file, handle });
+                  console.log('[MediaPanel] Got file handle from drop:', file.name);
+                }
+              } catch (err) {
+                // Fallback to regular file
+                const file = item.getAsFile();
+                if (file) filesWithoutHandles.push(file);
+              }
+            } else {
+              // Browser doesn't support getAsFileSystemHandle
+              const file = item.getAsFile();
+              if (file) filesWithoutHandles.push(file);
+            }
+          }
+        }
+
+        // Import files with handles using the store's method that saves handles
+        if (filesWithHandles.length > 0) {
+          console.log('[MediaPanel] Importing', filesWithHandles.length, 'files WITH handles from drop');
+          const { importFilesWithHandles } = useMediaStore.getState();
+          if (importFilesWithHandles) {
+            await importFilesWithHandles(filesWithHandles);
+          } else {
+            // Fallback if method doesn't exist
+            importFiles(filesWithHandles.map(f => f.file));
+          }
+        }
+
+        // Import files without handles (old way)
+        if (filesWithoutHandles.length > 0) {
+          console.log('[MediaPanel] Importing', filesWithoutHandles.length, 'files WITHOUT handles from drop');
+          importFiles(filesWithoutHandles);
+        }
       }
       return;
     }

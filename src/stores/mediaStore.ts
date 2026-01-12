@@ -153,6 +153,7 @@ interface MediaState {
   fileSystemSupported: boolean;
   proxyFolderName: string | null;
   importFilesWithPicker: () => Promise<MediaFile[]>;
+  importFilesWithHandles: (filesWithHandles: Array<{ file: File; handle: FileSystemFileHandle }>) => Promise<MediaFile[]>;
   pickProxyFolder: () => Promise<boolean>;
   showInExplorer: (type: 'raw' | 'proxy', mediaFileId?: string) => Promise<{ success: boolean; message: string }>;
 }
@@ -723,8 +724,10 @@ export const useMediaStore = create<MediaState>()(
 
           // If not in memory, try to get from IndexedDB
           if (!handle) {
+            console.log('[MediaStore] No handle in memory for:', mediaFile.name, 'ID:', id, '- checking IndexedDB with key:', `media_${id}`);
             try {
               const storedHandle = await projectDB.getStoredHandle(`media_${id}`);
+              console.log('[MediaStore] IndexedDB result for', `media_${id}`, ':', storedHandle ? 'found' : 'not found');
               if (storedHandle && storedHandle.kind === 'file') {
                 handle = storedHandle as FileSystemFileHandle;
                 // Cache it in memory for future use
@@ -832,6 +835,15 @@ export const useMediaStore = create<MediaState>()(
             return 0;
           }
 
+          // Debug: List all stored handles
+          try {
+            const allHandles = await projectDB.getAllHandles();
+            console.log('[MediaStore] All stored handles in IndexedDB:', allHandles.map(h => h.key));
+          } catch (e) {
+            console.warn('[MediaStore] Could not list handles:', e);
+          }
+
+          console.log('[MediaStore] Files to reload:', filesToReload.map(f => ({ id: f.id, name: f.name })));
           console.log('[MediaStore] Reloading', filesToReload.length, 'files...');
           let reloadedCount = 0;
 
@@ -1331,6 +1343,7 @@ export const useMediaStore = create<MediaState>()(
             // Store the file handle in memory and IndexedDB for persistence
             fileSystemService.storeFileHandle(id, handle);
             await projectDB.storeHandle(`media_${id}`, handle);
+            console.log('[MediaStore] Stored file handle for ID:', id, 'key:', `media_${id}`);
 
             const type = getMediaType(file);
             const url = URL.createObjectURL(file);
@@ -1424,6 +1437,127 @@ export const useMediaStore = create<MediaState>()(
               };
               await projectDB.saveMediaFile(storedFile);
               console.log('[MediaStore] Saved file with handle:', file.name);
+            } catch (e) {
+              console.warn('[MediaStore] Failed to save file metadata:', e);
+            }
+
+            imported.push(mediaFile);
+          }
+
+          return imported;
+        },
+
+        // Import files with existing handles (from drag-and-drop)
+        importFilesWithHandles: async (filesWithHandles) => {
+          const imported: MediaFile[] = [];
+
+          for (const { file, handle } of filesWithHandles) {
+            const id = generateId();
+
+            // Store the file handle in memory and IndexedDB for persistence
+            fileSystemService.storeFileHandle(id, handle);
+            await projectDB.storeHandle(`media_${id}`, handle);
+            console.log('[MediaStore] Stored file handle from drop for ID:', id);
+
+            const type = getMediaType(file);
+            const url = URL.createObjectURL(file);
+            const [info, thumbnailUrl] = await Promise.all([
+              getMediaInfo(file, type),
+              createThumbnail(file, type as 'video' | 'image'),
+            ]);
+
+            // Calculate file hash for deduplication
+            const fileHash = await calculateFileHash(file);
+
+            // Check for existing thumbnail by hash
+            let finalThumbnailUrl = thumbnailUrl;
+            if (fileHash) {
+              try {
+                const existingThumb = await projectDB.getThumbnail(fileHash);
+                if (existingThumb && existingThumb.blob && existingThumb.blob.size > 0) {
+                  finalThumbnailUrl = URL.createObjectURL(existingThumb.blob);
+                  console.log('[MediaStore] Reusing existing thumbnail for hash:', fileHash.slice(0, 8));
+                } else if (thumbnailUrl) {
+                  let thumbBlob: Blob | null = null;
+                  if (thumbnailUrl.startsWith('data:')) {
+                    const response = await fetch(thumbnailUrl);
+                    thumbBlob = await response.blob();
+                  } else if (thumbnailUrl.startsWith('blob:')) {
+                    const response = await fetch(thumbnailUrl);
+                    thumbBlob = await response.blob();
+                  }
+                  if (thumbBlob && thumbBlob.size > 0) {
+                    await projectDB.saveThumbnail({
+                      fileHash,
+                      blob: thumbBlob,
+                      createdAt: Date.now(),
+                    });
+                  }
+                }
+              } catch (e) {
+                console.warn('[MediaStore] Thumbnail dedup error:', e);
+              }
+            }
+
+            // Check for existing proxy by hash
+            let proxyStatus: ProxyStatus = 'none';
+            let proxyFrameCount: number | undefined;
+            if (fileHash && type === 'video') {
+              const existingProxyCount = await projectDB.getProxyFrameCountByHash(fileHash);
+              if (existingProxyCount > 0) {
+                proxyStatus = 'ready';
+                proxyFrameCount = existingProxyCount;
+                console.log('[MediaStore] Reusing existing proxy for hash:', fileHash.slice(0, 8));
+              }
+            }
+
+            const mediaFile: MediaFile = {
+              id,
+              name: file.name,
+              type,
+              parentId: null,
+              createdAt: Date.now(),
+              file,
+              url,
+              thumbnailUrl: finalThumbnailUrl,
+              duration: info.duration,
+              width: info.width,
+              height: info.height,
+              fps: info.fps,
+              codec: info.codec,
+              container: info.container,
+              fileSize: info.fileSize,
+              fileHash,
+              hasFileHandle: true,
+              filePath: file.name,
+              proxyStatus,
+              proxyFrameCount,
+              proxyFps: proxyFrameCount ? PROXY_FPS : undefined,
+              proxyProgress: proxyFrameCount ? 100 : 0,
+            };
+
+            set((state) => ({
+              files: [...state.files, mediaFile],
+            }));
+
+            // Save to IndexedDB
+            try {
+              const storedFile: StoredMediaFile = {
+                id,
+                name: file.name,
+                type: mediaFile.type,
+                fileHash,
+                duration: info.duration,
+                width: info.width,
+                height: info.height,
+                fps: info.fps,
+                codec: info.codec,
+                container: info.container,
+                fileSize: info.fileSize,
+                createdAt: mediaFile.createdAt,
+              };
+              await projectDB.saveMediaFile(storedFile);
+              console.log('[MediaStore] Saved file with handle from drop:', file.name);
             } catch (e) {
               console.warn('[MediaStore] Failed to save file metadata:', e);
             }
