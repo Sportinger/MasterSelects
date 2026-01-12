@@ -1805,14 +1805,26 @@ export class WebGPUEngine {
         console.log('[WebGPU] Entering idle mode - no changes for 1s');
       }
 
-      // Skip rendering when idle (but keep the loop running to detect wake-up)
-      if (this.isIdle && !this.renderRequested) {
-        this.animationId = requestAnimationFrame(loop);
-        return;
+      // Wake from idle if render was requested
+      if (this.isIdle && this.renderRequested) {
+        this.isIdle = false;
+        console.log('[WebGPU] Waking from idle mode');
       }
 
       // Clear render request flag after processing
       this.renderRequested = false;
+
+      // Always call renderCallback (for stats updates), but skip heavy work when idle
+      // renderFrame checks getIsIdle() internally
+      if (!this.isExporting) {
+        renderCallback();
+      }
+
+      // Skip detailed stats tracking when idle (save CPU)
+      if (this.isIdle) {
+        this.animationId = requestAnimationFrame(loop);
+        return;
+      }
 
       // Frame rate limiting when video is playing
       if (this.hasActiveVideo) {
@@ -1841,12 +1853,6 @@ export class WebGPUEngine {
         this.detailedStats.dropsLastSecond = this.detailedStats.dropsThisSecond;
         this.detailedStats.dropsThisSecond = 0;
         lastFpsReset = timestamp;
-      }
-
-      // Skip render callback during export to prevent video element conflicts
-      // Export uses its own render calls with precise seeking
-      if (!this.isExporting) {
-        renderCallback();
       }
 
       this.animationId = requestAnimationFrame(loop);

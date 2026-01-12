@@ -233,6 +233,18 @@ export function useEngine() {
 
     const renderFrame = () => {
       try {
+        // Always update stats (even when idle) so UI shows correct status
+        const now = performance.now();
+        if (now - lastStatsUpdate > 100) {
+          useMixerStore.getState().setEngineStats(engine.getStats());
+          lastStatsUpdate = now;
+        }
+
+        // Skip actual rendering if engine is idle
+        if (engine.getIsIdle()) {
+          return;
+        }
+
         // Use high-frequency playhead position during playback
         const currentPlayhead = playheadState.isUsingInternalPosition
           ? playheadState.position
@@ -271,13 +283,6 @@ export function useEngine() {
         const activeCompId = useMediaStore.getState().activeCompositionId;
         if (activeCompId) {
           engine.cacheActiveCompOutput(activeCompId);
-        }
-
-        // Throttle stats updates (every 100ms)
-        const now = performance.now();
-        if (now - lastStatsUpdate > 100) {
-          useMixerStore.getState().setEngineStats(engine.getStats());
-          lastStatsUpdate = now;
         }
       } catch (e) {
         console.error('Render error:', e);
