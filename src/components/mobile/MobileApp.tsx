@@ -97,11 +97,9 @@ export function MobileApp() {
               <div><span style={{ color: '#4ade80' }}>✓</span> Preview</div>
               <div><span style={{ color: '#4ade80' }}>✓</span> Timeline (basic)</div>
               <div><span style={{ color: '#fbbf24' }}>◐</span> Touch Gestures</div>
-              <div><span style={{ color: '#666' }}>○</span> Playback</div>
-              <div><span style={{ color: '#666' }}>○</span> Audio</div>
-              <div><span style={{ color: '#666' }}>○</span> Effects</div>
-              <div><span style={{ color: '#666' }}>○</span> Keyframes</div>
-              <div><span style={{ color: '#666' }}>○</span> Export</div>
+              <div><span style={{ color: '#666' }}>○</span> Playback, Audio, Effects</div>
+              <div><span style={{ color: '#666' }}>○</span> Keyframes, Masks, Export</div>
+              <div style={{ color: '#555', fontStyle: 'italic' }}>...and much more</div>
             </div>
 
             <button
