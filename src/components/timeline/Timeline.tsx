@@ -158,6 +158,18 @@ export function Timeline() {
   const timeToPixel = useCallback((time: number) => time * zoom, [zoom]);
   const pixelToTime = useCallback((pixel: number) => pixel / zoom, [zoom]);
 
+  // Calculate grid interval based on zoom (same logic as TimelineRuler)
+  const gridInterval = useMemo(() => {
+    if (zoom >= 100) return 0.5;
+    if (zoom >= 50) return 1;
+    if (zoom >= 20) return 2;
+    if (zoom >= 10) return 5;
+    if (zoom >= 5) return 10;
+    if (zoom >= 2) return 30;
+    return 60;
+  }, [zoom]);
+  const gridSize = gridInterval * zoom; // Grid line spacing in pixels
+
   // Clip dragging - extracted to hook
   const { clipDrag, clipDragRef, handleClipMouseDown, handleClipDoubleClick } = useClipDrag({
     trackLanesRef,
@@ -1502,6 +1514,7 @@ export function Timeline() {
             <div className="track-lanes-scroll" style={{
               transform: `translateX(-${scrollX}px)`,
               minWidth: Math.max(duration * zoom + 500, 2000), // Ensure background extends beyond visible content
+              ['--grid-size' as string]: `${gridSize}px`,
             }}>
               {/* New Video Track drop zone - at TOP above video tracks */}
               {externalDrag && (

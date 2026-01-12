@@ -2881,9 +2881,9 @@ input[type="checkbox"] {
   background: repeating-linear-gradient(
     90deg,
     var(--bg-secondary),
-    var(--bg-secondary) 49px,
-    #1a1a2e 49px,
-    #1a1a2e 50px
+    var(--bg-secondary) calc(var(--grid-size, 50px) - 1px),
+    #1a1a2e calc(var(--grid-size, 50px) - 1px),
+    #1a1a2e var(--grid-size, 50px)
   );
 }
 
@@ -2891,9 +2891,9 @@ input[type="checkbox"] {
   background: repeating-linear-gradient(
     90deg,
     var(--bg-secondary),
-    var(--bg-secondary) 49px,
-    #1a2e1a 49px,
-    #1a2e1a 50px
+    var(--bg-secondary) calc(var(--grid-size, 50px) - 1px),
+    #1a2e1a calc(var(--grid-size, 50px) - 1px),
+    #1a2e1a var(--grid-size, 50px)
   );
 }
 
