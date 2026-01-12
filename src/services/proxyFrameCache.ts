@@ -22,6 +22,16 @@ class ProxyFrameCache {
   private preloadQueue: string[] = [];
   private isPreloading = false;
 
+  // Audio proxy cache
+  private audioCache: Map<string, HTMLAudioElement> = new Map();
+  private audioLoadingPromises: Map<string, Promise<HTMLAudioElement | null>> = new Map();
+
+  // Audio buffer cache for instant scrubbing (Web Audio API)
+  private audioBufferCache: Map<string, AudioBuffer> = new Map();
+  private audioContext: AudioContext | null = null;
+  private scrubSource: AudioBufferSourceNode | null = null;
+  private scrubGain: GainNode | null = null;
+
   // Get cache key
   private getKey(mediaFileId: string, frameIndex: number): string {
     return `${mediaFileId}_${frameIndex}`;
@@ -123,9 +133,20 @@ class ProxyFrameCache {
       const mediaFile = useMediaStore.getState().files.find(f => f.id === mediaFileId);
       const storageKey = mediaFile?.fileHash || mediaFileId;
 
+      // Debug logging
+      if (frameIndex === 0) {
+        console.log('[ProxyCache] Loading frame 0 for:', mediaFile?.name);
+        console.log('[ProxyCache] storageKey:', storageKey);
+        console.log('[ProxyCache] projectOpen:', projectFileService.isProjectOpen());
+        console.log('[ProxyCache] proxyStatus:', mediaFile?.proxyStatus);
+      }
+
       // Load from project folder ONLY (no IndexedDB fallback)
       if (projectFileService.isProjectOpen()) {
         blob = await projectFileService.getProxyFrame(storageKey, frameIndex);
+        if (frameIndex === 0) {
+          console.log('[ProxyCache] Frame 0 blob:', blob ? `${blob.size} bytes` : 'null');
+        }
       }
 
       if (!blob) return null;
@@ -247,6 +268,236 @@ class ProxyFrameCache {
     this.isPreloading = false;
   }
 
+  // ============================================
+  // AUDIO PROXY METHODS
+  // ============================================
+
+  /**
+   * Get cached audio proxy element, or load it if not cached
+   * Returns null if no audio proxy exists
+   */
+  async getAudioProxy(mediaFileId: string): Promise<HTMLAudioElement | null> {
+    // Check cache first
+    const cached = this.audioCache.get(mediaFileId);
+    if (cached) {
+      return cached;
+    }
+
+    // Check if already loading
+    const existingPromise = this.audioLoadingPromises.get(mediaFileId);
+    if (existingPromise) {
+      return existingPromise;
+    }
+
+    // Start loading
+    const loadPromise = this.loadAudioProxy(mediaFileId);
+    this.audioLoadingPromises.set(mediaFileId, loadPromise);
+
+    try {
+      const audio = await loadPromise;
+      if (audio) {
+        this.audioCache.set(mediaFileId, audio);
+      }
+      return audio;
+    } finally {
+      this.audioLoadingPromises.delete(mediaFileId);
+    }
+  }
+
+  /**
+   * Get cached audio proxy synchronously (returns null if not yet loaded)
+   */
+  getCachedAudioProxy(mediaFileId: string): HTMLAudioElement | null {
+    return this.audioCache.get(mediaFileId) || null;
+  }
+
+  /**
+   * Preload audio proxy for a media file
+   */
+  async preloadAudioProxy(mediaFileId: string): Promise<void> {
+    // Just call getAudioProxy which handles caching
+    await this.getAudioProxy(mediaFileId);
+  }
+
+  /**
+   * Load audio proxy from project folder
+   */
+  private async loadAudioProxy(mediaFileId: string): Promise<HTMLAudioElement | null> {
+    try {
+      // Get storage key (prefer fileHash for deduplication)
+      const mediaStore = useMediaStore.getState();
+      const mediaFile = mediaStore.files.find(f => f.id === mediaFileId);
+      const storageKey = mediaFile?.fileHash || mediaFileId;
+
+      // Load audio file from project folder
+      const audioFile = await projectFileService.getProxyAudio(storageKey);
+      if (!audioFile) {
+        return null;
+      }
+
+      // Create audio element with object URL
+      const audio = new Audio();
+      audio.src = URL.createObjectURL(audioFile);
+      audio.preload = 'auto';
+
+      // Wait for audio to be ready
+      await new Promise<void>((resolve, reject) => {
+        const onCanPlay = () => {
+          audio.removeEventListener('canplaythrough', onCanPlay);
+          audio.removeEventListener('error', onError);
+          resolve();
+        };
+        const onError = () => {
+          audio.removeEventListener('canplaythrough', onCanPlay);
+          audio.removeEventListener('error', onError);
+          reject(new Error('Failed to load audio proxy'));
+        };
+        audio.addEventListener('canplaythrough', onCanPlay);
+        audio.addEventListener('error', onError);
+        // Start loading
+        audio.load();
+      });
+
+      console.log(`[ProxyFrameCache] Audio proxy loaded for ${mediaFileId}`);
+      return audio;
+    } catch (e) {
+      console.warn(`[ProxyFrameCache] Failed to load audio proxy for ${mediaFileId}:`, e);
+      return null;
+    }
+  }
+
+  // ============================================
+  // INSTANT AUDIO SCRUBBING (Web Audio API)
+  // ============================================
+
+  /**
+   * Get or create AudioContext for scrubbing
+   */
+  private getAudioContext(): AudioContext {
+    if (!this.audioContext) {
+      this.audioContext = new AudioContext();
+      this.scrubGain = this.audioContext.createGain();
+      this.scrubGain.connect(this.audioContext.destination);
+      this.scrubGain.gain.value = 1.0; // Full volume for scrubbing
+    }
+    return this.audioContext;
+  }
+
+  /**
+   * Get AudioBuffer for a media file (decode on first request)
+   */
+  async getAudioBuffer(mediaFileId: string): Promise<AudioBuffer | null> {
+    // Check cache
+    const cached = this.audioBufferCache.get(mediaFileId);
+    if (cached) return cached;
+
+    try {
+      // Get storage key
+      const mediaStore = useMediaStore.getState();
+      const mediaFile = mediaStore.files.find(f => f.id === mediaFileId);
+      const storageKey = mediaFile?.fileHash || mediaFileId;
+
+      // Load audio file from project folder
+      const audioFile = await projectFileService.getProxyAudio(storageKey);
+      if (!audioFile) return null;
+
+      // Decode to AudioBuffer
+      const arrayBuffer = await audioFile.arrayBuffer();
+      const audioContext = this.getAudioContext();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+      // Cache it
+      this.audioBufferCache.set(mediaFileId, audioBuffer);
+      console.log(`[ProxyFrameCache] Audio buffer decoded for ${mediaFileId}: ${audioBuffer.duration.toFixed(1)}s`);
+
+      return audioBuffer;
+    } catch (e) {
+      console.warn(`[ProxyFrameCache] Failed to decode audio buffer:`, e);
+      return null;
+    }
+  }
+
+  // Track active scrub sources for overlapping playback
+  private activeScrubSources: AudioBufferSourceNode[] = [];
+  private lastScrubTime = 0;
+
+  /**
+   * Play instant scrub audio at a specific time
+   * Uses AudioBuffer for zero-latency seeking
+   * Allows overlapping snippets for continuous sound during fast scrubbing
+   */
+  playScrubAudio(mediaFileId: string, time: number, duration: number = 0.15): void {
+    const buffer = this.audioBufferCache.get(mediaFileId);
+    if (!buffer) {
+      // Start loading buffer for next time
+      this.getAudioBuffer(mediaFileId);
+      return;
+    }
+
+    try {
+      const ctx = this.getAudioContext();
+
+      // Resume context if suspended (browser autoplay policy)
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+
+      // Clean up finished sources (keep max 3 overlapping)
+      this.activeScrubSources = this.activeScrubSources.filter(src => {
+        try {
+          // Check if source is still playing by seeing if it throws on stop
+          return true;
+        } catch {
+          return false;
+        }
+      });
+
+      // If too many sources, stop oldest
+      while (this.activeScrubSources.length > 3) {
+        const oldest = this.activeScrubSources.shift();
+        if (oldest) {
+          try {
+            oldest.stop();
+            oldest.disconnect();
+          } catch { /* ignore */ }
+        }
+      }
+
+      // Create new source with its own gain for fade
+      const sourceGain = ctx.createGain();
+      sourceGain.connect(this.scrubGain!);
+      sourceGain.gain.value = 1.0;
+
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(sourceGain);
+
+      // Calculate valid start time
+      const startTime = Math.max(0, Math.min(time, buffer.duration - duration));
+
+      // Auto-cleanup when done
+      source.onended = () => {
+        const idx = this.activeScrubSources.indexOf(source);
+        if (idx >= 0) this.activeScrubSources.splice(idx, 1);
+        sourceGain.disconnect();
+      };
+
+      // Play snippet
+      source.start(0, startTime, duration);
+      this.activeScrubSources.push(source);
+      this.lastScrubTime = time;
+    } catch (e) {
+      // Ignore scrub errors
+    }
+  }
+
+  /**
+   * Check if audio buffer is ready for instant scrubbing
+   */
+  hasAudioBuffer(mediaFileId: string): boolean {
+    return this.audioBufferCache.has(mediaFileId);
+  }
+
   // Clear cache for a specific media file
   clearForMedia(mediaFileId: string) {
     for (const [key] of this.cache) {
@@ -255,12 +506,33 @@ class ProxyFrameCache {
       }
     }
     this.preloadQueue = this.preloadQueue.filter((k) => !k.startsWith(mediaFileId + '_'));
+
+    // Also clear audio cache
+    const audio = this.audioCache.get(mediaFileId);
+    if (audio) {
+      audio.pause();
+      URL.revokeObjectURL(audio.src);
+      this.audioCache.delete(mediaFileId);
+    }
+
+    // Clear audio buffer cache
+    this.audioBufferCache.delete(mediaFileId);
   }
 
   // Clear entire cache
   clearAll() {
     this.cache.clear();
     this.preloadQueue = [];
+
+    // Clear audio cache
+    for (const [, audio] of this.audioCache) {
+      audio.pause();
+      URL.revokeObjectURL(audio.src);
+    }
+    this.audioCache.clear();
+
+    // Clear audio buffer cache
+    this.audioBufferCache.clear();
   }
 
   // Get cache stats

@@ -9,6 +9,7 @@ import { useSettingsStore, type PreviewQuality, type AutosaveInterval } from '..
 import { useMIDI } from '../../hooks/useMIDI';
 import { SettingsDialog } from './SettingsDialog';
 import { SavedToast } from './SavedToast';
+import { InfoDialog } from './InfoDialog';
 import { projectFileService } from '../../services/projectFileService';
 import {
   createNewProject,
@@ -19,7 +20,7 @@ import {
 } from '../../services/projectSync';
 import { APP_VERSION } from '../../version';
 
-type MenuId = 'file' | 'edit' | 'view' | 'output' | 'window' | null;
+type MenuId = 'file' | 'edit' | 'view' | 'output' | 'window' | 'info' | null;
 
 export function Toolbar() {
   const { isEngineReady, createOutputWindow } = useEngine();
@@ -49,6 +50,7 @@ export function Toolbar() {
   const [needsPermission, setNeedsPermission] = useState(false);
   const [pendingProjectName, setPendingProjectName] = useState<string | null>(null);
   const [showSavedToast, setShowSavedToast] = useState(false);
+  const [showInfoDialog, setShowInfoDialog] = useState(false);
   const menuBarRef = useRef<HTMLDivElement>(null);
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -651,6 +653,28 @@ export function Toolbar() {
             </div>
           )}
         </div>
+
+        {/* Info Menu */}
+        <div className="menu-item">
+          <button
+            className={`menu-trigger ${openMenu === 'info' ? 'active' : ''}`}
+            onClick={() => { setShowInfoDialog(true); closeMenu(); }}
+            onMouseEnter={() => handleMenuHover('info')}
+          >
+            Info
+          </button>
+        </div>
+      </div>
+
+      {/* Spacer */}
+      <div className="toolbar-spacer" />
+
+      {/* Center - Version Info */}
+      <div className="toolbar-center">
+        <span style={{ color: '#ff6b6b', fontSize: '11px' }}>
+          Work in Progress - Expect Bugs!
+        </span>
+        <span className="version">v{APP_VERSION}</span>
       </div>
 
       {/* Spacer */}
@@ -658,10 +682,6 @@ export function Toolbar() {
 
       {/* Status */}
       <div className="toolbar-section toolbar-right">
-        <span style={{ color: '#ff6b6b', fontSize: '11px', marginRight: '12px' }}>
-          Work in Progress - Expect Bugs!
-        </span>
-        <span className="version">v{APP_VERSION}</span>
         <span className={`status ${isEngineReady ? 'ready' : 'loading'}`}>
           {isEngineReady ? '● WebGPU Ready' : '○ Loading...'}
         </span>
@@ -672,6 +692,9 @@ export function Toolbar() {
 
       {/* Saved Toast */}
       <SavedToast visible={showSavedToast} onHide={() => setShowSavedToast(false)} />
+
+      {/* Info Dialog */}
+      {showInfoDialog && <InfoDialog onClose={() => setShowInfoDialog(false)} />}
     </div>
   );
 }

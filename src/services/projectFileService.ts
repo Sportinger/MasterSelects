@@ -947,6 +947,66 @@ class ProjectFileService {
     }
   }
 
+  /**
+   * Save audio proxy file (extracted audio for fast playback)
+   */
+  async saveProxyAudio(mediaId: string, blob: Blob): Promise<boolean> {
+    if (!this.projectHandle) {
+      console.error('[ProjectFile] No project handle for audio proxy save!');
+      return false;
+    }
+
+    try {
+      // Get or create media subfolder in Proxy/
+      const proxyFolder = await this.projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY, { create: true });
+      const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId, { create: true });
+
+      const fileName = 'audio.m4a';
+      const fileHandle = await mediaFolder.getFileHandle(fileName, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+
+      console.log(`[ProjectFile] Saved audio proxy to ${this.projectHandle.name}/${PROJECT_FOLDERS.PROXY}/${mediaId}/${fileName} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
+      return true;
+    } catch (e) {
+      console.error('[ProjectFile] Failed to save audio proxy:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Get audio proxy file
+   */
+  async getProxyAudio(mediaId: string): Promise<File | null> {
+    if (!this.projectHandle) return null;
+
+    try {
+      const proxyFolder = await this.projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
+      const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
+      const fileHandle = await mediaFolder.getFileHandle('audio.m4a');
+      return await fileHandle.getFile();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * Check if audio proxy exists for media
+   */
+  async hasProxyAudio(mediaId: string): Promise<boolean> {
+    if (!this.projectHandle) return false;
+
+    try {
+      const proxyFolder = await this.projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
+      const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
+      await mediaFolder.getFileHandle('audio.m4a');
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   // ============================================
   // ANALYSIS OPERATIONS (Range-based caching)
   // ============================================

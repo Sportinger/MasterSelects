@@ -116,16 +116,21 @@ export class FFmpegBridge {
 
       console.log(`[FFmpegBridge] Using ${hasSharedArrayBuffer ? 'multi-threaded' : 'single-threaded'} core`);
 
-      const loadConfig: Record<string, unknown> = {
-        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-      };
+      // Download FFmpeg core files (can take a while on first load)
+      console.log('[FFmpegBridge] Downloading ffmpeg-core.js...');
+      const coreURL = await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript');
+      console.log('[FFmpegBridge] Downloading ffmpeg-core.wasm (~30MB)...');
+      const wasmURL = await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm');
+
+      const loadConfig: Record<string, unknown> = { coreURL, wasmURL };
 
       // Multi-threaded version needs worker
       if (hasSharedArrayBuffer) {
+        console.log('[FFmpegBridge] Downloading ffmpeg-core.worker.js...');
         loadConfig.workerURL = await toBlobURL(`${baseURL}/ffmpeg-core.worker.js`, 'text/javascript');
       }
 
+      console.log('[FFmpegBridge] Initializing FFmpeg core...');
       await ffmpeg.load(loadConfig);
 
       this.ffmpeg = ffmpeg as unknown as FFmpegCore;
@@ -456,6 +461,83 @@ export class FFmpegBridge {
    */
   getLogs(): FFmpegLogEntry[] {
     return [...this.logs];
+  }
+
+  /**
+   * Extract audio from a video file
+   * Returns audio as AAC in M4A container for fast loading
+   */
+  async extractAudio(
+    file: File,
+    onProgress?: (percent: number) => void
+  ): Promise<Blob | null> {
+    if (!this.ffmpeg) {
+      throw new Error('FFmpeg not loaded. Call load() first.');
+    }
+
+    this.cancelled = false;
+    this.logs = [];
+
+    const fs = this.ffmpeg.FS;
+
+    try {
+      // Create directories
+      try { fs.mkdir('/input'); } catch { /* exists */ }
+      try { fs.mkdir('/output'); } catch { /* exists */ }
+
+      // Write input file to virtual filesystem
+      console.log(`[FFmpegBridge] Loading ${file.name} for audio extraction...`);
+      onProgress?.(5);
+
+      const inputData = new Uint8Array(await file.arrayBuffer());
+      const inputPath = `/input/${file.name}`;
+      fs.writeFile(inputPath, inputData);
+
+      onProgress?.(20);
+
+      // Build FFmpeg arguments for audio extraction
+      // -vn: no video, -acodec aac: encode to AAC, -b:a 192k: 192kbps bitrate
+      const args = [
+        '-y',                    // Overwrite output
+        '-i', inputPath,         // Input file
+        '-vn',                   // No video
+        '-acodec', 'aac',        // Encode to AAC
+        '-b:a', '192k',          // 192 kbps bitrate
+        '-ar', '48000',          // 48kHz sample rate
+        '-ac', '2',              // Stereo
+        '/output/audio.m4a',     // Output file
+      ];
+
+      console.log('[FFmpegBridge] Extracting audio: ffmpeg', args.join(' '));
+      onProgress?.(30);
+
+      // Execute FFmpeg
+      const exitCode = await this.ffmpeg.exec(args);
+
+      onProgress?.(90);
+
+      if (exitCode !== 0) {
+        console.warn('[FFmpegBridge] Audio extraction failed with code', exitCode);
+        return null;
+      }
+
+      // Read output file
+      const data = fs.readFile('/output/audio.m4a');
+
+      // Create a copy to ensure it's a standard ArrayBuffer
+      const buffer = new ArrayBuffer(data.byteLength);
+      new Uint8Array(buffer).set(data);
+
+      onProgress?.(100);
+
+      console.log(`[FFmpegBridge] Audio extracted: ${(data.byteLength / 1024 / 1024).toFixed(2)} MB`);
+      return new Blob([buffer], { type: 'audio/mp4' });
+    } catch (error) {
+      console.error('[FFmpegBridge] Audio extraction error:', error);
+      return null;
+    } finally {
+      this.cleanup();
+    }
   }
 
   /**

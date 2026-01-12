@@ -387,6 +387,10 @@ class LayerBuilderService {
       ? playheadState.position
       : timelineState.playheadPosition;
 
+    // Check if proxy mode is enabled
+    const mediaStore = useMediaStore.getState();
+    const proxyEnabled = mediaStore.proxyEnabled;
+
     const clipsAtTime = clips.filter(
       c => playheadPosition >= c.startTime && playheadPosition < c.startTime + c.duration
     );
@@ -401,6 +405,27 @@ class LayerBuilderService {
         const clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
         const timeDiff = Math.abs(video.currentTime - clipTime);
 
+        // Check if this clip should use proxy mode
+        const mediaFile = mediaStore.files.find(
+          f => f.name === clip.name || clip.source?.mediaFileId === f.id
+        );
+        const useProxy = proxyEnabled && mediaFile?.proxyFps &&
+          (mediaFile.proxyStatus === 'ready' || mediaFile.proxyStatus === 'generating');
+
+        // In proxy mode: pause video and let audio proxy handle audio
+        // We use cached WebP frames instead of video frames
+        if (useProxy) {
+          if (!video.paused) {
+            video.pause();
+          }
+          // Mute video to prevent any audio leakage
+          if (!video.muted) {
+            video.muted = true;
+          }
+          return; // Skip normal video sync
+        }
+
+        // Non-proxy mode: normal video playback
         if (clip.reversed) {
           if (!video.paused) video.pause();
           const seekThreshold = isDraggingPlayhead ? 0.1 : 0.03;
@@ -447,6 +472,35 @@ class LayerBuilderService {
         }
       }
     });
+  }
+
+  // Track audio proxies currently playing to manage their lifecycle
+  private activeAudioProxies: Map<string, HTMLAudioElement> = new Map();
+
+  // Audio scrubbing state
+  private lastScrubPosition = -1;
+  private scrubAudioTimeout: ReturnType<typeof setTimeout> | null = null;
+  private readonly SCRUB_AUDIO_DURATION = 80; // ms of audio to play when scrubbing
+
+  /**
+   * Play a short audio snippet for scrubbing feedback
+   */
+  private playScrubAudio(audio: HTMLAudioElement, time: number): void {
+    // Seek to position
+    audio.currentTime = time;
+    audio.volume = 0.7; // Slightly lower volume for scrubbing
+
+    // Play short snippet
+    audio.play().catch(() => {});
+
+    // Stop after short duration
+    if (this.scrubAudioTimeout) {
+      clearTimeout(this.scrubAudioTimeout);
+    }
+    this.scrubAudioTimeout = setTimeout(() => {
+      audio.pause();
+      this.scrubAudioTimeout = null;
+    }, this.SCRUB_AUDIO_DURATION);
   }
 
   /**
@@ -558,7 +612,15 @@ class LayerBuilderService {
 
         const shouldPlay = isPlaying && !effectivelyMuted && !isDraggingPlayhead && absSpeed > 0.1;
 
-        if (shouldPlay) {
+        // Audio scrubbing for audio track clips
+        if (isDraggingPlayhead && !effectivelyMuted) {
+          const positionChanged = Math.abs(playheadPosition - this.lastScrubPosition) > 0.02;
+          if (positionChanged) {
+            this.lastScrubPosition = playheadPosition;
+            audio.playbackRate = 1;
+            this.playScrubAudio(audio, clipTime);
+          }
+        } else if (shouldPlay) {
           // Gradual drift correction using playback rate adjustment
           const absDrift = Math.abs(timeDiff);
 
@@ -580,6 +642,11 @@ class LayerBuilderService {
             audio.playbackRate = Math.max(0.25, Math.min(4, newRate));
           }
 
+          // Reset volume after scrubbing
+          if (audio.volume !== 1) {
+            audio.volume = 1;
+          }
+
           if (audio.paused) {
             audio.currentTime = clipTime;
             audio.play().catch(err => {
@@ -598,6 +665,138 @@ class LayerBuilderService {
         }
       }
     });
+
+    // Sync audio proxies for video clips in proxy mode
+    // This provides faster audio sync than video element buffering
+    const mediaStore = useMediaStore.getState();
+    const activeVideoClipIds = new Set<string>();
+
+    videoTracks.forEach(track => {
+      const clip = clipsAtTime.find(c => c.trackId === track.id);
+
+      if (clip?.source?.videoElement && !clip.isComposition) {
+        // Check if proxy mode is enabled for this clip
+        const mediaFile = mediaStore.files.find(
+          f => f.name === clip.name || clip.source?.mediaFileId === f.id
+        );
+
+        const shouldUseAudioProxy = mediaStore.proxyEnabled &&
+          mediaFile?.hasProxyAudio &&
+          (mediaFile.proxyStatus === 'ready' || mediaFile.proxyStatus === 'generating');
+
+        if (shouldUseAudioProxy && mediaFile) {
+          activeVideoClipIds.add(clip.id);
+
+          // Mute video element audio when using audio proxy
+          const video = clip.source.videoElement;
+          if (!video.muted) {
+            video.muted = true;
+          }
+
+          // Get or load audio proxy
+          const audioProxy = proxyFrameCache.getCachedAudioProxy(mediaFile.id);
+
+          if (audioProxy) {
+            // Track active proxy
+            this.activeAudioProxies.set(clip.id, audioProxy);
+
+            const clipLocalTime = playheadPosition - clip.startTime;
+            const currentSpeed = getInterpolatedSpeed(clip.id, clipLocalTime);
+            const absSpeed = Math.abs(currentSpeed);
+            const sourceTime = getSourceTimeForClip(clip.id, clipLocalTime);
+            const initialSpeed = getInterpolatedSpeed(clip.id, 0);
+            const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
+            const clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
+
+            const trackObj = videoTracks.find(t => t.id === clip.trackId);
+            const effectivelyMuted = trackObj ? !isVideoTrackVisible(trackObj) : false;
+            audioProxy.muted = effectivelyMuted;
+
+            const targetRate = absSpeed > 0.1 ? absSpeed : 1;
+
+            // Set preservesPitch
+            const shouldPreservePitch = clip.preservesPitch !== false;
+            if ((audioProxy as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch !== shouldPreservePitch) {
+              (audioProxy as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch = shouldPreservePitch;
+            }
+
+            const timeDiff = audioProxy.currentTime - clipTime;
+            if (Math.abs(timeDiff) > maxAudioDrift) {
+              maxAudioDrift = Math.abs(timeDiff);
+            }
+
+            const shouldPlay = isPlaying && !effectivelyMuted && !isDraggingPlayhead && absSpeed > 0.1;
+
+            // Audio scrubbing - use instant Web Audio API scrubbing
+            if (isDraggingPlayhead && !effectivelyMuted) {
+              // Trigger every ~5ms of playhead movement for continuous sound
+              const positionChanged = Math.abs(playheadPosition - this.lastScrubPosition) > 0.005;
+              if (positionChanged) {
+                this.lastScrubPosition = playheadPosition;
+                // Use instant AudioBuffer scrubbing - overlapping snippets
+                proxyFrameCache.playScrubAudio(mediaFile.id, clipTime, 0.12);
+              }
+            } else if (shouldPlay) {
+              const absDrift = Math.abs(timeDiff);
+              let newRate = targetRate;
+
+              if (forceHardSync || absDrift > 0.25) {
+                // Force sync on playback start OR large drift (>250ms): hard seek
+                audioProxy.currentTime = clipTime;
+                newRate = targetRate;
+              } else if (absDrift > 0.05) {
+                // Drift 50-250ms: gentle playback rate adjustment (max 3%)
+                const correctionFactor = Math.min(0.03, absDrift * 0.1);
+                const correction = timeDiff > 0 ? -correctionFactor : correctionFactor;
+                newRate = targetRate * (1 + correction);
+              }
+
+              if (Math.abs(audioProxy.playbackRate - newRate) > 0.005) {
+                audioProxy.playbackRate = Math.max(0.25, Math.min(4, newRate));
+              }
+
+              // Reset volume after scrubbing
+              if (audioProxy.volume !== 1) {
+                audioProxy.volume = 1;
+              }
+
+              if (audioProxy.paused) {
+                audioProxy.currentTime = clipTime;
+                audioProxy.play().catch(err => {
+                  console.warn('[Audio Proxy] Failed to play:', err.message);
+                  hasAudioError = true;
+                });
+              }
+
+              if (!audioProxy.paused && !effectivelyMuted) {
+                audioPlayingCount++;
+              }
+            } else {
+              if (!audioProxy.paused) {
+                audioProxy.pause();
+              }
+              // Reset scrub position when not dragging
+              if (!isDraggingPlayhead) {
+                this.lastScrubPosition = -1;
+              }
+            }
+          } else {
+            // Audio proxy not loaded yet - trigger preload
+            proxyFrameCache.preloadAudioProxy(mediaFile.id);
+            // Also preload AudioBuffer for instant scrubbing
+            proxyFrameCache.getAudioBuffer(mediaFile.id);
+          }
+        }
+      }
+    });
+
+    // Pause audio proxies for clips no longer at playhead
+    for (const [clipId, audioProxy] of this.activeAudioProxies) {
+      if (!activeVideoClipIds.has(clipId) && !audioProxy.paused) {
+        audioProxy.pause();
+        this.activeAudioProxies.delete(clipId);
+      }
+    }
 
     // Pause audio clips not at playhead
     clips.forEach(clip => {

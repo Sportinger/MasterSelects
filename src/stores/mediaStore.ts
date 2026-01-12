@@ -43,6 +43,7 @@ export interface MediaFile extends MediaItem {
   proxyProgress?: number; // 0-100
   proxyFrameCount?: number; // Total frames in proxy
   proxyFps?: number; // Frame rate of proxy (e.g., 30)
+  hasProxyAudio?: boolean; // True if audio proxy was extracted
   // File System Access API support
   hasFileHandle?: boolean; // True if imported via File System Access API
   filePath?: string; // Display path (folder name / file name)
@@ -652,7 +653,7 @@ export const useMediaStore = create<MediaState>()(
         },
 
         reloadAllFiles: async () => {
-          const filesToReload = get().files.filter(f => !f.file);
+          let filesToReload = get().files.filter(f => !f.file);
           if (filesToReload.length === 0) {
             console.log('[MediaStore] No files need reloading');
             return 0;
@@ -660,115 +661,41 @@ export const useMediaStore = create<MediaState>()(
 
           console.log('[MediaStore] Files to relink:', filesToReload.map(f => f.name));
 
-          let dirHandle: FileSystemDirectoryHandle | null = null;
+          let totalReloaded = 0;
 
-          // First, try to use the project folder (we already have permission from opening the project)
-          const projectHandle = projectFileService.getProjectHandle();
-          if (projectHandle) {
-            console.log('[MediaStore] Trying project folder first:', projectHandle.name);
-            dirHandle = projectHandle;
-          }
+          // Step 1: Try to reload using stored file handles from IndexedDB
+          console.log('[MediaStore] Trying stored file handles first...');
 
-          // If no project handle, try saved media source folder from IndexedDB
-          if (!dirHandle) {
+          // Debug: List all stored handle keys
+          const allHandleKeys = await projectDB.listHandleKeys();
+          console.log('[MediaStore] All stored handle keys:', allHandleKeys);
+
+          for (const mediaFile of [...filesToReload]) {
+            const key = `media_${mediaFile.id}`;
+            console.log('[MediaStore] Looking for handle with key:', key);
             try {
-              console.log('[MediaStore] Checking for saved media source folder...');
-              const savedHandle = await projectDB.getStoredHandle('mediaSourceFolder');
-              console.log('[MediaStore] Saved handle:', savedHandle ? `${savedHandle.kind} - ${savedHandle.name}` : 'not found');
+              const storedHandle = await projectDB.getStoredHandle(key);
+              console.log('[MediaStore] Handle lookup result:', key, storedHandle ? `found (${storedHandle.kind})` : 'not found');
 
-              if (savedHandle && savedHandle.kind === 'directory') {
-                // Check if we still have permission
-                const permission = await (savedHandle as FileSystemDirectoryHandle).queryPermission({ mode: 'read' });
-                console.log('[MediaStore] Current permission:', permission);
+              if (storedHandle && storedHandle.kind === 'file') {
+                const fileHandle = storedHandle as FileSystemFileHandle;
 
+                // Request permission (this shows a simple prompt, no folder picker)
+                console.log('[MediaStore] Requesting permission for:', mediaFile.name);
+                const permission = await fileHandle.requestPermission({ mode: 'read' });
+                console.log('[MediaStore] Permission result:', permission);
                 if (permission === 'granted') {
-                  dirHandle = savedHandle as FileSystemDirectoryHandle;
-                  console.log('[MediaStore] Using saved media source folder:', dirHandle.name);
-                } else {
-                  // Try to request permission (this shows a prompt)
-                  console.log('[MediaStore] Requesting permission for saved folder...');
-                  const newPermission = await (savedHandle as FileSystemDirectoryHandle).requestPermission({ mode: 'read' });
-                  console.log('[MediaStore] New permission:', newPermission);
-                  if (newPermission === 'granted') {
-                    dirHandle = savedHandle as FileSystemDirectoryHandle;
-                    console.log('[MediaStore] Re-granted permission to saved folder:', dirHandle.name);
-                  }
-                }
-              }
-            } catch (e) {
-              console.log('[MediaStore] No saved media source folder or permission denied:', e);
-            }
-          }
-
-          // If no saved handle, prompt user to pick a folder
-          if (!dirHandle) {
-            try {
-              dirHandle = await (window as any).showDirectoryPicker({
-                mode: 'read',
-                startIn: 'videos',
-              });
-            } catch (e: any) {
-              if (e.name === 'AbortError') {
-                console.log('[MediaStore] Folder picker cancelled');
-                return 0;
-              }
-              throw e;
-            }
-          }
-
-          if (!dirHandle) return 0;
-
-          console.log('[MediaStore] Scanning folder:', dirHandle.name);
-
-          // Collect all files from the directory (recursively)
-          const foundFiles = new Map<string, FileSystemFileHandle>();
-
-          const scanDirectory = async (dir: FileSystemDirectoryHandle, path = '') => {
-            for await (const entry of (dir as any).values()) {
-              if (entry.kind === 'file') {
-                const fileName = entry.name.toLowerCase();
-                foundFiles.set(fileName, entry);
-                // Also store without extension for fuzzy matching
-                const nameWithoutExt = fileName.replace(/\.[^.]+$/, '');
-                if (!foundFiles.has(nameWithoutExt)) {
-                  foundFiles.set(nameWithoutExt, entry);
-                }
-              } else if (entry.kind === 'directory') {
-                // Recursively scan subdirectories
-                await scanDirectory(entry, `${path}${entry.name}/`);
-              }
-            }
-          };
-
-          await scanDirectory(dirHandle);
-          console.log('[MediaStore] Found', foundFiles.size, 'files in folder');
-
-          // Match files by name
-          let reloadedCount = 0;
-          for (const mediaFile of filesToReload) {
-            const searchName = mediaFile.name.toLowerCase();
-            const searchNameWithoutExt = searchName.replace(/\.[^.]+$/, '');
-
-            // Try exact match first, then without extension
-            let handle = foundFiles.get(searchName) || foundFiles.get(searchNameWithoutExt);
-
-            if (handle) {
-              try {
-                const permission = await handle.requestPermission({ mode: 'read' });
-                if (permission === 'granted') {
-                  const file = await handle.getFile();
+                  const file = await fileHandle.getFile();
                   const url = URL.createObjectURL(file);
 
-                  // Revoke old URL
                   if (mediaFile.url) {
                     URL.revokeObjectURL(mediaFile.url);
                   }
 
-                  // Store handle for future use
-                  fileSystemService.storeFileHandle(mediaFile.id, handle);
-                  await projectDB.storeHandle(`media_${mediaFile.id}`, handle);
+                  // Cache handle in memory
+                  fileSystemService.storeFileHandle(mediaFile.id, fileHandle);
 
-                  // Update file in store
+                  // Update store
                   set(state => ({
                     files: state.files.map(f =>
                       f.id === mediaFile.id
@@ -777,39 +704,115 @@ export const useMediaStore = create<MediaState>()(
                     ),
                   }));
 
-                  console.log('[MediaStore] Relinked:', mediaFile.name);
-                  reloadedCount++;
+                  // Update timeline clips
+                  const { useTimelineStore } = await import('./timeline');
+                  const timelineStore = useTimelineStore.getState();
+                  const clips = timelineStore.clips.filter(
+                    c => c.source?.mediaFileId === mediaFile.id && c.needsReload
+                  );
+
+                  if (clips.length > 0) {
+                    for (const clip of clips) {
+                      timelineStore.updateClip(clip.id, {
+                        file,
+                        needsReload: false,
+                        isLoading: true,
+                      });
+                    }
+                  }
+
+                  console.log('[MediaStore] Relinked via stored handle:', mediaFile.name);
+                  totalReloaded++;
                 }
-              } catch (e) {
-                console.warn('[MediaStore] Failed to relink:', mediaFile.name, e);
               }
-            } else {
-              console.log('[MediaStore] Not found in folder:', mediaFile.name);
+            } catch (e) {
+              console.log('[MediaStore] No stored handle for:', mediaFile.name);
             }
           }
 
-          // Save source folder for future relinking
-          if (reloadedCount > 0) {
-            // Store folder handle in IndexedDB for quick reconnect
-            console.log('[MediaStore] Saving media source folder handle:', dirHandle.name);
-            await projectDB.storeHandle('mediaSourceFolder', dirHandle);
-            console.log('[MediaStore] Saved media source folder handle successfully');
+          // Update files to reload list
+          filesToReload = get().files.filter(f => !f.file);
 
-            // Save folder name to project.json
-            const projectData = projectFileService.getProjectData();
-            if (projectData) {
-              const folderName = dirHandle.name;
-              const existingFolders = projectData.mediaSourceFolders || [];
-              if (!existingFolders.includes(folderName)) {
-                projectData.mediaSourceFolders = [...existingFolders, folderName];
-                projectFileService.markDirty();
-                console.log('[MediaStore] Saved media source folder:', folderName);
+          if (filesToReload.length === 0) {
+            console.log('[MediaStore] All files relinked via stored handles');
+            return totalReloaded;
+          }
+
+          // Step 2: For files still missing, use file picker (works with Downloads folder)
+          if (filesToReload.length > 0) {
+            console.log('[MediaStore] Files still missing, prompting user to locate them...');
+
+            for (const mediaFile of [...filesToReload]) {
+              console.log('[MediaStore] Prompting for:', mediaFile.name);
+
+              try {
+                // Show file picker for this specific file
+                const [handle] = await (window as any).showOpenFilePicker({
+                  multiple: false,
+                  types: [{
+                    description: `Locate: ${mediaFile.name}`,
+                    accept: {
+                      'video/*': [],
+                      'audio/*': [],
+                      'image/*': [],
+                    },
+                  }],
+                });
+
+                if (handle) {
+                  const file = await handle.getFile();
+                  const url = URL.createObjectURL(file);
+
+                  if (mediaFile.url) {
+                    URL.revokeObjectURL(mediaFile.url);
+                  }
+
+                  // Store handle for future
+                  fileSystemService.storeFileHandle(mediaFile.id, handle);
+                  await projectDB.storeHandle(`media_${mediaFile.id}`, handle);
+
+                  // Update store
+                  set(state => ({
+                    files: state.files.map(f =>
+                      f.id === mediaFile.id
+                        ? { ...f, file, url, hasFileHandle: true, name: file.name }
+                        : f
+                    ),
+                  }));
+
+                  // Update timeline clips
+                  const { useTimelineStore } = await import('./timeline');
+                  const timelineStore = useTimelineStore.getState();
+                  const clips = timelineStore.clips.filter(
+                    c => c.source?.mediaFileId === mediaFile.id && c.needsReload
+                  );
+
+                  if (clips.length > 0) {
+                    for (const clip of clips) {
+                      timelineStore.updateClip(clip.id, {
+                        file,
+                        needsReload: false,
+                        isLoading: true,
+                      });
+                    }
+                  }
+
+                  console.log('[MediaStore] Relinked via file picker:', file.name);
+                  totalReloaded++;
+                }
+              } catch (e: any) {
+                if (e.name === 'AbortError') {
+                  console.log('[MediaStore] User cancelled file picker for:', mediaFile.name);
+                  // User cancelled - stop asking for more files
+                  break;
+                }
+                console.warn('[MediaStore] Failed to pick file:', mediaFile.name, e);
               }
             }
           }
 
-          console.log('[MediaStore] Relinked', reloadedCount, '/', filesToReload.length, 'files');
-          return reloadedCount;
+          console.log('[MediaStore] Total relinked:', totalReloaded);
+          return totalReloaded;
         },
 
         createComposition: (name: string, settings?: Partial<Composition>) => {
@@ -1113,8 +1116,23 @@ export const useMediaStore = create<MediaState>()(
 
         // ============ Proxy System ============
 
-        setProxyEnabled: (enabled: boolean) => {
+        setProxyEnabled: async (enabled: boolean) => {
           set({ proxyEnabled: enabled });
+
+          // When enabling proxy mode, immediately mute all video elements
+          if (enabled) {
+            const { useTimelineStore } = await import('./timeline');
+            const clips = useTimelineStore.getState().clips;
+            clips.forEach(clip => {
+              if (clip.source?.videoElement) {
+                clip.source.videoElement.muted = true;
+                if (!clip.source.videoElement.paused) {
+                  clip.source.videoElement.pause();
+                }
+              }
+            });
+            console.log('[MediaStore] Proxy mode enabled - muted all videos');
+          }
         },
 
         updateProxyProgress: (mediaFileId: string, progress: number) => {
@@ -1126,13 +1144,28 @@ export const useMediaStore = create<MediaState>()(
           });
         },
 
-        setProxyStatus: (mediaFileId: string, status: ProxyStatus) => {
-          const { files } = get();
+        setProxyStatus: async (mediaFileId: string, status: ProxyStatus) => {
+          const { files, proxyEnabled } = get();
           set({
             files: files.map((f) =>
               f.id === mediaFileId ? { ...f, proxyStatus: status } : f
             ),
           });
+
+          // When proxy becomes ready and proxy mode is on, mute the video
+          if (status === 'ready' && proxyEnabled) {
+            const { useTimelineStore } = await import('./timeline');
+            const clips = useTimelineStore.getState().clips;
+            clips.forEach(clip => {
+              if (clip.source?.mediaFileId === mediaFileId && clip.source?.videoElement) {
+                clip.source.videoElement.muted = true;
+                if (!clip.source.videoElement.paused) {
+                  clip.source.videoElement.pause();
+                }
+                console.log('[MediaStore] Proxy ready - muted video for:', clip.name);
+              }
+            });
+          }
         },
 
         getNextFileNeedingProxy: () => {
@@ -1246,6 +1279,38 @@ export const useMediaStore = create<MediaState>()(
             }
 
             if (result) {
+              // Also extract audio proxy for fast playback sync
+              // Uses MP4Box.js for fast extraction (no FFmpeg needed)
+              try {
+                console.log('[Proxy] Extracting audio proxy (fast mode)...');
+                const { extractAudioFromVideo } = await import('../services/audioExtractor');
+
+                const audioResult = await extractAudioFromVideo(mediaFile.file!, (percent) => {
+                  console.log(`[Proxy] Audio extraction: ${percent.toFixed(0)}%`);
+                });
+
+                if (audioResult && audioResult.blob.size > 0) {
+                  // Save audio proxy to project folder
+                  const audioProxySaved = await projectFileService.saveProxyAudio(storageKey, audioResult.blob);
+                  if (audioProxySaved) {
+                    console.log(`[Proxy] Audio proxy saved for ${mediaFile.name} (${audioResult.codec}, ${(audioResult.blob.size / 1024).toFixed(1)}KB)`);
+                  }
+                } else {
+                  console.log('[Proxy] No audio in source file or extraction failed');
+                }
+              } catch (audioErr) {
+                console.warn('[Proxy] Audio extraction failed (non-fatal):', audioErr);
+                // Non-fatal - video proxies still work without audio proxy
+              }
+
+              // Check if audio proxy exists (might have been saved previously)
+              let hasAudioProxy = false;
+              try {
+                hasAudioProxy = await projectFileService.hasProxyAudio(storageKey);
+              } catch {
+                // Ignore errors
+              }
+
               // Update media file with proxy info
               set({
                 files: get().files.map((f) =>
@@ -1256,6 +1321,7 @@ export const useMediaStore = create<MediaState>()(
                         proxyProgress: 100,
                         proxyFrameCount: result!.frameCount,
                         proxyFps: result!.fps,
+                        hasProxyAudio: hasAudioProxy, // Only true if audio proxy actually exists
                       }
                     : f
                 ),

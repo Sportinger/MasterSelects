@@ -2,20 +2,27 @@
 
 ## Workflow
 
-**WICHTIG: Version bei JEDEM Commit erhöhen!**
+**Branch-Strategie (Cloudflare Pages):**
+- `staging` Branch: Entwicklung (kein Auto-Deploy)
+- `master` Branch: Production (Cloudflare baut nur hier)
+
 ```bash
-# 1. Version in src/version.ts erhöhen (z.B. 1.0.1 -> 1.0.2)
-# 2. Dann commit und push
+# Normal entwickeln auf staging:
+git add . && git commit -m "description" && git push origin staging
+
+# Wenn bereit für Production - VERSION ERHÖHEN!
+# 1. Version in src/version.ts erhöhen (z.B. 1.0.5 -> 1.0.6)
+# 2. Commit & Push auf staging
+# 3. Dann merge zu master:
+git checkout master && git merge staging && git push origin master
+git checkout staging
 ```
+
+**WICHTIG: Version nur bei MERGE zu master erhöhen!**
 - Datei: `src/version.ts`
 - Format: `MAJOR.MINOR.PATCH`
-- Bei jedem Commit: PATCH um 1 erhöhen (z.B. 1.0.1 -> 1.0.2)
+- VOR dem Merge zu master: PATCH um 1 erhöhen
 - Version wird oben rechts neben "WebGPU Ready" angezeigt
-
-**Always commit and push after completing changes:**
-```bash
-git add . && git commit -m "description" && git push
-```
 
 **Documentation: docs/Features/ pflegen!**
 - Bei jedem Commit mit neuen/geänderten Features: `docs/Features/` aktualisieren
