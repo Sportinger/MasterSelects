@@ -249,7 +249,7 @@ export function ExportPanel() {
       const { width: engineWidth, height: engineHeight } = engine.getOutputDimensions();
 
       // Create ImageData from the pixels
-      const imageData = new ImageData(pixels, engineWidth, engineHeight);
+      const imageData = new ImageData(new Uint8ClampedArray(pixels), engineWidth, engineHeight);
 
       // Create a canvas to draw the image
       const canvas = document.createElement('canvas');

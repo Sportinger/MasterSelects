@@ -2,7 +2,7 @@
 // Extracted from Timeline.tsx for better maintainability
 
 import { useEffect, useRef, useCallback } from 'react';
-import type { TimelineClip, TimelineTrack, Layer, Effect, NestedCompositionData, AnimatableProperty } from '../../../types';
+import type { TimelineClip, TimelineTrack, Layer, Effect, NestedCompositionData, AnimatableProperty, BlendMode } from '../../../types';
 import type { ClipDragState } from '../types';
 import { useMixerStore } from '../../../stores/mixerStore';
 import { useMediaStore } from '../../../stores/mediaStore';
@@ -39,7 +39,7 @@ interface UseLayerSyncProps {
     scale: { x: number; y: number };
     rotation: { x: number; y: number; z: number };
     opacity: number;
-    blendMode: string;
+    blendMode: BlendMode;
   };
   getInterpolatedEffects: (clipId: string, localTime: number) => Effect[];
   getInterpolatedSpeed: (clipId: string, localTime: number) => number;

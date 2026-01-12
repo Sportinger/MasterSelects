@@ -2,7 +2,8 @@
 // Extracted from Timeline.tsx for better maintainability
 
 import React, { useEffect, useCallback } from 'react';
-import type { TimelineClip, MediaFile } from '../../types';
+import type { TimelineClip } from '../../types';
+import type { MediaFile } from '../../stores/mediaStore';
 import type { ContextMenuState } from './types';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { useMediaStore } from '../../stores/mediaStore';

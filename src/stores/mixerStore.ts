@@ -148,6 +148,7 @@ export const useMixerStore = create<MixerState>()(
       targetFps: 60,
       decoder: 'none',
       audio: { playing: 0, drift: 0, status: 'silent' },
+      isIdle: false,
     },
 
     midiEnabled: false,

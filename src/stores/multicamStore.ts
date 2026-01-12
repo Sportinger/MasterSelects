@@ -617,7 +617,7 @@ export const useMultiCamStore = create<MultiCamStore>()(
         const timelineStore = useTimelineStore.getState();
 
         // Create a new track for multicam output
-        const trackId = timelineStore.addTrack('Multicam Edit', 'video');
+        const trackId = timelineStore.addTrack('video');
 
         // Import media store to get media files
         import('./mediaStore').then(({ useMediaStore }) => {
@@ -635,14 +635,27 @@ export const useMultiCamStore = create<MultiCamStore>()(
             const inPoint = (decision.start + camera.syncOffset) / 1000; // Convert to seconds
             const outPoint = (decision.end + camera.syncOffset) / 1000;
             const startTime = decision.start / 1000;
+            const duration = outPoint - inPoint;
 
-            timelineStore.addClipToTrack(
+            // Add clip and then trim it to the correct in/out points
+            timelineStore.addClip(
               trackId,
               mediaFile.file,
               startTime,
-              inPoint,
-              outPoint - inPoint
-            );
+              duration,
+              mediaFile.id
+            ).then(() => {
+              // Find the clip we just added and trim it
+              const clips = timelineStore.clips.filter(c =>
+                c.trackId === trackId &&
+                c.source?.mediaFileId === mediaFile.id &&
+                Math.abs(c.startTime - startTime) < 0.01
+              );
+              if (clips.length > 0) {
+                const clip = clips[clips.length - 1];
+                timelineStore.trimClip(clip.id, inPoint, outPoint);
+              }
+            });
           }
 
           console.log('[MultiCam] Applied EDL to timeline:', edl.length, 'clips');

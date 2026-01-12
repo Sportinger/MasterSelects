@@ -209,7 +209,7 @@ class VideoEncoderWrapper {
       bitrateMode: 'variable',
     });
 
-    console.log(`[VideoEncoder] Initialized: ${this.settings.width}x${this.settings.height} @ ${this.settings.fps}fps (${effectiveVideoCodec.toUpperCase()})`);
+    console.log(`[VideoEncoder] Initialized: ${this.settings.width}x${this.settings.height} @ ${this.settings.fps}fps (${this.effectiveVideoCodec.toUpperCase()})`);
     return true;
   }
 

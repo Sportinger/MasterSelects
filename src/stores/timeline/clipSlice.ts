@@ -1254,6 +1254,14 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
     }
   },
 
+  updateClip: (id, updates) => {
+    const { clips, updateDuration } = get();
+    set({
+      clips: clips.map(c => c.id === id ? { ...c, ...updates } : c)
+    });
+    updateDuration();
+  },
+
   updateClipTransform: (id, transform) => {
     const { clips, invalidateCache } = get();
     set({

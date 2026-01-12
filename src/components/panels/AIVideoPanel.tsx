@@ -94,7 +94,7 @@ async function captureCurrentFrame(): Promise<string | null> {
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
-    const imageData = new ImageData(pixels, width, height);
+    const imageData = new ImageData(new Uint8ClampedArray(pixels), width, height);
     ctx.putImageData(imageData, 0, 0);
 
     return canvas.toDataURL('image/png');
@@ -126,7 +126,7 @@ function getAspectRatioDimensions(aspectRatio: string): { width: number; height:
 export function AIVideoPanel() {
   const { apiKeys, openSettings } = useSettingsStore();
   const { importFile } = useMediaStore();
-  const { tracks, addClip, createTrack } = useTimelineStore();
+  const { tracks, addClip, addTrack } = useTimelineStore();
 
   // Panel tab state
   const [activeTab, setActiveTab] = useState<PanelTab>('generate');
@@ -360,8 +360,7 @@ export function AIVideoPanel() {
 
         // If no empty track, create a new one
         if (!targetTrackId) {
-          const newTrack = createTrack('video', `Video ${videoTracks.length + 1}`);
-          targetTrackId = newTrack.id;
+          targetTrackId = addTrack('video');
         }
 
         // Add clip to timeline at playhead position
@@ -381,7 +380,7 @@ export function AIVideoPanel() {
     } catch (err) {
       console.error('Failed to import video:', err);
     }
-  }, [importFile, tracks, addClip, createTrack, addToTimeline]);
+  }, [importFile, tracks, addClip, addTrack, addToTimeline]);
 
   // Generate video
   const generateVideo = useCallback(async () => {

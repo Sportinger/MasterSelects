@@ -2,7 +2,8 @@
 // Extracted from Timeline.tsx for better maintainability
 
 import { useEffect } from 'react';
-import type { TimelineClip, Composition } from '../../../types';
+import type { TimelineClip, ClipTransform } from '../../../types';
+import type { Composition } from '../../../stores/mediaStore';
 import { ALL_BLEND_MODES } from '../constants';
 
 interface UseTimelineKeyboardProps {
@@ -25,7 +26,7 @@ interface UseTimelineKeyboardProps {
   removeClip: (id: string) => void;
   removeKeyframe: (id: string) => void;
   splitClipAtPlayhead: () => void;
-  updateClipTransform: (id: string, transform: Partial<{ blendMode: string }>) => void;
+  updateClipTransform: (id: string, transform: Partial<ClipTransform>) => void;
 
   // Clip lookup
   clipMap: Map<string, TimelineClip>;

@@ -36,7 +36,7 @@ class WhisperService {
 
     try {
       // Dynamically import transformers.js
-      const { pipeline } = await import('@xenova/transformers');
+      const { pipeline } = await import('@huggingface/transformers');
 
       console.log('[WhisperService] Loading Whisper model...');
 

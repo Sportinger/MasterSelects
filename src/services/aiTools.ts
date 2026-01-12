@@ -759,7 +759,7 @@ async function captureFrameGrid(
       const frameCtx = frameCanvas.getContext('2d');
 
       if (frameCtx) {
-        const imageData = new ImageData(pixels, outputWidth, outputHeight);
+        const imageData = new ImageData(new Uint8ClampedArray(pixels), outputWidth, outputHeight);
         frameCtx.putImageData(imageData, 0, 0);
 
         // Draw scaled frame onto grid
@@ -828,7 +828,7 @@ function formatClipInfo(clip: TimelineClip, track: TimelineTrack | undefined) {
     outPoint: clip.outPoint,
     sourceType: clip.source.type,
     hasAnalysis: clip.analysisStatus === 'ready',
-    hasTranscript: !!clip.transcript?.segments?.length,
+    hasTranscript: !!clip.transcript?.length,
     // Transform info
     transform: clip.transform,
     // Effects count
@@ -854,7 +854,7 @@ function formatTrackInfo(track: TimelineTrack, clips: TimelineClip[]) {
       endTime: c.startTime + c.duration,
       duration: c.duration,
       hasAnalysis: c.analysisStatus === 'ready',
-      hasTranscript: !!c.transcript?.segments?.length,
+      hasTranscript: !!c.transcript?.length,
     })),
   };
 }
@@ -919,7 +919,7 @@ async function executeToolInternal(
             endTime: clip.startTime + clip.duration,
             duration: clip.duration,
             hasAnalysis: clip.analysisStatus === 'ready',
-            hasTranscript: !!clip.transcript?.segments?.length,
+            hasTranscript: !!clip.transcript?.length,
           };
         }).filter(Boolean);
 
@@ -1280,7 +1280,7 @@ async function executeToolInternal(
           return { success: false, error: 'Failed to create canvas context' };
         }
 
-        const imageData = new ImageData(pixels, width, height);
+        const imageData = new ImageData(new Uint8ClampedArray(pixels), width, height);
         ctx.putImageData(imageData, 0, 0);
 
         const dataUrl = canvas.toDataURL('image/png');
@@ -1371,7 +1371,7 @@ async function executeToolInternal(
           return { success: false, error: `Clip not found: ${clipId}` };
         }
 
-        if (!clip.transcript?.segments?.length) {
+        if (!clip.transcript?.length) {
           return {
             success: true,
             data: {
@@ -1385,16 +1385,14 @@ async function executeToolInternal(
           success: true,
           data: {
             hasTranscript: true,
-            language: clip.transcript.language,
-            segmentCount: clip.transcript.segments.length,
-            segments: clip.transcript.segments.map(seg => ({
-              start: seg.start,
-              end: seg.end,
-              text: seg.text,
-              words: seg.words,
+            segmentCount: clip.transcript.length,
+            segments: clip.transcript.map(word => ({
+              start: word.start,
+              end: word.end,
+              text: word.text,
             })),
             // Full text for easy reading
-            fullText: clip.transcript.segments.map(s => s.text).join(' '),
+            fullText: clip.transcript.map(w => w.text).join(' '),
           },
         };
       }
@@ -1408,7 +1406,7 @@ async function executeToolInternal(
           return { success: false, error: `Clip not found: ${clipId}` };
         }
 
-        if (!clip.transcript?.segments?.length) {
+        if (!clip.transcript?.length) {
           return {
             success: false,
             error: 'No transcript available to analyze for silence.',
@@ -1420,7 +1418,7 @@ async function executeToolInternal(
         const sourceEnd = clip.outPoint;
 
         // Filter segments to those within the visible range
-        const allSegments = clip.transcript.segments;
+        const allSegments = clip.transcript;
         const segments = allSegments.filter(seg => seg.end > sourceStart && seg.start < sourceEnd);
 
         const silentSections: Array<{ sourceStart: number; sourceEnd: number; duration: number }> = [];

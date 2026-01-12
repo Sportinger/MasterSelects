@@ -103,6 +103,7 @@ export interface TrackActions {
 export interface ClipActions {
   addClip: (trackId: string, file: File, startTime: number, estimatedDuration?: number, mediaFileId?: string) => Promise<void>;
   addCompClip: (trackId: string, composition: Composition, startTime: number) => void;
+  updateClip: (id: string, updates: Partial<TimelineClip>) => void;
   removeClip: (id: string) => void;
   moveClip: (id: string, newStartTime: number, newTrackId?: string, skipLinked?: boolean, skipGroup?: boolean) => void;
   trimClip: (id: string, inPoint: number, outPoint: number) => void;
