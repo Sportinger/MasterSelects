@@ -720,9 +720,9 @@ export function MediaPanel() {
             <button
               className="btn btn-sm btn-reload-all"
               onClick={handleReloadAll}
-              title={`Reload ${filesNeedReloadCount} file${filesNeedReloadCount > 1 ? 's' : ''} (requires permission)`}
+              title={`Relink ${filesNeedReloadCount} missing file${filesNeedReloadCount > 1 ? 's' : ''} - select a folder to scan`}
             >
-              Reload All ({filesNeedReloadCount})
+              Relink ({filesNeedReloadCount})
             </button>
           )}
           <button className="btn btn-sm" onClick={handleImport} title="Import Media">

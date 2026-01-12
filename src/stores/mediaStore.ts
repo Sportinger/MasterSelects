@@ -798,27 +798,97 @@ export const useMediaStore = create<MediaState>()(
             return 0;
           }
 
-          // Debug: List all stored handles
+          console.log('[MediaStore] Files to relink:', filesToReload.map(f => f.name));
+
+          // Smart relink: Let user pick a folder and auto-match files by name
           try {
-            const allHandles = await projectDB.getAllHandles();
-            console.log('[MediaStore] All stored handles in IndexedDB:', allHandles.map(h => h.key));
-          } catch (e) {
-            console.warn('[MediaStore] Could not list handles:', e);
-          }
+            const dirHandle = await (window as any).showDirectoryPicker({
+              mode: 'read',
+              startIn: 'videos',
+            });
 
-          console.log('[MediaStore] Files to reload:', filesToReload.map(f => ({ id: f.id, name: f.name })));
-          console.log('[MediaStore] Reloading', filesToReload.length, 'files...');
-          let reloadedCount = 0;
+            if (!dirHandle) return 0;
 
-          for (const mediaFile of filesToReload) {
-            const success = await get().reloadFile(mediaFile.id);
-            if (success) {
-              reloadedCount++;
+            console.log('[MediaStore] Scanning folder:', dirHandle.name);
+
+            // Collect all files from the directory (recursively)
+            const foundFiles = new Map<string, FileSystemFileHandle>();
+
+            const scanDirectory = async (dir: FileSystemDirectoryHandle, path = '') => {
+              for await (const entry of (dir as any).values()) {
+                if (entry.kind === 'file') {
+                  const fileName = entry.name.toLowerCase();
+                  foundFiles.set(fileName, entry);
+                  // Also store without extension for fuzzy matching
+                  const nameWithoutExt = fileName.replace(/\.[^.]+$/, '');
+                  if (!foundFiles.has(nameWithoutExt)) {
+                    foundFiles.set(nameWithoutExt, entry);
+                  }
+                } else if (entry.kind === 'directory') {
+                  // Recursively scan subdirectories
+                  await scanDirectory(entry, `${path}${entry.name}/`);
+                }
+              }
+            };
+
+            await scanDirectory(dirHandle);
+            console.log('[MediaStore] Found', foundFiles.size, 'files in folder');
+
+            // Match files by name
+            let reloadedCount = 0;
+            for (const mediaFile of filesToReload) {
+              const searchName = mediaFile.name.toLowerCase();
+              const searchNameWithoutExt = searchName.replace(/\.[^.]+$/, '');
+
+              // Try exact match first, then without extension
+              let handle = foundFiles.get(searchName) || foundFiles.get(searchNameWithoutExt);
+
+              if (handle) {
+                try {
+                  const permission = await handle.requestPermission({ mode: 'read' });
+                  if (permission === 'granted') {
+                    const file = await handle.getFile();
+                    const url = URL.createObjectURL(file);
+
+                    // Revoke old URL
+                    if (mediaFile.url) {
+                      URL.revokeObjectURL(mediaFile.url);
+                    }
+
+                    // Store handle for future use
+                    fileSystemService.storeFileHandle(mediaFile.id, handle);
+                    await projectDB.storeHandle(`media_${mediaFile.id}`, handle);
+
+                    // Update file in store
+                    set(state => ({
+                      files: state.files.map(f =>
+                        f.id === mediaFile.id
+                          ? { ...f, file, url, hasFileHandle: true }
+                          : f
+                      ),
+                    }));
+
+                    console.log('[MediaStore] Relinked:', mediaFile.name);
+                    reloadedCount++;
+                  }
+                } catch (e) {
+                  console.warn('[MediaStore] Failed to relink:', mediaFile.name, e);
+                }
+              } else {
+                console.log('[MediaStore] Not found in folder:', mediaFile.name);
+              }
             }
-          }
 
-          console.log('[MediaStore] Reloaded', reloadedCount, '/', filesToReload.length, 'files');
-          return reloadedCount;
+            console.log('[MediaStore] Relinked', reloadedCount, '/', filesToReload.length, 'files');
+            return reloadedCount;
+          } catch (e: any) {
+            if (e.name === 'AbortError') {
+              console.log('[MediaStore] Folder picker cancelled');
+              return 0;
+            }
+            console.error('[MediaStore] Relink failed:', e);
+            return 0;
+          }
         },
 
         createComposition: (name: string, settings?: Partial<Composition>) => {
