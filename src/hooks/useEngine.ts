@@ -304,6 +304,12 @@ export function useEngine() {
   useEffect(() => {
     if (!isEngineReady) return;
 
+    // Playhead position changes (scrubbing, playback)
+    const unsubPlayhead = useTimelineStore.subscribe(
+      (state) => state.playheadPosition,
+      () => engine.requestRender()
+    );
+
     // Clips changes (content, transforms, effects, etc.)
     const unsubClips = useTimelineStore.subscribe(
       (state) => state.clips,
@@ -342,6 +348,7 @@ export function useEngine() {
     );
 
     return () => {
+      unsubPlayhead();
       unsubClips();
       unsubTracks();
       unsubLayers();
