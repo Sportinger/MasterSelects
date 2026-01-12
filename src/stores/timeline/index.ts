@@ -778,7 +778,9 @@ export const useTimelineStore = create<TimelineStore>()(
           // Regular media clips
           const mediaFile = mediaStore.files.find(f => f.id === serializedClip.mediaFileId);
           if (!mediaFile || !mediaFile.file) {
-            console.warn('Could not find media file for clip:', serializedClip.name);
+            console.warn('Could not find media file for clip:', serializedClip.name,
+              '| mediaFileId:', serializedClip.mediaFileId,
+              '| available IDs:', mediaStore.files.map(f => f.id).join(', '));
             continue;
           }
 
