@@ -804,16 +804,23 @@ export const useMediaStore = create<MediaState>()(
 
           // First, try to use saved media source folder from IndexedDB
           try {
+            console.log('[MediaStore] Checking for saved media source folder...');
             const savedHandle = await projectDB.getStoredHandle('mediaSourceFolder');
+            console.log('[MediaStore] Saved handle:', savedHandle ? `${savedHandle.kind} - ${savedHandle.name}` : 'not found');
+
             if (savedHandle && savedHandle.kind === 'directory') {
               // Check if we still have permission
               const permission = await (savedHandle as FileSystemDirectoryHandle).queryPermission({ mode: 'read' });
+              console.log('[MediaStore] Current permission:', permission);
+
               if (permission === 'granted') {
                 dirHandle = savedHandle as FileSystemDirectoryHandle;
                 console.log('[MediaStore] Using saved media source folder:', dirHandle.name);
               } else {
-                // Try to request permission
+                // Try to request permission (this shows a prompt)
+                console.log('[MediaStore] Requesting permission for saved folder...');
                 const newPermission = await (savedHandle as FileSystemDirectoryHandle).requestPermission({ mode: 'read' });
+                console.log('[MediaStore] New permission:', newPermission);
                 if (newPermission === 'granted') {
                   dirHandle = savedHandle as FileSystemDirectoryHandle;
                   console.log('[MediaStore] Re-granted permission to saved folder:', dirHandle.name);
@@ -821,7 +828,7 @@ export const useMediaStore = create<MediaState>()(
               }
             }
           } catch (e) {
-            console.log('[MediaStore] No saved media source folder or permission denied');
+            console.log('[MediaStore] No saved media source folder or permission denied:', e);
           }
 
           // If no saved handle, prompt user to pick a folder
@@ -915,7 +922,9 @@ export const useMediaStore = create<MediaState>()(
           // Save source folder for future relinking
           if (reloadedCount > 0) {
             // Store folder handle in IndexedDB for quick reconnect
+            console.log('[MediaStore] Saving media source folder handle:', dirHandle.name);
             await projectDB.storeHandle('mediaSourceFolder', dirHandle);
+            console.log('[MediaStore] Saved media source folder handle successfully');
 
             // Save folder name to project.json
             const projectData = projectFileService.getProjectData();
