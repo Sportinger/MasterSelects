@@ -718,10 +718,58 @@ export const useMediaStore = create<MediaState>()(
           const mediaFile = get().files.find(f => f.id === id);
           if (!mediaFile) return false;
 
-          // Try to get file handle from storage
-          const handle = fileSystemService.getFileHandle(id);
+          // Try to get file handle from in-memory storage first
+          let handle = fileSystemService.getFileHandle(id);
+
+          // If not in memory, try to get from IndexedDB
           if (!handle) {
-            console.warn('[MediaStore] No file handle stored for:', mediaFile.name);
+            try {
+              const storedHandle = await projectDB.getStoredHandle(`media_${id}`);
+              if (storedHandle && storedHandle.kind === 'file') {
+                handle = storedHandle as FileSystemFileHandle;
+                // Cache it in memory for future use
+                fileSystemService.storeFileHandle(id, handle);
+                console.log('[MediaStore] Retrieved handle from IndexedDB for:', mediaFile.name);
+              }
+            } catch (e) {
+              console.warn('[MediaStore] Failed to get handle from IndexedDB:', e);
+            }
+          }
+
+          if (!handle) {
+            // No handle available - file was likely imported via drag-and-drop or old file input
+            // Prompt user to re-select the file
+            console.log('[MediaStore] No handle for:', mediaFile.name, '- prompting user to re-select');
+
+            try {
+              // Open file picker for user to re-select the file
+              const [newHandle] = await window.showOpenFilePicker({
+                multiple: false,
+                types: [{
+                  description: 'Media Files',
+                  accept: {
+                    'video/*': [],
+                    'audio/*': [],
+                    'image/*': [],
+                  },
+                }],
+              });
+
+              if (newHandle) {
+                handle = newHandle;
+                // Store the handle for future use
+                fileSystemService.storeFileHandle(id, handle);
+                await projectDB.storeHandle(`media_${id}`, handle);
+                console.log('[MediaStore] Stored new handle for:', mediaFile.name);
+              }
+            } catch (e) {
+              // User cancelled or error
+              console.warn('[MediaStore] File picker cancelled or failed:', e);
+              return false;
+            }
+          }
+
+          if (!handle) {
             return false;
           }
 
