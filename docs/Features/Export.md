@@ -13,6 +13,7 @@ Frame-by-frame video export with H.264/VP9 encoding.
 - [Audio Settings](#audio-settings)
 - [Export Process](#export-process)
 - [Frame Export](#frame-export)
+- [FFmpeg Export](#ffmpeg-export)
 
 ---
 
@@ -235,9 +236,77 @@ Example: 60s × 30fps × 15Mbps = ~112MB
 
 ---
 
+## FFmpeg Export
+
+### Overview
+FFmpeg WASM integration provides professional codec support for broadcast and VJ workflows. Loads on-demand (~20MB).
+
+### Professional Codecs
+
+| Codec | Category | Description |
+|-------|----------|-------------|
+| **ProRes** | Professional | Apple ProRes (Proxy, LT, 422, HQ, 4444, 4444 XQ) |
+| **DNxHR** | Professional | Avid DNxHR (LB, SQ, HQ, HQX, 444) |
+| **HAP** | Real-time | GPU-accelerated VJ codec (HAP, HAP Alpha, HAP Q) |
+| **FFV1** | Lossless | Open archival codec |
+| **Ut Video** | Lossless | Fast lossless with alpha |
+
+### Delivery Codecs
+
+| Codec | Features |
+|-------|----------|
+| H.264 (x264) | Universal compatibility |
+| H.265 (x265) | HDR support, smaller files |
+| VP9 | Alpha channel support |
+| AV1 (SVT) | Next-gen, best compression |
+
+### Container Formats
+
+| Format | Use Case |
+|--------|----------|
+| MOV | Apple/Pro workflows (ProRes) |
+| MP4 | Universal delivery |
+| MKV | Open format, all codecs |
+| WebM | Web optimized |
+| MXF | Broadcast (DNxHR) |
+
+### Platform Presets
+
+| Preset | Codec | Container |
+|--------|-------|-----------|
+| YouTube | H.264 | MP4 |
+| YouTube HDR | H.265 | MP4 |
+| Vimeo | H.264 | MP4 |
+| Instagram | H.264 | MP4 |
+| TikTok | H.264 | MP4 |
+| Adobe Premiere | ProRes HQ | MOV |
+| Final Cut Pro | ProRes HQ | MOV |
+| DaVinci Resolve | DNxHR HQ | MXF |
+| Avid | DNxHR HQ | MXF |
+| VJ / Media Server | HAP Q | MOV |
+| Archive | FFV1 | MKV |
+
+### Loading FFmpeg
+FFmpeg WASM is loaded on-demand when first used:
+1. Click "Load FFmpeg" button
+2. Downloads from CDN (~20MB)
+3. Ready indicator shows when loaded
+
+### Technical Notes
+- Requires SharedArrayBuffer (COOP/COEP headers)
+- Uses @ffmpeg/ffmpeg from npm
+- Frames rendered via GPU, then encoded by FFmpeg
+- Professional codecs (ProRes, HAP, DNxHR) require custom WASM build
+
+### Source Files
+- `src/engine/ffmpeg/FFmpegBridge.ts` - Core bridge
+- `src/engine/ffmpeg/codecs.ts` - Codec definitions
+- `src/components/export/FFmpegExportSection.tsx` - UI
+
+---
+
 ## Not Implemented
 
-- ProRes/DNxHR codecs
 - Multi-pass encoding
 - Background export
 - Opus/FLAC audio codecs

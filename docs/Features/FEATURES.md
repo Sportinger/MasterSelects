@@ -119,9 +119,9 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 
 ## 5. Export
 
-### Video-Export
+### WebCodecs Export (Standard)
 - **Frame-by-Frame Rendering**: Präzise Frame-Ausgabe
-- **Format**: MP4 mit H.264 Codec
+- **Format**: MP4 mit H.264/VP9 Codec
 - **Qualitätseinstellungen**: Auflösung und Bitrate
 - **Preset-Auflösungen**: 1080p, 4K, Custom
 - **Framerate**: 24p, 30p, 60p, etc.
@@ -130,6 +130,16 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 - **Dateigröße-Vorschau**: Geschätzte Ausgabegröße
 - **WebCodecs**: Hardware-beschleunigtes Encoding
 - **Progress**: Echtzeit-Fortschrittsanzeige
+
+### FFmpeg Export (Professionell)
+- **Professional Codecs**: ProRes, DNxHR, HAP
+- **Lossless**: FFV1, Ut Video
+- **Delivery**: H.264 (x264), H.265 (x265), VP9, AV1
+- **Container**: MOV, MP4, MKV, WebM, MXF
+- **Platform Presets**: YouTube, Vimeo, Instagram, TikTok
+- **NLE Presets**: Premiere, Final Cut, DaVinci, Avid
+- **VJ Presets**: HAP Q für Media Server
+- **On-Demand Loading**: WASM lädt bei Bedarf (~20MB)
 
 ---
 

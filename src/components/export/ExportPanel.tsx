@@ -7,6 +7,8 @@ import { AudioExportPipeline, AudioEncoderWrapper, type AudioCodec } from '../..
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { engine } from '../../engine/WebGPUEngine';
+import { FFmpegExportSection } from './FFmpegExportSection';
+import type { FFmpegExportSettings } from '../../engine/ffmpeg';
 
 export function ExportPanel() {
   const { duration, inPoint, outPoint, playheadPosition } = useTimelineStore();
@@ -631,6 +633,36 @@ export function ExportPanel() {
             <div>Est. Size: {estimatedSize()}</div>
           </div>
           </div>
+
+          {/* FFmpeg Professional Export */}
+          <FFmpegExportSection
+            width={useCustomResolution ? customWidth : width}
+            height={useCustomResolution ? customHeight : height}
+            fps={fps}
+            startTime={startTime}
+            endTime={endTime}
+            filename={filename}
+            onRenderFrames={async (settings: FFmpegExportSettings) => {
+              const frames: Uint8Array[] = [];
+              const totalFrames = Math.ceil((settings.endTime - settings.startTime) * settings.fps);
+
+              for (let i = 0; i < totalFrames; i++) {
+                const time = settings.startTime + (i / settings.fps);
+                // Seek to time and render frame
+                useTimelineStore.getState().setPlayheadPosition(time);
+                // Wait a frame for render
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                // Read pixels from GPU
+                const pixels = await engine.readPixels();
+                if (pixels) {
+                  // Convert Uint8ClampedArray to Uint8Array if needed
+                  frames.push(new Uint8Array(pixels.buffer, pixels.byteOffset, pixels.byteLength));
+                }
+              }
+
+              return frames;
+            }}
+          />
 
           {error && <div className="export-error">{error}</div>}
         </div>
