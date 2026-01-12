@@ -207,8 +207,8 @@ export function useEngine() {
     // Subscribe to composition changes
     // When switching compositions, we need to regenerate mask textures for the new comp
     // This handles nested comp masks showing correctly when returning to parent comp
-    const unsubscribeComp = useTimelineStore.subscribe(
-      (state) => state.activeCompId,
+    const unsubscribeComp = useMediaStore.subscribe(
+      (state) => state.activeCompositionId,
       () => {
         // Clear mask version cache to force regeneration for the new composition
         maskVersionRef.current.clear();

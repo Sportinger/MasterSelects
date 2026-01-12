@@ -182,6 +182,26 @@ interface MotionStats {
 - **During video playback**: 30fps limit
 - **Frame drop detection**: 1.5x target time
 
+### Idle Mode (Power Saving)
+After 1 second of no changes (stopped playhead, no scrubbing, no parameter changes), the engine enters idle mode:
+- **Render loop pauses** - No GPU work until needed
+- **Wake on demand** - Any state change triggers immediate re-render:
+  - Playhead movement (playback or scrubbing)
+  - Clip changes (content, transforms, effects)
+  - Track changes
+  - Layer changes
+  - Resolution/settings changes
+  - Composition switching
+
+```typescript
+// Wake the engine from idle
+engine.requestRender();
+
+// Check idle status
+const stats = engine.getStats();
+console.log(stats.isIdle); // true/false
+```
+
 ### Statistics Tracking
 ```typescript
 interface RenderStats {
@@ -193,6 +213,7 @@ interface RenderStats {
   submitTime: number;
   dropsThisSecond: number;
   dropsTotal: number;
+  isIdle: boolean;      // Engine in power-saving mode
 }
 ```
 
