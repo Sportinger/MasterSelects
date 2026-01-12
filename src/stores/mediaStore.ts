@@ -599,43 +599,26 @@ export const useMediaStore = create<MediaState>()(
           let finalThumbnailUrl = thumbnailUrl;
           if (fileHash) {
             try {
-              // Try local file system first (if project is open), then IndexedDB
-              let existingThumbBlob: Blob | null = null;
+              // Load/save thumbnails from project folder only (no browser cache)
               if (projectFileService.isProjectOpen()) {
-                existingThumbBlob = await projectFileService.getThumbnail(fileHash);
-              }
-              if (!existingThumbBlob) {
-                const existingThumb = await projectDB.getThumbnail(fileHash);
-                if (existingThumb?.blob?.size > 0) {
-                  existingThumbBlob = existingThumb.blob;
-                }
-              }
-
-              if (existingThumbBlob && existingThumbBlob.size > 0) {
-                // Reuse existing thumbnail
-                finalThumbnailUrl = URL.createObjectURL(existingThumbBlob);
-                console.log('[MediaStore] Reusing existing thumbnail for hash:', fileHash.slice(0, 8));
-              } else if (thumbnailUrl) {
-                // Save new thumbnail by hash
-                let thumbBlob: Blob | null = null;
-                if (thumbnailUrl.startsWith('data:')) {
-                  const response = await fetch(thumbnailUrl);
-                  thumbBlob = await response.blob();
-                } else if (thumbnailUrl.startsWith('blob:')) {
-                  const response = await fetch(thumbnailUrl);
-                  thumbBlob = await response.blob();
-                }
-                if (thumbBlob && thumbBlob.size > 0) {
-                  // Save to local file system if project is open, otherwise to IndexedDB
-                  if (projectFileService.isProjectOpen()) {
+                const existingThumbBlob = await projectFileService.getThumbnail(fileHash);
+                if (existingThumbBlob && existingThumbBlob.size > 0) {
+                  // Reuse existing thumbnail
+                  finalThumbnailUrl = URL.createObjectURL(existingThumbBlob);
+                  console.log('[MediaStore] Reusing existing thumbnail for hash:', fileHash.slice(0, 8));
+                } else if (thumbnailUrl) {
+                  // Save new thumbnail by hash
+                  let thumbBlob: Blob | null = null;
+                  if (thumbnailUrl.startsWith('data:')) {
+                    const response = await fetch(thumbnailUrl);
+                    thumbBlob = await response.blob();
+                  } else if (thumbnailUrl.startsWith('blob:')) {
+                    const response = await fetch(thumbnailUrl);
+                    thumbBlob = await response.blob();
+                  }
+                  if (thumbBlob && thumbBlob.size > 0) {
                     await projectFileService.saveThumbnail(fileHash, thumbBlob);
                     console.log('[MediaStore] Saved thumbnail to project folder:', fileHash.slice(0, 8));
-                  } else {
-                    await projectDB.saveThumbnail({
-                      fileHash,
-                      blob: thumbBlob,
-                      createdAt: Date.now(),
-                    });
                   }
                 }
               }
@@ -1385,41 +1368,24 @@ export const useMediaStore = create<MediaState>()(
             let finalThumbnailUrl = thumbnailUrl;
             if (fileHash) {
               try {
-                // Try local file system first (if project is open), then IndexedDB
-                let existingThumbBlob: Blob | null = null;
+                // Load/save thumbnails from project folder only (no browser cache)
                 if (projectFileService.isProjectOpen()) {
-                  existingThumbBlob = await projectFileService.getThumbnail(fileHash);
-                }
-                if (!existingThumbBlob) {
-                  const existingThumb = await projectDB.getThumbnail(fileHash);
-                  if (existingThumb?.blob?.size > 0) {
-                    existingThumbBlob = existingThumb.blob;
-                  }
-                }
-
-                if (existingThumbBlob && existingThumbBlob.size > 0) {
-                  finalThumbnailUrl = URL.createObjectURL(existingThumbBlob);
-                  console.log('[MediaStore] Reusing existing thumbnail for hash:', fileHash.slice(0, 8));
-                } else if (thumbnailUrl) {
-                  let thumbBlob: Blob | null = null;
-                  if (thumbnailUrl.startsWith('data:')) {
-                    const response = await fetch(thumbnailUrl);
-                    thumbBlob = await response.blob();
-                  } else if (thumbnailUrl.startsWith('blob:')) {
-                    const response = await fetch(thumbnailUrl);
-                    thumbBlob = await response.blob();
-                  }
-                  if (thumbBlob && thumbBlob.size > 0) {
-                    // Save to local file system if project is open, otherwise to IndexedDB
-                    if (projectFileService.isProjectOpen()) {
+                  const existingThumbBlob = await projectFileService.getThumbnail(fileHash);
+                  if (existingThumbBlob && existingThumbBlob.size > 0) {
+                    finalThumbnailUrl = URL.createObjectURL(existingThumbBlob);
+                    console.log('[MediaStore] Reusing existing thumbnail for hash:', fileHash.slice(0, 8));
+                  } else if (thumbnailUrl) {
+                    let thumbBlob: Blob | null = null;
+                    if (thumbnailUrl.startsWith('data:')) {
+                      const response = await fetch(thumbnailUrl);
+                      thumbBlob = await response.blob();
+                    } else if (thumbnailUrl.startsWith('blob:')) {
+                      const response = await fetch(thumbnailUrl);
+                      thumbBlob = await response.blob();
+                    }
+                    if (thumbBlob && thumbBlob.size > 0) {
                       await projectFileService.saveThumbnail(fileHash, thumbBlob);
                       console.log('[MediaStore] Saved thumbnail to project folder:', fileHash.slice(0, 8));
-                    } else {
-                      await projectDB.saveThumbnail({
-                        fileHash,
-                        blob: thumbBlob,
-                        createdAt: Date.now(),
-                      });
                     }
                   }
                 }
@@ -1516,41 +1482,24 @@ export const useMediaStore = create<MediaState>()(
             let finalThumbnailUrl = thumbnailUrl;
             if (fileHash) {
               try {
-                // Try local file system first (if project is open), then IndexedDB
-                let existingThumbBlob: Blob | null = null;
+                // Load/save thumbnails from project folder only (no browser cache)
                 if (projectFileService.isProjectOpen()) {
-                  existingThumbBlob = await projectFileService.getThumbnail(fileHash);
-                }
-                if (!existingThumbBlob) {
-                  const existingThumb = await projectDB.getThumbnail(fileHash);
-                  if (existingThumb?.blob?.size > 0) {
-                    existingThumbBlob = existingThumb.blob;
-                  }
-                }
-
-                if (existingThumbBlob && existingThumbBlob.size > 0) {
-                  finalThumbnailUrl = URL.createObjectURL(existingThumbBlob);
-                  console.log('[MediaStore] Reusing existing thumbnail for hash:', fileHash.slice(0, 8));
-                } else if (thumbnailUrl) {
-                  let thumbBlob: Blob | null = null;
-                  if (thumbnailUrl.startsWith('data:')) {
-                    const response = await fetch(thumbnailUrl);
-                    thumbBlob = await response.blob();
-                  } else if (thumbnailUrl.startsWith('blob:')) {
-                    const response = await fetch(thumbnailUrl);
-                    thumbBlob = await response.blob();
-                  }
-                  if (thumbBlob && thumbBlob.size > 0) {
-                    // Save to local file system if project is open, otherwise to IndexedDB
-                    if (projectFileService.isProjectOpen()) {
+                  const existingThumbBlob = await projectFileService.getThumbnail(fileHash);
+                  if (existingThumbBlob && existingThumbBlob.size > 0) {
+                    finalThumbnailUrl = URL.createObjectURL(existingThumbBlob);
+                    console.log('[MediaStore] Reusing existing thumbnail for hash:', fileHash.slice(0, 8));
+                  } else if (thumbnailUrl) {
+                    let thumbBlob: Blob | null = null;
+                    if (thumbnailUrl.startsWith('data:')) {
+                      const response = await fetch(thumbnailUrl);
+                      thumbBlob = await response.blob();
+                    } else if (thumbnailUrl.startsWith('blob:')) {
+                      const response = await fetch(thumbnailUrl);
+                      thumbBlob = await response.blob();
+                    }
+                    if (thumbBlob && thumbBlob.size > 0) {
                       await projectFileService.saveThumbnail(fileHash, thumbBlob);
                       console.log('[MediaStore] Saved thumbnail to project folder:', fileHash.slice(0, 8));
-                    } else {
-                      await projectDB.saveThumbnail({
-                        fileHash,
-                        blob: thumbBlob,
-                        createdAt: Date.now(),
-                      });
                     }
                   }
                 }
@@ -1689,18 +1638,9 @@ export const useMediaStore = create<MediaState>()(
                   }
                 }
 
-                // Restore thumbnail from hash - try local file system first, then IndexedDB
-                if (stored.fileHash) {
-                  let thumbBlob: Blob | null = null;
-                  if (projectFileService.isProjectOpen()) {
-                    thumbBlob = await projectFileService.getThumbnail(stored.fileHash);
-                  }
-                  if (!thumbBlob) {
-                    const thumbData = await projectDB.getThumbnail(stored.fileHash);
-                    if (thumbData?.blob) {
-                      thumbBlob = thumbData.blob;
-                    }
-                  }
+                // Restore thumbnail from project folder only (no browser cache)
+                if (stored.fileHash && projectFileService.isProjectOpen()) {
+                  const thumbBlob = await projectFileService.getThumbnail(stored.fileHash);
                   if (thumbBlob) {
                     thumbnailUrl = URL.createObjectURL(thumbBlob);
                   }
