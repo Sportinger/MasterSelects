@@ -1,7 +1,7 @@
 // WelcomeOverlay - First-time user welcome with folder picker
 // Shows on first load to ask for project storage folder
 
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { isFileSystemAccessSupported } from '../../services/fileSystemService';
 import { projectFileService } from '../../services/projectFileService';
 import { openExistingProject } from '../../services/projectSync';
@@ -45,13 +45,11 @@ const TYPEWRITER_SEQUENCE = [
   { action: 'type', text: 'Private', class: 'private' },
   { action: 'pause', duration: 350 },
   { action: 'type', text: ' · ', class: 'dot' },
-  { action: 'type', text: 'Fre', class: 'free' },  // Start typing Free
-  { action: 'pause', duration: 150 },
-  { action: 'type', text: 'q', class: 'free' },    // Typo!
-  { action: 'pause', duration: 300 },
-  { action: 'delete', count: 1 },                   // Delete the typo
-  { action: 'pause', duration: 150 },
-  { action: 'type', text: 'e', class: 'free' },    // Correct it
+  { action: 'type', text: 'Tre', class: 'free' },  // Typo!
+  { action: 'pause', duration: 280 },
+  { action: 'delete', count: 3 },                   // Delete "Tre"
+  { action: 'pause', duration: 200 },
+  { action: 'type', text: 'Free', class: 'free' }, // Correct it
   { action: 'pause', duration: 100 },
   { action: 'done' },
 ];
@@ -66,26 +64,27 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
   const [typewriterParts, setTypewriterParts] = useState<Array<{ text: string; class: string }>>([]);
   const [showCursor, setShowCursor] = useState(true);
   const [typewriterDone, setTypewriterDone] = useState(false);
-  const typewriterRef = useRef<{ step: number; charIndex: number }>({ step: 0, charIndex: 0 });
 
   const isSupported = isFileSystemAccessSupported();
   const browser = useMemo(() => detectBrowser(), []);
 
   // Typewriter effect
   useEffect(() => {
+    let step = 0;
+    let charIndex = 0;
     let timeout: ReturnType<typeof setTimeout>;
+    let deleteCount = 0;
+    let cancelled = false;
 
     const randomDelay = (base: number, variance: number) =>
       base + Math.random() * variance - variance / 2;
 
     const processStep = () => {
-      const { step } = typewriterRef.current;
-      if (step >= TYPEWRITER_SEQUENCE.length) return;
+      if (cancelled || step >= TYPEWRITER_SEQUENCE.length) return;
 
       const action = TYPEWRITER_SEQUENCE[step];
 
       if (action.action === 'type' && action.text) {
-        const { charIndex } = typewriterRef.current;
         if (charIndex < action.text.length) {
           // Type one character
           const char = action.text[charIndex];
@@ -93,47 +92,64 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
             const newParts = [...prev];
             const lastPart = newParts[newParts.length - 1];
             if (lastPart && lastPart.class === action.class) {
-              lastPart.text += char;
+              newParts[newParts.length - 1] = { ...lastPart, text: lastPart.text + char };
             } else {
               newParts.push({ text: char, class: action.class! });
             }
             return newParts;
           });
-          typewriterRef.current.charIndex++;
-          timeout = setTimeout(processStep, randomDelay(70, 50));
+          charIndex++;
+          timeout = setTimeout(processStep, randomDelay(75, 45));
         } else {
           // Move to next step
-          typewriterRef.current.step++;
-          typewriterRef.current.charIndex = 0;
+          step++;
+          charIndex = 0;
           timeout = setTimeout(processStep, randomDelay(30, 20));
         }
       } else if (action.action === 'pause') {
-        typewriterRef.current.step++;
+        step++;
         timeout = setTimeout(processStep, action.duration);
       } else if (action.action === 'delete') {
-        setTypewriterParts(prev => {
-          const newParts = [...prev];
-          const lastPart = newParts[newParts.length - 1];
-          if (lastPart && lastPart.text.length > 0) {
-            lastPart.text = lastPart.text.slice(0, -1);
-            if (lastPart.text.length === 0) {
-              newParts.pop();
+        const toDelete = action.count || 1;
+        if (deleteCount < toDelete) {
+          setTypewriterParts(prev => {
+            const newParts = [...prev];
+            const lastPart = newParts[newParts.length - 1];
+            if (lastPart && lastPart.text.length > 0) {
+              newParts[newParts.length - 1] = { ...lastPart, text: lastPart.text.slice(0, -1) };
+              if (newParts[newParts.length - 1].text.length === 0) {
+                newParts.pop();
+              }
             }
-          }
-          return newParts;
-        });
-        typewriterRef.current.step++;
-        timeout = setTimeout(processStep, randomDelay(60, 30));
+            return newParts;
+          });
+          deleteCount++;
+          timeout = setTimeout(processStep, randomDelay(50, 25));
+        } else {
+          step++;
+          deleteCount = 0;
+          timeout = setTimeout(processStep, randomDelay(30, 20));
+        }
       } else if (action.action === 'done') {
         setShowCursor(false);
-        setTypewriterDone(true);
+        setTimeout(() => {
+          if (!cancelled) setTypewriterDone(true);
+        }, 100);
       }
     };
 
-    // Start after a short delay
-    timeout = setTimeout(processStep, 500);
+    // Reset state for fresh start (handles Strict Mode remount)
+    setTypewriterParts([]);
+    setTypewriterDone(false);
+    setShowCursor(true);
 
-    return () => clearTimeout(timeout);
+    // Start after overlay fade-in
+    timeout = setTimeout(processStep, 800);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
   }, []);
 
   // Cursor blink

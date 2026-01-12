@@ -65,44 +65,52 @@ export function MobileApp() {
     }
   }, []);
 
-  // Mobile warning overlay
+  // Mobile warning overlay - uses same style as WelcomeOverlay
   if (showMobileWarning) {
     return (
-      <div className="mobile-warning-overlay">
-        <div className="mobile-warning-dialog">
-          <div className="mobile-warning-icon">📱</div>
-          <h2>Mobile Version</h2>
-          <p>
-            Die Mobile-Version von MASterSelects ist noch in Entwicklung
-            und nur rudimentär implementiert.
-          </p>
-          <p>
-            Für das volle Editing-Erlebnis bitte einen <strong>Desktop-Browser</strong> verwenden.
-          </p>
-          <div className="mobile-warning-buttons">
+      <div className="welcome-overlay-backdrop" style={{ animationDelay: '0s' }}>
+        <div className="welcome-overlay" style={{ animationDelay: '0s' }}>
+          <div className="welcome-browser-warning" style={{
+            background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.15) 0%, rgba(217, 119, 6, 0.1) 100%)',
+            borderColor: 'rgba(251, 191, 36, 0.35)',
+            maxWidth: '360px'
+          }}>
+            <svg className="welcome-browser-warning-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+              <line x1="12" y1="18" x2="12.01" y2="18"/>
+            </svg>
+            <span className="welcome-browser-warning-label" style={{ color: '#fbbf24' }}>Mobile Version</span>
+            <span className="welcome-browser-warning-name">In Entwicklung</span>
+            <span className="welcome-browser-warning-desc">
+              Die Mobile-Version ist noch rudimentär implementiert.
+              Für das volle Editing-Erlebnis bitte einen Desktop-Browser verwenden.
+            </span>
+
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              marginTop: '12px',
+              fontSize: '12px',
+              color: 'rgba(255,255,255,0.5)'
+            }}>
+              <div><span style={{ color: '#4ade80' }}>✓</span> Preview</div>
+              <div><span style={{ color: '#4ade80' }}>✓</span> Timeline (basic)</div>
+              <div><span style={{ color: '#fbbf24' }}>◐</span> Touch-Gesten</div>
+              <div><span style={{ color: '#666' }}>○</span> Effects</div>
+              <div><span style={{ color: '#666' }}>○</span> Export</div>
+            </div>
+
             <button
-              className="mobile-warning-btn primary"
+              className="welcome-browser-warning-btn"
               onClick={() => setShowMobileWarning(false)}
+              style={{ marginTop: '16px' }}
             >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
               Trotzdem testen
             </button>
-          </div>
-          <div className="mobile-warning-features">
-            <div className="feature-status">
-              <span className="status-icon done">✓</span> Preview
-            </div>
-            <div className="feature-status">
-              <span className="status-icon done">✓</span> Timeline (basic)
-            </div>
-            <div className="feature-status">
-              <span className="status-icon wip">◐</span> Touch-Gesten
-            </div>
-            <div className="feature-status">
-              <span className="status-icon todo">○</span> Effects
-            </div>
-            <div className="feature-status">
-              <span className="status-icon todo">○</span> Export
-            </div>
           </div>
         </div>
       </div>
