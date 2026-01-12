@@ -3121,6 +3121,30 @@ input[type="checkbox"] {
   transform: scaleX(-1);
 }
 
+/* Needs reload indicator - file permission required after refresh */
+.clip-reload-badge {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 1px 5px;
+  border-radius: 2px;
+  z-index: 10;
+  cursor: help;
+}
+
+.timeline-clip.needs-reload {
+  opacity: 0.6;
+  border-color: #ef4444 !important;
+}
+
+.timeline-clip.needs-reload .clip-thumbnails {
+  filter: grayscale(1);
+}
+
 /* Linked group (multicam) styles */
 .clip-linked-group-badge {
   position: absolute;

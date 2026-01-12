@@ -507,6 +507,7 @@ function TimelineClipComponent({
     isDragging && clipDrag?.forcingOverlap ? 'forcing-overlap' : '',
     clipTypeClass,
     clip.isLoading ? 'loading' : '',
+    clip.needsReload ? 'needs-reload' : '',
     hasProxy ? 'has-proxy' : '',
     isGeneratingProxy ? 'generating-proxy' : '',
     hasKeyframes(clip.id) ? 'has-keyframes' : '',
@@ -622,6 +623,12 @@ function TimelineClipComponent({
               />
             );
           })}
+        </div>
+      )}
+      {/* Needs reload indicator */}
+      {clip.needsReload && (
+        <div className="clip-reload-badge" title="Click media file to reload">
+          !
         </div>
       )}
       <div className="clip-content">
