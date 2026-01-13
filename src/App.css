@@ -6532,6 +6532,28 @@ input[type="checkbox"] {
 .welcome-tag-dot {
   color: rgba(255, 255, 255, 0.3);
   font-weight: 400;
+  display: inline-block;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 0;
+  animation: dot-expand 0.35s ease-out forwards;
+}
+
+@keyframes dot-expand {
+  0% {
+    max-width: 0;
+    padding: 0;
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    max-width: 40px;
+    padding: 0 12px;
+    opacity: 1;
+  }
 }
 
 /* Typewriter cursor */
@@ -6572,7 +6594,7 @@ input[type="checkbox"] {
 .welcome-title-master {
   color: #fff;
   display: inline-block;
-  animation: welcome-title-master-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) 1.05s both;
+  animation: welcome-title-master-in 0.8s ease-out 1.05s both;
 }
 
 @keyframes welcome-title-master-in {
@@ -6589,7 +6611,7 @@ input[type="checkbox"] {
 .welcome-title-selects {
   color: rgba(255, 255, 255, 0.7);
   display: inline-block;
-  animation: welcome-title-selects-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) 1.15s both;
+  animation: welcome-title-selects-in 0.8s ease-out 1.25s both;
 }
 
 @keyframes welcome-title-selects-in {
@@ -6883,6 +6905,22 @@ input[type="checkbox"] {
 
 .welcome-browser-warning-btn svg {
   opacity: 0.9;
+}
+
+/* OS warning for non-Linux systems (yellow/orange instead of red) */
+.welcome-os-warning {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(180, 83, 9, 0.1) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.welcome-os-warning .welcome-browser-warning-icon {
+  color: #f59e0b;
+  filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.5));
+}
+
+.welcome-os-warning .welcome-browser-warning-label {
+  color: #f59e0b;
 }
 
 /* Error state */

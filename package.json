@@ -11,7 +11,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/core": "^0.12.6",
+    "@ffmpeg/ffmpeg": "^0.12.6",
     "@ffmpeg/util": "^0.12.2",
     "@huggingface/transformers": "^3.8.1",
     "@webgpu/types": "^0.1.66",

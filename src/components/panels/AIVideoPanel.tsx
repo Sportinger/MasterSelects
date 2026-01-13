@@ -535,12 +535,12 @@ export function AIVideoPanel() {
   // Calculate current cost
   const currentCost = calculateCost(selectedProvider, mode, duration);
 
-  // Render empty state if no API credentials
-  if (!hasApiKey) {
-    return (
-      <div className="ai-video-panel">
-        <div className="ai-video-empty">
-          <div className="ai-video-no-key">
+  return (
+    <div className={`ai-video-panel ${!hasApiKey ? 'no-api-key' : ''}`}>
+      {/* API Key Overlay */}
+      {!hasApiKey && (
+        <div className="ai-video-overlay">
+          <div className="ai-video-overlay-content">
             <span className="no-key-icon">🎬</span>
             <p>PiAPI key required for AI video generation</p>
             <span className="no-key-hint">
@@ -551,12 +551,7 @@ export function AIVideoPanel() {
             </button>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="ai-video-panel">
+      )}
       {/* Sub-tabs with provider dropdown */}
       <div className="panel-tabs-row">
         <div className="panel-tabs">

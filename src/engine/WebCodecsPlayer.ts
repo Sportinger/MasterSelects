@@ -691,35 +691,48 @@ export class WebCodecsPlayer {
     if (this.useSimpleMode && this.videoElement) {
       return new Promise<void>((resolve) => {
         const video = this.videoElement!;
+        let resolved = false;
 
-        const onSeeked = () => {
-          video.removeEventListener('seeked', onSeeked);
-          // Wait for video frame callback to ensure frame is decoded
+        const doResolve = () => {
+          if (resolved) return;
+          resolved = true;
+          this.captureCurrentFrame();
+          resolve();
+        };
+
+        // Timeout fallback - requestVideoFrameCallback may not fire when video is paused
+        const timeout = setTimeout(() => {
+          if (!resolved) {
+            doResolve();
+          }
+        }, 100);
+
+        const waitForFrame = () => {
+          // Use requestVideoFrameCallback if available, but with timeout fallback
           if ('requestVideoFrameCallback' in video) {
             (video as any).requestVideoFrameCallback(() => {
-              this.captureCurrentFrame();
-              resolve();
+              clearTimeout(timeout);
+              doResolve();
             });
           } else {
-            this.captureCurrentFrame();
-            // Give extra time for frame decode
+            // Fallback: wait for readyState
             requestAnimationFrame(() => {
-              requestAnimationFrame(() => resolve());
+              requestAnimationFrame(() => {
+                clearTimeout(timeout);
+                doResolve();
+              });
             });
           }
         };
 
+        const onSeeked = () => {
+          video.removeEventListener('seeked', onSeeked);
+          waitForFrame();
+        };
+
         if (Math.abs(video.currentTime - timeSeconds) < 0.01 && !video.seeking) {
           // Already at position, just capture frame
-          if ('requestVideoFrameCallback' in video) {
-            (video as any).requestVideoFrameCallback(() => {
-              this.captureCurrentFrame();
-              resolve();
-            });
-          } else {
-            this.captureCurrentFrame();
-            resolve();
-          }
+          waitForFrame();
           return;
         }
 

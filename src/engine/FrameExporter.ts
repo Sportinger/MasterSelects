@@ -382,26 +382,39 @@ export class FrameExporter {
         const frameStart = performance.now();
         const time = startTime + frame * frameDuration;
 
+        if (frame % 10 === 0) {
+          console.log(`[FrameExporter] Processing frame ${frame}/${totalFrames} at time ${time.toFixed(3)}s`);
+        }
+
+        console.log(`[FrameExporter] Frame ${frame}: seeking...`);
         await this.seekAllClipsToTime(time);
+        console.log(`[FrameExporter] Frame ${frame}: seek done`);
 
         // Small delay to let video frames fully decode after seeking
         await new Promise(r => requestAnimationFrame(r));
 
+        console.log(`[FrameExporter] Frame ${frame}: building layers...`);
         const layers = this.buildLayersAtTime(time);
+        console.log(`[FrameExporter] Frame ${frame}: ${layers.length} layers`);
 
         if (layers.length === 0) {
           console.warn('[FrameExporter] No layers at time', time);
         }
 
+        console.log(`[FrameExporter] Frame ${frame}: rendering...`);
         engine.render(layers);
 
+        console.log(`[FrameExporter] Frame ${frame}: reading pixels...`);
         const pixels = await engine.readPixels();
         if (!pixels) {
           console.error('[FrameExporter] Failed to read pixels at frame', frame);
           continue;
         }
+        console.log(`[FrameExporter] Frame ${frame}: got ${pixels.length} bytes`);
 
+        console.log(`[FrameExporter] Frame ${frame}: encoding...`);
         await this.encoder.encodeFrame(pixels, frame);
+        console.log(`[FrameExporter] Frame ${frame}: done`);
 
         const frameTime = performance.now() - frameStart;
         this.frameTimes.push(frameTime);
@@ -486,6 +499,7 @@ export class FrameExporter {
     const clips = useTimelineStore.getState().getClipsAtTime(time);
     const tracks = useTimelineStore.getState().tracks;
     const seekPromises: Promise<void>[] = [];
+    const seekDescriptions: string[] = [];
 
     // Debug: log clips found at this time (only first frame)
     if (time < 0.1) {
@@ -550,15 +564,20 @@ export class FrameExporter {
 
         // Prefer WebCodecs async seek for guaranteed frame accuracy
         if (clip.source.webCodecsPlayer) {
+          seekDescriptions.push(`WebCodecs:${clip.name}`);
           seekPromises.push(clip.source.webCodecsPlayer.seekAsync(clipTime));
         } else {
-          console.log(`[FrameExporter] Seeking clip "${clip.name}" to ${clipTime.toFixed(3)}s (local: ${clipLocalTime.toFixed(3)}s)`);
+          seekDescriptions.push(`HTMLVideo:${clip.name}`);
           seekPromises.push(this.seekVideo(clip.source.videoElement, clipTime));
         }
       }
     }
 
-    await Promise.all(seekPromises);
+    if (seekPromises.length > 0) {
+      console.log(`[FrameExporter] Seeking ${seekPromises.length} clips:`, seekDescriptions);
+      await Promise.all(seekPromises);
+      console.log(`[FrameExporter] All seeks completed`);
+    }
   }
 
   private seekVideo(video: HTMLVideoElement, time: number): Promise<void> {

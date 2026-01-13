@@ -33,6 +33,33 @@ function detectBrowser(): { name: string; isChromium: boolean } {
   return { name: 'Unknown Browser', isChromium: false };
 }
 
+// Detect operating system
+function detectOS(): { name: string; isLinux: boolean } {
+  const ua = navigator.userAgent;
+  const platform = navigator.platform?.toLowerCase() || '';
+
+  if (/Linux/.test(ua) && !/Android/.test(ua)) {
+    return { name: 'Linux', isLinux: true };
+  }
+  if (/Windows/.test(ua)) {
+    return { name: 'Windows', isLinux: false };
+  }
+  if (/Mac OS|Macintosh/.test(ua)) {
+    return { name: 'macOS', isLinux: false };
+  }
+  if (/Android/.test(ua)) {
+    return { name: 'Android', isLinux: false };
+  }
+  if (/iPhone|iPad|iPod/.test(ua)) {
+    return { name: 'iOS', isLinux: false };
+  }
+  if (platform.includes('linux')) {
+    return { name: 'Linux', isLinux: true };
+  }
+
+  return { name: 'Unknown OS', isLinux: false };
+}
+
 interface WelcomeOverlayProps {
   onComplete: () => void;
 }
@@ -41,17 +68,17 @@ interface WelcomeOverlayProps {
 const TYPEWRITER_SEQUENCE = [
   { action: 'type', text: 'Local', class: 'local' },
   { action: 'pause', duration: 400 },
-  { action: 'type', text: '  ·  ', class: 'dot' },
+  { action: 'type', text: '·', class: 'dot' },
   { action: 'type', text: 'Private', class: 'private' },
   { action: 'pause', duration: 350 },
-  { action: 'type', text: '  ·  ', class: 'dot' },
+  { action: 'type', text: '·', class: 'dot' },
   { action: 'type', text: 'Tre', class: 'free' },  // Typo!
   { action: 'pause', duration: 280 },
   { action: 'delete', count: 3 },                   // Delete "Tre"
   { action: 'pause', duration: 200 },
   { action: 'type', text: 'Free', class: 'free' }, // Correct it
-  { action: 'pause', duration: 100 },
-  { action: 'done' },
+  { action: 'pause', duration: 400 },
+  { action: 'hideCursor' },
 ];
 
 export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
@@ -62,10 +89,12 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
 
   // Typewriter state
   const [typewriterParts, setTypewriterParts] = useState<Array<{ text: string; class: string }>>([]);
-  const [showCursor, setShowCursor] = useState(true);
+  const [cursorVisible, setCursorVisible] = useState(false);
+  const [cursorBlink, setCursorBlink] = useState(true);
 
   const isSupported = isFileSystemAccessSupported();
   const browser = useMemo(() => detectBrowser(), []);
+  const os = useMemo(() => detectOS(), []);
 
   // Typewriter effect
   useEffect(() => {
@@ -133,17 +162,22 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
           deleteCount = 0;
           scheduleNext(processStep, randomDelay(30, 20));
         }
-      } else if (action.action === 'done') {
-        setShowCursor(false);
+      } else if (action.action === 'hideCursor') {
+        setCursorBlink(false);
+        setCursorVisible(false);
       }
     };
 
     // Reset state for fresh start (handles Strict Mode remount)
     setTypewriterParts([]);
-    setShowCursor(true);
+    setCursorVisible(false);
+    setCursorBlink(true);
 
-    // Start after overlay fade-in
-    scheduleNext(processStep, 800);
+    // Start after overlay fade-in animation (1.0s delay + 0.4s animation + buffer)
+    scheduleNext(() => {
+      setCursorVisible(true);
+      processStep();
+    }, 1600);
 
     return () => {
       cancelled = true;
@@ -153,11 +187,12 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
 
   // Cursor blink
   useEffect(() => {
+    if (!cursorBlink) return;
     const interval = setInterval(() => {
-      setShowCursor(prev => !prev);
+      setCursorVisible(prev => !prev);
     }, 530);
     return () => clearInterval(interval);
-  }, []);
+  }, [cursorBlink]);
 
   const handleSelectFolder = useCallback(async () => {
     if (isSelecting || isClosing) return;
@@ -273,7 +308,7 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
           {typewriterParts.map((part, i) => (
             <span key={i} className={`welcome-tag-${part.class}`}>{part.text}</span>
           ))}
-          <span className={`welcome-cursor ${showCursor ? 'visible' : ''}`}>|</span>
+          <span className={`welcome-cursor ${cursorVisible ? 'visible' : ''}`}>|</span>
         </div>
 
         {/* Title */}
@@ -305,6 +340,23 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
               </svg>
               Download Chrome
             </a>
+          </div>
+        )}
+
+        {/* OS Warning for non-Linux systems (only show if browser is supported) */}
+        {browser.isChromium && !os.isLinux && (
+          <div className="welcome-browser-warning welcome-os-warning">
+            <svg className="welcome-browser-warning-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span className="welcome-browser-warning-label">Limited Performance</span>
+            <span className="welcome-browser-warning-name">{os.name}</span>
+            <span className="welcome-browser-warning-desc">
+              WebGPU performance on {os.name} is currently limited.
+              For best results, use Linux with Vulkan drivers enabled.
+            </span>
           </div>
         )}
 
