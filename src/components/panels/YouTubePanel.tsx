@@ -1,20 +1,11 @@
 // YouTube Search Panel
-// Supports both Invidious (no API key) and YouTube Data API
-// Drag videos to timeline to download and add them
+// Supports YouTube Data API (with key) and direct URL paste (no key)
 
 import { useState, useCallback, useRef } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { downloadYouTubeVideo, subscribeToDownload, type DownloadProgress } from '../../services/youtubeDownloader';
 import './YouTubePanel.css';
-
-// Invidious instances (fallback, no API key needed)
-const INVIDIOUS_INSTANCES = [
-  'https://inv.nadeko.net',
-  'https://invidious.nerdvpn.de',
-  'https://invidious.privacyredirect.com',
-  'https://invidious.protokolla.fi',
-];
 
 interface YouTubeVideo {
   id: string;
@@ -26,14 +17,47 @@ interface YouTubeVideo {
   views?: string;
 }
 
-type SearchProvider = 'invidious' | 'youtube-api';
+// Extract video ID from various YouTube URL formats
+function extractVideoId(input: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/,
+    /^([a-zA-Z0-9_-]{11})$/, // Just the ID
+  ];
+
+  for (const pattern of patterns) {
+    const match = input.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+// Get video info via YouTube oEmbed (supports CORS!)
+async function getVideoInfo(videoId: string): Promise<YouTubeVideo | null> {
+  try {
+    const response = await fetch(
+      `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`
+    );
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    return {
+      id: videoId,
+      title: data.title || 'Untitled',
+      thumbnail: `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
+      channel: data.author_name || 'Unknown',
+      duration: '?:??', // oEmbed doesn't provide duration
+      durationSeconds: 0,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export function YouTubePanel() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<YouTubeVideo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [provider, setProvider] = useState<SearchProvider>('invidious');
   const [draggingVideo, setDraggingVideo] = useState<string | null>(null);
 
   const { apiKeys, openSettings } = useSettingsStore();
@@ -47,11 +71,12 @@ export function YouTubePanel() {
   const tracks = useTimelineStore(s => s.tracks);
   const playheadPosition = useTimelineStore(s => s.playheadPosition);
 
-  // Track active downloads to prevent duplicates
+  // Track active downloads
   const activeDownloadsRef = useRef<Set<string>>(new Set());
 
-  // Format duration from seconds to MM:SS or HH:MM:SS
+  // Format duration from seconds
   const formatDuration = (seconds: number): string => {
+    if (!seconds) return '?:??';
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
@@ -61,72 +86,22 @@ export function YouTubePanel() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Parse ISO 8601 duration (PT1H2M3S) to seconds
+  // Parse ISO 8601 duration
   const parseISO8601Duration = (duration: string): number => {
     const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
     if (!match) return 0;
-    const hours = parseInt(match[1] || '0');
-    const minutes = parseInt(match[2] || '0');
-    const seconds = parseInt(match[3] || '0');
-    return hours * 3600 + minutes * 60 + seconds;
+    return parseInt(match[1] || '0') * 3600 + parseInt(match[2] || '0') * 60 + parseInt(match[3] || '0');
   };
 
   // Format view count
   const formatViews = (count: number): string => {
-    if (count >= 1000000) {
-      return `${(count / 1000000).toFixed(1)}M views`;
-    }
-    if (count >= 1000) {
-      return `${(count / 1000).toFixed(1)}K views`;
-    }
+    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M views`;
+    if (count >= 1000) return `${(count / 1000).toFixed(1)}K views`;
     return `${count} views`;
-  };
-
-  // Search using Invidious API
-  const searchInvidious = async (searchQuery: string): Promise<YouTubeVideo[]> => {
-    let lastError: Error | null = null;
-
-    for (const instance of INVIDIOUS_INSTANCES) {
-      try {
-        const response = await fetch(
-          `${instance}/api/v1/search?q=${encodeURIComponent(searchQuery)}&type=video`,
-          { signal: AbortSignal.timeout(10000) }
-        );
-
-        if (!response.ok) continue;
-
-        const data = await response.json();
-
-        return data
-          .filter((item: any) => item.type === 'video')
-          .slice(0, 20)
-          .map((item: any) => ({
-            id: item.videoId,
-            title: item.title,
-            thumbnail: item.videoThumbnails?.find((t: any) => t.quality === 'medium')?.url
-              || item.videoThumbnails?.[0]?.url
-              || `https://i.ytimg.com/vi/${item.videoId}/mqdefault.jpg`,
-            channel: item.author,
-            durationSeconds: item.lengthSeconds || 0,
-            duration: formatDuration(item.lengthSeconds || 0),
-            views: item.viewCount ? formatViews(item.viewCount) : undefined,
-          }));
-      } catch (err) {
-        lastError = err as Error;
-        continue;
-      }
-    }
-
-    throw lastError || new Error('All Invidious instances failed');
   };
 
   // Search using YouTube Data API
   const searchYouTubeAPI = async (searchQuery: string): Promise<YouTubeVideo[]> => {
-    if (!youtubeApiKey) {
-      throw new Error('YouTube API key not configured');
-    }
-
-    // First, search for videos
     const searchResponse = await fetch(
       `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=20&q=${encodeURIComponent(searchQuery)}&key=${youtubeApiKey}`
     );
@@ -145,9 +120,7 @@ export function YouTubePanel() {
     );
 
     const detailsData = await detailsResponse.json();
-    const detailsMap = new Map(
-      detailsData.items?.map((item: any) => [item.id, item]) || []
-    );
+    const detailsMap = new Map(detailsData.items?.map((item: any) => [item.id, item]) || []);
 
     return searchData.items.map((item: any) => {
       const details = detailsMap.get(item.id.videoId) as any;
@@ -168,36 +141,47 @@ export function YouTubePanel() {
     });
   };
 
-  // Main search handler
+  // Main search/add handler
   const handleSearch = useCallback(async () => {
-    if (!query.trim()) return;
+    const input = query.trim();
+    if (!input) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      let videos: YouTubeVideo[];
+      // Check if it's a YouTube URL or video ID
+      const videoId = extractVideoId(input);
 
-      if (provider === 'youtube-api' && youtubeApiKey) {
-        videos = await searchYouTubeAPI(query);
+      if (videoId) {
+        // Direct video URL/ID - get info and show it
+        const videoInfo = await getVideoInfo(videoId);
+        if (videoInfo) {
+          setResults([videoInfo]);
+        } else {
+          setError('Could not load video info');
+          setResults([]);
+        }
+      } else if (youtubeApiKey) {
+        // Search query with API key
+        const videos = await searchYouTubeAPI(input);
+        setResults(videos);
       } else {
-        videos = await searchInvidious(query);
+        // No API key and not a URL
+        setError('Paste a YouTube URL, or add API key in settings for search');
+        setResults([]);
       }
-
-      setResults(videos);
     } catch (err) {
       setError((err as Error).message);
       setResults([]);
     } finally {
       setLoading(false);
     }
-  }, [query, provider, youtubeApiKey]);
+  }, [query, youtubeApiKey]);
 
   // Handle Enter key
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
+    if (e.key === 'Enter') handleSearch();
   };
 
   // Open video in new tab
@@ -205,56 +189,46 @@ export function YouTubePanel() {
     window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank');
   };
 
-  // Copy video URL to clipboard
+  // Copy video URL
   const copyVideoUrl = (videoId: string) => {
     navigator.clipboard.writeText(`https://www.youtube.com/watch?v=${videoId}`);
   };
 
-  // Handle drag start
+  // Drag handlers
   const handleDragStart = (e: React.DragEvent, video: YouTubeVideo) => {
     e.dataTransfer.setData('application/x-youtube-video', JSON.stringify(video));
     e.dataTransfer.effectAllowed = 'copy';
     setDraggingVideo(video.id);
   };
 
-  // Handle drag end
-  const handleDragEnd = () => {
-    setDraggingVideo(null);
-  };
+  const handleDragEnd = () => setDraggingVideo(null);
 
-  // Start download and add to timeline
+  // Add video to timeline
   const addVideoToTimeline = async (video: YouTubeVideo) => {
-    // Check if already downloading
-    if (activeDownloadsRef.current.has(video.id)) {
-      console.log('[YouTube] Already downloading:', video.id);
-      return;
-    }
+    if (activeDownloadsRef.current.has(video.id)) return;
 
-    // Find first video track
     const videoTrack = tracks.find(t => t.type === 'video');
     if (!videoTrack) {
       setError('No video track available');
       return;
     }
 
-    // Add pending clip to timeline
     const clipId = addPendingDownloadClip(
       videoTrack.id,
       playheadPosition,
       video.id,
       video.title,
       video.thumbnail,
-      video.durationSeconds || 30
+      video.durationSeconds || 60
     );
 
     if (!clipId) {
-      setError('Failed to add clip to timeline');
+      setError('Failed to add clip');
       return;
     }
 
     activeDownloadsRef.current.add(video.id);
 
-    // Subscribe to download progress
     const unsubscribe = subscribeToDownload(video.id, (progress: DownloadProgress) => {
       if (progress.status === 'downloading' || progress.status === 'processing') {
         updateDownloadProgress(clipId, progress.progress);
@@ -262,15 +236,9 @@ export function YouTubePanel() {
     });
 
     try {
-      // Start download
       const file = await downloadYouTubeVideo(video.id, video.title, video.thumbnail);
-
-      // Complete the download - replace pending clip with actual video
       await completeDownload(clipId, file);
-
-      console.log('[YouTube] Download complete:', video.title);
     } catch (err) {
-      console.error('[YouTube] Download failed:', err);
       setDownloadError(clipId, (err as Error).message);
     } finally {
       activeDownloadsRef.current.delete(video.id);
@@ -280,13 +248,12 @@ export function YouTubePanel() {
 
   return (
     <div className="youtube-panel">
-      {/* Header with provider selection */}
       <div className="youtube-header">
         <div className="youtube-search-row">
           <input
             type="text"
             className="youtube-search-input"
-            placeholder="Search YouTube..."
+            placeholder={youtubeApiKey ? "Search or paste URL..." : "Paste YouTube URL..."}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -296,35 +263,30 @@ export function YouTubePanel() {
             onClick={handleSearch}
             disabled={loading || !query.trim()}
           >
-            {loading ? '...' : 'Search'}
+            {loading ? '...' : youtubeApiKey ? 'Search' : 'Add'}
           </button>
         </div>
 
         <div className="youtube-options">
-          <select
-            className="provider-select"
-            value={provider}
-            onChange={(e) => setProvider(e.target.value as SearchProvider)}
-          >
-            <option value="invidious">Invidious (No API Key)</option>
-            <option value="youtube-api" disabled={!youtubeApiKey}>
-              YouTube API {!youtubeApiKey && '(No Key)'}
-            </option>
-          </select>
-
-          {provider === 'youtube-api' && !youtubeApiKey && (
-            <button className="btn-settings-small" onClick={openSettings}>
-              Add API Key
-            </button>
+          {youtubeApiKey ? (
+            <span className="api-status api-active">API Key Active</span>
+          ) : (
+            <>
+              <span className="api-status">No API Key</span>
+              <button className="btn-settings-small" onClick={openSettings}>
+                Add Key
+              </button>
+            </>
           )}
         </div>
 
-        <div className="youtube-drag-hint">
-          Drag videos to timeline to download
-        </div>
+        {!youtubeApiKey && (
+          <div className="youtube-hint">
+            Paste YouTube URLs to add videos. Add API key for search.
+          </div>
+        )}
       </div>
 
-      {/* Error message */}
       {error && (
         <div className="youtube-error">
           <span className="error-icon">!</span>
@@ -332,12 +294,11 @@ export function YouTubePanel() {
         </div>
       )}
 
-      {/* Results */}
       <div className="youtube-results">
         {loading ? (
           <div className="youtube-loading">
             <div className="loading-spinner" />
-            <span>Searching...</span>
+            <span>Loading...</span>
           </div>
         ) : results.length > 0 ? (
           <div className="youtube-grid">
@@ -351,29 +312,18 @@ export function YouTubePanel() {
                 onClick={() => openVideo(video.id)}
               >
                 <div className="video-thumbnail">
-                  <img
-                    src={video.thumbnail}
-                    alt={video.title}
-                    loading="lazy"
-                    draggable={false}
-                  />
+                  <img src={video.thumbnail} alt={video.title} loading="lazy" draggable={false} />
                   <span className="video-duration">{video.duration}</span>
                   <button
                     className="btn-copy-url"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      copyVideoUrl(video.id);
-                    }}
+                    onClick={(e) => { e.stopPropagation(); copyVideoUrl(video.id); }}
                     title="Copy URL"
                   >
                     Copy
                   </button>
                   <button
                     className="btn-add-timeline"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      addVideoToTimeline(video);
-                    }}
+                    onClick={(e) => { e.stopPropagation(); addVideoToTimeline(video); }}
                     title="Add to timeline"
                   >
                     +
@@ -384,22 +334,23 @@ export function YouTubePanel() {
                   <span className="video-channel">{video.channel}</span>
                   {video.views && <span className="video-views">{video.views}</span>}
                 </div>
-                <div className="drag-hint">
-                  <span>Drag to timeline</span>
-                </div>
               </div>
             ))}
-          </div>
-        ) : query && !loading ? (
-          <div className="youtube-empty">
-            <p>No results found</p>
-            <span>Try a different search term</span>
           </div>
         ) : (
           <div className="youtube-empty">
             <span className="youtube-icon">YouTube</span>
-            <p>Search for videos</p>
-            <span>Drag results to timeline to download</span>
+            {youtubeApiKey ? (
+              <>
+                <p>Search for videos</p>
+                <span>Or paste a YouTube URL</span>
+              </>
+            ) : (
+              <>
+                <p>Paste a YouTube URL</p>
+                <span>e.g. youtube.com/watch?v=...</span>
+              </>
+            )}
           </div>
         )}
       </div>

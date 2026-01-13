@@ -168,6 +168,17 @@ UI Framework      Custom dockable panel system
 | Multicam EDL | ✅ | AI-generated edit decision lists |
 | Context Awareness | ✅ | AI knows timeline state |
 
+### YouTube Integration
+
+| Feature | Status | Details |
+|---------|--------|---------|
+| YouTube Search | ✅ | Search videos via Invidious or YouTube Data API |
+| Video Thumbnails | ✅ | Display thumbnails, titles, channels, duration |
+| Drag to Timeline | ✅ | Drag videos to timeline to download |
+| Cobalt Download | ✅ | Download videos via Cobalt API |
+| Pending Clip State | ✅ | Dashed preview with download progress |
+| Dual API Support | ✅ | Invidious (no key) or YouTube Data API (optional) |
+
 ### Audio
 
 | Feature | Status | Details |
@@ -229,7 +240,7 @@ UI Framework      Custom dockable panel system
 | Feature | Status | Details |
 |---------|--------|---------|
 | Dockable Panels | ✅ | Drag, resize, tab grouping |
-| 8 Panel Types | ✅ | Preview, Timeline, Media, Properties, Export, Multicam, AI Chat, Slots |
+| 9 Panel Types | ✅ | Preview, Timeline, Media, Properties, Export, Multicam, AI Chat, AI Video, YouTube |
 | Unified Properties Panel | ✅ | Transform, Effects, Masks, Volume tabs |
 | Menu Bar | ✅ | File, Edit, View, Output, Window |
 | Context Menus | ✅ | Right-click operations |
