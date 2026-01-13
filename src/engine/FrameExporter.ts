@@ -40,6 +40,9 @@ export interface ExportProgress {
   currentTime: number;
   audioPhase?: AudioExportProgress['phase'];
   audioPercent?: number;
+  // Info about clips that couldn't use fast MP4Box export
+  slowClipsCount?: number;
+  slowClipsMessage?: string;
 }
 
 export interface FullExportSettings extends ExportSettings {
@@ -342,6 +345,9 @@ export class FrameExporter {
   // Dedicated export players - loaded with MP4Box for fast sequential decoding
   private exportPlayers: Map<string, WebCodecsPlayer> = new Map();
 
+  // Track clips that couldn't use fast MP4Box export (need relinking)
+  private slowClips: string[] = [];
+
   constructor(settings: FullExportSettings) {
     this.settings = settings;
   }
@@ -445,6 +451,10 @@ export class FrameExporter {
           percent: videoPercent,
           estimatedTimeRemaining,
           currentTime: time,
+          slowClipsCount: this.slowClips.length,
+          slowClipsMessage: this.slowClips.length > 0
+            ? `${this.slowClips.length} clip(s) using slow fallback mode. Relink media for faster export.`
+            : undefined,
         });
       }
 
@@ -521,6 +531,9 @@ export class FrameExporter {
 
     console.log('[FrameExporter] Preparing clips with dedicated MP4Box players for fast export...');
 
+    // Reset slow clips tracking
+    this.slowClips = [];
+
     for (const clip of clips) {
       const track = tracks.find(t => t.id === clip.trackId);
       if (!track?.visible) continue;
@@ -535,7 +548,8 @@ export class FrameExporter {
         const file = clip.file || mediaFile?.file;
 
         if (!file) {
-          console.warn(`[FrameExporter] No file found for clip "${clip.name}", using fallback`);
+          console.warn(`[FrameExporter] No file found for clip "${clip.name}" - needs relinking, using slow fallback`);
+          this.slowClips.push(clip.name);
           // Fallback to existing player if available
           if (clip.source.webCodecsPlayer) {
             const clipLocalTime = Math.max(0, startTime - clip.startTime);
@@ -610,6 +624,8 @@ export class FrameExporter {
           console.log(`[FrameExporter] Prepared clip "${clip.name}" with MP4Box (sequential: ${isSequential})`);
         } catch (e) {
           console.error(`[FrameExporter] Failed to create export player for "${clip.name}":`, e);
+          // Track this as a slow clip - likely needs file relinking
+          this.slowClips.push(clip.name);
           // Fallback to existing player
           if (clip.source.webCodecsPlayer) {
             const clipLocalTime = Math.max(0, startTime - clip.startTime);
@@ -627,7 +643,16 @@ export class FrameExporter {
     }
 
     this.exportPrepared = true;
-    console.log(`[FrameExporter] ${this.exportPlayers.size} clips loaded with MP4Box, ${this.clipExportState.size} total prepared`);
+
+    // Log summary
+    if (this.slowClips.length > 0) {
+      console.warn(`[FrameExporter] ⚠️ ${this.slowClips.length} clip(s) using SLOW fallback mode (HTMLVideoElement seeking):`);
+      for (const name of this.slowClips) {
+        console.warn(`  - ${name} (needs relinking)`);
+      }
+      console.warn('[FrameExporter] 💡 Tip: Use "Relink Media" to restore file access for faster export');
+    }
+    console.log(`[FrameExporter] ${this.exportPlayers.size} clips loaded with MP4Box (fast), ${this.slowClips.length} using fallback (slow)`);
   }
 
   /**
