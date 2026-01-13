@@ -10,9 +10,8 @@ import { NativeHelperClient, isNativeHelperAvailable } from '../../services/nati
 import type { SystemInfo, ConnectionStatus } from '../../services/nativeHelper';
 import { useSettingsStore } from '../../stores/settingsStore';
 
-// GitHub releases URL for the helper
-const HELPER_DOWNLOAD_URL = 'https://github.com/Sportinger/MASterSelects/releases/latest';
-const HELPER_DIRECT_DOWNLOAD = 'https://github.com/Sportinger/MASterSelects/releases/latest/download/masterselects-helper';
+// Direct download from app (bundled in public folder)
+const HELPER_DIRECT_DOWNLOAD = '/downloads/masterselects-helper';
 
 interface NativeHelperStatusProps {
   /** Show as compact icon only */
@@ -268,16 +267,7 @@ function NativeHelperPopoverContent({
               download="masterselects-helper"
               className="block w-full text-center bg-blue-600 hover:bg-blue-500 text-white text-sm py-2 px-3 rounded transition-colors"
             >
-              Download Helper (Linux)
-            </a>
-
-            <a
-              href={HELPER_DOWNLOAD_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block w-full text-center bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-xs py-1.5 px-3 rounded transition-colors"
-            >
-              All Releases
+              Download Helper (Linux, 1.8 MB)
             </a>
           </div>
 

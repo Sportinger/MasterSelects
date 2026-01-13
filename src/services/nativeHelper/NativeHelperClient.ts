@@ -27,6 +27,8 @@ export interface NativeHelperConfig {
   autoReconnect?: boolean;
   reconnectInterval?: number;
   token?: string;
+  /** Only reconnect if we were previously connected */
+  onlyReconnectIfWasConnected?: boolean;
 }
 
 export interface DecodedFrame {
@@ -54,13 +56,15 @@ class NativeHelperClientImpl {
   private frameCallbacks = new Map<string, FrameCallback>();
   private statusListeners = new Set<(status: ConnectionStatus) => void>();
   private reconnectTimer: number | null = null;
+  private wasEverConnected = false;
 
   constructor() {
     this.config = {
       port: 9876,
       autoReconnect: true,
-      reconnectInterval: 3000,
+      reconnectInterval: 10000, // 10 seconds between reconnect attempts
       token: '',
+      onlyReconnectIfWasConnected: true, // Don't spam reconnects if never connected
     };
   }
 
@@ -101,7 +105,8 @@ class NativeHelperClientImpl {
         this.ws = new WebSocket(`ws://127.0.0.1:${this.config.port}`);
 
         this.ws.onopen = async () => {
-          console.log('[NativeHelper] Connected');
+          console.log('[NativeHelper] Connected to native helper');
+          this.wasEverConnected = true;
 
           // Authenticate if token provided
           if (this.config.token) {
@@ -117,7 +122,9 @@ class NativeHelperClientImpl {
         };
 
         this.ws.onclose = () => {
-          console.log('[NativeHelper] Disconnected');
+          if (this.wasEverConnected) {
+            console.log('[NativeHelper] Disconnected');
+          }
           this.setStatus('disconnected');
           this.handleDisconnect();
           if (this.status === 'connecting') {
@@ -125,9 +132,9 @@ class NativeHelperClientImpl {
           }
         };
 
-        this.ws.onerror = (err) => {
-          console.error('[NativeHelper] WebSocket error:', err);
-          this.setStatus('error');
+        this.ws.onerror = () => {
+          // Don't log errors when helper isn't running - it's optional
+          this.setStatus('disconnected');
           if (this.status === 'connecting') {
             resolve(false);
           }
@@ -136,9 +143,9 @@ class NativeHelperClientImpl {
         this.ws.onmessage = (event) => {
           this.handleMessage(event.data);
         };
-      } catch (err) {
-        console.error('[NativeHelper] Failed to connect:', err);
-        this.setStatus('error');
+      } catch {
+        // Silent fail - helper is optional
+        this.setStatus('disconnected');
         resolve(false);
       }
     });
@@ -352,8 +359,16 @@ class NativeHelperClientImpl {
     this.pendingRequests.clear();
     this.frameCallbacks.clear();
 
-    // Auto-reconnect
-    if (this.config.autoReconnect && this.status !== 'connecting') {
+    // Auto-reconnect only if:
+    // 1. autoReconnect is enabled
+    // 2. Not already trying to connect
+    // 3. Either we were connected before OR onlyReconnectIfWasConnected is false
+    const shouldReconnect =
+      this.config.autoReconnect &&
+      this.status !== 'connecting' &&
+      (!this.config.onlyReconnectIfWasConnected || this.wasEverConnected);
+
+    if (shouldReconnect) {
       this.reconnectTimer = window.setTimeout(() => {
         console.log('[NativeHelper] Attempting reconnect...');
         this.connect();
