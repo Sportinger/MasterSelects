@@ -47,13 +47,14 @@ RUN git clone --depth 1 https://code.videolan.org/videolan/x264.git && \
         --extra-cflags="-O3" && \
     emmake make -j$(nproc) && emmake make install
 
-# libvpx (VP9 encoder)
+# libvpx (VP9 only - VP8 fully disabled)
 RUN git clone --depth 1 https://chromium.googlesource.com/webm/libvpx.git && \
     cd libvpx && \
     emconfigure ./configure --prefix=/opt/vpx --target=generic-gnu \
         --enable-static --disable-shared --disable-examples --disable-tools \
-        --disable-docs --disable-unit-tests --enable-vp9-encoder \
-        --disable-vp8-encoder --disable-vp8-decoder && \
+        --disable-docs --disable-unit-tests \
+        --enable-vp9-encoder --enable-vp9-decoder \
+        --disable-vp8-encoder --disable-vp8-decoder --disable-vp8 && \
     emmake make -j$(nproc) && emmake make install
 
 # LAME (MP3 encoder)
@@ -65,12 +66,14 @@ RUN wget https://sourceforge.net/projects/lame/files/lame/3.100/lame-3.100.tar.g
     emmake make -j$(nproc) && emmake make install
 
 # Opus (modern audio codec) - with manual pkg-config
+# Using -fno-stack-protector in both CFLAGS and CPPFLAGS
+# Also passing flags directly to make to ensure they're used
 RUN git clone --depth 1 --branch v1.4 https://github.com/xiph/opus.git && \
     cd opus && ./autogen.sh && \
-    emconfigure ./configure --prefix=/opt/opus --host=i686-gnu \
+    CFLAGS="-O3 -fno-stack-protector" CPPFLAGS="-fno-stack-protector" emconfigure ./configure --prefix=/opt/opus --host=i686-gnu \
         --enable-static --disable-shared --disable-doc --disable-extra-programs \
-        --disable-rtcd --disable-intrinsics && \
-    emmake make -j$(nproc) && emmake make install && \
+        --disable-rtcd --disable-intrinsics --disable-hardening && \
+    emmake make CFLAGS="-O3 -fno-stack-protector" -j$(nproc) && emmake make install && \
     mkdir -p /opt/opus/lib/pkgconfig && \
     echo 'prefix=/opt/opus' > /opt/opus/lib/pkgconfig/opus.pc && \
     echo 'exec_prefix=${prefix}' >> /opt/opus/lib/pkgconfig/opus.pc && \
@@ -98,12 +101,14 @@ RUN git clone --depth 1 https://github.com/xiph/vorbis.git && \
         --with-ogg=/opt/ogg && \
     emmake make -j$(nproc) && emmake make install
 
-# WebP - with manual pkg-config
+# WebP - with animation support and libsharpyuv
 RUN git clone --depth 1 https://chromium.googlesource.com/webm/libwebp && \
     cd libwebp && ./autogen.sh && \
-    emconfigure ./configure --prefix=/opt/webp --host=i686-gnu \
+    CFLAGS="-O3 -fno-stack-protector" emconfigure ./configure --prefix=/opt/webp --host=i686-gnu \
         --enable-static --disable-shared \
-        --disable-threading && \
+        --disable-threading \
+        --enable-libwebpmux \
+        --enable-libsharpyuv && \
     emmake make -j$(nproc) && emmake make install && \
     mkdir -p /opt/webp/lib/pkgconfig && \
     echo 'prefix=/opt/webp' > /opt/webp/lib/pkgconfig/libwebp.pc && \
@@ -119,7 +124,14 @@ RUN git clone --depth 1 https://chromium.googlesource.com/webm/libwebp && \
 
 # ============ BUILD FFMPEG ============
 
-RUN git clone --depth 1 -b n6.1.1 https://github.com/FFmpeg/FFmpeg.git ffmpeg
+# Using FFmpeg 5.1.4 - better WASM compatibility than 6.x
+RUN git clone --depth 1 -b n5.1.4 https://github.com/FFmpeg/FFmpeg.git ffmpeg
+
+# Create stack protector stub for Opus (Opus uses stack protection that doesn't work in WASM)
+RUN echo '// Stack protector stubs for WASM' > /opt/stack_chk_stub.c && \
+    echo 'unsigned long __stack_chk_guard = 0xDEADBEEF;' >> /opt/stack_chk_stub.c && \
+    echo 'void __stack_chk_fail(void) { }' >> /opt/stack_chk_stub.c && \
+    emcc -c -O3 /opt/stack_chk_stub.c -o /opt/stack_chk_stub.o
 
 WORKDIR /src/ffmpeg
 
@@ -240,7 +252,7 @@ RUN emconfigure ./configure \
     --disable-debug \
     --disable-runtime-cpudetect \
     --disable-autodetect \
-    --enable-pthreads \
+    --disable-pthreads \
     --enable-gpl \
     --enable-version3 \
     --enable-libx264 \
@@ -292,6 +304,9 @@ RUN emconfigure ./configure \
     --enable-decoder=h264 \
     --enable-decoder=hevc \
     --enable-decoder=vp9 \
+    --enable-decoder=libvpx_vp9 \
+    --disable-decoder=libvpx_vp8 \
+    --disable-encoder=libvpx_vp8 \
     --enable-decoder=av1 \
     --enable-decoder=prores \
     --enable-decoder=png \
@@ -318,9 +333,9 @@ RUN emconfigure ./configure \
     --enable-parser=aac \
     --enable-protocol=file \
     --enable-protocol=pipe \
-    --extra-cflags="-O3 -pthread -I/opt/x264/include -I/opt/vpx/include -I/opt/snappy/include -I/opt/lame/include -I/opt/opus/include/opus -I/opt/ogg/include -I/opt/vorbis/include -I/opt/webp/include -I/opt/zlib/include" \
-    --extra-ldflags="-pthread -L/opt/x264/lib -L/opt/vpx/lib -L/opt/snappy/lib -L/opt/lame/lib -L/opt/opus/lib -L/opt/ogg/lib -L/opt/vorbis/lib -L/opt/webp/lib -L/opt/zlib/lib -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=5242880" \
-    --extra-libs="-lx264 -lvpx -lsnappy -lmp3lame -lopus -lvorbis -lvorbisenc -logg -lwebp -lz -lm" \
+    --extra-cflags="-O3 -fno-stack-protector -I/opt/x264/include -I/opt/vpx/include -I/opt/snappy/include -I/opt/lame/include -I/opt/opus/include/opus -I/opt/ogg/include -I/opt/vorbis/include -I/opt/webp/include -I/opt/zlib/include" \
+    --extra-ldflags="-L/opt/x264/lib -L/opt/vpx/lib -L/opt/snappy/lib -L/opt/lame/lib -L/opt/opus/lib -L/opt/ogg/lib -L/opt/vorbis/lib -L/opt/webp/lib -L/opt/zlib/lib -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=5242880 -sINITIAL_MEMORY=67108864" \
+    --extra-libs="/opt/stack_chk_stub.o -lx264 -lvpx -lsnappy -lmp3lame -lopus -lvorbis -lvorbisenc -logg -lwebpmux -lsharpyuv -lwebp -lz -lm" \
     --nm="/emsdk/upstream/bin/llvm-nm" \
     --ar="/emsdk/upstream/emscripten/emar" \
     --ranlib="/emsdk/upstream/emscripten/emranlib" \
@@ -339,35 +354,10 @@ RUN echo "=== Checking built library files ===" && \
     echo "=== Checking if fftools .o files exist ===" && \
     ls fftools/*.o 2>/dev/null || echo "No fftools .o files found - will compile manually"
 
-# Manually compile fftools sources if .o files don't exist
-# This is needed because emmake make doesn't always build the executables when cross-compiling
-# FFmpeg 6.x fftools require pthreads - we need to use Emscripten's pthread support
-RUN if [ ! -f "fftools/ffmpeg.o" ]; then \
-    echo "=== Manually compiling fftools with pthread support ===" && \
-    echo "Getting CFLAGS from config.mak..." && \
-    # Include paths from the FFmpeg build
-    INCLUDE_PATHS="-I. -Ifftools -include config.h -include libavutil/avconfig.h" && \
-    # External library includes
-    EXT_INCLUDES="-I/opt/x264/include -I/opt/vpx/include -I/opt/snappy/include -I/opt/lame/include -I/opt/opus/include/opus -I/opt/ogg/include -I/opt/vorbis/include -I/opt/webp/include -I/opt/zlib/include" && \
-    # Compile each fftools source file with pthread support
-    for src in fftools/ffmpeg.c fftools/ffmpeg_opt.c fftools/ffmpeg_filter.c \
-               fftools/ffmpeg_hw.c fftools/ffmpeg_mux.c fftools/ffmpeg_mux_init.c \
-               fftools/ffmpeg_demux.c fftools/ffmpeg_enc.c fftools/ffmpeg_dec.c \
-               fftools/cmdutils.c fftools/opt_common.c fftools/objpool.c \
-               fftools/sync_queue.c fftools/thread_queue.c; do \
-        if [ -f "$src" ]; then \
-            obj="${src%.c}.o" && \
-            echo "Compiling $src -> $obj" && \
-            emcc -c -O3 -pthread \
-                $INCLUDE_PATHS $EXT_INCLUDES \
-                -D_GNU_SOURCE -DHAVE_AV_CONFIG_H \
-                -Wno-pointer-sign -Wno-switch -Wno-parentheses \
-                "$src" -o "$obj" 2>&1 || echo "Failed: $src"; \
-        fi; \
-    done && \
-    echo "=== fftools compilation complete ===" && \
-    ls -la fftools/*.o 2>/dev/null || echo "No .o files created"; \
-fi
+# FFmpeg 5.x compiles fftools automatically with emmake make
+# Just verify they exist
+RUN echo "=== Checking fftools .o files ===" && \
+    ls -la fftools/*.o 2>/dev/null || echo "No .o files - build may have failed"
 
 # If ffmpeg_g doesn't exist, build the WASM module directly from libraries
 # This creates a minimal ffmpeg WASM that can be called from JavaScript
