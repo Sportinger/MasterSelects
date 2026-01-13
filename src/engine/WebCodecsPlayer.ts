@@ -86,6 +86,7 @@ export class WebCodecsPlayer {
 
   // Sequential export mode - avoids decoder reset on each frame
   private isInExportMode = false;
+  private frameResolve: (() => void) | null = null; // For waiting on decoded frames
 
   constructor(options: WebCodecsPlayerOptions = {}) {
     this.loop = options.loop ?? true;
@@ -444,6 +445,12 @@ export class WebCodecsPlayer {
         }
         this.currentFrame = frame;
         this.onFrame?.(frame);
+
+        // Resolve any pending frame wait (for sequential export)
+        if (this.frameResolve) {
+          this.frameResolve();
+          this.frameResolve = null;
+        }
       },
       error: (e) => {
         console.error('VideoDecoder error:', e);
@@ -915,10 +922,22 @@ export class WebCodecsPlayer {
       data: sample.data,
     });
 
+    // Create promise that resolves when frame arrives in output callback
+    const framePromise = new Promise<void>((resolve) => {
+      this.frameResolve = resolve;
+      // Timeout fallback in case frame never arrives
+      setTimeout(() => {
+        if (this.frameResolve === resolve) {
+          this.frameResolve = null;
+          resolve();
+        }
+      }, 100);
+    });
+
     try {
       this.decoder.decode(chunk);
-      // Flush to ensure the frame is available immediately
-      await this.decoder.flush();
+      // Wait for frame to arrive in callback (no flush needed!)
+      await framePromise;
     } catch (e) {
       console.warn('[WebCodecs] Export decode error:', e);
     }
