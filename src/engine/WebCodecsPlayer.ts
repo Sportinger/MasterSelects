@@ -977,6 +977,9 @@ export class WebCodecsPlayer {
       return;
     }
 
+    // DEBUG: Log when we need to reset decoder
+    console.warn(`[WebCodecs] DECODER RESET: targetIndex=${targetIndex}, sampleIndex=${this.sampleIndex}, diff=${targetIndex - this.sampleIndex}`);
+
     // Need to jump - find keyframe and decode from there
     let keyframeIndex = 0;
     for (let i = 0; i <= targetIndex; i++) {

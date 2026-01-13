@@ -6,6 +6,7 @@ import { Muxer as WebmMuxer, ArrayBufferTarget as WebmTarget } from 'webm-muxer'
 import { engine } from './WebGPUEngine';
 import { useTimelineStore } from '../stores/timeline';
 import { useMediaStore } from '../stores/mediaStore';
+import { WebCodecsPlayer } from './WebCodecsPlayer';
 import type { Layer, TimelineClip, NestedCompositionData } from '../types';
 import { AudioExportPipeline, type AudioExportProgress, type EncodedAudioResult, AudioEncoderWrapper, type AudioCodec } from './audio';
 
@@ -338,6 +339,9 @@ export class FrameExporter {
   private clipExportState: Map<string, { lastSourceTime: number; isSequential: boolean }> = new Map();
   private exportPrepared = false;
 
+  // Dedicated export players - loaded with MP4Box for fast sequential decoding
+  private exportPlayers: Map<string, WebCodecsPlayer> = new Map();
+
   constructor(settings: FullExportSettings) {
     this.settings = settings;
   }
@@ -507,82 +511,111 @@ export class FrameExporter {
 
   /**
    * Prepare all video clips for sequential export.
-   * This initializes WebCodecsPlayers in export mode so they can decode
-   * frames sequentially without resetting the decoder each time.
+   * Creates dedicated WebCodecsPlayers with MP4Box for fast sequential decoding.
+   * This bypasses the Simple Mode (HTMLVideoElement) which is slow for frame-by-frame export.
    */
   private async prepareClipsForExport(startTime: number): Promise<void> {
     const clips = useTimelineStore.getState().clips;
     const tracks = useTimelineStore.getState().tracks;
+    const mediaFiles = useMediaStore.getState().files;
 
-    console.log('[FrameExporter] Preparing clips for sequential export...');
+    console.log('[FrameExporter] Preparing clips with dedicated MP4Box players for fast export...');
 
     for (const clip of clips) {
       const track = tracks.find(t => t.id === clip.trackId);
       if (!track?.visible) continue;
 
-      // Handle nested compositions
-      if (clip.isComposition && clip.nestedClips) {
-        for (const nestedClip of clip.nestedClips) {
-          if (nestedClip.source?.webCodecsPlayer) {
-            // Calculate start time for nested clip
-            const clipLocalTime = Math.max(0, startTime - clip.startTime);
-            const nestedTime = clipLocalTime + (clip.inPoint || 0);
-            if (nestedTime >= nestedClip.startTime && nestedTime < nestedClip.startTime + nestedClip.duration) {
-              const nestedLocalTime = nestedTime - nestedClip.startTime;
-              const nestedClipTime = nestedClip.reversed
-                ? nestedClip.outPoint - nestedLocalTime
-                : nestedLocalTime + nestedClip.inPoint;
-
-              await nestedClip.source.webCodecsPlayer.prepareForSequentialExport(nestedClipTime);
-              this.clipExportState.set(nestedClip.id, {
-                lastSourceTime: nestedClipTime,
-                isSequential: !nestedClip.reversed,
-              });
-            }
-          }
-        }
-        continue;
-      }
+      // Skip nested compositions for now (TODO: implement later)
+      if (clip.isComposition) continue;
 
       // Handle regular video clips
-      if (clip.source?.type === 'video' && clip.source.webCodecsPlayer) {
-        // Calculate start time for this clip
-        const clipLocalTime = Math.max(0, startTime - clip.startTime);
+      if (clip.source?.type === 'video') {
+        // Get the video file
+        const mediaFile = mediaFiles.find(f => f.id === clip.source?.mediaFileId);
+        const file = clip.file || mediaFile?.file;
 
-        // Check if clip uses speed keyframes or is reversed
-        let clipTime: number;
-        let isSequential = !clip.reversed;
-
-        try {
-          const sourceTime = useTimelineStore.getState().getSourceTimeForClip(clip.id, clipLocalTime);
-          const initialSpeed = useTimelineStore.getState().getInterpolatedSpeed(clip.id, 0);
-          const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
-          clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
-
-          // Check if clip has non-standard speed (speed keyframes make it non-sequential)
-          const hasSpeedKeyframes = useTimelineStore.getState().hasKeyframes(clip.id, 'speed');
-          if (hasSpeedKeyframes || initialSpeed !== 1) {
-            isSequential = false;
+        if (!file) {
+          console.warn(`[FrameExporter] No file found for clip "${clip.name}", using fallback`);
+          // Fallback to existing player if available
+          if (clip.source.webCodecsPlayer) {
+            const clipLocalTime = Math.max(0, startTime - clip.startTime);
+            const clipTime = clip.reversed
+              ? clip.outPoint - clipLocalTime
+              : clipLocalTime + clip.inPoint;
+            await clip.source.webCodecsPlayer.prepareForSequentialExport(clipTime);
+            this.clipExportState.set(clip.id, {
+              lastSourceTime: clipTime,
+              isSequential: !clip.reversed,
+            });
           }
-        } catch {
-          clipTime = clip.reversed
-            ? clip.outPoint - clipLocalTime
-            : clipLocalTime + clip.inPoint;
-          clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, clipTime));
+          continue;
         }
 
-        await clip.source.webCodecsPlayer.prepareForSequentialExport(clipTime);
-        this.clipExportState.set(clip.id, {
-          lastSourceTime: clipTime,
-          isSequential,
-        });
+        try {
+          // Create dedicated export player with MP4Box (NOT Simple Mode)
+          const exportPlayer = new WebCodecsPlayer({
+            loop: false,
+            useSimpleMode: false, // Force MP4Box mode for fast decoding
+          });
 
-        console.log(`[FrameExporter] Prepared clip "${clip.name}" for export (sequential: ${isSequential})`);
+          // Load video file directly with MP4Box
+          console.log(`[FrameExporter] Loading "${clip.name}" with MP4Box...`);
+          const arrayBuffer = await file.arrayBuffer();
+          await exportPlayer.loadArrayBuffer(arrayBuffer);
+
+          // Store the export player
+          this.exportPlayers.set(clip.id, exportPlayer);
+
+          // Calculate start time for this clip
+          const clipLocalTime = Math.max(0, startTime - clip.startTime);
+          let clipTime: number;
+          let isSequential = !clip.reversed;
+
+          try {
+            const sourceTime = useTimelineStore.getState().getSourceTimeForClip(clip.id, clipLocalTime);
+            const initialSpeed = useTimelineStore.getState().getInterpolatedSpeed(clip.id, 0);
+            const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
+            clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
+
+            const hasSpeedKeyframes = useTimelineStore.getState().hasKeyframes(clip.id, 'speed');
+            if (hasSpeedKeyframes || initialSpeed !== 1) {
+              isSequential = false;
+            }
+          } catch {
+            clipTime = clip.reversed
+              ? clip.outPoint - clipLocalTime
+              : clipLocalTime + clip.inPoint;
+            clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, clipTime));
+          }
+
+          // Prepare for sequential export
+          await exportPlayer.prepareForSequentialExport(clipTime);
+          this.clipExportState.set(clip.id, {
+            lastSourceTime: clipTime,
+            isSequential,
+          });
+
+          console.log(`[FrameExporter] Prepared clip "${clip.name}" with MP4Box (sequential: ${isSequential})`);
+        } catch (e) {
+          console.error(`[FrameExporter] Failed to create export player for "${clip.name}":`, e);
+          // Fallback to existing player
+          if (clip.source.webCodecsPlayer) {
+            const clipLocalTime = Math.max(0, startTime - clip.startTime);
+            const clipTime = clip.reversed
+              ? clip.outPoint - clipLocalTime
+              : clipLocalTime + clip.inPoint;
+            await clip.source.webCodecsPlayer.prepareForSequentialExport(clipTime);
+            this.clipExportState.set(clip.id, {
+              lastSourceTime: clipTime,
+              isSequential: !clip.reversed,
+            });
+          }
+        }
       }
     }
 
     this.exportPrepared = true;
-    console.log(`[FrameExporter] ${this.clipExportState.size} clips prepared for sequential export`);
+    console.log(`[FrameExporter] ${this.exportPlayers.size} clips loaded with MP4Box, ${this.clipExportState.size} total prepared`);
   }
 
   /**
@@ -591,18 +624,16 @@ export class FrameExporter {
   private cleanupExportMode(): void {
     if (!this.exportPrepared) return;
 
+    // Destroy dedicated export players
+    for (const [clipId, player] of this.exportPlayers) {
+      console.log(`[FrameExporter] Destroying export player for clip ${clipId}`);
+      player.destroy();
+    }
+    this.exportPlayers.clear();
+
+    // Also cleanup any fallback players that were used
     const clips = useTimelineStore.getState().clips;
-
     for (const clip of clips) {
-      if (clip.isComposition && clip.nestedClips) {
-        for (const nestedClip of clip.nestedClips) {
-          if (nestedClip.source?.webCodecsPlayer?.isExportMode()) {
-            nestedClip.source.webCodecsPlayer.endSequentialExport();
-          }
-        }
-        continue;
-      }
-
       if (clip.source?.webCodecsPlayer?.isExportMode()) {
         clip.source.webCodecsPlayer.endSequentialExport();
       }
@@ -690,9 +721,21 @@ export class FrameExporter {
           clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, clipTime));
         }
 
-        if (clip.source.webCodecsPlayer) {
-          // Use sequential export if prepared
-          const exportState = this.clipExportState.get(clip.id);
+        // Check if we have a dedicated export player (MP4Box mode - fast!)
+        const exportPlayer = this.exportPlayers.get(clip.id);
+        const exportState = this.clipExportState.get(clip.id);
+
+        if (exportPlayer && exportState && exportPlayer.isExportMode()) {
+          // Use dedicated export player with MP4Box (fast sequential decoding)
+          seekDescriptions.push(`MP4Box:${clip.name}`);
+          seekPromises.push(this.seekClipSequential(
+            exportPlayer,
+            clipTime,
+            exportState,
+            clip.id
+          ));
+        } else if (clip.source.webCodecsPlayer) {
+          // Fallback to existing player
           if (exportState && clip.source.webCodecsPlayer.isExportMode()) {
             seekDescriptions.push(`Sequential:${clip.name}`);
             seekPromises.push(this.seekClipSequential(
@@ -950,15 +993,20 @@ export class FrameExporter {
       // Handle video clips
       if (clip.source?.type === 'video' && clip.source.videoElement) {
         const video = clip.source.videoElement;
-        const webCodecsPlayer = clip.source.webCodecsPlayer;
+
+        // Use dedicated export player if available (MP4Box mode - fast!)
+        const exportPlayer = this.exportPlayers.get(clip.id);
+        const webCodecsPlayer = exportPlayer || clip.source.webCodecsPlayer;
 
         // Check if video is ready:
+        // - Export player has a decoded frame (preferred), OR
         // - HTMLVideoElement has readyState >= 2 (HAVE_CURRENT_DATA), OR
-        // - WebCodecsPlayer has a decoded frame available
+        // - Fallback WebCodecsPlayer has a decoded frame
+        const hasExportFrame = exportPlayer?.hasFrame() ?? false;
         const videoReady = video.readyState >= 2;
         const hasWebCodecsFrame = webCodecsPlayer?.hasFrame() ?? false;
 
-        if (videoReady || hasWebCodecsFrame) {
+        if (hasExportFrame || videoReady || hasWebCodecsFrame) {
           layers.push({
             ...baseLayerProps,
             source: {
@@ -968,7 +1016,7 @@ export class FrameExporter {
             },
           });
         } else {
-          console.warn('[FrameExporter] Video not ready for clip', clip.id, 'readyState:', video.readyState, 'hasWebCodecsFrame:', hasWebCodecsFrame);
+          console.warn('[FrameExporter] Video not ready for clip', clip.id, 'hasExportFrame:', hasExportFrame, 'readyState:', video.readyState, 'hasWebCodecsFrame:', hasWebCodecsFrame);
         }
       }
       // Handle image clips
