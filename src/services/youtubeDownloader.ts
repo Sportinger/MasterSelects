@@ -1,7 +1,15 @@
 // YouTube video downloader service using Cobalt API
 // Cobalt is a free API that extracts video URLs from YouTube and other platforms
 
-const COBALT_API = 'https://api.cobalt.tools/api/json';
+// List of Cobalt API instances to try (some may have CORS enabled)
+const COBALT_INSTANCES = [
+  'https://cobalt-api.hyper.lol',
+  'https://cobalt-api.kwiatekmiki.com',
+  'https://cobalt.canine.tools',
+];
+
+// CORS proxy for instances that don't support CORS
+const CORS_PROXY = 'https://corsproxy.io/?';
 
 export interface DownloadProgress {
   videoId: string;
@@ -83,27 +91,70 @@ export async function downloadYouTubeVideo(
     progress.progress = 10;
     notifySubscribers(progress);
 
-    const response = await fetch(COBALT_API, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({
-        url: `https://www.youtube.com/watch?v=${videoId}`,
-        vCodec: 'h264',  // Most compatible
-        vQuality: '720', // Good quality, reasonable size
-        aFormat: 'mp3',
-        isAudioOnly: false,
-        filenamePattern: 'basic',
-      }),
+    const requestBody = JSON.stringify({
+      url: `https://www.youtube.com/watch?v=${videoId}`,
+      vCodec: 'h264',  // Most compatible
+      vQuality: '720', // Good quality, reasonable size
+      aFormat: 'mp3',
+      isAudioOnly: false,
+      filenamePattern: 'basic',
     });
 
-    if (!response.ok) {
-      throw new Error(`Cobalt API error: ${response.status}`);
+    let data: any = null;
+    let lastError: Error | null = null;
+
+    // Try each Cobalt instance
+    for (const instance of COBALT_INSTANCES) {
+      try {
+        const response = await fetch(instance, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: requestBody,
+        });
+
+        if (response.ok) {
+          data = await response.json();
+          if (data.status !== 'error') {
+            console.log(`[YouTubeDownloader] Success with instance: ${instance}`);
+            break;
+          }
+        }
+      } catch (e) {
+        lastError = e as Error;
+        console.log(`[YouTubeDownloader] Instance failed: ${instance}`, e);
+      }
     }
 
-    const data = await response.json();
+    // If all instances failed, try with CORS proxy on api.cobalt.tools
+    if (!data || data.status === 'error') {
+      console.log('[YouTubeDownloader] Trying CORS proxy...');
+      try {
+        const proxyUrl = CORS_PROXY + encodeURIComponent('https://api.cobalt.tools/');
+        const response = await fetch(proxyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: requestBody,
+        });
+
+        if (response.ok) {
+          data = await response.json();
+          console.log('[YouTubeDownloader] Success with CORS proxy');
+        }
+      } catch (e) {
+        lastError = e as Error;
+        console.log('[YouTubeDownloader] CORS proxy failed:', e);
+      }
+    }
+
+    if (!data) {
+      throw lastError || new Error('All Cobalt instances failed');
+    }
 
     if (data.status === 'error') {
       throw new Error(data.text || 'Failed to get video URL');
