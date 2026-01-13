@@ -67,11 +67,16 @@ export function NativeHelperStatus() {
         className="flex items-center gap-1.5 px-2 py-1 rounded text-xs hover:bg-white/10 transition-colors"
         title={isConnected ? 'Native Helper connected - Turbo Mode active' : 'Native Helper not running'}
       >
-        <span style={{ color: isConnected ? '#4ade80' : '#6b7280' }}>
-          {isConnected ? '⚡' : '○'}
-        </span>
-        {isConnected && (
-          <span className="text-green-400 font-medium">Turbo</span>
+        {isConnected ? (
+          <>
+            <span className="text-yellow-400">⚡</span>
+            <span className="text-green-400 font-medium">Turbo</span>
+          </>
+        ) : (
+          <svg className="w-4 h-4 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 6v6l4 2" />
+          </svg>
         )}
       </button>
 
@@ -101,8 +106,11 @@ function NativeHelperDialog({
   const [isClosing, setIsClosing] = useState(false);
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [checking, setChecking] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const { turboModeEnabled, setTurboModeEnabled } = useSettingsStore();
+
+  const quickStartCommands = `chmod +x masterselects-helper && ./masterselects-helper`;
 
   // Fetch system info when connected
   useEffect(() => {
@@ -116,13 +124,23 @@ function NativeHelperDialog({
   const handleClose = useCallback(() => {
     if (isClosing) return;
     setIsClosing(true);
-    setTimeout(onClose, 200);
+    setTimeout(onClose, 150);
   }, [onClose, isClosing]);
 
   const handleRetry = async () => {
     setChecking(true);
     await onRetry();
     setChecking(false);
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(quickStartCommands);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback
+    }
   };
 
   // Handle Escape key
@@ -143,10 +161,24 @@ function NativeHelperDialog({
 
   return (
     <div
-      className={`welcome-overlay-backdrop ${isClosing ? 'closing' : ''}`}
+      className="welcome-overlay-backdrop"
       onClick={handleBackdropClick}
+      style={{
+        animation: 'none',
+        opacity: isClosing ? 0 : 1,
+        transition: 'opacity 150ms ease-out',
+      }}
     >
-      <div className="welcome-overlay" style={{ maxWidth: '480px' }}>
+      <div
+        className="welcome-overlay"
+        style={{
+          maxWidth: '480px',
+          animation: 'none',
+          opacity: isClosing ? 0 : 1,
+          transform: isClosing ? 'scale(0.95)' : 'none',
+          transition: 'opacity 150ms ease-out, transform 150ms ease-out',
+        }}
+      >
         {/* Header */}
         <div className="welcome-tagline">
           <span className={isConnected ? 'welcome-tag-local' : 'welcome-tag-free'}>
@@ -222,12 +254,26 @@ function NativeHelperDialog({
                 </a>
 
                 <div className="bg-zinc-900 rounded-lg p-3">
-                  <p className="text-xs text-zinc-500 mb-2">Quick start:</p>
-                  <code className="text-xs text-zinc-300 font-mono block">
-                    chmod +x masterselects-helper
-                  </code>
-                  <code className="text-xs text-zinc-300 font-mono block">
-                    ./masterselects-helper
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-zinc-500">Quick start:</p>
+                    <button
+                      onClick={handleCopy}
+                      className="text-xs text-zinc-500 hover:text-white transition-colors"
+                    >
+                      {copied ? '✓ Copied' : 'Copy'}
+                    </button>
+                  </div>
+                  <code
+                    className="text-xs text-zinc-300 font-mono block bg-zinc-800 p-2 rounded select-all cursor-text"
+                    onClick={(e) => {
+                      const selection = window.getSelection();
+                      const range = document.createRange();
+                      range.selectNodeContents(e.currentTarget);
+                      selection?.removeAllRanges();
+                      selection?.addRange(range);
+                    }}
+                  >
+                    {quickStartCommands}
                   </code>
                 </div>
 
@@ -249,7 +295,7 @@ function NativeHelperDialog({
         </div>
 
         {/* Close Button */}
-        <button className="welcome-enter" onClick={handleClose}>
+        <button className="welcome-enter" onClick={handleClose} style={{ marginTop: '16px' }}>
           <span>Close</span>
           <kbd>Esc</kbd>
         </button>
