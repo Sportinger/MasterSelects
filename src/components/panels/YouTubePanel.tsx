@@ -59,6 +59,8 @@ export function YouTubePanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draggingVideo, setDraggingVideo] = useState<string | null>(null);
+  const [autoDownload, setAutoDownload] = useState(false);
+  const [downloadingVideos, setDownloadingVideos] = useState<Set<string>>(new Set());
 
   const { apiKeys, openSettings } = useSettingsStore();
   const youtubeApiKey = apiKeys.youtube || '';
@@ -157,10 +159,17 @@ export function YouTubePanel() {
         // Direct video URL/ID - get info and show it
         const videoInfo = await getVideoInfo(videoId);
         if (videoInfo) {
-          setResults([videoInfo]);
+          setResults(prev => {
+            // Avoid duplicates
+            if (prev.some(v => v.id === videoInfo.id)) return prev;
+            return [videoInfo, ...prev];
+          });
+          // Auto-download if enabled
+          if (autoDownload) {
+            downloadVideoOnly(videoInfo);
+          }
         } else {
           setError('Could not load video info');
-          setResults([]);
         }
       } else if (youtubeApiKey) {
         // Search query with API key
@@ -177,7 +186,7 @@ export function YouTubePanel() {
     } finally {
       setLoading(false);
     }
-  }, [query, youtubeApiKey]);
+  }, [query, youtubeApiKey, autoDownload]);
 
   // Handle Enter key
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -202,6 +211,39 @@ export function YouTubePanel() {
   };
 
   const handleDragEnd = () => setDraggingVideo(null);
+
+  // Download video only (save to downloads folder)
+  const downloadVideoOnly = async (video: YouTubeVideo) => {
+    if (downloadingVideos.has(video.id)) return;
+
+    setDownloadingVideos(prev => new Set(prev).add(video.id));
+
+    const unsubscribe = subscribeToDownload(video.id, (progress: DownloadProgress) => {
+      // Progress tracked via downloadingVideos set
+    });
+
+    try {
+      const file = await downloadYouTubeVideo(video.id, video.title, video.thumbnail);
+      // Trigger browser download
+      const url = URL.createObjectURL(file);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${video.title.replace(/[^a-zA-Z0-9 ]/g, '')}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(`Download failed: ${(err as Error).message}`);
+    } finally {
+      setDownloadingVideos(prev => {
+        const next = new Set(prev);
+        next.delete(video.id);
+        return next;
+      });
+      unsubscribe();
+    }
+  };
 
   // Add video to timeline
   const addVideoToTimeline = async (video: YouTubeVideo) => {
@@ -246,6 +288,13 @@ export function YouTubePanel() {
     }
   };
 
+  // Auto-download when video is added to results
+  const handleVideoAdded = async (video: YouTubeVideo) => {
+    if (autoDownload && !downloadingVideos.has(video.id)) {
+      downloadVideoOnly(video);
+    }
+  };
+
   return (
     <div className="youtube-panel">
       <div className="youtube-header">
@@ -278,6 +327,14 @@ export function YouTubePanel() {
               </button>
             </>
           )}
+          <label className="auto-download-toggle">
+            <input
+              type="checkbox"
+              checked={autoDownload}
+              onChange={(e) => setAutoDownload(e.target.checked)}
+            />
+            <span>Auto Download</span>
+          </label>
         </div>
 
         {!youtubeApiKey && (
@@ -305,7 +362,7 @@ export function YouTubePanel() {
             {results.map((video) => (
               <div
                 key={video.id}
-                className={`youtube-video-card ${draggingVideo === video.id ? 'dragging' : ''}`}
+                className={`youtube-video-card ${draggingVideo === video.id ? 'dragging' : ''} ${downloadingVideos.has(video.id) ? 'downloading' : ''}`}
                 draggable
                 onDragStart={(e) => handleDragStart(e, video)}
                 onDragEnd={handleDragEnd}
@@ -313,26 +370,44 @@ export function YouTubePanel() {
               >
                 <div className="video-thumbnail">
                   <img src={video.thumbnail} alt={video.title} loading="lazy" draggable={false} />
+                  {/* Text overlay on thumbnail */}
+                  <div className="video-info-overlay">
+                    <h4 className="video-title">{video.title}</h4>
+                    <span className="video-channel">{video.channel}</span>
+                  </div>
                   <span className="video-duration">{video.duration}</span>
-                  <button
-                    className="btn-copy-url"
-                    onClick={(e) => { e.stopPropagation(); copyVideoUrl(video.id); }}
-                    title="Copy URL"
-                  >
-                    Copy
-                  </button>
-                  <button
-                    className="btn-add-timeline"
-                    onClick={(e) => { e.stopPropagation(); addVideoToTimeline(video); }}
-                    title="Add to timeline"
-                  >
-                    +
-                  </button>
-                </div>
-                <div className="video-info">
-                  <h4 className="video-title">{video.title}</h4>
-                  <span className="video-channel">{video.channel}</span>
-                  {video.views && <span className="video-views">{video.views}</span>}
+                  {/* Action buttons */}
+                  <div className="video-actions">
+                    <button
+                      className="btn-download"
+                      onClick={(e) => { e.stopPropagation(); downloadVideoOnly(video); }}
+                      title="Download video"
+                      disabled={downloadingVideos.has(video.id)}
+                    >
+                      {downloadingVideos.has(video.id) ? '...' : '↓'}
+                    </button>
+                    <button
+                      className="btn-add-timeline"
+                      onClick={(e) => { e.stopPropagation(); addVideoToTimeline(video); }}
+                      title="Add to timeline"
+                    >
+                      +
+                    </button>
+                    <button
+                      className="btn-copy-url"
+                      onClick={(e) => { e.stopPropagation(); copyVideoUrl(video.id); }}
+                      title="Copy URL"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  {/* Downloading indicator */}
+                  {downloadingVideos.has(video.id) && (
+                    <div className="download-overlay">
+                      <div className="download-spinner" />
+                      <span>Downloading...</span>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
