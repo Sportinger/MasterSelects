@@ -44,16 +44,22 @@ export class NativeDecoder {
    * Open a video file and create a decoder
    */
   static async open(filePath: string, options?: NativeDecoderOptions): Promise<NativeDecoder> {
+    console.log('[NativeDecoder] Opening file:', filePath);
+
     // Ensure connected
     if (!NativeHelperClient.isConnected()) {
+      console.log('[NativeDecoder] Not connected, connecting...');
       const connected = await NativeHelperClient.connect();
       if (!connected) {
         throw new Error('Failed to connect to native helper');
       }
+      console.log('[NativeDecoder] Connected successfully');
     }
 
     // Open file
+    console.log('[NativeDecoder] Sending open command...');
     const metadata = await NativeHelperClient.openFile(filePath);
+    console.log('[NativeDecoder] Got metadata:', metadata);
 
     return new NativeDecoder(metadata.file_id, metadata, options ?? {});
   }
