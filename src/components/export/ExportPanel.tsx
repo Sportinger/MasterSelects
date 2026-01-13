@@ -27,8 +27,202 @@ import type {
   DnxhrProfile,
   HapFormat,
 } from '../../engine/ffmpeg';
+import type { Layer, TimelineClip, TimelineTrack } from '../../types';
 
 type EncoderType = 'webcodecs' | 'ffmpeg';
+
+// Helper: Seek all video clips to exact time for frame-accurate export
+async function seekAllClipsToTime(time: number): Promise<void> {
+  const { clips, tracks, getSourceTimeForClip, getInterpolatedSpeed } = useTimelineStore.getState();
+  const seekPromises: Promise<void>[] = [];
+
+  // Add timeout wrapper to prevent hanging - critical for WebCodecs seekAsync
+  const withTimeout = (promise: Promise<void>, ms: number): Promise<void> => {
+    return Promise.race([
+      promise,
+      new Promise<void>(resolve => setTimeout(resolve, ms))
+    ]);
+  };
+
+  // Get clips at this time
+  const clipsAtTime = clips.filter(
+    c => time >= c.startTime && time < c.startTime + c.duration
+  );
+
+  for (const clip of clipsAtTime) {
+    const track = tracks.find(t => t.id === clip.trackId);
+    if (!track?.visible) continue;
+
+    // Handle nested composition clips
+    if (clip.isComposition && clip.nestedClips) {
+      const clipLocalTime = time - clip.startTime;
+      const nestedTime = clipLocalTime + (clip.inPoint || 0);
+
+      for (const nestedClip of clip.nestedClips) {
+        if (nestedTime >= nestedClip.startTime && nestedTime < nestedClip.startTime + nestedClip.duration) {
+          if (nestedClip.source?.videoElement) {
+            const nestedLocalTime = nestedTime - nestedClip.startTime;
+            const nestedClipTime = nestedClip.reversed
+              ? nestedClip.outPoint - nestedLocalTime
+              : nestedLocalTime + nestedClip.inPoint;
+
+            if (nestedClip.source.webCodecsPlayer) {
+              // Use timeout to prevent WebCodecs seekAsync from hanging
+              seekPromises.push(withTimeout(nestedClip.source.webCodecsPlayer.seekAsync(nestedClipTime), 500));
+            } else {
+              seekPromises.push(seekVideo(nestedClip.source.videoElement, nestedClipTime));
+            }
+          }
+        }
+      }
+      continue;
+    }
+
+    // Handle regular video clips
+    if (clip.source?.type === 'video' && clip.source.videoElement) {
+      const clipLocalTime = time - clip.startTime;
+      let clipTime: number;
+
+      try {
+        const sourceTime = getSourceTimeForClip(clip.id, clipLocalTime);
+        const initialSpeed = getInterpolatedSpeed(clip.id, 0);
+        const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
+        clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
+      } catch {
+        clipTime = clip.reversed
+          ? clip.outPoint - clipLocalTime
+          : clipLocalTime + clip.inPoint;
+        clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, clipTime));
+      }
+
+      if (clip.source.webCodecsPlayer) {
+        // Use timeout to prevent WebCodecs seekAsync from hanging
+        seekPromises.push(withTimeout(clip.source.webCodecsPlayer.seekAsync(clipTime), 500));
+      } else {
+        seekPromises.push(seekVideo(clip.source.videoElement, clipTime));
+      }
+    }
+  }
+
+  await Promise.all(seekPromises);
+}
+
+// Helper: Seek HTMLVideoElement to exact time
+function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
+  return new Promise((resolve) => {
+    const targetTime = Math.max(0, Math.min(time, video.duration || 0));
+
+    // If already at target time, just wait for frame
+    if (Math.abs(video.currentTime - targetTime) < 0.01 && !video.seeking && video.readyState >= 3) {
+      requestAnimationFrame(() => resolve());
+      return;
+    }
+
+    // Set timeout in case seek never completes
+    const timeout = setTimeout(() => {
+      video.removeEventListener('seeked', onSeeked);
+      resolve();
+    }, 500);
+
+    const onSeeked = () => {
+      clearTimeout(timeout);
+      video.removeEventListener('seeked', onSeeked);
+      // Wait one frame for the video texture to update
+      requestAnimationFrame(() => resolve());
+    };
+
+    video.addEventListener('seeked', onSeeked);
+    video.currentTime = targetTime;
+  });
+}
+
+// Helper: Build render layers at specific time
+function buildLayersAtTime(time: number): Layer[] {
+  const { clips, tracks, getInterpolatedTransform, getInterpolatedEffects } = useTimelineStore.getState();
+  const layers: Layer[] = [];
+
+  const videoTracks = tracks.filter(t => t.type === 'video');
+  const anyVideoSolo = videoTracks.some(t => t.solo);
+
+  const isTrackVisible = (track: TimelineTrack) => {
+    if (!track.visible) return false;
+    if (anyVideoSolo) return track.solo;
+    return true;
+  };
+
+  const clipsAtTime = clips.filter(
+    c => time >= c.startTime && time < c.startTime + c.duration
+  );
+
+  // Sort by track order (bottom to top)
+  const sortedTracks = [...videoTracks].sort((a, b) => {
+    const aIndex = tracks.indexOf(a);
+    const bIndex = tracks.indexOf(b);
+    return bIndex - aIndex; // Higher index = lower track = rendered first
+  });
+
+  for (const track of sortedTracks) {
+    if (!isTrackVisible(track)) continue;
+
+    const trackClips = clipsAtTime.filter(c => c.trackId === track.id);
+
+    for (const clip of trackClips) {
+      const layer = buildLayerFromClip(clip, time, getInterpolatedTransform, getInterpolatedEffects);
+      if (layer) {
+        layers.push(layer);
+      }
+    }
+  }
+
+  return layers;
+}
+
+// Helper: Build a single layer from a clip
+function buildLayerFromClip(
+  clip: TimelineClip,
+  time: number,
+  getInterpolatedTransform: (clipId: string, localTime: number) => any,
+  getInterpolatedEffects: (clipId: string, localTime: number) => any
+): Layer | null {
+  const clipLocalTime = time - clip.startTime;
+  const transform = getInterpolatedTransform(clip.id, clipLocalTime);
+  const effects = getInterpolatedEffects(clip.id, clipLocalTime);
+
+  // Handle nested compositions
+  if (clip.isComposition && clip.nestedClips && clip.nestedTracks) {
+    // For nested compositions, we need to get the rendered frame from nested clips
+    // This is simplified - full implementation would recurse
+    return null;
+  }
+
+  // Handle video/image clips
+  if (clip.source?.videoElement || clip.source?.imageElement) {
+    const source = clip.source.videoElement || clip.source.imageElement;
+    if (!source) return null;
+
+    return {
+      id: clip.id,
+      source,
+      sourceType: clip.source.videoElement ? 'video' : 'image',
+      visible: true,
+      opacity: transform.opacity ?? 1,
+      blendMode: transform.blendMode ?? 'normal',
+      transform: {
+        x: transform.x ?? 0,
+        y: transform.y ?? 0,
+        scaleX: transform.scaleX ?? 1,
+        scaleY: transform.scaleY ?? 1,
+        rotation: transform.rotation ?? 0,
+        anchorX: transform.anchorX ?? 0.5,
+        anchorY: transform.anchorY ?? 0.5,
+      },
+      effects: effects || [],
+      crop: clip.crop,
+    };
+  }
+
+  return null;
+}
 
 export function ExportPanel() {
   const { duration, inPoint, outPoint, playheadPosition, startExport, setExportProgress, endExport } = useTimelineStore();
@@ -365,15 +559,52 @@ export function ExportPanel() {
       console.log('[ExportPanel] Rendering frames for FFmpeg...');
       const frames: Uint8Array[] = [];
       const totalFrames = Math.ceil((endTime - startTime) * exportFps);
+      const frameDuration = 1 / exportFps;
+
+      console.log(`[ExportPanel] Total frames: ${totalFrames}, duration: ${frameDuration.toFixed(4)}s per frame`);
+
+      // Set engine to export mode and correct resolution
+      engine.setExporting(true);
+      engine.setResolution(actualWidth, actualHeight);
+
+      const frameStartTime = performance.now();
 
       for (let i = 0; i < totalFrames; i++) {
-        const time = startTime + (i / exportFps);
-        useTimelineStore.getState().setPlayheadPosition(time);
-        await new Promise(resolve => requestAnimationFrame(resolve));
+        const time = startTime + i * frameDuration;
+
+        // Seek all video clips to the exact frame time
+        await seekAllClipsToTime(time);
+
+        // Small delay to ensure video frame is decoded (browser needs time after seek)
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        // Wait for frame to be rendered - use two rAFs to ensure texture update
+        await new Promise(resolve => requestAnimationFrame(() => {
+          requestAnimationFrame(resolve);
+        }));
+
+        // Build layers at this time and render
+        const layers = buildLayersAtTime(time);
+
+        if (layers.length === 0) {
+          console.warn(`[ExportPanel] No layers at time ${time.toFixed(3)}`);
+        }
+
+        engine.render(layers);
+
+        // Read pixels
         const pixels = await engine.readPixels();
         if (pixels) {
           frames.push(new Uint8Array(pixels.buffer, pixels.byteOffset, pixels.byteLength));
         }
+
+        // Log progress every 30 frames or on first frame
+        if (i === 0 || i % 30 === 0) {
+          const elapsed = (performance.now() - frameStartTime) / 1000;
+          const fps = (i + 1) / elapsed;
+          console.log(`[ExportPanel] Frame ${i + 1}/${totalFrames} at ${time.toFixed(3)}s, ${fps.toFixed(1)} fps, ${layers.length} layers`);
+        }
+
         // Update progress during rendering (0-60% of total)
         const percent = ((i + 1) / totalFrames) * 60;
         setFfmpegProgress({
@@ -389,6 +620,9 @@ export function ExportPanel() {
         // Update timeline export progress
         setExportProgress(percent, time);
       }
+
+      // Reset export mode
+      engine.setExporting(false);
 
       if (frames.length === 0) {
         throw new Error('No frames rendered');
@@ -473,6 +707,8 @@ export function ExportPanel() {
       setError(msg);
       console.error('[ExportPanel] FFmpeg export error:', e);
     } finally {
+      // Always reset export mode
+      engine.setExporting(false);
       setIsExporting(false);
       setExportPhase('idle');
       // End export progress in timeline
