@@ -1,15 +1,18 @@
-// YouTube video downloader service using Cobalt API
-// Cobalt is a free API that extracts video URLs from YouTube and other platforms
+// YouTube video downloader service
+// Uses multiple backends to find a working download source
 
-// Main Cobalt API endpoint
-const COBALT_API = 'https://api.cobalt.tools';
-
-// CORS proxies to try (in order of preference)
-const CORS_PROXIES = [
-  (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  (url: string) => `https://proxy.cors.sh/${url}`,
+// Cobalt API instances (some community instances may have CORS enabled)
+const COBALT_INSTANCES = [
+  'https://api.cobalt.tools',
+  'https://co.eepy.today',
+  'https://cobalt.api.timelessnesses.me',
 ];
+
+// Alternative: use saveservall API (has CORS support)
+const SAVESERVALL_API = 'https://api.saveservall.xyz/download';
+
+// For download URLs that need CORS proxy
+const DOWNLOAD_PROXY = 'https://corsproxy.io/?';
 
 export interface DownloadProgress {
   videoId: string;
@@ -86,110 +89,105 @@ export async function downloadYouTubeVideo(
   notifySubscribers(progress);
 
   try {
-    // Request video URL from Cobalt
+    // Request video URL from download APIs
     progress.status = 'downloading';
     progress.progress = 10;
     notifySubscribers(progress);
 
     const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
-
-    // Cobalt API v7 request body
-    const requestBody = JSON.stringify({
-      url: youtubeUrl,
-      videoQuality: '720',
-      filenameStyle: 'basic',
-    });
-
-    let data: any = null;
+    let downloadUrl: string | null = null;
     let lastError: Error | null = null;
 
-    // Try direct API first (works if CORS is disabled or in Electron)
-    try {
-      console.log('[YouTubeDownloader] Trying direct Cobalt API...');
-      const response = await fetch(COBALT_API, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: requestBody,
-      });
+    // Method 1: Try Cobalt instances
+    for (const instance of COBALT_INSTANCES) {
+      try {
+        console.log(`[YouTubeDownloader] Trying Cobalt: ${instance}...`);
+        const response = await fetch(instance, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({
+            url: youtubeUrl,
+            videoQuality: '720',
+            filenameStyle: 'basic',
+          }),
+        });
 
-      if (response.ok) {
-        data = await response.json();
-        console.log('[YouTubeDownloader] Direct API success');
-      }
-    } catch (e) {
-      lastError = e as Error;
-      console.log('[YouTubeDownloader] Direct API failed (CORS):', (e as Error).message);
-    }
-
-    // Try CORS proxies
-    if (!data || data.status === 'error') {
-      for (let i = 0; i < CORS_PROXIES.length; i++) {
-        const proxyFn = CORS_PROXIES[i];
-        const proxyUrl = proxyFn(COBALT_API);
-        console.log(`[YouTubeDownloader] Trying CORS proxy ${i + 1}...`);
-
-        try {
-          const response = await fetch(proxyUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            body: requestBody,
-          });
-
-          if (response.ok) {
-            const text = await response.text();
-            try {
-              data = JSON.parse(text);
-              if (data.url || data.status === 'tunnel' || data.status === 'redirect') {
-                console.log(`[YouTubeDownloader] CORS proxy ${i + 1} success`);
-                break;
-              }
-            } catch {
-              // Response wasn't JSON, try next proxy
-            }
+        if (response.ok) {
+          const data = await response.json();
+          if (data.url) {
+            downloadUrl = data.url;
+            console.log(`[YouTubeDownloader] Cobalt success: ${instance}`);
+            break;
+          } else if (data.status === 'picker' && data.picker?.[0]?.url) {
+            downloadUrl = data.picker[0].url;
+            console.log(`[YouTubeDownloader] Cobalt picker success: ${instance}`);
+            break;
+          } else if (data.status === 'error') {
+            lastError = new Error(data.text || 'Cobalt error');
           }
-        } catch (e) {
-          lastError = e as Error;
-          console.log(`[YouTubeDownloader] CORS proxy ${i + 1} failed:`, (e as Error).message);
         }
+      } catch (e) {
+        console.log(`[YouTubeDownloader] Cobalt failed: ${instance}`, (e as Error).message);
+        lastError = e as Error;
       }
     }
 
-    if (!data) {
-      throw lastError || new Error('Could not connect to download service. Try again later.');
+    // Method 2: Try SaveServAll API (has CORS)
+    if (!downloadUrl) {
+      try {
+        console.log('[YouTubeDownloader] Trying SaveServAll API...');
+        const response = await fetch(SAVESERVALL_API, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: youtubeUrl,
+            quality: '720p',
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.url || data.download_url) {
+            downloadUrl = data.url || data.download_url;
+            console.log('[YouTubeDownloader] SaveServAll success');
+          }
+        }
+      } catch (e) {
+        console.log('[YouTubeDownloader] SaveServAll failed:', (e as Error).message);
+        lastError = e as Error;
+      }
     }
 
-    if (data.status === 'error') {
-      throw new Error(data.text || data.error?.code || 'Failed to get video URL');
-    }
-
-    if (data.status === 'rate-limit') {
-      throw new Error('Rate limited. Please try again in a few seconds.');
-    }
-
-    // Get the download URL (API v7 format)
-    let downloadUrl = data.url || data.audio;
-
-    // Check for picker response (multiple quality options)
-    if (!downloadUrl && data.status === 'picker' && data.picker?.length > 0) {
-      // Find best video option (prefer mp4)
-      const videoOption = data.picker.find((p: any) => p.type === 'video') || data.picker[0];
-      downloadUrl = videoOption?.url;
-    }
-
-    // Handle tunnel/redirect (direct stream URLs)
-    if (!downloadUrl && (data.status === 'tunnel' || data.status === 'redirect')) {
-      downloadUrl = data.url;
+    // Method 3: Try y2mate-style API via CORS proxy
+    if (!downloadUrl) {
+      try {
+        console.log('[YouTubeDownloader] Trying fallback API...');
+        // Use a simple video info API that might work
+        const infoUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(youtubeUrl)}&format=json`;
+        const infoResponse = await fetch(infoUrl);
+        if (infoResponse.ok) {
+          // oEmbed works but doesn't give download URL
+          // At this point we need to inform user to use external tool
+          throw new Error('Browser download blocked. Use yt-dlp or cobalt.tools directly.');
+        }
+      } catch (e) {
+        if ((e as Error).message.includes('Browser download')) {
+          throw e;
+        }
+        lastError = e as Error;
+      }
     }
 
     if (!downloadUrl) {
-      console.log('[YouTubeDownloader] Response data:', data);
-      throw new Error('No download URL in response');
+      throw new Error(
+        lastError?.message ||
+        'Download service unavailable. Try using cobalt.tools or yt-dlp directly.'
+      );
     }
 
     progress.progress = 30;
@@ -199,6 +197,7 @@ export async function downloadYouTubeVideo(
     let videoResponse: Response | null = null;
 
     try {
+      console.log('[YouTubeDownloader] Downloading from:', downloadUrl.substring(0, 50) + '...');
       videoResponse = await fetch(downloadUrl);
       if (!videoResponse.ok) {
         videoResponse = null;
@@ -209,7 +208,7 @@ export async function downloadYouTubeVideo(
 
     // Try CORS proxy for download if direct failed
     if (!videoResponse) {
-      const proxyDownloadUrl = CORS_PROXIES[0](downloadUrl);
+      const proxyDownloadUrl = DOWNLOAD_PROXY + encodeURIComponent(downloadUrl);
       videoResponse = await fetch(proxyDownloadUrl);
     }
 
