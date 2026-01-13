@@ -316,15 +316,16 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
         console.log(`[Thumbnails/Waveform] Skipping for large file (${(file.size / 1024 / 1024).toFixed(0)}MB): ${file.name}`);
       }
 
-      if (get().thumbnailsEnabled && !isLargeFile) {
+      // Skip thumbnail generation for NativeDecoder (no video element) or large files
+      if (get().thumbnailsEnabled && !isLargeFile && video) {
         (async () => {
           try {
             // Wait for video to be ready for thumbnails
             await new Promise<void>((resolve) => {
-              if (video.readyState >= 2) {
+              if (video!.readyState >= 2) {
                 resolve();
               } else {
-                video.oncanplay = () => resolve();
+                video!.oncanplay = () => resolve();
                 setTimeout(resolve, 2000); // Timeout fallback
               }
             });
@@ -333,7 +334,7 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
             if (!get().thumbnailsEnabled) return;
 
             console.log(`[Thumbnails] Starting generation for ${file.name}...`);
-            const thumbnails = await generateThumbnails(video, naturalDuration);
+            const thumbnails = await generateThumbnails(video!, naturalDuration);
             console.log(`[Thumbnails] Complete: ${thumbnails.length} thumbnails for ${file.name}`);
 
             // Update clip with thumbnails
@@ -343,15 +344,18 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
             });
 
             // Seek back to start
-            video.currentTime = 0;
+            video!.currentTime = 0;
           } catch (e) {
             console.warn('Failed to generate thumbnails:', e);
           }
         })();
+      } else if (nativeDecoder) {
+        console.log(`[Thumbnails] Skipping for NativeDecoder file: ${file.name} (TODO: implement native thumbnails)`);
       }
 
       // Load audio - make it ready immediately, waveform loads in background
-      if (audioTrackId && audioClipId) {
+      // Skip for NativeDecoder files (browser can't decode ProRes/DNxHD audio)
+      if (audioTrackId && audioClipId && !nativeDecoder) {
         const audioFromVideo = document.createElement('audio');
         audioFromVideo.src = URL.createObjectURL(file);
         audioFromVideo.preload = 'auto';
@@ -398,6 +402,13 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
             }
           })();
         }
+      } else if (audioTrackId && audioClipId && nativeDecoder) {
+        // For NativeDecoder files, mark audio as unavailable (browser can't decode ProRes/DNxHD audio)
+        console.log(`[Audio] Skipping audio for NativeDecoder file: ${file.name} (TODO: implement native audio decoding)`);
+        updateClip(audioClipId, {
+          source: { type: 'audio', naturalDuration, mediaFileId },
+          isLoading: false,
+        });
       }
 
       // Sync to media store
