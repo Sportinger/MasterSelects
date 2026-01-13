@@ -552,6 +552,13 @@ export class FrameExporter {
         }
 
         try {
+          // Verify file is valid
+          console.log(`[FrameExporter] File for "${clip.name}": size=${file.size}, type=${file.type}, name=${file.name}`);
+
+          if (!file.size || file.size === 0) {
+            throw new Error(`File is empty or invalid (size: ${file.size})`);
+          }
+
           // Create dedicated export player with MP4Box (NOT Simple Mode)
           const exportPlayer = new WebCodecsPlayer({
             loop: false,
@@ -559,8 +566,13 @@ export class FrameExporter {
           });
 
           // Load video file directly with MP4Box
-          console.log(`[FrameExporter] Loading "${clip.name}" with MP4Box...`);
+          console.log(`[FrameExporter] Loading "${clip.name}" with MP4Box (${(file.size / 1024 / 1024).toFixed(1)}MB)...`);
           const arrayBuffer = await file.arrayBuffer();
+
+          if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+            throw new Error(`ArrayBuffer is empty (got ${arrayBuffer?.byteLength ?? 0} bytes from ${file.size} byte file)`);
+          }
+
           await exportPlayer.loadArrayBuffer(arrayBuffer);
 
           // Store the export player
