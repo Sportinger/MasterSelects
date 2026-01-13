@@ -794,7 +794,7 @@ export function Timeline() {
 
   // Quick duration check for dragged video files
   const getVideoDurationQuick = async (file: File): Promise<number | null> => {
-    if (!file.type.startsWith('video/')) return null;
+    if (!file.type.startsWith('video/') && !file.name.endsWith('.mov') && !file.name.endsWith('.mxf')) return null;
 
     return new Promise((resolve) => {
       const video = document.createElement('video');
@@ -853,7 +853,7 @@ export function Timeline() {
             const item = items[i];
             if (item.kind === 'file') {
               const file = item.getAsFile();
-              if (file && file.type.startsWith('video/')) {
+              if (file && (file.type.startsWith('video/') || file.name.endsWith('.mov') || file.name.endsWith('.mxf'))) {
                 const cacheKey = `${file.name}_${file.size}`;
                 if (dragDurationCacheRef.current?.url === cacheKey) {
                   dur = dragDurationCacheRef.current.duration;
@@ -1066,7 +1066,7 @@ export function Timeline() {
               const handle = await (item as any).getAsFileSystemHandle();
               if (handle && handle.kind === 'file') {
                 const file = await handle.getFile();
-                if (file.type.startsWith('video/') || file.type.startsWith('audio/') || file.type.startsWith('image/')) {
+                if (file.type.startsWith('video/') || file.type.startsWith('audio/') || file.type.startsWith('image/') || file.name.endsWith('.mov') || file.name.endsWith('.mxf')) {
                   const imported = await mediaStore.importFilesWithHandles([{ file, handle }]);
                   if (imported.length > 0) {
                     addClip(newTrackId, file, startTime, cachedDuration, imported[0].id);
@@ -1082,7 +1082,7 @@ export function Timeline() {
 
           // Fallback to regular file (no handle)
           const file = item.getAsFile();
-          if (file && (file.type.startsWith('video/') || file.type.startsWith('audio/') || file.type.startsWith('image/'))) {
+          if (file && (file.type.startsWith('video/') || file.type.startsWith('audio/') || file.type.startsWith('image/') || file.name.endsWith('.mov') || file.name.endsWith('.mxf'))) {
             const importedFile = await mediaStore.importFile(file);
             addClip(newTrackId, file, startTime, cachedDuration, importedFile?.id);
           }
@@ -1154,8 +1154,10 @@ export function Timeline() {
 
       // Handle external file drop - try to get file handle for persistence
       const items = e.dataTransfer.items;
+      console.log('[Timeline] External drop - items:', items?.length);
       if (items && items.length > 0) {
         const item = items[0];
+        console.log('[Timeline] Item kind:', item.kind, 'type:', item.type);
         if (item.kind === 'file') {
           // Capture rect before async operations (e.currentTarget becomes null after await)
           const rect = e.currentTarget.getBoundingClientRect();
@@ -1169,7 +1171,8 @@ export function Timeline() {
               const handle = await (item as any).getAsFileSystemHandle();
               if (handle && handle.kind === 'file') {
                 const file = await handle.getFile();
-                if (file.type.startsWith('video/') || file.type.startsWith('audio/') || file.type.startsWith('image/')) {
+                console.log('[Timeline] File from handle:', file.name, 'type:', file.type, 'size:', file.size);
+                if (file.type.startsWith('video/') || file.type.startsWith('audio/') || file.type.startsWith('image/') || file.name.endsWith('.mov') || file.name.endsWith('.mxf')) {
                   // Validate track type
                   const fileIsAudio = isAudioFile(file);
                   if (fileIsAudio && isVideoTrack) {
@@ -1196,7 +1199,8 @@ export function Timeline() {
 
           // Fallback to regular file (no handle)
           const file = item.getAsFile();
-          if (file && (file.type.startsWith('video/') || file.type.startsWith('audio/') || file.type.startsWith('image/'))) {
+          console.log('[Timeline] Fallback file:', file?.name, 'type:', file?.type);
+          if (file && (file.type.startsWith('video/') || file.type.startsWith('audio/') || file.type.startsWith('image/') || file.name.endsWith('.mov') || file.name.endsWith('.mxf'))) {
             const fileIsAudio = isAudioFile(file);
             if (fileIsAudio && isVideoTrack) {
               console.log('[Timeline] Audio files can only be dropped on audio tracks');
@@ -1732,19 +1736,19 @@ export function Timeline() {
           {/* Export Progress Overlay */}
           {isExporting && exportRange && (
             <>
-              {/* Progress bar - grows as export progresses */}
+              {/* Progress bar - grows based on percentage (0-100%) */}
               <div
                 className="timeline-export-overlay"
                 style={{
                   left: timeToPixel(exportRange.start),
-                  width: timeToPixel((exportCurrentTime ?? exportRange.start) - exportRange.start),
+                  width: timeToPixel((exportRange.end - exportRange.start) * ((exportProgress ?? 0) / 100)),
                 }}
               />
-              {/* Percentage display - left of render head */}
+              {/* Percentage display - at end of progress bar */}
               <div
                 className="timeline-export-text"
                 style={{
-                  left: timeToPixel(exportCurrentTime ?? exportRange.start) - 10,
+                  left: timeToPixel(exportRange.start + (exportRange.end - exportRange.start) * ((exportProgress ?? 0) / 100)) - 10,
                   transform: 'translateX(-100%)',
                 }}
               >
