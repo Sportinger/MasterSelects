@@ -46,3 +46,8 @@ Thumbs.db
 tmp
 temp
 *.tmp
+
+# FFmpeg WASM build outputs
+ffmpeg-wasm-build/build/
+ffmpeg-wasm-build/dist/
+public/ffmpeg/

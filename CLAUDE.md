@@ -6,19 +6,26 @@
 - `staging` Branch: Entwicklung (kein Auto-Deploy)
 - `master` Branch: Production (Cloudflare baut nur hier)
 
+**WICHTIG - Commit-Regeln:**
+- **IMMER auf `staging` committen** - niemals direkt auf master
+- **NUR PR/Merge zu master wenn User es explizit verlangt!**
+- Nicht selbstständig zu master mergen
+
 ```bash
 # Normal entwickeln auf staging:
 git add . && git commit -m "description" && git push origin staging
 
-# Wenn bereit für Production - VERSION ERHÖHEN!
+# NUR wenn User "merge zu master" oder "PR zu master" sagt:
 # 1. Version in src/version.ts erhöhen (z.B. 1.0.5 -> 1.0.6)
 # 2. Commit & Push auf staging
-# 3. Dann merge zu master:
-git checkout master && git merge staging && git push origin master
-git checkout staging
+# 3. PR erstellen und mergen:
+gh pr create --base master --head staging --title "..." --body "..."
+gh pr merge --merge
+# 4. Staging mit master synchronisieren:
+git fetch origin && git merge origin/master && git push origin staging
 ```
 
-**WICHTIG: Version nur bei MERGE zu master erhöhen!**
+**Version nur bei MERGE zu master erhöhen!**
 - Datei: `src/version.ts`
 - Format: `MAJOR.MINOR.PATCH`
 - VOR dem Merge zu master: PATCH um 1 erhöhen

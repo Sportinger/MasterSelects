@@ -333,15 +333,12 @@ export function AIChatPanel() {
     setError(null);
   }, []);
 
-  // Render empty state if no API key
-  if (!hasApiKey) {
-    return (
-      <div className="ai-chat-panel">
-        <div className="ai-chat-header">
-          <h2>AI Editor</h2>
-        </div>
-        <div className="ai-chat-empty">
-          <div className="ai-chat-no-key">
+  return (
+    <div className={`ai-chat-panel ${!hasApiKey ? 'no-api-key' : ''}`}>
+      {/* API Key Required Overlay */}
+      {!hasApiKey && (
+        <div className="ai-panel-overlay">
+          <div className="ai-panel-overlay-content">
             <span className="no-key-icon">🔑</span>
             <p>OpenAI API key required</p>
             <button className="btn-settings" onClick={openSettings}>
@@ -349,12 +346,7 @@ export function AIChatPanel() {
             </button>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="ai-chat-panel">
+      )}
       {/* Header */}
       <div className="ai-chat-header">
         <h2>AI Editor</h2>

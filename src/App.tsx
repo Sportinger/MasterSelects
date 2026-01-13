@@ -4,13 +4,24 @@ import { useState, useCallback, useEffect } from 'react';
 import { Toolbar } from './components';
 import { DockContainer } from './components/dock';
 import { WelcomeOverlay } from './components/common/WelcomeOverlay';
+import { MobileApp } from './components/mobile';
 import { useGlobalHistory } from './hooks/useGlobalHistory';
 import { useClipPanelSync } from './hooks/useClipPanelSync';
+import { useIsMobile, useForceMobile } from './hooks/useIsMobile';
 import { projectDB } from './services/projectDB';
 import { projectFileService } from './services/projectFileService';
 import './App.css';
 
 function App() {
+  // Mobile detection
+  const isMobile = useIsMobile();
+  const forceMobile = useForceMobile();
+  const showMobileUI = isMobile || forceMobile;
+
+  // Render mobile UI if on mobile device
+  if (showMobileUI) {
+    return <MobileApp />;
+  }
   // Initialize global undo/redo system
   useGlobalHistory();
 

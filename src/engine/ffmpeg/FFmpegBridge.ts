@@ -9,7 +9,7 @@ import type {
   FFmpegVideoCodec,
 } from './types';
 
-// FFmpeg WASM core interface (from @ffmpeg/ffmpeg)
+// FFmpeg WASM core interface (direct core, not @ffmpeg/ffmpeg wrapper)
 interface FFmpegCore {
   FS: {
     writeFile: (path: string, data: Uint8Array) => void;
@@ -18,9 +18,11 @@ interface FFmpegCore {
     readdir: (path: string) => string[];
     mkdir: (path: string) => void;
   };
-  exec: (args: string[]) => Promise<number>;
-  on: (event: string, callback: (data: unknown) => void) => void;
-  terminate: () => void;
+  callMain: (args: string[]) => number;
+  setLogger: (logger: (log: { type: string; message: string }) => void) => void;
+  setProgress: (handler: (progress: { progress: number; time: number }) => void) => void;
+  reset: () => void;
+  ret: number;
 }
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
@@ -76,64 +78,57 @@ export class FFmpegBridge {
     const startTime = performance.now();
 
     try {
-      // Dynamic import of @ffmpeg/ffmpeg
-      const { FFmpeg } = await import('@ffmpeg/ffmpeg');
-      const { toBlobURL } = await import('@ffmpeg/util');
+      // Load FFmpeg core directly (bypassing @ffmpeg/ffmpeg wrapper which has issues)
+      const baseURL = `${window.location.origin}/ffmpeg`;
 
-      const ffmpeg = new FFmpeg();
+      console.log('[FFmpegBridge] Fetching ffmpeg-core.js...');
+      const coreModule = await import(/* @vite-ignore */ `${baseURL}/ffmpeg-core.js`);
 
-      // Set up logging
-      ffmpeg.on('log', ({ message }: { message: string }) => {
-        this.handleLog('info', message);
-      });
-
-      // Set up progress
-      ffmpeg.on('progress', ({ progress, time }: { progress: number; time: number }) => {
-        if (this.onProgress && this.totalFrames > 0) {
-          const elapsed = (performance.now() - this.startTime) / 1000;
-          const speed = elapsed > 0 ? progress / elapsed : 0;
-          const remaining = speed > 0 ? (1 - progress) / speed : 0;
-
-          this.onProgress({
-            frame: Math.floor(progress * this.totalFrames),
-            fps: speed * 30, // Approximate
-            time,
-            speed,
-            bitrate: 0,
-            size: 0,
-            percent: progress * 100,
-            eta: remaining,
-          });
-        }
-      });
-
-      // Load FFmpeg core from CDN
-      // Use single-threaded version if SharedArrayBuffer not available
-      const hasSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined';
-      const baseURL = hasSharedArrayBuffer
-        ? 'https://unpkg.com/@ffmpeg/core-mt@0.12.6/dist/esm'  // Multi-threaded (faster)
-        : 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';     // Single-threaded (compatible)
-
-      console.log(`[FFmpegBridge] Using ${hasSharedArrayBuffer ? 'multi-threaded' : 'single-threaded'} core`);
-
-      // Download FFmpeg core files (can take a while on first load)
-      console.log('[FFmpegBridge] Downloading ffmpeg-core.js...');
-      const coreURL = await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript');
-      console.log('[FFmpegBridge] Downloading ffmpeg-core.wasm (~30MB)...');
-      const wasmURL = await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm');
-
-      const loadConfig: Record<string, unknown> = { coreURL, wasmURL };
-
-      // Multi-threaded version needs worker
-      if (hasSharedArrayBuffer) {
-        console.log('[FFmpegBridge] Downloading ffmpeg-core.worker.js...');
-        loadConfig.workerURL = await toBlobURL(`${baseURL}/ffmpeg-core.worker.js`, 'text/javascript');
-      }
+      console.log('[FFmpegBridge] Fetching ffmpeg-core.wasm...');
+      const wasmBinary = await fetch(`${baseURL}/ffmpeg-core.wasm`).then(r => r.arrayBuffer());
 
       console.log('[FFmpegBridge] Initializing FFmpeg core...');
-      await ffmpeg.load(loadConfig);
+      const core = await coreModule.default({
+        wasmBinary,
+        // Capture stdout/stderr
+        print: (message: string) => {
+          console.log('[FFmpeg]', message);
+          this.handleLog('info', message);
+        },
+        printErr: (message: string) => {
+          if (!message.startsWith('Aborted')) {
+            console.log('[FFmpeg ERR]', message);
+            this.handleLog('warning', message);
+          }
+        },
+      }) as FFmpegCore;
 
-      this.ffmpeg = ffmpeg as unknown as FFmpegCore;
+      // Set up progress handler
+      if (core.setProgress) {
+        core.setProgress(({ progress, time }) => {
+          if (this.onProgress && this.totalFrames > 0) {
+            const elapsed = (performance.now() - this.startTime) / 1000;
+            const speed = elapsed > 0 ? progress / elapsed : 0;
+            const remaining = speed > 0 ? (1 - progress) / speed : 0;
+
+            this.onProgress({
+              frame: Math.floor(progress * this.totalFrames),
+              fps: speed * 30,
+              time,
+              speed,
+              bitrate: 0,
+              size: 0,
+              percent: progress * 100,
+              eta: remaining,
+            });
+          }
+        });
+      }
+
+      // Debug: expose to window for testing
+      (window as unknown as Record<string, unknown>).ffmpegCore = core;
+
+      this.ffmpeg = core;
 
       const loadTime = ((performance.now() - startTime) / 1000).toFixed(2);
       console.log(`[FFmpegBridge] Loaded in ${loadTime}s`);
@@ -239,8 +234,13 @@ export class FFmpegBridge {
       const args = this.buildArgs(settings);
       console.log('[FFmpegBridge] Running: ffmpeg', args.join(' '));
 
-      // Execute FFmpeg
-      const exitCode = await this.ffmpeg.exec(args);
+      // Reset state before running
+      if (this.ffmpeg.reset) {
+        this.ffmpeg.reset();
+      }
+
+      // Execute FFmpeg (callMain is synchronous but may take a while)
+      const exitCode = this.ffmpeg.callMain(args);
       if (exitCode !== 0) {
         throw new Error(`FFmpeg exited with code ${exitCode}`);
       }
@@ -511,8 +511,13 @@ export class FFmpegBridge {
       console.log('[FFmpegBridge] Extracting audio: ffmpeg', args.join(' '));
       onProgress?.(30);
 
+      // Reset state before running
+      if (this.ffmpeg.reset) {
+        this.ffmpeg.reset();
+      }
+
       // Execute FFmpeg
-      const exitCode = await this.ffmpeg.exec(args);
+      const exitCode = this.ffmpeg.callMain(args);
 
       onProgress?.(90);
 
@@ -552,9 +557,7 @@ export class FFmpegBridge {
    */
   terminate(): void {
     if (this.ffmpeg) {
-      try {
-        this.ffmpeg.terminate();
-      } catch { /* ignore */ }
+      // Core doesn't have terminate, just clear reference
       this.ffmpeg = null;
       this.loadState = 'idle';
       this.loadPromise = null;

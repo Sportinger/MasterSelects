@@ -6,6 +6,64 @@
   height: 100%;
   background: var(--bg-secondary);
   color: var(--text-primary);
+  position: relative;
+}
+
+/* Blur content when no API key */
+.ai-video-panel.no-api-key > *:not(.ai-video-overlay) {
+  filter: blur(2px);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* API Key Overlay */
+.ai-video-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.ai-video-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.ai-video-overlay-content .no-key-icon {
+  font-size: 28px;
+}
+
+.ai-video-overlay-content p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.ai-video-overlay-content .no-key-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.ai-video-overlay-content .btn-settings {
+  padding: 8px 16px;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  color: var(--bg-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.ai-video-overlay-content .btn-settings:hover {
+  background: var(--accent-hover);
 }
 
 /* Panel tabs row with service dropdown */

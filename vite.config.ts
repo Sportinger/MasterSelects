@@ -20,16 +20,16 @@ export default defineConfig({
   server: {
     headers: {
       // Required for SharedArrayBuffer (FFmpeg multi-threaded, cross-tab sync)
-      // Note: 'require-corp' breaks Local Whisper (transformers.js from HuggingFace CDN)
-      // Online Whisper APIs (OpenAI, AssemblyAI, Deepgram) still work
+      // Using 'credentialless' instead of 'require-corp' to allow CDN resources
+      // (FFmpeg WASM from unpkg, transformers.js from HuggingFace)
       'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Embedder-Policy': 'credentialless',
     },
   },
   preview: {
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Embedder-Policy': 'credentialless',
     },
   },
   build: {

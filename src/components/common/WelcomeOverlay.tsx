@@ -1,14 +1,85 @@
 // WelcomeOverlay - First-time user welcome with folder picker
 // Shows on first load to ask for project storage folder
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { isFileSystemAccessSupported } from '../../services/fileSystemService';
 import { projectFileService } from '../../services/projectFileService';
 import { openExistingProject } from '../../services/projectSync';
 
+// Detect browser name and if it's Chromium-based
+function detectBrowser(): { name: string; isChromium: boolean } {
+  const ua = navigator.userAgent;
+
+  // Check specific browsers (order matters - more specific first)
+  if (/Edg\//.test(ua)) {
+    return { name: 'Microsoft Edge', isChromium: true };
+  }
+  if (/OPR\//.test(ua) || /Opera/.test(ua)) {
+    return { name: 'Opera', isChromium: true };
+  }
+  if (/Chrome\//.test(ua) && !/Chromium\//.test(ua)) {
+    return { name: 'Google Chrome', isChromium: true };
+  }
+  if (/Chromium\//.test(ua)) {
+    return { name: 'Chromium', isChromium: true };
+  }
+  if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) {
+    return { name: 'Safari', isChromium: false };
+  }
+  if (/Firefox\//.test(ua)) {
+    return { name: 'Firefox', isChromium: false };
+  }
+
+  return { name: 'Unknown Browser', isChromium: false };
+}
+
+// Detect operating system
+function detectOS(): { name: string; isLinux: boolean } {
+  const ua = navigator.userAgent;
+  const platform = navigator.platform?.toLowerCase() || '';
+
+  if (/Linux/.test(ua) && !/Android/.test(ua)) {
+    return { name: 'Linux', isLinux: true };
+  }
+  if (/Windows/.test(ua)) {
+    return { name: 'Windows', isLinux: false };
+  }
+  if (/Mac OS|Macintosh/.test(ua)) {
+    return { name: 'macOS', isLinux: false };
+  }
+  if (/Android/.test(ua)) {
+    return { name: 'Android', isLinux: false };
+  }
+  if (/iPhone|iPad|iPod/.test(ua)) {
+    return { name: 'iOS', isLinux: false };
+  }
+  if (platform.includes('linux')) {
+    return { name: 'Linux', isLinux: true };
+  }
+
+  return { name: 'Unknown OS', isLinux: false };
+}
+
 interface WelcomeOverlayProps {
   onComplete: () => void;
 }
+
+// Typewriter sequence with typo correction
+const TYPEWRITER_SEQUENCE = [
+  { action: 'type', text: 'Local', class: 'local' },
+  { action: 'pause', duration: 400 },
+  { action: 'type', text: '·', class: 'dot' },
+  { action: 'type', text: 'Private', class: 'private' },
+  { action: 'pause', duration: 350 },
+  { action: 'type', text: '·', class: 'dot' },
+  { action: 'type', text: 'Tre', class: 'free' },  // Typo!
+  { action: 'pause', duration: 280 },
+  { action: 'delete', count: 3 },                   // Delete "Tre"
+  { action: 'pause', duration: 200 },
+  { action: 'type', text: 'Free', class: 'free' }, // Correct it
+  { action: 'pause', duration: 400 },
+  { action: 'hideCursor' },
+];
 
 export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
   const [isSelecting, setIsSelecting] = useState(false);
@@ -16,7 +87,112 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Typewriter state
+  const [typewriterParts, setTypewriterParts] = useState<Array<{ text: string; class: string }>>([]);
+  const [cursorVisible, setCursorVisible] = useState(false);
+  const [cursorBlink, setCursorBlink] = useState(true);
+
   const isSupported = isFileSystemAccessSupported();
+  const browser = useMemo(() => detectBrowser(), []);
+  const os = useMemo(() => detectOS(), []);
+
+  // Typewriter effect
+  useEffect(() => {
+    let step = 0;
+    let charIndex = 0;
+    let deleteCount = 0;
+    let cancelled = false;
+    const timeouts: ReturnType<typeof setTimeout>[] = [];
+
+    const scheduleNext = (fn: () => void, delay: number) => {
+      const t = setTimeout(fn, delay);
+      timeouts.push(t);
+      return t;
+    };
+
+    const randomDelay = (base: number, variance: number) =>
+      base + Math.random() * variance - variance / 2;
+
+    const processStep = () => {
+      if (cancelled || step >= TYPEWRITER_SEQUENCE.length) return;
+
+      const action = TYPEWRITER_SEQUENCE[step];
+
+      if (action.action === 'type' && action.text) {
+        if (charIndex < action.text.length) {
+          const char = action.text[charIndex];
+          setTypewriterParts(prev => {
+            const newParts = [...prev];
+            const lastPart = newParts[newParts.length - 1];
+            if (lastPart && lastPart.class === action.class) {
+              newParts[newParts.length - 1] = { ...lastPart, text: lastPart.text + char };
+            } else {
+              newParts.push({ text: char, class: action.class! });
+            }
+            return newParts;
+          });
+          charIndex++;
+          scheduleNext(processStep, randomDelay(75, 45));
+        } else {
+          step++;
+          charIndex = 0;
+          scheduleNext(processStep, randomDelay(30, 20));
+        }
+      } else if (action.action === 'pause') {
+        step++;
+        scheduleNext(processStep, action.duration || 300);
+      } else if (action.action === 'delete') {
+        const toDelete = action.count || 1;
+        if (deleteCount < toDelete) {
+          setTypewriterParts(prev => {
+            const newParts = [...prev];
+            const lastPart = newParts[newParts.length - 1];
+            if (lastPart && lastPart.text.length > 0) {
+              newParts[newParts.length - 1] = { ...lastPart, text: lastPart.text.slice(0, -1) };
+              if (newParts[newParts.length - 1].text.length === 0) {
+                newParts.pop();
+              }
+            }
+            return newParts;
+          });
+          deleteCount++;
+          scheduleNext(processStep, randomDelay(50, 25));
+        } else {
+          step++;
+          deleteCount = 0;
+          scheduleNext(processStep, randomDelay(30, 20));
+        }
+      } else if (action.action === 'hideCursor') {
+        setCursorBlink(false);
+        setCursorVisible(false);
+      }
+    };
+
+    // Reset state for fresh start (handles Strict Mode remount)
+    setTypewriterParts([]);
+    setCursorVisible(false);
+    setCursorBlink(true);
+
+    // Start after overlay fade-in animation (1.0s delay + 0.4s animation + buffer)
+    scheduleNext(() => {
+      setCursorVisible(true);
+      processStep();
+    }, 1600);
+
+    return () => {
+      cancelled = true;
+      timeouts.forEach(t => clearTimeout(t));
+    };
+  }, []);
+
+  // Cursor blink
+  useEffect(() => {
+    if (!cursorBlink) return;
+    const interval = setInterval(() => {
+      setCursorVisible(prev => !prev);
+    }, 530);
+    return () => clearInterval(interval);
+  }, [cursorBlink]);
 
   const handleSelectFolder = useCallback(async () => {
     if (isSelecting || isClosing) return;
@@ -127,13 +303,12 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
   return (
     <div className={`welcome-overlay-backdrop ${isClosing ? 'closing' : ''}`}>
       <div className="welcome-overlay">
-        {/* Privacy tagline */}
+        {/* Privacy tagline - Typewriter effect */}
         <div className="welcome-tagline">
-          <span className="welcome-tag-local">Local</span>
-          <span className="welcome-tag-dot">·</span>
-          <span className="welcome-tag-private">Private</span>
-          <span className="welcome-tag-dot">·</span>
-          <span className="welcome-tag-free">Free</span>
+          {typewriterParts.map((part, i) => (
+            <span key={i} className={`welcome-tag-${part.class}`}>{part.text}</span>
+          ))}
+          <span className={`welcome-cursor ${cursorVisible ? 'visible' : ''}`}>|</span>
         </div>
 
         {/* Title */}
@@ -144,19 +319,61 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
 
         <p className="welcome-subtitle">Video editing in your browser</p>
 
-        {/* Folder Selection Card */}
-        <div className="welcome-folder-card">
-          <div className="welcome-folder-card-header">
-            <span className="welcome-folder-card-label">Project</span>
-            <span className="welcome-folder-card-optional">required</span>
+        {/* Browser Warning for non-Chromium browsers */}
+        {!browser.isChromium && (
+          <div className="welcome-browser-warning">
+            <svg className="welcome-browser-warning-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span className="welcome-browser-warning-label">Unsupported Browser</span>
+            <span className="welcome-browser-warning-name">{browser.name}</span>
+            <span className="welcome-browser-warning-desc">MasterSelects requires WebGPU which is currently only fully supported in Chrome.</span>
+            <a className="welcome-browser-warning-btn" href="https://www.google.com/chrome/" target="_blank" rel="noopener noreferrer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <circle cx="12" cy="12" r="4"/>
+                <line x1="21.17" y1="8" x2="12" y2="8"/>
+                <line x1="3.95" y1="6.06" x2="8.54" y2="14"/>
+                <line x1="10.88" y1="21.94" x2="15.46" y2="14"/>
+              </svg>
+              Download Chrome
+            </a>
           </div>
+        )}
 
-          {!isSupported ? (
-            <p className="welcome-note">
-              Your browser does not support local file storage.
-              Please use Chrome, Edge, or another Chromium-based browser.
-            </p>
-          ) : (
+        {/* OS Warning for non-Linux systems (only show if browser is supported) */}
+        {browser.isChromium && !os.isLinux && (
+          <div className="welcome-browser-warning welcome-os-warning">
+            <svg className="welcome-browser-warning-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span className="welcome-browser-warning-label">Limited Performance</span>
+            <span className="welcome-browser-warning-name">{os.name}</span>
+            <span className="welcome-browser-warning-desc">
+              WebGPU performance on {os.name} is currently limited.
+              For best results, use Linux with Vulkan drivers enabled.
+            </span>
+          </div>
+        )}
+
+        {/* Folder Selection Card - hide if browser not supported */}
+        {(isSupported || browser.isChromium) && (
+          <div className="welcome-folder-card">
+            <div className="welcome-folder-card-header">
+              <span className="welcome-folder-card-label">Project</span>
+              <span className="welcome-folder-card-optional">required</span>
+            </div>
+
+            {!isSupported ? (
+              <p className="welcome-note">
+                Your browser does not support local file storage.
+                Please use Chrome, Edge, or another Chromium-based browser.
+              </p>
+            ) : (
             <div className="welcome-folder-buttons">
               {/* New Project Button */}
               <button
@@ -209,8 +426,9 @@ export function WelcomeOverlay({ onComplete }: WelcomeOverlayProps) {
             </div>
           )}
 
-          {error && <p className="welcome-error">{error}</p>}
-        </div>
+            {error && <p className="welcome-error">{error}</p>}
+          </div>
+        )}
 
         {/* Enter hint */}
         <button className="welcome-enter" onClick={handleContinue}>
