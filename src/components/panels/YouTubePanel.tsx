@@ -144,8 +144,8 @@ export function YouTubePanel() {
   };
 
   // Main search/add handler
-  const handleSearch = useCallback(async () => {
-    const input = query.trim();
+  const handleSearch = useCallback(async (overrideQuery?: string) => {
+    const input = (overrideQuery ?? query).trim();
     if (!input) return;
 
     setLoading(true);
@@ -164,6 +164,8 @@ export function YouTubePanel() {
             if (prev.some(v => v.id === videoInfo.id)) return prev;
             return [videoInfo, ...prev];
           });
+          // Clear input for next paste
+          setQuery('');
           // Auto-download if enabled
           if (autoDownload) {
             downloadVideoOnly(videoInfo);
@@ -191,6 +193,19 @@ export function YouTubePanel() {
   // Handle Enter key
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') handleSearch();
+  };
+
+  // Handle paste - auto-add if it's a YouTube URL
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const pastedText = e.clipboardData.getData('text').trim();
+    const videoId = extractVideoId(pastedText);
+
+    if (videoId) {
+      e.preventDefault();
+      setQuery(pastedText);
+      // Trigger search immediately with pasted text
+      handleSearch(pastedText);
+    }
   };
 
   // Open video in new tab
@@ -306,6 +321,7 @@ export function YouTubePanel() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
           />
           <button
             className="youtube-search-btn"
