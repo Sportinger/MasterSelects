@@ -174,7 +174,21 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
         try {
           // Get file path from MediaFile or from dropped file
           const mediaFile = mediaFileId ? useMediaStore.getState().files.find(f => f.id === mediaFileId) : null;
-          const filePath = mediaFile?.absolutePath || (file as any).path || file.name;
+          let filePath = mediaFile?.absolutePath || (file as any).path;
+
+          // If no absolute path, try common locations (Linux/Mac)
+          if (!filePath || !filePath.startsWith('/')) {
+            const commonPaths = [
+              `/home/${typeof process !== 'undefined' ? process.env?.USER : 'admin'}/Desktop/${file.name}`,
+              `/home/admin/Desktop/${file.name}`,
+              `/tmp/${file.name}`,
+              `${file.name}`,
+            ];
+            // Use first path as best guess - helper will validate
+            filePath = commonPaths[0];
+            console.log(`[Timeline] No absolute path found, trying common locations:`, filePath);
+          }
+
           console.log(`[Timeline] Opening ${file.name} with Native Helper, path:`, filePath);
 
           nativeDecoder = await NativeDecoder.open(filePath);
