@@ -78,6 +78,10 @@ export function Timeline() {
     ramPreviewProgress,
     ramPreviewRange,
     isRamPreviewing,
+    isExporting,
+    exportProgress,
+    exportCurrentTime,
+    exportRange,
     startRamPreview,
     cancelRamPreview,
     getCachedRanges,
@@ -1723,6 +1727,30 @@ export function Timeline() {
             >
               {Math.round(ramPreviewProgress)}%
             </div>
+          )}
+
+          {/* Export Progress Overlay */}
+          {isExporting && exportRange && (
+            <>
+              {/* Progress bar - grows as export progresses */}
+              <div
+                className="timeline-export-overlay"
+                style={{
+                  left: timeToPixel(exportRange.start),
+                  width: timeToPixel((exportCurrentTime ?? exportRange.start) - exportRange.start),
+                }}
+              />
+              {/* Percentage display - left of render head */}
+              <div
+                className="timeline-export-text"
+                style={{
+                  left: timeToPixel(exportCurrentTime ?? exportRange.start) - 10,
+                  transform: 'translateX(-100%)',
+                }}
+              >
+                {Math.round(exportProgress ?? 0)}%
+              </div>
+            </>
           )}
 
           {getCachedRanges().map((range, i) => (

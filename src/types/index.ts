@@ -313,6 +313,12 @@ export interface TimelineClip {
   analysisProgress?: number;  // 0-100 progress
   // Text clip support
   textProperties?: TextClipProperties;
+  // YouTube download support
+  isPendingDownload?: boolean;  // True if clip is being downloaded
+  downloadProgress?: number;    // 0-100 download progress
+  downloadError?: string;       // Error message if download failed
+  youtubeVideoId?: string;      // YouTube video ID for pending downloads
+  youtubeThumbnail?: string;    // Thumbnail URL for pending display
 }
 
 export interface TimelineTrack {

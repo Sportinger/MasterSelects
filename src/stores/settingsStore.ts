@@ -15,6 +15,7 @@ interface APIKeys {
   assemblyai: string;
   deepgram: string;
   piapi: string;  // PiAPI key for AI video generation (Kling, Luma, etc.)
+  youtube: string; // YouTube Data API v3 key (optional, Invidious works without)
   // Legacy Kling keys (deprecated, use piapi instead)
   klingAccessKey: string;
   klingSecretKey: string;
@@ -70,6 +71,7 @@ export const useSettingsStore = create<SettingsState>()(
         assemblyai: '',
         deepgram: '',
         piapi: '',
+        youtube: '',
         klingAccessKey: '',
         klingSecretKey: '',
       },

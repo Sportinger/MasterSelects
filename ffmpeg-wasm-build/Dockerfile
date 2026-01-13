@@ -205,19 +205,25 @@ ENV LIBMP3LAME_LIBS="-L/opt/lame/lib -lmp3lame"
 ENV ZLIB_CFLAGS="-I/opt/zlib/include"
 ENV ZLIB_LIBS="-L/opt/zlib/lib -lz"
 
-# Patch FFmpeg configure to skip link tests for emscripten
-# The issue is check_pkg_config does: check_ld "cc" "$@" $extralibs
-# which fails because emcc produces .js not executables
-RUN echo "=== Patching FFmpeg configure ===" && \
-    echo "Looking for check_ld in configure..." && \
-    grep -n 'check_ld "cc"' configure | head -10 && \
-    # Replace check_ld with always-true for pkg_config checks
-    sed -i 's/check_ld "cc" "\$@" \$extralibs/true/g' configure && \
-    echo "=== Verifying patch ===" && \
-    grep -n 'true' configure | grep -v '#' | head -5
+# Patch FFmpeg configure to skip library link tests for emscripten
+# The issue: require_pkg_config calls test_pkg_config which does compile+link tests
+# We need to find and patch test_pkg_config
+RUN echo "=== Finding test_pkg_config function ===" && \
+    grep -n -A30 "^test_pkg_config(){" configure | head -40 && \
+    echo "" && \
+    echo "=== Patching test_pkg_config to skip compile/link tests ===" && \
+    # test_pkg_config likely calls check_func_headers or similar
+    # Replace the compile test with always-true
+    sed -i '/^test_pkg_config(){/,/^}/ s/check_func_headers/true #&/' configure && \
+    # Also check require_pkg_config
+    echo "=== Finding require_pkg_config function ===" && \
+    grep -n -A15 "^require_pkg_config(){" configure | head -20 && \
+    echo "" && \
+    echo "=== After patch ===" && \
+    grep -n -A30 "^test_pkg_config(){" configure | head -40
 
-# Run configure with all libraries enabled
-RUN ./configure \
+# Run configure with emconfigure (now that test_pkg_config is patched)
+RUN emconfigure ./configure \
     --pkg-config=/usr/local/bin/fake-pkg-config \
     --prefix=/opt/ffmpeg \
     --target-os=none \
@@ -234,7 +240,7 @@ RUN ./configure \
     --disable-debug \
     --disable-runtime-cpudetect \
     --disable-autodetect \
-    --disable-pthreads \
+    --enable-pthreads \
     --enable-gpl \
     --enable-version3 \
     --enable-libx264 \
@@ -312,8 +318,8 @@ RUN ./configure \
     --enable-parser=aac \
     --enable-protocol=file \
     --enable-protocol=pipe \
-    --extra-cflags="-O3 -I/opt/x264/include -I/opt/vpx/include -I/opt/snappy/include -I/opt/lame/include -I/opt/opus/include/opus -I/opt/ogg/include -I/opt/vorbis/include -I/opt/webp/include -I/opt/zlib/include -sUSE_PTHREADS=0" \
-    --extra-ldflags="-L/opt/x264/lib -L/opt/vpx/lib -L/opt/snappy/lib -L/opt/lame/lib -L/opt/opus/lib -L/opt/ogg/lib -L/opt/vorbis/lib -L/opt/webp/lib -L/opt/zlib/lib -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=5242880" \
+    --extra-cflags="-O3 -pthread -I/opt/x264/include -I/opt/vpx/include -I/opt/snappy/include -I/opt/lame/include -I/opt/opus/include/opus -I/opt/ogg/include -I/opt/vorbis/include -I/opt/webp/include -I/opt/zlib/include" \
+    --extra-ldflags="-pthread -L/opt/x264/lib -L/opt/vpx/lib -L/opt/snappy/lib -L/opt/lame/lib -L/opt/opus/lib -L/opt/ogg/lib -L/opt/vorbis/lib -L/opt/webp/lib -L/opt/zlib/lib -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=5242880" \
     --extra-libs="-lx264 -lvpx -lsnappy -lmp3lame -lopus -lvorbis -lvorbisenc -logg -lwebp -lz -lm" \
     --nm="/emsdk/upstream/bin/llvm-nm" \
     --ar="/emsdk/upstream/emscripten/emar" \
@@ -322,6 +328,49 @@ RUN ./configure \
     --cxx="em++"
 
 RUN emmake make -j$(nproc)
+
+# Check what was built
+RUN echo "=== Checking built library files ===" && \
+    ls -la libav*/lib*.a libsw*/lib*.a 2>/dev/null && \
+    echo "" && \
+    echo "=== Looking for ffmpeg binary ===" && \
+    ls -la ffmpeg* 2>/dev/null || echo "No ffmpeg binary found" && \
+    echo "" && \
+    echo "=== Checking if fftools .o files exist ===" && \
+    ls fftools/*.o 2>/dev/null || echo "No fftools .o files found - will compile manually"
+
+# Manually compile fftools sources if .o files don't exist
+# This is needed because emmake make doesn't always build the executables when cross-compiling
+# FFmpeg 6.x fftools require pthreads - we need to use Emscripten's pthread support
+RUN if [ ! -f "fftools/ffmpeg.o" ]; then \
+    echo "=== Manually compiling fftools with pthread support ===" && \
+    echo "Getting CFLAGS from config.mak..." && \
+    # Include paths from the FFmpeg build
+    INCLUDE_PATHS="-I. -Ifftools -include config.h -include libavutil/avconfig.h" && \
+    # External library includes
+    EXT_INCLUDES="-I/opt/x264/include -I/opt/vpx/include -I/opt/snappy/include -I/opt/lame/include -I/opt/opus/include/opus -I/opt/ogg/include -I/opt/vorbis/include -I/opt/webp/include -I/opt/zlib/include" && \
+    # Compile each fftools source file with pthread support
+    for src in fftools/ffmpeg.c fftools/ffmpeg_opt.c fftools/ffmpeg_filter.c \
+               fftools/ffmpeg_hw.c fftools/ffmpeg_mux.c fftools/ffmpeg_mux_init.c \
+               fftools/ffmpeg_demux.c fftools/ffmpeg_enc.c fftools/ffmpeg_dec.c \
+               fftools/cmdutils.c fftools/opt_common.c fftools/objpool.c \
+               fftools/sync_queue.c fftools/thread_queue.c; do \
+        if [ -f "$src" ]; then \
+            obj="${src%.c}.o" && \
+            echo "Compiling $src -> $obj" && \
+            emcc -c -O3 -pthread \
+                $INCLUDE_PATHS $EXT_INCLUDES \
+                -D_GNU_SOURCE -DHAVE_AV_CONFIG_H \
+                -Wno-pointer-sign -Wno-switch -Wno-parentheses \
+                "$src" -o "$obj" 2>&1 || echo "Failed: $src"; \
+        fi; \
+    done && \
+    echo "=== fftools compilation complete ===" && \
+    ls -la fftools/*.o 2>/dev/null || echo "No .o files created"; \
+fi
+
+# If ffmpeg_g doesn't exist, build the WASM module directly from libraries
+# This creates a minimal ffmpeg WASM that can be called from JavaScript
 
 # ============ CREATE WASM MODULE ============
 

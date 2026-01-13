@@ -31,7 +31,7 @@ import type {
 type EncoderType = 'webcodecs' | 'ffmpeg';
 
 export function ExportPanel() {
-  const { duration, inPoint, outPoint, playheadPosition } = useTimelineStore();
+  const { duration, inPoint, outPoint, playheadPosition, startExport, setExportProgress, endExport } = useTimelineStore();
   const { getActiveComposition } = useMediaStore();
   const composition = getActiveComposition();
 
@@ -278,9 +278,14 @@ export function ExportPanel() {
     });
     setExporter(exp);
 
+    // Start export progress in timeline
+    startExport(startTime, endTime);
+
     try {
       const blob = await exp.export((p) => {
         setProgress(p);
+        // Update timeline export progress
+        setExportProgress(p.percent, p.currentTime);
       });
 
       if (blob) {
@@ -292,6 +297,8 @@ export function ExportPanel() {
     } finally {
       setIsExporting(false);
       setExporter(null);
+      // End export progress in timeline
+      endExport();
     }
   }, [width, height, customWidth, customHeight, useCustomResolution, fps, customFps, useCustomFps, bitrate, startTime, endTime, filename, isExporting, includeAudio, audioSampleRate, audioBitrate, normalizeAudio, containerFormat, videoCodec]);
 
@@ -308,7 +315,9 @@ export function ExportPanel() {
     }
     setIsExporting(false);
     setExportPhase('idle');
-  }, [exporter, encoder]);
+    // End export progress in timeline
+    endExport();
+  }, [exporter, encoder, endExport]);
 
   // Handle FFmpeg export
   const handleFFmpegExport = useCallback(async () => {
@@ -331,6 +340,9 @@ export function ExportPanel() {
     const actualWidth = useCustomResolution ? customWidth : width;
     const actualHeight = useCustomResolution ? customHeight : height;
     const exportFps = useCustomFps ? customFps : fps;
+
+    // Start export progress in timeline
+    startExport(startTime, endTime);
 
     try {
       const settings: FFmpegExportSettings = {
@@ -363,8 +375,9 @@ export function ExportPanel() {
           frames.push(new Uint8Array(pixels.buffer, pixels.byteOffset, pixels.byteLength));
         }
         // Update progress during rendering
+        const percent = (i / totalFrames) * 50; // First 50% is rendering
         setFfmpegProgress({
-          percent: (i / totalFrames) * 50, // First 50% is rendering
+          percent,
           frame: i,
           fps: 0,
           time: time,
@@ -373,6 +386,8 @@ export function ExportPanel() {
           size: 0,
           eta: 0,
         });
+        // Update timeline export progress
+        setExportProgress(percent, time);
       }
 
       if (frames.length === 0) {
@@ -385,10 +400,13 @@ export function ExportPanel() {
 
       const ffmpeg = getFFmpegBridge();
       const blob = await ffmpeg.encode(frames, settings, (p: FFmpegProgress) => {
+        const totalPercent = 50 + (p.percent / 2); // Second 50% is encoding
         setFfmpegProgress({
           ...p,
-          percent: 50 + (p.percent / 2), // Second 50% is encoding
+          percent: totalPercent,
         });
+        // Update timeline export progress
+        setExportProgress(totalPercent, endTime);
       });
 
       // Download the file
@@ -409,11 +427,14 @@ export function ExportPanel() {
     } finally {
       setIsExporting(false);
       setExportPhase('idle');
+      // End export progress in timeline
+      endExport();
     }
   }, [
     isExporting, isFFmpegReady, loadFFmpeg, useCustomResolution, customWidth, customHeight,
     width, height, fps, customFps, useCustomFps, startTime, endTime, ffmpegCodec, ffmpegContainer,
     ffmpegRateControl, ffmpegQuality, ffmpegBitrate, proresProfile, dnxhrProfile, hapFormat, hapChunks, filename,
+    startExport, setExportProgress, endExport,
   ]);
 
   // Handle audio-only export

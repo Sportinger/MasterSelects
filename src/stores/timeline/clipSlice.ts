@@ -1680,4 +1680,151 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
       ),
     });
   },
+
+  // Add a pending download clip (YouTube videos being downloaded)
+  addPendingDownloadClip: (trackId, startTime, videoId, title, thumbnail, estimatedDuration = 30) => {
+    const { clips, tracks, updateDuration, findNonOverlappingPosition } = get();
+
+    const track = tracks.find(t => t.id === trackId);
+    if (!track || track.type !== 'video') {
+      console.warn('[Timeline] Pending download clips can only be added to video tracks');
+      return '';
+    }
+
+    const clipId = `clip-yt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Find non-overlapping position
+    const finalStartTime = findNonOverlappingPosition(clipId, startTime, trackId, estimatedDuration);
+
+    const pendingClip: TimelineClip = {
+      id: clipId,
+      trackId,
+      name: title,
+      file: new File([], `${title}.mp4`, { type: 'video/mp4' }), // Placeholder file
+      startTime: finalStartTime,
+      duration: estimatedDuration,
+      inPoint: 0,
+      outPoint: estimatedDuration,
+      source: null, // No source until download complete
+      transform: { ...DEFAULT_TRANSFORM },
+      effects: [],
+      isLoading: false,
+      isPendingDownload: true,
+      downloadProgress: 0,
+      youtubeVideoId: videoId,
+      youtubeThumbnail: thumbnail,
+    };
+
+    set({ clips: [...clips, pendingClip] });
+    updateDuration();
+
+    console.log(`[Timeline] Added pending download clip: ${clipId} for video ${videoId}`);
+    return clipId;
+  },
+
+  // Update download progress for a pending clip
+  updateDownloadProgress: (clipId, progress) => {
+    const { clips } = get();
+    set({
+      clips: clips.map(c =>
+        c.id === clipId ? { ...c, downloadProgress: progress } : c
+      ),
+    });
+  },
+
+  // Complete the download - replace pending clip with actual video
+  completeDownload: async (clipId, file) => {
+    const { clips, updateDuration, invalidateCache } = get();
+    const clip = clips.find(c => c.id === clipId);
+
+    if (!clip || !clip.isPendingDownload) {
+      console.warn('[Timeline] Clip not found or not a pending download:', clipId);
+      return;
+    }
+
+    console.log(`[Timeline] Completing download for clip: ${clipId}`);
+
+    // Create video element for the downloaded file
+    const video = document.createElement('video');
+    video.preload = 'auto';
+    video.muted = true;
+    video.playsInline = true;
+    const url = URL.createObjectURL(file);
+    video.src = url;
+
+    await new Promise<void>((resolve, reject) => {
+      video.addEventListener('loadedmetadata', () => resolve(), { once: true });
+      video.addEventListener('error', () => reject(new Error('Failed to load video')), { once: true });
+      video.load();
+    });
+
+    const naturalDuration = video.duration || 30;
+
+    // Generate thumbnails for the video
+    const thumbCount = Math.max(1, Math.min(20, Math.ceil(naturalDuration / 3)));
+    const thumbnails: string[] = [];
+    const canvas = document.createElement('canvas');
+    canvas.width = 160;
+    canvas.height = 90;
+    const ctx = canvas.getContext('2d')!;
+
+    for (let i = 0; i < thumbCount; i++) {
+      const time = (i / thumbCount) * naturalDuration;
+      video.currentTime = time;
+      await new Promise<void>(resolve => {
+        video.onseeked = () => {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          thumbnails.push(canvas.toDataURL('image/jpeg', 0.6));
+          resolve();
+        };
+      });
+    }
+
+    // Reset to start
+    video.currentTime = 0;
+
+    // Update the clip with actual video data
+    set({
+      clips: clips.map(c => {
+        if (c.id !== clipId) return c;
+        return {
+          ...c,
+          file,
+          duration: naturalDuration,
+          outPoint: naturalDuration,
+          source: {
+            type: 'video' as const,
+            videoElement: video,
+            naturalDuration,
+          },
+          thumbnails,
+          isPendingDownload: false,
+          downloadProgress: undefined,
+          youtubeVideoId: undefined,
+          youtubeThumbnail: undefined,
+        };
+      }),
+    });
+
+    updateDuration();
+    invalidateCache();
+
+    // Import to media store
+    const mediaStore = useMediaStore.getState();
+    mediaStore.importFile(file);
+
+    console.log(`[Timeline] Download complete for clip: ${clipId}, duration: ${naturalDuration}s`);
+  },
+
+  // Set download error for a clip
+  setDownloadError: (clipId, error) => {
+    const { clips } = get();
+    set({
+      clips: clips.map(c =>
+        c.id === clipId
+          ? { ...c, downloadError: error, isPendingDownload: false }
+          : c
+      ),
+    });
+  },
 });
