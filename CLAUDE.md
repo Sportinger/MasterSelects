@@ -8,11 +8,12 @@
 
 **WICHTIG - Commit-Regeln:**
 - **IMMER auf `staging` committen** - niemals direkt auf master
+- **Nach JEDER Änderung committen und pushen** - nicht mehrere Änderungen sammeln
 - **NUR PR/Merge zu master wenn User es explizit verlangt!**
 - Nicht selbstständig zu master mergen
 
 ```bash
-# Normal entwickeln auf staging:
+# Nach JEDER Änderung sofort committen und pushen:
 git add . && git commit -m "description" && git push origin staging
 
 # NUR wenn User "merge zu master" oder "PR zu master" sagt:
