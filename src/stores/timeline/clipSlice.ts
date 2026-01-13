@@ -172,9 +172,10 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
       if (useNativeDecoder) {
         // Use Native Helper for professional codecs (ProRes, DNxHD)
         try {
-          // Get file path - for dropped files we need the path
-          const filePath = (file as any).path || file.name;
-          console.log(`[Timeline] Opening ${file.name} with Native Helper...`);
+          // Get file path from MediaFile or from dropped file
+          const mediaFile = mediaFileId ? useMediaStore.getState().files.find(f => f.id === mediaFileId) : null;
+          const filePath = mediaFile?.absolutePath || (file as any).path || file.name;
+          console.log(`[Timeline] Opening ${file.name} with Native Helper, path:`, filePath);
 
           nativeDecoder = await NativeDecoder.open(filePath);
           naturalDuration = nativeDecoder.duration;

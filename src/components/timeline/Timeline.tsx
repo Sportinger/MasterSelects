@@ -1086,10 +1086,10 @@ export function Timeline() {
                 const file = await handle.getFile();
                 if (filePath) (file as any).path = filePath;
                 if (file.type.startsWith('video/') || file.type.startsWith('audio/') || file.type.startsWith('image/') || file.name.endsWith('.mov') || file.name.endsWith('.mxf')) {
-                  const imported = await mediaStore.importFilesWithHandles([{ file, handle }]);
+                  const imported = await mediaStore.importFilesWithHandles([{ file, handle, absolutePath: filePath }]);
                   if (imported.length > 0) {
                     addClip(newTrackId, file, startTime, cachedDuration, imported[0].id);
-                    console.log('[Timeline] Imported file with handle:', file.name);
+                    console.log('[Timeline] Imported file with handle:', file.name, 'absolutePath:', filePath);
                   }
                   return;
                 }
@@ -1244,10 +1244,10 @@ export function Timeline() {
                     return;
                   }
 
-                  const imported = await mediaStore.importFilesWithHandles([{ file, handle }]);
+                  const imported = await mediaStore.importFilesWithHandles([{ file, handle, absolutePath: filePath }]);
                   if (imported.length > 0) {
                     addClip(trackId, file, startTime, cachedDuration, imported[0].id);
-                    console.log('[Timeline] Imported file with handle:', file.name);
+                    console.log('[Timeline] Imported file with handle:', file.name, 'absolutePath:', filePath);
                   }
                   return;
                 }
