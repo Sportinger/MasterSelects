@@ -721,8 +721,8 @@ export class FrameExporter {
 
   /**
    * Seek a clip using sequential export optimization.
-   * If the clip can be decoded sequentially (next frame), use decodeNextFrameForExport().
-   * Otherwise, fall back to seekDuringExport() which still avoids full reset when possible.
+   * Uses seekDuringExport() which intelligently decides whether to decode
+   * sequentially or jump to a new position based on sample indices.
    */
   private async seekClipSequential(
     player: import('./WebCodecsPlayer').WebCodecsPlayer,
@@ -730,24 +730,11 @@ export class FrameExporter {
     exportState: { lastSourceTime: number; isSequential: boolean },
     clipId: string
   ): Promise<void> {
-    // Calculate frame duration (assume ~30fps for tolerance calculation)
-    const frameDuration = 1 / 30;
-    const timeDelta = targetTime - exportState.lastSourceTime;
-
-    // Check if we can use sequential decode:
-    // - Clip must be marked as sequential (not reversed, no speed keyframes)
-    // - Time must be moving forward by approximately one frame
-    const isNextFrame = exportState.isSequential &&
-      timeDelta > 0 &&
-      timeDelta < frameDuration * 2; // Allow some tolerance
-
-    if (isNextFrame) {
-      // Sequential decode - just get the next frame
-      await player.decodeNextFrameForExport();
-    } else {
-      // Need to jump - use seekDuringExport which is still optimized
-      await player.seekDuringExport(targetTime);
-    }
+    // seekDuringExport handles the logic of:
+    // - Converting time to sample index
+    // - Checking if sequential decode is possible
+    // - Only resetting decoder when truly necessary (jumping to distant frame)
+    await player.seekDuringExport(targetTime);
 
     // Update last source time
     exportState.lastSourceTime = targetTime;
