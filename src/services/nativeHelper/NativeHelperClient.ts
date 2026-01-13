@@ -5,16 +5,18 @@
  * methods for video decoding and encoding operations.
  */
 
-import {
+import type {
   Command,
   Response,
   FileMetadata,
   SystemInfo,
   EncodeOutput,
   FrameHeader,
+} from './protocol';
+
+import {
   parseFrameHeader,
   isCompressed,
-  ERROR_CODES,
 } from './protocol';
 
 // LZ4 decompression (we'll use a simple implementation or skip for now)

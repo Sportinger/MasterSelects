@@ -6,8 +6,9 @@
  * objects that can be used directly with WebGPU textures.
  */
 
-import { NativeHelperClient, DecodedFrame } from './NativeHelperClient';
-import { FileMetadata } from './protocol';
+import { NativeHelperClient } from './NativeHelperClient';
+import type { DecodedFrame } from './NativeHelperClient';
+import type { FileMetadata } from './protocol';
 
 export interface NativeDecoderOptions {
   /** Use scaled preview during scrubbing */
