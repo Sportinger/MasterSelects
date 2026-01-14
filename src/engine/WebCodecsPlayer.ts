@@ -354,36 +354,27 @@ export class WebCodecsPlayer {
         // Extract codec-specific description (avcC for H.264, hvcC for H.265, etc.)
         // This is REQUIRED for AVC/HEVC to work properly
         let description: ArrayBuffer | undefined;
-        const trackAny = videoTrack as any;
 
-        if (trackAny.avcC) {
-          // H.264/AVC - extract avcC box data
-          const avcC = trackAny.avcC;
-          const stream = new MP4Box.DataStream(undefined, 0, MP4Box.DataStream.BIG_ENDIAN);
-          avcC.write(stream);
-          description = stream.buffer.slice(8); // Skip box header (size + type)
-          console.log(`[WebCodecs] Extracted avcC description: ${description.byteLength} bytes`);
-        } else if (trackAny.hvcC) {
-          // H.265/HEVC - extract hvcC box data
-          const hvcC = trackAny.hvcC;
-          const stream = new MP4Box.DataStream(undefined, 0, MP4Box.DataStream.BIG_ENDIAN);
-          hvcC.write(stream);
-          description = stream.buffer.slice(8);
-          console.log(`[WebCodecs] Extracted hvcC description: ${description.byteLength} bytes`);
-        } else if (trackAny.vpcC) {
-          // VP9 - extract vpcC box data
-          const vpcC = trackAny.vpcC;
-          const stream = new MP4Box.DataStream(undefined, 0, MP4Box.DataStream.BIG_ENDIAN);
-          vpcC.write(stream);
-          description = stream.buffer.slice(8);
-          console.log(`[WebCodecs] Extracted vpcC description: ${description.byteLength} bytes`);
-        } else if (trackAny.av1C) {
-          // AV1 - extract av1C box data
-          const av1C = trackAny.av1C;
-          const stream = new MP4Box.DataStream(undefined, 0, MP4Box.DataStream.BIG_ENDIAN);
-          av1C.write(stream);
-          description = stream.buffer.slice(8);
-          console.log(`[WebCodecs] Extracted av1C description: ${description.byteLength} bytes`);
+        // Get the track structure from mp4File to access codec config boxes
+        try {
+          const trak = (mp4File as any).getTrackById(videoTrack.id);
+          if (trak?.mdia?.minf?.stbl?.stsd?.entries?.[0]) {
+            const entry = trak.mdia.minf.stbl.stsd.entries[0];
+
+            // Try to extract codec-specific configuration
+            const configBox = entry.avcC || entry.hvcC || entry.vpcC || entry.av1C;
+            if (configBox) {
+              const stream = new MP4Box.DataStream(undefined, 0, MP4Box.DataStream.BIG_ENDIAN);
+              configBox.write(stream);
+              // The write() includes the box header (8 bytes: size + type), we need to skip it
+              description = stream.buffer.slice(8);
+              console.log(`[WebCodecs] Extracted codec description: ${description.byteLength} bytes from ${entry.avcC ? 'avcC' : entry.hvcC ? 'hvcC' : entry.vpcC ? 'vpcC' : 'av1C'}`);
+            } else {
+              console.warn('[WebCodecs] No codec config box found in sample entry:', Object.keys(entry));
+            }
+          }
+        } catch (e) {
+          console.warn('[WebCodecs] Failed to extract codec description:', e);
         }
 
         this.codecConfig = {
@@ -1021,8 +1012,9 @@ export class WebCodecsPlayer {
       targetIndex = i;
     }
 
-    // Check if we can continue sequentially (target is current or next sample)
-    if (this.isInExportMode && targetIndex >= this.sampleIndex - 1 && targetIndex <= this.sampleIndex + 1) {
+    // Check if we can continue sequentially (target is within a few samples)
+    // Allow +/- 3 samples to handle frame rate conversions (e.g., 25fps video at 30fps export)
+    if (this.isInExportMode && targetIndex >= this.sampleIndex - 1 && targetIndex <= this.sampleIndex + 3) {
       // Close enough - decode sequentially to target
       while (this.sampleIndex <= targetIndex) {
         await this.decodeNextFrameForExport();
