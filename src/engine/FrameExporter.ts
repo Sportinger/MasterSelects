@@ -414,6 +414,15 @@ export class FrameExporter {
         const layers = this.buildLayersAtTime(time);
         console.log(`[FrameExporter] Frame ${frame}: ${layers.length} layers`);
 
+        // Debug: Check if webCodecsPlayer has a frame
+        for (const layer of layers) {
+          if (layer.source?.webCodecsPlayer) {
+            const hasFrame = layer.source.webCodecsPlayer.hasFrame();
+            const currentFrame = layer.source.webCodecsPlayer.getCurrentFrame();
+            console.log(`[FrameExporter] Frame ${frame}: Layer "${layer.name}" webCodecsPlayer hasFrame=${hasFrame}, frameTimestamp=${currentFrame?.timestamp ?? 'null'}`);
+          }
+        }
+
         if (layers.length === 0) {
           console.warn('[FrameExporter] No layers at time', time);
         }
@@ -791,6 +800,10 @@ export class FrameExporter {
             exportState,
             clip.id
           ));
+          // Also seek the HTMLVideoElement as fallback (in case MP4Box frame fails)
+          if (clip.source.videoElement) {
+            seekPromises.push(this.seekVideo(clip.source.videoElement, clipTime));
+          }
         } else if (clip.source.webCodecsPlayer) {
           // Fallback to existing player
           if (exportState && clip.source.webCodecsPlayer.isExportMode()) {
@@ -914,14 +927,16 @@ export class FrameExporter {
 
     // Wait for all videos to be ready (with timeout)
     const maxWaitTime = 2000;
-    const startTime = performance.now();
+    const startWait = performance.now();
 
-    while (performance.now() - startTime < maxWaitTime) {
+    while (performance.now() - startWait < maxWaitTime) {
       let allReady = true;
 
       for (const clip of videoClips) {
         const video = clip.source!.videoElement!;
-        const webCodecsPlayer = clip.source!.webCodecsPlayer;
+        // Check export player first, then fallback player
+        const exportPlayer = this.exportPlayers.get(clip.id);
+        const webCodecsPlayer = exportPlayer || clip.source!.webCodecsPlayer;
 
         const videoReady = video.readyState >= 2 && !video.seeking;
         const hasWebCodecsFrame = webCodecsPlayer?.hasFrame() ?? false;

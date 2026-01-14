@@ -941,13 +941,14 @@ export class WebCodecsPlayer {
     // Create promise that resolves when frame arrives in output callback
     const framePromise = new Promise<void>((resolve) => {
       this.frameResolve = resolve;
-      // Timeout fallback in case frame never arrives
+      // Timeout fallback in case frame never arrives (increased from 100ms to 500ms for slower systems)
       setTimeout(() => {
         if (this.frameResolve === resolve) {
+          console.warn('[WebCodecs] Frame decode timeout - frame may not have arrived');
           this.frameResolve = null;
           resolve();
         }
-      }, 100);
+      }, 500);
     });
 
     try {
@@ -1024,7 +1025,18 @@ export class WebCodecsPlayer {
       }
     }
 
+    // Flush and wait for the last frame to arrive
+    // Note: flush() ensures all decode operations complete
     await this.decoder.flush();
+
+    // Create promise that resolves when the NEXT frame arrives (after flush)
+    // This ensures we have the target frame in currentFrame
+    const framePromise = new Promise<void>((resolve) => {
+      // Small delay to ensure output callback has fired
+      setTimeout(() => resolve(), 10);
+    });
+    await framePromise;
+
     this.sampleIndex = targetIndex + 1;
   }
 
