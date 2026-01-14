@@ -87,6 +87,8 @@ export class WebCodecsPlayer {
   // Sequential export mode - avoids decoder reset on each frame
   private isInExportMode = false;
   private frameResolve: (() => void) | null = null; // For waiting on decoded frames
+  private decoderInitialized = false; // Flag to track decoder ready state
+  private pendingDecodeFirstFrame = false; // Flag to defer first frame decode
 
   constructor(options: WebCodecsPlayerOptions = {}) {
     this.loop = options.loop ?? true;
@@ -335,6 +337,7 @@ export class WebCodecsPlayer {
         // Don't clear timeout here - wait for onSamples to actually deliver frames
         const videoTrack = info.videoTracks[0];
         if (!videoTrack) {
+          clearTimeout(timeout);
           reject(new Error('No video track found in file'));
           return;
         }
@@ -356,21 +359,23 @@ export class WebCodecsPlayer {
           optimizeForLatency: true,
         };
 
-        // Check if codec is supported
+        // Set extraction options and start BEFORE codec check (to not miss samples)
+        mp4File.setExtractionOptions(videoTrack.id, null, {
+          nbSamples: Infinity,
+        });
+        mp4File.start();
+        console.log(`[WebCodecs] Extraction started for track ${videoTrack.id}`);
+
+        // Check if codec is supported (async, but extraction already started)
         VideoDecoder.isConfigSupported(this.codecConfig).then((support) => {
           if (!support.supported) {
+            clearTimeout(timeout);
             reject(new Error(`Codec ${codec} not supported`));
             return;
           }
 
           console.log(`[WebCodecs] Codec ${codec} supported, config:`, support.config);
           this.initDecoder();
-
-          // Set extraction options and start
-          mp4File.setExtractionOptions(videoTrack.id, null, {
-            nbSamples: Infinity,
-          });
-          mp4File.start();
         });
       };
 
@@ -383,8 +388,12 @@ export class WebCodecsPlayer {
           clearTimeout(timeout);
           console.log(`[WebCodecs] READY: ${this.width}x${this.height} @ ${this.frameRate.toFixed(1)}fps, ${this.samples.length} samples`);
 
-          // Decode first frame immediately so we have something to display
-          this.decodeFirstFrame();
+          // Decode first frame - either now if decoder ready, or defer until decoder initializes
+          if (this.decoderInitialized) {
+            this.decodeFirstFrame();
+          } else {
+            this.pendingDecodeFirstFrame = true;
+          }
 
           this.onReady?.(this.width, this.height);
           resolve();
@@ -459,6 +468,13 @@ export class WebCodecsPlayer {
     });
 
     this.decoder.configure(this.codecConfig);
+    this.decoderInitialized = true;
+
+    // Handle any deferred first frame decode
+    if (this.pendingDecodeFirstFrame) {
+      this.pendingDecodeFirstFrame = false;
+      this.decodeFirstFrame();
+    }
   }
 
   play(): void {
