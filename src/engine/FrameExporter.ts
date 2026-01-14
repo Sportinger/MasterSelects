@@ -399,48 +399,28 @@ export class FrameExporter {
         const frameStart = performance.now();
         const time = startTime + frame * frameDuration;
 
-        if (frame % 10 === 0) {
+        if (frame % 30 === 0) {
           console.log(`[FrameExporter] Processing frame ${frame}/${totalFrames} at time ${time.toFixed(3)}s`);
         }
 
-        console.log(`[FrameExporter] Frame ${frame}: seeking...`);
         await this.seekAllClipsToTime(time);
-        console.log(`[FrameExporter] Frame ${frame}: seek done`);
-
-        // Wait for all video elements to be ready after seeking
         await this.waitForAllVideosReady(time);
 
-        console.log(`[FrameExporter] Frame ${frame}: building layers...`);
         const layers = this.buildLayersAtTime(time);
-        console.log(`[FrameExporter] Frame ${frame}: ${layers.length} layers`);
 
-        // Debug: Check if webCodecsPlayer has a frame
-        for (const layer of layers) {
-          if (layer.source?.webCodecsPlayer) {
-            const hasFrame = layer.source.webCodecsPlayer.hasFrame();
-            const currentFrame = layer.source.webCodecsPlayer.getCurrentFrame();
-            console.log(`[FrameExporter] Frame ${frame}: Layer "${layer.name}" webCodecsPlayer hasFrame=${hasFrame}, frameTimestamp=${currentFrame?.timestamp ?? 'null'}`);
-          }
-        }
-
-        if (layers.length === 0) {
+        if (layers.length === 0 && frame === 0) {
           console.warn('[FrameExporter] No layers at time', time);
         }
 
-        console.log(`[FrameExporter] Frame ${frame}: rendering...`);
         engine.render(layers);
 
-        console.log(`[FrameExporter] Frame ${frame}: reading pixels...`);
         const pixels = await engine.readPixels();
         if (!pixels) {
           console.error('[FrameExporter] Failed to read pixels at frame', frame);
           continue;
         }
-        console.log(`[FrameExporter] Frame ${frame}: got ${pixels.length} bytes`);
 
-        console.log(`[FrameExporter] Frame ${frame}: encoding...`);
         await this.encoder.encodeFrame(pixels, frame);
-        console.log(`[FrameExporter] Frame ${frame}: done`);
 
         const frameTime = performance.now() - frameStart;
         this.frameTimes.push(frameTime);
@@ -716,16 +696,6 @@ export class FrameExporter {
     const seekPromises: Promise<void>[] = [];
     const seekDescriptions: string[] = [];
 
-    // Debug: log clips found at this time (only first frame)
-    if (time < 0.1) {
-      console.log(`[FrameExporter] Clips at time ${time.toFixed(3)}:`, clips.map(c => ({
-        name: c.name,
-        isComposition: c.isComposition,
-        hasVideoElement: !!c.source?.videoElement,
-        sourceType: c.source?.type,
-        trackId: c.trackId,
-      })));
-    }
 
     for (const clip of clips) {
       const track = tracks.find(t => t.id === clip.trackId);
@@ -800,10 +770,7 @@ export class FrameExporter {
             exportState,
             clip.id
           ));
-          // Also seek the HTMLVideoElement as fallback (in case MP4Box frame fails)
-          if (clip.source.videoElement) {
-            seekPromises.push(this.seekVideo(clip.source.videoElement, clipTime));
-          }
+          // Don't seek HTMLVideoElement - MP4Box player is faster and more reliable
         } else if (clip.source.webCodecsPlayer) {
           // Fallback to existing player
           if (exportState && clip.source.webCodecsPlayer.isExportMode()) {
@@ -826,9 +793,7 @@ export class FrameExporter {
     }
 
     if (seekPromises.length > 0) {
-      console.log(`[FrameExporter] Seeking ${seekPromises.length} clips:`, seekDescriptions);
       await Promise.all(seekPromises);
-      console.log(`[FrameExporter] All seeks completed`);
     }
   }
 
@@ -861,7 +826,7 @@ export class FrameExporter {
       const timeout = setTimeout(() => {
         console.warn('[FrameExporter] Seek timeout at', targetTime);
         resolve();
-      }, 2000);
+      }, 200); // Reduced from 2000ms - if video isn't ready after 200ms, proceed anyway
 
       // Use requestVideoFrameCallback if available - guarantees frame is decoded
       const waitForFrame = () => {
@@ -926,7 +891,8 @@ export class FrameExporter {
     if (videoClips.length === 0) return;
 
     // Wait for all videos to be ready (with timeout)
-    const maxWaitTime = 2000;
+    // Reduced from 2000ms - if frames aren't ready quickly, proceed with what we have
+    const maxWaitTime = 100;
     const startWait = performance.now();
 
     while (performance.now() - startWait < maxWaitTime) {

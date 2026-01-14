@@ -351,12 +351,48 @@ export class WebCodecsPlayer {
         // Build codec string
         const codec = this.getCodecString(videoTrack);
 
+        // Extract codec-specific description (avcC for H.264, hvcC for H.265, etc.)
+        // This is REQUIRED for AVC/HEVC to work properly
+        let description: ArrayBuffer | undefined;
+        const trackAny = videoTrack as any;
+
+        if (trackAny.avcC) {
+          // H.264/AVC - extract avcC box data
+          const avcC = trackAny.avcC;
+          const stream = new MP4Box.DataStream(undefined, 0, MP4Box.DataStream.BIG_ENDIAN);
+          avcC.write(stream);
+          description = stream.buffer.slice(8); // Skip box header (size + type)
+          console.log(`[WebCodecs] Extracted avcC description: ${description.byteLength} bytes`);
+        } else if (trackAny.hvcC) {
+          // H.265/HEVC - extract hvcC box data
+          const hvcC = trackAny.hvcC;
+          const stream = new MP4Box.DataStream(undefined, 0, MP4Box.DataStream.BIG_ENDIAN);
+          hvcC.write(stream);
+          description = stream.buffer.slice(8);
+          console.log(`[WebCodecs] Extracted hvcC description: ${description.byteLength} bytes`);
+        } else if (trackAny.vpcC) {
+          // VP9 - extract vpcC box data
+          const vpcC = trackAny.vpcC;
+          const stream = new MP4Box.DataStream(undefined, 0, MP4Box.DataStream.BIG_ENDIAN);
+          vpcC.write(stream);
+          description = stream.buffer.slice(8);
+          console.log(`[WebCodecs] Extracted vpcC description: ${description.byteLength} bytes`);
+        } else if (trackAny.av1C) {
+          // AV1 - extract av1C box data
+          const av1C = trackAny.av1C;
+          const stream = new MP4Box.DataStream(undefined, 0, MP4Box.DataStream.BIG_ENDIAN);
+          av1C.write(stream);
+          description = stream.buffer.slice(8);
+          console.log(`[WebCodecs] Extracted av1C description: ${description.byteLength} bytes`);
+        }
+
         this.codecConfig = {
           codec,
           codedWidth: videoTrack.video.width,
           codedHeight: videoTrack.video.height,
           hardwareAcceleration: 'prefer-hardware',
           optimizeForLatency: true,
+          description,
         };
 
         // Set extraction options and start BEFORE codec check (to not miss samples)
@@ -941,14 +977,14 @@ export class WebCodecsPlayer {
     // Create promise that resolves when frame arrives in output callback
     const framePromise = new Promise<void>((resolve) => {
       this.frameResolve = resolve;
-      // Timeout fallback in case frame never arrives (increased from 100ms to 500ms for slower systems)
+      // Timeout fallback in case frame never arrives
       setTimeout(() => {
         if (this.frameResolve === resolve) {
           console.warn('[WebCodecs] Frame decode timeout - frame may not have arrived');
           this.frameResolve = null;
           resolve();
         }
-      }, 500);
+      }, 50); // Reduced timeout - decoder should be fast
     });
 
     try {
@@ -1028,15 +1064,6 @@ export class WebCodecsPlayer {
     // Flush and wait for the last frame to arrive
     // Note: flush() ensures all decode operations complete
     await this.decoder.flush();
-
-    // Create promise that resolves when the NEXT frame arrives (after flush)
-    // This ensures we have the target frame in currentFrame
-    const framePromise = new Promise<void>((resolve) => {
-      // Small delay to ensure output callback has fired
-      setTimeout(() => resolve(), 10);
-    });
-    await framePromise;
-
     this.sampleIndex = targetIndex + 1;
   }
 
