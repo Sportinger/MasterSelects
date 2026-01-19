@@ -366,8 +366,19 @@ class ProxyFrameCache {
   }
 
   // ============================================
-  // INSTANT AUDIO SCRUBBING (Web Audio API)
+  // VARISPEED AUDIO SCRUBBING (Web Audio API)
+  // Like Premiere/Resolve: continuous audio that follows scrub speed
   // ============================================
+
+  // Varispeed scrubbing state
+  private scrubSource: AudioBufferSourceNode | null = null;
+  private scrubSourceGain: GainNode | null = null;
+  private scrubStartTime = 0; // AudioContext time when scrub started
+  private scrubStartPosition = 0; // Audio position when scrub started
+  private scrubCurrentMediaId: string | null = null;
+  private scrubLastPosition = 0;
+  private scrubLastTime = 0;
+  private scrubIsActive = false;
 
   /**
    * Get or create AudioContext for scrubbing
@@ -377,7 +388,7 @@ class ProxyFrameCache {
       this.audioContext = new AudioContext();
       this.scrubGain = this.audioContext.createGain();
       this.scrubGain.connect(this.audioContext.destination);
-      this.scrubGain.gain.value = 1.0; // Full volume for scrubbing
+      this.scrubGain.gain.value = 0.85; // Slightly lower for scrubbing
     }
     return this.audioContext;
   }
@@ -416,72 +427,118 @@ class ProxyFrameCache {
     }
   }
 
-  // Track active scrub sources for overlapping playback
+  // Legacy snippet sources (kept for cleanup)
   private activeScrubSources: AudioBufferSourceNode[] = [];
 
   /**
-   * Play instant scrub audio at a specific time
-   * Uses AudioBuffer for zero-latency seeking
-   * Allows overlapping snippets for continuous sound during fast scrubbing
+   * VARISPEED SCRUBBING - Call this continuously while scrubbing
+   * Audio plays continuously and follows the scrub position/speed
+   * Like Premiere Pro / DaVinci Resolve
    */
-  playScrubAudio(mediaFileId: string, time: number, duration: number = 0.15): void {
+  playScrubAudio(mediaFileId: string, targetTime: number, _duration: number = 0.15): void {
     const buffer = this.audioBufferCache.get(mediaFileId);
     if (!buffer) {
-      // Start loading buffer for next time
       this.getAudioBuffer(mediaFileId);
       return;
     }
 
-    try {
-      const ctx = this.getAudioContext();
-
-      // Resume context if suspended (browser autoplay policy)
-      if (ctx.state === 'suspended') {
-        ctx.resume();
-      }
-
-      // Clean up finished sources (keep max 8 overlapping for continuous scrub sound)
-      // Note: sources auto-remove via onended callback, this is just a safety limit
-      if (this.activeScrubSources.length > 12) {
-        this.activeScrubSources = this.activeScrubSources.slice(-8);
-      }
-
-      // If too many sources, stop oldest
-      while (this.activeScrubSources.length > 8) {
-        const oldest = this.activeScrubSources.shift();
-        if (oldest) {
-          try {
-            oldest.stop();
-            oldest.disconnect();
-          } catch { /* ignore */ }
-        }
-      }
-
-      // Create new source with its own gain for fade
-      const sourceGain = ctx.createGain();
-      sourceGain.connect(this.scrubGain!);
-      sourceGain.gain.value = 1.0;
-
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(sourceGain);
-
-      // Calculate valid start time
-      const startTime = Math.max(0, Math.min(time, buffer.duration - duration));
-
-      // Auto-cleanup when done
-      source.onended = () => {
-        const idx = this.activeScrubSources.indexOf(source);
-        if (idx >= 0) this.activeScrubSources.splice(idx, 1);
-        sourceGain.disconnect();
-      };
-
-      // Play snippet
-      source.start(0, startTime, duration);
-      this.activeScrubSources.push(source);
-    } catch {
-      // Ignore scrub errors
+    const ctx = this.getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
     }
+
+    const now = performance.now();
+    const clampedTarget = Math.max(0, Math.min(targetTime, buffer.duration - 0.1));
+
+    // Calculate scrub velocity (how fast user is scrubbing)
+    const timeDelta = (now - this.scrubLastTime) / 1000; // seconds
+    const posDelta = clampedTarget - this.scrubLastPosition;
+    this.scrubLastPosition = clampedTarget;
+    this.scrubLastTime = now;
+
+    // Need new source if: different media, not active, or position jumped too far
+    const needNewSource =
+      !this.scrubIsActive ||
+      this.scrubCurrentMediaId !== mediaFileId ||
+      !this.scrubSource;
+
+    if (needNewSource) {
+      // Stop existing source
+      this.stopScrubAudio();
+
+      // Create new continuous source
+      this.scrubSourceGain = ctx.createGain();
+      this.scrubSourceGain.connect(this.scrubGain!);
+      this.scrubSourceGain.gain.value = 0.9;
+
+      this.scrubSource = ctx.createBufferSource();
+      this.scrubSource.buffer = buffer;
+      this.scrubSource.connect(this.scrubSourceGain);
+      this.scrubSource.playbackRate.value = 1.0;
+
+      // Start playing from target position
+      this.scrubSource.start(0, clampedTarget);
+      this.scrubStartTime = ctx.currentTime;
+      this.scrubStartPosition = clampedTarget;
+      this.scrubCurrentMediaId = mediaFileId;
+      this.scrubIsActive = true;
+
+      this.scrubSource.onended = () => {
+        this.scrubIsActive = false;
+        this.scrubSource = null;
+      };
+    } else if (this.scrubSource && timeDelta > 0.001) {
+      // Calculate where audio SHOULD be vs where it IS
+      const elapsedAudioTime = (ctx.currentTime - this.scrubStartTime) * this.scrubSource.playbackRate.value;
+      const currentAudioPos = this.scrubStartPosition + elapsedAudioTime;
+      const drift = clampedTarget - currentAudioPos;
+
+      // If drift is too large (>300ms), restart at correct position
+      if (Math.abs(drift) > 0.3) {
+        this.stopScrubAudio();
+        // Will restart on next call
+        return;
+      }
+
+      // Calculate target playback rate based on scrub velocity
+      // scrubSpeed = how many seconds of audio per second of real time
+      const scrubSpeed = timeDelta > 0.01 ? Math.abs(posDelta) / timeDelta : 1;
+
+      // Clamp to reasonable range and add drift correction
+      const driftCorrection = drift * 2; // Gentle drift correction
+      let targetRate = Math.max(0.25, Math.min(4.0, scrubSpeed + driftCorrection));
+
+      // If scrubbing backwards, we can't play backwards, so just slow down a lot
+      if (posDelta < -0.001) {
+        targetRate = 0.25; // Minimum speed for backwards feel
+      }
+
+      // Smooth rate changes to avoid clicks
+      const currentRate = this.scrubSource.playbackRate.value;
+      const smoothedRate = currentRate + (targetRate - currentRate) * 0.3;
+      this.scrubSource.playbackRate.value = Math.max(0.25, Math.min(4.0, smoothedRate));
+    }
+  }
+
+  /**
+   * Stop scrub audio - call when scrubbing ends
+   */
+  stopScrubAudio(): void {
+    if (this.scrubSource) {
+      try {
+        this.scrubSource.stop();
+        this.scrubSource.disconnect();
+      } catch { /* ignore */ }
+      this.scrubSource = null;
+    }
+    if (this.scrubSourceGain) {
+      try {
+        this.scrubSourceGain.disconnect();
+      } catch { /* ignore */ }
+      this.scrubSourceGain = null;
+    }
+    this.scrubIsActive = false;
+    this.scrubCurrentMediaId = null;
   }
 
   /**

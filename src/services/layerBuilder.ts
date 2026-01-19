@@ -925,20 +925,16 @@ class LayerBuilderService {
 
             const shouldPlay = isPlaying && !effectivelyMuted && !isDraggingPlayhead && absSpeed > 0.1;
 
-            // Audio scrubbing - use instant Web Audio API scrubbing
+            // VARISPEED SCRUBBING - continuous audio that follows scrub speed
             if (isDraggingPlayhead && !effectivelyMuted) {
-              const now = performance.now();
-              const timeSinceLastScrub = now - this.lastScrubTime;
-              const positionChanged = Math.abs(playheadPosition - this.lastScrubPosition) > 0.003; // 3ms threshold
+              // Call every frame - varispeed system handles rate adjustment internally
+              proxyFrameCache.playScrubAudio(mediaFile.id, clipTime);
+            } else {
+              // Stop scrub audio when not scrubbing
+              proxyFrameCache.stopScrubAudio();
+            }
 
-              // Time-based + position-based trigger for continuous scrub audio
-              if (positionChanged && timeSinceLastScrub > 25) { // 25ms = ~40 triggers/sec max
-                this.lastScrubPosition = playheadPosition;
-                this.lastScrubTime = now;
-                // Longer duration (200ms) with overlap for continuous sound
-                proxyFrameCache.playScrubAudio(mediaFile.id, clipTime, 0.2);
-              }
-            } else if (shouldPlay) {
+            if (shouldPlay) {
               // Set playback rate (no drift correction - audio is master)
               const targetRate = absSpeed > 0.1 ? absSpeed : 1;
               if (Math.abs(audioProxy.playbackRate - targetRate) > 0.01) {
