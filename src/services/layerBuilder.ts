@@ -13,6 +13,12 @@ export const playheadState = {
   position: 0,
   isUsingInternalPosition: false, // true during playback, false when paused
   playbackJustStarted: false, // true for first few frames after playback starts
+  // Audio Master Clock - audio runs freely, playhead follows
+  masterAudioElement: null as HTMLAudioElement | HTMLVideoElement | null,
+  masterClipStartTime: 0, // clip.startTime in timeline
+  masterClipInPoint: 0, // clip.inPoint in source
+  masterClipSpeed: 1, // playback speed
+  hasMasterAudio: false, // true if we have an active audio master
 };
 
 class LayerBuilderService {
@@ -704,23 +710,24 @@ class LayerBuilderService {
   }
 
   /**
-   * Sync audio elements to current playhead - call this from render loop
-   * Handles audio play/pause/seek and drift tracking
-   * THROTTLED to avoid audio glitches from constant seeking
+   * Sync audio elements to current playhead - AUDIO MASTER CLOCK
+   * Audio runs freely without seeking/correction during playback.
+   * Playhead follows audio time (set in Timeline.tsx playback loop).
+   * This eliminates audio drift and clicking from constant seeks.
    */
   syncAudioElements(): void {
     const now = performance.now();
 
-    // Handle playback start - force immediate sync for first 10 frames
-    if (playheadState.playbackJustStarted) {
+    // Handle playback start - need immediate setup for first few frames
+    const isStartup = playheadState.playbackJustStarted;
+    if (isStartup) {
       this.playbackStartFrames++;
       if (this.playbackStartFrames > 10) {
         playheadState.playbackJustStarted = false;
         this.playbackStartFrames = 0;
       }
-      // Don't throttle during startup - we need to sync immediately
     } else {
-      // Throttle audio sync to avoid glitches - only run every AUDIO_SYNC_INTERVAL ms
+      // Throttle audio sync checks (but audio runs freely)
       if (now - this.lastAudioSyncTime < this.AUDIO_SYNC_INTERVAL) {
         return;
       }
@@ -741,9 +748,6 @@ class LayerBuilderService {
     const playheadPosition = playheadState.isUsingInternalPosition
       ? playheadState.position
       : timelineState.playheadPosition;
-
-    // Force hard sync on playback start
-    const forceHardSync = playheadState.playbackJustStarted;
 
     const audioTracks = tracks.filter(t => t.type === 'audio');
     const videoTracks = tracks.filter(t => t.type === 'video');
@@ -770,13 +774,15 @@ class LayerBuilderService {
     let audioPlayingCount = 0;
     let maxAudioDrift = 0;
     let hasAudioError = false;
+    let masterSet = false;
 
     // Resume audio context if needed (browser autoplay policy)
     if (isPlaying && !isDraggingPlayhead) {
       audioManager.resume().catch(() => {});
     }
 
-    // Sync audio track clips
+    // AUDIO MASTER CLOCK: Find and set the first unmuted audio as master
+    // Audio runs freely, playhead follows its time
     audioTracks.forEach(track => {
       const clip = clipsAtTime.find(c => c.trackId === track.id);
 
@@ -789,20 +795,9 @@ class LayerBuilderService {
         const initialSpeed = getInterpolatedSpeed(clip.id, 0);
         const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
         const clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
-        const timeDiff = audio.currentTime - clipTime;
-
-        if (Math.abs(timeDiff) > maxAudioDrift) {
-          maxAudioDrift = Math.abs(timeDiff);
-        }
 
         const effectivelyMuted = isAudioTrackMuted(track);
         audio.muted = effectivelyMuted;
-
-        // Set playback rate
-        const targetRate = absSpeed > 0.1 ? absSpeed : 1;
-        if (Math.abs(audio.playbackRate - targetRate) > 0.01) {
-          audio.playbackRate = Math.max(0.25, Math.min(4, targetRate));
-        }
 
         // Set preservesPitch
         const shouldPreservePitch = clip.preservesPitch !== false;
@@ -821,25 +816,10 @@ class LayerBuilderService {
             this.playScrubAudio(audio, clipTime);
           }
         } else if (shouldPlay) {
-          // Gradual drift correction using playback rate adjustment
-          const absDrift = Math.abs(timeDiff);
-
-          let newRate = targetRate;
-
-          if (forceHardSync || absDrift > 0.25) {
-            // Force sync on playback start OR large drift (>250ms): hard seek
-            audio.currentTime = clipTime;
-            newRate = targetRate;
-          } else if (absDrift > 0.05) {
-            // Drift 50-250ms: gentle playback rate adjustment (max 3%)
-            const correctionFactor = Math.min(0.03, absDrift * 0.1);
-            const correction = timeDiff > 0 ? -correctionFactor : correctionFactor;
-            newRate = targetRate * (1 + correction);
-          }
-
-          // Only change rate if difference is significant (avoid constant micro-adjustments)
-          if (Math.abs(audio.playbackRate - newRate) > 0.005) {
-            audio.playbackRate = Math.max(0.25, Math.min(4, newRate));
+          // Set playback rate (no drift correction - audio is master)
+          const targetRate = absSpeed > 0.1 ? absSpeed : 1;
+          if (Math.abs(audio.playbackRate - targetRate) > 0.01) {
+            audio.playbackRate = Math.max(0.25, Math.min(4, targetRate));
           }
 
           // Reset volume after scrubbing
@@ -848,11 +828,28 @@ class LayerBuilderService {
           }
 
           if (audio.paused) {
+            // Starting playback - seek to correct position ONCE, then let it run free
             audio.currentTime = clipTime;
             audio.play().catch(err => {
               console.warn('[Audio] Failed to play:', err.message);
               hasAudioError = true;
             });
+          }
+
+          // Set as master audio if not muted and not already set
+          if (!masterSet && !effectivelyMuted && !audio.paused) {
+            playheadState.hasMasterAudio = true;
+            playheadState.masterAudioElement = audio;
+            playheadState.masterClipStartTime = clip.startTime;
+            playheadState.masterClipInPoint = clip.inPoint;
+            playheadState.masterClipSpeed = absSpeed;
+            masterSet = true;
+          }
+
+          // Track drift for stats (informational only - no correction)
+          const timeDiff = audio.currentTime - clipTime;
+          if (Math.abs(timeDiff) > maxAudioDrift) {
+            maxAudioDrift = Math.abs(timeDiff);
           }
 
           if (!audio.paused && !effectivelyMuted) {
@@ -867,7 +864,7 @@ class LayerBuilderService {
     });
 
     // Sync audio proxies for video clips in proxy mode
-    // This provides faster audio sync than video element buffering
+    // AUDIO MASTER CLOCK: Audio proxy can also be master if no audio track clip is master
     const mediaStore = useMediaStore.getState();
     const activeVideoClipIds = new Set<string>();
 
@@ -912,47 +909,26 @@ class LayerBuilderService {
             const effectivelyMuted = trackObj ? !isVideoTrackVisible(trackObj) : false;
             audioProxy.muted = effectivelyMuted;
 
-            const targetRate = absSpeed > 0.1 ? absSpeed : 1;
-
             // Set preservesPitch
             const shouldPreservePitch = clip.preservesPitch !== false;
             if ((audioProxy as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch !== shouldPreservePitch) {
               (audioProxy as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch = shouldPreservePitch;
             }
 
-            const timeDiff = audioProxy.currentTime - clipTime;
-            if (Math.abs(timeDiff) > maxAudioDrift) {
-              maxAudioDrift = Math.abs(timeDiff);
-            }
-
             const shouldPlay = isPlaying && !effectivelyMuted && !isDraggingPlayhead && absSpeed > 0.1;
 
             // Audio scrubbing - use instant Web Audio API scrubbing
             if (isDraggingPlayhead && !effectivelyMuted) {
-              // Trigger every ~5ms of playhead movement for continuous sound
               const positionChanged = Math.abs(playheadPosition - this.lastScrubPosition) > 0.005;
               if (positionChanged) {
                 this.lastScrubPosition = playheadPosition;
-                // Use instant AudioBuffer scrubbing - overlapping snippets
                 proxyFrameCache.playScrubAudio(mediaFile.id, clipTime, 0.12);
               }
             } else if (shouldPlay) {
-              const absDrift = Math.abs(timeDiff);
-              let newRate = targetRate;
-
-              if (forceHardSync || absDrift > 0.25) {
-                // Force sync on playback start OR large drift (>250ms): hard seek
-                audioProxy.currentTime = clipTime;
-                newRate = targetRate;
-              } else if (absDrift > 0.05) {
-                // Drift 50-250ms: gentle playback rate adjustment (max 3%)
-                const correctionFactor = Math.min(0.03, absDrift * 0.1);
-                const correction = timeDiff > 0 ? -correctionFactor : correctionFactor;
-                newRate = targetRate * (1 + correction);
-              }
-
-              if (Math.abs(audioProxy.playbackRate - newRate) > 0.005) {
-                audioProxy.playbackRate = Math.max(0.25, Math.min(4, newRate));
+              // Set playback rate (no drift correction - audio is master)
+              const targetRate = absSpeed > 0.1 ? absSpeed : 1;
+              if (Math.abs(audioProxy.playbackRate - targetRate) > 0.01) {
+                audioProxy.playbackRate = Math.max(0.25, Math.min(4, targetRate));
               }
 
               // Reset volume after scrubbing
@@ -961,11 +937,28 @@ class LayerBuilderService {
               }
 
               if (audioProxy.paused) {
+                // Starting playback - seek ONCE, then let it run free
                 audioProxy.currentTime = clipTime;
                 audioProxy.play().catch(err => {
                   console.warn('[Audio Proxy] Failed to play:', err.message);
                   hasAudioError = true;
                 });
+              }
+
+              // Set as master if no master yet
+              if (!masterSet && !effectivelyMuted && !audioProxy.paused) {
+                playheadState.hasMasterAudio = true;
+                playheadState.masterAudioElement = audioProxy;
+                playheadState.masterClipStartTime = clip.startTime;
+                playheadState.masterClipInPoint = clip.inPoint;
+                playheadState.masterClipSpeed = absSpeed;
+                masterSet = true;
+              }
+
+              // Track drift for stats (informational only)
+              const timeDiff = audioProxy.currentTime - clipTime;
+              if (Math.abs(timeDiff) > maxAudioDrift) {
+                maxAudioDrift = Math.abs(timeDiff);
               }
 
               if (!audioProxy.paused && !effectivelyMuted) {
@@ -975,7 +968,6 @@ class LayerBuilderService {
               if (!audioProxy.paused) {
                 audioProxy.pause();
               }
-              // Reset scrub position when not dragging
               if (!isDraggingPlayhead) {
                 this.lastScrubPosition = -1;
               }
@@ -983,7 +975,6 @@ class LayerBuilderService {
           } else {
             // Audio proxy not loaded yet - trigger preload
             proxyFrameCache.preloadAudioProxy(mediaFile.id);
-            // Also preload AudioBuffer for instant scrubbing
             proxyFrameCache.getAudioBuffer(mediaFile.id);
           }
         }
@@ -996,6 +987,33 @@ class LayerBuilderService {
         audioProxy.pause();
         this.activeAudioProxies.delete(clipId);
       }
+    }
+
+    // VIDEO ELEMENT AUDIO: If no audio master yet, use playing video element as master
+    // This handles non-proxy mode where video element plays its own audio
+    if (!masterSet && isPlaying && !isDraggingPlayhead) {
+      videoTracks.forEach(track => {
+        if (masterSet) return;
+        const clip = clipsAtTime.find(c => c.trackId === track.id);
+        if (clip?.source?.videoElement && !clip.isComposition) {
+          const video = clip.source.videoElement;
+          const trackObj = videoTracks.find(t => t.id === clip.trackId);
+          const effectivelyMuted = trackObj ? !isVideoTrackVisible(trackObj) : false;
+
+          // Only use as master if video is playing and not muted
+          if (!video.paused && !video.muted && !effectivelyMuted) {
+            const clipLocalTime = playheadPosition - clip.startTime;
+            const absSpeed = Math.abs(getInterpolatedSpeed(clip.id, clipLocalTime));
+
+            playheadState.hasMasterAudio = true;
+            playheadState.masterAudioElement = video;
+            playheadState.masterClipStartTime = clip.startTime;
+            playheadState.masterClipInPoint = clip.inPoint;
+            playheadState.masterClipSpeed = absSpeed > 0.1 ? absSpeed : 1;
+            masterSet = true;
+          }
+        }
+      });
     }
 
     // Pause audio clips not at playhead
@@ -1045,32 +1063,33 @@ class LayerBuilderService {
         const shouldPlay = isPlaying && !effectivelyMuted && !isDraggingPlayhead && absSpeed > 0.1;
 
         if (shouldPlay) {
-          // Gradual drift correction using playback rate adjustment
-          const absDrift = Math.abs(timeDiff);
-
-          let newRate = targetRate;
-
-          if (forceHardSync || absDrift > 0.25) {
-            // Force sync on playback start OR large drift (>250ms): hard seek
-            audio.currentTime = clipTime;
-            newRate = targetRate;
-          } else if (absDrift > 0.05) {
-            // Drift 50-250ms: gentle playback rate adjustment (max 3%)
-            const correctionFactor = Math.min(0.03, absDrift * 0.1);
-            const correction = timeDiff > 0 ? -correctionFactor : correctionFactor;
-            newRate = targetRate * (1 + correction);
-          }
-
-          // Only change rate if difference is significant
-          if (Math.abs(audio.playbackRate - newRate) > 0.005) {
-            audio.playbackRate = Math.max(0.25, Math.min(4, newRate));
+          // AUDIO MASTER CLOCK: No drift correction - audio runs free
+          if (Math.abs(audio.playbackRate - targetRate) > 0.01) {
+            audio.playbackRate = Math.max(0.25, Math.min(4, targetRate));
           }
 
           if (audio.paused) {
+            // Starting playback - seek ONCE, then let it run free
             audio.currentTime = clipTime;
             audio.play().catch(err => {
               console.warn('[Nested Comp Audio] Failed to play:', err.message);
             });
+          }
+
+          // Set as master if no master yet
+          if (!masterSet && !effectivelyMuted && !audio.paused) {
+            playheadState.hasMasterAudio = true;
+            playheadState.masterAudioElement = audio;
+            playheadState.masterClipStartTime = clip.startTime;
+            playheadState.masterClipInPoint = clip.inPoint;
+            playheadState.masterClipSpeed = absSpeed;
+            masterSet = true;
+          }
+
+          // Track drift for stats (informational only)
+          const timeDiff = audio.currentTime - clipTime;
+          if (Math.abs(timeDiff) > maxAudioDrift) {
+            maxAudioDrift = Math.abs(timeDiff);
           }
 
           if (!audio.paused && !effectivelyMuted) {
@@ -1083,6 +1102,12 @@ class LayerBuilderService {
         }
       }
     });
+
+    // If no master audio was set, clear the master state
+    if (!masterSet && isPlaying) {
+      playheadState.hasMasterAudio = false;
+      playheadState.masterAudioElement = null;
+    }
 
     // Update audio status for stats display
     audioStatusTracker.updateStatus(audioPlayingCount, maxAudioDrift, hasAudioError);
