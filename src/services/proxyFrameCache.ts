@@ -1,6 +1,7 @@
 // Proxy frame cache - loads and caches WebP frames for fast playback
 
 import { projectFileService } from './projectFileService';
+import { fileSystemService } from './fileSystemService';
 import { useMediaStore } from '../stores/mediaStore';
 
 // Cache settings
@@ -395,37 +396,83 @@ class ProxyFrameCache {
 
   /**
    * Get AudioBuffer for a media file (decode on first request)
+   * Works with BOTH proxy audio AND original video files
    */
   async getAudioBuffer(mediaFileId: string): Promise<AudioBuffer | null> {
     // Check cache
     const cached = this.audioBufferCache.get(mediaFileId);
     if (cached) return cached;
 
+    // Check if already loading
+    if (this.audioBufferLoading.has(mediaFileId)) {
+      return null; // Loading in progress
+    }
+    this.audioBufferLoading.add(mediaFileId);
+
     try {
-      // Get storage key
       const mediaStore = useMediaStore.getState();
       const mediaFile = mediaStore.files.find(f => f.id === mediaFileId);
       const storageKey = mediaFile?.fileHash || mediaFileId;
 
-      // Load audio file from project folder
+      let arrayBuffer: ArrayBuffer | null = null;
+
+      // Try 1: Proxy audio file (fastest, smallest)
       const audioFile = await projectFileService.getProxyAudio(storageKey);
-      if (!audioFile) return null;
+      if (audioFile) {
+        console.log(`[AudioBuffer] Loading from proxy audio: ${mediaFileId}`);
+        arrayBuffer = await audioFile.arrayBuffer();
+      }
+
+      // Try 2: Original video file (extract audio from video)
+      if (!arrayBuffer && mediaFile?.blobUrl) {
+        console.log(`[AudioBuffer] Loading from video blob URL: ${mediaFileId}`);
+        try {
+          const response = await fetch(mediaFile.blobUrl);
+          arrayBuffer = await response.arrayBuffer();
+        } catch (e) {
+          console.warn(`[AudioBuffer] Failed to fetch video blob:`, e);
+        }
+      }
+
+      // Try 3: File handle (if available)
+      if (!arrayBuffer) {
+        const fileHandle = await fileSystemService.getStoredFileHandle(mediaFileId);
+        if (fileHandle) {
+          console.log(`[AudioBuffer] Loading from file handle: ${mediaFileId}`);
+          try {
+            const file = await fileHandle.getFile();
+            arrayBuffer = await file.arrayBuffer();
+          } catch (e) {
+            console.warn(`[AudioBuffer] Failed to read file handle:`, e);
+          }
+        }
+      }
+
+      if (!arrayBuffer) {
+        console.warn(`[AudioBuffer] No audio source found for ${mediaFileId}`);
+        this.audioBufferLoading.delete(mediaFileId);
+        return null;
+      }
 
       // Decode to AudioBuffer
-      const arrayBuffer = await audioFile.arrayBuffer();
       const audioContext = this.getAudioContext();
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0)); // Clone to avoid detached buffer
 
       // Cache it
       this.audioBufferCache.set(mediaFileId, audioBuffer);
-      console.log(`[ProxyFrameCache] Audio buffer decoded for ${mediaFileId}: ${audioBuffer.duration.toFixed(1)}s`);
+      this.audioBufferLoading.delete(mediaFileId);
+      console.log(`[AudioBuffer] Decoded ${mediaFileId}: ${audioBuffer.duration.toFixed(1)}s, ${audioBuffer.numberOfChannels}ch`);
 
       return audioBuffer;
     } catch (e) {
-      console.warn(`[ProxyFrameCache] Failed to decode audio buffer:`, e);
+      console.warn(`[AudioBuffer] Failed to decode:`, e);
+      this.audioBufferLoading.delete(mediaFileId);
       return null;
     }
   }
+
+  // Track loading state to prevent duplicate loads
+  private audioBufferLoading = new Set<string>();
 
   // Legacy snippet sources (kept for cleanup)
   private activeScrubSources: AudioBufferSourceNode[] = [];
@@ -438,8 +485,14 @@ class ProxyFrameCache {
   playScrubAudio(mediaFileId: string, targetTime: number, _duration: number = 0.15): void {
     const buffer = this.audioBufferCache.get(mediaFileId);
     if (!buffer) {
+      console.log('[Scrub] No AudioBuffer for', mediaFileId, '- loading...');
       this.getAudioBuffer(mediaFileId);
       return;
+    }
+
+    // Debug: Log that varispeed is active
+    if (!this.scrubIsActive) {
+      console.log('[Scrub] VARISPEED starting at', targetTime.toFixed(2), 's');
     }
 
     const ctx = this.getAudioContext();

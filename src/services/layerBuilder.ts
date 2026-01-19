@@ -889,50 +889,58 @@ class LayerBuilderService {
           mediaFile?.hasProxyAudio &&
           (mediaFile.proxyStatus === 'ready' || mediaFile.proxyStatus === 'generating');
 
+        // Get mediaFile for this clip (needed for audio buffer loading)
+        const mediaFileForClip = mediaStore.files.find(
+          f => f.name === clip.name || clip.source?.mediaFileId === f.id
+        );
+        const mediaFileId = mediaFileForClip?.id || clip.source?.mediaFileId || clip.id;
+
+        // Calculate clip time for scrubbing
+        const clipLocalTime = playheadPosition - clip.startTime;
+        const currentSpeed = getInterpolatedSpeed(clip.id, clipLocalTime);
+        const absSpeed = Math.abs(currentSpeed);
+        const sourceTime = getSourceTimeForClip(clip.id, clipLocalTime);
+        const initialSpeed = getInterpolatedSpeed(clip.id, 0);
+        const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
+        const clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
+
+        const trackObj = videoTracks.find(t => t.id === clip.trackId);
+        const effectivelyMuted = trackObj ? !isVideoTrackVisible(trackObj) : false;
+
+        // VARISPEED SCRUBBING for ALL video clips (proxy or not)
+        if (isDraggingPlayhead && !effectivelyMuted) {
+          // Mute video element during scrubbing - Web Audio handles audio
+          const video = clip.source.videoElement;
+          if (!video.muted) {
+            video.muted = true;
+          }
+          // Use varispeed scrubbing (loads audio buffer from video if no proxy)
+          proxyFrameCache.playScrubAudio(mediaFileId, clipTime);
+        } else if (!isDraggingPlayhead) {
+          proxyFrameCache.stopScrubAudio();
+        }
+
+        // Handle audio proxy for playback (not scrubbing)
         if (shouldUseAudioProxy && mediaFile) {
           activeVideoClipIds.add(clip.id);
 
-          // Mute video element audio when using audio proxy
           const video = clip.source.videoElement;
           if (!video.muted) {
             video.muted = true;
           }
 
-          // Get or load audio proxy
           const audioProxy = proxyFrameCache.getCachedAudioProxy(mediaFile.id);
 
           if (audioProxy) {
-            // Track active proxy
             this.activeAudioProxies.set(clip.id, audioProxy);
-
-            const clipLocalTime = playheadPosition - clip.startTime;
-            const currentSpeed = getInterpolatedSpeed(clip.id, clipLocalTime);
-            const absSpeed = Math.abs(currentSpeed);
-            const sourceTime = getSourceTimeForClip(clip.id, clipLocalTime);
-            const initialSpeed = getInterpolatedSpeed(clip.id, 0);
-            const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
-            const clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
-
-            const trackObj = videoTracks.find(t => t.id === clip.trackId);
-            const effectivelyMuted = trackObj ? !isVideoTrackVisible(trackObj) : false;
             audioProxy.muted = effectivelyMuted;
 
-            // Set preservesPitch
             const shouldPreservePitch = clip.preservesPitch !== false;
             if ((audioProxy as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch !== shouldPreservePitch) {
               (audioProxy as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch = shouldPreservePitch;
             }
 
             const shouldPlay = isPlaying && !effectivelyMuted && !isDraggingPlayhead && absSpeed > 0.1;
-
-            // VARISPEED SCRUBBING - continuous audio that follows scrub speed
-            if (isDraggingPlayhead && !effectivelyMuted) {
-              // Call every frame - varispeed system handles rate adjustment internally
-              proxyFrameCache.playScrubAudio(mediaFile.id, clipTime);
-            } else {
-              // Stop scrub audio when not scrubbing
-              proxyFrameCache.stopScrubAudio();
-            }
 
             if (shouldPlay) {
               // Set playback rate (no drift correction - audio is master)
