@@ -40,9 +40,46 @@ class LayerBuilderService {
   private readonly LOOKAHEAD_INTERVAL = 100; // Check for upcoming nested comps every 100ms
   private readonly LOOKAHEAD_SECONDS = 3.0; // Look 3 seconds ahead for more preload time
 
+  // === LAYER CACHING FOR PERFORMANCE ===
+  // Cache layers to avoid rebuilding every frame when nothing changed
+  private cachedLayers: Layer[] = [];
+  private cacheValid = false;
+
+  // Change detection state
+  private lastPlayheadFrame = -1; // Quantized to frame number
+  private lastClipsRef: TimelineClip[] | null = null;
+  private lastTracksRef: TimelineTrack[] | null = null;
+  private lastActiveCompId: string | null = null;
+  private lastIsPlaying = false;
+  private lastProxyEnabled = false;
+
+  // Frame rate for playhead quantization (prevents rebuilds within same frame)
+  private readonly FRAME_RATE = 30;
+
+  // Stats for debugging
+  private cacheHits = 0;
+  private cacheMisses = 0;
+  private lastStatsLog = 0;
+
+  // === FILTER RESULT CACHING ===
+  // Cache filtered tracks/clips to avoid repeated array operations
+  private cachedVideoTracks: TimelineTrack[] = [];
+  private cachedClipsAtTime: TimelineClip[] = [];
+  private lastFilterFrame = -1;
+  private lastFilterClipsRef: TimelineClip[] | null = null;
+  private lastFilterTracksRef: TimelineTrack[] | null = null;
+
+  /**
+   * Invalidate the layer cache - call when external changes occur
+   */
+  invalidateCache(): void {
+    this.cacheValid = false;
+  }
+
   /**
    * Build layers for the current frame - called directly from render loop
    * Gets all data from stores directly, no React overhead
+   * OPTIMIZED: Uses caching to avoid rebuilding when nothing changed
    */
   buildLayersFromStore(): Layer[] {
     const timelineState = useTimelineStore.getState();
@@ -57,14 +94,72 @@ class LayerBuilderService {
       getSourceTimeForClip,
     } = timelineState;
 
-    // Get active composition ID for unique layer IDs across compositions
-    const activeCompId = useMediaStore.getState().activeCompositionId || 'default';
+    const mediaState = useMediaStore.getState();
+    const activeCompId = mediaState.activeCompositionId || 'default';
+    const proxyEnabled = mediaState.proxyEnabled;
 
     // Use high-frequency playhead position during playback to avoid store read latency
     const playheadPosition = playheadState.isUsingInternalPosition
       ? playheadState.position
       : timelineState.playheadPosition;
 
+    // === CHANGE DETECTION ===
+    // Quantize playhead to frame number to avoid rebuilds within same frame
+    const currentFrame = Math.floor(playheadPosition * this.FRAME_RATE);
+
+    // Check if we can use cached layers
+    const clipsChanged = clips !== this.lastClipsRef;
+    const tracksChanged = tracks !== this.lastTracksRef;
+    const frameChanged = currentFrame !== this.lastPlayheadFrame;
+    const compChanged = activeCompId !== this.lastActiveCompId;
+    const playingChanged = isPlaying !== this.lastIsPlaying;
+    const proxyChanged = proxyEnabled !== this.lastProxyEnabled;
+
+    // During playback with keyframes, we need per-frame updates for smooth animation
+    // But for static content, we can skip if same frame
+    const hasKeyframedClips = clips.some(c =>
+      (c.keyframes && Object.keys(c.keyframes).length > 0) ||
+      (c.effects && c.effects.some(e => e.keyframes && Object.keys(e.keyframes).length > 0))
+    );
+
+    const needsRebuild = !this.cacheValid ||
+      clipsChanged ||
+      tracksChanged ||
+      compChanged ||
+      playingChanged ||
+      proxyChanged ||
+      (frameChanged && (isPlaying || isDraggingPlayhead || hasKeyframedClips));
+
+    // Log cache stats periodically
+    const now = performance.now();
+    if (now - this.lastStatsLog > 5000) {
+      const total = this.cacheHits + this.cacheMisses;
+      if (total > 0) {
+        const hitRate = ((this.cacheHits / total) * 100).toFixed(1);
+        console.log(`[LayerBuilder] Cache hit rate: ${hitRate}% (${this.cacheHits}/${total})`);
+      }
+      this.cacheHits = 0;
+      this.cacheMisses = 0;
+      this.lastStatsLog = now;
+    }
+
+    // Return cached layers if nothing important changed
+    if (!needsRebuild && this.cachedLayers.length > 0) {
+      this.cacheHits++;
+      return this.cachedLayers;
+    }
+
+    this.cacheMisses++;
+
+    // Update change detection state
+    this.lastPlayheadFrame = currentFrame;
+    this.lastClipsRef = clips;
+    this.lastTracksRef = tracks;
+    this.lastActiveCompId = activeCompId;
+    this.lastIsPlaying = isPlaying;
+    this.lastProxyEnabled = proxyEnabled;
+
+    // === BUILD LAYERS ===
     const videoTracks = tracks.filter(t => t.type === 'video' && t.visible !== false);
     const anyVideoSolo = videoTracks.some(t => t.solo);
 
@@ -268,6 +363,10 @@ class LayerBuilderService {
       this.preloadUpcomingNestedCompFrames(clips, playheadPosition);
     }
 
+    // Cache the built layers for future frames
+    this.cachedLayers = layers;
+    this.cacheValid = true;
+
     return layers;
   }
 
@@ -420,9 +519,14 @@ class LayerBuilderService {
     }
   }
 
+  // Video sync throttling - track last synced frame to avoid redundant syncs
+  private lastVideoSyncFrame = -1;
+  private lastVideoSyncPlaying = false;
+
   /**
    * Sync video elements to current playhead - call this from render loop
    * Handles video.currentTime updates and play/pause state
+   * OPTIMIZED: Skips sync if same frame and playback state unchanged
    */
   syncVideoElements(): void {
     const timelineState = useTimelineStore.getState();
@@ -430,6 +534,16 @@ class LayerBuilderService {
     const playheadPosition = playheadState.isUsingInternalPosition
       ? playheadState.position
       : timelineState.playheadPosition;
+
+    // Quick frame check - skip sync if same frame during playback (video plays itself)
+    const currentFrame = Math.floor(playheadPosition * this.FRAME_RATE);
+    if (isPlaying && !isDraggingPlayhead &&
+        currentFrame === this.lastVideoSyncFrame &&
+        isPlaying === this.lastVideoSyncPlaying) {
+      return; // Video elements auto-advance during playback, no sync needed
+    }
+    this.lastVideoSyncFrame = currentFrame;
+    this.lastVideoSyncPlaying = isPlaying;
 
     // Check if proxy mode is enabled
     const mediaStore = useMediaStore.getState();
