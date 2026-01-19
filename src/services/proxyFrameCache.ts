@@ -440,14 +440,14 @@ class ProxyFrameCache {
         ctx.resume();
       }
 
-      // Clean up finished sources (keep max 3 overlapping)
+      // Clean up finished sources (keep max 8 overlapping for continuous scrub sound)
       // Note: sources auto-remove via onended callback, this is just a safety limit
-      if (this.activeScrubSources.length > 5) {
-        this.activeScrubSources = this.activeScrubSources.slice(-3);
+      if (this.activeScrubSources.length > 12) {
+        this.activeScrubSources = this.activeScrubSources.slice(-8);
       }
 
       // If too many sources, stop oldest
-      while (this.activeScrubSources.length > 3) {
+      while (this.activeScrubSources.length > 8) {
         const oldest = this.activeScrubSources.shift();
         if (oldest) {
           try {

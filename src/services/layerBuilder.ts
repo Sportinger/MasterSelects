@@ -685,28 +685,31 @@ class LayerBuilderService {
 
   // Audio scrubbing state
   private lastScrubPosition = -1;
+  private lastScrubTime = 0;
   private scrubAudioTimeout: ReturnType<typeof setTimeout> | null = null;
-  private readonly SCRUB_AUDIO_DURATION = 80; // ms of audio to play when scrubbing
+  private readonly SCRUB_AUDIO_DURATION = 150; // ms of audio to play when scrubbing (longer = more continuous)
+  private readonly SCRUB_TRIGGER_INTERVAL = 30; // ms between scrub audio triggers (lower = more responsive)
 
   /**
    * Play a short audio snippet for scrubbing feedback
+   * Improved: Longer snippets, no early stopping for continuous sound
    */
   private playScrubAudio(audio: HTMLAudioElement, time: number): void {
     // Seek to position
     audio.currentTime = time;
-    audio.volume = 0.7; // Slightly lower volume for scrubbing
+    audio.volume = 0.8; // Slightly lower volume for scrubbing
 
     // Play short snippet
     audio.play().catch(() => {});
 
-    // Stop after short duration
-    if (this.scrubAudioTimeout) {
-      clearTimeout(this.scrubAudioTimeout);
+    // DON'T cancel previous timeout - let snippets overlap for continuous sound
+    // Only set new timeout if none active (prevents buildup)
+    if (!this.scrubAudioTimeout) {
+      this.scrubAudioTimeout = setTimeout(() => {
+        audio.pause();
+        this.scrubAudioTimeout = null;
+      }, this.SCRUB_AUDIO_DURATION);
     }
-    this.scrubAudioTimeout = setTimeout(() => {
-      audio.pause();
-      this.scrubAudioTimeout = null;
-    }, this.SCRUB_AUDIO_DURATION);
   }
 
   /**
@@ -809,9 +812,14 @@ class LayerBuilderService {
 
         // Audio scrubbing for audio track clips
         if (isDraggingPlayhead && !effectivelyMuted) {
-          const positionChanged = Math.abs(playheadPosition - this.lastScrubPosition) > 0.02;
-          if (positionChanged) {
+          const now = performance.now();
+          const timeSinceLastScrub = now - this.lastScrubTime;
+          const positionChanged = Math.abs(playheadPosition - this.lastScrubPosition) > 0.005; // 5ms threshold
+
+          // Trigger based on BOTH time interval AND position change for responsive scrubbing
+          if (positionChanged && timeSinceLastScrub > this.SCRUB_TRIGGER_INTERVAL) {
             this.lastScrubPosition = playheadPosition;
+            this.lastScrubTime = now;
             audio.playbackRate = 1;
             this.playScrubAudio(audio, clipTime);
           }
@@ -919,10 +927,16 @@ class LayerBuilderService {
 
             // Audio scrubbing - use instant Web Audio API scrubbing
             if (isDraggingPlayhead && !effectivelyMuted) {
-              const positionChanged = Math.abs(playheadPosition - this.lastScrubPosition) > 0.005;
-              if (positionChanged) {
+              const now = performance.now();
+              const timeSinceLastScrub = now - this.lastScrubTime;
+              const positionChanged = Math.abs(playheadPosition - this.lastScrubPosition) > 0.003; // 3ms threshold
+
+              // Time-based + position-based trigger for continuous scrub audio
+              if (positionChanged && timeSinceLastScrub > 25) { // 25ms = ~40 triggers/sec max
                 this.lastScrubPosition = playheadPosition;
-                proxyFrameCache.playScrubAudio(mediaFile.id, clipTime, 0.12);
+                this.lastScrubTime = now;
+                // Longer duration (200ms) with overlap for continuous sound
+                proxyFrameCache.playScrubAudio(mediaFile.id, clipTime, 0.2);
               }
             } else if (shouldPlay) {
               // Set playback rate (no drift correction - audio is master)
