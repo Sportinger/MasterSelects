@@ -436,7 +436,7 @@ class ProxyFrameCache {
 
       // Try 3: File handle (if available)
       if (!arrayBuffer) {
-        const fileHandle = await fileSystemService.getStoredFileHandle(mediaFileId);
+        const fileHandle = fileSystemService.getFileHandle(mediaFileId);
         if (fileHandle) {
           console.log(`[AudioBuffer] Loading from file handle: ${mediaFileId}`);
           try {
