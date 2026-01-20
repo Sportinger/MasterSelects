@@ -174,32 +174,91 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
     startVertices: [],
   });
 
+  // Local drag position state - used during drag to avoid expensive store updates
+  // This allows smooth 60fps dragging without triggering React re-renders from store changes
+  const [localDragVertex, setLocalDragVertex] = useState<{
+    vertexId: string;
+    x?: number;
+    y?: number;
+    handleIn?: { x: number; y: number };
+    handleOut?: { x: number; y: number };
+  } | null>(null);
+
+  // Local state for entire mask drag (all vertices offset)
+  const [localMaskOffset, setLocalMaskOffset] = useState<{ dx: number; dy: number } | null>(null);
+
   // Convert mask vertices to canvas coordinates for rendering (including position offset)
+  // Uses local drag state for smooth rendering during drag operations
   const canvasVertices = useMemo(() => {
     if (!activeMask) return [];
     const posX = activeMask.position?.x || 0;
     const posY = activeMask.position?.y || 0;
 
-    return activeMask.vertices.map(v => ({
-      ...v,
-      ...normalizedToCanvas(v.x + posX, v.y + posY, canvasWidth, canvasHeight),
-      handleIn: normalizedToCanvas(v.handleIn.x, v.handleIn.y, canvasWidth, canvasHeight),
-      handleOut: normalizedToCanvas(v.handleOut.x, v.handleOut.y, canvasWidth, canvasHeight),
-    }));
-  }, [activeMask, canvasWidth, canvasHeight]);
+    return activeMask.vertices.map(v => {
+      // Apply local drag offset for entire mask drag
+      let vx = v.x;
+      let vy = v.y;
+      let handleIn = v.handleIn;
+      let handleOut = v.handleOut;
+
+      if (localMaskOffset) {
+        // Entire mask is being dragged
+        vx = Math.max(0, Math.min(1, v.x + localMaskOffset.dx));
+        vy = Math.max(0, Math.min(1, v.y + localMaskOffset.dy));
+      } else if (localDragVertex && localDragVertex.vertexId === v.id) {
+        // Single vertex or handle is being dragged
+        if (localDragVertex.x !== undefined) vx = localDragVertex.x;
+        if (localDragVertex.y !== undefined) vy = localDragVertex.y;
+        if (localDragVertex.handleIn) handleIn = localDragVertex.handleIn;
+        if (localDragVertex.handleOut) handleOut = localDragVertex.handleOut;
+      }
+
+      return {
+        ...v,
+        ...normalizedToCanvas(vx + posX, vy + posY, canvasWidth, canvasHeight),
+        handleIn: normalizedToCanvas(handleIn.x, handleIn.y, canvasWidth, canvasHeight),
+        handleOut: normalizedToCanvas(handleOut.x, handleOut.y, canvasWidth, canvasHeight),
+      };
+    });
+  }, [activeMask, canvasWidth, canvasHeight, localDragVertex, localMaskOffset]);
 
   // Generate path data for the active mask
+  // Uses local drag state for smooth rendering during drag operations
   const pathData = useMemo(() => {
     if (!activeMask) return '';
+
+    // Apply local drag state to vertices for path rendering
+    let vertices = activeMask.vertices;
+    if (localMaskOffset || localDragVertex) {
+      vertices = activeMask.vertices.map(v => {
+        let vx = v.x;
+        let vy = v.y;
+        let handleIn = v.handleIn;
+        let handleOut = v.handleOut;
+
+        if (localMaskOffset) {
+          vx = Math.max(0, Math.min(1, v.x + localMaskOffset.dx));
+          vy = Math.max(0, Math.min(1, v.y + localMaskOffset.dy));
+        } else if (localDragVertex && localDragVertex.vertexId === v.id) {
+          if (localDragVertex.x !== undefined) vx = localDragVertex.x;
+          if (localDragVertex.y !== undefined) vy = localDragVertex.y;
+          if (localDragVertex.handleIn) handleIn = localDragVertex.handleIn;
+          if (localDragVertex.handleOut) handleOut = localDragVertex.handleOut;
+        }
+
+        return { ...v, x: vx, y: vy, handleIn, handleOut };
+      });
+    }
+
     return generatePathData(
-      activeMask.vertices,
+      vertices,
       activeMask.closed,
       activeMask.position?.x || 0,
       activeMask.position?.y || 0,
       canvasWidth,
       canvasHeight
     );
-  }, [activeMask, canvasWidth, canvasHeight]);
+  }, [activeMask, canvasWidth, canvasHeight, localDragVertex, localMaskOffset]);
 
   // Handle vertex drag start
   const handleVertexMouseDown = useCallback((
@@ -279,9 +338,9 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
           const normalizedShiftDx = shiftDx / canvasWidth;
           const scaleFactor = 1 + normalizedShiftDx * 5; // Multiply by 5 for sensitivity
 
-          // Scale both handles - keep vertex at position when shift was pressed
-          // Skip cache invalidation during drag for better performance
-          updateVertex(selectedClip.id, activeMask.id, dragState.current.vertexId, {
+          // Update local state only - no store update during drag for smooth 60fps
+          setLocalDragVertex({
+            vertexId: dragState.current.vertexId,
             x: dragState.current.shiftStartVertexX,
             y: dragState.current.shiftStartVertexY,
             handleIn: {
@@ -292,7 +351,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
               x: dragState.current.startHandleOutX * scaleFactor,
               y: dragState.current.startHandleOutY * scaleFactor,
             },
-          }, true);
+          });
         } else {
           // Normal drag: move vertex position
           const dx = (moveEvent.clientX - dragState.current.startX) * scaleX;
@@ -302,11 +361,12 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
 
           const newX = Math.max(0, Math.min(1, dragState.current.startVertexX + normalizedDx));
           const newY = Math.max(0, Math.min(1, dragState.current.startVertexY + normalizedDy));
-          // Skip cache invalidation during drag for better performance
-          updateVertex(selectedClip.id, activeMask.id, dragState.current.vertexId, {
+          // Update local state only - no store update during drag for smooth 60fps
+          setLocalDragVertex({
+            vertexId: dragState.current.vertexId,
             x: newX,
             y: newY,
-          }, true);
+          });
         }
       } else {
         // Move bezier handle
@@ -316,17 +376,32 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
         const normalizedDy = dy / canvasHeight;
 
         const handleKey = dragState.current.handleType;
-        // Skip cache invalidation during drag for better performance
-        updateVertex(selectedClip.id, activeMask.id, dragState.current.vertexId, {
+        // Update local state only - no store update during drag for smooth 60fps
+        setLocalDragVertex({
+          vertexId: dragState.current.vertexId,
           [handleKey]: {
             x: dragState.current.startHandleX + normalizedDx,
             y: dragState.current.startHandleY + normalizedDy,
           },
-        }, true);
+        });
       }
     };
 
     const handleMouseUp = () => {
+      // Commit local drag state to store (single update at drag end)
+      const localState = localDragVertex;
+      if (localState && selectedClip && activeMask) {
+        const updates: Partial<MaskVertex> = {};
+        if (localState.x !== undefined) updates.x = localState.x;
+        if (localState.y !== undefined) updates.y = localState.y;
+        if (localState.handleIn) updates.handleIn = localState.handleIn;
+        if (localState.handleOut) updates.handleOut = localState.handleOut;
+        updateVertex(selectedClip.id, activeMask.id, localState.vertexId, updates, true);
+      }
+
+      // Clear local drag state
+      setLocalDragVertex(null);
+
       dragState.current = {
         vertexId: null,
         handleType: null,
@@ -347,14 +422,13 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       };
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
-      // Mark dragging as complete and invalidate cache to trigger mask texture regeneration
+      // Mark dragging as complete to trigger mask texture regeneration
       setMaskDragging(false);
-      invalidateCache();
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-  }, [activeMask, selectedClip, selectVertex, updateVertex, canvasWidth, canvasHeight, invalidateCache, setMaskDragging]);
+  }, [activeMask, selectedClip, selectVertex, updateVertex, canvasWidth, canvasHeight, setMaskDragging, localDragVertex]);
 
   // Handle mask area drag (drag entire mask when clicking inside the mask fill)
   const handleMaskDragStart = useCallback((e: React.MouseEvent) => {
@@ -376,7 +450,6 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!maskDragState.current.isDragging) return;
-      if (!selectedClip || !activeMask) return;
 
       const svg = svgRef.current;
       if (!svg) return;
@@ -392,30 +465,8 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       const normalizedDx = dx / canvasWidth;
       const normalizedDy = dy / canvasHeight;
 
-      // Update all vertices at once
-      const { clips } = useTimelineStore.getState();
-      const updatedClips = clips.map(c => {
-        if (c.id !== selectedClip.id) return c;
-        return {
-          ...c,
-          masks: (c.masks || []).map(m => {
-            if (m.id !== activeMask.id) return m;
-            return {
-              ...m,
-              vertices: m.vertices.map(v => {
-                const startVertex = maskDragState.current.startVertices.find(sv => sv.id === v.id);
-                if (!startVertex) return v;
-                return {
-                  ...v,
-                  x: Math.max(0, Math.min(1, startVertex.x + normalizedDx)),
-                  y: Math.max(0, Math.min(1, startVertex.y + normalizedDy)),
-                };
-              }),
-            };
-          }),
-        };
-      });
-      useTimelineStore.setState({ clips: updatedClips });
+      // Update local offset state only - no store update during drag for smooth 60fps
+      setLocalMaskOffset({ dx: normalizedDx, dy: normalizedDy });
     };
 
     const handleMouseUp = () => {
