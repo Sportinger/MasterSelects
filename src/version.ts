@@ -3,7 +3,332 @@
 // Increment PATCH (0.0.X) for each commit
 export const APP_VERSION = '1.0.9';
 
-// Changelog entry type
+// Change entry type
+export interface ChangeEntry {
+  type: 'new' | 'fix' | 'improve';
+  title: string;
+  description?: string;
+}
+
+// Time-grouped changelog entry
+export interface TimeGroupedChanges {
+  label: string; // "Today", "Last Week", "This Month", "Earlier"
+  dateRange: string; // "Jan 20" or "Jan 13-19" etc
+  changes: ChangeEntry[];
+}
+
+// Calculate relative time labels based on current date
+function getTimeLabel(date: Date): { label: string; sortOrder: number } {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  if (date >= today) {
+    return { label: 'Today', sortOrder: 0 };
+  } else if (date >= yesterday) {
+    return { label: 'Yesterday', sortOrder: 1 };
+  } else if (date >= weekAgo) {
+    return { label: 'Last Week', sortOrder: 2 };
+  } else if (date >= monthAgo) {
+    return { label: 'This Month', sortOrder: 3 };
+  } else {
+    return { label: 'Earlier', sortOrder: 4 };
+  }
+}
+
+// Raw changelog data with dates
+interface RawChangeEntry extends ChangeEntry {
+  date: string; // ISO date string YYYY-MM-DD
+}
+
+const RAW_CHANGELOG: RawChangeEntry[] = [
+  // === Jan 20, 2026 ===
+  {
+    date: '2026-01-20',
+    type: 'new',
+    title: 'Export Mode Selection',
+    description: 'Choose between WebCodecs Fast, HTMLVideo Precise, or FFmpeg export',
+  },
+  {
+    date: '2026-01-20',
+    type: 'new',
+    title: 'Audio Master Clock',
+    description: 'Playhead follows audio for perfect sync like Premiere/Resolve',
+  },
+  {
+    date: '2026-01-20',
+    type: 'new',
+    title: 'Varispeed Audio Scrubbing',
+    description: 'Continuous playback with speed adjustment while scrubbing',
+  },
+  {
+    date: '2026-01-20',
+    type: 'improve',
+    title: 'Layer Caching',
+    description: 'Better performance when paused or scrubbing',
+  },
+  {
+    date: '2026-01-20',
+    type: 'fix',
+    title: 'Audio Export Codec Detection',
+    description: 'Properly detect AAC/Opus support for audio encoding',
+  },
+  {
+    date: '2026-01-20',
+    type: 'improve',
+    title: 'WebCodecs Export Optimization',
+    description: 'Parallel clip loading and sequential decoding for faster exports',
+  },
+
+  // === Jan 13-14, 2026 ===
+  {
+    date: '2026-01-14',
+    type: 'fix',
+    title: 'Export Frame Sync',
+    description: 'Proper H.264 avcC config and sequential decoding',
+  },
+  {
+    date: '2026-01-13',
+    type: 'new',
+    title: 'YouTube Video Download',
+    description: 'Download YouTube videos via Native Helper with yt-dlp',
+  },
+  {
+    date: '2026-01-13',
+    type: 'new',
+    title: 'Native Helper App',
+    description: 'Hardware-accelerated video codecs for ProRes/DNxHD',
+  },
+  {
+    date: '2026-01-13',
+    type: 'new',
+    title: 'NativeDecoder Integration',
+    description: 'Play professional codecs directly in browser',
+  },
+  {
+    date: '2026-01-13',
+    type: 'new',
+    title: 'FFmpeg Export with Audio',
+    description: 'Full FFmpeg WASM export with progress bar',
+  },
+  {
+    date: '2026-01-13',
+    type: 'new',
+    title: 'Desktop Mode for Mobile',
+    description: 'Option to view full desktop UI on mobile devices',
+  },
+  {
+    date: '2026-01-13',
+    type: 'new',
+    title: 'Multi-Select Relink Dialog',
+    description: 'Batch file relinking for missing media',
+  },
+  {
+    date: '2026-01-13',
+    type: 'fix',
+    title: 'MOV/MXF Import',
+    description: 'Case-insensitive extension detection for all containers',
+  },
+
+  // === Jan 12, 2026 ===
+  {
+    date: '2026-01-12',
+    type: 'new',
+    title: 'Mobile UI',
+    description: 'Touch gestures and responsive layout for mobile devices',
+  },
+  {
+    date: '2026-01-12',
+    type: 'new',
+    title: 'Relink Dialog',
+    description: 'Reconnect missing media files easily',
+  },
+  {
+    date: '2026-01-12',
+    type: 'fix',
+    title: 'Keyframes Persistence',
+    description: 'Keyframes now properly saved and restored in projects',
+  },
+  {
+    date: '2026-01-12',
+    type: 'fix',
+    title: 'NVIDIA GPU Compatibility',
+    description: 'Streaming decode for Windows NVIDIA proxy generation',
+  },
+
+  // === Jan 6, 2026 ===
+  {
+    date: '2026-01-06',
+    type: 'new',
+    title: '37 Blend Modes',
+    description: 'All After Effects blend modes now available',
+  },
+  {
+    date: '2026-01-06',
+    type: 'new',
+    title: 'Keyframe Animation System',
+    description: 'Animate any clip property with keyframes',
+  },
+  {
+    date: '2026-01-06',
+    type: 'new',
+    title: 'Composition Tabs',
+    description: 'Switch between compositions like After Effects',
+  },
+  {
+    date: '2026-01-06',
+    type: 'new',
+    title: 'Clip Cutter',
+    description: 'Press C to cut clips at playhead',
+  },
+  {
+    date: '2026-01-06',
+    type: 'new',
+    title: 'File System Access',
+    description: 'Save proxies and projects to real folders',
+  },
+
+  // === Jan 5, 2026 ===
+  {
+    date: '2026-01-05',
+    type: 'new',
+    title: 'GPU Proxy Generation',
+    description: 'Multi-core accelerated proxy creation',
+  },
+  {
+    date: '2026-01-05',
+    type: 'improve',
+    title: 'Instant Clip Drop',
+    description: 'Clips appear immediately, thumbnails generate in background',
+  },
+
+  // === Jan 4, 2026 ===
+  {
+    date: '2026-01-04',
+    type: 'new',
+    title: 'RAM Preview',
+    description: 'Cache frames to GPU for instant scrubbing like After Effects',
+  },
+  {
+    date: '2026-01-04',
+    type: 'new',
+    title: 'Nested Compositions',
+    description: 'Create and playback nested comps with thumbnails',
+  },
+  {
+    date: '2026-01-04',
+    type: 'new',
+    title: 'IndexedDB Persistence',
+    description: 'Projects auto-save locally in your browser',
+  },
+  {
+    date: '2026-01-04',
+    type: 'new',
+    title: 'Global Undo/Redo',
+    description: 'Ctrl+Z / Ctrl+Shift+Z for all actions',
+  },
+  {
+    date: '2026-01-04',
+    type: 'new',
+    title: 'Export Panel',
+    description: 'In/Out markers and render settings',
+  },
+  {
+    date: '2026-01-04',
+    type: 'new',
+    title: 'Solo & Mute Tracks',
+    description: 'Isolate or mute video/audio tracks',
+  },
+  {
+    date: '2026-01-04',
+    type: 'new',
+    title: 'Loop Playback',
+    description: 'Toggle loop mode and stop at out point',
+  },
+  {
+    date: '2026-01-04',
+    type: 'new',
+    title: 'Clip Snapping',
+    description: 'Smart collision detection when moving clips',
+  },
+  {
+    date: '2026-01-04',
+    type: 'new',
+    title: 'Precision Sliders',
+    description: 'Fine control for transform and effect values',
+  },
+  {
+    date: '2026-01-04',
+    type: 'new',
+    title: 'Audio Track Support',
+    description: 'Dedicated audio tracks with playback sync',
+  },
+  {
+    date: '2026-01-04',
+    type: 'fix',
+    title: 'Blend Modes Working',
+    description: 'Fixed u32 vs float mismatch in shader',
+  },
+  {
+    date: '2026-01-04',
+    type: 'improve',
+    title: 'Frame Caching',
+    description: 'Smooth video scrubbing with texture cache',
+  },
+];
+
+// Group changes by time period
+export function getGroupedChangelog(): TimeGroupedChanges[] {
+  const groups = new Map<string, { sortOrder: number; dateRange: string; changes: ChangeEntry[] }>();
+
+  for (const entry of RAW_CHANGELOG) {
+    const date = new Date(entry.date);
+    const { label, sortOrder } = getTimeLabel(date);
+
+    if (!groups.has(label)) {
+      // Format date range
+      const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      groups.set(label, { sortOrder, dateRange: dateStr, changes: [] });
+    }
+
+    const group = groups.get(label)!;
+    group.changes.push({
+      type: entry.type,
+      title: entry.title,
+      description: entry.description,
+    });
+
+    // Update date range if needed
+    const currentDate = new Date(entry.date);
+    const dateStr = currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    if (!group.dateRange.includes('-') && dateStr !== group.dateRange) {
+      // Create a range
+      const [firstPart] = group.dateRange.split(' ');
+      const [, secondDay] = dateStr.split(' ');
+      if (firstPart === dateStr.split(' ')[0]) {
+        // Same month
+        group.dateRange = `${group.dateRange.split(' ')[0]} ${secondDay}-${group.dateRange.split(' ')[1]}`;
+      }
+    }
+  }
+
+  // Sort groups by sortOrder and return
+  return Array.from(groups.entries())
+    .map(([label, data]) => ({
+      label,
+      dateRange: data.dateRange,
+      changes: data.changes,
+    }))
+    .sort((a, b) => {
+      const orderA = groups.get(a.label)?.sortOrder ?? 99;
+      const orderB = groups.get(b.label)?.sortOrder ?? 99;
+      return orderA - orderB;
+    });
+}
+
+// Legacy interface for backward compatibility
 export interface ChangelogEntry {
   version: string;
   date: string;
@@ -13,54 +338,15 @@ export interface ChangelogEntry {
   }[];
 }
 
-// Version changelog - add new entries at the TOP
+// Legacy changelog export (keeping for backward compatibility)
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: '1.0.9',
     date: '2026-01-20',
-    changes: [
-      { type: 'new', description: 'Audio Master Clock - playhead follows audio for perfect sync (like Premiere/Resolve)' },
-      { type: 'new', description: 'Varispeed audio scrubbing - continuous playback with speed adjustment' },
-      { type: 'new', description: 'Multi-select in relink dialog for batch file relinking' },
-      { type: 'new', description: 'Desktop mode option for mobile devices' },
-      { type: 'fix', description: 'MOV/MXF import now works with uppercase extensions (.MOV, .MXF)' },
-      { type: 'fix', description: 'Support for all video containers (TS, MTS, 3GP, etc.) with H.264/H.265' },
-      { type: 'fix', description: 'Export frame sync - proper H.264 avcC config and sequential decoding' },
-      { type: 'fix', description: 'Auto-open folder picker after single file relink' },
-      { type: 'improve', description: 'Layer caching for better pause/scrubbing performance' },
-      { type: 'improve', description: 'WebCodecs export optimization with parallel clip loading' },
-      { type: 'improve', description: 'Varispeed scrubbing works for all video clips (not just proxies)' },
-    ],
-  },
-  {
-    version: '1.0.8',
-    date: '2026-01-13',
-    changes: [
-      { type: 'new', description: 'YouTube video download via yt-dlp (requires Native Helper)' },
-      { type: 'new', description: 'Auto-add video when pasting YouTube URLs' },
-      { type: 'new', description: 'Download button on YouTube video thumbnails' },
-      { type: 'new', description: 'NativeDecoder integration for ProRes/DNxHD playback' },
-      { type: 'fix', description: 'Export progress bar now shows accurate progress' },
-      { type: 'improve', description: 'Better error handling for video file imports' },
-    ],
-  },
-  {
-    version: '1.0.7',
-    date: '2026-01-13',
-    changes: [
-      { type: 'new', description: 'Native Helper app for hardware-accelerated video codecs' },
-      { type: 'fix', description: 'Frame-accurate seeking for FFmpeg export' },
-      { type: 'new', description: 'Audio support in FFmpeg export with progress bar' },
-      { type: 'new', description: 'Custom FFmpeg WASM build with professional codecs' },
-    ],
-  },
-  {
-    version: '1.0.6',
-    date: '2026-01-10',
-    changes: [
-      { type: 'improve', description: 'YouTubePanel component updates' },
-      { type: 'new', description: 'Feature documentation system' },
-    ],
+    changes: RAW_CHANGELOG.filter(c => c.date === '2026-01-20').map(c => ({
+      type: c.type,
+      description: c.title,
+    })),
   },
 ];
 
