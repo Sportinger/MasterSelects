@@ -18,6 +18,9 @@ export type {
   AudioSettings,
   Command,
   Response,
+  VideoInfo,
+  FormatInfo,
+  FormatRecommendation,
 } from './protocol';
 
 export { ERROR_CODES } from './protocol';

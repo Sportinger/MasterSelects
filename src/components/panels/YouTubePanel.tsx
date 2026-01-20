@@ -6,6 +6,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { downloadYouTubeVideo, subscribeToDownload, isDownloadAvailable, type DownloadProgress } from '../../services/youtubeDownloader';
 import { NativeHelperClient } from '../../services/nativeHelper';
+import type { FormatRecommendation, VideoInfo } from '../../services/nativeHelper';
 import './YouTubePanel.css';
 
 interface YouTubeVideo {
@@ -54,6 +55,56 @@ async function getVideoInfo(videoId: string): Promise<YouTubeVideo | null> {
   }
 }
 
+// Format selection dialog
+function FormatDialog({
+  videoInfo,
+  onSelect,
+  onCancel,
+}: {
+  videoInfo: VideoInfo;
+  onSelect: (formatId: string) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="format-dialog-backdrop" onClick={onCancel}>
+      <div className="format-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="format-dialog-header">
+          <h3>Select Quality</h3>
+          <button className="format-dialog-close" onClick={onCancel}>×</button>
+        </div>
+
+        <div className="format-dialog-video">
+          <img src={videoInfo.thumbnail} alt={videoInfo.title} />
+          <div className="format-dialog-info">
+            <span className="format-dialog-title">{videoInfo.title}</span>
+            <span className="format-dialog-uploader">{videoInfo.uploader}</span>
+          </div>
+        </div>
+
+        <div className="format-dialog-options">
+          {videoInfo.recommendations.map((format) => (
+            <button
+              key={format.id}
+              className="format-option"
+              onClick={() => onSelect(format.id)}
+            >
+              <span className="format-label">{format.label}</span>
+              <span className="format-details">
+                {format.vcodec && <span className="format-codec">{format.vcodec.split('.')[0]}</span>}
+                {format.acodec && <span className="format-codec">{format.acodec.split('.')[0]}</span>}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <button className="format-dialog-cancel" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function YouTubePanel() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<YouTubeVideo[]>([]);
@@ -63,6 +114,14 @@ export function YouTubePanel() {
   const [autoDownload, setAutoDownload] = useState(false);
   const [downloadingVideos, setDownloadingVideos] = useState<Set<string>>(new Set());
   const [helperConnected, setHelperConnected] = useState(isDownloadAvailable());
+
+  // Format selection state
+  const [formatDialog, setFormatDialog] = useState<{
+    video: YouTubeVideo;
+    info: VideoInfo;
+    mode: 'download' | 'timeline';
+  } | null>(null);
+  const [fetchingFormats, setFetchingFormats] = useState<string | null>(null);
 
   const { apiKeys, openSettings } = useSettingsStore();
   const youtubeApiKey = apiKeys.youtube || '';
@@ -237,8 +296,56 @@ export function YouTubePanel() {
 
   const handleDragEnd = () => setDraggingVideo(null);
 
+  // Show format selection dialog before download
+  const showFormatDialog = async (video: YouTubeVideo, mode: 'download' | 'timeline') => {
+    if (fetchingFormats) return;
+
+    setFetchingFormats(video.id);
+    setError(null);
+
+    try {
+      const url = `https://www.youtube.com/watch?v=${video.id}`;
+      const info = await NativeHelperClient.listFormats(url);
+
+      if (info && info.recommendations.length > 0) {
+        setFormatDialog({ video, info, mode });
+      } else {
+        // Fallback: download with default format
+        if (mode === 'download') {
+          await executeDownload(video);
+        } else {
+          await executeAddToTimeline(video);
+        }
+      }
+    } catch (err) {
+      setError(`Failed to fetch formats: ${(err as Error).message}`);
+    } finally {
+      setFetchingFormats(null);
+    }
+  };
+
+  // Handle format selection from dialog
+  const handleFormatSelect = async (formatId: string) => {
+    if (!formatDialog) return;
+
+    const { video, mode } = formatDialog;
+    setFormatDialog(null);
+
+    if (mode === 'download') {
+      await executeDownload(video, formatId);
+    } else {
+      await executeAddToTimeline(video, formatId);
+    }
+  };
+
   // Download video only (save to downloads folder)
   const downloadVideoOnly = async (video: YouTubeVideo) => {
+    if (downloadingVideos.has(video.id)) return;
+    await showFormatDialog(video, 'download');
+  };
+
+  // Execute download with optional format
+  const executeDownload = async (video: YouTubeVideo, formatId?: string) => {
     if (downloadingVideos.has(video.id)) return;
 
     setDownloadingVideos(prev => new Set(prev).add(video.id));
@@ -248,7 +355,7 @@ export function YouTubePanel() {
     });
 
     try {
-      const file = await downloadYouTubeVideo(video.id, video.title, video.thumbnail);
+      const file = await downloadYouTubeVideo(video.id, video.title, video.thumbnail, formatId);
       // Trigger browser download
       const url = URL.createObjectURL(file);
       const a = document.createElement('a');

@@ -106,7 +106,46 @@ export interface DownloadYouTubeCommand {
   cmd: 'download_youtube';
   id: string;
   url: string;
+  format_id?: string;
   output_dir?: string;
+}
+
+export interface ListFormatsCommand {
+  cmd: 'list_formats';
+  id: string;
+  url: string;
+}
+
+export interface FormatInfo {
+  format_id: string;
+  ext: string;
+  resolution: string;
+  fps: number | null;
+  vcodec: string | null;
+  acodec: string | null;
+  filesize: number | null;
+  tbr: number | null;
+  format_note: string;
+  hasVideo: boolean;
+  hasAudio: boolean;
+}
+
+export interface FormatRecommendation {
+  id: string;
+  label: string;
+  resolution: string;
+  vcodec: string | null;
+  acodec: string | null;
+  needsMerge: boolean;
+}
+
+export interface VideoInfo {
+  title: string;
+  thumbnail: string;
+  duration: number;
+  uploader: string;
+  recommendations: FormatRecommendation[];
+  allFormats: FormatInfo[];
 }
 
 export interface GetFileCommand {
@@ -129,6 +168,7 @@ export type Command =
   | InfoCommand
   | PingCommand
   | DownloadYouTubeCommand
+  | ListFormatsCommand
   | GetFileCommand;
 
 // Encode settings

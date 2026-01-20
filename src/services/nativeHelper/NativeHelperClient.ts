@@ -11,6 +11,7 @@ import type {
   FileMetadata,
   SystemInfo,
   EncodeOutput,
+  VideoInfo,
 } from './protocol';
 
 import {
@@ -339,20 +340,63 @@ class NativeHelperClientImpl {
   }
 
   /**
+   * List available formats for a YouTube video
+   */
+  async listFormats(url: string): Promise<VideoInfo | null> {
+    const id = this.nextId();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        resolve(null);
+      }, 30000);
+
+      this.pendingRequests.set(id, (response: any) => {
+        clearTimeout(timeout);
+        if (response.ok) {
+          resolve({
+            title: response.title,
+            thumbnail: response.thumbnail,
+            duration: response.duration,
+            uploader: response.uploader,
+            recommendations: response.recommendations,
+            allFormats: response.allFormats,
+          });
+        } else {
+          resolve(null);
+        }
+      });
+
+      const cmd = {
+        cmd: 'list_formats',
+        id,
+        url,
+      };
+
+      this.sendRaw(JSON.stringify(cmd)).catch(() => {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(id);
+        resolve(null);
+      });
+    });
+  }
+
+  /**
    * Download a YouTube video using yt-dlp
    */
   async downloadYouTube(
     url: string,
+    formatId?: string,
     _onProgress?: (percent: number) => void // Reserved for future progress reporting
   ): Promise<{ success: boolean; path?: string; error?: string }> {
     const id = this.nextId();
 
     return new Promise((resolve, reject) => {
-      // Set timeout (5 minutes for large videos)
+      // Set timeout (10 minutes for large videos)
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(id);
         reject(new Error('Download timeout'));
-      }, 300000);
+      }, 600000);
 
       // Register callback
       this.pendingRequests.set(id, (response: any) => {
@@ -371,11 +415,15 @@ class NativeHelperClientImpl {
       });
 
       // Send download command
-      const cmd = {
+      const cmd: any = {
         cmd: 'download_youtube',
         id,
         url,
       };
+
+      if (formatId) {
+        cmd.format_id = formatId;
+      }
 
       this.sendRaw(JSON.stringify(cmd)).catch((err) => {
         clearTimeout(timeout);

@@ -141,14 +141,21 @@ export function useEngine() {
     }
   }, []);
 
+  // Throttle mask texture updates during drag (100ms = 10fps for GPU texture)
+  const lastMaskTextureUpdate = useRef(0);
+  const MASK_TEXTURE_THROTTLE_MS = 100; // Update GPU texture max 10fps during drag
+
   // Helper function to update mask textures - extracted to avoid duplication
   const updateMaskTextures = useCallback(() => {
     const { clips, playheadPosition, tracks, maskDragging } = useTimelineStore.getState();
 
-    // Skip texture regeneration during drag for better performance
-    // Texture will be regenerated when drag ends (maskDragging becomes false)
+    // Throttle texture regeneration during drag (expensive CPU operation)
     if (maskDragging) {
-      return;
+      const now = performance.now();
+      if (now - lastMaskTextureUpdate.current < MASK_TEXTURE_THROTTLE_MS) {
+        return; // Skip this update, too soon
+      }
+      lastMaskTextureUpdate.current = now;
     }
     const layers = useMixerStore.getState().layers;
 
