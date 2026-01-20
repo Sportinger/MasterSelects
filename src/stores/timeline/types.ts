@@ -238,7 +238,7 @@ export interface MaskActions {
   getClipMasks: (clipId: string) => ClipMask[];
   addVertex: (clipId: string, maskId: string, vertex: Omit<MaskVertex, 'id'>, index?: number) => string;
   removeVertex: (clipId: string, maskId: string, vertexId: string) => void;
-  updateVertex: (clipId: string, maskId: string, vertexId: string, updates: Partial<MaskVertex>) => void;
+  updateVertex: (clipId: string, maskId: string, vertexId: string, updates: Partial<MaskVertex>, skipCacheInvalidation?: boolean) => void;
   closeMask: (clipId: string, maskId: string) => void;
   addRectangleMask: (clipId: string) => string;
   addEllipseMask: (clipId: string) => string;

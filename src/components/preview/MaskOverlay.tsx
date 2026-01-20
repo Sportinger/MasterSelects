@@ -102,6 +102,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
     closeMask,
     addMask,
     setActiveMask,
+    invalidateCache,
   } = useTimelineStore();
 
   // Get first selected clip for mask editing
@@ -275,6 +276,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
           const scaleFactor = 1 + normalizedShiftDx * 5; // Multiply by 5 for sensitivity
 
           // Scale both handles - keep vertex at position when shift was pressed
+          // Skip cache invalidation during drag for better performance
           updateVertex(selectedClip.id, activeMask.id, dragState.current.vertexId, {
             x: dragState.current.shiftStartVertexX,
             y: dragState.current.shiftStartVertexY,
@@ -286,7 +288,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
               x: dragState.current.startHandleOutX * scaleFactor,
               y: dragState.current.startHandleOutY * scaleFactor,
             },
-          });
+          }, true);
         } else {
           // Normal drag: move vertex position
           const dx = (moveEvent.clientX - dragState.current.startX) * scaleX;
@@ -296,10 +298,11 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
 
           const newX = Math.max(0, Math.min(1, dragState.current.startVertexX + normalizedDx));
           const newY = Math.max(0, Math.min(1, dragState.current.startVertexY + normalizedDy));
+          // Skip cache invalidation during drag for better performance
           updateVertex(selectedClip.id, activeMask.id, dragState.current.vertexId, {
             x: newX,
             y: newY,
-          });
+          }, true);
         }
       } else {
         // Move bezier handle
@@ -309,12 +312,13 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
         const normalizedDy = dy / canvasHeight;
 
         const handleKey = dragState.current.handleType;
+        // Skip cache invalidation during drag for better performance
         updateVertex(selectedClip.id, activeMask.id, dragState.current.vertexId, {
           [handleKey]: {
             x: dragState.current.startHandleX + normalizedDx,
             y: dragState.current.startHandleY + normalizedDy,
           },
-        });
+        }, true);
       }
     };
 
@@ -339,11 +343,13 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       };
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      // Invalidate cache after drag ends to trigger mask texture regeneration
+      invalidateCache();
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-  }, [activeMask, selectedClip, selectVertex, updateVertex, canvasWidth, canvasHeight]);
+  }, [activeMask, selectedClip, selectVertex, updateVertex, canvasWidth, canvasHeight, invalidateCache]);
 
   // Handle mask area drag (drag entire mask when clicking inside the mask fill)
   const handleMaskDragStart = useCallback((e: React.MouseEvent) => {
@@ -413,6 +419,8 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       };
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      // Invalidate cache after drag ends to trigger mask texture regeneration
+      useTimelineStore.getState().invalidateCache();
     };
 
     window.addEventListener('mousemove', handleMouseMove);

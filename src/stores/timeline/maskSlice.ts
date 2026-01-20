@@ -193,7 +193,7 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
     invalidateCache();
   },
 
-  updateVertex: (clipId, maskId, vertexId, updates) => {
+  updateVertex: (clipId, maskId, vertexId, updates, skipCacheInvalidation = false) => {
     const { clips, invalidateCache } = get();
 
     set({
@@ -214,7 +214,11 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
       }),
     });
 
-    invalidateCache();
+    // Skip cache invalidation during drag operations for performance
+    // The caller should call invalidateCache() manually after drag ends
+    if (!skipCacheInvalidation) {
+      invalidateCache();
+    }
   },
 
   closeMask: (clipId, maskId) => {

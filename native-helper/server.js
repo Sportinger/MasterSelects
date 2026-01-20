@@ -81,11 +81,16 @@ wss.on('connection', (ws) => {
           ws.send(JSON.stringify({
             id: message.id,
             ok: true,
+            // SystemInfo format expected by the app
             version: VERSION,
+            ffmpeg_version: ytDlpVersion,
+            hw_accel: hasYtDlp ? ['yt-dlp'] : [],
+            cache_used_mb: 0,
+            cache_max_mb: 1000,
+            open_files: activeDownloads.size,
+            // Extra info
             platform: platform(),
             release: release(),
-            yt_dlp: hasYtDlp,
-            yt_dlp_version: ytDlpVersion,
             download_dir: DOWNLOAD_DIR,
           }));
           break;
