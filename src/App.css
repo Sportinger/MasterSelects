@@ -7371,9 +7371,10 @@ input[type="checkbox"] {
   transform: scale(0.96);
 }
 
-/* Dialog container */
+/* Dialog container - fixed size */
 .changelog-dialog {
   width: 480px;
+  height: 600px;
   max-height: 85vh;
   padding: 0;
   text-align: left;
@@ -7488,9 +7489,10 @@ input[type="checkbox"] {
   opacity: 0.6;
 }
 
-/* Scrollable content */
+/* Scrollable content - fills remaining space */
 .changelog-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 16px 24px;
   display: flex;
