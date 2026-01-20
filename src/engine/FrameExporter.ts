@@ -558,6 +558,18 @@ export class FrameExporter {
     for (const clip of videoClips) {
       if (clip.source?.type !== 'video') continue;
 
+      // Skip composition clips - they don't have video files, they render from nested content
+      if (clip.isComposition) {
+        console.log(`[FrameExporter] Clip ${clip.name}: Skipping WebCodecs prep (composition)`);
+        this.clipStates.set(clip.id, {
+          clipId: clip.id,
+          webCodecsPlayer: null,
+          lastSampleIndex: 0,
+          isSequential: false,
+        });
+        continue;
+      }
+
       const mediaFileId = clip.source.mediaFileId;
       const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
 
@@ -614,7 +626,13 @@ export class FrameExporter {
         throw new Error(`FAST export failed: Could not load file data for clip "${clip.name}". Try PRECISE mode instead.`);
       }
 
-      console.log(`[FrameExporter] Loaded ${clip.name} from ${loadSource} (${(fileData.byteLength / 1024 / 1024).toFixed(1)}MB)`);
+      // Detect file format from magic bytes
+      const header = new Uint8Array(fileData.slice(0, 12));
+      const isMOV = header[4] === 0x66 && header[5] === 0x74 && header[6] === 0x79 && header[7] === 0x70 &&
+                    (header[8] === 0x71 && header[9] === 0x74); // 'ftyp' + 'qt' = MOV
+      const fileType = isMOV ? 'MOV' : 'MP4';
+
+      console.log(`[FrameExporter] Loaded ${clip.name} from ${loadSource} (${(fileData.byteLength / 1024 / 1024).toFixed(1)}MB, ${fileType})`);
 
       // Create dedicated WebCodecs player for export
       const exportPlayer = new WebCodecsPlayer({
@@ -626,7 +644,8 @@ export class FrameExporter {
       try {
         await exportPlayer.loadArrayBuffer(fileData);
       } catch (e) {
-        throw new Error(`FAST export failed: WebCodecs/MP4Box parsing failed for clip "${clip.name}": ${e}. Try PRECISE mode instead.`);
+        const hint = isMOV ? ' MOV containers may have unsupported audio codecs.' : '';
+        throw new Error(`FAST export failed: WebCodecs/MP4Box parsing failed for clip "${clip.name}": ${e}.${hint} Try PRECISE mode instead.`);
       }
 
       // Calculate the clip's start time within the export
