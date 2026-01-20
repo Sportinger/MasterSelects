@@ -641,16 +641,9 @@ export class FrameExporter {
         const clipState = this.clipStates.get(clip.id);
 
         if (clipState?.isSequential && clipState.webCodecsPlayer) {
-          // Use WebCodecs sequential decoding (much faster!)
-          const wcp = clipState.webCodecsPlayer;
-
-          if (hasSpeedChanges) {
-            // Non-sequential access needed - use seekDuringExport (still faster than HTMLVideoElement)
-            seekPromises.push(wcp.seekDuringExport(clipTime));
-          } else {
-            // Sequential access - just decode next frame
-            seekPromises.push(wcp.decodeNextFrameForExport());
-          }
+          // Use WebCodecs seeking - it automatically uses sequential decoding when possible
+          // seekDuringExport checks if target is close and decodes sequentially if so
+          seekPromises.push(clipState.webCodecsPlayer.seekDuringExport(clipTime));
         } else {
           // Fall back to HTMLVideoElement seeking
           seekPromises.push(this.seekVideo(clip.source.videoElement, clipTime));
