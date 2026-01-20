@@ -89,6 +89,7 @@ export class WebCodecsPlayer {
   private frameResolve: (() => void) | null = null; // For waiting on decoded frames
   private decoderInitialized = false; // Flag to track decoder ready state
   private pendingDecodeFirstFrame = false; // Flag to defer first frame decode
+  private decoderReadyResolve: (() => void) | null = null; // For waiting on decoder initialization
 
   constructor(options: WebCodecsPlayerOptions = {}) {
     this.loop = options.loop ?? true;
@@ -502,6 +503,12 @@ export class WebCodecsPlayer {
       this.pendingDecodeFirstFrame = false;
       this.decodeFirstFrame();
     }
+
+    // Signal that decoder is ready (for export mode waiting)
+    if (this.decoderReadyResolve) {
+      this.decoderReadyResolve();
+      this.decoderReadyResolve = null;
+    }
   }
 
   play(): void {
@@ -874,6 +881,31 @@ export class WebCodecsPlayer {
   }
 
   /**
+   * Wait for decoder to be initialized (handles race condition in loadArrayBuffer)
+   */
+  private async waitForDecoderReady(): Promise<void> {
+    if (this.decoderInitialized) return;
+
+    // Wait for decoder to be ready
+    await new Promise<void>((resolve) => {
+      // Check again in case it became ready
+      if (this.decoderInitialized) {
+        resolve();
+        return;
+      }
+      this.decoderReadyResolve = resolve;
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        if (this.decoderReadyResolve === resolve) {
+          console.warn('[WebCodecs] Decoder initialization timeout');
+          this.decoderReadyResolve = null;
+          resolve();
+        }
+      }, 5000);
+    });
+  }
+
+  /**
    * Prepare for sequential export - seeks to start time and enters export mode.
    * In export mode, subsequent calls to decodeNextFrameForExport() will decode
    * frames sequentially without resetting the decoder (much faster).
@@ -885,8 +917,12 @@ export class WebCodecsPlayer {
       return;
     }
 
+    // Wait for decoder to be initialized (handles race condition with loadArrayBuffer)
+    await this.waitForDecoderReady();
+
     // Full mode: seek to start time and enter export mode
     if (!this.videoTrack || this.samples.length === 0 || !this.decoder) {
+      console.warn('[WebCodecs] prepareForSequentialExport: decoder not ready after waiting');
       return;
     }
 

@@ -944,7 +944,9 @@ export class FrameExporter {
 
         if (clipState?.isSequential && clipState.webCodecsPlayer) {
           // FAST MODE: WebCodecs sequential decoding
+          // Also seek HTMLVideoElement as backup in case WebCodecs frame retrieval fails
           seekPromises.push(clipState.webCodecsPlayer.seekDuringExport(clipTime));
+          seekPromises.push(this.seekVideo(clip.source.videoElement, clipTime));
         } else {
           // PRECISE MODE: HTMLVideoElement seeking (frame-accurate but slower)
           seekPromises.push(this.seekVideo(clip.source.videoElement, clipTime));
