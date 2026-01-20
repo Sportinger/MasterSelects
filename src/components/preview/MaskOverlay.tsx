@@ -5,7 +5,8 @@ import { useTimelineStore } from '../../stores/timeline';
 import type { MaskVertex } from '../../types';
 
 // Throttle helper - limits function calls to once per interval
-function throttle<T extends (...args: unknown[]) => void>(fn: T, interval: number): T {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function throttle<T extends (...args: any[]) => void>(fn: T, interval: number): T {
   let lastCall = 0;
   let pendingArgs: Parameters<T> | null = null;
   let rafId: number | null = null;
@@ -132,7 +133,6 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
     closeMask,
     addMask,
     setActiveMask,
-    invalidateCache,
     setMaskDragging,
   } = useTimelineStore();
 
@@ -206,9 +206,12 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
 
   // Throttled update function to limit store updates during drag (16ms = ~60fps max)
   const throttledUpdateVertex = useRef(
-    throttle((clipId: string, maskId: string, vertexId: string, updates: Partial<MaskVertex>) => {
-      updateVertex(clipId, maskId, vertexId, updates, true);
-    }, 16)
+    throttle(
+      (clipId: string, maskId: string, vertexId: string, updates: Partial<MaskVertex>) => {
+        updateVertex(clipId, maskId, vertexId, updates, true);
+      },
+      16
+    ) as (clipId: string, maskId: string, vertexId: string, updates: Partial<MaskVertex>) => void
   ).current;
 
   // Convert mask vertices to canvas coordinates for rendering (including position offset)

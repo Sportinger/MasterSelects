@@ -6,7 +6,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { downloadYouTubeVideo, subscribeToDownload, isDownloadAvailable, type DownloadProgress } from '../../services/youtubeDownloader';
 import { NativeHelperClient } from '../../services/nativeHelper';
-import type { FormatRecommendation, VideoInfo } from '../../services/nativeHelper';
+import type { VideoInfo } from '../../services/nativeHelper';
 import './YouTubePanel.css';
 
 interface YouTubeVideo {
