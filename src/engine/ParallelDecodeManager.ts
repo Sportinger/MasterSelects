@@ -51,11 +51,16 @@ interface ClipInfo {
   clipId: string;
   clipName: string;
   fileData: ArrayBuffer;
-  startTime: number;      // Clip start on timeline
+  startTime: number;      // Clip start on timeline (or within composition for nested)
   duration: number;       // Clip duration on timeline
   inPoint: number;        // Source in point
   outPoint: number;       // Source out point
   reversed: boolean;
+  // Nested clip properties
+  isNested?: boolean;
+  parentClipId?: string;
+  parentStartTime?: number;   // Parent composition's start on main timeline
+  parentInPoint?: number;     // Parent composition's in point
 }
 
 interface DecodedFrame {
@@ -255,21 +260,57 @@ export class ParallelDecodeManager {
 
   /**
    * Convert source video time to timeline time
+   * For nested clips, this returns the time on the MAIN timeline
    */
   private sourceTimeToTimeline(clipInfo: ClipInfo, sourceTime: number): number {
     const relativeTime = sourceTime - clipInfo.inPoint;
-    return clipInfo.startTime + (clipInfo.reversed ? clipInfo.duration - relativeTime : relativeTime);
+    const clipLocalTime = clipInfo.reversed ? clipInfo.duration - relativeTime : relativeTime;
+
+    if (clipInfo.isNested && clipInfo.parentStartTime !== undefined) {
+      // For nested clips: clipInfo.startTime is relative to composition
+      // Main timeline time = parentStartTime + parentInPoint + clipStartTime + clipLocalTime
+      const compTime = clipInfo.startTime + clipLocalTime;
+      return clipInfo.parentStartTime + (clipInfo.parentInPoint || 0) + compTime;
+    }
+
+    return clipInfo.startTime + clipLocalTime;
   }
 
   /**
    * Convert timeline time to source video time
+   * For nested clips, timelineTime is the MAIN timeline time
    */
   private timelineToSourceTime(clipInfo: ClipInfo, timelineTime: number): number {
-    const clipLocalTime = timelineTime - clipInfo.startTime;
+    let clipLocalTime: number;
+
+    if (clipInfo.isNested && clipInfo.parentStartTime !== undefined) {
+      // Convert main timeline time to composition time
+      const compTime = timelineTime - clipInfo.parentStartTime - (clipInfo.parentInPoint || 0);
+      // Then to clip local time
+      clipLocalTime = compTime - clipInfo.startTime;
+    } else {
+      clipLocalTime = timelineTime - clipInfo.startTime;
+    }
+
     if (clipInfo.reversed) {
       return clipInfo.outPoint - clipLocalTime;
     }
     return clipInfo.inPoint + clipLocalTime;
+  }
+
+  /**
+   * Check if a timeline time falls within this clip's range
+   */
+  private isTimeInClipRange(clipInfo: ClipInfo, timelineTime: number): boolean {
+    if (clipInfo.isNested && clipInfo.parentStartTime !== undefined) {
+      // Convert main timeline time to composition time
+      const compTime = timelineTime - clipInfo.parentStartTime - (clipInfo.parentInPoint || 0);
+      // Check if within nested clip's range in the composition
+      return compTime >= clipInfo.startTime && compTime < clipInfo.startTime + clipInfo.duration;
+    }
+
+    // Regular clip check
+    return timelineTime >= clipInfo.startTime && timelineTime < clipInfo.startTime + clipInfo.duration;
   }
 
   /**
@@ -283,10 +324,9 @@ export class ParallelDecodeManager {
 
     for (const [, clipDecoder] of this.clipDecoders) {
       const clipInfo = clipDecoder.clipInfo;
-      const clipEnd = clipInfo.startTime + clipInfo.duration;
 
-      // Skip if timeline time is outside this clip's range
-      if (timelineTime < clipInfo.startTime || timelineTime >= clipEnd) {
+      // Skip if timeline time is outside this clip's range (handles nested clips too)
+      if (!this.isTimeInClipRange(clipInfo, timelineTime)) {
         continue;
       }
 
@@ -407,10 +447,9 @@ export class ParallelDecodeManager {
     if (!clipDecoder) return null;
 
     const clipInfo = clipDecoder.clipInfo;
-    const clipEnd = clipInfo.startTime + clipInfo.duration;
 
-    // Check if time is within clip range
-    if (timelineTime < clipInfo.startTime || timelineTime >= clipEnd) {
+    // Check if time is within clip range (handles nested clips too)
+    if (!this.isTimeInClipRange(clipInfo, timelineTime)) {
       return null;
     }
 

@@ -561,6 +561,10 @@ export class FrameExporter {
     // Separate composition clips from regular video clips
     const regularVideoClips: typeof videoClips = [];
     const compositionClips: typeof videoClips = [];
+    const nestedVideoClips: Array<{
+      clip: TimelineClip;
+      parentClip: TimelineClip;
+    }> = [];
 
     for (const clip of videoClips) {
       if (clip.source?.type !== 'video') continue;
@@ -573,16 +577,28 @@ export class FrameExporter {
           lastSampleIndex: 0,
           isSequential: false,
         });
-        console.log(`[FrameExporter] Clip ${clip.name}: Skipping WebCodecs prep (composition)`);
+        console.log(`[FrameExporter] Clip ${clip.name}: Composition with nested clips`);
+
+        // Collect nested video clips from this composition
+        if (clip.nestedClips) {
+          for (const nestedClip of clip.nestedClips) {
+            if (nestedClip.source?.type === 'video' && nestedClip.source.videoElement) {
+              nestedVideoClips.push({ clip: nestedClip, parentClip: clip });
+            }
+          }
+        }
       } else {
         regularVideoClips.push(clip);
       }
     }
 
-    // Use parallel decoding if we have 2+ regular video clips
-    if (regularVideoClips.length >= 2) {
-      console.log(`[FrameExporter] Using PARALLEL decoding for ${regularVideoClips.length} video clips`);
-      await this.initializeParallelDecoding(regularVideoClips, mediaFiles, startTime);
+    // Combine regular clips and nested clips for parallel decoding count
+    const totalVideoClips = regularVideoClips.length + nestedVideoClips.length;
+
+    // Use parallel decoding if we have 2+ total video clips (including nested)
+    if (totalVideoClips >= 2) {
+      console.log(`[FrameExporter] Using PARALLEL decoding for ${regularVideoClips.length} regular + ${nestedVideoClips.length} nested = ${totalVideoClips} video clips`);
+      await this.initializeParallelDecoding(regularVideoClips, mediaFiles, startTime, nestedVideoClips);
       return;
     }
 
@@ -718,12 +734,13 @@ export class FrameExporter {
   }
 
   /**
-   * Initialize parallel decoding for multiple video clips
+   * Initialize parallel decoding for multiple video clips (including nested)
    */
   private async initializeParallelDecoding(
     clips: TimelineClip[],
     mediaFiles: any[],
-    _startTime: number  // Reserved for future seek optimization
+    _startTime: number,  // Reserved for future seek optimization
+    nestedClips: Array<{ clip: TimelineClip; parentClip: TimelineClip }> = []
   ): Promise<void> {
     this.parallelDecoder = new ParallelDecodeManager();
 
@@ -737,9 +754,13 @@ export class FrameExporter {
       inPoint: number;
       outPoint: number;
       reversed: boolean;
+      isNested?: boolean;
+      parentClipId?: string;
+      parentStartTime?: number;
+      parentInPoint?: number;
     }> = [];
 
-    // Load all file data in parallel
+    // Load regular clips file data in parallel
     const loadPromises = clips.map(async (clip) => {
       const mediaFileId = clip.source!.mediaFileId;
       const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
@@ -761,26 +782,67 @@ export class FrameExporter {
       };
     });
 
-    const loadedClips = await Promise.all(loadPromises);
-    clipInfos.push(...loadedClips);
+    // Load nested clips file data in parallel
+    const nestedLoadPromises = nestedClips.map(async ({ clip, parentClip }) => {
+      const mediaFileId = clip.source!.mediaFileId;
+      const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
+      const fileData = await this.loadClipFileData(clip, mediaFile);
 
-    console.log(`[FrameExporter] Loaded ${clipInfos.length} clips for parallel decoding`);
+      if (!fileData) {
+        console.warn(`[FrameExporter] Could not load nested clip "${clip.name}", will use HTMLVideoElement`);
+        return null;
+      }
+
+      // For nested clips, we need to track parent timing for proper timeline mapping
+      return {
+        clipId: clip.id,
+        clipName: `${parentClip.name}/${clip.name}`,
+        fileData,
+        startTime: clip.startTime,  // Time within the composition
+        duration: clip.duration,
+        inPoint: clip.inPoint,
+        outPoint: clip.outPoint,
+        reversed: clip.reversed || false,
+        isNested: true,
+        parentClipId: parentClip.id,
+        parentStartTime: parentClip.startTime,
+        parentInPoint: parentClip.inPoint || 0,
+      };
+    });
+
+    const loadedClips = await Promise.all(loadPromises);
+    const loadedNestedClips = (await Promise.all(nestedLoadPromises)).filter(c => c !== null);
+
+    clipInfos.push(...loadedClips);
+    clipInfos.push(...loadedNestedClips as any[]);
+
+    console.log(`[FrameExporter] Loaded ${loadedClips.length} regular + ${loadedNestedClips.length} nested clips for parallel decoding`);
 
     // Initialize parallel decoder
     await this.parallelDecoder.initialize(clipInfos, this.settings.fps);
 
-    // Mark clips as using parallel decoding
+    // Mark regular clips as using parallel decoding
     for (const clip of clips) {
       this.clipStates.set(clip.id, {
         clipId: clip.id,
         webCodecsPlayer: null,
         lastSampleIndex: 0,
-        isSequential: false,  // Not using individual sequential mode
+        isSequential: false,
+      });
+    }
+
+    // Mark nested clips as using parallel decoding
+    for (const { clip } of nestedClips) {
+      this.clipStates.set(clip.id, {
+        clipId: clip.id,
+        webCodecsPlayer: null,
+        lastSampleIndex: 0,
+        isSequential: false,
       });
     }
 
     this.useParallelDecode = true;
-    console.log(`[FrameExporter] Parallel decoding initialized for ${clips.length} clips`);
+    console.log(`[FrameExporter] Parallel decoding initialized for ${clipInfos.length} total clips`);
   }
 
   private async seekAllClipsToTime(time: number): Promise<void> {
@@ -1079,7 +1141,7 @@ export class FrameExporter {
 
       // Handle nested compositions
       if (clip.isComposition && clip.nestedClips && clip.nestedClips.length > 0) {
-        const nestedLayers = this.buildNestedLayersForExport(clip, clipLocalTime + (clip.inPoint || 0));
+        const nestedLayers = this.buildNestedLayersForExport(clip, clipLocalTime + (clip.inPoint || 0), time);
 
         if (nestedLayers.length > 0) {
           const composition = useMediaStore.getState().compositions.find(c => c.id === clip.compositionId);
@@ -1177,8 +1239,11 @@ export class FrameExporter {
   /**
    * Build layers for a nested composition at export time
    * Note: Video seeking is handled by seekAllClipsToTime, not here
+   * @param clip - The composition clip
+   * @param nestedTime - Time within the composition
+   * @param mainTimelineTime - Time on the main timeline (for parallel decoder)
    */
-  private buildNestedLayersForExport(clip: TimelineClip, nestedTime: number): Layer[] {
+  private buildNestedLayersForExport(clip: TimelineClip, nestedTime: number, mainTimelineTime: number): Layer[] {
     if (!clip.nestedClips || !clip.nestedTracks) return [];
 
     const nestedVideoTracks = clip.nestedTracks.filter(t => t.type === 'video' && t.visible);
@@ -1227,9 +1292,25 @@ export class FrameExporter {
         },
       };
 
-      // Don't seek here - seekAllClipsToTime handles all seeking
-      // Just build the layer with the video element
+      // Try parallel decoder first (for nested clips), then fall back to video element
       if (nestedClip.source?.videoElement) {
+        // Check if this nested clip has a parallel decoded frame
+        if (this.useParallelDecode && this.parallelDecoder && this.parallelDecoder.hasClip(nestedClip.id)) {
+          const videoFrame = this.parallelDecoder.getFrameForClip(nestedClip.id, mainTimelineTime);
+          if (videoFrame) {
+            layers.push({
+              ...baseLayer,
+              source: {
+                type: 'video',
+                videoElement: nestedClip.source.videoElement,
+                videoFrame: videoFrame,  // Use parallel decoded frame
+              },
+            } as Layer);
+            continue;
+          }
+        }
+
+        // Fall back to video element
         layers.push({
           ...baseLayer,
           source: {
