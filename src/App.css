@@ -7338,16 +7338,16 @@ input[type="checkbox"] {
   }
 }
 
-/* ===== What's New Dialog ===== */
+/* ===== Changelog Dialog (What's New) ===== */
 
-/* Backdrop without entrance animation for smooth close transition */
+/* Backdrop */
 .whats-new-backdrop {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: transparent;
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -7371,132 +7371,305 @@ input[type="checkbox"] {
   transform: scale(0.96);
 }
 
-.whats-new-dialog {
+/* Dialog container - fixed size */
+.changelog-dialog {
+  width: 480px;
+  height: 600px;
+  max-height: 85vh;
+  padding: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Header */
+.changelog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.changelog-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.changelog-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.3px;
+}
+
+.changelog-version {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-timeline);
+  background: rgba(0, 212, 255, 0.1);
+  padding: 4px 10px;
+  border-radius: 10px;
+}
+
+.changelog-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.changelog-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+/* Filter tabs */
+.changelog-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 12px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.changelog-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.changelog-tab:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.changelog-tab.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+}
+
+.changelog-tab-new.active {
+  background: rgba(81, 207, 102, 0.15);
+  color: #51cf66;
+}
+
+.changelog-tab-fix.active {
+  background: rgba(77, 171, 247, 0.15);
+  color: #4dabf7;
+}
+
+.changelog-tab-improve.active {
+  background: rgba(255, 170, 0, 0.15);
+  color: #ffaa00;
+}
+
+.changelog-tab-count {
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.6;
+}
+
+/* Scrollable content - fills remaining space */
+.changelog-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Time group */
+.changelog-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.changelog-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.changelog-group-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.changelog-group-date {
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.changelog-group-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+}
+
+.changelog-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Change item */
+.changelog-item {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  transition: background 0.15s;
+}
+
+.changelog-item.has-description {
+  cursor: pointer;
+}
+
+.changelog-item.has-description:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.changelog-item-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.changelog-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.changelog-icon-new {
+  background: rgba(81, 207, 102, 0.15);
+  color: #51cf66;
+}
+
+.changelog-icon-fix {
+  background: rgba(77, 171, 247, 0.15);
+  color: #4dabf7;
+}
+
+.changelog-icon-improve {
+  background: rgba(255, 170, 0, 0.15);
+  color: #ffaa00;
+}
+
+.changelog-item .changelog-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.changelog-expand {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  opacity: 0.5;
+}
+
+.changelog-description {
+  margin-top: 6px;
+  margin-left: 32px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* Known issues */
+.changelog-issues {
+  margin: 0 24px 16px;
+  padding: 12px 14px;
+  background: rgba(255, 68, 68, 0.05);
+  border: 1px solid rgba(255, 68, 68, 0.12);
+  border-radius: 10px;
+}
+
+.changelog-issues-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #ff6b6b;
+  margin-bottom: 8px;
+}
+
+.changelog-issues-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.changelog-issue-item {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  padding-left: 22px;
+  position: relative;
+}
+
+.changelog-issue-item::before {
+  content: '•';
+  position: absolute;
+  left: 8px;
+  color: #ff6b6b;
+  opacity: 0.5;
+}
+
+/* Footer */
+.changelog-footer {
+  padding: 16px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.changelog-footer .welcome-enter {
+  width: 100%;
+}
+
+/* Legacy styles kept for backward compatibility */
+.whats-new-dialog:not(.changelog-dialog) {
   width: 420px;
   max-height: 80vh;
   padding: 28px 32px 24px;
   text-align: left;
   overflow-y: auto;
-}
-
-.whats-new-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 4px;
-}
-
-.whats-new-title {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.5px;
-}
-
-.whats-new-version {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--accent-timeline);
-  background: rgba(0, 212, 255, 0.1);
-  padding: 4px 10px;
-  border-radius: 12px;
-}
-
-.whats-new-date {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin-bottom: 20px;
-}
-
-.whats-new-section {
-  margin-bottom: 20px;
-}
-
-.whats-new-section-title {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-secondary);
-  margin: 0 0 12px;
-}
-
-.whats-new-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.whats-new-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--text-primary);
-  line-height: 1.4;
-}
-
-.whats-new-tag {
-  flex-shrink: 0;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  padding: 2px 6px;
-  border-radius: 4px;
-  margin-top: 1px;
-}
-
-.whats-new-tag-new {
-  background: rgba(81, 207, 102, 0.15);
-  color: #51cf66;
-}
-
-.whats-new-tag-fix {
-  background: rgba(77, 171, 247, 0.15);
-  color: #4dabf7;
-}
-
-.whats-new-tag-improve {
-  background: rgba(255, 170, 0, 0.15);
-  color: #ffaa00;
-}
-
-/* Known Issues Section */
-.whats-new-issues {
-  background: rgba(255, 68, 68, 0.05);
-  border: 1px solid rgba(255, 68, 68, 0.15);
-  border-radius: 12px;
-  padding: 16px;
-  margin-top: 8px;
-}
-
-.whats-new-issues .whats-new-section-title {
-  color: #ff6b6b;
-}
-
-.whats-new-issue-item {
-  color: var(--text-secondary);
-}
-
-.whats-new-issue-icon {
-  flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 68, 68, 0.2);
-  color: #ff6b6b;
-  font-size: 11px;
-  font-weight: 700;
-  border-radius: 50%;
-}
-
-.whats-new-dialog .welcome-enter {
-  margin-top: 8px;
-  align-self: stretch;
 }
