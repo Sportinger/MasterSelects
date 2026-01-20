@@ -1073,6 +1073,7 @@ export const useTimelineStore = create<TimelineStore>()(
       activeMaskId: null as string | null,
       selectedVertexIds: new Set<string>(),
       maskDrawStart: null as { x: number; y: number } | null,
+      maskDragging: false,
     };
 
     // Export actions (inline since they're simple)

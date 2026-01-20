@@ -103,6 +103,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
     addMask,
     setActiveMask,
     invalidateCache,
+    setMaskDragging,
   } = useTimelineStore();
 
   // Get first selected clip for mask editing
@@ -216,6 +217,9 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
 
     // Select vertex
     selectVertex(vertexId, false);
+
+    // Mark as dragging to prevent mask texture regeneration during drag
+    setMaskDragging(true);
 
     // Start drag - store all initial positions
     dragState.current = {
@@ -343,13 +347,14 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       };
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
-      // Invalidate cache after drag ends to trigger mask texture regeneration
+      // Mark dragging as complete and invalidate cache to trigger mask texture regeneration
+      setMaskDragging(false);
       invalidateCache();
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-  }, [activeMask, selectedClip, selectVertex, updateVertex, canvasWidth, canvasHeight, invalidateCache]);
+  }, [activeMask, selectedClip, selectVertex, updateVertex, canvasWidth, canvasHeight, invalidateCache, setMaskDragging]);
 
   // Handle mask area drag (drag entire mask when clicking inside the mask fill)
   const handleMaskDragStart = useCallback((e: React.MouseEvent) => {
@@ -365,6 +370,9 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       startY: e.clientY,
       startVertices: activeMask.vertices.map(v => ({ id: v.id, x: v.x, y: v.y })),
     };
+
+    // Mark as dragging to prevent mask texture regeneration during drag
+    setMaskDragging(true);
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!maskDragState.current.isDragging) return;
@@ -419,13 +427,14 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       };
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
-      // Invalidate cache after drag ends to trigger mask texture regeneration
+      // Mark dragging as complete and invalidate cache to trigger mask texture regeneration
+      useTimelineStore.getState().setMaskDragging(false);
       useTimelineStore.getState().invalidateCache();
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-  }, [activeMask, selectedClip, canvasWidth, canvasHeight]);
+  }, [activeMask, selectedClip, canvasWidth, canvasHeight, setMaskDragging]);
 
   // Handle clicking on SVG background (add vertex in drawing mode, deselect in editing mode)
   const handleSvgClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {

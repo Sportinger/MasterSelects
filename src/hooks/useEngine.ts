@@ -143,7 +143,13 @@ export function useEngine() {
 
   // Helper function to update mask textures - extracted to avoid duplication
   const updateMaskTextures = useCallback(() => {
-    const { clips, playheadPosition, tracks } = useTimelineStore.getState();
+    const { clips, playheadPosition, tracks, maskDragging } = useTimelineStore.getState();
+
+    // Skip texture regeneration during drag for better performance
+    // Texture will be regenerated when drag ends (maskDragging becomes false)
+    if (maskDragging) {
+      return;
+    }
     const layers = useMixerStore.getState().layers;
 
     // Get engine output dimensions (the actual render resolution)

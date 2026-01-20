@@ -10,6 +10,10 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
     }
   },
 
+  setMaskDragging: (dragging: boolean) => {
+    set({ maskDragging: dragging });
+  },
+
   setMaskDrawStart: (point) => {
     set({ maskDrawStart: point });
   },

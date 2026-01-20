@@ -88,6 +88,7 @@ export interface TimelineState {
   activeMaskId: string | null;
   selectedVertexIds: Set<string>;
   maskDrawStart: { x: number; y: number } | null;
+  maskDragging: boolean; // True during vertex/mask drag - skips texture regeneration
 }
 
 // Track actions interface
@@ -227,6 +228,7 @@ export interface KeyframeActions {
 // Mask actions interface
 export interface MaskActions {
   setMaskEditMode: (mode: MaskEditMode) => void;
+  setMaskDragging: (dragging: boolean) => void;
   setMaskDrawStart: (point: { x: number; y: number } | null) => void;
   setActiveMask: (clipId: string | null, maskId: string | null) => void;
   selectVertex: (vertexId: string, addToSelection?: boolean) => void;
