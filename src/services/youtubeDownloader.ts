@@ -59,6 +59,7 @@ export async function downloadYouTubeVideo(
   videoId: string,
   title: string,
   thumbnail: string,
+  formatId?: string,
   onProgress?: DownloadCallback
 ): Promise<File> {
   // Check if already downloading
@@ -97,7 +98,7 @@ export async function downloadYouTubeVideo(
     // Request download from Native Helper
     console.log('[YouTubeDownloader] Starting download:', videoId);
 
-    const result = await NativeHelperClient.downloadYouTube(youtubeUrl, (percent) => {
+    const result = await NativeHelperClient.downloadYouTube(youtubeUrl, formatId, (percent) => {
       progress.progress = 5 + (percent * 0.9); // 5% to 95%
       notifySubscribers(progress);
     });

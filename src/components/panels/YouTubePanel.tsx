@@ -380,6 +380,12 @@ export function YouTubePanel() {
   // Add video to timeline
   const addVideoToTimeline = async (video: YouTubeVideo) => {
     if (activeDownloadsRef.current.has(video.id)) return;
+    await showFormatDialog(video, 'timeline');
+  };
+
+  // Execute add to timeline with optional format
+  const executeAddToTimeline = async (video: YouTubeVideo, formatId?: string) => {
+    if (activeDownloadsRef.current.has(video.id)) return;
 
     const videoTrack = tracks.find(t => t.type === 'video');
     if (!videoTrack) {
@@ -410,7 +416,7 @@ export function YouTubePanel() {
     });
 
     try {
-      const file = await downloadYouTubeVideo(video.id, video.title, video.thumbnail);
+      const file = await downloadYouTubeVideo(video.id, video.title, video.thumbnail, formatId);
       await completeDownload(clipId, file);
     } catch (err) {
       setDownloadError(clipId, (err as Error).message);
@@ -526,9 +532,9 @@ export function YouTubePanel() {
                       className={`btn-download ${!helperConnected ? 'disabled' : ''}`}
                       onClick={(e) => { e.stopPropagation(); downloadVideoOnly(video); }}
                       title={helperConnected ? "Download video" : "Native Helper required for download"}
-                      disabled={downloadingVideos.has(video.id) || !helperConnected}
+                      disabled={downloadingVideos.has(video.id) || fetchingFormats === video.id || !helperConnected}
                     >
-                      {downloadingVideos.has(video.id) ? '...' : '↓'}
+                      {downloadingVideos.has(video.id) || fetchingFormats === video.id ? '...' : '↓'}
                     </button>
                     <button
                       className="btn-add-timeline"
@@ -573,6 +579,15 @@ export function YouTubePanel() {
           </div>
         )}
       </div>
+
+      {/* Format selection dialog */}
+      {formatDialog && (
+        <FormatDialog
+          videoInfo={formatDialog.info}
+          onSelect={handleFormatSelect}
+          onCancel={() => setFormatDialog(null)}
+        />
+      )}
     </div>
   );
 }
