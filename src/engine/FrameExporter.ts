@@ -555,7 +555,44 @@ export class FrameExporter {
       return;
     }
 
-    // FAST MODE: Use WebCodecs with MP4Box parsing
+    // FAST MODE: Try WebCodecs with MP4Box parsing, fallback to PRECISE on codec errors
+    try {
+      await this.initializeFastMode(videoClips, mediaFiles, startTime);
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      // Check if this is a codec/parsing error that can be handled by PRECISE mode
+      if (error.includes('not supported') || error.includes('FAST export failed')) {
+        console.warn(`[FrameExporter] FAST mode failed, auto-fallback to PRECISE: ${error}`);
+        this.exportMode = 'precise';
+        // Clean up any partially initialized states
+        this.clipStates.clear();
+        // Run PRECISE mode for all video clips
+        for (const clip of videoClips) {
+          if (clip.source?.type !== 'video') continue;
+          this.clipStates.set(clip.id, {
+            clipId: clip.id,
+            webCodecsPlayer: null,
+            lastSampleIndex: 0,
+            isSequential: false,
+          });
+          console.log(`[FrameExporter] Clip ${clip.name}: PRECISE mode (HTMLVideoElement) [auto-fallback]`);
+        }
+        console.log(`[FrameExporter] All ${videoClips.length} clips using PRECISE mode (auto-fallback from FAST)`);
+        return;
+      }
+      // Re-throw other errors
+      throw e;
+    }
+  }
+
+  /**
+   * Initialize FAST mode with WebCodecs - extracted for try-catch wrapper
+   */
+  private async initializeFastMode(
+    videoClips: TimelineClip[],
+    mediaFiles: any[],
+    startTime: number
+  ): Promise<void> {
     const { WebCodecsPlayer } = await import('./WebCodecsPlayer');
 
     // Separate composition clips from regular video clips
@@ -607,7 +644,7 @@ export class FrameExporter {
       const mediaFileId = clip.source!.mediaFileId;
       const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
 
-      // Get the file data - try multiple sources (NO FALLBACK TO HTMLVideoElement!)
+      // Get the file data - try multiple sources
       const fileData = await this.loadClipFileData(clip, mediaFile);
 
       if (!fileData) {
@@ -628,7 +665,7 @@ export class FrameExporter {
         loop: false,
       });
 
-      // Load and parse with MP4Box - NO FALLBACK on failure
+      // Load and parse with MP4Box
       try {
         await exportPlayer.loadArrayBuffer(fileData);
       } catch (e) {

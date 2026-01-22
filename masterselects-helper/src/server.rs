@@ -4,10 +4,12 @@ use anyhow::Result;
 use futures_util::{SinkExt, StreamExt};
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::path::PathBuf;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tokio_tungstenite::WebSocketStream;
 use tracing::{debug, error, info, warn};
+use warp::Filter;
 
 use crate::protocol::{Command, Response};
 use crate::session::{AppState, Session};
@@ -20,12 +22,13 @@ pub struct ServerConfig {
     pub allowed_origins: Vec<String>,
 }
 
-/// Run the WebSocket server
+/// Run the WebSocket server and HTTP file server
 pub async fn run(config: ServerConfig) -> Result<()> {
-    let addr = format!("127.0.0.1:{}", config.port);
-    let listener = TcpListener::bind(&addr).await?;
+    let ws_addr = format!("127.0.0.1:{}", config.port);
+    let http_port = config.port + 1; // HTTP on port+1 (e.g., 9877)
 
-    info!("WebSocket server listening on ws://{}", addr);
+    let listener = TcpListener::bind(&ws_addr).await?;
+    info!("WebSocket server listening on ws://{}", ws_addr);
 
     // Create shared state
     let state = Arc::new(AppState::new(
@@ -36,7 +39,12 @@ pub async fn run(config: ServerConfig) -> Result<()> {
 
     let allowed_origins = Arc::new(config.allowed_origins);
 
-    // Accept connections
+    // Start HTTP file server in background
+    tokio::spawn(async move {
+        run_http_server(http_port).await;
+    });
+
+    // Accept WebSocket connections
     while let Ok((stream, addr)) = listener.accept().await {
         let state = state.clone();
         let allowed_origins = allowed_origins.clone();
@@ -49,6 +57,68 @@ pub async fn run(config: ServerConfig) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Run HTTP file server for fast file downloads
+async fn run_http_server(port: u16) {
+    // CORS headers for localhost
+    let cors = warp::cors()
+        .allow_any_origin()
+        .allow_methods(vec!["GET", "OPTIONS"])
+        .allow_headers(vec!["Content-Type"]);
+
+    // File serving endpoint: GET /file?path=/path/to/file
+    let file_route = warp::path("file")
+        .and(warp::get())
+        .and(warp::query::<std::collections::HashMap<String, String>>())
+        .and_then(serve_file)
+        .with(cors);
+
+    info!("HTTP file server listening on http://127.0.0.1:{}", port);
+    warp::serve(file_route).run(([127, 0, 0, 1], port)).await;
+}
+
+/// Serve a file from allowed directories
+async fn serve_file(
+    params: std::collections::HashMap<String, String>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let path = params.get("path").ok_or_else(warp::reject::not_found)?;
+    let path = PathBuf::from(path);
+
+    // Security: Only allow absolute paths in allowed directories
+    if !path.is_absolute() {
+        return Err(warp::reject::not_found());
+    }
+
+    let allowed_prefixes = [
+        std::env::var("HOME").unwrap_or_default() + "/Downloads",
+        "/tmp".to_string(),
+    ];
+
+    let path_str = path.to_string_lossy();
+    let is_allowed = allowed_prefixes.iter().any(|prefix| path_str.starts_with(prefix));
+
+    if !is_allowed {
+        warn!("HTTP: Rejected file request for: {}", path_str);
+        return Err(warp::reject::not_found());
+    }
+
+    if !path.exists() {
+        return Err(warp::reject::not_found());
+    }
+
+    // Read and serve file
+    match tokio::fs::read(&path).await {
+        Ok(data) => {
+            info!("HTTP: Serving file: {} ({} bytes)", path.display(), data.len());
+            Ok(warp::reply::with_header(
+                data,
+                "Content-Type",
+                "video/mp4",
+            ))
+        }
+        Err(_) => Err(warp::reject::not_found()),
+    }
 }
 
 /// Handle a single WebSocket connection

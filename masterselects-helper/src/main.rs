@@ -111,6 +111,7 @@ async fn main() -> anyhow::Result<()> {
         println!("║         MasterSelects Native Helper v{}              ║", env!("CARGO_PKG_VERSION"));
         println!("╠═══════════════════════════════════════════════════════════╣");
         println!("║  WebSocket: ws://127.0.0.1:{}                          ║", args.port);
+        println!("║  HTTP File: http://127.0.0.1:{}                        ║", args.port + 1);
         println!("║  Cache: {} MB                                          ║", args.cache_mb);
         println!("║  Max decoders: {}                                        ║", args.max_decoders);
         println!("╚═══════════════════════════════════════════════════════════╝");

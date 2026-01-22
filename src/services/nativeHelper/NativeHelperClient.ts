@@ -434,16 +434,31 @@ class NativeHelperClientImpl {
   }
 
   /**
-   * Get a downloaded file from the Native Helper
+   * Get a downloaded file from the Native Helper via HTTP (fast) or WebSocket fallback
    */
   async getDownloadedFile(path: string): Promise<ArrayBuffer | null> {
+    // Try HTTP first (much faster than WebSocket base64)
+    const httpPort = this.config.port + 1; // HTTP on port+1 (9877)
+    try {
+      console.log('[NativeHelper] Fetching file via HTTP:', path);
+      const response = await fetch(`http://127.0.0.1:${httpPort}/file?path=${encodeURIComponent(path)}`);
+      if (response.ok) {
+        const buffer = await response.arrayBuffer();
+        console.log('[NativeHelper] File received via HTTP:', buffer.byteLength, 'bytes');
+        return buffer;
+      }
+    } catch (e) {
+      console.warn('[NativeHelper] HTTP fetch failed, falling back to WebSocket:', e);
+    }
+
+    // Fallback to WebSocket (slower but more compatible)
     const id = this.nextId();
 
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(id);
         resolve(null);
-      }, 60000); // 60 seconds for large files
+      }, 120000); // 120 seconds for large files via WebSocket
 
       // For file requests, we expect base64 data in the response
       this.pendingRequests.set(id, async (response: any) => {
