@@ -377,10 +377,11 @@ export function YouTubePanel() {
     }
   };
 
-  // Add video to timeline
+  // Add video to timeline - skip format dialog for speed, use default format
   const addVideoToTimeline = async (video: YouTubeVideo) => {
     if (activeDownloadsRef.current.has(video.id)) return;
-    await showFormatDialog(video, 'timeline');
+    // Skip format fetching - just download with best quality
+    await executeAddToTimeline(video);
   };
 
   // Execute add to timeline with optional format
