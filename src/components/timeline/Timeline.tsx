@@ -1473,7 +1473,7 @@ export function Timeline() {
       // Use mediaFiles from hook state instead of getState() for render-time lookups
       const mediaFile = mediaFiles.find(
         (f) =>
-          f.id === clip.source?.mediaFileId ||
+          f.id === clip.mediaFileId ||
           f.name === clip.name ||
           f.name === clip.name.replace(' (Audio)', '')
       );

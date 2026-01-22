@@ -55,7 +55,7 @@ export function TimelineContextMenu({
       const mediaStore = useMediaStore.getState();
       return mediaStore.files.find(
         (f) =>
-          f.id === clip.source?.mediaFileId ||
+          f.id === clip.mediaFileId ||
           f.name === clip.name ||
           f.name === clip.name.replace(' (Audio)', '')
       ) || null;

@@ -310,7 +310,7 @@ export async function analyzeClip(clipId: string): Promise<void> {
   updateClipAnalysis(clipId, { status: 'analyzing', progress: 0 });
 
   // Check for cached analysis first (from project folder, not browser cache)
-  const mediaFileId = clip.source?.mediaFileId;
+  const mediaFileId = clip.mediaFileId;
   const inPoint = clip.inPoint ?? 0;
   const outPoint = clip.outPoint ?? clip.duration;
 

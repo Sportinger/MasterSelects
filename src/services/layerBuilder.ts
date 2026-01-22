@@ -605,7 +605,7 @@ class LayerBuilderService {
 
         // Check if this clip should use proxy mode
         const mediaFile = mediaStore.files.find(
-          f => f.name === clip.name || clip.source?.mediaFileId === f.id
+          f => f.name === clip.name || clip.mediaFileId === f.id
         );
         const useProxy = proxyEnabled && mediaFile?.proxyFps &&
           (mediaFile.proxyStatus === 'ready' || mediaFile.proxyStatus === 'generating');
@@ -874,7 +874,7 @@ class LayerBuilderService {
       if (clip?.source?.videoElement && !clip.isComposition) {
         // Check if proxy mode is enabled for this clip
         const mediaFile = mediaStore.files.find(
-          f => f.name === clip.name || clip.source?.mediaFileId === f.id
+          f => f.name === clip.name || clip.mediaFileId === f.id
         );
 
         const shouldUseAudioProxy = mediaStore.proxyEnabled &&
@@ -883,9 +883,9 @@ class LayerBuilderService {
 
         // Get mediaFile for this clip (needed for audio buffer loading)
         const mediaFileForClip = mediaStore.files.find(
-          f => f.name === clip.name || clip.source?.mediaFileId === f.id
+          f => f.name === clip.name || clip.mediaFileId === f.id
         );
-        const mediaFileId = mediaFileForClip?.id || clip.source?.mediaFileId || clip.id;
+        const mediaFileId = mediaFileForClip?.id || clip.mediaFileId || clip.id;
 
         // Calculate clip time for scrubbing
         const clipLocalTime = playheadPosition - clip.startTime;
@@ -1150,7 +1150,7 @@ class LayerBuilderService {
     // Check for proxy usage
     const mediaStore = useMediaStore.getState();
     const mediaFile = mediaStore.files.find(
-      f => f.name === clip.name || clip.source?.mediaFileId === f.id
+      f => f.name === clip.name || clip.mediaFileId === f.id
     );
     const proxyFps = mediaFile?.proxyFps || 30;
     const frameIndex = Math.floor(clipTime * proxyFps);

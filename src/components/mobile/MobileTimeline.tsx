@@ -175,7 +175,7 @@ export function MobileTimeline({ precisionMode }: MobileTimelineProps) {
           const left = timeToX(clip.startTime);
           const width = clip.duration * pixelsPerSecond;
           const isSelected = selectedClipIds.has(clip.id);
-          const mediaFileId = clip.source?.mediaFileId;
+          const mediaFileId = clip.mediaFileId;
           const mediaFile = mediaFileId ? files.find((f) => f.id === mediaFileId) : null;
           const sourceType = clip.source?.type || 'video';
 

@@ -1221,7 +1221,7 @@ export const useMediaStore = create<MediaState>()(
             const { useTimelineStore } = await import('./timeline');
             const clips = useTimelineStore.getState().clips;
             clips.forEach(clip => {
-              if (clip.source?.mediaFileId === mediaFileId && clip.source?.videoElement) {
+              if (clip.mediaFileId === mediaFileId && clip.source?.videoElement) {
                 clip.source.videoElement.muted = true;
                 if (!clip.source.videoElement.paused) {
                   clip.source.videoElement.pause();

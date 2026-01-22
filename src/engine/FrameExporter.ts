@@ -691,7 +691,7 @@ export class FrameExporter {
     let fileData: ArrayBuffer | null = null;
 
     // 1. Try media file's file handle via fileSystemService
-    const storedHandle = mediaFile?.hasFileHandle ? fileSystemService.getFileHandle(clip.source?.mediaFileId || '') : null;
+    const storedHandle = mediaFile?.hasFileHandle ? fileSystemService.getFileHandle(clip.mediaFileId || '') : null;
     if (!fileData && storedHandle) {
       try {
         const file = await storedHandle.getFile();

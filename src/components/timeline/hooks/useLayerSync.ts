@@ -485,7 +485,7 @@ export function useLayerSync({
 
         const mediaStore = useMediaStore.getState();
         const mediaFile = mediaStore.files.find(
-          (f) => f.name === clip.name || clip.source?.mediaFileId === f.id
+          (f) => f.name === clip.name || clip.mediaFileId === f.id
         );
         const proxyFps = mediaFile?.proxyFps || 30;
 

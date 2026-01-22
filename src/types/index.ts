@@ -282,6 +282,7 @@ export interface TimelineClip {
     filePath?: string;  // Path to original file (for native helper to access directly)
   } | null;
   thumbnails?: string[];  // Array of data URLs for filmstrip preview
+  mediaFileId?: string;   // Reference to MediaFile for audio/proxy lookup (top-level for YouTube downloads)
   linkedClipId?: string;  // ID of linked clip (e.g., audio linked to video)
   linkedGroupId?: string; // ID of multicam group (clips synced together)
   parentClipId?: string;  // ID of parent clip for transform inheritance (like AE parenting)
