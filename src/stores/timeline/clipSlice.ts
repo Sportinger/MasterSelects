@@ -1844,37 +1844,13 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
 
     const naturalDuration = video.duration || 30;
 
-    // Generate thumbnails for the video
-    const thumbCount = Math.max(1, Math.min(20, Math.ceil(naturalDuration / 3)));
-    const thumbnails: string[] = [];
-    const canvas = document.createElement('canvas');
-    canvas.width = 160;
-    canvas.height = 90;
-    const ctx = canvas.getContext('2d')!;
+    // Use YouTube thumbnail initially, generate real thumbnails in background
+    const initialThumbnails = clip.youtubeThumbnail ? [clip.youtubeThumbnail] : [];
 
-    for (let i = 0; i < thumbCount; i++) {
-      const time = (i / thumbCount) * naturalDuration;
-      video.currentTime = time;
-      await new Promise<void>(resolve => {
-        video.onseeked = () => {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          thumbnails.push(canvas.toDataURL('image/jpeg', 0.6));
-          resolve();
-        };
-      });
-    }
-
-    // Reset to start and wait for video to be ready
+    // Reset to start
     video.currentTime = 0;
-    await new Promise<void>(resolve => {
-      if (video.readyState >= 2) {
-        resolve();
-      } else {
-        video.addEventListener('canplay', () => resolve(), { once: true });
-      }
-    });
 
-    // Update the clip with actual video data
+    // Update the clip with actual video data IMMEDIATELY (no waiting for thumbnails)
     set({
       clips: clips.map(c => {
         if (c.id !== clipId) return c;
@@ -1888,7 +1864,7 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
             videoElement: video,
             naturalDuration,
           },
-          thumbnails,
+          thumbnails: initialThumbnails,
           isPendingDownload: false,
           downloadProgress: undefined,
           youtubeVideoId: undefined,
@@ -1912,6 +1888,37 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
     });
 
     console.log(`[Timeline] Download complete for clip: ${clipId}, duration: ${naturalDuration}s, mediaFileId: ${mediaFile.id}`);
+
+    // Generate real thumbnails in background (non-blocking)
+    setTimeout(async () => {
+      const thumbCount = Math.max(1, Math.min(10, Math.ceil(naturalDuration / 30))); // Fewer thumbnails
+      const thumbnails: string[] = [];
+      const canvas = document.createElement('canvas');
+      canvas.width = 160;
+      canvas.height = 90;
+      const ctx = canvas.getContext('2d')!;
+
+      for (let i = 0; i < thumbCount; i++) {
+        const time = (i / thumbCount) * naturalDuration;
+        video.currentTime = time;
+        await new Promise<void>(resolve => {
+          video.onseeked = () => {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            thumbnails.push(canvas.toDataURL('image/jpeg', 0.6));
+            resolve();
+          };
+        });
+      }
+
+      // Update thumbnails
+      video.currentTime = 0;
+      set({
+        clips: get().clips.map(c =>
+          c.id === clipId ? { ...c, thumbnails } : c
+        ),
+      });
+      console.log(`[Timeline] Generated ${thumbCount} thumbnails for clip: ${clipId}`);
+    }, 100);
   },
 
   // Set download error for a clip
