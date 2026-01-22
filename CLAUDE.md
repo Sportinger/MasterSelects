@@ -81,6 +81,26 @@ npm run build                 # Production build
 npm run lint                  # ESLint check
 ```
 
+## Native Helper
+
+Der Native Helper ist ein Rust-basierter Server für schnelles Video-Decoding via FFmpeg.
+
+```bash
+# Standard (wenn FFmpeg < 8.0):
+cd masterselects-helper && cargo run --release
+
+# Arch Linux (FFmpeg 8.0+ entfernt avfft.h, nutze ffmpeg4.4):
+cd masterselects-helper && \
+FFMPEG_INCLUDE_DIR=/usr/include/ffmpeg4.4 \
+FFMPEG_LIB_DIR=/usr/lib/ffmpeg4.4 \
+PKG_CONFIG_PATH=/usr/lib/ffmpeg4.4/pkgconfig \
+cargo run --release
+```
+
+**Ports:**
+- WebSocket: `ws://127.0.0.1:9876`
+- HTTP File Server: `http://127.0.0.1:9877`
+
 ## Project Structure
 
 ```
