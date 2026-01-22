@@ -426,10 +426,19 @@ export class FrameExporter {
           console.warn('[FrameExporter] No layers at time', time);
         }
 
+        // Check if GPU device is still valid before rendering
+        if (!engine.isDeviceValid()) {
+          throw new Error('WebGPU device lost during export. Try keeping the browser tab in focus.');
+        }
+
         engine.render(layers);
 
         const pixels = await engine.readPixels();
         if (!pixels) {
+          // Check if this is due to device loss
+          if (!engine.isDeviceValid()) {
+            throw new Error('WebGPU device lost during export. Try keeping the browser tab in focus.');
+          }
           console.error('[FrameExporter] Failed to read pixels at frame', frame);
           continue;
         }

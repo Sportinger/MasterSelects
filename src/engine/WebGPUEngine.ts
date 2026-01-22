@@ -168,6 +168,13 @@ export class WebGPUEngine {
     this.videoFrameManager = new VideoFrameManager();
   }
 
+  /**
+   * Check if the WebGPU device is still valid (not lost)
+   */
+  isDeviceValid(): boolean {
+    return this.context.initialized && this.context.getDevice() !== null;
+  }
+
   async initialize(): Promise<boolean> {
     const success = await this.context.initialize();
     if (!success) return false;
