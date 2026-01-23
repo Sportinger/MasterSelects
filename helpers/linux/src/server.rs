@@ -13,6 +13,7 @@ use warp::Filter;
 
 use crate::protocol::{Command, Response};
 use crate::session::{AppState, Session};
+use crate::utils;
 
 /// Server configuration
 pub struct ServerConfig {
@@ -90,16 +91,9 @@ async fn serve_file(
         return Err(warp::reject::not_found());
     }
 
-    let allowed_prefixes = [
-        std::env::var("HOME").unwrap_or_default() + "/Downloads",
-        "/tmp".to_string(),
-    ];
-
-    let path_str = path.to_string_lossy();
-    let is_allowed = allowed_prefixes.iter().any(|prefix| path_str.starts_with(prefix));
-
-    if !is_allowed {
-        warn!("HTTP: Rejected file request for: {}", path_str);
+    // Security: Only allow files in allowed directories (cross-platform)
+    if !utils::is_path_allowed(&path) {
+        warn!("HTTP: Rejected file request for: {}", path.display());
         return Err(warp::reject::not_found());
     }
 

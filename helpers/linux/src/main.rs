@@ -10,6 +10,7 @@ mod encoder;
 mod protocol;
 mod server;
 mod session;
+mod utils;
 
 use clap::Parser;
 use tracing::{info, error, Level};

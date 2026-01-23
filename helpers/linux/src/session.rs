@@ -13,6 +13,7 @@ use crate::protocol::{
     error_codes, Command, Compression, PixelFormat, Response, SystemInfo,
     DecodedFrame, encode_frame_message,
 };
+use crate::utils;
 
 /// Generate a random auth token
 pub fn generate_auth_token() -> String {
@@ -605,7 +606,7 @@ impl Session {
             std::path::PathBuf::from(dir)
         } else {
             // Default to temp folder - browser will save to project folder
-            std::path::PathBuf::from("/tmp/masterselects-downloads")
+            utils::get_download_dir()
         };
 
         // Create directory if it doesn't exist
@@ -681,16 +682,8 @@ impl Session {
             return Response::error(id, error_codes::INVALID_PATH, "Path must be absolute");
         }
 
-        // Security: Only allow files in allowed directories
-        let allowed_prefixes = [
-            std::env::var("HOME").unwrap_or_default() + "/Downloads",
-            "/tmp".to_string(),
-        ];
-
-        let path_str = path.to_string_lossy();
-        let is_allowed = allowed_prefixes.iter().any(|prefix| path_str.starts_with(prefix));
-
-        if !is_allowed {
+        // Security: Only allow files in allowed directories (cross-platform)
+        if !utils::is_path_allowed(path) {
             return Response::error(id, error_codes::PERMISSION_DENIED, "File path not in allowed directory");
         }
 
