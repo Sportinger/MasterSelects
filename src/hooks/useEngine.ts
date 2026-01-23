@@ -36,6 +36,9 @@ export function useEngine() {
       useMixerStore.getState().setEngineReady(success);
       if (success) {
         useMixerStore.getState().setPlaying(true);
+        // Get and store GPU info
+        const gpuInfo = engine.getGPUInfo();
+        useMixerStore.getState().setGpuInfo(gpuInfo);
       }
     }
 

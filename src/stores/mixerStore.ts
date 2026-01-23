@@ -33,6 +33,7 @@ interface MixerState {
   // Engine
   isEngineReady: boolean;
   engineStats: EngineStats;
+  gpuInfo: { vendor: string; device: string; description: string } | null;
 
   // MIDI
   midiEnabled: boolean;
@@ -73,6 +74,7 @@ interface MixerState {
   removeOutputWindow: (id: string) => void;
 
   setEngineReady: (ready: boolean) => void;
+  setGpuInfo: (info: { vendor: string; device: string; description: string } | null) => void;
   setEngineStats: (stats: EngineStats) => void;
 
   setPlaying: (playing: boolean) => void;
@@ -138,6 +140,7 @@ export const useMixerStore = create<MixerState>()(
     eqBands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // 10 bands at 0 dB (flat)
 
     isEngineReady: false,
+    gpuInfo: null,
     engineStats: {
       fps: 0,
       frameTime: 0,
@@ -519,6 +522,10 @@ export const useMixerStore = create<MixerState>()(
     // Engine actions
     setEngineReady: (ready: boolean) => {
       set({ isEngineReady: ready });
+    },
+
+    setGpuInfo: (info: { vendor: string; device: string; description: string } | null) => {
+      set({ gpuInfo: info });
     },
 
     setEngineStats: (stats: EngineStats) => {

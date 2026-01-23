@@ -25,7 +25,7 @@ type MenuId = 'file' | 'edit' | 'view' | 'output' | 'window' | 'info' | null;
 
 export function Toolbar() {
   const { isEngineReady, createOutputWindow } = useEngine();
-  const { setPlaying, outputWindows } = useMixerStore();
+  const { setPlaying, outputWindows, gpuInfo } = useMixerStore();
 
   // Auto-start playback when engine is ready
   useEffect(() => {
@@ -684,8 +684,8 @@ export function Toolbar() {
       {/* Status */}
       <div className="toolbar-section toolbar-right">
         <NativeHelperStatus />
-        <span className={`status ${isEngineReady ? 'ready' : 'loading'}`}>
-          {isEngineReady ? '● WebGPU Ready' : '○ Loading...'}
+        <span className={`status ${isEngineReady ? 'ready' : 'loading'}`} title={gpuInfo?.description || ''}>
+          {isEngineReady ? `● WebGPU ${gpuInfo ? `(${gpuInfo.vendor})` : ''}` : '○ Loading...'}
         </span>
       </div>
 

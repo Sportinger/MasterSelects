@@ -80,6 +80,24 @@ export class WebGPUContext {
     return this.isInitialized;
   }
 
+  /**
+   * Get GPU info (vendor, device name, etc.)
+   */
+  getGPUInfo(): { vendor: string; device: string; description: string } | null {
+    if (!this.adapter) return null;
+
+    // adapter.info is available in Chrome 114+
+    const info = (this.adapter as any).info;
+    if (info) {
+      return {
+        vendor: info.vendor || 'Unknown',
+        device: info.device || '',
+        description: info.description || '',
+      };
+    }
+    return null;
+  }
+
   // Create and configure a canvas context
   configureCanvas(canvas: HTMLCanvasElement): GPUCanvasContext | null {
     if (!this.device) return null;

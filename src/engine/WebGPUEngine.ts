@@ -175,6 +175,13 @@ export class WebGPUEngine {
     return this.context.initialized && this.context.getDevice() !== null;
   }
 
+  /**
+   * Get GPU info (vendor, device name)
+   */
+  getGPUInfo(): { vendor: string; device: string; description: string } | null {
+    return this.context.getGPUInfo();
+  }
+
   async initialize(): Promise<boolean> {
     const success = await this.context.initialize();
     if (!success) return false;
