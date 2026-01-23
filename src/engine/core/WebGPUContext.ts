@@ -1,10 +1,20 @@
 // WebGPU device, adapter, and queue initialization
 
+export type DeviceLostCallback = (reason: string) => void;
+export type DeviceRestoredCallback = () => void;
+
 export class WebGPUContext {
   private device: GPUDevice | null = null;
   private adapter: GPUAdapter | null = null;
   private initPromise: Promise<boolean> | null = null;
   private isInitialized = false;
+
+  // Callbacks for device loss/restore events
+  private deviceLostCallbacks: Set<DeviceLostCallback> = new Set();
+  private deviceRestoredCallbacks: Set<DeviceRestoredCallback> = new Set();
+
+  // Track if we're recovering from a device loss
+  private isRecovering = false;
 
   async initialize(): Promise<boolean> {
     // Prevent multiple initializations with promise-based lock
@@ -50,11 +60,35 @@ export class WebGPUContext {
       this.device.lost.then((info) => {
         console.error('WebGPU device lost:', info.message);
         this.isInitialized = false;
+
+        // Notify listeners about device loss BEFORE attempting recovery
+        for (const callback of this.deviceLostCallbacks) {
+          try {
+            callback(info.message);
+          } catch (e) {
+            console.error('[WebGPU] Error in device lost callback:', e);
+          }
+        }
+
         // Attempt auto-recovery after a short delay
         if (info.reason !== 'destroyed') {
           console.log('[WebGPU] Attempting device recovery...');
           this.initPromise = null;
-          setTimeout(() => this.initialize(), 100);
+          this.isRecovering = true;
+          setTimeout(async () => {
+            const success = await this.initialize();
+            if (success) {
+              this.isRecovering = false;
+              // Notify listeners that device was restored
+              for (const callback of this.deviceRestoredCallbacks) {
+                try {
+                  callback();
+                } catch (e) {
+                  console.error('[WebGPU] Error in device restored callback:', e);
+                }
+              }
+            }
+          }, 100);
         }
       });
 
@@ -153,11 +187,48 @@ export class WebGPUContext {
     return texture;
   }
 
+  /**
+   * Register a callback to be notified when the device is lost
+   */
+  onDeviceLost(callback: DeviceLostCallback): void {
+    this.deviceLostCallbacks.add(callback);
+  }
+
+  /**
+   * Remove a device lost callback
+   */
+  offDeviceLost(callback: DeviceLostCallback): void {
+    this.deviceLostCallbacks.delete(callback);
+  }
+
+  /**
+   * Register a callback to be notified when the device is restored after loss
+   */
+  onDeviceRestored(callback: DeviceRestoredCallback): void {
+    this.deviceRestoredCallbacks.add(callback);
+  }
+
+  /**
+   * Remove a device restored callback
+   */
+  offDeviceRestored(callback: DeviceRestoredCallback): void {
+    this.deviceRestoredCallbacks.delete(callback);
+  }
+
+  /**
+   * Check if the context is currently recovering from a device loss
+   */
+  get recovering(): boolean {
+    return this.isRecovering;
+  }
+
   destroy(): void {
     this.device?.destroy();
     this.device = null;
     this.adapter = null;
     this.isInitialized = false;
     this.initPromise = null;
+    this.deviceLostCallbacks.clear();
+    this.deviceRestoredCallbacks.clear();
   }
 }

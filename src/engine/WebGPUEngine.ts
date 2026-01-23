@@ -163,9 +163,117 @@ export class WebGPUEngine {
   // Used to determine which canvases should receive main render output
   private independentCanvasCompositions: Map<string, string> = new Map();
 
+  // Stored canvas references for re-configuration after device recovery
+  private previewCanvasElements: Map<string, HTMLCanvasElement> = new Map();
+  private independentCanvasElements: Map<string, HTMLCanvasElement> = new Map();
+  private mainPreviewCanvas: HTMLCanvasElement | null = null;
+
+  // Flag to track if we're in the middle of recovery
+  private isRecoveringFromDeviceLoss = false;
+
   constructor() {
     this.context = new WebGPUContext();
     this.videoFrameManager = new VideoFrameManager();
+
+    // Register for device loss/restore events
+    this.context.onDeviceLost((reason) => {
+      console.log('[WebGPUEngine] Device lost, cleaning up resources:', reason);
+      this.isRecoveringFromDeviceLoss = true;
+      this.handleDeviceLost();
+    });
+
+    this.context.onDeviceRestored(() => {
+      console.log('[WebGPUEngine] Device restored, recreating resources');
+      this.handleDeviceRestored();
+      this.isRecoveringFromDeviceLoss = false;
+    });
+  }
+
+  /**
+   * Handle device loss - clean up all GPU resources
+   * Called before device recovery is attempted
+   */
+  private handleDeviceLost(): void {
+    // Stop the render loop to prevent using invalid resources
+    const wasRunning = this.isRunning;
+    this.stop();
+
+    // Clear all GPU resources - they are now invalid
+    // Note: Don't call .destroy() on invalid resources, just clear references
+    this.pingTexture = null;
+    this.pongTexture = null;
+    this.pingView = null;
+    this.pongView = null;
+    this.independentPingTexture = null;
+    this.independentPongTexture = null;
+    this.independentPingView = null;
+    this.independentPongView = null;
+    this.blackTexture = null;
+    this.sampler = null;
+
+    // Clear canvas contexts - they need to be reconfigured
+    this.previewContext = null;
+    this.previewCanvases.clear();
+    this.independentPreviewCanvases.clear();
+
+    // Clear nested composition textures
+    this.nestedCompTextures.clear();
+    this.pendingTextureCleanup = [];
+
+    // Clear video caches
+    this.lastVideoTime.clear();
+    this.cachedExternalTexture.clear();
+
+    // Clear managers (they hold invalid GPU resources)
+    this.textureManager = null;
+    this.maskTextureManager = null;
+    this.scrubbingCache = null;
+
+    // Clear pipelines
+    this.compositorPipeline = null;
+    this.effectsPipeline = null;
+    this.outputPipeline = null;
+
+    console.log('[WebGPUEngine] All GPU resources cleaned up after device loss');
+  }
+
+  /**
+   * Handle device restoration - recreate all GPU resources
+   * Called after the device has been successfully re-initialized
+   */
+  private async handleDeviceRestored(): Promise<void> {
+    // Recreate all resources
+    await this.createResources();
+
+    // Reconfigure all stored canvas elements
+    if (this.mainPreviewCanvas) {
+      this.previewContext = this.context.configureCanvas(this.mainPreviewCanvas);
+    }
+
+    for (const [id, canvas] of this.previewCanvasElements) {
+      const context = this.context.configureCanvas(canvas);
+      if (context) {
+        this.previewCanvases.set(id, context);
+      }
+    }
+
+    for (const [id, canvas] of this.independentCanvasElements) {
+      const context = this.context.configureCanvas(canvas);
+      if (context) {
+        this.independentPreviewCanvases.set(id, context);
+      }
+    }
+
+    // Restart render loop
+    this.start(() => {
+      // This will be overridden by useEngine when it re-subscribes
+      console.log('[WebGPUEngine] Render loop restarted after device recovery');
+    });
+
+    // Request a render to update the display
+    this.requestRender();
+
+    console.log('[WebGPUEngine] Device recovery complete');
   }
 
   /**
@@ -269,12 +377,14 @@ export class WebGPUEngine {
   }
 
   setPreviewCanvas(canvas: HTMLCanvasElement): void {
+    this.mainPreviewCanvas = canvas; // Store for recovery
     this.previewContext = this.context.configureCanvas(canvas);
   }
 
   // === MULTIPLE PREVIEW CANVAS MANAGEMENT ===
 
   registerPreviewCanvas(id: string, canvas: HTMLCanvasElement): void {
+    this.previewCanvasElements.set(id, canvas); // Store for recovery
     const context = this.context.configureCanvas(canvas);
     if (context) {
       this.previewCanvases.set(id, context);
@@ -284,11 +394,13 @@ export class WebGPUEngine {
 
   unregisterPreviewCanvas(id: string): void {
     this.previewCanvases.delete(id);
+    this.previewCanvasElements.delete(id);
     console.log(`[Engine] Unregistered preview canvas: ${id}`);
   }
 
   // Register canvas for independent composition rendering (NOT rendered by main loop)
   registerIndependentPreviewCanvas(id: string, canvas: HTMLCanvasElement, compositionId?: string): void {
+    this.independentCanvasElements.set(id, canvas); // Store for recovery
     const context = this.context.configureCanvas(canvas);
     if (context) {
       this.independentPreviewCanvases.set(id, context);
@@ -306,6 +418,7 @@ export class WebGPUEngine {
 
   unregisterIndependentPreviewCanvas(id: string): void {
     this.independentPreviewCanvases.delete(id);
+    this.independentCanvasElements.delete(id);
     this.activeCompMirrorCanvases.delete(id); // Also remove from mirror set
     this.independentCanvasCompositions.delete(id); // Also remove composition tracking
     console.log(`[Engine] Unregistered INDEPENDENT preview canvas: ${id}`);
@@ -728,6 +841,11 @@ export class WebGPUEngine {
   // === MAIN RENDER ===
 
   render(layers: Layer[]): void {
+    // Skip rendering during device recovery
+    if (this.isRecoveringFromDeviceLoss || this.context.recovering) {
+      return;
+    }
+
     const device = this.context.getDevice();
     if (!device || !this.compositorPipeline || !this.outputPipeline || !this.sampler) return;
     if (!this.pingView || !this.pongView) return;
@@ -1210,6 +1328,11 @@ export class WebGPUEngine {
    * Used for multi-composition preview where each preview shows different content
    */
   renderToPreviewCanvas(canvasId: string, layers: Layer[]): void {
+    // Skip rendering during device recovery
+    if (this.isRecoveringFromDeviceLoss || this.context.recovering) {
+      return;
+    }
+
     const device = this.context.getDevice();
     // Look in INDEPENDENT canvases map (not rendered by main loop)
     const canvasContext = this.independentPreviewCanvases.get(canvasId);
@@ -1895,6 +2018,12 @@ export class WebGPUEngine {
 
       // Clear render request flag after processing
       this.renderRequested = false;
+
+      // Skip rendering during device recovery
+      if (this.isRecoveringFromDeviceLoss || this.context.recovering) {
+        this.animationId = requestAnimationFrame(loop);
+        return;
+      }
 
       // Always call renderCallback (for stats updates), but skip heavy work when idle
       // renderFrame checks getIsIdle() internally
