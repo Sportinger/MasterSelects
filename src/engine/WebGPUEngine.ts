@@ -98,9 +98,10 @@ export class WebGPUEngine {
   private profileCounter = 0;
   private lastProfileTime = 0;
 
-  // Resolution
-  private outputWidth = 1920;
-  private outputHeight = 1080;
+  // Resolution - start small to avoid Vulkan memory allocation issues on init
+  // Will be resized to actual resolution when useEngine sets it
+  private outputWidth = 640;
+  private outputHeight = 360;
 
   // Transparency grid (checkerboard) display
   private showTransparencyGrid = false;
@@ -305,24 +306,31 @@ export class WebGPUEngine {
     const device = this.context.getDevice();
     if (!device) return;
 
-    // Initialize managers
+    // Initialize managers first (lightweight)
     this.textureManager = new TextureManager(device);
     this.maskTextureManager = new MaskTextureManager(device);
     this.scrubbingCache = new ScrubbingCache(device);
 
-    // Initialize pipelines
+    // Create sampler (lightweight)
+    this.sampler = this.context.createSampler();
+
+    // Create pipelines before textures (shaders compile async, no memory pressure)
     this.compositorPipeline = new CompositorPipeline(device);
     this.effectsPipeline = new EffectsPipeline(device);
     this.outputPipeline = new OutputPipeline(device);
+    await this.createPipelines();
 
-    // Create sampler
-    this.sampler = this.context.createSampler();
+    // Small delay to let Vulkan memory manager settle
+    await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Create black texture
+    // Create black texture (tiny - 1x1 pixel)
     this.blackTexture = this.context.createSolidColorTexture(0, 0, 0, 255);
 
+    // Another small delay before large texture allocation
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // Create ping-pong textures last (largest memory allocation)
     this.createPingPongTextures();
-    await this.createPipelines();
   }
 
   private createPingPongTextures(): void {
