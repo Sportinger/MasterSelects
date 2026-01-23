@@ -2,6 +2,7 @@
 // Downloads videos locally without third-party web services
 
 import { NativeHelperClient } from './nativeHelper';
+import { projectFileService } from './projectFileService';
 
 export interface DownloadProgress {
   videoId: string;
@@ -117,8 +118,26 @@ export async function downloadYouTubeVideo(
     if (!fileResponse) {
       throw new Error('Failed to read downloaded file from helper');
     }
-    const sanitizedTitle = title.replace(/[^a-zA-Z0-9\s-]/g, '').substring(0, 100);
-    const file = new File([fileResponse], `${sanitizedTitle}.mp4`, { type: 'video/mp4' });
+
+    // Try to save to project's YT folder if a project is open
+    let file: File;
+    const blob = new Blob([fileResponse], { type: 'video/mp4' });
+    if (projectFileService.isProjectOpen()) {
+      const savedFile = await projectFileService.saveYouTubeDownload(blob, title);
+      if (savedFile) {
+        file = savedFile;
+        console.log('[YouTubeDownloader] Saved to project YT folder');
+      } else {
+        // Fallback to in-memory file
+        const sanitizedTitle = title.replace(/[^a-zA-Z0-9\s-]/g, '').substring(0, 100);
+        file = new File([fileResponse], `${sanitizedTitle}.mp4`, { type: 'video/mp4' });
+      }
+    } else {
+      // No project open, keep in memory
+      const sanitizedTitle = title.replace(/[^a-zA-Z0-9\s-]/g, '').substring(0, 100);
+      file = new File([fileResponse], `${sanitizedTitle}.mp4`, { type: 'video/mp4' });
+      console.log('[YouTubeDownloader] No project open, file kept in memory only');
+    }
 
     progress.status = 'complete';
     progress.progress = 100;

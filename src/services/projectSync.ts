@@ -3,6 +3,7 @@
 
 import { useMediaStore, type MediaFile, type Composition, type MediaFolder } from '../stores/mediaStore';
 import { useTimelineStore } from '../stores/timeline';
+import { useYouTubeStore } from '../stores/youtubeStore';
 import {
   projectFileService,
   type ProjectMediaFile,
@@ -175,6 +176,10 @@ export async function syncStoresToProject(): Promise<void> {
     projectData.activeCompositionId = freshState.activeCompositionId;
     projectData.openCompositionIds = freshState.openCompositionIds;
     projectData.expandedFolderIds = freshState.expandedFolderIds;
+
+    // Save YouTube panel state
+    const youtubeState = useYouTubeStore.getState().getState();
+    projectData.youtube = youtubeState;
   }
 
   console.log('[ProjectSync] Synced stores to project');
@@ -379,6 +384,13 @@ export async function loadProjectToStores(): Promise<void> {
     }
   }
 
+  // Load YouTube panel state
+  if (projectData.youtube) {
+    useYouTubeStore.getState().loadState(projectData.youtube);
+  } else {
+    useYouTubeStore.getState().reset();
+  }
+
   console.log('[ProjectSync] Loaded project to stores:', projectData.name);
 }
 
@@ -467,6 +479,17 @@ export function setupAutoSync(): void {
       }
     }
   );
+
+  // Subscribe to YouTube store changes
+  let prevYouTubeVideos = useYouTubeStore.getState().videos;
+  useYouTubeStore.subscribe((state) => {
+    if (state.videos !== prevYouTubeVideos) {
+      prevYouTubeVideos = state.videos;
+      if (projectFileService.isProjectOpen()) {
+        projectFileService.markDirty();
+      }
+    }
+  });
 
   console.log('[ProjectSync] Auto-sync setup complete');
 }

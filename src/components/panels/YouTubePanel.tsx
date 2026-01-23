@@ -4,6 +4,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTimelineStore } from '../../stores/timeline';
+import { useYouTubeStore, type YouTubeVideo as StoreYouTubeVideo } from '../../stores/youtubeStore';
 import { downloadYouTubeVideo, subscribeToDownload, isDownloadAvailable, type DownloadProgress } from '../../services/youtubeDownloader';
 import { NativeHelperClient } from '../../services/nativeHelper';
 import type { VideoInfo } from '../../services/nativeHelper';
@@ -17,6 +18,33 @@ interface YouTubeVideo {
   duration: string;
   durationSeconds: number;
   views?: string;
+}
+
+// Convert store video to panel format
+function storeToPanel(v: StoreYouTubeVideo): YouTubeVideo {
+  return {
+    id: v.id,
+    title: v.title,
+    thumbnail: v.thumbnail,
+    channel: v.channelTitle,
+    duration: v.duration || '?:??',
+    durationSeconds: v.durationSeconds || 0,
+    views: v.viewCount,
+  };
+}
+
+// Convert panel video to store format
+function panelToStore(v: YouTubeVideo): StoreYouTubeVideo {
+  return {
+    id: v.id,
+    title: v.title,
+    thumbnail: v.thumbnail,
+    channelTitle: v.channel,
+    publishedAt: new Date().toISOString(),
+    duration: v.duration,
+    durationSeconds: v.durationSeconds,
+    viewCount: v.views,
+  };
 }
 
 // Extract video ID from various YouTube URL formats
@@ -107,13 +135,22 @@ function FormatDialog({
 
 export function YouTubePanel() {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<YouTubeVideo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draggingVideo, setDraggingVideo] = useState<string | null>(null);
   const [autoDownload, setAutoDownload] = useState(false);
   const [downloadingVideos, setDownloadingVideos] = useState<Set<string>>(new Set());
   const [helperConnected, setHelperConnected] = useState(isDownloadAvailable());
+
+  // YouTube store - videos persist with project
+  const storeVideos = useYouTubeStore(s => s.videos);
+  const addVideos = useYouTubeStore(s => s.addVideos);
+  const _removeVideo = useYouTubeStore(s => s.removeVideo); // For future use
+  const _clearVideos = useYouTubeStore(s => s.clearVideos); // For future use
+  void _removeVideo; void _clearVideos; // Suppress unused warnings
+
+  // Convert store videos to panel format
+  const results = storeVideos.map(storeToPanel);
 
   // Format selection state
   const [formatDialog, setFormatDialog] = useState<{
@@ -228,11 +265,8 @@ export function YouTubePanel() {
         // Direct video URL/ID - get info and show it
         const videoInfo = await getVideoInfo(videoId);
         if (videoInfo) {
-          setResults(prev => {
-            // Avoid duplicates
-            if (prev.some(v => v.id === videoInfo.id)) return prev;
-            return [videoInfo, ...prev];
-          });
+          // Add to store (handles duplicates)
+          addVideos([panelToStore(videoInfo)]);
           // Clear input for next paste
           setQuery('');
           // Auto-download if enabled
@@ -245,15 +279,14 @@ export function YouTubePanel() {
       } else if (youtubeApiKey) {
         // Search query with API key
         const videos = await searchYouTubeAPI(input);
-        setResults(videos);
+        // Add all to store
+        addVideos(videos.map(panelToStore));
       } else {
         // No API key and not a URL
         setError('Paste a YouTube URL, or add API key in settings for search');
-        setResults([]);
       }
     } catch (err) {
       setError((err as Error).message);
-      setResults([]);
     } finally {
       setLoading(false);
     }

@@ -22,6 +22,17 @@ interface StoredAnalysisFile {
   };
 }
 
+export interface ProjectYouTubeVideo {
+  id: string;
+  title: string;
+  thumbnail: string;
+  channelTitle: string;
+  publishedAt: string;
+  duration?: string;
+  durationSeconds?: number;
+  viewCount?: string;
+}
+
 export interface ProjectFile {
   version: 1;
   name: string;
@@ -52,6 +63,12 @@ export interface ProjectFile {
 
   // Media source folders (for relinking after cache clear)
   mediaSourceFolders?: string[];
+
+  // YouTube panel state
+  youtube?: {
+    videos: ProjectYouTubeVideo[];
+    lastQuery: string;
+  };
 }
 
 export interface ProjectMediaFile {
@@ -224,6 +241,7 @@ const PROJECT_FOLDERS = {
   CACHE_WAVEFORMS: 'Cache/waveforms',
   RENDERS: 'Renders',
   BACKUPS: 'Backups',
+  YT: 'YT',
 } as const;
 
 const MAX_BACKUPS = 20;
@@ -648,6 +666,38 @@ class ProjectFileService {
     } catch (e) {
       console.error(`[ProjectFile] Failed to write ${subFolder}/${fileName}:`, e);
       return false;
+    }
+  }
+
+  /**
+   * Save a YouTube download to the project's YT folder
+   * Returns the File object with correct name for timeline use
+   */
+  async saveYouTubeDownload(blob: Blob, title: string): Promise<File | null> {
+    if (!this.projectHandle) {
+      console.warn('[ProjectFile] No project open, cannot save YouTube download to project');
+      return null;
+    }
+
+    try {
+      // Sanitize filename
+      const sanitizedTitle = title.replace(/[^a-zA-Z0-9\s\-_]/g, '').substring(0, 100).trim();
+      const fileName = `${sanitizedTitle}.mp4`;
+
+      // Write to YT folder
+      const success = await this.writeFile('YT', fileName, blob);
+      if (!success) {
+        console.error('[ProjectFile] Failed to write YouTube file');
+        return null;
+      }
+
+      // Return as File object
+      const file = new File([blob], fileName, { type: 'video/mp4' });
+      console.log(`[ProjectFile] Saved YouTube download: YT/${fileName}`);
+      return file;
+    } catch (e) {
+      console.error('[ProjectFile] Failed to save YouTube download:', e);
+      return null;
     }
   }
 
