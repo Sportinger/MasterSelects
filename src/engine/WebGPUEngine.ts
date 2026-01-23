@@ -264,11 +264,13 @@ export class WebGPUEngine {
       }
     }
 
-    // Restart render loop
+    // Restart render loop with empty callback
+    // useEngine will re-subscribe with the actual render callback
     this.start(() => {
-      // This will be overridden by useEngine when it re-subscribes
-      console.log('[WebGPUEngine] Render loop restarted after device recovery');
+      // Empty placeholder - useEngine will override this
     });
+
+    console.log('[WebGPUEngine] Render loop restarted after device recovery');
 
     // Request a render to update the display
     this.requestRender();
