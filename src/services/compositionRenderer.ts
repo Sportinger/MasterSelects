@@ -644,6 +644,46 @@ class CompositionRendererService {
     }
     console.log(`[CompositionRenderer] Invalidated all non-active compositions`);
   }
+
+  /**
+   * Invalidate a composition AND all parent compositions that contain it as nested
+   * Call this when a composition's content changes (clips added/removed/modified)
+   */
+  invalidateCompositionAndParents(compositionId: string): void {
+    // First invalidate the composition itself
+    this.invalidateComposition(compositionId);
+
+    // Find all parent compositions that contain this as a nested comp
+    const { compositions } = useMediaStore.getState();
+
+    for (const comp of compositions) {
+      if (comp.id === compositionId) continue;
+
+      // Check if this composition contains the changed one as a nested clip
+      const clips = comp.timelineData?.clips || [];
+      const hasNested = clips.some(clip =>
+        clip.isComposition && clip.compositionId === compositionId
+      );
+
+      if (hasNested) {
+        console.log(`[CompositionRenderer] Invalidating parent composition: ${comp.name} (contains ${compositionId})`);
+        this.invalidateComposition(comp.id);
+        // Recursively invalidate grandparents
+        this.invalidateCompositionAndParents(comp.id);
+      }
+    }
+  }
+
+  /**
+   * Invalidate ALL cached compositions - use when major changes occur
+   */
+  invalidateAll(): void {
+    for (const [, sources] of this.compositionSources.entries()) {
+      sources.isReady = false;
+      sources.clipSources.clear();
+    }
+    console.log(`[CompositionRenderer] Invalidated ALL compositions`);
+  }
 }
 
 // Singleton instance

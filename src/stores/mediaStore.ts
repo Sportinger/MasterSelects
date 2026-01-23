@@ -1096,8 +1096,8 @@ export const useMediaStore = create<MediaState>()(
                 c.id === activeCompositionId ? { ...c, timelineData } : c
               ),
             }));
-            // Invalidate the composition's cached sources since timelineData changed
-            compositionRenderer.invalidateComposition(activeCompositionId);
+            // Invalidate the composition's cached sources AND parent compositions that contain it
+            compositionRenderer.invalidateCompositionAndParents(activeCompositionId);
           }
 
           // Update active composition
