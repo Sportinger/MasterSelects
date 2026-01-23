@@ -1818,7 +1818,7 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
 
   // Complete the download - replace pending clip with actual video
   completeDownload: async (clipId, file) => {
-    const { clips, updateDuration, invalidateCache } = get();
+    const { clips, findAvailableAudioTrack, updateDuration, invalidateCache } = get();
     const clip = clips.find(c => c.id === clipId);
 
     if (!clip || !clip.isPendingDownload) {
@@ -1833,6 +1833,7 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
     video.preload = 'auto';
     video.muted = true;
     video.playsInline = true;
+    video.crossOrigin = 'anonymous';
     const url = URL.createObjectURL(file);
     video.src = url;
 
@@ -1850,44 +1851,139 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
     // Reset to start
     video.currentTime = 0;
 
-    // Update the clip with actual video data IMMEDIATELY (no waiting for thumbnails)
-    set({
-      clips: clips.map(c => {
-        if (c.id !== clipId) return c;
-        return {
-          ...c,
-          file,
-          duration: naturalDuration,
-          outPoint: naturalDuration,
-          source: {
-            type: 'video' as const,
-            videoElement: video,
-            naturalDuration,
-          },
-          thumbnails: initialThumbnails,
-          isPendingDownload: false,
-          downloadProgress: undefined,
-          youtubeVideoId: undefined,
-          youtubeThumbnail: undefined,
-        };
-      }),
-    });
-
-    updateDuration();
-    invalidateCache();
-
-    // Import to media store and get the mediaFileId
+    // Import to media store and get the mediaFileId FIRST
     const mediaStore = useMediaStore.getState();
     const mediaFile = await mediaStore.importFile(file);
 
-    // Update clip with mediaFileId so audio can be loaded
-    set({
-      clips: get().clips.map(c =>
-        c.id === clipId ? { ...c, mediaFileId: mediaFile.id } : c
-      ),
+    // Find or create audio track for linked audio clip
+    const audioTrackId = findAvailableAudioTrack(clip.startTime, naturalDuration);
+    const audioClipId = audioTrackId ? `clip-audio-yt-${Date.now()}` : undefined;
+
+    // Update the clip with actual video data IMMEDIATELY (no waiting for thumbnails)
+    const updatedClips = clips.map(c => {
+      if (c.id !== clipId) return c;
+      return {
+        ...c,
+        file,
+        duration: naturalDuration,
+        outPoint: naturalDuration,
+        source: {
+          type: 'video' as const,
+          videoElement: video,
+          naturalDuration,
+          mediaFileId: mediaFile.id,
+        },
+        mediaFileId: mediaFile.id,
+        linkedClipId: audioClipId,
+        thumbnails: initialThumbnails,
+        isPendingDownload: false,
+        downloadProgress: undefined,
+        youtubeVideoId: undefined,
+        youtubeThumbnail: undefined,
+      };
     });
 
+    // Create linked audio clip if we have an audio track
+    if (audioTrackId && audioClipId) {
+      const audioClip: TimelineClip = {
+        id: audioClipId,
+        trackId: audioTrackId,
+        name: `${clip.name} (Audio)`,
+        file,
+        startTime: clip.startTime,
+        duration: naturalDuration,
+        inPoint: 0,
+        outPoint: naturalDuration,
+        source: { type: 'audio', naturalDuration, mediaFileId: mediaFile.id },
+        mediaFileId: mediaFile.id,
+        linkedClipId: clipId,
+        transform: { ...DEFAULT_TRANSFORM },
+        effects: [],
+        isLoading: false,
+      };
+      updatedClips.push(audioClip);
+      console.log(`[Timeline] Created linked audio clip: ${audioClipId} on track ${audioTrackId}`);
+    }
+
+    set({ clips: updatedClips });
+    updateDuration();
+    invalidateCache();
+
     console.log(`[Timeline] Download complete for clip: ${clipId}, duration: ${naturalDuration}s, mediaFileId: ${mediaFile.id}`);
+
+    // Initialize WebCodecsPlayer for hardware-accelerated decoding
+    const hasWebCodecs = 'VideoDecoder' in window && 'VideoFrame' in window;
+    if (hasWebCodecs) {
+      try {
+        console.log(`[Timeline] Initializing WebCodecsPlayer for YouTube download...`);
+        const { WebCodecsPlayer } = await import('../../engine/WebCodecsPlayer');
+
+        const webCodecsPlayer = new WebCodecsPlayer({
+          loop: false,
+          useSimpleMode: true,
+          onError: (error) => {
+            console.warn('[Timeline] WebCodecs error:', error.message);
+          },
+        });
+
+        webCodecsPlayer.attachToVideoElement(video);
+        console.log(`[Timeline] WebCodecsPlayer ready for YouTube download`);
+
+        set({
+          clips: get().clips.map(c => {
+            if (c.id !== clipId || !c.source) return c;
+            return {
+              ...c,
+              source: {
+                ...c.source,
+                webCodecsPlayer,
+              },
+            };
+          }),
+        });
+      } catch (err) {
+        console.warn('[Timeline] WebCodecsPlayer init failed, using HTMLVideoElement:', err);
+      }
+    }
+
+    // Create audio element for the linked audio clip
+    if (audioTrackId && audioClipId) {
+      const audioFromVideo = document.createElement('audio');
+      audioFromVideo.src = url;
+      audioFromVideo.preload = 'auto';
+
+      set({
+        clips: get().clips.map(c =>
+          c.id === audioClipId
+            ? { ...c, source: { type: 'audio' as const, audioElement: audioFromVideo, naturalDuration, mediaFileId: mediaFile.id } }
+            : c
+        ),
+      });
+
+      // Generate waveform in background if enabled
+      if (get().waveformsEnabled) {
+        set({
+          clips: get().clips.map(c => c.id === audioClipId ? { ...c, waveformGenerating: true, waveformProgress: 0 } : c)
+        });
+
+        (async () => {
+          try {
+            const audioWaveform = await generateWaveform(file);
+            set({
+              clips: get().clips.map(c =>
+                c.id === audioClipId ? { ...c, waveform: audioWaveform, waveformGenerating: false } : c
+              ),
+            });
+            console.log(`[Timeline] Waveform generated for YouTube audio clip`);
+          } catch (e) {
+            console.warn('[Timeline] Waveform generation failed:', e);
+            set({
+              clips: get().clips.map(c => c.id === audioClipId ? { ...c, waveformGenerating: false } : c)
+            });
+          }
+        })();
+      }
+    }
 
     // Generate real thumbnails in background (non-blocking)
     setTimeout(async () => {
