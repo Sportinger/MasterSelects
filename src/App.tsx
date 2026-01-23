@@ -14,7 +14,17 @@ import { projectDB } from './services/projectDB';
 import { projectFileService } from './services/projectFileService';
 import './App.css';
 
+// Dev test pages - access via ?test=parallel-decode
+import { ParallelDecodeTest } from './test/ParallelDecodeTest';
+
 function App() {
+  // Check for test mode via URL param
+  const urlParams = new URLSearchParams(window.location.search);
+  const testMode = urlParams.get('test');
+
+  if (testMode === 'parallel-decode') {
+    return <ParallelDecodeTest />;
+  }
   // Mobile detection
   const isMobile = useIsMobile();
   const forceMobile = useForceMobile();

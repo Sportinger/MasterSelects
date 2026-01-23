@@ -377,12 +377,11 @@ export class ParallelDecodeManager {
         // Decode in larger batches for throughput
         framesToDecode = Math.min(framesToDecode, DECODE_BATCH_SIZE);
 
-        // Check if we need to seek (find nearest keyframe)
-        const targetStart = clipDecoder.sampleIndex;
-        if (targetStart > clipDecoder.sampleIndex + 30) {
-          // Need to seek - find keyframe
-          let keyframeIndex = targetStart;
-          for (let i = targetStart; i >= 0; i--) {
+        // Check if we need to seek (target is far ahead of current position)
+        if (targetSampleIndex > clipDecoder.sampleIndex + 30) {
+          // Need to seek - find nearest keyframe before target
+          let keyframeIndex = targetSampleIndex;
+          for (let i = targetSampleIndex; i >= 0; i--) {
             if (clipDecoder.samples[i].is_sync) {
               keyframeIndex = i;
               break;
