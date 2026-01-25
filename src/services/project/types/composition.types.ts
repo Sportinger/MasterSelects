@@ -1,0 +1,66 @@
+// Composition-related types
+
+import type { ProjectKeyframe, ProjectMarker, ProjectEffect, ProjectMask, ProjectTransform } from './timeline.types';
+
+export interface ProjectTrack {
+  id: string;
+  name: string;
+  type: 'video' | 'audio';
+  height: number;
+  locked: boolean;
+  visible: boolean;
+  muted: boolean;
+  solo: boolean;
+}
+
+export interface ProjectClip {
+  id: string;
+  trackId: string;
+  mediaId: string; // Reference to ProjectMediaFile.id
+
+  // Timeline position
+  startTime: number;
+  duration: number;
+
+  // Source trimming
+  inPoint: number;
+  outPoint: number;
+
+  // Transform
+  transform: ProjectTransform;
+
+  // Effects
+  effects: ProjectEffect[];
+
+  // Masks
+  masks: ProjectMask[];
+
+  // Keyframes
+  keyframes: ProjectKeyframe[];
+
+  // Audio
+  volume: number;
+  audioEnabled: boolean;
+
+  // Flags
+  reversed: boolean;
+  disabled: boolean;
+}
+
+export interface ProjectComposition {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  frameRate: number;
+  duration: number;
+  backgroundColor: string;
+  folderId: string | null;
+
+  // Tracks and clips
+  tracks: ProjectTrack[];
+  clips: ProjectClip[];
+
+  // Markers
+  markers: ProjectMarker[];
+}
