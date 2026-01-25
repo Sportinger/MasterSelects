@@ -310,6 +310,15 @@ export function useEngine() {
         // Render layers (layerBuilder already handles mask properties)
         engine.render(layers);
 
+        // Cache rendered frame for instant scrubbing (like Premiere's playback caching)
+        // Only cache if RAM preview is enabled and we're playing (not generating RAM preview)
+        const { ramPreviewEnabled, addCachedFrame } = useTimelineStore.getState();
+        if (ramPreviewEnabled && isPlaying) {
+          engine.cacheCompositeFrame(currentPlayhead).then(() => {
+            addCachedFrame(currentPlayhead);
+          });
+        }
+
         // Cache active comp output for parent preview texture sharing
         // This allows parent compositions to show the active comp without video conflicts
         const activeCompId = useMediaStore.getState().activeCompositionId;

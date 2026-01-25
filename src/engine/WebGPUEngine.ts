@@ -781,10 +781,13 @@ export class WebGPUEngine {
 
   renderCachedFrame(time: number): boolean {
     const device = this.context.getDevice();
-    if (!this.previewContext || !device || !this.scrubbingCache || !this.outputPipeline || !this.sampler) return false;
+    if (!this.previewContext || !device || !this.scrubbingCache || !this.outputPipeline || !this.sampler) {
+      return false;
+    }
 
     const gpuCached = this.scrubbingCache.getGpuCachedFrame(time);
     if (gpuCached) {
+      log.debug('RAM Preview cache hit (GPU)', { time: time.toFixed(3) });
       const commandEncoder = device.createCommandEncoder();
       this.outputPipeline.renderToCanvas(commandEncoder, this.previewContext, gpuCached.bindGroup);
       for (const previewCtx of this.previewCanvases.values()) {
@@ -798,7 +801,14 @@ export class WebGPUEngine {
     }
 
     const imageData = this.scrubbingCache.getCachedCompositeFrame(time);
-    if (!imageData) return false;
+    if (!imageData) {
+      // Only log occasionally to avoid spam
+      if (Math.random() < 0.05) {
+        log.debug('RAM Preview cache miss', { time: time.toFixed(3), cacheSize: this.scrubbingCache.getCompositeCacheStats(1920, 1080).count });
+      }
+      return false;
+    }
+    log.debug('RAM Preview cache hit (ImageData→GPU)', { time: time.toFixed(3) });
 
     try {
       const { width, height } = { width: imageData.width, height: imageData.height };

@@ -257,11 +257,18 @@ export function useLayerSync({
       return;
     }
 
-    if (
-      ramPreviewRange &&
-      playheadPosition >= ramPreviewRange.start &&
-      playheadPosition <= ramPreviewRange.end
-    ) {
+    // Try to use RAM Preview cache for instant scrubbing
+    // This provides instant access to pre-rendered frames
+    if (ramPreviewRange) {
+      const inRange = playheadPosition >= ramPreviewRange.start && playheadPosition <= ramPreviewRange.end;
+      if (inRange) {
+        if (engine.renderCachedFrame(playheadPosition)) {
+          return; // Cache hit - instant render, no video seek needed
+        }
+        // Cache miss within range - will fall through to regular render
+      }
+    } else {
+      // No RAM preview range, but still try the cache in case frames were cached during playback
       if (engine.renderCachedFrame(playheadPosition)) {
         return;
       }
