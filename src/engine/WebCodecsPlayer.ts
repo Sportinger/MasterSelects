@@ -485,10 +485,6 @@ export class WebCodecsPlayer {
         // In export mode, buffer frames by CTS for B-frame handling
         if (this.isInExportMode) {
           const cts = frame.timestamp; // microseconds
-          // Debug: log frame output
-          if (this.exportFrameBuffer.size < 5 || this.exportFrameBuffer.size % 10 === 0) {
-            console.log(`[WebCodecs] Frame output: cts=${cts}, buffer size=${this.exportFrameBuffer.size + 1}`);
-          }
           this.exportFrameBuffer.set(cts, frame);
 
           // DON'T set currentFrame here - it's managed by seekDuringExport
@@ -1046,13 +1042,8 @@ export class WebCodecsPlayer {
     while (waitCount < maxWait) {
       const queueSize = this.decoder.decodeQueueSize;
       const bufferSize = this.exportFrameBuffer.size;
-      // B-frames need ~3-4 future reference frames, so expect samplesDecoded - 4 frames
-      const expectedFrames = Math.max(1, samplesDecoded - 4);
-
-      // Log progress every 20 iterations (200ms)
-      if (waitCount % 20 === 0) {
-        console.log(`[WebCodecs] Waiting: queue=${queueSize}, buffer=${bufferSize}/${expectedFrames}, waited=${waitCount * 10}ms`);
-      }
+      // B-frames need future reference frames, so expect fewer frames than samples
+      const expectedFrames = Math.max(1, samplesDecoded - 10);
 
       if (queueSize === 0 && bufferSize >= expectedFrames) {
         break;
@@ -1179,57 +1170,59 @@ export class WebCodecsPlayer {
       return { frame: bestFrame, diff: bestDiff };
     };
 
-    // First check if frame is already in buffer
+    // First check if frame is already in buffer AND close enough
     let { frame: bestFrame, diff: bestDiff } = findBestFrame();
 
-    // Debug: log buffer state
-    console.log(`[WebCodecs] seekDuringExport(${timeSeconds.toFixed(3)}): buffer=${this.exportFrameBuffer.size}, bestDiff=${bestDiff?.toFixed(0) ?? 'none'}`);
+    // Accept frame if within 1.5 frame durations (handles non-zero start times)
+    const maxAcceptableDiff = frameDuration * 1.5;
 
-    // If we have ANY frame in buffer, use the closest one
-    // This handles videos with non-zero start times or edit list offsets
-    if (bestFrame) {
+    if (bestFrame && bestDiff < maxAcceptableDiff) {
       this.currentFrame = bestFrame;
       return;
     }
 
-    // Need to decode more frames - always decode FORWARD in DTS order
-    // Queue samples ahead to handle B-frame buffering in the decoder
-    const decodeAhead = 20; // Decode 20 samples ahead to ensure B-frame references
-    const maxSampleIndex = Math.min(this.sampleIndex + decodeAhead, this.samples.length);
+    // Need to decode more frames - keep decoding until we have a frame close to target
+    // B-frames need future reference frames, so we may need to decode many samples
+    let decodeAttempts = 0;
+    const maxDecodeAttempts = 10; // Max 10 batches of decoding
 
-    // Queue all samples without waiting (decoder will buffer B-frames)
-    while (this.sampleIndex < maxSampleIndex && this.decoder) {
-      this.queueNextSampleForDecode();
-    }
+    while (decodeAttempts < maxDecodeAttempts && this.decoder && this.isInExportMode) {
+      // Queue 30 more samples
+      const samplesToQueue = 30;
+      const maxSampleIndex = Math.min(this.sampleIndex + samplesToQueue, this.samples.length);
 
-    // Check decoder is still valid after queuing
-    if (!this.decoder || !this.isInExportMode) return;
-
-    // Wait for decoder queue to drain and new frames to appear
-    let waitCount = 0;
-    const maxWaits = 50; // 500ms max
-    const bufferSizeBefore = this.exportFrameBuffer.size;
-
-    while (waitCount < maxWaits && this.decoder && this.isInExportMode) {
-      const queueEmpty = this.decoder.decodeQueueSize === 0;
-      const hasNewFrames = this.exportFrameBuffer.size > bufferSizeBefore;
-
-      if (queueEmpty && hasNewFrames) {
+      if (this.sampleIndex >= this.samples.length) {
+        // Reached end of samples, use whatever we have
         break;
       }
 
-      await new Promise(r => setTimeout(r, 10));
-      waitCount++;
+      while (this.sampleIndex < maxSampleIndex && this.decoder) {
+        this.queueNextSampleForDecode();
+      }
+
+      // Wait for decoder to process
+      let waitCount = 0;
+      while (waitCount < 30 && this.decoder && this.decoder.decodeQueueSize > 0) {
+        await new Promise(r => setTimeout(r, 10));
+        waitCount++;
+      }
+
+      // Check if we now have a good frame
+      ({ frame: bestFrame, diff: bestDiff } = findBestFrame());
+      if (bestFrame && bestDiff < maxAcceptableDiff) {
+        this.currentFrame = bestFrame;
+        return;
+      }
+
+      decodeAttempts++;
     }
 
     // Check decoder is still valid
     if (!this.decoder || !this.isInExportMode) return;
 
-    // Check if we now have our frame
+    // Use best available frame even if not ideal
     ({ frame: bestFrame, diff: bestDiff } = findBestFrame());
     if (bestFrame) {
-      // Use best frame even if not within strict tolerance
-      // This handles videos with non-zero start times or unusual frame timing
       this.currentFrame = bestFrame;
       return;
     }
