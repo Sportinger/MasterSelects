@@ -1,0 +1,255 @@
+// Proxy generation slice
+
+import type { MediaFile, MediaSliceCreator, ProxyStatus } from '../types';
+import { PROXY_FPS } from '../constants';
+import { projectFileService } from '../../../services/projectFileService';
+import { useTimelineStore } from '../../timeline';
+
+// Track active generations for cancellation
+const activeProxyGenerations = new Map<string, { cancelled: boolean }>();
+
+export interface ProxyActions {
+  proxyEnabled: boolean;
+  setProxyEnabled: (enabled: boolean) => void;
+  generateProxy: (mediaFileId: string) => Promise<void>;
+  cancelProxyGeneration: (mediaFileId: string) => void;
+  updateProxyProgress: (mediaFileId: string, progress: number) => void;
+  setProxyStatus: (mediaFileId: string, status: ProxyStatus) => void;
+  getNextFileNeedingProxy: () => MediaFile | undefined;
+}
+
+export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => ({
+  proxyEnabled: false,
+
+  setProxyEnabled: async (enabled: boolean) => {
+    set({ proxyEnabled: enabled });
+
+    if (enabled) {
+      // Mute all video elements when enabling proxy mode
+      const clips = useTimelineStore.getState().clips;
+      clips.forEach(clip => {
+        if (clip.source?.videoElement) {
+          clip.source.videoElement.muted = true;
+          if (!clip.source.videoElement.paused) {
+            clip.source.videoElement.pause();
+          }
+        }
+      });
+      console.log('[Proxy] Mode enabled - muted all videos');
+    }
+  },
+
+  updateProxyProgress: (mediaFileId: string, progress: number) => {
+    set((state) => ({
+      files: state.files.map((f) =>
+        f.id === mediaFileId ? { ...f, proxyProgress: progress } : f
+      ),
+    }));
+  },
+
+  setProxyStatus: async (mediaFileId: string, status: ProxyStatus) => {
+    const { proxyEnabled } = get();
+
+    set((state) => ({
+      files: state.files.map((f) =>
+        f.id === mediaFileId ? { ...f, proxyStatus: status } : f
+      ),
+    }));
+
+    // Mute video when proxy becomes ready
+    if (status === 'ready' && proxyEnabled) {
+      const clips = useTimelineStore.getState().clips;
+      clips.forEach(clip => {
+        if (clip.mediaFileId === mediaFileId && clip.source?.videoElement) {
+          clip.source.videoElement.muted = true;
+          if (!clip.source.videoElement.paused) {
+            clip.source.videoElement.pause();
+          }
+        }
+      });
+    }
+  },
+
+  getNextFileNeedingProxy: () => {
+    const { files, currentlyGeneratingProxyId } = get();
+    return files.find(
+      (f) =>
+        f.type === 'video' &&
+        f.file &&
+        f.proxyStatus !== 'ready' &&
+        f.proxyStatus !== 'generating' &&
+        f.id !== currentlyGeneratingProxyId
+    );
+  },
+
+  generateProxy: async (mediaFileId: string) => {
+    const { files, currentlyGeneratingProxyId } = get();
+
+    if (currentlyGeneratingProxyId) {
+      console.log('[Proxy] Already generating, queuing:', mediaFileId);
+      return;
+    }
+
+    const mediaFile = files.find((f) => f.id === mediaFileId);
+    if (!mediaFile || mediaFile.type !== 'video' || !mediaFile.file) {
+      console.warn('[Proxy] Invalid media file:', mediaFileId);
+      return;
+    }
+
+    if (!projectFileService.isProjectOpen()) {
+      console.error('[Proxy] No project open!');
+      return;
+    }
+
+    console.log(`[Proxy] Starting generation for ${mediaFile.name}...`);
+
+    // Check if already exists
+    const storageKey = mediaFile.fileHash || mediaFileId;
+    const existingCount = await projectFileService.getProxyFrameCount(storageKey);
+    if (existingCount > 0) {
+      console.log('[Proxy] Already exists:', mediaFile.name);
+      set((s) => ({
+        files: s.files.map((f) =>
+          f.id === mediaFileId
+            ? { ...f, proxyStatus: 'ready' as ProxyStatus, proxyProgress: 100, proxyFrameCount: existingCount }
+            : f
+        ),
+      }));
+      return;
+    }
+
+    // Set up cancellation
+    const controller = { cancelled: false };
+    activeProxyGenerations.set(mediaFileId, controller);
+
+    // Inline setProxyStatus and updateProxyProgress
+    set({ currentlyGeneratingProxyId: mediaFileId });
+    set((state) => ({
+      files: state.files.map((f) =>
+        f.id === mediaFileId ? { ...f, proxyStatus: 'generating' as ProxyStatus, proxyProgress: 0, proxyFps: PROXY_FPS } : f
+      ),
+    }));
+
+    // Progress updater function
+    const updateProgress = (progress: number) => {
+      set((state) => ({
+        files: state.files.map((f) =>
+          f.id === mediaFileId ? { ...f, proxyProgress: progress } : f
+        ),
+      }));
+    };
+
+    try {
+      // Generate video proxy
+      const result = await generateVideoProxy(
+        mediaFile,
+        storageKey,
+        controller,
+        updateProgress
+      );
+
+      if (result && !controller.cancelled) {
+        // Extract audio proxy
+        await extractAudioProxy(mediaFile, storageKey);
+
+        // Check for audio proxy
+        const hasAudioProxy = await projectFileService.hasProxyAudio(storageKey);
+
+        // Update final status
+        set((s) => ({
+          files: s.files.map((f) =>
+            f.id === mediaFileId
+              ? {
+                  ...f,
+                  proxyStatus: 'ready' as ProxyStatus,
+                  proxyProgress: 100,
+                  proxyFrameCount: result.frameCount,
+                  proxyFps: result.fps,
+                  hasProxyAudio: hasAudioProxy,
+                }
+              : f
+          ),
+        }));
+
+        console.log(`[Proxy] Complete: ${result.frameCount} frames for ${mediaFile.name}`);
+      } else if (!controller.cancelled) {
+        // Set error status inline
+        set((state) => ({
+          files: state.files.map((f) =>
+            f.id === mediaFileId ? { ...f, proxyStatus: 'error' as ProxyStatus } : f
+          ),
+        }));
+      }
+    } catch (e) {
+      console.error('[Proxy] Generation failed:', e);
+      set((state) => ({
+        files: state.files.map((f) =>
+          f.id === mediaFileId ? { ...f, proxyStatus: 'error' as ProxyStatus } : f
+        ),
+      }));
+    } finally {
+      activeProxyGenerations.delete(mediaFileId);
+      set({ currentlyGeneratingProxyId: null });
+    }
+  },
+
+  cancelProxyGeneration: (mediaFileId: string) => {
+    const controller = activeProxyGenerations.get(mediaFileId);
+    if (controller) {
+      controller.cancelled = true;
+      console.log('[Proxy] Cancelled:', mediaFileId);
+    }
+
+    const { currentlyGeneratingProxyId } = get();
+    if (currentlyGeneratingProxyId === mediaFileId) {
+      set((state) => ({
+        currentlyGeneratingProxyId: null,
+        files: state.files.map((f) =>
+          f.id === mediaFileId
+            ? { ...f, proxyStatus: 'none' as ProxyStatus, proxyProgress: 0 }
+            : f
+        ),
+      }));
+    }
+  },
+});
+
+async function generateVideoProxy(
+  mediaFile: MediaFile,
+  storageKey: string,
+  controller: { cancelled: boolean },
+  updateProgress: (progress: number) => void
+): Promise<{ frameCount: number; fps: number } | null> {
+  const { getProxyGenerator } = await import('../../../services/proxyGenerator');
+  const generator = getProxyGenerator();
+
+  const saveFrame = async (frame: { frameIndex: number; blob: Blob }) => {
+    await projectFileService.saveProxyFrame(storageKey, frame.frameIndex, frame.blob);
+  };
+
+  return generator.generate(
+    mediaFile.file!,
+    mediaFile.id,
+    updateProgress,
+    () => controller.cancelled,
+    saveFrame
+  );
+}
+
+async function extractAudioProxy(
+  mediaFile: MediaFile,
+  storageKey: string
+): Promise<void> {
+  try {
+    console.log('[Proxy] Extracting audio...');
+    const { extractAudioFromVideo } = await import('../../../services/audioExtractor');
+
+    const result = await extractAudioFromVideo(mediaFile.file!, () => {});
+    if (result && result.blob && result.blob.size > 0) {
+      await projectFileService.saveProxyAudio(storageKey, result.blob);
+      console.log(`[Proxy] Audio saved (${(result.blob.size / 1024).toFixed(1)}KB)`);
+    }
+  } catch (e) {
+    console.warn('[Proxy] Audio extraction failed (non-fatal):', e);
+  }
+}

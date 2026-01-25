@@ -2,6 +2,213 @@
 
 **Target**: Reduce `src/engine/FrameExporter.ts` from 1510 LOC to ~350 LOC main file with helpers below ~300 LOC each.
 
+**Performance Target**: ~30% faster export through algorithmic improvements.
+
+---
+
+## Performance Optimizations (Apply During Refactor)
+
+### HIGH IMPACT
+
+#### 1. Cache Timeline State Per Frame
+**Problem**: `useTimelineStore.getState()` called 3-5 times per frame across functions.
+**Solution**: Create `FrameContext` object cached once per frame.
+
+```typescript
+// Add to types.ts
+export interface FrameContext {
+  time: number;
+  state: ReturnType<typeof useTimelineStore.getState>;
+  trackMap: Map<string, TimelineTrack>;       // O(1) track lookup
+  clipsByTrack: Map<string, TimelineClip>;    // O(1) clip lookup
+  clipsAtTime: TimelineClip[];                // Pre-filtered
+}
+
+// Create once per frame in export loop
+function createFrameContext(time: number): FrameContext {
+  const state = useTimelineStore.getState();
+  const clipsAtTime = state.getClipsAtTime(time);
+
+  // Build lookup maps once
+  const trackMap = new Map(state.tracks.map(t => [t.id, t]));
+  const clipsByTrack = new Map(clipsAtTime.map(c => [c.trackId, c]));
+
+  return { time, state, trackMap, clipsByTrack, clipsAtTime };
+}
+```
+
+**Impact**: Eliminates ~180,000 redundant state access calls for 1-minute export.
+
+#### 2. Binary Search in ParallelDecodeManager
+**Problem**: `findSampleIndexForTime()` uses O(n) linear search through all samples.
+**Solution**: Binary search since samples are sorted by `cts`.
+
+```typescript
+// Replace in ParallelDecodeManager.ts
+private findSampleIndexForTime(clipDecoder: ClipDecoder, sourceTime: number): number {
+  const targetTime = sourceTime * clipDecoder.videoTrack.timescale;
+  const samples = clipDecoder.samples;
+
+  // Binary search
+  let left = 0;
+  let right = samples.length - 1;
+
+  while (left < right) {
+    const mid = Math.floor((left + right + 1) / 2);
+    if (samples[mid].cts <= targetTime) {
+      left = mid;
+    } else {
+      right = mid - 1;
+    }
+  }
+
+  return left;
+}
+```
+
+**Impact**: O(log n) vs O(n) = ~1000x faster for 18,000 sample videos.
+
+#### 3. Optimize Frame Buffer Lookup
+**Problem**: `getFrameForClip()` iterates ALL buffered frames to find closest.
+**Solution**: Track min/max timestamps, use sorted insertion.
+
+```typescript
+// Add to ClipDecoder interface
+interface ClipDecoder {
+  // ... existing fields
+  sortedTimestamps: number[];  // Keep sorted for binary search
+  oldestTimestamp: number;
+  newestTimestamp: number;
+}
+
+// Optimized lookup
+getFrameForClip(clipId: string, timelineTime: number): VideoFrame | null {
+  const clipDecoder = this.clipDecoders.get(clipId);
+  if (!clipDecoder) return null;
+
+  const targetTimestamp = this.timelineToSourceTime(clipDecoder.clipInfo, timelineTime) * 1_000_000;
+
+  // Quick bounds check
+  if (targetTimestamp < clipDecoder.oldestTimestamp - frameTolerance ||
+      targetTimestamp > clipDecoder.newestTimestamp + frameTolerance) {
+    return null;
+  }
+
+  // Binary search for closest timestamp
+  const idx = this.binarySearchClosest(clipDecoder.sortedTimestamps, targetTimestamp);
+  const closestTimestamp = clipDecoder.sortedTimestamps[idx];
+
+  if (Math.abs(closestTimestamp - targetTimestamp) < frameTolerance) {
+    return clipDecoder.frameBuffer.get(closestTimestamp)?.frame ?? null;
+  }
+
+  return null;
+}
+```
+
+**Impact**: O(log n) vs O(n) for frame lookup.
+
+### MEDIUM IMPACT
+
+#### 4. FPS-Based Constants
+**Problem**: Hardcoded tolerances (50ms, 100ms) don't account for frame rate.
+
+```typescript
+// Add to types.ts
+export function getFrameTolerance(fps: number): number {
+  const frameDurationMicros = 1_000_000 / fps;
+  return frameDurationMicros * 1.5;  // 1.5 frame tolerance
+}
+
+export function getKeyframeInterval(fps: number): number {
+  return fps;  // 1 keyframe per second
+}
+
+// Usage in VideoEncoderWrapper
+const keyFrame = frameIndex % getKeyframeInterval(this.settings.fps) === 0;
+```
+
+#### 5. Replace setTimeout with queueMicrotask
+**Problem**: `setTimeout(0)` has ~4ms minimum delay.
+
+```typescript
+// In VideoEncoderWrapper.encodeFrame
+if (frameIndex % 30 === 0) {  // Less frequent yield
+  await new Promise(resolve => queueMicrotask(resolve));
+}
+```
+
+#### 6. Avoid Buffer Array Allocation on Every Frame
+**Problem**: `handleDecodedFrame` creates and sorts array when buffer is full.
+
+```typescript
+// Track oldest separately instead of sorting
+private handleDecodedFrame(clipDecoder: ClipDecoder, frame: VideoFrame): void {
+  const timestamp = frame.timestamp;
+
+  clipDecoder.frameBuffer.set(timestamp, { frame, sourceTime: timestamp / 1_000_000, timestamp });
+
+  // Update sorted list efficiently (insertion sort for single element)
+  const idx = this.binarySearchInsertPosition(clipDecoder.sortedTimestamps, timestamp);
+  clipDecoder.sortedTimestamps.splice(idx, 0, timestamp);
+
+  // Update bounds
+  clipDecoder.oldestTimestamp = clipDecoder.sortedTimestamps[0];
+  clipDecoder.newestTimestamp = clipDecoder.sortedTimestamps[clipDecoder.sortedTimestamps.length - 1];
+
+  // Cleanup if too large - remove oldest
+  if (clipDecoder.frameBuffer.size > MAX_BUFFER_SIZE) {
+    const oldestTs = clipDecoder.sortedTimestamps.shift()!;
+    clipDecoder.frameBuffer.get(oldestTs)?.frame.close();
+    clipDecoder.frameBuffer.delete(oldestTs);
+    clipDecoder.oldestTimestamp = clipDecoder.sortedTimestamps[0];
+  }
+}
+```
+
+#### 7. Pass Context Instead of Re-fetching
+Update all functions to accept `FrameContext` instead of calling `getState()`:
+
+```typescript
+// Before
+export async function seekAllClipsToTime(time: number, ...): Promise<void> {
+  const clips = useTimelineStore.getState().getClipsAtTime(time);  // ❌ Re-fetch
+  const tracks = useTimelineStore.getState().tracks;               // ❌ Re-fetch
+
+// After
+export async function seekAllClipsToTime(ctx: FrameContext, ...): Promise<void> {
+  const { clipsAtTime, trackMap } = ctx;  // ✅ Use cached
+```
+
+### LOW IMPACT (Good Practice)
+
+#### 8. Early Cancellation Checks
+```typescript
+// Add check before expensive operations
+for (let frame = 0; frame < totalFrames; frame++) {
+  if (this.isCancelled) return null;
+
+  // ... seek
+  if (this.isCancelled) return null;  // Check after seek
+
+  // ... render
+  if (this.isCancelled) return null;  // Check after render
+
+  // ... encode
+}
+```
+
+#### 9. Memory Warning for Large Files
+```typescript
+// In loadClipFileData
+const totalSize = clips.reduce((sum, c) => sum + (c.file?.size || 0), 0);
+if (totalSize > 2 * 1024 * 1024 * 1024) {  // > 2GB
+  console.warn(`[FrameExporter] Large file load: ${(totalSize / 1024 / 1024 / 1024).toFixed(1)}GB - may cause memory issues`);
+}
+```
+
+---
+
 ## Current Issues
 
 ### Giant Functions
@@ -151,6 +358,45 @@ export interface BaseLayerProps {
   position: { x: number; y: number; z: number };
   scale: { x: number; y: number };
   rotation: { x: number; y: number; z: number };
+}
+
+// ============ FRAME CONTEXT (Performance Optimization) ============
+
+import type { TimelineClip, TimelineTrack } from '../../stores/timeline/types';
+
+/**
+ * Cached context for a single frame - avoids repeated getState() calls.
+ * Create once per frame, pass to all functions.
+ */
+export interface FrameContext {
+  time: number;
+  fps: number;
+  frameTolerance: number;
+  clipsAtTime: TimelineClip[];
+  trackMap: Map<string, TimelineTrack>;
+  clipsByTrack: Map<string, TimelineClip>;
+  getInterpolatedTransform: (clipId: string, localTime: number) => any;
+  getInterpolatedEffects: (clipId: string, localTime: number) => any[];
+  getSourceTimeForClip: (clipId: string, localTime: number) => number;
+  getInterpolatedSpeed: (clipId: string, localTime: number) => number;
+}
+
+// ============ FPS-BASED CONSTANTS ============
+
+/**
+ * Get frame tolerance in microseconds based on fps.
+ * Uses 1.5 frame duration for tolerance.
+ */
+export function getFrameTolerance(fps: number): number {
+  return Math.round((1_000_000 / fps) * 1.5);
+}
+
+/**
+ * Get keyframe interval (frames between keyframes).
+ * Default: 1 keyframe per second.
+ */
+export function getKeyframeInterval(fps: number): number {
+  return Math.round(fps);
 }
 ```
 
@@ -491,7 +737,7 @@ export class VideoEncoderWrapper {
     return this.audioCodec;
   }
 
-  async encodeFrame(pixels: Uint8ClampedArray, frameIndex: number): Promise<void> {
+  async encodeFrame(pixels: Uint8ClampedArray, frameIndex: number, keyframeInterval?: number): Promise<void> {
     if (!this.encoder || this.isClosed) {
       throw new Error('Encoder not initialized or already closed');
     }
@@ -507,13 +753,15 @@ export class VideoEncoderWrapper {
       duration: durationMicros,
     });
 
-    const keyFrame = frameIndex % 30 === 0;
+    // FPS-based keyframe interval (default: 1 keyframe per second)
+    const interval = keyframeInterval ?? this.settings.fps;
+    const keyFrame = frameIndex % interval === 0;
     this.encoder.encode(frame, { keyFrame });
     frame.close();
 
-    // Yield to event loop periodically
-    if (frameIndex % 10 === 0) {
-      await new Promise(resolve => setTimeout(resolve, 0));
+    // Yield to event loop periodically - use queueMicrotask for lower latency
+    if (frameIndex % 30 === 0) {
+      await new Promise(resolve => queueMicrotask(resolve));
     }
   }
 
@@ -944,30 +1192,30 @@ export function cleanupExportMode(
 // Video seeking and ready-state management for export
 
 import type { TimelineClip, TimelineTrack } from '../../types';
-import type { ExportClipState } from './types';
-import { useTimelineStore } from '../../stores/timeline';
+import type { ExportClipState, FrameContext } from './types';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 
 /**
  * Seek all clips to the specified time for frame export.
+ * Uses FrameContext for O(1) lookups instead of repeated getState() calls.
  */
 export async function seekAllClipsToTime(
-  time: number,
+  ctx: FrameContext,
   clipStates: Map<string, ExportClipState>,
   parallelDecoder: ParallelDecodeManager | null,
   useParallelDecode: boolean
 ): Promise<void> {
+  const { time, clipsAtTime, trackMap } = ctx;
+
   // PARALLEL DECODE MODE
   if (useParallelDecode && parallelDecoder) {
     await parallelDecoder.prefetchFramesForTime(time);
 
     // Handle composition clips not in parallel decode
-    const clips = useTimelineStore.getState().getClipsAtTime(time);
-    const tracks = useTimelineStore.getState().tracks;
     const seekPromises: Promise<void>[] = [];
 
-    for (const clip of clips) {
-      const track = tracks.find(t => t.id === clip.trackId);
+    for (const clip of clipsAtTime) {
+      const track = trackMap.get(clip.trackId);
       if (!track?.visible) continue;
 
       // Handle nested composition clips
@@ -1001,19 +1249,18 @@ export async function seekAllClipsToTime(
   }
 
   // SEQUENTIAL MODE
-  await seekSequentialMode(time, clipStates);
+  await seekSequentialMode(ctx, clipStates);
 }
 
 async function seekSequentialMode(
-  time: number,
+  ctx: FrameContext,
   clipStates: Map<string, ExportClipState>
 ): Promise<void> {
-  const clips = useTimelineStore.getState().getClipsAtTime(time);
-  const tracks = useTimelineStore.getState().tracks;
+  const { time, clipsAtTime, trackMap, getSourceTimeForClip, getInterpolatedSpeed } = ctx;
   const seekPromises: Promise<void>[] = [];
 
-  for (const clip of clips) {
-    const track = tracks.find(t => t.id === clip.trackId);
+  for (const clip of clipsAtTime) {
+    const track = trackMap.get(clip.trackId);
     if (!track?.visible) continue;
 
     // Handle nested composition clips
@@ -1042,8 +1289,8 @@ async function seekSequentialMode(
       // Calculate clip time (handles speed keyframes and reversed clips)
       let clipTime: number;
       try {
-        const sourceTime = useTimelineStore.getState().getSourceTimeForClip(clip.id, clipLocalTime);
-        const initialSpeed = useTimelineStore.getState().getInterpolatedSpeed(clip.id, 0);
+        const sourceTime = getSourceTimeForClip(clip.id, clipLocalTime);
+        const initialSpeed = getInterpolatedSpeed(clip.id, 0);
         const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
         clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
       } catch {
@@ -1130,18 +1377,18 @@ export function seekVideo(video: HTMLVideoElement, time: number): Promise<void> 
 
 /**
  * Wait for all video clips at a given time to have their frames ready.
+ * Uses FrameContext for O(1) lookups.
  */
 export async function waitForAllVideosReady(
-  time: number,
+  ctx: FrameContext,
   clipStates: Map<string, ExportClipState>,
   parallelDecoder: ParallelDecodeManager | null,
   useParallelDecode: boolean
 ): Promise<void> {
-  const clips = useTimelineStore.getState().getClipsAtTime(time);
-  const tracks = useTimelineStore.getState().tracks;
+  const { clipsAtTime, trackMap } = ctx;
 
-  const videoClips = clips.filter(clip => {
-    const track = tracks.find(t => t.id === clip.trackId);
+  const videoClips = clipsAtTime.filter(clip => {
+    const track = trackMap.get(clip.trackId);
     return track?.visible && clip.source?.type === 'video' && clip.source.videoElement;
   });
 
@@ -1196,48 +1443,59 @@ export async function waitForAllVideosReady(
 // Layer building for export rendering
 
 import type { Layer, TimelineClip, NestedCompositionData } from '../../types';
-import type { ExportClipState, BaseLayerProps } from './types';
-import { useTimelineStore } from '../../stores/timeline';
+import type { ExportClipState, BaseLayerProps, FrameContext } from './types';
 import { useMediaStore } from '../../stores/mediaStore';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 
+// Cache video tracks and solo state at export start (don't change during export)
+let cachedVideoTracks: any[] | null = null;
+let cachedAnyVideoSolo = false;
+
+export function initializeLayerBuilder(tracks: any[]): void {
+  cachedVideoTracks = tracks.filter(t => t.type === 'video');
+  cachedAnyVideoSolo = cachedVideoTracks.some(t => t.solo);
+}
+
+export function cleanupLayerBuilder(): void {
+  cachedVideoTracks = null;
+  cachedAnyVideoSolo = false;
+}
+
 /**
  * Build layers for rendering at a specific time.
+ * Uses FrameContext for O(1) lookups - no getState() calls per frame.
  */
 export function buildLayersAtTime(
-  time: number,
+  ctx: FrameContext,
   clipStates: Map<string, ExportClipState>,
   parallelDecoder: ParallelDecodeManager | null,
   useParallelDecode: boolean
 ): Layer[] {
-  const timelineState = useTimelineStore.getState();
-  const { clips, tracks, getInterpolatedTransform, getInterpolatedEffects } = timelineState;
+  const { time, clipsByTrack, getInterpolatedTransform, getInterpolatedEffects } = ctx;
   const layers: Layer[] = [];
 
-  const videoTracks = tracks.filter(t => t.type === 'video');
-  const anyVideoSolo = videoTracks.some(t => t.solo);
+  if (!cachedVideoTracks) {
+    console.error('[ExportLayerBuilder] Not initialized - call initializeLayerBuilder first');
+    return [];
+  }
 
-  const isTrackVisible = (track: typeof videoTracks[0]) => {
+  const isTrackVisible = (track: typeof cachedVideoTracks[0]) => {
     if (!track.visible) return false;
-    if (anyVideoSolo) return track.solo;
+    if (cachedAnyVideoSolo) return track.solo;
     return true;
   };
 
-  // Get clips at current time
-  const clipsAtTime = clips.filter(
-    c => time >= c.startTime && time < c.startTime + c.duration
-  );
-
   // Build layers in track order (bottom to top)
-  for (let trackIndex = 0; trackIndex < videoTracks.length; trackIndex++) {
-    const track = videoTracks[trackIndex];
+  for (let trackIndex = 0; trackIndex < cachedVideoTracks.length; trackIndex++) {
+    const track = cachedVideoTracks[trackIndex];
     if (!isTrackVisible(track)) continue;
 
-    const clip = clipsAtTime.find(c => c.trackId === track.id);
+    // O(1) lookup instead of O(n) find
+    const clip = clipsByTrack.get(track.id);
     if (!clip) continue;
 
     const clipLocalTime = time - clip.startTime;
-    const baseLayerProps = buildBaseLayerProps(clip, clipLocalTime, trackIndex, getInterpolatedTransform, getInterpolatedEffects);
+    const baseLayerProps = buildBaseLayerProps(clip, clipLocalTime, trackIndex, ctx);
 
     // Handle nested compositions
     if (clip.isComposition && clip.nestedClips && clip.nestedClips.length > 0) {
@@ -1292,14 +1550,16 @@ export function buildLayersAtTime(
 
 /**
  * Build base layer properties from clip transform.
+ * Uses FrameContext methods for transform/effects interpolation.
  */
 function buildBaseLayerProps(
   clip: TimelineClip,
   clipLocalTime: number,
   trackIndex: number,
-  getInterpolatedTransform: Function,
-  getInterpolatedEffects: Function
+  ctx: FrameContext
 ): BaseLayerProps {
+  const { getInterpolatedTransform, getInterpolatedEffects } = ctx;
+
   // Get transform safely with defaults
   let transform;
   try {
@@ -1573,11 +1833,13 @@ export {
 import { engine } from '../WebGPUEngine';
 import { AudioExportPipeline, type AudioExportProgress, type EncodedAudioResult } from '../audio';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
-import type { FullExportSettings, ExportProgress, ExportMode, ExportClipState } from './types';
+import { useTimelineStore } from '../../stores/timeline';
+import type { FullExportSettings, ExportProgress, ExportMode, ExportClipState, FrameContext } from './types';
+import { getFrameTolerance, getKeyframeInterval } from './types';
 import { VideoEncoderWrapper } from './VideoEncoderWrapper';
 import { prepareClipsForExport, cleanupExportMode } from './ClipPreparation';
 import { seekAllClipsToTime, waitForAllVideosReady } from './VideoSeeker';
-import { buildLayersAtTime } from './ExportLayerBuilder';
+import { buildLayersAtTime, initializeLayerBuilder, cleanupLayerBuilder } from './ExportLayerBuilder';
 import {
   RESOLUTION_PRESETS,
   FRAME_RATE_PRESETS,
@@ -1641,6 +1903,14 @@ export class FrameExporter {
       this.useParallelDecode = preparation.useParallelDecode;
       this.exportMode = preparation.exportMode;
 
+      // Initialize layer builder cache (tracks don't change during export)
+      const { tracks } = useTimelineStore.getState();
+      initializeLayerBuilder(tracks);
+
+      // Pre-calculate frame tolerance
+      const frameTolerance = getFrameTolerance(fps);
+      const keyframeInterval = getKeyframeInterval(fps);
+
       // Phase 1: Encode video frames
       for (let frame = 0; frame < totalFrames; frame++) {
         if (this.isCancelled) {
@@ -1654,14 +1924,17 @@ export class FrameExporter {
         const frameStart = performance.now();
         const time = startTime + frame * frameDuration;
 
+        // Create FrameContext once per frame - avoids repeated getState() calls
+        const ctx = this.createFrameContext(time, fps, frameTolerance);
+
         if (frame % 30 === 0 || frame < 5) {
           console.log(`[FrameExporter] Processing frame ${frame}/${totalFrames} at time ${time.toFixed(3)}s`);
         }
 
-        await seekAllClipsToTime(time, this.clipStates, this.parallelDecoder, this.useParallelDecode);
-        await waitForAllVideosReady(time, this.clipStates, this.parallelDecoder, this.useParallelDecode);
+        await seekAllClipsToTime(ctx, this.clipStates, this.parallelDecoder, this.useParallelDecode);
+        await waitForAllVideosReady(ctx, this.clipStates, this.parallelDecoder, this.useParallelDecode);
 
-        const layers = buildLayersAtTime(time, this.clipStates, this.parallelDecoder, this.useParallelDecode);
+        const layers = buildLayersAtTime(ctx, this.clipStates, this.parallelDecoder, this.useParallelDecode);
 
         if (layers.length === 0 && frame === 0) {
           console.warn('[FrameExporter] No layers at time', time);
@@ -1683,7 +1956,13 @@ export class FrameExporter {
           continue;
         }
 
-        await this.encoder.encodeFrame(pixels, frame);
+        await this.encoder.encodeFrame(pixels, frame, keyframeInterval);
+
+        // Early cancellation check after expensive encode
+        if (this.isCancelled) {
+          this.cleanup(originalDimensions);
+          return null;
+        }
 
         // Update progress
         const frameTime = performance.now() - frameStart;
@@ -1756,10 +2035,37 @@ export class FrameExporter {
 
   private cleanup(originalDimensions: { width: number; height: number }): void {
     cleanupExportMode(this.clipStates, this.parallelDecoder);
+    cleanupLayerBuilder();
     this.parallelDecoder = null;
     this.useParallelDecode = false;
     engine.setExporting(false);
     engine.setResolution(originalDimensions.width, originalDimensions.height);
+  }
+
+  /**
+   * Create FrameContext for a single frame - caches all state lookups.
+   * This is the key optimization: one getState() call per frame instead of 5+.
+   */
+  private createFrameContext(time: number, fps: number, frameTolerance: number): FrameContext {
+    const state = useTimelineStore.getState();
+    const clipsAtTime = state.getClipsAtTime(time);
+
+    // Build O(1) lookup maps
+    const trackMap = new Map(state.tracks.map(t => [t.id, t]));
+    const clipsByTrack = new Map(clipsAtTime.map(c => [c.trackId, c]));
+
+    return {
+      time,
+      fps,
+      frameTolerance,
+      clipsAtTime,
+      trackMap,
+      clipsByTrack,
+      getInterpolatedTransform: state.getInterpolatedTransform,
+      getInterpolatedEffects: state.getInterpolatedEffects,
+      getSourceTimeForClip: state.getSourceTimeForClip,
+      getInterpolatedSpeed: state.getInterpolatedSpeed,
+    };
   }
 
   // Static helper methods - delegate to codecHelpers
@@ -1880,6 +2186,222 @@ rm -rf src/engine/export
 
 ---
 
+## Phase 8: Optimize ParallelDecodeManager
+
+These optimizations should be applied to `src/engine/ParallelDecodeManager.ts` during or after the refactor.
+
+### Step 8.1: Add Binary Search for Sample Lookup
+
+Replace the linear search in `findSampleIndexForTime`:
+
+```typescript
+// Replace lines 464-473
+private findSampleIndexForTime(clipDecoder: ClipDecoder, sourceTime: number): number {
+  const targetTime = sourceTime * clipDecoder.videoTrack.timescale;
+  const samples = clipDecoder.samples;
+
+  // Binary search - O(log n) instead of O(n)
+  let left = 0;
+  let right = samples.length - 1;
+
+  while (left < right) {
+    const mid = Math.floor((left + right + 1) / 2);
+    if (samples[mid].cts <= targetTime) {
+      left = mid;
+    } else {
+      right = mid - 1;
+    }
+  }
+
+  return left;
+}
+```
+
+### Step 8.2: Add Sorted Timestamp Tracking
+
+Update ClipDecoder interface and handleDecodedFrame:
+
+```typescript
+// Update interface around line 72
+interface ClipDecoder {
+  clipId: string;
+  clipName: string;
+  decoder: VideoDecoder;
+  samples: Sample[];
+  sampleIndex: number;
+  videoTrack: MP4VideoTrack;
+  codecConfig: VideoDecoderConfig;
+  frameBuffer: Map<number, DecodedFrame>;
+  sortedTimestamps: number[];           // NEW: Sorted list for binary search
+  oldestTimestamp: number;              // NEW: Track bounds
+  newestTimestamp: number;              // NEW: Track bounds
+  lastDecodedTimestamp: number;
+  clipInfo: ClipInfo;
+  isDecoding: boolean;
+  pendingDecode: Promise<void> | null;
+}
+
+// Initialize in onSamples callback (around line 190)
+const clipDecoder: ClipDecoder = {
+  // ... existing fields
+  sortedTimestamps: [],
+  oldestTimestamp: Infinity,
+  newestTimestamp: -Infinity,
+  // ...
+};
+```
+
+### Step 8.3: Optimize handleDecodedFrame
+
+Replace the current implementation:
+
+```typescript
+// Replace lines 234-258
+private handleDecodedFrame(clipDecoder: ClipDecoder, frame: VideoFrame): void {
+  const timestamp = frame.timestamp;
+  const sourceTime = timestamp / 1_000_000;
+
+  // Store frame
+  clipDecoder.frameBuffer.set(timestamp, { frame, sourceTime, timestamp });
+
+  // Maintain sorted timestamp list with binary insertion
+  const insertIdx = this.binarySearchInsertPosition(clipDecoder.sortedTimestamps, timestamp);
+  clipDecoder.sortedTimestamps.splice(insertIdx, 0, timestamp);
+
+  // Update bounds (O(1) operation)
+  if (timestamp < clipDecoder.oldestTimestamp) {
+    clipDecoder.oldestTimestamp = timestamp;
+  }
+  if (timestamp > clipDecoder.newestTimestamp) {
+    clipDecoder.newestTimestamp = timestamp;
+  }
+
+  clipDecoder.lastDecodedTimestamp = timestamp;
+
+  // Cleanup if buffer too large - remove oldest (no sorting needed)
+  if (clipDecoder.frameBuffer.size > MAX_BUFFER_SIZE) {
+    const oldestTs = clipDecoder.sortedTimestamps.shift()!;
+    const oldFrame = clipDecoder.frameBuffer.get(oldestTs);
+    if (oldFrame) {
+      oldFrame.frame.close();
+      clipDecoder.frameBuffer.delete(oldestTs);
+    }
+    // Update oldest bound
+    clipDecoder.oldestTimestamp = clipDecoder.sortedTimestamps[0] ?? Infinity;
+  }
+}
+
+// Add helper method
+private binarySearchInsertPosition(arr: number[], target: number): number {
+  let left = 0;
+  let right = arr.length;
+
+  while (left < right) {
+    const mid = Math.floor((left + right) / 2);
+    if (arr[mid] < target) {
+      left = mid + 1;
+    } else {
+      right = mid;
+    }
+  }
+
+  return left;
+}
+```
+
+### Step 8.4: Optimize getFrameForClip
+
+Replace with binary search lookup:
+
+```typescript
+// Replace lines 479-517
+getFrameForClip(clipId: string, timelineTime: number): VideoFrame | null {
+  const clipDecoder = this.clipDecoders.get(clipId);
+  if (!clipDecoder) return null;
+
+  const clipInfo = clipDecoder.clipInfo;
+  if (!this.isTimeInClipRange(clipInfo, timelineTime)) {
+    return null;
+  }
+
+  const targetSourceTime = this.timelineToSourceTime(clipInfo, timelineTime);
+  const targetTimestamp = targetSourceTime * 1_000_000;
+
+  // Quick bounds check - O(1)
+  const tolerance = 100_000; // 100ms, should be fps-based
+  if (targetTimestamp < clipDecoder.oldestTimestamp - tolerance ||
+      targetTimestamp > clipDecoder.newestTimestamp + tolerance) {
+    return null;
+  }
+
+  // Binary search for closest timestamp - O(log n) instead of O(n)
+  const timestamps = clipDecoder.sortedTimestamps;
+  if (timestamps.length === 0) return null;
+
+  let left = 0;
+  let right = timestamps.length - 1;
+
+  while (left < right) {
+    const mid = Math.floor((left + right) / 2);
+    if (timestamps[mid] < targetTimestamp) {
+      left = mid + 1;
+    } else {
+      right = mid;
+    }
+  }
+
+  // Check closest candidates (left and left-1)
+  let closestIdx = left;
+  if (left > 0) {
+    const diffLeft = Math.abs(timestamps[left] - targetTimestamp);
+    const diffPrev = Math.abs(timestamps[left - 1] - targetTimestamp);
+    if (diffPrev < diffLeft) {
+      closestIdx = left - 1;
+    }
+  }
+
+  const closestTimestamp = timestamps[closestIdx];
+  const diff = Math.abs(closestTimestamp - targetTimestamp);
+
+  if (diff < tolerance) {
+    const decodedFrame = clipDecoder.frameBuffer.get(closestTimestamp);
+    if (decodedFrame) {
+      if (diff > 50_000) {
+        console.log(`[ParallelDecode] ${clipDecoder.clipName}: frame diff ${(diff/1000).toFixed(1)}ms`);
+      }
+      return decodedFrame.frame;
+    }
+  }
+
+  console.warn(`[ParallelDecode] ${clipDecoder.clipName}: No frame within tolerance at ${(targetTimestamp/1_000_000).toFixed(3)}s`);
+  return null;
+}
+```
+
+### Step 8.5: Add FPS-Based Tolerance
+
+Add fps parameter to initialization and use it for tolerances:
+
+```typescript
+// Add to class properties
+private exportFps: number = 30;
+private frameTolerance: number = 50_000; // Default 50ms
+
+// Update initialize method
+async initialize(clips: ClipInfo[], exportFps: number): Promise<void> {
+  this.isActive = true;
+  this.exportFps = exportFps;
+  this.frameTolerance = Math.round((1_000_000 / exportFps) * 1.5); // 1.5 frame tolerance
+
+  console.log(`[ParallelDecode] Initializing ${clips.length} clips at ${exportFps}fps (tolerance: ${this.frameTolerance}μs)`);
+  // ... rest of method
+}
+
+// Use this.frameTolerance instead of hardcoded values
+```
+
+---
+
 ## Expected Results
 
 | Metric | Before | After |
@@ -1888,3 +2410,16 @@ rm -rf src/engine/export
 | Largest file | FrameExporter.ts (1510) | ClipPreparation.ts (~250) |
 | Duplicate code | ~150 LOC | ~0 LOC |
 | Files | 1 | 8 |
+
+### Performance Improvements
+
+| Operation | Before | After | Improvement |
+|-----------|--------|-------|-------------|
+| State access per frame | 5-7 calls | 1 call | ~85% reduction |
+| Track lookup | O(n) | O(1) | Map lookup |
+| Clip lookup | O(n) | O(1) | Map lookup |
+| Sample index search | O(n) | O(log n) | ~1000x for long videos |
+| Frame buffer lookup | O(n) | O(log n) | ~60x for 60-frame buffer |
+| Yield overhead | ~4ms/10 frames | ~0ms/30 frames | Near-zero latency |
+
+**Estimated Total Improvement**: ~20-40% faster export for multi-clip projects.

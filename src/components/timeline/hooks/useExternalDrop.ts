@@ -9,7 +9,8 @@ import {
   getVideoDurationQuick,
 } from '../utils/fileTypeHelpers';
 import type { ExternalDragState } from '../types';
-import type { TimelineTrack, TimelineClip, Composition } from '../../../types';
+import type { TimelineTrack, TimelineClip } from '../../../types';
+import type { Composition } from '../../../stores/mediaStore';
 
 interface UseExternalDropProps {
   timelineRef: React.RefObject<HTMLDivElement | null>;
