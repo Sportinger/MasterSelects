@@ -391,23 +391,16 @@ function TimelineClipComponent({
 }: TimelineClipProps) {
   const thumbnails = clip.thumbnails || [];
 
-  // Entrance animation - animate clips on mount with staggered delays (left to right)
-  const timelineDuration = useTimelineStore(s => s.duration);
-  const allClips = useTimelineStore(s => s.clips);
+  // Entrance animation - stagger based on clip position (left to right)
   const [isAnimating, setIsAnimating] = useState(true);
-
-  // Sort clips by startTime and find this clip's index for stagger order
-  const sortedClipIds = [...allClips].sort((a, b) => a.startTime - b.startTime).map(c => c.id);
-  const clipIndex = sortedClipIds.indexOf(clip.id);
-  // Each clip gets 50ms delay after the previous one
-  const animationDelay = Math.max(0, clipIndex) * 0.05;
-  const animationDelayRef = useRef(animationDelay);
+  // Use clip's startTime for stagger - clips further right animate later
+  // Cap at 400ms max delay to keep animation snappy
+  const animationDelayRef = useRef(Math.min(clip.startTime * 0.015, 0.4));
 
   useEffect(() => {
-    // Remove animation class after animation completes (runs only on mount)
     const timer = setTimeout(() => {
       setIsAnimating(false);
-    }, 600 + animationDelayRef.current * 1000);
+    }, 350 + animationDelayRef.current * 1000);
     return () => clearTimeout(timer);
   }, []);
 
