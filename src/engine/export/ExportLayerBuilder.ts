@@ -196,7 +196,8 @@ function buildVideoLayer(
         },
       };
     }
-    log.warn(`Parallel decode missing frame for clip "${clip.name}" at time ${time.toFixed(3)}s`);
+    // No fallback - error out if parallel decode fails
+    throw new Error(`Parallel decode failed for clip "${clip.name}" at time ${time.toFixed(3)}s - no frame available`);
   }
 
   // Try sequential WebCodecs VideoFrame
@@ -212,14 +213,13 @@ function buildVideoLayer(
         },
       };
     }
+    // No fallback for sequential either
+    throw new Error(`Sequential decode failed for clip "${clip.name}" at time ${time.toFixed(3)}s - no frame available`);
   }
 
-  // Fall back to HTMLVideoElement
+  // Only use HTMLVideoElement if not using parallel/sequential decode
   const videoReady = video.readyState >= 2 && !video.seeking;
   if (videoReady) {
-    if (useParallelDecode && parallelDecoder?.hasClip(clip.id)) {
-      log.warn(`Falling back to HTMLVideoElement for "${clip.name}" - frame may be incorrect`);
-    }
     return {
       ...baseLayerProps,
       source: {
@@ -229,8 +229,7 @@ function buildVideoLayer(
     };
   }
 
-  log.warn(`Video not ready for clip ${clip.id}, readyState: ${video.readyState}, seeking: ${video.seeking}`);
-  return null;
+  throw new Error(`Video not ready for clip "${clip.name}" at time ${time.toFixed(3)}s (readyState: ${video.readyState}, seeking: ${video.seeking})`)
 }
 
 /**
@@ -261,7 +260,7 @@ function buildNestedLayersForExport(
 
     const baseLayer = buildNestedBaseLayer(nestedClip);
 
-    // Try parallel decoder first, then video element
+    // Try parallel decoder first - no fallback
     if (nestedClip.source?.videoElement) {
       if (useParallelDecode && parallelDecoder && parallelDecoder.hasClip(nestedClip.id)) {
         const videoFrame = parallelDecoder.getFrameForClip(nestedClip.id, mainTimelineTime);
@@ -276,13 +275,11 @@ function buildNestedLayersForExport(
           } as Layer);
           continue;
         }
-        log.warn(`Parallel decode missing frame for nested clip "${nestedClip.name}"`);
+        // No fallback - error out
+        throw new Error(`Parallel decode failed for nested clip "${nestedClip.name}" at time ${mainTimelineTime.toFixed(3)}s`);
       }
 
-      // Fall back to video element
-      if (useParallelDecode && parallelDecoder?.hasClip(nestedClip.id)) {
-        log.warn(`Falling back to HTMLVideoElement for nested clip "${nestedClip.name}"`);
-      }
+      // Only use HTMLVideoElement if not using parallel decode
       layers.push({
         ...baseLayer,
         source: {

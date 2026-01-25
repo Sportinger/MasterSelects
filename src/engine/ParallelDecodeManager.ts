@@ -421,8 +421,8 @@ export class ParallelDecodeManager {
       const targetTimestamp = sourceTime * 1_000_000;
       const targetSampleIndex = this.findSampleIndexForTime(clipDecoder, sourceTime);
 
-      // Loop until frame is in buffer (max 20 attempts with delays)
-      for (let attempt = 0; attempt < 20; attempt++) {
+      // Loop until frame is in buffer (max 8 attempts - fail fast to fallback)
+      for (let attempt = 0; attempt < 8; attempt++) {
         // Wait for pending decode
         if (clipDecoder.pendingDecode) {
           await clipDecoder.pendingDecode;
