@@ -977,9 +977,14 @@ export class WebCodecsPlayer {
     this.decoder.configure(this.codecConfig!);
     this.sampleIndex = keyframeIndex;
 
-    // Pre-decode frames: from keyframe to start + ahead buffer
-    const decodeEnd = Math.min(startSampleIndex + this.exportAheadCount, this.samples.length);
-    console.log(`[WebCodecs Export] Preparing: keyframe=${keyframeIndex}, start=${startSampleIndex}, decoding ${decodeEnd - keyframeIndex} samples`);
+    // For short clips (<1000 samples), decode ALL samples upfront
+    // This ensures B-frames get all their reference frames
+    // For longer clips, we'd need a smarter streaming approach
+    const decodeEnd = this.samples.length < 1000
+      ? this.samples.length
+      : Math.min(startSampleIndex + this.exportAheadCount, this.samples.length);
+
+    console.log(`[WebCodecs Export] Preparing: keyframe=${keyframeIndex}, start=${startSampleIndex}, decoding ALL ${decodeEnd - keyframeIndex} samples (total: ${this.samples.length})`);
 
     // Decode all samples in batch
     for (let i = keyframeIndex; i < decodeEnd; i++) {
@@ -998,10 +1003,13 @@ export class WebCodecsPlayer {
     }
     this.sampleIndex = decodeEnd;
 
-    console.log(`[WebCodecs Export] Queued ${decodeEnd - keyframeIndex} samples, queue size: ${this.decoder.decodeQueueSize}`);
+    const samplesDecoded = decodeEnd - keyframeIndex;
+    console.log(`[WebCodecs Export] Queued ${samplesDecoded} samples, queue size: ${this.decoder.decodeQueueSize}`);
 
-    // Wait for decoder to output frames (with timeout)
-    await this.waitForDecoderFlush(2000);
+    // Wait for decoder to output frames
+    // Timeout scales with sample count: ~10ms per sample
+    const flushTimeout = Math.max(5000, samplesDecoded * 10);
+    await this.waitForDecoderFlush(flushTimeout);
 
     // Build sorted CTS array for index-based access
     this.exportFramesCts = Array.from(this.exportFrameBuffer.keys()).sort((a, b) => a - b);
