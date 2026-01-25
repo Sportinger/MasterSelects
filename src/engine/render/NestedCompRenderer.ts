@@ -5,6 +5,9 @@ import type { CompositorPipeline } from '../pipeline/CompositorPipeline';
 import type { EffectsPipeline } from '../../effects/EffectsPipeline';
 import type { TextureManager } from '../texture/TextureManager';
 import type { MaskTextureManager } from '../texture/MaskTextureManager';
+import { Logger } from '../../services/logger';
+
+const log = Logger.create('NestedCompRenderer');
 
 interface NestedCompTexture {
   texture: GPUTexture;
@@ -123,8 +126,24 @@ export class NestedCompRenderer {
     // Collect layer data
     const nestedLayerData = this.collectNestedLayerData(nestedLayers);
 
+    // Debug: Log nested layer collection results
+    log.debug('preRender', {
+      compositionId,
+      inputLayers: nestedLayers.length,
+      collectedLayers: nestedLayerData.length,
+      layerDetails: nestedLayers.map(l => ({
+        id: l.id,
+        visible: l.visible,
+        hasVideoElement: !!l.source?.videoElement,
+        hasWebCodecs: !!l.source?.webCodecsPlayer,
+        hasImageElement: !!l.source?.imageElement,
+        videoReadyState: l.source?.videoElement?.readyState,
+      })),
+    });
+
     // Handle empty composition
     if (nestedLayerData.length === 0) {
+      log.warn('No nested layers collected - rendering transparent', { compositionId });
       const clearPass = commandEncoder.beginRenderPass({
         colorAttachments: [{
           view: compTexture.view,
@@ -254,6 +273,8 @@ export class NestedCompRenderer {
             });
             continue;
           }
+        } else {
+          log.debug('WebCodecs has no frame', { layerId: layer.id, wcTime: layer.source.webCodecsPlayer.currentTime });
         }
       }
 
@@ -268,7 +289,11 @@ export class NestedCompRenderer {
               sourceWidth: video.videoWidth, sourceHeight: video.videoHeight,
             });
             continue;
+          } else {
+            log.warn('Failed to import video texture', { layerId: layer.id });
           }
+        } else {
+          log.debug('Video not ready', { layerId: layer.id, readyState: video.readyState, currentTime: video.currentTime });
         }
       }
 

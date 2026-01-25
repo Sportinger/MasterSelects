@@ -10,6 +10,9 @@ import { LayerCache } from './LayerCache';
 import { TransformCache } from './TransformCache';
 import { AudioSyncHandler, createAudioSyncState, finalizeAudioSync, resumeAudioContextIfNeeded } from './AudioSyncHandler';
 import { proxyFrameCache } from '../proxyFrameCache';
+import { Logger } from '../logger';
+
+const log = Logger.create('LayerBuilder');
 
 /**
  * LayerBuilderService - Builds render layers from timeline state
@@ -399,6 +402,24 @@ export class LayerBuilderService {
     const nestedVideoTracks = clip.nestedTracks.filter(t => t.type === 'video' && t.visible);
     const layers: Layer[] = [];
 
+    // Debug: log nested clip info once per second
+    if (Math.floor(ctx.now / 1000) !== Math.floor((ctx.now - 16) / 1000)) {
+      log.debug('buildNestedLayers', {
+        compClipId: clip.id,
+        clipTime,
+        nestedClipCount: clip.nestedClips.length,
+        nestedClips: clip.nestedClips.map(nc => ({
+          id: nc.id,
+          name: nc.name,
+          isLoading: nc.isLoading,
+          hasVideoElement: !!nc.source?.videoElement,
+          hasWebCodecs: !!nc.source?.webCodecsPlayer,
+          hasImageElement: !!nc.source?.imageElement,
+          videoReadyState: nc.source?.videoElement?.readyState,
+        })),
+      });
+    }
+
     for (let i = nestedVideoTracks.length - 1; i >= 0; i--) {
       const nestedTrack = nestedVideoTracks[i];
       const nestedClip = clip.nestedClips.find(
@@ -464,6 +485,11 @@ export class LayerBuilderService {
     if (nestedClip.masks && nestedClip.masks.length > 0) {
       (baseLayer as any).maskClipId = nestedClip.id;
       (baseLayer as any).maskInvert = nestedClip.masks.some(m => m.inverted);
+    }
+
+    // Skip clips that are still loading
+    if (nestedClip.isLoading) {
+      return null;
     }
 
     if (nestedClip.source?.videoElement) {
