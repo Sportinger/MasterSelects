@@ -196,7 +196,7 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
     if (!videoHasAudio && audioClipId) {
       log.debug('Removing audio clip for video without audio', { file: file.name });
       setClips(clips => clips.filter(c => c.id !== audioClipId));
-      blobUrlManager.remove(audioClipId);
+      blobUrlManager.revokeAll(audioClipId);
     } else if (audioClipId) {
       updateClip(audioClipId, { duration: naturalDuration, outPoint: naturalDuration });
     }

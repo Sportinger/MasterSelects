@@ -3,6 +3,7 @@
 
 import { Logger } from './logger';
 import { useMediaStore, type MediaFile, type Composition, type MediaFolder } from '../stores/mediaStore';
+import { getMediaInfo } from '../stores/mediaStore/helpers/mediaInfoHelpers';
 
 const log = Logger.create('ProjectSync');
 import { useTimelineStore } from '../stores/timeline';
@@ -36,7 +37,13 @@ function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
     duration: file.duration,
     width: file.width,
     height: file.height,
-    frameRate: undefined, // Not stored in current system
+    frameRate: file.fps,
+    codec: file.codec,
+    audioCodec: file.audioCodec,
+    container: file.container,
+    bitrate: file.bitrate,
+    fileSize: file.fileSize,
+    hasAudio: file.hasAudio,
     hasProxy: file.proxyStatus === 'ready',
     folderId: file.parentId,
     importedAt: new Date(file.createdAt).toISOString(),
@@ -311,6 +318,13 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
       duration: pm.duration,
       width: pm.width,
       height: pm.height,
+      fps: pm.frameRate,
+      codec: pm.codec,
+      audioCodec: pm.audioCodec,
+      container: pm.container,
+      bitrate: pm.bitrate,
+      fileSize: pm.fileSize,
+      hasAudio: pm.hasAudio,
       proxyStatus: pm.hasProxy ? 'ready' : 'none',
       hasFileHandle: !!handle,
       filePath: pm.sourcePath,
@@ -503,6 +517,75 @@ export async function loadProjectToStores(): Promise<void> {
 
   // Auto-relink missing files from Raw folder
   await autoRelinkFromRawFolder();
+
+  // Refresh media metadata (codec, bitrate, hasAudio) for all files
+  refreshMediaMetadata();
+}
+
+/**
+ * Refresh media metadata (codec, bitrate, hasAudio) for all loaded files.
+ * This runs in the background after project load to populate metadata fields.
+ */
+async function refreshMediaMetadata(): Promise<void> {
+  const mediaState = useMediaStore.getState();
+  // Refresh files that have a file object but are missing important metadata
+  const filesToRefresh = mediaState.files.filter(f =>
+    f.file && (
+      f.codec === undefined ||
+      f.container === undefined ||
+      f.fileSize === undefined ||
+      (f.type === 'video' && f.hasAudio === undefined)
+    )
+  );
+
+  if (filesToRefresh.length === 0) {
+    log.debug('No files need metadata refresh');
+    return;
+  }
+
+  log.info(`Refreshing metadata for ${filesToRefresh.length} files...`);
+
+  // Process files in parallel but with a limit to avoid overwhelming the browser
+  const batchSize = 3;
+  for (let i = 0; i < filesToRefresh.length; i += batchSize) {
+    const batch = filesToRefresh.slice(i, i + batchSize);
+
+    await Promise.all(batch.map(async (mediaFile) => {
+      if (!mediaFile.file) return;
+
+      try {
+        const info = await getMediaInfo(mediaFile.file, mediaFile.type);
+
+        // Update the file in the store
+        useMediaStore.setState((state) => ({
+          files: state.files.map((f) =>
+            f.id === mediaFile.id
+              ? {
+                  ...f,
+                  codec: info.codec || f.codec,
+                  audioCodec: info.audioCodec,
+                  container: info.container || f.container,
+                  bitrate: info.bitrate || f.bitrate,
+                  fileSize: info.fileSize || f.fileSize,
+                  hasAudio: info.hasAudio ?? f.hasAudio,
+                  fps: info.fps || f.fps,
+                }
+              : f
+          ),
+        }));
+
+        log.debug(`Refreshed metadata for: ${mediaFile.name}`, {
+          codec: info.codec,
+          hasAudio: info.hasAudio,
+          bitrate: info.bitrate,
+        });
+      } catch (e) {
+        log.warn(`Failed to refresh metadata for: ${mediaFile.name}`, e);
+      }
+    }));
+  }
+
+  log.info('Media metadata refresh complete');
 }
 
 /**

@@ -16,6 +16,12 @@ export interface ProjectMediaFile {
   width?: number;
   height?: number;
   frameRate?: number;
+  codec?: string;
+  audioCodec?: string;
+  container?: string;
+  bitrate?: number;
+  fileSize?: number;
+  hasAudio?: boolean;
 
   // Proxy status
   hasProxy: boolean;

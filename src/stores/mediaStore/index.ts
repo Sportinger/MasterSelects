@@ -86,6 +86,9 @@ export const useMediaStore = create<MediaStoreState>()(
   }))
 );
 
+// Register store globally for init.ts to access (avoids circular dependency)
+(globalThis as any).__mediaStoreModule = { useMediaStore };
+
 // Import init module for side effects (auto-init, autosave, beforeunload)
 import './init';
 

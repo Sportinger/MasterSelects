@@ -12,12 +12,26 @@ const log = Logger.create('MediaStore');
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MediaStore = any;
 
+// Cached store reference - populated after first access
+let cachedMediaStore: MediaStore | null = null;
+
 // Lazy getter to avoid circular dependency
-const getMediaStore = (): MediaStore => {
-  // Dynamic import at runtime after index.ts has finished initializing
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { useMediaStore } = require('./index');
-  return useMediaStore;
+const getMediaStore = (): MediaStore | null => {
+  if (cachedMediaStore) return cachedMediaStore;
+
+  // Try to get the store - it may not be ready yet during initial load
+  try {
+    // Use dynamic import workaround for ESM
+    // The store is accessed through the global module cache
+    const module = (globalThis as any).__mediaStoreModule;
+    if (module?.useMediaStore) {
+      cachedMediaStore = module.useMediaStore;
+      return cachedMediaStore;
+    }
+  } catch {
+    // Store not ready yet
+  }
+  return null;
 };
 
 /**
@@ -25,6 +39,7 @@ const getMediaStore = (): MediaStore => {
  */
 function saveTimelineToActiveComposition(): void {
   const useMediaStore = getMediaStore();
+  if (!useMediaStore) return; // Store not ready yet
   const { activeCompositionId } = useMediaStore.getState();
   if (activeCompositionId) {
     const timelineStore = useTimelineStore.getState();
