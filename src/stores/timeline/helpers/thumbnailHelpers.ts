@@ -1,0 +1,117 @@
+// Thumbnail generation helper - eliminates 3x duplication in clip loading
+// Handles video and image thumbnail generation
+
+import { seekVideo } from '../utils';
+
+export interface ThumbnailOptions {
+  maxCount?: number;
+  width?: number;
+  height?: number;
+  quality?: number;
+  intervalSeconds?: number;
+}
+
+/**
+ * Generate thumbnails from a video element.
+ * Used for video clips and composition clips.
+ */
+export async function generateVideoThumbnails(
+  video: HTMLVideoElement,
+  duration: number,
+  options: ThumbnailOptions = {}
+): Promise<string[]> {
+  const {
+    maxCount = 10,
+    width,
+    height = 40,
+    quality = 0.6,
+    intervalSeconds = 30,
+  } = options;
+
+  const thumbnails: string[] = [];
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) {
+    console.warn('[Thumbnails] Could not get canvas context');
+    return thumbnails;
+  }
+
+  // Calculate dimensions preserving aspect ratio
+  const thumbHeight = height;
+  const thumbWidth = width || Math.round((video.videoWidth / video.videoHeight) * thumbHeight);
+  canvas.width = thumbWidth;
+  canvas.height = thumbHeight;
+
+  // Calculate number of thumbnails (more for longer videos, up to maxCount)
+  const thumbCount = Math.max(1, Math.min(maxCount, Math.ceil(duration / intervalSeconds)));
+  const interval = duration / thumbCount;
+
+  for (let i = 0; i < thumbCount; i++) {
+    const time = i * interval;
+    try {
+      await seekVideo(video, time);
+      ctx.drawImage(video, 0, 0, thumbWidth, thumbHeight);
+      thumbnails.push(canvas.toDataURL('image/jpeg', quality));
+    } catch (e) {
+      console.warn('[Thumbnails] Failed at', time, e);
+    }
+  }
+
+  return thumbnails;
+}
+
+/**
+ * Generate a single thumbnail from an image element.
+ */
+export function generateImageThumbnail(
+  img: HTMLImageElement,
+  options: { height?: number; quality?: number } = {}
+): string | null {
+  const { height = 40, quality = 0.6 } = options;
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) {
+    return null;
+  }
+
+  const thumbWidth = Math.round((img.width / img.height) * height);
+  canvas.width = thumbWidth;
+  canvas.height = height;
+  ctx.drawImage(img, 0, 0, thumbWidth, height);
+
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
+/**
+ * Generate thumbnails for YouTube/downloaded video with specific sizing.
+ */
+export async function generateDownloadThumbnails(
+  video: HTMLVideoElement,
+  duration: number
+): Promise<string[]> {
+  const thumbCount = Math.max(1, Math.min(10, Math.ceil(duration / 30)));
+  const thumbnails: string[] = [];
+  const canvas = document.createElement('canvas');
+  canvas.width = 160;
+  canvas.height = 90;
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) return thumbnails;
+
+  for (let i = 0; i < thumbCount; i++) {
+    const time = (i / thumbCount) * duration;
+    video.currentTime = time;
+    await new Promise<void>(resolve => {
+      video.onseeked = () => {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        thumbnails.push(canvas.toDataURL('image/jpeg', 0.6));
+        resolve();
+      };
+    });
+  }
+
+  return thumbnails;
+}
