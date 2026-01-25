@@ -78,6 +78,9 @@ interface ClipDecoder {
   videoTrack: MP4VideoTrack;
   codecConfig: VideoDecoderConfig;
   frameBuffer: Map<number, DecodedFrame>;  // timestamp (μs) -> decoded frame
+  sortedTimestamps: number[];              // Sorted list for O(log n) lookup
+  oldestTimestamp: number;                 // Track bounds for quick rejection
+  newestTimestamp: number;                 // Track bounds for quick rejection
   lastDecodedTimestamp: number;            // Track last decoded timestamp
   clipInfo: ClipInfo;
   isDecoding: boolean;
@@ -93,14 +96,19 @@ export class ParallelDecodeManager {
   private clipDecoders: Map<string, ClipDecoder> = new Map();
   private isActive = false;
   private decodePromises: Map<string, Promise<void>> = new Map();
+  private exportFps = 30;
+  private frameTolerance = 50_000;  // Default 50ms in microseconds
 
   /**
    * Initialize the manager with clips to decode
    */
   async initialize(clips: ClipInfo[], exportFps: number): Promise<void> {
     this.isActive = true;
+    this.exportFps = exportFps;
+    // FPS-based tolerance: 1.5 frame duration
+    this.frameTolerance = Math.round((1_000_000 / exportFps) * 1.5);
 
-    console.log(`[ParallelDecode] Initializing ${clips.length} clips at ${exportFps}fps...`);
+    console.log(`[ParallelDecode] Initializing ${clips.length} clips at ${exportFps}fps (tolerance: ${this.frameTolerance}μs)...`);
 
     // Parse all clips in parallel
     const initPromises = clips.map(clip => this.initializeClip(clip));
@@ -196,6 +204,9 @@ export class ParallelDecodeManager {
             videoTrack,
             codecConfig,
             frameBuffer: new Map(),
+            sortedTimestamps: [],
+            oldestTimestamp: Infinity,
+            newestTimestamp: -Infinity,
             lastDecodedTimestamp: 0,
             clipInfo,
             isDecoding: false,
@@ -230,31 +241,63 @@ export class ParallelDecodeManager {
   /**
    * Handle a decoded frame from VideoDecoder output callback
    * Uses the frame's timestamp directly for accurate time mapping
+   * Optimized: maintains sorted timestamp list for O(log n) lookups
    */
   private handleDecodedFrame(clipDecoder: ClipDecoder, frame: VideoFrame): void {
-    // Use the frame's timestamp directly (preserved from EncodedVideoChunk)
     const timestamp = frame.timestamp;  // microseconds
     const sourceTime = timestamp / 1_000_000;  // convert to seconds
 
-    // Store frame by its timestamp for accurate retrieval
+    // Store frame by its timestamp
     clipDecoder.frameBuffer.set(timestamp, {
       frame,
       sourceTime,
       timestamp,
     });
 
+    // Maintain sorted timestamp list with binary insertion - O(log n)
+    const insertIdx = this.binarySearchInsertPosition(clipDecoder.sortedTimestamps, timestamp);
+    clipDecoder.sortedTimestamps.splice(insertIdx, 0, timestamp);
+
+    // Update bounds - O(1)
+    if (timestamp < clipDecoder.oldestTimestamp) {
+      clipDecoder.oldestTimestamp = timestamp;
+    }
+    if (timestamp > clipDecoder.newestTimestamp) {
+      clipDecoder.newestTimestamp = timestamp;
+    }
+
     clipDecoder.lastDecodedTimestamp = timestamp;
 
-    // Cleanup old frames if buffer is too large
+    // Cleanup if buffer too large - remove oldest (no sorting needed)
     if (clipDecoder.frameBuffer.size > MAX_BUFFER_SIZE) {
-      const timestamps = [...clipDecoder.frameBuffer.keys()].sort((a, b) => a - b);
-      const oldestTimestamp = timestamps[0];
-      const oldFrame = clipDecoder.frameBuffer.get(oldestTimestamp);
+      const oldestTs = clipDecoder.sortedTimestamps.shift()!;
+      const oldFrame = clipDecoder.frameBuffer.get(oldestTs);
       if (oldFrame) {
         oldFrame.frame.close();
-        clipDecoder.frameBuffer.delete(oldestTimestamp);
+        clipDecoder.frameBuffer.delete(oldestTs);
+      }
+      // Update oldest bound
+      clipDecoder.oldestTimestamp = clipDecoder.sortedTimestamps[0] ?? Infinity;
+    }
+  }
+
+  /**
+   * Binary search for insert position - O(log n)
+   */
+  private binarySearchInsertPosition(arr: number[], target: number): number {
+    let left = 0;
+    let right = arr.length;
+
+    while (left < right) {
+      const mid = Math.floor((left + right) / 2);
+      if (arr[mid] < target) {
+        left = mid + 1;
+      } else {
+        right = mid;
       }
     }
+
+    return left;
   }
 
   /**
@@ -421,11 +464,14 @@ export class ParallelDecodeManager {
           clipDecoder.decoder.configure(clipDecoder.codecConfig);
           clipDecoder.sampleIndex = keyframeIndex;
 
-          // Clear buffer since we're seeking
+          // Clear buffer since we're seeking - also reset sorted list and bounds
           for (const [, decodedFrame] of clipDecoder.frameBuffer) {
             decodedFrame.frame.close();
           }
           clipDecoder.frameBuffer.clear();
+          clipDecoder.sortedTimestamps = [];
+          clipDecoder.oldestTimestamp = Infinity;
+          clipDecoder.newestTimestamp = -Infinity;
         }
 
         // Queue frames for decode (non-blocking - output callback handles results)
@@ -459,22 +505,32 @@ export class ParallelDecodeManager {
   }
 
   /**
-   * Find sample index for a given source time
+   * Find sample index for a given source time - O(log n) binary search
    */
   private findSampleIndexForTime(clipDecoder: ClipDecoder, sourceTime: number): number {
     const targetTime = sourceTime * clipDecoder.videoTrack.timescale;
+    const samples = clipDecoder.samples;
 
-    for (let i = 0; i < clipDecoder.samples.length; i++) {
-      if (clipDecoder.samples[i].cts > targetTime) {
-        return Math.max(0, i - 1);
+    // Binary search for the sample with cts <= targetTime
+    let left = 0;
+    let right = samples.length - 1;
+
+    while (left < right) {
+      const mid = Math.floor((left + right + 1) / 2);
+      if (samples[mid].cts <= targetTime) {
+        left = mid;
+      } else {
+        right = mid - 1;
       }
     }
-    return clipDecoder.samples.length - 1;
+
+    return left;
   }
 
   /**
    * Get the decoded frame for a clip at a specific timeline time
    * Returns null if frame isn't ready (shouldn't happen if prefetch was called)
+   * Optimized: O(log n) binary search instead of O(n) linear scan
    */
   getFrameForClip(clipId: string, timelineTime: number): VideoFrame | null {
     const clipDecoder = this.clipDecoders.get(clipId);
@@ -487,32 +543,57 @@ export class ParallelDecodeManager {
       return null;
     }
 
-    // Find the closest frame in buffer by source time
     const targetSourceTime = this.timelineToSourceTime(clipInfo, timelineTime);
     const targetTimestamp = targetSourceTime * 1_000_000;  // Convert to microseconds
 
-    // Find the frame with closest timestamp
-    let closestFrame: DecodedFrame | null = null;
-    let closestDiff = Infinity;
+    // Quick bounds check - O(1) rejection
+    if (targetTimestamp < clipDecoder.oldestTimestamp - this.frameTolerance ||
+        targetTimestamp > clipDecoder.newestTimestamp + this.frameTolerance) {
+      return null;
+    }
 
-    for (const [, decodedFrame] of clipDecoder.frameBuffer) {
-      const diff = Math.abs(decodedFrame.timestamp - targetTimestamp);
-      if (diff < closestDiff) {
-        closestDiff = diff;
-        closestFrame = decodedFrame;
+    // Binary search for closest timestamp - O(log n) instead of O(n)
+    const timestamps = clipDecoder.sortedTimestamps;
+    if (timestamps.length === 0) return null;
+
+    let left = 0;
+    let right = timestamps.length - 1;
+
+    while (left < right) {
+      const mid = Math.floor((left + right) / 2);
+      if (timestamps[mid] < targetTimestamp) {
+        left = mid + 1;
+      } else {
+        right = mid;
       }
     }
 
-    // Return frame if within reasonable range (100ms = 100000μs)
-    if (closestFrame && closestDiff < 100_000) {
-      // Debug: log frame selection
-      if (closestDiff > 50_000) {  // Log if > 50ms difference
-        console.log(`[ParallelDecode] ${clipDecoder.clipName}: frame diff ${(closestDiff/1000).toFixed(1)}ms, buffer size ${clipDecoder.frameBuffer.size}`);
+    // Check closest candidates (left and left-1)
+    let closestIdx = left;
+    if (left > 0) {
+      const diffLeft = Math.abs(timestamps[left] - targetTimestamp);
+      const diffPrev = Math.abs(timestamps[left - 1] - targetTimestamp);
+      if (diffPrev < diffLeft) {
+        closestIdx = left - 1;
       }
-      return closestFrame.frame;
     }
 
-    console.warn(`[ParallelDecode] ${clipDecoder.clipName}: No frame within 100ms at target ${(targetTimestamp/1_000_000).toFixed(3)}s, buffer size ${clipDecoder.frameBuffer.size}`);
+    const closestTimestamp = timestamps[closestIdx];
+    const closestDiff = Math.abs(closestTimestamp - targetTimestamp);
+
+    if (closestDiff < this.frameTolerance) {
+      const decodedFrame = clipDecoder.frameBuffer.get(closestTimestamp);
+      if (decodedFrame) {
+        // Debug: log if diff is significant (> half frame duration)
+        const halfFrameDuration = 500_000 / this.exportFps;
+        if (closestDiff > halfFrameDuration) {
+          console.log(`[ParallelDecode] ${clipDecoder.clipName}: frame diff ${(closestDiff/1000).toFixed(1)}ms`);
+        }
+        return decodedFrame.frame;
+      }
+    }
+
+    console.warn(`[ParallelDecode] ${clipDecoder.clipName}: No frame within tolerance at ${(targetTimestamp/1_000_000).toFixed(3)}s`);
     return null;
   }
 

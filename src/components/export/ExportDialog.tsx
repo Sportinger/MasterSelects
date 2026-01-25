@@ -2,8 +2,8 @@
 // After Effects-style precise rendering
 
 import { useState, useEffect, useCallback } from 'react';
-import { FrameExporter, downloadBlob } from '../../engine/FrameExporter';
-import type { ExportProgress, VideoCodec, ContainerFormat } from '../../engine/FrameExporter';
+import { FrameExporter, downloadBlob } from '../../engine/export';
+import type { ExportProgress, VideoCodec, ContainerFormat } from '../../engine/export';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 
