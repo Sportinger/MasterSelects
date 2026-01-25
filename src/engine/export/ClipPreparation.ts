@@ -44,19 +44,10 @@ export async function prepareClipsForExport(
     return initializePreciseMode(videoClips, clipStates);
   }
 
-  // FAST MODE: Try WebCodecs with MP4Box parsing
-  try {
-    return await initializeFastMode(videoClips, mediaFiles, startTime, clipStates, settings.fps);
-  } catch (e) {
-    const error = e instanceof Error ? e.message : String(e);
-    // Check if this is a codec/parsing error that can be handled by PRECISE mode
-    if (error.includes('not supported') || error.includes('FAST export failed')) {
-      console.warn(`[FrameExporter] FAST mode failed, auto-fallback to PRECISE: ${error}`);
-      clipStates.clear();
-      return initializePreciseMode(videoClips, clipStates);
-    }
-    throw e;
-  }
+  // FAST MODE: WebCodecs with MP4Box parsing
+  // NOTE: Auto-fallback to PRECISE mode is DISABLED for debugging
+  // All errors will be thrown to surface issues with FAST mode
+  return await initializeFastMode(videoClips, mediaFiles, startTime, clipStates, settings.fps);
 }
 
 function initializePreciseMode(
