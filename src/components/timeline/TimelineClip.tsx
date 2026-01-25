@@ -536,6 +536,7 @@ function TimelineClipComponent({
     clip.parentClipId ? 'has-parent' : '',
     clip.isPendingDownload ? 'pending-download' : '',
     clip.downloadError ? 'download-error' : '',
+    clip.isComposition ? 'composition' : '',
   ]
     .filter(Boolean)
     .join(' ');

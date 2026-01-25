@@ -3844,6 +3844,15 @@ input[type="checkbox"] {
   box-shadow: 0 0 0 2px var(--accent-timeline);
 }
 
+/* Nested composition clips always have orange outline */
+.timeline-clip.composition {
+  box-shadow: 0 0 0 2px #f97316;
+}
+
+.timeline-clip.composition.selected {
+  box-shadow: 0 0 0 2px #f97316, 0 0 0 4px var(--accent-timeline);
+}
+
 .timeline-clip.dragging {
   opacity: 0.9;
   cursor: grabbing;
