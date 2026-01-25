@@ -4,6 +4,7 @@
 import { useMediaStore, type MediaFile, type Composition, type MediaFolder } from '../stores/mediaStore';
 import { useTimelineStore } from '../stores/timeline';
 import { useYouTubeStore } from '../stores/youtubeStore';
+import { useDockStore } from '../stores/dockStore';
 import {
   projectFileService,
   type ProjectMediaFile,
@@ -180,6 +181,48 @@ export async function syncStoresToProject(): Promise<void> {
     // Save YouTube panel state
     const youtubeState = useYouTubeStore.getState().getState();
     projectData.youtube = youtubeState;
+
+    // Save UI state (dock layout + composition view states)
+    const dockLayout = useDockStore.getState().getLayoutForProject();
+
+    // Build composition view state from all compositions
+    const compositionViewState: Record<string, {
+      playheadPosition?: number;
+      zoom?: number;
+      scrollX?: number;
+      inPoint?: number | null;
+      outPoint?: number | null;
+    }> = {};
+
+    // Get current timeline state for active composition
+    const timelineState = useTimelineStore.getState();
+    if (freshState.activeCompositionId) {
+      compositionViewState[freshState.activeCompositionId] = {
+        playheadPosition: timelineState.playheadPosition,
+        zoom: timelineState.zoom,
+        scrollX: timelineState.scrollX,
+        inPoint: timelineState.inPoint,
+        outPoint: timelineState.outPoint,
+      };
+    }
+
+    // Also save view state from other compositions' timelineData
+    for (const comp of freshState.compositions) {
+      if (comp.id !== freshState.activeCompositionId && comp.timelineData) {
+        compositionViewState[comp.id] = {
+          playheadPosition: comp.timelineData.playheadPosition,
+          zoom: comp.timelineData.zoom,
+          scrollX: comp.timelineData.scrollX,
+          inPoint: comp.timelineData.inPoint,
+          outPoint: comp.timelineData.outPoint,
+        };
+      }
+    }
+
+    projectData.uiState = {
+      dockLayout,
+      compositionViewState,
+    };
   }
 
   console.log('[ProjectSync] Synced stores to project');
@@ -258,8 +301,20 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
 /**
  * Convert ProjectComposition to Composition format
  */
-function convertProjectCompositionToStore(projectComps: ProjectComposition[]): Composition[] {
+function convertProjectCompositionToStore(
+  projectComps: ProjectComposition[],
+  compositionViewState?: Record<string, {
+    playheadPosition?: number;
+    zoom?: number;
+    scrollX?: number;
+    inPoint?: number | null;
+    outPoint?: number | null;
+  }>
+): Composition[] {
   return projectComps.map((pc) => {
+    // Get saved view state for this composition
+    const viewState = compositionViewState?.[pc.id];
+
     // Convert back to timelineData format
     const timelineData = {
       tracks: pc.tracks.map((t) => ({
@@ -296,13 +351,13 @@ function convertProjectCompositionToStore(projectComps: ProjectComposition[]): C
         reversed: c.reversed,
         disabled: c.disabled,
       })),
-      // Required CompositionTimelineData fields
-      playheadPosition: 0,
+      // Restore view state from saved uiState, or use defaults
+      playheadPosition: viewState?.playheadPosition ?? 0,
       duration: pc.duration,
-      zoom: 1,
-      scrollX: 0,
-      inPoint: null,
-      outPoint: null,
+      zoom: viewState?.zoom ?? 1,
+      scrollX: viewState?.scrollX ?? 0,
+      inPoint: viewState?.inPoint ?? null,
+      outPoint: viewState?.outPoint ?? null,
       loopPlayback: false,
     };
 
@@ -348,7 +403,10 @@ export async function loadProjectToStores(): Promise<void> {
 
   // Convert and load data
   const files = await convertProjectMediaToStore(projectData.media);
-  const compositions = convertProjectCompositionToStore(projectData.compositions);
+  const compositions = convertProjectCompositionToStore(
+    projectData.compositions,
+    projectData.uiState?.compositionViewState
+  );
   const folders = convertProjectFolderToStore(projectData.folders);
 
   // Clear timeline first
@@ -389,6 +447,12 @@ export async function loadProjectToStores(): Promise<void> {
     useYouTubeStore.getState().loadState(projectData.youtube);
   } else {
     useYouTubeStore.getState().reset();
+  }
+
+  // Restore dock layout from project
+  if (projectData.uiState?.dockLayout) {
+    useDockStore.getState().setLayoutFromProject(projectData.uiState.dockLayout);
+    console.log('[ProjectSync] Restored dock layout from project');
   }
 
   console.log('[ProjectSync] Loaded project to stores:', projectData.name);
@@ -485,6 +549,17 @@ export function setupAutoSync(): void {
   useYouTubeStore.subscribe((state) => {
     if (state.videos !== prevYouTubeVideos) {
       prevYouTubeVideos = state.videos;
+      if (projectFileService.isProjectOpen()) {
+        projectFileService.markDirty();
+      }
+    }
+  });
+
+  // Subscribe to dock layout changes
+  let prevDockLayout = useDockStore.getState().layout;
+  useDockStore.subscribe((state) => {
+    if (state.layout !== prevDockLayout) {
+      prevDockLayout = state.layout;
       if (projectFileService.isProjectOpen()) {
         projectFileService.markDirty();
       }
