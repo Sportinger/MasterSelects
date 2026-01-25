@@ -6,7 +6,7 @@ import {
   isVideoFile,
   isAudioFile,
   isMediaFile,
-  getVideoDurationQuick,
+  getVideoMetadataQuick,
 } from '../utils/fileTypeHelpers';
 import type { ExternalDragState } from '../types';
 import type { TimelineTrack, TimelineClip } from '../../../types';
@@ -80,7 +80,7 @@ export function useExternalDrop({
 }: UseExternalDropProps): UseExternalDropReturn {
   const [externalDrag, setExternalDrag] = useState<ExternalDragState | null>(null);
   const dragCounterRef = useRef(0);
-  const dragDurationCacheRef = useRef<{ url: string; duration: number } | null>(null);
+  const dragMetadataCacheRef = useRef<{ url: string; duration: number; hasAudio: boolean } | null>(null);
 
   // Handle external file drag enter on track
   const handleTrackDragEnter = useCallback(
@@ -104,6 +104,7 @@ export function useExternalDrop({
 
       if (e.dataTransfer.types.includes('Files')) {
         let dur: number | undefined;
+        let hasAudio: boolean | undefined;
         const items = e.dataTransfer.items;
         if (items && items.length > 0) {
           for (let i = 0; i < items.length; i++) {
@@ -112,14 +113,19 @@ export function useExternalDrop({
               const file = item.getAsFile();
               if (file && isVideoFile(file)) {
                 const cacheKey = `${file.name}_${file.size}`;
-                if (dragDurationCacheRef.current?.url === cacheKey) {
-                  dur = dragDurationCacheRef.current.duration;
+                if (dragMetadataCacheRef.current?.url === cacheKey) {
+                  dur = dragMetadataCacheRef.current.duration;
+                  hasAudio = dragMetadataCacheRef.current.hasAudio;
                 } else {
-                  getVideoDurationQuick(file).then((d) => {
-                    if (d) {
-                      dragDurationCacheRef.current = { url: cacheKey, duration: d };
+                  getVideoMetadataQuick(file).then((metadata) => {
+                    if (metadata) {
+                      dragMetadataCacheRef.current = {
+                        url: cacheKey,
+                        duration: metadata.duration ?? 5,
+                        hasAudio: metadata.hasAudio,
+                      };
                       setExternalDrag((prev) =>
-                        prev ? { ...prev, duration: d } : null
+                        prev ? { ...prev, duration: metadata.duration ?? 5, hasAudio: metadata.hasAudio } : null
                       );
                     }
                   });
@@ -130,7 +136,7 @@ export function useExternalDrop({
           }
         }
 
-        setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration: dur });
+        setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration: dur, hasAudio });
       }
     },
     [scrollX, pixelToTime]
@@ -155,10 +161,14 @@ export function useExternalDrop({
         const isVideoTrack = targetTrack?.type === 'video';
 
         const previewDuration =
-          externalDrag?.duration ?? dragDurationCacheRef.current?.duration ?? 5;
+          externalDrag?.duration ?? dragMetadataCacheRef.current?.duration ?? 5;
+
+        // Check if video has audio - default to true if not yet determined
+        const videoHasAudio = externalDrag?.hasAudio ?? dragMetadataCacheRef.current?.hasAudio ?? true;
 
         let audioTrackId: string | undefined;
-        if (isVideoTrack) {
+        // Only show audio preview if video has audio tracks
+        if (isVideoTrack && videoHasAudio) {
           const audioTracks = tracks.filter((t) => t.type === 'audio');
           const endTime = startTime + previewDuration;
 
@@ -185,7 +195,8 @@ export function useExternalDrop({
           y: e.clientY,
           audioTrackId,
           isVideo: isVideoTrack,
-          duration: prev?.duration ?? dragDurationCacheRef.current?.duration,
+          hasAudio: prev?.hasAudio ?? dragMetadataCacheRef.current?.hasAudio,
+          duration: prev?.duration ?? dragMetadataCacheRef.current?.duration,
         }));
       }
     },
@@ -219,7 +230,8 @@ export function useExternalDrop({
           startTime,
           x: e.clientX,
           y: e.clientY,
-          duration: prev?.duration ?? dragDurationCacheRef.current?.duration ?? 5,
+          duration: prev?.duration ?? dragMetadataCacheRef.current?.duration ?? 5,
+          hasAudio: prev?.hasAudio ?? dragMetadataCacheRef.current?.hasAudio,
           newTrackType: trackType,
           isVideo: trackType === 'video',
           isAudio: trackType === 'audio',

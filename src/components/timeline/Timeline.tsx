@@ -735,11 +735,12 @@ export function Timeline() {
               );
             })}
             {/* New audio track preview header - appears when dragging over new track zone or linked audio needs new track */}
-            {externalDrag && (
+            {/* Only show if the video has audio (hasAudio !== false) */}
+            {externalDrag && externalDrag.hasAudio !== false && (
               <div
                 className={`track-header-preview audio ${
                   externalDrag.newTrackType === 'audio' ||
-                  externalDrag.newTrackType === 'video' ||
+                  (externalDrag.newTrackType === 'video' && externalDrag.hasAudio !== false) ||
                   (externalDrag.isVideo && externalDrag.audioTrackId === '__new_audio_track__')
                     ? 'active'
                     : ''
@@ -862,10 +863,12 @@ export function Timeline() {
             )}
 
           {/* New Audio Track drop zone - at BOTTOM below audio tracks */}
-          {externalDrag && (
+          {/* Only show for audio files OR videos with audio (hasAudio !== false) */}
+          {externalDrag && (externalDrag.newTrackType === 'audio' || externalDrag.hasAudio !== false) && (
             <div
               className={`new-track-drop-zone audio ${
-                externalDrag.newTrackType === 'audio' || externalDrag.newTrackType === 'video'
+                externalDrag.newTrackType === 'audio' ||
+                (externalDrag.newTrackType === 'video' && externalDrag.hasAudio !== false)
                   ? 'active'
                   : ''
               }`}
@@ -878,8 +881,9 @@ export function Timeline() {
               onDrop={(e) => handleNewTrackDrop(e, 'audio')}
             >
               <span className="drop-zone-label">+ Drop to create new Audio Track</span>
-              {/* Show audio preview when dropping audio OR when dropping video (linked audio) */}
-              {(externalDrag.newTrackType === 'audio' || externalDrag.newTrackType === 'video') && (
+              {/* Show audio preview when dropping audio OR when dropping video with audio */}
+              {(externalDrag.newTrackType === 'audio' ||
+                (externalDrag.newTrackType === 'video' && externalDrag.hasAudio !== false)) && (
                 <div
                   className="timeline-clip-preview audio"
                   style={{

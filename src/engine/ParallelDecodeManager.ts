@@ -459,10 +459,19 @@ export class ParallelDecodeManager {
       return; // Let current decode continue, don't wait
     }
 
+    // Check if decoder is still valid
+    if (!clipDecoder.decoder || clipDecoder.decoder.state === 'closed') {
+      return;
+    }
+
     clipDecoder.isDecoding = true;
 
     clipDecoder.pendingDecode = (async () => {
       try {
+        // Double-check decoder state inside async block
+        if (!clipDecoder.decoder || clipDecoder.decoder.state === 'closed') {
+          return;
+        }
         const endIndex = Math.min(targetSampleIndex, clipDecoder.samples.length);
         let framesToDecode = endIndex - clipDecoder.sampleIndex;
 
@@ -473,23 +482,8 @@ export class ParallelDecodeManager {
         // Decode in larger batches for throughput
         framesToDecode = Math.min(framesToDecode, DECODE_BATCH_SIZE);
 
-        // Always ensure we start from a keyframe (decoder may have been flushed)
-        let startIndex = clipDecoder.sampleIndex;
-        const currentSample = clipDecoder.samples[startIndex];
-
-        // If current sample is not a keyframe, find the previous keyframe
-        if (currentSample && !currentSample.is_sync) {
-          for (let i = startIndex - 1; i >= 0; i--) {
-            if (clipDecoder.samples[i].is_sync) {
-              startIndex = i;
-              log.debug(`${clipDecoder.clipName}: backed up to keyframe at sample ${i}`);
-              break;
-            }
-          }
-        }
-
         // Check if we need to seek (target is far ahead of current position)
-        const needsSeek = targetSampleIndex > startIndex + 30;
+        const needsSeek = targetSampleIndex > clipDecoder.sampleIndex + 30;
 
         if (needsSeek) {
           // Need to seek - find nearest keyframe before target
@@ -500,9 +494,19 @@ export class ParallelDecodeManager {
               break;
             }
           }
-          startIndex = keyframeIndex;
 
-          // Clear buffer since we're seeking - also reset sorted list and bounds
+          log.debug(`${clipDecoder.clipName}: seeking to keyframe at sample ${keyframeIndex}`);
+
+          // Reset decoder for seek
+          clipDecoder.decoder.reset();
+          const exportConfig: VideoDecoderConfig = {
+            ...clipDecoder.codecConfig,
+            hardwareAcceleration: 'prefer-software',
+          };
+          clipDecoder.decoder.configure(exportConfig);
+          clipDecoder.sampleIndex = keyframeIndex;
+
+          // Clear buffer since we're seeking
           for (const [, decodedFrame] of clipDecoder.frameBuffer) {
             decodedFrame.frame.close();
           }
@@ -511,19 +515,6 @@ export class ParallelDecodeManager {
           clipDecoder.oldestTimestamp = Infinity;
           clipDecoder.newestTimestamp = -Infinity;
         }
-
-        // Reset and reconfigure decoder before decoding (ensures clean state after any flush)
-        clipDecoder.decoder.reset();
-        const exportConfig: VideoDecoderConfig = {
-          ...clipDecoder.codecConfig,
-          hardwareAcceleration: 'prefer-software',
-        };
-        clipDecoder.decoder.configure(exportConfig);
-        clipDecoder.sampleIndex = startIndex;
-
-        // Recalculate frames to decode after potential backup to keyframe
-        const newEndIndex = Math.min(startIndex + DECODE_BATCH_SIZE, clipDecoder.samples.length);
-        framesToDecode = newEndIndex - startIndex;
 
         // Queue frames for decode (non-blocking - output callback handles results)
         for (let i = 0; i < framesToDecode && clipDecoder.sampleIndex < clipDecoder.samples.length; i++) {
@@ -537,7 +528,11 @@ export class ParallelDecodeManager {
             data: sample.data,
           });
 
-          clipDecoder.decoder.decode(chunk);
+          try {
+            clipDecoder.decoder.decode(chunk);
+          } catch (e) {
+            log.warn(`${clipDecoder.clipName}: decode error at sample ${clipDecoder.sampleIndex - 1}: ${e}`);
+          }
         }
 
         // Only flush if explicitly requested (when we need frames NOW)
