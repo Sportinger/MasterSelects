@@ -1184,15 +1184,19 @@ export class WebCodecsPlayer {
     // Need to decode more frames - keep decoding until we have a frame close to target
     // B-frames need future reference frames, so we may need to decode many samples
     let decodeAttempts = 0;
-    const maxDecodeAttempts = 10; // Max 10 batches of decoding
+    const maxDecodeAttempts = 20; // Max 20 batches of decoding
+    const targetCtsForLog = targetCts;
+
+    console.log(`[WebCodecs] Need more frames for time ${timeSeconds.toFixed(3)}s (target cts=${targetCtsForLog}), current buffer=${this.exportFrameBuffer.size}, sampleIndex=${this.sampleIndex}`);
 
     while (decodeAttempts < maxDecodeAttempts && this.decoder && this.isInExportMode) {
       // Queue 30 more samples
       const samplesToQueue = 30;
       const maxSampleIndex = Math.min(this.sampleIndex + samplesToQueue, this.samples.length);
+      const startSampleIndex = this.sampleIndex;
 
       if (this.sampleIndex >= this.samples.length) {
-        // Reached end of samples, use whatever we have
+        console.log(`[WebCodecs] Reached end of samples at ${this.sampleIndex}`);
         break;
       }
 
@@ -1200,16 +1204,23 @@ export class WebCodecsPlayer {
         this.queueNextSampleForDecode();
       }
 
-      // Wait for decoder to process
+      // Wait for decoder to process and output frames
       let waitCount = 0;
-      while (waitCount < 30 && this.decoder && this.decoder.decodeQueueSize > 0) {
+      const bufferBefore = this.exportFrameBuffer.size;
+      while (waitCount < 50 && this.decoder) {
+        if (this.decoder.decodeQueueSize === 0 && this.exportFrameBuffer.size > bufferBefore) {
+          break;
+        }
         await new Promise(r => setTimeout(r, 10));
         waitCount++;
       }
 
+      console.log(`[WebCodecs] Decoded samples ${startSampleIndex}-${this.sampleIndex}, buffer now ${this.exportFrameBuffer.size}, queue=${this.decoder?.decodeQueueSize}`);
+
       // Check if we now have a good frame
       ({ frame: bestFrame, diff: bestDiff } = findBestFrame());
       if (bestFrame && bestDiff < maxAcceptableDiff) {
+        console.log(`[WebCodecs] Found good frame with diff=${bestDiff}`);
         this.currentFrame = bestFrame;
         return;
       }
