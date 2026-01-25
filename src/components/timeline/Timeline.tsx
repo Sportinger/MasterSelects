@@ -1197,42 +1197,6 @@ export function Timeline() {
             </div>
           )}
 
-          {/* Timeline markers */}
-          {markers.map(marker => (
-            <div
-              key={marker.id}
-              className={`timeline-marker ${timelineMarkerDrag?.markerId === marker.id ? 'dragging' : ''}`}
-              style={{
-                left: timeToPixel(marker.time),
-                '--marker-color': marker.color,
-              } as React.CSSProperties}
-              title={`${marker.label || 'Marker'}: ${formatTime(marker.time)} (drag to move, right-click to delete)`}
-              onMouseDown={(e) => handleTimelineMarkerMouseDown(e, marker.id)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                removeMarker(marker.id);
-              }}
-            >
-              <div className="timeline-marker-flag">M</div>
-              <div className="timeline-marker-line" />
-            </div>
-          ))}
-
-          {/* Ghost marker for drag-to-create */}
-          {markerCreateDrag && markerCreateDrag.isOverTimeline && (
-            <div
-              className={`timeline-marker ghost ${markerCreateDrag.dropAnimating ? 'drop-animation' : ''}`}
-              style={{
-                left: timeToPixel(markerCreateDrag.currentTime),
-                '--marker-color': '#00d4ff',
-              } as React.CSSProperties}
-            >
-              <div className="timeline-marker-flag">M</div>
-              <div className="timeline-marker-line" />
-            </div>
-          )}
-
               {/* Marquee selection rectangle */}
               {marquee && (
                 <div
@@ -1330,6 +1294,42 @@ export function Timeline() {
             <div className="playhead-head" />
             <div className="playhead-line" />
           </div>
+
+          {/* Timeline markers - span from ruler through all tracks like playhead */}
+          {markers.map(marker => (
+            <div
+              key={marker.id}
+              className={`timeline-marker ${timelineMarkerDrag?.markerId === marker.id ? 'dragging' : ''}`}
+              style={{
+                left: timeToPixel(marker.time) - scrollX + 150,
+                '--marker-color': marker.color,
+              } as React.CSSProperties}
+              title={`${marker.label || 'Marker'}: ${formatTime(marker.time)} (drag to move, right-click to delete)`}
+              onMouseDown={(e) => handleTimelineMarkerMouseDown(e, marker.id)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                removeMarker(marker.id);
+              }}
+            >
+              <div className="timeline-marker-head">M</div>
+              <div className="timeline-marker-line" />
+            </div>
+          ))}
+
+          {/* Ghost marker for drag-to-create */}
+          {markerCreateDrag && markerCreateDrag.isOverTimeline && (
+            <div
+              className={`timeline-marker ghost ${markerCreateDrag.dropAnimating ? 'drop-animation' : ''}`}
+              style={{
+                left: timeToPixel(markerCreateDrag.currentTime) - scrollX + 150,
+                '--marker-color': '#00d4ff',
+              } as React.CSSProperties}
+            >
+              <div className="timeline-marker-head">M</div>
+              <div className="timeline-marker-line" />
+            </div>
+          )}
         </div>{/* timeline-body-content */}
 
         {/* Vertical Scrollbar */}
