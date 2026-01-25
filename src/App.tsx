@@ -1,5 +1,8 @@
 // WebVJ Mixer - Main Application
 
+// DEV: Disable changelog dialog for development
+const DEV_DISABLE_WHATS_NEW = true;
+
 import { useState, useCallback, useEffect } from 'react';
 import { Toolbar } from './components';
 import { DockContainer } from './components/dock';
@@ -86,6 +89,7 @@ function App() {
 
   // Show What's New dialog after initial check (when no welcome overlay)
   useEffect(() => {
+    if (DEV_DISABLE_WHATS_NEW) return;
     if (isChecking) return;
 
     // If welcome is showing, don't show What's New yet
@@ -99,7 +103,9 @@ function App() {
     setManuallyDismissed(true);
     setHasStoredProject(true); // Project was just created
     // After welcome, show What's New with small delay for animation
-    setTimeout(() => setShowWhatsNew(true), 300);
+    if (!DEV_DISABLE_WHATS_NEW) {
+      setTimeout(() => setShowWhatsNew(true), 300);
+    }
   }, []);
 
   const handleWhatsNewClose = useCallback(() => {
