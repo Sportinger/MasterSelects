@@ -1,5 +1,5 @@
 // WebGPU Rendering Engine - Thin Facade
-// Orchestrates: StatsTracker, RenderTargetManager, OutputWindowManager,
+// Orchestrates: PerformanceStats, RenderTargetManager, OutputWindowManager,
 //               RenderLoop, LayerCollector, Compositor, NestedCompRenderer
 
 import type { Layer, OutputWindow, EngineStats, LayerRenderData } from './core/types';
@@ -16,7 +16,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { reportRenderTime } from '../services/performanceMonitor';
 
 // New modules
-import { StatsTracker } from './stats/StatsTracker';
+import { PerformanceStats } from './stats/PerformanceStats';
 import { RenderTargetManager } from './core/RenderTargetManager';
 import { OutputWindowManager } from './managers/OutputWindowManager';
 import { RenderLoop } from './render/RenderLoop';
@@ -29,7 +29,7 @@ export class WebGPUEngine {
   private context: WebGPUContext;
 
   // Extracted modules
-  private statsTracker: StatsTracker;
+  private performanceStats: PerformanceStats;
   private renderTargetManager: RenderTargetManager | null = null;
   private outputWindowManager: OutputWindowManager | null = null;
   private renderLoop: RenderLoop | null = null;
@@ -76,7 +76,7 @@ export class WebGPUEngine {
   constructor() {
     this.context = new WebGPUContext();
     this.videoFrameManager = new VideoFrameManager();
-    this.statsTracker = new StatsTracker();
+    this.performanceStats = new PerformanceStats();
 
     // Device recovery handlers
     this.context.onDeviceLost((reason) => {
@@ -152,7 +152,7 @@ export class WebGPUEngine {
       this.maskTextureManager
     );
 
-    this.renderLoop = new RenderLoop(this.statsTracker, {
+    this.renderLoop = new RenderLoop(this.performanceStats, {
       isRecovering: () => this.isRecoveringFromDeviceLoss || this.context.recovering,
       isExporting: () => this.isExporting,
       onRender: () => {}, // Set by start()
@@ -409,10 +409,10 @@ export class WebGPUEngine {
   }
 
   start(renderCallback: () => void): void {
-    if (!this.statsTracker) return;
+    if (!this.performanceStats) return;
 
     // Create new loop with the callback
-    this.renderLoop = new RenderLoop(this.statsTracker, {
+    this.renderLoop = new RenderLoop(this.performanceStats, {
       isRecovering: () => this.isRecoveringFromDeviceLoss || this.context.recovering,
       isExporting: () => this.isExporting,
       onRender: renderCallback,
@@ -452,13 +452,13 @@ export class WebGPUEngine {
     const importTime = performance.now() - t1;
 
     // Update stats
-    this.statsTracker.setDecoder(this.layerCollector.getDecoder());
+    this.performanceStats.setDecoder(this.layerCollector.getDecoder());
     this.renderLoop?.setHasActiveVideo(this.layerCollector.hasActiveVideo());
 
     // Handle empty layers
     if (layerData.length === 0) {
       this.renderEmptyFrame(device);
-      this.statsTracker.setLayerCount(0);
+      this.performanceStats.setLayerCount(0);
       return;
     }
 
@@ -517,15 +517,15 @@ export class WebGPUEngine {
 
     // Stats
     const totalTime = performance.now() - t0;
-    this.statsTracker.recordRenderTiming({
+    this.performanceStats.recordRenderTiming({
       importTexture: importTime,
       createBindGroup: 0,
       renderPass: renderTime,
       submit: submitTime,
       total: totalTime,
     });
-    this.statsTracker.setLayerCount(result.layerCount);
-    this.statsTracker.updateStats();
+    this.performanceStats.setLayerCount(result.layerCount);
+    this.performanceStats.updateStats();
     reportRenderTime(totalTime);
   }
 
@@ -851,7 +851,7 @@ export class WebGPUEngine {
   // === STATS ===
 
   getStats(): EngineStats {
-    return this.statsTracker.getStats(this.getIsIdle());
+    return this.performanceStats.getStats(this.getIsIdle());
   }
 
   // === ACCESSORS ===

@@ -1,6 +1,6 @@
 // Animation loop with idle detection and frame rate limiting
 
-import type { StatsTracker } from '../stats/StatsTracker';
+import type { PerformanceStats } from '../stats/PerformanceStats';
 
 export interface RenderLoopCallbacks {
   isRecovering: () => boolean;
@@ -9,7 +9,7 @@ export interface RenderLoopCallbacks {
 }
 
 export class RenderLoop {
-  private statsTracker: StatsTracker;
+  private performanceStats: PerformanceStats;
   private callbacks: RenderLoopCallbacks;
   private animationId: number | null = null;
   private isRunning = false;
@@ -30,10 +30,10 @@ export class RenderLoop {
   private lastFpsReset = 0;
 
   constructor(
-    statsTracker: StatsTracker,
+    performanceStats: PerformanceStats,
     callbacks: RenderLoopCallbacks
   ) {
-    this.statsTracker = statsTracker;
+    this.performanceStats = statsTracker;
     this.callbacks = callbacks;
   }
 
@@ -95,12 +95,12 @@ export class RenderLoop {
 
       // Record RAF gap for stats
       if (lastTimestamp > 0) {
-        this.statsTracker.recordRafGap(rafGap);
+        this.performanceStats.recordRafGap(rafGap);
       }
 
       // Reset per-second counters
       if (timestamp - this.lastFpsReset >= 1000) {
-        this.statsTracker.resetPerSecondCounters();
+        this.performanceStats.resetPerSecondCounters();
         this.lastFpsReset = timestamp;
       }
 

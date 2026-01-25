@@ -3,7 +3,7 @@
 import type { EngineStats, DetailedStats, ProfileData } from '../core/types';
 import { audioStatusTracker } from '../../services/audioManager';
 
-export class StatsTracker {
+export class PerformanceStats {
   // FPS tracking
   private frameCount = 0;
   private fps = 0;
