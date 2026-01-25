@@ -158,29 +158,57 @@ export function useTimelineKeyboard({
 
       // Shift + "+": Cycle through blend modes (forward)
       // Shift + "-": Cycle through blend modes (backward)
-      if (
-        e.shiftKey &&
-        (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_')
-      ) {
+      // Note: On US keyboards, Shift+= produces "+", Shift+- produces "_"
+      // We check for both the shifted and unshifted characters
+      const isPlus = e.key === '+' || (e.shiftKey && e.key === '=');
+      const isMinus = e.key === '-' || e.key === '_' || (e.shiftKey && e.code === 'Minus');
+
+      if (e.shiftKey && (isPlus || isMinus)) {
         e.preventDefault();
+
+        // Debug logging
+        console.log('[Keyboard] Blend mode shortcut detected', {
+          key: e.key,
+          code: e.code,
+          shiftKey: e.shiftKey,
+          isPlus,
+          isMinus,
+          selectedClipIds: [...selectedClipIds],
+        });
+
         // Apply to first selected clip
         const firstSelectedId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
-        if (firstSelectedId) {
-          const clip = clipMap.get(firstSelectedId);
-          if (clip) {
-            const currentMode = clip.transform.blendMode;
-            const currentIndex = ALL_BLEND_MODES.indexOf(currentMode);
-            const direction = e.key === '+' || e.key === '=' ? 1 : -1;
-            const nextIndex =
-              (currentIndex + direction + ALL_BLEND_MODES.length) %
-              ALL_BLEND_MODES.length;
-            const nextMode = ALL_BLEND_MODES[nextIndex];
-            // Apply to all selected clips
-            [...selectedClipIds].forEach(clipId => {
-              updateClipTransform(clipId, { blendMode: nextMode });
-            });
-          }
+        if (!firstSelectedId) {
+          console.log('[Keyboard] No clip selected');
+          return;
         }
+
+        const clip = clipMap.get(firstSelectedId);
+        if (!clip) {
+          console.log('[Keyboard] Clip not found in clipMap', { firstSelectedId });
+          return;
+        }
+
+        const currentMode = clip.transform?.blendMode || 'normal';
+        const currentIndex = ALL_BLEND_MODES.indexOf(currentMode);
+        const direction = isPlus ? 1 : -1;
+        const nextIndex =
+          (currentIndex + direction + ALL_BLEND_MODES.length) %
+          ALL_BLEND_MODES.length;
+        const nextMode = ALL_BLEND_MODES[nextIndex];
+
+        console.log('[Keyboard] Cycling blend mode', {
+          currentMode,
+          currentIndex,
+          direction,
+          nextIndex,
+          nextMode,
+        });
+
+        // Apply to all selected clips
+        [...selectedClipIds].forEach(clipId => {
+          updateClipTransform(clipId, { blendMode: nextMode });
+        });
         return;
       }
 
