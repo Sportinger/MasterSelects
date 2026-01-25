@@ -724,6 +724,8 @@ export function Timeline() {
           proxyProgress={mediaFile?.proxyProgress || 0}
           showTranscriptMarkers={showTranscriptMarkers}
           toolMode={toolMode}
+          snappingEnabled={snappingEnabled}
+          playheadPosition={playheadPosition}
           cutHoverInfo={cutHoverInfo}
           onCutHover={handleCutHover}
           onMouseDown={(e) => handleClipMouseDown(e, clip.id)}
@@ -754,6 +756,8 @@ export function Timeline() {
       mediaFiles,
       showTranscriptMarkers,
       toolMode,
+      snappingEnabled,
+      playheadPosition,
       cutHoverInfo,
       handleCutHover,
       handleClipMouseDown,

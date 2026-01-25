@@ -1182,8 +1182,9 @@ export class WebCodecsPlayer {
     // First check if frame is already in buffer
     let { frame: bestFrame, diff: bestDiff } = findBestFrame();
 
-    // If we have a good match in buffer, use it
-    if (bestFrame && bestDiff < tolerance) {
+    // If we have ANY frame in buffer, use the closest one
+    // This handles videos with non-zero start times or edit list offsets
+    if (bestFrame) {
       this.currentFrame = bestFrame;
       return;
     }
@@ -1223,14 +1224,16 @@ export class WebCodecsPlayer {
 
     // Check if we now have our frame
     ({ frame: bestFrame, diff: bestDiff } = findBestFrame());
-    if (bestFrame && bestDiff < tolerance) {
+    if (bestFrame) {
+      // Use best frame even if not within strict tolerance
+      // This handles videos with non-zero start times or unusual frame timing
       this.currentFrame = bestFrame;
       return;
     }
 
-    // If we still don't have the frame, we might need to seek backwards
-    // or the target is past what we've decoded
-    if (!bestFrame || bestDiff > tolerance) {
+    // Only do full seek if we have NO frames at all (shouldn't happen normally)
+    if (!bestFrame) {
+      console.warn(`[WebCodecs] No frames in buffer, doing full seek. Buffer size: ${this.exportFrameBuffer.size}`);
       // Find which sample has CTS closest to target
       let targetSampleIndex = 0;
       let closestDiff = Infinity;

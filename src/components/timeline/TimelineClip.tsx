@@ -361,6 +361,7 @@ function TimelineClipComponent({
   isLinkedToTrimming,
   clipDrag,
   clipTrim,
+  zoom,
   scrollX,
   timelineRef,
   proxyEnabled,
@@ -368,6 +369,8 @@ function TimelineClipComponent({
   proxyProgress,
   showTranscriptMarkers,
   toolMode,
+  snappingEnabled,
+  playheadPosition,
   cutHoverInfo,
   onCutHover,
   onMouseDown,
@@ -537,6 +540,34 @@ function TimelineClipComponent({
   // Get parent clip name for tooltip
   const parentClip = clip.parentClipId ? clips.find(c => c.id === clip.parentClipId) : null;
 
+  // Cut tool snapping helper
+  const snapCutTime = (rawTime: number, shouldSnap: boolean): number => {
+    if (!shouldSnap) return rawTime;
+
+    const snapThresholdPixels = 10;
+    const snapThresholdTime = snapThresholdPixels / zoom;
+
+    // Collect snap targets: playhead and all clip edges
+    const snapTargets: number[] = [playheadPosition];
+    clips.forEach(c => {
+      snapTargets.push(c.startTime);
+      snapTargets.push(c.startTime + c.duration);
+    });
+
+    // Find nearest snap target
+    let nearestTarget = rawTime;
+    let nearestDistance = Infinity;
+    for (const target of snapTargets) {
+      const distance = Math.abs(target - rawTime);
+      if (distance < nearestDistance && distance <= snapThresholdTime) {
+        nearestDistance = distance;
+        nearestTarget = target;
+      }
+    }
+
+    return nearestTarget;
+  };
+
   // Cut tool handlers
   const handleMouseMove = (e: React.MouseEvent) => {
     if (toolMode !== 'cut') {
@@ -546,7 +577,10 @@ function TimelineClipComponent({
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     // Convert pixel position to time
-    const cutTime = displayStartTime + (x / width) * displayDuration;
+    const rawCutTime = displayStartTime + (x / width) * displayDuration;
+    // Snap: enabled without Alt, or disabled with Alt
+    const shouldSnap = snappingEnabled ? !e.altKey : e.altKey;
+    const cutTime = snapCutTime(rawCutTime, shouldSnap);
     onCutHover(clip.id, cutTime);
   };
 
@@ -560,7 +594,10 @@ function TimelineClipComponent({
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     // Convert pixel position to time within clip
-    const cutTime = displayStartTime + (x / width) * displayDuration;
+    const rawCutTime = displayStartTime + (x / width) * displayDuration;
+    // Snap: enabled without Alt, or disabled with Alt
+    const shouldSnap = snappingEnabled ? !e.altKey : e.altKey;
+    const cutTime = snapCutTime(rawCutTime, shouldSnap);
     onCutAtPosition(clip.id, cutTime);
     onCutHover(null, null);
   };
