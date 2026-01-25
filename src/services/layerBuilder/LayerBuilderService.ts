@@ -393,37 +393,10 @@ export class LayerBuilderService {
    * Build nested layers (simplified - delegates to separate method for full implementation)
    */
   private buildNestedLayers(clip: TimelineClip, clipTime: number, ctx: FrameContext): Layer[] {
-    if (!clip.nestedClips || !clip.nestedTracks) {
-      // Only log occasionally to avoid spam
-      if (this.debugFrameCount % 60 === 0) {
-        console.log('[LayerBuilder] buildNestedLayers - no nestedClips or nestedTracks', {
-          clipId: clip.id,
-          hasNestedClips: !!clip.nestedClips,
-          hasNestedTracks: !!clip.nestedTracks,
-        });
-      }
-      return [];
-    }
+    if (!clip.nestedClips || !clip.nestedTracks) return [];
 
     const nestedVideoTracks = clip.nestedTracks.filter(t => t.type === 'video' && t.visible);
     const layers: Layer[] = [];
-
-    // Debug log occasionally
-    if (this.debugFrameCount % 60 === 0) {
-      console.log('[LayerBuilder] buildNestedLayers', {
-        clipId: clip.id,
-        clipTime,
-        nestedClipsCount: clip.nestedClips.length,
-        nestedVideoTracksCount: nestedVideoTracks.length,
-        nestedClipSources: clip.nestedClips.map(nc => ({
-          id: nc.id,
-          hasSource: !!nc.source,
-          sourceType: nc.source?.type,
-          hasVideoElement: !!nc.source?.videoElement,
-          isLoading: nc.isLoading,
-        })),
-      });
-    }
 
     for (let i = nestedVideoTracks.length - 1; i >= 0; i--) {
       const nestedTrack = nestedVideoTracks[i];

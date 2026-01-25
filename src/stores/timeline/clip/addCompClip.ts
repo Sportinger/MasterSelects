@@ -70,43 +70,21 @@ function updateNestedClipInCompClip(
   nestedClipId: string,
   updates: Partial<TimelineClip>
 ): TimelineClip[] {
-  let updated = false;
-
-  const result = clips.map(clip => {
-    if (clip.id !== compClipId) return clip;
-
-    // If nestedClips not set yet, log and return unchanged
-    if (!clip.nestedClips) {
-      log.warn('updateNestedClipInCompClip: comp clip has no nestedClips yet', { compClipId, nestedClipId });
-      return clip;
-    }
+  return clips.map(clip => {
+    if (clip.id !== compClipId || !clip.nestedClips) return clip;
 
     // Check if the nested clip exists
     const nestedClipExists = clip.nestedClips.some(nc => nc.id === nestedClipId);
-    if (!nestedClipExists) {
-      log.warn('updateNestedClipInCompClip: nested clip not found', {
-        compClipId,
-        nestedClipId,
-        existingIds: clip.nestedClips.map(nc => nc.id),
-      });
-      return clip;
-    }
+    if (!nestedClipExists) return clip;
 
     // Create new nestedClips array with updated nested clip
     const updatedNestedClips = clip.nestedClips.map(nc =>
       nc.id === nestedClipId ? { ...nc, ...updates } : nc
     );
 
-    updated = true;
     // Return new comp clip object to trigger re-render
     return { ...clip, nestedClips: updatedNestedClips };
   });
-
-  if (!updated) {
-    log.warn('updateNestedClipInCompClip: no update performed', { compClipId, nestedClipId });
-  }
-
-  return result;
 }
 
 /**
@@ -180,11 +158,7 @@ function loadVideoNestedClip(
   video.preload = 'auto';
   video.crossOrigin = 'anonymous';
 
-  log.info('Loading nested video', { compClipId, nestedClipId, fileName, fileUrl: fileUrl.slice(0, 50) });
-
   video.addEventListener('canplaythrough', async () => {
-    log.info('Nested video canplaythrough fired', { compClipId, nestedClipId, fileName, duration: video.duration });
-
     // Seek to start to ensure we have a frame ready
     video.currentTime = 0;
 
@@ -200,19 +174,8 @@ function loadVideoNestedClip(
       source.webCodecsPlayer = webCodecsPlayer;
     }
 
-    // Check if comp clip exists and has nestedClips before update
-    const currentClips = get().clips;
-    const compClip = currentClips.find((c: TimelineClip) => c.id === compClipId);
-    log.info('Before update - comp clip state', {
-      compClipId,
-      compClipExists: !!compClip,
-      hasNestedClips: !!compClip?.nestedClips,
-      nestedClipsCount: compClip?.nestedClips?.length,
-      nestedClipIds: compClip?.nestedClips?.map((nc: TimelineClip) => nc.id),
-    });
-
     // Immutably update the nested clip inside the comp clip
-    const updatedClips = updateNestedClipInCompClip(currentClips, compClipId, nestedClipId, {
+    const updatedClips = updateNestedClipInCompClip(get().clips, compClipId, nestedClipId, {
       source,
       isLoading: false,
     });
@@ -223,18 +186,7 @@ function loadVideoNestedClip(
     const { invalidateCache } = get();
     if (invalidateCache) invalidateCache();
 
-    // Verify update worked
-    const afterClips = get().clips;
-    const afterCompClip = afterClips.find((c: TimelineClip) => c.id === compClipId);
-    const afterNestedClip = afterCompClip?.nestedClips?.find((nc: TimelineClip) => nc.id === nestedClipId);
-    log.info('After update - nested clip state', {
-      compClipId,
-      nestedClipId,
-      hasSource: !!afterNestedClip?.source,
-      sourceType: afterNestedClip?.source?.type,
-      hasVideoElement: !!afterNestedClip?.source?.videoElement,
-      videoReadyState: video.readyState,
-    });
+    log.debug('Nested video loaded', { compClipId, nestedClipId, fileName });
   }, { once: true });
 
   video.addEventListener('error', (e) => {
