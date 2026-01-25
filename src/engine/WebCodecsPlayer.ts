@@ -1033,22 +1033,27 @@ export class WebCodecsPlayer {
       }
     }
 
-    // Wait for decoder queue to drain first
+    // Wait for decoder queue to drain and frames to be output
     const samplesDecoded = decodeEnd - keyframeIndex;
     let waitCount = 0;
-    const maxWait = 50; // 500ms max for queue drain
+    const maxWait = 100; // 1 second max
 
-    while (this.decoder.decodeQueueSize > 0 && waitCount < maxWait) {
+    while (waitCount < maxWait) {
+      const queueEmpty = this.decoder.decodeQueueSize === 0;
+      // B-frames need ~3-4 future reference frames, so expect samplesDecoded - 4 frames
+      const expectedFrames = Math.max(1, samplesDecoded - 4);
+      const hasEnoughFrames = this.exportFrameBuffer.size >= expectedFrames;
+
+      if (queueEmpty && hasEnoughFrames) {
+        break;
+      }
+
       await new Promise(r => setTimeout(r, 10));
       waitCount++;
     }
 
-    // CRITICAL: Flush decoder to force output of all buffered B-frames
-    // Without flush(), B-frames stay buffered waiting for more reference frames
-    await this.decoder.flush();
-
-    // Small wait for output callbacks to complete
-    await new Promise(r => setTimeout(r, 30));
+    // Extra wait for any pending output callbacks
+    await new Promise(r => setTimeout(r, 20));
 
     // Set currentFrame to the closest frame to our target time
     const targetCts = startTimeSeconds * 1_000_000;
@@ -1186,22 +1191,24 @@ export class WebCodecsPlayer {
     // Check decoder is still valid after queuing
     if (!this.decoder || !this.isInExportMode) return;
 
-    // Wait for decoder queue to drain
+    // Wait for decoder queue to drain and new frames to appear
     let waitCount = 0;
-    const maxWaits = 30; // 300ms max for queue drain
+    const maxWaits = 50; // 500ms max
+    const bufferSizeBefore = this.exportFrameBuffer.size;
 
-    while (waitCount < maxWaits && this.decoder && this.decoder.decodeQueueSize > 0) {
+    while (waitCount < maxWaits && this.decoder && this.isInExportMode) {
+      const queueEmpty = this.decoder.decodeQueueSize === 0;
+      const hasNewFrames = this.exportFrameBuffer.size > bufferSizeBefore;
+
+      if (queueEmpty && hasNewFrames) {
+        break;
+      }
+
       await new Promise(r => setTimeout(r, 10));
       waitCount++;
     }
 
     // Check decoder is still valid
-    if (!this.decoder || !this.isInExportMode) return;
-
-    // Flush to force output of buffered B-frames
-    await this.decoder.flush();
-
-    // Check decoder is still valid after flush
     if (!this.decoder || !this.isInExportMode) return;
 
     // Check if we now have our frame

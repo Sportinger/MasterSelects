@@ -144,6 +144,16 @@ export function Timeline() {
   const scrollWrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
+  // Cut tool hover state (shared across linked clips)
+  const [cutHoverInfo, setCutHoverInfo] = useState<{ clipId: string; time: number } | null>(null);
+  const handleCutHover = useCallback((clipId: string | null, time: number | null) => {
+    if (clipId && time !== null) {
+      setCutHoverInfo({ clipId, time });
+    } else {
+      setCutHoverInfo(null);
+    }
+  }, []);
+
   // Performance: Create lookup maps for O(1) clip/track access (must be before hooks that use them)
   const clipMap = useMemo(() => new Map(clips.map(c => [c.id, c])), [clips]);
   const trackMap = useMemo(() => new Map(tracks.map(t => [t.id, t])), [tracks]);
@@ -714,6 +724,8 @@ export function Timeline() {
           proxyProgress={mediaFile?.proxyProgress || 0}
           showTranscriptMarkers={showTranscriptMarkers}
           toolMode={toolMode}
+          cutHoverInfo={cutHoverInfo}
+          onCutHover={handleCutHover}
           onMouseDown={(e) => handleClipMouseDown(e, clip.id)}
           onDoubleClick={(e) => handleClipDoubleClick(e, clip.id)}
           onContextMenu={(e) => handleClipContextMenu(e, clip.id)}
@@ -742,6 +754,8 @@ export function Timeline() {
       mediaFiles,
       showTranscriptMarkers,
       toolMode,
+      cutHoverInfo,
+      handleCutHover,
       handleClipMouseDown,
       handleClipDoubleClick,
       handleClipContextMenu,

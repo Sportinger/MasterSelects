@@ -1,6 +1,6 @@
 // TimelineClip component - Clip rendering within tracks
 
-import { memo, useRef, useEffect, useState } from 'react';
+import { memo, useRef, useEffect } from 'react';
 import type { TimelineClipProps } from './types';
 import { THUMB_WIDTH } from './constants';
 import type { ClipAnalysis } from '../../types';
@@ -368,6 +368,8 @@ function TimelineClipComponent({
   proxyProgress,
   showTranscriptMarkers,
   toolMode,
+  cutHoverInfo,
+  onCutHover,
   onMouseDown,
   onDoubleClick,
   onContextMenu,
@@ -381,9 +383,16 @@ function TimelineClipComponent({
   onPickWhipDragEnd,
   onSetClipParent,
 }: TimelineClipProps) {
-  // Cut tool hover position (relative to clip left edge in pixels)
-  const [cutHoverX, setCutHoverX] = useState<number | null>(null);
   const thumbnails = clip.thumbnails || [];
+
+  // Check if this clip should show cut indicator (either directly hovered or linked to hovered clip)
+  const isDirectlyHovered = cutHoverInfo?.clipId === clip.id;
+  const linkedClip = clip.linkedClipId ? clips.find(c => c.id === clip.linkedClipId) : null;
+  const isLinkedToHovered = linkedClip && cutHoverInfo?.clipId === linkedClip.id;
+  // Also check reverse link - if another clip links to this one
+  const reverseLinkedClip = clips.find(c => c.linkedClipId === clip.id);
+  const isReverseLinkedToHovered = reverseLinkedClip && cutHoverInfo?.clipId === reverseLinkedClip.id;
+  const shouldShowCutIndicator = toolMode === 'cut' && cutHoverInfo && (isDirectlyHovered || isLinkedToHovered || isReverseLinkedToHovered);
 
   // Determine if this is an audio clip (check source type, MIME type, or extension as fallback)
   const audioExtensions = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'];
@@ -531,16 +540,18 @@ function TimelineClipComponent({
   // Cut tool handlers
   const handleMouseMove = (e: React.MouseEvent) => {
     if (toolMode !== 'cut') {
-      if (cutHoverX !== null) setCutHoverX(null);
+      if (cutHoverInfo?.clipId === clip.id) onCutHover(null, null);
       return;
     }
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    setCutHoverX(x);
+    // Convert pixel position to time
+    const cutTime = displayStartTime + (x / width) * displayDuration;
+    onCutHover(clip.id, cutTime);
   };
 
   const handleMouseLeave = () => {
-    if (cutHoverX !== null) setCutHoverX(null);
+    if (cutHoverInfo?.clipId === clip.id) onCutHover(null, null);
   };
 
   const handleClick = (e: React.MouseEvent) => {
@@ -551,8 +562,13 @@ function TimelineClipComponent({
     // Convert pixel position to time within clip
     const cutTime = displayStartTime + (x / width) * displayDuration;
     onCutAtPosition(clip.id, cutTime);
-    setCutHoverX(null);
+    onCutHover(null, null);
   };
+
+  // Calculate cut indicator position for this clip
+  const cutIndicatorX = shouldShowCutIndicator && cutHoverInfo
+    ? ((cutHoverInfo.time - displayStartTime) / displayDuration) * width
+    : null;
 
   return (
     <div
@@ -567,10 +583,10 @@ function TimelineClipComponent({
       onClick={handleClick}
     >
       {/* Cut indicator line */}
-      {toolMode === 'cut' && cutHoverX !== null && (
+      {shouldShowCutIndicator && cutIndicatorX !== null && cutIndicatorX >= 0 && cutIndicatorX <= width && (
         <div
           className="cut-indicator"
-          style={{ left: cutHoverX }}
+          style={{ left: cutIndicatorX }}
         />
       )}
       {/* YouTube pending download preview */}
