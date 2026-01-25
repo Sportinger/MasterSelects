@@ -91,6 +91,11 @@ export class WebCodecsPlayer {
   private pendingDecodeFirstFrame = false; // Flag to defer first frame decode
   private loadResolve: (() => void) | null = null; // For waiting on decoder init in loadArrayBuffer
 
+  // Export mode frame buffer for B-frame handling
+  // Frames must be decoded in DTS order but served in CTS order
+  private exportFrameBuffer: Map<number, VideoFrame> = new Map(); // CTS (μs) -> VideoFrame
+  private exportBufferSize = 30; // Keep 30 frames in buffer (1 second at 30fps)
+
   constructor(options: WebCodecsPlayerOptions = {}) {
     this.loop = options.loop ?? true;
     this.onFrame = options.onFrame;
@@ -477,11 +482,38 @@ export class WebCodecsPlayer {
 
     this.decoder = new VideoDecoder({
       output: (frame) => {
-        // Close previous frame to prevent memory leak
-        if (this.currentFrame) {
-          this.currentFrame.close();
+        // In export mode, buffer frames by CTS for B-frame handling
+        if (this.isInExportMode) {
+          const cts = frame.timestamp; // microseconds
+          this.exportFrameBuffer.set(cts, frame);
+
+          // Also update currentFrame to the latest decoded
+          if (this.currentFrame && this.currentFrame !== frame) {
+            // Don't close - it might be in the buffer
+          }
+          this.currentFrame = frame;
+
+          // Cleanup old frames if buffer is too large
+          if (this.exportFrameBuffer.size > this.exportBufferSize) {
+            // Find and remove oldest frame
+            let oldestCts = Infinity;
+            for (const cts of this.exportFrameBuffer.keys()) {
+              if (cts < oldestCts) oldestCts = cts;
+            }
+            const oldFrame = this.exportFrameBuffer.get(oldestCts);
+            if (oldFrame && oldFrame !== this.currentFrame) {
+              oldFrame.close();
+            }
+            this.exportFrameBuffer.delete(oldestCts);
+          }
+        } else {
+          // Normal mode: just keep current frame
+          if (this.currentFrame) {
+            this.currentFrame.close();
+          }
+          this.currentFrame = frame;
         }
-        this.currentFrame = frame;
+
         this.onFrame?.(frame);
 
         // Resolve any pending frame wait (for sequential export)
@@ -909,8 +941,8 @@ export class WebCodecsPlayer {
 
   /**
    * Prepare for sequential export - seeks to start time and enters export mode.
-   * In export mode, subsequent calls to decodeNextFrameForExport() will decode
-   * frames sequentially without resetting the decoder (much faster).
+   * In export mode, subsequent calls to seekDuringExport() will use a frame buffer
+   * to handle B-frame reordering efficiently.
    */
   async prepareForSequentialExport(startTimeSeconds: number): Promise<void> {
     // Simple mode doesn't benefit from sequential decoding - browser handles it
@@ -923,6 +955,14 @@ export class WebCodecsPlayer {
     if (!this.videoTrack || this.samples.length === 0 || !this.decoder) {
       return;
     }
+
+    // Clear any existing export buffer
+    for (const frame of this.exportFrameBuffer.values()) {
+      if (frame !== this.currentFrame) {
+        frame.close();
+      }
+    }
+    this.exportFrameBuffer.clear();
 
     const targetTime = startTimeSeconds * this.videoTrack.timescale;
 
@@ -1060,8 +1100,11 @@ export class WebCodecsPlayer {
 
   /**
    * Seek to a specific time during export.
-   * Use this for non-sequential access (e.g., reversed clips, speed changes).
-   * Falls back to full seek but stays in export mode.
+   * Handles B-frame reordering by buffering decoded frames and serving by CTS.
+   *
+   * IMPORTANT: Samples must be decoded in DTS order (sample array order),
+   * but we serve frames in CTS order (presentation order). B-frames cause
+   * these orders to differ.
    */
   async seekDuringExport(timeSeconds: number): Promise<void> {
     if (this.useSimpleMode && this.videoElement) {
@@ -1074,75 +1117,126 @@ export class WebCodecsPlayer {
       return;
     }
 
-    const targetTime = timeSeconds * this.videoTrack.timescale;
+    const targetCts = timeSeconds * 1_000_000; // Target in microseconds
+    const frameDuration = 1_000_000 / this.frameRate;
+    const tolerance = frameDuration * 0.6; // 60% of frame duration
 
-    // Find sample with CTS closest to target time
-    // IMPORTANT: Samples are in DECODE order (DTS), not presentation order (CTS)
-    // due to B-frame reordering. We must search all samples to find the right one.
-    let targetIndex = 0;
-    let closestDiff = Infinity;
+    // First check if frame is already in buffer
+    let bestFrame: VideoFrame | null = null;
+    let bestDiff = Infinity;
 
-    for (let i = 0; i < this.samples.length; i++) {
-      const diff = Math.abs(this.samples[i].cts - targetTime);
-      if (diff < closestDiff) {
-        closestDiff = diff;
-        targetIndex = i;
-      }
-      // Early exit: if we're getting further away and past target, stop searching
-      // (optimization for videos without B-frames where CTS is sorted)
-      if (this.samples[i].cts > targetTime + closestDiff) {
-        break;
+    for (const [cts, frame] of this.exportFrameBuffer) {
+      const diff = Math.abs(cts - targetCts);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestFrame = frame;
       }
     }
 
-    // Check if we can continue sequentially (target is within a few samples)
-    // Allow +/- 3 samples to handle frame rate conversions (e.g., 25fps video at 30fps export)
-    if (this.isInExportMode && targetIndex >= this.sampleIndex - 1 && targetIndex <= this.sampleIndex + 3) {
-      // Decode frames sequentially until we reach or pass the target
-      // sampleIndex points to the NEXT frame to decode, so we need to decode while sampleIndex <= targetIndex
-      const beforeIndex = this.sampleIndex;
-      while (this.sampleIndex <= targetIndex) {
-        await this.decodeNextFrameForExport();
-      }
-      // Debug: log first few seeks to verify frame-accurate export
-      if (targetIndex < 10) {
-        console.log(`[WebCodecs] Export seek: time=${timeSeconds.toFixed(3)}s → sample ${targetIndex}, sampleIndex now ${this.sampleIndex} (decoded ${this.sampleIndex - beforeIndex} new)`);
-      }
+    // If we have a good match in buffer, use it
+    if (bestFrame && bestDiff < tolerance) {
+      this.currentFrame = bestFrame;
       return;
     }
 
-    // Need to jump - find keyframe and decode from there
-    let keyframeIndex = 0;
-    for (let i = 0; i <= targetIndex; i++) {
-      if (this.samples[i].is_sync) {
-        keyframeIndex = i;
+    // Need to decode more frames - always decode FORWARD in DTS order
+    // Decode until we have a frame close enough to our target CTS
+    const maxDecodes = 60; // Safety limit
+    let decodeCount = 0;
+
+    while (decodeCount < maxDecodes && this.sampleIndex < this.samples.length) {
+      // Check buffer again after each decode
+      bestDiff = Infinity;
+      for (const [cts, frame] of this.exportFrameBuffer) {
+        const diff = Math.abs(cts - targetCts);
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          bestFrame = frame;
+        }
+      }
+
+      if (bestFrame && bestDiff < tolerance) {
+        this.currentFrame = bestFrame;
+        return;
+      }
+
+      // Check if we've already decoded past our target
+      // (useful for detecting when target is before our decode position)
+      const currentSample = this.samples[this.sampleIndex];
+      const currentSampleCts = (currentSample.cts * 1_000_000) / currentSample.timescale;
+
+      // If the next sample's CTS is way past our target and we have something close, use it
+      if (currentSampleCts > targetCts + frameDuration * 10 && bestFrame) {
+        this.currentFrame = bestFrame;
+        return;
+      }
+
+      // Decode next frame
+      await this.decodeNextFrameForExport();
+      decodeCount++;
+    }
+
+    // If we couldn't find a good frame, we might need to seek backwards
+    // This requires resetting the decoder
+    if (!bestFrame || bestDiff > tolerance) {
+      // Find which sample has CTS closest to target
+      let targetSampleIndex = 0;
+      let closestDiff = Infinity;
+      const targetTimeInTimescale = timeSeconds * this.videoTrack.timescale;
+
+      for (let i = 0; i < this.samples.length; i++) {
+        const diff = Math.abs(this.samples[i].cts - targetTimeInTimescale);
+        if (diff < closestDiff) {
+          closestDiff = diff;
+          targetSampleIndex = i;
+        }
+      }
+
+      // If target sample is before our current position, we need to reset
+      if (targetSampleIndex < this.sampleIndex - this.exportBufferSize) {
+        // Clear buffer
+        for (const frame of this.exportFrameBuffer.values()) {
+          if (frame !== this.currentFrame) {
+            frame.close();
+          }
+        }
+        this.exportFrameBuffer.clear();
+
+        // Find keyframe before target
+        let keyframeIndex = 0;
+        for (let i = 0; i <= targetSampleIndex; i++) {
+          if (this.samples[i].is_sync) {
+            keyframeIndex = i;
+          }
+        }
+
+        // Reset and decode from keyframe
+        this.decoder.reset();
+        this.decoder.configure(this.codecConfig!);
+        this.sampleIndex = keyframeIndex;
+
+        // Decode up to and slightly past target
+        const endIndex = Math.min(targetSampleIndex + 10, this.samples.length);
+        while (this.sampleIndex < endIndex) {
+          await this.decodeNextFrameForExport();
+        }
+
+        // Now find best match in buffer
+        bestDiff = Infinity;
+        for (const [cts, frame] of this.exportFrameBuffer) {
+          const diff = Math.abs(cts - targetCts);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            bestFrame = frame;
+          }
+        }
       }
     }
 
-    // Reset decoder for the jump
-    this.decoder.reset();
-    this.decoder.configure(this.codecConfig!);
-
-    // Decode from keyframe up to target frame
-    for (let i = keyframeIndex; i <= targetIndex; i++) {
-      const sample = this.samples[i];
-      const chunk = new EncodedVideoChunk({
-        type: sample.is_sync ? 'key' : 'delta',
-        timestamp: (sample.cts * 1_000_000) / sample.timescale,
-        duration: (sample.duration * 1_000_000) / sample.timescale,
-        data: sample.data,
-      });
-      try {
-        this.decoder.decode(chunk);
-      } catch {
-        // Skip decode errors
-      }
+    // Use whatever we found
+    if (bestFrame) {
+      this.currentFrame = bestFrame;
     }
-
-    // Flush and wait for the last frame to arrive
-    // Note: flush() ensures all decode operations complete
-    await this.decoder.flush();
-    this.sampleIndex = targetIndex + 1;
   }
 
   /**
@@ -1192,6 +1286,15 @@ export class WebCodecsPlayer {
    */
   endSequentialExport(): void {
     this.isInExportMode = false;
+
+    // Clean up export frame buffer
+    for (const frame of this.exportFrameBuffer.values()) {
+      if (frame !== this.currentFrame) {
+        frame.close();
+      }
+    }
+    this.exportFrameBuffer.clear();
+
     console.log('[WebCodecs] Export mode: ended');
   }
 
@@ -1248,8 +1351,19 @@ export class WebCodecsPlayer {
       this.decoder = null;
     }
 
+    // Clean up export frame buffer
+    for (const frame of this.exportFrameBuffer.values()) {
+      frame.close();
+    }
+    this.exportFrameBuffer.clear();
+
     if (this.currentFrame) {
-      this.currentFrame.close();
+      // Only close if not already closed in buffer cleanup
+      try {
+        this.currentFrame.close();
+      } catch {
+        // Already closed
+      }
       this.currentFrame = null;
     }
 

@@ -123,61 +123,115 @@ cd tools/native-helper && npm install && npm start
 src/
 ├── components/
 │   ├── timeline/           # Timeline editor components
-│   │   ├── Timeline.tsx    # Main orchestrator
+│   │   ├── Timeline.tsx    # Main orchestrator (1323 LOC after refactor)
+│   │   ├── hooks/          # Extracted hooks
+│   │   │   ├── useTimelineKeyboard.ts
+│   │   │   ├── useTimelineZoom.ts
+│   │   │   ├── usePlayheadDrag.ts
+│   │   │   ├── useMarqueeSelection.ts
+│   │   │   ├── useClipTrim.ts
+│   │   │   ├── useClipDrag.ts
+│   │   │   └── useLayerSync.ts
+│   │   ├── components/     # Sub-components
+│   │   │   └── TimelineContextMenu.tsx
+│   │   ├── utils/          # Timeline utilities
 │   │   ├── TimelineRuler.tsx
 │   │   ├── TimelineTrack.tsx
 │   │   ├── TimelineClip.tsx
 │   │   ├── TimelineKeyframes.tsx
 │   │   ├── TimelineControls.tsx
 │   │   ├── TimelineHeader.tsx
-│   │   ├── CurveEditor.tsx     # Bezier keyframe editor
-│   │   ├── MulticamDialog.tsx  # Multicam setup dialog
-│   │   ├── PickWhip.tsx        # Expression linking
-│   │   └── ParentChildLink.tsx # Layer parenting
+│   │   ├── TimelineNavigator.tsx  # Bottom scrollbar with zoom handles
+│   │   ├── CurveEditor.tsx        # Bezier keyframe editor
+│   │   ├── MulticamDialog.tsx
+│   │   ├── PickWhip.tsx           # Layer parenting UI
+│   │   └── ParentChildLink.tsx    # Physics-based cable animation
 │   ├── panels/             # Dock panel contents
-│   │   ├── PropertiesPanel.tsx  # Unified: Transform, Effects, Masks, Volume
-│   │   ├── MediaPanel.tsx
-│   │   ├── AIChatPanel.tsx
+│   │   ├── PropertiesPanel.tsx    # Unified: Transform, Effects, Masks, Volume, Transcript, Analysis
+│   │   ├── MediaPanel.tsx         # Columns, folders, drag-drop
+│   │   ├── AIChatPanel.tsx        # GPT-4/5 function calling
+│   │   ├── AIVideoPanel.tsx       # PiAPI integration
+│   │   ├── YouTubePanel.tsx       # Search & download
 │   │   ├── MultiCamPanel.tsx
-│   │   ├── TranscriptPanel.tsx
-│   │   ├── AnalysisPanel.tsx
-│   │   ├── LayerPanel.tsx
-│   │   ├── EffectsPanel.tsx     # Legacy, use PropertiesPanel
-│   │   └── ClipPropertiesPanel.tsx
+│   │   └── LayerPanel.tsx
 │   ├── preview/            # Preview & overlay
-│   │   ├── Preview.tsx
+│   │   ├── Preview.tsx     # Quality dropdown, transparency grid
 │   │   └── MaskOverlay.tsx
 │   ├── export/             # Export functionality
 │   │   ├── ExportDialog.tsx
-│   │   └── ExportPanel.tsx
+│   │   └── ExportPanel.tsx  # Fast/Precise/FFmpeg modes
+│   ├── mobile/             # Mobile-specific components
+│   │   └── MobileWarningOverlay.tsx
 │   ├── common/             # Shared components
-│   │   └── Toolbar.tsx
+│   │   └── Toolbar.tsx     # Menu bar
 │   └── dock/               # Dockable panel system
 │
 ├── stores/
 │   ├── timeline/           # Timeline state (slices)
-│   │   ├── index.ts        # Main store export
-│   │   ├── types.ts        # Timeline types
-│   │   ├── constants.ts    # Default values
-│   │   ├── utils.ts        # Helper functions
+│   │   ├── index.ts
+│   │   ├── types.ts
+│   │   ├── constants.ts
+│   │   ├── utils.ts
 │   │   ├── trackSlice.ts
 │   │   ├── clipSlice.ts
 │   │   ├── playbackSlice.ts
 │   │   ├── keyframeSlice.ts
 │   │   ├── selectionSlice.ts
-│   │   └── maskSlice.ts    # Mask shapes and vertices
-│   ├── mediaStore.ts       # Media & video state
+│   │   ├── maskSlice.ts
+│   │   ├── clip/           # Modular clip operations
+│   │   │   ├── addVideoClip.ts
+│   │   │   ├── addAudioClip.ts
+│   │   │   ├── addImageClip.ts
+│   │   │   ├── addCompClip.ts
+│   │   │   └── completeDownload.ts
+│   │   └── helpers/        # Utility functions
+│   │       ├── mediaTypeHelpers.ts
+│   │       ├── thumbnailHelpers.ts
+│   │       ├── waveformHelpers.ts
+│   │       ├── audioTrackHelpers.ts
+│   │       ├── webCodecsHelpers.ts
+│   │       ├── clipStateHelpers.ts
+│   │       ├── idGenerator.ts
+│   │       └── blobUrlManager.ts
+│   ├── mediaStore/         # Media state (modular slices)
+│   │   ├── index.ts
+│   │   ├── types.ts
+│   │   ├── constants.ts
+│   │   ├── init.ts
+│   │   ├── slices/
+│   │   │   ├── fileImportSlice.ts
+│   │   │   ├── fileManageSlice.ts
+│   │   │   ├── folderSlice.ts
+│   │   │   ├── selectionSlice.ts
+│   │   │   ├── compositionSlice.ts
+│   │   │   ├── projectSlice.ts
+│   │   │   └── proxySlice.ts
+│   │   └── helpers/
+│   │       ├── fileHashHelpers.ts
+│   │       ├── mediaInfoHelpers.ts
+│   │       ├── thumbnailHelpers.ts
+│   │       └── importPipeline.ts
 │   ├── mixerStore.ts       # Layer, effect, grid state
 │   ├── multicamStore.ts    # Multicam sources and sync
+│   ├── youtubeStore.ts     # YouTube search and downloads
 │   ├── settingsStore.ts    # App settings and preferences
 │   ├── dockStore.ts        # UI layout state
 │   └── historyStore.ts     # Undo/redo
 │
 ├── engine/
+│   ├── WebGPUEngine.ts     # Facade (orchestrates modules)
+│   ├── WebCodecsPlayer.ts  # Video decoding
+│   ├── ParallelDecodeManager.ts  # Multi-clip parallel decode for export
 │   ├── core/               # GPU initialization
 │   │   ├── WebGPUContext.ts
+│   │   ├── RenderTargetManager.ts
 │   │   └── types.ts
-│   ├── pipeline/           # Render pipelines
+│   ├── render/             # Rendering
+│   │   ├── RenderLoop.ts
+│   │   ├── Compositor.ts
+│   │   ├── LayerCollector.ts
+│   │   └── NestedCompRenderer.ts
+│   ├── pipeline/           # GPU pipelines
 │   │   ├── CompositorPipeline.ts
 │   │   ├── EffectsPipeline.ts
 │   │   └── OutputPipeline.ts
@@ -186,15 +240,76 @@ src/
 │   │   ├── MaskTextureManager.ts
 │   │   └── ScrubbingCache.ts
 │   ├── video/              # Video handling
-│   │   ├── VideoFrameManager.ts
-│   │   └── WebCodecsPlayer.ts
-│   ├── export/
-│   │   └── FrameExporter.ts
-│   └── WebGPUEngine.ts     # Facade (orchestrates modules)
+│   │   └── VideoFrameManager.ts
+│   ├── export/             # Export system (modular)
+│   │   ├── FrameExporter.ts
+│   │   ├── ClipPreparation.ts
+│   │   ├── ExportLayerBuilder.ts
+│   │   ├── VideoEncoderWrapper.ts
+│   │   ├── VideoSeeker.ts
+│   │   ├── codecHelpers.ts
+│   │   └── types.ts
+│   ├── audio/              # Audio processing
+│   │   ├── AudioEncoder.ts
+│   │   ├── AudioExportPipeline.ts
+│   │   ├── AudioExtractor.ts
+│   │   ├── AudioMixer.ts
+│   │   ├── AudioEffectRenderer.ts
+│   │   └── TimeStretchProcessor.ts
+│   ├── ffmpeg/             # FFmpeg WASM
+│   │   ├── FFmpegBridge.ts
+│   │   ├── codecs.ts
+│   │   └── types.ts
+│   ├── proxy/              # Proxy generation
+│   │   └── ProxyResizePipeline.ts
+│   ├── analysis/           # Video analysis
+│   │   └── OpticalFlowAnalyzer.ts
+│   ├── stats/              # Performance monitoring
+│   │   └── PerformanceStats.ts
+│   └── managers/           # Output management
+│       └── OutputWindowManager.ts
+│
+├── effects/                # Modular GPU effects (30+)
+│   ├── _shared/            # Shared effect utilities
+│   ├── color/              # Color effects
+│   │   ├── brightness/
+│   │   ├── contrast/
+│   │   ├── saturation/
+│   │   ├── vibrance/
+│   │   ├── hue-shift/
+│   │   ├── temperature/
+│   │   ├── exposure/
+│   │   ├── levels/
+│   │   └── invert/
+│   ├── blur/               # Blur effects
+│   │   ├── box/
+│   │   ├── gaussian/
+│   │   ├── motion/
+│   │   ├── radial/
+│   │   └── zoom/
+│   ├── distort/            # Distortion effects
+│   │   ├── pixelate/
+│   │   ├── kaleidoscope/
+│   │   ├── mirror/
+│   │   ├── rgb-split/
+│   │   ├── twirl/
+│   │   ├── wave/
+│   │   └── bulge/
+│   ├── stylize/            # Stylize effects
+│   │   ├── vignette/
+│   │   ├── grain/
+│   │   ├── glow/
+│   │   ├── posterize/
+│   │   ├── edge-detect/
+│   │   ├── scanlines/
+│   │   ├── threshold/
+│   │   └── sharpen/
+│   └── keying/             # Keying effects
+│       └── chroma-key/
 │
 ├── shaders/                # WGSL shaders
 │   ├── composite.wgsl      # Layer compositing, 37 blend modes
-│   ├── effects.wgsl        # GPU effects
+│   ├── effects.wgsl        # Legacy GPU effects
 │   ├── opticalflow.wgsl    # Motion analysis
 │   └── output.wgsl         # Final output
 │
@@ -202,26 +317,72 @@ src/
 │   ├── useEngine.ts
 │   ├── useGlobalHistory.ts
 │   ├── useMIDI.ts
-│   ├── useClipPanelSync.ts     # Auto-switch panels on clip select
+│   ├── useIsMobile.ts          # Mobile detection
+│   ├── useClipPanelSync.ts
 │   └── useContextMenuPosition.ts
 │
-└── services/
-    ├── projectDB.ts            # IndexedDB persistence
-    ├── fileSystemService.ts    # File System Access API
-    ├── proxyGenerator.ts       # GPU proxy generation
-    ├── proxyFrameCache.ts      # Proxy frame caching
-    ├── audioManager.ts         # Web Audio API, 10-band EQ
-    ├── audioSync.ts            # Cross-correlation sync
-    ├── audioAnalyzer.ts        # Audio level analysis
-    ├── aiTools.ts              # 50+ AI editing tools
-    ├── claudeService.ts        # Claude API integration
-    ├── whisperService.ts       # Transcription providers
-    ├── clipTranscriber.ts      # Clip transcription
-    ├── transcriptSync.ts       # Transcript synchronization
-    ├── clipAnalyzer.ts         # Clip analysis
-    ├── multicamAnalyzer.ts     # Multicam analysis
-    ├── compositionRenderer.ts  # Nested composition rendering
-    └── apiKeyManager.ts        # API key storage
+├── services/
+│   ├── project/                # Project file service (modular)
+│   │   ├── ProjectFileService.ts
+│   │   ├── core/
+│   │   │   ├── ProjectCoreService.ts
+│   │   │   ├── FileStorageService.ts
+│   │   │   └── constants.ts
+│   │   ├── domains/
+│   │   │   ├── AnalysisService.ts
+│   │   │   ├── CacheService.ts
+│   │   │   ├── ProxyStorageService.ts
+│   │   │   ├── RawMediaService.ts
+│   │   │   └── TranscriptService.ts
+│   │   └── types/
+│   │       ├── project.types.ts
+│   │       ├── media.types.ts
+│   │       ├── composition.types.ts
+│   │       ├── timeline.types.ts
+│   │       └── folder.types.ts
+│   ├── nativeHelper/           # Native Helper client
+│   │   ├── NativeHelperClient.ts
+│   │   ├── NativeDecoder.ts
+│   │   └── protocol.ts
+│   ├── projectDB.ts
+│   ├── projectSync.ts
+│   ├── fileSystemService.ts
+│   ├── proxyGenerator.ts
+│   ├── proxyFrameCache.ts
+│   ├── audioManager.ts
+│   ├── audioSync.ts
+│   ├── audioExtractor.ts
+│   ├── audioAnalyzer.ts
+│   ├── compositionAudioMixer.ts
+│   ├── aiTools.ts
+│   ├── claudeService.ts
+│   ├── whisperService.ts
+│   ├── clipTranscriber.ts
+│   ├── transcriptSync.ts
+│   ├── clipAnalyzer.ts
+│   ├── multicamAnalyzer.ts
+│   ├── compositionRenderer.ts
+│   ├── previewRenderManager.ts
+│   ├── layerBuilder.ts
+│   ├── textRenderer.ts
+│   ├── googleFontsService.ts
+│   ├── youtubeDownloader.ts
+│   ├── klingService.ts
+│   ├── piApiService.ts
+│   ├── performanceMonitor.ts
+│   └── apiKeyManager.ts
+│
+├── workers/                # Web Workers
+│   └── whisper.worker.ts
+│
+└── types/                  # TypeScript types
+
+tools/
+├── helpers/                # Native Helper (Rust)
+│   ├── win/                # Windows: YouTube only (yt-dlp)
+│   ├── linux/              # Linux: Full FFmpeg decoder
+│   └── mac/                # macOS: Full FFmpeg decoder
+└── native-helper/          # Electron YouTube tray app
 ```
 
 ## Critical Patterns
@@ -330,23 +491,34 @@ chrome://gpu
 
 ## Panel System
 
-8 dockable panel types:
-- **Preview** - Composition canvas
-- **Timeline** - Multi-track editor
-- **Media** - Media browser
-- **Properties** - Unified clip editing (Transform, Effects, Masks, Volume)
-- **Export** - Render settings
-- **Multicam** - Camera sync
-- **AI Chat** - GPT assistant
+10 dockable panel types:
+- **Preview** - Composition canvas with quality/transparency controls
+- **Timeline** - Multi-track editor with navigator
+- **Media** - Media browser with columns/folders
+- **Properties** - Unified: Transform, Effects, Masks, Volume, Transcript, Analysis
+- **Export** - Fast/Precise/FFmpeg export modes
+- **Multicam** - Audio-based camera sync
+- **AI Chat** - GPT-4/5 editing assistant
+- **AI Video** - PiAPI video generation
+- **YouTube** - Search and download
 - **Slots** - Layer management
 
 ## Key Features
 
 - **WebGPU** rendering with 60fps compositing
 - **37 blend modes** (all After Effects modes)
-- **9 GPU effects** with keyframe animation
+- **30+ GPU effects** (color, blur, distort, stylize, keying) with modular architecture
+- **Text clips** with 50 Google Fonts, stroke, shadow
 - **10-band EQ** with keyframe support
+- **Audio master clock** - playhead follows audio like Premiere/Resolve
+- **Varispeed audio scrubbing** for all video clips
 - **Multicam sync** via audio cross-correlation
-- **AI tools** (50+) via OpenAI function calling
+- **AI tools** (50+) via OpenAI function calling (GPT-4/GPT-5)
+- **AI Video** generation via PiAPI
+- **YouTube integration** - search, download, edit
 - **4 transcription providers** (Local Whisper, OpenAI, AssemblyAI, Deepgram)
-- **H.264/VP9 export** via WebCodecs
+- **3 export modes**: WebCodecs Fast, HTMLVideo Precise, FFmpeg
+- **Parallel decoding** for faster multi-clip exports
+- **Native Helper** (Rust) for hardware-accelerated ProRes/DNxHD
+- **Local project storage** with Raw folder, autosave, backups
+- **Mobile support** with responsive UI and touch gestures
