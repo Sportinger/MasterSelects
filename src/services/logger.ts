@@ -85,7 +85,7 @@ const registeredModules = new Set<string>();
 
 let config: LoggerConfig = {
   enabled: [],
-  level: 'INFO',
+  level: 'WARN',  // Default to WARN - use Logger.setLevel('INFO') or Logger.setLevel('DEBUG') for more verbose output
   timestamps: true,
   bufferSize: 500,
 };
