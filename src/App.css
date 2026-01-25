@@ -3254,6 +3254,22 @@ input[type="checkbox"] {
   100% { transform: translateX(100%); }
 }
 
+/* Clip entrance animation on composition switch */
+@keyframes clip-entrance {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.timeline-clip.entrance-animate {
+  animation: clip-entrance 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 .clip-loading-spinner {
   width: 14px;
   height: 14px;
@@ -8136,4 +8152,145 @@ input[type="checkbox"] {
   padding: 28px 32px 24px;
   text-align: left;
   overflow-y: auto;
+}
+
+/* ========================================
+   IndexedDB Error Dialog
+   ======================================== */
+
+.indexeddb-error-dialog {
+  width: 480px;
+  max-width: 90vw;
+  padding: 32px;
+  text-align: center;
+}
+
+.indexeddb-error-icon {
+  margin-bottom: 16px;
+}
+
+.indexeddb-error-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #fff;
+  margin: 0 0 20px 0;
+}
+
+.indexeddb-error-content {
+  text-align: left;
+}
+
+.indexeddb-error-description {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 16px 0;
+}
+
+.indexeddb-error-note {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 20px;
+}
+
+.indexeddb-error-note strong {
+  color: #22c55e;
+}
+
+.indexeddb-error-steps {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.indexeddb-error-steps h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  margin: 0 0 12px 0;
+}
+
+.indexeddb-error-steps ol {
+  margin: 0;
+  padding-left: 20px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.indexeddb-error-steps li {
+  margin-bottom: 4px;
+}
+
+.indexeddb-error-steps kbd {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.indexeddb-error-steps strong {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.indexeddb-error-alternative {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.indexeddb-error-alternative code {
+  display: block;
+  margin: 8px 0;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  word-break: break-all;
+}
+
+.indexeddb-error-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  justify-content: center;
+}
+
+.indexeddb-error-btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.indexeddb-error-btn.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.indexeddb-error-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.indexeddb-error-btn.primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border: none;
+  color: #fff;
+}
+
+.indexeddb-error-btn.primary:hover {
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
 }

@@ -476,6 +476,8 @@ export const useTimelineStore = create<TimelineStore>()(
         }
 
         // Restore tracks and basic state
+        // Increment animation key to trigger entrance animations on clips
+        const { clipEntranceAnimationKey } = get();
         set({
           tracks: data.tracks.map(t => ({ ...t })),
           clips: [], // We'll restore clips separately
@@ -497,6 +499,8 @@ export const useTimelineStore = create<TimelineStore>()(
           expandedCurveProperties: new Map<string, Set<import('../../types').AnimatableProperty>>(),
           // Restore markers
           markers: data.markers || [],
+          // Increment animation key for clip entrance animations
+          clipEntranceAnimationKey: clipEntranceAnimationKey + 1,
         });
 
         // Restore keyframes from serialized clips
@@ -1191,6 +1195,9 @@ export const useTimelineStore = create<TimelineStore>()(
 
       // Timeline markers
       markers: [] as import('./types').TimelineMarker[],
+
+      // Clip entrance animation key (increments on composition switch)
+      clipEntranceAnimationKey: 0,
     };
 
     // Layer actions (render layers for engine, moved from mixerStore)

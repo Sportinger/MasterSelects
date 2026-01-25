@@ -1,6 +1,6 @@
 // TimelineClip component - Clip rendering within tracks
 
-import { memo, useRef, useEffect } from 'react';
+import { memo, useRef, useEffect, useState } from 'react';
 import type { TimelineClipProps } from './types';
 import { THUMB_WIDTH } from './constants';
 import type { ClipAnalysis } from '../../types';
@@ -391,6 +391,33 @@ function TimelineClipComponent({
 }: TimelineClipProps) {
   const thumbnails = clip.thumbnails || [];
 
+  // Entrance animation on composition switch
+  const clipEntranceAnimationKey = useTimelineStore(s => s.clipEntranceAnimationKey);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [animationDelay, setAnimationDelay] = useState(0);
+  const prevAnimationKeyRef = useRef(clipEntranceAnimationKey);
+
+  useEffect(() => {
+    // Detect when animation key changes (composition switched)
+    if (clipEntranceAnimationKey !== prevAnimationKeyRef.current) {
+      prevAnimationKeyRef.current = clipEntranceAnimationKey;
+      // Calculate stagger delay based on clip's start time (left to right animation)
+      // Max stagger of 300ms spread across clips based on their position
+      const maxStagger = 0.3; // 300ms max delay
+      const normalizedPosition = Math.min(clip.startTime / 60, 1); // Normalize to 0-1 range (assuming 60s max)
+      const delay = normalizedPosition * maxStagger;
+      setAnimationDelay(delay);
+      setIsAnimating(true);
+
+      // Remove animation class after animation completes
+      const timer = setTimeout(() => {
+        setIsAnimating(false);
+      }, 600 + delay * 1000); // 600ms animation + delay
+
+      return () => clearTimeout(timer);
+    }
+  }, [clipEntranceAnimationKey, clip.startTime]);
+
   // Check if this clip should show cut indicator (either directly hovered or linked to hovered clip)
   const isDirectlyHovered = cutHoverInfo?.clipId === clip.id;
   const linkedClip = clip.linkedClipId ? clips.find(c => c.id === clip.linkedClipId) : null;
@@ -619,8 +646,13 @@ function TimelineClipComponent({
 
   return (
     <div
-      className={`${clipClass}${toolMode === 'cut' ? ' cut-mode' : ''}`}
-      style={{ left, width, cursor: toolMode === 'cut' ? 'crosshair' : undefined }}
+      className={`${clipClass}${toolMode === 'cut' ? ' cut-mode' : ''}${isAnimating ? ' entrance-animate' : ''}`}
+      style={{
+        left,
+        width,
+        cursor: toolMode === 'cut' ? 'crosshair' : undefined,
+        animationDelay: isAnimating ? `${animationDelay}s` : undefined,
+      }}
       data-clip-id={clip.id}
       onMouseDown={toolMode === 'cut' ? undefined : onMouseDown}
       onDoubleClick={toolMode === 'cut' ? undefined : onDoubleClick}

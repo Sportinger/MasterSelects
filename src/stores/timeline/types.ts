@@ -112,6 +112,9 @@ export interface TimelineState {
 
   // Timeline markers
   markers: TimelineMarker[];
+
+  // Clip entrance animation key (increments on composition switch to trigger animations)
+  clipEntranceAnimationKey: number;
 }
 
 // Track actions interface
