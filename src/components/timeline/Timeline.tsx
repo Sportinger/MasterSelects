@@ -739,7 +739,8 @@ export function Timeline() {
               <div
                 className={`track-header-preview audio ${
                   externalDrag.newTrackType === 'audio' ||
-                  (externalDrag.isVideo && externalDrag.audioTrackId === '__new_audio_track__' && externalDrag.newTrackType !== 'video')
+                  externalDrag.newTrackType === 'video' ||
+                  (externalDrag.isVideo && externalDrag.audioTrackId === '__new_audio_track__')
                     ? 'active'
                     : ''
                 }`}
@@ -863,7 +864,11 @@ export function Timeline() {
           {/* New Audio Track drop zone - at BOTTOM below audio tracks */}
           {externalDrag && (
             <div
-              className={`new-track-drop-zone audio ${externalDrag.newTrackType === 'audio' ? 'active' : ''}`}
+              className={`new-track-drop-zone audio ${
+                externalDrag.newTrackType === 'audio' || externalDrag.newTrackType === 'video'
+                  ? 'active'
+                  : ''
+              }`}
               onDragOver={(e) => handleNewTrackDragOver(e, 'audio')}
               onDragEnter={(e) => {
                 e.preventDefault();
@@ -873,7 +878,8 @@ export function Timeline() {
               onDrop={(e) => handleNewTrackDrop(e, 'audio')}
             >
               <span className="drop-zone-label">+ Drop to create new Audio Track</span>
-              {externalDrag.newTrackType === 'audio' && (
+              {/* Show audio preview when dropping audio OR when dropping video (linked audio) */}
+              {(externalDrag.newTrackType === 'audio' || externalDrag.newTrackType === 'video') && (
                 <div
                   className="timeline-clip-preview audio"
                   style={{
@@ -882,7 +888,9 @@ export function Timeline() {
                   }}
                 >
                   <div className="clip-content">
-                    <span className="clip-name">New clip</span>
+                    <span className="clip-name">
+                      {externalDrag.newTrackType === 'video' ? 'Audio (linked)' : 'New clip'}
+                    </span>
                   </div>
                 </div>
               )}
