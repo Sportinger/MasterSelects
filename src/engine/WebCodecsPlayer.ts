@@ -994,12 +994,22 @@ export class WebCodecsPlayer {
     this.decoder.configure(this.codecConfig!);
     this.sampleIndex = keyframeIndex;
 
-    // Only decode enough to reach start position + small buffer (30 frames)
-    // More frames will be decoded on-demand during export
-    const INITIAL_BUFFER = 30;
-    const decodeEnd = Math.min(startSampleIndex + INITIAL_BUFFER, this.samples.length);
+    // Find NEXT keyframe after start position - this is the natural decode boundary
+    // (B-frames need future reference frames, so we must decode to next keyframe)
+    let nextKeyframeIndex = this.samples.length; // default to end
+    for (let i = startSampleIndex + 1; i < this.samples.length; i++) {
+      if (this.samples[i].is_sync) {
+        nextKeyframeIndex = i;
+        break;
+      }
+    }
 
-    console.log(`[WebCodecs Export] Preparing: keyframe=${keyframeIndex}, start=${startSampleIndex}, decoding ${decodeEnd - keyframeIndex} samples (total: ${this.samples.length})`);
+    // Decode from current keyframe to next keyframe (or end if no more keyframes)
+    // Add small buffer beyond next keyframe for smoother playback
+    const BUFFER_BEYOND_KEYFRAME = 15;
+    const decodeEnd = Math.min(nextKeyframeIndex + BUFFER_BEYOND_KEYFRAME, this.samples.length);
+
+    console.log(`[WebCodecs Export] Preparing: keyframe=${keyframeIndex}, start=${startSampleIndex}, nextKeyframe=${nextKeyframeIndex}, decoding ${decodeEnd - keyframeIndex} samples (total: ${this.samples.length})`);
 
     // Decode from keyframe to start position + buffer
     for (let i = keyframeIndex; i < decodeEnd; i++) {
@@ -1183,15 +1193,26 @@ export class WebCodecsPlayer {
   }
 
   /**
-   * Decode more frames and add to buffer
+   * Decode more frames and add to buffer.
+   * Decodes until next keyframe to ensure B-frames can be resolved.
    */
-  private async decodeMoreFrames(count: number): Promise<void> {
+  private async decodeMoreFrames(minCount: number): Promise<void> {
     if (!this.decoder || !this.videoTrack || this.sampleIndex >= this.samples.length) {
       return;
     }
 
     const startIndex = this.sampleIndex;
-    const endIndex = Math.min(this.sampleIndex + count, this.samples.length);
+
+    // Find next keyframe after minCount samples
+    let endIndex = Math.min(this.sampleIndex + minCount, this.samples.length);
+    for (let i = endIndex; i < this.samples.length; i++) {
+      if (this.samples[i].is_sync) {
+        endIndex = i + 15; // Include some frames past keyframe
+        break;
+      }
+      endIndex = i + 1; // Keep going if no keyframe found
+    }
+    endIndex = Math.min(endIndex, this.samples.length);
 
     for (let i = this.sampleIndex; i < endIndex; i++) {
       const sample = this.samples[i];
@@ -1208,7 +1229,8 @@ export class WebCodecsPlayer {
     this.sampleIndex = endIndex;
 
     // Wait for frames to be output (with timeout)
-    await this.waitForDecoderFlush(1000);
+    const sampleCount = endIndex - startIndex;
+    await this.waitForDecoderFlush(Math.max(2000, sampleCount * 10));
 
     // Update sorted CTS array
     this.exportFramesCts = Array.from(this.exportFrameBuffer.keys()).sort((a, b) => a - b);

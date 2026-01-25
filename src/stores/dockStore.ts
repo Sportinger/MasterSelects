@@ -175,6 +175,10 @@ interface DockState {
   // Layout management
   resetLayout: () => void;
   saveLayoutAsDefault: () => void;
+
+  // Project persistence (for saving/loading layout from project file)
+  getLayoutForProject: () => DockLayout;
+  setLayoutFromProject: (layout: DockLayout) => void;
 }
 
 export const useDockStore = create<DockState>()(
@@ -567,6 +571,16 @@ export const useDockStore = create<DockState>()(
         saveLayoutAsDefault: () => {
           const { layout } = get();
           localStorage.setItem('webvj-dock-layout-default', JSON.stringify(layout));
+        },
+
+        getLayoutForProject: () => {
+          return get().layout;
+        },
+
+        setLayoutFromProject: (layout: DockLayout) => {
+          // Clean up any invalid panel types from the loaded layout
+          const cleanedLayout = cleanupPersistedLayout(layout);
+          set({ layout: cleanedLayout, maxZIndex: 1000 });
         },
       }),
       {

@@ -3,6 +3,7 @@
 import type { ProjectMediaFile } from './media.types';
 import type { ProjectComposition } from './composition.types';
 import type { ProjectFolder } from './folder.types';
+import type { DockLayout } from '../../../types/dock';
 
 export interface ProjectYouTubeVideo {
   id: string;
@@ -25,6 +26,20 @@ export interface ProjectSettings {
   height: number;
   frameRate: number;
   sampleRate: number;
+}
+
+// UI state that gets persisted with the project
+export interface ProjectUIState {
+  // Dock/panel layout
+  dockLayout?: DockLayout;
+  // Timeline view state per composition (keyed by composition ID)
+  compositionViewState?: Record<string, {
+    playheadPosition?: number;
+    zoom?: number;
+    scrollX?: number;
+    inPoint?: number | null;
+    outPoint?: number | null;
+  }>;
 }
 
 export interface ProjectFile {
@@ -55,4 +70,7 @@ export interface ProjectFile {
 
   // YouTube panel state
   youtube?: ProjectYouTubeState;
+
+  // UI state (dock layout, view positions, etc.)
+  uiState?: ProjectUIState;
 }
