@@ -61,6 +61,29 @@ export interface LoadNestedClipsParams {
 }
 
 /**
+ * Helper to update a nested clip inside a comp clip (immutable update).
+ * This ensures React/Zustand detects the change and triggers re-renders.
+ */
+function updateNestedClipInCompClip(
+  clips: TimelineClip[],
+  compClipId: string,
+  nestedClipId: string,
+  updates: Partial<TimelineClip>
+): TimelineClip[] {
+  return clips.map(clip => {
+    if (clip.id !== compClipId || !clip.nestedClips) return clip;
+
+    // Create new nestedClips array with updated nested clip
+    const updatedNestedClips = clip.nestedClips.map(nc =>
+      nc.id === nestedClipId ? { ...nc, ...updates } : nc
+    );
+
+    // Return new comp clip object to trigger re-render
+    return { ...clip, nestedClips: updatedNestedClips };
+  });
+}
+
+/**
  * Load nested clips from composition's timeline data.
  */
 export async function loadNestedClips(params: LoadNestedClipsParams): Promise<TimelineClip[]> {
@@ -105,11 +128,11 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
     const fileUrl = blobUrlManager.create(nestedClip.id, mediaFile.file, urlType as 'video' | 'audio' | 'image');
 
     if (type === 'video') {
-      loadVideoNestedClip(nestedClip, fileUrl, mediaFile.file.name, get, set);
+      loadVideoNestedClip(compClipId, nestedClip.id, fileUrl, mediaFile.file.name, get, set);
     } else if (type === 'audio') {
-      loadAudioNestedClip(nestedClip, fileUrl);
+      loadAudioNestedClip(compClipId, nestedClip.id, fileUrl, get, set);
     } else if (type === 'image') {
-      loadImageNestedClip(nestedClip, fileUrl, get, set);
+      loadImageNestedClip(compClipId, nestedClip.id, fileUrl, get, set);
     }
   }
 
@@ -117,7 +140,8 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
 }
 
 function loadVideoNestedClip(
-  nestedClip: TimelineClip,
+  compClipId: string,
+  nestedClipId: string,
   fileUrl: string,
   fileName: string,
   get: () => any,
@@ -131,41 +155,61 @@ function loadVideoNestedClip(
   video.crossOrigin = 'anonymous';
 
   video.addEventListener('canplaythrough', async () => {
-    nestedClip.source = {
+    const source: TimelineClip['source'] = {
       type: 'video',
       videoElement: video,
       naturalDuration: video.duration,
     };
-    nestedClip.isLoading = false;
 
     // Initialize WebCodecsPlayer
     const webCodecsPlayer = await initWebCodecsPlayer(video, fileName);
     if (webCodecsPlayer) {
-      nestedClip.source = { ...nestedClip.source, webCodecsPlayer };
+      source.webCodecsPlayer = webCodecsPlayer;
     }
 
-    // Trigger re-render
-    set({ clips: [...get().clips] });
+    // Immutably update the nested clip inside the comp clip
+    set({
+      clips: updateNestedClipInCompClip(get().clips, compClipId, nestedClipId, {
+        source,
+        isLoading: false,
+      }),
+    });
+
+    log.debug('Nested video loaded', { compClipId, nestedClipId, fileName });
   }, { once: true });
 }
 
-function loadAudioNestedClip(nestedClip: TimelineClip, fileUrl: string): void {
+function loadAudioNestedClip(
+  compClipId: string,
+  nestedClipId: string,
+  fileUrl: string,
+  get: () => any,
+  set: (state: any) => void
+): void {
   const audio = document.createElement('audio');
   audio.src = fileUrl;
   audio.preload = 'auto';
 
   audio.addEventListener('canplaythrough', () => {
-    nestedClip.source = {
-      type: 'audio',
-      audioElement: audio,
-      naturalDuration: audio.duration,
-    };
-    nestedClip.isLoading = false;
+    // Immutably update the nested clip inside the comp clip
+    set({
+      clips: updateNestedClipInCompClip(get().clips, compClipId, nestedClipId, {
+        source: {
+          type: 'audio',
+          audioElement: audio,
+          naturalDuration: audio.duration,
+        },
+        isLoading: false,
+      }),
+    });
+
+    log.debug('Nested audio loaded', { compClipId, nestedClipId });
   }, { once: true });
 }
 
 function loadImageNestedClip(
-  nestedClip: TimelineClip,
+  compClipId: string,
+  nestedClipId: string,
   fileUrl: string,
   get: () => any,
   set: (state: any) => void
@@ -174,9 +218,15 @@ function loadImageNestedClip(
   img.src = fileUrl;
 
   img.addEventListener('load', () => {
-    nestedClip.source = { type: 'image', imageElement: img };
-    nestedClip.isLoading = false;
-    set({ clips: [...get().clips] });
+    // Immutably update the nested clip inside the comp clip
+    set({
+      clips: updateNestedClipInCompClip(get().clips, compClipId, nestedClipId, {
+        source: { type: 'image', imageElement: img },
+        isLoading: false,
+      }),
+    });
+
+    log.debug('Nested image loaded', { compClipId, nestedClipId });
   }, { once: true });
 }
 
@@ -191,40 +241,47 @@ export interface GenerateCompThumbnailsParams {
 
 /**
  * Generate thumbnails from first video in nested composition.
+ * Uses polling to wait for video to load since nested clips are loaded async.
  */
 export function generateCompThumbnails(params: GenerateCompThumbnailsParams): void {
   const { clipId, nestedClips, compDuration, thumbnailsEnabled, get, set } = params;
 
   if (!thumbnailsEnabled) return;
 
-  const firstVideoClip = nestedClips.find(c => c.file.type.startsWith('video/'));
-  if (!firstVideoClip) return;
+  // Find the first video clip by file type
+  const firstVideoClipId = nestedClips.find(c => c.file.type.startsWith('video/'))?.id;
+  if (!firstVideoClipId) return;
 
-  // Wait for video to load using event listener instead of arbitrary timeout
+  let attempts = 0;
+  const maxAttempts = 50; // 5 seconds max (50 * 100ms)
+
   const checkAndGenerate = async () => {
     if (!get().thumbnailsEnabled) return;
-    const video = firstVideoClip.source?.videoElement;
+
+    // Get fresh state - the nestedClips might have been updated since initial call
+    const compClip = get().clips.find((c: TimelineClip) => c.id === clipId);
+    const currentNestedClip = compClip?.nestedClips?.find((nc: TimelineClip) => nc.id === firstVideoClipId);
+    const video = currentNestedClip?.source?.videoElement;
+
     if (video && video.readyState >= 2) {
       try {
         const thumbnails = await generateThumbnails(video, compDuration);
         set({ clips: updateClipById(get().clips, clipId, { thumbnails }) });
+        log.debug('Generated thumbnails for nested comp', { clipId, count: thumbnails.length });
       } catch (e) {
         log.warn('Failed to generate thumbnails for nested comp', e);
       }
+    } else if (attempts < maxAttempts) {
+      // Video not ready yet, try again
+      attempts++;
+      setTimeout(checkAndGenerate, 100);
+    } else {
+      log.warn('Timeout waiting for nested video to load for thumbnails', { clipId });
     }
   };
 
-  // Try immediately if ready, otherwise wait for canplay event
-  const video = firstVideoClip.source?.videoElement;
-  if (video) {
-    if (video.readyState >= 2) {
-      checkAndGenerate();
-    } else {
-      video.addEventListener('canplay', checkAndGenerate, { once: true });
-      // Fallback timeout in case event never fires
-      setTimeout(checkAndGenerate, 2000);
-    }
-  }
+  // Start checking after a short delay to allow initial load
+  setTimeout(checkAndGenerate, 100);
 }
 
 export interface CreateCompLinkedAudioParams {
