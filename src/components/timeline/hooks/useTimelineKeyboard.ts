@@ -28,6 +28,10 @@ interface UseTimelineKeyboardProps {
   splitClipAtPlayhead: () => void;
   updateClipTransform: (id: string, transform: Partial<ClipTransform>) => void;
 
+  // Tool mode
+  toolMode: 'select' | 'cut';
+  toggleCutTool: () => void;
+
   // Clip lookup
   clipMap: Map<string, TimelineClip>;
 
@@ -36,6 +40,9 @@ interface UseTimelineKeyboardProps {
   playheadPosition: number;
   duration: number;
   setPlayheadPosition: (time: number) => void;
+
+  // Markers
+  addMarker?: (time: number) => string;
 }
 
 export function useTimelineKeyboard({
@@ -52,11 +59,14 @@ export function useTimelineKeyboard({
   removeKeyframe,
   splitClipAtPlayhead,
   updateClipTransform,
+  toolMode,
+  toggleCutTool,
   clipMap,
   activeComposition,
   playheadPosition,
   duration,
   setPlayheadPosition,
+  addMarker,
 }: UseTimelineKeyboardProps): void {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -114,6 +124,15 @@ export function useTimelineKeyboard({
         return;
       }
 
+      // M: add marker at playhead
+      if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        if (addMarker) {
+          addMarker(playheadPosition);
+        }
+        return;
+      }
+
       // Delete/Backspace: remove selected keyframes first, then clips
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
@@ -130,38 +149,56 @@ export function useTimelineKeyboard({
         return;
       }
 
-      // C: Cut/split clip at playhead position
+      // C: Toggle cut tool mode / Shift+C: Split clip at playhead position
       if (e.key === 'c' || e.key === 'C') {
         e.preventDefault();
-        splitClipAtPlayhead();
+        if (e.shiftKey) {
+          // Shift+C: Split clip at playhead position (legacy behavior)
+          splitClipAtPlayhead();
+        } else {
+          // C: Toggle cut tool mode
+          toggleCutTool();
+        }
+        return;
+      }
+
+      // Escape: Exit cut tool mode (return to select)
+      if (e.key === 'Escape' && toolMode === 'cut') {
+        e.preventDefault();
+        toggleCutTool();
         return;
       }
 
       // Shift + "+": Cycle through blend modes (forward)
       // Shift + "-": Cycle through blend modes (backward)
-      if (
-        e.shiftKey &&
-        (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_')
-      ) {
+      // Supports: numpad +/-, Shift+=/- on main keyboard
+      const isNumpadPlus = e.code === 'NumpadAdd';
+      const isNumpadMinus = e.code === 'NumpadSubtract';
+      const isMainPlus = e.shiftKey && (e.key === '+' || e.key === '=');
+      const isMainMinus = e.shiftKey && (e.key === '-' || e.key === '_' || e.code === 'Minus');
+      const isPlus = isNumpadPlus || isMainPlus;
+      const isMinus = isNumpadMinus || isMainMinus;
+
+      if (isPlus || isMinus) {
         e.preventDefault();
-        // Apply to first selected clip
         const firstSelectedId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
-        if (firstSelectedId) {
-          const clip = clipMap.get(firstSelectedId);
-          if (clip) {
-            const currentMode = clip.transform.blendMode;
-            const currentIndex = ALL_BLEND_MODES.indexOf(currentMode);
-            const direction = e.key === '+' || e.key === '=' ? 1 : -1;
-            const nextIndex =
-              (currentIndex + direction + ALL_BLEND_MODES.length) %
-              ALL_BLEND_MODES.length;
-            const nextMode = ALL_BLEND_MODES[nextIndex];
-            // Apply to all selected clips
-            [...selectedClipIds].forEach(clipId => {
-              updateClipTransform(clipId, { blendMode: nextMode });
-            });
-          }
-        }
+        if (!firstSelectedId) return;
+
+        const clip = clipMap.get(firstSelectedId);
+        if (!clip) return;
+
+        const currentMode = clip.transform?.blendMode || 'normal';
+        const currentIndex = ALL_BLEND_MODES.indexOf(currentMode);
+        const direction = isPlus ? 1 : -1;
+        const nextIndex =
+          (currentIndex + direction + ALL_BLEND_MODES.length) %
+          ALL_BLEND_MODES.length;
+        const nextMode = ALL_BLEND_MODES[nextIndex];
+
+        // Apply to all selected clips
+        [...selectedClipIds].forEach(clipId => {
+          updateClipTransform(clipId, { blendMode: nextMode });
+        });
         return;
       }
 
@@ -205,9 +242,12 @@ export function useTimelineKeyboard({
     splitClipAtPlayhead,
     clipMap,
     updateClipTransform,
+    toolMode,
+    toggleCutTool,
     activeComposition,
     playheadPosition,
     duration,
     setPlayheadPosition,
+    addMarker,
   ]);
 }

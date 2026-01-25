@@ -4,6 +4,37 @@ import { useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
 import type { MaskVertex } from '../../types';
 
+// Throttle helper - limits function calls to once per interval
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function throttle<T extends (...args: any[]) => void>(fn: T, interval: number): T {
+  let lastCall = 0;
+  let pendingArgs: Parameters<T> | null = null;
+  let rafId: number | null = null;
+
+  const throttled = (...args: Parameters<T>) => {
+    const now = performance.now();
+    if (now - lastCall >= interval) {
+      lastCall = now;
+      fn(...args);
+    } else {
+      // Store args for trailing call
+      pendingArgs = args;
+      if (!rafId) {
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          if (pendingArgs) {
+            lastCall = performance.now();
+            fn(...pendingArgs);
+            pendingArgs = null;
+          }
+        });
+      }
+    }
+  };
+
+  return throttled as T;
+}
+
 // Shape drawing state
 interface ShapeDrawState {
   startX: number;
@@ -102,6 +133,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
     closeMask,
     addMask,
     setActiveMask,
+    setMaskDragging,
   } = useTimelineStore();
 
   // Get first selected clip for mask editing
@@ -172,6 +204,16 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
     startVertices: [],
   });
 
+  // Throttled update function to limit store updates during drag (16ms = ~60fps max)
+  const throttledUpdateVertex = useRef(
+    throttle(
+      (clipId: string, maskId: string, vertexId: string, updates: Partial<MaskVertex>) => {
+        updateVertex(clipId, maskId, vertexId, updates, true);
+      },
+      16
+    ) as (clipId: string, maskId: string, vertexId: string, updates: Partial<MaskVertex>) => void
+  ).current;
+
   // Convert mask vertices to canvas coordinates for rendering (including position offset)
   const canvasVertices = useMemo(() => {
     if (!activeMask) return [];
@@ -215,6 +257,9 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
 
     // Select vertex
     selectVertex(vertexId, false);
+
+    // Mark as dragging to prevent mask texture regeneration during drag
+    setMaskDragging(true);
 
     // Start drag - store all initial positions
     dragState.current = {
@@ -274,8 +319,8 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
           const normalizedShiftDx = shiftDx / canvasWidth;
           const scaleFactor = 1 + normalizedShiftDx * 5; // Multiply by 5 for sensitivity
 
-          // Scale both handles - keep vertex at position when shift was pressed
-          updateVertex(selectedClip.id, activeMask.id, dragState.current.vertexId, {
+          // Throttled update - max 60fps
+          throttledUpdateVertex(selectedClip.id, activeMask.id, dragState.current.vertexId, {
             x: dragState.current.shiftStartVertexX,
             y: dragState.current.shiftStartVertexY,
             handleIn: {
@@ -296,7 +341,8 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
 
           const newX = Math.max(0, Math.min(1, dragState.current.startVertexX + normalizedDx));
           const newY = Math.max(0, Math.min(1, dragState.current.startVertexY + normalizedDy));
-          updateVertex(selectedClip.id, activeMask.id, dragState.current.vertexId, {
+          // Throttled update - max 60fps
+          throttledUpdateVertex(selectedClip.id, activeMask.id, dragState.current.vertexId, {
             x: newX,
             y: newY,
           });
@@ -309,7 +355,8 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
         const normalizedDy = dy / canvasHeight;
 
         const handleKey = dragState.current.handleType;
-        updateVertex(selectedClip.id, activeMask.id, dragState.current.vertexId, {
+        // Throttled update - max 60fps
+        throttledUpdateVertex(selectedClip.id, activeMask.id, dragState.current.vertexId, {
           [handleKey]: {
             x: dragState.current.startHandleX + normalizedDx,
             y: dragState.current.startHandleY + normalizedDy,
@@ -339,11 +386,13 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       };
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      // Mark dragging as complete to trigger mask texture regeneration
+      setMaskDragging(false);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-  }, [activeMask, selectedClip, selectVertex, updateVertex, canvasWidth, canvasHeight]);
+  }, [activeMask, selectedClip, selectVertex, canvasWidth, canvasHeight, setMaskDragging, throttledUpdateVertex]);
 
   // Handle mask area drag (drag entire mask when clicking inside the mask fill)
   const handleMaskDragStart = useCallback((e: React.MouseEvent) => {
@@ -360,9 +409,19 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       startVertices: activeMask.vertices.map(v => ({ id: v.id, x: v.x, y: v.y })),
     };
 
+    // Mark as dragging to prevent mask texture regeneration during drag
+    setMaskDragging(true);
+
+    // Throttled mask move function
+    let lastMaskUpdate = 0;
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!maskDragState.current.isDragging) return;
       if (!selectedClip || !activeMask) return;
+
+      // Throttle to ~60fps (16ms)
+      const now = performance.now();
+      if (now - lastMaskUpdate < 16) return;
+      lastMaskUpdate = now;
 
       const svg = svgRef.current;
       if (!svg) return;
@@ -378,7 +437,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       const normalizedDx = dx / canvasWidth;
       const normalizedDy = dy / canvasHeight;
 
-      // Update all vertices at once
+      // Update all vertices at once (throttled)
       const { clips } = useTimelineStore.getState();
       const updatedClips = clips.map(c => {
         if (c.id !== selectedClip.id) return c;
@@ -413,11 +472,13 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
       };
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      // Mark dragging as complete to trigger mask texture regeneration
+      useTimelineStore.getState().setMaskDragging(false);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-  }, [activeMask, selectedClip, canvasWidth, canvasHeight]);
+  }, [activeMask, selectedClip, canvasWidth, canvasHeight, setMaskDragging]);
 
   // Handle clicking on SVG background (add vertex in drawing mode, deselect in editing mode)
   const handleSvgClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {

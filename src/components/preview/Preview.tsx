@@ -1,8 +1,11 @@
 // Preview canvas component with After Effects-style editing overlay
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { Logger } from '../../services/logger';
+
+const log = Logger.create('Preview');
 import { useEngine } from '../../hooks/useEngine';
-import { useMixerStore } from '../../stores/mixerStore';
+import { useEngineStore } from '../../stores/engineStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useDockStore } from '../../stores/dockStore';
@@ -206,8 +209,9 @@ function StatsOverlay({ stats, resolution, expanded, onToggle }: {
 
 export function Preview({ panelId, compositionId }: PreviewProps) {
   const { isEngineReady, registerPreviewCanvas, unregisterPreviewCanvas, registerIndependentPreviewCanvas, unregisterIndependentPreviewCanvas } = useEngine();
-  const { engineStats, outputResolution, layers, selectedLayerId, selectLayer } = useMixerStore();
-  const { clips, selectedClipIds, selectClip, updateClipTransform, maskEditMode } = useTimelineStore();
+  const { engineStats } = useEngineStore();
+  const { outputResolution } = useSettingsStore();
+  const { clips, selectedClipIds, selectClip, updateClipTransform, maskEditMode, layers, selectedLayerId, selectLayer } = useTimelineStore();
   const { compositions, activeCompositionId } = useMediaStore();
   const { addPreviewPanel, updatePanelData, closePanelById } = useDockStore();
   const { previewQuality, setPreviewQuality } = useSettingsStore();
@@ -254,19 +258,19 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
 
     // Clean up previous registration
     if (currentMode === 'main') {
-      console.log(`[Preview ${panelId}] Unregistering from main canvas map`);
+      log.debug(`[${panelId}] Unregistering from main canvas map`);
       unregisterPreviewCanvas(panelId);
     } else if (currentMode === 'independent') {
-      console.log(`[Preview ${panelId}] Unregistering from independent canvas map`);
+      log.debug(`[${panelId}] Unregistering from independent canvas map`);
       unregisterIndependentPreviewCanvas(panelId);
     }
 
     // Register with new mode
     if (targetMode === 'main') {
-      console.log(`[Preview ${panelId}] Registering with main canvas map (Active mode)`);
+      log.debug(`[${panelId}] Registering with main canvas map (Active mode)`);
       registerPreviewCanvas(panelId, canvasRef.current);
     } else {
-      console.log(`[Preview ${panelId}] Registering with independent canvas map (composition: ${compositionId})`);
+      log.debug(`[${panelId}] Registering with independent canvas map (composition: ${compositionId})`);
       registerIndependentPreviewCanvas(panelId, canvasRef.current, compositionId || undefined);
     }
 
@@ -292,7 +296,7 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
       return;
     }
 
-    console.log(`[Preview ${panelId}] Registering with PreviewRenderManager for composition: ${compositionId}`);
+    log.debug(`[${panelId}] Registering with PreviewRenderManager for composition: ${compositionId}`);
 
     // Register with the centralized render manager
     // It handles: preparation, single RAF loop, nested comp sync
@@ -300,7 +304,7 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
     setCompReady(true);
 
     return () => {
-      console.log(`[Preview ${panelId}] Unregistering from PreviewRenderManager`);
+      log.debug(`[${panelId}] Unregistering from PreviewRenderManager`);
       previewRenderManager.unregister(panelId);
     };
   }, [isIndependentComp, compositionId, isEngineReady, panelId]);
@@ -743,7 +747,7 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
     // Update current drag position for box visual feedback
     currentDragPos.current = { x: boxPosX, y: boxPosY };
 
-    console.log(`[Drag] mouse dx=${dx.toFixed(0)}, box=${boxPosX.toFixed(4)}, image=${imagePosX.toFixed(4)}`);
+    log.debug(`Drag: mouse dx=${dx.toFixed(0)}, box=${boxPosX.toFixed(4)}, image=${imagePosX.toFixed(4)}`);
 
     // Find the corresponding clip and update its transform
     const layer = layers.find(l => l?.id === dragLayerId);

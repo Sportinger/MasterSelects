@@ -386,6 +386,9 @@ export class CompositorPipeline {
   private uniformData = new Float32Array(this.uniformBuffer);
   private uniformDataU32 = new Uint32Array(this.uniformBuffer);
 
+  // Indices that use u32 values (for proper change detection)
+  private static readonly U32_INDICES = [1, 10, 11, 16]; // blendMode, hasMask, maskInvert, maskFeatherQuality
+
   // Per-layer uniform buffers
   private layerUniformBuffers: Map<string, GPUBuffer> = new Map();
 
@@ -393,8 +396,22 @@ export class CompositorPipeline {
   // Key format: "layerId:baseViewLabel:layerViewLabel:maskViewLabel"
   private bindGroupCache: Map<string, GPUBindGroup> = new Map();
 
+  // Frame-scoped cache for external texture bind groups (cleared each frame)
+  // Avoids creating duplicate bind groups for same video rendered to multiple outputs
+  private frameExternalBindGroupCache: Map<string, GPUBindGroup> = new Map();
+  private currentFrameId = 0;
+
+  // Uniform change detection - track last values per layer
+  private lastUniformValues: Map<string, { float: Float32Array; u32: Uint32Array }> = new Map();
+
   constructor(device: GPUDevice) {
     this.device = device;
+  }
+
+  // Call at start of each frame to clear ephemeral caches
+  beginFrame(): void {
+    this.currentFrameId++;
+    this.frameExternalBindGroupCache.clear();
   }
 
   async createPipelines(): Promise<void> {
@@ -520,7 +537,50 @@ export class CompositorPipeline {
     this.uniformData[17] = layer.position.z ?? 0;       // posZ (depth position)
     this.uniformData[18] = 0;           // _pad2
     this.uniformData[19] = 0;           // _pad3
-    this.device.queue.writeBuffer(uniformBuffer, 0, this.uniformData);
+
+    // Change detection - only write to GPU if values changed
+    const lastValuesEntry = this.lastUniformValues.get(layer.id);
+    let needsUpdate = true;
+
+    if (lastValuesEntry) {
+      needsUpdate = false;
+      const lastFloat = lastValuesEntry.float;
+      const lastU32 = lastValuesEntry.u32;
+
+      // Check float values
+      for (let i = 0; i < 20; i++) {
+        // Skip indices that are u32 - compare them separately
+        if (CompositorPipeline.U32_INDICES.includes(i)) continue;
+        if (Math.abs(this.uniformData[i] - lastFloat[i]) > 0.00001) {
+          needsUpdate = true;
+          break;
+        }
+      }
+
+      // Check u32 values (blendMode, hasMask, maskInvert, maskFeatherQuality)
+      if (!needsUpdate) {
+        for (const i of CompositorPipeline.U32_INDICES) {
+          if (this.uniformDataU32[i] !== lastU32[i]) {
+            needsUpdate = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (needsUpdate) {
+      this.device.queue.writeBuffer(uniformBuffer, 0, this.uniformData);
+      // Store copy of current values (both float and u32 views)
+      if (!lastValuesEntry) {
+        this.lastUniformValues.set(layer.id, {
+          float: new Float32Array(this.uniformData),
+          u32: new Uint32Array(this.uniformDataU32),
+        });
+      } else {
+        lastValuesEntry.float.set(this.uniformData);
+        lastValuesEntry.u32.set(this.uniformDataU32);
+      }
+    }
   }
 
   // Create bind group for regular textures (with caching for static images)
@@ -566,14 +626,37 @@ export class CompositorPipeline {
     });
   }
 
-  // Create bind group for external video textures
+  // Create bind group for external video textures (with frame-scoped caching)
   createExternalCompositeBindGroup(
     sampler: GPUSampler,
     baseView: GPUTextureView,
     externalTexture: GPUExternalTexture,
     uniformBuffer: GPUBuffer,
-    maskTextureView: GPUTextureView
+    maskTextureView: GPUTextureView,
+    layerId?: string,
+    isPingBase?: boolean
   ): GPUBindGroup {
+    // Frame-scoped cache key - external textures are ephemeral but we can reuse
+    // within a frame if same video is rendered to multiple outputs
+    if (layerId !== undefined && isPingBase !== undefined) {
+      const cacheKey = `ext:${layerId}:${isPingBase ? 'ping' : 'pong'}`;
+      let bindGroup = this.frameExternalBindGroupCache.get(cacheKey);
+      if (!bindGroup) {
+        bindGroup = this.device.createBindGroup({
+          layout: this.externalCompositeBindGroupLayout!,
+          entries: [
+            { binding: 0, resource: sampler },
+            { binding: 1, resource: baseView },
+            { binding: 2, resource: externalTexture },
+            { binding: 3, resource: { buffer: uniformBuffer } },
+            { binding: 4, resource: maskTextureView },
+          ],
+        });
+        this.frameExternalBindGroupCache.set(cacheKey, bindGroup);
+      }
+      return bindGroup;
+    }
+
     return this.device.createBindGroup({
       layout: this.externalCompositeBindGroupLayout!,
       entries: [
@@ -607,7 +690,9 @@ export class CompositorPipeline {
     }
     this.layerUniformBuffers.clear();
 
-    // Clear bind group cache
+    // Clear bind group caches
     this.bindGroupCache.clear();
+    this.frameExternalBindGroupCache.clear();
+    this.lastUniformValues.clear();
   }
 }

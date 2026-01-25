@@ -2,13 +2,16 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { engine } from '../engine/WebGPUEngine';
-import { useMixerStore } from '../stores/mixerStore';
+import { useEngineStore } from '../stores/engineStore';
 import { useTimelineStore } from '../stores/timeline';
 import { useMediaStore } from '../stores/mediaStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import type { ClipMask, MaskVertex } from '../types';
 import { generateMaskTexture } from '../utils/maskRenderer';
 import { layerBuilder, playheadState } from '../services/layerBuilder';
+import { Logger } from '../services/logger';
+
+const log = Logger.create('Engine');
 
 // Create a stable hash of mask properties (including feather since blur is CPU-side now)
 // This is faster than JSON.stringify for comparison
@@ -22,8 +25,8 @@ function getMaskShapeHash(masks: ClipMask[]): string {
 
 export function useEngine() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const isEngineReady = useMixerStore((state) => state.isEngineReady);
-  const isPlaying = useMixerStore((state) => state.isPlaying);
+  const isEngineReady = useEngineStore((state) => state.isEngineReady);
+  const isPlaying = useTimelineStore((state) => state.isPlaying);
   const initRef = useRef(false);
 
   // Initialize engine - only once
@@ -33,9 +36,11 @@ export function useEngine() {
 
     async function init() {
       const success = await engine.initialize();
-      useMixerStore.getState().setEngineReady(success);
+      useEngineStore.getState().setEngineReady(success);
       if (success) {
-        useMixerStore.getState().setPlaying(true);
+        // Get and store GPU info
+        const gpuInfo = engine.getGPUInfo();
+        useEngineStore.getState().setGpuInfo(gpuInfo);
       }
     }
 
@@ -58,22 +63,21 @@ export function useEngine() {
     if (!isEngineReady) return;
 
     const updateResolution = () => {
-      const { outputResolution } = useMixerStore.getState();
-      const { previewQuality } = useSettingsStore.getState();
+      const { outputResolution, previewQuality } = useSettingsStore.getState();
 
       // Apply preview quality scaling to base resolution
       const scaledWidth = Math.round(outputResolution.width * previewQuality);
       const scaledHeight = Math.round(outputResolution.height * previewQuality);
 
       engine.setResolution(scaledWidth, scaledHeight);
-      console.log(`[Engine] Resolution set to ${scaledWidth}×${scaledHeight} (${previewQuality * 100}% of ${outputResolution.width}×${outputResolution.height})`);
+      log.info(`Resolution set to ${scaledWidth}×${scaledHeight} (${previewQuality * 100}% of ${outputResolution.width}×${outputResolution.height})`);
     };
 
     // Initial update
     updateResolution();
 
     // Subscribe to outputResolution changes
-    const unsubscribeMixer = useMixerStore.subscribe(
+    const unsubscribeResolution = useSettingsStore.subscribe(
       (state) => state.outputResolution,
       () => updateResolution()
     );
@@ -96,7 +100,7 @@ export function useEngine() {
     );
 
     return () => {
-      unsubscribeMixer();
+      unsubscribeResolution();
       unsubscribeSettings();
       unsubscribeTransparency();
     };
@@ -125,10 +129,10 @@ export function useEngine() {
         );
 
         if (maskImageData) {
-          console.log(`[Mask] Generated mask texture for clip ${clip.id}: ${engineDimensions.width}x${engineDimensions.height}, masks: ${clip.masks.length}`);
+          log.debug(`Generated mask texture for clip ${clip.id}: ${engineDimensions.width}x${engineDimensions.height}, masks: ${clip.masks.length}`);
           engine.updateMaskTexture(clip.id, maskImageData);
         } else {
-          console.warn(`[Mask] Failed to generate mask texture for clip ${clip.id}`);
+          log.warn(`Failed to generate mask texture for clip ${clip.id}`);
         }
       }
     } else if (clip.id) {
@@ -141,10 +145,23 @@ export function useEngine() {
     }
   }, []);
 
+  // Throttle mask texture updates during drag (100ms = 10fps for GPU texture)
+  const lastMaskTextureUpdate = useRef(0);
+  const MASK_TEXTURE_THROTTLE_MS = 100; // Update GPU texture max 10fps during drag
+
   // Helper function to update mask textures - extracted to avoid duplication
   const updateMaskTextures = useCallback(() => {
-    const { clips, playheadPosition, tracks } = useTimelineStore.getState();
-    const layers = useMixerStore.getState().layers;
+    const { clips, playheadPosition, tracks, maskDragging } = useTimelineStore.getState();
+
+    // Throttle texture regeneration during drag (expensive CPU operation)
+    if (maskDragging) {
+      const now = performance.now();
+      if (now - lastMaskTextureUpdate.current < MASK_TEXTURE_THROTTLE_MS) {
+        return; // Skip this update, too soon
+      }
+      lastMaskTextureUpdate.current = now;
+    }
+    const layers = useTimelineStore.getState().layers;
 
     // Get engine output dimensions (the actual render resolution)
     const engineDimensions = engine.getOutputDimensions();
@@ -216,10 +233,26 @@ export function useEngine() {
       }
     );
 
+    // Subscribe to maskDragging changes
+    // When drag ends (maskDragging: true -> false), regenerate mask textures
+    let wasDragging = false;
+    const unsubscribeDragging = useTimelineStore.subscribe(
+      (state) => state.maskDragging,
+      (maskDragging) => {
+        if (wasDragging && !maskDragging) {
+          // Drag just ended - force texture regeneration by clearing version cache
+          maskVersionRef.current.clear();
+          updateMaskTextures();
+        }
+        wasDragging = maskDragging;
+      }
+    );
+
     return () => {
       unsubscribeClips();
       unsubscribeTracks();
       unsubscribeComp();
+      unsubscribeDragging();
     };
   }, [isEngineReady, updateMaskTextures]);
 
@@ -236,7 +269,7 @@ export function useEngine() {
         // Always update stats (even when idle) so UI shows correct status
         const now = performance.now();
         if (now - lastStatsUpdate > 100) {
-          useMixerStore.getState().setEngineStats(engine.getStats());
+          useEngineStore.getState().setEngineStats(engine.getStats());
           lastStatsUpdate = now;
         }
 
@@ -278,6 +311,15 @@ export function useEngine() {
         // Render layers (layerBuilder already handles mask properties)
         engine.render(layers);
 
+        // Cache rendered frame for instant scrubbing (like Premiere's playback caching)
+        // Only cache if RAM preview is enabled and we're playing (not generating RAM preview)
+        const { ramPreviewEnabled, addCachedFrame } = useTimelineStore.getState();
+        if (ramPreviewEnabled && isPlaying) {
+          engine.cacheCompositeFrame(currentPlayhead).then(() => {
+            addCachedFrame(currentPlayhead);
+          });
+        }
+
         // Cache active comp output for parent preview texture sharing
         // This allows parent compositions to show the active comp without video conflicts
         const activeCompId = useMediaStore.getState().activeCompositionId;
@@ -285,7 +327,7 @@ export function useEngine() {
           engine.cacheActiveCompOutput(activeCompId);
         }
       } catch (e) {
-        console.error('Render error:', e);
+        log.error('Render error', e);
       }
     };
 
@@ -322,14 +364,14 @@ export function useEngine() {
       () => engine.requestRender()
     );
 
-    // Layer changes in mixer store
-    const unsubLayers = useMixerStore.subscribe(
+    // Layer changes in timeline store
+    const unsubLayers = useTimelineStore.subscribe(
       (state) => state.layers,
       () => engine.requestRender()
     );
 
     // Output resolution changes
-    const unsubResolution = useMixerStore.subscribe(
+    const unsubResolution = useSettingsStore.subscribe(
       (state) => state.outputResolution,
       () => engine.requestRender()
     );

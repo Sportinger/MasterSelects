@@ -4,6 +4,11 @@ import type { PlaybackActions, RamPreviewActions, SliceCreator } from './types';
 import type { Layer } from '../../types';
 import { RAM_PREVIEW_FPS, FRAME_TOLERANCE, MIN_ZOOM, MAX_ZOOM } from './constants';
 import { quantizeTime } from './utils';
+import { Logger } from '../../services/logger';
+import { engine } from '../../engine/WebGPUEngine';
+import { layerBuilder } from '../../services/layerBuilder';
+
+const log = Logger.create('PlaybackSlice');
 
 // Combined playback and RAM preview actions
 export type PlaybackAndRamPreviewActions = PlaybackActions & RamPreviewActions;
@@ -206,7 +211,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
     // Don't start if RAM Preview is disabled or already running
     if (!ramPreviewEnabled || isRamPreviewing) return;
 
-    console.log('[RAM Preview] Starting generation...');
+    log.debug('RAM Preview starting generation');
 
     // Determine range to preview (use In/Out or clips extent)
     const start = inPoint ?? 0;
@@ -376,31 +381,37 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
               continue; // Skip this clip if seek failed or cancelled
             }
 
-            // Add to layers
+            // Add to layers (with defensive defaults for transform properties)
+            const pos = clip.transform?.position ?? { x: 0, y: 0, z: 0 };
+            const scl = clip.transform?.scale ?? { x: 1, y: 1 };
+            const rot = clip.transform?.rotation ?? { x: 0, y: 0, z: 0 };
             layers.push({
               id: clip.id,
               name: clip.name,
               visible: true,
-              opacity: clip.transform.opacity,
-              blendMode: clip.transform.blendMode,
+              opacity: clip.transform?.opacity ?? 1,
+              blendMode: clip.transform?.blendMode ?? 'normal',
               source: { type: 'video', videoElement: video },
               effects: [],
-              position: { x: clip.transform.position.x, y: clip.transform.position.y, z: clip.transform.position.z },
-              scale: { x: clip.transform.scale.x, y: clip.transform.scale.y },
-              rotation: { x: clip.transform.rotation.x * (Math.PI / 180), y: clip.transform.rotation.y * (Math.PI / 180), z: clip.transform.rotation.z * (Math.PI / 180) },
+              position: { x: pos.x, y: pos.y, z: pos.z },
+              scale: { x: scl.x, y: scl.y },
+              rotation: { x: rot.x * (Math.PI / 180), y: rot.y * (Math.PI / 180), z: rot.z * (Math.PI / 180) },
             });
           } else if (clip.source?.type === 'image' && clip.source.imageElement) {
+            const imgPos = clip.transform?.position ?? { x: 0, y: 0, z: 0 };
+            const imgScl = clip.transform?.scale ?? { x: 1, y: 1 };
+            const imgRot = clip.transform?.rotation ?? { x: 0, y: 0, z: 0 };
             layers.push({
               id: clip.id,
               name: clip.name,
               visible: true,
-              opacity: clip.transform.opacity,
-              blendMode: clip.transform.blendMode,
+              opacity: clip.transform?.opacity ?? 1,
+              blendMode: clip.transform?.blendMode ?? 'normal',
               source: { type: 'image', imageElement: clip.source.imageElement },
               effects: [],
-              position: { x: clip.transform.position.x, y: clip.transform.position.y, z: clip.transform.position.z },
-              scale: { x: clip.transform.scale.x, y: clip.transform.scale.y },
-              rotation: { x: clip.transform.rotation.x * (Math.PI / 180), y: clip.transform.rotation.y * (Math.PI / 180), z: clip.transform.rotation.z * (Math.PI / 180) },
+              position: { x: imgPos.x, y: imgPos.y, z: imgPos.z },
+              scale: { x: imgScl.x, y: imgScl.y },
+              rotation: { x: imgRot.x * (Math.PI / 180), y: imgRot.y * (Math.PI / 180), z: imgRot.z * (Math.PI / 180) },
             });
           }
         }
@@ -465,12 +476,12 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
           ramPreviewRange: { start, end },
           ramPreviewProgress: null
         });
-        console.log(`[RAM Preview] Complete: ${totalFrames} frames cached (${start.toFixed(1)}s - ${end.toFixed(1)}s)`);
+        log.debug('RAM Preview complete', { totalFrames, start: start.toFixed(1), end: end.toFixed(1) });
       } else {
-        console.log('[RAM Preview] Cancelled');
+        log.debug('RAM Preview cancelled');
       }
     } catch (error) {
-      console.error('[RAM Preview] Error:', error);
+      log.error('RAM Preview error', error);
     } finally {
       engine.setGeneratingRamPreview(false);
       set({ isRamPreviewing: false, ramPreviewProgress: null });
@@ -538,14 +549,12 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
   // Invalidate cache when content changes (clip moved, trimmed, etc.)
   invalidateCache: () => {
     // Cancel any ongoing RAM preview
-    set({ isRamPreviewing: false });
-    // Then async cleanup the engine
-    import('../../engine/WebGPUEngine').then(({ engine }) => {
-      engine.setGeneratingRamPreview(false);
-      engine.clearCompositeCache();
-    });
-    // Clear cached frame times
-    set({ cachedFrameTimes: new Set(), ramPreviewRange: null, ramPreviewProgress: null });
+    set({ isRamPreviewing: false, cachedFrameTimes: new Set(), ramPreviewRange: null, ramPreviewProgress: null });
+    // Immediately clear all caches and request render
+    layerBuilder.invalidateCache(); // Force layer rebuild
+    engine.setGeneratingRamPreview(false);
+    engine.clearCompositeCache();
+    engine.requestRender(); // Wake up render loop to show changes immediately
   },
 
   // Performance toggles
@@ -555,5 +564,15 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
 
   toggleWaveformsEnabled: () => {
     set({ waveformsEnabled: !get().waveformsEnabled });
+  },
+
+  // Tool mode actions
+  setToolMode: (mode) => {
+    set({ toolMode: mode });
+  },
+
+  toggleCutTool: () => {
+    const { toolMode } = get();
+    set({ toolMode: toolMode === 'cut' ? 'select' : 'cut' });
   },
 });

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Parallel Decode Test</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #0f0; }
+    #log { white-space: pre-wrap; font-size: 12px; }
+    .error { color: #f00; }
+    .success { color: #0f0; }
+    .info { color: #0af; }
+    button { margin: 10px 5px 10px 0; padding: 10px 20px; }
+    #videos { display: flex; gap: 10px; margin: 20px 0; }
+    video { width: 200px; height: 120px; background: #333; }
+  </style>
+</head>
+<body>
+  <h2>Parallel Decode Export Test</h2>
+  <div>
+    <input type="file" id="fileInput" multiple accept="video/*">
+    <button onclick="runTest()">Run Export Test</button>
+    <button onclick="clearLog()">Clear Log</button>
+  </div>
+  <div id="videos"></div>
+  <div id="log"></div>
+
+  <script type="module">
+    // Import the parallel decoder
+    import { ParallelDecodeManager } from '../src/engine/ParallelDecodeManager.ts';
+
+    const log = (msg, type = '') => {
+      const el = document.getElementById('log');
+      const line = document.createElement('div');
+      line.className = type;
+      line.textContent = `[${new Date().toISOString().substr(11, 12)}] ${msg}`;
+      el.appendChild(line);
+      el.scrollTop = el.scrollHeight;
+      console.log(msg);
+    };
+
+    window.clearLog = () => document.getElementById('log').innerHTML = '';
+
+    const loadedFiles = [];
+
+    document.getElementById('fileInput').addEventListener('change', async (e) => {
+      loadedFiles.length = 0;
+      document.getElementById('videos').innerHTML = '';
+
+      for (const file of e.target.files) {
+        log(`Loading: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'info');
+
+        const arrayBuffer = await file.arrayBuffer();
+        const blob = new Blob([arrayBuffer], { type: file.type });
+        const url = URL.createObjectURL(blob);
+
+        const video = document.createElement('video');
+        video.src = url;
+        video.muted = true;
+        video.controls = true;
+        document.getElementById('videos').appendChild(video);
+
+        await new Promise(r => video.onloadedmetadata = r);
+
+        loadedFiles.push({
+          name: file.name,
+          arrayBuffer,
+          video,
+          duration: video.duration
+        });
+
+        log(`Loaded: ${file.name} - ${video.videoWidth}x${video.videoHeight}, ${video.duration.toFixed(2)}s`, 'success');
+      }
+    });
+
+    window.runTest = async () => {
+      if (loadedFiles.length === 0) {
+        log('Please load video files first!', 'error');
+        return;
+      }
+
+      log('=== Starting Parallel Decode Test ===', 'info');
+
+      try {
+        const decoder = new ParallelDecodeManager();
+
+        // Create clip infos
+        const clipInfos = loadedFiles.map((file, i) => ({
+          clipId: `clip-${i}`,
+          clipName: file.name,
+          fileData: file.arrayBuffer,
+          startTime: i * 2, // Stagger clips by 2 seconds
+          duration: Math.min(file.duration, 5), // Use 5 seconds max
+          inPoint: 0,
+          outPoint: Math.min(file.duration, 5),
+          reversed: false
+        }));
+
+        log(`Initializing ${clipInfos.length} clips...`, 'info');
+        const initStart = performance.now();
+        await decoder.initialize(clipInfos, 30);
+        log(`Initialized in ${(performance.now() - initStart).toFixed(0)}ms`, 'success');
+
+        // Test export simulation
+        const fps = 30;
+        const totalDuration = Math.max(...clipInfos.map(c => c.startTime + c.duration));
+        const totalFrames = Math.ceil(totalDuration * fps);
+
+        log(`Simulating export: ${totalFrames} frames at ${fps}fps, ${totalDuration.toFixed(2)}s duration`, 'info');
+
+        const exportStart = performance.now();
+        let framesDecoded = 0;
+        let framesMissing = 0;
+
+        for (let frame = 0; frame < totalFrames; frame++) {
+          const time = frame / fps;
+
+          // Prefetch
+          await decoder.prefetchFramesForTime(time);
+
+          // Get frames for each clip
+          for (const clipInfo of clipInfos) {
+            if (time >= clipInfo.startTime && time < clipInfo.startTime + clipInfo.duration) {
+              const videoFrame = decoder.getFrameForClip(clipInfo.clipId, time);
+              if (videoFrame) {
+                framesDecoded++;
+              } else {
+                framesMissing++;
+                if (framesMissing <= 5) {
+                  log(`Frame missing: ${clipInfo.clipName} at ${time.toFixed(3)}s`, 'error');
+                }
+              }
+            }
+          }
+
+          // Advance
+          decoder.advanceToTime(time);
+
+          // Progress every 30 frames
+          if (frame % 30 === 0 || frame === totalFrames - 1) {
+            const elapsed = performance.now() - exportStart;
+            const exportFps = (frame + 1) / (elapsed / 1000);
+            log(`Frame ${frame + 1}/${totalFrames} (${((frame + 1) / totalFrames * 100).toFixed(0)}%) - ${exportFps.toFixed(1)} fps`, 'info');
+          }
+        }
+
+        const totalTime = performance.now() - exportStart;
+        const avgFps = totalFrames / (totalTime / 1000);
+
+        log('=== Export Test Complete ===', 'success');
+        log(`Total time: ${(totalTime / 1000).toFixed(2)}s`, 'info');
+        log(`Average FPS: ${avgFps.toFixed(1)}`, avgFps > 20 ? 'success' : 'error');
+        log(`Frames decoded: ${framesDecoded}`, 'info');
+        log(`Frames missing: ${framesMissing}`, framesMissing === 0 ? 'success' : 'error');
+
+        decoder.cleanup();
+        log('Cleanup complete', 'success');
+
+      } catch (e) {
+        log(`ERROR: ${e.message}`, 'error');
+        log(e.stack, 'error');
+      }
+    };
+  </script>
+</body>
+</html>

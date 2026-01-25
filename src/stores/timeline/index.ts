@@ -7,7 +7,6 @@ import type { TimelineStore, TimelineUtils, TimelineClip, Keyframe, CompositionT
 import type { SerializableClip } from '../../types';
 import { DEFAULT_TRACKS, SNAP_THRESHOLD_SECONDS, OVERLAP_RESISTANCE_PIXELS } from './constants';
 import { useMediaStore } from '../mediaStore';
-import { useMixerStore } from '../mixerStore';
 
 import { createTrackSlice } from './trackSlice';
 import { createClipSlice } from './clipSlice';
@@ -15,8 +14,12 @@ import { createPlaybackSlice } from './playbackSlice';
 import { createSelectionSlice } from './selectionSlice';
 import { createKeyframeSlice } from './keyframeSlice';
 import { createMaskSlice } from './maskSlice';
+import { createMarkerSlice } from './markerSlice';
 import { projectFileService } from '../../services/projectFileService';
 import type { ClipAnalysis, FrameAnalysisData } from '../../types';
+import { Logger } from '../../services/logger';
+
+const log = Logger.create('Timeline');
 
 // Re-export types for convenience
 export type { TimelineStore, TimelineClip, Keyframe } from './types';
@@ -32,6 +35,7 @@ export const useTimelineStore = create<TimelineStore>()(
     const selectionActions = createSelectionSlice(set, get);
     const keyframeActions = createKeyframeSlice(set, get);
     const maskActions = createMaskSlice(set, get);
+    const markerActions = createMarkerSlice(set, get);
 
     // Utils that need to be defined inline due to cross-dependencies
     const utils: TimelineUtils = {
@@ -76,7 +80,7 @@ export const useTimelineStore = create<TimelineStore>()(
         addTrack('audio');
         const { tracks: updatedTracks } = get();
         const newTrack = updatedTracks[updatedTracks.length - 1];
-        console.log('[Timeline] Created new audio track:', newTrack.name);
+        log.debug('Created new audio track', { name: newTrack.name });
         return newTrack.id;
       },
 
@@ -368,7 +372,7 @@ export const useTimelineStore = create<TimelineStore>()(
 
       // Get serializable timeline state for saving to composition
       getSerializableState: (): CompositionTimelineData => {
-        const { tracks, clips, playheadPosition, duration, durationLocked, zoom, scrollX, inPoint, outPoint, loopPlayback, clipKeyframes } = get();
+        const { tracks, clips, playheadPosition, duration, durationLocked, zoom, scrollX, inPoint, outPoint, loopPlayback, clipKeyframes, markers } = get();
 
         // Convert clips to serializable format (without DOM elements)
         const mediaStore = useMediaStore.getState();
@@ -431,6 +435,7 @@ export const useTimelineStore = create<TimelineStore>()(
           inPoint,
           outPoint,
           loopPlayback,
+          markers: markers.length > 0 ? markers : undefined,  // Only save if there are markers
         };
       },
 
@@ -458,6 +463,7 @@ export const useTimelineStore = create<TimelineStore>()(
             outPoint: null,
             loopPlayback: false,
             selectedClipIds: new Set(),
+            markers: [],
           });
           return;
         }
@@ -482,6 +488,8 @@ export const useTimelineStore = create<TimelineStore>()(
           expandedTrackPropertyGroups: new Map<string, Set<string>>(),
           selectedKeyframeIds: new Set<string>(),
           expandedCurveProperties: new Map<string, Set<import('../../types').AnimatableProperty>>(),
+          // Restore markers
+          markers: data.markers || [],
         });
 
         // Restore keyframes from serialized clips
@@ -537,7 +545,7 @@ export const useTimelineStore = create<TimelineStore>()(
                 // Regenerate audio mixdown in background
                 import('../../services/compositionAudioMixer').then(async ({ compositionAudioMixer }) => {
                   try {
-                    console.log(`[loadState] Regenerating audio mixdown for ${composition.name}...`);
+                    log.debug('Regenerating audio mixdown', { composition: composition.name });
                     const mixdownResult = await compositionAudioMixer.mixdownComposition(composition.id);
 
                     if (mixdownResult && mixdownResult.hasAudio) {
@@ -561,7 +569,7 @@ export const useTimelineStore = create<TimelineStore>()(
                             : c
                         ),
                       }));
-                      console.log(`[loadState] Audio mixdown restored for ${composition.name}`);
+                      log.debug('Audio mixdown restored', { composition: composition.name });
                     } else {
                       // No audio - generate flat waveform
                       const flatWaveform = new Array(Math.max(1, Math.floor(serializedClip.duration * 50))).fill(0);
@@ -574,7 +582,7 @@ export const useTimelineStore = create<TimelineStore>()(
                       }));
                     }
                   } catch (e) {
-                    console.error('[loadState] Failed to regenerate audio mixdown:', e);
+                    log.error('Failed to regenerate audio mixdown', e);
                   }
                 });
 
@@ -667,18 +675,18 @@ export const useTimelineStore = create<TimelineStore>()(
                       if (hasWebCodecs) {
                         try {
                           const { WebCodecsPlayer } = await import('../../engine/WebCodecsPlayer');
-                          console.log(`[Nested Comp Load] Initializing WebCodecsPlayer for ${nestedFileRef.name}...`);
+                          log.debug('Initializing WebCodecsPlayer for nested comp', { file: nestedFileRef.name });
 
                           const webCodecsPlayer = new WebCodecsPlayer({
                             loop: false,
                             useSimpleMode: true,
                             onError: (error) => {
-                              console.warn('[Nested Comp Load] WebCodecs error:', error.message);
+                              log.warn('WebCodecs error in nested comp', { error: error.message });
                             },
                           });
 
                           webCodecsPlayer.attachToVideoElement(video);
-                          console.log(`[Nested Comp Load] WebCodecsPlayer ready for ${nestedFileRef.name}`);
+                          log.debug('WebCodecsPlayer ready for nested comp', { file: nestedFileRef.name });
 
                           // Update nested clip source with webCodecsPlayer
                           nestedClip.source = {
@@ -686,7 +694,7 @@ export const useTimelineStore = create<TimelineStore>()(
                             webCodecsPlayer,
                           };
                         } catch (err) {
-                          console.warn('[Nested Comp Load] WebCodecsPlayer init failed:', err);
+                          log.warn('WebCodecsPlayer init failed in nested comp', err);
                         }
                       }
 
@@ -726,7 +734,7 @@ export const useTimelineStore = create<TimelineStore>()(
                 }));
               }
             } else {
-              console.warn('Could not find composition for clip:', serializedClip.name);
+              log.warn('Could not find composition for clip', { clip: serializedClip.name });
             }
             continue;
           }
@@ -771,22 +779,21 @@ export const useTimelineStore = create<TimelineStore>()(
               clips: [...state.clips, textClip],
             }));
 
-            console.log(`[loadState] Restored text clip: ${serializedClip.name}`);
+            log.debug('Restored text clip', { clip: serializedClip.name });
             continue;
           }
 
           // Regular media clips
           const mediaFile = mediaStore.files.find(f => f.id === serializedClip.mediaFileId);
           if (!mediaFile) {
-            console.warn('Media file not found for clip:', serializedClip.name,
-              '| mediaFileId:', serializedClip.mediaFileId);
+            log.warn('Media file not found for clip', { clip: serializedClip.name, mediaFileId: serializedClip.mediaFileId });
             continue;
           }
 
           // Create the clip - even if file is missing (needs reload after refresh)
           const needsReload = !mediaFile.file;
           if (needsReload) {
-            console.log('[loadState] Clip needs reload (file permission required):', serializedClip.name);
+            log.debug('Clip needs reload (file permission required)', { clip: serializedClip.name });
           }
 
           // Create placeholder file if missing
@@ -839,7 +846,7 @@ export const useTimelineStore = create<TimelineStore>()(
               serializedClip.outPoint
             ).then(cachedAnalysis => {
               if (cachedAnalysis) {
-                console.log('[Timeline] Loaded analysis from project folder for:', serializedClip.name);
+                log.debug('Loaded analysis from project folder', { clip: serializedClip.name });
                 const analysis: ClipAnalysis = {
                   frames: cachedAnalysis.frames as FrameAnalysisData[],
                   sampleInterval: cachedAnalysis.sampleInterval,
@@ -853,13 +860,13 @@ export const useTimelineStore = create<TimelineStore>()(
                 }));
               }
             }).catch(err => {
-              console.warn('[Timeline] Failed to load analysis from project folder:', err);
+              log.warn('Failed to load analysis from project folder', err);
             });
           }
 
           // Skip media loading if file needs reload (no valid File object)
           if (needsReload) {
-            console.log('[loadState] Skipping media load for clip that needs reload:', clip.name);
+            log.debug('Skipping media load for clip that needs reload', { clip: clip.name });
             continue;
           }
 
@@ -899,19 +906,19 @@ export const useTimelineStore = create<TimelineStore>()(
               if (hasWebCodecs) {
                 try {
                   const { WebCodecsPlayer } = await import('../../engine/WebCodecsPlayer');
-                  console.log(`[Timeline] Initializing WebCodecsPlayer for restored clip ${clip.name}...`);
+                  log.debug('Initializing WebCodecsPlayer for restored clip', { clip: clip.name });
 
                   const webCodecsPlayer = new WebCodecsPlayer({
                     loop: false,
                     useSimpleMode: true, // Use VideoFrame from HTMLVideoElement (more compatible)
                     onError: (error) => {
-                      console.warn('[Timeline] WebCodecs error:', error.message);
+                      log.warn('WebCodecs error', { error: error.message });
                     },
                   });
 
                   // Attach to existing video element
                   webCodecsPlayer.attachToVideoElement(video);
-                  console.log(`[Timeline] WebCodecsPlayer ready for restored clip ${clip.name}`);
+                  log.debug('WebCodecsPlayer ready for restored clip', { clip: clip.name });
 
                   // Update clip source with webCodecsPlayer
                   set(state => ({
@@ -928,7 +935,7 @@ export const useTimelineStore = create<TimelineStore>()(
                     ),
                   }));
                 } catch (err) {
-                  console.warn('[Timeline] WebCodecsPlayer init failed for restored clip, using HTMLVideoElement:', err);
+                  log.warn('WebCodecsPlayer init failed for restored clip, using HTMLVideoElement', err);
                 }
               }
             }, { once: true });
@@ -999,8 +1006,8 @@ export const useTimelineStore = create<TimelineStore>()(
           }
         });
 
-        // Clear mixer store layers so preview shows black
-        useMixerStore.setState({ layers: [] });
+        // Clear layers so preview shows black
+        set({ layers: [] });
 
         const { tracks } = get();
         set({
@@ -1034,6 +1041,10 @@ export const useTimelineStore = create<TimelineStore>()(
       isPlaying: false,
       isDraggingPlayhead: false,
       selectedClipIds: new Set<string>(),
+
+      // Render layers (populated by useLayerSync, used by engine)
+      layers: [] as import('../../types').Layer[],
+      selectedLayerId: null as string | null,
 
       // In/Out markers
       inPoint: null as number | null,
@@ -1073,6 +1084,29 @@ export const useTimelineStore = create<TimelineStore>()(
       activeMaskId: null as string | null,
       selectedVertexIds: new Set<string>(),
       maskDrawStart: null as { x: number; y: number } | null,
+      maskDragging: false,
+
+      // Tool mode
+      toolMode: 'select' as const,
+
+      // Timeline markers
+      markers: [] as import('./types').TimelineMarker[],
+    };
+
+    // Layer actions (render layers for engine, moved from mixerStore)
+    const layerActions = {
+      setLayers: (layers: import('../../types').Layer[]) => {
+        set({ layers });
+      },
+      updateLayer: (id: string, updates: Partial<import('../../types').Layer>) => {
+        const { layers } = get();
+        set({
+          layers: layers.map((l) => (l?.id === id ? { ...l, ...updates } : l)),
+        });
+      },
+      selectLayer: (id: string | null) => {
+        set({ selectedLayerId: id });
+      },
     };
 
     // Export actions (inline since they're simple)
@@ -1096,7 +1130,9 @@ export const useTimelineStore = create<TimelineStore>()(
       ...exportActions,
       ...selectionActions,
       ...keyframeActions,
+      ...layerActions,
       ...maskActions,
+      ...markerActions,
       ...utils,
     };
   })

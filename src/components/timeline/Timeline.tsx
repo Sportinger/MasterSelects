@@ -5,7 +5,6 @@ import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
 import type { AnimatableProperty, TimelineClip as TimelineClipType } from '../../types';
 import { useMediaStore } from '../../stores/mediaStore';
-import { playheadState } from '../../services/layerBuilder';
 
 import { TimelineRuler } from './TimelineRuler';
 import { TimelineControls } from './TimelineControls';
@@ -26,17 +25,15 @@ import { useMarqueeSelection } from './hooks/useMarqueeSelection';
 import { useClipTrim } from './hooks/useClipTrim';
 import { useClipDrag } from './hooks/useClipDrag';
 import { useLayerSync } from './hooks/useLayerSync';
-import {
-  RAM_PREVIEW_IDLE_DELAY,
-  PROXY_IDLE_DELAY,
-  DURATION_CHECK_TIMEOUT,
-} from './constants';
+import { usePlaybackLoop } from './hooks/usePlaybackLoop';
+import { useVideoPreload } from './hooks/useVideoPreload';
+import { useAutoFeatures } from './hooks/useAutoFeatures';
+import { useExternalDrop } from './hooks/useExternalDrop';
+import { usePickWhipDrag } from './hooks/usePickWhipDrag';
+import { useTimelineHelpers } from './hooks/useTimelineHelpers';
+import { usePlayheadSnap } from './hooks/usePlayheadSnap';
 import { MIN_ZOOM, MAX_ZOOM } from '../../stores/timeline/constants';
-import type {
-  ExternalDragState,
-  ContextMenuState,
-  PickWhipDragState,
-} from './types';
+import type { ContextMenuState } from './types';
 
 export function Timeline() {
   const {
@@ -123,6 +120,14 @@ export function Timeline() {
     getSourceTimeForClip,
     getInterpolatedSpeed,
     addTextClip,
+    toolMode,
+    toggleCutTool,
+    splitClip,
+    // Markers
+    markers,
+    addMarker,
+    moveMarker,
+    removeMarker,
   } = useTimelineStore();
 
   const {
@@ -134,8 +139,6 @@ export function Timeline() {
     files: mediaFiles,
     currentlyGeneratingProxyId,
     showInExplorer,
-    getNextFileNeedingProxy,
-    generateProxy,
   } = useMediaStore();
   const activeComposition = getActiveComposition() ?? null;
   const openCompositions = getOpenCompositions();
@@ -146,25 +149,30 @@ export function Timeline() {
   const scrollWrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
+  // Cut tool hover state (shared across linked clips)
+  const [cutHoverInfo, setCutHoverInfo] = useState<{ clipId: string; time: number } | null>(null);
+  const handleCutHover = useCallback((clipId: string | null, time: number | null) => {
+    if (clipId && time !== null) {
+      setCutHoverInfo({ clipId, time });
+    } else {
+      setCutHoverInfo(null);
+    }
+  }, []);
+
   // Performance: Create lookup maps for O(1) clip/track access (must be before hooks that use them)
   const clipMap = useMemo(() => new Map(clips.map(c => [c.id, c])), [clips]);
   const trackMap = useMemo(() => new Map(tracks.map(t => [t.id, t])), [tracks]);
 
-  // Time conversion helpers (must be before hooks that use them)
-  const timeToPixel = useCallback((time: number) => time * zoom, [zoom]);
-  const pixelToTime = useCallback((pixel: number) => pixel / zoom, [zoom]);
-
-  // Calculate grid interval based on zoom (same logic as TimelineRuler)
-  const gridInterval = useMemo(() => {
-    if (zoom >= 100) return 0.5;
-    if (zoom >= 50) return 1;
-    if (zoom >= 20) return 2;
-    if (zoom >= 10) return 5;
-    if (zoom >= 5) return 10;
-    if (zoom >= 2) return 30;
-    return 60;
-  }, [zoom]);
-  const gridSize = gridInterval * zoom; // Grid line spacing in pixels
+  // Time helpers - extracted to hook
+  const {
+    timeToPixel,
+    pixelToTime,
+    gridSize,
+    formatTime,
+    parseTime,
+    getClipsAtTime,
+    getSnapTargetTimes,
+  } = useTimelineHelpers({ zoom, clips, getClipKeyframes });
 
   // Clip dragging - extracted to hook
   const { clipDrag, handleClipMouseDown, handleClipDoubleClick } = useClipDrag({
@@ -175,6 +183,7 @@ export function Timeline() {
     clipMap,
     selectedClipIds,
     scrollX,
+    snappingEnabled,
     selectClip,
     moveClip,
     openCompositionTab,
@@ -210,8 +219,26 @@ export function Timeline() {
     pixelToTime,
   });
 
-  // External file drag preview state
-  const [externalDrag, setExternalDrag] = useState<ExternalDragState | null>(null);
+  // External file drag & drop - extracted to hook
+  const {
+    externalDrag,
+    dragCounterRef,
+    handleTrackDragEnter,
+    handleTrackDragOver,
+    handleTrackDragLeave,
+    handleTrackDrop,
+    handleNewTrackDragOver,
+    handleNewTrackDrop,
+  } = useExternalDrop({
+    timelineRef,
+    scrollX,
+    tracks,
+    clips,
+    pixelToTime,
+    addTrack,
+    addClip,
+    addCompClip,
+  });
 
   // Vertical scroll position (custom scrollbar)
   const [scrollY, setScrollY] = useState(0);
@@ -219,14 +246,192 @@ export function Timeline() {
   // Context menu state for clip right-click
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const handleClipContextMenu = useClipContextMenu(selectedClipIds, selectClip, setContextMenu);
-  const dragCounterRef = useRef(0);
 
   // Transcript markers visibility toggle
   const [showTranscriptMarkers, setShowTranscriptMarkers] = useState(true);
-  const dragDurationCacheRef = useRef<{ url: string; duration: number } | null>(null);
+
+  // Timeline marker drag state
+  const [timelineMarkerDrag, setTimelineMarkerDrag] = useState<{
+    markerId: string;
+    startX: number;
+    originalTime: number;
+  } | null>(null);
+
+  // Drag-to-create marker state
+  const [markerCreateDrag, setMarkerCreateDrag] = useState<{
+    isDragging: boolean;
+    currentTime: number;
+    isOverTimeline: boolean;
+    dropAnimating: boolean;
+  } | null>(null);
 
   // Multicam dialog state
   const [multicamDialogOpen, setMulticamDialogOpen] = useState(false);
+
+  // Handle timeline marker drag start
+  const handleTimelineMarkerMouseDown = useCallback((e: React.MouseEvent, markerId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const marker = markers.find(m => m.id === markerId);
+    if (!marker) return;
+
+    setTimelineMarkerDrag({
+      markerId,
+      startX: e.clientX,
+      originalTime: marker.time,
+    });
+  }, [markers]);
+
+  // Handle timeline marker drag - effect for mouse move/up
+  useEffect(() => {
+    if (!timelineMarkerDrag) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!timelineRef.current) return;
+
+      const rect = timelineRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left + scrollX;
+      let time = pixelToTime(x);
+
+      // Apply snapping if enabled (and not holding Alt)
+      const shouldSnap = snappingEnabled !== e.altKey;
+      if (shouldSnap) {
+        const snapTimes = getSnapTargetTimes();
+        // Also snap to playhead
+        snapTimes.push(playheadPosition);
+        // Snap to in/out points if set
+        if (inPoint !== null) snapTimes.push(inPoint);
+        if (outPoint !== null) snapTimes.push(outPoint);
+
+        const snapThresholdTime = pixelToTime(10); // 10 pixels threshold
+        let closestSnap = time;
+        let minDist = Infinity;
+
+        for (const snapTime of snapTimes) {
+          const dist = Math.abs(time - snapTime);
+          if (dist < minDist && dist < snapThresholdTime) {
+            minDist = dist;
+            closestSnap = snapTime;
+          }
+        }
+        time = closestSnap;
+      }
+
+      // Clamp to valid range
+      time = Math.max(0, Math.min(time, duration));
+      moveMarker(timelineMarkerDrag.markerId, time);
+    };
+
+    const handleMouseUp = () => {
+      setTimelineMarkerDrag(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [timelineMarkerDrag, scrollX, snappingEnabled, duration, pixelToTime, getSnapTargetTimes, moveMarker, playheadPosition, inPoint, outPoint]);
+
+  // Handle add marker at playhead (click)
+  const handleAddMarkerAtPlayhead = useCallback(() => {
+    addMarker(playheadPosition);
+  }, [addMarker, playheadPosition]);
+
+  // Handle drag-to-create marker - start dragging from button
+  const handleMarkerButtonDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setMarkerCreateDrag({
+      isDragging: true,
+      currentTime: playheadPosition,
+      isOverTimeline: false,
+      dropAnimating: false,
+    });
+  }, [playheadPosition]);
+
+  // Handle drag-to-create marker - mouse move/up effect
+  useEffect(() => {
+    if (!markerCreateDrag || !markerCreateDrag.isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      // Use timelineBodyRef for wider detection (includes ruler area)
+      const bodyRef = timelineBodyRef.current;
+      const trackRef = timelineRef.current;
+      if (!bodyRef || !trackRef) return;
+
+      const bodyRect = bodyRef.getBoundingClientRect();
+      const trackRect = trackRef.getBoundingClientRect();
+
+      // Calculate time from X position (using track area for proper offset)
+      const x = e.clientX - trackRect.left + scrollX;
+      let time = pixelToTime(x);
+
+      // Apply snapping if enabled (and not holding Alt)
+      const shouldSnap = snappingEnabled !== e.altKey;
+      if (shouldSnap) {
+        const snapTimes = getSnapTargetTimes();
+        snapTimes.push(playheadPosition);
+        if (inPoint !== null) snapTimes.push(inPoint);
+        if (outPoint !== null) snapTimes.push(outPoint);
+
+        const snapThresholdTime = pixelToTime(10);
+        let closestSnap = time;
+        let minDist = Infinity;
+
+        for (const snapTime of snapTimes) {
+          const dist = Math.abs(time - snapTime);
+          if (dist < minDist && dist < snapThresholdTime) {
+            minDist = dist;
+            closestSnap = snapTime;
+          }
+        }
+        time = closestSnap;
+      }
+
+      time = Math.max(0, Math.min(time, duration));
+
+      // Check if mouse is over the timeline body (more generous area)
+      const isOverTimeline = e.clientX >= bodyRect.left && e.clientX <= bodyRect.right &&
+                             e.clientY >= bodyRect.top && e.clientY <= bodyRect.bottom;
+
+      setMarkerCreateDrag(prev => prev ? { ...prev, currentTime: time, isOverTimeline } : null);
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      const bodyRef = timelineBodyRef.current;
+      if (!bodyRef || !markerCreateDrag) {
+        setMarkerCreateDrag(null);
+        return;
+      }
+
+      const bodyRect = bodyRef.getBoundingClientRect();
+      const isOverTimeline = e.clientX >= bodyRect.left && e.clientX <= bodyRect.right &&
+                             e.clientY >= bodyRect.top && e.clientY <= bodyRect.bottom;
+
+      if (isOverTimeline) {
+        // Add the marker and trigger drop animation
+        addMarker(markerCreateDrag.currentTime);
+        setMarkerCreateDrag(prev => prev ? { ...prev, isDragging: false, dropAnimating: true } : null);
+
+        // Clear animation after it completes
+        setTimeout(() => {
+          setMarkerCreateDrag(null);
+        }, 300);
+      } else {
+        setMarkerCreateDrag(null);
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [markerCreateDrag, scrollX, snappingEnabled, duration, pixelToTime, getSnapTargetTimes, addMarker, playheadPosition, inPoint, outPoint]);
 
   // Marquee selection - extracted to hook
   const { marquee, handleMarqueeMouseDown } = useMarqueeSelection({
@@ -249,11 +454,15 @@ export function Timeline() {
     getExpandedTrackHeight,
   });
 
-  // Pick whip drag state for clip parenting
-  const [pickWhipDrag, setPickWhipDrag] = useState<PickWhipDragState | null>(null);
-
-  // Pick whip drag state for track/layer parenting
-  const [trackPickWhipDrag, setTrackPickWhipDrag] = useState<PickWhipDragState | null>(null);
+  // Pick whip drag - extracted to hook
+  const {
+    pickWhipDrag,
+    handlePickWhipDragStart,
+    handlePickWhipDragEnd,
+    trackPickWhipDrag,
+    handleTrackPickWhipDragStart,
+    handleTrackPickWhipDragEnd,
+  } = usePickWhipDrag({ setClipParent, setTrackParent });
 
   // Performance: Memoize video/audio track filtering and solo state
   const { videoTracks, audioTracks, anyVideoSolo, anyAudioSolo } = useMemo(() => {
@@ -311,45 +520,6 @@ export function Timeline() {
     [mediaFiles]
   );
 
-  // Format time as MM:SS.ms
-  const formatTime = useCallback((seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    const ms = Math.floor((seconds % 1) * 100);
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
-  }, []);
-
-  // Parse time string (MM:SS.ms or SS.ms or just seconds) back to seconds
-  const parseTime = useCallback((timeStr: string): number | null => {
-    const trimmed = timeStr.trim();
-    if (!trimmed) return null;
-
-    // Try MM:SS.ms format
-    const match = trimmed.match(/^(\d+):(\d+)(?:\.(\d+))?$/);
-    if (match) {
-      const mins = parseInt(match[1], 10);
-      const secs = parseInt(match[2], 10);
-      const ms = match[3] ? parseInt(match[3].padEnd(2, '0').slice(0, 2), 10) : 0;
-      return mins * 60 + secs + ms / 100;
-    }
-
-    // Try SS.ms or just seconds
-    const num = parseFloat(trimmed);
-    if (!isNaN(num) && num >= 0) {
-      return num;
-    }
-
-    return null;
-  }, []);
-
-  // Get clips at time helper
-  const getClipsAtTime = useCallback(
-    (time: number) => {
-      return clips.filter((c) => time >= c.startTime && time < c.startTime + c.duration);
-    },
-    [clips]
-  );
-
   // Keyboard shortcuts - extracted to hook
   useTimelineKeyboard({
     isPlaying,
@@ -365,120 +535,31 @@ export function Timeline() {
     removeKeyframe,
     splitClipAtPlayhead,
     updateClipTransform,
+    toolMode,
+    toggleCutTool,
     clipMap,
     activeComposition,
     playheadPosition,
     duration,
     setPlayheadPosition,
+    addMarker,
   });
 
-  // Auto-start RAM Preview after 2 seconds of idle (like After Effects)
-  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Cancel RAM preview when user starts playing or scrubbing (keep cached frames)
-  useEffect(() => {
-    if ((isPlaying || isDraggingPlayhead) && isRamPreviewing) {
-      cancelRamPreview();
-    }
-  }, [isPlaying, isDraggingPlayhead, isRamPreviewing, cancelRamPreview]);
-
-  // Check for idle state and auto-start RAM preview
-  useEffect(() => {
-    if (idleTimerRef.current) {
-      clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = null;
-    }
-
-    if (
-      !ramPreviewEnabled ||
-      isPlaying ||
-      isRamPreviewing ||
-      isDraggingPlayhead ||
-      clips.length === 0
-    ) {
-      return;
-    }
-
-    const renderStart = inPoint ?? 0;
-    const renderEnd =
-      outPoint ?? Math.max(...clips.map((c) => c.startTime + c.duration));
-
-    if (renderEnd - renderStart < 0.1) {
-      return;
-    }
-
-    if (
-      ramPreviewRange &&
-      ramPreviewRange.start <= renderStart &&
-      ramPreviewRange.end >= renderEnd
-    ) {
-      return;
-    }
-
-    idleTimerRef.current = setTimeout(() => {
-      const state = useTimelineStore.getState();
-      if (state.ramPreviewEnabled && !state.isPlaying && !state.isRamPreviewing) {
-        startRamPreview();
-      }
-    }, RAM_PREVIEW_IDLE_DELAY);
-
-    return () => {
-      if (idleTimerRef.current) {
-        clearTimeout(idleTimerRef.current);
-        idleTimerRef.current = null;
-      }
-    };
-  }, [
+  // Auto-start RAM preview and proxy generation - extracted to hook
+  useAutoFeatures({
     ramPreviewEnabled,
+    proxyEnabled,
     isPlaying,
-    isRamPreviewing,
     isDraggingPlayhead,
+    isRamPreviewing,
+    currentlyGeneratingProxyId,
     inPoint,
     outPoint,
     ramPreviewRange,
     clips,
     startRamPreview,
-  ]);
-
-  // Auto-generate proxies after 3 seconds of idle
-  const proxyIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (proxyIdleTimerRef.current) {
-      clearTimeout(proxyIdleTimerRef.current);
-      proxyIdleTimerRef.current = null;
-    }
-
-    if (!proxyEnabled || isPlaying || currentlyGeneratingProxyId || isDraggingPlayhead) {
-      return;
-    }
-
-    proxyIdleTimerRef.current = setTimeout(() => {
-      const mediaStore = useMediaStore.getState();
-      if (mediaStore.proxyEnabled && !mediaStore.currentlyGeneratingProxyId) {
-        const nextFile = mediaStore.getNextFileNeedingProxy();
-        if (nextFile) {
-          console.log('[Proxy] Auto-starting proxy generation for:', nextFile.name);
-          mediaStore.generateProxy(nextFile.id);
-        }
-      }
-    }, PROXY_IDLE_DELAY);
-
-    return () => {
-      if (proxyIdleTimerRef.current) {
-        clearTimeout(proxyIdleTimerRef.current);
-        proxyIdleTimerRef.current = null;
-      }
-    };
-  }, [
-    proxyEnabled,
-    isPlaying,
-    currentlyGeneratingProxyId,
-    isDraggingPlayhead,
-    clips,
-    getNextFileNeedingProxy,
-    generateProxy,
-  ]);
+    cancelRamPreview,
+  });
 
   // Layer sync - extracted to hook
   useLayerSync({
@@ -506,206 +587,16 @@ export function Timeline() {
     isAudioTrackMuted,
   });
 
-  // Preload upcoming video clips - seek videos and force buffering before playhead hits them
-  // This prevents stuttering when playback transitions to a new clip
-  // PERFORMANCE: Throttled to run every 500ms instead of every frame
-  const lastPreloadCheckRef = useRef(0);
-  useEffect(() => {
-    if (!isPlaying || isDraggingPlayhead) return;
+  // Preload upcoming video clips - extracted to hook
+  useVideoPreload({
+    isPlaying,
+    isDraggingPlayhead,
+    playheadPosition,
+    clips,
+  });
 
-    // Throttle preload checks to every 500ms (no need to check every frame for 2s lookahead)
-    const now = performance.now();
-    if (now - lastPreloadCheckRef.current < 500) return;
-    lastPreloadCheckRef.current = now;
-
-    const LOOKAHEAD_TIME = 2.0; // Look 2 seconds ahead
-    // Use high-frequency playhead position during playback
-    const currentPosition = playheadState.isUsingInternalPosition
-      ? playheadState.position
-      : playheadPosition;
-    const lookaheadPosition = currentPosition + LOOKAHEAD_TIME;
-
-    // Helper to preload a video element - seeks and forces buffering
-    const preloadVideo = (video: HTMLVideoElement, targetTime: number, _clipName: string) => {
-      const timeDiff = Math.abs(video.currentTime - targetTime);
-
-      // Only preload if significantly different (avoid repeated preloading)
-      if (timeDiff > 0.1) {
-        video.currentTime = Math.max(0, targetTime);
-
-        // Force buffer by briefly playing then pausing
-        // This triggers the browser to actually fetch the video data
-        const wasPlaying = !video.paused;
-        if (!wasPlaying) {
-          video.play()
-            .then(() => {
-              // Immediately pause after play starts buffering
-              setTimeout(() => {
-                if (!wasPlaying) video.pause();
-              }, 50);
-            })
-            .catch(() => {
-              // Ignore play errors (e.g., autoplay policy)
-            });
-        }
-        // console.log(`[Preload] Pre-buffering ${clipName} at ${targetTime.toFixed(2)}s`);
-      }
-    };
-
-    // Find clips that will start playing soon (not currently playing, but will be soon)
-    const upcomingClips = clips.filter(clip => {
-      // Clip starts after current position but within lookahead window
-      const startsInLookahead = clip.startTime > currentPosition && clip.startTime <= lookaheadPosition;
-      // Has a video element to preload
-      const hasVideo = clip.source?.videoElement;
-      return startsInLookahead && hasVideo;
-    });
-
-    // Pre-buffer upcoming regular clips
-    for (const clip of upcomingClips) {
-      if (clip.source?.videoElement) {
-        preloadVideo(clip.source.videoElement, clip.inPoint, clip.name);
-      }
-    }
-
-    // Also preload nested composition clips
-    const upcomingNestedClips = clips.filter(clip => {
-      const startsInLookahead = clip.startTime > currentPosition && clip.startTime <= lookaheadPosition;
-      const hasNestedClips = clip.isComposition && clip.nestedClips && clip.nestedClips.length > 0;
-      return startsInLookahead && hasNestedClips;
-    });
-
-    for (const compClip of upcomingNestedClips) {
-      if (!compClip.nestedClips) continue;
-
-      // Find the nested video clip that would play at the start of this comp clip
-      const compStartTime = compClip.inPoint; // Time within the composition
-
-      for (const nestedClip of compClip.nestedClips) {
-        if (!nestedClip.source?.videoElement) continue;
-
-        // Check if this nested clip would be playing at comp start
-        if (compStartTime >= nestedClip.startTime && compStartTime < nestedClip.startTime + nestedClip.duration) {
-          const nestedLocalTime = compStartTime - nestedClip.startTime;
-          const targetTime = nestedClip.reversed
-            ? nestedClip.outPoint - nestedLocalTime
-            : nestedLocalTime + nestedClip.inPoint;
-
-          preloadVideo(nestedClip.source.videoElement, targetTime, nestedClip.name);
-        }
-      }
-    }
-  }, [isPlaying, isDraggingPlayhead, playheadPosition, clips]);
-
-  // Playback loop - AUDIO MASTER CLOCK
-  // Audio runs freely without correction, playhead follows audio time
-  // This eliminates audio drift and clicking from constant seeks
-  useEffect(() => {
-    if (!isPlaying) {
-      // Disable internal position tracking when not playing
-      playheadState.isUsingInternalPosition = false;
-      playheadState.hasMasterAudio = false;
-      playheadState.masterAudioElement = null;
-      return;
-    }
-
-    let rafId: number;
-    let lastTime = performance.now();
-    let lastStateUpdate = 0;
-    const STATE_UPDATE_INTERVAL = 33; // Update store every 33ms (~30fps for UI/subscribers)
-
-    // Initialize internal position from store and enable high-frequency mode
-    playheadState.position = useTimelineStore.getState().playheadPosition;
-    playheadState.isUsingInternalPosition = true;
-    playheadState.playbackJustStarted = true; // Signal for initial audio sync
-
-    const updatePlayhead = (currentTime: number) => {
-      const state = useTimelineStore.getState();
-      const { duration: dur, inPoint: ip, outPoint: op, loopPlayback: lp, pause: ps, clips } = state;
-      const effectiveEnd = op !== null ? op : dur;
-      const effectiveStart = ip !== null ? ip : 0;
-
-      let newPosition: number;
-
-      // AUDIO MASTER CLOCK: If we have an active audio element, derive playhead from its time
-      if (playheadState.hasMasterAudio && playheadState.masterAudioElement) {
-        const audio = playheadState.masterAudioElement;
-        if (!audio.paused && audio.readyState >= 2) {
-          // Calculate timeline position from audio's current time
-          // audioTime = clipInPoint + (timelinePosition - clipStartTime) * speed
-          // So: timelinePosition = clipStartTime + (audioTime - clipInPoint) / speed
-          const audioTime = audio.currentTime;
-          const speed = playheadState.masterClipSpeed || 1;
-          newPosition = playheadState.masterClipStartTime +
-            (audioTime - playheadState.masterClipInPoint) / speed;
-        } else {
-          // Audio paused or not ready, fall back to system time
-          const deltaTime = (currentTime - lastTime) / 1000;
-          const cappedDelta = Math.min(deltaTime, 0.1);
-          newPosition = playheadState.position + cappedDelta;
-        }
-      } else {
-        // No audio master - use system time (fallback for video-only or image clips)
-        const deltaTime = (currentTime - lastTime) / 1000;
-        const cappedDelta = Math.min(deltaTime, 0.1);
-        newPosition = playheadState.position + cappedDelta;
-      }
-      lastTime = currentTime;
-
-      // Handle end of timeline / looping
-      if (newPosition >= effectiveEnd) {
-        if (lp) {
-          newPosition = effectiveStart;
-          // Reset audio master - will be re-established by syncAudioElements
-          playheadState.hasMasterAudio = false;
-          playheadState.masterAudioElement = null;
-          // Seek all audio/video to start
-          clips.forEach(clip => {
-            if (clip.source?.audioElement) {
-              clip.source.audioElement.currentTime = clip.inPoint;
-            }
-            if (clip.source?.videoElement) {
-              clip.source.videoElement.currentTime = clip.reversed ? clip.outPoint : clip.inPoint;
-            }
-          });
-        } else {
-          newPosition = effectiveEnd;
-          ps();
-          playheadState.position = newPosition;
-          playheadState.isUsingInternalPosition = false;
-          playheadState.hasMasterAudio = false;
-          playheadState.masterAudioElement = null;
-          useTimelineStore.setState({ playheadPosition: newPosition });
-          return;
-        }
-      }
-
-      // Clamp to start
-      if (newPosition < effectiveStart) {
-        newPosition = effectiveStart;
-      }
-
-      // Update high-frequency position for render loop to read
-      playheadState.position = newPosition;
-
-      // PERFORMANCE: Only update store at throttled interval
-      if (currentTime - lastStateUpdate >= STATE_UPDATE_INTERVAL) {
-        useTimelineStore.setState({ playheadPosition: newPosition });
-        lastStateUpdate = currentTime;
-      }
-
-      rafId = requestAnimationFrame(updatePlayhead);
-    };
-
-    rafId = requestAnimationFrame(updatePlayhead);
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      playheadState.isUsingInternalPosition = false;
-      playheadState.hasMasterAudio = false;
-      playheadState.masterAudioElement = null;
-    };
-  }, [isPlaying]);
+  // Audio master clock playback loop - extracted to hook
+  usePlaybackLoop({ isPlaying });
 
   // Handle shift+mousewheel on track header to resize height
   const handleTrackHeaderWheel = useCallback(
@@ -743,596 +634,18 @@ export function Timeline() {
     setScrollY,
   });
 
-  // Get all snap target times
-  const getSnapTargetTimes = useCallback(() => {
-    const snapTimes: number[] = [];
-    clips.forEach((clip) => {
-      snapTimes.push(clip.startTime);
-      snapTimes.push(clip.startTime + clip.duration);
-
-      const kfs = getClipKeyframes(clip.id);
-      kfs.forEach((kf) => {
-        const absTime = clip.startTime + kf.time;
-        snapTimes.push(absTime);
-      });
-    });
-    return snapTimes;
-  }, [clips, getClipKeyframes]);
-
-  // Playhead dragging
-  useEffect(() => {
-    if (!isDraggingPlayhead) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!timelineRef.current) return;
-      const rect = timelineRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left + scrollX;
-      let time = pixelToTime(x);
-
-      if (e.shiftKey) {
-        const snapTimes = getSnapTargetTimes();
-        const snapThreshold = pixelToTime(10);
-
-        let closestSnap: number | null = null;
-        let closestDistance = Infinity;
-
-        for (const snapTime of snapTimes) {
-          const distance = Math.abs(time - snapTime);
-          if (distance < closestDistance && distance < snapThreshold) {
-            closestDistance = distance;
-            closestSnap = snapTime;
-          }
-        }
-
-        if (closestSnap !== null) {
-          time = closestSnap;
-        }
-      }
-
-      setPlayheadPosition(Math.max(0, Math.min(time, duration)));
-    };
-
-    const handleMouseUp = () => {
-      setDraggingPlayhead(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [
+  // Playhead snapping during drag - extracted to hook
+  usePlayheadSnap({
     isDraggingPlayhead,
+    timelineRef,
     scrollX,
     duration,
-    setPlayheadPosition,
-    setDraggingPlayhead,
+    snappingEnabled,
     pixelToTime,
     getSnapTargetTimes,
-  ]);
-
-  // Helper: Check if file is a video by type or extension (case-insensitive)
-  // Accept all common container formats - WebCodecs will check if codec (H.264/H.265) is supported
-  const isVideoFile = (file: File): boolean => {
-    if (file.type.startsWith('video/')) return true;
-    const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    // All containers that might contain H.264/H.265
-    const videoExts = [
-      'mov', 'mp4', 'm4v', 'mxf', 'avi', 'mkv', 'webm',  // Common
-      'ts', 'mts', 'm2ts',                               // Transport streams
-      'wmv', 'asf', 'flv', 'f4v',                        // Windows/Flash
-      '3gp', '3g2', 'ogv', 'vob', 'mpg', 'mpeg',         // Other
-    ];
-    return videoExts.includes(ext);
-  };
-
-  // Helper: Check if file is any media type (video/audio/image)
-  const isMediaFile = (file: File): boolean => {
-    if (file.type.startsWith('video/') || file.type.startsWith('audio/') || file.type.startsWith('image/')) return true;
-    const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    // All containers that might contain H.264/H.265
-    const videoExts = [
-      'mov', 'mp4', 'm4v', 'mxf', 'avi', 'mkv', 'webm',  // Common
-      'ts', 'mts', 'm2ts',                               // Transport streams
-      'wmv', 'asf', 'flv', 'f4v',                        // Windows/Flash
-      '3gp', '3g2', 'ogv', 'vob', 'mpg', 'mpeg',         // Other
-    ];
-    const audioExts = ['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'wma', 'aiff', 'alac'];
-    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif', 'heic', 'heif'];
-    return videoExts.includes(ext) || audioExts.includes(ext) || imageExts.includes(ext);
-  };
-
-  // Quick duration check for dragged video files
-  const getVideoDurationQuick = async (file: File): Promise<number | null> => {
-    if (!isVideoFile(file)) return null;
-
-    return new Promise((resolve) => {
-      const video = document.createElement('video');
-      video.preload = 'metadata';
-
-      const cleanup = () => {
-        URL.revokeObjectURL(video.src);
-        video.remove();
-      };
-
-      video.onloadedmetadata = () => {
-        const dur = video.duration;
-        cleanup();
-        resolve(isFinite(dur) ? dur : null);
-      };
-
-      video.onerror = () => {
-        cleanup();
-        resolve(null);
-      };
-
-      setTimeout(() => {
-        cleanup();
-        resolve(null);
-      }, DURATION_CHECK_TIMEOUT);
-
-      video.src = URL.createObjectURL(file);
-    });
-  };
-
-  // Handle external file drag enter on track
-  const handleTrackDragEnter = useCallback(
-    (e: React.DragEvent, trackId: string) => {
-      e.preventDefault();
-      dragCounterRef.current++;
-
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = e.clientX - rect.left + scrollX;
-      const startTime = pixelToTime(x);
-
-      if (e.dataTransfer.types.includes('application/x-composition-id')) {
-        setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration: 5, isVideo: true });
-        return;
-      }
-
-      if (e.dataTransfer.types.includes('application/x-media-file-id')) {
-        setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration: 5, isVideo: true });
-        return;
-      }
-
-      if (e.dataTransfer.types.includes('Files')) {
-        let dur: number | undefined;
-        const items = e.dataTransfer.items;
-        if (items && items.length > 0) {
-          for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            if (item.kind === 'file') {
-              const file = item.getAsFile();
-              if (file && isVideoFile(file)) {
-                const cacheKey = `${file.name}_${file.size}`;
-                if (dragDurationCacheRef.current?.url === cacheKey) {
-                  dur = dragDurationCacheRef.current.duration;
-                } else {
-                  getVideoDurationQuick(file).then((d) => {
-                    if (d) {
-                      dragDurationCacheRef.current = { url: cacheKey, duration: d };
-                      setExternalDrag((prev) =>
-                        prev ? { ...prev, duration: d } : null
-                      );
-                    }
-                  });
-                }
-                break;
-              }
-            }
-          }
-        }
-
-        setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration: dur });
-      }
-    },
-    [scrollX, pixelToTime]
-  );
-
-  // Handle external file drag over track
-  const handleTrackDragOver = useCallback(
-    (e: React.DragEvent, trackId: string) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'copy';
-
-      const isCompDrag = e.dataTransfer.types.includes('application/x-composition-id');
-      const isMediaPanelDrag = e.dataTransfer.types.includes('application/x-media-file-id');
-      const isFileDrag = e.dataTransfer.types.includes('Files');
-
-      if ((isCompDrag || isMediaPanelDrag || isFileDrag) && timelineRef.current) {
-        const rect = timelineRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left + scrollX;
-        const startTime = pixelToTime(x);
-
-        const targetTrack = tracks.find((t) => t.id === trackId);
-        const isVideoTrack = targetTrack?.type === 'video';
-
-        const previewDuration =
-          externalDrag?.duration ?? dragDurationCacheRef.current?.duration ?? 5;
-
-        let audioTrackId: string | undefined;
-        if (isVideoTrack) {
-          const audioTracks = tracks.filter((t) => t.type === 'audio');
-          const endTime = startTime + previewDuration;
-
-          for (const aTrack of audioTracks) {
-            const trackClips = clips.filter((c) => c.trackId === aTrack.id);
-            const hasOverlap = trackClips.some((clip) => {
-              const clipEnd = clip.startTime + clip.duration;
-              return !(endTime <= clip.startTime || startTime >= clipEnd);
-            });
-            if (!hasOverlap) {
-              audioTrackId = aTrack.id;
-              break;
-            }
-          }
-          if (!audioTrackId) {
-            audioTrackId = '__new_audio_track__';
-          }
-        }
-
-        setExternalDrag((prev) => ({
-          trackId,
-          startTime,
-          x: e.clientX,
-          y: e.clientY,
-          audioTrackId,
-          isVideo: isVideoTrack,
-          duration: prev?.duration ?? dragDurationCacheRef.current?.duration,
-        }));
-      }
-    },
-    [scrollX, pixelToTime, tracks, clips, externalDrag]
-  );
-
-  // Handle external file drag leave
-  const handleTrackDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    dragCounterRef.current--;
-
-    if (dragCounterRef.current === 0) {
-      setExternalDrag(null);
-    }
-  }, []);
-
-  // Handle drag over "new track" drop zone
-  const handleNewTrackDragOver = useCallback(
-    (e: React.DragEvent, trackType: 'video' | 'audio') => {
-      e.preventDefault();
-      e.stopPropagation();
-      e.dataTransfer.dropEffect = 'copy';
-
-      if (timelineRef.current) {
-        const rect = timelineRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left + scrollX;
-        const startTime = pixelToTime(x);
-
-        setExternalDrag((prev) => ({
-          trackId: '__new_track__',
-          startTime,
-          x: e.clientX,
-          y: e.clientY,
-          duration: prev?.duration ?? dragDurationCacheRef.current?.duration ?? 5,
-          newTrackType: trackType,
-          isVideo: trackType === 'video',
-          isAudio: trackType === 'audio',
-        }));
-      }
-    },
-    [scrollX, pixelToTime]
-  );
-
-  // Handle drop on "new track" zone - creates new track and adds clip
-  const handleNewTrackDrop = useCallback(
-    async (e: React.DragEvent, trackType: 'video' | 'audio') => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      const cachedDuration =
-        externalDrag?.duration ?? dragDurationCacheRef.current?.duration;
-
-      dragCounterRef.current = 0;
-      setExternalDrag(null);
-
-      // Helper to check if file is audio
-      const audioExtensions = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'];
-      const isAudioFile = (file: File) => {
-        const ext = file.name?.split('.').pop()?.toLowerCase() || '';
-        return file.type.startsWith('audio/') || audioExtensions.includes(ext);
-      };
-
-      // Validate file type matches track type BEFORE creating track
-      const mediaFileId = e.dataTransfer.getData('application/x-media-file-id');
-      if (mediaFileId) {
-        const mediaStore = useMediaStore.getState();
-        const mediaFile = mediaStore.files.find((f) => f.id === mediaFileId);
-        if (mediaFile?.file) {
-          const fileIsAudio = isAudioFile(mediaFile.file);
-          if (fileIsAudio && trackType === 'video') {
-            console.log('[Timeline] Audio files can only be dropped on audio tracks');
-            return;
-          }
-          if (!fileIsAudio && trackType === 'audio') {
-            console.log('[Timeline] Video/image files can only be dropped on video tracks');
-            return;
-          }
-        }
-      }
-
-      if (e.dataTransfer.files.length > 0) {
-        const file = e.dataTransfer.files[0];
-        const fileIsAudio = isAudioFile(file);
-        if (fileIsAudio && trackType === 'video') {
-          console.log('[Timeline] Audio files can only be dropped on audio tracks');
-          return;
-        }
-        if (!fileIsAudio && trackType === 'audio') {
-          console.log('[Timeline] Video/image files can only be dropped on video tracks');
-          return;
-        }
-      }
-
-      // Create a new track
-      const newTrackId = addTrack(trackType);
-      if (!newTrackId) return;
-
-      const rect = timelineRef.current?.getBoundingClientRect();
-      if (!rect) return;
-
-      const x = e.clientX - rect.left + scrollX;
-      const startTime = Math.max(0, pixelToTime(x));
-
-      // Handle composition drag
-      const compositionId = e.dataTransfer.getData('application/x-composition-id');
-      if (compositionId) {
-        const mediaStore = useMediaStore.getState();
-        const comp = mediaStore.compositions.find((c) => c.id === compositionId);
-        if (comp) {
-          addCompClip(newTrackId, comp, startTime);
-          return;
-        }
-      }
-
-      // Handle media panel drag
-      if (mediaFileId) {
-        const mediaStore = useMediaStore.getState();
-        const mediaFile = mediaStore.files.find((f) => f.id === mediaFileId);
-        if (mediaFile?.file) {
-          addClip(newTrackId, mediaFile.file, startTime, mediaFile.duration, mediaFileId);
-          return;
-        }
-      }
-
-      // Try to get file path from various drag data formats
-      let filePath: string | undefined;
-      const uriList = e.dataTransfer.getData('text/uri-list');
-      if (uriList) {
-        const uri = uriList.split('\n')[0]?.trim();
-        if (uri?.startsWith('file://')) {
-          filePath = decodeURIComponent(uri.replace('file://', ''));
-        }
-      }
-      if (!filePath) {
-        const plainText = e.dataTransfer.getData('text/plain');
-        if (plainText?.startsWith('/') || plainText?.startsWith('file://')) {
-          filePath = plainText.startsWith('file://')
-            ? decodeURIComponent(plainText.replace('file://', ''))
-            : plainText;
-        }
-      }
-
-      // Handle external file drop - try to get file handle for persistence
-      const items = e.dataTransfer.items;
-      if (items && items.length > 0) {
-        const item = items[0];
-        if (item.kind === 'file') {
-          const mediaStore = useMediaStore.getState();
-
-          // Try to get file handle (File System Access API)
-          if ('getAsFileSystemHandle' in item) {
-            try {
-              const handle = await (item as any).getAsFileSystemHandle();
-              if (handle && handle.kind === 'file') {
-                const file = await handle.getFile();
-                if (filePath) (file as any).path = filePath;
-                if (isMediaFile(file)) {
-                  const imported = await mediaStore.importFilesWithHandles([{ file, handle, absolutePath: filePath }]);
-                  if (imported.length > 0) {
-                    addClip(newTrackId, file, startTime, cachedDuration, imported[0].id);
-                    console.log('[Timeline] Imported file with handle:', file.name, 'absolutePath:', filePath);
-                  }
-                  return;
-                }
-              }
-            } catch (err) {
-              console.warn('[Timeline] Could not get file handle, falling back:', err);
-            }
-          }
-
-          // Fallback to regular file (no handle)
-          const file = item.getAsFile();
-          if (file && filePath) (file as any).path = filePath;
-          if (file && isMediaFile(file)) {
-            const importedFile = await mediaStore.importFile(file);
-            addClip(newTrackId, file, startTime, cachedDuration, importedFile?.id);
-          }
-        }
-      }
-    },
-    [scrollX, pixelToTime, addTrack, addCompClip, addClip, externalDrag]
-  );
-
-  // Handle external file drop on track
-  const handleTrackDrop = useCallback(
-    async (e: React.DragEvent, trackId: string) => {
-      e.preventDefault();
-
-      const cachedDuration =
-        externalDrag?.duration ?? dragDurationCacheRef.current?.duration;
-
-      dragCounterRef.current = 0;
-      setExternalDrag(null);
-
-      // Get track type for validation
-      const targetTrack = tracks.find((t) => t.id === trackId);
-      const isVideoTrack = targetTrack?.type === 'video';
-      const isAudioTrack = targetTrack?.type === 'audio';
-
-      // Helper to check if file is audio
-      const audioExtensions = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'];
-      const isAudioFile = (file: File) => {
-        const ext = file.name?.split('.').pop()?.toLowerCase() || '';
-        return file.type.startsWith('audio/') || audioExtensions.includes(ext);
-      };
-
-      const compositionId = e.dataTransfer.getData('application/x-composition-id');
-      if (compositionId) {
-        const mediaStore = useMediaStore.getState();
-        const comp = mediaStore.compositions.find((c) => c.id === compositionId);
-        if (comp) {
-          const rect = e.currentTarget.getBoundingClientRect();
-          const x = e.clientX - rect.left + scrollX;
-          const startTime = pixelToTime(x);
-          addCompClip(trackId, comp, Math.max(0, startTime));
-          return;
-        }
-      }
-
-      const mediaFileId = e.dataTransfer.getData('application/x-media-file-id');
-      if (mediaFileId) {
-        const mediaStore = useMediaStore.getState();
-        const mediaFile = mediaStore.files.find((f) => f.id === mediaFileId);
-        if (mediaFile?.file) {
-          // Simple validation: audio files only on audio tracks, video/image only on video tracks
-          const fileIsAudio = isAudioFile(mediaFile.file);
-          if (fileIsAudio && isVideoTrack) {
-            console.log('[Timeline] Audio files can only be dropped on audio tracks');
-            return;
-          }
-          if (!fileIsAudio && isAudioTrack) {
-            console.log('[Timeline] Video/image files can only be dropped on video tracks');
-            return;
-          }
-
-          const rect = e.currentTarget.getBoundingClientRect();
-          const x = e.clientX - rect.left + scrollX;
-          const startTime = pixelToTime(x);
-          addClip(trackId, mediaFile.file, Math.max(0, startTime), mediaFile.duration, mediaFileId);
-          return;
-        }
-      }
-
-      // Handle external file drop - try to get file handle for persistence
-      const items = e.dataTransfer.items;
-      console.log('[Timeline] External drop - items:', items?.length, 'types:', Array.from(e.dataTransfer.types));
-
-      // Try to get file path from various drag data formats
-      let filePath: string | undefined;
-
-      // Try text/uri-list (Nautilus, Dolphin)
-      const uriList = e.dataTransfer.getData('text/uri-list');
-      if (uriList) {
-        const uri = uriList.split('\n')[0]?.trim();
-        if (uri?.startsWith('file://')) {
-          filePath = decodeURIComponent(uri.replace('file://', ''));
-          console.log('[Timeline] Got file path from URI list:', filePath);
-        }
-      }
-
-      // Try text/plain (some file managers)
-      if (!filePath) {
-        const plainText = e.dataTransfer.getData('text/plain');
-        if (plainText?.startsWith('/') || plainText?.startsWith('file://')) {
-          filePath = plainText.startsWith('file://')
-            ? decodeURIComponent(plainText.replace('file://', ''))
-            : plainText;
-          console.log('[Timeline] Got file path from text/plain:', filePath);
-        }
-      }
-
-      // Try text/x-moz-url (Firefox)
-      if (!filePath) {
-        const mozUrl = e.dataTransfer.getData('text/x-moz-url');
-        if (mozUrl?.startsWith('file://')) {
-          filePath = decodeURIComponent(mozUrl.split('\n')[0].replace('file://', ''));
-          console.log('[Timeline] Got file path from moz-url:', filePath);
-        }
-      }
-
-      console.log('[Timeline] Final file path:', filePath || 'NOT AVAILABLE');
-
-      if (items && items.length > 0) {
-        const item = items[0];
-        console.log('[Timeline] Item kind:', item.kind, 'type:', item.type);
-        if (item.kind === 'file') {
-          // Capture rect before async operations (e.currentTarget becomes null after await)
-          const rect = e.currentTarget.getBoundingClientRect();
-          const x = e.clientX - rect.left + scrollX;
-          const startTime = Math.max(0, pixelToTime(x));
-          const mediaStore = useMediaStore.getState();
-
-          // Try to get file handle (File System Access API)
-          if ('getAsFileSystemHandle' in item) {
-            try {
-              const handle = await (item as any).getAsFileSystemHandle();
-              if (handle && handle.kind === 'file') {
-                const file = await handle.getFile();
-                // Attach file path if we got it from URI list
-                if (filePath) {
-                  (file as any).path = filePath;
-                }
-                console.log('[Timeline] File from handle:', file.name, 'type:', file.type, 'size:', file.size, 'path:', filePath);
-                if (isMediaFile(file)) {
-                  // Validate track type
-                  const fileIsAudio = isAudioFile(file);
-                  if (fileIsAudio && isVideoTrack) {
-                    console.log('[Timeline] Audio files can only be dropped on audio tracks');
-                    return;
-                  }
-                  if (!fileIsAudio && isAudioTrack) {
-                    console.log('[Timeline] Video/image files can only be dropped on video tracks');
-                    return;
-                  }
-
-                  const imported = await mediaStore.importFilesWithHandles([{ file, handle, absolutePath: filePath }]);
-                  if (imported.length > 0) {
-                    addClip(trackId, file, startTime, cachedDuration, imported[0].id);
-                    console.log('[Timeline] Imported file with handle:', file.name, 'absolutePath:', filePath);
-                  }
-                  return;
-                }
-              }
-            } catch (err) {
-              console.warn('[Timeline] Could not get file handle, falling back:', err);
-            }
-          }
-
-          // Fallback to regular file (no handle)
-          const file = item.getAsFile();
-          if (file && filePath) {
-            (file as any).path = filePath;
-          }
-          console.log('[Timeline] Fallback file:', file?.name, 'type:', file?.type, 'path:', filePath);
-          if (file && isMediaFile(file)) {
-            const fileIsAudio = isAudioFile(file);
-            if (fileIsAudio && isVideoTrack) {
-              console.log('[Timeline] Audio files can only be dropped on audio tracks');
-              return;
-            }
-            if (!fileIsAudio && isAudioTrack) {
-              console.log('[Timeline] Video/image files can only be dropped on video tracks');
-              return;
-            }
-
-            const importedFile = await mediaStore.importFile(file);
-            addClip(trackId, file, startTime, cachedDuration, importedFile?.id);
-          }
-        }
-      }
-    },
-    [scrollX, pixelToTime, addCompClip, addClip, externalDrag, tracks]
-  );
+    setPlayheadPosition,
+    setDraggingPlayhead,
+  });
 
   // Render keyframe diamonds
   const renderKeyframeDiamonds = useCallback(
@@ -1357,90 +670,6 @@ export function Timeline() {
     },
     [clips, selectedKeyframeIds, clipKeyframes, clipDrag, scrollX, selectKeyframe, moveKeyframe, updateKeyframe, timeToPixel, pixelToTime]
   );
-
-  // Pick whip drag handlers for layer parenting
-  const handlePickWhipDragStart = useCallback((clipId: string, startX: number, startY: number) => {
-    setPickWhipDrag({
-      sourceClipId: clipId,
-      startX,
-      startY,
-      currentX: startX,
-      currentY: startY,
-    });
-
-    const handleMouseMove = (e: MouseEvent) => {
-      setPickWhipDrag(prev => prev ? {
-        ...prev,
-        currentX: e.clientX,
-        currentY: e.clientY,
-      } : null);
-    };
-
-    const handleMouseUp = (e: MouseEvent) => {
-      // Find clip at drop position
-      const target = document.elementFromPoint(e.clientX, e.clientY);
-      const clipElement = target?.closest('.timeline-clip');
-      if (clipElement) {
-        const targetClipId = clipElement.getAttribute('data-clip-id');
-        if (targetClipId && targetClipId !== clipId) {
-          setClipParent(clipId, targetClipId);
-        }
-      }
-      setPickWhipDrag(null);
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  }, [setClipParent]);
-
-  const handlePickWhipDragEnd = useCallback(() => {
-    setPickWhipDrag(null);
-  }, []);
-
-  // Track pick whip drag handlers for layer parenting
-  const handleTrackPickWhipDragStart = useCallback((trackId: string, startX: number, startY: number) => {
-    setTrackPickWhipDrag({
-      sourceClipId: trackId, // Using clipId field to store trackId
-      startX,
-      startY,
-      currentX: startX,
-      currentY: startY,
-    });
-
-    const handleMouseMove = (e: MouseEvent) => {
-      setTrackPickWhipDrag(prev => prev ? {
-        ...prev,
-        currentX: e.clientX,
-        currentY: e.clientY,
-      } : null);
-    };
-
-    const handleMouseUp = (e: MouseEvent) => {
-      // Find track header at drop position
-      const target = document.elementFromPoint(e.clientX, e.clientY);
-      const trackHeader = target?.closest('.track-header');
-      if (trackHeader) {
-        // Find the track-pick-whip with data-track-id inside the header
-        const pickWhip = trackHeader.querySelector('.track-pick-whip');
-        const targetTrackId = pickWhip?.getAttribute('data-track-id');
-        if (targetTrackId && targetTrackId !== trackId) {
-          setTrackParent(trackId, targetTrackId);
-        }
-      }
-      setTrackPickWhipDrag(null);
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  }, [setTrackParent]);
-
-  const handleTrackPickWhipDragEnd = useCallback(() => {
-    setTrackPickWhipDrag(null);
-  }, []);
 
   // Render a clip
   const renderClip = useCallback(
@@ -1473,7 +702,7 @@ export function Timeline() {
       // Use mediaFiles from hook state instead of getState() for render-time lookups
       const mediaFile = mediaFiles.find(
         (f) =>
-          f.id === clip.source?.mediaFileId ||
+          f.id === clip.mediaFileId ||
           f.name === clip.name ||
           f.name === clip.name.replace(' (Audio)', '')
       );
@@ -1501,10 +730,16 @@ export function Timeline() {
           proxyStatus={mediaFile?.proxyStatus}
           proxyProgress={mediaFile?.proxyProgress || 0}
           showTranscriptMarkers={showTranscriptMarkers}
+          toolMode={toolMode}
+          snappingEnabled={snappingEnabled}
+          playheadPosition={playheadPosition}
+          cutHoverInfo={cutHoverInfo}
+          onCutHover={handleCutHover}
           onMouseDown={(e) => handleClipMouseDown(e, clip.id)}
           onDoubleClick={(e) => handleClipDoubleClick(e, clip.id)}
           onContextMenu={(e) => handleClipContextMenu(e, clip.id)}
           onTrimStart={(e, edge) => handleTrimStart(e, clip.id, edge)}
+          onCutAtPosition={splitClip}
           hasKeyframes={hasKeyframes}
           timeToPixel={timeToPixel}
           pixelToTime={pixelToTime}
@@ -1527,10 +762,16 @@ export function Timeline() {
       proxyEnabled,
       mediaFiles,
       showTranscriptMarkers,
+      toolMode,
+      snappingEnabled,
+      playheadPosition,
+      cutHoverInfo,
+      handleCutHover,
       handleClipMouseDown,
       handleClipDoubleClick,
       handleClipContextMenu,
       handleTrimStart,
+      splitClip,
       hasKeyframes,
       timeToPixel,
       pixelToTime,
@@ -1574,6 +815,7 @@ export function Timeline() {
         showTranscriptMarkers={showTranscriptMarkers}
         thumbnailsEnabled={thumbnailsEnabled}
         waveformsEnabled={waveformsEnabled}
+        toolMode={toolMode}
         onPlay={play}
         onPause={pause}
         onStop={stop}
@@ -1588,6 +830,7 @@ export function Timeline() {
         onToggleTranscriptMarkers={() => setShowTranscriptMarkers(!showTranscriptMarkers)}
         onToggleThumbnails={toggleThumbnailsEnabled}
         onToggleWaveforms={toggleWaveformsEnabled}
+        onToggleCutTool={toggleCutTool}
         onAddVideoTrack={() => addTrack('video')}
         onAddAudioTrack={() => addTrack('audio')}
         onAddTextClip={() => {
@@ -1606,7 +849,16 @@ export function Timeline() {
       <div className="timeline-body" ref={timelineBodyRef}>
         <div className="timeline-body-content">
           <div className="timeline-header-row">
-            <div className="ruler-header">Time</div>
+            <div className="ruler-header">
+              <span>Time</span>
+              <button
+                className={`add-marker-btn ${markerCreateDrag?.isDragging ? 'dragging' : ''}`}
+                onMouseDown={handleMarkerButtonDragStart}
+                title="Drag to place marker, or press M"
+              >
+                M
+              </button>
+            </div>
             <div className="time-ruler-wrapper">
               <TimelineRuler
                 duration={duration}
@@ -1620,6 +872,15 @@ export function Timeline() {
           <div className="timeline-scroll-wrapper" ref={scrollWrapperRef}>
             <div className="timeline-content-row" ref={contentRef} style={{ transform: `translateY(-${scrollY}px)` }}>
           <div className="track-headers">
+            {/* New video track preview header - appears when dragging over new track zone */}
+            {externalDrag && (
+              <div
+                className={`track-header-preview video ${externalDrag.newTrackType === 'video' ? 'active' : ''}`}
+                style={{ height: 60 }}
+              >
+                <span className="track-header-preview-label">+ New Video Track</span>
+              </div>
+            )}
             {tracks.map((track) => {
               const isDimmed =
                 (track.type === 'video' && anyVideoSolo && !track.solo) ||
@@ -1668,6 +929,22 @@ export function Timeline() {
                 />
               );
             })}
+            {/* New audio track preview header - appears when dragging over new track zone or linked audio needs new track */}
+            {/* Only show if the video has audio (hasAudio !== false) */}
+            {externalDrag && externalDrag.hasAudio !== false && (
+              <div
+                className={`track-header-preview audio ${
+                  externalDrag.newTrackType === 'audio' ||
+                  (externalDrag.newTrackType === 'video' && externalDrag.hasAudio !== false) ||
+                  (externalDrag.isVideo && externalDrag.audioTrackId === '__new_audio_track__')
+                    ? 'active'
+                    : ''
+                }`}
+                style={{ height: 40 }}
+              >
+                <span className="track-header-preview-label">+ New Audio Track</span>
+              </div>
+            )}
           </div>
 
           <div
@@ -1761,8 +1038,10 @@ export function Timeline() {
           })}
 
           {/* New audio track preview for linked video audio */}
+          {/* Only show if video has audio (hasAudio !== false) */}
           {externalDrag &&
             externalDrag.isVideo &&
+            externalDrag.hasAudio !== false &&
             externalDrag.audioTrackId === '__new_audio_track__' &&
             externalDrag.newTrackType !== 'video' && (
               <div className="track-lane audio new-track-preview" style={{ height: 40 }}>
@@ -1781,9 +1060,15 @@ export function Timeline() {
             )}
 
           {/* New Audio Track drop zone - at BOTTOM below audio tracks */}
-          {externalDrag && (
+          {/* Only show for audio files OR videos with audio (hasAudio !== false) */}
+          {externalDrag && (externalDrag.newTrackType === 'audio' || externalDrag.hasAudio !== false) && (
             <div
-              className={`new-track-drop-zone audio ${externalDrag.newTrackType === 'audio' ? 'active' : ''}`}
+              className={`new-track-drop-zone audio ${
+                externalDrag.newTrackType === 'audio' ||
+                (externalDrag.newTrackType === 'video' && externalDrag.hasAudio !== false)
+                  ? 'active'
+                  : ''
+              }`}
               onDragOver={(e) => handleNewTrackDragOver(e, 'audio')}
               onDragEnter={(e) => {
                 e.preventDefault();
@@ -1793,7 +1078,9 @@ export function Timeline() {
               onDrop={(e) => handleNewTrackDrop(e, 'audio')}
             >
               <span className="drop-zone-label">+ Drop to create new Audio Track</span>
-              {externalDrag.newTrackType === 'audio' && (
+              {/* Show audio preview when dropping audio OR when dropping video with audio */}
+              {(externalDrag.newTrackType === 'audio' ||
+                (externalDrag.newTrackType === 'video' && externalDrag.hasAudio !== false)) && (
                 <div
                   className="timeline-clip-preview audio"
                   style={{
@@ -1802,7 +1089,9 @@ export function Timeline() {
                   }}
                 >
                   <div className="clip-content">
-                    <span className="clip-name">New clip</span>
+                    <span className="clip-name">
+                      {externalDrag.newTrackType === 'video' ? 'Audio (linked)' : 'New clip'}
+                    </span>
                   </div>
                 </div>
               )}
@@ -2012,6 +1301,42 @@ export function Timeline() {
             <div className="playhead-head" />
             <div className="playhead-line" />
           </div>
+
+          {/* Timeline markers - span from ruler through all tracks like playhead */}
+          {markers.map(marker => (
+            <div
+              key={marker.id}
+              className={`timeline-marker ${timelineMarkerDrag?.markerId === marker.id ? 'dragging' : ''}`}
+              style={{
+                left: timeToPixel(marker.time) - scrollX + 150,
+                '--marker-color': marker.color,
+              } as React.CSSProperties}
+              title={`${marker.label || 'Marker'}: ${formatTime(marker.time)} (drag to move, right-click to delete)`}
+              onMouseDown={(e) => handleTimelineMarkerMouseDown(e, marker.id)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                removeMarker(marker.id);
+              }}
+            >
+              <div className="timeline-marker-head">M</div>
+              <div className="timeline-marker-line" />
+            </div>
+          ))}
+
+          {/* Ghost marker for drag-to-create */}
+          {markerCreateDrag && markerCreateDrag.isOverTimeline && (
+            <div
+              className={`timeline-marker ghost ${markerCreateDrag.dropAnimating ? 'drop-animation' : ''}`}
+              style={{
+                left: timeToPixel(markerCreateDrag.currentTime) - scrollX + 150,
+                '--marker-color': '#00d4ff',
+              } as React.CSSProperties}
+            >
+              <div className="timeline-marker-head">M</div>
+              <div className="timeline-marker-line" />
+            </div>
+          )}
         </div>{/* timeline-body-content */}
 
         {/* Vertical Scrollbar */}

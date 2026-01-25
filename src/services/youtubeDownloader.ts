@@ -1,7 +1,11 @@
 // YouTube video downloader service using Native Helper + yt-dlp
 // Downloads videos locally without third-party web services
 
+import { Logger } from './logger';
 import { NativeHelperClient } from './nativeHelper';
+
+const log = Logger.create('YouTubeDownloader');
+import { projectFileService } from './projectFileService';
 
 export interface DownloadProgress {
   videoId: string;
@@ -59,6 +63,7 @@ export async function downloadYouTubeVideo(
   videoId: string,
   title: string,
   thumbnail: string,
+  formatId?: string,
   onProgress?: DownloadCallback
 ): Promise<File> {
   // Check if already downloading
@@ -95,9 +100,9 @@ export async function downloadYouTubeVideo(
     const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
     // Request download from Native Helper
-    console.log('[YouTubeDownloader] Starting download:', videoId);
+    log.info(`Starting download: ${videoId}`);
 
-    const result = await NativeHelperClient.downloadYouTube(youtubeUrl, (percent) => {
+    const result = await NativeHelperClient.downloadYouTube(youtubeUrl, formatId, (percent) => {
       progress.progress = 5 + (percent * 0.9); // 5% to 95%
       notifySubscribers(progress);
     });
@@ -110,15 +115,32 @@ export async function downloadYouTubeVideo(
     progress.progress = 95;
     notifySubscribers(progress);
 
-    // Read the downloaded file via Native Helper
-    console.log('[YouTubeDownloader] Fetching file from helper:', result.path);
+    // Transfer file from helper via WebSocket
+    log.debug(`Fetching file from helper: ${result.path}`);
     const fileResponse = await NativeHelperClient.getDownloadedFile(result.path!);
     if (!fileResponse) {
       throw new Error('Failed to read downloaded file from helper');
     }
 
-    const sanitizedTitle = title.replace(/[^a-zA-Z0-9\s-]/g, '').substring(0, 100);
-    const file = new File([fileResponse], `${sanitizedTitle}.mp4`, { type: 'video/mp4' });
+    // Try to save to project's YT folder if a project is open
+    let file: File;
+    const blob = new Blob([fileResponse], { type: 'video/mp4' });
+    if (projectFileService.isProjectOpen()) {
+      const savedFile = await projectFileService.saveYouTubeDownload(blob, title);
+      if (savedFile) {
+        file = savedFile;
+        log.info('Saved to project YT folder');
+      } else {
+        // Fallback to in-memory file
+        const sanitizedTitle = title.replace(/[^a-zA-Z0-9\s-]/g, '').substring(0, 100);
+        file = new File([fileResponse], `${sanitizedTitle}.mp4`, { type: 'video/mp4' });
+      }
+    } else {
+      // No project open, keep in memory
+      const sanitizedTitle = title.replace(/[^a-zA-Z0-9\s-]/g, '').substring(0, 100);
+      file = new File([fileResponse], `${sanitizedTitle}.mp4`, { type: 'video/mp4' });
+      log.debug('No project open, file kept in memory only');
+    }
 
     progress.status = 'complete';
     progress.progress = 100;

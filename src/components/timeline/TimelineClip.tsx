@@ -6,6 +6,9 @@ import { THUMB_WIDTH } from './constants';
 import type { ClipAnalysis } from '../../types';
 import { useTimelineStore } from '../../stores/timeline';
 import { PickWhip } from './PickWhip';
+import { Logger } from '../../services/logger';
+
+const log = Logger.create('TimelineClip');
 
 // Render waveform for audio clips using canvas for better performance
 // Supports trimming: only displays the portion of waveform between inPoint and outPoint
@@ -361,16 +364,23 @@ function TimelineClipComponent({
   isLinkedToTrimming,
   clipDrag,
   clipTrim,
+  zoom,
   scrollX,
   timelineRef,
   proxyEnabled,
   proxyStatus,
   proxyProgress,
   showTranscriptMarkers,
+  toolMode,
+  snappingEnabled,
+  playheadPosition,
+  cutHoverInfo,
+  onCutHover,
   onMouseDown,
   onDoubleClick,
   onContextMenu,
   onTrimStart,
+  onCutAtPosition,
   hasKeyframes,
   timeToPixel,
   pixelToTime,
@@ -380,6 +390,15 @@ function TimelineClipComponent({
   onSetClipParent,
 }: TimelineClipProps) {
   const thumbnails = clip.thumbnails || [];
+
+  // Check if this clip should show cut indicator (either directly hovered or linked to hovered clip)
+  const isDirectlyHovered = cutHoverInfo?.clipId === clip.id;
+  const linkedClip = clip.linkedClipId ? clips.find(c => c.id === clip.linkedClipId) : null;
+  const isLinkedToHovered = linkedClip && cutHoverInfo?.clipId === linkedClip.id;
+  // Also check reverse link - if another clip links to this one
+  const reverseLinkedClip = clips.find(c => c.linkedClipId === clip.id);
+  const isReverseLinkedToHovered = reverseLinkedClip && cutHoverInfo?.clipId === reverseLinkedClip.id;
+  const shouldShowCutIndicator = toolMode === 'cut' && cutHoverInfo && (isDirectlyHovered || isLinkedToHovered || isReverseLinkedToHovered);
 
   // Determine if this is an audio clip (check source type, MIME type, or extension as fallback)
   const audioExtensions = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'];
@@ -517,6 +536,7 @@ function TimelineClipComponent({
     clip.parentClipId ? 'has-parent' : '',
     clip.isPendingDownload ? 'pending-download' : '',
     clip.downloadError ? 'download-error' : '',
+    clip.isComposition ? 'composition' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -524,15 +544,98 @@ function TimelineClipComponent({
   // Get parent clip name for tooltip
   const parentClip = clip.parentClipId ? clips.find(c => c.id === clip.parentClipId) : null;
 
+  // Cut tool snapping helper
+  const snapCutTime = (rawTime: number, shouldSnap: boolean): number => {
+    log.debug('CUT SNAP', { shouldSnap, snappingEnabled, rawTime, zoom, playheadPosition });
+    if (!shouldSnap) return rawTime;
+
+    const snapThresholdPixels = 10;
+    const snapThresholdTime = snapThresholdPixels / zoom;
+
+    // Collect snap targets: playhead and all clip edges
+    const snapTargets: number[] = [playheadPosition];
+    clips.forEach(c => {
+      snapTargets.push(c.startTime);
+      snapTargets.push(c.startTime + c.duration);
+    });
+
+    log.debug('CUT SNAP targets:', { snapTargets, threshold: snapThresholdTime });
+
+    // Find nearest snap target
+    let nearestTarget = rawTime;
+    let nearestDistance = Infinity;
+    for (const target of snapTargets) {
+      const distance = Math.abs(target - rawTime);
+      if (distance < nearestDistance && distance <= snapThresholdTime) {
+        nearestDistance = distance;
+        nearestTarget = target;
+      }
+    }
+
+    log.debug('CUT SNAP result:', { nearestTarget, nearestDistance, snapped: nearestTarget !== rawTime });
+    return nearestTarget;
+  };
+
+  // Cut tool handlers
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (toolMode !== 'cut') {
+      if (cutHoverInfo?.clipId === clip.id) onCutHover(null, null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    // Convert pixel position to time
+    const rawCutTime = displayStartTime + (x / width) * displayDuration;
+    // When snapping enabled: snap by default, Alt temporarily disables
+    // When snapping disabled: don't snap, Alt temporarily enables
+    const shouldSnap = snappingEnabled !== e.altKey;
+    const cutTime = snapCutTime(rawCutTime, shouldSnap);
+    onCutHover(clip.id, cutTime);
+  };
+
+  const handleMouseLeave = () => {
+    if (cutHoverInfo?.clipId === clip.id) onCutHover(null, null);
+  };
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (toolMode !== 'cut') return;
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    // Convert pixel position to time within clip
+    const rawCutTime = displayStartTime + (x / width) * displayDuration;
+    // When snapping enabled: snap by default, Alt temporarily disables
+    // When snapping disabled: don't snap, Alt temporarily enables
+    const shouldSnap = snappingEnabled !== e.altKey;
+    const cutTime = snapCutTime(rawCutTime, shouldSnap);
+    onCutAtPosition(clip.id, cutTime);
+    onCutHover(null, null);
+  };
+
+  // Calculate cut indicator position for this clip
+  const cutIndicatorX = shouldShowCutIndicator && cutHoverInfo
+    ? ((cutHoverInfo.time - displayStartTime) / displayDuration) * width
+    : null;
+
   return (
     <div
-      className={clipClass}
-      style={{ left, width }}
+      className={`${clipClass}${toolMode === 'cut' ? ' cut-mode' : ''}`}
+      style={{ left, width, cursor: toolMode === 'cut' ? 'crosshair' : undefined }}
       data-clip-id={clip.id}
-      onMouseDown={onMouseDown}
-      onDoubleClick={onDoubleClick}
+      onMouseDown={toolMode === 'cut' ? undefined : onMouseDown}
+      onDoubleClick={toolMode === 'cut' ? undefined : onDoubleClick}
       onContextMenu={onContextMenu}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      onClick={handleClick}
     >
+      {/* Cut indicator line */}
+      {shouldShowCutIndicator && cutIndicatorX !== null && cutIndicatorX >= 0 && cutIndicatorX <= width && (
+        <div
+          className="cut-indicator"
+          style={{ left: cutIndicatorX }}
+        />
+      )}
       {/* YouTube pending download preview */}
       {clip.isPendingDownload && clip.youtubeThumbnail && (
         <div

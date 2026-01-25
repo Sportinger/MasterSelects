@@ -208,7 +208,7 @@ export interface EngineStats {
   layerCount: number;
   targetFps: number;
   // Decoder info
-  decoder: 'WebCodecs' | 'HTMLVideo' | 'HTMLVideo(cached)' | 'HTMLVideo(paused-cache)' | 'NativeHelper' | 'none';
+  decoder: 'WebCodecs' | 'HTMLVideo' | 'HTMLVideo(cached)' | 'HTMLVideo(paused-cache)' | 'NativeHelper' | 'ParallelDecode' | 'none';
   // Audio status
   audio: {
     playing: number;       // Number of audio elements currently playing
@@ -282,6 +282,7 @@ export interface TimelineClip {
     filePath?: string;  // Path to original file (for native helper to access directly)
   } | null;
   thumbnails?: string[];  // Array of data URLs for filmstrip preview
+  mediaFileId?: string;   // Reference to MediaFile for audio/proxy lookup (top-level for YouTube downloads)
   linkedClipId?: string;  // ID of linked clip (e.g., audio linked to video)
   linkedGroupId?: string; // ID of multicam group (clips synced together)
   parentClipId?: string;  // ID of parent clip for transform inheritance (like AE parenting)
@@ -387,6 +388,14 @@ export interface SerializableClip {
   textProperties?: TextClipProperties;
 }
 
+// Serializable timeline marker (for project save/load)
+export interface SerializableMarker {
+  id: string;
+  time: number;
+  label: string;
+  color: string;
+}
+
 // Serializable timeline data for composition storage
 export interface CompositionTimelineData {
   tracks: TimelineTrack[];
@@ -399,6 +408,7 @@ export interface CompositionTimelineData {
   inPoint: number | null;
   outPoint: number | null;
   loopPlayback: boolean;
+  markers?: SerializableMarker[];  // Timeline markers
 }
 
 // Keyframe animation types

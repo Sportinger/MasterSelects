@@ -51,3 +51,13 @@ temp
 ffmpeg-wasm-build/build/
 ffmpeg-wasm-build/dist/
 ffmpeg-wasm-build/build.log
+
+# Terminal state (Claude Code)
+.terminal_*
+
+# Test videos (large files - keep out of git)
+public/test-videos/
+
+# Rust build artifacts
+tools/helpers/*/target/
+helpers/*/target/

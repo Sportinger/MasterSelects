@@ -4,6 +4,9 @@
 import { useState, useCallback, useRef } from 'react';
 import type { TimelineClip, TimelineTrack } from '../../../types';
 import type { ClipDragState } from '../types';
+import { Logger } from '../../../services/logger';
+
+const log = Logger.create('useClipDrag');
 
 interface UseClipDragProps {
   // Refs
@@ -16,6 +19,7 @@ interface UseClipDragProps {
   clipMap: Map<string, TimelineClip>;
   selectedClipIds: Set<string>;
   scrollX: number;
+  snappingEnabled: boolean;
 
   // Actions
   selectClip: (clipId: string | null, addToSelection?: boolean) => void;
@@ -43,6 +47,7 @@ export function useClipDrag({
   clipMap,
   selectedClipIds,
   scrollX,
+  snappingEnabled,
   selectClip,
   moveClip,
   openCompositionTab,
@@ -123,12 +128,15 @@ export function useClipDrag({
         const x = moveEvent.clientX - rect.left + scrollX - drag.grabOffsetX;
         const rawTime = Math.max(0, pixelToTime(x));
 
-        // First check for edge snapping
-        const { startTime: snappedTime, snapped } = getSnappedPosition(
-          drag.clipId,
-          rawTime,
-          newTrackId
-        );
+        // Snapping with Alt-key toggle:
+        // - When snapping enabled: snap by default, Alt temporarily disables
+        // - When snapping disabled: don't snap, Alt temporarily enables
+        const shouldSnap = snappingEnabled !== moveEvent.altKey;
+
+        // First check for edge snapping (only if snapping should be active)
+        const { startTime: snappedTime, snapped } = shouldSnap
+          ? getSnappedPosition(drag.clipId, rawTime, newTrackId)
+          : { startTime: rawTime, snapped: false };
 
         // Then apply resistance for overlap prevention
         const draggedClip = clipMap.get(drag.clipId);
@@ -195,7 +203,7 @@ export function useClipDrag({
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [trackLanesRef, timelineRef, clipMap, tracks, scrollX, pixelToTime, selectClip, selectedClipIds, getSnappedPosition, getPositionWithResistance, moveClip]
+    [trackLanesRef, timelineRef, clipMap, tracks, scrollX, snappingEnabled, pixelToTime, selectClip, selectedClipIds, getSnappedPosition, getPositionWithResistance, moveClip]
   );
 
   // Handle double-click on clip - open composition if it's a nested comp
@@ -209,7 +217,7 @@ export function useClipDrag({
 
       // If this clip is a composition, open it in a new tab and switch to it
       if (clip.isComposition && clip.compositionId) {
-        console.log('[Timeline] Double-click on composition clip, opening:', clip.compositionId);
+        log.debug('Double-click on composition clip, opening:', clip.compositionId);
         openCompositionTab(clip.compositionId);
       }
     },

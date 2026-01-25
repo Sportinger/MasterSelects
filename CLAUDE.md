@@ -1,199 +1,102 @@
 # CLAUDE.md
 
-## Workflow
+Anweisungen für AI-Assistenten (Claude, GPT, etc.) bei der Arbeit an diesem Projekt.
 
-**Branch-Strategie (Cloudflare Pages):**
-- `staging` Branch: Entwicklung (kein Auto-Deploy)
-- `master` Branch: Production (Cloudflare baut nur hier)
+---
 
-**WICHTIG - Commit-Regeln:**
-- **IMMER auf `staging` committen** - niemals direkt auf master
-- **Nach JEDER Änderung committen und pushen** - nicht mehrere Änderungen sammeln
-- **NUR PR/Merge zu master wenn User es explizit verlangt!**
-- Nicht selbstständig zu master mergen
+## 1. Workflow (WICHTIG!)
 
+### Branch-Regeln
+| Branch | Zweck |
+|--------|-------|
+| `staging` | Entwicklung - hierhin committen |
+| `master` | Production - nur via PR |
+
+### Commit-Regeln
 ```bash
-# Nach JEDER Änderung sofort committen und pushen:
+# Nach JEDER Änderung sofort:
 git add . && git commit -m "description" && git push origin staging
+```
 
-# NUR wenn User "merge zu master" oder "PR zu master" sagt:
-# 1. Version in src/version.ts erhöhen (z.B. 1.0.5 -> 1.0.6)
-# 2. CHANGELOG in src/version.ts aktualisieren (neuer Eintrag mit allen Änderungen)
-# 3. KNOWN_ISSUES in src/version.ts prüfen und aktualisieren
-# 4. Commit & Push auf staging
-# 5. PR erstellen und mergen:
+**NIEMALS:**
+- Direkt auf `master` committen
+- Selbstständig zu `master` mergen
+- Mehrere Änderungen sammeln
+
+### Merge zu Master (nur wenn User es verlangt!)
+```bash
+# 1. Version erhöhen in src/version.ts
+# 2. CHANGELOG aktualisieren in src/version.ts
+# 3. Commit & Push
+# 4. PR erstellen und mergen:
 gh pr create --base master --head staging --title "..." --body "..."
 gh pr merge --merge
-# 6. Staging mit master synchronisieren:
+# 5. Staging synchronisieren:
 git fetch origin && git merge origin/master && git push origin staging
 ```
 
-**Version nur bei MERGE zu master erhöhen!**
-- Datei: `src/version.ts`
-- Format: `MAJOR.MINOR.PATCH`
-- VOR dem Merge zu master: PATCH um 1 erhöhen
-- Version wird oben rechts neben "WebGPU Ready" angezeigt
+### Version & Changelog
+- **Datei:** `src/version.ts`
+- **Version:** Nur bei Merge zu master erhöhen (PATCH +1)
+- **CHANGELOG:** Neuen Eintrag am Anfang mit `version`, `date`, `changes[]`
+- **KNOWN_ISSUES:** Aktuelle Bugs pflegen
 
-**What's New Dialog aktualisieren bei MERGE zu master!**
-- Datei: `src/version.ts`
-- `CHANGELOG` Array: Neuen Eintrag am ANFANG hinzufügen mit:
-  - `version`: Die neue Version (z.B. '1.0.8')
-  - `date`: Aktuelles Datum (z.B. '2026-01-15')
-  - `changes`: Array mit allen Änderungen seit letztem Release
-    - `type`: 'new' (grün), 'fix' (blau), oder 'improve' (orange)
-    - `description`: Kurze Beschreibung der Änderung
-- `KNOWN_ISSUES` Array: Aktuelle Bugs/Einschränkungen pflegen
-  - Behobene Issues entfernen
-  - Neue bekannte Probleme hinzufügen
+### Dokumentation
+Bei Feature-Änderungen: `docs/Features/` aktualisieren
 
-```typescript
-// Beispiel für neuen CHANGELOG Eintrag:
-export const CHANGELOG: ChangelogEntry[] = [
-  {
-    version: '1.0.8',
-    date: '2026-01-15',
-    changes: [
-      { type: 'new', description: 'Neue Feature Beschreibung' },
-      { type: 'fix', description: 'Behobener Bug' },
-      { type: 'improve', description: 'Verbesserung' },
-    ],
-  },
-  // ... ältere Einträge
-];
+---
 
-export const KNOWN_ISSUES: string[] = [
-  'Aktuelles Problem 1',
-  'Aktuelles Problem 2',
-];
-```
-
-**Documentation: docs/Features/ pflegen!**
-- Bei jedem Commit mit neuen/geänderten Features: `docs/Features/` aktualisieren
-- Falls ein bestehendes Feature auffällt, das noch nicht dokumentiert ist: hinzufügen
-- Das Feature-Handbuch dient als vollständige Referenz aller App-Funktionen
-- Main index: `docs/Features/README.md`
-
-## Quick Start
+## 2. Quick Reference
 
 ```bash
 npm install && npm run dev   # http://localhost:5173
-npm run build                 # Production build
-npm run lint                  # ESLint check
+npm run build                # Production build
+npm run lint                 # ESLint check
 ```
 
-## Project Structure
+### Native Helper (optional)
+```bash
+# Windows (YouTube):
+cd tools/helpers/win && cargo run --release
+
+# Linux/Mac (FFmpeg decode):
+cd tools/helpers/linux && cargo run --release  # oder /mac
+```
+Ports: WebSocket `9876`, HTTP `9877`
+
+---
+
+## 3. Architektur (Kurzübersicht)
 
 ```
 src/
-├── components/
-│   ├── timeline/           # Timeline editor components
-│   │   ├── Timeline.tsx    # Main orchestrator
-│   │   ├── TimelineRuler.tsx
-│   │   ├── TimelineTrack.tsx
-│   │   ├── TimelineClip.tsx
-│   │   ├── TimelineKeyframes.tsx
-│   │   ├── TimelineControls.tsx
-│   │   ├── TimelineHeader.tsx
-│   │   ├── CurveEditor.tsx     # Bezier keyframe editor
-│   │   ├── MulticamDialog.tsx  # Multicam setup dialog
-│   │   ├── PickWhip.tsx        # Expression linking
-│   │   └── ParentChildLink.tsx # Layer parenting
-│   ├── panels/             # Dock panel contents
-│   │   ├── PropertiesPanel.tsx  # Unified: Transform, Effects, Masks, Volume
-│   │   ├── MediaPanel.tsx
-│   │   ├── AIChatPanel.tsx
-│   │   ├── MultiCamPanel.tsx
-│   │   ├── TranscriptPanel.tsx
-│   │   ├── AnalysisPanel.tsx
-│   │   ├── LayerPanel.tsx
-│   │   ├── EffectsPanel.tsx     # Legacy, use PropertiesPanel
-│   │   └── ClipPropertiesPanel.tsx
-│   ├── preview/            # Preview & overlay
-│   │   ├── Preview.tsx
-│   │   └── MaskOverlay.tsx
-│   ├── export/             # Export functionality
-│   │   ├── ExportDialog.tsx
-│   │   └── ExportPanel.tsx
-│   ├── common/             # Shared components
-│   │   └── Toolbar.tsx
-│   └── dock/               # Dockable panel system
-│
-├── stores/
-│   ├── timeline/           # Timeline state (slices)
-│   │   ├── index.ts        # Main store export
-│   │   ├── types.ts        # Timeline types
-│   │   ├── constants.ts    # Default values
-│   │   ├── utils.ts        # Helper functions
-│   │   ├── trackSlice.ts
-│   │   ├── clipSlice.ts
-│   │   ├── playbackSlice.ts
-│   │   ├── keyframeSlice.ts
-│   │   ├── selectionSlice.ts
-│   │   └── maskSlice.ts    # Mask shapes and vertices
-│   ├── mediaStore.ts       # Media & video state
-│   ├── mixerStore.ts       # Layer, effect, grid state
-│   ├── multicamStore.ts    # Multicam sources and sync
-│   ├── settingsStore.ts    # App settings and preferences
-│   ├── dockStore.ts        # UI layout state
-│   └── historyStore.ts     # Undo/redo
-│
-├── engine/
-│   ├── core/               # GPU initialization
-│   │   ├── WebGPUContext.ts
-│   │   └── types.ts
-│   ├── pipeline/           # Render pipelines
-│   │   ├── CompositorPipeline.ts
-│   │   ├── EffectsPipeline.ts
-│   │   └── OutputPipeline.ts
-│   ├── texture/            # Texture management
-│   │   ├── TextureManager.ts
-│   │   ├── MaskTextureManager.ts
-│   │   └── ScrubbingCache.ts
-│   ├── video/              # Video handling
-│   │   ├── VideoFrameManager.ts
-│   │   └── WebCodecsPlayer.ts
-│   ├── export/
-│   │   └── FrameExporter.ts
-│   └── WebGPUEngine.ts     # Facade (orchestrates modules)
-│
-├── shaders/                # WGSL shaders
-│   ├── composite.wgsl      # Layer compositing, 37 blend modes
-│   ├── effects.wgsl        # GPU effects
-│   ├── opticalflow.wgsl    # Motion analysis
-│   └── output.wgsl         # Final output
-│
-├── hooks/
-│   ├── useEngine.ts
-│   ├── useGlobalHistory.ts
-│   ├── useMIDI.ts
-│   ├── useClipPanelSync.ts     # Auto-switch panels on clip select
-│   └── useContextMenuPosition.ts
-│
-└── services/
-    ├── projectDB.ts            # IndexedDB persistence
-    ├── fileSystemService.ts    # File System Access API
-    ├── proxyGenerator.ts       # GPU proxy generation
-    ├── proxyFrameCache.ts      # Proxy frame caching
-    ├── audioManager.ts         # Web Audio API, 10-band EQ
-    ├── audioSync.ts            # Cross-correlation sync
-    ├── audioAnalyzer.ts        # Audio level analysis
-    ├── aiTools.ts              # 50+ AI editing tools
-    ├── claudeService.ts        # Claude API integration
-    ├── whisperService.ts       # Transcription providers
-    ├── clipTranscriber.ts      # Clip transcription
-    ├── transcriptSync.ts       # Transcript synchronization
-    ├── clipAnalyzer.ts         # Clip analysis
-    ├── multicamAnalyzer.ts     # Multicam analysis
-    ├── compositionRenderer.ts  # Nested composition rendering
-    └── apiKeyManager.ts        # API key storage
+├── components/          # React UI
+│   ├── timeline/        # Timeline-Editor (hooks/, components/)
+│   ├── panels/          # Properties, Media, AI, YouTube, Export
+│   ├── preview/         # Canvas + Overlays
+│   └── dock/            # Panel-System
+├── stores/              # Zustand State
+│   ├── timeline/        # Slices: track, clip, keyframe, mask, playback
+│   └── mediaStore/      # Slices: import, folder, proxy, composition
+├── engine/              # WebGPU Rendering
+│   ├── core/            # WebGPUContext, RenderTargetManager
+│   ├── render/          # Compositor, RenderLoop, LayerCollector
+│   ├── export/          # FrameExporter, VideoEncoder, AudioEncoder
+│   ├── audio/           # AudioMixer, TimeStretch
+│   └── ffmpeg/          # FFmpegBridge
+├── effects/             # 30+ GPU Effects (color/, blur/, distort/, stylize/)
+├── services/            # Audio, AI, Project, NativeHelper
+└── shaders/             # WGSL (composite, effects, output)
 ```
 
-## Critical Patterns
+**Detaillierte Struktur:** siehe `README.md` oder `docs/Features/`
+
+---
+
+## 4. Critical Patterns (MUST READ)
 
 ### HMR Singleton
-
-Engine must survive hot reloads to prevent "Device mismatch" errors:
-
+Engine muss Hot Reloads überleben:
 ```typescript
 const hot = import.meta.hot;
 if (hot?.data?.engine) {
@@ -205,15 +108,13 @@ if (hot?.data?.engine) {
 ```
 
 ### Stale Closure Fix
-
-Always use `get().layers` inside async callbacks:
-
+Immer `get()` in async Callbacks:
 ```typescript
-// WRONG - stale closure
+// FALSCH
 const { layers } = get();
 video.onload = () => set({ layers: layers.map(...) });
 
-// CORRECT - fresh state
+// RICHTIG
 video.onload = () => {
   const current = get().layers;
   set({ layers: current.map(...) });
@@ -221,96 +122,106 @@ video.onload = () => {
 ```
 
 ### Video Ready State
-
-Wait for `canplaythrough`, not `loadeddata`:
-
+Warten auf `canplaythrough`, nicht `loadeddata`:
 ```typescript
 video.addEventListener('canplaythrough', () => {
-  // Video ready for texture creation
+  // Jetzt ist Video bereit
 }, { once: true });
 ```
 
 ### Zustand Slice Pattern
-
-Store slices follow this pattern:
-
 ```typescript
 export const createSlice: SliceCreator<Actions> = (set, get) => ({
   actionName: (params) => {
     const state = get();
-    // ... logic
     set({ /* updates */ });
   },
 });
 ```
 
-## Texture Types
+---
 
-| Source | Texture Type |
-|--------|-------------|
+## 5. Debugging & Logging
+
+### Logger verwenden
+```typescript
+import { Logger } from '@/services/logger';
+const log = Logger.create('ModuleName');
+
+log.debug('Verbose', { data });  // Nur wenn DEBUG aktiv
+log.info('Event');               // Immer sichtbar
+log.warn('Warning', data);       // Orange
+log.error('Fehler', error);      // Rot + Stack Trace
+```
+
+### Console Commands
+```javascript
+Logger.enable('WebGPU,FFmpeg')  // Module aktivieren
+Logger.enable('*')              // Alle aktivieren
+Logger.disable()                // Nur Errors
+
+Logger.setLevel('DEBUG')        // Alle Level
+Logger.setLevel('WARN')         // Nur Warn+Error
+
+Logger.search('device')         // Logs durchsuchen
+Logger.errors()                 // Nur Fehler
+Logger.dump(50)                 // Letzte 50 ausgeben
+Logger.summary()                // Übersicht für AI
+```
+
+### Common Issues
+
+| Problem | Lösung |
+|---------|--------|
+| 15fps auf Linux | `chrome://flags/#enable-vulkan` aktivieren |
+| "Device mismatch" | HMR kaputt → Seite neu laden |
+| Schwarzes Canvas | `readyState >= 2` prüfen |
+| WebCodecs Fehler | Fällt automatisch auf HTMLVideoElement zurück |
+
+---
+
+## 6. Wichtige Dateien
+
+| Bereich | Datei |
+|---------|-------|
+| Version/Changelog | `src/version.ts` |
+| Engine Entry | `src/engine/WebGPUEngine.ts` |
+| Timeline Store | `src/stores/timeline/index.ts` |
+| Media Store | `src/stores/mediaStore/index.ts` |
+| Effects Registry | `src/effects/index.ts` |
+| Logger | `src/services/logger.ts` |
+| Project Storage | `src/services/project/core/ProjectCoreService.ts` |
+
+### Neuen Effect hinzufügen
+1. Shader in `src/effects/[category]/[name]/shader.wgsl`
+2. Index in `src/effects/[category]/[name]/index.ts`
+3. Export in `src/effects/[category]/index.ts`
+4. UI in `src/components/panels/PropertiesPanel.tsx`
+
+---
+
+## 7. Texture Types
+
+| Source | GPU Type |
+|--------|----------|
 | Video (HTMLVideoElement) | `texture_external` (zero-copy) |
-| Video (WebCodecs VideoFrame) | `texture_external` (zero-copy) |
+| Video (VideoFrame) | `texture_external` (zero-copy) |
 | Image | `texture_2d<f32>` (copied once) |
 
-## Common Issues
+---
 
-| Problem | Solution |
-|---------|----------|
-| 15fps on Linux | Enable Vulkan: `chrome://flags/#enable-vulkan` |
-| "Device mismatch" | HMR broke singleton - refresh page |
-| Black canvas | Check `readyState >= 2` before texture import |
-| WebCodecs fails | Falls back to HTMLVideoElement automatically |
-
-## Render Loop
+## 8. Render Pipeline
 
 ```
 useEngine hook
-    └─► engine.start(callback)
-            └─► requestAnimationFrame loop
-                    └─► engine.render(layers)
-                            ├─► Import external textures
-                            ├─► Ping-pong composite each layer
-                            └─► Output to canvas(es)
+  └─► engine.start(callback)
+        └─► requestAnimationFrame loop
+              └─► engine.render(layers)
+                    ├─► Import textures
+                    ├─► Composite layers (ping-pong)
+                    └─► Output to canvas
 ```
 
-## Adding Effects
+---
 
-1. Add shader in `src/shaders/effects.wgsl`
-2. Add params type and defaults in `src/stores/timeline/utils.ts:getDefaultEffectParams()`
-3. Add UI controls in `src/components/panels/PropertiesPanel.tsx` (Effects tab)
-
-## Debugging
-
-```typescript
-// Profile output (automatic, every 1s)
-// [PROFILE] FPS=60 | gap=16ms | layers=3 | render=2.50ms
-
-// Check GPU status
-chrome://gpu
-
-// Slow frame warnings (automatic)
-// [RAF] Very slow frame: rafDelay=150ms
-```
-
-## Panel System
-
-8 dockable panel types:
-- **Preview** - Composition canvas
-- **Timeline** - Multi-track editor
-- **Media** - Media browser
-- **Properties** - Unified clip editing (Transform, Effects, Masks, Volume)
-- **Export** - Render settings
-- **Multicam** - Camera sync
-- **AI Chat** - GPT assistant
-- **Slots** - Layer management
-
-## Key Features
-
-- **WebGPU** rendering with 60fps compositing
-- **37 blend modes** (all After Effects modes)
-- **9 GPU effects** with keyframe animation
-- **10-band EQ** with keyframe support
-- **Multicam sync** via audio cross-correlation
-- **AI tools** (50+) via OpenAI function calling
-- **4 transcription providers** (Local Whisper, OpenAI, AssemblyAI, Deepgram)
-- **H.264/VP9 export** via WebCodecs
+*Ausführliche Dokumentation: `docs/Features/README.md`*

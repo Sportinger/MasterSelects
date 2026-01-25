@@ -4,6 +4,9 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import type { MediaFile } from './mediaStore';
+import { Logger } from '../services/logger';
+
+const log = Logger.create('MultiCam');
 
 // =============================================================================
 // Types
@@ -222,7 +225,7 @@ export const useMultiCamStore = create<MultiCamStore>()(
 
       // Check if already added
       if (cameras.some(c => c.mediaFileId === mediaFile.id)) {
-        console.warn('[MultiCam] Camera already added:', mediaFile.name);
+        log.warn('Camera already added:', mediaFile.name);
         return;
       }
 
@@ -246,7 +249,7 @@ export const useMultiCamStore = create<MultiCamStore>()(
         };
       });
 
-      console.log('[MultiCam] Added camera:', camera.name);
+      log.info('Added camera:', camera.name);
     },
 
     removeCamera: (id: string) => {
@@ -299,12 +302,12 @@ export const useMultiCamStore = create<MultiCamStore>()(
       const { cameras, masterCameraId } = get();
 
       if (cameras.length < 2) {
-        console.warn('[MultiCam] Need at least 2 cameras to sync');
+        log.warn('Need at least 2 cameras to sync');
         return;
       }
 
       if (!masterCameraId) {
-        console.warn('[MultiCam] No master camera set');
+        log.warn('No master camera set');
         return;
       }
 
@@ -348,9 +351,9 @@ export const useMultiCamStore = create<MultiCamStore>()(
           analysisProgress: 100,
         });
 
-        console.log('[MultiCam] Sync complete');
+        log.info('Sync complete');
       } catch (error) {
-        console.error('[MultiCam] Sync failed:', error);
+        log.error('Sync failed:', error);
         set({
           analysisStatus: 'error',
           analysisError: error instanceof Error ? error.message : 'Sync failed',
@@ -374,7 +377,7 @@ export const useMultiCamStore = create<MultiCamStore>()(
       const { cameras } = get();
 
       if (cameras.length === 0) {
-        console.warn('[MultiCam] No cameras to analyze');
+        log.warn('No cameras to analyze');
         return;
       }
 
@@ -411,9 +414,9 @@ export const useMultiCamStore = create<MultiCamStore>()(
           analysisProgress: 100,
         });
 
-        console.log('[MultiCam] Analysis complete');
+        log.info('Analysis complete');
       } catch (error) {
-        console.error('[MultiCam] Analysis failed:', error);
+        log.error('Analysis failed:', error);
         set({
           analysisStatus: 'error',
           analysisError: error instanceof Error ? error.message : 'Analysis failed',
@@ -438,7 +441,7 @@ export const useMultiCamStore = create<MultiCamStore>()(
       const { cameras, masterCameraId } = get();
 
       if (cameras.length === 0) {
-        console.warn('[MultiCam] No cameras for transcription');
+        log.warn('No cameras for transcription');
         return;
       }
 
@@ -448,7 +451,7 @@ export const useMultiCamStore = create<MultiCamStore>()(
         : cameras[0];
 
       if (!sourceCamera) {
-        console.warn('[MultiCam] No source camera for transcription');
+        log.warn('No source camera for transcription');
         return;
       }
 
@@ -475,9 +478,9 @@ export const useMultiCamStore = create<MultiCamStore>()(
           transcriptProgress: 100,
         });
 
-        console.log('[MultiCam] Transcription complete:', transcript.length, 'entries');
+        log.info('Transcription complete:', transcript.length, 'entries');
       } catch (error) {
-        console.error('[MultiCam] Transcription failed:', error);
+        log.error('Transcription failed:', error);
         set({
           transcriptStatus: 'error',
           transcriptError: error instanceof Error ? error.message : 'Transcription failed',
@@ -517,7 +520,7 @@ export const useMultiCamStore = create<MultiCamStore>()(
       const { cameras, analysis, transcript, apiKeySet, editStyle, customPrompt } = get();
 
       if (cameras.length === 0) {
-        console.warn('[MultiCam] No cameras for EDL generation');
+        log.warn('No cameras for EDL generation');
         return;
       }
 
@@ -551,9 +554,9 @@ export const useMultiCamStore = create<MultiCamStore>()(
           edlStatus: 'complete',
         });
 
-        console.log('[MultiCam] EDL generated:', edl.length, 'decisions');
+        log.info('EDL generated:', edl.length, 'decisions');
       } catch (error) {
-        console.error('[MultiCam] EDL generation failed:', error);
+        log.error('EDL generation failed:', error);
         set({
           edlStatus: 'error',
           edlError: error instanceof Error ? error.message : 'EDL generation failed',
@@ -608,7 +611,7 @@ export const useMultiCamStore = create<MultiCamStore>()(
       const { edl, cameras } = get();
 
       if (edl.length === 0) {
-        console.warn('[MultiCam] No EDL to apply');
+        log.warn('No EDL to apply');
         return;
       }
 
@@ -658,7 +661,7 @@ export const useMultiCamStore = create<MultiCamStore>()(
             });
           }
 
-          console.log('[MultiCam] Applied EDL to timeline:', edl.length, 'clips');
+          log.info('Applied EDL to timeline:', edl.length, 'clips');
         });
       });
     },
@@ -673,9 +676,9 @@ export const useMultiCamStore = create<MultiCamStore>()(
         const { apiKeyManager } = await import('../services/apiKeyManager');
         await apiKeyManager.storeKey(key);
         set({ apiKeySet: true, apiKey: null }); // Don't store raw key in state
-        console.log('[MultiCam] API key stored');
+        log.info('API key stored');
       } catch (error) {
-        console.error('[MultiCam] Failed to store API key:', error);
+        log.error('Failed to store API key:', error);
         throw error;
       }
     },
@@ -685,9 +688,9 @@ export const useMultiCamStore = create<MultiCamStore>()(
         const { apiKeyManager } = await import('../services/apiKeyManager');
         await apiKeyManager.clearKey();
         set({ apiKeySet: false, apiKey: null });
-        console.log('[MultiCam] API key cleared');
+        log.info('API key cleared');
       } catch (error) {
-        console.error('[MultiCam] Failed to clear API key:', error);
+        log.error('Failed to clear API key:', error);
       }
     },
 
@@ -740,7 +743,7 @@ if (typeof window !== 'undefined') {
       const hasKey = await apiKeyManager.hasKey();
       useMultiCamStore.setState({ apiKeySet: hasKey });
     } catch (error) {
-      console.warn('[MultiCam] Failed to check API key:', error);
+      log.warn('Failed to check API key:', error);
     }
   }, 100);
 }

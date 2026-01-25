@@ -1,8 +1,15 @@
 // Project Sync Service
 // Synchronizes mediaStore and timelineStore with projectFileService
 
+import { Logger } from './logger';
 import { useMediaStore, type MediaFile, type Composition, type MediaFolder } from '../stores/mediaStore';
+import { getMediaInfo } from '../stores/mediaStore/helpers/mediaInfoHelpers';
+import { createThumbnail } from '../stores/mediaStore/helpers/thumbnailHelpers';
+
+const log = Logger.create('ProjectSync');
 import { useTimelineStore } from '../stores/timeline';
+import { useYouTubeStore } from '../stores/youtubeStore';
+import { useDockStore } from '../stores/dockStore';
 import {
   projectFileService,
   type ProjectMediaFile,
@@ -31,7 +38,13 @@ function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
     duration: file.duration,
     width: file.width,
     height: file.height,
-    frameRate: undefined, // Not stored in current system
+    frameRate: file.fps,
+    codec: file.codec,
+    audioCodec: file.audioCodec,
+    container: file.container,
+    bitrate: file.bitrate,
+    fileSize: file.fileSize,
+    hasAudio: file.hasAudio,
     hasProxy: file.proxyStatus === 'ready',
     folderId: file.parentId,
     importedAt: new Date(file.createdAt).toISOString(),
@@ -123,6 +136,17 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       audioEnabled: c.audioEnabled !== false,
       reversed: c.reversed || false,
       disabled: c.disabled || false,
+      // Nested composition support
+      isComposition: c.isComposition || undefined,
+      compositionId: c.compositionId || undefined,
+      // Text clip support
+      textProperties: c.textProperties || undefined,
+      // Transcript data
+      transcript: c.transcript || undefined,
+      transcriptStatus: c.transcriptStatus || undefined,
+      // Analysis data
+      analysis: c.analysis || undefined,
+      analysisStatus: c.analysisStatus || undefined,
     }));
 
     // Note: markers not currently stored in CompositionTimelineData
@@ -175,9 +199,63 @@ export async function syncStoresToProject(): Promise<void> {
     projectData.activeCompositionId = freshState.activeCompositionId;
     projectData.openCompositionIds = freshState.openCompositionIds;
     projectData.expandedFolderIds = freshState.expandedFolderIds;
+
+    // Save YouTube panel state
+    const youtubeState = useYouTubeStore.getState().getState();
+    projectData.youtube = youtubeState;
+
+    // Save UI state (dock layout + composition view states)
+    const dockLayout = useDockStore.getState().getLayoutForProject();
+
+    // Build composition view state from all compositions
+    const compositionViewState: Record<string, {
+      playheadPosition?: number;
+      zoom?: number;
+      scrollX?: number;
+      inPoint?: number | null;
+      outPoint?: number | null;
+    }> = {};
+
+    // Get current timeline state for active composition
+    const timelineState = useTimelineStore.getState();
+    if (freshState.activeCompositionId) {
+      compositionViewState[freshState.activeCompositionId] = {
+        playheadPosition: timelineState.playheadPosition,
+        zoom: timelineState.zoom,
+        scrollX: timelineState.scrollX,
+        inPoint: timelineState.inPoint,
+        outPoint: timelineState.outPoint,
+      };
+    }
+
+    // Also save view state from other compositions' timelineData
+    for (const comp of freshState.compositions) {
+      if (comp.id !== freshState.activeCompositionId && comp.timelineData) {
+        compositionViewState[comp.id] = {
+          playheadPosition: comp.timelineData.playheadPosition,
+          zoom: comp.timelineData.zoom,
+          scrollX: comp.timelineData.scrollX,
+          inPoint: comp.timelineData.inPoint,
+          outPoint: comp.timelineData.outPoint,
+        };
+      }
+    }
+
+    // Capture per-project UI settings from localStorage
+    const mediaPanelColumns = localStorage.getItem('media-panel-column-order');
+    const mediaPanelNameWidth = localStorage.getItem('media-panel-name-width');
+    const transcriptLanguage = localStorage.getItem('transcriptLanguage');
+
+    projectData.uiState = {
+      dockLayout,
+      compositionViewState,
+      mediaPanelColumns: mediaPanelColumns ? JSON.parse(mediaPanelColumns) : undefined,
+      mediaPanelNameWidth: mediaPanelNameWidth ? parseInt(mediaPanelNameWidth, 10) : undefined,
+      transcriptLanguage: transcriptLanguage || undefined,
+    };
   }
 
-  console.log('[ProjectSync] Synced stores to project');
+  log.info(' Synced stores to project');
 }
 
 // ============================================
@@ -205,10 +283,10 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
           handle = storedHandle as FileSystemFileHandle;
           // Cache in memory for future use
           fileSystemService.storeFileHandle(pm.id, handle);
-          console.log('[ProjectSync] Retrieved handle from IndexedDB for:', pm.name);
+          log.info(' Retrieved handle from IndexedDB for:', pm.name);
         }
       } catch (e) {
-        console.warn('[ProjectSync] Failed to get handle from IndexedDB:', pm.name, e);
+        log.warn(' Failed to get handle from IndexedDB:', pm.name, e);
       }
     }
 
@@ -219,13 +297,13 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
         if (permission === 'granted') {
           file = await handle.getFile();
           url = URL.createObjectURL(file);
-          console.log('[ProjectSync] Restored file from handle:', pm.name);
+          log.info(' Restored file from handle:', pm.name);
         } else {
           // Permission needs to be requested - will be done by reloadFile
-          console.log('[ProjectSync] File needs permission:', pm.name);
+          log.info(' File needs permission:', pm.name);
         }
       } catch (e) {
-        console.warn(`[ProjectSync] Could not access file: ${pm.name}`, e);
+        log.warn(`Could not access file: ${pm.name}`, e);
       }
     }
 
@@ -241,6 +319,13 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
       duration: pm.duration,
       width: pm.width,
       height: pm.height,
+      fps: pm.frameRate,
+      codec: pm.codec,
+      audioCodec: pm.audioCodec,
+      container: pm.container,
+      bitrate: pm.bitrate,
+      fileSize: pm.fileSize,
+      hasAudio: pm.hasAudio,
       proxyStatus: pm.hasProxy ? 'ready' : 'none',
       hasFileHandle: !!handle,
       filePath: pm.sourcePath,
@@ -253,8 +338,20 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
 /**
  * Convert ProjectComposition to Composition format
  */
-function convertProjectCompositionToStore(projectComps: ProjectComposition[]): Composition[] {
+function convertProjectCompositionToStore(
+  projectComps: ProjectComposition[],
+  compositionViewState?: Record<string, {
+    playheadPosition?: number;
+    zoom?: number;
+    scrollX?: number;
+    inPoint?: number | null;
+    outPoint?: number | null;
+  }>
+): Composition[] {
   return projectComps.map((pc) => {
+    // Get saved view state for this composition
+    const viewState = compositionViewState?.[pc.id];
+
     // Convert back to timelineData format
     const timelineData = {
       tracks: pc.tracks.map((t) => ({
@@ -270,14 +367,14 @@ function convertProjectCompositionToStore(projectComps: ProjectComposition[]): C
       clips: pc.clips.map((c) => ({
         id: c.id,
         trackId: c.trackId,
-        name: (c as any).name || '',
+        name: c.name || '',
         mediaFileId: c.mediaId,  // Map mediaId -> mediaFileId for loadState
-        sourceType: (c as any).sourceType || 'video',
-        naturalDuration: (c as any).naturalDuration,
-        thumbnails: (c as any).thumbnails,
-        linkedClipId: (c as any).linkedClipId,
-        linkedGroupId: (c as any).linkedGroupId,
-        waveform: (c as any).waveform,
+        sourceType: c.sourceType || 'video',
+        naturalDuration: c.naturalDuration,
+        thumbnails: c.thumbnails,
+        linkedClipId: c.linkedClipId,
+        linkedGroupId: c.linkedGroupId,
+        waveform: c.waveform,
         startTime: c.startTime,
         duration: c.duration,
         inPoint: c.inPoint,
@@ -290,14 +387,25 @@ function convertProjectCompositionToStore(projectComps: ProjectComposition[]): C
         audioEnabled: c.audioEnabled,
         reversed: c.reversed,
         disabled: c.disabled,
+        // Nested composition support
+        isComposition: c.isComposition,
+        compositionId: c.compositionId,
+        // Text clip support
+        textProperties: c.textProperties,
+        // Transcript data
+        transcript: c.transcript,
+        transcriptStatus: c.transcriptStatus,
+        // Analysis data
+        analysis: c.analysis,
+        analysisStatus: c.analysisStatus,
       })),
-      // Required CompositionTimelineData fields
-      playheadPosition: 0,
+      // Restore view state from saved uiState, or use defaults
+      playheadPosition: viewState?.playheadPosition ?? 0,
       duration: pc.duration,
-      zoom: 1,
-      scrollX: 0,
-      inPoint: null,
-      outPoint: null,
+      zoom: viewState?.zoom ?? 1,
+      scrollX: viewState?.scrollX ?? 0,
+      inPoint: viewState?.inPoint ?? null,
+      outPoint: viewState?.outPoint ?? null,
       loopPlayback: false,
     };
 
@@ -337,13 +445,16 @@ function convertProjectFolderToStore(projectFolders: ProjectFolder[]): MediaFold
 export async function loadProjectToStores(): Promise<void> {
   const projectData = projectFileService.getProjectData();
   if (!projectData) {
-    console.error('[ProjectSync] No project data to load');
+    log.error(' No project data to load');
     return;
   }
 
   // Convert and load data
   const files = await convertProjectMediaToStore(projectData.media);
-  const compositions = convertProjectCompositionToStore(projectData.compositions);
+  const compositions = convertProjectCompositionToStore(
+    projectData.compositions,
+    projectData.uiState?.compositionViewState
+  );
   const folders = convertProjectFolderToStore(projectData.folders);
 
   // Clear timeline first
@@ -379,7 +490,252 @@ export async function loadProjectToStores(): Promise<void> {
     }
   }
 
-  console.log('[ProjectSync] Loaded project to stores:', projectData.name);
+  // Load YouTube panel state
+  if (projectData.youtube) {
+    useYouTubeStore.getState().loadState(projectData.youtube);
+  } else {
+    useYouTubeStore.getState().reset();
+  }
+
+  // Restore dock layout from project
+  if (projectData.uiState?.dockLayout) {
+    useDockStore.getState().setLayoutFromProject(projectData.uiState.dockLayout);
+    log.info(' Restored dock layout from project');
+  }
+
+  // Restore per-project UI settings to localStorage
+  if (projectData.uiState?.mediaPanelColumns) {
+    localStorage.setItem('media-panel-column-order', JSON.stringify(projectData.uiState.mediaPanelColumns));
+  }
+  if (projectData.uiState?.mediaPanelNameWidth !== undefined) {
+    localStorage.setItem('media-panel-name-width', String(projectData.uiState.mediaPanelNameWidth));
+  }
+  if (projectData.uiState?.transcriptLanguage) {
+    localStorage.setItem('transcriptLanguage', projectData.uiState.transcriptLanguage);
+  }
+
+  log.info(' Loaded project to stores:', projectData.name);
+
+  // Auto-relink missing files from Raw folder
+  await autoRelinkFromRawFolder();
+
+  // Restore thumbnails and refresh metadata in the background
+  restoreMediaThumbnails();
+  refreshMediaMetadata();
+}
+
+/**
+ * Refresh media metadata (codec, bitrate, hasAudio) for all loaded files.
+ * This runs in the background after project load to populate metadata fields.
+ */
+async function refreshMediaMetadata(): Promise<void> {
+  const mediaState = useMediaStore.getState();
+  // Refresh files that have a file object but are missing important metadata
+  const filesToRefresh = mediaState.files.filter(f =>
+    f.file && (
+      f.codec === undefined ||
+      f.container === undefined ||
+      f.fileSize === undefined ||
+      (f.type === 'video' && f.hasAudio === undefined)
+    )
+  );
+
+  if (filesToRefresh.length === 0) {
+    log.debug('No files need metadata refresh');
+    return;
+  }
+
+  log.info(`Refreshing metadata for ${filesToRefresh.length} files...`);
+
+  // Process files in parallel but with a limit to avoid overwhelming the browser
+  const batchSize = 3;
+  for (let i = 0; i < filesToRefresh.length; i += batchSize) {
+    const batch = filesToRefresh.slice(i, i + batchSize);
+
+    await Promise.all(batch.map(async (mediaFile) => {
+      if (!mediaFile.file) return;
+
+      try {
+        const info = await getMediaInfo(mediaFile.file, mediaFile.type);
+
+        // Update the file in the store
+        useMediaStore.setState((state) => ({
+          files: state.files.map((f) =>
+            f.id === mediaFile.id
+              ? {
+                  ...f,
+                  codec: info.codec || f.codec,
+                  audioCodec: info.audioCodec,
+                  container: info.container || f.container,
+                  bitrate: info.bitrate || f.bitrate,
+                  fileSize: info.fileSize || f.fileSize,
+                  hasAudio: info.hasAudio ?? f.hasAudio,
+                  fps: info.fps || f.fps,
+                }
+              : f
+          ),
+        }));
+
+        log.debug(`Refreshed metadata for: ${mediaFile.name}`, {
+          codec: info.codec,
+          hasAudio: info.hasAudio,
+          bitrate: info.bitrate,
+        });
+      } catch (e) {
+        log.warn(`Failed to refresh metadata for: ${mediaFile.name}`, e);
+      }
+    }));
+  }
+
+  log.info('Media metadata refresh complete');
+}
+
+/**
+ * Restore thumbnails for media files after project load.
+ * Checks project folder first, then regenerates from file if needed.
+ */
+async function restoreMediaThumbnails(): Promise<void> {
+  const mediaState = useMediaStore.getState();
+  // Find files that need thumbnails (video/image files without thumbnailUrl)
+  const filesToRestore = mediaState.files.filter(f =>
+    f.file && !f.thumbnailUrl && (f.type === 'video' || f.type === 'image')
+  );
+
+  if (filesToRestore.length === 0) {
+    log.debug('No thumbnails need restoration');
+    return;
+  }
+
+  log.info(`Restoring thumbnails for ${filesToRestore.length} files...`);
+
+  // Process in batches to avoid overwhelming browser
+  const batchSize = 5;
+  for (let i = 0; i < filesToRestore.length; i += batchSize) {
+    const batch = filesToRestore.slice(i, i + batchSize);
+
+    await Promise.all(batch.map(async (mediaFile) => {
+      if (!mediaFile.file) return;
+
+      try {
+        let thumbnailUrl: string | undefined;
+
+        // First try to get from project folder if we have a hash
+        if (mediaFile.fileHash && projectFileService.isProjectOpen()) {
+          const existingBlob = await projectFileService.getThumbnail(mediaFile.fileHash);
+          if (existingBlob && existingBlob.size > 0) {
+            thumbnailUrl = URL.createObjectURL(existingBlob);
+            log.debug(`Restored thumbnail from project: ${mediaFile.name}`);
+          }
+        }
+
+        // If not found in project, regenerate from file
+        if (!thumbnailUrl) {
+          thumbnailUrl = await createThumbnail(mediaFile.file, mediaFile.type as 'video' | 'image');
+          log.debug(`Regenerated thumbnail: ${mediaFile.name}`);
+        }
+
+        if (thumbnailUrl) {
+          useMediaStore.setState((state) => ({
+            files: state.files.map((f) =>
+              f.id === mediaFile.id ? { ...f, thumbnailUrl } : f
+            ),
+          }));
+        }
+      } catch (e) {
+        log.warn(`Failed to restore thumbnail for: ${mediaFile.name}`, e);
+      }
+    }));
+  }
+
+  log.info('Thumbnail restoration complete');
+}
+
+/**
+ * Automatically relink missing media files from the project's Raw folder
+ * This runs silently after project load - no user interaction needed if all files are found
+ */
+async function autoRelinkFromRawFolder(): Promise<void> {
+  if (!projectFileService.isProjectOpen()) return;
+
+  const mediaState = useMediaStore.getState();
+  const missingFiles = mediaState.files.filter(f => !f.file && !f.url);
+
+  if (missingFiles.length === 0) {
+    log.info(' No missing files to relink');
+    return;
+  }
+
+  log.info(`Attempting auto-relink for ${missingFiles.length} missing files...`);
+
+  // Scan the Raw folder
+  const rawFiles = await projectFileService.scanRawFolder();
+  if (rawFiles.size === 0) {
+    log.info(' Raw folder is empty or not accessible');
+    return;
+  }
+
+  log.debug(`Found ${rawFiles.size} files in Raw folder`);
+
+  // Match and relink files
+  let relinkedCount = 0;
+  const updatedFiles = [...mediaState.files];
+
+  for (let i = 0; i < updatedFiles.length; i++) {
+    const file = updatedFiles[i];
+    if (file.file || file.url) continue; // Already has file
+
+    const searchName = file.name.toLowerCase();
+    const handle = rawFiles.get(searchName);
+
+    if (handle) {
+      try {
+        const fileObj = await handle.getFile();
+        const url = URL.createObjectURL(fileObj);
+
+        // Store handle for future access
+        fileSystemService.storeFileHandle(file.id, handle);
+        await projectDB.storeHandle(`media_${file.id}`, handle);
+
+        // Update file entry
+        updatedFiles[i] = {
+          ...file,
+          file: fileObj,
+          url,
+          hasFileHandle: true,
+        };
+
+        relinkedCount++;
+        log.debug(`Auto-relinked: ${file.name}`);
+      } catch (e) {
+        log.warn(`Could not read file from Raw: ${file.name}`, e);
+      }
+    }
+  }
+
+  if (relinkedCount > 0) {
+    // Update media store with relinked files
+    useMediaStore.setState({ files: updatedFiles });
+    log.info(`Auto-relinked ${relinkedCount}/${missingFiles.length} files from Raw folder`);
+
+    // Also update any clips that reference these files
+    const timelineStore = useTimelineStore.getState();
+    for (const file of updatedFiles) {
+      if (file.file) {
+        const clips = timelineStore.clips.filter(
+          c => c.source?.mediaFileId === file.id && c.needsReload
+        );
+        for (const clip of clips) {
+          timelineStore.updateClip(clip.id, {
+            file: file.file,
+            needsReload: false,
+            isLoading: true,
+          });
+        }
+      }
+    }
+  } else {
+    log.info(' No files could be auto-relinked from Raw folder');
+  }
 }
 
 // ============================================
@@ -425,7 +781,7 @@ export async function openExistingProject(): Promise<boolean> {
  */
 export async function saveCurrentProject(): Promise<boolean> {
   if (!projectFileService.isProjectOpen()) {
-    console.error('[ProjectSync] No project open');
+    log.error(' No project open');
     return false;
   }
 
@@ -468,5 +824,27 @@ export function setupAutoSync(): void {
     }
   );
 
-  console.log('[ProjectSync] Auto-sync setup complete');
+  // Subscribe to YouTube store changes
+  let prevYouTubeVideos = useYouTubeStore.getState().videos;
+  useYouTubeStore.subscribe((state) => {
+    if (state.videos !== prevYouTubeVideos) {
+      prevYouTubeVideos = state.videos;
+      if (projectFileService.isProjectOpen()) {
+        projectFileService.markDirty();
+      }
+    }
+  });
+
+  // Subscribe to dock layout changes
+  let prevDockLayout = useDockStore.getState().layout;
+  useDockStore.subscribe((state) => {
+    if (state.layout !== prevDockLayout) {
+      prevDockLayout = state.layout;
+      if (projectFileService.isProjectOpen()) {
+        projectFileService.markDirty();
+      }
+    }
+  });
+
+  log.info(' Auto-sync setup complete');
 }

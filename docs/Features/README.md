@@ -2,7 +2,7 @@
 
 **Professional WebGPU Video Compositor & Timeline Editor**
 
-Version 1.0.6 | January 2026
+Version 1.1.0 | January 2026
 
 ---
 
@@ -17,13 +17,18 @@ MASterSelects is a browser-based professional video editing application built on
 | **WebGPU Rendering** | Hardware-accelerated compositing with zero-copy video textures at 60fps |
 | **Multi-track Timeline** | Professional NLE with video/audio tracks, nested compositions, and multicam |
 | **Keyframe Animation** | Full property animation with bezier curve editor and 5 easing modes |
-| **AI Integration** | 50+ intelligent editing tools via OpenAI function calling |
-| **30+ GPU Effects** | Color, blur, distort, stylize, keying effects with quality controls |
-| **Professional Audio** | 10-band parametric EQ with keyframe automation |
+| **AI Integration** | 50+ intelligent editing tools via OpenAI function calling (GPT-4/GPT-5) |
+| **AI Video Generation** | PiAPI integration for AI-powered video creation |
+| **YouTube Integration** | Search, download, and edit YouTube videos directly |
+| **30+ GPU Effects** | Modular color, blur, distort, stylize, keying effects with quality controls |
+| **Text Clips** | Typography with 50 Google Fonts, stroke, shadow effects |
+| **Professional Audio** | 10-band parametric EQ, audio master clock, varispeed scrubbing |
 | **Multicam Support** | Audio-based cross-correlation synchronization |
-| **Video Export** | H.264/VP9 WebCodecs + FFmpeg WASM (ProRes, DNxHR, HAP) |
+| **3 Export Modes** | WebCodecs Fast, HTMLVideo Precise, FFmpeg WASM (ProRes, DNxHR, HAP) |
+| **Parallel Decoding** | Multi-clip parallel decode for faster exports |
 | **Native Helper** | Optional 10x faster ProRes/DNxHD decode with hardware accel |
-| **Local Storage** | Project folder with autosave, backups, and smart media relinking |
+| **Local Storage** | Project folder with Raw media, autosave, backups, smart relinking |
+| **Mobile Support** | Responsive UI with touch gestures |
 
 ---
 
@@ -31,14 +36,16 @@ MASterSelects is a browser-based professional video editing application built on
 
 ```
 Frontend          React 19 + TypeScript + Vite 7.2
-State Management  Zustand with slice architecture
+State Management  Zustand with modular slice architecture
 GPU Rendering     WebGPU + WGSL shaders (2,000+ lines)
-Video Decoding    WebCodecs API with hardware acceleration
-Video Encoding    WebCodecs + FFmpeg WASM (ProRes, DNxHR, HAP)
-Audio Processing  Web Audio API with AnalyserNode
-AI Services       OpenAI GPT-4 function calling
-Persistence       File System Access API + local project folders
-UI Framework      Custom dockable panel system
+GPU Effects       30+ modular effects with individual WGSL shaders
+Video Decoding    WebCodecs API with hardware acceleration + parallel decode
+Video Encoding    WebCodecs (Fast/Precise) + FFmpeg WASM (ProRes, DNxHR, HAP)
+Audio Processing  Web Audio API, audio master clock, varispeed scrubbing
+AI Services       OpenAI GPT-4/GPT-5 function calling, PiAPI video generation
+Persistence       File System Access API + local project folders with Raw media
+Native Helper     Rust + FFmpeg (Linux/Mac) or yt-dlp (Windows)
+UI Framework      Custom dockable panel system with mobile support
 ```
 
 ---
@@ -50,19 +57,20 @@ UI Framework      Custom dockable panel system
 | [Timeline](./Timeline.md) | Multi-track editing, clips, snapping, compositions, multicam |
 | [Keyframes](./Keyframes.md) | Animation system, curve editor, bezier interpolation |
 | [Preview & Playback](./Preview.md) | RAM Preview, scrubbing, multiple outputs, edit mode |
-| [Effects](./Effects.md) | GPU effects, 37 blend modes, transforms |
+| [Effects](./Effects.md) | 30+ modular GPU effects, 37 blend modes, transforms |
 | [Masks](./Masks.md) | Shape masks, pen tool, GPU feathering |
-| [AI Integration](./AI-Integration.md) | 50+ AI tools, transcription, intelligent editing |
-| [Media Panel](./Media-Panel.md) | Import, folder organization, compositions |
-| [Audio](./Audio.md) | 10-band EQ, waveforms, multicam sync |
+| [AI Integration](./AI-Integration.md) | 50+ AI tools, transcription, AI video generation |
+| [Media Panel](./Media-Panel.md) | Import, folder organization, columns, compositions |
+| [Audio](./Audio.md) | 10-band EQ, audio master clock, varispeed scrubbing |
 | [Text Clips](./Text-Clips.md) | Typography, 50 Google Fonts, stroke, shadow |
-| [Export](./Export.md) | H.264/VP9 encoding, frame-by-frame rendering |
-| [UI & Panels](./UI-Panels.md) | Dockable panels, layouts, menus, MIDI control |
-| [GPU Engine](./GPU-Engine.md) | WebGPU architecture, optical flow, texture management |
-| [Project Persistence](./Project-Persistence.md) | Auto-save, IndexedDB, file handles |
+| [Export](./Export.md) | WebCodecs Fast/Precise, FFmpeg, parallel decoding |
+| [UI & Panels](./UI-Panels.md) | Dockable panels, layouts, menus, mobile support |
+| [GPU Engine](./GPU-Engine.md) | WebGPU architecture, modular render pipeline |
+| [Project Persistence](./Project-Persistence.md) | Local folders, Raw media, autosave, backups |
 | [Proxy System](./Proxy-System.md) | GPU-accelerated proxy generation |
-| [Native Helper](./Native-Helper.md) | Optional Turbo Mode for ProRes/DNxHD |
+| [Native Helper](./Native-Helper.md) | Turbo Mode for ProRes/DNxHD, YouTube downloads |
 | [Keyboard Shortcuts](./Keyboard-Shortcuts.md) | Complete shortcut reference |
+| [Debugging](./Debugging.md) | Logger service, module filtering, AI-agent inspection |
 
 ---
 
@@ -176,9 +184,12 @@ UI Framework      Custom dockable panel system
 |---------|--------|---------|
 | YouTube Search | ✅ | Search videos via Invidious or YouTube Data API |
 | Video Thumbnails | ✅ | Display thumbnails, titles, channels, duration |
-| Drag to Timeline | ✅ | Drag videos to timeline to download |
-| Cobalt Download | ✅ | Download videos via Cobalt API |
-| Pending Clip State | ✅ | Dashed preview with download progress |
+| Quality Selection | ✅ | Choose video quality before download |
+| Native Helper Download | ✅ | Fast downloads via yt-dlp integration |
+| Cobalt Fallback | ✅ | Download via Cobalt API if Native Helper unavailable |
+| Add to Timeline | ✅ | Download and add directly to timeline |
+| Project Storage | ✅ | Downloads saved to project YT/ folder |
+| H.264 Preference | ✅ | Prefers H.264 over AV1/VP9 for compatibility |
 | Dual API Support | ✅ | Invidious (no key) or YouTube Data API (optional) |
 
 ### Audio
@@ -188,11 +199,15 @@ UI Framework      Custom dockable panel system
 | 10-Band Parametric EQ | ✅ | 31Hz to 16kHz frequency bands |
 | EQ Gain Range | ✅ | -12dB to +12dB per band |
 | EQ Keyframes | ✅ | Animate EQ parameters over time |
+| Audio Master Clock | ✅ | Playhead follows audio for perfect sync |
+| Varispeed Scrubbing | ✅ | Continuous playback with speed adjustment |
+| Speed Property | ✅ | Keyframeable clip playback speed |
 | Waveform Display | ✅ | 50 samples/second resolution |
 | Volume Control | ✅ | Per-clip volume adjustment |
 | Multicam Audio Sync | ✅ | Cross-correlation algorithm |
 | Audio Track Mute | ✅ | Per-track mute control |
 | Audio Solo | ✅ | Isolate audio tracks |
+| Composition Audio | ✅ | Nested composition audio mixdown |
 
 ### Preview & Playback
 
@@ -201,26 +216,34 @@ UI Framework      Custom dockable panel system
 | Real-time Preview | ✅ | 60fps GPU rendering |
 | Idle Mode | ✅ | Auto-pause GPU when nothing changes |
 | Preview Quality | ✅ | Full/Half/Quarter resolution for performance |
-| RAM Preview | ✅ | 30fps cached playback, 900 frame limit |
+| Layer Caching | ✅ | Better performance when paused or scrubbing |
+| RAM Preview | ✅ | Cached playback with 900 frame limit |
 | Multiple Outputs | ✅ | Open multiple preview windows |
-| Edit Mode | ✅ | Direct manipulation in preview |
+| Per-Preview Grid | ✅ | Individual transparency grid toggle |
+| Edit Mode | ✅ | Direct manipulation in preview (Tab toggle) |
 | Scrubbing Cache | ✅ | 3-tier caching system |
-| Statistics Overlay | ✅ | FPS, timing, idle status indicators |
+| Statistics Overlay | ✅ | FPS, timing, idle status, GPU vendor |
 | Resolution Presets | ✅ | 480p to 4K preview |
 | Pause on Drag | ✅ | Playback pauses when dragging playhead |
+| GPU Recovery | ✅ | Automatic WebGPU device recovery |
 
 ### Export
 
 | Feature | Status | Details |
 |---------|--------|---------|
-| H.264 Export | ✅ | MP4 container |
-| VP9 Export | ✅ | WebM container |
+| WebCodecs Fast Mode | ✅ | Sequential decoding with MP4Box parsing |
+| HTMLVideo Precise Mode | ✅ | Frame-accurate seeking for complex timelines |
+| FFmpeg WASM Export | ✅ | ProRes, DNxHR, HAP codecs |
+| Parallel Decoding | ✅ | Multi-clip parallel decode for faster exports |
+| H.264/VP9 Export | ✅ | MP4/WebM containers |
 | Resolution Presets | ✅ | 480p, 720p, 1080p, 4K |
 | Frame Rate Options | ✅ | 24, 25, 30, 60 fps |
 | Quality Presets | ✅ | 5-35 Mbps bitrate |
+| AAC/Opus Audio | ✅ | Auto-detect browser codec support |
 | In/Out Export | ✅ | Export marked region |
 | Single Frame Export | ✅ | PNG frame capture |
-| Progress Tracking | ✅ | Frame count and ETA |
+| Progress Overlay | ✅ | Timeline progress bar with cancel |
+| Auto Fallback | ✅ | Falls back to Precise mode if Fast fails |
 
 ### Project & Media Management
 
@@ -255,13 +278,17 @@ UI Framework      Custom dockable panel system
 | Feature | Status | Details |
 |---------|--------|---------|
 | Dockable Panels | ✅ | Drag, resize, tab grouping |
-| 9 Panel Types | ✅ | Preview, Timeline, Media, Properties, Export, Multicam, AI Chat, AI Video, YouTube |
-| Unified Properties Panel | ✅ | Transform, Effects, Masks, Volume tabs |
-| Menu Bar | ✅ | File, Edit, View, Output, Window |
-| Context Menus | ✅ | Right-click operations |
+| 10 Panel Types | ✅ | Preview, Timeline, Media, Properties, Export, Multicam, AI Chat, AI Video, YouTube, Slots |
+| Unified Properties Panel | ✅ | Transform, Effects, Masks, Volume, Transcript, Analysis |
+| Menu Bar | ✅ | File, Edit, View, Output, Audio, Info, Window |
+| Context Menus | ✅ | Right-click operations (viewport-bounded) |
 | MIDI Control | ✅ | Web MIDI API integration |
 | Keyboard Shortcuts | ✅ | Comprehensive hotkey support |
 | Hold-to-Drag Tabs | ✅ | 500ms hold to reorder |
+| Mobile Support | ✅ | Responsive layout with touch gestures |
+| Desktop Mode Toggle | ✅ | Option to view full UI on mobile |
+| What's New Dialog | ✅ | Time-grouped changelog on refresh |
+| Welcome Overlay | ✅ | Project folder selection on launch |
 
 ---
 
@@ -472,6 +499,10 @@ The following features are planned but not currently available:
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 1.1.0 | Jan 2026 | Export mode selection, audio master clock, varispeed scrubbing, parallel decoding |
+| 1.0.9 | Jan 2026 | Layer caching, WebCodecs export optimization, case-insensitive file detection |
+| 1.0.8 | Jan 2026 | Native Helper YouTube download, NativeDecoder integration, FFmpeg audio export |
+| 1.0.7 | Jan 2026 | Mobile UI, desktop mode toggle, FFmpeg direct loading |
 | 1.0.6 | Jan 2026 | Windows GPU proxy fix, streaming decode, FFmpeg WASM |
 | 1.0.5 | Jan 2026 | 30+ modular GPU effects, effect bypass/quality controls |
 | 1.0.4 | Jan 2026 | Local project storage, autosave, backup system |

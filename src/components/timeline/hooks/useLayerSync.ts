@@ -4,11 +4,14 @@
 import { useEffect, useRef, useCallback } from 'react';
 import type { TimelineClip, TimelineTrack, Layer, Effect, NestedCompositionData, AnimatableProperty, BlendMode } from '../../../types';
 import type { ClipDragState } from '../types';
-import { useMixerStore } from '../../../stores/mixerStore';
+import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { engine } from '../../../engine/WebGPUEngine';
 import { proxyFrameCache } from '../../../services/proxyFrameCache';
 import { audioManager, audioStatusTracker } from '../../../services/audioManager';
+import { Logger } from '../../../services/logger';
+
+const log = Logger.create('useLayerSync');
 
 interface UseLayerSyncProps {
   // Refs
@@ -157,12 +160,20 @@ export function useLayerSync({
           ? nestedClip.outPoint - nestedLocalTime
           : nestedLocalTime + nestedClip.inPoint;
 
-        // Update video currentTime
+        // Update video currentTime and WebCodecsPlayer
         if (nestedClip.source?.videoElement) {
           const video = nestedClip.source.videoElement;
+          const webCodecsPlayer = nestedClip.source.webCodecsPlayer;
           const timeDiff = Math.abs(video.currentTime - nestedClipTime);
           if (timeDiff > 0.05) {
             video.currentTime = nestedClipTime;
+          }
+          // Seek WebCodecsPlayer for nested clips (critical for preview during playback)
+          if (webCodecsPlayer) {
+            const wcTimeDiff = Math.abs(webCodecsPlayer.currentTime - nestedClipTime);
+            if (wcTimeDiff > 0.05) {
+              webCodecsPlayer.seek(nestedClipTime);
+            }
           }
           if (isPlaying && video.paused) {
             video.play().catch(() => {});
@@ -257,11 +268,18 @@ export function useLayerSync({
       return;
     }
 
-    if (
-      ramPreviewRange &&
-      playheadPosition >= ramPreviewRange.start &&
-      playheadPosition <= ramPreviewRange.end
-    ) {
+    // Try to use RAM Preview cache for instant scrubbing
+    // This provides instant access to pre-rendered frames
+    if (ramPreviewRange) {
+      const inRange = playheadPosition >= ramPreviewRange.start && playheadPosition <= ramPreviewRange.end;
+      if (inRange) {
+        if (engine.renderCachedFrame(playheadPosition)) {
+          return; // Cache hit - instant render, no video seek needed
+        }
+        // Cache miss within range - will fall through to regular render
+      }
+    } else {
+      // No RAM preview range, but still try the cache in case frames were cached during playback
       if (engine.renderCachedFrame(playheadPosition)) {
         return;
       }
@@ -331,7 +349,7 @@ export function useLayerSync({
       activeClipIdsRef.current = '';
     }
 
-    const currentLayers = useMixerStore.getState().layers;
+    const currentLayers = useTimelineStore.getState().layers;
     const newLayers = [...currentLayers];
     let layersChanged = false;
 
@@ -374,7 +392,7 @@ export function useLayerSync({
             opacity: interpolatedTransform.opacity,
             blendMode: interpolatedTransform.blendMode,
             source: {
-              type: 'video', // Will be pre-rendered to texture
+              type: 'image', // Nested comps are pre-rendered to texture
               nestedComposition: nestedCompData,
             },
             effects: interpolatedEffects,
@@ -423,7 +441,7 @@ export function useLayerSync({
             })
             .catch((err) => {
               nativeDecoderPendingRef.current[clip.id] = false;
-              console.warn('[NativeDecoder] Seek failed:', err);
+              log.warn('NativeDecoder seek failed:', err);
             });
         }
 
@@ -485,7 +503,7 @@ export function useLayerSync({
 
         const mediaStore = useMediaStore.getState();
         const mediaFile = mediaStore.files.find(
-          (f) => f.name === clip.name || clip.source?.mediaFileId === f.id
+          (f) => f.name === clip.name || clip.mediaFileId === f.id
         );
         const proxyFps = mediaFile?.proxyFps || 30;
 
@@ -587,7 +605,7 @@ export function useLayerSync({
                   if (image) {
                     proxyFramesRef.current.set(cacheKey, { frameIndex, image });
 
-                    const currentLayers2 = useMixerStore.getState().layers;
+                    const currentLayers2 = useTimelineStore.getState().layers;
                     const updatedLayers = [...currentLayers2];
                     updatedLayers[capturedLayerIndex] = {
                       id: `timeline_layer_${capturedLayerIndex}`,
@@ -615,7 +633,7 @@ export function useLayerSync({
                         z: (capturedTransform.rotation.z * Math.PI) / 180,
                       },
                     };
-                    useMixerStore.setState({ layers: updatedLayers });
+                    useTimelineStore.setState({ layers: updatedLayers });
                   }
                 });
             }
@@ -886,7 +904,7 @@ export function useLayerSync({
     });
 
     if (layersChanged) {
-      useMixerStore.setState({ layers: newLayers });
+      useTimelineStore.setState({ layers: newLayers });
       // Trigger one-shot render when paused (render loop not running)
       // This ensures text edits, property changes, etc. update the preview immediately
       engine.render(newLayers);
@@ -953,7 +971,7 @@ export function useLayerSync({
           if (audio.paused) {
             audio.currentTime = clipTime;
             audio.play().catch((err) => {
-              console.warn('[Audio] Failed to play:', err.message);
+              log.warn('Audio failed to play:', err.message);
               hasAudioError = true;
             });
           }
@@ -1038,7 +1056,7 @@ export function useLayerSync({
           if (audio.paused) {
             audio.currentTime = clipTime;
             audio.play().catch((err) => {
-              console.warn('[Nested Comp Audio] Failed to play:', err.message);
+              log.warn('Nested Comp Audio failed to play:', err.message);
             });
           }
 

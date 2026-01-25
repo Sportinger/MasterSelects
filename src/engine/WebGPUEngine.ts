@@ -1,8 +1,9 @@
-// WebGPU Rendering Engine for WebVJ Mixer - Facade Pattern
-// This is the main engine class that orchestrates all the manager modules
+// WebGPU Rendering Engine - Thin Facade
+// Orchestrates: PerformanceStats, RenderTargetManager, OutputWindowManager,
+//               RenderLoop, LayerCollector, Compositor, NestedCompRenderer
 
-import type { Layer, OutputWindow, EngineStats, LayerRenderData, DetailedStats, ProfileData } from './core/types';
-import { WebGPUContext } from './core/WebGPUContext';
+import type { Layer, OutputWindow, EngineStats, LayerRenderData } from './core/types';
+import { WebGPUContext, type GPUPowerPreference } from './core/WebGPUContext';
 import { TextureManager } from './texture/TextureManager';
 import { MaskTextureManager } from './texture/MaskTextureManager';
 import { ScrubbingCache } from './texture/ScrubbingCache';
@@ -10,15 +11,36 @@ import { CompositorPipeline } from './pipeline/CompositorPipeline';
 import { EffectsPipeline } from '../effects/EffectsPipeline';
 import { OutputPipeline } from './pipeline/OutputPipeline';
 import { VideoFrameManager } from './video/VideoFrameManager';
-import { audioStatusTracker } from '../services/audioManager';
 import { useMediaStore } from '../stores/mediaStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { reportRenderTime } from '../services/performanceMonitor';
+import { Logger } from '../services/logger';
+
+const log = Logger.create('WebGPUEngine');
+
+// New modules
+import { PerformanceStats } from './stats/PerformanceStats';
+import { RenderTargetManager } from './core/RenderTargetManager';
+import { OutputWindowManager } from './managers/OutputWindowManager';
+import { RenderLoop } from './render/RenderLoop';
+import { LayerCollector } from './render/LayerCollector';
+import { Compositor } from './render/Compositor';
+import { NestedCompRenderer } from './render/NestedCompRenderer';
 
 export class WebGPUEngine {
   // Core context
   private context: WebGPUContext;
 
-  // Managers
+  // Extracted modules
+  private performanceStats: PerformanceStats;
+  private renderTargetManager: RenderTargetManager | null = null;
+  private outputWindowManager: OutputWindowManager | null = null;
+  private renderLoop: RenderLoop | null = null;
+  private layerCollector: LayerCollector | null = null;
+  private compositor: Compositor | null = null;
+  private nestedCompRenderer: NestedCompRenderer | null = null;
+
+  // Existing managers (unchanged)
   private textureManager: TextureManager | null = null;
   private maskTextureManager: MaskTextureManager | null = null;
   private scrubbingCache: ScrubbingCache | null = null;
@@ -29,151 +51,63 @@ export class WebGPUEngine {
   private effectsPipeline: EffectsPipeline | null = null;
   private outputPipeline: OutputPipeline | null = null;
 
-  // Main preview canvas (legacy - kept for backward compatibility)
-  private previewContext: GPUCanvasContext | null = null;
-
-  // Multiple preview canvases (inline previews in dock panels)
-  // These are rendered by the MAIN render loop (active composition)
-  private previewCanvases: Map<string, GPUCanvasContext> = new Map();
-
-  // Independent preview canvases - NOT rendered by main loop
-  // These have their own render loop for different compositions
-  private independentPreviewCanvases: Map<string, GPUCanvasContext> = new Map();
-
-  // Render targets - ping pong buffers (main render loop)
-  private pingTexture: GPUTexture | null = null;
-  private pongTexture: GPUTexture | null = null;
-  private blackTexture: GPUTexture | null = null;
-
-  // Cached texture views (main render loop)
-  private pingView: GPUTextureView | null = null;
-  private pongView: GPUTextureView | null = null;
-
-  // Separate ping-pong buffers for independent preview rendering
-  // This prevents flickering when main loop and independent previews run simultaneously
-  private independentPingTexture: GPUTexture | null = null;
-  private independentPongTexture: GPUTexture | null = null;
-  private independentPingView: GPUTextureView | null = null;
-  private independentPongView: GPUTextureView | null = null;
-
   // Resources
   private sampler: GPUSampler | null = null;
 
-  // Output windows
-  private outputWindows: Map<string, OutputWindow> = new Map();
+  // Canvas management (kept inline - simple Map operations)
+  private previewContext: GPUCanvasContext | null = null;
+  private previewCanvases: Map<string, GPUCanvasContext> = new Map();
+  private independentPreviewCanvases: Map<string, GPUCanvasContext> = new Map();
+  private independentCanvasCompositions: Map<string, string> = new Map();
+  private previewCanvasElements: Map<string, HTMLCanvasElement> = new Map();
+  private independentCanvasElements: Map<string, HTMLCanvasElement> = new Map();
+  private mainPreviewCanvas: HTMLCanvasElement | null = null;
 
-  // Stats
-  private frameCount = 0;
-  private fps = 0;
-  private fpsUpdateTime = 0;
-
-  // Detailed stats tracking
-  private detailedStats: DetailedStats = {
-    rafGap: 0,
-    importTexture: 0,
-    renderPass: 0,
-    submit: 0,
-    total: 0,
-    dropsTotal: 0,
-    dropsLastSecond: 0,
-    dropsThisSecond: 0,
-    lastDropReason: 'none',
-    lastRafTime: 0,
-    decoder: 'none',
-  };
-  private readonly TARGET_FRAME_TIME = 16.67; // 60fps target
-
-  // Animation
-  private animationId: number | null = null;
-  private isRunning = false;
-
-  // Performance profiling
-  private profileData: ProfileData = {
-    importTexture: 0,
-    createBindGroup: 0,
-    renderPass: 0,
-    submit: 0,
-    total: 0,
-  };
-  private profileCounter = 0;
-  private lastProfileTime = 0;
-
-  // Resolution
-  private outputWidth = 1920;
-  private outputHeight = 1080;
-
-  // Transparency grid (checkerboard) display
+  // State flags
+  private isRecoveringFromDeviceLoss = false;
+  private isGeneratingRamPreview = false;
+  private isExporting = false;
   private showTransparencyGrid = false;
 
-  // Ring buffer for frame times (avoids O(n) shift)
-  private frameTimeBuffer = new Float32Array(60);
-  private frameTimeIndex = 0;
-  private frameTimeCount = 0;
+  // Video time tracking (for optimization)
+  private lastVideoTime: Map<string, number> = new Map();
 
-  // Track which texture has the final composited frame (for export)
-  private lastRenderWasPing = false;
-
-  // Reusable layer data array to avoid allocations
-  private layerRenderData: LayerRenderData[] = [];
-
-  // Track active video for frame rate limiting
-  private hasActiveVideo = false;
-  private lastRenderTime = 0;
-  private readonly VIDEO_FRAME_TIME = 16.67; // ~60fps target (was 33.33ms / 30fps)
-
-  // Performance tracking
-  private lastFrameStart = 0;
-  private statsCounter = 0;
-  private lastLayerCount = 0;
-
-  // Flag to skip preview updates during RAM preview generation
-  private isGeneratingRamPreview = false;
-
-  // Flag to completely pause render loop during export
-  private isExporting = false;
-
-  // Idle mode - pause rendering when nothing changes
-  private lastActivityTime = 0;
-  private isIdle = false;
-  private readonly IDLE_TIMEOUT = 1000; // 1 second before going idle
-  private renderRequested = false;
-  private lastRenderedPlayhead = -1; // Track playhead to detect scrubbing
-
-  // Reusable resources for RAM Preview playback
+  // RAM preview playback
   private ramPlaybackCanvas: HTMLCanvasElement | null = null;
   private ramPlaybackCtx: CanvasRenderingContext2D | null = null;
 
-  // Track video currentTime to skip texture import for unchanged frames
-  private lastVideoTime: Map<string, number> = new Map();
-  private cachedExternalTexture: Map<string, GPUExternalTexture> = new Map();
-
-  // Batched uniform buffer updates
-  private pendingUniformUpdates: Array<{buffer: GPUBuffer; data: Float32Array}> = [];
-
-  // Nested composition pre-render textures
-  // Map of compositionId -> {texture, view} for pre-rendered nested compositions
-  private nestedCompTextures: Map<string, { texture: GPUTexture; view: GPUTextureView }> = new Map();
-  private pendingTextureCleanup: GPUTexture[] = [];
-
-  // Independent canvases that should mirror the main render output
-  // These are rendered to directly by the main render loop (no separate copy needed)
-  private activeCompMirrorCanvases: Set<string> = new Set();
-
-  // Track which compositionId each independent canvas is showing
-  // Used to determine which canvases should receive main render output
-  private independentCanvasCompositions: Map<string, string> = new Map();
+  // Export canvas (OffscreenCanvas for zero-copy VideoFrame creation)
+  private exportCanvas: OffscreenCanvas | null = null;
+  private exportCanvasContext: GPUCanvasContext | null = null;
 
   constructor() {
     this.context = new WebGPUContext();
     this.videoFrameManager = new VideoFrameManager();
+    this.performanceStats = new PerformanceStats();
+
+    // Device recovery handlers
+    this.context.onDeviceLost((reason) => {
+      log.warn('Device lost', { reason });
+      this.isRecoveringFromDeviceLoss = true;
+      this.handleDeviceLost();
+    });
+
+    this.context.onDeviceRestored(() => {
+      log.info('Device restored');
+      this.handleDeviceRestored();
+      this.isRecoveringFromDeviceLoss = false;
+    });
   }
 
+  // === INITIALIZATION ===
+
   async initialize(): Promise<boolean> {
-    const success = await this.context.initialize();
+    const preference = useSettingsStore.getState().gpuPowerPreference;
+    const success = await this.context.initialize(preference);
     if (!success) return false;
 
     await this.createResources();
-    console.log('[WebGPU] Engine initialized successfully');
+    log.info('Engine initialized');
     return true;
   }
 
@@ -186,131 +120,157 @@ export class WebGPUEngine {
     this.maskTextureManager = new MaskTextureManager(device);
     this.scrubbingCache = new ScrubbingCache(device);
 
-    // Initialize pipelines
-    this.compositorPipeline = new CompositorPipeline(device);
-    this.effectsPipeline = new EffectsPipeline(device);
-    this.outputPipeline = new OutputPipeline(device);
-
     // Create sampler
     this.sampler = this.context.createSampler();
 
-    // Create black texture
-    this.blackTexture = this.context.createSolidColorTexture(0, 0, 0, 255);
+    // Create pipelines
+    this.compositorPipeline = new CompositorPipeline(device);
+    this.effectsPipeline = new EffectsPipeline(device);
+    this.outputPipeline = new OutputPipeline(device);
+    await this.compositorPipeline.createPipelines();
+    await this.effectsPipeline.createPipelines();
+    await this.outputPipeline.createPipeline();
 
-    this.createPingPongTextures();
-    await this.createPipelines();
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Initialize extracted modules
+    this.renderTargetManager = new RenderTargetManager(device);
+    this.renderTargetManager.createBlackTexture((r, g, b, a) =>
+      this.context.createSolidColorTexture(r, g, b, a)
+    );
+    this.renderTargetManager.createPingPongTextures();
+
+    const { width, height } = this.renderTargetManager.getResolution();
+    this.outputWindowManager = new OutputWindowManager(width, height);
+
+    this.layerCollector = new LayerCollector();
+
+    this.compositor = new Compositor(
+      this.compositorPipeline,
+      this.effectsPipeline,
+      this.maskTextureManager
+    );
+
+    this.nestedCompRenderer = new NestedCompRenderer(
+      device,
+      this.compositorPipeline,
+      this.effectsPipeline,
+      this.textureManager,
+      this.maskTextureManager
+    );
+
+    this.renderLoop = new RenderLoop(this.performanceStats, {
+      isRecovering: () => this.isRecoveringFromDeviceLoss || this.context.recovering,
+      isExporting: () => this.isExporting,
+      onRender: () => {}, // Set by start()
+    });
   }
 
-  private createPingPongTextures(): void {
-    const device = this.context.getDevice();
-    if (!device) return;
+  // === DEVICE RECOVERY ===
 
-    // Destroy existing textures
-    this.pingTexture?.destroy();
-    this.pongTexture?.destroy();
-    this.independentPingTexture?.destroy();
-    this.independentPongTexture?.destroy();
+  private handleDeviceLost(): void {
+    this.renderLoop?.stop();
 
-    // Main render loop ping-pong buffers
-    this.pingTexture = device.createTexture({
-      size: [this.outputWidth, this.outputHeight],
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
-    });
+    // Clear GPU resources
+    this.renderTargetManager?.clearAll();
+    this.previewContext = null;
+    this.previewCanvases.clear();
+    this.independentPreviewCanvases.clear();
+    this.lastVideoTime.clear();
 
-    this.pongTexture = device.createTexture({
-      size: [this.outputWidth, this.outputHeight],
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
-    });
+    // Clear managers
+    this.textureManager = null;
+    this.maskTextureManager = null;
+    this.scrubbingCache = null;
+    this.compositorPipeline = null;
+    this.effectsPipeline = null;
+    this.outputPipeline = null;
 
-    // Independent preview ping-pong buffers (prevents flickering)
-    this.independentPingTexture = device.createTexture({
-      size: [this.outputWidth, this.outputHeight],
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
-    });
-
-    this.independentPongTexture = device.createTexture({
-      size: [this.outputWidth, this.outputHeight],
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
-    });
-
-    // Cache views
-    this.pingView = this.pingTexture.createView();
-    this.pongView = this.pongTexture.createView();
-    this.independentPingView = this.independentPingTexture.createView();
-    this.independentPongView = this.independentPongTexture.createView();
-
-    // Invalidate bind group caches (textures changed)
-    this.outputPipeline?.invalidateCache();
-    this.compositorPipeline?.invalidateBindGroupCache();
+    log.debug('Resources cleaned after device loss');
   }
 
-  private async createPipelines(): Promise<void> {
-    await this.compositorPipeline?.createPipelines();
-    await this.effectsPipeline?.createPipelines();
-    await this.outputPipeline?.createPipeline();
+  private async handleDeviceRestored(): Promise<void> {
+    await this.createResources();
+
+    // Reconfigure canvases
+    if (this.mainPreviewCanvas) {
+      this.previewContext = this.context.configureCanvas(this.mainPreviewCanvas);
+    }
+    for (const [id, canvas] of this.previewCanvasElements) {
+      const ctx = this.context.configureCanvas(canvas);
+      if (ctx) this.previewCanvases.set(id, ctx);
+    }
+    for (const [id, canvas] of this.independentCanvasElements) {
+      const ctx = this.context.configureCanvas(canvas);
+      if (ctx) this.independentPreviewCanvases.set(id, ctx);
+    }
+
+    this.renderLoop?.start();
+    this.requestRender();
+    log.info('Recovery complete');
   }
+
+  // === CANVAS MANAGEMENT ===
 
   setPreviewCanvas(canvas: HTMLCanvasElement): void {
+    this.mainPreviewCanvas = canvas;
     this.previewContext = this.context.configureCanvas(canvas);
   }
 
-  // === MULTIPLE PREVIEW CANVAS MANAGEMENT ===
-
   registerPreviewCanvas(id: string, canvas: HTMLCanvasElement): void {
-    const context = this.context.configureCanvas(canvas);
-    if (context) {
-      this.previewCanvases.set(id, context);
-      console.log(`[Engine] Registered preview canvas: ${id}`);
+    this.previewCanvasElements.set(id, canvas);
+    const ctx = this.context.configureCanvas(canvas);
+    if (ctx) {
+      this.previewCanvases.set(id, ctx);
+      log.debug('Registered preview canvas', { id });
     }
   }
 
   unregisterPreviewCanvas(id: string): void {
     this.previewCanvases.delete(id);
-    console.log(`[Engine] Unregistered preview canvas: ${id}`);
+    this.previewCanvasElements.delete(id);
+    log.debug('Unregistered preview canvas', { id });
   }
 
-  // Register canvas for independent composition rendering (NOT rendered by main loop)
   registerIndependentPreviewCanvas(id: string, canvas: HTMLCanvasElement, compositionId?: string): void {
-    const context = this.context.configureCanvas(canvas);
-    if (context) {
-      this.independentPreviewCanvases.set(id, context);
-      if (compositionId) {
-        this.independentCanvasCompositions.set(id, compositionId);
-      }
-      console.log(`[Engine] Registered INDEPENDENT preview canvas: ${id} for composition: ${compositionId || 'unknown'}`);
+    this.independentCanvasElements.set(id, canvas);
+    const ctx = this.context.configureCanvas(canvas);
+    if (ctx) {
+      this.independentPreviewCanvases.set(id, ctx);
+      if (compositionId) this.independentCanvasCompositions.set(id, compositionId);
+      log.debug('Registered independent preview canvas', { id, compositionId });
     }
-  }
-
-  // Update which composition an independent canvas is showing
-  setIndependentCanvasComposition(canvasId: string, compositionId: string): void {
-    this.independentCanvasCompositions.set(canvasId, compositionId);
   }
 
   unregisterIndependentPreviewCanvas(id: string): void {
     this.independentPreviewCanvases.delete(id);
-    this.activeCompMirrorCanvases.delete(id); // Also remove from mirror set
-    this.independentCanvasCompositions.delete(id); // Also remove composition tracking
-    console.log(`[Engine] Unregistered INDEPENDENT preview canvas: ${id}`);
+    this.independentCanvasElements.delete(id);
+    this.independentCanvasCompositions.delete(id);
+    log.debug('Unregistered independent preview canvas', { id });
   }
 
-  /**
-   * Mark an independent canvas to receive the main render output directly
-   * Used when a preview is showing the same composition as the active timeline
-   * @deprecated Use setIndependentCanvasComposition instead - main loop auto-detects mirrors
-   */
-  setCanvasMirrorsActiveComp(canvasId: string, mirrors: boolean): void {
-    if (mirrors) {
-      this.activeCompMirrorCanvases.add(canvasId);
-    } else {
-      this.activeCompMirrorCanvases.delete(canvasId);
-    }
+  setIndependentCanvasComposition(canvasId: string, compositionId: string): void {
+    this.independentCanvasCompositions.set(canvasId, compositionId);
   }
 
-  // === MASK TEXTURE MANAGEMENT ===
+  /** @deprecated Use setIndependentCanvasComposition instead */
+  setCanvasMirrorsActiveComp(_canvasId: string, _mirrors: boolean): void {
+    // Kept for backward compatibility - no-op
+  }
+
+  // === OUTPUT WINDOWS ===
+
+  createOutputWindow(id: string, name: string): OutputWindow | null {
+    const device = this.context.getDevice();
+    if (!device || !this.outputWindowManager) return null;
+    return this.outputWindowManager.createOutputWindow(id, name, device);
+  }
+
+  closeOutputWindow(id: string): void {
+    this.outputWindowManager?.closeOutputWindow(id);
+  }
+
+  // === MASK MANAGEMENT ===
 
   updateMaskTexture(layerId: string, imageData: ImageData | null): void {
     this.maskTextureManager?.updateMaskTexture(layerId, imageData);
@@ -322,136 +282,6 @@ export class WebGPUEngine {
 
   hasMaskTexture(layerId: string): boolean {
     return this.maskTextureManager?.hasMaskTexture(layerId) ?? false;
-  }
-
-  // === OUTPUT WINDOW MANAGEMENT ===
-
-  createOutputWindow(id: string, name: string): OutputWindow | null {
-    const device = this.context.getDevice();
-    const outputWindow = window.open(
-      '',
-      `output_${id}`,
-      'width=960,height=540,menubar=no,toolbar=no,location=no,status=no'
-    );
-
-    if (!outputWindow) {
-      console.error('Failed to open output window (popup blocked?)');
-      return null;
-    }
-
-    outputWindow.document.title = `WebVJ Output - ${name}`;
-    outputWindow.document.body.style.cssText =
-      'margin:0;padding:0;background:#000;overflow:hidden;width:100vw;height:100vh;';
-
-    const canvas = outputWindow.document.createElement('canvas');
-    canvas.width = this.outputWidth;
-    canvas.height = this.outputHeight;
-    canvas.style.cssText = 'display:block;background:#000;';
-    outputWindow.document.body.appendChild(canvas);
-
-    // Aspect ratio locking
-    const aspectRatio = this.outputWidth / this.outputHeight;
-    let lastWidth = outputWindow.innerWidth;
-    let lastHeight = outputWindow.innerHeight;
-    let resizing = false;
-
-    const enforceAspectRatio = () => {
-      if (resizing) return;
-      resizing = true;
-
-      const currentWidth = outputWindow.innerWidth;
-      const currentHeight = outputWindow.innerHeight;
-      const widthDelta = Math.abs(currentWidth - lastWidth);
-      const heightDelta = Math.abs(currentHeight - lastHeight);
-
-      let newWidth: number;
-      let newHeight: number;
-
-      if (widthDelta >= heightDelta) {
-        newWidth = currentWidth;
-        newHeight = Math.round(currentWidth / aspectRatio);
-      } else {
-        newHeight = currentHeight;
-        newWidth = Math.round(currentHeight * aspectRatio);
-      }
-
-      if (newWidth !== currentWidth || newHeight !== currentHeight) {
-        outputWindow.resizeTo(newWidth + (outputWindow.outerWidth - currentWidth),
-                              newHeight + (outputWindow.outerHeight - currentHeight));
-      }
-
-      canvas.style.width = '100%';
-      canvas.style.height = '100%';
-
-      lastWidth = newWidth;
-      lastHeight = newHeight;
-
-      setTimeout(() => { resizing = false; }, 50);
-    };
-
-    canvas.style.width = '100%';
-    canvas.style.height = '100%';
-    outputWindow.addEventListener('resize', enforceAspectRatio);
-
-    let context: GPUCanvasContext | null = null;
-
-    if (device) {
-      context = canvas.getContext('webgpu');
-      if (context) {
-        context.configure({
-          device,
-          format: 'bgra8unorm',
-          alphaMode: 'premultiplied',
-        });
-      }
-    }
-
-    const fullscreenBtn = outputWindow.document.createElement('button');
-    fullscreenBtn.textContent = 'Fullscreen';
-    fullscreenBtn.style.cssText =
-      'position:fixed;top:10px;right:10px;padding:8px 16px;cursor:pointer;z-index:1000;opacity:0.7;';
-    fullscreenBtn.onclick = () => {
-      canvas.requestFullscreen();
-    };
-    outputWindow.document.body.appendChild(fullscreenBtn);
-
-    outputWindow.document.addEventListener('fullscreenchange', () => {
-      fullscreenBtn.style.display = outputWindow.document.fullscreenElement ? 'none' : 'block';
-    });
-
-    outputWindow.onbeforeunload = () => {
-      this.outputWindows.delete(id);
-    };
-
-    const output: OutputWindow = {
-      id,
-      name,
-      window: outputWindow,
-      canvas,
-      context,
-      isFullscreen: false,
-    };
-
-    this.outputWindows.set(id, output);
-    return output;
-  }
-
-  closeOutputWindow(id: string): void {
-    const output = this.outputWindows.get(id);
-    if (output?.window) {
-      output.window.close();
-    }
-    this.outputWindows.delete(id);
-  }
-
-  // === TEXTURE MANAGEMENT ===
-
-  createImageTexture(image: HTMLImageElement): GPUTexture | null {
-    return this.textureManager?.createImageTexture(image) ?? null;
-  }
-
-  importVideoTexture(source: HTMLVideoElement | VideoFrame): GPUExternalTexture | null {
-    return this.textureManager?.importVideoTexture(source) ?? null;
   }
 
   // === VIDEO MANAGEMENT ===
@@ -467,17 +297,22 @@ export class WebGPUEngine {
   cleanupVideo(video: HTMLVideoElement): void {
     this.scrubbingCache?.cleanupVideo(video);
     this.videoFrameManager.cleanupVideo(video);
-    // Clear video time tracking
-    const videoKey = video.src;
-    if (videoKey) {
-      this.lastVideoTime.delete(videoKey);
-      this.cachedExternalTexture.delete(videoKey);
-    }
-    console.log('[WebGPU] Cleaned up video resources');
+    if (video.src) this.lastVideoTime.delete(video.src);
+    log.debug('Cleaned up video resources');
   }
 
   setHasActiveVideo(hasVideo: boolean): void {
-    this.hasActiveVideo = hasVideo;
+    this.renderLoop?.setHasActiveVideo(hasVideo);
+  }
+
+  // === TEXTURE MANAGEMENT ===
+
+  createImageTexture(image: HTMLImageElement): GPUTexture | null {
+    return this.textureManager?.createImageTexture(image) ?? null;
+  }
+
+  importVideoTexture(source: HTMLVideoElement | VideoFrame): GPUExternalTexture | null {
+    return this.textureManager?.importVideoTexture(source) ?? null;
   }
 
   // === CACHING ===
@@ -485,7 +320,12 @@ export class WebGPUEngine {
   clearCaches(): void {
     this.scrubbingCache?.clearAll();
     this.textureManager?.clearCaches();
-    console.log('[WebGPU] Cleared all caches');
+    log.debug('Cleared all caches');
+  }
+
+  clearVideoCache(): void {
+    this.lastVideoTime.clear();
+    log.debug('Cleared video texture cache');
   }
 
   cacheFrameAtTime(video: HTMLVideoElement, time: number): void {
@@ -494,10 +334,6 @@ export class WebGPUEngine {
 
   getCachedFrame(videoSrc: string, time: number): GPUTextureView | null {
     return this.scrubbingCache?.getCachedFrame(videoSrc, time) ?? null;
-  }
-
-  preCacheFrames(_video: HTMLVideoElement, _centerTime: number, _radiusSeconds: number = 2, _fps: number = 30): void {
-    // Implemented in ScrubbingCache but not exposed - for future use
   }
 
   getScrubbingCacheStats(): { count: number; maxCount: number } {
@@ -512,27 +348,22 @@ export class WebGPUEngine {
 
   async cacheCompositeFrame(time: number): Promise<void> {
     if (!this.scrubbingCache) return;
-
     if (this.scrubbingCache.hasCompositeCacheFrame(time)) return;
 
     const pixels = await this.readPixels();
     if (!pixels) return;
 
-    // Debug: check if pixels have data
-    if (this.scrubbingCache.getCompositeCacheStats(this.outputWidth, this.outputHeight).count === 0) {
+    const { width, height } = this.renderTargetManager?.getResolution() ?? { width: 640, height: 360 };
+
+    if (this.scrubbingCache.getCompositeCacheStats(width, height).count === 0) {
       let nonZero = 0;
       for (let i = 0; i < Math.min(1000, pixels.length); i++) {
         if (pixels[i] !== 0) nonZero++;
       }
-      console.log(`[RAM Preview] First frame: ${nonZero} non-zero pixels in first 1000, size: ${this.outputWidth}x${this.outputHeight}`);
+      log.debug('RAM Preview first frame', { nonZero, width, height });
     }
 
-    const imageData = new ImageData(
-      new Uint8ClampedArray(pixels),
-      this.outputWidth,
-      this.outputHeight
-    );
-
+    const imageData = new ImageData(new Uint8ClampedArray(pixels), width, height);
     this.scrubbingCache.cacheCompositeFrame(time, imageData);
   }
 
@@ -548,69 +379,404 @@ export class WebGPUEngine {
     this.scrubbingCache?.clearCompositeCache();
     this.ramPlaybackCanvas = null;
     this.ramPlaybackCtx = null;
-    console.log('[WebGPU] Composite cache cleared');
+    log.debug('Composite cache cleared');
   }
 
   getCompositeCacheStats(): { count: number; maxFrames: number; memoryMB: number } {
-    return this.scrubbingCache?.getCompositeCacheStats(this.outputWidth, this.outputHeight) ??
-      { count: 0, maxFrames: 0, memoryMB: 0 };
+    const { width, height } = this.renderTargetManager?.getResolution() ?? { width: 640, height: 360 };
+    return this.scrubbingCache?.getCompositeCacheStats(width, height) ?? { count: 0, maxFrames: 0, memoryMB: 0 };
   }
 
   setGeneratingRamPreview(generating: boolean): void {
     this.isGeneratingRamPreview = generating;
   }
 
-  /**
-   * Set export mode - pauses all preview rendering to avoid conflicts
-   * Export renders directly via engine.render() without preview loop interference
-   */
   setExporting(exporting: boolean): void {
     this.isExporting = exporting;
-    // Clear video time tracking when entering export mode to ensure fresh texture imports
-    if (exporting) {
-      this.lastVideoTime.clear();
-    }
-    console.log(`[WebGPUEngine] Export mode: ${exporting ? 'ON' : 'OFF'}`);
+    if (exporting) this.lastVideoTime.clear();
+    log.info('Export mode', { enabled: exporting });
   }
 
-  /**
-   * Check if currently exporting
-   */
   getIsExporting(): boolean {
     return this.isExporting;
   }
 
   /**
-   * Request a render - call this when something changes that needs to be displayed
-   * This wakes the engine from idle mode
+   * Initialize export canvas for zero-copy VideoFrame creation.
+   * Call this before starting export with the target resolution.
    */
+  initExportCanvas(width: number, height: number): boolean {
+    const device = this.context.getDevice();
+    if (!device) {
+      log.error('Cannot init export canvas: no device');
+      return false;
+    }
+
+    // Create OffscreenCanvas at export resolution
+    this.exportCanvas = new OffscreenCanvas(width, height);
+    const ctx = this.exportCanvas.getContext('webgpu');
+    if (!ctx) {
+      log.error('Failed to get WebGPU context from OffscreenCanvas');
+      this.exportCanvas = null;
+      return false;
+    }
+
+    // Configure with same settings as preview canvases
+    const preferredFormat = navigator.gpu.getPreferredCanvasFormat();
+    ctx.configure({
+      device,
+      format: preferredFormat,
+      alphaMode: 'premultiplied',
+    });
+
+    this.exportCanvasContext = ctx;
+    log.info('Export canvas initialized', { width, height, format: preferredFormat });
+    return true;
+  }
+
+  /**
+   * Create VideoFrame directly from the export canvas (zero-copy path).
+   * Must call render() first to populate the canvas.
+   * Waits for GPU work to complete before capturing the frame.
+   */
+  async createVideoFrameFromExport(timestamp: number, duration: number): Promise<VideoFrame | null> {
+    if (!this.exportCanvas) {
+      log.error('Export canvas not initialized');
+      return null;
+    }
+
+    const device = this.context.getDevice();
+    if (!device) {
+      log.error('No GPU device');
+      return null;
+    }
+
+    // CRITICAL: Wait for GPU to finish rendering before capturing frame
+    await device.queue.onSubmittedWorkDone();
+
+    try {
+      // Create VideoFrame directly from OffscreenCanvas - browser handles GPU→VideoFrame
+      const frame = new VideoFrame(this.exportCanvas, {
+        timestamp,
+        duration,
+        alpha: 'discard', // We don't need alpha channel in export
+      });
+      return frame;
+    } catch (e) {
+      log.error('Failed to create VideoFrame from export canvas', e);
+      return null;
+    }
+  }
+
+  /**
+   * Cleanup export canvas after export completes.
+   */
+  cleanupExportCanvas(): void {
+    this.exportCanvasContext = null;
+    this.exportCanvas = null;
+    log.debug('Export canvas cleaned up');
+  }
+
+  // === RENDER LOOP ===
+
   requestRender(): void {
-    this.lastActivityTime = performance.now();
-    this.renderRequested = true;
-    if (this.isIdle) {
-      this.isIdle = false;
-      console.log('[WebGPU] Waking from idle mode');
-    }
+    this.renderLoop?.requestRender();
   }
 
-  /**
-   * Check if engine is currently in idle mode (not rendering)
-   */
   getIsIdle(): boolean {
-    return this.isIdle;
+    return this.renderLoop?.getIsIdle() ?? false;
+  }
+
+  updatePlayheadTracking(playhead: number): boolean {
+    return this.renderLoop?.updatePlayheadTracking(playhead) ?? false;
+  }
+
+  start(renderCallback: () => void): void {
+    if (!this.performanceStats) return;
+
+    // Create new loop with the callback
+    this.renderLoop = new RenderLoop(this.performanceStats, {
+      isRecovering: () => this.isRecoveringFromDeviceLoss || this.context.recovering,
+      isExporting: () => this.isExporting,
+      onRender: renderCallback,
+    });
+    this.renderLoop.start();
+  }
+
+  stop(): void {
+    this.renderLoop?.stop();
+  }
+
+  // === MAIN RENDER ===
+
+  render(layers: Layer[]): void {
+    if (this.isRecoveringFromDeviceLoss || this.context.recovering) return;
+
+    const device = this.context.getDevice();
+    if (!device || !this.compositorPipeline || !this.outputPipeline || !this.sampler) return;
+    if (!this.renderTargetManager || !this.layerCollector || !this.compositor) return;
+
+    const pingView = this.renderTargetManager.getPingView();
+    const pongView = this.renderTargetManager.getPongView();
+    if (!pingView || !pongView) return;
+
+    // Clear frame-scoped caches (external texture bind groups)
+    this.compositorPipeline.beginFrame();
+
+    const t0 = performance.now();
+    const { width, height } = this.renderTargetManager.getResolution();
+
+    // Collect layer data
+    const t1 = performance.now();
+    const layerData = this.layerCollector.collect(layers, {
+      textureManager: this.textureManager!,
+      scrubbingCache: this.scrubbingCache,
+      getLastVideoTime: (key) => this.lastVideoTime.get(key),
+      setLastVideoTime: (key, time) => this.lastVideoTime.set(key, time),
+      isExporting: this.isExporting,
+    });
+    const importTime = performance.now() - t1;
+
+    // Update stats
+    this.performanceStats.setDecoder(this.layerCollector.getDecoder());
+    this.renderLoop?.setHasActiveVideo(this.layerCollector.hasActiveVideo());
+
+    // Handle empty layers
+    if (layerData.length === 0) {
+      this.renderEmptyFrame(device);
+      this.performanceStats.setLayerCount(0);
+      return;
+    }
+
+    // Pre-render nested compositions (batched with main composite)
+    const commandBuffers: GPUCommandBuffer[] = [];
+    let hasNestedComps = false;
+
+    const preRenderEncoder = device.createCommandEncoder();
+    for (const data of layerData) {
+      if (data.layer.source?.nestedComposition) {
+        hasNestedComps = true;
+        const nc = data.layer.source.nestedComposition;
+        const view = this.nestedCompRenderer!.preRender(
+          nc.compositionId, nc.layers, nc.width, nc.height, preRenderEncoder, this.sampler
+        );
+        if (view) data.textureView = view;
+      }
+    }
+    if (hasNestedComps) {
+      commandBuffers.push(preRenderEncoder.finish());
+    }
+
+    // Composite
+    const t2 = performance.now();
+    const commandEncoder = device.createCommandEncoder();
+    const result = this.compositor.composite(layerData, commandEncoder, {
+      device, sampler: this.sampler, pingView, pongView, outputWidth: width, outputHeight: height,
+    });
+    const renderTime = performance.now() - t2;
+
+    // Output
+    const finalIsPing = result.usedPing;
+    const outputBindGroup = this.outputPipeline!.getOutputBindGroup(this.sampler, result.finalView, finalIsPing);
+    this.outputPipeline!.updateUniforms(this.showTransparencyGrid, width, height);
+
+    const skipCanvas = this.isGeneratingRamPreview || this.isExporting;
+    if (!skipCanvas) {
+      if (this.previewContext) {
+        this.outputPipeline!.renderToCanvas(commandEncoder, this.previewContext, outputBindGroup);
+      }
+      for (const ctx of this.previewCanvases.values()) {
+        this.outputPipeline!.renderToCanvas(commandEncoder, ctx, outputBindGroup);
+      }
+      // Independent canvases showing active comp
+      const activeCompId = useMediaStore.getState().activeCompositionId;
+      for (const [canvasId, compId] of this.independentCanvasCompositions) {
+        if (compId === activeCompId) {
+          const ctx = this.independentPreviewCanvases.get(canvasId);
+          if (ctx) this.outputPipeline!.renderToCanvas(commandEncoder, ctx, outputBindGroup);
+        }
+      }
+      // Output windows
+      for (const output of this.outputWindowManager!.getOutputWindows().values()) {
+        if (output.context) this.outputPipeline!.renderToCanvas(commandEncoder, output.context, outputBindGroup);
+      }
+    }
+
+    // Render to export canvas for zero-copy VideoFrame creation
+    if (this.isExporting && this.exportCanvasContext) {
+      // Disable transparency grid for export
+      this.outputPipeline!.updateUniforms(false, width, height);
+      this.outputPipeline!.renderToCanvas(commandEncoder, this.exportCanvasContext, outputBindGroup);
+    }
+
+    // Batch submit all command buffers in single call
+    commandBuffers.push(commandEncoder.finish());
+    const t3 = performance.now();
+    device.queue.submit(commandBuffers);
+    const submitTime = performance.now() - t3;
+
+    // Cleanup after submit
+    if (hasNestedComps) {
+      this.nestedCompRenderer!.cleanupPendingTextures();
+    }
+
+    // Stats
+    const totalTime = performance.now() - t0;
+    this.performanceStats.recordRenderTiming({
+      importTexture: importTime,
+      createBindGroup: 0,
+      renderPass: renderTime,
+      submit: submitTime,
+      total: totalTime,
+    });
+    this.performanceStats.setLayerCount(result.layerCount);
+    this.performanceStats.updateStats();
+    reportRenderTime(totalTime);
+  }
+
+  private renderEmptyFrame(device: GPUDevice): void {
+    const commandEncoder = device.createCommandEncoder();
+    if (this.previewContext) {
+      const pass = commandEncoder.beginRenderPass({
+        colorAttachments: [{
+          view: this.previewContext.getCurrentTexture().createView(),
+          clearValue: { r: 0, g: 0, b: 0, a: 1 },
+          loadOp: 'clear',
+          storeOp: 'store',
+        }],
+      });
+      pass.end();
+    }
+    for (const ctx of this.previewCanvases.values()) {
+      const pass = commandEncoder.beginRenderPass({
+        colorAttachments: [{
+          view: ctx.getCurrentTexture().createView(),
+          clearValue: { r: 0, g: 0, b: 0, a: 1 },
+          loadOp: 'clear',
+          storeOp: 'store',
+        }],
+      });
+      pass.end();
+    }
+    device.queue.submit([commandEncoder.finish()]);
   }
 
   /**
-   * Update playhead tracking for idle detection
-   * Returns true if playhead changed (needs render)
+   * Render specific layers to a specific preview canvas
+   * Used for multi-composition preview where each preview shows different content
    */
-  updatePlayheadTracking(playhead: number): boolean {
-    const changed = Math.abs(playhead - this.lastRenderedPlayhead) > 0.0001;
-    if (changed) {
-      this.lastRenderedPlayhead = playhead;
-      this.requestRender();
+  renderToPreviewCanvas(canvasId: string, layers: Layer[]): void {
+    if (this.isRecoveringFromDeviceLoss || this.context.recovering) return;
+
+    const device = this.context.getDevice();
+    const canvasContext = this.independentPreviewCanvases.get(canvasId);
+    if (!device || !canvasContext || !this.compositorPipeline || !this.outputPipeline || !this.sampler) return;
+
+    const indPingView = this.renderTargetManager?.getIndependentPingView();
+    const indPongView = this.renderTargetManager?.getIndependentPongView();
+    if (!indPingView || !indPongView) return;
+
+    // Prepare layer data
+    const layerData: LayerRenderData[] = [];
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const layer = layers[i];
+      if (!layer?.visible || !layer.source || layer.opacity === 0) continue;
+
+      if (layer.source.videoElement) {
+        const video = layer.source.videoElement;
+        if (video.readyState >= 2) {
+          const extTex = this.textureManager?.importVideoTexture(video);
+          if (extTex) {
+            layerData.push({ layer, isVideo: true, externalTexture: extTex, textureView: null, sourceWidth: video.videoWidth, sourceHeight: video.videoHeight });
+            continue;
+          }
+        }
+      }
+      if (layer.source.imageElement) {
+        const img = layer.source.imageElement;
+        let texture = this.textureManager?.getCachedImageTexture(img);
+        if (!texture) texture = this.textureManager?.createImageTexture(img) ?? undefined;
+        if (texture) {
+          layerData.push({ layer, isVideo: false, externalTexture: null, textureView: this.textureManager!.getImageView(texture), sourceWidth: img.naturalWidth, sourceHeight: img.naturalHeight });
+        }
+      }
+      if (layer.source.textCanvas) {
+        const canvas = layer.source.textCanvas;
+        const texture = this.textureManager?.createCanvasTexture(canvas);
+        if (texture) {
+          layerData.push({ layer, isVideo: false, externalTexture: null, textureView: this.textureManager!.getImageView(texture), sourceWidth: canvas.width, sourceHeight: canvas.height });
+        }
+      }
     }
-    return changed;
+
+    const { width, height } = this.renderTargetManager!.getResolution();
+
+    if (layerData.length === 0) {
+      const commandEncoder = device.createCommandEncoder();
+      const blackTex = this.renderTargetManager!.getBlackTexture();
+      if (blackTex) {
+        const blackView = blackTex.createView();
+        const blackBindGroup = this.outputPipeline.createOutputBindGroup(this.sampler, blackView);
+        this.outputPipeline.renderToCanvas(commandEncoder, canvasContext, blackBindGroup);
+      }
+      device.queue.submit([commandEncoder.finish()]);
+      return;
+    }
+
+    const commandEncoder = device.createCommandEncoder();
+
+    // Ping-pong compositing using independent buffers
+    let readView = indPingView;
+    let writeView = indPongView;
+    let usePing = true;
+
+    const clearPass = commandEncoder.beginRenderPass({
+      colorAttachments: [{ view: readView, clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: 'clear', storeOp: 'store' }],
+    });
+    clearPass.end();
+
+    for (const data of layerData) {
+      const layer = data.layer;
+      const uniformBuffer = this.compositorPipeline!.getOrCreateUniformBuffer(layer.id);
+      const sourceAspect = data.sourceWidth / data.sourceHeight;
+      const outputAspect = width / height;
+      const maskLookupId = layer.maskClipId || layer.id;
+      const maskInfo = this.maskTextureManager?.getMaskInfo(maskLookupId) ?? { hasMask: false, view: this.maskTextureManager?.getWhiteMaskView()! };
+      const hasMask = maskInfo.hasMask;
+      const maskTextureView = maskInfo.view;
+
+      this.compositorPipeline!.updateLayerUniforms(layer, sourceAspect, outputAspect, hasMask, uniformBuffer);
+
+      let pipeline: GPURenderPipeline;
+      let bindGroup: GPUBindGroup;
+
+      if (data.isVideo && data.externalTexture) {
+        pipeline = this.compositorPipeline!.getExternalCompositePipeline()!;
+        bindGroup = this.compositorPipeline!.createExternalCompositeBindGroup(this.sampler!, readView, data.externalTexture, uniformBuffer, maskTextureView);
+      } else if (data.textureView) {
+        pipeline = this.compositorPipeline!.getCompositePipeline()!;
+        bindGroup = this.compositorPipeline!.createCompositeBindGroup(this.sampler!, readView, data.textureView, uniformBuffer, maskTextureView);
+      } else {
+        continue;
+      }
+
+      const compositePass = commandEncoder.beginRenderPass({
+        colorAttachments: [{ view: writeView, loadOp: 'clear', storeOp: 'store' }],
+      });
+      compositePass.setPipeline(pipeline);
+      compositePass.setBindGroup(0, bindGroup);
+      compositePass.draw(6);
+      compositePass.end();
+
+      [readView, writeView] = [writeView, readView];
+      usePing = !usePing;
+    }
+
+    const finalIsPing = !usePing;
+    const outputBindGroup = this.outputPipeline!.getOutputBindGroup(this.sampler!, readView, finalIsPing);
+    this.outputPipeline!.renderToCanvas(commandEncoder, canvasContext, outputBindGroup);
+
+    device.queue.submit([commandEncoder.finish()]);
   }
 
   renderCachedFrame(time: number): boolean {
@@ -619,35 +785,34 @@ export class WebGPUEngine {
       return false;
     }
 
-    // First, check GPU cache for instant playback
     const gpuCached = this.scrubbingCache.getGpuCachedFrame(time);
     if (gpuCached) {
+      log.debug('RAM Preview cache hit (GPU)', { time: time.toFixed(3) });
       const commandEncoder = device.createCommandEncoder();
       this.outputPipeline.renderToCanvas(commandEncoder, this.previewContext, gpuCached.bindGroup);
-      // Render to all inline preview canvases
       for (const previewCtx of this.previewCanvases.values()) {
         this.outputPipeline.renderToCanvas(commandEncoder, previewCtx, gpuCached.bindGroup);
       }
-      for (const output of this.outputWindows.values()) {
-        if (output.context) {
-          this.outputPipeline.renderToCanvas(commandEncoder, output.context, gpuCached.bindGroup);
-        }
+      for (const output of this.outputWindowManager!.getOutputWindows().values()) {
+        if (output.context) this.outputPipeline.renderToCanvas(commandEncoder, output.context, gpuCached.bindGroup);
       }
       device.queue.submit([commandEncoder.finish()]);
       return true;
     }
 
-    // Fall back to CPU cache and upload to GPU
     const imageData = this.scrubbingCache.getCachedCompositeFrame(time);
     if (!imageData) {
+      // Only log occasionally to avoid spam
+      if (Math.random() < 0.05) {
+        log.debug('RAM Preview cache miss', { time: time.toFixed(3), cacheSize: this.scrubbingCache.getCompositeCacheStats(1920, 1080).count });
+      }
       return false;
     }
+    log.debug('RAM Preview cache hit (ImageData→GPU)', { time: time.toFixed(3) });
 
     try {
-      const width = imageData.width;
-      const height = imageData.height;
+      const { width, height } = { width: imageData.width, height: imageData.height };
 
-      // Reuse or create canvas for ImageData -> GPU transfer
       if (!this.ramPlaybackCanvas || !this.ramPlaybackCtx) {
         this.ramPlaybackCanvas = document.createElement('canvas');
         this.ramPlaybackCanvas.width = width;
@@ -662,1252 +827,99 @@ export class WebGPUEngine {
 
       this.ramPlaybackCtx.putImageData(imageData, 0, 0);
 
-      // Create a new GPU texture for this frame
       const texture = device.createTexture({
         size: [width, height],
         format: 'rgba8unorm',
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
       });
 
-      device.queue.copyExternalImageToTexture(
-        { source: this.ramPlaybackCanvas },
-        { texture },
-        [width, height]
-      );
+      device.queue.copyExternalImageToTexture({ source: this.ramPlaybackCanvas }, { texture }, [width, height]);
 
       const view = texture.createView();
       const bindGroup = this.outputPipeline.createOutputBindGroup(this.sampler, view);
 
-      // Add to GPU cache
       this.scrubbingCache.addToGpuCache(time, { texture, view, bindGroup });
 
-      // Render to preview
       const commandEncoder = device.createCommandEncoder();
       this.outputPipeline.renderToCanvas(commandEncoder, this.previewContext, bindGroup);
-
-      // Render to all inline preview canvases
       for (const previewCtx of this.previewCanvases.values()) {
         this.outputPipeline.renderToCanvas(commandEncoder, previewCtx, bindGroup);
       }
-
-      for (const output of this.outputWindows.values()) {
-        if (output.context) {
-          this.outputPipeline.renderToCanvas(commandEncoder, output.context, bindGroup);
-        }
+      for (const output of this.outputWindowManager!.getOutputWindows().values()) {
+        if (output.context) this.outputPipeline.renderToCanvas(commandEncoder, output.context, bindGroup);
       }
-
       device.queue.submit([commandEncoder.finish()]);
       return true;
     } catch (e) {
-      console.warn('[WebGPU] Failed to render cached frame:', e);
+      log.warn('Failed to render cached frame', e);
       return false;
     }
   }
 
-  // === MAIN RENDER ===
+  // === NESTED COMPOSITION HELPERS ===
 
-  render(layers: Layer[]): void {
-    const device = this.context.getDevice();
-    if (!device || !this.compositorPipeline || !this.outputPipeline || !this.sampler) return;
-    if (!this.pingView || !this.pongView) return;
-
-    const t0 = performance.now();
-
-    // Reuse array, just clear it
-    this.layerRenderData.length = 0;
-
-    // Prepare layer data - import textures (reverse order: lower slots render on top)
-    const t1 = performance.now();
-    for (let i = layers.length - 1; i >= 0; i--) {
-      const layer = layers[i];
-      // Skip invisible layers and layers with zero opacity (saves GPU overhead)
-      if (!layer || !layer.visible || !layer.source || layer.opacity === 0) continue;
-
-      // Try Native Helper decoder first (turbo mode - fastest for ProRes/DNxHD)
-      if (layer.source.nativeDecoder) {
-        const bitmap = layer.source.nativeDecoder.getCurrentFrame();
-        if (bitmap) {
-          // Create texture from ImageBitmap
-          const texture = this.textureManager?.createImageBitmapTexture(bitmap);
-          if (texture) {
-            this.detailedStats.decoder = 'NativeHelper';
-            this.layerRenderData.push({
-              layer,
-              isVideo: false,
-              externalTexture: null,
-              textureView: texture.createView(),
-              sourceWidth: bitmap.width,
-              sourceHeight: bitmap.height,
-            });
-            continue;
-          }
-        }
-      }
-
-      // Try WebCodecs VideoFrame (if available)
-      if (layer.source.webCodecsPlayer) {
-        const frame = layer.source.webCodecsPlayer.getCurrentFrame();
-        if (frame) {
-          const extTex = this.textureManager?.importVideoTexture(frame);
-          if (extTex) {
-            this.detailedStats.decoder = 'WebCodecs';
-            this.layerRenderData.push({
-              layer,
-              isVideo: true,
-              externalTexture: extTex,
-              textureView: null,
-              sourceWidth: frame.displayWidth,
-              sourceHeight: frame.displayHeight,
-            });
-            continue;
-          }
-        }
-      }
-
-      // HTMLVideoElement - optimized with frame tracking
-      if (layer.source.videoElement) {
-        const video = layer.source.videoElement;
-        const videoKey = video.src || layer.id;
-
-        if (video.readyState >= 2) {
-          // Check if video time has changed since last frame (optimization for paused videos)
-          const lastTime = this.lastVideoTime.get(videoKey);
-          const currentTime = video.currentTime;
-          const videoTimeChanged = lastTime === undefined || Math.abs(currentTime - lastTime) > 0.001;
-
-          // OPTIMIZATION: If video time hasn't changed, use cached frame instead of re-importing
-          // This saves significant GPU overhead for paused videos
-          // IMPORTANT: Skip cache during export - we need fresh frames at each seek position
-          if (!videoTimeChanged && !this.isExporting) {
-            const lastFrame = this.scrubbingCache?.getLastFrame(video);
-            if (lastFrame) {
-              this.detailedStats.decoder = 'HTMLVideo(paused-cache)';
-              this.layerRenderData.push({
-                layer,
-                isVideo: false,
-                externalTexture: null,
-                textureView: lastFrame.view,
-                sourceWidth: lastFrame.width,
-                sourceHeight: lastFrame.height,
-              });
-              continue;
-            }
-          }
-
-          // Video time changed or no cache - import external texture
-          const extTex = this.textureManager?.importVideoTexture(video);
-          if (extTex) {
-            // Update time tracking
-            this.lastVideoTime.set(videoKey, currentTime);
-
-            // Cache frame for pause/seek fallback
-            const now = performance.now();
-            const lastCapture = this.scrubbingCache?.getLastCaptureTime(video) || 0;
-            if (now - lastCapture > 200) { // Cache more frequently for smoother pause
-              this.scrubbingCache?.captureVideoFrame(video);
-              this.scrubbingCache?.setLastCaptureTime(video, now);
-            }
-            this.detailedStats.decoder = 'HTMLVideo';
-
-            this.layerRenderData.push({
-              layer,
-              isVideo: true,
-              externalTexture: extTex,
-              textureView: null,
-              sourceWidth: video.videoWidth,
-              sourceHeight: video.videoHeight,
-            });
-            continue;
-          }
-
-          // Import failed - use cached frame
-          const lastFrame = this.scrubbingCache?.getLastFrame(video);
-          if (lastFrame) {
-            this.detailedStats.decoder = 'HTMLVideo(cached)';
-            this.layerRenderData.push({
-              layer,
-              isVideo: false,
-              externalTexture: null,
-              textureView: lastFrame.view,
-              sourceWidth: lastFrame.width,
-              sourceHeight: lastFrame.height,
-            });
-            continue;
-          }
-        } else {
-          // Video not ready - try last frame cache
-          const lastFrame = this.scrubbingCache?.getLastFrame(video);
-          if (lastFrame) {
-            this.layerRenderData.push({
-              layer,
-              isVideo: false,
-              externalTexture: null,
-              textureView: lastFrame.view,
-              sourceWidth: lastFrame.width,
-              sourceHeight: lastFrame.height,
-            });
-            continue;
-          }
-        }
-      }
-
-      // Images
-      if (layer.source.imageElement) {
-        const img = layer.source.imageElement;
-        let texture = this.textureManager?.getCachedImageTexture(img);
-        if (!texture) {
-          texture = this.textureManager?.createImageTexture(img) ?? undefined;
-        }
-        if (texture) {
-          const imageView = this.textureManager!.getImageView(texture);
-          this.layerRenderData.push({
-            layer,
-            isVideo: false,
-            externalTexture: null,
-            textureView: imageView,
-            sourceWidth: img.naturalWidth,
-            sourceHeight: img.naturalHeight,
-          });
-          continue;
-        }
-      }
-
-      // Text clips - render canvas to texture
-      if (layer.source.textCanvas) {
-        const canvas = layer.source.textCanvas;
-        const texture = this.textureManager?.createCanvasTexture(canvas);
-        if (texture) {
-          const textView = this.textureManager!.getImageView(texture);
-          this.layerRenderData.push({
-            layer,
-            isVideo: false,
-            externalTexture: null,
-            textureView: textView,
-            sourceWidth: canvas.width,
-            sourceHeight: canvas.height,
-          });
-          continue;
-        }
-      }
-
-      // Nested compositions - will be pre-rendered below
-      if (layer.source.nestedComposition) {
-        const nestedComp = layer.source.nestedComposition;
-        // Mark for pre-rendering - actual texture will be created in pre-render pass
-        this.layerRenderData.push({
-          layer,
-          isVideo: false,
-          externalTexture: null,
-          textureView: null, // Will be set after pre-render
-          sourceWidth: nestedComp.width,
-          sourceHeight: nestedComp.height,
-        });
-      }
-    }
-
-    // Pre-render nested compositions (must happen before main compositing)
-    // Need to create command encoder early for pre-rendering
-    const preRenderCommandEncoder = device.createCommandEncoder();
-    for (const data of this.layerRenderData) {
-      if (data.layer.source?.nestedComposition) {
-        const nestedComp = data.layer.source.nestedComposition;
-        const preRenderedView = this.preRenderNestedComposition(
-          nestedComp.compositionId,
-          nestedComp.layers,
-          nestedComp.width,
-          nestedComp.height,
-          preRenderCommandEncoder
-        );
-        if (preRenderedView) {
-          data.textureView = preRenderedView;
-        }
-      }
-    }
-    // Submit pre-render commands
-    device.queue.submit([preRenderCommandEncoder.finish()]);
-
-    // Clean up temporary textures after submit (they're no longer referenced)
-    for (const texture of this.pendingTextureCleanup) {
-      texture.destroy();
-    }
-    this.pendingTextureCleanup = [];
-
-    this.profileData.importTexture = performance.now() - t1;
-
-    // Update video flag for frame rate limiting
-    this.hasActiveVideo = this.layerRenderData.some(d => d.isVideo);
-
-    // Early exit if nothing to render - clear all canvases to black
-    if (this.layerRenderData.length === 0) {
-      const commandEncoder = device.createCommandEncoder();
-
-      // Clear main preview context
-      if (this.previewContext) {
-        const pass = commandEncoder.beginRenderPass({
-          colorAttachments: [{
-            view: this.previewContext.getCurrentTexture().createView(),
-            clearValue: { r: 0, g: 0, b: 0, a: 1 },
-            loadOp: 'clear',
-            storeOp: 'store',
-          }],
-        });
-        pass.end();
-      }
-
-      // Clear all registered preview canvases (from Preview components)
-      for (const previewCtx of this.previewCanvases.values()) {
-        const pass = commandEncoder.beginRenderPass({
-          colorAttachments: [{
-            view: previewCtx.getCurrentTexture().createView(),
-            clearValue: { r: 0, g: 0, b: 0, a: 1 },
-            loadOp: 'clear',
-            storeOp: 'store',
-          }],
-        });
-        pass.end();
-      }
-
-      device.queue.submit([commandEncoder.finish()]);
-      this.lastLayerCount = 0;
-      return;
-    }
-
-    const t2 = performance.now();
-    const commandEncoder = device.createCommandEncoder();
-
-    // Ping-pong compositing
-    let readView = this.pingView;
-    let writeView = this.pongView;
-    let usePing = true;
-
-    // Clear first buffer to transparent (allows transparency grid to work)
-    const clearPass = commandEncoder.beginRenderPass({
-      colorAttachments: [{
-        view: readView,
-        clearValue: { r: 0, g: 0, b: 0, a: 0 },
-        loadOp: 'clear',
-        storeOp: 'store',
-      }],
-    });
-    clearPass.end();
-
-    // Composite each visible layer
-    for (let i = 0; i < this.layerRenderData.length; i++) {
-      const data = this.layerRenderData[i];
-      const layer = data.layer;
-
-      // Get or create per-layer uniform buffer
-      const uniformBuffer = this.compositorPipeline!.getOrCreateUniformBuffer(layer.id);
-
-      // Calculate aspect ratios
-      const sourceAspect = data.sourceWidth / data.sourceHeight;
-      const outputAspect = this.outputWidth / this.outputHeight;
-
-      // Get mask texture view for this layer (use maskClipId if available, fallback to layer.id)
-      const maskLookupId = layer.maskClipId || layer.id;
-      const hasMask = this.maskTextureManager?.hasMaskTexture(maskLookupId) ?? false;
-      const maskTextureView = this.maskTextureManager?.getMaskTextureView(maskLookupId) ??
-                             this.maskTextureManager?.getWhiteMaskView()!;
-
-      // Debug logging for mask state
-      this.maskTextureManager?.logMaskState(maskLookupId, hasMask);
-
-      // Update uniforms
-      this.compositorPipeline!.updateLayerUniforms(layer, sourceAspect, outputAspect, hasMask, uniformBuffer);
-
-      let pipeline: GPURenderPipeline;
-      let bindGroup: GPUBindGroup;
-
-      if (data.isVideo && data.externalTexture) {
-        pipeline = this.compositorPipeline!.getExternalCompositePipeline()!;
-        bindGroup = this.compositorPipeline!.createExternalCompositeBindGroup(
-          this.sampler!,
-          readView,
-          data.externalTexture,
-          uniformBuffer,
-          maskTextureView
-        );
-      } else if (data.textureView) {
-        pipeline = this.compositorPipeline!.getCompositePipeline()!;
-        bindGroup = this.compositorPipeline!.createCompositeBindGroup(
-          this.sampler!,
-          readView,
-          data.textureView,
-          uniformBuffer,
-          maskTextureView
-        );
-      } else {
-        continue;
-      }
-
-      const compositePass = commandEncoder.beginRenderPass({
-        colorAttachments: [{
-          view: writeView,
-          loadOp: 'clear',
-          storeOp: 'store',
-        }],
-      });
-      compositePass.setPipeline(pipeline);
-      compositePass.setBindGroup(0, bindGroup);
-      compositePass.draw(6);
-      compositePass.end();
-
-      // Apply effects to the layer if any
-      if (layer.effects && layer.effects.length > 0 && this.effectsPipeline) {
-        const result = this.effectsPipeline.applyEffects(
-          commandEncoder,
-          layer.effects,
-          this.sampler!,
-          writeView,
-          readView,
-          this.pingView!,
-          this.pongView!,
-          this.outputWidth,
-          this.outputHeight
-        );
-
-        if (result.swapped) {
-          // Adjust for effect swaps
-          const tempView = readView;
-          readView = writeView;
-          writeView = tempView;
-          usePing = !usePing;
-        }
-      }
-
-      // Swap buffers
-      const temp = readView;
-      readView = writeView;
-      writeView = temp;
-      usePing = !usePing;
-    }
-    this.profileData.renderPass = performance.now() - t2;
-
-    this.lastLayerCount = this.layerRenderData.length;
-    this.lastRenderWasPing = usePing;
-
-    // Get output bind group
-    const finalIsPing = !usePing;
-    const outputBindGroup = this.outputPipeline!.getOutputBindGroup(this.sampler!, readView, finalIsPing);
-
-    // Update output pipeline uniforms (transparency grid setting)
-    this.outputPipeline!.updateUniforms(this.showTransparencyGrid, this.outputWidth, this.outputHeight);
-
-    // Skip all canvas rendering during export (export reads pixels directly from GPU buffer)
-    const skipCanvasRendering = this.isGeneratingRamPreview || this.isExporting;
-
-    // Render to preview (skip during RAM preview generation or export)
-    if (this.previewContext && !skipCanvasRendering) {
-      this.outputPipeline!.renderToCanvas(commandEncoder, this.previewContext, outputBindGroup);
-    }
-
-    // Render to all inline preview canvases
-    if (!skipCanvasRendering) {
-      for (const previewCtx of this.previewCanvases.values()) {
-        this.outputPipeline!.renderToCanvas(commandEncoder, previewCtx, outputBindGroup);
-      }
-    }
-
-    // Render to independent canvases that are showing the active composition
-    // Auto-detect based on independentCanvasCompositions (no need for async flag setting)
-    if (!skipCanvasRendering) {
-      const activeCompId = useMediaStore.getState().activeCompositionId;
-      for (const [canvasId, compId] of this.independentCanvasCompositions.entries()) {
-        if (compId === activeCompId) {
-          const ctx = this.independentPreviewCanvases.get(canvasId);
-          if (ctx) {
-            this.outputPipeline!.renderToCanvas(commandEncoder, ctx, outputBindGroup);
-          }
-        }
-      }
-    }
-
-    // Render to output windows
-    if (!skipCanvasRendering) {
-      for (const output of this.outputWindows.values()) {
-        if (output.context) {
-          this.outputPipeline!.renderToCanvas(commandEncoder, output.context, outputBindGroup);
-        }
-      }
-    }
-
-    const t3 = performance.now();
-    device.queue.submit([commandEncoder.finish()]);
-    this.profileData.submit = performance.now() - t3;
-
-    this.profileData.total = performance.now() - t0;
-
-    // Report to performance monitor for auto quality reset
-    reportRenderTime(this.profileData.total);
-
-    // Update detailed stats
-    this.detailedStats.importTexture = this.detailedStats.importTexture * 0.9 + this.profileData.importTexture * 0.1;
-    this.detailedStats.renderPass = this.detailedStats.renderPass * 0.9 + this.profileData.renderPass * 0.1;
-    this.detailedStats.submit = this.detailedStats.submit * 0.9 + this.profileData.submit * 0.1;
-    this.detailedStats.total = this.detailedStats.total * 0.9 + this.profileData.total * 0.1;
-
-    // Detect drops caused by slow render
-    if (this.profileData.total > this.TARGET_FRAME_TIME) {
-      if (this.profileData.importTexture > this.TARGET_FRAME_TIME * 0.5) {
-        this.detailedStats.lastDropReason = 'slow_import';
-      } else {
-        this.detailedStats.lastDropReason = 'slow_render';
-      }
-    }
-
-    // Profile counter for internal use
-    this.profileCounter++;
-    const now = performance.now();
-    if (now - this.lastProfileTime >= 1000) {
-      this.profileCounter = 0;
-      this.lastProfileTime = now;
-    }
-
-    this.updateStats();
-  }
-
-  /**
-   * Render specific layers to a specific preview canvas
-   * Used for multi-composition preview where each preview shows different content
-   */
-  renderToPreviewCanvas(canvasId: string, layers: Layer[]): void {
-    const device = this.context.getDevice();
-    // Look in INDEPENDENT canvases map (not rendered by main loop)
-    const canvasContext = this.independentPreviewCanvases.get(canvasId);
-
-    if (!device || !canvasContext || !this.compositorPipeline || !this.outputPipeline || !this.sampler) {
-      return;
-    }
-    // Use independent ping-pong buffers to avoid conflicts with main render loop
-    if (!this.independentPingView || !this.independentPongView) return;
-
-    // Prepare layer data
-    const layerData: LayerRenderData[] = [];
-
-    for (let i = layers.length - 1; i >= 0; i--) {
-      const layer = layers[i];
-      if (!layer || !layer.visible || !layer.source || layer.opacity === 0) continue;
-
-      // HTMLVideoElement
-      if (layer.source.videoElement) {
-        const video = layer.source.videoElement;
-        if (video.readyState >= 2) {
-          const extTex = this.textureManager?.importVideoTexture(video);
-          if (extTex) {
-            layerData.push({
-              layer,
-              isVideo: true,
-              externalTexture: extTex,
-              textureView: null,
-              sourceWidth: video.videoWidth,
-              sourceHeight: video.videoHeight,
-            });
-            continue;
-          }
-        }
-      }
-
-      // Image
-      if (layer.source.imageElement) {
-        const img = layer.source.imageElement;
-        let texture = this.textureManager?.getCachedImageTexture(img);
-        if (!texture) {
-          texture = this.textureManager?.createImageTexture(img) ?? undefined;
-        }
-        if (texture) {
-          const imageView = this.textureManager!.getImageView(texture);
-          layerData.push({
-            layer,
-            isVideo: false,
-            externalTexture: null,
-            textureView: imageView,
-            sourceWidth: img.naturalWidth,
-            sourceHeight: img.naturalHeight,
-          });
-        }
-      }
-
-      // Text canvas
-      if (layer.source.textCanvas) {
-        const canvas = layer.source.textCanvas;
-        const texture = this.textureManager?.createCanvasTexture(canvas);
-        if (texture) {
-          const textView = this.textureManager!.getImageView(texture);
-          layerData.push({
-            layer,
-            isVideo: false,
-            externalTexture: null,
-            textureView: textView,
-            sourceWidth: canvas.width,
-            sourceHeight: canvas.height,
-          });
-        }
-      }
-    }
-
-    // If no layers, clear to black
-    if (layerData.length === 0) {
-      const commandEncoder = device.createCommandEncoder();
-      if (this.blackTexture) {
-        const blackView = this.blackTexture.createView();
-        const blackBindGroup = this.outputPipeline.createOutputBindGroup(this.sampler, blackView);
-        this.outputPipeline.renderToCanvas(commandEncoder, canvasContext, blackBindGroup);
-      }
-      device.queue.submit([commandEncoder.finish()]);
-      return;
-    }
-
-    const commandEncoder = device.createCommandEncoder();
-
-    // Ping-pong compositing using INDEPENDENT buffers (avoids main loop conflicts)
-    let readView = this.independentPingView!;
-    let writeView = this.independentPongView!;
-    let usePing = true;
-
-    // Clear first buffer to transparent (allows transparency grid to work)
-    const clearPass = commandEncoder.beginRenderPass({
-      colorAttachments: [{
-        view: readView,
-        clearValue: { r: 0, g: 0, b: 0, a: 0 },
-        loadOp: 'clear',
-        storeOp: 'store',
-      }],
-    });
-    clearPass.end();
-
-    // Composite each layer
-    for (let i = 0; i < layerData.length; i++) {
-      const data = layerData[i];
-      const layer = data.layer;
-
-      // Get or create per-layer uniform buffer
-      const uniformBuffer = this.compositorPipeline!.getOrCreateUniformBuffer(layer.id);
-
-      // Calculate aspect ratios
-      const sourceAspect = data.sourceWidth / data.sourceHeight;
-      const outputAspect = this.outputWidth / this.outputHeight;
-
-      // Get mask texture view for this layer (use maskClipId if available, fallback to layer.id)
-      const maskLookupId = layer.maskClipId || layer.id;
-      const hasMask = this.maskTextureManager?.hasMaskTexture(maskLookupId) ?? false;
-      const maskTextureView = this.maskTextureManager?.getMaskTextureView(maskLookupId) ??
-                             this.maskTextureManager?.getWhiteMaskView()!;
-
-      // Update uniforms
-      this.compositorPipeline!.updateLayerUniforms(layer, sourceAspect, outputAspect, hasMask, uniformBuffer);
-
-      let pipeline: GPURenderPipeline;
-      let bindGroup: GPUBindGroup;
-
-      if (data.isVideo && data.externalTexture) {
-        pipeline = this.compositorPipeline!.getExternalCompositePipeline()!;
-        bindGroup = this.compositorPipeline!.createExternalCompositeBindGroup(
-          this.sampler!,
-          readView,
-          data.externalTexture,
-          uniformBuffer,
-          maskTextureView
-        );
-      } else if (data.textureView) {
-        pipeline = this.compositorPipeline!.getCompositePipeline()!;
-        bindGroup = this.compositorPipeline!.createCompositeBindGroup(
-          this.sampler!,
-          readView,
-          data.textureView,
-          uniformBuffer,
-          maskTextureView
-        );
-      } else {
-        continue;
-      }
-
-      const compositePass = commandEncoder.beginRenderPass({
-        colorAttachments: [{
-          view: writeView,
-          loadOp: 'clear',
-          storeOp: 'store',
-        }],
-      });
-      compositePass.setPipeline(pipeline);
-      compositePass.setBindGroup(0, bindGroup);
-      compositePass.draw(6);
-      compositePass.end();
-
-      // Swap buffers
-      const temp = readView;
-      readView = writeView;
-      writeView = temp;
-      usePing = !usePing;
-    }
-
-    // Output to this specific canvas
-    const finalIsPing = !usePing;
-    const outputBindGroup = this.outputPipeline!.getOutputBindGroup(this.sampler!, readView, finalIsPing);
-    this.outputPipeline!.renderToCanvas(commandEncoder, canvasContext, outputBindGroup);
-
-    device.queue.submit([commandEncoder.finish()]);
-  }
-
-  /**
-   * Check if a pre-rendered texture exists for a nested composition
-   */
   hasNestedCompTexture(compositionId: string): boolean {
-    return this.nestedCompTextures.has(compositionId);
+    return this.nestedCompRenderer?.hasTexture(compositionId) ?? false;
   }
 
-  /**
-   * Cache the current main render output for a composition
-   * This allows parent previews to use the cached texture when the child comp is active
-   */
   cacheActiveCompOutput(compositionId: string): void {
-    const device = this.context.getDevice();
-    if (!device || !this.pingTexture || !this.pongTexture) return;
+    const pingTex = this.renderTargetManager?.getPingTexture();
+    const pongTex = this.renderTargetManager?.getPongTexture();
+    if (!pingTex || !pongTex || !this.nestedCompRenderer) return;
 
-    // Get the texture that has the final render
-    const finalIsPing = !this.lastRenderWasPing;
-    const sourceTexture = finalIsPing ? this.pingTexture : this.pongTexture;
+    const { width, height } = this.renderTargetManager!.getResolution();
+    const finalIsPing = !this.compositor?.getLastRenderWasPing();
+    const sourceTexture = finalIsPing ? pingTex : pongTex;
 
-    // Get or create the cache texture
-    let compTexture = this.nestedCompTextures.get(compositionId);
-    if (!compTexture || compTexture.texture.width !== this.outputWidth || compTexture.texture.height !== this.outputHeight) {
-      // Clean up old texture
-      if (compTexture) {
-        compTexture.texture.destroy();
-      }
-
-      // Create new texture for caching
-      const texture = device.createTexture({
-        size: { width: this.outputWidth, height: this.outputHeight },
-        format: 'rgba8unorm',
-        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-      });
-      const view = texture.createView();
-      compTexture = { texture, view };
-      this.nestedCompTextures.set(compositionId, compTexture);
-    }
-
-    // Copy the current output to the cache
-    const commandEncoder = device.createCommandEncoder();
-    commandEncoder.copyTextureToTexture(
-      { texture: sourceTexture },
-      { texture: compTexture.texture },
-      { width: this.outputWidth, height: this.outputHeight }
-    );
-    device.queue.submit([commandEncoder.finish()]);
+    this.nestedCompRenderer.cacheActiveCompOutput(compositionId, sourceTexture, width, height);
   }
 
-  /**
-   * Copy the main render loop's final output to an independent preview canvas
-   * Used when a preview is showing the same composition as the active timeline
-   * Returns true if successful
-   */
   copyMainOutputToPreview(canvasId: string): boolean {
     const device = this.context.getDevice();
     const canvasContext = this.independentPreviewCanvases.get(canvasId);
+    const pingView = this.renderTargetManager?.getPingView();
+    const pongView = this.renderTargetManager?.getPongView();
 
-    if (!device || !canvasContext || !this.outputPipeline || !this.sampler || !this.pingView || !this.pongView) {
-      return false;
-    }
+    if (!device || !canvasContext || !this.outputPipeline || !this.sampler || !pingView || !pongView) return false;
 
-    // Get the same view that was just rendered to the main output
-    const finalIsPing = !this.lastRenderWasPing;
-    const finalView = finalIsPing ? this.pingView : this.pongView;
+    const finalIsPing = !this.compositor?.getLastRenderWasPing();
+    const finalView = finalIsPing ? pingView : pongView;
 
-    // Create command encoder
     const commandEncoder = device.createCommandEncoder();
-
-    // Create bind group for the final composited output
     const outputBindGroup = this.outputPipeline.getOutputBindGroup(this.sampler, finalView, finalIsPing);
-
-    // Render to the preview canvas
     this.outputPipeline.renderToCanvas(commandEncoder, canvasContext, outputBindGroup);
-
     device.queue.submit([commandEncoder.finish()]);
     return true;
   }
 
-  /**
-   * Copy a pre-rendered nested composition texture to a preview canvas
-   * Used when the composition is nested in the active timeline and already rendered by main loop
-   * Returns true if successful, false if no texture available
-   */
   copyNestedCompTextureToPreview(canvasId: string, compositionId: string): boolean {
     const device = this.context.getDevice();
     const canvasContext = this.independentPreviewCanvases.get(canvasId);
-    const compTexture = this.nestedCompTextures.get(compositionId);
+    const compTexture = this.nestedCompRenderer?.getTexture(compositionId);
 
-    if (!device || !canvasContext || !compTexture || !this.outputPipeline || !this.sampler) {
-      return false;
-    }
+    if (!device || !canvasContext || !compTexture || !this.outputPipeline || !this.sampler) return false;
 
-    // Create command encoder
     const commandEncoder = device.createCommandEncoder();
-
-    // Create bind group for the nested comp texture
     const outputBindGroup = this.outputPipeline.createOutputBindGroup(this.sampler, compTexture.view);
-
-    // Render the texture to the preview canvas
     this.outputPipeline.renderToCanvas(commandEncoder, canvasContext, outputBindGroup);
-
     device.queue.submit([commandEncoder.finish()]);
     return true;
   }
 
-  /**
-   * Pre-render a nested composition to an offscreen texture
-   * Returns the texture view to be used as the source for the parent layer
-   */
-  preRenderNestedComposition(
-    compositionId: string,
-    nestedLayers: Layer[],
-    width: number,
-    height: number,
-    commandEncoder: GPUCommandEncoder
-  ): GPUTextureView | null {
-    const device = this.context.getDevice();
-    if (!device || !this.compositorPipeline || !this.sampler) return null;
-
-    // Get or create offscreen texture for this composition
-    let compTexture = this.nestedCompTextures.get(compositionId);
-    if (!compTexture || compTexture.texture.width !== width || compTexture.texture.height !== height) {
-      // Clean up old texture if it exists
-      if (compTexture) {
-        compTexture.texture.destroy();
-      }
-
-      // Create new texture
-      const texture = device.createTexture({
-        size: { width, height },
-        format: 'rgba8unorm',
-        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
-      });
-      const view = texture.createView();
-      compTexture = { texture, view };
-      this.nestedCompTextures.set(compositionId, compTexture);
-    }
-
-    // Create temporary ping-pong textures for nested comp rendering
-    const nestedPingTexture = device.createTexture({
-      size: { width, height },
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-    const nestedPongTexture = device.createTexture({
-      size: { width, height },
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-    const nestedPingView = nestedPingTexture.createView();
-    const nestedPongView = nestedPongTexture.createView();
-
-    // Prepare layer data for nested composition (reverse order: lower slots render on top)
-    const nestedLayerData: LayerRenderData[] = [];
-    for (let i = nestedLayers.length - 1; i >= 0; i--) {
-      const layer = nestedLayers[i];
-      if (!layer || !layer.visible || !layer.source || layer.opacity === 0) continue;
-
-      // Try WebCodecs VideoFrame first
-      if (layer.source.webCodecsPlayer) {
-        const frame = layer.source.webCodecsPlayer.getCurrentFrame();
-        if (frame) {
-          const extTex = this.textureManager?.importVideoTexture(frame);
-          if (extTex) {
-            nestedLayerData.push({
-              layer,
-              isVideo: true,
-              externalTexture: extTex,
-              textureView: null,
-              sourceWidth: frame.displayWidth,
-              sourceHeight: frame.displayHeight,
-            });
-            continue;
-          }
-        }
-      }
-
-      // HTMLVideoElement
-      if (layer.source.videoElement) {
-        const video = layer.source.videoElement;
-        if (video.readyState >= 2) {
-          const extTex = this.textureManager?.importVideoTexture(video);
-          if (extTex) {
-            nestedLayerData.push({
-              layer,
-              isVideo: true,
-              externalTexture: extTex,
-              textureView: null,
-              sourceWidth: video.videoWidth,
-              sourceHeight: video.videoHeight,
-            });
-            continue;
-          }
-        }
-      }
-
-      // Images
-      if (layer.source.imageElement) {
-        const img = layer.source.imageElement;
-        let texture = this.textureManager?.getCachedImageTexture(img);
-        if (!texture) {
-          texture = this.textureManager?.createImageTexture(img) ?? undefined;
-        }
-        if (texture) {
-          const imageView = this.textureManager!.getImageView(texture);
-          nestedLayerData.push({
-            layer,
-            isVideo: false,
-            externalTexture: null,
-            textureView: imageView,
-            sourceWidth: img.naturalWidth,
-            sourceHeight: img.naturalHeight,
-          });
-        }
-      }
-
-      // Text canvas
-      if (layer.source.textCanvas) {
-        const canvas = layer.source.textCanvas;
-        const texture = this.textureManager?.createCanvasTexture(canvas);
-        if (texture) {
-          const textView = this.textureManager!.getImageView(texture);
-          nestedLayerData.push({
-            layer,
-            isVideo: false,
-            externalTexture: null,
-            textureView: textView,
-            sourceWidth: canvas.width,
-            sourceHeight: canvas.height,
-          });
-        }
-      }
-    }
-
-    // If no layers to render, return transparent texture
-    if (nestedLayerData.length === 0) {
-      // Clear the output texture to transparent
-      const clearPass = commandEncoder.beginRenderPass({
-        colorAttachments: [{
-          view: compTexture.view,
-          clearValue: { r: 0, g: 0, b: 0, a: 0 },
-          loadOp: 'clear',
-          storeOp: 'store',
-        }],
-      });
-      clearPass.end();
-      nestedPingTexture.destroy();
-      nestedPongTexture.destroy();
-      return compTexture.view;
-    }
-
-    // Ping-pong compositing for nested layers
-    let readView = nestedPingView;
-    let writeView = nestedPongView;
-
-    // Clear first buffer to transparent (so nested comp blends correctly with parent)
-    const clearPass = commandEncoder.beginRenderPass({
-      colorAttachments: [{
-        view: readView,
-        clearValue: { r: 0, g: 0, b: 0, a: 0 },
-        loadOp: 'clear',
-        storeOp: 'store',
-      }],
-    });
-    clearPass.end();
-
-    // Composite each nested layer
-    const nestedOutputAspect = width / height;
-    for (let i = 0; i < nestedLayerData.length; i++) {
-      const data = nestedLayerData[i];
-      const layer = data.layer;
-
-      const uniformBuffer = this.compositorPipeline!.getOrCreateUniformBuffer(`nested-${compositionId}-${layer.id}`);
-      const sourceAspect = data.sourceWidth / data.sourceHeight;
-
-      // Get mask texture view (use maskClipId if available, fallback to layer.id)
-      const maskLookupId = layer.maskClipId || layer.id;
-      const hasMask = this.maskTextureManager?.hasMaskTexture(maskLookupId) ?? false;
-      const maskTextureView = this.maskTextureManager?.getMaskTextureView(maskLookupId) ??
-                             this.maskTextureManager?.getWhiteMaskView()!;
-
-      this.compositorPipeline!.updateLayerUniforms(layer, sourceAspect, nestedOutputAspect, hasMask, uniformBuffer);
-
-      let pipeline: GPURenderPipeline;
-      let bindGroup: GPUBindGroup;
-
-      if (data.isVideo && data.externalTexture) {
-        pipeline = this.compositorPipeline!.getExternalCompositePipeline()!;
-        bindGroup = this.compositorPipeline!.createExternalCompositeBindGroup(
-          this.sampler!,
-          readView,
-          data.externalTexture,
-          uniformBuffer,
-          maskTextureView
-        );
-      } else if (data.textureView) {
-        pipeline = this.compositorPipeline!.getCompositePipeline()!;
-        bindGroup = this.compositorPipeline!.createCompositeBindGroup(
-          this.sampler!,
-          readView,
-          data.textureView,
-          uniformBuffer,
-          maskTextureView
-        );
-      } else {
-        continue;
-      }
-
-      const compositePass = commandEncoder.beginRenderPass({
-        colorAttachments: [{
-          view: writeView,
-          loadOp: 'clear',
-          storeOp: 'store',
-        }],
-      });
-      compositePass.setPipeline(pipeline);
-      compositePass.setBindGroup(0, bindGroup);
-      compositePass.draw(6);
-      compositePass.end();
-
-      // Apply effects
-      if (layer.effects && layer.effects.length > 0 && this.effectsPipeline) {
-        const result = this.effectsPipeline.applyEffects(
-          commandEncoder,
-          layer.effects,
-          this.sampler!,
-          writeView,
-          readView,
-          nestedPingView,
-          nestedPongView,
-          width,
-          height
-        );
-        if (result.swapped) {
-          // Adjust for effect swaps
-          const tempView = readView;
-          readView = writeView;
-          writeView = tempView;
-        }
-      } else {
-        // Swap buffers
-        const temp = readView;
-        readView = writeView;
-        writeView = temp;
-      }
-    }
-
-    // Copy final result to the composition texture using GPU texture copy
-    // We need to determine which ping-pong texture has the final result
-    // readView contains the final composited image after all layers
-    // Use a composite pass with passthrough to copy to compTexture (same format: rgba8unorm)
-    const copyPass = commandEncoder.beginRenderPass({
-      colorAttachments: [{
-        view: compTexture.view,
-        loadOp: 'clear',
-        storeOp: 'store',
-      }],
-    });
-    // Use compositor pipeline (rgba8unorm) for copy - create a passthrough bind group
-    const copyUniformBuffer = this.compositorPipeline!.getOrCreateUniformBuffer(`nested-copy-${compositionId}`);
-    // Set up passthrough layer uniforms (opacity=1, blendMode=normal, no transform)
-    const passthroughLayer: Layer = {
-      id: 'passthrough',
-      name: 'passthrough',
-      visible: true,
-      opacity: 1,
-      blendMode: 'normal',
-      source: { type: 'image' },
-      effects: [],
-      position: { x: 0, y: 0, z: 0 },
-      scale: { x: 1, y: 1 },
-      rotation: { x: 0, y: 0, z: 0 },
-    };
-    this.compositorPipeline!.updateLayerUniforms(passthroughLayer, 1, 1, false, copyUniformBuffer);
-    const copyBindGroup = this.compositorPipeline!.createCompositeBindGroup(
-      this.sampler!,
-      readView, // base texture (will be overwritten)
-      readView, // layer texture (source to copy)
-      copyUniformBuffer,
-      this.maskTextureManager!.getWhiteMaskView()!
-    );
-    copyPass.setPipeline(this.compositorPipeline!.getCompositePipeline()!);
-    copyPass.setBindGroup(0, copyBindGroup);
-    copyPass.draw(6);
-    copyPass.end();
-
-    // Store temporary textures for cleanup after command buffer submit
-    // Can't destroy them here as they're still referenced by the command buffer
-    this.pendingTextureCleanup.push(nestedPingTexture, nestedPongTexture);
-
-    return compTexture.view;
-  }
-
-  /**
-   * Clean up nested composition textures
-   */
   cleanupNestedCompTexture(compositionId: string): void {
-    const compTexture = this.nestedCompTextures.get(compositionId);
-    if (compTexture) {
-      compTexture.texture.destroy();
-      this.nestedCompTextures.delete(compositionId);
-    }
+    this.nestedCompRenderer?.cleanupTexture(compositionId);
   }
 
-  private updateStats(): void {
-    this.frameCount++;
-    this.statsCounter++;
-
-    if (this.statsCounter >= 10) {
-      this.statsCounter = 0;
-      const now = performance.now();
-
-      if (this.lastFrameStart > 0) {
-        const frameTime = (now - this.lastFrameStart) / 10;
-        this.frameTimeBuffer[this.frameTimeIndex] = frameTime;
-        this.frameTimeIndex = (this.frameTimeIndex + 1) % 60;
-        if (this.frameTimeCount < 60) this.frameTimeCount++;
-      }
-      this.lastFrameStart = now;
-
-      if (now - this.fpsUpdateTime >= 1000) {
-        this.fps = this.frameCount;
-        this.frameCount = 0;
-        this.fpsUpdateTime = now;
-      }
-    }
-  }
-
-  getStats(): EngineStats {
-    let sum = 0;
-    for (let i = 0; i < this.frameTimeCount; i++) {
-      sum += this.frameTimeBuffer[i];
-    }
-    const avgFrameTime = this.frameTimeCount > 0 ? sum / this.frameTimeCount : 0;
-    return {
-      fps: this.fps,
-      frameTime: avgFrameTime,
-      gpuMemory: 0,
-      timing: {
-        rafGap: this.detailedStats.rafGap,
-        importTexture: this.detailedStats.importTexture,
-        renderPass: this.detailedStats.renderPass,
-        submit: this.detailedStats.submit,
-        total: this.detailedStats.total,
-      },
-      drops: {
-        count: this.detailedStats.dropsTotal,
-        lastSecond: this.detailedStats.dropsLastSecond,
-        reason: this.detailedStats.lastDropReason,
-      },
-      layerCount: this.lastLayerCount,
-      targetFps: 60,
-      decoder: this.detailedStats.decoder,
-      audio: audioStatusTracker.getStatus(),
-      isIdle: this.isIdle,
-    };
-  }
-
-  // === ANIMATION LOOP ===
-
-  start(renderCallback: () => void): void {
-    if (this.isRunning) return;
-    this.isRunning = true;
-    this.lastActivityTime = performance.now();
-    this.isIdle = false;
-    console.log('[WebGPU] Starting render loop');
-
-    let lastTimestamp = 0;
-    let lastFpsReset = 0;
-
-    const loop = (timestamp: number) => {
-      if (!this.isRunning) return;
-
-      const rafGap = lastTimestamp > 0 ? timestamp - lastTimestamp : 0;
-      lastTimestamp = timestamp;
-
-      // Check for idle timeout - enter idle mode if no activity
-      const timeSinceActivity = timestamp - this.lastActivityTime;
-      if (!this.isIdle && !this.renderRequested && timeSinceActivity > this.IDLE_TIMEOUT) {
-        this.isIdle = true;
-        console.log('[WebGPU] Entering idle mode - no changes for 1s');
-      }
-
-      // Wake from idle if render was requested
-      if (this.isIdle && this.renderRequested) {
-        this.isIdle = false;
-        console.log('[WebGPU] Waking from idle mode');
-      }
-
-      // Clear render request flag after processing
-      this.renderRequested = false;
-
-      // Always call renderCallback (for stats updates), but skip heavy work when idle
-      // renderFrame checks getIsIdle() internally
-      if (!this.isExporting) {
-        renderCallback();
-      }
-
-      // Skip detailed stats tracking when idle (save CPU)
-      if (this.isIdle) {
-        this.animationId = requestAnimationFrame(loop);
-        return;
-      }
-
-      // Frame rate limiting when video is playing
-      if (this.hasActiveVideo) {
-        const timeSinceLastRender = timestamp - this.lastRenderTime;
-        if (timeSinceLastRender < this.VIDEO_FRAME_TIME) {
-          this.animationId = requestAnimationFrame(loop);
-          return;
-        }
-        this.lastRenderTime = timestamp;
-      }
-
-      this.detailedStats.rafGap = this.detailedStats.rafGap * 0.9 + rafGap * 0.1;
-
-      // Detect frame drops - only count if gap is significantly larger than target
-      // A gap > 2x the target frame time means we definitely missed at least 1 frame
-      if (rafGap > this.TARGET_FRAME_TIME * 2 && lastTimestamp > 0) {
-        // Use round to better estimate missed frames (33ms gap = 1 missed)
-        const missedFrames = Math.max(1, Math.round(rafGap / this.TARGET_FRAME_TIME) - 1);
-        this.detailedStats.dropsTotal += missedFrames;
-        this.detailedStats.dropsThisSecond += missedFrames;
-        this.detailedStats.lastDropReason = 'slow_raf';
-      }
-
-      // Reset per-second drop counter
-      if (timestamp - lastFpsReset >= 1000) {
-        this.detailedStats.dropsLastSecond = this.detailedStats.dropsThisSecond;
-        this.detailedStats.dropsThisSecond = 0;
-        lastFpsReset = timestamp;
-      }
-
-      this.animationId = requestAnimationFrame(loop);
-    };
-
-    this.animationId = requestAnimationFrame(loop);
-  }
-
-  stop(): void {
-    this.isRunning = false;
-    if (this.animationId !== null) {
-      cancelAnimationFrame(this.animationId);
-      this.animationId = null;
-    }
-  }
+  // === RESOLUTION ===
 
   setResolution(width: number, height: number): void {
-    // Skip if resolution hasn't changed
-    if (this.outputWidth === width && this.outputHeight === height) return;
-
-    this.outputWidth = width;
-    this.outputHeight = height;
-    this.createPingPongTextures();
-
-    // Clear caches since they contain frames at old resolution
-    if (this.scrubbingCache) {
-      this.scrubbingCache.clearCompositeCache();
-      this.scrubbingCache.clearScrubbingCache();
-      console.log(`[Engine] Caches cleared for resolution change to ${width}×${height}`);
+    if (this.renderTargetManager?.setResolution(width, height)) {
+      this.scrubbingCache?.clearCompositeCache();
+      this.scrubbingCache?.clearScrubbingCache();
+      this.outputWindowManager?.updateResolution(width, height);
+      this.outputPipeline?.invalidateCache();
+      this.compositorPipeline?.invalidateBindGroupCache();
+      log.debug('Caches cleared for resolution change', { width, height });
     }
   }
 
@@ -1915,37 +927,27 @@ export class WebGPUEngine {
     this.showTransparencyGrid = show;
   }
 
-  // Clear the frame buffer (useful when loading a new project)
   clearFrame(): void {
     const device = this.context.getDevice();
-    if (!device || !this.pingView || !this.pongView) return;
+    const pingView = this.renderTargetManager?.getPingView();
+    const pongView = this.renderTargetManager?.getPongView();
+    if (!device || !pingView || !pongView) return;
 
     const commandEncoder = device.createCommandEncoder();
 
-    // Clear both ping and pong textures to transparent
     const clearPing = commandEncoder.beginRenderPass({
-      colorAttachments: [{
-        view: this.pingView,
-        clearValue: { r: 0, g: 0, b: 0, a: 0 },
-        loadOp: 'clear',
-        storeOp: 'store',
-      }],
+      colorAttachments: [{ view: pingView, clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: 'clear', storeOp: 'store' }],
     });
     clearPing.end();
 
     const clearPong = commandEncoder.beginRenderPass({
-      colorAttachments: [{
-        view: this.pongView,
-        clearValue: { r: 0, g: 0, b: 0, a: 0 },
-        loadOp: 'clear',
-        storeOp: 'store',
-      }],
+      colorAttachments: [{ view: pongView, clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: 'clear', storeOp: 'store' }],
     });
     clearPong.end();
 
-    // Update uniforms and render cleared frame to canvases
-    this.outputPipeline?.updateUniforms(this.showTransparencyGrid, this.outputWidth, this.outputHeight);
-    const outputBindGroup = this.outputPipeline?.createOutputBindGroup(this.sampler!, this.pingView);
+    const { width, height } = this.renderTargetManager!.getResolution();
+    this.outputPipeline?.updateUniforms(this.showTransparencyGrid, width, height);
+    const outputBindGroup = this.outputPipeline?.createOutputBindGroup(this.sampler!, pingView);
     if (outputBindGroup) {
       if (this.previewContext) {
         this.outputPipeline!.renderToCanvas(commandEncoder, this.previewContext, outputBindGroup);
@@ -1958,24 +960,77 @@ export class WebGPUEngine {
     device.queue.submit([commandEncoder.finish()]);
   }
 
+  getOutputDimensions(): { width: number; height: number } {
+    return this.renderTargetManager?.getResolution() ?? { width: 640, height: 360 };
+  }
+
+  // === STATS ===
+
+  getStats(): EngineStats {
+    return this.performanceStats.getStats(this.getIsIdle());
+  }
+
+  // === ACCESSORS ===
+
   getDevice(): GPUDevice | null {
     return this.context.getDevice();
   }
 
-  getOutputDimensions(): { width: number; height: number } {
-    return { width: this.outputWidth, height: this.outputHeight };
+  isDeviceValid(): boolean {
+    return this.context.initialized && this.context.getDevice() !== null;
   }
+
+  getGPUInfo(): { vendor: string; device: string; description: string } | null {
+    return this.context.getGPUInfo();
+  }
+
+  getPowerPreference(): GPUPowerPreference {
+    return this.context.getPowerPreference();
+  }
+
+  async reinitializeWithPreference(preference: GPUPowerPreference): Promise<boolean> {
+    log.info('Reinitializing with preference', { preference });
+    this.stop();
+    this.handleDeviceLost();
+    const success = await this.context.reinitializeWithPreference(preference);
+    if (!success) {
+      log.error('Failed to reinitialize with new preference');
+      return false;
+    }
+    await this.createResources();
+
+    if (this.mainPreviewCanvas) {
+      this.previewContext = this.context.configureCanvas(this.mainPreviewCanvas);
+    }
+    for (const [id, canvas] of this.previewCanvasElements) {
+      const ctx = this.context.configureCanvas(canvas);
+      if (ctx) this.previewCanvases.set(id, ctx);
+    }
+    for (const [id, canvas] of this.independentCanvasElements) {
+      const ctx = this.context.configureCanvas(canvas);
+      if (ctx) this.independentPreviewCanvases.set(id, ctx);
+    }
+
+    this.requestRender();
+    log.info('Reinitialize complete');
+    return true;
+  }
+
+  // === PIXEL READBACK ===
 
   async readPixels(): Promise<Uint8ClampedArray | null> {
     const device = this.context.getDevice();
-    if (!device || !this.pingTexture || !this.pongTexture) return null;
+    const pingTex = this.renderTargetManager?.getPingTexture();
+    const pongTex = this.renderTargetManager?.getPongTexture();
+    if (!device || !pingTex || !pongTex) return null;
 
-    const sourceTexture = this.lastRenderWasPing ? this.pingTexture : this.pongTexture;
+    const { width, height } = this.renderTargetManager!.getResolution();
+    const sourceTexture = this.compositor?.getLastRenderWasPing() ? pingTex : pongTex;
 
     const bytesPerPixel = 4;
-    const unalignedBytesPerRow = this.outputWidth * bytesPerPixel;
+    const unalignedBytesPerRow = width * bytesPerPixel;
     const bytesPerRow = Math.ceil(unalignedBytesPerRow / 256) * 256;
-    const bufferSize = bytesPerRow * this.outputHeight;
+    const bufferSize = bytesPerRow * height;
 
     const stagingBuffer = device.createBuffer({
       size: bufferSize,
@@ -1985,21 +1040,20 @@ export class WebGPUEngine {
     const commandEncoder = device.createCommandEncoder();
     commandEncoder.copyTextureToBuffer(
       { texture: sourceTexture },
-      { buffer: stagingBuffer, bytesPerRow, rowsPerImage: this.outputHeight },
-      [this.outputWidth, this.outputHeight]
+      { buffer: stagingBuffer, bytesPerRow, rowsPerImage: height },
+      [width, height]
     );
     device.queue.submit([commandEncoder.finish()]);
 
     await stagingBuffer.mapAsync(GPUMapMode.READ);
     const arrayBuffer = stagingBuffer.getMappedRange();
-
-    const result = new Uint8ClampedArray(this.outputWidth * this.outputHeight * bytesPerPixel);
+    const result = new Uint8ClampedArray(width * height * bytesPerPixel);
     const srcView = new Uint8Array(arrayBuffer);
 
     if (bytesPerRow === unalignedBytesPerRow) {
       result.set(srcView.subarray(0, result.length));
     } else {
-      for (let y = 0; y < this.outputHeight; y++) {
+      for (let y = 0; y < height; y++) {
         const srcOffset = y * bytesPerRow;
         const dstOffset = y * unalignedBytesPerRow;
         result.set(srcView.subarray(srcOffset, srcOffset + unalignedBytesPerRow), dstOffset);
@@ -2008,22 +1062,16 @@ export class WebGPUEngine {
 
     stagingBuffer.unmap();
     stagingBuffer.destroy();
-
     return result;
   }
 
+  // === CLEANUP ===
+
   destroy(): void {
     this.stop();
-
-    for (const output of this.outputWindows.values()) {
-      output.window?.close();
-    }
-    this.outputWindows.clear();
-
-    this.pingTexture?.destroy();
-    this.pongTexture?.destroy();
-    this.blackTexture?.destroy();
-
+    this.outputWindowManager?.destroy();
+    this.renderTargetManager?.destroy();
+    this.nestedCompRenderer?.destroy();
     this.textureManager?.destroy();
     this.maskTextureManager?.destroy();
     this.scrubbingCache?.destroy();
@@ -2032,29 +1080,28 @@ export class WebGPUEngine {
     this.effectsPipeline?.destroy();
     this.outputPipeline?.destroy();
     this.context.destroy();
-
-    // Clear optimization caches
     this.lastVideoTime.clear();
-    this.cachedExternalTexture.clear();
-    this.pendingUniformUpdates.length = 0;
   }
 }
 
-// Preserve singleton across HMR to prevent multiple GPU device creation
+// === HMR SINGLETON ===
+
 let engineInstance: WebGPUEngine;
 
-// Check if we're in a Vite HMR context
-declare const import_meta_hot: { data: Record<string, unknown> } | undefined;
-const hot = typeof import.meta !== 'undefined' ? (import.meta as { hot?: { data: Record<string, unknown> } }).hot : undefined;
+const hot = typeof import.meta !== 'undefined'
+  ? (import.meta as { hot?: { data: Record<string, unknown> } }).hot
+  : undefined;
+
+const hmrLog = Logger.create('WebGPU-HMR');
 
 if (hot) {
-  // Preserve engine instance across HMR
   const existing = hot.data.engine as WebGPUEngine | undefined;
   if (existing) {
-    console.log('[WebGPU] Reusing existing engine instance from HMR');
+    hmrLog.debug('Reusing engine from HMR');
+    existing.clearVideoCache();
     engineInstance = existing;
   } else {
-    console.log('[WebGPU] Creating new engine instance');
+    hmrLog.debug('Creating new engine');
     engineInstance = new WebGPUEngine();
     hot.data.engine = engineInstance;
   }

@@ -3,29 +3,24 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { Logger } from '../services/logger';
+
+const log = Logger.create('History');
 
 // Snapshot of undoable state from all stores
 interface StateSnapshot {
   timestamp: number;
   label: string; // Description of the action (for debugging)
 
-  // Timeline state
+  // Timeline state (including layers since they moved here from mixerStore)
   timeline: {
     clips: any[];
     tracks: any[];
     selectedClipIds: string[];
     zoom: number;
     scrollX: number;
-  };
-
-  // Mixer state
-  mixer: {
     layers: any[];
     selectedLayerId: string | null;
-    gridColumns: number;
-    gridRows: number;
-    slotGroups: any[];
-    outputResolution: { width: number; height: number };
   };
 
   // Media state
@@ -80,24 +75,19 @@ interface HistoryState {
 // Import stores dynamically to avoid circular dependencies
 let getTimelineState: () => any;
 let setTimelineState: (state: any) => void;
-let getMixerState: () => any;
-let setMixerState: (state: any) => void;
 let getMediaState: () => any;
 let setMediaState: (state: any) => void;
 let getDockState: () => any;
 let setDockState: (state: any) => void;
 
-// Initialize store references (called from App.tsx)
+// Initialize store references (called from useGlobalHistory)
 export function initHistoryStoreRefs(stores: {
   timeline: { getState: () => any; setState: (state: any) => void };
-  mixer: { getState: () => any; setState: (state: any) => void };
   media: { getState: () => any; setState: (state: any) => void };
   dock: { getState: () => any; setState: (state: any) => void };
 }) {
   getTimelineState = stores.timeline.getState;
   setTimelineState = stores.timeline.setState;
-  getMixerState = stores.mixer.getState;
-  setMixerState = stores.mixer.setState;
   getMediaState = stores.media.getState;
   setMediaState = stores.media.setState;
   getDockState = stores.dock.getState;
@@ -134,7 +124,6 @@ function deepClone<T>(obj: T): T {
 // Create snapshot from current state
 function createSnapshot(label: string): StateSnapshot {
   const timeline = getTimelineState?.() || {};
-  const mixer = getMixerState?.() || {};
   const media = getMediaState?.() || {};
   const dock = getDockState?.() || {};
 
@@ -147,14 +136,8 @@ function createSnapshot(label: string): StateSnapshot {
       selectedClipIds: timeline.selectedClipIds ? [...timeline.selectedClipIds] : [],
       zoom: timeline.zoom || 50,
       scrollX: timeline.scrollX || 0,
-    },
-    mixer: {
-      layers: deepClone(mixer.layers || []),
-      selectedLayerId: mixer.selectedLayerId || null,
-      gridColumns: mixer.gridColumns || 4,
-      gridRows: mixer.gridRows || 4,
-      slotGroups: deepClone(mixer.slotGroups || []),
-      outputResolution: mixer.outputResolution || { width: 1920, height: 1080 },
+      layers: deepClone(timeline.layers || []),
+      selectedLayerId: timeline.selectedLayerId || null,
     },
     media: {
       files: deepClone(media.files || []),
@@ -173,36 +156,26 @@ function createSnapshot(label: string): StateSnapshot {
 function applySnapshot(snapshot: StateSnapshot) {
   if (!snapshot) return;
 
-  // Apply timeline state
+  // Apply timeline state (including layers)
   if (setTimelineState) {
+    const currentTimeline = getTimelineState();
+    // Preserve source references for layers
+    const restoredLayers = snapshot.timeline.layers.map((layer: any) => {
+      const currentLayer = currentTimeline.layers?.find((l: any) => l?.id === layer.id);
+      return {
+        ...deepClone(layer),
+        source: currentLayer?.source || layer.source,
+      };
+    });
+
     setTimelineState({
       clips: deepClone(snapshot.timeline.clips),
       tracks: deepClone(snapshot.timeline.tracks),
       selectedClipIds: new Set(snapshot.timeline.selectedClipIds || []),
       zoom: snapshot.timeline.zoom,
       scrollX: snapshot.timeline.scrollX,
-    });
-  }
-
-  // Apply mixer state (preserve source references)
-  if (setMixerState) {
-    const currentMixer = getMixerState();
-    const restoredLayers = snapshot.mixer.layers.map((layer: any) => {
-      // Find current layer to preserve video/image source references
-      const currentLayer = currentMixer.layers?.find((l: any) => l.id === layer.id);
-      return {
-        ...deepClone(layer),
-        source: currentLayer?.source || layer.source, // Preserve source reference
-      };
-    });
-
-    setMixerState({
       layers: restoredLayers,
-      selectedLayerId: snapshot.mixer.selectedLayerId,
-      gridColumns: snapshot.mixer.gridColumns,
-      gridRows: snapshot.mixer.gridRows,
-      slotGroups: deepClone(snapshot.mixer.slotGroups),
-      outputResolution: snapshot.mixer.outputResolution,
+      selectedLayerId: snapshot.timeline.selectedLayerId,
     });
   }
 
@@ -298,7 +271,7 @@ export const useHistoryStore = create<HistoryState>()(
         isApplying: false,
       });
 
-      console.log(`[History] Undo: ${previousSnapshot.label}`);
+      log.debug(`Undo: ${previousSnapshot.label}`);
     },
 
     redo: () => {
@@ -327,7 +300,7 @@ export const useHistoryStore = create<HistoryState>()(
         isApplying: false,
       });
 
-      console.log(`[History] Redo: ${nextSnapshot.label}`);
+      log.debug(`Redo: ${nextSnapshot.label}`);
     },
 
     canUndo: () => get().undoStack.length > 0,

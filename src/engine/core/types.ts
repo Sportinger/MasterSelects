@@ -94,7 +94,7 @@ export interface DetailedStats {
   dropsThisSecond: number;
   lastDropReason: 'none' | 'slow_raf' | 'slow_render' | 'slow_import';
   lastRafTime: number;
-  decoder: 'WebCodecs' | 'HTMLVideo' | 'HTMLVideo(cached)' | 'HTMLVideo(paused-cache)' | 'NativeHelper' | 'none';
+  decoder: 'WebCodecs' | 'HTMLVideo' | 'HTMLVideo(cached)' | 'HTMLVideo(paused-cache)' | 'NativeHelper' | 'ParallelDecode' | 'none';
 }
 
 // Profile data for performance tracking
@@ -111,4 +111,24 @@ export interface GpuFrameCacheEntry {
   texture: GPUTexture;
   view: GPUTextureView;
   bindGroup: GPUBindGroup;
+}
+
+// === REFACTOR: New interfaces for module communication ===
+
+export interface RenderTargets {
+  pingTexture: GPUTexture | null;
+  pongTexture: GPUTexture | null;
+  pingView: GPUTextureView | null;
+  pongView: GPUTextureView | null;
+  independentPingTexture: GPUTexture | null;
+  independentPongTexture: GPUTexture | null;
+  independentPingView: GPUTextureView | null;
+  independentPongView: GPUTextureView | null;
+  blackTexture: GPUTexture | null;
+}
+
+export interface CompositeResult {
+  finalView: GPUTextureView;
+  usedPing: boolean;
+  layerCount: number;
 }

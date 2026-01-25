@@ -12,7 +12,8 @@ import type {
   ClipMask,
   MaskVertex,
   Effect,
-  TextClipProperties
+  TextClipProperties,
+  Layer,
 } from '../../types';
 import type { Composition } from '../mediaStore';
 
@@ -31,10 +32,22 @@ export type {
   Effect,
   Composition,
   TextClipProperties,
+  Layer,
 };
 
 // Mask edit mode types
 export type MaskEditMode = 'none' | 'drawing' | 'editing' | 'drawingRect' | 'drawingEllipse' | 'drawingPen';
+
+// Timeline tool mode types
+export type TimelineToolMode = 'select' | 'cut';
+
+// Timeline marker type
+export interface TimelineMarker {
+  id: string;
+  time: number;
+  label: string;
+  color: string;
+}
 
 // Timeline state interface
 export interface TimelineState {
@@ -49,6 +62,10 @@ export interface TimelineState {
   isPlaying: boolean;
   isDraggingPlayhead: boolean;
   selectedClipIds: Set<string>;
+
+  // Render layers (populated by useLayerSync from timeline clips, used by engine)
+  layers: Layer[];
+  selectedLayerId: string | null;
 
   // In/Out markers
   inPoint: number | null;
@@ -88,6 +105,13 @@ export interface TimelineState {
   activeMaskId: string | null;
   selectedVertexIds: Set<string>;
   maskDrawStart: { x: number; y: number } | null;
+  maskDragging: boolean; // True during vertex/mask drag - skips texture regeneration
+
+  // Tool mode
+  toolMode: TimelineToolMode;
+
+  // Timeline markers
+  markers: TimelineMarker[];
 }
 
 // Track actions interface
@@ -159,6 +183,9 @@ export interface PlaybackActions {
   setLoopPlayback: (loop: boolean) => void;
   toggleLoopPlayback: () => void;
   setDuration: (duration: number) => void;
+  // Tool mode
+  setToolMode: (mode: TimelineToolMode) => void;
+  toggleCutTool: () => void;
 }
 
 // RAM Preview actions interface
@@ -224,9 +251,26 @@ export interface KeyframeActions {
   updateBezierHandle: (keyframeId: string, handle: 'in' | 'out', position: BezierHandle) => void;
 }
 
+// Layer actions interface (render layers for engine)
+export interface LayerActions {
+  setLayers: (layers: Layer[]) => void;
+  updateLayer: (id: string, updates: Partial<Layer>) => void;
+  selectLayer: (id: string | null) => void;
+}
+
+// Marker actions interface
+export interface MarkerActions {
+  addMarker: (time: number, label?: string, color?: string) => string;
+  removeMarker: (markerId: string) => void;
+  updateMarker: (markerId: string, updates: Partial<Omit<TimelineMarker, 'id'>>) => void;
+  moveMarker: (markerId: string, newTime: number) => void;
+  clearMarkers: () => void;
+}
+
 // Mask actions interface
 export interface MaskActions {
   setMaskEditMode: (mode: MaskEditMode) => void;
+  setMaskDragging: (dragging: boolean) => void;
   setMaskDrawStart: (point: { x: number; y: number } | null) => void;
   setActiveMask: (clipId: string | null, maskId: string | null) => void;
   selectVertex: (vertexId: string, addToSelection?: boolean) => void;
@@ -238,7 +282,7 @@ export interface MaskActions {
   getClipMasks: (clipId: string) => ClipMask[];
   addVertex: (clipId: string, maskId: string, vertex: Omit<MaskVertex, 'id'>, index?: number) => string;
   removeVertex: (clipId: string, maskId: string, vertexId: string) => void;
-  updateVertex: (clipId: string, maskId: string, vertexId: string, updates: Partial<MaskVertex>) => void;
+  updateVertex: (clipId: string, maskId: string, vertexId: string, updates: Partial<MaskVertex>, skipCacheInvalidation?: boolean) => void;
   closeMask: (clipId: string, maskId: string) => void;
   addRectangleMask: (clipId: string) => string;
   addEllipseMask: (clipId: string) => string;
@@ -271,7 +315,9 @@ export interface TimelineStore extends
   ExportActions,
   SelectionActions,
   KeyframeActions,
+  LayerActions,
   MaskActions,
+  MarkerActions,
   TimelineUtils {}
 
 // Slice creator type

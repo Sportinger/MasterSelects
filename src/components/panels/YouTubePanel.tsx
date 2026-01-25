@@ -4,8 +4,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTimelineStore } from '../../stores/timeline';
+import { useYouTubeStore, type YouTubeVideo as StoreYouTubeVideo } from '../../stores/youtubeStore';
 import { downloadYouTubeVideo, subscribeToDownload, isDownloadAvailable, type DownloadProgress } from '../../services/youtubeDownloader';
 import { NativeHelperClient } from '../../services/nativeHelper';
+import type { VideoInfo } from '../../services/nativeHelper';
 import './YouTubePanel.css';
 
 interface YouTubeVideo {
@@ -16,6 +18,33 @@ interface YouTubeVideo {
   duration: string;
   durationSeconds: number;
   views?: string;
+}
+
+// Convert store video to panel format
+function storeToPanel(v: StoreYouTubeVideo): YouTubeVideo {
+  return {
+    id: v.id,
+    title: v.title,
+    thumbnail: v.thumbnail,
+    channel: v.channelTitle,
+    duration: v.duration || '?:??',
+    durationSeconds: v.durationSeconds || 0,
+    views: v.viewCount,
+  };
+}
+
+// Convert panel video to store format
+function panelToStore(v: YouTubeVideo): StoreYouTubeVideo {
+  return {
+    id: v.id,
+    title: v.title,
+    thumbnail: v.thumbnail,
+    channelTitle: v.channel,
+    publishedAt: new Date().toISOString(),
+    duration: v.duration,
+    durationSeconds: v.durationSeconds,
+    viewCount: v.views,
+  };
 }
 
 // Extract video ID from various YouTube URL formats
@@ -54,15 +83,82 @@ async function getVideoInfo(videoId: string): Promise<YouTubeVideo | null> {
   }
 }
 
+// Format selection dialog
+function FormatDialog({
+  videoInfo,
+  onSelect,
+  onCancel,
+}: {
+  videoInfo: VideoInfo;
+  onSelect: (formatId: string) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="format-dialog-backdrop" onClick={onCancel}>
+      <div className="format-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="format-dialog-header">
+          <h3>Select Quality</h3>
+          <button className="format-dialog-close" onClick={onCancel}>×</button>
+        </div>
+
+        <div className="format-dialog-video">
+          <img src={videoInfo.thumbnail} alt={videoInfo.title} />
+          <div className="format-dialog-info">
+            <span className="format-dialog-title">{videoInfo.title}</span>
+            <span className="format-dialog-uploader">{videoInfo.uploader}</span>
+          </div>
+        </div>
+
+        <div className="format-dialog-options">
+          {videoInfo.recommendations.map((format) => (
+            <button
+              key={format.id}
+              className="format-option"
+              onClick={() => onSelect(format.id)}
+            >
+              <span className="format-label">{format.label}</span>
+              <span className="format-details">
+                {format.vcodec && <span className="format-codec">{format.vcodec.split('.')[0]}</span>}
+                {format.acodec && <span className="format-codec">{format.acodec.split('.')[0]}</span>}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <button className="format-dialog-cancel" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function YouTubePanel() {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<YouTubeVideo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draggingVideo, setDraggingVideo] = useState<string | null>(null);
   const [autoDownload, setAutoDownload] = useState(false);
   const [downloadingVideos, setDownloadingVideos] = useState<Set<string>>(new Set());
   const [helperConnected, setHelperConnected] = useState(isDownloadAvailable());
+
+  // YouTube store - videos persist with project
+  const storeVideos = useYouTubeStore(s => s.videos);
+  const addVideos = useYouTubeStore(s => s.addVideos);
+  const _removeVideo = useYouTubeStore(s => s.removeVideo); // For future use
+  const _clearVideos = useYouTubeStore(s => s.clearVideos); // For future use
+  void _removeVideo; void _clearVideos; // Suppress unused warnings
+
+  // Convert store videos to panel format
+  const results = storeVideos.map(storeToPanel);
+
+  // Format selection state
+  const [formatDialog, setFormatDialog] = useState<{
+    video: YouTubeVideo;
+    info: VideoInfo;
+    mode: 'download' | 'timeline';
+  } | null>(null);
+  const [fetchingFormats, setFetchingFormats] = useState<string | null>(null);
 
   const { apiKeys, openSettings } = useSettingsStore();
   const youtubeApiKey = apiKeys.youtube || '';
@@ -169,11 +265,8 @@ export function YouTubePanel() {
         // Direct video URL/ID - get info and show it
         const videoInfo = await getVideoInfo(videoId);
         if (videoInfo) {
-          setResults(prev => {
-            // Avoid duplicates
-            if (prev.some(v => v.id === videoInfo.id)) return prev;
-            return [videoInfo, ...prev];
-          });
+          // Add to store (handles duplicates)
+          addVideos([panelToStore(videoInfo)]);
           // Clear input for next paste
           setQuery('');
           // Auto-download if enabled
@@ -186,15 +279,14 @@ export function YouTubePanel() {
       } else if (youtubeApiKey) {
         // Search query with API key
         const videos = await searchYouTubeAPI(input);
-        setResults(videos);
+        // Add all to store
+        addVideos(videos.map(panelToStore));
       } else {
         // No API key and not a URL
         setError('Paste a YouTube URL, or add API key in settings for search');
-        setResults([]);
       }
     } catch (err) {
       setError((err as Error).message);
-      setResults([]);
     } finally {
       setLoading(false);
     }
@@ -237,8 +329,56 @@ export function YouTubePanel() {
 
   const handleDragEnd = () => setDraggingVideo(null);
 
+  // Show format selection dialog before download
+  const showFormatDialog = async (video: YouTubeVideo, mode: 'download' | 'timeline') => {
+    if (fetchingFormats) return;
+
+    setFetchingFormats(video.id);
+    setError(null);
+
+    try {
+      const url = `https://www.youtube.com/watch?v=${video.id}`;
+      const info = await NativeHelperClient.listFormats(url);
+
+      if (info && info.recommendations.length > 0) {
+        setFormatDialog({ video, info, mode });
+      } else {
+        // Fallback: download with default format
+        if (mode === 'download') {
+          await executeDownload(video);
+        } else {
+          await executeAddToTimeline(video);
+        }
+      }
+    } catch (err) {
+      setError(`Failed to fetch formats: ${(err as Error).message}`);
+    } finally {
+      setFetchingFormats(null);
+    }
+  };
+
+  // Handle format selection from dialog
+  const handleFormatSelect = async (formatId: string) => {
+    if (!formatDialog) return;
+
+    const { video, mode } = formatDialog;
+    setFormatDialog(null);
+
+    if (mode === 'download') {
+      await executeDownload(video, formatId);
+    } else {
+      await executeAddToTimeline(video, formatId);
+    }
+  };
+
   // Download video only (save to downloads folder)
   const downloadVideoOnly = async (video: YouTubeVideo) => {
+    if (downloadingVideos.has(video.id)) return;
+    await showFormatDialog(video, 'download');
+  };
+
+  // Execute download with optional format
+  const executeDownload = async (video: YouTubeVideo, formatId?: string) => {
     if (downloadingVideos.has(video.id)) return;
 
     setDownloadingVideos(prev => new Set(prev).add(video.id));
@@ -248,7 +388,7 @@ export function YouTubePanel() {
     });
 
     try {
-      const file = await downloadYouTubeVideo(video.id, video.title, video.thumbnail);
+      const file = await downloadYouTubeVideo(video.id, video.title, video.thumbnail, formatId);
       // Trigger browser download
       const url = URL.createObjectURL(file);
       const a = document.createElement('a');
@@ -270,8 +410,14 @@ export function YouTubePanel() {
     }
   };
 
-  // Add video to timeline
+  // Add video to timeline - show format dialog first
   const addVideoToTimeline = async (video: YouTubeVideo) => {
+    if (activeDownloadsRef.current.has(video.id)) return;
+    await showFormatDialog(video, 'timeline');
+  };
+
+  // Execute add to timeline with optional format
+  const executeAddToTimeline = async (video: YouTubeVideo, formatId?: string) => {
     if (activeDownloadsRef.current.has(video.id)) return;
 
     const videoTrack = tracks.find(t => t.type === 'video');
@@ -303,7 +449,7 @@ export function YouTubePanel() {
     });
 
     try {
-      const file = await downloadYouTubeVideo(video.id, video.title, video.thumbnail);
+      const file = await downloadYouTubeVideo(video.id, video.title, video.thumbnail, formatId);
       await completeDownload(clipId, file);
     } catch (err) {
       setDownloadError(clipId, (err as Error).message);
@@ -419,16 +565,17 @@ export function YouTubePanel() {
                       className={`btn-download ${!helperConnected ? 'disabled' : ''}`}
                       onClick={(e) => { e.stopPropagation(); downloadVideoOnly(video); }}
                       title={helperConnected ? "Download video" : "Native Helper required for download"}
-                      disabled={downloadingVideos.has(video.id) || !helperConnected}
+                      disabled={downloadingVideos.has(video.id) || fetchingFormats === video.id || !helperConnected}
                     >
-                      {downloadingVideos.has(video.id) ? '...' : '↓'}
+                      {downloadingVideos.has(video.id) || fetchingFormats === video.id ? '...' : '↓'}
                     </button>
                     <button
-                      className="btn-add-timeline"
+                      className={`btn-add-timeline ${fetchingFormats === video.id ? 'loading' : ''}`}
                       onClick={(e) => { e.stopPropagation(); addVideoToTimeline(video); }}
-                      title="Add to timeline"
+                      title={fetchingFormats === video.id ? "Loading formats..." : "Add to timeline"}
+                      disabled={fetchingFormats === video.id || activeDownloadsRef.current.has(video.id)}
                     >
-                      +
+                      {fetchingFormats === video.id ? '...' : '+'}
                     </button>
                     <button
                       className="btn-copy-url"
@@ -438,6 +585,13 @@ export function YouTubePanel() {
                       Copy
                     </button>
                   </div>
+                  {/* Fetching formats indicator */}
+                  {fetchingFormats === video.id && (
+                    <div className="download-overlay">
+                      <div className="download-spinner" />
+                      <span>Loading formats...</span>
+                    </div>
+                  )}
                   {/* Downloading indicator */}
                   {downloadingVideos.has(video.id) && (
                     <div className="download-overlay">
@@ -466,6 +620,15 @@ export function YouTubePanel() {
           </div>
         )}
       </div>
+
+      {/* Format selection dialog */}
+      {formatDialog && (
+        <FormatDialog
+          videoInfo={formatDialog.info}
+          onSelect={handleFormatSelect}
+          onCancel={() => setFormatDialog(null)}
+        />
+      )}
     </div>
   );
 }

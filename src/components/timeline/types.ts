@@ -46,6 +46,7 @@ export interface ExternalDragState {
   audioTrackId?: string;  // Preview for linked audio clip
   isVideo?: boolean;      // Is the dragged file a video?
   isAudio?: boolean;      // Is the dragged file audio-only?
+  hasAudio?: boolean;     // Does the video file have audio tracks?
   duration?: number;      // Actual duration of dragged file
   newTrackType?: 'video' | 'audio' | null;  // If hovering over "new track" drop zone
 }
@@ -94,6 +95,7 @@ export interface TimelineControlsProps {
   showTranscriptMarkers: boolean;
   thumbnailsEnabled: boolean;
   waveformsEnabled: boolean;
+  toolMode: 'select' | 'cut';
   onPlay: () => void;
   onPause: () => void;
   onStop: () => void;
@@ -108,6 +110,7 @@ export interface TimelineControlsProps {
   onToggleTranscriptMarkers: () => void;
   onToggleThumbnails: () => void;
   onToggleWaveforms: () => void;
+  onToggleCutTool: () => void;
   onAddVideoTrack: () => void;
   onAddAudioTrack: () => void;
   onAddTextClip: () => void;
@@ -227,10 +230,16 @@ export interface TimelineClipProps {
   proxyStatus: 'none' | 'generating' | 'ready' | 'error' | undefined;
   proxyProgress: number;
   showTranscriptMarkers: boolean;
+  toolMode: 'select' | 'cut';
+  snappingEnabled: boolean;
+  playheadPosition: number;
+  cutHoverInfo: { clipId: string; time: number } | null;
+  onCutHover: (clipId: string | null, time: number | null) => void;
   onMouseDown: (e: React.MouseEvent) => void;
   onDoubleClick: (e: React.MouseEvent) => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onTrimStart: (e: React.MouseEvent, edge: 'left' | 'right') => void;
+  onCutAtPosition: (clipId: string, time: number) => void;
   hasKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;
   timeToPixel: (time: number) => number;
   pixelToTime: (pixel: number) => number;

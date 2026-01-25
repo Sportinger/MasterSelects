@@ -1,7 +1,10 @@
 // CompositionRenderer - Evaluates any composition at a given time and returns renderable layers
 // This enables multiple previews showing different compositions simultaneously
 
+import { Logger } from './logger';
 import type { Layer, SerializableClip, TimelineTrack, TimelineClip, NestedCompositionData } from '../types';
+
+const log = Logger.create('CompositionRenderer');
 import { useMediaStore } from '../stores/mediaStore';
 import { useTimelineStore } from '../stores/timeline';
 import { calculateSourceTime } from '../utils/speedIntegration';
@@ -53,7 +56,7 @@ class CompositionRendererService {
     const composition = useMediaStore.getState().compositions.find(c => c.id === compositionId);
 
     if (!composition) {
-      console.warn(`[CompositionRenderer] Composition ${compositionId} not found`);
+      log.warn(`Composition ${compositionId} not found`);
       return false;
     }
 
@@ -65,13 +68,13 @@ class CompositionRendererService {
     if (isActiveComp) {
       // Active composition - use live data from timeline store
       clips = useTimelineStore.getState().clips;
-      console.log(`[CompositionRenderer] Preparing ACTIVE composition: ${composition.name} (${clips.length} clips from timeline store)`);
+      log.info(`Preparing ACTIVE composition: ${composition.name} (${clips.length} clips from timeline store)`);
     } else if (composition.timelineData) {
       // Non-active composition - use serialized data
       clips = composition.timelineData.clips || [];
-      console.log(`[CompositionRenderer] Preparing composition: ${composition.name} (${clips.length} clips from timelineData)`);
+      log.info(`Preparing composition: ${composition.name} (${clips.length} clips from timelineData)`);
     } else {
-      console.warn(`[CompositionRenderer] Composition ${compositionId} has no timeline data`);
+      log.warn(`Composition ${compositionId} has no timeline data`);
       return false;
     }
 
@@ -150,7 +153,7 @@ class CompositionRendererService {
       const mediaFile = mediaFiles.find(f => f.id === mediaFileId);
 
       if (!mediaFile?.file) {
-        console.warn(`[CompositionRenderer] Media file not found for clip ${clip.id}`);
+        log.warn(`Media file not found for clip ${clip.id}`);
         continue;
       }
 
@@ -165,7 +168,7 @@ class CompositionRendererService {
     await Promise.all(loadPromises);
 
     sources.isReady = true;
-    console.log(`[CompositionRenderer] Composition ready: ${composition.name}, ${sources.clipSources.size} sources`);
+    log.info(`Composition ready: ${composition.name}, ${sources.clipSources.size} sources`);
 
     // Notify any waiting callbacks
     const callbacks = this.readyCallbacks.get(compositionId) || [];
@@ -193,12 +196,12 @@ class CompositionRendererService {
           file,
           naturalDuration: video.duration || clip.naturalDuration || 0,
         });
-        console.log(`[CompositionRenderer] Video loaded: ${file.name}`);
+        log.debug(`Video loaded: ${file.name}`);
         resolve();
       }, { once: true });
 
       video.addEventListener('error', () => {
-        console.error(`[CompositionRenderer] Failed to load video: ${file.name}`);
+        log.error(`Failed to load video: ${file.name}`);
         resolve(); // Don't block on errors
       }, { once: true });
 
@@ -220,12 +223,12 @@ class CompositionRendererService {
           file,
           naturalDuration: clip.naturalDuration || 5,
         });
-        console.log(`[CompositionRenderer] Image loaded: ${file.name}`);
+        log.debug(`Image loaded: ${file.name}`);
         resolve();
       };
 
       img.onerror = () => {
-        console.error(`[CompositionRenderer] Failed to load image: ${file.name}`);
+        log.error(`Failed to load image: ${file.name}`);
         resolve();
       };
     });
@@ -264,7 +267,7 @@ class CompositionRendererService {
       clips = composition.timelineData.clips || [];
       tracks = composition.timelineData.tracks || [];
     } else {
-      console.warn(`[CompositionRenderer] evaluateAtTime: comp ${composition.name} has NO timelineData!`);
+      log.warn(`evaluateAtTime: comp ${composition.name} has NO timelineData!`);
       return [];
     }
 
@@ -591,7 +594,7 @@ class CompositionRendererService {
     }
 
     this.compositionSources.delete(compositionId);
-    console.log(`[CompositionRenderer] Disposed composition: ${compositionId}`);
+    log.debug(`Disposed composition: ${compositionId}`);
   }
 
   /**
@@ -622,7 +625,7 @@ class CompositionRendererService {
   invalidateComposition(compositionId: string): void {
     const sources = this.compositionSources.get(compositionId);
     if (sources) {
-      console.log(`[CompositionRenderer] Invalidating composition: ${compositionId}`);
+      log.debug(`Invalidating composition: ${compositionId}`);
       // Mark as not ready - will be re-prepared on next access
       sources.isReady = false;
       // Clear cached clip sources (they may be stale)
@@ -642,7 +645,47 @@ class CompositionRendererService {
         sources.clipSources.clear();
       }
     }
-    console.log(`[CompositionRenderer] Invalidated all non-active compositions`);
+    log.debug('Invalidated all non-active compositions');
+  }
+
+  /**
+   * Invalidate a composition AND all parent compositions that contain it as nested
+   * Call this when a composition's content changes (clips added/removed/modified)
+   */
+  invalidateCompositionAndParents(compositionId: string): void {
+    // First invalidate the composition itself
+    this.invalidateComposition(compositionId);
+
+    // Find all parent compositions that contain this as a nested comp
+    const { compositions } = useMediaStore.getState();
+
+    for (const comp of compositions) {
+      if (comp.id === compositionId) continue;
+
+      // Check if this composition contains the changed one as a nested clip
+      const clips = comp.timelineData?.clips || [];
+      const hasNested = clips.some(clip =>
+        clip.isComposition && clip.compositionId === compositionId
+      );
+
+      if (hasNested) {
+        log.debug(`Invalidating parent composition: ${comp.name} (contains ${compositionId})`);
+        this.invalidateComposition(comp.id);
+        // Recursively invalidate grandparents
+        this.invalidateCompositionAndParents(comp.id);
+      }
+    }
+  }
+
+  /**
+   * Invalidate ALL cached compositions - use when major changes occur
+   */
+  invalidateAll(): void {
+    for (const [, sources] of this.compositionSources.entries()) {
+      sources.isReady = false;
+      sources.clipSources.clear();
+    }
+    log.debug('Invalidated ALL compositions');
   }
 }
 

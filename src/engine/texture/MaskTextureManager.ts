@@ -1,5 +1,9 @@
 // Mask texture handling for layer masking
 
+import { Logger } from '../../services/logger';
+
+const log = Logger.create('MaskTextureManager');
+
 export class MaskTextureManager {
   private device: GPUDevice;
 
@@ -46,7 +50,7 @@ export class MaskTextureManager {
 
     // If no imageData, layer will use white fallback (no masking)
     if (!imageData) {
-      console.log(`[MaskTextureManager] No mask data for layer ${layerId}, using white fallback`);
+      log.debug(`No mask data for layer ${layerId}, using white fallback`);
       return;
     }
 
@@ -72,7 +76,7 @@ export class MaskTextureManager {
     this.maskTextures.set(layerId, maskTexture);
     this.maskTextureViews.set(layerId, maskTexture.createView());
 
-    console.log(`[MaskTextureManager] Uploaded mask texture for layer ${layerId}: ${imageData.width}x${imageData.height}`);
+    log.debug(`Uploaded mask texture for layer ${layerId}: ${imageData.width}x${imageData.height}`);
   }
 
   // Remove mask texture for a layer
@@ -91,8 +95,8 @@ export class MaskTextureManager {
   }
 
   // Get mask texture view for a layer (returns white fallback if no mask)
-  getMaskTextureView(layerId: string): GPUTextureView {
-    return this.maskTextureViews.get(layerId) || this.whiteMaskView!;
+  getMaskTextureView(layerId: string): GPUTextureView | null {
+    return this.maskTextureViews.get(layerId) ?? null;
   }
 
   // Get the fallback white mask view
@@ -100,10 +104,18 @@ export class MaskTextureManager {
     return this.whiteMaskView!;
   }
 
+  // Get mask info in single lookup (avoids double Map access)
+  getMaskInfo(layerId: string): { hasMask: boolean; view: GPUTextureView } {
+    const view = this.maskTextureViews.get(layerId);
+    return view
+      ? { hasMask: true, view }
+      : { hasMask: false, view: this.whiteMaskView! };
+  }
+
   // Log mask state for debugging (throttled)
   logMaskState(layerId: string, hasMask: boolean): void {
     if (hasMask && (!this.lastMaskDebugLog || Date.now() - this.lastMaskDebugLog > 1000)) {
-      console.log(`[MaskTextureManager] Rendering layer ${layerId} WITH mask`);
+      log.debug(`Rendering layer ${layerId} WITH mask`);
       this.lastMaskDebugLog = Date.now();
     }
   }

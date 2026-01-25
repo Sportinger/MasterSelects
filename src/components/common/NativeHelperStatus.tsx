@@ -4,13 +4,22 @@
  * Shows connection status in toolbar and opens a dialog for details/download.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { NativeHelperClient, isNativeHelperAvailable } from '../../services/nativeHelper';
 import type { SystemInfo, ConnectionStatus } from '../../services/nativeHelper';
 import { useSettingsStore } from '../../stores/settingsStore';
 
-// Direct download from app (bundled in public folder)
-const HELPER_DIRECT_DOWNLOAD = '/downloads/masterselects-helper';
+// Detect platform
+function detectPlatform(): 'mac' | 'windows' | 'linux' | 'unknown' {
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes('mac')) return 'mac';
+  if (ua.includes('win')) return 'windows';
+  if (ua.includes('linux')) return 'linux';
+  return 'unknown';
+}
+
+// GitHub releases download URL
+const GITHUB_RELEASES = 'https://github.com/Sportinger/MasterSelects/releases/latest';
 
 /**
  * Toolbar button that shows helper status
@@ -103,11 +112,11 @@ function NativeHelperDialog({
   const [isClosing, setIsClosing] = useState(false);
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [checking, setChecking] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const { turboModeEnabled, setTurboModeEnabled } = useSettingsStore();
 
-  const quickStartCommands = `chmod +x masterselects-helper && ./masterselects-helper`;
+  const platform = useMemo(() => detectPlatform(), []);
+  const isMac = platform === 'mac';
 
   // Fetch system info when connected
   useEffect(() => {
@@ -128,16 +137,6 @@ function NativeHelperDialog({
     setChecking(true);
     await onRetry();
     setChecking(false);
-  };
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(quickStartCommands);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback
-    }
   };
 
   // Handle Escape key
@@ -238,41 +237,76 @@ function NativeHelperDialog({
               /* Not Connected State */
               <div className="space-y-4">
                 <p className="text-sm text-zinc-400">
-                  The Native Helper is a small companion app that provides hardware-accelerated
-                  video decoding for professional codecs.
+                  {isMac
+                    ? 'Download the MasterSelects Helper app to enable YouTube downloads and faster video decoding.'
+                    : 'The Native Helper enables YouTube downloads and hardware-accelerated video decoding.'}
                 </p>
 
-                <a
-                  href={HELPER_DIRECT_DOWNLOAD}
-                  download="masterselects-helper"
-                  className="block w-full text-center bg-blue-600 hover:bg-blue-500 text-white py-2.5 px-4 rounded-lg transition-colors font-medium"
-                >
-                  Download Helper (Linux, 1.8 MB)
-                </a>
-
-                <div className="bg-zinc-900 rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs text-zinc-500">Quick start:</p>
-                    <button
-                      onClick={handleCopy}
-                      className="text-xs text-zinc-500 hover:text-white transition-colors"
+                {isMac ? (
+                  /* macOS Instructions */
+                  <>
+                    <a
+                      href={GITHUB_RELEASES}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block w-full text-center bg-blue-600 hover:bg-blue-500 text-white py-2.5 px-4 rounded-lg transition-colors font-medium"
                     >
-                      {copied ? '✓ Copied' : 'Copy'}
-                    </button>
-                  </div>
-                  <code
-                    className="text-xs text-zinc-300 font-mono block bg-zinc-800 p-2 rounded select-all cursor-text"
-                    onClick={(e) => {
-                      const selection = window.getSelection();
-                      const range = document.createRange();
-                      range.selectNodeContents(e.currentTarget);
-                      selection?.removeAllRanges();
-                      selection?.addRange(range);
-                    }}
-                  >
-                    {quickStartCommands}
-                  </code>
-                </div>
+                      Download for macOS
+                    </a>
+
+                    <div className="bg-zinc-900 rounded-lg p-3 space-y-2">
+                      <p className="text-xs text-zinc-500 font-medium">Installation:</p>
+                      <ol className="text-xs text-zinc-400 space-y-1.5 list-decimal list-inside">
+                        <li>Download <code className="bg-zinc-800 px-1 rounded">MasterSelects-Helper.dmg</code></li>
+                        <li>Open the DMG and drag the app to Applications</li>
+                        <li>Open from Applications (right-click → Open for first launch)</li>
+                        <li>The helper runs in your menubar ⚡</li>
+                      </ol>
+                    </div>
+
+                    <div className="bg-zinc-900 rounded-lg p-3">
+                      <p className="text-xs text-zinc-500 mb-2">For YouTube downloads, also install yt-dlp:</p>
+                      <code
+                        className="text-xs text-zinc-300 font-mono block bg-zinc-800 p-2 rounded select-all cursor-pointer"
+                        onClick={(e) => {
+                          navigator.clipboard.writeText('brew install yt-dlp');
+                          const el = e.currentTarget;
+                          el.textContent = '✓ Copied!';
+                          setTimeout(() => { el.textContent = 'brew install yt-dlp'; }, 1500);
+                        }}
+                      >
+                        brew install yt-dlp
+                      </code>
+                    </div>
+                  </>
+                ) : (
+                  /* Linux/Windows Instructions */
+                  <>
+                    <a
+                      href={GITHUB_RELEASES}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block w-full text-center bg-blue-600 hover:bg-blue-500 text-white py-2.5 px-4 rounded-lg transition-colors font-medium"
+                    >
+                      Download from GitHub
+                    </a>
+
+                    <div className="bg-zinc-900 rounded-lg p-3">
+                      <p className="text-xs text-zinc-500 mb-2">Or run via npm:</p>
+                      <code
+                        className="text-xs text-zinc-300 font-mono block bg-zinc-800 p-2 rounded select-all cursor-pointer"
+                        onClick={(e) => {
+                          navigator.clipboard.writeText('cd native-helper && npm start');
+                          const el = e.currentTarget;
+                          el.textContent = '✓ Copied!';
+                          setTimeout(() => { el.textContent = 'cd native-helper && npm start'; }, 1500);
+                        }}
+                      >
+                        cd native-helper && npm start
+                      </code>
+                    </div>
+                  </>
+                )}
 
                 <button
                   onClick={handleRetry}

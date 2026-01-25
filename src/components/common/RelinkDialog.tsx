@@ -2,9 +2,13 @@
 // Shows list of missing files, allows searching folders, updates status
 
 import { useState, useCallback, useEffect } from 'react';
+import { Logger } from '../../services/logger';
+
+const log = Logger.create('RelinkDialog');
 import { useMediaStore } from '../../stores/mediaStore';
 import { fileSystemService } from '../../services/fileSystemService';
 import { projectDB } from '../../services/projectDB';
+import { projectFileService } from '../../services/projectFileService';
 
 interface RelinkDialogProps {
   onClose: () => void;
@@ -25,15 +29,56 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
   const [isSearching, setIsSearching] = useState(false);
   const [searchedFolders, setSearchedFolders] = useState<string[]>([]);
 
-  // Initialize file statuses
+  // Initialize file statuses and auto-scan Raw folder
   useEffect(() => {
-    const missingFiles = files.filter(f => !f.file);
-    setFileStatuses(missingFiles.map(f => ({
-      id: f.id,
-      name: f.name,
-      filePath: f.filePath,
-      status: 'missing',
-    })));
+    const initializeStatuses = async () => {
+      const missingFiles = files.filter(f => !f.file);
+      const initialStatuses: FileStatus[] = missingFiles.map(f => ({
+        id: f.id,
+        name: f.name,
+        filePath: f.filePath,
+        status: 'missing' as const,
+      }));
+      setFileStatuses(initialStatuses);
+
+      // Auto-scan Raw folder for missing files if project is open
+      if (projectFileService.isProjectOpen() && missingFiles.length > 0) {
+        log.debug('Auto-scanning project Raw folder...');
+        const rawFiles = await projectFileService.scanRawFolder();
+
+        if (rawFiles.size > 0) {
+          log.debug(`Found ${rawFiles.size} files in Raw folder`);
+
+          // Match missing files against Raw folder contents
+          const updatedStatuses = [...initialStatuses];
+          for (const status of updatedStatuses) {
+            if (status.status === 'missing') {
+              const searchName = status.name.toLowerCase();
+              const handle = rawFiles.get(searchName);
+
+              if (handle) {
+                try {
+                  const file = await handle.getFile();
+                  status.status = 'found';
+                  status.newHandle = handle;
+                  status.newFile = file;
+                  log.debug(`Found in Raw folder: ${status.name}`);
+                } catch (e) {
+                  log.warn(`Could not read file from Raw: ${status.name}`, e);
+                }
+              }
+            }
+          }
+
+          setFileStatuses(updatedStatuses);
+          if (rawFiles.size > 0) {
+            setSearchedFolders(['Raw (project folder)']);
+          }
+        }
+      }
+    };
+
+    initializeStatuses();
   }, [files]);
 
   // Scan a folder for missing files
@@ -54,12 +99,12 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
           }
         }
       } catch (e) {
-        console.warn('[RelinkDialog] Error scanning directory:', e);
+        log.warn('Error scanning directory', e);
       }
     };
 
     await scanDirectory(dirHandle);
-    console.log('[RelinkDialog] Found', foundFiles.size, 'files in', dirHandle.name);
+    log.debug(`Found ${foundFiles.size} files in ${dirHandle.name}`);
 
     // Match missing files
     setFileStatuses(prev => {
@@ -101,7 +146,7 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
       }
     } catch (e: any) {
       if (e.name !== 'AbortError') {
-        console.error('[RelinkDialog] Browse error:', e);
+        log.error('Browse error', e);
       }
     }
   }, [scanFolder]);
@@ -136,14 +181,14 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
           selectedFiles.set(file.name.toLowerCase(), { file, handle });
         }
 
-        console.log(`[RelinkDialog] User selected ${selectedFiles.size} file(s)`);
+        log.debug(`User selected ${selectedFiles.size} file(s)`);
 
         // Match selected files against missing files
         setFileStatuses(prev => prev.map(status => {
           if (status.status === 'missing') {
             const match = selectedFiles.get(status.name.toLowerCase());
             if (match) {
-              console.log(`[RelinkDialog] Matched: ${status.name}`);
+              log.debug(`Matched: ${status.name}`);
               return {
                 ...status,
                 status: 'found',
@@ -168,20 +213,20 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
               startIn: handles[0], // Start in same folder as selected file
             });
             if (dirHandle) {
-              console.log('[RelinkDialog] Scanning folder for remaining files...');
+              log.debug('Scanning folder for remaining files...');
               await scanFolder(dirHandle);
             }
           } catch (e: any) {
             // User cancelled - that's fine, we still have the manually selected files
             if (e.name !== 'AbortError') {
-              console.log('[RelinkDialog] Folder access declined, using manually selected files only');
+              log.debug('Folder access declined, using manually selected files only');
             }
           }
         }
       }
     } catch (e: any) {
       if (e.name !== 'AbortError') {
-        console.error('[RelinkDialog] Pick file error:', e);
+        log.error('Pick file error', e);
       }
     }
   }, [fileStatuses, scanFolder]);
@@ -221,7 +266,7 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
           });
         }
 
-        console.log('[RelinkDialog] Applied:', status.name);
+        log.info(`Applied: ${status.name}`);
       }
     }
 

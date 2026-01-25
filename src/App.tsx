@@ -1,5 +1,8 @@
 // WebVJ Mixer - Main Application
 
+// DEV: Disable changelog dialog for development
+const DEV_DISABLE_WHATS_NEW = true;
+
 import { useState, useCallback, useEffect } from 'react';
 import { Toolbar } from './components';
 import { DockContainer } from './components/dock';
@@ -14,7 +17,17 @@ import { projectDB } from './services/projectDB';
 import { projectFileService } from './services/projectFileService';
 import './App.css';
 
+// Dev test pages - access via ?test=parallel-decode
+import { ParallelDecodeTest } from './test/ParallelDecodeTest';
+
 function App() {
+  // Check for test mode via URL param
+  const urlParams = new URLSearchParams(window.location.search);
+  const testMode = urlParams.get('test');
+
+  if (testMode === 'parallel-decode') {
+    return <ParallelDecodeTest />;
+  }
   // Mobile detection
   const isMobile = useIsMobile();
   const forceMobile = useForceMobile();
@@ -40,6 +53,12 @@ function App() {
 
   // What's New dialog state - show on every refresh after welcome (if any)
   const [showWhatsNew, setShowWhatsNew] = useState(false);
+
+  // Load API keys from encrypted storage on mount
+  const loadApiKeys = useSettingsStore((s) => s.loadApiKeys);
+  useEffect(() => {
+    loadApiKeys();
+  }, [loadApiKeys]);
 
   // Check for stored project on mount, then poll for changes
   // This handles the case where Toolbar's restore fails and clears handles
@@ -70,6 +89,7 @@ function App() {
 
   // Show What's New dialog after initial check (when no welcome overlay)
   useEffect(() => {
+    if (DEV_DISABLE_WHATS_NEW) return;
     if (isChecking) return;
 
     // If welcome is showing, don't show What's New yet
@@ -83,7 +103,9 @@ function App() {
     setManuallyDismissed(true);
     setHasStoredProject(true); // Project was just created
     // After welcome, show What's New with small delay for animation
-    setTimeout(() => setShowWhatsNew(true), 300);
+    if (!DEV_DISABLE_WHATS_NEW) {
+      setTimeout(() => setShowWhatsNew(true), 300);
+    }
   }, []);
 
   const handleWhatsNewClose = useCallback(() => {

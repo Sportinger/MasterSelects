@@ -2,6 +2,10 @@
 // Supports: Kling, Luma, Veo, Sora2, Wanx, Hailuo, SkyReels, Hunyuan, etc.
 // Docs: https://piapi.ai/docs/overview
 
+import { Logger } from './logger';
+
+const log = Logger.create('PiAPI');
+
 const BASE_URL = 'https://api.piapi.ai';
 const MODELS_CACHE_KEY = 'piapi-video-models';
 const MODELS_CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
@@ -103,7 +107,7 @@ function loadCachedModels(): VideoProvider[] | null {
       }
     }
   } catch (e) {
-    console.warn('[PiAPI] Failed to load cached models:', e);
+    log.warn(' Failed to load cached models:', e);
   }
   return null;
 }
@@ -116,7 +120,7 @@ function saveCachedModels(models: VideoProvider[]) {
       timestamp: Date.now(),
     }));
   } catch (e) {
-    console.warn('[PiAPI] Failed to cache models:', e);
+    log.warn(' Failed to cache models:', e);
   }
 }
 
@@ -275,7 +279,7 @@ class PiApiService {
     formData.append('time', '1h'); // File expires in 1 hour (enough for video generation)
     formData.append('fileToUpload', blob, 'image.jpg');
 
-    console.log('[PiAPI] Uploading image to litterbox.catbox.moe, size:', Math.round(blob.size / 1024), 'KB');
+    log.debug(' Uploading image to litterbox.catbox.moe, size:', Math.round(blob.size / 1024), 'KB');
 
     const response = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
       method: 'POST',
@@ -288,7 +292,7 @@ class PiApiService {
 
     // Litterbox returns the URL as plain text
     const url = await response.text();
-    console.log('[PiAPI] Litterbox response:', url);
+    log.debug(' Litterbox response:', url);
 
     if (!url.startsWith('http')) {
       throw new Error(url || 'Litterbox upload failed');
@@ -303,7 +307,7 @@ class PiApiService {
     try {
       return await this.uploadToLitterbox(dataUrl);
     } catch (err) {
-      console.warn('[PiAPI] Litterbox upload failed:', err);
+      log.warn(' Litterbox upload failed:', err);
       throw new Error('Failed to upload image: ' + (err instanceof Error ? err.message : 'Unknown error'));
     }
   }
@@ -337,7 +341,7 @@ class PiApiService {
         // Convert to JPEG with compression
         const compressed = canvas.toDataURL('image/jpeg', quality);
         const sizeKB = Math.round((compressed.length * 0.75) / 1024);
-        console.log(`[PiAPI] Compressed image: ${img.width}x${img.height} -> ${width}x${height}, ~${sizeKB}KB`);
+        log.debug(`Compressed image: ${img.width}x${img.height} -> ${width}x${height}, ~${sizeKB}KB`);
 
         resolve(compressed);
       };
@@ -370,19 +374,19 @@ class PiApiService {
     try {
       result = JSON.parse(responseText) as T;
     } catch {
-      console.error('[PiAPI] Failed to parse response:', responseText);
+      log.error(' Failed to parse response:', responseText);
       throw new Error(`PiAPI error: ${response.status} - Invalid JSON response`);
     }
 
     if (!response.ok) {
-      console.error('[PiAPI] API error:', result);
+      log.error(' API error:', result);
       const errorMsg = (result as PiApiResponse).message || responseText;
       throw new Error(`PiAPI error: ${response.status} - ${errorMsg}`);
     }
 
     const apiResult = result as PiApiResponse;
     if (apiResult.code !== 200 && apiResult.code !== 0) {
-      console.error('[PiAPI] API returned error code:', result);
+      log.error(' API returned error code:', result);
       throw new Error(`PiAPI error: ${apiResult.message}`);
     }
 
@@ -436,7 +440,7 @@ class PiApiService {
           service_mode: 'public',
         },
       };
-      console.log('[PiAPI] Request body:', JSON.stringify(body, null, 2));
+      log.debug(' Request body:', JSON.stringify(body, null, 2));
       return body;
     }
 
@@ -521,7 +525,7 @@ class PiApiService {
       }
     );
 
-    console.log('[PiAPI] Creating text-to-video task:', {
+    log.debug(' Creating text-to-video task:', {
       provider: params.provider,
       version: params.version,
       duration: params.duration,
@@ -537,18 +541,18 @@ class PiApiService {
     let imageTailUrl: string | undefined;
 
     if (params.startImageUrl) {
-      console.log('[PiAPI] Compressing and uploading start image...');
+      log.debug(' Compressing and uploading start image...');
       const compressed = await this.compressImage(params.startImageUrl);
       imageUrl = await this.uploadImage(compressed);
     }
 
     if (params.endImageUrl) {
-      console.log('[PiAPI] Compressing and uploading end image...');
+      log.debug(' Compressing and uploading end image...');
       const compressed = await this.compressImage(params.endImageUrl);
       imageTailUrl = await this.uploadImage(compressed);
     }
 
-    console.log('[PiAPI] Creating image-to-video with uploaded URLs:', { imageUrl, imageTailUrl });
+    log.debug(' Creating image-to-video with uploaded URLs:', { imageUrl, imageTailUrl });
 
     const body = this.buildRequestBody(
       params.provider,
@@ -566,7 +570,7 @@ class PiApiService {
       }
     );
 
-    console.log('[PiAPI] Creating image-to-video task:', {
+    log.debug(' Creating image-to-video task:', {
       provider: params.provider,
       version: params.version,
       duration: params.duration,
@@ -653,12 +657,12 @@ class PiApiService {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[PiAPI] Account info error:', errorText);
+      log.error(' Account info error:', errorText);
       throw new Error(`Failed to get account info: ${response.status}`);
     }
 
     const result = await response.json();
-    console.log('[PiAPI] Account info:', result);
+    log.debug(' Account info:', result);
 
     // Parse response - field names may vary
     return {

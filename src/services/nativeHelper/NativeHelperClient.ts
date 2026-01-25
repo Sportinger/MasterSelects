@@ -5,12 +5,14 @@
  * methods for video decoding and encoding operations.
  */
 
+import { Logger } from '../logger';
 import type {
   Command,
   Response,
   FileMetadata,
   SystemInfo,
   EncodeOutput,
+  VideoInfo,
 } from './protocol';
 
 import {
@@ -20,6 +22,8 @@ import {
 
 // LZ4 decompression (we'll use a simple implementation or skip for now)
 // In production, use a proper LZ4 library like 'lz4js'
+
+const log = Logger.create('NativeHelper');
 
 export interface NativeHelperConfig {
   port?: number;
@@ -52,6 +56,7 @@ class NativeHelperClientImpl {
   private status: ConnectionStatus = 'disconnected';
   private requestId = 0;
   private pendingRequests = new Map<string, ResponseCallback>();
+  private progressCallbacks = new Map<string, (percent: number) => void>();
   private frameCallbacks = new Map<string, FrameCallback>();
   private statusListeners = new Set<(status: ConnectionStatus) => void>();
   private reconnectTimer: number | null = null;
@@ -105,7 +110,7 @@ class NativeHelperClientImpl {
         this.ws.binaryType = 'arraybuffer'; // Ensure binary data comes as ArrayBuffer, not Blob
 
         this.ws.onopen = async () => {
-          console.log('[NativeHelper] Connected to native helper');
+          log.info('Connected to native helper');
           this.wasEverConnected = true;
 
           // Authenticate if token provided
@@ -113,7 +118,7 @@ class NativeHelperClientImpl {
             try {
               await this.send({ cmd: 'auth', id: this.nextId(), token: this.config.token });
             } catch {
-              console.warn('[NativeHelper] Auth failed');
+              log.warn('Auth failed');
             }
           }
 
@@ -123,7 +128,7 @@ class NativeHelperClientImpl {
 
         this.ws.onclose = () => {
           if (this.wasEverConnected) {
-            console.log('[NativeHelper] Disconnected');
+            log.info('Disconnected');
           }
           this.setStatus('disconnected');
           this.handleDisconnect();
@@ -339,24 +344,85 @@ class NativeHelperClientImpl {
   }
 
   /**
+   * List available formats for a YouTube video
+   */
+  async listFormats(url: string): Promise<VideoInfo | null> {
+    const id = this.nextId();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        resolve(null);
+      }, 30000);
+
+      this.pendingRequests.set(id, (response: any) => {
+        clearTimeout(timeout);
+        if (response.ok) {
+          resolve({
+            title: response.title,
+            thumbnail: response.thumbnail,
+            duration: response.duration,
+            uploader: response.uploader,
+            recommendations: response.recommendations,
+            allFormats: response.allFormats,
+          });
+        } else {
+          resolve(null);
+        }
+      });
+
+      const cmd = {
+        cmd: 'list_formats',
+        id,
+        url,
+      };
+
+      this.sendRaw(JSON.stringify(cmd)).catch(() => {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(id);
+        resolve(null);
+      });
+    });
+  }
+
+  /**
    * Download a YouTube video using yt-dlp
    */
   async downloadYouTube(
     url: string,
-    _onProgress?: (percent: number) => void // Reserved for future progress reporting
+    formatId?: string,
+    onProgress?: (percent: number) => void
   ): Promise<{ success: boolean; path?: string; error?: string }> {
     const id = this.nextId();
 
     return new Promise((resolve, reject) => {
-      // Set timeout (5 minutes for large videos)
+      // Set timeout (10 minutes for large videos)
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(id);
+        this.progressCallbacks.delete(id);
         reject(new Error('Download timeout'));
-      }, 300000);
+      }, 600000);
 
-      // Register callback
+      // Register progress callback if provided
+      if (onProgress) {
+        this.progressCallbacks.set(id, onProgress);
+      }
+
+      // Register completion callback
       this.pendingRequests.set(id, (response: any) => {
+        // Check if this is a progress message
+        if (response.type === 'progress' && response.percent !== undefined) {
+          // Don't resolve yet - this is just progress
+          const progressCb = this.progressCallbacks.get(id);
+          if (progressCb) {
+            progressCb(response.percent);
+          }
+          return; // Keep waiting for final response
+        }
+
+        // Final response
         clearTimeout(timeout);
+        this.progressCallbacks.delete(id);
         if (response.ok) {
           resolve({
             success: true,
@@ -371,46 +437,64 @@ class NativeHelperClientImpl {
       });
 
       // Send download command
-      const cmd = {
+      const cmd: any = {
         cmd: 'download_youtube',
         id,
         url,
       };
 
+      if (formatId) {
+        cmd.format_id = formatId;
+      }
+
       this.sendRaw(JSON.stringify(cmd)).catch((err) => {
         clearTimeout(timeout);
         this.pendingRequests.delete(id);
+        this.progressCallbacks.delete(id);
         reject(err);
       });
     });
   }
 
   /**
-   * Get a downloaded file from the Native Helper
+   * Get a downloaded file from the Native Helper via HTTP (fast) or WebSocket fallback
    */
   async getDownloadedFile(path: string): Promise<ArrayBuffer | null> {
+    // Try HTTP first (much faster than WebSocket base64)
+    const httpPort = this.config.port + 1; // HTTP on port+1 (9877)
+    try {
+      log.debug('Fetching file via HTTP:', path);
+      const response = await fetch(`http://127.0.0.1:${httpPort}/file?path=${encodeURIComponent(path)}`);
+      if (response.ok) {
+        const buffer = await response.arrayBuffer();
+        log.debug('File received via HTTP:', buffer.byteLength + ' bytes');
+        return buffer;
+      }
+    } catch (e) {
+      log.warn('HTTP fetch failed, falling back to WebSocket', e);
+    }
+
+    // Fallback to WebSocket (slower but more compatible)
     const id = this.nextId();
 
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(id);
         resolve(null);
-      }, 60000); // 60 seconds for large files
+      }, 120000); // 120 seconds for large files via WebSocket
 
       // For file requests, we expect base64 data in the response
-      this.pendingRequests.set(id, (response: any) => {
+      this.pendingRequests.set(id, async (response: any) => {
         clearTimeout(timeout);
         if (response.ok && response.data) {
-          // Decode base64 to ArrayBuffer
+          // Decode base64 to ArrayBuffer using fetch (much faster than manual loop)
           try {
-            const binaryString = atob(response.data);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-              bytes[i] = binaryString.charCodeAt(i);
-            }
-            resolve(bytes.buffer);
+            const dataUrl = `data:application/octet-stream;base64,${response.data}`;
+            const fetchResponse = await fetch(dataUrl);
+            const buffer = await fetchResponse.arrayBuffer();
+            resolve(buffer);
           } catch (e) {
-            console.error('[NativeHelper] Failed to decode base64 data:', e);
+            log.error('Failed to decode base64 data', e);
             resolve(null);
           }
         } else {
@@ -464,7 +548,7 @@ class NativeHelperClientImpl {
 
     if (shouldReconnect) {
       this.reconnectTimer = window.setTimeout(() => {
-        console.log('[NativeHelper] Attempting reconnect...');
+        log.debug('Attempting reconnect...');
         this.connect();
       }, this.config.reconnectInterval);
     }
@@ -478,18 +562,22 @@ class NativeHelperClientImpl {
         const callback = this.pendingRequests.get(response.id);
 
         if (callback) {
-          this.pendingRequests.delete(response.id);
+          // Check if this is a progress message - don't delete callback yet
+          const isProgress = (response as any).type === 'progress';
+          if (!isProgress) {
+            this.pendingRequests.delete(response.id);
+          }
           callback(response);
         }
       } catch (err) {
-        console.error('[NativeHelper] Failed to parse response:', err);
+        log.error('Failed to parse response', err);
       }
     } else {
       // Binary frame data
       const header = parseFrameHeader(data);
 
       if (!header) {
-        console.error('[NativeHelper] Invalid frame header');
+        log.error('Invalid frame header');
         return;
       }
 
@@ -500,7 +588,7 @@ class NativeHelperClientImpl {
       // Decompress if needed
       if (isCompressed(header.flags)) {
         // TODO: Use proper LZ4 decompression
-        console.warn('[NativeHelper] LZ4 decompression not implemented, using raw data');
+        log.warn('LZ4 decompression not implemented, using raw data');
       }
 
       const frame: DecodedFrame = {

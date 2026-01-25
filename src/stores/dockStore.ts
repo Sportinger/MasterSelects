@@ -20,6 +20,9 @@ import {
   insertPanelAtTarget,
   collapseSingleChildSplits,
 } from '../utils/dockLayout';
+import { Logger } from '../services/logger';
+
+const log = Logger.create('DockStore');
 
 // Valid panel types (used to filter out removed panels from saved layouts)
 const VALID_PANEL_TYPES = new Set(Object.keys(PANEL_CONFIGS));
@@ -175,6 +178,10 @@ interface DockState {
   // Layout management
   resetLayout: () => void;
   saveLayoutAsDefault: () => void;
+
+  // Project persistence (for saving/loading layout from project file)
+  getLayoutForProject: () => DockLayout;
+  setLayoutFromProject: (layout: DockLayout) => void;
 }
 
 export const useDockStore = create<DockState>()(
@@ -558,7 +565,7 @@ export const useDockStore = create<DockState>()(
               set({ layout: parsed, maxZIndex: 1000 });
               return;
             } catch (e) {
-              console.error('Failed to parse saved default layout:', e);
+              log.error('Failed to parse saved default layout:', e);
             }
           }
           set({ layout: DEFAULT_LAYOUT, maxZIndex: 1000 });
@@ -567,6 +574,16 @@ export const useDockStore = create<DockState>()(
         saveLayoutAsDefault: () => {
           const { layout } = get();
           localStorage.setItem('webvj-dock-layout-default', JSON.stringify(layout));
+        },
+
+        getLayoutForProject: () => {
+          return get().layout;
+        },
+
+        setLayoutFromProject: (layout: DockLayout) => {
+          // Clean up any invalid panel types from the loaded layout
+          const cleanedLayout = cleanupPersistedLayout(layout);
+          set({ layout: cleanedLayout, maxZIndex: 1000 });
         },
       }),
       {

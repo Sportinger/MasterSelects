@@ -2,8 +2,11 @@
 // After Effects-style precise rendering
 
 import { useState, useEffect, useCallback } from 'react';
-import { FrameExporter, downloadBlob } from '../../engine/FrameExporter';
-import type { ExportProgress, VideoCodec, ContainerFormat } from '../../engine/FrameExporter';
+import { Logger } from '../../services/logger';
+
+const log = Logger.create('ExportDialog');
+import { FrameExporter, downloadBlob } from '../../engine/export';
+import type { ExportProgress, VideoCodec, ContainerFormat } from '../../engine/export';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 
@@ -128,7 +131,7 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
         onClose();
       }
     } catch (e) {
-      console.error('[ExportDialog] Export failed:', e);
+      log.error('Export failed', e);
       setError(e instanceof Error ? e.message : 'Export failed');
     } finally {
       setIsExporting(false);

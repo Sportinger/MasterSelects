@@ -1,16 +1,18 @@
 // Scrubbing frame cache for instant access during timeline scrubbing
 // Also includes RAM preview composite cache for instant playback
 
+import { Logger } from '../../services/logger';
 import type { GpuFrameCacheEntry } from '../core/types';
+
+const log = Logger.create('ScrubbingCache');
 
 export class ScrubbingCache {
   private device: GPUDevice;
 
   // Scrubbing frame cache - pre-decoded frames for instant access
-  // Key: "videoSrc:frameTime" -> GPUTexture
-  private scrubbingCache: Map<string, GPUTexture> = new Map();
-  private scrubbingCacheViews: Map<string, GPUTextureView> = new Map();
-  private scrubbingCacheOrder: string[] = []; // LRU order
+  // Key: "videoSrc:frameTime" -> { texture, view }
+  // Uses Map insertion order for O(1) LRU operations
+  private scrubbingCache: Map<string, { texture: GPUTexture; view: GPUTextureView }> = new Map();
   private maxScrubbingCacheFrames = 300; // ~10 seconds at 30fps, ~2.4GB VRAM at 1080p
 
   // Last valid frame cache - keeps last frame visible during seeks
@@ -21,14 +23,14 @@ export class ScrubbingCache {
 
   // RAM Preview cache - fully composited frames for instant playback
   // Key: time (quantized to frame) -> ImageData (CPU-side for memory efficiency)
+  // Uses Map insertion order for O(1) LRU operations
   private compositeCache: Map<number, ImageData> = new Map();
-  private compositeCacheOrder: number[] = []; // LRU order
   private maxCompositeCacheFrames = 900; // 30 seconds at 30fps
 
   // GPU texture cache for instant RAM Preview playback (no CPU->GPU upload needed)
   // Limited size to conserve VRAM (~500MB at 1080p for 60 frames)
+  // Uses Map insertion order for O(1) LRU operations
   private gpuFrameCache: Map<number, GpuFrameCacheEntry> = new Map();
-  private gpuFrameCacheOrder: number[] = []; // LRU order
   private maxGpuCacheFrames = 60; // ~500MB at 1080p
 
   constructor(device: GPUDevice) {
@@ -61,18 +63,17 @@ export class ScrubbingCache {
         [width, height]
       );
 
-      // Add to cache
-      this.scrubbingCache.set(key, texture);
-      this.scrubbingCacheViews.set(key, texture.createView());
-      this.scrubbingCacheOrder.push(key);
+      // Add to cache (Map maintains insertion order)
+      this.scrubbingCache.set(key, { texture, view: texture.createView() });
 
-      // LRU eviction
-      while (this.scrubbingCacheOrder.length > this.maxScrubbingCacheFrames) {
-        const oldKey = this.scrubbingCacheOrder.shift()!;
-        const oldTexture = this.scrubbingCache.get(oldKey);
-        oldTexture?.destroy();
-        this.scrubbingCache.delete(oldKey);
-        this.scrubbingCacheViews.delete(oldKey);
+      // LRU eviction - evict oldest (first) entries
+      while (this.scrubbingCache.size > this.maxScrubbingCacheFrames) {
+        const oldestKey = this.scrubbingCache.keys().next().value;
+        if (oldestKey) {
+          const oldEntry = this.scrubbingCache.get(oldestKey);
+          oldEntry?.texture.destroy();
+          this.scrubbingCache.delete(oldestKey);
+        }
       }
     } catch {
       texture.destroy();
@@ -82,15 +83,12 @@ export class ScrubbingCache {
   // Get cached frame for scrubbing
   getCachedFrame(videoSrc: string, time: number): GPUTextureView | null {
     const key = `${videoSrc}:${time.toFixed(3)}`;
-    const view = this.scrubbingCacheViews.get(key);
-    if (view) {
-      // Move to end of LRU list
-      const idx = this.scrubbingCacheOrder.indexOf(key);
-      if (idx > -1) {
-        this.scrubbingCacheOrder.splice(idx, 1);
-        this.scrubbingCacheOrder.push(key);
-      }
-      return view;
+    const entry = this.scrubbingCache.get(key);
+    if (entry) {
+      // Move to end of Map (delete + re-add) for O(1) LRU update
+      this.scrubbingCache.delete(key);
+      this.scrubbingCache.set(key, entry);
+      return entry.view;
     }
     return null;
   }
@@ -107,20 +105,18 @@ export class ScrubbingCache {
   clearScrubbingCache(videoSrc?: string): void {
     if (videoSrc) {
       // Clear only frames from this video
-      const keysToRemove = this.scrubbingCacheOrder.filter(k => k.startsWith(videoSrc));
-      keysToRemove.forEach(key => {
-        const texture = this.scrubbingCache.get(key);
-        texture?.destroy();
-        this.scrubbingCache.delete(key);
-        this.scrubbingCacheViews.delete(key);
-      });
-      this.scrubbingCacheOrder = this.scrubbingCacheOrder.filter(k => !k.startsWith(videoSrc));
+      for (const [key, entry] of this.scrubbingCache) {
+        if (key.startsWith(videoSrc)) {
+          entry.texture.destroy();
+          this.scrubbingCache.delete(key);
+        }
+      }
     } else {
       // Clear all
-      this.scrubbingCache.forEach(t => t.destroy());
+      for (const entry of this.scrubbingCache.values()) {
+        entry.texture.destroy();
+      }
       this.scrubbingCache.clear();
-      this.scrubbingCacheViews.clear();
-      this.scrubbingCacheOrder = [];
     }
   }
 
@@ -206,12 +202,13 @@ export class ScrubbingCache {
     if (this.compositeCache.has(key)) return;
 
     this.compositeCache.set(key, imageData);
-    this.compositeCacheOrder.push(key);
 
-    // Evict old frames if over limit
-    while (this.compositeCacheOrder.length > this.maxCompositeCacheFrames) {
-      const oldKey = this.compositeCacheOrder.shift()!;
-      this.compositeCache.delete(oldKey);
+    // Evict oldest frames if over limit
+    while (this.compositeCache.size > this.maxCompositeCacheFrames) {
+      const oldestKey = this.compositeCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.compositeCache.delete(oldestKey);
+      }
     }
   }
 
@@ -221,12 +218,9 @@ export class ScrubbingCache {
     const imageData = this.compositeCache.get(key);
 
     if (imageData) {
-      // Move to end of LRU order
-      const idx = this.compositeCacheOrder.indexOf(key);
-      if (idx > -1) {
-        this.compositeCacheOrder.splice(idx, 1);
-        this.compositeCacheOrder.push(key);
-      }
+      // Move to end of Map for O(1) LRU update
+      this.compositeCache.delete(key);
+      this.compositeCache.set(key, imageData);
       return imageData;
     }
     return null;
@@ -252,12 +246,9 @@ export class ScrubbingCache {
     const key = this.quantizeTime(time);
     const entry = this.gpuFrameCache.get(key);
     if (entry) {
-      // Update LRU order
-      const idx = this.gpuFrameCacheOrder.indexOf(key);
-      if (idx > -1) {
-        this.gpuFrameCacheOrder.splice(idx, 1);
-        this.gpuFrameCacheOrder.push(key);
-      }
+      // Move to end of Map for O(1) LRU update
+      this.gpuFrameCache.delete(key);
+      this.gpuFrameCache.set(key, entry);
       return entry;
     }
     return null;
@@ -267,30 +258,29 @@ export class ScrubbingCache {
   addToGpuCache(time: number, entry: GpuFrameCacheEntry): void {
     const key = this.quantizeTime(time);
     this.gpuFrameCache.set(key, entry);
-    this.gpuFrameCacheOrder.push(key);
 
     // Evict oldest GPU cached frames if over limit
-    while (this.gpuFrameCacheOrder.length > this.maxGpuCacheFrames) {
-      const oldKey = this.gpuFrameCacheOrder.shift()!;
-      const oldEntry = this.gpuFrameCache.get(oldKey);
-      oldEntry?.texture.destroy();
-      this.gpuFrameCache.delete(oldKey);
+    while (this.gpuFrameCache.size > this.maxGpuCacheFrames) {
+      const oldestKey = this.gpuFrameCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        const oldEntry = this.gpuFrameCache.get(oldestKey);
+        oldEntry?.texture.destroy();
+        this.gpuFrameCache.delete(oldestKey);
+      }
     }
   }
 
   // Clear composite cache
   clearCompositeCache(): void {
     this.compositeCache.clear();
-    this.compositeCacheOrder = [];
 
     // Clear GPU frame cache
     for (const entry of this.gpuFrameCache.values()) {
       entry.texture.destroy();
     }
     this.gpuFrameCache.clear();
-    this.gpuFrameCacheOrder = [];
 
-    console.log('[ScrubbingCache] Composite cache cleared');
+    log.debug('Composite cache cleared');
   }
 
   // Clear all caches
@@ -307,7 +297,7 @@ export class ScrubbingCache {
     this.lastFrameSizes.clear();
     this.lastCaptureTime.clear();
 
-    console.log('[ScrubbingCache] All caches cleared');
+    log.debug('All caches cleared');
   }
 
   destroy(): void {

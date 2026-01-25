@@ -1,11 +1,15 @@
 // Toolbar component - After Effects style menu bar
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Logger } from '../../services/logger';
+
+const log = Logger.create('Toolbar');
 import { useEngine } from '../../hooks/useEngine';
-import { useMixerStore } from '../../stores/mixerStore';
+import { useEngineStore } from '../../stores/engineStore';
+import { useTimelineStore } from '../../stores/timeline';
 import { useDockStore } from '../../stores/dockStore';
 import { PANEL_CONFIGS, type PanelType } from '../../types/dock';
-import { useSettingsStore, type PreviewQuality, type AutosaveInterval } from '../../stores/settingsStore';
+import { useSettingsStore, type PreviewQuality, type AutosaveInterval, type GPUPowerPreference } from '../../stores/settingsStore';
 import { useMIDI } from '../../hooks/useMIDI';
 import { SettingsDialog } from './SettingsDialog';
 import { SavedToast } from './SavedToast';
@@ -20,26 +24,22 @@ import {
   setupAutoSync,
 } from '../../services/projectSync';
 import { APP_VERSION } from '../../version';
+import { engine } from '../../engine/WebGPUEngine';
 
 type MenuId = 'file' | 'edit' | 'view' | 'output' | 'window' | 'info' | null;
 
 export function Toolbar() {
   const { isEngineReady, createOutputWindow } = useEngine();
-  const { setPlaying, outputWindows } = useMixerStore();
-
-  // Auto-start playback when engine is ready
-  useEffect(() => {
-    if (isEngineReady) {
-      setPlaying(true);
-    }
-  }, [isEngineReady, setPlaying]);
+  const { gpuInfo } = useEngineStore();
+  const { outputWindows } = useSettingsStore();
   const { resetLayout, isPanelTypeVisible, togglePanelType, saveLayoutAsDefault } = useDockStore();
   const { isSupported: midiSupported, isEnabled: midiEnabled, enableMIDI, disableMIDI, devices } = useMIDI();
   const {
     isSettingsOpen, openSettings, closeSettings,
     previewQuality, setPreviewQuality,
     autosaveEnabled, setAutosaveEnabled,
-    autosaveInterval, setAutosaveInterval
+    autosaveInterval, setAutosaveInterval,
+    gpuPowerPreference, setGpuPowerPreference
   } = useSettingsStore();
 
   const [openMenu, setOpenMenu] = useState<MenuId>(null);
@@ -52,7 +52,10 @@ export function Toolbar() {
   const [pendingProjectName, setPendingProjectName] = useState<string | null>(null);
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [showInfoDialog, setShowInfoDialog] = useState(false);
+  const [gpuMenuOpen, setGpuMenuOpen] = useState(false);
+  const [gpuSwitching, setGpuSwitching] = useState(false);
   const menuBarRef = useRef<HTMLDivElement>(null);
+  const gpuMenuRef = useRef<HTMLDivElement>(null);
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Update project name from service - check periodically for changes
@@ -210,11 +213,11 @@ export function Toolbar() {
     // Set up new timer if autosave is enabled and project is open
     if (autosaveEnabled && isProjectOpen) {
       const intervalMs = autosaveInterval * 60 * 1000; // Convert minutes to milliseconds
-      console.log(`[Autosave] Enabled with ${autosaveInterval} minute interval`);
+      log.info(`Autosave enabled with ${autosaveInterval} minute interval`);
 
       autosaveTimerRef.current = setInterval(async () => {
         if (projectFileService.isProjectOpen() && projectFileService.hasUnsavedChanges()) {
-          console.log('[Autosave] Creating backup and saving project...');
+          log.info('Autosave: Creating backup and saving project...');
           // Create backup before saving
           await projectFileService.createBackup();
           // Then save the project
@@ -328,10 +331,54 @@ export function Toolbar() {
   const handleNewOutput = useCallback(() => {
     const output = createOutputWindow(`Output ${Date.now()}`);
     if (output) {
-      console.log('Created output window:', output.id);
+      log.info('Created output window', { id: output.id });
     }
     setOpenMenu(null);
   }, [createOutputWindow]);
+
+  // Handle GPU preference change
+  const handleGpuPreferenceChange = useCallback(async (preference: GPUPowerPreference) => {
+    if (preference === gpuPowerPreference || gpuSwitching) return;
+
+    setGpuSwitching(true);
+    setGpuMenuOpen(false);
+
+    try {
+      // Update the setting first
+      setGpuPowerPreference(preference);
+
+      // Reinitialize the engine with new preference
+      const success = await engine.reinitializeWithPreference(preference);
+
+      if (success) {
+        // Update GPU info in mixer store
+        const newGpuInfo = engine.getGPUInfo();
+        useEngineStore.getState().setGpuInfo(newGpuInfo);
+        log.info('GPU preference changed', { preference, gpuInfo: newGpuInfo });
+      } else {
+        // Revert on failure
+        setGpuPowerPreference(gpuPowerPreference);
+        log.error('Failed to change GPU preference');
+      }
+    } catch (e) {
+      log.error('Error changing GPU preference', e);
+      setGpuPowerPreference(gpuPowerPreference);
+    } finally {
+      setGpuSwitching(false);
+    }
+  }, [gpuPowerPreference, gpuSwitching, setGpuPowerPreference]);
+
+  // Close GPU menu when clicking outside
+  useEffect(() => {
+    if (!gpuMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (gpuMenuRef.current && !gpuMenuRef.current.contains(e.target as Node)) {
+        setGpuMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [gpuMenuOpen]);
 
   const handleMenuClick = (menuId: MenuId) => {
     setOpenMenu(openMenu === menuId ? null : menuId);
@@ -551,7 +598,6 @@ export function Toolbar() {
               <div className="menu-submenu">
                 <span className="menu-label">Panels</span>
                 {(Object.keys(PANEL_CONFIGS) as PanelType[])
-                  .filter(type => type !== 'slots') // Hide slots panel
                   .map((type) => {
                     const config = PANEL_CONFIGS[type];
                     const isVisible = isPanelTypeVisible(type);
@@ -684,8 +730,51 @@ export function Toolbar() {
       {/* Status */}
       <div className="toolbar-section toolbar-right">
         <NativeHelperStatus />
-        <span className={`status ${isEngineReady ? 'ready' : 'loading'}`}>
-          {isEngineReady ? '● WebGPU Ready' : '○ Loading...'}
+
+        {/* GPU Preference Dropdown */}
+        <div className="gpu-selector" ref={gpuMenuRef}>
+          <button
+            className={`gpu-trigger ${gpuSwitching ? 'switching' : ''}`}
+            onClick={() => !gpuSwitching && setGpuMenuOpen(!gpuMenuOpen)}
+            disabled={gpuSwitching || !isEngineReady}
+            title={gpuSwitching ? 'Switching GPU...' : 'Select GPU preference'}
+          >
+            {gpuSwitching ? (
+              '⟳'
+            ) : gpuPowerPreference === 'high-performance' ? (
+              '⚡'
+            ) : (
+              '🔋'
+            )}
+          </button>
+          {gpuMenuOpen && (
+            <div className="gpu-dropdown">
+              <div className="gpu-dropdown-header">GPU Preference</div>
+              <button
+                className={`gpu-option ${gpuPowerPreference === 'high-performance' ? 'active' : ''}`}
+                onClick={() => handleGpuPreferenceChange('high-performance')}
+              >
+                <span className="gpu-icon">⚡</span>
+                <span className="gpu-label">High Performance</span>
+                <span className="gpu-desc">Dedicated GPU (dGPU)</span>
+              </button>
+              <button
+                className={`gpu-option ${gpuPowerPreference === 'low-power' ? 'active' : ''}`}
+                onClick={() => handleGpuPreferenceChange('low-power')}
+              >
+                <span className="gpu-icon">🔋</span>
+                <span className="gpu-label">Power Saving</span>
+                <span className="gpu-desc">Integrated GPU (iGPU)</span>
+              </button>
+              <div className="gpu-note">
+                Note: Browser may ignore preference
+              </div>
+            </div>
+          )}
+        </div>
+
+        <span className={`status ${isEngineReady ? 'ready' : 'loading'}`} title={gpuInfo?.description || ''}>
+          {isEngineReady ? `● WebGPU ${gpuInfo ? `(${gpuInfo.vendor})` : ''}` : '○ Loading...'}
         </span>
       </div>
 
