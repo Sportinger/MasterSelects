@@ -695,13 +695,33 @@ async function autoRelinkFromRawFolder(): Promise<void> {
     const handle = rawFiles.get(searchName);
 
     if (handle) {
-      try {
-        const fileObj = await handle.getFile();
+      // Try with retries - file handle may need a moment to be ready
+      let fileObj: File | undefined;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          fileObj = await handle.getFile();
+          break; // Success
+        } catch (e) {
+          if (attempt < 2) {
+            // Wait before retry
+            await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
+          } else {
+            log.warn(`Could not read file from Raw: ${file.name}`, e);
+          }
+        }
+      }
+
+      if (fileObj) {
         const url = URL.createObjectURL(fileObj);
 
         // Store handle for future access
         fileSystemService.storeFileHandle(file.id, handle);
-        await projectDB.storeHandle(`media_${file.id}`, handle);
+        try {
+          await projectDB.storeHandle(`media_${file.id}`, handle);
+        } catch (e) {
+          // IndexedDB may fail, but we can still use the file
+          log.debug(`Could not store handle in IndexedDB: ${file.name}`);
+        }
 
         // Update file entry
         updatedFiles[i] = {
@@ -713,8 +733,6 @@ async function autoRelinkFromRawFolder(): Promise<void> {
 
         relinkedCount++;
         log.debug(`Auto-relinked from Raw: ${file.name}`);
-      } catch (e) {
-        log.warn(`Could not read file from Raw: ${file.name}`, e);
       }
     } else {
       // Try to get from stored file handle in IndexedDB

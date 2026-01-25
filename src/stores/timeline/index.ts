@@ -378,13 +378,19 @@ export const useTimelineStore = create<TimelineStore>()(
         // Convert clips to serializable format (without DOM elements)
         const mediaStore = useMediaStore.getState();
         const serializableClips: SerializableClip[] = clips.map(clip => {
-          // Find the mediaFile ID by matching the file name in mediaStore
-          // For linked audio clips (name ends with "(Audio)"), strip the suffix to find the video file
-          let lookupName = clip.name;
-          if (clip.linkedClipId && clip.source?.type === 'audio' && lookupName.endsWith(' (Audio)')) {
-            lookupName = lookupName.replace(' (Audio)', '');
+          // Use existing mediaFileId if available, otherwise lookup by name
+          let resolvedMediaFileId = clip.source?.mediaFileId || '';
+
+          if (!resolvedMediaFileId && !clip.isComposition) {
+            // Fallback: Find the mediaFile ID by matching the file name in mediaStore
+            // For linked audio clips (name ends with "(Audio)"), strip the suffix to find the video file
+            let lookupName = clip.name;
+            if (clip.linkedClipId && clip.source?.type === 'audio' && lookupName.endsWith(' (Audio)')) {
+              lookupName = lookupName.replace(' (Audio)', '');
+            }
+            const mediaFile = mediaStore.files.find(f => f.name === lookupName);
+            resolvedMediaFileId = mediaFile?.id || '';
           }
-          const mediaFile = mediaStore.files.find(f => f.name === lookupName);
 
           // Get keyframes for this clip
           const keyframes = clipKeyframes.get(clip.id) || [];
@@ -393,7 +399,7 @@ export const useTimelineStore = create<TimelineStore>()(
             id: clip.id,
             trackId: clip.trackId,
             name: clip.name,
-            mediaFileId: clip.isComposition ? '' : (mediaFile?.id || ''), // Comp clips don't have media files
+            mediaFileId: clip.isComposition ? '' : resolvedMediaFileId, // Comp clips don't have media files
             startTime: clip.startTime,
             duration: clip.duration,
             inPoint: clip.inPoint,
