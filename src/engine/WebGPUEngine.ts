@@ -558,7 +558,7 @@ export class WebGPUEngine {
         hasNestedComps = true;
         const nc = data.layer.source.nestedComposition;
         const view = this.nestedCompRenderer!.preRender(
-          nc.compositionId, nc.layers, nc.width, nc.height, preRenderEncoder, this.sampler
+          nc.compositionId, nc.layers, nc.width, nc.height, preRenderEncoder, this.sampler, nc.currentTime
         );
         if (view) data.textureView = view;
       }

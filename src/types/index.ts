@@ -91,6 +91,7 @@ export interface NestedCompositionData {
   layers: Layer[];  // Layers from the nested composition to be pre-rendered
   width: number;
   height: number;
+  currentTime?: number;  // Current time for frame caching
 }
 
 // Text clip typography properties

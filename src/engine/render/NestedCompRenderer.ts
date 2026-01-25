@@ -35,6 +35,10 @@ export class NestedCompRenderer {
   // Texture pool for ping-pong buffers, keyed by "widthxheight"
   private texturePool: Map<string, PooledTexturePair[]> = new Map();
 
+  // Frame caching: track last render time to skip redundant re-renders
+  private lastRenderTime: Map<string, number> = new Map();
+  private lastLayerCount: Map<string, number> = new Map();
+
   constructor(
     device: GPUDevice,
     compositorPipeline: CompositorPipeline,
@@ -102,7 +106,8 @@ export class NestedCompRenderer {
     width: number,
     height: number,
     commandEncoder: GPUCommandEncoder,
-    sampler: GPUSampler
+    sampler: GPUSampler,
+    currentTime?: number
   ): GPUTextureView | null {
     // Get or create output texture
     let compTexture = this.nestedCompTextures.get(compositionId);
@@ -117,6 +122,21 @@ export class NestedCompRenderer {
       compTexture = { texture, view: texture.createView() };
       this.nestedCompTextures.set(compositionId, compTexture);
     }
+
+    // Frame caching: skip re-render if same time and layer count
+    // Quantize time to ~60fps frames to avoid floating point issues
+    const quantizedTime = currentTime !== undefined ? Math.round(currentTime * 60) : -1;
+    const lastTime = this.lastRenderTime.get(compositionId);
+    const lastCount = this.lastLayerCount.get(compositionId);
+
+    if (quantizedTime >= 0 && lastTime === quantizedTime && lastCount === nestedLayers.length) {
+      // Same frame, return cached texture
+      return compTexture.view;
+    }
+
+    // Update cache tracking
+    this.lastRenderTime.set(compositionId, quantizedTime);
+    this.lastLayerCount.set(compositionId, nestedLayers.length);
 
     // Acquire ping-pong textures from pool
     const texturePair = this.acquireTexturePair(width, height);
@@ -375,7 +395,24 @@ export class NestedCompRenderer {
     this.device.queue.submit([commandEncoder.finish()]);
   }
 
+  /**
+   * Invalidate frame cache for a specific composition or all
+   */
+  invalidateCache(compositionId?: string): void {
+    if (compositionId) {
+      this.lastRenderTime.delete(compositionId);
+      this.lastLayerCount.delete(compositionId);
+    } else {
+      this.lastRenderTime.clear();
+      this.lastLayerCount.clear();
+    }
+  }
+
   destroy(): void {
+    // Clear frame cache
+    this.lastRenderTime.clear();
+    this.lastLayerCount.clear();
+
     // Destroy nested comp textures
     for (const tex of this.nestedCompTextures.values()) {
       tex.texture.destroy();

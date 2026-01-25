@@ -159,6 +159,7 @@ export class LayerBuilderService {
       layers: nestedLayers,
       width: compWidth,
       height: compHeight,
+      currentTime: ctx.playheadPosition,
     };
 
     const layer: Layer = {
