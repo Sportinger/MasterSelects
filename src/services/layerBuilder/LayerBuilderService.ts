@@ -47,10 +47,11 @@ export class LayerBuilderService {
   private activeAudioProxies = new Map<string, HTMLAudioElement>();
 
   /**
-   * Invalidate the layer cache
+   * Invalidate all caches (layer cache and transform cache)
    */
   invalidateCache(): void {
     this.layerCache.invalidate();
+    this.transformCache.clear();
   }
 
   /**
