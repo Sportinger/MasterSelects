@@ -99,9 +99,9 @@ export class WebCodecsPlayer {
   private exportFrameBuffer: Map<number, VideoFrame> = new Map(); // CTS (μs) -> VideoFrame
   private exportFramesCts: number[] = []; // Sorted CTS values for index-based lookup
   private exportCurrentIndex = 0; // Current frame index in export
-  private exportStartCts = 0; // First frame CTS for this export
-  private exportEndCts = 0; // Last frame CTS for this export
-  private exportAheadCount = 60; // Decode this many frames ahead
+  private _exportStartCts = 0; // First frame CTS for this export
+  private _exportEndCts = 0; // Last frame CTS for this export
+  private _exportAheadCount = 60; // Decode this many frames ahead
 
   constructor(options: WebCodecsPlayerOptions = {}) {
     this.loop = options.loop ?? true;
@@ -1062,7 +1062,7 @@ export class WebCodecsPlayer {
     this.exportFramesCts = Array.from(this.exportFrameBuffer.keys()).sort((a, b) => a - b);
 
     // Store the start CTS for reference
-    this.exportStartCts = startTimeSeconds * 1_000_000;
+    this._exportStartCts = startTimeSeconds * 1_000_000;
 
     // Set currentFrame to first frame
     if (this.exportFramesCts.length > 0) {
