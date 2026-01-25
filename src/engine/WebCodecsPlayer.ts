@@ -333,18 +333,17 @@ export class WebCodecsPlayer {
     return new Promise((resolve, reject) => {
       console.log(`[WebCodecs] Parsing MP4 (${(buffer.byteLength / 1024 / 1024).toFixed(1)}MB)...`);
 
-      // Timeout if mp4box fails to parse (e.g., due to unusual metadata boxes)
-      // Increased to 10 seconds for larger files
+      // Reduced timeout - we only wait for codec info now, not all samples
       const timeout = setTimeout(() => {
         reject(new Error('MP4 parsing timeout - file may have unsupported metadata'));
-      }, 10000);
+      }, 5000);
 
       this.mp4File = MP4Box.createFile();
       const mp4File = this.mp4File!;
+      let resolved = false;
 
       mp4File.onReady = (info) => {
         console.log(`[WebCodecs] MP4 onReady: ${info.videoTracks.length} video tracks`);
-        // Don't clear timeout here - wait for onSamples to actually deliver frames
         const videoTrack = info.videoTracks[0];
         if (!videoTrack) {
           clearTimeout(timeout);
@@ -413,28 +412,31 @@ export class WebCodecsPlayer {
 
           console.log(`[WebCodecs] Codec ${codec} supported, config:`, support.config);
           this.initDecoder();
+
+          // RESOLVE IMMEDIATELY after decoder is configured - don't wait for samples!
+          // Samples will continue loading in background
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeout);
+            console.log(`[WebCodecs] Decoder configured: ${this.width}x${this.height} @ ${this.frameRate.toFixed(1)}fps (samples loading in background)`);
+            resolve();
+          }
         });
       };
 
       mp4File.onSamples = (_trackId, _ref, samples) => {
         this.samples.push(...samples);
 
-        // Signal ready after first batch of samples AND decoder is initialized
+        // Mark ready when we have samples and decoder (for playback mode)
         if (!this.ready && this.samples.length > 0 && this.decoderInitialized) {
           this.ready = true;
-          clearTimeout(timeout);
-          console.log(`[WebCodecs] READY: ${this.width}x${this.height} @ ${this.frameRate.toFixed(1)}fps, ${this.samples.length} samples`);
+          console.log(`[WebCodecs] READY: ${this.samples.length} samples loaded so far`);
 
           this.decodeFirstFrame();
           this.onReady?.(this.width, this.height);
-          resolve();
-        } else if (!this.ready && this.samples.length > 0) {
-          // Samples received but decoder not ready yet - store resolve for initDecoder
+        } else if (!this.ready && this.samples.length > 0 && !this.decoderInitialized) {
+          // Samples received but decoder not ready yet
           this.pendingDecodeFirstFrame = true;
-          this.loadResolve = () => {
-            clearTimeout(timeout);
-            resolve();
-          };
         }
       };
 
@@ -934,7 +936,22 @@ export class WebCodecsPlayer {
       return;
     }
 
-    if (!this.videoTrack || this.samples.length === 0 || !this.decoder) {
+    // Wait for samples to load (lazy loading means they might not be ready yet)
+    if (this.samples.length === 0) {
+      console.log('[WebCodecs Export] Waiting for samples to load...');
+      const maxWaitMs = 10000; // 10 second max wait
+      const startWait = performance.now();
+      while (this.samples.length === 0 && performance.now() - startWait < maxWaitMs) {
+        await new Promise(r => setTimeout(r, 50));
+      }
+      if (this.samples.length === 0) {
+        console.error('[WebCodecs Export] Timeout waiting for samples');
+        return;
+      }
+      console.log(`[WebCodecs Export] Samples ready: ${this.samples.length} (waited ${(performance.now() - startWait).toFixed(0)}ms)`);
+    }
+
+    if (!this.videoTrack || !this.decoder) {
       return;
     }
 

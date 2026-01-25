@@ -118,18 +118,18 @@ export class ParallelDecodeManager {
   }
 
   /**
-   * Initialize a single clip decoder
+   * Initialize a single clip decoder - LAZY MODE
+   * Resolves immediately after getting codec config, samples extracted on-demand
    */
   private async initializeClip(clipInfo: ClipInfo): Promise<void> {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error(`MP4 parsing timeout for clip "${clipInfo.clipName}"`));
-      }, 15000);
+      }, 5000); // Reduced - we only wait for codec info now
 
       const mp4File = MP4Box.createFile() as MP4File;
-      let samples: Sample[] = [];
       let videoTrack: MP4VideoTrack | null = null;
-      let codecConfig: VideoDecoderConfig | null = null;
+      let resolved = false;
 
       mp4File.onReady = (info) => {
         videoTrack = info.videoTracks[0];
@@ -158,7 +158,7 @@ export class ParallelDecodeManager {
           console.warn(`[ParallelDecode] Failed to extract codec description for ${clipInfo.clipName}:`, e);
         }
 
-        codecConfig = {
+        const codecConfig: VideoDecoderConfig = {
           codec,
           codedWidth: videoTrack.video.width,
           codedHeight: videoTrack.video.height,
@@ -167,62 +167,67 @@ export class ParallelDecodeManager {
           description,
         };
 
+        // Create VideoDecoder immediately (don't wait for samples)
+        const decoder = new VideoDecoder({
+          output: (frame) => {
+            const clipDecoder = this.clipDecoders.get(clipInfo.clipId);
+            if (clipDecoder) {
+              this.handleDecodedFrame(clipDecoder, frame);
+            } else {
+              frame.close();
+            }
+          },
+          error: (e) => {
+            console.error(`[ParallelDecode] Decoder error for ${clipInfo.clipName}:`, e);
+          },
+        });
+
+        decoder.configure(codecConfig);
+
+        const clipDecoder: ClipDecoder = {
+          clipId: clipInfo.clipId,
+          clipName: clipInfo.clipName,
+          decoder,
+          samples: [], // Start empty - filled lazily by onSamples
+          sampleIndex: 0,
+          videoTrack,
+          codecConfig,
+          frameBuffer: new Map(),
+          sortedTimestamps: [],
+          oldestTimestamp: Infinity,
+          newestTimestamp: -Infinity,
+          lastDecodedTimestamp: 0,
+          clipInfo,
+          isDecoding: false,
+          pendingDecode: null,
+        };
+
+        this.clipDecoders.set(clipInfo.clipId, clipDecoder);
+
+        // Start sample extraction (non-blocking)
         mp4File.setExtractionOptions(videoTrack.id, null, { nbSamples: Infinity });
         mp4File.start();
+
+        // RESOLVE IMMEDIATELY - don't wait for samples!
+        clearTimeout(timeout);
+        console.log(`[ParallelDecode] Clip "${clipInfo.clipName}" initialized: ${videoTrack.video.width}x${videoTrack.video.height} (samples loading in background)`);
+        resolved = true;
+        resolve();
       };
 
       mp4File.onSamples = (_trackId, _ref, newSamples) => {
-        samples.push(...newSamples);
-
-        // Once we have samples, create the decoder
-        if (samples.length > 0 && videoTrack && codecConfig && !this.clipDecoders.has(clipInfo.clipId)) {
-          clearTimeout(timeout);
-
-          // Create VideoDecoder for this clip
-          const decoder = new VideoDecoder({
-            output: (frame) => {
-              const clipDecoder = this.clipDecoders.get(clipInfo.clipId);
-              if (clipDecoder) {
-                this.handleDecodedFrame(clipDecoder, frame);
-              } else {
-                frame.close();
-              }
-            },
-            error: (e) => {
-              console.error(`[ParallelDecode] Decoder error for ${clipInfo.clipName}:`, e);
-            },
-          });
-
-          decoder.configure(codecConfig);
-
-          const clipDecoder: ClipDecoder = {
-            clipId: clipInfo.clipId,
-            clipName: clipInfo.clipName,
-            decoder,
-            samples,
-            sampleIndex: 0,
-            videoTrack,
-            codecConfig,
-            frameBuffer: new Map(),
-            sortedTimestamps: [],
-            oldestTimestamp: Infinity,
-            newestTimestamp: -Infinity,
-            lastDecodedTimestamp: 0,
-            clipInfo,
-            isDecoding: false,
-            pendingDecode: null,
-          };
-
-          this.clipDecoders.set(clipInfo.clipId, clipDecoder);
-
-          console.log(`[ParallelDecode] Clip "${clipInfo.clipName}" ready: ${videoTrack.video.width}x${videoTrack.video.height}, ${samples.length} samples`);
-          resolve();
+        // Samples arrive asynchronously - add them to the decoder's sample list
+        const clipDecoder = this.clipDecoders.get(clipInfo.clipId);
+        if (clipDecoder) {
+          clipDecoder.samples.push(...newSamples);
         }
       };
 
       mp4File.onError = (e) => {
         clearTimeout(timeout);
-        reject(new Error(`MP4 parsing error for "${clipInfo.clipName}": ${e}`));
+        if (!resolved) {
+          reject(new Error(`MP4 parsing error for "${clipInfo.clipName}": ${e}`));
+        }
       };
 
       // Feed buffer to MP4Box
@@ -352,6 +357,20 @@ export class ParallelDecodeManager {
       // Skip if timeline time is outside this clip's range (handles nested clips too)
       if (!this.isTimeInClipRange(clipInfo, timelineTime)) {
         continue;
+      }
+
+      // Wait for samples if lazy loading hasn't delivered them yet
+      if (clipDecoder.samples.length === 0) {
+        const maxWaitMs = 5000; // 5 second max wait per clip
+        const startWait = performance.now();
+        while (clipDecoder.samples.length === 0 && performance.now() - startWait < maxWaitMs) {
+          await new Promise(r => setTimeout(r, 20));
+        }
+        if (clipDecoder.samples.length === 0) {
+          console.warn(`[ParallelDecode] "${clipInfo.clipName}" has no samples after waiting`);
+          continue;
+        }
+        console.log(`[ParallelDecode] "${clipInfo.clipName}" samples ready: ${clipDecoder.samples.length} (waited ${(performance.now() - startWait).toFixed(0)}ms)`);
       }
 
       // Calculate target source time and sample index
