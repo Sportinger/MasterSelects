@@ -112,3 +112,23 @@ export interface GpuFrameCacheEntry {
   view: GPUTextureView;
   bindGroup: GPUBindGroup;
 }
+
+// === REFACTOR: New interfaces for module communication ===
+
+export interface RenderTargets {
+  pingTexture: GPUTexture | null;
+  pongTexture: GPUTexture | null;
+  pingView: GPUTextureView | null;
+  pongView: GPUTextureView | null;
+  independentPingTexture: GPUTexture | null;
+  independentPongTexture: GPUTexture | null;
+  independentPingView: GPUTextureView | null;
+  independentPongView: GPUTextureView | null;
+  blackTexture: GPUTexture | null;
+}
+
+export interface CompositeResult {
+  finalView: GPUTextureView;
+  usedPing: boolean;
+  layerCount: number;
+}
