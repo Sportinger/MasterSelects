@@ -788,8 +788,9 @@ class ProjectFileService {
   /**
    * Copy a file to the Raw/ folder in the project
    * Returns the file handle and relative path if successful
+   * If file with same name and size already exists, returns existing file instead of copying
    */
-  async copyToRawFolder(file: File, fileName?: string): Promise<{ handle: FileSystemFileHandle; relativePath: string } | null> {
+  async copyToRawFolder(file: File, fileName?: string): Promise<{ handle: FileSystemFileHandle; relativePath: string; alreadyExisted: boolean } | null> {
     if (!this.projectHandle) {
       console.warn('[ProjectFile] No project open, cannot copy to Raw folder');
       return null;
@@ -802,13 +803,28 @@ class ProjectFileService {
       // Use provided fileName or original file name
       const targetName = fileName || file.name;
 
+      // Check if file already exists with same name and size
+      try {
+        const existingHandle = await rawFolder.getFileHandle(targetName, { create: false });
+        const existingFile = await existingHandle.getFile();
+
+        if (existingFile.size === file.size) {
+          // File with same name and size already exists - reuse it
+          const relativePath = `${PROJECT_FOLDERS.RAW}/${targetName}`;
+          console.log(`[ProjectFile] File already exists in Raw folder with same size: ${relativePath}`);
+          return { handle: existingHandle, relativePath, alreadyExisted: true };
+        }
+      } catch {
+        // File doesn't exist, will create new one
+      }
+
       // Check if file already exists - if so, add suffix
       let finalName = targetName;
       let counter = 1;
       while (true) {
         try {
           await rawFolder.getFileHandle(finalName, { create: false });
-          // File exists, try with suffix
+          // File exists (but different size), try with suffix
           const ext = targetName.lastIndexOf('.');
           if (ext > 0) {
             finalName = `${targetName.slice(0, ext)}_${counter}${targetName.slice(ext)}`;
@@ -831,7 +847,7 @@ class ProjectFileService {
       const relativePath = `${PROJECT_FOLDERS.RAW}/${finalName}`;
       console.log(`[ProjectFile] Copied ${file.name} to ${relativePath} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
 
-      return { handle: fileHandle, relativePath };
+      return { handle: fileHandle, relativePath, alreadyExisted: false };
     } catch (e) {
       console.error('[ProjectFile] Failed to copy file to Raw folder:', e);
       return null;
