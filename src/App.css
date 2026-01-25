@@ -4399,6 +4399,52 @@ input[type="checkbox"] {
   transition: width 0.1s ease-out;
 }
 
+/* View dropdown */
+.view-dropdown {
+  position: relative;
+}
+
+.view-dropdown .btn {
+  display: flex;
+  align-items: center;
+}
+
+.view-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 4px 0;
+  min-width: 160px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.view-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+  transition: background 0.1s;
+}
+
+.view-dropdown-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.view-dropdown-item input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent-color);
+  cursor: pointer;
+}
+
 .btn-danger {
   background: var(--danger);
   color: white;

@@ -45,7 +45,9 @@ function TimelineControlsComponent({
 }: TimelineControlsProps) {
   const [isEditingDuration, setIsEditingDuration] = useState(false);
   const [durationInputValue, setDurationInputValue] = useState('');
+  const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
   const durationInputRef = useRef<HTMLInputElement>(null);
+  const viewDropdownRef = useRef<HTMLDivElement>(null);
 
   // Focus input when editing starts
   useEffect(() => {
@@ -54,6 +56,19 @@ function TimelineControlsComponent({
       durationInputRef.current.select();
     }
   }, [isEditingDuration]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (viewDropdownRef.current && !viewDropdownRef.current.contains(e.target as Node)) {
+        setViewDropdownOpen(false);
+      }
+    };
+    if (viewDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [viewDropdownOpen]);
 
   const handleDurationClick = () => {
     setDurationInputValue(formatTime(duration));
@@ -192,62 +207,54 @@ function TimelineControlsComponent({
         >
           RAM {ramPreviewEnabled ? 'ON' : 'OFF'}
         </button>
-        <button
-          className={`btn btn-sm ${proxyEnabled ? 'btn-active' : ''}`}
-          onClick={onToggleProxy}
-          title={
-            proxyEnabled
-              ? 'Proxy enabled - using optimized frames'
-              : 'Proxy disabled - using original video'
-          }
-        >
-          {currentlyGeneratingProxyId ? (
-            <>
-              {'\u23F3'} Generating...
-            </>
-          ) : (
-            <>
-              {proxyEnabled ? '\uD83C\uDFAC' : '\uD83C\uDFA5'} Proxy{' '}
-              {proxyEnabled ? 'On' : 'Off'}
-              {mediaFilesWithProxy > 0 && (
-                <span className="proxy-count">({mediaFilesWithProxy})</span>
-              )}
-            </>
+        <div className="view-dropdown" ref={viewDropdownRef}>
+          <button
+            className={`btn btn-sm ${viewDropdownOpen ? 'btn-active' : ''}`}
+            onClick={() => setViewDropdownOpen(!viewDropdownOpen)}
+            title="View options"
+          >
+            View
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 4 }}>
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          {viewDropdownOpen && (
+            <div className="view-dropdown-menu">
+              <label
+                className="view-dropdown-item"
+                onClick={(e) => { e.preventDefault(); onToggleProxy(); }}
+              >
+                <input type="checkbox" checked={proxyEnabled} readOnly />
+                <span>
+                  Proxy
+                  {currentlyGeneratingProxyId && ' (Generating...)'}
+                  {!currentlyGeneratingProxyId && mediaFilesWithProxy > 0 && ` (${mediaFilesWithProxy})`}
+                </span>
+              </label>
+              <label
+                className="view-dropdown-item"
+                onClick={(e) => { e.preventDefault(); onToggleThumbnails(); }}
+              >
+                <input type="checkbox" checked={thumbnailsEnabled} readOnly />
+                <span>Thumbnails</span>
+              </label>
+              <label
+                className="view-dropdown-item"
+                onClick={(e) => { e.preventDefault(); onToggleWaveforms(); }}
+              >
+                <input type="checkbox" checked={waveformsEnabled} readOnly />
+                <span>Waveforms</span>
+              </label>
+              <label
+                className="view-dropdown-item"
+                onClick={(e) => { e.preventDefault(); onToggleTranscriptMarkers(); }}
+              >
+                <input type="checkbox" checked={showTranscriptMarkers} readOnly />
+                <span>Transcript Markers</span>
+              </label>
+            </div>
           )}
-        </button>
-        <button
-          className={`btn btn-sm ${showTranscriptMarkers ? 'btn-active' : ''}`}
-          onClick={onToggleTranscriptMarkers}
-          title={
-            showTranscriptMarkers
-              ? 'Transcript markers visible - click to hide'
-              : 'Transcript markers hidden - click to show'
-          }
-        >
-          T {showTranscriptMarkers ? 'On' : 'Off'}
-        </button>
-        <button
-          className={`btn btn-sm ${thumbnailsEnabled ? 'btn-active' : ''}`}
-          onClick={onToggleThumbnails}
-          title={
-            thumbnailsEnabled
-              ? 'Thumbnails enabled - generating thumbnails for clips'
-              : 'Thumbnails disabled - improves performance for long videos'
-          }
-        >
-          Thumb {thumbnailsEnabled ? 'On' : 'Off'}
-        </button>
-        <button
-          className={`btn btn-sm ${waveformsEnabled ? 'btn-active' : ''}`}
-          onClick={onToggleWaveforms}
-          title={
-            waveformsEnabled
-              ? 'Waveforms enabled - generating audio waveforms'
-              : 'Waveforms disabled - improves performance for long audio'
-          }
-        >
-          Wave {waveformsEnabled ? 'On' : 'Off'}
-        </button>
+        </div>
       </div>
       <div className="timeline-tracks-controls">
         <button className="btn btn-sm" onClick={onAddVideoTrack}>
