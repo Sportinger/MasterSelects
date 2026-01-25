@@ -124,6 +124,15 @@ export function useTimelineKeyboard({
         return;
       }
 
+      // M: add marker at playhead
+      if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        if (addMarker) {
+          addMarker(playheadPosition);
+        }
+        return;
+      }
+
       // Delete/Backspace: remove selected keyframes first, then clips
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
@@ -239,5 +248,6 @@ export function useTimelineKeyboard({
     playheadPosition,
     duration,
     setPlayheadPosition,
+    addMarker,
   ]);
 }

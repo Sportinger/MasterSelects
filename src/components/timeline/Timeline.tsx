@@ -441,6 +441,7 @@ export function Timeline() {
     playheadPosition,
     duration,
     setPlayheadPosition,
+    addMarker,
   });
 
   // Auto-start RAM preview and proxy generation - extracted to hook
