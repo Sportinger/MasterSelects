@@ -376,31 +376,37 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
               continue; // Skip this clip if seek failed or cancelled
             }
 
-            // Add to layers
+            // Add to layers (with defensive defaults for transform properties)
+            const pos = clip.transform?.position ?? { x: 0, y: 0, z: 0 };
+            const scl = clip.transform?.scale ?? { x: 1, y: 1 };
+            const rot = clip.transform?.rotation ?? { x: 0, y: 0, z: 0 };
             layers.push({
               id: clip.id,
               name: clip.name,
               visible: true,
-              opacity: clip.transform.opacity,
-              blendMode: clip.transform.blendMode,
+              opacity: clip.transform?.opacity ?? 1,
+              blendMode: clip.transform?.blendMode ?? 'normal',
               source: { type: 'video', videoElement: video },
               effects: [],
-              position: { x: clip.transform.position.x, y: clip.transform.position.y, z: clip.transform.position.z },
-              scale: { x: clip.transform.scale.x, y: clip.transform.scale.y },
-              rotation: { x: clip.transform.rotation.x * (Math.PI / 180), y: clip.transform.rotation.y * (Math.PI / 180), z: clip.transform.rotation.z * (Math.PI / 180) },
+              position: { x: pos.x, y: pos.y, z: pos.z },
+              scale: { x: scl.x, y: scl.y },
+              rotation: { x: rot.x * (Math.PI / 180), y: rot.y * (Math.PI / 180), z: rot.z * (Math.PI / 180) },
             });
           } else if (clip.source?.type === 'image' && clip.source.imageElement) {
+            const imgPos = clip.transform?.position ?? { x: 0, y: 0, z: 0 };
+            const imgScl = clip.transform?.scale ?? { x: 1, y: 1 };
+            const imgRot = clip.transform?.rotation ?? { x: 0, y: 0, z: 0 };
             layers.push({
               id: clip.id,
               name: clip.name,
               visible: true,
-              opacity: clip.transform.opacity,
-              blendMode: clip.transform.blendMode,
+              opacity: clip.transform?.opacity ?? 1,
+              blendMode: clip.transform?.blendMode ?? 'normal',
               source: { type: 'image', imageElement: clip.source.imageElement },
               effects: [],
-              position: { x: clip.transform.position.x, y: clip.transform.position.y, z: clip.transform.position.z },
-              scale: { x: clip.transform.scale.x, y: clip.transform.scale.y },
-              rotation: { x: clip.transform.rotation.x * (Math.PI / 180), y: clip.transform.rotation.y * (Math.PI / 180), z: clip.transform.rotation.z * (Math.PI / 180) },
+              position: { x: imgPos.x, y: imgPos.y, z: imgPos.z },
+              scale: { x: imgScl.x, y: imgScl.y },
+              rotation: { x: imgRot.x * (Math.PI / 180), y: imgRot.y * (Math.PI / 180), z: imgRot.z * (Math.PI / 180) },
             });
           }
         }
