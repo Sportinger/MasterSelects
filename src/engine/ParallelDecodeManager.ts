@@ -473,8 +473,25 @@ export class ParallelDecodeManager {
         // Decode in larger batches for throughput
         framesToDecode = Math.min(framesToDecode, DECODE_BATCH_SIZE);
 
+        // Always ensure we start from a keyframe (decoder may have been flushed)
+        let startIndex = clipDecoder.sampleIndex;
+        const currentSample = clipDecoder.samples[startIndex];
+
+        // If current sample is not a keyframe, find the previous keyframe
+        if (currentSample && !currentSample.is_sync) {
+          for (let i = startIndex - 1; i >= 0; i--) {
+            if (clipDecoder.samples[i].is_sync) {
+              startIndex = i;
+              log.debug(`${clipDecoder.clipName}: backed up to keyframe at sample ${i}`);
+              break;
+            }
+          }
+        }
+
         // Check if we need to seek (target is far ahead of current position)
-        if (targetSampleIndex > clipDecoder.sampleIndex + 30) {
+        const needsSeek = targetSampleIndex > startIndex + 30;
+
+        if (needsSeek) {
           // Need to seek - find nearest keyframe before target
           let keyframeIndex = targetSampleIndex;
           for (let i = targetSampleIndex; i >= 0; i--) {
@@ -483,17 +500,7 @@ export class ParallelDecodeManager {
               break;
             }
           }
-
-          // Reset decoder and decode from keyframe
-          await clipDecoder.decoder.flush(); // Flush before reset
-          clipDecoder.decoder.reset();
-          // Use software decoding for reliable export
-          const exportConfig: VideoDecoderConfig = {
-            ...clipDecoder.codecConfig,
-            hardwareAcceleration: 'prefer-software',
-          };
-          clipDecoder.decoder.configure(exportConfig);
-          clipDecoder.sampleIndex = keyframeIndex;
+          startIndex = keyframeIndex;
 
           // Clear buffer since we're seeking - also reset sorted list and bounds
           for (const [, decodedFrame] of clipDecoder.frameBuffer) {
@@ -504,6 +511,19 @@ export class ParallelDecodeManager {
           clipDecoder.oldestTimestamp = Infinity;
           clipDecoder.newestTimestamp = -Infinity;
         }
+
+        // Reset and reconfigure decoder before decoding (ensures clean state after any flush)
+        clipDecoder.decoder.reset();
+        const exportConfig: VideoDecoderConfig = {
+          ...clipDecoder.codecConfig,
+          hardwareAcceleration: 'prefer-software',
+        };
+        clipDecoder.decoder.configure(exportConfig);
+        clipDecoder.sampleIndex = startIndex;
+
+        // Recalculate frames to decode after potential backup to keyframe
+        const newEndIndex = Math.min(startIndex + DECODE_BATCH_SIZE, clipDecoder.samples.length);
+        framesToDecode = newEndIndex - startIndex;
 
         // Queue frames for decode (non-blocking - output callback handles results)
         for (let i = 0; i < framesToDecode && clipDecoder.sampleIndex < clipDecoder.samples.length; i++) {

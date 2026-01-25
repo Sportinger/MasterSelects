@@ -55,13 +55,21 @@ export function isMediaFile(file: File): boolean {
 }
 
 /**
- * Quick duration check for dragged video files
- * Returns null if not a video or duration cannot be determined
+ * Video metadata result including duration and audio presence
  */
-export async function getVideoDurationQuick(
+export interface VideoMetadata {
+  duration: number | null;
+  hasAudio: boolean;
+}
+
+/**
+ * Quick metadata check for dragged video files
+ * Returns duration and whether the video has audio tracks
+ */
+export async function getVideoMetadataQuick(
   file: File,
   timeoutMs = DURATION_CHECK_TIMEOUT
-): Promise<number | null> {
+): Promise<VideoMetadata | null> {
   if (!isVideoFile(file)) return null;
 
   return new Promise((resolve) => {
@@ -81,8 +89,22 @@ export async function getVideoDurationQuick(
     video.onloadedmetadata = () => {
       clearTimeout(timeoutId);
       const dur = video.duration;
+
+      // Check for audio tracks - use AudioTracks API if available
+      // Falls back to assuming audio exists for broader compatibility
+      let hasAudio = true; // Default to true for safety
+
+      // Modern browsers with AudioTracks API
+      if ('audioTracks' in video) {
+        const audioTracks = (video as HTMLVideoElement & { audioTracks?: { length: number } }).audioTracks;
+        hasAudio = (audioTracks?.length ?? 0) > 0;
+      }
+
       cleanup();
-      resolve(isFinite(dur) ? dur : null);
+      resolve({
+        duration: isFinite(dur) ? dur : null,
+        hasAudio,
+      });
     };
 
     video.onerror = () => {
@@ -93,4 +115,16 @@ export async function getVideoDurationQuick(
 
     video.src = URL.createObjectURL(file);
   });
+}
+
+/**
+ * Quick duration check for dragged video files
+ * Returns null if not a video or duration cannot be determined
+ */
+export async function getVideoDurationQuick(
+  file: File,
+  timeoutMs = DURATION_CHECK_TIMEOUT
+): Promise<number | null> {
+  const metadata = await getVideoMetadataQuick(file, timeoutMs);
+  return metadata?.duration ?? null;
 }
