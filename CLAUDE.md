@@ -81,20 +81,36 @@ npm run build                 # Production build
 npm run lint                  # ESLint check
 ```
 
-## Native Helper
+## Native Helpers
 
-Der Native Helper ist ein Rust-basierter Server für schnelles Video-Decoding via FFmpeg.
+Native helpers for video decoding and YouTube downloads. Located in `tools/helpers/`.
+
+**Platform-specific:**
+- `tools/helpers/win/` - Windows: YouTube download only (no FFmpeg needed)
+- `tools/helpers/linux/` - Linux: Full FFmpeg decoder
+- `tools/helpers/mac/` - macOS: Full FFmpeg decoder
 
 ```bash
-# Standard (wenn FFmpeg < 8.0):
-cd masterselects-helper && cargo run --release
+# Windows (YouTube downloads):
+cd tools/helpers/win && cargo run --release
 
-# Arch Linux (FFmpeg 8.0+ entfernt avfft.h, nutze ffmpeg4.4):
-cd masterselects-helper && \
+# Linux (FFmpeg decoding):
+cd tools/helpers/linux && cargo run --release
+
+# Linux with FFmpeg 8.0+ (Arch Linux - use ffmpeg4.4):
+cd tools/helpers/linux && \
 FFMPEG_INCLUDE_DIR=/usr/include/ffmpeg4.4 \
 FFMPEG_LIB_DIR=/usr/lib/ffmpeg4.4 \
 PKG_CONFIG_PATH=/usr/lib/ffmpeg4.4/pkgconfig \
 cargo run --release
+
+# macOS (FFmpeg decoding):
+cd tools/helpers/mac && cargo run --release
+```
+
+**Electron Helper (YouTube tray app):**
+```bash
+cd tools/native-helper && npm install && npm start
 ```
 
 **Ports:**
