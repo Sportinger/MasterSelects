@@ -363,9 +363,8 @@ export class ParallelDecodeManager {
    * Optimized for speed: fires decode ahead in background, only waits if frame is missing
    */
   async prefetchFramesForTime(timelineTime: number): Promise<void> {
+    log.info(`prefetchFramesForTime(${timelineTime.toFixed(3)}) - isActive=${this.isActive}, decoders=${this.clipDecoders.size}`);
     if (!this.isActive) return;
-
-    log.info(`prefetchFramesForTime(${timelineTime.toFixed(3)}) - ${this.clipDecoders.size} decoders`);
 
     const clipsNeedingFlush: ClipDecoder[] = [];
 
