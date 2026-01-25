@@ -29,11 +29,11 @@ import { usePlaybackLoop } from './hooks/usePlaybackLoop';
 import { useVideoPreload } from './hooks/useVideoPreload';
 import { useAutoFeatures } from './hooks/useAutoFeatures';
 import { useExternalDrop } from './hooks/useExternalDrop';
+import { usePickWhipDrag } from './hooks/usePickWhipDrag';
+import { useTimelineHelpers } from './hooks/useTimelineHelpers';
+import { usePlayheadSnap } from './hooks/usePlayheadSnap';
 import { MIN_ZOOM, MAX_ZOOM } from '../../stores/timeline/constants';
-import type {
-  ContextMenuState,
-  PickWhipDragState,
-} from './types';
+import type { ContextMenuState } from './types';
 
 export function Timeline() {
   const {
@@ -158,21 +158,16 @@ export function Timeline() {
   const clipMap = useMemo(() => new Map(clips.map(c => [c.id, c])), [clips]);
   const trackMap = useMemo(() => new Map(tracks.map(t => [t.id, t])), [tracks]);
 
-  // Time conversion helpers (must be before hooks that use them)
-  const timeToPixel = useCallback((time: number) => time * zoom, [zoom]);
-  const pixelToTime = useCallback((pixel: number) => pixel / zoom, [zoom]);
-
-  // Calculate grid interval based on zoom (same logic as TimelineRuler)
-  const gridInterval = useMemo(() => {
-    if (zoom >= 100) return 0.5;
-    if (zoom >= 50) return 1;
-    if (zoom >= 20) return 2;
-    if (zoom >= 10) return 5;
-    if (zoom >= 5) return 10;
-    if (zoom >= 2) return 30;
-    return 60;
-  }, [zoom]);
-  const gridSize = gridInterval * zoom; // Grid line spacing in pixels
+  // Time helpers - extracted to hook
+  const {
+    timeToPixel,
+    pixelToTime,
+    gridSize,
+    formatTime,
+    parseTime,
+    getClipsAtTime,
+    getSnapTargetTimes,
+  } = useTimelineHelpers({ zoom, clips, getClipKeyframes });
 
   // Clip dragging - extracted to hook
   const { clipDrag, handleClipMouseDown, handleClipDoubleClick } = useClipDrag({
@@ -273,11 +268,15 @@ export function Timeline() {
     getExpandedTrackHeight,
   });
 
-  // Pick whip drag state for clip parenting
-  const [pickWhipDrag, setPickWhipDrag] = useState<PickWhipDragState | null>(null);
-
-  // Pick whip drag state for track/layer parenting
-  const [trackPickWhipDrag, setTrackPickWhipDrag] = useState<PickWhipDragState | null>(null);
+  // Pick whip drag - extracted to hook
+  const {
+    pickWhipDrag,
+    handlePickWhipDragStart,
+    handlePickWhipDragEnd,
+    trackPickWhipDrag,
+    handleTrackPickWhipDragStart,
+    handleTrackPickWhipDragEnd,
+  } = usePickWhipDrag({ setClipParent, setTrackParent });
 
   // Performance: Memoize video/audio track filtering and solo state
   const { videoTracks, audioTracks, anyVideoSolo, anyAudioSolo } = useMemo(() => {
@@ -333,45 +332,6 @@ export function Timeline() {
   const mediaFilesWithProxyCount = useMemo(
     () => mediaFiles.filter((f) => f.proxyStatus === 'ready').length,
     [mediaFiles]
-  );
-
-  // Format time as MM:SS.ms
-  const formatTime = useCallback((seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    const ms = Math.floor((seconds % 1) * 100);
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
-  }, []);
-
-  // Parse time string (MM:SS.ms or SS.ms or just seconds) back to seconds
-  const parseTime = useCallback((timeStr: string): number | null => {
-    const trimmed = timeStr.trim();
-    if (!trimmed) return null;
-
-    // Try MM:SS.ms format
-    const match = trimmed.match(/^(\d+):(\d+)(?:\.(\d+))?$/);
-    if (match) {
-      const mins = parseInt(match[1], 10);
-      const secs = parseInt(match[2], 10);
-      const ms = match[3] ? parseInt(match[3].padEnd(2, '0').slice(0, 2), 10) : 0;
-      return mins * 60 + secs + ms / 100;
-    }
-
-    // Try SS.ms or just seconds
-    const num = parseFloat(trimmed);
-    if (!isNaN(num) && num >= 0) {
-      return num;
-    }
-
-    return null;
-  }, []);
-
-  // Get clips at time helper
-  const getClipsAtTime = useCallback(
-    (time: number) => {
-      return clips.filter((c) => time >= c.startTime && time < c.startTime + c.duration);
-    },
-    [clips]
   );
 
   // Keyboard shortcuts - extracted to hook
@@ -487,74 +447,17 @@ export function Timeline() {
     setScrollY,
   });
 
-  // Get all snap target times
-  const getSnapTargetTimes = useCallback(() => {
-    const snapTimes: number[] = [];
-    clips.forEach((clip) => {
-      snapTimes.push(clip.startTime);
-      snapTimes.push(clip.startTime + clip.duration);
-
-      const kfs = getClipKeyframes(clip.id);
-      kfs.forEach((kf) => {
-        const absTime = clip.startTime + kf.time;
-        snapTimes.push(absTime);
-      });
-    });
-    return snapTimes;
-  }, [clips, getClipKeyframes]);
-
-  // Playhead dragging
-  useEffect(() => {
-    if (!isDraggingPlayhead) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!timelineRef.current) return;
-      const rect = timelineRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left + scrollX;
-      let time = pixelToTime(x);
-
-      if (e.shiftKey) {
-        const snapTimes = getSnapTargetTimes();
-        const snapThreshold = pixelToTime(10);
-
-        let closestSnap: number | null = null;
-        let closestDistance = Infinity;
-
-        for (const snapTime of snapTimes) {
-          const distance = Math.abs(time - snapTime);
-          if (distance < closestDistance && distance < snapThreshold) {
-            closestDistance = distance;
-            closestSnap = snapTime;
-          }
-        }
-
-        if (closestSnap !== null) {
-          time = closestSnap;
-        }
-      }
-
-      setPlayheadPosition(Math.max(0, Math.min(time, duration)));
-    };
-
-    const handleMouseUp = () => {
-      setDraggingPlayhead(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [
+  // Playhead snapping during drag - extracted to hook
+  usePlayheadSnap({
     isDraggingPlayhead,
+    timelineRef,
     scrollX,
     duration,
-    setPlayheadPosition,
-    setDraggingPlayhead,
     pixelToTime,
     getSnapTargetTimes,
-  ]);
+    setPlayheadPosition,
+    setDraggingPlayhead,
+  });
 
   // Render keyframe diamonds
   const renderKeyframeDiamonds = useCallback(
@@ -579,90 +482,6 @@ export function Timeline() {
     },
     [clips, selectedKeyframeIds, clipKeyframes, clipDrag, scrollX, selectKeyframe, moveKeyframe, updateKeyframe, timeToPixel, pixelToTime]
   );
-
-  // Pick whip drag handlers for layer parenting
-  const handlePickWhipDragStart = useCallback((clipId: string, startX: number, startY: number) => {
-    setPickWhipDrag({
-      sourceClipId: clipId,
-      startX,
-      startY,
-      currentX: startX,
-      currentY: startY,
-    });
-
-    const handleMouseMove = (e: MouseEvent) => {
-      setPickWhipDrag(prev => prev ? {
-        ...prev,
-        currentX: e.clientX,
-        currentY: e.clientY,
-      } : null);
-    };
-
-    const handleMouseUp = (e: MouseEvent) => {
-      // Find clip at drop position
-      const target = document.elementFromPoint(e.clientX, e.clientY);
-      const clipElement = target?.closest('.timeline-clip');
-      if (clipElement) {
-        const targetClipId = clipElement.getAttribute('data-clip-id');
-        if (targetClipId && targetClipId !== clipId) {
-          setClipParent(clipId, targetClipId);
-        }
-      }
-      setPickWhipDrag(null);
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  }, [setClipParent]);
-
-  const handlePickWhipDragEnd = useCallback(() => {
-    setPickWhipDrag(null);
-  }, []);
-
-  // Track pick whip drag handlers for layer parenting
-  const handleTrackPickWhipDragStart = useCallback((trackId: string, startX: number, startY: number) => {
-    setTrackPickWhipDrag({
-      sourceClipId: trackId, // Using clipId field to store trackId
-      startX,
-      startY,
-      currentX: startX,
-      currentY: startY,
-    });
-
-    const handleMouseMove = (e: MouseEvent) => {
-      setTrackPickWhipDrag(prev => prev ? {
-        ...prev,
-        currentX: e.clientX,
-        currentY: e.clientY,
-      } : null);
-    };
-
-    const handleMouseUp = (e: MouseEvent) => {
-      // Find track header at drop position
-      const target = document.elementFromPoint(e.clientX, e.clientY);
-      const trackHeader = target?.closest('.track-header');
-      if (trackHeader) {
-        // Find the track-pick-whip with data-track-id inside the header
-        const pickWhip = trackHeader.querySelector('.track-pick-whip');
-        const targetTrackId = pickWhip?.getAttribute('data-track-id');
-        if (targetTrackId && targetTrackId !== trackId) {
-          setTrackParent(trackId, targetTrackId);
-        }
-      }
-      setTrackPickWhipDrag(null);
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  }, [setTrackParent]);
-
-  const handleTrackPickWhipDragEnd = useCallback(() => {
-    setTrackPickWhipDrag(null);
-  }, []);
 
   // Render a clip
   const renderClip = useCallback(
