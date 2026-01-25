@@ -625,6 +625,7 @@ export class LayerBuilderService {
 
   /**
    * Sync nested composition video elements
+   * Uses same logic as regular clips: play during playback, seek when paused
    */
   private syncNestedCompVideos(compClip: TimelineClip, ctx: FrameContext): void {
     if (!compClip.nestedClips || !compClip.nestedTracks) return;
@@ -637,7 +638,9 @@ export class LayerBuilderService {
       if (!nestedClip.source?.videoElement) continue;
 
       // Check if nested clip is active at current comp time
-      if (compTime < nestedClip.startTime || compTime >= nestedClip.startTime + nestedClip.duration) {
+      const isActive = compTime >= nestedClip.startTime && compTime < nestedClip.startTime + nestedClip.duration;
+
+      if (!isActive) {
         // Pause if not active
         if (!nestedClip.source.videoElement.paused) {
           nestedClip.source.videoElement.pause();
@@ -655,19 +658,29 @@ export class LayerBuilderService {
       const webCodecsPlayer = nestedClip.source.webCodecsPlayer;
       const timeDiff = Math.abs(video.currentTime - nestedClipTime);
 
-      // Always pause nested videos (we render frame by frame)
-      if (!video.paused) video.pause();
+      // During playback: let video play naturally (like regular clips)
+      if (ctx.isPlaying) {
+        if (video.paused) {
+          video.play().catch(() => {});
+        }
+        // Only seek if significantly out of sync (>0.5s)
+        if (timeDiff > 0.5) {
+          video.currentTime = nestedClipTime;
+        }
+      } else {
+        // When paused: pause video and seek to exact time
+        if (!video.paused) video.pause();
 
-      // Seek if needed
-      const seekThreshold = ctx.isDraggingPlayhead ? 0.1 : 0.05;
-      if (timeDiff > seekThreshold) {
-        this.throttledSeek(nestedClip.id, video, nestedClipTime, ctx);
+        const seekThreshold = ctx.isDraggingPlayhead ? 0.1 : 0.05;
+        if (timeDiff > seekThreshold) {
+          this.throttledSeek(nestedClip.id, video, nestedClipTime, ctx);
+        }
       }
 
-      // Seek WebCodecsPlayer for nested clips (critical for video preview)
-      if (webCodecsPlayer) {
+      // Sync WebCodecsPlayer only when not playing (it handles its own playback)
+      if (webCodecsPlayer && !ctx.isPlaying) {
         const wcTimeDiff = Math.abs(webCodecsPlayer.currentTime - nestedClipTime);
-        if (wcTimeDiff > seekThreshold) {
+        if (wcTimeDiff > 0.05) {
           webCodecsPlayer.seek(nestedClipTime);
         }
       }
