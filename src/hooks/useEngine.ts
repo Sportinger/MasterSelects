@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { engine } from '../engine/WebGPUEngine';
-import { useMixerStore } from '../stores/mixerStore';
+import { useEngineStore } from '../stores/engineStore';
 import { useTimelineStore } from '../stores/timeline';
 import { useMediaStore } from '../stores/mediaStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -25,8 +25,8 @@ function getMaskShapeHash(masks: ClipMask[]): string {
 
 export function useEngine() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const isEngineReady = useMixerStore((state) => state.isEngineReady);
-  const isPlaying = useMixerStore((state) => state.isPlaying);
+  const isEngineReady = useEngineStore((state) => state.isEngineReady);
+  const isPlaying = useTimelineStore((state) => state.isPlaying);
   const initRef = useRef(false);
 
   // Initialize engine - only once
@@ -36,12 +36,12 @@ export function useEngine() {
 
     async function init() {
       const success = await engine.initialize();
-      useMixerStore.getState().setEngineReady(success);
+      useEngineStore.getState().setEngineReady(success);
       if (success) {
-        useMixerStore.getState().setPlaying(true);
+        useTimelineStore.getState().play();
         // Get and store GPU info
         const gpuInfo = engine.getGPUInfo();
-        useMixerStore.getState().setGpuInfo(gpuInfo);
+        useEngineStore.getState().setGpuInfo(gpuInfo);
       }
     }
 
@@ -64,8 +64,7 @@ export function useEngine() {
     if (!isEngineReady) return;
 
     const updateResolution = () => {
-      const { outputResolution } = useMixerStore.getState();
-      const { previewQuality } = useSettingsStore.getState();
+      const { outputResolution, previewQuality } = useSettingsStore.getState();
 
       // Apply preview quality scaling to base resolution
       const scaledWidth = Math.round(outputResolution.width * previewQuality);
@@ -79,7 +78,7 @@ export function useEngine() {
     updateResolution();
 
     // Subscribe to outputResolution changes
-    const unsubscribeMixer = useMixerStore.subscribe(
+    const unsubscribeResolution = useSettingsStore.subscribe(
       (state) => state.outputResolution,
       () => updateResolution()
     );
@@ -102,7 +101,7 @@ export function useEngine() {
     );
 
     return () => {
-      unsubscribeMixer();
+      unsubscribeResolution();
       unsubscribeSettings();
       unsubscribeTransparency();
     };
@@ -163,7 +162,7 @@ export function useEngine() {
       }
       lastMaskTextureUpdate.current = now;
     }
-    const layers = useMixerStore.getState().layers;
+    const layers = useTimelineStore.getState().layers;
 
     // Get engine output dimensions (the actual render resolution)
     const engineDimensions = engine.getOutputDimensions();
@@ -271,7 +270,7 @@ export function useEngine() {
         // Always update stats (even when idle) so UI shows correct status
         const now = performance.now();
         if (now - lastStatsUpdate > 100) {
-          useMixerStore.getState().setEngineStats(engine.getStats());
+          useEngineStore.getState().setEngineStats(engine.getStats());
           lastStatsUpdate = now;
         }
 
@@ -366,14 +365,14 @@ export function useEngine() {
       () => engine.requestRender()
     );
 
-    // Layer changes in mixer store
-    const unsubLayers = useMixerStore.subscribe(
+    // Layer changes in timeline store
+    const unsubLayers = useTimelineStore.subscribe(
       (state) => state.layers,
       () => engine.requestRender()
     );
 
     // Output resolution changes
-    const unsubResolution = useMixerStore.subscribe(
+    const unsubResolution = useSettingsStore.subscribe(
       (state) => state.outputResolution,
       () => engine.requestRender()
     );

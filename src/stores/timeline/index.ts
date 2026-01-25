@@ -7,7 +7,6 @@ import type { TimelineStore, TimelineUtils, TimelineClip, Keyframe, CompositionT
 import type { SerializableClip } from '../../types';
 import { DEFAULT_TRACKS, SNAP_THRESHOLD_SECONDS, OVERLAP_RESISTANCE_PIXELS } from './constants';
 import { useMediaStore } from '../mediaStore';
-import { useMixerStore } from '../mixerStore';
 
 import { createTrackSlice } from './trackSlice';
 import { createClipSlice } from './clipSlice';
@@ -1001,8 +1000,8 @@ export const useTimelineStore = create<TimelineStore>()(
           }
         });
 
-        // Clear mixer store layers so preview shows black
-        useMixerStore.setState({ layers: [] });
+        // Clear layers so preview shows black
+        set({ layers: [] });
 
         const { tracks } = get();
         set({
@@ -1036,6 +1035,10 @@ export const useTimelineStore = create<TimelineStore>()(
       isPlaying: false,
       isDraggingPlayhead: false,
       selectedClipIds: new Set<string>(),
+
+      // Render layers (populated by useLayerSync, used by engine)
+      layers: [] as import('../../types').Layer[],
+      selectedLayerId: null as string | null,
 
       // In/Out markers
       inPoint: null as number | null,
@@ -1081,6 +1084,22 @@ export const useTimelineStore = create<TimelineStore>()(
       toolMode: 'select' as const,
     };
 
+    // Layer actions (render layers for engine, moved from mixerStore)
+    const layerActions = {
+      setLayers: (layers: import('../../types').Layer[]) => {
+        set({ layers });
+      },
+      updateLayer: (id: string, updates: Partial<import('../../types').Layer>) => {
+        const { layers } = get();
+        set({
+          layers: layers.map((l) => (l?.id === id ? { ...l, ...updates } : l)),
+        });
+      },
+      selectLayer: (id: string | null) => {
+        set({ selectedLayerId: id });
+      },
+    };
+
     // Export actions (inline since they're simple)
     const exportActions = {
       setExportProgress: (progress: number | null, currentTime: number | null) => {
@@ -1102,6 +1121,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...exportActions,
       ...selectionActions,
       ...keyframeActions,
+      ...layerActions,
       ...maskActions,
       ...utils,
     };

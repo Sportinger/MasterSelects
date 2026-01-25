@@ -5,7 +5,8 @@ import { Logger } from '../../services/logger';
 
 const log = Logger.create('Toolbar');
 import { useEngine } from '../../hooks/useEngine';
-import { useMixerStore } from '../../stores/mixerStore';
+import { useEngineStore } from '../../stores/engineStore';
+import { useTimelineStore } from '../../stores/timeline';
 import { useDockStore } from '../../stores/dockStore';
 import { PANEL_CONFIGS, type PanelType } from '../../types/dock';
 import { useSettingsStore, type PreviewQuality, type AutosaveInterval, type GPUPowerPreference } from '../../stores/settingsStore';
@@ -29,14 +30,16 @@ type MenuId = 'file' | 'edit' | 'view' | 'output' | 'window' | 'info' | null;
 
 export function Toolbar() {
   const { isEngineReady, createOutputWindow } = useEngine();
-  const { setPlaying, outputWindows, gpuInfo } = useMixerStore();
+  const { gpuInfo } = useEngineStore();
+  const { outputWindows } = useSettingsStore();
+  const { play } = useTimelineStore();
 
   // Auto-start playback when engine is ready
   useEffect(() => {
     if (isEngineReady) {
-      setPlaying(true);
+      play();
     }
-  }, [isEngineReady, setPlaying]);
+  }, [isEngineReady, play]);
   const { resetLayout, isPanelTypeVisible, togglePanelType, saveLayoutAsDefault } = useDockStore();
   const { isSupported: midiSupported, isEnabled: midiEnabled, enableMIDI, disableMIDI, devices } = useMIDI();
   const {
@@ -358,7 +361,7 @@ export function Toolbar() {
       if (success) {
         // Update GPU info in mixer store
         const newGpuInfo = engine.getGPUInfo();
-        useMixerStore.getState().setGpuInfo(newGpuInfo);
+        useEngineStore.getState().setGpuInfo(newGpuInfo);
         log.info('GPU preference changed', { preference, gpuInfo: newGpuInfo });
       } else {
         // Revert on failure

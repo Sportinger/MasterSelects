@@ -12,7 +12,8 @@ import type {
   ClipMask,
   MaskVertex,
   Effect,
-  TextClipProperties
+  TextClipProperties,
+  Layer,
 } from '../../types';
 import type { Composition } from '../mediaStore';
 
@@ -31,6 +32,7 @@ export type {
   Effect,
   Composition,
   TextClipProperties,
+  Layer,
 };
 
 // Mask edit mode types
@@ -52,6 +54,10 @@ export interface TimelineState {
   isPlaying: boolean;
   isDraggingPlayhead: boolean;
   selectedClipIds: Set<string>;
+
+  // Render layers (populated by useLayerSync from timeline clips, used by engine)
+  layers: Layer[];
+  selectedLayerId: string | null;
 
   // In/Out markers
   inPoint: number | null;
@@ -234,6 +240,13 @@ export interface KeyframeActions {
   updateBezierHandle: (keyframeId: string, handle: 'in' | 'out', position: BezierHandle) => void;
 }
 
+// Layer actions interface (render layers for engine)
+export interface LayerActions {
+  setLayers: (layers: Layer[]) => void;
+  updateLayer: (id: string, updates: Partial<Layer>) => void;
+  selectLayer: (id: string | null) => void;
+}
+
 // Mask actions interface
 export interface MaskActions {
   setMaskEditMode: (mode: MaskEditMode) => void;
@@ -282,6 +295,7 @@ export interface TimelineStore extends
   ExportActions,
   SelectionActions,
   KeyframeActions,
+  LayerActions,
   MaskActions,
   TimelineUtils {}
 

@@ -4,7 +4,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import type { TimelineClip, TimelineTrack, Layer, Effect, NestedCompositionData, AnimatableProperty, BlendMode } from '../../../types';
 import type { ClipDragState } from '../types';
-import { useMixerStore } from '../../../stores/mixerStore';
+import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { engine } from '../../../engine/WebGPUEngine';
 import { proxyFrameCache } from '../../../services/proxyFrameCache';
@@ -341,7 +341,7 @@ export function useLayerSync({
       activeClipIdsRef.current = '';
     }
 
-    const currentLayers = useMixerStore.getState().layers;
+    const currentLayers = useTimelineStore.getState().layers;
     const newLayers = [...currentLayers];
     let layersChanged = false;
 
@@ -597,7 +597,7 @@ export function useLayerSync({
                   if (image) {
                     proxyFramesRef.current.set(cacheKey, { frameIndex, image });
 
-                    const currentLayers2 = useMixerStore.getState().layers;
+                    const currentLayers2 = useTimelineStore.getState().layers;
                     const updatedLayers = [...currentLayers2];
                     updatedLayers[capturedLayerIndex] = {
                       id: `timeline_layer_${capturedLayerIndex}`,
@@ -625,7 +625,7 @@ export function useLayerSync({
                         z: (capturedTransform.rotation.z * Math.PI) / 180,
                       },
                     };
-                    useMixerStore.setState({ layers: updatedLayers });
+                    useTimelineStore.setState({ layers: updatedLayers });
                   }
                 });
             }
@@ -896,7 +896,7 @@ export function useLayerSync({
     });
 
     if (layersChanged) {
-      useMixerStore.setState({ layers: newLayers });
+      useTimelineStore.setState({ layers: newLayers });
       // Trigger one-shot render when paused (render loop not running)
       // This ensures text edits, property changes, etc. update the preview immediately
       engine.render(newLayers);

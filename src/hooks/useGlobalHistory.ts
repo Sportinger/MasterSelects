@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from 'react';
 import { useTimelineStore } from '../stores/timeline';
-import { useMixerStore } from '../stores/mixerStore';
 import { useMediaStore } from '../stores/mediaStore';
 import { useDockStore } from '../stores/dockStore';
 import {
@@ -39,10 +38,6 @@ export function useGlobalHistory() {
       timeline: {
         getState: useTimelineStore.getState,
         setState: useTimelineStore.setState,
-      },
-      mixer: {
-        getState: useMixerStore.getState,
-        setState: useMixerStore.setState,
       },
       media: {
         getState: useMediaStore.getState,
@@ -98,55 +93,6 @@ export function useGlobalHistory() {
       { fireImmediately: false }
     );
 
-    // Subscribe to mixer changes
-    const unsubMixer = useMixerStore.subscribe(
-      (state) => ({
-        layers: state.layers,
-        selectedLayerId: state.selectedLayerId,
-        gridColumns: state.gridColumns,
-        gridRows: state.gridRows,
-        slotGroups: state.slotGroups,
-      }),
-      (curr, prev) => {
-        if (useHistoryStore.getState().isApplying) return;
-
-        if (curr.layers !== prev.layers) {
-          // Check what changed in layers
-          const currLayerState = JSON.stringify(curr.layers.map(l => ({
-            id: l?.id,
-            opacity: l?.opacity,
-            blendMode: l?.blendMode,
-            visible: l?.visible,
-            position: l?.position,
-            scale: l?.scale,
-            rotation: l?.rotation,
-            effects: l?.effects?.length,
-            hasSource: !!l?.source,
-          })));
-          const prevLayerState = JSON.stringify(prev.layers.map(l => ({
-            id: l?.id,
-            opacity: l?.opacity,
-            blendMode: l?.blendMode,
-            visible: l?.visible,
-            position: l?.position,
-            scale: l?.scale,
-            rotation: l?.rotation,
-            effects: l?.effects?.length,
-            hasSource: !!l?.source,
-          })));
-
-          if (currLayerState !== prevLayerState) {
-            debouncedCapture('Modify layer');
-          }
-        } else if (curr.gridColumns !== prev.gridColumns || curr.gridRows !== prev.gridRows) {
-          debouncedCapture('Change grid');
-        } else if (curr.slotGroups !== prev.slotGroups) {
-          debouncedCapture('Modify slot groups');
-        }
-      },
-      { fireImmediately: false }
-    );
-
     // Subscribe to media changes
     const unsubMedia = useMediaStore.subscribe(
       (state) => ({
@@ -182,7 +128,6 @@ export function useGlobalHistory() {
 
     return () => {
       unsubTimeline();
-      unsubMixer();
       unsubMedia();
       unsubDock();
     };

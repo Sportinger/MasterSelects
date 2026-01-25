@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { subscribeWithSelector, persist } from 'zustand/middleware';
 import { apiKeyManager, type ApiKeyType } from '../services/apiKeyManager';
 import { Logger } from '../services/logger';
+import type { OutputWindow } from '../types';
 
 const log = Logger.create('SettingsStore');
 
@@ -67,6 +68,11 @@ interface SettingsState {
   // UI state
   isSettingsOpen: boolean;
 
+  // Output settings (moved from mixerStore)
+  outputWindows: OutputWindow[];
+  outputResolution: { width: number; height: number };
+  fps: number;
+
   // Actions
   setApiKey: (provider: keyof APIKeys, key: string) => void;
   setTranscriptionProvider: (provider: TranscriptionProvider) => void;
@@ -84,6 +90,11 @@ interface SettingsState {
   openSettings: () => void;
   closeSettings: () => void;
   toggleSettings: () => void;
+
+  // Output actions
+  addOutputWindow: (output: OutputWindow) => void;
+  removeOutputWindow: (id: string) => void;
+  setResolution: (width: number, height: number) => void;
 
   // Helpers
   getActiveApiKey: () => string | null;
@@ -120,6 +131,11 @@ export const useSettingsStore = create<SettingsState>()(
       copyMediaToProject: true, // Copy imported files to Raw/ folder by default
       hasCompletedSetup: false, // Show welcome overlay on first run
       isSettingsOpen: false,
+
+      // Output settings (moved from mixerStore)
+      outputWindows: [],
+      outputResolution: { width: 1920, height: 1080 },
+      fps: 60,
 
       // Actions
       setApiKey: (provider, key) => {
@@ -187,6 +203,17 @@ export const useSettingsStore = create<SettingsState>()(
       closeSettings: () => set({ isSettingsOpen: false }),
       toggleSettings: () => set((state) => ({ isSettingsOpen: !state.isSettingsOpen })),
 
+      // Output actions
+      addOutputWindow: (output) => {
+        set((state) => ({ outputWindows: [...state.outputWindows, output] }));
+      },
+      removeOutputWindow: (id) => {
+        set((state) => ({ outputWindows: state.outputWindows.filter((o) => o.id !== id) }));
+      },
+      setResolution: (width, height) => {
+        set({ outputResolution: { width, height } });
+      },
+
       // Helpers
       getActiveApiKey: () => {
         const { transcriptionProvider, apiKeys } = get();
@@ -225,6 +252,8 @@ export const useSettingsStore = create<SettingsState>()(
         gpuPowerPreference: state.gpuPowerPreference,
         copyMediaToProject: state.copyMediaToProject,
         hasCompletedSetup: state.hasCompletedSetup,
+        outputResolution: state.outputResolution,
+        fps: state.fps,
       }),
     }
   )

@@ -5,7 +5,7 @@ import { Logger } from '../../services/logger';
 
 const log = Logger.create('Preview');
 import { useEngine } from '../../hooks/useEngine';
-import { useMixerStore } from '../../stores/mixerStore';
+import { useEngineStore } from '../../stores/engineStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useDockStore } from '../../stores/dockStore';
@@ -209,8 +209,9 @@ function StatsOverlay({ stats, resolution, expanded, onToggle }: {
 
 export function Preview({ panelId, compositionId }: PreviewProps) {
   const { isEngineReady, registerPreviewCanvas, unregisterPreviewCanvas, registerIndependentPreviewCanvas, unregisterIndependentPreviewCanvas } = useEngine();
-  const { engineStats, outputResolution, layers, selectedLayerId, selectLayer } = useMixerStore();
-  const { clips, selectedClipIds, selectClip, updateClipTransform, maskEditMode } = useTimelineStore();
+  const { engineStats } = useEngineStore();
+  const { outputResolution } = useSettingsStore();
+  const { clips, selectedClipIds, selectClip, updateClipTransform, maskEditMode, layers, selectedLayerId, selectLayer } = useTimelineStore();
   const { compositions, activeCompositionId } = useMediaStore();
   const { addPreviewPanel, updatePanelData, closePanelById } = useDockStore();
   const { previewQuality, setPreviewQuality } = useSettingsStore();
