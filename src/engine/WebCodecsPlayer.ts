@@ -485,6 +485,10 @@ export class WebCodecsPlayer {
         // In export mode, buffer frames by CTS for B-frame handling
         if (this.isInExportMode) {
           const cts = frame.timestamp; // microseconds
+          // Debug: log frame output
+          if (this.exportFrameBuffer.size < 5 || this.exportFrameBuffer.size % 10 === 0) {
+            console.log(`[WebCodecs] Frame output: cts=${cts}, buffer size=${this.exportFrameBuffer.size + 1}`);
+          }
           this.exportFrameBuffer.set(cts, frame);
 
           // DON'T set currentFrame here - it's managed by seekDuringExport
@@ -1040,12 +1044,17 @@ export class WebCodecsPlayer {
     const maxWait = 100; // 1 second max
 
     while (waitCount < maxWait) {
-      const queueEmpty = this.decoder.decodeQueueSize === 0;
+      const queueSize = this.decoder.decodeQueueSize;
+      const bufferSize = this.exportFrameBuffer.size;
       // B-frames need ~3-4 future reference frames, so expect samplesDecoded - 4 frames
       const expectedFrames = Math.max(1, samplesDecoded - 4);
-      const hasEnoughFrames = this.exportFrameBuffer.size >= expectedFrames;
 
-      if (queueEmpty && hasEnoughFrames) {
+      // Log progress every 20 iterations (200ms)
+      if (waitCount % 20 === 0) {
+        console.log(`[WebCodecs] Waiting: queue=${queueSize}, buffer=${bufferSize}/${expectedFrames}, waited=${waitCount * 10}ms`);
+      }
+
+      if (queueSize === 0 && bufferSize >= expectedFrames) {
         break;
       }
 
