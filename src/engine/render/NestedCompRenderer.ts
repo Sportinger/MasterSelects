@@ -163,7 +163,19 @@ export class NestedCompRenderer {
 
     // Handle empty composition
     if (nestedLayerData.length === 0) {
-      log.warn('No nested layers collected - rendering transparent', { compositionId });
+      log.warn('No nested layers collected - rendering transparent', {
+        compositionId,
+        inputLayers: nestedLayers.length,
+        layerDetails: nestedLayers.map(l => ({
+          id: l.id,
+          visible: l.visible,
+          sourceType: l.source?.type,
+          hasVideoElement: !!l.source?.videoElement,
+          videoReadyState: l.source?.videoElement?.readyState,
+          hasWebCodecs: !!l.source?.webCodecsPlayer,
+          hasImageElement: !!l.source?.imageElement,
+        })),
+      });
       const clearPass = commandEncoder.beginRenderPass({
         colorAttachments: [{
           view: compTexture.view,

@@ -186,6 +186,7 @@ function doSetActiveComposition(
   );
 
   // Save current timeline to current composition
+  const savedCompId = currentActiveId;
   if (currentActiveId) {
     const timelineData = timelineStore.getSerializableState();
     set((state) => ({
@@ -194,10 +195,6 @@ function doSetActiveComposition(
       ),
     }));
     compositionRenderer.invalidateCompositionAndParents(currentActiveId);
-
-    // Refresh nested clips in all parent compositions that contain this one
-    // This ensures comp clips show updated content when source composition changes
-    timelineStore.refreshCompClipNestedData(currentActiveId);
   }
 
   // Update active composition
@@ -213,6 +210,12 @@ function doSetActiveComposition(
       timelineStore.setPlayheadPosition(syncedPlayhead);
     }
     // zoom and scrollX are restored by loadState() from composition's timelineData
+
+    // Refresh nested clips in the NEW timeline that reference the OLD composition
+    // This ensures comp clips show updated content when source composition changes
+    if (savedCompId) {
+      timelineStore.refreshCompClipNestedData(savedCompId);
+    }
   } else {
     timelineStore.clearTimeline();
   }
