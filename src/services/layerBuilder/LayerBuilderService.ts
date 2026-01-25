@@ -393,10 +393,37 @@ export class LayerBuilderService {
    * Build nested layers (simplified - delegates to separate method for full implementation)
    */
   private buildNestedLayers(clip: TimelineClip, clipTime: number, ctx: FrameContext): Layer[] {
-    if (!clip.nestedClips || !clip.nestedTracks) return [];
+    if (!clip.nestedClips || !clip.nestedTracks) {
+      // Only log occasionally to avoid spam
+      if (this.debugFrameCount % 60 === 0) {
+        console.log('[LayerBuilder] buildNestedLayers - no nestedClips or nestedTracks', {
+          clipId: clip.id,
+          hasNestedClips: !!clip.nestedClips,
+          hasNestedTracks: !!clip.nestedTracks,
+        });
+      }
+      return [];
+    }
 
     const nestedVideoTracks = clip.nestedTracks.filter(t => t.type === 'video' && t.visible);
     const layers: Layer[] = [];
+
+    // Debug log occasionally
+    if (this.debugFrameCount % 60 === 0) {
+      console.log('[LayerBuilder] buildNestedLayers', {
+        clipId: clip.id,
+        clipTime,
+        nestedClipsCount: clip.nestedClips.length,
+        nestedVideoTracksCount: nestedVideoTracks.length,
+        nestedClipSources: clip.nestedClips.map(nc => ({
+          id: nc.id,
+          hasSource: !!nc.source,
+          sourceType: nc.source?.type,
+          hasVideoElement: !!nc.source?.videoElement,
+          isLoading: nc.isLoading,
+        })),
+      });
+    }
 
     for (let i = nestedVideoTracks.length - 1; i >= 0; i--) {
       const nestedTrack = nestedVideoTracks[i];
@@ -567,6 +594,11 @@ export class LayerBuilderService {
     // Sync each clip at playhead
     for (const clip of ctx.clipsAtTime) {
       this.syncClipVideo(clip, ctx);
+
+      // Sync nested composition videos
+      if (clip.isComposition && clip.nestedClips && clip.nestedClips.length > 0) {
+        this.syncNestedCompVideos(clip, ctx);
+      }
     }
 
     // Pause videos not at playhead
@@ -577,6 +609,61 @@ export class LayerBuilderService {
         if (!isAtPlayhead && !clip.source.videoElement.paused) {
           clip.source.videoElement.pause();
         }
+      }
+
+      // Pause nested comp videos not at playhead
+      if (clip.isComposition && clip.nestedClips) {
+        const isAtPlayhead = ctx.clipsByTrackId.has(clip.trackId) &&
+          ctx.clipsByTrackId.get(clip.trackId)?.id === clip.id;
+        if (!isAtPlayhead) {
+          for (const nestedClip of clip.nestedClips) {
+            if (nestedClip.source?.videoElement && !nestedClip.source.videoElement.paused) {
+              nestedClip.source.videoElement.pause();
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Sync nested composition video elements
+   */
+  private syncNestedCompVideos(compClip: TimelineClip, ctx: FrameContext): void {
+    if (!compClip.nestedClips || !compClip.nestedTracks) return;
+
+    // Calculate time within the composition
+    const compLocalTime = ctx.playheadPosition - compClip.startTime;
+    const compTime = compLocalTime + compClip.inPoint;
+
+    for (const nestedClip of compClip.nestedClips) {
+      if (!nestedClip.source?.videoElement) continue;
+
+      // Check if nested clip is active at current comp time
+      if (compTime < nestedClip.startTime || compTime >= nestedClip.startTime + nestedClip.duration) {
+        // Pause if not active
+        if (!nestedClip.source.videoElement.paused) {
+          nestedClip.source.videoElement.pause();
+        }
+        continue;
+      }
+
+      // Calculate time within the nested clip
+      const nestedLocalTime = compTime - nestedClip.startTime;
+      const nestedClipTime = nestedClip.reversed
+        ? nestedClip.outPoint - nestedLocalTime
+        : nestedLocalTime + nestedClip.inPoint;
+
+      const video = nestedClip.source.videoElement;
+      const timeDiff = Math.abs(video.currentTime - nestedClipTime);
+
+      // Always pause nested videos (we render frame by frame)
+      if (!video.paused) video.pause();
+
+      // Seek if needed
+      const seekThreshold = ctx.isDraggingPlayhead ? 0.1 : 0.05;
+      if (timeDiff > seekThreshold) {
+        this.throttledSeek(nestedClip.id, video, nestedClipTime, ctx);
       }
     }
   }
