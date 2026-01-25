@@ -283,9 +283,11 @@ async function initializeParallelDecoding(
     }
 
     if (!clipActiveAtStart) {
-      log.debug(`Skipping first-frame check for "${clipInfo.clipName}" - not active at start time ${_startTime}`);
+      log.info(`Skipping first-frame check for "${clipInfo.clipName}" - not active at start time ${_startTime} (clip starts at ${clipInfo.startTime})`);
       continue;
     }
+    log.info(`Verifying first frame for "${clipInfo.clipName}" at start time ${_startTime} (clip starts at ${clipInfo.startTime})`);
+
 
     let frame = parallelDecoder.getFrameForClip(clipInfo.clipId, _startTime);
 
