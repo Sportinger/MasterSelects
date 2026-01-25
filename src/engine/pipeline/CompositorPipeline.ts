@@ -393,8 +393,22 @@ export class CompositorPipeline {
   // Key format: "layerId:baseViewLabel:layerViewLabel:maskViewLabel"
   private bindGroupCache: Map<string, GPUBindGroup> = new Map();
 
+  // Frame-scoped cache for external texture bind groups (cleared each frame)
+  // Avoids creating duplicate bind groups for same video rendered to multiple outputs
+  private frameExternalBindGroupCache: Map<string, GPUBindGroup> = new Map();
+  private currentFrameId = 0;
+
+  // Uniform change detection - track last values per layer
+  private lastUniformValues: Map<string, Float32Array> = new Map();
+
   constructor(device: GPUDevice) {
     this.device = device;
+  }
+
+  // Call at start of each frame to clear ephemeral caches
+  beginFrame(): void {
+    this.currentFrameId++;
+    this.frameExternalBindGroupCache.clear();
   }
 
   async createPipelines(): Promise<void> {
@@ -520,7 +534,30 @@ export class CompositorPipeline {
     this.uniformData[17] = layer.position.z ?? 0;       // posZ (depth position)
     this.uniformData[18] = 0;           // _pad2
     this.uniformData[19] = 0;           // _pad3
-    this.device.queue.writeBuffer(uniformBuffer, 0, this.uniformData);
+
+    // Change detection - only write to GPU if values changed
+    const lastValues = this.lastUniformValues.get(layer.id);
+    let needsUpdate = true;
+
+    if (lastValues) {
+      needsUpdate = false;
+      for (let i = 0; i < 20; i++) {
+        if (Math.abs(this.uniformData[i] - lastValues[i]) > 0.00001) {
+          needsUpdate = true;
+          break;
+        }
+      }
+    }
+
+    if (needsUpdate) {
+      this.device.queue.writeBuffer(uniformBuffer, 0, this.uniformData);
+      // Store copy of current values
+      if (!lastValues) {
+        this.lastUniformValues.set(layer.id, new Float32Array(this.uniformData));
+      } else {
+        lastValues.set(this.uniformData);
+      }
+    }
   }
 
   // Create bind group for regular textures (with caching for static images)
@@ -566,14 +603,37 @@ export class CompositorPipeline {
     });
   }
 
-  // Create bind group for external video textures
+  // Create bind group for external video textures (with frame-scoped caching)
   createExternalCompositeBindGroup(
     sampler: GPUSampler,
     baseView: GPUTextureView,
     externalTexture: GPUExternalTexture,
     uniformBuffer: GPUBuffer,
-    maskTextureView: GPUTextureView
+    maskTextureView: GPUTextureView,
+    layerId?: string,
+    isPingBase?: boolean
   ): GPUBindGroup {
+    // Frame-scoped cache key - external textures are ephemeral but we can reuse
+    // within a frame if same video is rendered to multiple outputs
+    if (layerId !== undefined && isPingBase !== undefined) {
+      const cacheKey = `ext:${layerId}:${isPingBase ? 'ping' : 'pong'}`;
+      let bindGroup = this.frameExternalBindGroupCache.get(cacheKey);
+      if (!bindGroup) {
+        bindGroup = this.device.createBindGroup({
+          layout: this.externalCompositeBindGroupLayout!,
+          entries: [
+            { binding: 0, resource: sampler },
+            { binding: 1, resource: baseView },
+            { binding: 2, resource: externalTexture },
+            { binding: 3, resource: { buffer: uniformBuffer } },
+            { binding: 4, resource: maskTextureView },
+          ],
+        });
+        this.frameExternalBindGroupCache.set(cacheKey, bindGroup);
+      }
+      return bindGroup;
+    }
+
     return this.device.createBindGroup({
       layout: this.externalCompositeBindGroupLayout!,
       entries: [
@@ -607,7 +667,9 @@ export class CompositorPipeline {
     }
     this.layerUniformBuffers.clear();
 
-    // Clear bind group cache
+    // Clear bind group caches
     this.bindGroupCache.clear();
+    this.frameExternalBindGroupCache.clear();
+    this.lastUniformValues.clear();
   }
 }

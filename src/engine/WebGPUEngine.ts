@@ -437,6 +437,9 @@ export class WebGPUEngine {
     const pongView = this.renderTargetManager.getPongView();
     if (!pingView || !pongView) return;
 
+    // Clear frame-scoped caches (external texture bind groups)
+    this.compositorPipeline.beginFrame();
+
     const t0 = performance.now();
     const { width, height } = this.renderTargetManager.getResolution();
 
@@ -462,10 +465,14 @@ export class WebGPUEngine {
       return;
     }
 
-    // Pre-render nested compositions
+    // Pre-render nested compositions (batched with main composite)
+    const commandBuffers: GPUCommandBuffer[] = [];
+    let hasNestedComps = false;
+
     const preRenderEncoder = device.createCommandEncoder();
     for (const data of layerData) {
       if (data.layer.source?.nestedComposition) {
+        hasNestedComps = true;
         const nc = data.layer.source.nestedComposition;
         const view = this.nestedCompRenderer!.preRender(
           nc.compositionId, nc.layers, nc.width, nc.height, preRenderEncoder, this.sampler
@@ -473,8 +480,9 @@ export class WebGPUEngine {
         if (view) data.textureView = view;
       }
     }
-    device.queue.submit([preRenderEncoder.finish()]);
-    this.nestedCompRenderer!.cleanupPendingTextures();
+    if (hasNestedComps) {
+      commandBuffers.push(preRenderEncoder.finish());
+    }
 
     // Composite
     const t2 = performance.now();
@@ -511,9 +519,16 @@ export class WebGPUEngine {
       }
     }
 
+    // Batch submit all command buffers in single call
+    commandBuffers.push(commandEncoder.finish());
     const t3 = performance.now();
-    device.queue.submit([commandEncoder.finish()]);
+    device.queue.submit(commandBuffers);
     const submitTime = performance.now() - t3;
+
+    // Cleanup after submit
+    if (hasNestedComps) {
+      this.nestedCompRenderer!.cleanupPendingTextures();
+    }
 
     // Stats
     const totalTime = performance.now() - t0;
@@ -636,8 +651,9 @@ export class WebGPUEngine {
       const sourceAspect = data.sourceWidth / data.sourceHeight;
       const outputAspect = width / height;
       const maskLookupId = layer.maskClipId || layer.id;
-      const hasMask = this.maskTextureManager?.hasMaskTexture(maskLookupId) ?? false;
-      const maskTextureView = this.maskTextureManager?.getMaskTextureView(maskLookupId) ?? this.maskTextureManager?.getWhiteMaskView()!;
+      const maskInfo = this.maskTextureManager?.getMaskInfo(maskLookupId) ?? { hasMask: false, view: this.maskTextureManager?.getWhiteMaskView()! };
+      const hasMask = maskInfo.hasMask;
+      const maskTextureView = maskInfo.view;
 
       this.compositorPipeline!.updateLayerUniforms(layer, sourceAspect, outputAspect, hasMask, uniformBuffer);
 

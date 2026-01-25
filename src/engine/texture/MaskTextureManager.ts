@@ -91,13 +91,21 @@ export class MaskTextureManager {
   }
 
   // Get mask texture view for a layer (returns white fallback if no mask)
-  getMaskTextureView(layerId: string): GPUTextureView {
-    return this.maskTextureViews.get(layerId) || this.whiteMaskView!;
+  getMaskTextureView(layerId: string): GPUTextureView | null {
+    return this.maskTextureViews.get(layerId) ?? null;
   }
 
   // Get the fallback white mask view
   getWhiteMaskView(): GPUTextureView {
     return this.whiteMaskView!;
+  }
+
+  // Get mask info in single lookup (avoids double Map access)
+  getMaskInfo(layerId: string): { hasMask: boolean; view: GPUTextureView } {
+    const view = this.maskTextureViews.get(layerId);
+    return view
+      ? { hasMask: true, view }
+      : { hasMask: false, view: this.whiteMaskView! };
   }
 
   // Log mask state for debugging (throttled)

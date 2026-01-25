@@ -62,11 +62,11 @@ export class Compositor {
       const sourceAspect = data.sourceWidth / data.sourceHeight;
       const outputAspect = state.outputWidth / state.outputHeight;
 
-      // Get mask texture
+      // Get mask texture (single lookup instead of two)
       const maskLookupId = layer.maskClipId || layer.id;
-      const hasMask = this.maskTextureManager.hasMaskTexture(maskLookupId);
-      const maskTextureView = this.maskTextureManager.getMaskTextureView(maskLookupId) ??
-                              this.maskTextureManager.getWhiteMaskView()!;
+      const maskInfo = this.maskTextureManager.getMaskInfo(maskLookupId);
+      const hasMask = maskInfo.hasMask;
+      const maskTextureView = maskInfo.view;
 
       this.maskTextureManager.logMaskState(maskLookupId, hasMask);
 
@@ -76,6 +76,9 @@ export class Compositor {
       let pipeline: GPURenderPipeline;
       let bindGroup: GPUBindGroup;
 
+      // Track which ping-pong buffer we're reading from for cache key
+      const isPingBase = readView === state.pingView;
+
       if (data.isVideo && data.externalTexture) {
         pipeline = this.compositorPipeline.getExternalCompositePipeline()!;
         bindGroup = this.compositorPipeline.createExternalCompositeBindGroup(
@@ -83,7 +86,9 @@ export class Compositor {
           readView,
           data.externalTexture,
           uniformBuffer,
-          maskTextureView
+          maskTextureView,
+          layer.id,
+          isPingBase
         );
       } else if (data.textureView) {
         pipeline = this.compositorPipeline.getCompositePipeline()!;
@@ -92,7 +97,9 @@ export class Compositor {
           readView,
           data.textureView,
           uniformBuffer,
-          maskTextureView
+          maskTextureView,
+          layer.id,
+          isPingBase
         );
       } else {
         continue;

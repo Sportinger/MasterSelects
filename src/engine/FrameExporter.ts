@@ -413,7 +413,7 @@ export class FrameExporter {
         const frameStart = performance.now();
         const time = startTime + frame * frameDuration;
 
-        if (frame % 30 === 0) {
+        if (frame % 30 === 0 || frame < 5) {
           console.log(`[FrameExporter] Processing frame ${frame}/${totalFrames} at time ${time.toFixed(3)}s`);
         }
 

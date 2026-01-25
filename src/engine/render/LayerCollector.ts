@@ -40,50 +40,64 @@ export class LayerCollector {
     const source = layer.source;
     if (!source) return null;
 
-    // 1. Try Native Helper decoder (turbo mode)
-    if (source.nativeDecoder) {
-      const bitmap = source.nativeDecoder.getCurrentFrame();
-      if (bitmap) {
-        const texture = deps.textureManager.createImageBitmapTexture(bitmap);
-        if (texture) {
-          this.currentDecoder = 'NativeHelper';
-          return {
-            layer,
-            isVideo: false,
-            externalTexture: null,
-            textureView: texture.createView(),
-            sourceWidth: bitmap.width,
-            sourceHeight: bitmap.height,
-          };
-        }
-      }
-    }
+    // Fast path: use source.type to skip irrelevant checks
+    const sourceType = source.type;
 
-    // 2. Try direct VideoFrame (parallel decoder)
-    if (source.videoFrame) {
-      const frame = source.videoFrame;
-      const extTex = deps.textureManager.importVideoTexture(frame);
-      if (extTex) {
-        this.currentDecoder = 'ParallelDecode';
-        this.hasVideo = true;
+    // Image sources - skip video checks entirely
+    if (sourceType === 'image') {
+      if (source.imageElement) {
+        return this.tryImage(layer, source.imageElement, deps);
+      }
+      // Nested compositions are also images
+      if (source.nestedComposition) {
+        const nestedComp = source.nestedComposition;
         return {
           layer,
-          isVideo: true,
-          externalTexture: extTex,
-          textureView: null,
-          sourceWidth: frame.displayWidth,
-          sourceHeight: frame.displayHeight,
+          isVideo: false,
+          externalTexture: null,
+          textureView: null, // Set after pre-render
+          sourceWidth: nestedComp.width,
+          sourceHeight: nestedComp.height,
         };
       }
+      return null;
     }
 
-    // 3. Try WebCodecs VideoFrame
-    if (source.webCodecsPlayer) {
-      const frame = source.webCodecsPlayer.getCurrentFrame();
-      if (frame) {
+    // Text sources - skip video/image checks
+    if (sourceType === 'text') {
+      if (source.textCanvas) {
+        return this.tryTextCanvas(layer, source.textCanvas, deps);
+      }
+      return null;
+    }
+
+    // Video sources - check decoders in priority order
+    if (sourceType === 'video') {
+      // 1. Try Native Helper decoder (turbo mode) - most efficient
+      if (source.nativeDecoder) {
+        const bitmap = source.nativeDecoder.getCurrentFrame();
+        if (bitmap) {
+          const texture = deps.textureManager.createImageBitmapTexture(bitmap);
+          if (texture) {
+            this.currentDecoder = 'NativeHelper';
+            return {
+              layer,
+              isVideo: false,
+              externalTexture: null,
+              textureView: texture.createView(),
+              sourceWidth: bitmap.width,
+              sourceHeight: bitmap.height,
+            };
+          }
+        }
+      }
+
+      // 2. Try direct VideoFrame (parallel decoder)
+      if (source.videoFrame) {
+        const frame = source.videoFrame;
         const extTex = deps.textureManager.importVideoTexture(frame);
         if (extTex) {
-          this.currentDecoder = 'WebCodecs';
+          this.currentDecoder = 'ParallelDecode';
           this.hasVideo = true;
           return {
             layer,
@@ -95,37 +109,31 @@ export class LayerCollector {
           };
         }
       }
-    }
 
-    // 4. Try HTMLVideoElement
-    if (source.videoElement) {
-      const data = this.tryHTMLVideo(layer, source.videoElement, deps);
-      if (data) return data;
-    }
+      // 3. Try WebCodecs VideoFrame
+      if (source.webCodecsPlayer) {
+        const frame = source.webCodecsPlayer.getCurrentFrame();
+        if (frame) {
+          const extTex = deps.textureManager.importVideoTexture(frame);
+          if (extTex) {
+            this.currentDecoder = 'WebCodecs';
+            this.hasVideo = true;
+            return {
+              layer,
+              isVideo: true,
+              externalTexture: extTex,
+              textureView: null,
+              sourceWidth: frame.displayWidth,
+              sourceHeight: frame.displayHeight,
+            };
+          }
+        }
+      }
 
-    // 5. Try Image
-    if (source.imageElement) {
-      const data = this.tryImage(layer, source.imageElement, deps);
-      if (data) return data;
-    }
-
-    // 6. Try Text Canvas
-    if (source.textCanvas) {
-      const data = this.tryTextCanvas(layer, source.textCanvas, deps);
-      if (data) return data;
-    }
-
-    // 7. Nested Composition (placeholder - actual texture set later)
-    if (source.nestedComposition) {
-      const nestedComp = source.nestedComposition;
-      return {
-        layer,
-        isVideo: false,
-        externalTexture: null,
-        textureView: null, // Set after pre-render
-        sourceWidth: nestedComp.width,
-        sourceHeight: nestedComp.height,
-      };
+      // 4. Try HTMLVideoElement (fallback)
+      if (source.videoElement) {
+        return this.tryHTMLVideo(layer, source.videoElement, deps);
+      }
     }
 
     return null;

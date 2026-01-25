@@ -18,7 +18,7 @@ import {
 import { shouldSkipWaveform, generateWaveformForFile } from '../helpers/waveformHelpers';
 import { generateLinkedClipIds } from '../helpers/idGenerator';
 import { blobUrlManager } from '../helpers/blobUrlManager';
-import { updateClipById, createUpdateBatch } from '../helpers/clipStateHelpers';
+import { updateClipById } from '../helpers/clipStateHelpers';
 
 export interface AddVideoClipParams {
   trackId: string;

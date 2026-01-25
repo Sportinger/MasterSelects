@@ -28,7 +28,7 @@ import {
   generateLinkedGroupId,
 } from './helpers/idGenerator';
 import { blobUrlManager } from './helpers/blobUrlManager';
-import { updateClipById, createUpdateBatch } from './helpers/clipStateHelpers';
+import { updateClipById } from './helpers/clipStateHelpers';
 
 export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
   addClip: async (trackId, file, startTime, providedDuration, mediaFileId) => {

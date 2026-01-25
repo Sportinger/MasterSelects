@@ -85,9 +85,9 @@ interface ClipDecoder {
 }
 
 // Buffer settings - tuned for speed like After Effects
-const BUFFER_AHEAD_FRAMES = 60;   // Pre-decode this many frames ahead (2 seconds at 30fps)
-const MAX_BUFFER_SIZE = 90;       // Maximum frames to keep in buffer
-const DECODE_BATCH_SIZE = 15;     // Decode this many frames per batch (larger = more throughput)
+const BUFFER_AHEAD_FRAMES = 30;   // Pre-decode this many frames ahead (1 second at 30fps)
+const MAX_BUFFER_SIZE = 60;       // Maximum frames to keep in buffer
+const DECODE_BATCH_SIZE = 60;     // Decode this many frames per batch - large for initial catchup
 
 export class ParallelDecodeManager {
   private clipDecoders: Map<string, ClipDecoder> = new Map();
@@ -325,32 +325,59 @@ export class ParallelDecodeManager {
         }
       }
 
-      // Trigger decode ahead (fire and forget for speed)
+      // Trigger decode ahead - await if we need the frame NOW
       const needsDecoding = clipDecoder.sampleIndex < targetSampleIndex + BUFFER_AHEAD_FRAMES;
       if (needsDecoding && !clipDecoder.isDecoding) {
-        // If frame not in buffer, we need to flush to get it NOW
-        this.decodeAhead(clipDecoder, targetSampleIndex + BUFFER_AHEAD_FRAMES, !frameInBuffer);
+        if (!frameInBuffer) {
+          // Need frame NOW - await the decode with flush
+          await this.decodeAhead(clipDecoder, targetSampleIndex + BUFFER_AHEAD_FRAMES, true);
+        } else {
+          // Fire and forget for frames already in buffer
+          this.decodeAhead(clipDecoder, targetSampleIndex + BUFFER_AHEAD_FRAMES, false);
+        }
       }
 
-      // Track clips that need their frames NOW
+      // Track clips that still need their frames
       if (!frameInBuffer) {
         clipsNeedingFlush.push(clipDecoder);
       }
     }
 
-    // Only wait for clips that don't have their frame yet (rare with 60 frame buffer)
-    if (clipsNeedingFlush.length > 0) {
-      await Promise.all(
-        clipsNeedingFlush.map(async (clipDecoder) => {
-          if (clipDecoder.pendingDecode) {
-            await clipDecoder.pendingDecode;
+    // Wait for clips that don't have their frame yet - keep decoding until we have it
+    for (const clipDecoder of clipsNeedingFlush) {
+      const clipInfo = clipDecoder.clipInfo;
+      const sourceTime = this.timelineToSourceTime(clipInfo, timelineTime);
+      const targetTimestamp = sourceTime * 1_000_000;
+      const targetSampleIndex = this.findSampleIndexForTime(clipDecoder, sourceTime);
+
+      // Loop until frame is in buffer (max 10 attempts)
+      for (let attempt = 0; attempt < 10; attempt++) {
+        // Wait for pending decode
+        if (clipDecoder.pendingDecode) {
+          await clipDecoder.pendingDecode;
+        }
+
+        // Check if frame is now in buffer
+        let frameFound = false;
+        for (const [, decodedFrame] of clipDecoder.frameBuffer) {
+          if (Math.abs(decodedFrame.timestamp - targetTimestamp) < 100_000) {
+            frameFound = true;
+            break;
           }
-          // If still missing, do a synchronous flush
-          if (clipDecoder.decoder.decodeQueueSize > 0) {
-            await clipDecoder.decoder.flush();
-          }
-        })
-      );
+        }
+
+        if (frameFound) break;
+
+        // Still missing - decode more frames
+        if (clipDecoder.decoder.decodeQueueSize > 0) {
+          await clipDecoder.decoder.flush();
+        }
+
+        // Trigger another decode batch if needed
+        if (clipDecoder.sampleIndex <= targetSampleIndex && !clipDecoder.isDecoding) {
+          await this.decodeAhead(clipDecoder, targetSampleIndex + BUFFER_AHEAD_FRAMES, true);
+        }
+      }
     }
   }
 

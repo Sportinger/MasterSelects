@@ -32,9 +32,10 @@ export function ParallelDecodeTest() {
   const [progress, setProgress] = useState(0);
   const decoderRef = useRef<ParallelDecodeManager | null>(null);
 
-  // Public domain test videos (archive.org has CORS enabled)
+  // Local test videos (served from public folder - no CORS issues)
   const TEST_VIDEOS = [
-    { name: 'Test Video 1', url: 'https://archive.org/download/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4' },
+    { name: 'Kling AI Video', url: '/test-videos/test1.mp4' },
+    { name: 'TV Noise 1080p', url: '/test-videos/test2.mp4' },
   ];
 
   const log = (message: string, type: LogEntry['type'] = 'info') => {

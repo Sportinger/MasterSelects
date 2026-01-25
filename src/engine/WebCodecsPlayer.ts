@@ -997,22 +997,29 @@ export class WebCodecsPlayer {
     });
 
     // Create promise that resolves when frame arrives in output callback
+    let timedOut = false;
     const framePromise = new Promise<void>((resolve) => {
       this.frameResolve = resolve;
       // Timeout fallback in case frame never arrives
       setTimeout(() => {
         if (this.frameResolve === resolve) {
-          console.warn('[WebCodecs] Frame decode timeout - frame may not have arrived');
+          timedOut = true;
           this.frameResolve = null;
           resolve();
         }
-      }, 50); // Reduced timeout - decoder should be fast
+      }, 200); // 200ms timeout for H.264/HEVC decoding
     });
 
     try {
       this.decoder.decode(chunk);
-      // Wait for frame to arrive in callback (no flush needed!)
+      // Wait for frame to arrive in callback
       await framePromise;
+
+      // If timeout triggered, flush decoder to force frame delivery
+      if (timedOut && this.decoder.decodeQueueSize > 0) {
+        console.warn('[WebCodecs] Frame decode timeout - flushing decoder');
+        await this.decoder.flush();
+      }
     } catch (e) {
       console.warn('[WebCodecs] Export decode error:', e);
     }
@@ -1046,9 +1053,15 @@ export class WebCodecsPlayer {
     // Check if we can continue sequentially (target is within a few samples)
     // Allow +/- 3 samples to handle frame rate conversions (e.g., 25fps video at 30fps export)
     if (this.isInExportMode && targetIndex >= this.sampleIndex - 1 && targetIndex <= this.sampleIndex + 3) {
-      // Close enough - decode sequentially to target
+      // Decode frames sequentially until we reach or pass the target
+      // sampleIndex points to the NEXT frame to decode, so we need to decode while sampleIndex <= targetIndex
+      const beforeIndex = this.sampleIndex;
       while (this.sampleIndex <= targetIndex) {
         await this.decodeNextFrameForExport();
+      }
+      // Debug: log first few seeks to verify frame-accurate export
+      if (targetIndex < 5) {
+        console.log(`[WebCodecs] Export seek: time=${timeSeconds.toFixed(3)}s → sample ${targetIndex} (decoded ${this.sampleIndex - beforeIndex} new)`);
       }
       return;
     }

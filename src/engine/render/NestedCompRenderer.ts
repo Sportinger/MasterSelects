@@ -11,6 +11,16 @@ interface NestedCompTexture {
   view: GPUTextureView;
 }
 
+interface PooledTexturePair {
+  pingTexture: GPUTexture;
+  pongTexture: GPUTexture;
+  pingView: GPUTextureView;
+  pongView: GPUTextureView;
+  width: number;
+  height: number;
+  inUse: boolean;
+}
+
 export class NestedCompRenderer {
   private device: GPUDevice;
   private compositorPipeline: CompositorPipeline;
@@ -18,7 +28,9 @@ export class NestedCompRenderer {
   private textureManager: TextureManager;
   private maskTextureManager: MaskTextureManager;
   private nestedCompTextures: Map<string, NestedCompTexture> = new Map();
-  private pendingTextureCleanup: GPUTexture[] = [];
+
+  // Texture pool for ping-pong buffers, keyed by "widthxheight"
+  private texturePool: Map<string, PooledTexturePair[]> = new Map();
 
   constructor(
     device: GPUDevice,
@@ -32,6 +44,53 @@ export class NestedCompRenderer {
     this.effectsPipeline = effectsPipeline;
     this.textureManager = textureManager;
     this.maskTextureManager = maskTextureManager;
+  }
+
+  // Acquire a ping-pong texture pair from pool or create new
+  private acquireTexturePair(width: number, height: number): PooledTexturePair {
+    const key = `${width}x${height}`;
+    let pool = this.texturePool.get(key);
+    if (!pool) {
+      pool = [];
+      this.texturePool.set(key, pool);
+    }
+
+    // Find available pair
+    for (const pair of pool) {
+      if (!pair.inUse) {
+        pair.inUse = true;
+        return pair;
+      }
+    }
+
+    // Create new pair
+    const pingTexture = this.device.createTexture({
+      size: { width, height },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
+    });
+    const pongTexture = this.device.createTexture({
+      size: { width, height },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
+    });
+
+    const pair: PooledTexturePair = {
+      pingTexture,
+      pongTexture,
+      pingView: pingTexture.createView(),
+      pongView: pongTexture.createView(),
+      width,
+      height,
+      inUse: true,
+    };
+    pool.push(pair);
+    return pair;
+  }
+
+  // Release texture pair back to pool
+  private releaseTexturePair(pair: PooledTexturePair): void {
+    pair.inUse = false;
   }
 
   preRender(
@@ -56,19 +115,10 @@ export class NestedCompRenderer {
       this.nestedCompTextures.set(compositionId, compTexture);
     }
 
-    // Create temporary ping-pong textures
-    const nestedPingTexture = this.device.createTexture({
-      size: { width, height },
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-    const nestedPongTexture = this.device.createTexture({
-      size: { width, height },
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-    const nestedPingView = nestedPingTexture.createView();
-    const nestedPongView = nestedPongTexture.createView();
+    // Acquire ping-pong textures from pool
+    const texturePair = this.acquireTexturePair(width, height);
+    const nestedPingView = texturePair.pingView;
+    const nestedPongView = texturePair.pongView;
 
     // Collect layer data
     const nestedLayerData = this.collectNestedLayerData(nestedLayers);
@@ -84,8 +134,7 @@ export class NestedCompRenderer {
         }],
       });
       clearPass.end();
-      nestedPingTexture.destroy();
-      nestedPongTexture.destroy();
+      this.releaseTexturePair(texturePair);
       return compTexture.view;
     }
 
@@ -112,9 +161,9 @@ export class NestedCompRenderer {
       const sourceAspect = data.sourceWidth / data.sourceHeight;
 
       const maskLookupId = layer.maskClipId || layer.id;
-      const hasMask = this.maskTextureManager.hasMaskTexture(maskLookupId);
-      const maskTextureView = this.maskTextureManager.getMaskTextureView(maskLookupId) ??
-                              this.maskTextureManager.getWhiteMaskView()!;
+      const maskInfo = this.maskTextureManager.getMaskInfo(maskLookupId);
+      const hasMask = maskInfo.hasMask;
+      const maskTextureView = maskInfo.view;
 
       this.compositorPipeline.updateLayerUniforms(layer, sourceAspect, outputAspect, hasMask, uniformBuffer);
 
@@ -158,11 +207,17 @@ export class NestedCompRenderer {
       [readView, writeView] = [writeView, readView];
     }
 
-    // Copy result to output texture
-    this.copyToOutput(commandEncoder, readView, compTexture, compositionId, sampler);
+    // Copy result to output texture using efficient GPU copy
+    // Determine which texture readView came from
+    const sourceTexture = readView === nestedPingView ? texturePair.pingTexture : texturePair.pongTexture;
+    commandEncoder.copyTextureToTexture(
+      { texture: sourceTexture },
+      { texture: compTexture.texture },
+      { width, height }
+    );
 
-    // Queue cleanup
-    this.pendingTextureCleanup.push(nestedPingTexture, nestedPongTexture);
+    // Release textures back to pool
+    this.releaseTexturePair(texturePair);
 
     return compTexture.view;
   }
@@ -249,34 +304,6 @@ export class NestedCompRenderer {
     return result;
   }
 
-  private copyToOutput(
-    commandEncoder: GPUCommandEncoder,
-    sourceView: GPUTextureView,
-    compTexture: NestedCompTexture,
-    compositionId: string,
-    sampler: GPUSampler
-  ): void {
-    const copyUniformBuffer = this.compositorPipeline.getOrCreateUniformBuffer(`nested-copy-${compositionId}`);
-    const passthroughLayer: Layer = {
-      id: 'passthrough', name: 'passthrough', visible: true, opacity: 1,
-      blendMode: 'normal', source: { type: 'image' }, effects: [],
-      position: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1 }, rotation: { x: 0, y: 0, z: 0 },
-    };
-    this.compositorPipeline.updateLayerUniforms(passthroughLayer, 1, 1, false, copyUniformBuffer);
-
-    const copyBindGroup = this.compositorPipeline.createCompositeBindGroup(
-      sampler, sourceView, sourceView, copyUniformBuffer, this.maskTextureManager.getWhiteMaskView()!
-    );
-
-    const copyPass = commandEncoder.beginRenderPass({
-      colorAttachments: [{ view: compTexture.view, loadOp: 'clear', storeOp: 'store' }],
-    });
-    copyPass.setPipeline(this.compositorPipeline.getCompositePipeline()!);
-    copyPass.setBindGroup(0, copyBindGroup);
-    copyPass.draw(6);
-    copyPass.end();
-  }
-
   hasTexture(compositionId: string): boolean {
     return this.nestedCompTextures.has(compositionId);
   }
@@ -286,10 +313,7 @@ export class NestedCompRenderer {
   }
 
   cleanupPendingTextures(): void {
-    for (const texture of this.pendingTextureCleanup) {
-      texture.destroy();
-    }
-    this.pendingTextureCleanup = [];
+    // No-op - textures are now managed by the pool
   }
 
   cleanupTexture(compositionId: string): void {
@@ -327,10 +351,19 @@ export class NestedCompRenderer {
   }
 
   destroy(): void {
+    // Destroy nested comp textures
     for (const tex of this.nestedCompTextures.values()) {
       tex.texture.destroy();
     }
     this.nestedCompTextures.clear();
-    this.cleanupPendingTextures();
+
+    // Destroy texture pool
+    for (const pool of this.texturePool.values()) {
+      for (const pair of pool) {
+        pair.pingTexture.destroy();
+        pair.pongTexture.destroy();
+      }
+    }
+    this.texturePool.clear();
   }
 }
