@@ -271,8 +271,14 @@ export function generateCompThumbnails(params: GenerateCompThumbnailsParams): vo
 
   if (!thumbnailsEnabled) return;
 
-  // Find the first video clip by file type
-  const firstVideoClipId = nestedClips.find(c => c.file.type.startsWith('video/'))?.id;
+  // Find the first video clip by file type or source type
+  const firstVideoClip = nestedClips.find(c =>
+    c.file?.type?.startsWith('video/') ||
+    c.source?.type === 'video' ||
+    // Fallback: check file extension
+    /\.(mp4|mov|webm|avi|mkv|m4v)$/i.test(c.file?.name || c.name || '')
+  );
+  const firstVideoClipId = firstVideoClip?.id;
   if (!firstVideoClipId) return;
 
   let attempts = 0;
