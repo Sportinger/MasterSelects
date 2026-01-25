@@ -1,6 +1,6 @@
 // TimelineClip component - Clip rendering within tracks
 
-import { memo, useRef, useEffect, useState } from 'react';
+import { memo, useRef, useEffect } from 'react';
 import type { TimelineClipProps } from './types';
 import { THUMB_WIDTH } from './constants';
 import type { ClipAnalysis } from '../../types';
@@ -391,18 +391,9 @@ function TimelineClipComponent({
 }: TimelineClipProps) {
   const thumbnails = clip.thumbnails || [];
 
-  // Entrance animation - stagger based on clip position (left to right)
-  const [isAnimating, setIsAnimating] = useState(true);
-  // Use clip's startTime for stagger - clips further right animate later
-  // Cap at 400ms max delay to keep animation snappy
-  const animationDelayRef = useRef(Math.min(clip.startTime * 0.015, 0.4));
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsAnimating(false);
-    }, 350 + animationDelayRef.current * 1000);
-    return () => clearTimeout(timer);
-  }, []);
+  // Entrance animation delay based on clip position (left to right)
+  // 15ms per second of timeline position, max 400ms delay
+  const entranceDelay = Math.min(clip.startTime * 0.015, 0.4);
 
   // Check if this clip should show cut indicator (either directly hovered or linked to hovered clip)
   const isDirectlyHovered = cutHoverInfo?.clipId === clip.id;
@@ -632,12 +623,12 @@ function TimelineClipComponent({
 
   return (
     <div
-      className={`${clipClass}${toolMode === 'cut' ? ' cut-mode' : ''}${isAnimating ? ' entrance-animate' : ''}`}
+      className={`${clipClass}${toolMode === 'cut' ? ' cut-mode' : ''} entrance-animate`}
       style={{
         left,
         width,
         cursor: toolMode === 'cut' ? 'crosshair' : undefined,
-        animationDelay: isAnimating ? `${animationDelay}s` : undefined,
+        animationDelay: `${entranceDelay}s`,
       }}
       data-clip-id={clip.id}
       onMouseDown={toolMode === 'cut' ? undefined : onMouseDown}
