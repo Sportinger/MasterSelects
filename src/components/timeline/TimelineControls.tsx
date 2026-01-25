@@ -19,6 +19,7 @@ function TimelineControlsComponent({
   showTranscriptMarkers,
   thumbnailsEnabled,
   waveformsEnabled,
+  toolMode,
   onPlay,
   onPause,
   onStop,
@@ -33,6 +34,7 @@ function TimelineControlsComponent({
   onToggleTranscriptMarkers,
   onToggleThumbnails,
   onToggleWaveforms,
+  onToggleCutTool,
   onAddVideoTrack,
   onAddAudioTrack,
   onAddTextClip,
@@ -128,6 +130,19 @@ function TimelineControlsComponent({
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 2L12 6M12 18L12 22M2 12L6 12M18 12L22 12" />
             <circle cx="12" cy="12" r="3" />
+          </svg>
+        </button>
+        <button
+          className={`btn btn-sm btn-icon ${toolMode === 'cut' ? 'btn-active' : ''}`}
+          onClick={onToggleCutTool}
+          title={toolMode === 'cut' ? 'Cut Tool active (C) - click clips to split' : 'Cut Tool (C) - click to activate'}
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="6" cy="6" r="3" />
+            <circle cx="6" cy="18" r="3" />
+            <line x1="20" y1="4" x2="8.12" y2="15.88" />
+            <line x1="14.47" y1="14.48" x2="20" y2="20" />
+            <line x1="8.12" y1="8.12" x2="12" y2="12" />
           </svg>
         </button>
         <button className="btn btn-sm" onClick={() => onSetZoom(zoom - 10)} title="Zoom out">

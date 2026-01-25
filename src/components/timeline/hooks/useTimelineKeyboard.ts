@@ -28,6 +28,10 @@ interface UseTimelineKeyboardProps {
   splitClipAtPlayhead: () => void;
   updateClipTransform: (id: string, transform: Partial<ClipTransform>) => void;
 
+  // Tool mode
+  toolMode: 'select' | 'cut';
+  toggleCutTool: () => void;
+
   // Clip lookup
   clipMap: Map<string, TimelineClip>;
 
@@ -52,6 +56,8 @@ export function useTimelineKeyboard({
   removeKeyframe,
   splitClipAtPlayhead,
   updateClipTransform,
+  toolMode,
+  toggleCutTool,
   clipMap,
   activeComposition,
   playheadPosition,
@@ -130,10 +136,23 @@ export function useTimelineKeyboard({
         return;
       }
 
-      // C: Cut/split clip at playhead position
+      // C: Toggle cut tool mode / Shift+C: Split clip at playhead position
       if (e.key === 'c' || e.key === 'C') {
         e.preventDefault();
-        splitClipAtPlayhead();
+        if (e.shiftKey) {
+          // Shift+C: Split clip at playhead position (legacy behavior)
+          splitClipAtPlayhead();
+        } else {
+          // C: Toggle cut tool mode
+          toggleCutTool();
+        }
+        return;
+      }
+
+      // Escape: Exit cut tool mode (return to select)
+      if (e.key === 'Escape' && toolMode === 'cut') {
+        e.preventDefault();
+        toggleCutTool();
         return;
       }
 
@@ -205,6 +224,8 @@ export function useTimelineKeyboard({
     splitClipAtPlayhead,
     clipMap,
     updateClipTransform,
+    toolMode,
+    toggleCutTool,
     activeComposition,
     playheadPosition,
     duration,

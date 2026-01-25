@@ -1,6 +1,6 @@
 // TimelineClip component - Clip rendering within tracks
 
-import { memo, useRef, useEffect } from 'react';
+import { memo, useRef, useEffect, useState } from 'react';
 import type { TimelineClipProps } from './types';
 import { THUMB_WIDTH } from './constants';
 import type { ClipAnalysis } from '../../types';
@@ -367,10 +367,12 @@ function TimelineClipComponent({
   proxyStatus,
   proxyProgress,
   showTranscriptMarkers,
+  toolMode,
   onMouseDown,
   onDoubleClick,
   onContextMenu,
   onTrimStart,
+  onCutAtPosition,
   hasKeyframes,
   timeToPixel,
   pixelToTime,
@@ -379,6 +381,8 @@ function TimelineClipComponent({
   onPickWhipDragEnd,
   onSetClipParent,
 }: TimelineClipProps) {
+  // Cut tool hover position (relative to clip left edge in pixels)
+  const [cutHoverX, setCutHoverX] = useState<number | null>(null);
   const thumbnails = clip.thumbnails || [];
 
   // Determine if this is an audio clip (check source type, MIME type, or extension as fallback)
@@ -524,15 +528,51 @@ function TimelineClipComponent({
   // Get parent clip name for tooltip
   const parentClip = clip.parentClipId ? clips.find(c => c.id === clip.parentClipId) : null;
 
+  // Cut tool handlers
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (toolMode !== 'cut') {
+      if (cutHoverX !== null) setCutHoverX(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    setCutHoverX(x);
+  };
+
+  const handleMouseLeave = () => {
+    if (cutHoverX !== null) setCutHoverX(null);
+  };
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (toolMode !== 'cut') return;
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    // Convert pixel position to time within clip
+    const cutTime = displayStartTime + (x / width) * displayDuration;
+    onCutAtPosition(clip.id, cutTime);
+    setCutHoverX(null);
+  };
+
   return (
     <div
-      className={clipClass}
-      style={{ left, width }}
+      className={`${clipClass}${toolMode === 'cut' ? ' cut-mode' : ''}`}
+      style={{ left, width, cursor: toolMode === 'cut' ? 'crosshair' : undefined }}
       data-clip-id={clip.id}
-      onMouseDown={onMouseDown}
-      onDoubleClick={onDoubleClick}
+      onMouseDown={toolMode === 'cut' ? undefined : onMouseDown}
+      onDoubleClick={toolMode === 'cut' ? undefined : onDoubleClick}
       onContextMenu={onContextMenu}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      onClick={handleClick}
     >
+      {/* Cut indicator line */}
+      {toolMode === 'cut' && cutHoverX !== null && (
+        <div
+          className="cut-indicator"
+          style={{ left: cutHoverX }}
+        />
+      )}
       {/* YouTube pending download preview */}
       {clip.isPendingDownload && clip.youtubeThumbnail && (
         <div

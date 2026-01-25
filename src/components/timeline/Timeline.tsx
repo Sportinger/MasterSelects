@@ -120,6 +120,9 @@ export function Timeline() {
     getSourceTimeForClip,
     getInterpolatedSpeed,
     addTextClip,
+    toolMode,
+    toggleCutTool,
+    splitClip,
   } = useTimelineStore();
 
   const {
@@ -376,6 +379,8 @@ export function Timeline() {
     removeKeyframe,
     splitClipAtPlayhead,
     updateClipTransform,
+    toolMode,
+    toggleCutTool,
     clipMap,
     activeComposition,
     playheadPosition,
@@ -708,10 +713,12 @@ export function Timeline() {
           proxyStatus={mediaFile?.proxyStatus}
           proxyProgress={mediaFile?.proxyProgress || 0}
           showTranscriptMarkers={showTranscriptMarkers}
+          toolMode={toolMode}
           onMouseDown={(e) => handleClipMouseDown(e, clip.id)}
           onDoubleClick={(e) => handleClipDoubleClick(e, clip.id)}
           onContextMenu={(e) => handleClipContextMenu(e, clip.id)}
           onTrimStart={(e, edge) => handleTrimStart(e, clip.id, edge)}
+          onCutAtPosition={splitClip}
           hasKeyframes={hasKeyframes}
           timeToPixel={timeToPixel}
           pixelToTime={pixelToTime}
@@ -734,10 +741,12 @@ export function Timeline() {
       proxyEnabled,
       mediaFiles,
       showTranscriptMarkers,
+      toolMode,
       handleClipMouseDown,
       handleClipDoubleClick,
       handleClipContextMenu,
       handleTrimStart,
+      splitClip,
       hasKeyframes,
       timeToPixel,
       pixelToTime,
@@ -781,6 +790,7 @@ export function Timeline() {
         showTranscriptMarkers={showTranscriptMarkers}
         thumbnailsEnabled={thumbnailsEnabled}
         waveformsEnabled={waveformsEnabled}
+        toolMode={toolMode}
         onPlay={play}
         onPause={pause}
         onStop={stop}
@@ -795,6 +805,7 @@ export function Timeline() {
         onToggleTranscriptMarkers={() => setShowTranscriptMarkers(!showTranscriptMarkers)}
         onToggleThumbnails={toggleThumbnailsEnabled}
         onToggleWaveforms={toggleWaveformsEnabled}
+        onToggleCutTool={toggleCutTool}
         onAddVideoTrack={() => addTrack('video')}
         onAddAudioTrack={() => addTrack('audio')}
         onAddTextClip={() => {

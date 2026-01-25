@@ -487,20 +487,18 @@ export class WebCodecsPlayer {
           const cts = frame.timestamp; // microseconds
           this.exportFrameBuffer.set(cts, frame);
 
-          // Also update currentFrame to the latest decoded
-          if (this.currentFrame && this.currentFrame !== frame) {
-            // Don't close - it might be in the buffer
-          }
-          this.currentFrame = frame;
+          // DON'T set currentFrame here - it's managed by seekDuringExport
+          // to avoid reference confusion between buffer and currentFrame
 
           // Cleanup old frames if buffer is too large
           if (this.exportFrameBuffer.size > this.exportBufferSize) {
-            // Find and remove oldest frame
+            // Find and remove oldest frame (but not currentFrame if it's in use)
             let oldestCts = Infinity;
-            for (const cts of this.exportFrameBuffer.keys()) {
-              if (cts < oldestCts) oldestCts = cts;
+            for (const bufCts of this.exportFrameBuffer.keys()) {
+              if (bufCts < oldestCts) oldestCts = bufCts;
             }
             const oldFrame = this.exportFrameBuffer.get(oldestCts);
+            // Only close if it's not being used as currentFrame
             if (oldFrame && oldFrame !== this.currentFrame) {
               oldFrame.close();
             }
@@ -514,7 +512,10 @@ export class WebCodecsPlayer {
           this.currentFrame = frame;
         }
 
-        this.onFrame?.(frame);
+        // Only call onFrame callback in normal mode (export doesn't need it)
+        if (!this.isInExportMode) {
+          this.onFrame?.(frame);
+        }
 
         // Resolve any pending frame wait (for sequential export)
         if (this.frameResolve) {
@@ -988,6 +989,16 @@ export class WebCodecsPlayer {
       }
     }
 
+    // Close any existing currentFrame from normal mode before entering export mode
+    if (this.currentFrame) {
+      try {
+        this.currentFrame.close();
+      } catch {
+        // Already closed
+      }
+      this.currentFrame = null;
+    }
+
     // Reset decoder once at the start
     this.decoder.reset();
     if (!this.codecConfig) {
@@ -1022,20 +1033,47 @@ export class WebCodecsPlayer {
       }
     }
 
-    // Wait for decoder to process queued samples with timeout safety
+    // Wait for decoder to process queued samples AND output frames
+    // decodeQueueSize=0 means chunks are accepted, not that frames are output
     let waitCount = 0;
-    const maxWait = 100; // Max 1 second (100 * 10ms)
-    const initialQueueSize = this.decoder.decodeQueueSize;
+    const maxWait = 150; // Max 1.5 seconds (150 * 10ms)
+    const samplesDecoded = decodeEnd - keyframeIndex;
+    const expectedFrames = Math.max(1, samplesDecoded - 5); // B-frames buffer ~5 frames
 
-    while (this.decoder.decodeQueueSize > 0 && waitCount < maxWait) {
+    while (waitCount < maxWait) {
+      // Check if decoder accepted all chunks AND we have enough frames
+      const queueEmpty = this.decoder.decodeQueueSize === 0;
+      const hasEnoughFrames = this.exportFrameBuffer.size >= expectedFrames;
+
+      if (queueEmpty && hasEnoughFrames) {
+        break;
+      }
+
       await new Promise(r => setTimeout(r, 10));
       waitCount++;
     }
 
-    // Small additional wait for output callbacks
-    await new Promise(r => setTimeout(r, 50));
+    // One more flush to ensure all pending frames are output
+    if (this.decoder.decodeQueueSize === 0) {
+      await new Promise(r => setTimeout(r, 50));
+    }
 
-    console.log(`[WebCodecs] Export mode: started at sample ${keyframeIndex}, decoded ${decodeEnd - keyframeIndex} samples (initial queue=${initialQueueSize}, waited ${waitCount}), buffer has ${this.exportFrameBuffer.size} frames`);
+    // Set currentFrame to the closest frame to our target time
+    const targetCts = startTimeSeconds * 1_000_000;
+    let bestFrame: VideoFrame | null = null;
+    let bestDiff = Infinity;
+    for (const [cts, frame] of this.exportFrameBuffer) {
+      const diff = Math.abs(cts - targetCts);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestFrame = frame;
+      }
+    }
+    if (bestFrame) {
+      this.currentFrame = bestFrame;
+    }
+
+    console.log(`[WebCodecs] Export mode: started at sample ${keyframeIndex}, decoded ${samplesDecoded} samples, waited ${waitCount * 10}ms, buffer has ${this.exportFrameBuffer.size} frames (expected ${expectedFrames})`);
   }
 
   /**
@@ -1111,7 +1149,8 @@ export class WebCodecsPlayer {
       return;
     }
 
-    if (!this.videoTrack || this.samples.length === 0 || !this.decoder) {
+    // Early exit if not in export mode or decoder is gone
+    if (!this.isInExportMode || !this.videoTrack || this.samples.length === 0 || !this.decoder) {
       return;
     }
 
@@ -1148,21 +1187,30 @@ export class WebCodecsPlayer {
     const maxSampleIndex = Math.min(this.sampleIndex + decodeAhead, this.samples.length);
 
     // Queue all samples without waiting (decoder will buffer B-frames)
-    while (this.sampleIndex < maxSampleIndex) {
+    while (this.sampleIndex < maxSampleIndex && this.decoder) {
       this.queueNextSampleForDecode();
     }
 
-    // Wait for decoder to process with timeout safety
+    // Check decoder is still valid after queuing
+    if (!this.decoder || !this.isInExportMode) return;
+
+    // Wait for decoder queue to drain AND for output callbacks
+    // decodeQueueSize=0 means decoder accepted chunks, not that frames are output
     let waitCount = 0;
     const maxWaits = 50; // 50 * 10ms = 500ms max
+    const initialBufferSize = this.exportFrameBuffer.size;
 
-    while (waitCount < maxWaits && this.decoder.decodeQueueSize > 0) {
+    while (waitCount < maxWaits && this.decoder && this.isInExportMode) {
+      // Wait until queue is drained AND we have new frames
+      if (this.decoder.decodeQueueSize === 0 && this.exportFrameBuffer.size > initialBufferSize) {
+        break;
+      }
       await new Promise(r => setTimeout(r, 10));
       waitCount++;
     }
 
-    // Small wait for output callbacks
-    await new Promise(r => setTimeout(r, 20));
+    // Check decoder is still valid
+    if (!this.decoder || !this.isInExportMode) return;
 
     // Check if we now have our frame
     ({ frame: bestFrame, diff: bestDiff } = findBestFrame());
@@ -1196,6 +1244,9 @@ export class WebCodecsPlayer {
       }
       this.exportFrameBuffer.clear();
 
+      // Check decoder is still valid before reset
+      if (!this.decoder || !this.isInExportMode) return;
+
       // Find keyframe before target
       let keyframeIndex = 0;
       for (let i = 0; i <= targetSampleIndex; i++) {
@@ -1206,24 +1257,33 @@ export class WebCodecsPlayer {
 
       // Reset and decode from keyframe
       this.decoder.reset();
-      this.decoder.configure(this.codecConfig!);
+      if (!this.codecConfig) return;
+      this.decoder.configure(this.codecConfig);
       this.sampleIndex = keyframeIndex;
 
       // Queue samples up to and past target (for B-frame reordering)
       // Need to decode past target because B-frames need future references
       const endIndex = Math.min(targetSampleIndex + 15, this.samples.length);
-      while (this.sampleIndex < endIndex) {
+      while (this.sampleIndex < endIndex && this.decoder) {
         this.queueNextSampleForDecode();
       }
+
+      // Check decoder is still valid
+      if (!this.decoder || !this.isInExportMode) return;
 
       // Wait for decoder with timeout safety
       let resetWaitCount = 0;
       const maxResetWaits = 100; // 100 * 10ms = 1s max
-      while (this.decoder.decodeQueueSize > 0 && resetWaitCount < maxResetWaits) {
+      while (this.decoder && this.decoder.decodeQueueSize > 0 && resetWaitCount < maxResetWaits) {
         await new Promise(r => setTimeout(r, 10));
         resetWaitCount++;
+        if (!this.isInExportMode) return;
       }
-      await new Promise(r => setTimeout(r, 20));
+
+      // Small wait for output callbacks
+      if (this.decoder && this.isInExportMode) {
+        await new Promise(r => setTimeout(r, 30));
+      }
 
       // Now find best match in buffer
       ({ frame: bestFrame, diff: bestDiff } = findBestFrame());

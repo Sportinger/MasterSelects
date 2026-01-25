@@ -94,6 +94,7 @@ export interface TimelineControlsProps {
   showTranscriptMarkers: boolean;
   thumbnailsEnabled: boolean;
   waveformsEnabled: boolean;
+  toolMode: 'select' | 'cut';
   onPlay: () => void;
   onPause: () => void;
   onStop: () => void;
@@ -108,6 +109,7 @@ export interface TimelineControlsProps {
   onToggleTranscriptMarkers: () => void;
   onToggleThumbnails: () => void;
   onToggleWaveforms: () => void;
+  onToggleCutTool: () => void;
   onAddVideoTrack: () => void;
   onAddAudioTrack: () => void;
   onAddTextClip: () => void;
@@ -227,10 +229,12 @@ export interface TimelineClipProps {
   proxyStatus: 'none' | 'generating' | 'ready' | 'error' | undefined;
   proxyProgress: number;
   showTranscriptMarkers: boolean;
+  toolMode: 'select' | 'cut';
   onMouseDown: (e: React.MouseEvent) => void;
   onDoubleClick: (e: React.MouseEvent) => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onTrimStart: (e: React.MouseEvent, edge: 'left' | 'right') => void;
+  onCutAtPosition: (clipId: string, time: number) => void;
   hasKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;
   timeToPixel: (time: number) => number;
   pixelToTime: (pixel: number) => number;

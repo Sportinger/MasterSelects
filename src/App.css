@@ -3776,6 +3776,48 @@ input[type="checkbox"] {
   box-shadow: 0 0 0 2px #ef4444, 0 4px 12px rgba(239, 68, 68, 0.5);
 }
 
+/* Cut tool mode */
+.timeline-clip.cut-mode {
+  cursor: crosshair !important;
+}
+
+.timeline-clip.cut-mode:hover {
+  box-shadow: 0 0 0 1px #f97316;
+}
+
+/* Cut indicator line */
+.cut-indicator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #f97316;
+  pointer-events: none;
+  z-index: 100;
+  box-shadow: 0 0 4px rgba(249, 115, 22, 0.8);
+}
+
+.cut-indicator::before,
+.cut-indicator::after {
+  content: '';
+  position: absolute;
+  left: -4px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+}
+
+.cut-indicator::before {
+  top: 0;
+  border-top: 6px solid #f97316;
+}
+
+.cut-indicator::after {
+  bottom: 0;
+  border-bottom: 6px solid #f97316;
+}
+
 /* Premiere-style drag feedback */
 .timeline-tracks.dragging-clip {
   cursor: grabbing;
