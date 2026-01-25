@@ -14,6 +14,9 @@ import { VideoFrameManager } from './video/VideoFrameManager';
 import { useMediaStore } from '../stores/mediaStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { reportRenderTime } from '../services/performanceMonitor';
+import { Logger } from '../services/logger';
+
+const log = Logger.create('WebGPUEngine');
 
 // New modules
 import { PerformanceStats } from './stats/PerformanceStats';
@@ -84,13 +87,13 @@ export class WebGPUEngine {
 
     // Device recovery handlers
     this.context.onDeviceLost((reason) => {
-      console.log('[WebGPUEngine] Device lost:', reason);
+      log.warn('Device lost', { reason });
       this.isRecoveringFromDeviceLoss = true;
       this.handleDeviceLost();
     });
 
     this.context.onDeviceRestored(() => {
-      console.log('[WebGPUEngine] Device restored');
+      log.info('Device restored');
       this.handleDeviceRestored();
       this.isRecoveringFromDeviceLoss = false;
     });
@@ -104,7 +107,7 @@ export class WebGPUEngine {
     if (!success) return false;
 
     await this.createResources();
-    console.log('[WebGPU] Engine initialized');
+    log.info('Engine initialized');
     return true;
   }
 
@@ -183,7 +186,7 @@ export class WebGPUEngine {
     this.effectsPipeline = null;
     this.outputPipeline = null;
 
-    console.log('[WebGPUEngine] Resources cleaned after device loss');
+    log.debug('Resources cleaned after device loss');
   }
 
   private async handleDeviceRestored(): Promise<void> {
@@ -204,7 +207,7 @@ export class WebGPUEngine {
 
     this.renderLoop?.start();
     this.requestRender();
-    console.log('[WebGPUEngine] Recovery complete');
+    log.info('Recovery complete');
   }
 
   // === CANVAS MANAGEMENT ===
@@ -219,14 +222,14 @@ export class WebGPUEngine {
     const ctx = this.context.configureCanvas(canvas);
     if (ctx) {
       this.previewCanvases.set(id, ctx);
-      console.log(`[Engine] Registered preview canvas: ${id}`);
+      log.debug('Registered preview canvas', { id });
     }
   }
 
   unregisterPreviewCanvas(id: string): void {
     this.previewCanvases.delete(id);
     this.previewCanvasElements.delete(id);
-    console.log(`[Engine] Unregistered preview canvas: ${id}`);
+    log.debug('Unregistered preview canvas', { id });
   }
 
   registerIndependentPreviewCanvas(id: string, canvas: HTMLCanvasElement, compositionId?: string): void {
@@ -235,7 +238,7 @@ export class WebGPUEngine {
     if (ctx) {
       this.independentPreviewCanvases.set(id, ctx);
       if (compositionId) this.independentCanvasCompositions.set(id, compositionId);
-      console.log(`[Engine] Registered INDEPENDENT preview canvas: ${id} for composition: ${compositionId || 'unknown'}`);
+      log.debug('Registered independent preview canvas', { id, compositionId });
     }
   }
 
@@ -243,7 +246,7 @@ export class WebGPUEngine {
     this.independentPreviewCanvases.delete(id);
     this.independentCanvasElements.delete(id);
     this.independentCanvasCompositions.delete(id);
-    console.log(`[Engine] Unregistered INDEPENDENT preview canvas: ${id}`);
+    log.debug('Unregistered independent preview canvas', { id });
   }
 
   setIndependentCanvasComposition(canvasId: string, compositionId: string): void {
@@ -295,7 +298,7 @@ export class WebGPUEngine {
     this.scrubbingCache?.cleanupVideo(video);
     this.videoFrameManager.cleanupVideo(video);
     if (video.src) this.lastVideoTime.delete(video.src);
-    console.log('[WebGPU] Cleaned up video resources');
+    log.debug('Cleaned up video resources');
   }
 
   setHasActiveVideo(hasVideo: boolean): void {
@@ -317,12 +320,12 @@ export class WebGPUEngine {
   clearCaches(): void {
     this.scrubbingCache?.clearAll();
     this.textureManager?.clearCaches();
-    console.log('[WebGPU] Cleared all caches');
+    log.debug('Cleared all caches');
   }
 
   clearVideoCache(): void {
     this.lastVideoTime.clear();
-    console.log('[WebGPU] Cleared video texture cache');
+    log.debug('Cleared video texture cache');
   }
 
   cacheFrameAtTime(video: HTMLVideoElement, time: number): void {
@@ -357,7 +360,7 @@ export class WebGPUEngine {
       for (let i = 0; i < Math.min(1000, pixels.length); i++) {
         if (pixels[i] !== 0) nonZero++;
       }
-      console.log(`[RAM Preview] First frame: ${nonZero} non-zero pixels in first 1000, size: ${width}x${height}`);
+      log.debug('RAM Preview first frame', { nonZero, width, height });
     }
 
     const imageData = new ImageData(new Uint8ClampedArray(pixels), width, height);
@@ -376,7 +379,7 @@ export class WebGPUEngine {
     this.scrubbingCache?.clearCompositeCache();
     this.ramPlaybackCanvas = null;
     this.ramPlaybackCtx = null;
-    console.log('[WebGPU] Composite cache cleared');
+    log.debug('Composite cache cleared');
   }
 
   getCompositeCacheStats(): { count: number; maxFrames: number; memoryMB: number } {
@@ -391,7 +394,7 @@ export class WebGPUEngine {
   setExporting(exporting: boolean): void {
     this.isExporting = exporting;
     if (exporting) this.lastVideoTime.clear();
-    console.log(`[WebGPUEngine] Export mode: ${exporting ? 'ON' : 'OFF'}`);
+    log.info('Export mode', { enabled: exporting });
   }
 
   getIsExporting(): boolean {
@@ -405,7 +408,7 @@ export class WebGPUEngine {
   initExportCanvas(width: number, height: number): boolean {
     const device = this.context.getDevice();
     if (!device) {
-      console.error('[WebGPUEngine] Cannot init export canvas: no device');
+      log.error('Cannot init export canvas: no device');
       return false;
     }
 
@@ -413,7 +416,7 @@ export class WebGPUEngine {
     this.exportCanvas = new OffscreenCanvas(width, height);
     const ctx = this.exportCanvas.getContext('webgpu');
     if (!ctx) {
-      console.error('[WebGPUEngine] Failed to get WebGPU context from OffscreenCanvas');
+      log.error('Failed to get WebGPU context from OffscreenCanvas');
       this.exportCanvas = null;
       return false;
     }
@@ -427,7 +430,7 @@ export class WebGPUEngine {
     });
 
     this.exportCanvasContext = ctx;
-    console.log(`[WebGPUEngine] Export canvas initialized: ${width}x${height} (${preferredFormat})`);
+    log.info('Export canvas initialized', { width, height, format: preferredFormat });
     return true;
   }
 
@@ -438,13 +441,13 @@ export class WebGPUEngine {
    */
   async createVideoFrameFromExport(timestamp: number, duration: number): Promise<VideoFrame | null> {
     if (!this.exportCanvas) {
-      console.error('[WebGPUEngine] Export canvas not initialized');
+      log.error('Export canvas not initialized');
       return null;
     }
 
     const device = this.context.getDevice();
     if (!device) {
-      console.error('[WebGPUEngine] No GPU device');
+      log.error('No GPU device');
       return null;
     }
 
@@ -460,7 +463,7 @@ export class WebGPUEngine {
       });
       return frame;
     } catch (e) {
-      console.error('[WebGPUEngine] Failed to create VideoFrame from export canvas:', e);
+      log.error('Failed to create VideoFrame from export canvas', e);
       return null;
     }
   }
@@ -471,7 +474,7 @@ export class WebGPUEngine {
   cleanupExportCanvas(): void {
     this.exportCanvasContext = null;
     this.exportCanvas = null;
-    console.log('[WebGPUEngine] Export canvas cleaned up');
+    log.debug('Export canvas cleaned up');
   }
 
   // === RENDER LOOP ===
@@ -838,7 +841,7 @@ export class WebGPUEngine {
       device.queue.submit([commandEncoder.finish()]);
       return true;
     } catch (e) {
-      console.warn('[WebGPU] Failed to render cached frame:', e);
+      log.warn('Failed to render cached frame', e);
       return false;
     }
   }
@@ -906,7 +909,7 @@ export class WebGPUEngine {
       this.outputWindowManager?.updateResolution(width, height);
       this.outputPipeline?.invalidateCache();
       this.compositorPipeline?.invalidateBindGroupCache();
-      console.log(`[Engine] Caches cleared for resolution change to ${width}x${height}`);
+      log.debug('Caches cleared for resolution change', { width, height });
     }
   }
 
@@ -976,12 +979,12 @@ export class WebGPUEngine {
   }
 
   async reinitializeWithPreference(preference: GPUPowerPreference): Promise<boolean> {
-    console.log(`[WebGPUEngine] Reinitializing with preference: ${preference}`);
+    log.info('Reinitializing with preference', { preference });
     this.stop();
     this.handleDeviceLost();
     const success = await this.context.reinitializeWithPreference(preference);
     if (!success) {
-      console.error('[WebGPUEngine] Failed to reinitialize with new preference');
+      log.error('Failed to reinitialize with new preference');
       return false;
     }
     await this.createResources();
@@ -999,7 +1002,7 @@ export class WebGPUEngine {
     }
 
     this.requestRender();
-    console.log('[WebGPUEngine] Reinitialize complete');
+    log.info('Reinitialize complete');
     return true;
   }
 
@@ -1079,14 +1082,16 @@ const hot = typeof import.meta !== 'undefined'
   ? (import.meta as { hot?: { data: Record<string, unknown> } }).hot
   : undefined;
 
+const hmrLog = Logger.create('WebGPU-HMR');
+
 if (hot) {
   const existing = hot.data.engine as WebGPUEngine | undefined;
   if (existing) {
-    console.log('[WebGPU] Reusing engine from HMR');
+    hmrLog.debug('Reusing engine from HMR');
     existing.clearVideoCache();
     engineInstance = existing;
   } else {
-    console.log('[WebGPU] Creating new engine');
+    hmrLog.debug('Creating new engine');
     engineInstance = new WebGPUEngine();
     hot.data.engine = engineInstance;
   }
