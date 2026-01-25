@@ -116,7 +116,7 @@ async function getMP4Info(file: File): Promise<Partial<MediaInfo>> {
       }
     }, 5000);
 
-    mp4boxFile.onReady = (info) => {
+    mp4boxFile.onReady = (info: any) => {
       if (resolved) return;
       resolved = true;
       clearTimeout(timeout);
@@ -138,7 +138,7 @@ async function getMP4Info(file: File): Promise<Partial<MediaInfo>> {
       });
     };
 
-    mp4boxFile.onError = (error) => {
+    mp4boxFile.onError = (error: any) => {
       if (resolved) return;
       resolved = true;
       clearTimeout(timeout);

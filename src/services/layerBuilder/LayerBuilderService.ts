@@ -1,7 +1,7 @@
 // LayerBuilderService - Main orchestrator for layer building
 // Uses modular components for caching, transforms, and audio sync
 
-import type { TimelineClip, TimelineTrack, Layer, Effect, NestedCompositionData } from '../../types';
+import type { TimelineClip, Layer, NestedCompositionData, BlendMode } from '../../types';
 import type { FrameContext, NativeDecoderState } from './types';
 import { LAYER_BUILDER_CONSTANTS } from './types';
 import { playheadState } from './PlayheadState';
@@ -41,10 +41,6 @@ export class LayerBuilderService {
 
   // Lookahead preloading
   private lastLookaheadTime = 0;
-  private primedNestedVideos = new Set<string>();
-
-  // Debug
-  private debugFrameCount = 0;
 
   // Active audio proxies tracking
   private activeAudioProxies = new Map<string, HTMLAudioElement>();
@@ -170,7 +166,7 @@ export class LayerBuilderService {
       name: clip.name,
       visible: true,
       opacity: transform.opacity,
-      blendMode: transform.blendMode,
+      blendMode: transform.blendMode as BlendMode,
       source: { type: 'image', nestedComposition: nestedCompData },
       effects,
       position: transform.position,
@@ -198,7 +194,7 @@ export class LayerBuilderService {
       name: clip.name,
       visible: true,
       opacity: transform.opacity,
-      blendMode: transform.blendMode,
+      blendMode: transform.blendMode as BlendMode,
       source: { type: 'video', nativeDecoder: clip.source!.nativeDecoder },
       effects,
       position: transform.position,
@@ -235,7 +231,7 @@ export class LayerBuilderService {
       name: clip.name,
       visible: true,
       opacity: transform.opacity,
-      blendMode: transform.blendMode,
+      blendMode: transform.blendMode as BlendMode,
       source: {
         type: 'video',
         videoElement: clip.source!.videoElement,
@@ -310,7 +306,7 @@ export class LayerBuilderService {
       name: clip.name,
       visible: true,
       opacity: transform.opacity,
-      blendMode: transform.blendMode,
+      blendMode: transform.blendMode as BlendMode,
       source: { type: 'image', imageElement: clip.source!.imageElement },
       effects,
       position: transform.position,
@@ -343,7 +339,7 @@ export class LayerBuilderService {
       name: clip.name,
       visible: true,
       opacity: transform.opacity,
-      blendMode: transform.blendMode,
+      blendMode: transform.blendMode as BlendMode,
       source: { type: 'image', imageElement },
       effects,
       position: transform.position,
@@ -371,7 +367,7 @@ export class LayerBuilderService {
       name: clip.name,
       visible: true,
       opacity: transform.opacity,
-      blendMode: transform.blendMode,
+      blendMode: transform.blendMode as BlendMode,
       source: { type: 'text', textCanvas: clip.source!.textCanvas },
       effects,
       position: transform.position,
@@ -449,7 +445,7 @@ export class LayerBuilderService {
   /**
    * Build layer for a nested clip
    */
-  private buildNestedClipLayer(nestedClip: TimelineClip, nestedClipTime: number, ctx: FrameContext): Layer | null {
+  private buildNestedClipLayer(nestedClip: TimelineClip, _nestedClipTime: number, _ctx: FrameContext): Layer | null {
     const transform = nestedClip.transform || {
       position: { x: 0, y: 0, z: 0 },
       scale: { x: 1, y: 1 },
