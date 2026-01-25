@@ -248,7 +248,7 @@ export function useExternalDrop({
       e.stopPropagation();
 
       const cachedDuration =
-        externalDrag?.duration ?? dragDurationCacheRef.current?.duration;
+        externalDrag?.duration ?? dragMetadataCacheRef.current?.duration;
 
       dragCounterRef.current = 0;
       setExternalDrag(null);
@@ -365,7 +365,7 @@ export function useExternalDrop({
       e.preventDefault();
 
       const cachedDuration =
-        externalDrag?.duration ?? dragDurationCacheRef.current?.duration;
+        externalDrag?.duration ?? dragMetadataCacheRef.current?.duration;
 
       dragCounterRef.current = 0;
       setExternalDrag(null);
