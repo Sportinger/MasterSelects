@@ -76,9 +76,6 @@ export interface TimelineRulerProps {
   scrollX: number;
   onRulerMouseDown: (e: React.MouseEvent) => void;
   formatTime: (seconds: number) => string;
-  // Marker drag-to-create
-  onMarkerDragStart: (e: React.MouseEvent) => void;
-  isMarkerDragging: boolean;
 }
 
 // Props for TimelineControls component

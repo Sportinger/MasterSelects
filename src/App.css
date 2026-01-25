@@ -4588,9 +4588,50 @@ input[type="checkbox"] {
   }
 }
 
-/* Ruler header styles are defined earlier in the file */
+/* Add Marker Button in ruler-header */
+.ruler-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+}
 
-/* Legacy add-marker-btn styles removed - now using .ruler-marker-btn in TimelineRuler */
+.ruler-header > span {
+  flex: 1;
+  text-align: center;
+}
+
+.add-marker-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--text-secondary);
+  cursor: grab;
+  transition: all 0.15s ease;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.add-marker-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-color);
+  color: var(--accent-timeline);
+}
+
+.add-marker-btn.dragging {
+  background: var(--accent-timeline);
+  border-color: var(--accent-timeline);
+  color: white;
+  cursor: grabbing;
+  transform: scale(1.1);
+  box-shadow: 0 0 12px var(--accent-timeline);
+}
 
 /* RAM Preview */
 .timeline-ram-preview {

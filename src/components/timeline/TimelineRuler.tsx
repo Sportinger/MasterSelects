@@ -9,8 +9,6 @@ function TimelineRulerComponent({
   scrollX,
   onRulerMouseDown,
   formatTime,
-  onMarkerDragStart,
-  isMarkerDragging,
 }: TimelineRulerProps) {
   // Time to pixel conversion
   const timeToPixel = (time: number) => time * zoom;
@@ -63,21 +61,12 @@ function TimelineRulerComponent({
   }
 
   return (
-    <div className="time-ruler-container">
-      <div
-        className="time-ruler"
-        style={{ width, transform: `translateX(-${scrollX}px)` }}
-        onMouseDown={onRulerMouseDown}
-      >
-        {markers}
-      </div>
-      <button
-        className={`ruler-marker-btn ${isMarkerDragging ? 'dragging' : ''}`}
-        onMouseDown={onMarkerDragStart}
-        title="Drag to place marker, or press M"
-      >
-        M
-      </button>
+    <div
+      className="time-ruler"
+      style={{ width, transform: `translateX(-${scrollX}px)` }}
+      onMouseDown={onRulerMouseDown}
+    >
+      {markers}
     </div>
   );
 }
