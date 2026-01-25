@@ -849,16 +849,7 @@ export function Timeline() {
       <div className="timeline-body" ref={timelineBodyRef}>
         <div className="timeline-body-content">
           <div className="timeline-header-row">
-            <div className="ruler-header">
-              <span>Time</span>
-              <button
-                className={`add-marker-btn ${markerCreateDrag?.isDragging ? 'dragging' : ''}`}
-                onMouseDown={handleMarkerButtonDragStart}
-                title="Drag to place marker, or click to add at playhead (M)"
-              >
-                M
-              </button>
-            </div>
+            <div className="ruler-header">Time</div>
             <div className="time-ruler-wrapper">
               <TimelineRuler
                 duration={duration}
@@ -866,6 +857,8 @@ export function Timeline() {
                 scrollX={scrollX}
                 onRulerMouseDown={handleRulerMouseDown}
                 formatTime={formatTime}
+                onMarkerDragStart={handleMarkerButtonDragStart}
+                isMarkerDragging={markerCreateDrag?.isDragging ?? false}
               />
             </div>
           </div>

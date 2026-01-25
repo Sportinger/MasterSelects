@@ -3044,16 +3044,62 @@ input[type="checkbox"] {
   position: relative;
 }
 
+.time-ruler-container {
+  position: relative;
+  height: 30px;
+  display: flex;
+  overflow: hidden;
+}
+
 .time-ruler {
   height: 30px;
   background: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-color);
   position: relative;
   cursor: pointer;
+  flex: 1;
 }
 
 .time-ruler:hover {
   background: var(--bg-hover);
+}
+
+/* Ruler Marker Button (M) */
+.ruler-marker-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: bold;
+  cursor: grab;
+  transition: all 0.15s ease;
+  z-index: 10;
+}
+
+.ruler-marker-btn:hover {
+  background: var(--accent-timeline);
+  border-color: var(--accent-timeline);
+  color: white;
+  box-shadow: 0 0 8px var(--accent-timeline);
+}
+
+.ruler-marker-btn.dragging {
+  background: var(--accent-timeline);
+  border-color: var(--accent-timeline);
+  color: white;
+  cursor: grabbing;
+  transform: translateY(-50%) scale(1.15);
+  box-shadow: 0 0 12px var(--accent-timeline);
 }
 
 .time-marker {
@@ -4538,54 +4584,9 @@ input[type="checkbox"] {
   }
 }
 
-/* Add Marker Button */
-.ruler-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 8px;
-}
+/* Ruler header styles are defined earlier in the file */
 
-.ruler-header > span {
-  flex: 1;
-  text-align: center;
-}
-
-.add-marker-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  color: var(--text-secondary);
-  cursor: grab;
-  transition: all 0.15s ease;
-  font-size: 10px;
-  font-weight: bold;
-}
-
-.add-marker-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-color);
-  color: var(--accent-timeline);
-}
-
-.add-marker-btn:active {
-  transform: scale(0.95);
-}
-
-.add-marker-btn.dragging {
-  background: var(--accent-timeline);
-  border-color: var(--accent-timeline);
-  color: white;
-  cursor: grabbing;
-  transform: scale(1.1);
-  box-shadow: 0 0 12px var(--accent-timeline);
-}
+/* Legacy add-marker-btn styles removed - now using .ruler-marker-btn in TimelineRuler */
 
 /* RAM Preview */
 .timeline-ram-preview {
