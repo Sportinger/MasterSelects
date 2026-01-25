@@ -19,6 +19,7 @@ export interface ImportParams {
   id: string;
   handle?: FileSystemFileHandle;
   absolutePath?: string;
+  parentId?: string | null;
 }
 
 export interface ImportResult {
@@ -38,7 +39,7 @@ export function generateId(): string {
  * Replaces duplicate logic in importFile, importFilesWithPicker, importFilesWithHandles.
  */
 export async function processImport(params: ImportParams): Promise<ImportResult> {
-  const { file, id, handle, absolutePath } = params;
+  const { file, id, handle, absolutePath, parentId } = params;
 
   // Store handle if provided (for original file location)
   if (handle) {
@@ -73,7 +74,7 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
     id,
     name: file.name,
     type,
-    parentId: null,
+    parentId: parentId ?? null,
     createdAt: Date.now(),
     file,
     url,

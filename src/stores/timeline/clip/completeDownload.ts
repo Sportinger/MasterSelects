@@ -69,9 +69,16 @@ export async function completeDownload(params: CompleteDownloadParams): Promise<
   const initialThumbnails = clip.youtubeThumbnail ? [clip.youtubeThumbnail] : [];
   video.currentTime = 0;
 
-  // Import to media store
+  // Import to media store in YouTube folder
   const mediaStore = useMediaStore.getState();
-  const mediaFile = await mediaStore.importFile(file);
+
+  // Find or create YouTube folder
+  let ytFolder = mediaStore.folders.find(f => f.name === 'YouTube' && f.parentId === null);
+  if (!ytFolder) {
+    ytFolder = mediaStore.createFolder('YouTube');
+  }
+
+  const mediaFile = await mediaStore.importFile(file, ytFolder.id);
 
   // Find/create audio track
   const audioTrackId = findAvailableAudioTrack(clip.startTime, naturalDuration);

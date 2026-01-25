@@ -9,8 +9,8 @@ import { Logger } from '../../../services/logger';
 const log = Logger.create('Import');
 
 export interface FileImportActions {
-  importFile: (file: File) => Promise<MediaFile>;
-  importFiles: (files: FileList | File[]) => Promise<MediaFile[]>;
+  importFile: (file: File, parentId?: string | null) => Promise<MediaFile>;
+  importFiles: (files: FileList | File[], parentId?: string | null) => Promise<MediaFile[]>;
   importFilesWithPicker: () => Promise<MediaFile[]>;
   importFilesWithHandles: (filesWithHandles: Array<{
     file: File;
@@ -20,12 +20,13 @@ export interface FileImportActions {
 }
 
 export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set, _get) => ({
-  importFile: async (file: File) => {
+  importFile: async (file: File, parentId?: string | null) => {
     log.info('Starting:', file.name, 'type:', file.type, 'size:', file.size);
 
     const result = await processImport({
       file,
       id: generateId(),
+      parentId,
     });
 
     set((state) => ({
@@ -36,7 +37,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
     return result.mediaFile;
   },
 
-  importFiles: async (files: FileList | File[]) => {
+  importFiles: async (files: FileList | File[], parentId?: string | null) => {
     const fileArray = Array.from(files);
     const imported: MediaFile[] = [];
 
@@ -49,6 +50,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
           const result = await processImport({
             file,
             id: generateId(),
+            parentId,
           });
           set((state) => ({
             files: [...state.files, result.mediaFile],
