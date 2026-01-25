@@ -53,7 +53,7 @@ class CompositionAudioMixerService {
     const composition = compositions.find(c => c.id === compositionId);
 
     if (!composition) {
-      console.warn(`[CompositionAudioMixer] Composition ${compositionId} not found`);
+      log.warn(`Composition ${compositionId} not found`);
       return null;
     }
 
@@ -72,14 +72,14 @@ class CompositionAudioMixerService {
       clips = composition.timelineData.clips || [];
       tracks = composition.timelineData.tracks || [];
     } else {
-      console.warn(`[CompositionAudioMixer] Composition ${compositionId} has no timeline data`);
+      log.warn(`Composition ${compositionId} has no timeline data`);
       return null;
     }
 
     // Find audio tracks
     const audioTracks = tracks.filter(t => t.type === 'audio');
     if (audioTracks.length === 0) {
-      console.log(`[CompositionAudioMixer] No audio tracks in composition ${composition.name}`);
+      log.debug(`No audio tracks in composition ${composition.name}`);
       return {
         buffer: this.createSilentBuffer(composition.duration || 10),
         waveform: [],
@@ -93,7 +93,7 @@ class CompositionAudioMixerService {
     const audioClips = clips.filter(c => audioTrackIds.has(c.trackId));
 
     if (audioClips.length === 0) {
-      console.log(`[CompositionAudioMixer] No audio clips in composition ${composition.name}`);
+      log.debug(`No audio clips in composition ${composition.name}`);
       return {
         buffer: this.createSilentBuffer(composition.duration || 10),
         waveform: [],
@@ -102,7 +102,7 @@ class CompositionAudioMixerService {
       };
     }
 
-    console.log(`[CompositionAudioMixer] Processing ${audioClips.length} audio clips from ${composition.name}`);
+    log.info(`Processing ${audioClips.length} audio clips from ${composition.name}`);
 
     onProgress?.({ phase: 'extracting', percent: 10, message: 'Extracting audio...' });
 
@@ -129,7 +129,7 @@ class CompositionAudioMixerService {
       }
 
       if (!file) {
-        console.warn(`[CompositionAudioMixer] No file found for clip ${clip.name}`);
+        log.warn(`No file found for clip ${clip.name}`);
         continue;
       }
 
@@ -137,7 +137,7 @@ class CompositionAudioMixerService {
         // Extract audio from the file
         const extractedBuffer = await audioExtractor.extractAudio(file, clip.id);
         if (!extractedBuffer) {
-          console.warn(`[CompositionAudioMixer] Failed to extract audio from ${clip.name}`);
+          log.warn(`Failed to extract audio from ${clip.name}`);
           continue;
         }
 
@@ -161,7 +161,7 @@ class CompositionAudioMixerService {
           clipVolume: clip.transform?.opacity ?? 1, // Use opacity as volume proxy
         });
       } catch (e) {
-        console.error(`[CompositionAudioMixer] Error processing ${clip.name}:`, e);
+        log.error(`Error processing ${clip.name}`, e);
       }
 
       onProgress?.({
@@ -172,7 +172,7 @@ class CompositionAudioMixerService {
     }
 
     if (trackDataList.length === 0) {
-      console.log(`[CompositionAudioMixer] No audio could be extracted from composition ${composition.name}`);
+      log.info(`No audio could be extracted from composition ${composition.name}`);
       return {
         buffer: this.createSilentBuffer(duration),
         waveform: [],
@@ -199,7 +199,7 @@ class CompositionAudioMixerService {
 
     onProgress?.({ phase: 'complete', percent: 100, message: 'Complete' });
 
-    console.log(`[CompositionAudioMixer] Mixdown complete: ${duration.toFixed(2)}s, ${waveform.length} waveform samples`);
+    log.info(`Mixdown complete: ${duration.toFixed(2)}s, ${waveform.length} waveform samples`);
 
     return {
       buffer: mixedBuffer,

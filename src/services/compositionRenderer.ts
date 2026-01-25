@@ -56,7 +56,7 @@ class CompositionRendererService {
     const composition = useMediaStore.getState().compositions.find(c => c.id === compositionId);
 
     if (!composition) {
-      console.warn(`[CompositionRenderer] Composition ${compositionId} not found`);
+      log.warn(`Composition ${compositionId} not found`);
       return false;
     }
 
@@ -68,13 +68,13 @@ class CompositionRendererService {
     if (isActiveComp) {
       // Active composition - use live data from timeline store
       clips = useTimelineStore.getState().clips;
-      console.log(`[CompositionRenderer] Preparing ACTIVE composition: ${composition.name} (${clips.length} clips from timeline store)`);
+      log.info(`Preparing ACTIVE composition: ${composition.name} (${clips.length} clips from timeline store)`);
     } else if (composition.timelineData) {
       // Non-active composition - use serialized data
       clips = composition.timelineData.clips || [];
-      console.log(`[CompositionRenderer] Preparing composition: ${composition.name} (${clips.length} clips from timelineData)`);
+      log.info(`Preparing composition: ${composition.name} (${clips.length} clips from timelineData)`);
     } else {
-      console.warn(`[CompositionRenderer] Composition ${compositionId} has no timeline data`);
+      log.warn(`Composition ${compositionId} has no timeline data`);
       return false;
     }
 
@@ -153,7 +153,7 @@ class CompositionRendererService {
       const mediaFile = mediaFiles.find(f => f.id === mediaFileId);
 
       if (!mediaFile?.file) {
-        console.warn(`[CompositionRenderer] Media file not found for clip ${clip.id}`);
+        log.warn(`Media file not found for clip ${clip.id}`);
         continue;
       }
 

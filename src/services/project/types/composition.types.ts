@@ -16,7 +16,8 @@ export interface ProjectTrack {
 export interface ProjectClip {
   id: string;
   trackId: string;
-  mediaId: string; // Reference to ProjectMediaFile.id
+  name?: string;
+  mediaId: string; // Reference to ProjectMediaFile.id (empty for composition clips)
 
   // Timeline position
   startTime: number;
@@ -45,6 +46,29 @@ export interface ProjectClip {
   // Flags
   reversed: boolean;
   disabled: boolean;
+
+  // Nested composition support
+  isComposition?: boolean;
+  compositionId?: string;
+
+  // Additional clip metadata (for restoration)
+  sourceType?: 'video' | 'audio' | 'image';
+  naturalDuration?: number;
+  linkedClipId?: string;
+  linkedGroupId?: string;
+  thumbnails?: string[];
+  waveform?: number[];
+
+  // Text clip support
+  textProperties?: any;
+
+  // Transcript data
+  transcript?: any[];
+  transcriptStatus?: string;
+
+  // Analysis data
+  analysis?: any;
+  analysisStatus?: string;
 }
 
 export interface ProjectComposition {

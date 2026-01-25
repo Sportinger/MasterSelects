@@ -128,6 +128,17 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       audioEnabled: c.audioEnabled !== false,
       reversed: c.reversed || false,
       disabled: c.disabled || false,
+      // Nested composition support
+      isComposition: c.isComposition || undefined,
+      compositionId: c.compositionId || undefined,
+      // Text clip support
+      textProperties: c.textProperties || undefined,
+      // Transcript data
+      transcript: c.transcript || undefined,
+      transcriptStatus: c.transcriptStatus || undefined,
+      // Analysis data
+      analysis: c.analysis || undefined,
+      analysisStatus: c.analysisStatus || undefined,
     }));
 
     // Note: markers not currently stored in CompositionTimelineData
@@ -341,14 +352,14 @@ function convertProjectCompositionToStore(
       clips: pc.clips.map((c) => ({
         id: c.id,
         trackId: c.trackId,
-        name: (c as any).name || '',
+        name: c.name || '',
         mediaFileId: c.mediaId,  // Map mediaId -> mediaFileId for loadState
-        sourceType: (c as any).sourceType || 'video',
-        naturalDuration: (c as any).naturalDuration,
-        thumbnails: (c as any).thumbnails,
-        linkedClipId: (c as any).linkedClipId,
-        linkedGroupId: (c as any).linkedGroupId,
-        waveform: (c as any).waveform,
+        sourceType: c.sourceType || 'video',
+        naturalDuration: c.naturalDuration,
+        thumbnails: c.thumbnails,
+        linkedClipId: c.linkedClipId,
+        linkedGroupId: c.linkedGroupId,
+        waveform: c.waveform,
         startTime: c.startTime,
         duration: c.duration,
         inPoint: c.inPoint,
@@ -361,6 +372,17 @@ function convertProjectCompositionToStore(
         audioEnabled: c.audioEnabled,
         reversed: c.reversed,
         disabled: c.disabled,
+        // Nested composition support
+        isComposition: c.isComposition,
+        compositionId: c.compositionId,
+        // Text clip support
+        textProperties: c.textProperties,
+        // Transcript data
+        transcript: c.transcript,
+        transcriptStatus: c.transcriptStatus,
+        // Analysis data
+        analysis: c.analysis,
+        analysisStatus: c.analysisStatus,
       })),
       // Restore view state from saved uiState, or use defaults
       playheadPosition: viewState?.playheadPosition ?? 0,

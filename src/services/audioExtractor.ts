@@ -104,7 +104,7 @@ export async function extractAudioFromVideo(
 
       totalSamples = audioTrack.nbSamples;
 
-      console.log(`[AudioExtractor] Found audio track: ${audioTrack.codec}, ${audioTrack.sampleRate}Hz, ${audioTrack.channelCount}ch, ${totalSamples} samples`);
+      log.info(`Found audio track: ${audioTrack.codec}, ${audioTrack.sampleRate}Hz, ${audioTrack.channelCount}ch, ${totalSamples} samples`);
 
       // Set up extraction
       mp4boxFile.setExtractionOptions(audioTrack.id, null, {
@@ -129,14 +129,14 @@ export async function extractAudioFromVideo(
     };
 
     mp4boxFile.onError = (error: string) => {
-      console.error('[AudioExtractor] MP4Box error:', error);
+      log.error('MP4Box error:', error);
       resolve(null);
     };
 
     // When all samples are extracted, create the output file
     const finalize = () => {
       if (!audioTrack || audioSamples.length === 0) {
-        console.warn('[AudioExtractor] No audio samples extracted');
+        log.warn('No audio samples extracted');
         resolve(null);
         return;
       }
@@ -151,7 +151,7 @@ export async function extractAudioFromVideo(
         onProgress?.(100);
 
         if (blob) {
-          console.log(`[AudioExtractor] Created ${(blob.size / 1024).toFixed(1)}KB audio file`);
+          log.info(`Created ${(blob.size / 1024).toFixed(1)}KB audio file`);
           resolve({
             blob,
             codec: audioTrack.codec,
@@ -163,7 +163,7 @@ export async function extractAudioFromVideo(
           resolve(null);
         }
       } catch (e) {
-        console.error('[AudioExtractor] Failed to create audio file:', e);
+        log.error('Failed to create audio file', e);
         resolve(null);
       }
     };
@@ -203,7 +203,7 @@ export async function extractAudioFromVideo(
     };
 
     reader.onerror = () => {
-      console.error('[AudioExtractor] File read error');
+      log.error('File read error');
       resolve(null);
     };
 
@@ -228,7 +228,7 @@ function createAudioBlob(
     return createADTSFile(track, samples);
   } else if (codecLower.includes('opus')) {
     // Opus - just concatenate (browser might not play this directly)
-    console.log('[AudioExtractor] Opus audio - creating raw blob');
+    log.info('Opus audio - creating raw blob');
     const totalSize = samples.reduce((sum, s) => sum + s.byteLength, 0);
     const combined = new Uint8Array(totalSize);
     let offset = 0;
@@ -239,7 +239,7 @@ function createAudioBlob(
     return new Blob([combined], { type: 'audio/opus' });
   } else {
     // Unknown codec - try raw blob
-    console.log(`[AudioExtractor] Unknown codec ${track.codec} - creating raw blob`);
+    log.info(`Unknown codec ${track.codec} - creating raw blob`);
     const totalSize = samples.reduce((sum, s) => sum + s.byteLength, 0);
     const combined = new Uint8Array(totalSize);
     let offset = 0;
