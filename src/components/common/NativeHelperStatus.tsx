@@ -213,24 +213,38 @@ function NativeHelperDialog({
                     <span className="info-feature-icon">v{info.version}</span>
                     <span>Helper Version</span>
                   </div>
-                  <div className="info-feature">
-                    <span className="info-feature-icon">{info.cache_used_mb}MB</span>
-                    <span>Cache Used ({info.cache_max_mb}MB max)</span>
-                  </div>
-                  {info.hw_accel.length > 0 && (
+                  {/* Full helper shows cache and hw accel info */}
+                  {info.cache_used_mb !== undefined && (
+                    <div className="info-feature">
+                      <span className="info-feature-icon">{info.cache_used_mb}MB</span>
+                      <span>Cache Used ({info.cache_max_mb}MB max)</span>
+                    </div>
+                  )}
+                  {info.hw_accel && info.hw_accel.length > 0 && (
                     <div className="info-feature">
                       <span className="info-feature-icon">HW</span>
                       <span>{info.hw_accel.join(', ')}</span>
                     </div>
                   )}
-                  <div className="info-feature">
-                    <span className="info-feature-icon">{info.open_files}</span>
-                    <span>Open Files</span>
-                  </div>
+                  {info.open_files !== undefined && (
+                    <div className="info-feature">
+                      <span className="info-feature-icon">{info.open_files}</span>
+                      <span>Open Files</span>
+                    </div>
+                  )}
+                  {/* Lite helper (Windows) shows YouTube availability */}
+                  {(info as any).lite && (
+                    <div className="info-feature">
+                      <span className="info-feature-icon">{(info as any).ytdlp_available ? '✓' : '✗'}</span>
+                      <span>YouTube Downloads</span>
+                    </div>
+                  )}
                 </div>
 
                 <p className="text-xs text-green-400 text-center pt-2">
-                  ProRes and DNxHD files will decode at native speed
+                  {(info as any).lite
+                    ? 'YouTube downloads enabled'
+                    : 'ProRes and DNxHD files will decode at native speed'}
                 </p>
               </div>
             ) : turboModeEnabled ? (
