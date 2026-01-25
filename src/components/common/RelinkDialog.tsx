@@ -5,6 +5,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useMediaStore } from '../../stores/mediaStore';
 import { fileSystemService } from '../../services/fileSystemService';
 import { projectDB } from '../../services/projectDB';
+import { projectFileService } from '../../services/projectFileService';
 
 interface RelinkDialogProps {
   onClose: () => void;
@@ -25,15 +26,56 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
   const [isSearching, setIsSearching] = useState(false);
   const [searchedFolders, setSearchedFolders] = useState<string[]>([]);
 
-  // Initialize file statuses
+  // Initialize file statuses and auto-scan Raw folder
   useEffect(() => {
-    const missingFiles = files.filter(f => !f.file);
-    setFileStatuses(missingFiles.map(f => ({
-      id: f.id,
-      name: f.name,
-      filePath: f.filePath,
-      status: 'missing',
-    })));
+    const initializeStatuses = async () => {
+      const missingFiles = files.filter(f => !f.file);
+      const initialStatuses: FileStatus[] = missingFiles.map(f => ({
+        id: f.id,
+        name: f.name,
+        filePath: f.filePath,
+        status: 'missing' as const,
+      }));
+      setFileStatuses(initialStatuses);
+
+      // Auto-scan Raw folder for missing files if project is open
+      if (projectFileService.isProjectOpen() && missingFiles.length > 0) {
+        console.log('[RelinkDialog] Auto-scanning project Raw folder...');
+        const rawFiles = await projectFileService.scanRawFolder();
+
+        if (rawFiles.size > 0) {
+          console.log('[RelinkDialog] Found', rawFiles.size, 'files in Raw folder');
+
+          // Match missing files against Raw folder contents
+          const updatedStatuses = [...initialStatuses];
+          for (const status of updatedStatuses) {
+            if (status.status === 'missing') {
+              const searchName = status.name.toLowerCase();
+              const handle = rawFiles.get(searchName);
+
+              if (handle) {
+                try {
+                  const file = await handle.getFile();
+                  status.status = 'found';
+                  status.newHandle = handle;
+                  status.newFile = file;
+                  console.log('[RelinkDialog] Found in Raw folder:', status.name);
+                } catch (e) {
+                  console.warn('[RelinkDialog] Could not read file from Raw:', status.name, e);
+                }
+              }
+            }
+          }
+
+          setFileStatuses(updatedStatuses);
+          if (rawFiles.size > 0) {
+            setSearchedFolders(['Raw (project folder)']);
+          }
+        }
+      }
+    };
+
+    initializeStatuses();
   }, [files]);
 
   // Scan a folder for missing files

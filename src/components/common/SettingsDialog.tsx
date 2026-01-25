@@ -13,9 +13,11 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
     apiKeys,
     transcriptionProvider,
     forceDesktopMode,
+    copyMediaToProject,
     setApiKey,
     setTranscriptionProvider,
     setForceDesktopMode,
+    setCopyMediaToProject,
   } = useSettingsStore();
 
   // Check if we're actually on a mobile device
@@ -241,6 +243,25 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
                 Get API Key (free credits on signup) →
               </a>
             </div>
+          </div>
+
+          {/* Media Import Settings */}
+          <div className="settings-section">
+            <h3>Media Import</h3>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={copyMediaToProject}
+                onChange={(e) => setCopyMediaToProject(e.target.checked)}
+              />
+              <span className="toggle-label">
+                <span className="toggle-title">Copy media to project folder</span>
+                <span className="toggle-description">
+                  When importing clips, copy them to the project's Raw folder for easier relinking.
+                  Files will always be available in the project directory.
+                </span>
+              </span>
+            </label>
           </div>
 
           {/* Mobile/Desktop View Toggle - only show on mobile devices */}
@@ -521,6 +542,49 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
 
           .btn-mobile-switch:hover {
             background: var(--bg-hover);
+          }
+
+          .settings-toggle {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s;
+          }
+
+          .settings-toggle:hover {
+            border-color: var(--text-secondary);
+          }
+
+          .settings-toggle input[type="checkbox"] {
+            margin-top: 2px;
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent);
+            cursor: pointer;
+          }
+
+          .toggle-label {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+          }
+
+          .toggle-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+          }
+
+          .toggle-description {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.4;
           }
         `}</style>
       </div>

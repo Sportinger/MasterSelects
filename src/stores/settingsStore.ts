@@ -53,6 +53,9 @@ interface SettingsState {
   // GPU preference
   gpuPowerPreference: GPUPowerPreference;  // 'high-performance' (dGPU) or 'low-power' (iGPU)
 
+  // Media import settings
+  copyMediaToProject: boolean;  // Copy imported files to project Raw/ folder
+
   // First-run state
   hasCompletedSetup: boolean;
 
@@ -71,6 +74,7 @@ interface SettingsState {
   setNativeHelperConnected: (connected: boolean) => void;
   setForceDesktopMode: (force: boolean) => void;
   setGpuPowerPreference: (preference: GPUPowerPreference) => void;
+  setCopyMediaToProject: (enabled: boolean) => void;
   setHasCompletedSetup: (completed: boolean) => void;
   openSettings: () => void;
   closeSettings: () => void;
@@ -104,6 +108,7 @@ export const useSettingsStore = create<SettingsState>()(
       nativeHelperConnected: false, // Not connected initially
       forceDesktopMode: false, // Use responsive detection by default
       gpuPowerPreference: 'high-performance', // Prefer dGPU by default
+      copyMediaToProject: true, // Copy imported files to Raw/ folder by default
       hasCompletedSetup: false, // Show welcome overlay on first run
       isSettingsOpen: false,
 
@@ -155,6 +160,10 @@ export const useSettingsStore = create<SettingsState>()(
 
       setGpuPowerPreference: (preference) => {
         set({ gpuPowerPreference: preference });
+      },
+
+      setCopyMediaToProject: (enabled) => {
+        set({ copyMediaToProject: enabled });
       },
 
       setHasCompletedSetup: (completed) => {

@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { useTimelineStore } from './timeline';
+import { useSettingsStore } from './settingsStore';
 import { projectDB, type StoredProject } from '../services/projectDB';
 import { fileSystemService } from '../services/fileSystemService';
 import { projectFileService } from '../services/projectFileService';
@@ -48,6 +49,7 @@ export interface MediaFile extends MediaItem {
   hasFileHandle?: boolean; // True if imported via File System Access API
   filePath?: string; // Display path (folder name / file name)
   absolutePath?: string; // Full file system path (for native helper decoding)
+  projectPath?: string; // Relative path in project folder (e.g., "Raw/video.mp4") - for relinking
 }
 
 // Composition (like After Effects comp)
@@ -547,8 +549,21 @@ export const useMediaStore = create<MediaState>()(
             }
           }
 
+          // Copy to Raw folder if enabled
+          let projectPath: string | undefined;
+          let projectFileHandle: FileSystemFileHandle | undefined;
+          const { copyMediaToProject } = useSettingsStore.getState();
+          if (copyMediaToProject && projectFileService.isProjectOpen()) {
+            const copyResult = await projectFileService.copyToRawFolder(file);
+            if (copyResult) {
+              projectPath = copyResult.relativePath;
+              projectFileHandle = copyResult.handle;
+            }
+          }
+
+          const mediaFileId = generateId();
           const mediaFile: MediaFile = {
-            id: generateId(),
+            id: mediaFileId,
             name: file.name,
             type,
             parentId: null,
@@ -560,8 +575,17 @@ export const useMediaStore = create<MediaState>()(
             proxyStatus,
             proxyFrameCount,
             proxyFps: proxyFrameCount ? PROXY_FPS : undefined,
+            projectPath,
+            hasFileHandle: !!projectFileHandle,
             ...info,
           };
+
+          // Store the project file handle if we copied the file
+          if (projectFileHandle) {
+            fileSystemService.storeFileHandle(mediaFileId, projectFileHandle);
+            await projectDB.storeHandle(`media_${mediaFileId}`, projectFileHandle);
+            console.log('[MediaStore] Stored handle for copied file:', projectPath);
+          }
 
           set((state) => ({
             files: [...state.files, mediaFile],
@@ -1493,6 +1517,22 @@ export const useMediaStore = create<MediaState>()(
               }
             }
 
+            // Copy to Raw folder if enabled
+            let projectPath: string | undefined;
+            let projectFileHandle: FileSystemFileHandle | undefined;
+            const { copyMediaToProject } = useSettingsStore.getState();
+            if (copyMediaToProject && projectFileService.isProjectOpen()) {
+              const copyResult = await projectFileService.copyToRawFolder(file);
+              if (copyResult) {
+                projectPath = copyResult.relativePath;
+                projectFileHandle = copyResult.handle;
+                // Also store the project file handle (in addition to original handle)
+                fileSystemService.storeFileHandle(`${id}_project`, projectFileHandle);
+                await projectDB.storeHandle(`media_${id}_project`, projectFileHandle);
+                console.log('[MediaStore] Copied file to project Raw folder:', projectPath);
+              }
+            }
+
             const mediaFile: MediaFile = {
               id,
               name: file.name,
@@ -1508,6 +1548,7 @@ export const useMediaStore = create<MediaState>()(
               proxyStatus,
               proxyFrameCount,
               proxyFps: proxyFrameCount ? PROXY_FPS : undefined,
+              projectPath,
               ...info,
             };
 
@@ -1587,6 +1628,22 @@ export const useMediaStore = create<MediaState>()(
               }
             }
 
+            // Copy to Raw folder if enabled
+            let projectPath: string | undefined;
+            let projectFileHandle: FileSystemFileHandle | undefined;
+            const { copyMediaToProject } = useSettingsStore.getState();
+            if (copyMediaToProject && projectFileService.isProjectOpen()) {
+              const copyResult = await projectFileService.copyToRawFolder(file);
+              if (copyResult) {
+                projectPath = copyResult.relativePath;
+                projectFileHandle = copyResult.handle;
+                // Also store the project file handle (in addition to original handle)
+                fileSystemService.storeFileHandle(`${id}_project`, projectFileHandle);
+                await projectDB.storeHandle(`media_${id}_project`, projectFileHandle);
+                console.log('[MediaStore] Copied file to project Raw folder:', projectPath);
+              }
+            }
+
             const mediaFile: MediaFile = {
               id,
               name: file.name,
@@ -1611,6 +1668,7 @@ export const useMediaStore = create<MediaState>()(
               proxyFrameCount,
               proxyFps: proxyFrameCount ? PROXY_FPS : undefined,
               proxyProgress: proxyFrameCount ? 100 : 0,
+              projectPath,
             };
 
             set((state) => ({
