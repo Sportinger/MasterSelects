@@ -50,6 +50,7 @@ export class LayerBuilderService {
    * Invalidate all caches (layer cache and transform cache)
    */
   invalidateCache(): void {
+    console.log('[LayerBuilderService] invalidateCache called');
     this.layerCache.invalidate();
     this.transformCache.clear();
   }
