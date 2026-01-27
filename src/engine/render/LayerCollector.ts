@@ -3,6 +3,9 @@
 import type { Layer, LayerRenderData, DetailedStats } from '../core/types';
 import type { TextureManager } from '../texture/TextureManager';
 import type { ScrubbingCache } from '../texture/ScrubbingCache';
+import { Logger } from '../../services/logger';
+
+const log = Logger.create('LayerCollector');
 
 export interface LayerCollectorDeps {
   textureManager: TextureManager;
@@ -22,17 +25,26 @@ export class LayerCollector {
     this.hasVideo = false;
     this.currentDecoder = 'none';
 
+    log.debug(`Collecting ${layers.length} layers`);
+
     // Process layers in reverse order (lower slots render on top)
     for (let i = layers.length - 1; i >= 0; i--) {
       const layer = layers[i];
-      if (!layer?.visible || !layer.source || layer.opacity === 0) continue;
+      if (!layer?.visible || !layer.source || layer.opacity === 0) {
+        log.debug(`Skipping layer ${layer?.id}: visible=${layer?.visible}, hasSource=${!!layer?.source}, opacity=${layer?.opacity}`);
+        continue;
+      }
 
       const data = this.collectLayerData(layer, deps);
       if (data) {
+        log.debug(`Layer ${layer.id} collected: isVideo=${data.isVideo}, hasExternalTex=${!!data.externalTexture}, hasTextureView=${!!data.textureView}`);
         this.layerRenderData.push(data);
+      } else {
+        log.warn(`Layer ${layer.id} failed to collect - no texture data returned`);
       }
     }
 
+    log.debug(`Total layers collected: ${this.layerRenderData.length}`);
     return this.layerRenderData;
   }
 
@@ -142,6 +154,8 @@ export class LayerCollector {
   private tryHTMLVideo(layer: Layer, video: HTMLVideoElement, deps: LayerCollectorDeps): LayerRenderData | null {
     const videoKey = video.src || layer.id;
 
+    log.debug(`tryHTMLVideo: readyState=${video.readyState}, videoWidth=${video.videoWidth}, videoHeight=${video.videoHeight}`);
+
     if (video.readyState >= 2) {
       const lastTime = deps.getLastVideoTime(videoKey);
       const currentTime = video.currentTime;
@@ -164,6 +178,7 @@ export class LayerCollector {
       }
 
       // Import external texture
+      log.debug('Attempting to import video as external texture...');
       const extTex = deps.textureManager.importVideoTexture(video);
       if (extTex) {
         deps.setLastVideoTime(videoKey, currentTime);

@@ -125,6 +125,10 @@ export class WebGPUContext {
         }
       }
 
+      // Log preferred canvas format - critical for Linux/Vulkan debugging
+      const preferredFormat = navigator.gpu.getPreferredCanvasFormat();
+      log.info(`Preferred canvas format: ${preferredFormat}`);
+
       log.info('Context initialized successfully');
       return true;
     } catch (error) {
