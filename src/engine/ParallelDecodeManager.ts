@@ -190,9 +190,9 @@ export class ParallelDecodeManager {
 
         try {
           decoder.configure(codecConfig);
-          log.info(`Decoder configured for "${clipInfo.clipName}": ${codec} ${videoTrack.video.width}x${videoTrack.video.height}`);
+          console.log(`[ParallelDecode] Decoder configured for "${clipInfo.clipName}": ${codec} ${videoTrack.video.width}x${videoTrack.video.height}`);
         } catch (e) {
-          log.error(`Failed to configure decoder for "${clipInfo.clipName}": ${e}`);
+          console.error(`[ParallelDecode] Failed to configure decoder for "${clipInfo.clipName}":`, e);
           throw e;
         }
 
@@ -269,9 +269,9 @@ export class ParallelDecodeManager {
     const timestamp = frame.timestamp;  // microseconds
     const sourceTime = timestamp / 1_000_000;  // convert to seconds
 
-    // Log first 3 frames for debugging
-    if (clipDecoder.frameBuffer.size < 3) {
-      log.info(`"${clipDecoder.clipName}": Frame ${clipDecoder.frameBuffer.size + 1} decoded at ${sourceTime.toFixed(3)}s`);
+    // Log first 5 frames for debugging
+    if (clipDecoder.frameBuffer.size < 5) {
+      console.log(`[ParallelDecode] "${clipDecoder.clipName}": Frame ${clipDecoder.frameBuffer.size + 1} decoded at ${sourceTime.toFixed(3)}s (timestamp=${timestamp}µs)`);
     }
 
     // Store frame by its timestamp
@@ -383,23 +383,22 @@ export class ParallelDecodeManager {
         continue;
       }
 
-      log.debug(`"${clipInfo.clipName}": Processing - samples=${clipDecoder.samples.length}, buffer=${clipDecoder.frameBuffer.size}, decoderState=${clipDecoder.decoder.state}`);
+      console.log(`[ParallelDecode] "${clipInfo.clipName}": Processing at time ${timelineTime.toFixed(3)}s - samples=${clipDecoder.samples.length}, buffer=${clipDecoder.frameBuffer.size}, decoderState=${clipDecoder.decoder.state}`);
 
       // Wait for samples if lazy loading hasn't delivered them yet
       if (clipDecoder.samples.length === 0) {
-        const endWaitSamples = log.time(`waitForSamples "${clipInfo.clipName}"`);
+        console.log(`[ParallelDecode] "${clipInfo.clipName}": Waiting for samples...`);
         const maxWaitMs = 10000; // 10 second max wait per clip (increased for large files)
         const startWait = performance.now();
         while (clipDecoder.samples.length === 0 && performance.now() - startWait < maxWaitMs) {
           await new Promise(r => setTimeout(r, 50));
         }
-        endWaitSamples();
         if (clipDecoder.samples.length === 0) {
           const errorMsg = `"${clipInfo.clipName}" has no samples after waiting ${maxWaitMs}ms`;
-          log.error(errorMsg);
+          console.error(`[ParallelDecode] ${errorMsg}`);
           throw new Error(`Parallel decode initialization failed: ${errorMsg}`);
         }
-        log.info(`"${clipInfo.clipName}" samples ready: ${clipDecoder.samples.length} (waited ${(performance.now() - startWait).toFixed(0)}ms)`);
+        console.log(`[ParallelDecode] "${clipInfo.clipName}" samples ready: ${clipDecoder.samples.length} (waited ${(performance.now() - startWait).toFixed(0)}ms)`);
       }
 
       // Calculate target source time and sample index
@@ -421,15 +420,15 @@ export class ParallelDecodeManager {
       const needsDecoding = clipDecoder.sampleIndex < targetSampleIndex + BUFFER_AHEAD_FRAMES;
       if (needsDecoding && !clipDecoder.isDecoding) {
         const decodeTarget = targetSampleIndex + BUFFER_AHEAD_FRAMES;
-        log.info(`"${clipInfo.clipName}": Triggering decode - samples=${clipDecoder.samples.length}, targetIdx=${targetSampleIndex}, currentIdx=${clipDecoder.sampleIndex}, decodeTarget=${decodeTarget}`);
+        console.log(`[ParallelDecode] "${clipInfo.clipName}": Triggering decode - samples=${clipDecoder.samples.length}, targetIdx=${targetSampleIndex}, currentIdx=${clipDecoder.sampleIndex}, decodeTarget=${decodeTarget}, frameInBuffer=${frameInBuffer}`);
         if (!frameInBuffer) {
           // Need frame NOW - await the decode with flush
-          log.debug(`"${clipInfo.clipName}": Awaiting decode (frame not in buffer yet)`);
+          console.log(`[ParallelDecode] "${clipInfo.clipName}": Awaiting decode (frame not in buffer yet)`);
           await this.decodeAhead(clipDecoder, decodeTarget, true);
-          log.info(`"${clipInfo.clipName}": After decode - buffer=${clipDecoder.frameBuffer.size} frames, decoderState=${clipDecoder.decoder.state}`);
+          console.log(`[ParallelDecode] "${clipInfo.clipName}": After decode - buffer=${clipDecoder.frameBuffer.size} frames, decoderState=${clipDecoder.decoder.state}`);
         } else {
           // Fire and forget for frames already in buffer
-          log.debug(`"${clipInfo.clipName}": Background decode (frame already in buffer)`);
+          console.log(`[ParallelDecode] "${clipInfo.clipName}": Background decode (frame already in buffer)`);
           this.decodeAhead(clipDecoder, decodeTarget, false);
         }
       }
@@ -561,7 +560,7 @@ export class ParallelDecodeManager {
         // Decode in larger batches for throughput
         framesToDecode = Math.min(framesToDecode, DECODE_BATCH_SIZE);
 
-        log.info(`${clipDecoder.clipName}: Decoding ${framesToDecode} frames (from sample ${clipDecoder.sampleIndex} to ${clipDecoder.sampleIndex + framesToDecode}), forceFlush=${forceFlush}`);
+        console.log(`[ParallelDecode] ${clipDecoder.clipName}: Decoding ${framesToDecode} frames (from sample ${clipDecoder.sampleIndex} to ${clipDecoder.sampleIndex + framesToDecode}), forceFlush=${forceFlush}`);
 
         // Check if we need to seek (target is far ahead of current position)
         const needsSeek = targetSampleIndex > clipDecoder.sampleIndex + 30;
@@ -635,7 +634,7 @@ export class ParallelDecodeManager {
           }
         }
 
-        log.debug(`${clipDecoder.clipName}: Queued ${decodedCount} chunks to decoder, decodeQueueSize=${clipDecoder.decoder.decodeQueueSize}`);
+        console.log(`[ParallelDecode] ${clipDecoder.clipName}: Queued ${decodedCount} chunks to decoder, decodeQueueSize=${clipDecoder.decoder.decodeQueueSize}`);
 
         // Only flush if explicitly requested (when we need frames NOW)
         if (forceFlush) {
