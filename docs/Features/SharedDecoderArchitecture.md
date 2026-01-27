@@ -387,9 +387,11 @@ For each frame in export:
 - [ ] Integrate all components into `FrameExporter`
 - [ ] Implement new export loop with just-in-time nested rendering
 - [ ] Add progress reporting (accurate for nested comps)
-- [ ] Implement fallback to HTMLVideoElement on errors
+- [ ] **Implement comprehensive error handling (NO auto-fallbacks)**
+- [ ] Add clear error messages with actionable suggestions
 - [ ] Performance testing with 10+ nested compositions
 - [ ] Memory profiling and leak detection
+- [ ] Test error scenarios (decoder fails, memory exhaustion, etc.)
 
 ### Phase 5: Polish & Production Ready (Week 5)
 - [ ] Add export settings UI (cache size: 200MB/500MB/2GB)
@@ -440,16 +442,39 @@ function selectExportSystem(clips, tracks, compositions): 'V1' | 'V2' {
 Export settings panel:
 ```
 Export System:
-  ( ) Automatic (Recommended)
-  ( ) Legacy System (V1) - Stable, simple projects
-  ( ) Shared Decoders (V2) - Complex projects, faster
+  ( ) Automatic (Recommended) - Smart selection based on complexity
+  ( ) Legacy System (V1) - For simple projects or if V2 has issues
+  ( ) Shared Decoders (V2) - Force V2 for testing
 ```
+
+**Error Handling Philosophy:**
+```
+NO HIDDEN FALLBACKS!
+
+If V2 selected (auto or manual):
+  → V2 must work or throw clear error
+  → NO automatic fallback to V1
+  → Show detailed error message with:
+    - What failed (decoder, cache, worker)
+    - Which file/clip caused issue
+    - Suggestion: "Try Legacy System (V1) in Export Settings"
+
+User can MANUALLY switch to V1 if needed.
+```
+
+**Why No Auto-Fallback:**
+- ✅ **Clear feedback**: User knows exactly what's happening
+- ✅ **Forces quality**: We must make V2 robust, no shortcuts
+- ✅ **Better debugging**: Errors surface immediately, not hidden
+- ✅ **User control**: Explicit choice, no surprises
+- ✅ **Simpler code**: No complex fallback logic
 
 **Rollout:**
 1. **Week 1-2**: Implement V2 core (SharedDecoderPool, FrameCache)
-2. **Week 3**: Add auto-selection logic, test both paths
-3. **Week 4**: Deploy with Automatic mode as default
-4. **Week 5+**: Monitor, optimize, adjust thresholds
+2. **Week 3**: Add auto-selection logic, extensive error handling
+3. **Week 4**: Test with complex projects, fix all errors properly
+4. **Week 5**: Deploy with Automatic mode as default
+5. **Week 6+**: Monitor error rates, optimize thresholds
 
 ## Performance Targets
 
@@ -468,28 +493,80 @@ Export System:
 - Peak memory < 2GB for complex projects
 - No memory leaks over long exports
 
-## Risk Mitigation
+## Error Handling & Risk Mitigation
+
+### Error Handling Strategy
+
+**Clear, Actionable Errors - No Hidden Fallbacks:**
+
+```typescript
+class ExportError extends Error {
+  component: 'SharedDecoder' | 'FrameCache' | 'Worker' | 'NestedRenderer'
+  clipName?: string
+  fileHash?: string
+  detailedMessage: string
+  suggestedAction: string
+}
+
+// Example error:
+throw new ExportError({
+  component: 'SharedDecoder',
+  clipName: 'video.mp4',
+  fileHash: 'abc123',
+  detailedMessage: 'Decoder failed after reset() - codec may not support reuse',
+  suggestedAction: 'Switch to Legacy System (V1) in Export Settings'
+})
+```
+
+**Error Display:**
+```
+Export Failed ❌
+
+Component: Shared Decoder System
+File: "Sunlight Forest.mp4"
+Issue: Decoder reset failed after seeking
+
+This file may use a codec that doesn't support decoder reuse.
+
+Suggestion: Use "Legacy System (V1)" in Export Settings
+```
+
+### Risk Mitigation
 
 **Risks:**
 1. **Decoder reuse bugs**: VideoDecoder may have issues with reset/configure
-   - Mitigation: Extensive testing, fallback to new decoder instance on errors
-   - Monitoring: Log all reset/configure operations
+   - Mitigation: Extensive testing with all codecs (H.264, H.265, VP9, AV1)
+   - On error: Destroy decoder and create NEW instance (not reset)
+   - If repeated failures: Throw clear error, suggest V1
+   - NO silent fallback to V1
 
 2. **Cache thrashing**: LRU may evict needed frames causing re-decode
    - Mitigation: Adaptive cache sizing based on file usage patterns
-   - Monitoring: Track cache hit rate, warn if < 80%
+   - Monitoring: Track cache hit rate, log if < 80%
+   - On thrashing: Increase cache size automatically (up to memory limit)
+   - If still thrashing: Throw error with suggestion to increase cache size
 
 3. **Just-in-time rendering overhead**: Rendering nested comps per-frame may be slow
    - Mitigation: GPU acceleration for all compositing, single-frame cache
-   - Fallback: Optional pre-render mode for very slow systems (can add later)
+   - Monitoring: Track frame render time, warn if > 100ms
+   - If too slow: Throw error with details on which comp is slow
+   - User action: Simplify composition or use V1
 
 4. **Worker communication overhead**: Transferring VideoFrames between workers
    - Mitigation: Use transferable objects, batch transfers where possible
-   - Alternative: Consider SharedArrayBuffer for zero-copy (if supported)
+   - Monitoring: Track transfer time
+   - If overhead > 20%: Log warning, continue (this is acceptable)
 
 5. **Complex nested structures**: Triple-nested comps with many layers
    - Mitigation: Flatten layers where possible, optimize GPU compositing
-   - Limit: Warn user if nesting depth > 5 levels
+   - Limit: Detect depth > 5, warn user before export starts
+   - If render fails: Clear error about which nested comp failed
+
+6. **Memory exhaustion**: Cache grows too large
+   - Mitigation: Hard memory limit (configurable, default 1GB)
+   - On approaching limit: Increase eviction rate
+   - On limit exceeded: Throw clear error with suggestion to reduce cache size
+   - NO silent degradation
 
 ## Open Questions
 
