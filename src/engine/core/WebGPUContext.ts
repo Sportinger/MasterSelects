@@ -22,6 +22,10 @@ export class WebGPUContext {
   // Track if we're recovering from a device loss
   private isRecovering = false;
 
+  // Track recovery attempts to prevent infinite loops
+  private recoveryAttempts = 0;
+  private static readonly MAX_RECOVERY_ATTEMPTS = 3;
+
   async initialize(powerPreference?: GPUPowerPreference): Promise<boolean> {
     // Store the preference if provided
     if (powerPreference) {
@@ -81,15 +85,24 @@ export class WebGPUContext {
           }
         }
 
-        // Attempt auto-recovery after a short delay
+        // Attempt auto-recovery after a short delay (with retry limit)
         if (info.reason !== 'destroyed') {
-          log.info('Attempting device recovery...');
+          this.recoveryAttempts++;
+
+          if (this.recoveryAttempts > WebGPUContext.MAX_RECOVERY_ATTEMPTS) {
+            log.error(`Device recovery failed after ${WebGPUContext.MAX_RECOVERY_ATTEMPTS} attempts. Please reload the page.`);
+            this.isRecovering = false;
+            return;
+          }
+
+          log.info(`Attempting device recovery (attempt ${this.recoveryAttempts}/${WebGPUContext.MAX_RECOVERY_ATTEMPTS})...`);
           this.initPromise = null;
           this.isRecovering = true;
           setTimeout(async () => {
             const success = await this.initialize();
             if (success) {
               this.isRecovering = false;
+              this.recoveryAttempts = 0; // Reset on success
               // Notify listeners that device was restored
               for (const callback of this.deviceRestoredCallbacks) {
                 try {
