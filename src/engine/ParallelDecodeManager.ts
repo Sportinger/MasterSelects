@@ -93,8 +93,9 @@ interface ClipDecoder {
 
 // Buffer settings - tuned for speed like After Effects
 const BUFFER_AHEAD_FRAMES = 30;   // Pre-decode this many frames ahead (1 second at 30fps)
-const MAX_BUFFER_SIZE = 60;       // Maximum frames to keep in buffer
+const MAX_BUFFER_SIZE = 120;      // Maximum frames to keep in buffer (increased for seeks)
 const DECODE_BATCH_SIZE = 60;     // Decode this many frames per batch - large for initial catchup
+const SEEK_BATCH_MULTIPLIER = 5;  // Multiplier for batch size after seeks (5x = 300 frames)
 
 export class ParallelDecodeManager {
   private clipDecoders: Map<string, ClipDecoder> = new Map();
@@ -542,7 +543,13 @@ export class ParallelDecodeManager {
    * Decode frames ahead to fill buffer - optimized for throughput
    * Does NOT flush after every batch - frames arrive via output callback asynchronously
    */
-  private async decodeAhead(clipDecoder: ClipDecoder, targetSampleIndex: number, forceFlush: boolean = false): Promise<void> {
+  private async decodeAhead(clipDecoder: ClipDecoder, targetSampleIndex: number, forceFlush: boolean = false, recursionDepth: number = 0): Promise<void> {
+    // Prevent infinite recursion
+    if (recursionDepth > 3) {
+      log.warn(`${clipDecoder.clipName}: Max recursion depth reached (${recursionDepth}), stopping`);
+      return;
+    }
+
     if (clipDecoder.isDecoding) {
       log.debug(`${clipDecoder.clipName}: Already decoding, skipping`);
       return; // Let current decode continue, don't wait
@@ -575,8 +582,8 @@ export class ParallelDecodeManager {
         }
 
         // Decode in larger batches for throughput
-        // Use larger batch for seeks to reach target faster
-        const batchSize = needsSeek ? DECODE_BATCH_SIZE * 3 : DECODE_BATCH_SIZE;
+        // Use much larger batch for seeks to reach target in one go
+        const batchSize = needsSeek ? DECODE_BATCH_SIZE * SEEK_BATCH_MULTIPLIER : DECODE_BATCH_SIZE;
         framesToDecode = Math.min(framesToDecode, batchSize);
 
         console.log(`[ParallelDecode] ${clipDecoder.clipName}: Decoding ${framesToDecode} frames (from sample ${clipDecoder.sampleIndex} to ${clipDecoder.sampleIndex + framesToDecode}), forceFlush=${forceFlush}, needsSeek=${needsSeek}, batchSize=${batchSize}`);
@@ -656,13 +663,6 @@ export class ParallelDecodeManager {
         if (forceFlush) {
           await clipDecoder.decoder.flush();
           clipDecoder.needsKeyframe = true; // After flush, next decode needs keyframe
-
-          // After flush, check if we reached the target. If not, decode more batches.
-          const stillBehind = clipDecoder.sampleIndex < targetSampleIndex;
-          if (stillBehind) {
-            const remainingFrames = targetSampleIndex - clipDecoder.sampleIndex;
-            console.log(`[ParallelDecode] ${clipDecoder.clipName}: Still behind target after batch (sampleIndex=${clipDecoder.sampleIndex}, targetIdx=${targetSampleIndex}, remaining=${remainingFrames})`);
-          }
         }
       } catch (e) {
         log.error(`Decode error for ${clipDecoder.clipName}: ${e}`);
@@ -675,9 +675,17 @@ export class ParallelDecodeManager {
     await clipDecoder.pendingDecode;
 
     // If we're still behind target after the batch, decode more recursively
-    if (forceFlush && clipDecoder.sampleIndex < targetSampleIndex) {
-      console.log(`[ParallelDecode] ${clipDecoder.clipName}: Decoding additional batch to reach target`);
-      await this.decodeAhead(clipDecoder, targetSampleIndex, true);
+    // BUT: Don't recurse if we just did a seek (needsSeek), as the seek resets sampleIndex
+    // and would cause infinite recursion. Instead, let the next prefetch call handle it.
+    const stillBehind = clipDecoder.sampleIndex < targetSampleIndex;
+    const didSeek = targetSampleIndex > clipDecoder.sampleIndex + 30; // Check if seek happened
+
+    if (forceFlush && stillBehind && !didSeek && recursionDepth < 3) {
+      const remainingFrames = targetSampleIndex - clipDecoder.sampleIndex;
+      console.log(`[ParallelDecode] ${clipDecoder.clipName}: Still behind target (sampleIndex=${clipDecoder.sampleIndex}, targetIdx=${targetSampleIndex}, remaining=${remainingFrames}), decoding additional batch (recursion ${recursionDepth + 1}/3)`);
+      await this.decodeAhead(clipDecoder, targetSampleIndex, true, recursionDepth + 1);
+    } else if (stillBehind) {
+      console.log(`[ParallelDecode] ${clipDecoder.clipName}: Still behind target (sampleIndex=${clipDecoder.sampleIndex}, targetIdx=${targetSampleIndex}), stopping (${didSeek ? 'after seek' : 'max recursion'})`);
     }
   }
 
