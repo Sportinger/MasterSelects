@@ -25,6 +25,23 @@ Result: Seek required → Buffer cleared → Infinite loop
 3. **Memory Efficient**: Reuse decoded frames, shared decoder instances
 4. **Smart Pre-fetching**: Decode frames in optimal order based on export timeline
 5. **Resilient**: Graceful degradation, fallback to HTMLVideoElement if needed
+6. **Hybrid Approach**: Use best system for each project complexity level
+
+## Why Hybrid Approach?
+
+**Benefits:**
+- ✅ **Simple projects keep working** with proven V1 system (no regression risk)
+- ✅ **Complex projects get V2** where it's actually needed
+- ✅ **Gradual rollout**: V2 bugs only affect complex projects
+- ✅ **Lower risk**: Don't break what's working for 80% of users
+- ✅ **Better testing**: Can compare V1 vs V2 on same project
+- ✅ **User trust**: Always have fallback that works
+
+**Risk Mitigation:**
+- V1 continues to work → **no breaking changes** for existing workflows
+- V2 only activates when needed → **contained blast radius**
+- Manual override → **user can force V1** if V2 has issues
+- Clear UI indication → **user knows which system is active**
 
 ## Research Findings
 
@@ -382,19 +399,57 @@ For each frame in export:
 - [ ] Create example complex projects for testing
 - [ ] Final performance validation
 
-## Migration Strategy
+## Migration Strategy - HYBRID APPROACH
 
-**Deployment Plan:**
-- Release V2 as **default for all projects immediately** (per user request)
-- Keep V1 as fallback via export setting: "Use Legacy Export (if issues)"
-- Automatic fallback to V1 on critical errors with user notification
-- Deprecate V1 after 4 weeks if no major issues reported
+**Smart Auto-Selection:**
+Automatically choose the best system based on project complexity:
+
+```typescript
+function selectExportSystem(clips, tracks, compositions): 'V1' | 'V2' {
+  const videoClips = clips.filter(c => c.source?.type === 'video')
+  const uniqueFiles = new Set(videoClips.map(c => c.mediaFileId)).size
+  const hasNestedComps = compositions.some(c => c.isNested)
+  const nestedClipCount = countNestedClips(compositions)
+
+  // Simple project: Use V1 (current system - proven, stable)
+  if (uniqueFiles <= 3 && !hasNestedComps) {
+    return 'V1'
+  }
+
+  // Medium complexity: Use V1 if < 8 files, otherwise V2
+  if (uniqueFiles <= 8 && nestedClipCount <= 5) {
+    return 'V1'
+  }
+
+  // Complex project: Always use V2 (shared decoders needed)
+  return 'V2'
+}
+```
+
+**Decision Matrix:**
+
+| Project Type | Clips | Files | Nested | System | Reason |
+|--------------|-------|-------|--------|--------|--------|
+| Simple | 3 | 3 | No | **V1** | Proven, less overhead |
+| Medium | 10 | 5 | No | **V1** | Current system handles well |
+| Medium-Complex | 10 | 8 | 2 comps | **V1** | Still manageable |
+| Complex | 15 | 10 | 3+ comps | **V2** | Shared decoders critical |
+| Very Complex | 30 | 20 | 10+ comps | **V2** | Only V2 can handle |
+
+**Manual Override:**
+Export settings panel:
+```
+Export System:
+  ( ) Automatic (Recommended)
+  ( ) Legacy System (V1) - Stable, simple projects
+  ( ) Shared Decoders (V2) - Complex projects, faster
+```
 
 **Rollout:**
-1. Deploy V2 as default
-2. Monitor error rates and user feedback first week
-3. Quick fixes for critical bugs
-4. Deprecate V1 after 4 weeks of stability
+1. **Week 1-2**: Implement V2 core (SharedDecoderPool, FrameCache)
+2. **Week 3**: Add auto-selection logic, test both paths
+3. **Week 4**: Deploy with Automatic mode as default
+4. **Week 5+**: Monitor, optimize, adjust thresholds
 
 ## Performance Targets
 
