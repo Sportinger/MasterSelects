@@ -563,6 +563,9 @@ export class ParallelDecodeManager {
           log.warn(`${clipDecoder.clipName}: Decoder closed during decode setup`);
           return;
         }
+        // Check if we need to seek (target is far ahead of current position)
+        const needsSeek = targetSampleIndex > clipDecoder.sampleIndex + 30;
+
         const endIndex = Math.min(targetSampleIndex, clipDecoder.samples.length);
         let framesToDecode = endIndex - clipDecoder.sampleIndex;
 
@@ -572,12 +575,11 @@ export class ParallelDecodeManager {
         }
 
         // Decode in larger batches for throughput
-        framesToDecode = Math.min(framesToDecode, DECODE_BATCH_SIZE);
+        // Use larger batch for seeks to reach target faster
+        const batchSize = needsSeek ? DECODE_BATCH_SIZE * 3 : DECODE_BATCH_SIZE;
+        framesToDecode = Math.min(framesToDecode, batchSize);
 
-        console.log(`[ParallelDecode] ${clipDecoder.clipName}: Decoding ${framesToDecode} frames (from sample ${clipDecoder.sampleIndex} to ${clipDecoder.sampleIndex + framesToDecode}), forceFlush=${forceFlush}`);
-
-        // Check if we need to seek (target is far ahead of current position)
-        const needsSeek = targetSampleIndex > clipDecoder.sampleIndex + 30;
+        console.log(`[ParallelDecode] ${clipDecoder.clipName}: Decoding ${framesToDecode} frames (from sample ${clipDecoder.sampleIndex} to ${clipDecoder.sampleIndex + framesToDecode}), forceFlush=${forceFlush}, needsSeek=${needsSeek}, batchSize=${batchSize}`);
 
         // After flush, we need to start from a keyframe
         if (clipDecoder.needsKeyframe && !needsSeek) {
@@ -605,7 +607,7 @@ export class ParallelDecodeManager {
             }
           }
 
-          log.debug(`${clipDecoder.clipName}: seeking to keyframe at sample ${keyframeIndex}`);
+          console.log(`[ParallelDecode] ${clipDecoder.clipName}: Seeking to keyframe at sample ${keyframeIndex} (target=${targetSampleIndex}, distance=${targetSampleIndex - keyframeIndex})`);
 
           // Reset decoder for seek
           clipDecoder.decoder.reset();
@@ -654,6 +656,13 @@ export class ParallelDecodeManager {
         if (forceFlush) {
           await clipDecoder.decoder.flush();
           clipDecoder.needsKeyframe = true; // After flush, next decode needs keyframe
+
+          // After flush, check if we reached the target. If not, decode more batches.
+          const stillBehind = clipDecoder.sampleIndex < targetSampleIndex;
+          if (stillBehind) {
+            const remainingFrames = targetSampleIndex - clipDecoder.sampleIndex;
+            console.log(`[ParallelDecode] ${clipDecoder.clipName}: Still behind target after batch (sampleIndex=${clipDecoder.sampleIndex}, targetIdx=${targetSampleIndex}, remaining=${remainingFrames})`);
+          }
         }
       } catch (e) {
         log.error(`Decode error for ${clipDecoder.clipName}: ${e}`);
@@ -664,6 +673,12 @@ export class ParallelDecodeManager {
     })();
 
     await clipDecoder.pendingDecode;
+
+    // If we're still behind target after the batch, decode more recursively
+    if (forceFlush && clipDecoder.sampleIndex < targetSampleIndex) {
+      console.log(`[ParallelDecode] ${clipDecoder.clipName}: Decoding additional batch to reach target`);
+      await this.decodeAhead(clipDecoder, targetSampleIndex, true);
+    }
   }
 
   /**
