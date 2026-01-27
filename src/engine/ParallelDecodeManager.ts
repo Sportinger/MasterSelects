@@ -438,15 +438,15 @@ export class ParallelDecodeManager {
         const decodeTarget = targetSampleIndex + BUFFER_AHEAD_FRAMES;
         console.log(`[ParallelDecode] "${clipInfo.clipName}": Triggering decode - samples=${clipDecoder.samples.length}, targetIdx=${targetSampleIndex}, currentIdx=${clipDecoder.sampleIndex}, decodeTarget=${decodeTarget}, frameInBuffer=${frameInBuffer}, isBehindTarget=${isBehindTarget}, needsBackSeek=${needsDecodingBack}`);
 
-        // ALWAYS await if we're behind target OR frame is not in buffer
-        if (isBehindTarget || !frameInBuffer) {
+        // Only await if frame is NOT in buffer - that's the only case we need it NOW
+        if (!frameInBuffer) {
           // Need frame NOW - await the decode with flush
-          console.log(`[ParallelDecode] "${clipInfo.clipName}": Awaiting decode (${!frameInBuffer ? 'frame not in buffer' : 'behind target sample'})`);
+          console.log(`[ParallelDecode] "${clipInfo.clipName}": Awaiting decode (frame not in buffer)`);
           await this.decodeAhead(clipDecoder, decodeTarget, true);
           console.log(`[ParallelDecode] "${clipInfo.clipName}": After decode - buffer=${clipDecoder.frameBuffer.size} frames, decoderState=${clipDecoder.decoder.state}`);
         } else {
-          // Only fire-and-forget if we're AHEAD of target AND frame is in buffer
-          console.log(`[ParallelDecode] "${clipInfo.clipName}": Background decode (ahead of target, frame in buffer)`);
+          // Frame already in buffer - background decode for future frames (no seek needed)
+          console.log(`[ParallelDecode] "${clipInfo.clipName}": Background decode (frame in buffer)`);
           this.decodeAhead(clipDecoder, decodeTarget, false);
         }
       }
@@ -574,41 +574,14 @@ export class ParallelDecodeManager {
           return;
         }
         // Check if we need to seek (target is far from current position - either ahead OR behind)
+        // But ONLY seek if forceFlush is true (we actually need the frame now)
+        // Background decodes should just continue forward, not seek
         const isTooFarAhead = targetSampleIndex > clipDecoder.sampleIndex + 30;
         const isTooFarBehind = clipDecoder.sampleIndex > targetSampleIndex + 30;
-        const needsSeek = isTooFarAhead || isTooFarBehind;
+        const needsSeek = forceFlush && (isTooFarAhead || isTooFarBehind);
 
-        const endIndex = Math.min(targetSampleIndex, clipDecoder.samples.length);
-        let framesToDecode = endIndex - clipDecoder.sampleIndex;
-
-        if (framesToDecode <= 0) {
-          log.debug(`${clipDecoder.clipName}: No frames to decode (sampleIndex=${clipDecoder.sampleIndex}, target=${targetSampleIndex})`);
-          return;
-        }
-
-        // Decode in larger batches for throughput
-        // Use much larger batch for seeks to reach target in one go
-        const batchSize = needsSeek ? DECODE_BATCH_SIZE * SEEK_BATCH_MULTIPLIER : DECODE_BATCH_SIZE;
-        framesToDecode = Math.min(framesToDecode, batchSize);
-
-        console.log(`[ParallelDecode] ${clipDecoder.clipName}: Decoding ${framesToDecode} frames (from sample ${clipDecoder.sampleIndex} to ${clipDecoder.sampleIndex + framesToDecode}), forceFlush=${forceFlush}, needsSeek=${needsSeek} (ahead=${isTooFarAhead}, behind=${isTooFarBehind}), batchSize=${batchSize}`);
-
-        // After flush, we need to start from a keyframe
-        if (clipDecoder.needsKeyframe && !needsSeek) {
-          const currentSample = clipDecoder.samples[clipDecoder.sampleIndex];
-          if (currentSample && !currentSample.is_sync) {
-            // Back up to previous keyframe
-            for (let i = clipDecoder.sampleIndex - 1; i >= 0; i--) {
-              if (clipDecoder.samples[i].is_sync) {
-                log.debug(`${clipDecoder.clipName}: after flush, backing up to keyframe at sample ${i}`);
-                clipDecoder.sampleIndex = i;
-                break;
-              }
-            }
-          }
-          clipDecoder.needsKeyframe = false;
-        }
-
+        // IMPORTANT: Do seek FIRST before calculating framesToDecode
+        // Otherwise if we're past the target, framesToDecode will be negative and we'll return early
         if (needsSeek) {
           // Need to seek - find nearest keyframe before target
           let keyframeIndex = targetSampleIndex;
@@ -639,6 +612,38 @@ export class ParallelDecodeManager {
           clipDecoder.sortedTimestamps = [];
           clipDecoder.oldestTimestamp = Infinity;
           clipDecoder.newestTimestamp = -Infinity;
+        }
+
+        // Calculate frames to decode AFTER potential seek (sampleIndex may have changed)
+        const endIndex = Math.min(targetSampleIndex, clipDecoder.samples.length);
+        let framesToDecode = endIndex - clipDecoder.sampleIndex;
+
+        if (framesToDecode <= 0) {
+          log.debug(`${clipDecoder.clipName}: No frames to decode (sampleIndex=${clipDecoder.sampleIndex}, target=${targetSampleIndex})`);
+          return;
+        }
+
+        // Decode in larger batches for throughput
+        // Use much larger batch for seeks to reach target in one go
+        const batchSize = needsSeek ? DECODE_BATCH_SIZE * SEEK_BATCH_MULTIPLIER : DECODE_BATCH_SIZE;
+        framesToDecode = Math.min(framesToDecode, batchSize);
+
+        console.log(`[ParallelDecode] ${clipDecoder.clipName}: Decoding ${framesToDecode} frames (from sample ${clipDecoder.sampleIndex} to ${clipDecoder.sampleIndex + framesToDecode}), forceFlush=${forceFlush}, needsSeek=${needsSeek} (ahead=${isTooFarAhead}, behind=${isTooFarBehind}), batchSize=${batchSize}`);
+
+        // After flush, we need to start from a keyframe
+        if (clipDecoder.needsKeyframe && !needsSeek) {
+          const currentSample = clipDecoder.samples[clipDecoder.sampleIndex];
+          if (currentSample && !currentSample.is_sync) {
+            // Back up to previous keyframe
+            for (let i = clipDecoder.sampleIndex - 1; i >= 0; i--) {
+              if (clipDecoder.samples[i].is_sync) {
+                log.debug(`${clipDecoder.clipName}: after flush, backing up to keyframe at sample ${i}`);
+                clipDecoder.sampleIndex = i;
+                break;
+              }
+            }
+          }
+          clipDecoder.needsKeyframe = false;
         }
 
         // Queue frames for decode (non-blocking - output callback handles results)
