@@ -188,19 +188,24 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
     if (composition.timelineData) {
       const nestedClips = await loadNestedClips({ compClipId: compClip.id, composition, get, set });
       const nestedTracks = composition.timelineData.tracks;
+      const compDuration = composition.timelineData?.duration ?? composition.duration;
+
+      // Calculate clip boundaries for segment-aligned thumbnails
+      const boundaries = calculateNestedClipBoundaries(composition.timelineData, compDuration);
 
       set({
         clips: get().clips.map(c =>
-          c.id === compClip.id ? { ...c, nestedClips, nestedTracks, isLoading: false } : c
+          c.id === compClip.id ? { ...c, nestedClips, nestedTracks, nestedClipBoundaries: boundaries, isLoading: false } : c
         ),
       });
 
-      // Generate thumbnails from first video
+      // Generate segment-aligned thumbnails
       generateCompThumbnails({
         clipId: compClip.id,
         nestedClips,
-        compDuration: composition.timelineData?.duration ?? composition.duration,
+        compDuration,
         thumbnailsEnabled,
+        boundaries,
         get,
         set,
       });
@@ -879,7 +884,6 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
 
       // Only regenerate thumbnails if content actually changed
       if (needsThumbnailUpdate) {
-        const compDuration = composition.timelineData?.duration ?? composition.duration;
         // Await thumbnail generation to prevent race conditions when multiple
         // comp clips reference the same composition
         await generateCompThumbnails({
@@ -887,6 +891,7 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
           nestedClips,
           compDuration,
           thumbnailsEnabled: get().thumbnailsEnabled,
+          boundaries: nestedClipBoundaries,
           get,
           set,
         });
@@ -894,6 +899,7 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
         log.debug('Regenerated thumbnails for comp clip (content changed)', {
           compClipId: compClip.id,
           nestedClipCount: nestedClips.length,
+          boundaryCount: nestedClipBoundaries.length,
         });
       } else {
         log.debug('Skipped thumbnail regeneration (no content change)', {

@@ -23,6 +23,8 @@ interface ThumbnailOptions {
   count?: number;
   width?: number;
   height?: number;
+  /** Pre-calculated boundary positions (normalized 0-1) for segment-based thumbnails */
+  boundaries?: number[];
 }
 
 const DEFAULT_OPTIONS: Required<ThumbnailOptions> = {
@@ -191,7 +193,7 @@ class ThumbnailRendererService {
     options?: ThumbnailOptions
   ): Promise<string[]> {
     const opts = { ...DEFAULT_OPTIONS, ...options };
-    const { count, width, height } = opts;
+    const { count, width, height, boundaries } = opts;
 
     // Initialize if needed
     if (!await this.initialize()) {
@@ -216,12 +218,14 @@ class ThumbnailRendererService {
       return [];
     }
 
-    // Get content-aware sample times that reflect the composition's clip structure
-    const sampleTimes = this.getContentAwareSampleTimes(compositionId, duration, count);
+    // Get sample times - use boundaries if provided, otherwise content-aware
+    const sampleTimes = boundaries && boundaries.length > 0
+      ? this.getSegmentSampleTimes(boundaries, duration, count)
+      : this.getContentAwareSampleTimes(compositionId, duration, count);
 
     const thumbnails: string[] = [];
 
-    // Generate frames at content-aware positions
+    // Generate frames at sample positions
     for (const time of sampleTimes) {
       // Clamp to slightly before end to avoid seek issues
       const clampedTime = Math.min(time, duration - 0.01);
@@ -241,6 +245,66 @@ class ThumbnailRendererService {
 
     log.debug(`Generated ${thumbnails.length} thumbnails for composition ${compositionId}`);
     return thumbnails;
+  }
+
+  /**
+   * Get sample times based on pre-calculated segment boundaries.
+   * Each segment between boundaries gets at least one thumbnail at its midpoint.
+   */
+  private getSegmentSampleTimes(boundaries: number[], duration: number, targetCount: number): number[] {
+    // Build full boundary list including 0 and 1
+    const allBoundaries = [0, ...boundaries.filter(b => b > 0 && b < 1), 1].sort((a, b) => a - b);
+
+    // Remove duplicates (boundaries very close to each other)
+    const uniqueBoundaries: number[] = [allBoundaries[0]];
+    for (let i = 1; i < allBoundaries.length; i++) {
+      if (allBoundaries[i] - uniqueBoundaries[uniqueBoundaries.length - 1] > 0.01) {
+        uniqueBoundaries.push(allBoundaries[i]);
+      }
+    }
+
+    log.debug(`Segment boundaries (${uniqueBoundaries.length}):`, uniqueBoundaries.map(b => (b * 100).toFixed(1) + '%'));
+
+    // Calculate segment count
+    const segmentCount = uniqueBoundaries.length - 1;
+    if (segmentCount <= 0) {
+      return this.getEvenSampleTimes(duration, targetCount);
+    }
+
+    // Calculate how many samples per segment to reach target count
+    const samplesPerSegment = Math.max(1, Math.ceil(targetCount / segmentCount));
+    const times: number[] = [];
+
+    for (let i = 0; i < segmentCount; i++) {
+      const segStart = uniqueBoundaries[i];
+      const segEnd = uniqueBoundaries[i + 1];
+      const segDuration = segEnd - segStart;
+
+      // Generate samples within this segment
+      for (let j = 0; j < samplesPerSegment; j++) {
+        // Position samples evenly within the segment, avoiding edges
+        const t = samplesPerSegment > 1
+          ? (j + 0.5) / samplesPerSegment
+          : 0.5; // Single sample at midpoint
+
+        const normalizedTime = segStart + t * segDuration;
+        times.push(normalizedTime * duration);
+      }
+    }
+
+    // Limit to target count if we have too many
+    if (times.length > targetCount) {
+      const step = times.length / targetCount;
+      const sampled: number[] = [];
+      for (let i = 0; i < targetCount; i++) {
+        sampled.push(times[Math.floor(i * step)]);
+      }
+      log.info(`Segment-based sample times (${sampled.length}):`, sampled.map(t => t.toFixed(2) + 's'));
+      return sampled;
+    }
+
+    log.info(`Segment-based sample times (${times.length}):`, times.map(t => t.toFixed(2) + 's'));
+    return times;
   }
 
   /**

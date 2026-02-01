@@ -10,7 +10,7 @@ import { useMediaStore } from '../mediaStore';
 
 import { createTrackSlice } from './trackSlice';
 import { createClipSlice } from './clipSlice';
-import { generateCompThumbnails } from './clip/addCompClip';
+import { generateCompThumbnails, calculateNestedClipBoundaries } from './clip/addCompClip';
 import { createPlaybackSlice } from './playbackSlice';
 import { createSelectionSlice } from './selectionSlice';
 import { createKeyframeSlice } from './keyframeSlice';
@@ -849,23 +849,27 @@ export const useTimelineStore = create<TimelineStore>()(
                   }
                 }
 
-                // Update comp clip with nested data
+                // Calculate clip boundaries for visual markers and thumbnail alignment
+                const compDuration = composition.timelineData?.duration ?? composition.duration;
+                const boundaries = calculateNestedClipBoundaries(composition.timelineData, compDuration);
+
+                // Update comp clip with nested data and boundaries
                 set(state => ({
                   clips: state.clips.map(c =>
                     c.id === compClip.id
-                      ? { ...c, nestedClips, nestedTracks, isLoading: false }
+                      ? { ...c, nestedClips, nestedTracks, nestedClipBoundaries: boundaries, isLoading: false }
                       : c
                   ),
                 }));
 
                 // Regenerate thumbnails if missing (for older projects or failed generation)
                 if (!serializedClip.thumbnails || serializedClip.thumbnails.length === 0) {
-                  const compDuration = composition.timelineData?.duration ?? composition.duration;
                   generateCompThumbnails({
                     clipId: compClip.id,
                     nestedClips,
                     compDuration,
                     thumbnailsEnabled: get().thumbnailsEnabled,
+                    boundaries,
                     get,
                     set,
                   });

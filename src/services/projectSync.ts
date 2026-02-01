@@ -899,21 +899,28 @@ async function reloadNestedCompositionClips(): Promise<void> {
 
     // Update the composition clip with nested data
     if (nestedClips.length > 0) {
+      const compDuration = composition.timelineData?.duration ?? composition.duration;
+
+      // Calculate clip boundaries for visual markers and thumbnail alignment
+      const { calculateNestedClipBoundaries } = await import('../stores/timeline/clip/addCompClip');
+      const boundaries = calculateNestedClipBoundaries(composition.timelineData, compDuration);
+
       timelineStore.updateClip(compClip.id, {
         nestedClips,
         nestedTracks,
+        nestedClipBoundaries: boundaries,
         isLoading: false,
       });
 
       // Generate thumbnails if missing
       if (!compClip.thumbnails || compClip.thumbnails.length === 0) {
         const { generateCompThumbnails } = await import('../stores/timeline/clip/addCompClip');
-        const compDuration = composition.timelineData?.duration ?? composition.duration;
         generateCompThumbnails({
           clipId: compClip.id,
           nestedClips,
           compDuration,
           thumbnailsEnabled: timelineStore.thumbnailsEnabled,
+          boundaries,
           get: useTimelineStore.getState,
           set: useTimelineStore.setState,
         });

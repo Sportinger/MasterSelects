@@ -399,6 +399,8 @@ export interface GenerateCompThumbnailsParams {
   nestedClips: TimelineClip[];
   compDuration: number;
   thumbnailsEnabled: boolean;
+  /** Pre-calculated boundary positions (normalized 0-1) for segment-based thumbnails */
+  boundaries?: number[];
   get: CompClipStoreGet;
   set: CompClipStoreSet;
 }
@@ -406,10 +408,11 @@ export interface GenerateCompThumbnailsParams {
 /**
  * Generate thumbnails for nested composition using WebGPU rendering.
  * Shows all layers with effects, not just the first video.
+ * Uses segment boundaries to ensure each clip section gets a representative thumbnail.
  * Falls back to polling first video if WebGPU fails.
  */
 export async function generateCompThumbnails(params: GenerateCompThumbnailsParams): Promise<void> {
-  const { clipId, compDuration, thumbnailsEnabled, get, set } = params;
+  const { clipId, compDuration, thumbnailsEnabled, boundaries, get, set } = params;
 
   if (!thumbnailsEnabled) return;
 
@@ -426,12 +429,17 @@ export async function generateCompThumbnails(params: GenerateCompThumbnailsParam
 
   // Try WebGPU-based rendering first (shows all layers with effects)
   try {
-    log.info('Generating WebGPU thumbnails for nested comp', { clipId, compositionId: compClip.compositionId, compDuration });
+    log.info('Generating WebGPU thumbnails for nested comp', {
+      clipId,
+      compositionId: compClip.compositionId,
+      compDuration,
+      boundaryCount: boundaries?.length ?? 0,
+    });
 
     const thumbnails = await thumbnailRenderer.generateCompositionThumbnails(
       compClip.compositionId,
       compDuration,
-      { count: 10, width: 160, height: 90 }
+      { count: 10, width: 160, height: 90, boundaries }
     );
 
     log.info('WebGPU thumbnail result', { clipId, count: thumbnails.length, hasData: thumbnails.length > 0 });
