@@ -13,6 +13,7 @@ import { blobUrlManager } from '../helpers/blobUrlManager';
 import { updateClipById } from '../helpers/clipStateHelpers';
 import { Logger } from '../../../services/logger';
 import { thumbnailRenderer } from '../../../services/thumbnailRenderer';
+import { compositionRenderer } from '../../../services/compositionRenderer';
 
 const log = Logger.create('AddCompClip');
 
@@ -363,6 +364,10 @@ export async function generateCompThumbnails(params: GenerateCompThumbnailsParam
     log.warn('No composition ID for comp clip', { clipId });
     return;
   }
+
+  // Invalidate cached composition data to ensure fresh sources
+  // This is critical when nested comp content has changed
+  compositionRenderer.invalidateComposition(compClip.compositionId);
 
   // Try WebGPU-based rendering first (shows all layers with effects)
   try {
