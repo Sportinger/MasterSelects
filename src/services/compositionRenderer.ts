@@ -45,12 +45,16 @@ class CompositionRendererService {
    * Prepare a composition for rendering - loads all video/image sources
    */
   async prepareComposition(compositionId: string): Promise<boolean> {
+    log.info(`prepareComposition called for ${compositionId}`);
+
     // Already prepared?
     const existing = this.compositionSources.get(compositionId);
     if (existing?.isReady) {
+      log.debug(`prepareComposition: already ready, returning cached`);
       existing.lastAccessTime = Date.now();
       return true;
     }
+    log.debug(`prepareComposition: not ready, preparing...`);
 
     const { activeCompositionId } = useMediaStore.getState();
     const composition = useMediaStore.getState().compositions.find(c => c.id === compositionId);
@@ -165,10 +169,19 @@ class CompositionRendererService {
     }
 
     // Wait for all sources to load
+    log.info(`prepareComposition: waiting for ${loadPromises.length} sources to load`);
     await Promise.all(loadPromises);
 
     sources.isReady = true;
-    log.info(`Composition ready: ${composition.name}, ${sources.clipSources.size} sources`);
+    log.info(`Composition ready: ${composition.name}, ${sources.clipSources.size} sources loaded`);
+
+    if (sources.clipSources.size === 0 && clips.length > 0) {
+      log.warn(`prepareComposition: No sources loaded for ${clips.length} clips! Check mediaFileId values.`);
+      for (const clip of clips) {
+        const sc = clip as SerializableClip;
+        log.warn(`  Clip ${clip.id}: sourceType=${sc.sourceType}, mediaFileId=${sc.mediaFileId || 'MISSING'}`);
+      }
+    }
 
     // Notify any waiting callbacks
     const callbacks = this.readyCallbacks.get(compositionId) || [];
@@ -270,6 +283,12 @@ class CompositionRendererService {
       clips = composition.timelineData.clips || [];
       tracks = composition.timelineData.tracks || [];
       log.debug(`evaluateAtTime: using timelineData, ${clips.length} clips, ${tracks.length} tracks`);
+
+      // Log clip details for debugging
+      for (const clip of clips) {
+        const sc = clip as SerializableClip;
+        log.debug(`evaluateAtTime clip: ${sc.id}, type=${sc.sourceType}, mediaFileId=${sc.mediaFileId || 'NONE'}`);
+      }
     } else {
       log.warn(`evaluateAtTime: comp ${composition.name} has NO timelineData!`);
       return [];
