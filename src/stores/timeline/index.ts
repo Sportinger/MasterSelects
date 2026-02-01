@@ -10,7 +10,7 @@ import { useMediaStore } from '../mediaStore';
 
 import { createTrackSlice } from './trackSlice';
 import { createClipSlice } from './clipSlice';
-import { generateCompThumbnails, calculateNestedClipBoundaries } from './clip/addCompClip';
+import { generateCompThumbnails, calculateNestedClipBoundaries, buildClipSegments } from './clip/addCompClip';
 import { createPlaybackSlice } from './playbackSlice';
 import { createSelectionSlice } from './selectionSlice';
 import { createKeyframeSlice } from './keyframeSlice';
@@ -862,17 +862,32 @@ export const useTimelineStore = create<TimelineStore>()(
                   ),
                 }));
 
-                // Regenerate thumbnails if missing (for older projects or failed generation)
-                if (!serializedClip.thumbnails || serializedClip.thumbnails.length === 0) {
-                  generateCompThumbnails({
-                    clipId: compClip.id,
-                    nestedClips,
-                    compDuration,
-                    thumbnailsEnabled: get().thumbnailsEnabled,
-                    boundaries,
-                    get,
-                    set,
-                  });
+                // Always generate clip segments on project load (new segment-based thumbnail system)
+                if (get().thumbnailsEnabled) {
+                  // Wait for nested clip sources to load, then build segments
+                  setTimeout(async () => {
+                    // Get fresh nested clips (they may have updated sources now)
+                    const freshCompClip = get().clips.find(c => c.id === compClip.id);
+                    const freshNestedClips = freshCompClip?.nestedClips || nestedClips;
+
+                    const clipSegments = await buildClipSegments(
+                      composition.timelineData,
+                      compDuration,
+                      freshNestedClips
+                    );
+
+                    if (clipSegments.length > 0) {
+                      set(state => ({
+                        clips: state.clips.map(c =>
+                          c.id === compClip.id ? { ...c, clipSegments } : c
+                        ),
+                      }));
+                      log.info('Built clip segments on project load', {
+                        clipId: compClip.id,
+                        segmentCount: clipSegments.length,
+                      });
+                    }
+                  }, 1000); // Wait longer on project load for all videos to load
                 }
               } else {
                 // No timeline data
