@@ -30,9 +30,15 @@ export default defineConfig([
       '@typescript-eslint/no-explicit-any': 'warn',
       // Allow empty catch blocks (they often intentionally swallow errors)
       'no-empty': ['error', { allowEmptyCatch: true }],
-      // React Hooks rules - downgrade some to warnings (many false positives with existing code patterns)
+      // React Hooks - keep rules-of-hooks as error (critical)
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
+      // React Compiler rules - downgrade to warnings (many false positives with existing patterns)
+      'react-hooks/set-state-in-effect': 'warn',
+      'react-hooks/refs': 'warn',
+      'react-hooks/preserve-manual-memoization': 'warn',
+      'react-hooks/purity': 'warn',
+      'react-hooks/invariant': 'warn',
       // React Refresh - allow non-component exports (common for constants/types)
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },

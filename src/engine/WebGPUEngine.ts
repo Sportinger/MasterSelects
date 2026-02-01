@@ -750,7 +750,9 @@ export class WebGPUEngine {
       const sourceAspect = data.sourceWidth / data.sourceHeight;
       const outputAspect = width / height;
       const maskLookupId = layer.maskClipId || layer.id;
-      const maskInfo = this.maskTextureManager?.getMaskInfo(maskLookupId) ?? { hasMask: false, view: this.maskTextureManager?.getWhiteMaskView()! };
+      // Get mask info - maskTextureManager should always exist during rendering
+      const maskManager = this.maskTextureManager!;
+      const maskInfo = maskManager.getMaskInfo(maskLookupId) ?? { hasMask: false, view: maskManager.getWhiteMaskView() };
       const hasMask = maskInfo.hasMask;
       const maskTextureView = maskInfo.view;
 
