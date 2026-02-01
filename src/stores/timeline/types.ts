@@ -300,6 +300,9 @@ export interface ClipboardClipData {
   speed?: number;
   preservesPitch?: boolean;
   textProperties?: import('../../types').TextClipProperties;
+  // Visual data (thumbnails, waveforms)
+  thumbnails?: string[];
+  waveform?: number[];
   // Composition clips
   isComposition?: boolean;
   compositionId?: string;

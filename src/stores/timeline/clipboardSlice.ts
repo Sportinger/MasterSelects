@@ -3,6 +3,7 @@
 import type { ClipboardActions, SliceCreator, ClipboardClipData, Keyframe } from './types';
 import type { TimelineClip } from '../../types';
 import { Logger } from '../../services/logger';
+import { captureSnapshot } from '../historyStore';
 
 const log = Logger.create('Clipboard');
 
@@ -63,6 +64,9 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         speed: clip.speed,
         preservesPitch: clip.preservesPitch,
         textProperties: clip.textProperties ? { ...clip.textProperties } : undefined,
+        // Visual data - reuse existing thumbnails and waveforms
+        thumbnails: clip.thumbnails ? [...clip.thumbnails] : undefined,
+        waveform: clip.waveform ? [...clip.waveform] : undefined,
         isComposition: clip.isComposition,
         compositionId: clip.compositionId,
       };
@@ -79,6 +83,9 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
       log.debug('No clipboard data to paste');
       return;
     }
+
+    // Capture snapshot for undo before making changes
+    captureSnapshot('Paste clips');
 
     const timestamp = Date.now();
     const randomSuffix = () => Math.random().toString(36).substr(2, 5);
@@ -162,6 +169,9 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         speed: clipData.speed,
         preservesPitch: clipData.preservesPitch,
         textProperties: clipData.textProperties ? { ...clipData.textProperties } : undefined,
+        // Reuse existing thumbnails and waveforms from copied clip
+        thumbnails: clipData.thumbnails ? [...clipData.thumbnails] : undefined,
+        waveform: clipData.waveform ? [...clipData.waveform] : undefined,
         isComposition: clipData.isComposition,
         compositionId: clipData.compositionId,
         isLoading: true, // Will need to reload media
