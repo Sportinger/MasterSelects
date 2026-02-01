@@ -107,6 +107,8 @@ class CompositionRendererService {
       // Get media file ID
       const mediaFileId = timelineClip.source?.mediaFileId || serializableClip.mediaFileId;
 
+      log.debug(`Processing clip ${clip.id}: sourceType=${sourceType}, mediaFileId=${mediaFileId || 'NONE'}, isActive=${isActiveComp}`);
+
       if (!mediaFileId) {
         // For active composition, the video/image/text elements are already loaded
         if (isActiveComp && timelineClip.source) {
@@ -157,9 +159,15 @@ class CompositionRendererService {
       const mediaFile = mediaFiles.find(f => f.id === mediaFileId);
 
       if (!mediaFile?.file) {
-        log.warn(`Media file not found for clip ${clip.id}`);
+        log.warn(`Media file not found for clip ${clip.id}`, {
+          mediaFileId,
+          availableFileIds: mediaFiles.map(f => f.id).slice(0, 5), // First 5 for brevity
+          totalFiles: mediaFiles.length,
+        });
         continue;
       }
+
+      log.debug(`Found media file for clip ${clip.id}: ${mediaFile.name}`);
 
       if (sourceType === 'video') {
         loadPromises.push(this.loadVideoSource(sources, serializableClip, mediaFile.file));

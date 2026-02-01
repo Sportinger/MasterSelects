@@ -365,9 +365,9 @@ export async function generateCompThumbnails(params: GenerateCompThumbnailsParam
     return;
   }
 
-  // Invalidate cached composition data to ensure fresh sources
-  // This is critical when nested comp content has changed
-  compositionRenderer.invalidateComposition(compClip.compositionId);
+  // NOTE: We don't invalidate here anymore - invalidation is already done by
+  // compositionRenderer.invalidateCompositionAndParents() when switching compositions.
+  // Invalidating here caused race conditions when multiple comp clips reference the same composition.
 
   // Try WebGPU-based rendering first (shows all layers with effects)
   try {

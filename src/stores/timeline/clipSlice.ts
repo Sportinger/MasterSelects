@@ -775,7 +775,9 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
       // Only regenerate thumbnails if content actually changed
       if (needsThumbnailUpdate) {
         const compDuration = composition.timelineData?.duration ?? composition.duration;
-        generateCompThumbnails({
+        // Await thumbnail generation to prevent race conditions when multiple
+        // comp clips reference the same composition
+        await generateCompThumbnails({
           clipId: compClip.id,
           nestedClips,
           compDuration,
