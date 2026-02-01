@@ -125,7 +125,7 @@ export function useTimelineZoom({
 
         setZoom(newZoom);
         setScrollX(newScrollX);
-      } else if (e.shiftKey) {
+      } else if (e.shiftKey && !isOverTrackHeaders) {
         // Shift+scroll = horizontal scroll (use deltaY since mouse wheel is vertical)
         e.preventDefault();
         const trackLanes = el.querySelector('.track-lanes');
