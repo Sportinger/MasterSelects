@@ -889,10 +889,19 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
       const nestedClipBoundaries = calculateNestedClipBoundaries(composition.timelineData, compDuration);
 
       // Update the comp clip with new nested data, content hash, and boundaries
+      // IMPORTANT: Preserve existing clipSegments if no thumbnail update needed
       set({
         clips: get().clips.map(c =>
           c.id === compClip.id
-            ? { ...c, nestedClips, nestedTracks, nestedContentHash: newContentHash, nestedClipBoundaries }
+            ? {
+                ...c,
+                nestedClips,
+                nestedTracks,
+                nestedContentHash: newContentHash,
+                nestedClipBoundaries,
+                // Keep existing clipSegments if not regenerating
+                clipSegments: needsThumbnailUpdate ? undefined : c.clipSegments,
+              }
             : c
         ),
       });
