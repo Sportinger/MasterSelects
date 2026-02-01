@@ -524,7 +524,7 @@ function TimelineClipComponent({
   hasKeyframes,
   fadeInDuration,
   fadeOutDuration,
-  // opacityKeyframes - TODO: add to props type when implementing fade curves
+  opacityKeyframes,
   timeToPixel,
   pixelToTime,
   formatTime,
