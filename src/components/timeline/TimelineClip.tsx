@@ -486,7 +486,7 @@ function FadeCurve({
       ))}
     </svg>
   );
-});
+}
 
 function TimelineClipComponent({
   clip,
