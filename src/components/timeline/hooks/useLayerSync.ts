@@ -638,7 +638,9 @@ export function useLayerSync({
                 });
             }
 
-            if (cached?.image) {
+            // Try nearest cached frame for smooth scrubbing, then fall back to previous frame
+            const nearestOrCachedImage = proxyFrameCache.getNearestCachedFrame(mediaFile.id, frameIndex, 30) || cached?.image;
+            if (nearestOrCachedImage) {
               const transform = getInterpolatedTransform(clip.id, keyframeLocalTime);
               newLayers[layerIndex] = {
                 id: `timeline_layer_${layerIndex}`,
@@ -648,7 +650,7 @@ export function useLayerSync({
                 blendMode: transform.blendMode,
                 source: {
                   type: 'image',
-                  imageElement: cached.image,
+                  imageElement: nearestOrCachedImage,
                 },
                 effects: interpolatedEffectsForProxy,
                 position: { x: transform.position.x, y: transform.position.y, z: transform.position.z },

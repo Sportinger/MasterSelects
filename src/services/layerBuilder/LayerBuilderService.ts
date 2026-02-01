@@ -282,12 +282,19 @@ export class LayerBuilderService {
       return this.buildImageLayerFromElement(clip, layerIndex, cachedFrame, clipTime, ctx);
     }
 
+    // Try to get nearest cached frame for smooth scrubbing
+    const nearestFrame = proxyFrameCache.getNearestCachedFrame(mediaFile.id, frameIndex, 30);
+    if (nearestFrame) {
+      return this.buildImageLayerFromElement(clip, layerIndex, nearestFrame, clipTime, ctx);
+    }
+
     // Use previous cached frame as fallback
     const cached = this.proxyFramesRef.get(cacheKey);
     if (cached?.image) {
       return this.buildImageLayerFromElement(clip, layerIndex, cached.image, clipTime, ctx);
     }
 
+    // No proxy frame available - return null to fall back to video
     return null;
   }
 
