@@ -1,7 +1,7 @@
 // Composition clip addition - extracted from addCompClip
 // Handles nested composition loading, audio mixdown, and linked audio creation
 
-import type { TimelineClip, TimelineTrack, CompositionTimelineData, SerializableClip } from '../../../types';
+import type { TimelineClip, TimelineTrack, CompositionTimelineData, SerializableClip, Keyframe } from '../../../types';
 import type { Composition } from '../types';
 import { DEFAULT_TRANSFORM } from '../constants';
 import { useMediaStore } from '../../mediaStore';
@@ -22,6 +22,7 @@ interface CompClipStoreState {
   clips: TimelineClip[];
   tracks: TimelineTrack[];
   thumbnailsEnabled: boolean;
+  clipKeyframes: Map<string, Keyframe[]>;
   invalidateCache?: () => void;
 }
 
@@ -284,6 +285,9 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
   const mediaStore = useMediaStore.getState();
   const nestedClips: TimelineClip[] = [];
 
+  // Collect keyframes for nested clips (will be added to store)
+  const nestedKeyframes = new Map<string, Keyframe[]>();
+
   log.info('loadNestedClips', {
     compClipId,
     compositionId: composition.id,
@@ -295,6 +299,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
       trackId: c.trackId,
       mediaFileId: c.mediaFileId,
       sourceType: c.sourceType,
+      hasKeyframes: !!(c.keyframes && c.keyframes.length > 0),
     })),
     availableMediaFiles: mediaStore.files.map(f => ({ id: f.id, name: f.name })),
   });
@@ -310,8 +315,10 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
       continue;
     }
 
+    const nestedClipId = generateNestedClipId(compClipId, serializedClip.id);
+
     const nestedClip: TimelineClip = {
-      id: generateNestedClipId(compClipId, serializedClip.id),
+      id: nestedClipId,
       trackId: serializedClip.trackId,
       name: serializedClip.name,
       file: mediaFile.file,
@@ -331,6 +338,21 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
 
     nestedClips.push(nestedClip);
 
+    // Load keyframes for this nested clip (with updated clip ID)
+    if (serializedClip.keyframes && serializedClip.keyframes.length > 0) {
+      const updatedKeyframes = serializedClip.keyframes.map((kf: Keyframe) => ({
+        ...kf,
+        clipId: nestedClipId, // Update clip ID to match nested clip ID
+      }));
+      nestedKeyframes.set(nestedClipId, updatedKeyframes);
+      log.info('Loaded keyframes for nested clip', {
+        nestedClipId,
+        originalClipId: serializedClip.id,
+        keyframeCount: updatedKeyframes.length,
+        properties: [...new Set(updatedKeyframes.map((k: Keyframe) => k.property))],
+      });
+    }
+
     // Load media element async - track URL for cleanup
     const type = serializedClip.sourceType;
     const urlType = type === 'video' ? 'video' : type === 'audio' ? 'audio' : 'image';
@@ -343,6 +365,21 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
     } else if (type === 'image') {
       loadImageNestedClip(compClipId, nestedClip.id, fileUrl, get, set);
     }
+  }
+
+  // Merge nested clip keyframes into the store's clipKeyframes Map
+  if (nestedKeyframes.size > 0) {
+    const currentKeyframes = get().clipKeyframes;
+    const mergedKeyframes = new Map(currentKeyframes);
+    nestedKeyframes.forEach((keyframes, clipId) => {
+      mergedKeyframes.set(clipId, keyframes);
+    });
+    set({ clipKeyframes: mergedKeyframes });
+    log.info('Merged nested clip keyframes into store', {
+      compClipId,
+      nestedKeyframeClipCount: nestedKeyframes.size,
+      totalKeyframeClipCount: mergedKeyframes.size,
+    });
   }
 
   return nestedClips;
