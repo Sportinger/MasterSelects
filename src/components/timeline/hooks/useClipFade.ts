@@ -46,6 +46,12 @@ export function useClipFade({
   const clipFadeRef = useRef<ClipFadeState | null>(clipFade);
   clipFadeRef.current = clipFade;
 
+  // Store preserved easing settings when starting fade drag
+  const preservedEasingRef = useRef<{
+    fadeInEasing?: string;
+    fadeOutEasing?: string;
+  }>({});
+
   // Calculate fade-in duration from opacity keyframes
   const getFadeInDuration = useCallback((clipId: string): number => {
     const keyframes = getClipKeyframes(clipId);
@@ -98,108 +104,6 @@ export function useClipFade({
 
     return 0;
   }, [clipMap, getClipKeyframes]);
-
-  const handleFadeStart = useCallback(
-    (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => {
-      e.stopPropagation();
-      e.preventDefault();
-
-      const clip = clipMap.get(clipId);
-      if (!clip) return;
-
-      // Get existing fade duration
-      const originalFadeDuration = edge === 'left'
-        ? getFadeInDuration(clipId)
-        : getFadeOutDuration(clipId);
-
-      // Reset preserved easing for this drag session
-      preservedEasingRef.current = {};
-
-      // Preserve existing easing before any modifications
-      const keyframes = getClipKeyframes(clipId);
-      const opacityKeyframes = keyframes.filter(k => k.property === 'opacity').sort((a, b) => a.time - b.time);
-
-      if (edge === 'left') {
-        // Find the first keyframe (at time 0) for fade-in easing
-        const firstKf = opacityKeyframes.find(k => k.time === 0);
-        if (firstKf) {
-          preservedEasingRef.current.fadeInEasing = firstKf.easing;
-        }
-      } else {
-        // Find the second-to-last keyframe for fade-out easing
-        const fadeOutStart = opacityKeyframes.find(k => k.value >= 0.99 && k.time > clip.duration * 0.5);
-        if (fadeOutStart) {
-          preservedEasingRef.current.fadeOutEasing = fadeOutStart.easing;
-        }
-      }
-
-      const initialFade: ClipFadeState = {
-        clipId,
-        edge,
-        startX: e.clientX,
-        currentX: e.clientX,
-        clipDuration: clip.duration,
-        originalFadeDuration,
-      };
-      setClipFade(initialFade);
-      clipFadeRef.current = initialFade;
-
-      let isFirstMove = true;
-
-      const handleMouseMove = (moveEvent: MouseEvent) => {
-        const fade = clipFadeRef.current;
-        if (!fade) return;
-
-        const clip = clipMap.get(fade.clipId);
-        if (!clip) return;
-
-        const updated = {
-          ...fade,
-          currentX: moveEvent.clientX,
-        };
-        setClipFade(updated);
-        clipFadeRef.current = updated;
-
-        // Calculate new fade duration based on mouse movement
-        const deltaX = moveEvent.clientX - fade.startX;
-        const deltaTime = pixelToTime(Math.abs(deltaX));
-
-        let newFadeDuration: number;
-        if (fade.edge === 'left') {
-          // For fade-in: dragging right increases duration
-          newFadeDuration = fade.originalFadeDuration + (deltaX > 0 ? deltaTime : -deltaTime);
-        } else {
-          // For fade-out: dragging left increases duration
-          newFadeDuration = fade.originalFadeDuration + (deltaX < 0 ? deltaTime : -deltaTime);
-        }
-
-        // Clamp fade duration (min 0, max half of clip duration)
-        const maxFade = clip.duration * 0.5;
-        newFadeDuration = Math.max(0, Math.min(newFadeDuration, maxFade));
-
-        // Update keyframes in real-time
-        updateFadeKeyframes(fade.clipId, fade.edge, newFadeDuration, clip.duration, isFirstMove);
-        isFirstMove = false;
-      };
-
-      const handleMouseUp = () => {
-        setClipFade(null);
-        clipFadeRef.current = null;
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-    },
-    [clipMap, getFadeInDuration, getFadeOutDuration, getClipKeyframes, pixelToTime, updateFadeKeyframes]
-  );
-
-  // Store preserved easing settings when starting fade drag
-  const preservedEasingRef = useRef<{
-    fadeInEasing?: string;
-    fadeOutEasing?: string;
-  }>({});
 
   // Helper function to update/create fade keyframes
   const updateFadeKeyframes = useCallback((
@@ -259,6 +163,102 @@ export function useClipFade({
       }
     }
   }, [addKeyframe, removeKeyframe, getClipKeyframes]);
+
+  const handleFadeStart = useCallback(
+    (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => {
+      e.stopPropagation();
+      e.preventDefault();
+
+      const clip = clipMap.get(clipId);
+      if (!clip) return;
+
+      // Get existing fade duration
+      const originalFadeDuration = edge === 'left'
+        ? getFadeInDuration(clipId)
+        : getFadeOutDuration(clipId);
+
+      // Reset preserved easing for this drag session
+      preservedEasingRef.current = {};
+
+      // Preserve existing easing before any modifications
+      const keyframes = getClipKeyframes(clipId);
+      const opacityKeyframes = keyframes.filter(k => k.property === 'opacity').sort((a, b) => a.time - b.time);
+
+      if (edge === 'left') {
+        // Find the first keyframe (at time 0) for fade-in easing
+        const firstKf = opacityKeyframes.find(k => k.time === 0);
+        if (firstKf) {
+          preservedEasingRef.current.fadeInEasing = firstKf.easing;
+        }
+      } else {
+        // Find the second-to-last keyframe for fade-out easing
+        const fadeOutStart = opacityKeyframes.find(k => k.value >= 0.99 && k.time > clip.duration * 0.5);
+        if (fadeOutStart) {
+          preservedEasingRef.current.fadeOutEasing = fadeOutStart.easing;
+        }
+      }
+
+      const initialFade: ClipFadeState = {
+        clipId,
+        edge,
+        startX: e.clientX,
+        currentX: e.clientX,
+        clipDuration: clip.duration,
+        originalFadeDuration,
+      };
+      setClipFade(initialFade);
+      clipFadeRef.current = initialFade;
+
+      let isFirstMove = true;
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        const fade = clipFadeRef.current;
+        if (!fade) return;
+
+        const currentClip = clipMap.get(fade.clipId);
+        if (!currentClip) return;
+
+        const updated = {
+          ...fade,
+          currentX: moveEvent.clientX,
+        };
+        setClipFade(updated);
+        clipFadeRef.current = updated;
+
+        // Calculate new fade duration based on mouse movement
+        const deltaX = moveEvent.clientX - fade.startX;
+        const deltaTime = pixelToTime(Math.abs(deltaX));
+
+        let newFadeDuration: number;
+        if (fade.edge === 'left') {
+          // For fade-in: dragging right increases duration
+          newFadeDuration = fade.originalFadeDuration + (deltaX > 0 ? deltaTime : -deltaTime);
+        } else {
+          // For fade-out: dragging left increases duration
+          newFadeDuration = fade.originalFadeDuration + (deltaX < 0 ? deltaTime : -deltaTime);
+        }
+
+        // Clamp fade duration (min 0, max half of clip duration)
+        const maxFade = currentClip.duration * 0.5;
+        newFadeDuration = Math.max(0, Math.min(newFadeDuration, maxFade));
+
+        // Update keyframes in real-time
+        updateFadeKeyframes(fade.clipId, fade.edge, newFadeDuration, currentClip.duration, isFirstMove);
+        isFirstMove = false;
+      };
+
+      const handleMouseUp = () => {
+        setClipFade(null);
+        clipFadeRef.current = null;
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    },
+    [clipMap, getFadeInDuration, getFadeOutDuration, getClipKeyframes, pixelToTime, updateFadeKeyframes]
+  );
 
   return {
     clipFade,
