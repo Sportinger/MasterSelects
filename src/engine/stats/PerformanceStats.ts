@@ -85,12 +85,21 @@ export class PerformanceStats {
 
   updateStats(): void {
     this.frameCount++;
-    this.statsCounter++;
+    const now = performance.now();
 
+    // Update FPS every 250ms (4x per second) for responsive display
+    const elapsed = now - this.fpsUpdateTime;
+    if (elapsed >= 250) {
+      // Calculate precise FPS (frames per second)
+      this.fps = Math.round((this.frameCount / elapsed) * 1000);
+      this.frameCount = 0;
+      this.fpsUpdateTime = now;
+    }
+
+    // Frame time averaging (batched every 10 frames for efficiency)
+    this.statsCounter++;
     if (this.statsCounter >= 10) {
       this.statsCounter = 0;
-      const now = performance.now();
-
       if (this.lastFrameStart > 0) {
         const frameTime = (now - this.lastFrameStart) / 10;
         this.frameTimeBuffer[this.frameTimeIndex] = frameTime;
@@ -98,15 +107,6 @@ export class PerformanceStats {
         if (this.frameTimeCount < 60) this.frameTimeCount++;
       }
       this.lastFrameStart = now;
-
-      // Update FPS every 250ms (4x per second) for more responsive display
-      const elapsed = now - this.fpsUpdateTime;
-      if (elapsed >= 250) {
-        // Scale to frames per second
-        this.fps = Math.round((this.frameCount / elapsed) * 1000);
-        this.frameCount = 0;
-        this.fpsUpdateTime = now;
-      }
     }
   }
 
