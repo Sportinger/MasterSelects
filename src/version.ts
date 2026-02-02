@@ -4,8 +4,12 @@
 export const APP_VERSION = '1.1.1';
 
 // Build/Platform notice shown at top of changelog
-export const BUILD_NOTICE = {
-  type: 'info' as const, // 'info' | 'warning' | 'success'
+export const BUILD_NOTICE: {
+  type: 'info' | 'warning' | 'success';
+  title: string;
+  message: string;
+} = {
+  type: 'info',
   title: 'Windows Build',
   message: 'This build is currently tested on Windows. Mac/Linux support may vary.',
 };

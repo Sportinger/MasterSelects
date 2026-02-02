@@ -396,7 +396,6 @@ function FadeCurve({
     const y2 = valueToY(kf2.value);
 
     const duration = kf2.time - kf1.time;
-    const valueDiff = kf2.value - kf1.value;
 
     // Determine control points based on easing type
     let cp1x: number, cp1y: number, cp2x: number, cp2y: number;
@@ -503,7 +502,7 @@ function TimelineClipComponent({
   isLinkedToTrimming,
   clipDrag,
   clipTrim,
-  clipFade,
+  clipFade: _clipFade,
   zoom,
   scrollX,
   timelineRef,

@@ -10,7 +10,7 @@ import { useMediaStore } from '../mediaStore';
 
 import { createTrackSlice } from './trackSlice';
 import { createClipSlice } from './clipSlice';
-import { generateCompThumbnails, calculateNestedClipBoundaries, buildClipSegments } from './clip/addCompClip';
+import { calculateNestedClipBoundaries, buildClipSegments } from './clip/addCompClip';
 import { createPlaybackSlice } from './playbackSlice';
 import { createSelectionSlice } from './selectionSlice';
 import { createKeyframeSlice } from './keyframeSlice';

@@ -20,7 +20,6 @@ import { createImageClipPlaceholder, loadImageMedia } from './clip/addImageClip'
 import {
   createCompClipPlaceholder,
   loadNestedClips,
-  generateCompThumbnails,
   createCompLinkedAudioClip,
   createNestedContentHash,
   calculateNestedClipBoundaries,

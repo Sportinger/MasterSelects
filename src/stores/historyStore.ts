@@ -94,23 +94,19 @@ interface MediaStoreState {
   expandedFolderIds: string[];
 }
 
-interface DockStoreState {
-  layout: DockNode | null;
-}
-
 // Import stores dynamically to avoid circular dependencies
 let getTimelineState: (() => TimelineStoreState) | undefined;
 let setTimelineState: ((state: Partial<TimelineStoreState>) => void) | undefined;
 let getMediaState: (() => MediaStoreState) | undefined;
 let setMediaState: ((state: Partial<MediaStoreState>) => void) | undefined;
-let getDockState: (() => DockStoreState) | undefined;
-let setDockState: ((state: Partial<DockStoreState>) => void) | undefined;
+let getDockState: (() => any) | undefined;
+let setDockState: ((state: any) => void) | undefined;
 
 // Initialize store references (called from useGlobalHistory)
 export function initHistoryStoreRefs(stores: {
   timeline: { getState: () => TimelineStoreState; setState: (state: Partial<TimelineStoreState>) => void };
   media: { getState: () => MediaStoreState; setState: (state: Partial<MediaStoreState>) => void };
-  dock: { getState: () => DockStoreState; setState: (state: Partial<DockStoreState>) => void };
+  dock: { getState: () => any; setState: (state: any) => void };
 }) {
   getTimelineState = stores.timeline.getState;
   setTimelineState = stores.timeline.setState;
@@ -149,9 +145,9 @@ function deepClone<T>(obj: T): T {
 
 // Create snapshot from current state
 function createSnapshot(label: string): StateSnapshot {
-  const timeline = getTimelineState?.() || {};
-  const media = getMediaState?.() || {};
-  const dock = getDockState?.() || {};
+  const timeline = getTimelineState?.() || ({} as any);
+  const media = getMediaState?.() || ({} as any);
+  const dock = getDockState?.() || ({} as any);
 
   return {
     timestamp: Date.now(),

@@ -31,6 +31,7 @@ const DEFAULT_OPTIONS: Required<ThumbnailOptions> = {
   count: 10,
   width: 160,
   height: 90,
+  boundaries: [],
 };
 
 class ThumbnailRendererService {
@@ -819,7 +820,7 @@ class ThumbnailRendererService {
       return null;
     }
 
-    const { device, sampler, compositorPipeline, effectsPipeline, outputPipeline, textureManager, maskTextureManager } = this.resources;
+    const { device, sampler, compositorPipeline, effectsPipeline, outputPipeline, textureManager: _textureManager, maskTextureManager } = this.resources;
 
     if (!clip.source) return null;
 
@@ -832,8 +833,8 @@ class ThumbnailRendererService {
       opacity: transform.opacity ?? 1,
       blendMode: 'normal',
       source: clip.source as Layer['source'],
-      effects: clip.effects || [],
-      position: transform.position || { x: 0, y: 0, z: 0 },
+      effects: (clip.effects || []) as any,
+      position: { x: transform.position?.x || 0, y: transform.position?.y || 0, z: transform.position?.z || 0 },
       scale: transform.scale || { x: 1, y: 1 },
       rotation: typeof transform.rotation === 'number'
         ? transform.rotation

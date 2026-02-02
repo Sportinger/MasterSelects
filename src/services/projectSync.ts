@@ -6,7 +6,6 @@ import { useMediaStore, type MediaFile, type Composition, type MediaFolder } fro
 import { getMediaInfo } from '../stores/mediaStore/helpers/mediaInfoHelpers';
 import { createThumbnail } from '../stores/mediaStore/helpers/thumbnailHelpers';
 import { updateTimelineClips } from '../stores/mediaStore/slices/fileManageSlice';
-import type { SerializableClip, TimelineTrack as StoreTimelineTrack, TimelineClip, Effect, Mask, CompositionTimelineData } from '../types';
 
 const log = Logger.create('ProjectSync');
 import { useTimelineStore } from '../stores/timeline';
@@ -72,7 +71,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
     const timelineData = comp.timelineData;
 
     // Convert tracks
-    const tracks: ProjectTrack[] = (timelineData?.tracks || []).map((t: StoreTimelineTrack) => ({
+    const tracks: ProjectTrack[] = (timelineData?.tracks || []).map((t: any) => ({
       id: t.id,
       name: t.name,
       type: t.type,
@@ -84,7 +83,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
     }));
 
     // Convert clips
-    const clips: ProjectClip[] = (timelineData?.clips || []).map((c: SerializableClip) => ({
+    const clips: ProjectClip[] = (timelineData?.clips || []).map((c: any) => ({
       id: c.id,
       trackId: c.trackId,
       name: c.name || '',
@@ -113,14 +112,14 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
         opacity: c.transform?.opacity ?? 1,
         blendMode: c.transform?.blendMode || 'normal',
       },
-      effects: (c.effects || []).map((e: Effect) => ({
+      effects: (c.effects || []).map((e: any) => ({
         id: e.id,
         type: e.type,
         name: e.name || e.type,
         enabled: e.enabled !== false,
         params: e.params || {},
       })),
-      masks: (c.masks || []).map((m: Mask) => ({
+      masks: (c.masks || []).map((m: any) => ({
         id: m.id,
         name: m.name || 'Mask',
         mode: m.mode || 'add',
@@ -422,7 +421,7 @@ function convertProjectCompositionToStore(
       frameRate: pc.frameRate,
       duration: pc.duration,
       backgroundColor: pc.backgroundColor,
-      timelineData: timelineData as CompositionTimelineData, // Type assertion for complex nested types
+      timelineData: timelineData as any, // Type assertion for complex nested types
     };
     return comp;
   });
@@ -809,14 +808,14 @@ async function reloadNestedCompositionClips(): Promise<void> {
     const composition = mediaStore.compositions.find(c => c.id === compClip.compositionId);
     if (!composition?.timelineData) continue;
 
-    const nestedClips: Partial<TimelineClip>[] = [];
+    const nestedClips: any[] = [];
     const nestedTracks = composition.timelineData.tracks;
 
     for (const nestedSerializedClip of composition.timelineData.clips) {
       const nestedMediaFile = mediaStore.files.find(f => f.id === nestedSerializedClip.mediaFileId);
       if (!nestedMediaFile?.file) continue;
 
-      const nestedClip: Partial<TimelineClip> = {
+      const nestedClip: any = {
         id: `nested-${compClip.id}-${nestedSerializedClip.id}`,
         trackId: nestedSerializedClip.trackId,
         name: nestedSerializedClip.name,
@@ -899,28 +898,21 @@ async function reloadNestedCompositionClips(): Promise<void> {
 
     // Update the composition clip with nested data
     if (nestedClips.length > 0) {
-      const compDuration = composition.timelineData?.duration ?? composition.duration;
-
-      // Calculate clip boundaries for visual markers and thumbnail alignment
-      const { calculateNestedClipBoundaries } = await import('../stores/timeline/clip/addCompClip');
-      const boundaries = calculateNestedClipBoundaries(composition.timelineData, compDuration);
-
       timelineStore.updateClip(compClip.id, {
         nestedClips,
         nestedTracks,
-        nestedClipBoundaries: boundaries,
         isLoading: false,
       });
 
       // Generate thumbnails if missing
       if (!compClip.thumbnails || compClip.thumbnails.length === 0) {
         const { generateCompThumbnails } = await import('../stores/timeline/clip/addCompClip');
+        const compDuration = composition.timelineData?.duration ?? composition.duration;
         generateCompThumbnails({
           clipId: compClip.id,
           nestedClips,
           compDuration,
           thumbnailsEnabled: timelineStore.thumbnailsEnabled,
-          boundaries,
           get: useTimelineStore.getState,
           set: useTimelineStore.setState,
         });

@@ -45,21 +45,15 @@ interface MP4VideoTrack {
   video: { width: number; height: number };
 }
 
-interface MP4Track {
-  video?: { width: number; height: number };
-  codec?: string;
-  id?: number;
-}
-
 interface MP4File {
   onReady: (info: { videoTracks: MP4VideoTrack[] }) => void;
-  onSamples: (trackId: number, ref: unknown, samples: Sample[]) => void;
+  onSamples: (trackId: number, ref: any, samples: Sample[]) => void;
   onError: (error: string) => void;
   appendBuffer: (buffer: MP4ArrayBuffer) => number;
   start: () => void;
   flush: () => void;
-  setExtractionOptions: (trackId: number, user: unknown, options: { nbSamples: number }) => void;
-  getTrackById: (id: number) => MP4Track | undefined;
+  setExtractionOptions: (trackId: number, user: any, options: { nbSamples: number }) => void;
+  getTrackById: (id: number) => any;
 }
 
 interface GeneratorResult {
@@ -231,7 +225,6 @@ class ProxyGeneratorGPU {
     this.decodedFrames.clear();
     this.frameTimestamps = [];
 
-    // eslint-disable-next-line no-async-promise-executor
     return new Promise(async (resolve, reject) => {
       this.resolveGeneration = resolve;
 
@@ -335,7 +328,6 @@ class ProxyGeneratorGPU {
   }
 
   private async loadWithMP4Box(file: File): Promise<boolean> {
-    // eslint-disable-next-line no-async-promise-executor
     return new Promise(async (resolve) => {
       this.mp4File = MP4Box.createFile();
       const mp4File = this.mp4File!;
@@ -436,7 +428,7 @@ class ProxyGeneratorGPU {
         checkComplete();
       };
 
-      mp4File.onSamples = (_trackId: number, _ref: unknown, samples: Sample[]) => {
+      mp4File.onSamples = (_trackId: number, _ref: any, samples: Sample[]) => {
         this.samples.push(...samples);
         log.debug(`Received ${samples.length} samples (total: ${this.samples.length}/${expectedSamples})`);
         if (this.samples.length >= expectedSamples) {
@@ -499,7 +491,7 @@ class ProxyGeneratorGPU {
     });
   }
 
-  private getCodecString(codec: string, trak: MP4Track | undefined): string {
+  private getCodecString(codec: string, trak: any): string {
     // Handle different codec types
     if (codec.startsWith('avc1')) {
       // H.264/AVC
@@ -589,7 +581,7 @@ class ProxyGeneratorGPU {
 
     let decodedCount = 0;
     let errorCount = 0;
-    let lastError: unknown = null;
+    let lastError: any = null;
 
     this.decoder = new VideoDecoder({
       output: (frame) => {
@@ -685,8 +677,8 @@ class ProxyGeneratorGPU {
 
     // Performance tracking
     const startTime = performance.now();
-    let _totalGpuTime = 0;
-    let _totalEncodeTime = 0;
+    let totalGpuTime = 0;
+    let totalEncodeTime = 0;
     let batchCount = 0;
     const dbBatch: { id: string; mediaFileId: string; frameIndex: number; blob: Blob }[] = [];
 
@@ -717,7 +709,7 @@ class ProxyGeneratorGPU {
           const gpuStart = performance.now();
           const pixelArrays = await this.resizePipeline!.processBatch(batchFrames);
           const gpuEnd = performance.now();
-          _totalGpuTime += gpuEnd - gpuStart;
+          totalGpuTime += gpuEnd - gpuStart;
 
           // CRITICAL: Close video frames immediately to release decoder buffer
           for (const frame of batchFrames) {
@@ -737,7 +729,7 @@ class ProxyGeneratorGPU {
 
           const blobs = await Promise.all(encodePromises);
           const encodeEnd = performance.now();
-          _totalEncodeTime += encodeEnd - encodeStart;
+          totalEncodeTime += encodeEnd - encodeStart;
 
           // Log batch performance
           if (batchCount % 5 === 0 || batchCount === 1) {

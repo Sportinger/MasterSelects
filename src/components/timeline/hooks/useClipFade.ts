@@ -3,7 +3,7 @@
 // Preserves existing bezier handles when adjusting fade duration
 
 import { useState, useCallback, useRef } from 'react';
-import type { TimelineClip } from '../../../types';
+import type { TimelineClip, AnimatableProperty, EasingType } from '../../../types';
 import type { ClipFadeState } from '../types';
 
 interface KeyframeData {
@@ -22,7 +22,7 @@ interface UseClipFadeProps {
   clipMap: Map<string, TimelineClip>;
 
   // Keyframe actions
-  addKeyframe: (clipId: string, property: 'opacity', value: number, time: number, easing?: string) => void;
+  addKeyframe: (clipId: string, property: AnimatableProperty, value: number, time?: number, easing?: EasingType) => void;
   removeKeyframe: (keyframeId: string) => void;
   moveKeyframe: (keyframeId: string, newTime: number) => void;
   getClipKeyframes: (clipId: string) => KeyframeData[];
