@@ -54,13 +54,12 @@ interface RawChangeEntry extends ChangeEntry {
 }
 
 const RAW_CHANGELOG: RawChangeEntry[] = [
-  // === After Reddit Post (Feb 2, 2026) ===
+  // === Feb 2, 2026 ===
   {
     date: '2026-02-02',
     type: 'new',
     title: 'Text Items in Media Panel',
     description: 'Add text clips via Media Panel with drag-to-timeline support',
-    section: '🚀 After Reddit Post',
     commit: 'd822843',
   },
   {
@@ -133,13 +132,11 @@ const RAW_CHANGELOG: RawChangeEntry[] = [
     description: 'Cut tool automatically returns to select mode after cutting a clip',
     commit: 'de80778',
   },
-  // === Before Reddit Post (Feb 2, 2026) ===
   {
     date: '2026-02-02',
     type: 'fix',
     title: 'Nested Comp Export',
     description: 'Fixed opacity and keyframe animations not applied during export of nested compositions',
-    section: '📋 Before Reddit Post',
   },
   {
     date: '2026-02-02',
