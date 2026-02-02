@@ -56,9 +56,23 @@ scaleTracksOfType()  - Batch height adjustment
 |--------|--------|-------|
 | **Move** | Drag clip | Supports snapping + resistance |
 | **Trim** | Drag edges | Left/right trim handles |
-| **Split** | `C` key | Splits all clips at playhead |
+| **Split** | `C` key | Cut tool - splits all clips at playhead |
+| **Copy** | `Ctrl+C` | Copy selected clips |
+| **Paste** | `Ctrl+V` | Paste clips at playhead |
 | **Delete** | `Delete` key | Removes selected clips |
 | **Reverse** | Context menu | Shows ↻ badge |
+
+### Cut Tool
+- **Shortcut:** `C`
+- **Snapping:** Automatically snaps to clip edges (hold `Alt` to disable)
+- **Linked clips:** Splits both video and audio together
+- **Visual indicator:** Cut line extends across all linked clips
+
+### Copy/Paste
+- **Copy:** `Ctrl+C` copies selected clips with all properties
+- **Paste:** `Ctrl+V` pastes at playhead position
+- **Preserved:** Effects, keyframes, masks, thumbnails, waveforms
+- **Undo support:** Full undo/redo for paste operations
 
 ### Clip Properties (Keyframeable)
 - Position (X, Y, Z depth)
@@ -167,6 +181,16 @@ trimOverlappingClips()    - Auto-trim when placing
 - Double-click to enter and edit contents
 - Changes reflect in parent composition
 - Recursive rendering for deep nesting
+- **Orange outline** for easy identification
+- **Boundary markers** show clip start/end positions
+- **Content-aware thumbnails** sample at clip boundaries
+
+### Fade Curves (Bezier)
+Visual opacity fade curves displayed directly on timeline clips:
+- **Creating fades:** Add opacity keyframes at clip start/end
+- **Bezier visualization:** Shows smooth fade curve on clip
+- **Real-time updates:** Curves update instantly during adjustment
+- **Fade handles:** Drag to adjust fade duration while preserving easing
 
 ### Composition Tabs
 - Open compositions appear as tabs

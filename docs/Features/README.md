@@ -2,7 +2,7 @@
 
 **Professional WebGPU Video Compositor & Timeline Editor**
 
-Version 1.1.0 | January 2026
+Version 1.1.2 | February 2026
 
 ---
 
@@ -82,15 +82,20 @@ UI Framework      Custom dockable panel system with mobile support
 |---------|--------|---------|
 | Multi-track Timeline | ✅ | Unlimited video and audio tracks |
 | Clip Operations | ✅ | Move, trim, split, delete, reverse |
+| Cut Tool | ✅ | `C` to split clips with snapping (Alt to disable) |
+| Copy/Paste | ✅ | `Ctrl+C/V` with effects, keyframes, masks preserved |
+| Bezier Fade Curves | ✅ | Visual opacity fades with real-time preview |
 | Magnetic Snapping | ✅ | 0.1s snap distance with edge alignment |
 | Snap Toggle | ✅ | Toolbar button to enable/disable snapping |
 | Overlap Resistance | ✅ | 100px resistance with auto-trim |
 | Marquee Selection | ✅ | Rectangle selection with Shift modifier |
 | Linked Audio | ✅ | Video-audio linking with Alt+drag override |
-| Nested Compositions | ✅ | Double-click to edit, recursive rendering |
+| Nested Compositions | ✅ | Orange outline, boundary markers, recursive rendering |
 | Composition Tabs | ✅ | Multiple open compositions with tab navigation |
+| Clip Entrance Animation | ✅ | Smooth animation when switching compositions |
 | Track Controls | ✅ | Visibility, mute, solo, expand |
 | Playback Looping | ✅ | In/Out points with loop mode |
+| Marker Drag-to-Create | ✅ | Drag M button to create markers with ghost preview |
 
 ### Text Clips
 
@@ -217,20 +222,24 @@ UI Framework      Custom dockable panel system with mobile support
 | Idle Mode | ✅ | Auto-pause GPU when nothing changes |
 | Preview Quality | ✅ | Full/Half/Quarter resolution for performance |
 | Layer Caching | ✅ | Better performance when paused or scrubbing |
+| Auto Frame Caching | ✅ | Cache frames during playback for instant scrubbing |
 | RAM Preview | ✅ | Cached playback with 900 frame limit |
 | Multiple Outputs | ✅ | Open multiple preview windows |
 | Per-Preview Grid | ✅ | Individual transparency grid toggle |
 | Edit Mode | ✅ | Direct manipulation in preview (Tab toggle) |
-| Scrubbing Cache | ✅ | 3-tier caching system |
+| Scrubbing Cache | ✅ | 3-tier caching system (LRU 300 + last frame + composite) |
 | Statistics Overlay | ✅ | FPS, timing, idle status, GPU vendor |
 | Resolution Presets | ✅ | 480p to 4K preview |
 | Pause on Drag | ✅ | Playback pauses when dragging playhead |
 | GPU Recovery | ✅ | Automatic WebGPU device recovery |
+| Numpad Blend Cycling | ✅ | Numpad +/- to cycle through blend modes |
 
 ### Export
 
 | Feature | Status | Details |
 |---------|--------|---------|
+| Export System V2 | ✅ | Shared decoder pool with intelligent frame caching |
+| Export Planner | ✅ | Smart decode scheduling for optimized performance |
 | WebCodecs Fast Mode | ✅ | Sequential decoding with MP4Box parsing |
 | HTMLVideo Precise Mode | ✅ | Frame-accurate seeking for complex timelines |
 | FFmpeg WASM Export | ✅ | ProRes, DNxHR, HAP codecs |
@@ -250,8 +259,11 @@ UI Framework      Custom dockable panel system with mobile support
 | Feature | Status | Details |
 |---------|--------|---------|
 | Local Project Folder | ✅ | All data stored in user-selected folder |
+| Auto-Copy to Raw | ✅ | Imported media automatically copied to Raw/ folder |
+| Auto-Relink from Raw | ✅ | Auto-restore missing files from Raw folder on load |
 | Auto-Save | ✅ | Configurable interval (1-10 min) |
 | Backup System | ✅ | Keeps last 20 backups automatically |
+| UI State Persistence | ✅ | Dock layout + timeline view state saved per project |
 | Welcome Overlay | ✅ | Project folder selection on launch |
 | Save As | ✅ | Export project to new location |
 | Smart Media Relink | ✅ | Auto-find moved/renamed files |
@@ -259,17 +271,21 @@ UI Framework      Custom dockable panel system with mobile support
 | Media Import | ✅ | MP4, WebM, MOV, WAV, MP3, PNG, JPG |
 | Proxy Generation | ✅ | GPU-accelerated, Windows/Linux/Mac |
 | Hash Deduplication | ✅ | Same files share proxies/thumbnails |
+| IndexedDB Error Dialog | ✅ | Clear error when browser storage is corrupted |
 
 ### Native Helper (Turbo Mode)
 
 | Feature | Status | Details |
 |---------|--------|---------|
-| ProRes Decoding | ✅ | All profiles at native speed |
-| DNxHD/DNxHR Decoding | ✅ | All profiles at native speed |
+| Windows Lite Build | ✅ | YouTube downloads only (~10MB, no FFmpeg) |
+| Linux/Mac Full Build | ✅ | ProRes/DNxHD decode + YouTube downloads |
+| ProRes Decoding | ✅ | All profiles at native speed (Linux/Mac) |
+| DNxHD/DNxHR Decoding | ✅ | All profiles at native speed (Linux/Mac) |
 | Hardware Acceleration | ✅ | VAAPI (Intel/AMD), NVDEC (NVIDIA) |
+| YouTube Downloads | ✅ | yt-dlp integration with quality selection |
 | Frame Cache | ✅ | LRU cache up to 2GB |
 | Background Prefetch | ✅ | Frames loaded ahead of playhead |
-| Native Encoding | ✅ | 10x faster ProRes/DNxHD export |
+| Native Encoding | ✅ | 10x faster ProRes/DNxHD export (Linux/Mac) |
 | Auto-Detection | ✅ | Toolbar shows "⚡ Turbo" when connected |
 | Download Link | ✅ | Click indicator for helper download |
 
@@ -282,6 +298,8 @@ UI Framework      Custom dockable panel system with mobile support
 | Unified Properties Panel | ✅ | Transform, Effects, Masks, Volume, Transcript, Analysis |
 | Menu Bar | ✅ | File, Edit, View, Output, Audio, Info, Window |
 | Context Menus | ✅ | Right-click operations (viewport-bounded) |
+| WYSIWYG Thumbnails | ✅ | Thumbnails show effects applied to clips |
+| WebGPU Thumbnail Renderer | ✅ | GPU-accelerated thumbnails for nested comps |
 | MIDI Control | ✅ | Web MIDI API integration |
 | Keyboard Shortcuts | ✅ | Comprehensive hotkey support |
 | Hold-to-Drag Tabs | ✅ | 500ms hold to reorder |
@@ -304,7 +322,7 @@ UI Framework      Custom dockable panel system with mobile support
 ├─────────────────────────────────────────────────────────────────────────┤
 │                         State Layer (Zustand)                            │
 │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────────────┐  │
-│  │  Timeline   │ │   Mixer     │ │   Media     │ │    Multicam       │  │
+│  │  Timeline   │ │   Dock      │ │   Media     │ │    Multicam       │  │
 │  │   Store     │ │   Store     │ │   Store     │ │     Store         │  │
 │  │  (7 slices) │ │             │ │             │ │                   │  │
 │  └─────────────┘ └─────────────┘ └─────────────┘ └───────────────────┘  │
@@ -499,6 +517,8 @@ The following features are planned but not currently available:
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 1.1.2 | Feb 2026 | Nested comp export fixes, Windows build notice |
+| 1.1.1 | Feb 2026 | Cut tool, copy/paste, bezier fade curves, WYSIWYG thumbnails, Export V2, auto frame caching, UI state persistence, marker drag-to-create, major refactoring (WebGPUEngine, Timeline, FrameExporter, ClipSlice) |
 | 1.1.0 | Jan 2026 | Export mode selection, audio master clock, varispeed scrubbing, parallel decoding |
 | 1.0.9 | Jan 2026 | Layer caching, WebCodecs export optimization, case-insensitive file detection |
 | 1.0.8 | Jan 2026 | Native Helper YouTube download, NativeDecoder integration, FFmpeg audio export |
@@ -515,8 +535,8 @@ The following features are planned but not currently available:
 
 ## License
 
-MASterSelects is proprietary software.
+MIT - see [LICENSE](../../LICENSE)
 
 ---
 
-*Documentation updated January 2026*
+*Documentation updated February 2026*

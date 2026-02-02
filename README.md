@@ -1,7 +1,7 @@
 # MASterSelects
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)
-![License](https://img.shields.io/badge/license-Proprietary-red.svg)
+![Version](https://img.shields.io/badge/version-1.1.2-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Browser-lightgrey.svg)
 ![WebGPU](https://img.shields.io/badge/WebGPU-Powered-green.svg)
 ![React](https://img.shields.io/badge/React-19.2-61DAFB.svg?logo=react)
@@ -17,22 +17,24 @@ A browser-based video editing application with After Effects-style compositing, 
 | Feature | Description | Docs |
 |---------|-------------|------|
 | **Multi-track Timeline** | Video and audio tracks with nested compositions | [Timeline](docs/Features/Timeline.md) |
+| **Cut Tool & Copy/Paste** | C to split clips, Ctrl+C/V to copy/paste | [Timeline](docs/Features/Timeline.md) |
 | **Keyframe Animation** | Bezier curve editor with 5 easing modes | [Keyframes](docs/Features/Keyframes.md) |
-| **37 Blend Modes** | All After Effects blend modes | [Effects](docs/Features/Effects.md) |
+| **Bezier Fade Curves** | Visual opacity fades with real-time preview | [Timeline](docs/Features/Timeline.md) |
+| **37 Blend Modes** | All After Effects blend modes (Numpad +/- to cycle) | [Effects](docs/Features/Effects.md) |
 | **30+ GPU Effects** | Color, blur, distort, stylize, keying effects | [Effects](docs/Features/Effects.md) |
 | **Text Clips** | Typography with 50 Google Fonts, stroke, shadow | [Text Clips](docs/Features/Text-Clips.md) |
 | **Vector Masks** | Rectangle, ellipse, pen tool with GPU feathering | [Masks](docs/Features/Masks.md) |
 | **AI Integration** | 50+ editing tools via GPT-4/GPT-5 | [AI Integration](docs/Features/AI-Integration.md) |
 | **AI Video Generation** | PiAPI integration for AI video creation | [AI Integration](docs/Features/AI-Integration.md) |
-| **YouTube Integration** | Search, download, and edit YouTube videos | [YouTube](docs/Features/YouTube.md) |
+| **YouTube Integration** | Search, download with quality selection | [YouTube](docs/Features/YouTube.md) |
 | **10-Band EQ** | Parametric equalizer with keyframe support | [Audio](docs/Features/Audio.md) |
 | **Multicam Sync** | Audio-based cross-correlation synchronization | [Audio](docs/Features/Audio.md) |
 | **4 Transcription Providers** | Local Whisper, OpenAI, AssemblyAI, Deepgram | [AI Integration](docs/Features/AI-Integration.md) |
-| **RAM Preview** | Cached playback at 60fps with idle mode | [Preview](docs/Features/Preview.md) |
-| **Export Modes** | WebCodecs Fast, HTMLVideo Precise, FFmpeg | [Export](docs/Features/Export.md) |
-| **Native Helper** | Hardware-accelerated ProRes/DNxHD (optional) | [Native Helper](docs/Features/Native-Helper.md) |
-| **Local Project Storage** | Project folder with autosave and backups | [Project Persistence](docs/Features/Project-Persistence.md) |
-| **Smart Media Relink** | Auto-reconnect and relink missing media files | [Media Panel](docs/Features/Media-Panel.md) |
+| **RAM Preview** | Cached playback at 60fps with auto frame caching | [Preview](docs/Features/Preview.md) |
+| **Export System V2** | Parallel decoding, shared decoder pool, frame caching | [Export](docs/Features/Export.md) |
+| **Native Helper** | Hardware-accelerated ProRes/DNxHD (Windows Lite available) | [Native Helper](docs/Features/Native-Helper.md) |
+| **Local Project Storage** | Auto-copy to Raw folder, UI state persistence | [Project Persistence](docs/Features/Project-Persistence.md) |
+| **Smart Media Relink** | Auto-relink from Raw folder on project load | [Media Panel](docs/Features/Media-Panel.md) |
 | **Mobile Support** | Responsive UI with touch gestures | [UI & Panels](docs/Features/UI-Panels.md) |
 
 **[Full Documentation](docs/Features/README.md)** | **[Keyboard Shortcuts](docs/Features/Keyboard-Shortcuts.md)**
@@ -148,11 +150,13 @@ chrome://flags/#enable-vulkan → Enabled
 | Key | Action |
 |-----|--------|
 | `Space` | Play/Pause |
-| `C` | Split clip at playhead |
+| `C` | Cut tool - split clips at playhead |
+| `Ctrl+C/V` | Copy/Paste clips |
 | `Delete` | Delete selected |
 | `I` / `O` | Set In/Out points |
 | `Ctrl+Z` | Undo |
 | `Ctrl+S` | Save project |
+| `Numpad +/-` | Cycle blend modes |
 
 [Full shortcut reference](docs/Features/Keyboard-Shortcuts.md)
 
@@ -171,28 +175,37 @@ npm run preview  # Preview production build
 
 ```
 src/
-├── components/     # React components
-│   ├── timeline/   # Timeline editor (hooks/, components/, utils/)
-│   ├── panels/     # Dock panels (Properties, Media, YouTube, AI, etc.)
-│   ├── preview/    # Preview canvas and overlays
-│   ├── mobile/     # Mobile-specific components
-│   └── dock/       # Panel system
-├── stores/         # Zustand state management
-│   ├── timeline/   # Timeline slices (track, clip, keyframe, mask, etc.)
-│   └── mediaStore/ # Media slices (import, folder, proxy, composition)
-├── engine/         # WebGPU rendering (modular architecture)
-│   ├── core/       # WebGPU context and render targets
-│   ├── render/     # Compositor, render loop, layer collection
-│   ├── export/     # Frame exporter, video encoder, codec helpers
-│   └── audio/      # Audio encoder, mixer, time stretch
-├── effects/        # Modular GPU effects (30+ effects)
-├── shaders/        # WGSL shaders
-├── services/       # Audio, AI, persistence, Native Helper
-│   ├── project/    # Project file service (domains, types)
-│   └── nativeHelper/ # Native decoder and client
-└── hooks/          # React hooks
+├── components/        # React components
+│   ├── timeline/      # Timeline editor (hooks/, components/, utils/)
+│   ├── panels/        # Dock panels (Properties, Media, YouTube, AI, Export)
+│   ├── preview/       # Preview canvas and overlays
+│   ├── common/        # Shared components (Toolbar, Dialogs, etc.)
+│   ├── mobile/        # Mobile-specific components
+│   ├── export/        # Export UI components
+│   └── dock/          # Panel system
+├── stores/            # Zustand state management
+│   ├── timeline/      # Timeline slices (track, clip, keyframe, mask, etc.)
+│   └── mediaStore/    # Media slices (import, folder, proxy, composition)
+├── engine/            # WebGPU rendering (modular architecture)
+│   ├── core/          # WebGPU context and render targets
+│   ├── render/        # Compositor, render loop, layer collection
+│   ├── export/        # Frame exporter, video encoder, V2 export system
+│   ├── managers/      # Decode managers, texture managers
+│   ├── pipeline/      # Render pipelines
+│   ├── texture/       # Texture and frame caching (ScrubbingCache)
+│   ├── audio/         # Audio encoder, mixer, time stretch
+│   └── ffmpeg/        # FFmpeg WASM bridge
+├── effects/           # Modular GPU effects (30+ effects)
+├── shaders/           # WGSL shaders
+├── services/          # Audio, AI, persistence, Native Helper
+│   ├── project/       # Project file service (modular architecture)
+│   ├── nativeHelper/  # Native decoder and client
+│   └── ai/            # AI tools (modular architecture)
+├── types/             # Shared TypeScript types
+├── hooks/             # React hooks
+└── utils/             # Utility functions
 tools/
-└── helpers/        # Native Helper (Rust) - win/, linux/, mac/
+└── helpers/           # Native Helper (Rust) - win/, linux/, mac/
 ```
 
 See [CLAUDE.md](CLAUDE.md) for detailed structure and patterns.
@@ -242,4 +255,4 @@ log.error('Error occurred', error);      // Red, always shows
 
 ## License
 
-Proprietary
+MIT - see [LICENSE](LICENSE)

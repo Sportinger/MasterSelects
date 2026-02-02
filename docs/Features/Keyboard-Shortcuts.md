@@ -33,7 +33,10 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 
 | Shortcut | Action |
 |----------|--------|
-| `C` | Split all clips at playhead |
+| `C` | Cut tool - split clips at playhead (with snapping) |
+| `Alt + C` | Cut without snapping |
+| `Ctrl + C` | Copy selected clips |
+| `Ctrl + V` | Paste clips at playhead |
 | `Delete` / `Backspace` | Delete selected (keyframes first, then clips) |
 | `Escape` | Deselect all |
 
@@ -68,6 +71,8 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 |----------|--------|
 | `Shift + +` | Next blend mode |
 | `Shift + -` | Previous blend mode |
+| `Numpad +` | Next blend mode (alternative) |
+| `Numpad -` | Previous blend mode (alternative) |
 
 ---
 
@@ -162,7 +167,8 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 │  X = Clear I/O   L = Loop              │
 ├─────────────────────────────────────────┤
 │           EDITING                       │
-│  C = Split       Del = Delete          │
+│  C = Cut/Split   Del = Delete          │
+│  Ctrl+C = Copy   Ctrl+V = Paste        │
 │  Ctrl+Z = Undo   Ctrl+Shift+Z = Redo   │
 ├─────────────────────────────────────────┤
 │           PROJECT                       │
@@ -174,6 +180,7 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 ├─────────────────────────────────────────┤
 │           BLEND MODES                   │
 │  Shift++ = Next  Shift+- = Previous    │
+│  Numpad+/- = Cycle blend modes         │
 └─────────────────────────────────────────┘
 ```
 
