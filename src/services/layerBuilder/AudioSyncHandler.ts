@@ -103,7 +103,8 @@ export class AudioSyncHandler {
     }
 
     // Apply clip volume (from audio-volume effect, supports keyframes)
-    const targetVolume = Math.max(0, Math.min(2, volume));
+    // HTMLMediaElement.volume only accepts [0, 1] range - clamp to prevent errors
+    const targetVolume = Math.max(0, Math.min(1, volume));
     if (Math.abs(element.volume - targetVolume) > 0.01) {
       element.volume = targetVolume;
     }
