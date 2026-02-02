@@ -1,18 +1,14 @@
 // App version - INCREMENT ON EVERY COMMIT!
 // Format: MAJOR.MINOR.PATCH
 // Increment PATCH (0.0.X) for each commit
-export const APP_VERSION = '1.1.3';
+export const APP_VERSION = '1.1.4';
 
-// Build/Platform notice shown at top of changelog
+// Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: {
   type: 'info' | 'warning' | 'success';
   title: string;
   message: string;
-} = {
-  type: 'info',
-  title: 'Windows Build',
-  message: 'This build is currently tested on Windows. Mac/Linux support may vary.',
-};
+} | null = null;
 
 // Change entry type
 export interface ChangeEntry {
@@ -57,6 +53,44 @@ interface RawChangeEntry extends ChangeEntry {
 }
 
 const RAW_CHANGELOG: RawChangeEntry[] = [
+  // === Feb 2, 2026 PM - Effect & Scrubbing Fixes ===
+  {
+    date: '2026-02-02',
+    type: 'fix',
+    title: 'Effects Bleeding Through Layers',
+    description: 'Effects now only affect their own layer, not layers below - added effect pre-processing pipeline',
+    section: '🎨 Effect & Render Fixes',
+  },
+  {
+    date: '2026-02-02',
+    type: 'fix',
+    title: 'Nested Comp Transforms When Paused',
+    description: 'Nested composition transforms and effects now show correctly when timeline is paused',
+  },
+  {
+    date: '2026-02-02',
+    type: 'fix',
+    title: 'Nested Comp Keyframes on Load',
+    description: 'Nested composition keyframes now load correctly when opening a project',
+  },
+  {
+    date: '2026-02-02',
+    type: 'fix',
+    title: 'Video Frame Jumping',
+    description: 'Reduced video frame jumping when changing effects - use cached frames during seeking',
+  },
+  {
+    date: '2026-02-02',
+    type: 'fix',
+    title: 'Scrubbing Not Working',
+    description: 'Fixed scrubbing and black preview on reload - render loop now stays active',
+  },
+  {
+    date: '2026-02-02',
+    type: 'fix',
+    title: 'Audio Decode Spam',
+    description: 'Stop spamming audio decode errors for videos without audio track',
+  },
   // === After Reddit Post (Feb 2, 2026 ~9:00 AM) ===
   {
     date: '2026-02-02',
