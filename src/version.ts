@@ -56,10 +56,28 @@ const RAW_CHANGELOG: RawChangeEntry[] = [
   // === After Reddit Post (Feb 2, 2026) ===
   {
     date: '2026-02-02',
+    type: 'new',
+    title: 'Text Items in Media Panel',
+    description: 'Add text clips via Media Panel with drag-to-timeline support',
+    section: '🚀 After Reddit Post',
+  },
+  {
+    date: '2026-02-02',
+    type: 'fix',
+    title: 'Export Frame Tolerance',
+    description: 'Fixed export failing when frame not within tolerance',
+  },
+  {
+    date: '2026-02-02',
+    type: 'improve',
+    title: 'FPS Stats Accuracy',
+    description: 'Show render time in stats, fix precision and multiple RAF loop issues',
+  },
+  {
+    date: '2026-02-02',
     type: 'fix',
     title: 'Effects Bleeding Through Layers',
     description: 'Effects now only affect their own layer, not layers below - added effect pre-processing pipeline',
-    section: '🚀 After Reddit Post',
   },
   {
     date: '2026-02-02',
