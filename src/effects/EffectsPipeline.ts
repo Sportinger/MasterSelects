@@ -173,11 +173,6 @@ export class EffectsPipeline {
       return { finalView: inputView, swapped: false };
     }
 
-    // Debug: log effect chain
-    if (enabledEffects.length > 1) {
-      console.log(`[EffectsPipeline] Applying ${enabledEffects.length} effects:`, enabledEffects.map(e => e.type));
-    }
-
     let effectInput = inputView;
     let effectOutput = outputView;
     let swapped = false;

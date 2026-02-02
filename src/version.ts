@@ -1,7 +1,7 @@
 // App version - INCREMENT ON EVERY COMMIT!
 // Format: MAJOR.MINOR.PATCH
 // Increment PATCH (0.0.X) for each commit
-export const APP_VERSION = '1.1.5';
+export const APP_VERSION = '1.1.6';
 
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: {
@@ -55,6 +55,20 @@ interface RawChangeEntry extends ChangeEntry {
 
 const RAW_CHANGELOG: RawChangeEntry[] = [
   // === Feb 2, 2026 ===
+  {
+    date: '2026-02-02',
+    type: 'fix',
+    title: 'Texture Lifecycle Management',
+    description: 'Fix "Destroyed texture used in a submit" warnings causing black preview when switching compositions',
+    commit: 'f69d0c7',
+  },
+  {
+    date: '2026-02-02',
+    type: 'fix',
+    title: 'Masks After Page Refresh',
+    description: 'Masks now show correctly after page refresh and when switching compositions',
+    commit: '7331a9f',
+  },
   {
     date: '2026-02-02',
     type: 'new',
