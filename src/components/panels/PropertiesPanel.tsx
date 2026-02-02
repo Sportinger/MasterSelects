@@ -67,6 +67,44 @@ function KeyframeToggle({ clipId, property, value }: KeyframeToggleProps) {
   );
 }
 
+// Master keyframe toggle for Scale X and Y together
+function ScaleKeyframeToggle({ clipId, scaleX, scaleY }: { clipId: string; scaleX: number; scaleY: number }) {
+  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe } = useTimelineStore();
+
+  const xRecording = isRecording(clipId, 'scale.x');
+  const yRecording = isRecording(clipId, 'scale.y');
+  const xHasKfs = hasKeyframes(clipId, 'scale.x');
+  const yHasKfs = hasKeyframes(clipId, 'scale.y');
+
+  const anyRecording = xRecording || yRecording;
+  const anyHasKfs = xHasKfs || yHasKfs;
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!anyRecording && !anyHasKfs) {
+      addKeyframe(clipId, 'scale.x', scaleX);
+      addKeyframe(clipId, 'scale.y', scaleY);
+    }
+    toggleKeyframeRecording(clipId, 'scale.x');
+    toggleKeyframeRecording(clipId, 'scale.y');
+  };
+
+  return (
+    <button
+      className={`keyframe-toggle ${anyRecording ? 'recording' : ''} ${anyHasKfs ? 'has-keyframes' : ''}`}
+      onClick={handleClick}
+      title={anyRecording ? 'Stop recording scale keyframes' : anyHasKfs ? 'Enable scale keyframe recording' : 'Add scale keyframes'}
+    >
+      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="13" r="7" />
+        <line x1="12" y1="13" x2="12" y2="9" />
+        <line x1="12" y1="2" x2="12" y2="5" />
+        <line x1="9" y1="3" x2="15" y2="3" />
+      </svg>
+    </button>
+  );
+}
+
 // Precision slider with modifier key support
 interface PrecisionSliderProps {
   min: number;
@@ -301,7 +339,7 @@ function TransformTab({ clipId, transform, speed = 1 }: TransformTabProps) {
       <div className="properties-section">
         <h4>Scale</h4>
         <div className="control-row">
-          <span className="keyframe-toggle-placeholder" />
+          <ScaleKeyframeToggle clipId={clipId} scaleX={transform.scale.x} scaleY={transform.scale.y} />
           <label>Uniform</label>
           <PrecisionSlider min={0.1} max={3} step={0.0001} value={uniformScale}
             onChange={handleUniformScaleChange} defaultValue={1} />
@@ -309,7 +347,7 @@ function TransformTab({ clipId, transform, speed = 1 }: TransformTabProps) {
         </div>
         {(['x', 'y'] as const).map(axis => (
           <div className="control-row" key={axis}>
-            <KeyframeToggle clipId={clipId} property={`scale.${axis}`} value={transform.scale[axis]} />
+            <span className="keyframe-toggle-placeholder" />
             <label>{axis.toUpperCase()}</label>
             <PrecisionSlider min={0.1} max={3} step={0.0001} value={transform.scale[axis]}
               onChange={(v) => handlePropertyChange(`scale.${axis}`, v)} defaultValue={1} />
