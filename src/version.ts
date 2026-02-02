@@ -16,6 +16,7 @@ export interface ChangeEntry {
   title: string;
   description?: string;
   section?: string; // Optional section header to create visual dividers
+  commit?: string; // Git commit hash for linking to GitHub
 }
 
 // Time-grouped changelog entry
@@ -60,66 +61,77 @@ const RAW_CHANGELOG: RawChangeEntry[] = [
     title: 'Text Items in Media Panel',
     description: 'Add text clips via Media Panel with drag-to-timeline support',
     section: '🚀 After Reddit Post',
+    commit: 'd822843',
   },
   {
     date: '2026-02-02',
     type: 'fix',
     title: 'Export Frame Tolerance',
     description: 'Fixed export failing when frame not within tolerance',
+    commit: '24445ab',
   },
   {
     date: '2026-02-02',
     type: 'improve',
     title: 'FPS Stats Accuracy',
     description: 'Show render time in stats, fix precision and multiple RAF loop issues',
+    commit: '9c61956',
   },
   {
     date: '2026-02-02',
     type: 'fix',
     title: 'Effects Bleeding Through Layers',
     description: 'Effects now only affect their own layer, not layers below - added effect pre-processing pipeline',
+    commit: '889448a',
   },
   {
     date: '2026-02-02',
     type: 'fix',
     title: 'Nested Comp Transforms When Paused',
     description: 'Nested composition transforms and effects now show correctly when timeline is paused',
+    commit: 'b41c8c0',
   },
   {
     date: '2026-02-02',
     type: 'fix',
     title: 'Nested Comp Keyframes on Load',
     description: 'Nested composition keyframes now load correctly when opening a project',
+    commit: '9e4d7fd',
   },
   {
     date: '2026-02-02',
     type: 'fix',
     title: 'Video Frame Jumping',
     description: 'Reduced video frame jumping when changing effects - use cached frames during seeking',
+    commit: '31d205d',
   },
   {
     date: '2026-02-02',
     type: 'fix',
     title: 'Scrubbing Not Working',
     description: 'Fixed scrubbing and black preview on reload - render loop now stays active',
+    commit: '333d3f6',
   },
   {
     date: '2026-02-02',
     type: 'fix',
     title: 'Audio Decode Spam',
     description: 'Stop spamming audio decode errors for videos without audio track',
+    commit: '75f1f91',
   },
   {
     date: '2026-02-02',
     type: 'fix',
     title: 'Clip Split Playback',
     description: 'Fixed playback issues after cutting clips - now creates independent video/audio elements',
+    commit: '51c1c86',
   },
   {
     date: '2026-02-02',
     type: 'improve',
     title: 'Cut Mode Auto-Reset',
     description: 'Cut tool automatically returns to select mode after cutting a clip',
+    commit: 'de80778',
   },
   // === Before Reddit Post (Feb 2, 2026) ===
   {
