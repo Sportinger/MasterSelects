@@ -731,6 +731,7 @@ export function getGroupedChangelog(): TimeGroupedChanges[] {
       title: entry.title,
       description: entry.description,
       section: entry.section,
+      commit: entry.commit,
     });
 
     // Update date range if needed
