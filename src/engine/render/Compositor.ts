@@ -89,6 +89,11 @@ export class Compositor {
       // IMPORTANT: Apply effects to the SOURCE layer BEFORE compositing
       // This ensures effects only affect this layer, not the accumulated background
       if (layer.effects && layer.effects.length > 0 && state.effectTempView && state.effectTempView2) {
+        // Debug: log effect count per layer
+        const enabledCount = layer.effects.filter((e: { enabled: boolean }) => e.enabled).length;
+        if (enabledCount > 1) {
+          console.log(`[Compositor] Layer ${layer.name} has ${enabledCount} enabled effects`);
+        }
         // First, we need to copy/render the source into a temp texture so we can apply effects to it
         // For video (external texture), render it to temp texture first
         if (useExternalTexture && sourceExternalTexture) {
