@@ -402,11 +402,11 @@ function VolumeTab({ clipId, effects }: VolumeTabProps) {
       <div className="properties-section">
         <div className="section-header-row">
           <h4>Volume</h4>
+        </div>
+        <div className="control-row">
           {volumeEffect && (
             <EffectKeyframeToggle clipId={clipId} effectId={volumeEffect.id} paramName="volume" value={volume} />
           )}
-        </div>
-        <div className="control-row">
           <input type="range" min="0" max="2" step="0.01" value={volume}
             onChange={(e) => handleVolumeChange(parseFloat(e.target.value))} />
           <span className="value">{Math.round(volume * 100)}%</span>
