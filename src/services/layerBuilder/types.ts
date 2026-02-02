@@ -83,6 +83,7 @@ export interface AudioSyncTarget {
   canBeMaster: boolean;
   type: 'audioTrack' | 'audioProxy' | 'videoElement' | 'mixdown';
   volume?: number; // 0-2, from audio-volume effect (default 1)
+  eqGains?: number[]; // 10-band EQ gains in dB, from audio-eq effect
 }
 
 /**

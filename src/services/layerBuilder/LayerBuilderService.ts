@@ -26,6 +26,24 @@ function getClipVolume(ctx: FrameContext, clip: TimelineClip, clipLocalTime: num
   return (volumeEffect?.params?.volume as number) ?? 1;
 }
 
+// EQ band parameter names (matching audio-eq effect)
+const EQ_BAND_PARAMS = [
+  'band31', 'band62', 'band125', 'band250', 'band500',
+  'band1k', 'band2k', 'band4k', 'band8k', 'band16k'
+];
+
+/**
+ * Get interpolated EQ gains for a clip from audio-eq effect
+ * Returns array of 10 gain values in dB, or undefined if no EQ effect
+ */
+function getClipEQGains(ctx: FrameContext, clip: TimelineClip, clipLocalTime: number): number[] | undefined {
+  const effects = ctx.getInterpolatedEffects(clip.id, clipLocalTime);
+  const eqEffect = effects.find(e => e.type === 'audio-eq');
+  if (!eqEffect) return undefined;
+
+  return EQ_BAND_PARAMS.map(param => (eqEffect.params?.[param] as number) ?? 0);
+}
+
 /**
  * LayerBuilderService - Builds render layers from timeline state
  * Optimized with caching, memoization, and object reuse
@@ -963,6 +981,7 @@ export class LayerBuilderService {
         canBeMaster: true,
         type: 'audioTrack',
         volume: getClipVolume(ctx, clip, timeInfo.clipLocalTime),
+        eqGains: getClipEQGains(ctx, clip, timeInfo.clipLocalTime),
       }, ctx, state);
     }
   }
@@ -1015,6 +1034,7 @@ export class LayerBuilderService {
             canBeMaster: !state.masterSet,
             type: 'audioProxy',
             volume: getClipVolume(ctx, clip, timeInfo.clipLocalTime),
+            eqGains: getClipEQGains(ctx, clip, timeInfo.clipLocalTime),
           }, ctx, state);
         } else {
           // Trigger preload
@@ -1053,6 +1073,7 @@ export class LayerBuilderService {
         canBeMaster: !state.masterSet,
         type: 'mixdown',
         volume: getClipVolume(ctx, clip, timeInfo.clipLocalTime),
+        eqGains: getClipEQGains(ctx, clip, timeInfo.clipLocalTime),
       }, ctx, state);
     }
   }
