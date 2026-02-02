@@ -84,9 +84,8 @@ export function MediaPanel() {
     showInExplorer,
     activeCompositionId,
     moveToFolder,
+    createTextItem,
   } = useMediaStore();
-
-  const { tracks, playheadPosition, addTextClip } = useTimelineStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -312,16 +311,11 @@ export function MediaPanel() {
     closeContextMenu();
   }, [createFolder, closeContextMenu]);
 
-  // New text clip
+  // New text item (in Media Panel, can be dragged to timeline)
   const handleNewText = useCallback(() => {
-    const videoTrack = tracks.find(t => t.type === 'video');
-    if (videoTrack) {
-      addTextClip(videoTrack.id, playheadPosition);
-    } else {
-      log.warn('No video track available for text clip');
-    }
+    createTextItem();
     closeContextMenu();
-  }, [tracks, playheadPosition, addTextClip, closeContextMenu]);
+  }, [createTextItem, closeContextMenu]);
 
   // Composition settings
   const openCompositionSettings = useCallback((comp: Composition) => {
@@ -376,6 +370,16 @@ export function MediaPanel() {
         return;
       }
       e.dataTransfer.setData('application/x-composition-id', comp.id);
+      e.dataTransfer.effectAllowed = 'copyMove';
+      if (e.currentTarget instanceof HTMLElement) {
+        e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
+      }
+      return;
+    }
+
+    // Handle text item drag
+    if (item.type === 'text') {
+      e.dataTransfer.setData('application/x-text-item-id', item.id);
       e.dataTransfer.effectAllowed = 'copyMove';
       if (e.currentTarget instanceof HTMLElement) {
         e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
@@ -613,7 +617,8 @@ export function MediaPanel() {
                'type' in item && item.type === 'composition' ? '🎬' :
                'type' in item && item.type === 'video' ? '🎥' :
                'type' in item && item.type === 'audio' ? '🔊' :
-               'type' in item && item.type === 'image' ? '🖼️' : '📄'}
+               'type' in item && item.type === 'image' ? '🖼️' :
+               'type' in item && item.type === 'text' ? 'T' : '📄'}
             </span>
             {'thumbnailUrl' in item && item.thumbnailUrl && (
               <img src={item.thumbnailUrl} alt="" className="media-item-thumbnail" draggable={false} />
@@ -698,7 +703,7 @@ export function MediaPanel() {
     const isSelected = selectedIds.includes(item.id);
     const isRenaming = renamingId === item.id;
     const isExpanded = isFolder && expandedFolderIds.includes(item.id);
-    const isMediaFile = !isFolder && 'type' in item && item.type !== 'composition';
+    const isMediaFile = !isFolder && 'type' in item && item.type !== 'composition' && item.type !== 'text';
     const hasFile = isMediaFile && 'file' in item && !!(item as MediaFile).file;
     const canDrag = true;
     const isDragTarget = isFolder && dragOverFolderId === item.id;

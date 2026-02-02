@@ -24,6 +24,7 @@ interface UseExternalDropProps {
   addTrack: (type: 'video' | 'audio') => string | undefined;
   addClip: (trackId: string, file: File, startTime: number, duration?: number, mediaFileId?: string) => void;
   addCompClip: (trackId: string, comp: Composition, startTime: number) => void;
+  addTextClip: (trackId: string, startTime: number, duration?: number) => Promise<string | null>;
 }
 
 interface UseExternalDropReturn {
@@ -77,6 +78,7 @@ export function useExternalDrop({
   addTrack,
   addClip,
   addCompClip,
+  addTextClip,
 }: UseExternalDropProps): UseExternalDropReturn {
   const [externalDrag, setExternalDrag] = useState<ExternalDragState | null>(null);
   const dragCounterRef = useRef(0);
@@ -98,6 +100,11 @@ export function useExternalDrop({
       }
 
       if (e.dataTransfer.types.includes('application/x-media-file-id')) {
+        setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration: 5, isVideo: true });
+        return;
+      }
+
+      if (e.dataTransfer.types.includes('application/x-text-item-id')) {
         setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration: 5, isVideo: true });
         return;
       }
@@ -150,9 +157,10 @@ export function useExternalDrop({
 
       const isCompDrag = e.dataTransfer.types.includes('application/x-composition-id');
       const isMediaPanelDrag = e.dataTransfer.types.includes('application/x-media-file-id');
+      const isTextDrag = e.dataTransfer.types.includes('application/x-text-item-id');
       const isFileDrag = e.dataTransfer.types.includes('Files');
 
-      if ((isCompDrag || isMediaPanelDrag || isFileDrag) && timelineRef.current) {
+      if ((isCompDrag || isMediaPanelDrag || isTextDrag || isFileDrag) && timelineRef.current) {
         const rect = timelineRef.current.getBoundingClientRect();
         const x = e.clientX - rect.left + scrollX;
         const startTime = pixelToTime(x);
@@ -306,6 +314,17 @@ export function useExternalDrop({
         }
       }
 
+      // Handle text item drag
+      const textItemId = e.dataTransfer.getData('application/x-text-item-id');
+      if (textItemId) {
+        const mediaStore = useMediaStore.getState();
+        const textItem = mediaStore.textItems.find((t) => t.id === textItemId);
+        if (textItem) {
+          addTextClip(newTrackId, startTime, textItem.duration);
+          return;
+        }
+      }
+
       // Handle media panel drag
       if (mediaFileId) {
         const mediaStore = useMediaStore.getState();
@@ -356,7 +375,7 @@ export function useExternalDrop({
         }
       }
     },
-    [scrollX, pixelToTime, addTrack, addCompClip, addClip, externalDrag, timelineRef]
+    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, externalDrag, timelineRef]
   );
 
   // Handle external file drop on track
@@ -384,6 +403,20 @@ export function useExternalDrop({
           const x = e.clientX - rect.left + scrollX;
           const startTime = pixelToTime(x);
           addCompClip(trackId, comp, Math.max(0, startTime));
+          return;
+        }
+      }
+
+      // Handle text item drag from media panel
+      const textItemId = e.dataTransfer.getData('application/x-text-item-id');
+      if (textItemId) {
+        const mediaStore = useMediaStore.getState();
+        const textItem = mediaStore.textItems.find((t) => t.id === textItemId);
+        if (textItem && isVideoTrack) {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = e.clientX - rect.left + scrollX;
+          const startTime = pixelToTime(x);
+          addTextClip(trackId, Math.max(0, startTime), textItem.duration);
           return;
         }
       }
@@ -487,7 +520,7 @@ export function useExternalDrop({
         }
       }
     },
-    [scrollX, pixelToTime, addCompClip, addClip, externalDrag, tracks, timelineRef]
+    [scrollX, pixelToTime, addCompClip, addClip, addTextClip, externalDrag, tracks, timelineRef]
   );
 
   return {
