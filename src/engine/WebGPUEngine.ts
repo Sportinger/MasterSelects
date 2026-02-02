@@ -314,6 +314,10 @@ export class WebGPUEngine {
     this.renderLoop?.setHasActiveVideo(hasVideo);
   }
 
+  setIsPlaying(playing: boolean): void {
+    this.renderLoop?.setIsPlaying(playing);
+  }
+
   // === TEXTURE MANAGEMENT ===
 
   createImageTexture(image: HTMLImageElement): GPUTexture | null {
@@ -503,6 +507,9 @@ export class WebGPUEngine {
   start(renderCallback: () => void): void {
     if (!this.performanceStats) return;
 
+    // Stop any existing loop first to prevent multiple RAF loops accumulating
+    this.renderLoop?.stop();
+
     // Create new loop with the callback
     this.renderLoop = new RenderLoop(this.performanceStats, {
       isRecovering: () => this.isRecoveringFromDeviceLoss || this.context.recovering,
@@ -579,8 +586,16 @@ export class WebGPUEngine {
     // Composite
     const t2 = performance.now();
     const commandEncoder = device.createCommandEncoder();
+
+    // Get effect temp textures for pre-processing effects on source layers
+    const effectTempTexture = this.renderTargetManager.getEffectTempTexture() ?? undefined;
+    const effectTempView = this.renderTargetManager.getEffectTempView() ?? undefined;
+    const effectTempTexture2 = this.renderTargetManager.getEffectTempTexture2() ?? undefined;
+    const effectTempView2 = this.renderTargetManager.getEffectTempView2() ?? undefined;
+
     const result = this.compositor.composite(layerData, commandEncoder, {
       device, sampler: this.sampler, pingView, pongView, outputWidth: width, outputHeight: height,
+      effectTempTexture, effectTempView, effectTempTexture2, effectTempView2,
     });
     const renderTime = performance.now() - t2;
 

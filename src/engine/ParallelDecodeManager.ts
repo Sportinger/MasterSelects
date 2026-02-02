@@ -817,22 +817,18 @@ export class ParallelDecodeManager {
     const frameTimestamp = timestamps[closestIdx];
     const frameDiff = Math.abs(frameTimestamp - targetTimestamp);
 
-    // Accept if within tolerance
-    if (frameDiff < this.frameTolerance) {
-      const decodedFrame = clipDecoder.frameBuffer.get(frameTimestamp);
-      if (decodedFrame) {
-        return decodedFrame.frame;
+    const decodedFrame = clipDecoder.frameBuffer.get(frameTimestamp);
+    if (decodedFrame) {
+      // Log warning if outside tolerance but still return the closest frame
+      // Better to have a slightly off frame than fail the export
+      if (frameDiff >= this.frameTolerance) {
+        log.debug(`${clipDecoder.clipName}: Using nearest frame at ${(targetTimestamp/1_000_000).toFixed(3)}s - diff=${(frameDiff/1000).toFixed(1)}ms exceeds tolerance=${(this.frameTolerance/1000).toFixed(1)}ms`);
       }
+      return decodedFrame.frame;
     }
 
-    // Log detailed info about what went wrong
-    const bufferTimes = Array.from(clipDecoder.frameBuffer.values())
-      .map(f => (f.timestamp / 1_000_000).toFixed(3))
-      .sort()
-      .slice(0, 5)
-      .join(', ');
-
-    log.warn(`${clipDecoder.clipName}: No frame within tolerance at ${(targetTimestamp/1_000_000).toFixed(3)}s - tolerance=${(this.frameTolerance/1000).toFixed(1)}ms, buffer=${clipDecoder.frameBuffer.size} frames [${bufferTimes}...], oldest=${(clipDecoder.oldestTimestamp/1_000_000).toFixed(3)}s, newest=${(clipDecoder.newestTimestamp/1_000_000).toFixed(3)}s`);
+    // No frame found at all
+    log.warn(`${clipDecoder.clipName}: No frame available at ${(targetTimestamp/1_000_000).toFixed(3)}s - buffer=${clipDecoder.frameBuffer.size} frames`);
     return null;
   }
 

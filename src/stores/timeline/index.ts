@@ -853,6 +853,35 @@ export const useTimelineStore = create<TimelineStore>()(
                 const compDuration = composition.timelineData?.duration ?? composition.duration;
                 const boundaries = calculateNestedClipBoundaries(composition.timelineData, compDuration);
 
+                // Load keyframes for nested clips (important for transforms and effects!)
+                const nestedKeyframesMap = new Map<string, Keyframe[]>();
+                for (const nestedSerializedClip of composition.timelineData.clips) {
+                  const nestedClipId = `nested-${compClip.id}-${nestedSerializedClip.id}`;
+                  if (nestedSerializedClip.keyframes && nestedSerializedClip.keyframes.length > 0) {
+                    // Update clip IDs in keyframes to match nested clip ID format
+                    const updatedKeyframes = nestedSerializedClip.keyframes.map((kf: Keyframe) => ({
+                      ...kf,
+                      clipId: nestedClipId,
+                    }));
+                    nestedKeyframesMap.set(nestedClipId, updatedKeyframes);
+                    log.debug('Loaded keyframes for nested clip in loadState', {
+                      nestedClipId,
+                      originalClipId: nestedSerializedClip.id,
+                      keyframeCount: updatedKeyframes.length,
+                    });
+                  }
+                }
+
+                // Merge nested keyframes into store
+                if (nestedKeyframesMap.size > 0) {
+                  const currentKeyframes = get().clipKeyframes;
+                  const mergedKeyframes = new Map(currentKeyframes);
+                  nestedKeyframesMap.forEach((keyframes, clipId) => {
+                    mergedKeyframes.set(clipId, keyframes);
+                  });
+                  set({ clipKeyframes: mergedKeyframes });
+                }
+
                 // Update comp clip with nested data and boundaries
                 set(state => ({
                   clips: state.clips.map(c =>

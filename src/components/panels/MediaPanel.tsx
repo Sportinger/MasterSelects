@@ -84,6 +84,7 @@ export function MediaPanel() {
     showInExplorer,
     activeCompositionId,
     moveToFolder,
+    createTextItem,
   } = useMediaStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -310,6 +311,12 @@ export function MediaPanel() {
     closeContextMenu();
   }, [createFolder, closeContextMenu]);
 
+  // New text item (in Media Panel, can be dragged to timeline)
+  const handleNewText = useCallback(() => {
+    createTextItem();
+    closeContextMenu();
+  }, [createTextItem, closeContextMenu]);
+
   // Composition settings
   const openCompositionSettings = useCallback((comp: Composition) => {
     setSettingsDialog({
@@ -363,6 +370,16 @@ export function MediaPanel() {
         return;
       }
       e.dataTransfer.setData('application/x-composition-id', comp.id);
+      e.dataTransfer.effectAllowed = 'copyMove';
+      if (e.currentTarget instanceof HTMLElement) {
+        e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
+      }
+      return;
+    }
+
+    // Handle text item drag
+    if (item.type === 'text') {
+      e.dataTransfer.setData('application/x-text-item-id', item.id);
       e.dataTransfer.effectAllowed = 'copyMove';
       if (e.currentTarget instanceof HTMLElement) {
         e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
@@ -600,7 +617,8 @@ export function MediaPanel() {
                'type' in item && item.type === 'composition' ? '🎬' :
                'type' in item && item.type === 'video' ? '🎥' :
                'type' in item && item.type === 'audio' ? '🔊' :
-               'type' in item && item.type === 'image' ? '🖼️' : '📄'}
+               'type' in item && item.type === 'image' ? '🖼️' :
+               'type' in item && item.type === 'text' ? 'T' : '📄'}
             </span>
             {'thumbnailUrl' in item && item.thumbnailUrl && (
               <img src={item.thumbnailUrl} alt="" className="media-item-thumbnail" draggable={false} />
@@ -685,7 +703,7 @@ export function MediaPanel() {
     const isSelected = selectedIds.includes(item.id);
     const isRenaming = renamingId === item.id;
     const isExpanded = isFolder && expandedFolderIds.includes(item.id);
-    const isMediaFile = !isFolder && 'type' in item && item.type !== 'composition';
+    const isMediaFile = !isFolder && 'type' in item && item.type !== 'composition' && item.type !== 'text';
     const hasFile = isMediaFile && 'file' in item && !!(item as MediaFile).file;
     const canDrag = true;
     const isDragTarget = isFolder && dragOverFolderId === item.id;
@@ -776,10 +794,9 @@ export function MediaPanel() {
                   <span>Folder</span>
                 </div>
                 <div className="add-dropdown-separator" />
-                <div className="add-dropdown-item" onClick={() => { /* TODO: Add text layer */ setAddDropdownOpen(false); }}>
+                <div className="add-dropdown-item" onClick={() => { handleNewText(); setAddDropdownOpen(false); }}>
                   <span className="add-dropdown-icon">T</span>
                   <span>Text</span>
-                  <span className="add-dropdown-hint">Coming soon</span>
                 </div>
                 <div className="add-dropdown-item" onClick={() => { /* TODO: Add solid */ setAddDropdownOpen(false); }}>
                   <span className="add-dropdown-icon">◼</span>

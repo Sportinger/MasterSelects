@@ -29,6 +29,9 @@ function StatsOverlay({ stats, resolution, expanded, onToggle }: {
   const fpsColor = stats.fps >= 55 ? '#4f4' : stats.fps >= 30 ? '#ff4' : '#f44';
   const dropColor = stats.drops.lastSecond > 0 ? '#f44' : '#4f4';
   const decoderColor = stats.decoder === 'WebCodecs' ? '#4f4' : stats.decoder === 'HTMLVideo' ? '#fa4' : '#888';
+  // Render time color: green < 10ms, yellow < 16.67ms (60fps target), red >= 16.67ms
+  const renderTime = stats.timing.total;
+  const renderTimeColor = renderTime < 10 ? '#4f4' : renderTime < 16.67 ? '#ff4' : '#f44';
 
   // Determine bottleneck
   const bottleneck = useMemo(() => {
@@ -52,6 +55,11 @@ function StatsOverlay({ stats, resolution, expanded, onToggle }: {
       >
         <span style={{ color: fpsColor, fontWeight: 'bold' }}>{stats.fps}</span>
         <span style={{ opacity: 0.7 }}> FPS</span>
+        {!stats.isIdle && renderTime > 0 && (
+          <span style={{ color: renderTimeColor, marginLeft: 6, fontSize: 10 }}>
+            {renderTime.toFixed(1)}ms
+          </span>
+        )}
         {stats.isIdle && (
           <span style={{ color: '#888', marginLeft: 6, fontSize: 9 }}>[IDLE]</span>
         )}

@@ -23,8 +23,9 @@ export class RenderLoop {
   private renderRequested = false;
   private lastRenderedPlayhead = -1;
 
-  // Frame rate limiting
+  // Frame rate limiting (only during playback, not scrubbing)
   private hasActiveVideo = false;
+  private isPlaying = false;
   private lastRenderTime = 0;
 
   private readonly IDLE_TIMEOUT = 1000; // 1s before idle
@@ -75,6 +76,24 @@ export class RenderLoop {
         return;
       }
 
+      // Skip stats when idle (but still allow occasional renders for UI updates)
+      if (this.isIdle) {
+        this.animationId = requestAnimationFrame(loop);
+        return;
+      }
+
+      // Frame rate limiting for video - ONLY during playback, not scrubbing
+      // This reduces GPU load and prevents frame sync issues from excessive rendering
+      // But we never skip renders during scrubbing (when paused)
+      if (this.hasActiveVideo && this.isPlaying) {
+        const timeSinceLastRender = timestamp - this.lastRenderTime;
+        if (timeSinceLastRender < this.VIDEO_FRAME_TIME) {
+          this.animationId = requestAnimationFrame(loop);
+          return;
+        }
+        this.lastRenderTime = timestamp;
+      }
+
       // Call render callback (unless exporting)
       if (!this.callbacks.isExporting()) {
         try {
@@ -83,22 +102,6 @@ export class RenderLoop {
           log.error('Error in render callback', e);
           // Continue loop despite error to prevent freeze
         }
-      }
-
-      // Skip stats when idle
-      if (this.isIdle) {
-        this.animationId = requestAnimationFrame(loop);
-        return;
-      }
-
-      // Frame rate limiting for video
-      if (this.hasActiveVideo) {
-        const timeSinceLastRender = timestamp - this.lastRenderTime;
-        if (timeSinceLastRender < this.VIDEO_FRAME_TIME) {
-          this.animationId = requestAnimationFrame(loop);
-          return;
-        }
-        this.lastRenderTime = timestamp;
       }
 
       // Record RAF gap for stats
@@ -149,5 +152,9 @@ export class RenderLoop {
 
   setHasActiveVideo(hasVideo: boolean): void {
     this.hasActiveVideo = hasVideo;
+  }
+
+  setIsPlaying(playing: boolean): void {
+    this.isPlaying = playing;
   }
 }

@@ -259,6 +259,7 @@ export function Timeline() {
     addTrack,
     addClip,
     addCompClip,
+    addTextClip,
   });
 
   // Vertical scroll position (custom scrollbar)

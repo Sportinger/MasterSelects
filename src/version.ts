@@ -1,24 +1,21 @@
 // App version - INCREMENT ON EVERY COMMIT!
 // Format: MAJOR.MINOR.PATCH
 // Increment PATCH (0.0.X) for each commit
-export const APP_VERSION = '1.1.3';
+export const APP_VERSION = '1.1.5';
 
-// Build/Platform notice shown at top of changelog
+// Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: {
   type: 'info' | 'warning' | 'success';
   title: string;
   message: string;
-} = {
-  type: 'info',
-  title: 'Windows Build',
-  message: 'This build is currently tested on Windows. Mac/Linux support may vary.',
-};
+} | null = null;
 
 // Change entry type
 export interface ChangeEntry {
   type: 'new' | 'fix' | 'improve';
   title: string;
   description?: string;
+  section?: string; // Optional section header to create visual dividers
 }
 
 // Time-grouped changelog entry
@@ -52,10 +49,66 @@ function getTimeLabel(date: Date): { label: string; sortOrder: number } {
 // Raw changelog data with dates
 interface RawChangeEntry extends ChangeEntry {
   date: string; // ISO date string YYYY-MM-DD
+  section?: string; // Optional section header to create visual dividers
 }
 
 const RAW_CHANGELOG: RawChangeEntry[] = [
-  // === Feb 2, 2026 - Clip Split & Cut Mode Fixes ===
+  // === After Reddit Post (Feb 2, 2026) ===
+  {
+    date: '2026-02-02',
+    type: 'new',
+    title: 'Text Items in Media Panel',
+    description: 'Add text clips via Media Panel with drag-to-timeline support',
+    section: '🚀 After Reddit Post',
+  },
+  {
+    date: '2026-02-02',
+    type: 'fix',
+    title: 'Export Frame Tolerance',
+    description: 'Fixed export failing when frame not within tolerance',
+  },
+  {
+    date: '2026-02-02',
+    type: 'improve',
+    title: 'FPS Stats Accuracy',
+    description: 'Show render time in stats, fix precision and multiple RAF loop issues',
+  },
+  {
+    date: '2026-02-02',
+    type: 'fix',
+    title: 'Effects Bleeding Through Layers',
+    description: 'Effects now only affect their own layer, not layers below - added effect pre-processing pipeline',
+  },
+  {
+    date: '2026-02-02',
+    type: 'fix',
+    title: 'Nested Comp Transforms When Paused',
+    description: 'Nested composition transforms and effects now show correctly when timeline is paused',
+  },
+  {
+    date: '2026-02-02',
+    type: 'fix',
+    title: 'Nested Comp Keyframes on Load',
+    description: 'Nested composition keyframes now load correctly when opening a project',
+  },
+  {
+    date: '2026-02-02',
+    type: 'fix',
+    title: 'Video Frame Jumping',
+    description: 'Reduced video frame jumping when changing effects - use cached frames during seeking',
+  },
+  {
+    date: '2026-02-02',
+    type: 'fix',
+    title: 'Scrubbing Not Working',
+    description: 'Fixed scrubbing and black preview on reload - render loop now stays active',
+  },
+  {
+    date: '2026-02-02',
+    type: 'fix',
+    title: 'Audio Decode Spam',
+    description: 'Stop spamming audio decode errors for videos without audio track',
+  },
   {
     date: '2026-02-02',
     type: 'fix',
@@ -68,12 +121,13 @@ const RAW_CHANGELOG: RawChangeEntry[] = [
     title: 'Cut Mode Auto-Reset',
     description: 'Cut tool automatically returns to select mode after cutting a clip',
   },
-  // === Feb 2, 2026 - Nested Comp Export Fixes ===
+  // === Before Reddit Post (Feb 2, 2026) ===
   {
     date: '2026-02-02',
     type: 'fix',
     title: 'Nested Comp Export',
     description: 'Fixed opacity and keyframe animations not applied during export of nested compositions',
+    section: '📋 Before Reddit Post',
   },
   {
     date: '2026-02-02',
@@ -664,6 +718,7 @@ export function getGroupedChangelog(): TimeGroupedChanges[] {
       type: entry.type,
       title: entry.title,
       description: entry.description,
+      section: entry.section,
     });
 
     // Update date range if needed
