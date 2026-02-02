@@ -7709,6 +7709,35 @@ input[type="checkbox"] {
   margin-top: 8px;
 }
 
+.info-github-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px 16px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #c9d1d9;
+  font-size: 13px;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.info-github-link:hover {
+  background: #30363d;
+  border-color: #8b949e;
+  color: #fff;
+}
+
+.info-github-link svg {
+  opacity: 0.8;
+}
+
+.info-github-link:hover svg {
+  opacity: 1;
+}
+
 /* ============================================
    Relink Dialog - Media relinking interface
    ============================================ */

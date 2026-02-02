@@ -19,7 +19,7 @@ function detectPlatform(): 'mac' | 'windows' | 'linux' | 'unknown' {
 }
 
 // GitHub releases download URL
-const GITHUB_RELEASES = 'https://github.com/Sportinger/MasterSelects/releases/latest';
+const GITHUB_RELEASES = 'https://github.com/Sportinger/MASterSelects/releases/latest';
 
 /**
  * Toolbar button that shows helper status
