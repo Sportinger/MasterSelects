@@ -435,17 +435,15 @@ function VolumeTab({ clipId, effects }: VolumeTabProps) {
       <div className="properties-section eq-section">
         <div className="section-header-row">
           <h4>10-Band Equalizer</h4>
+          {eqEffect && (
+            <EQKeyframeToggle clipId={clipId} effectId={eqEffect.id} eqBands={eqBands} />
+          )}
           <button className="btn btn-sm" onClick={handleResetEQ}>Reset</button>
         </div>
 
         <div className="eq-bands">
           {EQ_FREQUENCIES.map((freq, index) => (
             <div key={freq} className="eq-band">
-              <div className="eq-band-kf">
-                {eqEffect && (
-                  <EffectKeyframeToggle clipId={clipId} effectId={eqEffect.id} paramName={EQ_BAND_PARAMS[index]} value={eqBands[index]} />
-                )}
-              </div>
               <div className="eq-band-value">
                 {eqBands[index] > 0 ? '+' : ''}{eqBands[index].toFixed(1)}
               </div>
@@ -488,6 +486,38 @@ function EffectKeyframeToggle({ clipId, effectId, paramName, value }: { clipId: 
   return (
     <button className={`keyframe-toggle ${recording ? 'recording' : ''} ${hasKfs ? 'has-keyframes' : ''}`}
       onClick={handleClick} title={recording ? 'Stop recording keyframes' : hasKfs ? 'Enable keyframe recording' : 'Add keyframe'}>
+      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="13" r="7" /><line x1="12" y1="13" x2="12" y2="9" />
+        <line x1="12" y1="2" x2="12" y2="5" /><line x1="9" y1="3" x2="15" y2="3" />
+      </svg>
+    </button>
+  );
+}
+
+// Master keyframe toggle for all 10 EQ bands at once
+function EQKeyframeToggle({ clipId, effectId, eqBands }: { clipId: string; effectId: string; eqBands: number[] }) {
+  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe } = useTimelineStore();
+
+  // Check if any band is recording or has keyframes
+  const anyRecording = EQ_BAND_PARAMS.some(param => isRecording(clipId, createEffectProperty(effectId, param)));
+  const anyHasKfs = EQ_BAND_PARAMS.some(param => hasKeyframes(clipId, createEffectProperty(effectId, param)));
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Toggle all 10 bands at once
+    EQ_BAND_PARAMS.forEach((param, index) => {
+      const property = createEffectProperty(effectId, param);
+      if (!anyRecording && !anyHasKfs) {
+        // Add keyframe for each band with current value
+        addKeyframe(clipId, property, eqBands[index]);
+      }
+      toggleKeyframeRecording(clipId, property);
+    });
+  };
+
+  return (
+    <button className={`keyframe-toggle ${anyRecording ? 'recording' : ''} ${anyHasKfs ? 'has-keyframes' : ''}`}
+      onClick={handleClick} title={anyRecording ? 'Stop recording EQ keyframes' : anyHasKfs ? 'Enable EQ keyframe recording' : 'Add EQ keyframes'}>
       <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
         <circle cx="12" cy="13" r="7" /><line x1="12" y1="13" x2="12" y2="9" />
         <line x1="12" y1="2" x2="12" y2="5" /><line x1="9" y1="3" x2="15" y2="3" />
