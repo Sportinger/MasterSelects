@@ -192,17 +192,19 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
                 <div className="changelog-group-line" />
               </div>
               <div className="changelog-group-items">
-                {group.changes.map((change, i) => (
-                  <div key={`${groupIndex}-${i}`}>
-                    {change.section && (
-                      <div className="changelog-section-divider">
+                {group.changes.flatMap((change, i) => {
+                  const items = [];
+                  if (change.section) {
+                    items.push(
+                      <div key={`section-${groupIndex}-${i}`} className="changelog-section-divider">
                         <span className="changelog-section-label">{change.section}</span>
                         <div className="changelog-section-line" />
                       </div>
-                    )}
-                    <ChangeItem change={change} />
-                  </div>
-                ))}
+                    );
+                  }
+                  items.push(<ChangeItem key={`${groupIndex}-${i}`} change={change} />);
+                  return items;
+                })}
               </div>
             </div>
           ))}
