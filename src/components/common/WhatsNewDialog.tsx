@@ -213,30 +213,33 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
             </div>
           )}
 
-          {filteredGroups.map((group, groupIndex) => (
-            <div key={group.label} className="changelog-group">
-              <div className="changelog-group-header">
-                <span className="changelog-group-label">{group.label}</span>
-                <span className="changelog-group-date">{group.dateRange}</span>
-                <div className="changelog-group-line" />
+          {filteredGroups.map((group, groupIndex) => {
+            // Split changes into left and right columns (alternating)
+            const leftChanges = group.changes.filter((_, i) => i % 2 === 0);
+            const rightChanges = group.changes.filter((_, i) => i % 2 === 1);
+
+            return (
+              <div key={group.label} className="changelog-group">
+                <div className="changelog-group-header">
+                  <span className="changelog-group-label">{group.label}</span>
+                  <span className="changelog-group-date">{group.dateRange}</span>
+                  <div className="changelog-group-line" />
+                </div>
+                <div className="changelog-group-items">
+                  <div className="changelog-column">
+                    {leftChanges.map((change, i) => (
+                      <ChangeItem key={`${groupIndex}-left-${i}`} change={change} />
+                    ))}
+                  </div>
+                  <div className="changelog-column">
+                    {rightChanges.map((change, i) => (
+                      <ChangeItem key={`${groupIndex}-right-${i}`} change={change} />
+                    ))}
+                  </div>
+                </div>
               </div>
-              <div className="changelog-group-items">
-                {group.changes.flatMap((change, i) => {
-                  const items = [];
-                  if (change.section) {
-                    items.push(
-                      <div key={`section-${groupIndex}-${i}`} className="changelog-section-divider">
-                        <span className="changelog-section-label">{change.section}</span>
-                        <div className="changelog-section-line" />
-                      </div>
-                    );
-                  }
-                  items.push(<ChangeItem key={`${groupIndex}-${i}`} change={change} />);
-                  return items;
-                })}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Footer */}
