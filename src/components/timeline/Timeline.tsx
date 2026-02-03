@@ -30,6 +30,7 @@ import { usePlaybackLoop } from './hooks/usePlaybackLoop';
 import { useVideoPreload } from './hooks/useVideoPreload';
 import { useAutoFeatures } from './hooks/useAutoFeatures';
 import { useExternalDrop } from './hooks/useExternalDrop';
+import { useTransitionDrop } from './hooks/useTransitionDrop';
 import { usePickWhipDrag } from './hooks/usePickWhipDrag';
 import { useTimelineHelpers } from './hooks/useTimelineHelpers';
 import { usePlayheadSnap } from './hooks/usePlayheadSnap';
@@ -268,6 +269,47 @@ export function Timeline() {
     addCompClip,
     addTextClip,
   });
+
+  // Transition drop handling for drag-and-drop transitions between clips
+  const {
+    activeJunction,
+    handleDragOver: handleTransitionDragOver,
+    handleDrop: handleTransitionDrop,
+    handleDragLeave: handleTransitionDragLeave,
+    isTransitionDrag,
+  } = useTransitionDrop();
+
+  // Combined drag handlers that check for transition drops first
+  const handleCombinedDragOver = useCallback((e: React.DragEvent, trackId: string) => {
+    if (isTransitionDrag(e)) {
+      const rect = timelineRef.current?.getBoundingClientRect();
+      if (rect) {
+        const mouseX = e.clientX - rect.left + scrollX;
+        const mouseTime = pixelToTime(mouseX);
+        handleTransitionDragOver(e, trackId, mouseTime);
+      }
+    } else {
+      handleTrackDragOver(e, trackId);
+    }
+  }, [isTransitionDrag, handleTransitionDragOver, handleTrackDragOver, scrollX, pixelToTime]);
+
+  const handleCombinedDrop = useCallback((e: React.DragEvent, trackId: string) => {
+    if (isTransitionDrag(e)) {
+      const rect = timelineRef.current?.getBoundingClientRect();
+      if (rect) {
+        const mouseX = e.clientX - rect.left + scrollX;
+        const mouseTime = pixelToTime(mouseX);
+        handleTransitionDrop(e, trackId, mouseTime);
+      }
+    } else {
+      handleTrackDrop(e, trackId);
+    }
+  }, [isTransitionDrag, handleTransitionDrop, handleTrackDrop, scrollX, pixelToTime]);
+
+  const handleCombinedDragLeave = useCallback((e: React.DragEvent) => {
+    handleTransitionDragLeave();
+    handleTrackDragLeave(e);
+  }, [handleTransitionDragLeave, handleTrackDragLeave]);
 
   // Vertical scroll position (custom scrollbar)
   const [scrollY, setScrollY] = useState(0);
@@ -1065,10 +1107,10 @@ export function Timeline() {
                 onClipMouseDown={handleClipMouseDown}
                 onClipContextMenu={handleClipContextMenu}
                 onTrimStart={handleTrimStart}
-                onDrop={(e) => handleTrackDrop(e, track.id)}
-                onDragOver={(e) => handleTrackDragOver(e, track.id)}
+                onDrop={(e) => handleCombinedDrop(e, track.id)}
+                onDragOver={(e) => handleCombinedDragOver(e, track.id)}
                 onDragEnter={(e) => handleTrackDragEnter(e, track.id)}
-                onDragLeave={handleTrackDragLeave}
+                onDragLeave={handleCombinedDragLeave}
                 renderClip={renderClip}
                 clipKeyframes={clipKeyframes}
                 renderKeyframeDiamonds={renderKeyframeDiamonds}
@@ -1081,6 +1123,41 @@ export function Timeline() {
               />
             );
           })}
+
+          {/* Junction highlight for transition drop */}
+          {activeJunction && (
+            <div
+              className="transition-junction-highlight"
+              style={{
+                position: 'absolute',
+                left: timeToPixel(activeJunction.junctionTime) - 10,
+                width: 20,
+                top: 0,
+                bottom: 0,
+                background: 'linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.5), transparent)',
+                pointerEvents: 'none',
+                zIndex: 100,
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  top: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  background: 'rgba(59, 130, 246, 0.9)',
+                  color: 'white',
+                  padding: '4px 8px',
+                  borderRadius: 4,
+                  fontSize: 11,
+                  fontWeight: 500,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Drop transition
+              </div>
+            </div>
+          )}
 
           {/* New audio track preview for linked video audio */}
           {/* Only show if video has audio (hasAudio !== false) */}
@@ -1218,7 +1295,11 @@ export function Timeline() {
           ))}
 
           {/* Proxy frame cache indicator (yellow) */}
-          {getProxyCachedRanges().map((range, i) => (
+          {(() => {
+            const ranges = getProxyCachedRanges();
+            if (ranges.length > 0) console.log('[Timeline] Proxy cached ranges:', ranges);
+            return ranges;
+          })().map((range, i) => (
             <div
               key={`proxy-${i}`}
               className="proxy-cache-indicator"

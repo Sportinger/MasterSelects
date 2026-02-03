@@ -292,6 +292,14 @@ export interface MarkerActions {
   clearMarkers: () => void;
 }
 
+// Transition actions interface
+export interface TransitionActions {
+  applyTransition: (clipAId: string, clipBId: string, type: string, duration: number) => void;
+  removeTransition: (clipId: string, edge: 'in' | 'out') => void;
+  updateTransitionDuration: (clipId: string, edge: 'in' | 'out', duration: number) => void;
+  findClipJunction: (trackId: string, time: number, threshold?: number) => { clipA: TimelineClip; clipB: TimelineClip; junctionTime: number } | null;
+}
+
 // Clipboard data for copy/paste
 export interface ClipboardClipData {
   // Serializable clip data (without DOM elements)
@@ -387,6 +395,7 @@ export interface TimelineStore extends
   LayerActions,
   MaskActions,
   MarkerActions,
+  TransitionActions,
   ClipboardActions,
   TimelineUtils {}
 

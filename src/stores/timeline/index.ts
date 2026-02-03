@@ -16,6 +16,7 @@ import { createSelectionSlice } from './selectionSlice';
 import { createKeyframeSlice } from './keyframeSlice';
 import { createMaskSlice } from './maskSlice';
 import { createMarkerSlice } from './markerSlice';
+import { createTransitionSlice } from './transitionSlice';
 import { createClipboardSlice } from './clipboardSlice';
 import { projectFileService } from '../../services/projectFileService';
 import type { ClipAnalysis, FrameAnalysisData } from '../../types';
@@ -38,6 +39,7 @@ export const useTimelineStore = create<TimelineStore>()(
     const keyframeActions = createKeyframeSlice(set, get);
     const maskActions = createMaskSlice(set, get);
     const markerActions = createMarkerSlice(set, get);
+    const transitionActions = createTransitionSlice(set, get);
     const clipboardActions = createClipboardSlice(set, get);
 
     // Utils that need to be defined inline due to cross-dependencies
@@ -1345,6 +1347,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...layerActions,
       ...maskActions,
       ...markerActions,
+      ...transitionActions,
       ...clipboardActions,
       ...utils,
     };
