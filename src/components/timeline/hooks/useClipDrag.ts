@@ -163,27 +163,42 @@ export function useClipDrag({
         const clipDuration = draggedClip?.duration || 0;
         const baseTime = snapped ? snappedTime : rawTime;
 
-        // Get all selected clip IDs (for excluding from collision detection)
+        // Get all selected clip IDs AND their linked clips (for excluding from collision detection)
+        // This ensures video+audio pairs move as a unit
         const allSelectedIds = drag.multiSelectClipIds
           ? [drag.clipId, ...drag.multiSelectClipIds]
           : [drag.clipId];
 
-        // Check primary clip with other selected clips excluded
+        // Also collect all linked clips of selected clips
+        const allExcludedIds = [...allSelectedIds];
+        for (const selId of allSelectedIds) {
+          const selClip = clipMap.get(selId);
+          if (selClip?.linkedClipId && !allExcludedIds.includes(selClip.linkedClipId)) {
+            allExcludedIds.push(selClip.linkedClipId);
+          }
+        }
+
+        // Check primary clip with all related clips excluded
         let { startTime: resistedTime, forcingOverlap } = getPositionWithResistance(
           drag.clipId,
           baseTime,
           newTrackId,
           clipDuration,
           undefined, // zoom
-          allSelectedIds // exclude all selected clips
+          allExcludedIds // exclude all selected clips and their linked clips
         );
 
         let timeDelta = resistedTime - (draggedClip?.startTime ?? drag.originalStartTime);
 
-        // Also check linked clip (audio) for resistance on its track
-        if (draggedClip?.linkedClipId && !moveEvent.altKey) {
-          const linkedClip = clipMap.get(draggedClip.linkedClipId);
-          if (linkedClip) {
+        // Check ALL linked clips for resistance (not just the primary dragged clip's linked clip)
+        if (!moveEvent.altKey) {
+          for (const selId of allSelectedIds) {
+            const selClip = clipMap.get(selId);
+            if (!selClip?.linkedClipId) continue;
+
+            const linkedClip = clipMap.get(selClip.linkedClipId);
+            if (!linkedClip) continue;
+
             const linkedNewTime = linkedClip.startTime + timeDelta;
             const linkedResult = getPositionWithResistance(
               linkedClip.id,
@@ -191,14 +206,14 @@ export function useClipDrag({
               linkedClip.trackId,
               linkedClip.duration,
               undefined,
-              allSelectedIds
+              allExcludedIds
             );
             // If linked clip has more resistance, use that position
             const linkedTimeDelta = linkedResult.startTime - linkedClip.startTime;
             if (Math.abs(linkedTimeDelta) < Math.abs(timeDelta)) {
-              // Linked clip is more constrained - adjust main clip position
-              resistedTime = (draggedClip?.startTime ?? drag.originalStartTime) + linkedTimeDelta;
+              // Linked clip is more constrained - adjust for the whole group
               timeDelta = linkedTimeDelta;
+              resistedTime = (draggedClip?.startTime ?? drag.originalStartTime) + timeDelta;
               forcingOverlap = linkedResult.forcingOverlap || forcingOverlap;
             }
           }
@@ -218,7 +233,7 @@ export function useClipDrag({
               selectedClip.trackId,
               selectedClip.duration,
               undefined,
-              allSelectedIds
+              allExcludedIds
             );
 
             // If this clip is more constrained, reduce the timeDelta for the whole group
@@ -290,17 +305,36 @@ export function useClipDrag({
           // If multiple clips are selected, move them all by the same delta
           if (isMultiSelect) {
             log.debug('Moving multiple clips', { count: currentSelectedIds.size });
-            // Move the dragged clip first (this handles snapping)
-            // skipTrim=true to avoid trimming other selected clips
-            moveClip(drag.clipId, finalStartTime, drag.currentTrackId, false, drag.altKeyPressed, true);
 
-            // Move other selected clips by the same delta (skip linked, group, and trim to avoid double-moving and trimming each other)
+            // Track which clips we've already moved (to avoid double-moving linked clips)
+            const movedClipIds = new Set<string>();
+
+            // Move the dragged clip first (this handles snapping)
+            // skipLinked depends on whether linked clip is also selected
+            const draggedClip = currentClipMap.get(drag.clipId);
+            const draggedLinkedInSelection = !!(draggedClip?.linkedClipId && currentSelectedIds.has(draggedClip.linkedClipId));
+            moveClip(drag.clipId, finalStartTime, drag.currentTrackId, draggedLinkedInSelection, drag.altKeyPressed, true);
+            movedClipIds.add(drag.clipId);
+            // If linked clip was moved via skipLinked=false, mark it as moved
+            if (draggedClip?.linkedClipId && !draggedLinkedInSelection && !drag.altKeyPressed) {
+              movedClipIds.add(draggedClip.linkedClipId);
+            }
+
+            // Move other selected clips by the same delta
             for (const selectedId of currentSelectedIds) {
-              if (selectedId === drag.clipId) continue;
+              if (movedClipIds.has(selectedId)) continue; // Skip already-moved clips
               const selectedClip = currentClipMap.get(selectedId);
               if (selectedClip) {
                 const newTime = Math.max(0, selectedClip.startTime + timeDelta);
-                moveClip(selectedId, newTime, selectedClip.trackId, true, true, true); // skipLinked, skipGroup, skipTrim
+                // If linked clip is also selected, skip it (will be moved in its own iteration)
+                // If linked clip is NOT selected, move it with this clip (skipLinked=false)
+                const linkedInSelection = !!(selectedClip.linkedClipId && currentSelectedIds.has(selectedClip.linkedClipId));
+                moveClip(selectedId, newTime, selectedClip.trackId, linkedInSelection, true, true); // skipGroup, skipTrim always true
+                movedClipIds.add(selectedId);
+                // If linked clip was moved via skipLinked=false, mark it as moved
+                if (selectedClip.linkedClipId && !linkedInSelection) {
+                  movedClipIds.add(selectedClip.linkedClipId);
+                }
               }
             }
           } else {
