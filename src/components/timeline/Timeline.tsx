@@ -37,18 +37,6 @@ import {
   selectSelectedKeyframeIds,
   selectClipKeyframes,
   selectExpandedCurveProperties,
-  // Action selectors (stable references, grouped for convenience)
-  selectPlaybackActions,
-  selectTrackActions,
-  selectClipActions,
-  selectTransformGetters,
-  selectKeyframeActions,
-  selectInOutActions,
-  selectViewActions,
-  selectPreviewActions,
-  selectToolActions,
-  selectMarkerActions,
-  selectClipboardActions,
 } from '../../stores/timeline/selectors';
 import type { AnimatableProperty, TimelineClip as TimelineClipType } from '../../types';
 import { useMediaStore } from '../../stores/mediaStore';
@@ -131,57 +119,60 @@ export function Timeline() {
 
   // ===========================================
   // STABLE ACTION REFERENCES
-  // Actions don't change, so grouping them doesn't cause re-renders.
+  // Actions are stable functions - get them once from getState() to avoid
+  // creating new object references that would cause infinite re-renders.
   // ===========================================
 
-  const {
-    play, pause, stop, playForward, playReverse,
-    setPlayheadPosition, setDraggingPlayhead,
-  } = useTimelineStore(selectPlaybackActions);
+  // Get actions once - they're stable and don't change
+  const store = useTimelineStore.getState();
 
-  const {
-    addTrack, isTrackExpanded, toggleTrackExpanded,
-    getExpandedTrackHeight, trackHasKeyframes, setTrackParent,
-  } = useTimelineStore(selectTrackActions);
+  // Playback actions
+  const { play, pause, stop, playForward, playReverse, setPlayheadPosition, setDraggingPlayhead } = store;
 
+  // Track actions
+  const { addTrack, isTrackExpanded, toggleTrackExpanded, getExpandedTrackHeight, trackHasKeyframes, setTrackParent } = store;
+
+  // Clip actions
   const {
     addClip, addCompClip, addTextClip, moveClip, trimClip,
     removeClip, selectClip, unlinkGroup, splitClip, splitClipAtPlayhead,
     toggleClipReverse, updateClipTransform, setClipParent, generateWaveformForClip,
-  } = useTimelineStore(selectClipActions);
+  } = store;
 
+  // Transform getters
   const {
     getInterpolatedTransform, getInterpolatedEffects, getInterpolatedSpeed,
     getSourceTimeForClip, getSnappedPosition, getPositionWithResistance,
-  } = useTimelineStore(selectTransformGetters);
+  } = store;
 
+  // Keyframe actions
   const {
     getClipKeyframes, selectKeyframe, deselectAllKeyframes, hasKeyframes,
     addKeyframe, moveKeyframe, updateKeyframe, removeKeyframe,
     setPropertyValue, toggleCurveExpanded, updateBezierHandle,
-  } = useTimelineStore(selectKeyframeActions);
+  } = store;
 
-  const {
-    setInPoint, setOutPoint, setInPointAtPlayhead,
-    setOutPointAtPlayhead, clearInOut,
-  } = useTimelineStore(selectInOutActions);
+  // In/out point actions
+  const { setInPoint, setOutPoint, setInPointAtPlayhead, setOutPointAtPlayhead, clearInOut } = store;
 
-  const {
-    setZoom, setScrollX, setDuration, toggleSnapping,
-  } = useTimelineStore(selectViewActions);
+  // View actions
+  const { setZoom, setScrollX, setDuration, toggleSnapping } = store;
 
+  // Preview actions
   const {
     toggleLoopPlayback, toggleRamPreviewEnabled, startRamPreview,
     cancelRamPreview, getCachedRanges, getProxyCachedRanges,
     startProxyCachePreload, cancelProxyCachePreload,
-  } = useTimelineStore(selectPreviewActions);
+  } = store;
 
-  const {
-    setToolMode, toggleCutTool, toggleThumbnailsEnabled, toggleWaveformsEnabled,
-  } = useTimelineStore(selectToolActions);
+  // Tool actions
+  const { setToolMode, toggleCutTool, toggleThumbnailsEnabled, toggleWaveformsEnabled } = store;
 
-  const { addMarker, moveMarker, removeMarker } = useTimelineStore(selectMarkerActions);
-  const { copyClips, pasteClips } = useTimelineStore(selectClipboardActions);
+  // Marker actions
+  const { addMarker, moveMarker, removeMarker } = store;
+
+  // Clipboard actions
+  const { copyClips, pasteClips } = store;
 
   const {
     getActiveComposition,
