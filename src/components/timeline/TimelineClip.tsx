@@ -546,12 +546,12 @@ function TimelineClipComponent({
 
   // Determine animation class:
   // - 'exiting': apply exit animation
-  // - New clips (mounted with current key): apply entrance animation
+  // - 'entering' + new clips: apply entrance animation (only during composition switch)
   // - Otherwise: no animation
   const isNewClip = mountKeyRef.current === clipEntranceKey && clipEntranceKey > 0;
   const animationClass = clipAnimationPhase === 'exiting'
     ? 'exit-animate'
-    : isNewClip
+    : (clipAnimationPhase === 'entering' && isNewClip)
       ? 'entrance-animate'
       : '';
 
