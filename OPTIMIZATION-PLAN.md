@@ -232,9 +232,9 @@ export const selectClipById = (id: string) => (state: TimelineStore) =>
 | 1 | Store subscription optimization (1.1) | CRITICAL | High | ✅ DONE |
 | 2 | Dynamic import for test (1.2) | CRITICAL | Medium | ✅ DONE |
 | 3 | Reduce polling frequency (2.1) | HIGH | Medium | ✅ DONE |
-| 4 | Consolidate useState (2.2) | HIGH | Medium | TODO |
-| 5 | Narrow useCallback deps (3.1) | MEDIUM | Medium | TODO |
-| 6 | Memoize child components (3.2) | MEDIUM | Low-Medium | TODO |
+| 4 | Consolidate useState (2.2) | HIGH | Medium | ✅ DONE |
+| 5 | Stabilize useCallback (3.1) | MEDIUM | Medium | ✅ DONE |
+| 6 | Memoize child components (3.2) | MEDIUM | Low-Medium | ✅ ALREADY DONE |
 | 7 | Extract selectors (4.1) | LOW | Code quality | ✅ DONE |
 
 ## Completed Changes
@@ -251,6 +251,22 @@ export const selectClipById = (id: string) => (state: TimelineStore) =>
 - Main bundle reduced by ~5 KB (ParallelDecodeTest now lazy-loaded)
 - Timeline component now only re-renders when specific subscribed values change
 - Polling interval reduced from 500ms to 2000ms (75% fewer IndexedDB queries)
+
+### 2026-02-04: Hook Extraction & Callback Stabilization
+
+**Files modified:**
+- `src/components/timeline/hooks/useMarkerDrag.ts` - NEW: Extracted marker drag logic
+- `src/components/timeline/Timeline.tsx` - Use new hook, stabilize TimelineControls callbacks
+
+**Changes:**
+- Extracted 2 useState, 2 useEffect, 2 useCallback for marker operations into `useMarkerDrag` hook
+- Replaced 5 inline arrow functions in TimelineControls with stable useCallback references
+- Used functional updates (`prev => !prev`) and `getState()` pattern to avoid stale closures
+
+**Results:**
+- Timeline.tsx reduced by ~90 lines of inline state/effect code
+- TimelineControls no longer re-renders due to unstable callback references
+- Child components (TimelineClip, TimelineTrack, TimelineHeader) already use React.memo
 
 ---
 
