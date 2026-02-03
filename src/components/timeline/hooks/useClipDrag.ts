@@ -29,7 +29,7 @@ interface UseClipDragProps {
   // Helpers
   pixelToTime: (pixel: number) => number;
   getSnappedPosition: (clipId: string, rawTime: number, trackId: string) => { startTime: number; snapped: boolean };
-  getPositionWithResistance: (clipId: string, rawTime: number, trackId: string, duration: number) => { startTime: number; forcingOverlap: boolean };
+  getPositionWithResistance: (clipId: string, rawTime: number, trackId: string, duration: number, zoom?: number, excludeClipIds?: string[]) => { startTime: number; forcingOverlap: boolean };
 }
 
 interface UseClipDragReturn {
@@ -163,38 +163,77 @@ export function useClipDrag({
         const clipDuration = draggedClip?.duration || 0;
         const baseTime = snapped ? snappedTime : rawTime;
 
+        // Get all selected clip IDs (for excluding from collision detection)
+        const allSelectedIds = drag.multiSelectClipIds
+          ? [drag.clipId, ...drag.multiSelectClipIds]
+          : [drag.clipId];
+
+        // Check primary clip with other selected clips excluded
         let { startTime: resistedTime, forcingOverlap } = getPositionWithResistance(
           drag.clipId,
           baseTime,
           newTrackId,
-          clipDuration
+          clipDuration,
+          undefined, // zoom
+          allSelectedIds // exclude all selected clips
         );
+
+        let timeDelta = resistedTime - (draggedClip?.startTime ?? drag.originalStartTime);
 
         // Also check linked clip (audio) for resistance on its track
         if (draggedClip?.linkedClipId && !moveEvent.altKey) {
           const linkedClip = clipMap.get(draggedClip.linkedClipId);
           if (linkedClip) {
-            const timeDelta = resistedTime - draggedClip.startTime;
             const linkedNewTime = linkedClip.startTime + timeDelta;
             const linkedResult = getPositionWithResistance(
               linkedClip.id,
               linkedNewTime,
               linkedClip.trackId,
-              linkedClip.duration
+              linkedClip.duration,
+              undefined,
+              allSelectedIds
             );
             // If linked clip has more resistance, use that position
             const linkedTimeDelta = linkedResult.startTime - linkedClip.startTime;
             if (Math.abs(linkedTimeDelta) < Math.abs(timeDelta)) {
               // Linked clip is more constrained - adjust main clip position
-              resistedTime = draggedClip.startTime + linkedTimeDelta;
+              resistedTime = (draggedClip?.startTime ?? drag.originalStartTime) + linkedTimeDelta;
+              timeDelta = linkedTimeDelta;
               forcingOverlap = linkedResult.forcingOverlap || forcingOverlap;
+            }
+          }
+        }
+
+        // For multi-select: check all other selected clips for resistance too
+        // The whole group should stop if ANY clip hits an obstacle
+        if (drag.multiSelectClipIds?.length && !forcingOverlap) {
+          for (const selectedId of drag.multiSelectClipIds) {
+            const selectedClip = clipMap.get(selectedId);
+            if (!selectedClip) continue;
+
+            const selectedNewTime = selectedClip.startTime + timeDelta;
+            const selectedResult = getPositionWithResistance(
+              selectedClip.id,
+              selectedNewTime,
+              selectedClip.trackId,
+              selectedClip.duration,
+              undefined,
+              allSelectedIds
+            );
+
+            // If this clip is more constrained, reduce the timeDelta for the whole group
+            const selectedActualDelta = selectedResult.startTime - selectedClip.startTime;
+            if (Math.abs(selectedActualDelta) < Math.abs(timeDelta)) {
+              timeDelta = selectedActualDelta;
+              resistedTime = (draggedClip?.startTime ?? drag.originalStartTime) + timeDelta;
+              forcingOverlap = selectedResult.forcingOverlap || forcingOverlap;
             }
           }
         }
 
         // Calculate time delta for multi-select preview
         const multiSelectTimeDelta = drag.multiSelectClipIds?.length
-          ? resistedTime - drag.originalStartTime
+          ? timeDelta
           : undefined;
 
         const newDrag: ClipDragState = {

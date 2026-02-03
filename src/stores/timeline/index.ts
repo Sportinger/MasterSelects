@@ -231,15 +231,17 @@ export const useTimelineStore = create<TimelineStore>()(
       // Apply magnetic resistance at clip edges during drag
       // Returns position with resistance applied, and whether user has "broken through" to force overlap
       // Uses PIXEL-based resistance so it works regardless of clip duration
-      getPositionWithResistance: (clipId: string, desiredStartTime: number, trackId: string, duration: number, zoom?: number) => {
+      getPositionWithResistance: (clipId: string, desiredStartTime: number, trackId: string, duration: number, zoom?: number, excludeClipIds?: string[]) => {
         const { clips, zoom: storeZoom } = get();
         const currentZoom = zoom ?? storeZoom;
         const movingClip = clips.find(c => c.id === clipId);
+        const excludeSet = new Set(excludeClipIds || []);
 
-        // Get other clips on the TARGET track (excluding the moving clip and its linked clip)
+        // Get other clips on the TARGET track (excluding the moving clip, its linked clip, and any excluded clips)
         const otherClips = clips.filter(c =>
           c.trackId === trackId &&
           c.id !== clipId &&
+          !excludeSet.has(c.id) &&
           (movingClip ? c.id !== movingClip.linkedClipId && c.linkedClipId !== clipId : true)
         ).sort((a, b) => a.startTime - b.startTime);
 
