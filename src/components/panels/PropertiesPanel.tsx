@@ -39,7 +39,8 @@ interface KeyframeToggleProps {
 }
 
 function KeyframeToggle({ clipId, property, value }: KeyframeToggleProps) {
-  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe } = useTimelineStore();
+  // Use getState() for actions - they're stable and don't need subscriptions
+  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe } = useTimelineStore.getState();
   const recording = isRecording(clipId, property);
   const hasKfs = hasKeyframes(clipId, property);
 
@@ -69,7 +70,8 @@ function KeyframeToggle({ clipId, property, value }: KeyframeToggleProps) {
 
 // Master keyframe toggle for Scale X and Y together
 function ScaleKeyframeToggle({ clipId, scaleX, scaleY }: { clipId: string; scaleX: number; scaleY: number }) {
-  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe } = useTimelineStore();
+  // Use getState() for actions - they're stable and don't need subscriptions
+  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe } = useTimelineStore.getState();
 
   const xRecording = isRecording(clipId, 'scale.x');
   const yRecording = isRecording(clipId, 'scale.y');
@@ -268,7 +270,8 @@ interface TransformTabProps {
 }
 
 function TransformTab({ clipId, transform, speed = 1 }: TransformTabProps) {
-  const { setPropertyValue, updateClipTransform } = useTimelineStore();
+  // Use getState() for actions - they're stable and don't need subscriptions
+  const { setPropertyValue, updateClipTransform } = useTimelineStore.getState();
 
   const handlePropertyChange = (property: AnimatableProperty, value: number) => {
     setPropertyValue(clipId, property, value);
@@ -392,7 +395,11 @@ interface VolumeTabProps {
 }
 
 function VolumeTab({ clipId, effects }: VolumeTabProps) {
-  const { setPropertyValue, getInterpolatedEffects, playheadPosition, clips, addClipEffect, setClipPreservesPitch } = useTimelineStore();
+  // Reactive data - subscribe to specific values only
+  const playheadPosition = useTimelineStore(state => state.playheadPosition);
+  const clips = useTimelineStore(state => state.clips);
+  // Actions from getState() - stable, no subscription needed
+  const { setPropertyValue, getInterpolatedEffects, addClipEffect, setClipPreservesPitch } = useTimelineStore.getState();
   const clip = clips.find(c => c.id === clipId);
   const clipLocalTime = clip ? playheadPosition - clip.startTime : 0;
   const interpolatedEffects = getInterpolatedEffects(clipId, clipLocalTime);
@@ -510,7 +517,8 @@ function VolumeTab({ clipId, effects }: VolumeTabProps) {
 // See src/effects/ for effect definitions
 
 function EffectKeyframeToggle({ clipId, effectId, paramName, value }: { clipId: string; effectId: string; paramName: string; value: number }) {
-  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe } = useTimelineStore();
+  // Use getState() for actions - they're stable and don't need subscriptions
+  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe } = useTimelineStore.getState();
   const property = createEffectProperty(effectId, paramName);
   const recording = isRecording(clipId, property);
   const hasKfs = hasKeyframes(clipId, property);
@@ -534,7 +542,8 @@ function EffectKeyframeToggle({ clipId, effectId, paramName, value }: { clipId: 
 
 // Master keyframe toggle for all 10 EQ bands at once
 function EQKeyframeToggle({ clipId, effectId, eqBands }: { clipId: string; effectId: string; eqBands: number[] }) {
-  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe } = useTimelineStore();
+  // Use getState() for actions - they're stable and don't need subscriptions
+  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe } = useTimelineStore.getState();
 
   // Check if any band is recording or has keyframes
   const anyRecording = EQ_BAND_PARAMS.some(param => isRecording(clipId, createEffectProperty(effectId, param)));
@@ -570,7 +579,11 @@ interface EffectsTabProps {
 }
 
 function EffectsTab({ clipId, effects }: EffectsTabProps) {
-  const { addClipEffect, removeClipEffect, updateClipEffect, setClipEffectEnabled, setPropertyValue, getInterpolatedEffects, playheadPosition, clips } = useTimelineStore();
+  // Reactive data - subscribe to specific values only
+  const playheadPosition = useTimelineStore(state => state.playheadPosition);
+  const clips = useTimelineStore(state => state.clips);
+  // Actions from getState() - stable, no subscription needed
+  const { addClipEffect, removeClipEffect, updateClipEffect, setClipEffectEnabled, setPropertyValue, getInterpolatedEffects } = useTimelineStore.getState();
   const clip = clips.find(c => c.id === clipId);
   const clipLocalTime = clip ? playheadPosition - clip.startTime : 0;
   const interpolatedEffects = getInterpolatedEffects(clipId, clipLocalTime);
@@ -823,7 +836,8 @@ interface MaskItemProps {
 }
 
 function MaskItem({ clipId, mask, isActive, onSelect }: MaskItemProps) {
-  const { updateMask, removeMask, setActiveMask, setMaskEditMode } = useTimelineStore();
+  // Use getState() for actions - they're stable and don't need subscriptions
+  const { updateMask, removeMask, setActiveMask, setMaskEditMode } = useTimelineStore.getState();
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(mask.name);
 
@@ -899,7 +913,11 @@ interface MasksTabProps {
 }
 
 function MasksTab({ clipId, masks }: MasksTabProps) {
-  const { addRectangleMask, addEllipseMask, activeMaskId, setActiveMask, maskEditMode, setMaskEditMode } = useTimelineStore();
+  // Reactive data - subscribe to specific values only
+  const activeMaskId = useTimelineStore(state => state.activeMaskId);
+  const maskEditMode = useTimelineStore(state => state.maskEditMode);
+  // Actions from getState() - stable, no subscription needed
+  const { addRectangleMask, addEllipseMask, setActiveMask, setMaskEditMode } = useTimelineStore.getState();
   const [showMaskMenu, setShowMaskMenu] = useState(false);
 
   const handleStartDrawMode = (mode: 'drawingRect' | 'drawingEllipse' | 'drawingPen') => setMaskEditMode(mode);
@@ -994,7 +1012,10 @@ interface TranscriptTabProps {
 }
 
 function TranscriptTab({ clipId, transcript, transcriptStatus, transcriptProgress, clipStartTime, inPoint }: TranscriptTabProps) {
-  const { setPlayheadPosition, playheadPosition } = useTimelineStore();
+  // Reactive data - subscribe to specific value only
+  const playheadPosition = useTimelineStore(state => state.playheadPosition);
+  // Actions from getState() - stable, no subscription needed
+  const { setPlayheadPosition } = useTimelineStore.getState();
   const [language, setLanguage] = useState(() => localStorage.getItem('transcriptLanguage') || 'de');
   const [searchQuery, setSearchQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1137,7 +1158,8 @@ interface AnalysisTabProps {
 }
 
 function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress, clipStartTime, inPoint, outPoint }: AnalysisTabProps) {
-  const { playheadPosition } = useTimelineStore();
+  // Reactive data - subscribe to specific value only
+  const playheadPosition = useTimelineStore(state => state.playheadPosition);
 
   // Calculate current values at playhead
   const currentValues = useMemo((): FrameAnalysisData | null => {
@@ -1274,7 +1296,13 @@ function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress, clipS
 // MAIN PANEL
 // ============================================
 export function PropertiesPanel() {
-  const { clips, tracks, selectedClipIds, playheadPosition, getInterpolatedTransform, getInterpolatedSpeed } = useTimelineStore();
+  // Reactive data - subscribe to specific values only
+  const clips = useTimelineStore(state => state.clips);
+  const tracks = useTimelineStore(state => state.tracks);
+  const selectedClipIds = useTimelineStore(state => state.selectedClipIds);
+  const playheadPosition = useTimelineStore(state => state.playheadPosition);
+  // Actions from getState() - stable, no subscription needed
+  const { getInterpolatedTransform, getInterpolatedSpeed } = useTimelineStore.getState();
   const [activeTab, setActiveTab] = useState<PropertiesTab>('transform');
   const [lastClipId, setLastClipId] = useState<string | null>(null);
 
