@@ -866,13 +866,27 @@ export class LayerBuilderService {
     // Normal video sync
     const timeDiff = Math.abs(video.currentTime - timeInfo.clipTime);
 
-    if (clip.reversed) {
+    // Reverse playback: either clip is reversed OR timeline playbackSpeed is negative
+    // H.264 can't play backwards, so we seek frame-by-frame
+    const isReversePlayback = clip.reversed || ctx.playbackSpeed < 0;
+
+    if (isReversePlayback) {
+      // For reverse: pause video and seek to each frame
+      if (!video.paused) video.pause();
+      // Use tighter threshold for smoother reverse playback
+      const seekThreshold = ctx.isDraggingPlayhead ? 0.1 : 0.02;
+      if (timeDiff > seekThreshold) {
+        this.throttledSeek(clip.id, video, timeInfo.clipTime, ctx);
+      }
+    } else if (ctx.playbackSpeed !== 1) {
+      // Non-standard forward speed (2x, 4x, etc.): seek frame-by-frame for accuracy
       if (!video.paused) video.pause();
       const seekThreshold = ctx.isDraggingPlayhead ? 0.1 : 0.03;
       if (timeDiff > seekThreshold) {
         this.throttledSeek(clip.id, video, timeInfo.clipTime, ctx);
       }
     } else {
+      // Normal 1x forward playback: let video play naturally
       if (ctx.isPlaying && video.paused) {
         video.play().catch(() => {});
       } else if (!ctx.isPlaying && !video.paused) {
@@ -943,6 +957,13 @@ export class LayerBuilderService {
    */
   syncAudioElements(): void {
     const ctx = createFrameContext();
+
+    // At non-standard playback speeds (reverse or fast-forward), mute all audio
+    // Audio can't play backwards and fast-forward sounds bad
+    if (ctx.playbackSpeed !== 1 && ctx.isPlaying) {
+      this.muteAllAudio(ctx);
+      return;
+    }
 
     // Handle playback start
     const isStartup = playheadState.playbackJustStarted;
@@ -1115,6 +1136,29 @@ export class LayerBuilderService {
       }
 
       if (clip.mixdownAudio && !isAtPlayhead && !clip.mixdownAudio.paused) {
+        clip.mixdownAudio.pause();
+      }
+    }
+  }
+
+  /**
+   * Mute all audio during non-standard playback (reverse or fast-forward)
+   * Audio can't play backwards and fast-forward audio sounds bad
+   */
+  private muteAllAudio(ctx: FrameContext): void {
+    // Clear master audio since we're not using audio sync
+    playheadState.hasMasterAudio = false;
+    playheadState.masterAudioElement = null;
+
+    // Pause all audio elements
+    for (const clip of ctx.clips) {
+      if (clip.source?.audioElement && !clip.source.audioElement.paused) {
+        clip.source.audioElement.pause();
+      }
+      if (clip.source?.videoElement && !clip.source.videoElement.muted) {
+        clip.source.videoElement.muted = true;
+      }
+      if (clip.mixdownAudio && !clip.mixdownAudio.paused) {
         clip.mixdownAudio.pause();
       }
     }

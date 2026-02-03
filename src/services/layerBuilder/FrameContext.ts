@@ -24,6 +24,7 @@ export function createFrameContext(): FrameContext {
     isPlaying,
     isDraggingPlayhead,
     playheadPosition: storePlayheadPosition,
+    playbackSpeed,
     getInterpolatedTransform,
     getInterpolatedEffects,
     getInterpolatedSpeed,
@@ -58,6 +59,7 @@ export function createFrameContext(): FrameContext {
     isPlaying,
     isDraggingPlayhead,
     playheadPosition,
+    playbackSpeed,
     activeCompId,
     proxyEnabled,
 

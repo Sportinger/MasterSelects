@@ -28,6 +28,7 @@ export interface FrameContext {
   isPlaying: boolean;
   isDraggingPlayhead: boolean;
   playheadPosition: number;
+  playbackSpeed: number;
   activeCompId: string;
   proxyEnabled: boolean;
 
