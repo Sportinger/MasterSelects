@@ -360,6 +360,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
 
           if (clip.source?.type === 'video' && clip.source.videoElement) {
             const video = clip.source.videoElement;
+            const webCodecsPlayer = clip.source.webCodecsPlayer;
             const clipLocalTime = time - clip.startTime;
             // Calculate source time using speed integration (handles keyframes)
             const sourceTime = get().getSourceTimeForClip(clip.id, clipLocalTime);
@@ -369,59 +370,37 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
             const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
             const clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
 
-            // Robust seek with verification and retry
-            const seekWithVerify = async (targetTime: number, maxRetries = 3): Promise<boolean> => {
-              for (let attempt = 0; attempt < maxRetries; attempt++) {
-                // Check if cancelled
-                if (checkCancelled()) return false;
-
-                // Seek to target time
-                await new Promise<void>((resolve) => {
-                  const timeout = setTimeout(() => {
-                    video.removeEventListener('seeked', onSeeked);
-                    resolve();
-                  }, 500);
-
-                  const onSeeked = () => {
-                    clearTimeout(timeout);
-                    video.removeEventListener('seeked', onSeeked);
-                    resolve();
-                  };
-
-                  video.addEventListener('seeked', onSeeked);
-                  video.currentTime = targetTime;
-                });
-
-                // Wait for video to be fully ready (not seeking, has data)
-                await new Promise<void>((resolve) => {
-                  const checkReady = () => {
-                    if (!video.seeking && video.readyState >= 2) {
-                      resolve();
-                    } else {
-                      requestAnimationFrame(checkReady);
-                    }
-                  };
-                  checkReady();
-                  // Timeout fallback
-                  setTimeout(resolve, 200);
-                });
-
-                // Verify position is correct (within 1 frame tolerance at 30fps)
-                if (Math.abs(video.currentTime - targetTime) < FRAME_TOLERANCE) {
-                  return true; // Success
-                }
-
-                // Position wrong (user scrubbed?), retry
-                if (checkCancelled()) return false;
+            // Use WebCodecsPlayer for fast seeking if available
+            if (webCodecsPlayer) {
+              if (checkCancelled()) continue;
+              try {
+                await webCodecsPlayer.seekAsync(clipTime);
+              } catch {
+                // Fallback to video element on error
+                video.currentTime = clipTime;
+                await new Promise(r => setTimeout(r, 50));
               }
-              return false; // Failed after retries
-            };
+            } else {
+              // Fallback: HTMLVideoElement seek (slower)
+              if (checkCancelled()) continue;
+              await new Promise<void>((resolve) => {
+                const timeout = setTimeout(() => {
+                  video.removeEventListener('seeked', onSeeked);
+                  resolve();
+                }, 200);
 
-            // Perform seek with verification
-            const seekSuccess = await seekWithVerify(clipTime);
-            if (!seekSuccess || checkCancelled()) {
-              continue; // Skip this clip if seek failed or cancelled
+                const onSeeked = () => {
+                  clearTimeout(timeout);
+                  video.removeEventListener('seeked', onSeeked);
+                  resolve();
+                };
+
+                video.addEventListener('seeked', onSeeked);
+                video.currentTime = clipTime;
+              });
             }
+
+            if (checkCancelled()) continue;
 
             // Add to layers (with defensive defaults for transform properties)
             const pos = clip.transform?.position ?? { x: 0, y: 0, z: 0 };
@@ -433,7 +412,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
               visible: true,
               opacity: clip.transform?.opacity ?? 1,
               blendMode: clip.transform?.blendMode ?? 'normal',
-              source: { type: 'video', videoElement: video },
+              source: { type: 'video', videoElement: video, webCodecsPlayer },
               effects: [],
               position: { x: pos.x, y: pos.y, z: pos.z },
               scale: { x: scl.x, y: scl.y },
@@ -481,36 +460,34 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
 
               if (nestedClip.source?.videoElement) {
                 const nestedVideo = nestedClip.source.videoElement;
+                const nestedWebCodecs = nestedClip.source.webCodecsPlayer;
 
-                // Seek nested video with verification
-                await new Promise<void>((resolve) => {
-                  const timeout = setTimeout(() => {
-                    nestedVideo.removeEventListener('seeked', onSeeked);
-                    resolve();
-                  }, 300);
-
-                  const onSeeked = () => {
-                    clearTimeout(timeout);
-                    nestedVideo.removeEventListener('seeked', onSeeked);
-                    resolve();
-                  };
-
-                  nestedVideo.addEventListener('seeked', onSeeked);
-                  nestedVideo.currentTime = nestedClipTime;
-                });
-
-                // Wait for video to be ready
-                await new Promise<void>((resolve) => {
-                  const checkReady = () => {
-                    if (!nestedVideo.seeking && nestedVideo.readyState >= 2) {
+                // Use WebCodecsPlayer for fast seeking if available
+                if (nestedWebCodecs) {
+                  try {
+                    await nestedWebCodecs.seekAsync(nestedClipTime);
+                  } catch {
+                    nestedVideo.currentTime = nestedClipTime;
+                    await new Promise(r => setTimeout(r, 50));
+                  }
+                } else {
+                  // Fallback: HTMLVideoElement seek
+                  await new Promise<void>((resolve) => {
+                    const timeout = setTimeout(() => {
+                      nestedVideo.removeEventListener('seeked', onSeeked);
                       resolve();
-                    } else {
-                      requestAnimationFrame(checkReady);
-                    }
-                  };
-                  checkReady();
-                  setTimeout(resolve, 100);
-                });
+                    }, 150);
+
+                    const onSeeked = () => {
+                      clearTimeout(timeout);
+                      nestedVideo.removeEventListener('seeked', onSeeked);
+                      resolve();
+                    };
+
+                    nestedVideo.addEventListener('seeked', onSeeked);
+                    nestedVideo.currentTime = nestedClipTime;
+                  });
+                }
 
                 const nestedPos = nestedClip.transform?.position ?? { x: 0, y: 0, z: 0 };
                 const nestedScl = nestedClip.transform?.scale ?? { x: 1, y: 1 };
@@ -522,7 +499,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
                   visible: true,
                   opacity: nestedClip.transform?.opacity ?? 1,
                   blendMode: nestedClip.transform?.blendMode ?? 'normal',
-                  source: { type: 'video', videoElement: nestedVideo },
+                  source: { type: 'video', videoElement: nestedVideo, webCodecsPlayer: nestedWebCodecs },
                   effects: nestedClip.effects || [],
                   position: { x: nestedPos.x, y: nestedPos.y, z: nestedPos.z },
                   scale: { x: nestedScl.x, y: nestedScl.y },
