@@ -85,6 +85,7 @@ export function MediaPanel() {
     activeCompositionId,
     moveToFolder,
     createTextItem,
+    getOrCreateTextFolder,
   } = useMediaStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -313,9 +314,10 @@ export function MediaPanel() {
 
   // New text item (in Media Panel, can be dragged to timeline)
   const handleNewText = useCallback(() => {
-    createTextItem();
+    const textFolderId = getOrCreateTextFolder();
+    createTextItem(undefined, textFolderId);
     closeContextMenu();
-  }, [createTextItem, closeContextMenu]);
+  }, [createTextItem, getOrCreateTextFolder, closeContextMenu]);
 
   // Composition settings
   const openCompositionSettings = useCallback((comp: Composition) => {

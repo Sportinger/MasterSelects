@@ -162,7 +162,7 @@ export interface ClipActions {
   // Audio pitch preservation
   setClipPreservesPitch: (clipId: string, preservesPitch: boolean) => void;
   // Text clip actions
-  addTextClip: (trackId: string, startTime: number, duration?: number) => Promise<string | null>;
+  addTextClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => Promise<string | null>;
   updateTextProperties: (clipId: string, props: Partial<TextClipProperties>) => void;
   // YouTube pending download clips
   addPendingDownloadClip: (trackId: string, startTime: number, videoId: string, title: string, thumbnail: string, estimatedDuration?: number) => string;

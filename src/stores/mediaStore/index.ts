@@ -31,7 +31,8 @@ type MediaStoreState = MediaState &
     getItemsByFolder: (folderId: string | null) => ProjectItem[];
     getItemById: (id: string) => ProjectItem | undefined;
     getFileByName: (name: string) => MediaFile | undefined;
-    createTextItem: (name?: string) => string;
+    getOrCreateTextFolder: () => string;
+    createTextItem: (name?: string, parentId?: string | null) => string;
     removeTextItem: (id: string) => void;
   };
 
@@ -80,15 +81,26 @@ export const useMediaStore = create<MediaStoreState>()(
       return get().files.find((f) => f.name === name);
     },
 
+    // Get or create "Text" folder for organizing text items
+    getOrCreateTextFolder: () => {
+      const { folders, createFolder } = get();
+      const existingFolder = folders.find((f) => f.name === 'Text' && f.parentId === null);
+      if (existingFolder) {
+        return existingFolder.id;
+      }
+      const newFolder = createFolder('Text', null);
+      return newFolder.id;
+    },
+
     // Create text item in Media Panel
-    createTextItem: (name?: string) => {
+    createTextItem: (name?: string, parentId?: string | null) => {
       const { textItems } = get();
       const id = `text-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const newText = {
         id,
         name: name || `Text ${textItems.length + 1}`,
         type: 'text' as const,
-        parentId: null,
+        parentId: parentId !== undefined ? parentId : null,
         createdAt: Date.now(),
         text: 'New Text',
         fontFamily: 'Arial',

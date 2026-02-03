@@ -37,6 +37,7 @@ import {
 import { blobUrlManager } from './helpers/blobUrlManager';
 import { updateClipById } from './helpers/clipStateHelpers';
 import { thumbnailRenderer } from '../../services/thumbnailRenderer';
+import { useMediaStore } from '../mediaStore';
 
 // Debounce map for thumbnail regeneration per clip
 const thumbnailDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -630,7 +631,7 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
 
   // ========== TEXT CLIP ACTIONS ==========
 
-  addTextClip: async (trackId, startTime, duration = DEFAULT_TEXT_DURATION) => {
+  addTextClip: async (trackId, startTime, duration = DEFAULT_TEXT_DURATION, skipMediaItem = false) => {
     const { clips, tracks, updateDuration, invalidateCache } = get();
     const track = tracks.find(t => t.id === trackId);
 
@@ -664,6 +665,14 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
     set({ clips: [...clips, textClip] });
     updateDuration();
     invalidateCache();
+
+    // Also create a media item in the Text folder (unless dragged from media panel)
+    if (!skipMediaItem) {
+      const mediaStore = useMediaStore.getState();
+      const textFolderId = mediaStore.getOrCreateTextFolder();
+      mediaStore.createTextItem('Text', textFolderId);
+    }
+
     log.debug('Created text clip', { clipId });
     return clipId;
   },
