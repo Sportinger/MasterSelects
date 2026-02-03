@@ -1,7 +1,29 @@
 # React Optimization Plan v2
 
 **Created:** 2026-02-04
+**Updated:** 2026-02-04
 **Based on:** Full codebase audit + REACT-BEST-PRACTICES.md
+
+---
+
+## Completion Status
+
+| Phase | Task | Status |
+|-------|------|--------|
+| 1.1 | PropertiesPanel store subscriptions | ✅ DONE (a739556) |
+| 1.2 | MediaPanel store subscriptions | ✅ DONE (93d5ab9) |
+| 1.3 | Toolbar polling fix | ✅ DONE (c09635d) |
+| 2.1 | PropertiesPanel component split | ✅ DONE (dbd9a0f) |
+| 2.2 | useLayerSync split | ⏭️ SKIPPED (high complexity, medium impact) |
+| 3.1 | Inline arrow functions | ⏭️ N/A (components now split, marginal benefit) |
+| 4.x | Low priority items | ⏸️ DEFERRED |
+
+**Key Results:**
+- PropertiesPanel split into 8 lazy-loaded modules (61K → ~3-7K each)
+- Eliminated infinite re-render loop from store action selectors
+- Fixed 12 nested components subscribing to entire store
+- Reduced MediaPanel store subscriptions from 30+ to 8 reactive values
+- Reduced Toolbar polling from 500ms to 2000ms
 
 ---
 
@@ -353,16 +375,16 @@ const columnState = useColumnOrder();
 
 ## Implementation Priority
 
-| Order | Task | Priority | Impact | Complexity |
-|-------|------|----------|--------|------------|
-| 1 | PropertiesPanel store subscriptions (1.1) | CRITICAL | HIGH | Medium |
-| 2 | MediaPanel store subscriptions (1.2) | CRITICAL | MEDIUM-HIGH | Low |
-| 3 | Toolbar polling fix (1.3) | HIGH | MEDIUM | Low |
-| 4 | PropertiesPanel component split (2.1) | HIGH | HIGH | High |
-| 5 | Inline arrow functions (3.1) | MEDIUM | MEDIUM | Medium |
-| 6 | useLayerSync split (2.2) | MEDIUM | MEDIUM | High |
-| 7 | Shared UI components (4.1) | LOW | LOW | Low |
-| 8 | MediaPanel useState consolidation (4.2) | LOW | LOW | Low |
+| Order | Task | Priority | Impact | Complexity | Status |
+|-------|------|----------|--------|------------|--------|
+| 1 | PropertiesPanel store subscriptions (1.1) | CRITICAL | HIGH | Medium | ✅ DONE |
+| 2 | MediaPanel store subscriptions (1.2) | CRITICAL | MEDIUM-HIGH | Low | ✅ DONE |
+| 3 | Toolbar polling fix (1.3) | HIGH | MEDIUM | Low | ✅ DONE |
+| 4 | PropertiesPanel component split (2.1) | HIGH | HIGH | High | ✅ DONE |
+| 5 | Inline arrow functions (3.1) | MEDIUM | MEDIUM | Medium | ⏭️ N/A |
+| 6 | useLayerSync split (2.2) | MEDIUM | MEDIUM | High | ⏭️ SKIPPED |
+| 7 | Shared UI components (4.1) | LOW | LOW | Low | ⏸️ DEFERRED |
+| 8 | MediaPanel useState consolidation (4.2) | LOW | LOW | Low | ⏸️ DEFERRED |
 
 ---
 
