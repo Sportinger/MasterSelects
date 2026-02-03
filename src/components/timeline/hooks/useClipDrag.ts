@@ -191,8 +191,29 @@ export function useClipDrag({
           const rect = timelineRef.current.getBoundingClientRect();
           const x = upEvent.clientX - rect.left + scrollX - drag.grabOffsetX;
           const newStartTime = Math.max(0, pixelToTime(x));
-          // Pass skipGroup (altKeyPressed) to moveClip for independent drag
-          moveClip(drag.clipId, newStartTime, drag.currentTrackId, false, drag.altKeyPressed);
+
+          // Calculate the time delta for multi-select movement
+          const draggedClip = clipMap.get(drag.clipId);
+          const timeDelta = newStartTime - (draggedClip?.startTime ?? drag.originalStartTime);
+
+          // If multiple clips are selected, move them all by the same delta
+          if (selectedClipIds.size > 1 && selectedClipIds.has(drag.clipId)) {
+            // Move the dragged clip first (this handles snapping)
+            moveClip(drag.clipId, newStartTime, drag.currentTrackId, false, drag.altKeyPressed);
+
+            // Move other selected clips by the same delta (skip linked to avoid double-moving)
+            for (const selectedId of selectedClipIds) {
+              if (selectedId === drag.clipId) continue;
+              const selectedClip = clipMap.get(selectedId);
+              if (selectedClip) {
+                const newTime = Math.max(0, selectedClip.startTime + timeDelta);
+                moveClip(selectedId, newTime, selectedClip.trackId, true, true); // skipLinked, skipGroup
+              }
+            }
+          } else {
+            // Single clip drag - normal behavior
+            moveClip(drag.clipId, newStartTime, drag.currentTrackId, false, drag.altKeyPressed);
+          }
         }
         setClipDrag(null);
         clipDragRef.current = null;
