@@ -43,11 +43,12 @@ function TimelineKeyframesComponent({
   timeToPixel,
   pixelToTime,
 }: TimelineKeyframesProps) {
-  // Drag state
+  // Drag state - includes original times for all selected keyframes
   const [dragState, setDragState] = useState<{
     keyframeId: string;
     clipId: string;
     startX: number;
+    originalTimes: Map<string, { time: number; clipId: string }>; // keyframeId -> original time + clipId
     startTime: number;
     clipStartTime: number;
   } | null>(null);
@@ -111,8 +112,29 @@ function TimelineKeyframesComponent({
     e.preventDefault();
     e.stopPropagation();
 
-    // Select the keyframe
-    onSelectKeyframe(kf.id, e.shiftKey);
+    // Select the keyframe (if not already selected and not shift-clicking)
+    if (!selectedKeyframeIds.has(kf.id)) {
+      onSelectKeyframe(kf.id, e.shiftKey);
+    }
+
+    // Capture original times for all selected keyframes (for multi-select drag)
+    const originalTimes = new Map<string, { time: number; clipId: string }>();
+
+    // Include the dragged keyframe
+    originalTimes.set(kf.id, { time: kf.time, clipId: clip.id });
+
+    // Include other selected keyframes
+    for (const selectedId of selectedKeyframeIds) {
+      if (selectedId === kf.id) continue;
+      // Find this keyframe in clipKeyframes
+      for (const [clipId, keyframes] of clipKeyframes.entries()) {
+        const selectedKf = keyframes.find(k => k.id === selectedId);
+        if (selectedKf) {
+          originalTimes.set(selectedId, { time: selectedKf.time, clipId });
+          break;
+        }
+      }
+    }
 
     // Start drag
     setDragState({
@@ -121,8 +143,9 @@ function TimelineKeyframesComponent({
       startX: e.clientX,
       startTime: kf.time,
       clipStartTime: clip.startTime,
+      originalTimes,
     });
-  }, [onSelectKeyframe]);
+  }, [onSelectKeyframe, selectedKeyframeIds, clipKeyframes]);
 
   // Handle drag movement
   useEffect(() => {
@@ -140,14 +163,18 @@ function TimelineKeyframesComponent({
       const newPixel = currentPixel + effectiveDelta;
       const newAbsTime = pixelToTime(newPixel);
 
-      // Calculate new clip-local time (ensure it stays within clip bounds)
-      const clip = clips.find(c => c.id === dragState.clipId);
-      if (!clip) return;
+      // Calculate time delta from original position
+      const timeDelta = newAbsTime - (dragState.clipStartTime + dragState.startTime);
 
-      const newClipTime = newAbsTime - clip.startTime;
-      const clampedTime = Math.max(0, Math.min(clip.duration, newClipTime));
+      // Move all selected keyframes by the same time delta
+      for (const [keyframeId, original] of dragState.originalTimes.entries()) {
+        const clip = clips.find(c => c.id === original.clipId);
+        if (!clip) continue;
 
-      onMoveKeyframe(dragState.keyframeId, clampedTime);
+        const newTime = original.time + timeDelta;
+        const clampedTime = Math.max(0, Math.min(clip.duration, newTime));
+        onMoveKeyframe(keyframeId, clampedTime);
+      }
     };
 
     const handleMouseUp = () => {

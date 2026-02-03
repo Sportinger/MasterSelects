@@ -546,12 +546,12 @@ function TimelineClipComponent({
 
   // Determine animation class:
   // - 'exiting': apply exit animation
-  // - New clips (mounted with current key): apply entrance animation
+  // - 'entering' + new clips: apply entrance animation (only during composition switch)
   // - Otherwise: no animation
   const isNewClip = mountKeyRef.current === clipEntranceKey && clipEntranceKey > 0;
   const animationClass = clipAnimationPhase === 'exiting'
     ? 'exit-animate'
-    : isNewClip
+    : (clipAnimationPhase === 'entering' && isNewClip)
       ? 'entrance-animate'
       : '';
 
@@ -660,6 +660,9 @@ function TimelineClipComponent({
     }
     const timeDelta = newDragTime - draggedClip.startTime;
     left = timeToPixel(Math.max(0, clip.startTime + timeDelta));
+  } else if (clipDrag?.multiSelectClipIds?.includes(clip.id) && clipDrag.multiSelectTimeDelta !== undefined) {
+    // This clip is part of multi-select drag (but not the primary dragged clip)
+    left = timeToPixel(Math.max(0, clip.startTime + clipDrag.multiSelectTimeDelta));
   }
 
   // Calculate how many thumbnails to show based on clip width
@@ -679,11 +682,15 @@ function TimelineClipComponent({
   // Determine clip type class (audio, video, text, or image)
   const clipTypeClass = isTextClip ? 'text' : isAudioClip ? 'audio' : (clip.source?.type || 'video');
 
+  // Check if this clip is part of a multi-select drag
+  const isInMultiSelectDrag = clipDrag?.multiSelectClipIds?.includes(clip.id) && clipDrag.multiSelectTimeDelta !== undefined;
+
   const clipClass = [
     'timeline-clip',
     isSelected ? 'selected' : '',
     isInLinkedGroup ? 'linked-group' : '',
     isDragging ? 'dragging' : '',
+    isInMultiSelectDrag ? 'dragging multiselect-dragging' : '',
     isLinkedToDragging ? 'linked-dragging' : '',
     isTrimming ? 'trimming' : '',
     isLinkedToTrimming ? 'linked-trimming' : '',

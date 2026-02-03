@@ -141,7 +141,7 @@ export interface ClipActions {
   addCompClip: (trackId: string, composition: Composition, startTime: number) => void;
   updateClip: (id: string, updates: Partial<TimelineClip>) => void;
   removeClip: (id: string) => void;
-  moveClip: (id: string, newStartTime: number, newTrackId?: string, skipLinked?: boolean, skipGroup?: boolean) => void;
+  moveClip: (id: string, newStartTime: number, newTrackId?: string, skipLinked?: boolean, skipGroup?: boolean, skipTrim?: boolean, excludeClipIds?: string[]) => void;
   trimClip: (id: string, inPoint: number, outPoint: number) => void;
   splitClip: (clipId: string, splitTime: number) => void;
   splitClipAtPlayhead: () => void;
@@ -349,7 +349,8 @@ export interface TimelineUtils {
   findNonOverlappingPosition: (clipId: string, desiredStartTime: number, trackId: string, duration: number) => number;
   // Get position with magnetic resistance at clip edges - returns adjusted position and whether user has "broken through"
   // Uses pixel-based resistance (zoom converts time distance to pixels)
-  getPositionWithResistance: (clipId: string, desiredStartTime: number, trackId: string, duration: number, zoom?: number) => { startTime: number; forcingOverlap: boolean };
+  // excludeClipIds: optional list of clip IDs to exclude from collision detection (for multi-select)
+  getPositionWithResistance: (clipId: string, desiredStartTime: number, trackId: string, duration: number, zoom?: number, excludeClipIds?: string[]) => { startTime: number; forcingOverlap: boolean };
   // Trim any clips that the placed clip overlaps with
   trimOverlappingClips: (clipId: string, startTime: number, trackId: string, duration: number) => void;
   getSerializableState: () => CompositionTimelineData;

@@ -88,12 +88,12 @@ export const useTimelineStore = create<TimelineStore>()(
       },
 
       getSnappedPosition: (clipId: string, desiredStartTime: number, trackId: string) => {
-        const { clips, snappingEnabled } = get();
+        const { clips } = get();
         const movingClip = clips.find(c => c.id === clipId);
         if (!movingClip) return { startTime: desiredStartTime, snapped: false };
 
-        // If snapping is disabled, return the desired position without snapping
-        if (!snappingEnabled) return { startTime: Math.max(0, desiredStartTime), snapped: false };
+        // Note: Caller decides whether to call this based on snappingEnabled + Alt key
+        // This function always attempts to snap when called
 
         const clipDuration = movingClip.duration;
         const desiredEndTime = desiredStartTime + clipDuration;
@@ -231,15 +231,17 @@ export const useTimelineStore = create<TimelineStore>()(
       // Apply magnetic resistance at clip edges during drag
       // Returns position with resistance applied, and whether user has "broken through" to force overlap
       // Uses PIXEL-based resistance so it works regardless of clip duration
-      getPositionWithResistance: (clipId: string, desiredStartTime: number, trackId: string, duration: number, zoom?: number) => {
+      getPositionWithResistance: (clipId: string, desiredStartTime: number, trackId: string, duration: number, zoom?: number, excludeClipIds?: string[]) => {
         const { clips, zoom: storeZoom } = get();
         const currentZoom = zoom ?? storeZoom;
         const movingClip = clips.find(c => c.id === clipId);
+        const excludeSet = new Set(excludeClipIds || []);
 
-        // Get other clips on the TARGET track (excluding the moving clip and its linked clip)
+        // Get other clips on the TARGET track (excluding the moving clip, its linked clip, and any excluded clips)
         const otherClips = clips.filter(c =>
           c.trackId === trackId &&
           c.id !== clipId &&
+          !excludeSet.has(c.id) &&
           (movingClip ? c.id !== movingClip.linkedClipId && c.linkedClipId !== clipId : true)
         ).sort((a, b) => a.startTime - b.startTime);
 

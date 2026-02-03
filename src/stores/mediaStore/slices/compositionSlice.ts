@@ -226,9 +226,6 @@ function finishCompositionSwitch(
 ): void {
   const timelineStore = useTimelineStore.getState();
 
-  // Reset animation phase before loading new composition
-  timelineStore.setClipAnimationPhase('idle');
-
   // Update active composition
   set({ activeCompositionId: newId });
 
@@ -248,7 +245,16 @@ function finishCompositionSwitch(
     if (savedCompId) {
       timelineStore.refreshCompClipNestedData(savedCompId);
     }
+
+    // Trigger entrance animation for new clips
+    timelineStore.setClipAnimationPhase('entering');
+
+    // Reset to idle after entrance animation completes
+    setTimeout(() => {
+      timelineStore.setClipAnimationPhase('idle');
+    }, 700); // Entrance animation duration (0.6s + buffer)
   } else {
     timelineStore.clearTimeline();
+    timelineStore.setClipAnimationPhase('idle');
   }
 }
