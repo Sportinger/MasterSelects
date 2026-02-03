@@ -105,7 +105,9 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
   },
 
   pause: () => {
-    set({ isPlaying: false });
+    // Reset playback speed to normal when pausing
+    // So that Space (play/pause toggle) plays forward again
+    set({ isPlaying: false, playbackSpeed: 1 });
   },
 
   stop: () => {
