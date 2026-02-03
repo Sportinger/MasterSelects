@@ -33,6 +33,14 @@ function ImproveIcon() {
   );
 }
 
+function RefactorIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M3 4h8M3 7h5M3 10h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function GitHubIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
@@ -60,6 +68,7 @@ function ChangeItem({ change }: { change: ChangeEntry }) {
           {change.type === 'new' && <NewIcon />}
           {change.type === 'fix' && <FixIcon />}
           {change.type === 'improve' && <ImproveIcon />}
+          {change.type === 'refactor' && <RefactorIcon />}
         </span>
         <span className="changelog-title">{change.title}</span>
         {hasExpandableContent && (
@@ -95,7 +104,7 @@ function ChangeItem({ change }: { change: ChangeEntry }) {
 
 export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
   const [isClosing, setIsClosing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'all' | 'new' | 'fix' | 'improve'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'new' | 'fix' | 'improve' | 'refactor'>('all');
 
   const groupedChangelog = useMemo(() => getGroupedChangelog(), []);
 
@@ -144,6 +153,7 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
       new: all.filter(c => c.type === 'new').length,
       fix: all.filter(c => c.type === 'fix').length,
       improve: all.filter(c => c.type === 'improve').length,
+      refactor: all.filter(c => c.type === 'refactor').length,
     };
   }, [groupedChangelog]);
 
@@ -184,6 +194,12 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
             onClick={() => setActiveTab('improve')}
           >
             Improved <span className="changelog-tab-count">{counts.improve}</span>
+          </button>
+          <button
+            className={`changelog-tab changelog-tab-refactor ${activeTab === 'refactor' ? 'active' : ''}`}
+            onClick={() => setActiveTab('refactor')}
+          >
+            Refactor <span className="changelog-tab-count">{counts.refactor}</span>
           </button>
         </div>
 

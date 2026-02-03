@@ -8107,6 +8107,11 @@ input[type="checkbox"] {
   color: #ffaa00;
 }
 
+.changelog-tab-refactor.active {
+  background: rgba(168, 85, 247, 0.15);
+  color: #a855f7;
+}
+
 .changelog-tab-count {
   font-size: 10px;
   font-weight: 600;
@@ -8279,6 +8284,11 @@ input[type="checkbox"] {
 .changelog-icon-improve {
   background: rgba(255, 170, 0, 0.15);
   color: #ffaa00;
+}
+
+.changelog-icon-refactor {
+  background: rgba(168, 85, 247, 0.15);
+  color: #a855f7;
 }
 
 .changelog-item .changelog-title {
