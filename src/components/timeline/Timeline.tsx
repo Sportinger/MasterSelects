@@ -188,7 +188,6 @@ export function Timeline() {
     getOpenCompositions,
     openCompositionTab,
     proxyEnabled,
-    setProxyEnabled,
     files: mediaFiles,
     currentlyGeneratingProxyId,
     showInExplorer,
@@ -217,6 +216,26 @@ export function Timeline() {
     splitClip(clipId, time);
     setToolMode('select');
   }, [splitClip, setToolMode]);
+
+  // Stable callbacks for TimelineControls (avoids re-renders from inline arrows)
+  const handleToggleProxy = useCallback(() => {
+    useMediaStore.getState().setProxyEnabled(!useMediaStore.getState().proxyEnabled);
+  }, []);
+
+  const handleToggleTranscriptMarkers = useCallback(() => {
+    setShowTranscriptMarkers(prev => !prev);
+  }, []);
+
+  const handleAddVideoTrack = useCallback(() => addTrack('video'), [addTrack]);
+  const handleAddAudioTrack = useCallback(() => addTrack('audio'), [addTrack]);
+
+  const handleAddTextClip = useCallback(() => {
+    const state = useTimelineStore.getState();
+    const videoTrack = state.tracks.find(t => t.type === 'video');
+    if (videoTrack) {
+      addTextClip(videoTrack.id, state.playheadPosition);
+    }
+  }, [addTextClip]);
 
   // Performance: Create lookup maps for O(1) clip/track access (must be before hooks that use them)
   const clipMap = useMemo(() => new Map(clips.map(c => [c.id, c])), [clips]);
@@ -796,24 +815,18 @@ export function Timeline() {
         onSetOutPoint={setOutPointAtPlayhead}
         onClearInOut={clearInOut}
         onToggleRamPreview={toggleRamPreviewEnabled}
-        onToggleProxy={() => setProxyEnabled(!proxyEnabled)}
+        onToggleProxy={handleToggleProxy}
         isProxyCaching={isProxyCaching}
         proxyCacheProgress={proxyCacheProgress}
         onStartProxyCachePreload={startProxyCachePreload}
         onCancelProxyCachePreload={cancelProxyCachePreload}
-        onToggleTranscriptMarkers={() => setShowTranscriptMarkers(!showTranscriptMarkers)}
+        onToggleTranscriptMarkers={handleToggleTranscriptMarkers}
         onToggleThumbnails={toggleThumbnailsEnabled}
         onToggleWaveforms={toggleWaveformsEnabled}
         onToggleCutTool={toggleCutTool}
-        onAddVideoTrack={() => addTrack('video')}
-        onAddAudioTrack={() => addTrack('audio')}
-        onAddTextClip={() => {
-          // Add text clip at playhead position on topmost video track
-          const videoTrack = tracks.find(t => t.type === 'video');
-          if (videoTrack) {
-            addTextClip(videoTrack.id, playheadPosition);
-          }
-        }}
+        onAddVideoTrack={handleAddVideoTrack}
+        onAddAudioTrack={handleAddAudioTrack}
+        onAddTextClip={handleAddTextClip}
         onSetDuration={setDuration}
         onFitToWindow={handleFitToWindow}
         formatTime={formatTime}
