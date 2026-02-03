@@ -23,7 +23,7 @@ interface UseClipDragProps {
 
   // Actions
   selectClip: (clipId: string | null, addToSelection?: boolean) => void;
-  moveClip: (clipId: string, newStartTime: number, trackId: string, skipLinked?: boolean, skipGroup?: boolean) => void;
+  moveClip: (clipId: string, newStartTime: number, trackId: string, skipLinked?: boolean, skipGroup?: boolean, skipTrim?: boolean) => void;
   openCompositionTab: (compositionId: string) => void;
 
   // Helpers
@@ -72,7 +72,9 @@ export function useClipDrag({
       e.stopPropagation();
       e.preventDefault();
 
-      const clip = clipMap.get(clipId);
+      // Use ref for current clipMap to avoid stale closure
+      const currentClipMap = clipMapRef.current;
+      const clip = currentClipMap.get(clipId);
       if (!clip) return;
 
       // Shift+Click: Toggle selection (add/remove from multi-selection)
@@ -81,11 +83,20 @@ export function useClipDrag({
         return; // Don't start drag on shift+click
       }
 
+      // Use ref for current selection to avoid stale closure
+      const currentSelectedIds = selectedClipIdsRef.current;
+
       // If clip is not selected, select only this clip
       // If clip is already selected (part of multi-selection), keep selection
-      if (!selectedClipIds.has(clipId)) {
+      if (!currentSelectedIds.has(clipId)) {
         selectClip(clipId);
       }
+
+      // Capture other selected clip IDs for multi-select drag (re-read after potential selection change)
+      const finalSelectedIds = selectedClipIdsRef.current;
+      const otherSelectedIds = finalSelectedIds.size > 1 && finalSelectedIds.has(clipId)
+        ? [...finalSelectedIds].filter(id => id !== clipId)
+        : [];
 
       const clipElement = e.currentTarget as HTMLElement;
       const clipRect = clipElement.getBoundingClientRect();
@@ -103,6 +114,9 @@ export function useClipDrag({
         altKeyPressed: e.altKey, // Capture Alt state for independent drag
         forcingOverlap: false,
         dragStartTime: Date.now(), // Track when drag started for track-change delay
+        // Multi-select support
+        multiSelectClipIds: otherSelectedIds.length > 0 ? otherSelectedIds : undefined,
+        multiSelectTimeDelta: 0,
       };
       setClipDrag(initialDrag);
       clipDragRef.current = initialDrag;
@@ -178,6 +192,11 @@ export function useClipDrag({
           }
         }
 
+        // Calculate time delta for multi-select preview
+        const multiSelectTimeDelta = drag.multiSelectClipIds?.length
+          ? resistedTime - drag.originalStartTime
+          : undefined;
+
         const newDrag: ClipDragState = {
           ...drag,
           currentX: moveEvent.clientX,
@@ -186,6 +205,7 @@ export function useClipDrag({
           isSnapping: snapped && !forcingOverlap,
           altKeyPressed: moveEvent.altKey, // Update Alt state dynamically
           forcingOverlap,
+          multiSelectTimeDelta,
         };
         setClipDrag(newDrag);
         clipDragRef.current = newDrag;
@@ -206,18 +226,28 @@ export function useClipDrag({
           const draggedClip = currentClipMap.get(drag.clipId);
           const timeDelta = newStartTime - (draggedClip?.startTime ?? drag.originalStartTime);
 
+          log.debug('Multi-select drag check', {
+            selectedCount: currentSelectedIds.size,
+            selectedIds: [...currentSelectedIds],
+            dragClipId: drag.clipId,
+            hasDragClip: currentSelectedIds.has(drag.clipId),
+            timeDelta,
+          });
+
           // If multiple clips are selected, move them all by the same delta
           if (currentSelectedIds.size > 1 && currentSelectedIds.has(drag.clipId)) {
+            log.debug('Moving multiple clips', { count: currentSelectedIds.size });
             // Move the dragged clip first (this handles snapping)
-            moveClip(drag.clipId, newStartTime, drag.currentTrackId, false, drag.altKeyPressed);
+            // skipTrim=true to avoid trimming other selected clips
+            moveClip(drag.clipId, newStartTime, drag.currentTrackId, false, drag.altKeyPressed, true);
 
-            // Move other selected clips by the same delta (skip linked to avoid double-moving)
+            // Move other selected clips by the same delta (skip linked, group, and trim to avoid double-moving and trimming each other)
             for (const selectedId of currentSelectedIds) {
               if (selectedId === drag.clipId) continue;
               const selectedClip = currentClipMap.get(selectedId);
               if (selectedClip) {
                 const newTime = Math.max(0, selectedClip.startTime + timeDelta);
-                moveClip(selectedId, newTime, selectedClip.trackId, true, true); // skipLinked, skipGroup
+                moveClip(selectedId, newTime, selectedClip.trackId, true, true, true); // skipLinked, skipGroup, skipTrim
               }
             }
           } else {

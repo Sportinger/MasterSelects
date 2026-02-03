@@ -368,7 +368,7 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
     invalidateCache();
   },
 
-  moveClip: (id, newStartTime, newTrackId, skipLinked = false, skipGroup = false) => {
+  moveClip: (id, newStartTime, newTrackId, skipLinked = false, skipGroup = false, skipTrim = false) => {
     const { clips, tracks, updateDuration, getSnappedPosition, getPositionWithResistance, trimOverlappingClips, invalidateCache } = get();
     const movingClip = clips.find(c => c.id === id);
     if (!movingClip) return;
@@ -416,8 +416,8 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
       }),
     });
 
-    if (forcingOverlap) trimOverlappingClips(id, finalStartTime, targetTrackId, movingClip.duration);
-    if (linkedForcingOverlap && linkedClip && !skipLinked) {
+    if (forcingOverlap && !skipTrim) trimOverlappingClips(id, finalStartTime, targetTrackId, movingClip.duration);
+    if (linkedForcingOverlap && linkedClip && !skipLinked && !skipTrim) {
       trimOverlappingClips(linkedClip.id, linkedFinalTime, linkedClip.trackId, linkedClip.duration);
     }
 
