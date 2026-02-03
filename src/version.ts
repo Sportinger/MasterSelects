@@ -12,7 +12,7 @@ export const BUILD_NOTICE: {
 
 // Change entry type
 export interface ChangeEntry {
-  type: 'new' | 'fix' | 'improve';
+  type: 'new' | 'fix' | 'improve' | 'refactor';
   title: string;
   description?: string;
   section?: string; // Optional section header to create visual dividers
@@ -54,6 +54,127 @@ interface RawChangeEntry extends ChangeEntry {
 }
 
 const RAW_CHANGELOG: RawChangeEntry[] = [
+  // === Feb 4, 2026 - Transitions & React Optimization ===
+  {
+    date: '2026-02-04',
+    type: 'new',
+    title: 'Transitions System',
+    description: 'Crossfade transitions between clips with GPU-accelerated rendering',
+    commit: '455a99d',
+  },
+  {
+    date: '2026-02-04',
+    type: 'new',
+    title: 'Transitions Panel',
+    description: 'Modular panel with drag-drop support for applying transitions',
+    commit: 'a98c2ad',
+  },
+  {
+    date: '2026-02-04',
+    type: 'new',
+    title: 'JKL Playback Shortcuts',
+    description: 'Industry-standard J/K/L keyboard shortcuts for playback control',
+    commit: 'c0f882f',
+  },
+  {
+    date: '2026-02-04',
+    type: 'new',
+    title: 'Transform Handles in Edit Mode',
+    description: 'Corner and edge handles for scaling with Shift for aspect ratio lock',
+    commit: '633b842',
+  },
+  {
+    date: '2026-02-04',
+    type: 'new',
+    title: 'Proxy Cache Indicator',
+    description: 'Yellow indicator on timeline ruler shows cached proxy frames',
+    commit: 'fb19843',
+  },
+  {
+    date: '2026-02-04',
+    type: 'new',
+    title: 'Manual Video Warmup',
+    description: 'Cache button for preloading proxy frames before playback',
+    commit: '0f1a902',
+  },
+  {
+    date: '2026-02-04',
+    type: 'improve',
+    title: 'Settings Dialog Redesign',
+    description: 'After Effects-style sidebar navigation with categorized settings',
+    commit: '1c8cbeb',
+  },
+  {
+    date: '2026-02-04',
+    type: 'improve',
+    title: 'Faster RAM Preview',
+    description: 'Use WebCodecsPlayer for faster RAM Preview frame generation',
+    commit: '5e618fc',
+  },
+  {
+    date: '2026-02-04',
+    type: 'improve',
+    title: 'Reverse Playback',
+    description: 'Improved reverse playback support for H.264 videos',
+    commit: 'b19a5cb',
+  },
+  {
+    date: '2026-02-04',
+    type: 'improve',
+    title: 'Draggable Settings Dialog',
+    description: 'Settings dialog can now be dragged without dark overlay',
+    commit: '977aefc',
+  },
+  {
+    date: '2026-02-04',
+    type: 'refactor',
+    title: 'React Performance Optimization',
+    description: 'Zustand selectors and lazy loading for reduced re-renders',
+    commit: '0352751',
+  },
+  {
+    date: '2026-02-04',
+    type: 'refactor',
+    title: 'Extract useMarkerDrag Hook',
+    description: 'Marker drag logic extracted into reusable custom hook',
+    commit: '828b090',
+  },
+  {
+    date: '2026-02-04',
+    type: 'refactor',
+    title: 'Stabilize TimelineControls',
+    description: 'useCallback for callback props to prevent unnecessary re-renders',
+    commit: 'e1752ed',
+  },
+  {
+    date: '2026-02-04',
+    type: 'fix',
+    title: 'Infinite Loop in Actions',
+    description: 'Use getState() for store actions instead of selectors to prevent loops',
+    commit: 'f839fb2',
+  },
+  {
+    date: '2026-02-04',
+    type: 'fix',
+    title: 'RAM Preview Nested Compositions',
+    description: 'RAM Preview now correctly caches nested composition frames',
+    commit: '52d922d',
+  },
+  {
+    date: '2026-02-04',
+    type: 'fix',
+    title: 'Reset Playback Speed on Pause',
+    description: 'Playback speed resets to 1x when pausing instead of staying at JKL speed',
+    commit: 'cb33627',
+  },
+  {
+    date: '2026-02-04',
+    type: 'fix',
+    title: 'Audio Effect GPU Warnings',
+    description: 'Fixed audio effect warnings in GPU rendering pipeline',
+    commit: 'a6ff1dc',
+  },
+
   // === Feb 3, 2026 - Multi-Select & FCP XML ===
   {
     date: '2026-02-03',
@@ -470,49 +591,49 @@ const RAW_CHANGELOG: RawChangeEntry[] = [
   // === Jan 25, 2026 - MAJOR REFACTORING DAY ===
   {
     date: '2026-01-25',
-    type: 'improve',
+    type: 'refactor',
     title: 'WebGPUEngine Refactor',
     description: 'Split into focused modules - 57% smaller core file',
   },
   {
     date: '2026-01-25',
-    type: 'improve',
+    type: 'refactor',
     title: 'Timeline Component Refactor',
     description: 'Extract hooks and utilities - 2109 → 1323 lines of code',
   },
   {
     date: '2026-01-25',
-    type: 'improve',
+    type: 'refactor',
     title: 'ClipSlice Refactor',
     description: 'Modular clip and helper modules - 66% code reduction',
   },
   {
     date: '2026-01-25',
-    type: 'improve',
+    type: 'refactor',
     title: 'FrameExporter Refactor',
     description: 'Split 1510-line file into 8 focused modules',
   },
   {
     date: '2026-01-25',
-    type: 'improve',
+    type: 'refactor',
     title: 'ProjectFileService Refactor',
     description: 'Modular architecture with clean separation of concerns',
   },
   {
     date: '2026-01-25',
-    type: 'improve',
+    type: 'refactor',
     title: 'AI Tools Refactor',
     description: 'Split monolithic aiTools.ts into modular architecture',
   },
   {
     date: '2026-01-25',
-    type: 'improve',
+    type: 'refactor',
     title: 'Remove VJ/Mixer Mode',
     description: 'Simplified codebase by removing unused VJ mode entirely',
   },
   {
     date: '2026-01-25',
-    type: 'improve',
+    type: 'refactor',
     title: 'Codebase Reorganization',
     description: 'Cleaner folder structure and better code organization',
   },
@@ -608,9 +729,16 @@ const RAW_CHANGELOG: RawChangeEntry[] = [
   // === Jan 21, 2026 ===
   {
     date: '2026-01-21',
-    type: 'improve',
+    type: 'refactor',
     title: 'Removed VJ/Mixer Mode',
     description: 'Simplified codebase by removing unused VJ mode',
+  },
+  {
+    date: '2026-01-21',
+    type: 'refactor',
+    title: 'Logger Service Migration',
+    description: 'Migrated codebase to centralized Logger service',
+    commit: '847a386',
   },
   {
     date: '2026-01-21',
@@ -646,6 +774,20 @@ const RAW_CHANGELOG: RawChangeEntry[] = [
   // === Jan 20, 2026 ===
   {
     date: '2026-01-20',
+    type: 'refactor',
+    title: 'WebCodecsPlayer Export Simplification',
+    description: 'Simplified WebCodecsPlayer export mode for cleaner code',
+    commit: 'a1d193f',
+  },
+  {
+    date: '2026-01-20',
+    type: 'refactor',
+    title: 'View Toggles Consolidation',
+    description: 'Consolidated view toggles into single dropdown button',
+    commit: 'ef9e3c0',
+  },
+  {
+    date: '2026-01-20',
     type: 'new',
     title: 'Export Mode Selection',
     description: 'Choose between WebCodecs Fast, HTMLVideo Precise, or FFmpeg export',
@@ -679,6 +821,15 @@ const RAW_CHANGELOG: RawChangeEntry[] = [
     type: 'improve',
     title: 'WebCodecs Export Optimization',
     description: 'Parallel clip loading and sequential decoding for faster exports',
+  },
+
+  // === Jan 16, 2026 ===
+  {
+    date: '2026-01-16',
+    type: 'refactor',
+    title: 'Helpers Platform Reorganization',
+    description: 'Reorganized native helpers by platform (win, mac, linux)',
+    commit: '6a51335',
   },
 
   // === Jan 13-14, 2026 ===
@@ -934,7 +1085,7 @@ export interface ChangelogEntry {
   version: string;
   date: string;
   changes: {
-    type: 'new' | 'fix' | 'improve';
+    type: 'new' | 'fix' | 'improve' | 'refactor';
     description: string;
   }[];
 }
