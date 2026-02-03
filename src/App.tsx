@@ -9,6 +9,7 @@ import { DockContainer } from './components/dock';
 import { WelcomeOverlay } from './components/common/WelcomeOverlay';
 import { WhatsNewDialog } from './components/common/WhatsNewDialog';
 import { IndexedDBErrorDialog } from './components/common/IndexedDBErrorDialog';
+import { LinuxVulkanWarning } from './components/common/LinuxVulkanWarning';
 import { MobileApp } from './components/mobile';
 import { useGlobalHistory } from './hooks/useGlobalHistory';
 import { useClipPanelSync } from './hooks/useClipPanelSync';
@@ -155,6 +156,7 @@ function App() {
 
   return (
     <div className="app">
+      <LinuxVulkanWarning />
       <Toolbar />
       <DockContainer />
       {showWelcome && (

@@ -41,6 +41,12 @@ export function useEngine() {
         // Get and store GPU info
         const gpuInfo = engine.getGPUInfo();
         useEngineStore.getState().setGpuInfo(gpuInfo);
+
+        // Show Linux Vulkan warning if on Linux
+        const isLinux = navigator.platform.toLowerCase().includes('linux');
+        if (isLinux) {
+          useEngineStore.getState().setLinuxVulkanWarning(true);
+        }
       }
     }
 
