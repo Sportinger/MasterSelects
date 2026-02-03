@@ -1,6 +1,6 @@
 // Settings Dialog - After Effects style preferences with sidebar navigation
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSettingsStore, type TranscriptionProvider, type PreviewQuality, type AutosaveInterval, type GPUPowerPreference } from '../../stores/settingsStore';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
@@ -35,6 +35,65 @@ const categories: CategoryConfig[] = [
 
 export function SettingsDialog({ onClose }: SettingsDialogProps) {
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('general');
+
+  // Drag state
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Center dialog on mount
+  useEffect(() => {
+    if (dialogRef.current) {
+      const rect = dialogRef.current.getBoundingClientRect();
+      setPosition({
+        x: (window.innerWidth - rect.width) / 2,
+        y: (window.innerHeight - rect.height) / 2,
+      });
+    }
+  }, []);
+
+  // Handle drag
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (dialogRef.current) {
+      const rect = dialogRef.current.getBoundingClientRect();
+      dragOffset.current = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      };
+      setIsDragging(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newX = e.clientX - dragOffset.current.x;
+      const newY = e.clientY - dragOffset.current.y;
+
+      // Keep dialog within viewport bounds
+      const maxX = window.innerWidth - (dialogRef.current?.offsetWidth || 720);
+      const maxY = window.innerHeight - (dialogRef.current?.offsetHeight || 560);
+
+      setPosition({
+        x: Math.max(0, Math.min(newX, maxX)),
+        y: Math.max(0, Math.min(newY, maxY)),
+      });
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
 
   const {
     apiKeys,
@@ -511,12 +570,22 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
   };
 
   return (
-    <div className="settings-overlay" onClick={onClose}>
-      <div className="settings-dialog" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="settings-header">
+    <div className="settings-container">
+      <div
+        ref={dialogRef}
+        className={`settings-dialog ${isDragging ? 'dragging' : ''}`}
+        style={{
+          left: position.x,
+          top: position.y,
+        }}
+      >
+        {/* Header - Draggable */}
+        <div
+          className="settings-header"
+          onMouseDown={handleMouseDown}
+        >
           <h1>Preferences</h1>
-          <button className="settings-close" onClick={onClose}>×</button>
+          <button className="settings-close" onClick={onClose} onMouseDown={(e) => e.stopPropagation()}>×</button>
         </div>
 
         {/* Main content with sidebar */}
@@ -548,17 +617,16 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
         </div>
 
         <style>{`
-          .settings-overlay {
+          .settings-container {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.8);
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            pointer-events: none;
             z-index: 10000;
           }
 
           .settings-dialog {
+            position: fixed;
+            pointer-events: auto;
             background: var(--bg-primary, #1a1a1a);
             border: 1px solid var(--border-color);
             border-radius: 8px;
@@ -572,6 +640,11 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
           }
 
+          .settings-dialog.dragging {
+            cursor: grabbing;
+            user-select: none;
+          }
+
           /* Header */
           .settings-header {
             display: flex;
@@ -581,6 +654,12 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
             background: var(--bg-tertiary);
             border-bottom: 1px solid var(--border-color);
             flex-shrink: 0;
+            cursor: grab;
+            user-select: none;
+          }
+
+          .settings-dialog.dragging .settings-header {
+            cursor: grabbing;
           }
 
           .settings-header h1 {
@@ -588,6 +667,7 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
             font-size: 14px;
             font-weight: 600;
             color: var(--text-primary);
+            pointer-events: none;
           }
 
           .settings-close {
