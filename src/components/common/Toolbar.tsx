@@ -68,8 +68,9 @@ export function Toolbar() {
 
     updateProjectState();
 
-    // Check for project changes every 500ms (handles WelcomeOverlay creating project)
-    const interval = setInterval(updateProjectState, 500);
+    // Check for project changes every 2000ms (handles WelcomeOverlay creating project)
+    // Reduced from 500ms to minimize unnecessary re-renders
+    const interval = setInterval(updateProjectState, 2000);
     return () => clearInterval(interval);
   }, []);
 
