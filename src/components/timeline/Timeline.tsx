@@ -3,6 +3,53 @@
 
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
+import {
+  // Core data selectors (subscribe individually for optimal re-renders)
+  selectTracks,
+  selectClips,
+  selectPlayheadPosition,
+  selectDuration,
+  selectZoom,
+  selectScrollX,
+  selectIsPlaying,
+  selectSelectedClipIds,
+  selectMarkers,
+  // UI state selectors
+  selectSnappingEnabled,
+  selectInPoint,
+  selectOutPoint,
+  selectLoopPlayback,
+  selectToolMode,
+  selectThumbnailsEnabled,
+  selectWaveformsEnabled,
+  selectIsDraggingPlayhead,
+  // Preview/export selectors
+  selectRamPreviewEnabled,
+  selectRamPreviewProgress,
+  selectRamPreviewRange,
+  selectIsRamPreviewing,
+  selectIsExporting,
+  selectExportProgress,
+  selectExportRange,
+  selectIsProxyCaching,
+  selectProxyCacheProgress,
+  // Keyframe selectors
+  selectSelectedKeyframeIds,
+  selectClipKeyframes,
+  selectExpandedCurveProperties,
+  // Action selectors (stable references, grouped for convenience)
+  selectPlaybackActions,
+  selectTrackActions,
+  selectClipActions,
+  selectTransformGetters,
+  selectKeyframeActions,
+  selectInOutActions,
+  selectViewActions,
+  selectPreviewActions,
+  selectToolActions,
+  selectMarkerActions,
+  selectClipboardActions,
+} from '../../stores/timeline/selectors';
 import type { AnimatableProperty, TimelineClip as TimelineClipType } from '../../types';
 import { useMediaStore } from '../../stores/mediaStore';
 
@@ -38,110 +85,102 @@ import { MIN_ZOOM, MAX_ZOOM } from '../../stores/timeline/constants';
 import type { ContextMenuState } from './types';
 
 export function Timeline() {
+  // ===========================================
+  // OPTIMIZED STORE SUBSCRIPTIONS
+  // Each selector creates a separate subscription, so the component
+  // only re-renders when the specific value it uses changes.
+  // ===========================================
+
+  // Core data (frequently changing)
+  const tracks = useTimelineStore(selectTracks);
+  const clips = useTimelineStore(selectClips);
+  const playheadPosition = useTimelineStore(selectPlayheadPosition);
+  const duration = useTimelineStore(selectDuration);
+  const zoom = useTimelineStore(selectZoom);
+  const scrollX = useTimelineStore(selectScrollX);
+  const isPlaying = useTimelineStore(selectIsPlaying);
+  const selectedClipIds = useTimelineStore(selectSelectedClipIds);
+  const markers = useTimelineStore(selectMarkers);
+
+  // UI state (less frequent changes)
+  const snappingEnabled = useTimelineStore(selectSnappingEnabled);
+  const inPoint = useTimelineStore(selectInPoint);
+  const outPoint = useTimelineStore(selectOutPoint);
+  const loopPlayback = useTimelineStore(selectLoopPlayback);
+  const toolMode = useTimelineStore(selectToolMode);
+  const thumbnailsEnabled = useTimelineStore(selectThumbnailsEnabled);
+  const waveformsEnabled = useTimelineStore(selectWaveformsEnabled);
+  const isDraggingPlayhead = useTimelineStore(selectIsDraggingPlayhead);
+
+  // Preview/export state
+  const ramPreviewEnabled = useTimelineStore(selectRamPreviewEnabled);
+  const ramPreviewProgress = useTimelineStore(selectRamPreviewProgress);
+  const ramPreviewRange = useTimelineStore(selectRamPreviewRange);
+  const isRamPreviewing = useTimelineStore(selectIsRamPreviewing);
+  const isExporting = useTimelineStore(selectIsExporting);
+  const exportProgress = useTimelineStore(selectExportProgress);
+  const exportRange = useTimelineStore(selectExportRange);
+  const isProxyCaching = useTimelineStore(selectIsProxyCaching);
+  const proxyCacheProgress = useTimelineStore(selectProxyCacheProgress);
+
+  // Keyframe state
+  const selectedKeyframeIds = useTimelineStore(selectSelectedKeyframeIds);
+  const clipKeyframes = useTimelineStore(selectClipKeyframes);
+  const expandedCurveProperties = useTimelineStore(selectExpandedCurveProperties);
+
+  // ===========================================
+  // STABLE ACTION REFERENCES
+  // Actions don't change, so grouping them doesn't cause re-renders.
+  // ===========================================
+
   const {
-    tracks,
-    clips,
-    playheadPosition,
-    duration,
-    zoom,
-    scrollX,
-    snappingEnabled,
-    toggleSnapping,
-    isPlaying,
-    selectedClipIds,
-    inPoint,
-    outPoint,
-    addTrack,
-    addClip,
-    addCompClip,
-    moveClip,
-    trimClip,
-    removeClip,
-    selectClip,
-    unlinkGroup,
-    setPlayheadPosition,
-    setZoom,
-    setScrollX,
-    play,
-    pause,
-    stop,
-    playForward,
-    playReverse,
-    setInPoint,
-    setOutPoint,
-    setInPointAtPlayhead,
-    setOutPointAtPlayhead,
-    clearInOut,
-    getSnappedPosition,
-    getPositionWithResistance,
-    loopPlayback,
-    toggleLoopPlayback,
-    ramPreviewProgress,
-    ramPreviewRange,
-    isRamPreviewing,
-    isExporting,
-    exportProgress,
-    // exportCurrentTime, - unused, kept in store for future display
-    exportRange,
-    startRamPreview,
-    cancelRamPreview,
-    getCachedRanges,
-    getProxyCachedRanges,
-    isDraggingPlayhead,
-    setDraggingPlayhead,
-    ramPreviewEnabled,
-    toggleRamPreviewEnabled,
-    isProxyCaching,
-    proxyCacheProgress,
-    startProxyCachePreload,
-    cancelProxyCachePreload,
-    splitClipAtPlayhead,
-    toggleClipReverse,
-    updateClipTransform,
-    getInterpolatedTransform,
-    getInterpolatedEffects,
-    isTrackExpanded,
-    toggleTrackExpanded,
-    getExpandedTrackHeight,
-    getClipKeyframes,
-    selectKeyframe,
-    deselectAllKeyframes,
-    selectedKeyframeIds,
-    hasKeyframes,
-    trackHasKeyframes,
-    clipKeyframes,
-    addKeyframe,
-    moveKeyframe,
-    updateKeyframe,
-    removeKeyframe,
-    setPropertyValue,
-    expandedCurveProperties,
-    toggleCurveExpanded,
-    updateBezierHandle,
-    thumbnailsEnabled,
-    waveformsEnabled,
-    toggleThumbnailsEnabled,
-    toggleWaveformsEnabled,
-    generateWaveformForClip,
-    setDuration,
-    setClipParent,
-    setTrackParent,
-    getSourceTimeForClip,
-    getInterpolatedSpeed,
-    addTextClip,
-    toolMode,
-    setToolMode,
-    toggleCutTool,
-    splitClip,
-    // Markers
-    markers,
-    addMarker,
-    moveMarker,
-    removeMarker,
-    // Clipboard
-    copyClips,
-    pasteClips,
-  } = useTimelineStore();
+    play, pause, stop, playForward, playReverse,
+    setPlayheadPosition, setDraggingPlayhead,
+  } = useTimelineStore(selectPlaybackActions);
+
+  const {
+    addTrack, isTrackExpanded, toggleTrackExpanded,
+    getExpandedTrackHeight, trackHasKeyframes, setTrackParent,
+  } = useTimelineStore(selectTrackActions);
+
+  const {
+    addClip, addCompClip, addTextClip, moveClip, trimClip,
+    removeClip, selectClip, unlinkGroup, splitClip, splitClipAtPlayhead,
+    toggleClipReverse, updateClipTransform, setClipParent, generateWaveformForClip,
+  } = useTimelineStore(selectClipActions);
+
+  const {
+    getInterpolatedTransform, getInterpolatedEffects, getInterpolatedSpeed,
+    getSourceTimeForClip, getSnappedPosition, getPositionWithResistance,
+  } = useTimelineStore(selectTransformGetters);
+
+  const {
+    getClipKeyframes, selectKeyframe, deselectAllKeyframes, hasKeyframes,
+    addKeyframe, moveKeyframe, updateKeyframe, removeKeyframe,
+    setPropertyValue, toggleCurveExpanded, updateBezierHandle,
+  } = useTimelineStore(selectKeyframeActions);
+
+  const {
+    setInPoint, setOutPoint, setInPointAtPlayhead,
+    setOutPointAtPlayhead, clearInOut,
+  } = useTimelineStore(selectInOutActions);
+
+  const {
+    setZoom, setScrollX, setDuration, toggleSnapping,
+  } = useTimelineStore(selectViewActions);
+
+  const {
+    toggleLoopPlayback, toggleRamPreviewEnabled, startRamPreview,
+    cancelRamPreview, getCachedRanges, getProxyCachedRanges,
+    startProxyCachePreload, cancelProxyCachePreload,
+  } = useTimelineStore(selectPreviewActions);
+
+  const {
+    setToolMode, toggleCutTool, toggleThumbnailsEnabled, toggleWaveformsEnabled,
+  } = useTimelineStore(selectToolActions);
+
+  const { addMarker, moveMarker, removeMarker } = useTimelineStore(selectMarkerActions);
+  const { copyClips, pasteClips } = useTimelineStore(selectClipboardActions);
 
   const {
     getActiveComposition,
