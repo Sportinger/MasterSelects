@@ -712,63 +712,92 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
     engine.requestRender(); // Wake up render loop to show changes immediately
   },
 
-  // Proxy cache preloading - preload all proxy frames for clips with ready proxies
+  // Video warmup - seek through all videos to fill browser cache for smooth scrubbing
   startProxyCachePreload: async () => {
     const { clips, isProxyCaching } = get();
-    if (isProxyCaching) return; // Already caching
 
-    const mediaFiles = useMediaStore.getState().files;
+    if (isProxyCaching) return;
 
-    // Find all clips with ready proxies
-    const clipsWithProxy: Array<{ mediaFileId: string; totalFrames: number; fps: number }> = [];
+    // Collect all video elements (including from nested compositions)
+    const videoClips: Array<{ video: HTMLVideoElement; duration: number; name: string }> = [];
 
-    for (const clip of clips) {
-      const mediaFileId = clip.mediaFileId || clip.source?.mediaFileId;
-      if (!mediaFileId) continue;
+    const collectVideos = (clipList: typeof clips) => {
+      for (const clip of clipList) {
+        if (clip.source?.videoElement) {
+          videoClips.push({
+            video: clip.source.videoElement,
+            duration: clip.source.naturalDuration || clip.duration,
+            name: clip.name,
+          });
+        }
+        // Also collect from nested compositions
+        if (clip.isComposition && clip.nestedClips) {
+          collectVideos(clip.nestedClips);
+        }
+      }
+    };
 
-      const mediaFile = mediaFiles.find(f => f.id === mediaFileId);
-      if (!mediaFile?.proxyFps || mediaFile.proxyStatus !== 'ready') continue;
+    collectVideos(clips);
 
-      const totalFrames = Math.ceil((mediaFile.duration || 10) * mediaFile.proxyFps);
-      clipsWithProxy.push({ mediaFileId, totalFrames, fps: mediaFile.proxyFps });
-    }
-
-    if (clipsWithProxy.length === 0) {
-      log.info('No clips with ready proxies to cache');
+    if (videoClips.length === 0) {
+      log.info('No video clips to warmup');
       return;
     }
 
     set({ isProxyCaching: true, proxyCacheProgress: 0 });
-    log.info(`Starting proxy cache preload for ${clipsWithProxy.length} clips`);
+    log.info(`Starting video warmup for ${videoClips.length} clips`);
 
     try {
-      let totalFrames = 0;
-      let loadedFrames = 0;
+      const SEEK_INTERVAL = 0.5; // Seek every 0.5 seconds
+      let totalSeeks = 0;
+      let completedSeeks = 0;
 
-      // Calculate total frames
-      for (const clip of clipsWithProxy) {
-        totalFrames += clip.totalFrames;
+      // Calculate total seeks needed
+      for (const clip of videoClips) {
+        totalSeeks += Math.ceil(clip.duration / SEEK_INTERVAL);
       }
 
-      // Preload each clip
-      for (const clip of clipsWithProxy) {
-        const clipStartFrames = loadedFrames;
+      // Warmup each video
+      for (const clip of videoClips) {
+        const video = clip.video;
+        const duration = clip.duration;
+        const seekCount = Math.ceil(duration / SEEK_INTERVAL);
 
-        await proxyFrameCache.preloadAllFrames(
-          clip.mediaFileId,
-          clip.totalFrames,
-          clip.fps,
-          (loaded) => {
-            loadedFrames = clipStartFrames + loaded;
-            const progress = Math.round((loadedFrames / totalFrames) * 100);
-            set({ proxyCacheProgress: progress });
+        for (let i = 0; i < seekCount; i++) {
+          // Check if cancelled
+          if (!get().isProxyCaching) {
+            log.info('Video warmup cancelled');
+            return;
           }
-        );
+
+          const seekTime = Math.min(i * SEEK_INTERVAL, duration - 0.1);
+
+          // Seek to position
+          video.currentTime = seekTime;
+
+          // Wait for seek to complete
+          await new Promise<void>((resolve) => {
+            const onSeeked = () => {
+              video.removeEventListener('seeked', onSeeked);
+              resolve();
+            };
+            video.addEventListener('seeked', onSeeked);
+            // Timeout fallback
+            setTimeout(resolve, 200);
+          });
+
+          completedSeeks++;
+          const progress = Math.round((completedSeeks / totalSeeks) * 100);
+          set({ proxyCacheProgress: progress });
+
+          // Small delay to not overwhelm the browser
+          await new Promise(r => setTimeout(r, 10));
+        }
       }
 
-      log.info('Proxy cache preload complete');
+      log.info('Video warmup complete');
     } catch (e) {
-      log.error('Proxy cache preload failed', e);
+      log.error('Video warmup failed', e);
     } finally {
       set({ isProxyCaching: false, proxyCacheProgress: null });
     }

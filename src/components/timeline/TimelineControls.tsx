@@ -216,12 +216,11 @@ function TimelineControlsComponent({
           onClick={isProxyCaching ? onCancelProxyCachePreload : onStartProxyCachePreload}
           title={
             isProxyCaching
-              ? `Caching proxy frames... ${proxyCacheProgress ?? 0}% - Click to cancel`
-              : 'Cache all proxy frames for instant scrubbing'
+              ? `Warming up videos... ${proxyCacheProgress ?? 0}% - Click to cancel`
+              : 'Warmup all videos for smooth scrubbing (seeks through to fill browser cache)'
           }
-          disabled={!proxyEnabled || mediaFilesWithProxy === 0}
         >
-          {isProxyCaching ? `Cache ${proxyCacheProgress ?? 0}%` : 'Cache'}
+          {isProxyCaching ? `Warmup ${proxyCacheProgress ?? 0}%` : 'Warmup'}
         </button>
         <div className="view-dropdown" ref={viewDropdownRef}>
           <button
