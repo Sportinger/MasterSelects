@@ -7,6 +7,8 @@ import { quantizeTime } from './utils';
 import { Logger } from '../../services/logger';
 import { engine } from '../../engine/WebGPUEngine';
 import { layerBuilder } from '../../services/layerBuilder';
+import { proxyFrameCache } from '../../services/proxyFrameCache';
+import { useMediaStore } from '../mediaStore';
 
 const log = Logger.create('PlaybackSlice');
 
@@ -584,6 +586,111 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
     ranges.push({ start: rangeStart, end: rangeEnd + frameInterval });
 
     return ranges;
+  },
+
+  // Get proxy frame cached ranges (for yellow timeline indicator)
+  // Returns ranges in timeline time coordinates
+  getProxyCachedRanges: () => {
+    const { clips } = get();
+    const mediaFiles = useMediaStore.getState().files;
+    const allRanges: Array<{ start: number; end: number }> = [];
+
+    // Process all video clips with proxy enabled
+    for (const clip of clips) {
+      if (clip.source?.type !== 'video' || !clip.mediaFileId) continue;
+
+      const mediaFile = mediaFiles.find(f => f.id === clip.mediaFileId);
+      if (!mediaFile?.proxyFps || mediaFile.proxyStatus !== 'ready') continue;
+
+      // Get cached ranges for this media file (in media time)
+      const mediaCachedRanges = proxyFrameCache.getCachedRanges(mediaFile.id, mediaFile.proxyFps);
+
+      // Convert media time ranges to timeline time ranges
+      const playbackRate = clip.speed || 1;
+      for (const range of mediaCachedRanges) {
+        // Media time is relative to inPoint
+        const mediaStart = range.start;
+        const mediaEnd = range.end;
+
+        // Only include ranges that overlap with the visible clip portion
+        const clipMediaStart = clip.inPoint;
+        const clipMediaEnd = clip.inPoint + clip.duration * playbackRate;
+
+        if (mediaEnd < clipMediaStart || mediaStart > clipMediaEnd) continue;
+
+        // Clamp to visible portion
+        const visibleMediaStart = Math.max(mediaStart, clipMediaStart);
+        const visibleMediaEnd = Math.min(mediaEnd, clipMediaEnd);
+
+        // Convert to timeline time
+        const timelineStart = clip.startTime + (visibleMediaStart - clip.inPoint) / playbackRate;
+        const timelineEnd = clip.startTime + (visibleMediaEnd - clip.inPoint) / playbackRate;
+
+        allRanges.push({ start: timelineStart, end: timelineEnd });
+      }
+
+      // Also process nested clips if this is a composition
+      if (clip.isComposition && clip.nestedClips) {
+        for (const nestedClip of clip.nestedClips) {
+          if (nestedClip.source?.type !== 'video' || !nestedClip.mediaFileId) continue;
+
+          const nestedMediaFile = mediaFiles.find(f => f.id === nestedClip.mediaFileId);
+          if (!nestedMediaFile?.proxyFps || nestedMediaFile.proxyStatus !== 'ready') continue;
+
+          const nestedCachedRanges = proxyFrameCache.getCachedRanges(nestedMediaFile.id, nestedMediaFile.proxyFps);
+          const nestedPlaybackRate = nestedClip.speed || 1;
+
+          for (const range of nestedCachedRanges) {
+            // Convert nested clip media time to parent clip timeline time
+            const mediaStart = range.start;
+            const mediaEnd = range.end;
+
+            const nestedMediaStart = nestedClip.inPoint;
+            const nestedMediaEnd = nestedClip.inPoint + nestedClip.duration * nestedPlaybackRate;
+
+            if (mediaEnd < nestedMediaStart || mediaStart > nestedMediaEnd) continue;
+
+            const visibleMediaStart = Math.max(mediaStart, nestedMediaStart);
+            const visibleMediaEnd = Math.min(mediaEnd, nestedMediaEnd);
+
+            // First convert to nested clip's local time
+            const nestedLocalStart = nestedClip.startTime + (visibleMediaStart - nestedClip.inPoint) / nestedPlaybackRate;
+            const nestedLocalEnd = nestedClip.startTime + (visibleMediaEnd - nestedClip.inPoint) / nestedPlaybackRate;
+
+            // Then convert to parent timeline time (accounting for composition's inPoint)
+            const compInPoint = clip.inPoint;
+            if (nestedLocalEnd < compInPoint || nestedLocalStart > compInPoint + clip.duration) continue;
+
+            const visibleNestedStart = Math.max(nestedLocalStart, compInPoint);
+            const visibleNestedEnd = Math.min(nestedLocalEnd, compInPoint + clip.duration);
+
+            const timelineStart = clip.startTime + (visibleNestedStart - compInPoint);
+            const timelineEnd = clip.startTime + (visibleNestedEnd - compInPoint);
+
+            allRanges.push({ start: timelineStart, end: timelineEnd });
+          }
+        }
+      }
+    }
+
+    // Merge overlapping ranges
+    if (allRanges.length === 0) return [];
+
+    allRanges.sort((a, b) => a.start - b.start);
+    const merged: Array<{ start: number; end: number }> = [allRanges[0]];
+
+    for (let i = 1; i < allRanges.length; i++) {
+      const last = merged[merged.length - 1];
+      const current = allRanges[i];
+
+      if (current.start <= last.end + 0.05) { // Allow 50ms gap
+        last.end = Math.max(last.end, current.end);
+      } else {
+        merged.push(current);
+      }
+    }
+
+    return merged;
   },
 
   // Invalidate cache when content changes (clip moved, trimmed, etc.)

@@ -213,6 +213,7 @@ export interface RamPreviewActions {
   clearRamPreview: () => void;
   addCachedFrame: (time: number) => void;
   getCachedRanges: () => Array<{ start: number; end: number }>;
+  getProxyCachedRanges: () => Array<{ start: number; end: number }>;
   invalidateCache: () => void;
   // Performance toggles
   toggleThumbnailsEnabled: () => void;

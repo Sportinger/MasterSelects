@@ -8199,13 +8199,19 @@ input[type="checkbox"] {
 }
 
 .changelog-group-items {
-  column-count: 2;
-  column-gap: 12px;
+  display: flex;
+  gap: 12px;
+}
+
+.changelog-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 /* Section divider within time group */
 .changelog-section-divider {
-  column-span: all;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -8234,8 +8240,6 @@ input[type="checkbox"] {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.02);
   transition: background 0.15s;
-  break-inside: avoid;
-  margin-bottom: 4px;
 }
 
 .changelog-item.has-description {

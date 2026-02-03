@@ -85,6 +85,7 @@ export function Timeline() {
     startRamPreview,
     cancelRamPreview,
     getCachedRanges,
+    getProxyCachedRanges,
     isDraggingPlayhead,
     setDraggingPlayhead,
     ramPreviewEnabled,
@@ -1205,6 +1206,19 @@ export function Timeline() {
                 width: Math.max(2, timeToPixel(range.end - range.start)),
               }}
               title={`Cached: ${formatTime(range.start)} - ${formatTime(range.end)}`}
+            />
+          ))}
+
+          {/* Proxy frame cache indicator (yellow) */}
+          {getProxyCachedRanges().map((range, i) => (
+            <div
+              key={`proxy-${i}`}
+              className="proxy-cache-indicator"
+              style={{
+                left: timeToPixel(range.start),
+                width: Math.max(2, timeToPixel(range.end - range.start)),
+              }}
+              title={`Proxy cached: ${formatTime(range.start)} - ${formatTime(range.end)}`}
             />
           ))}
 
