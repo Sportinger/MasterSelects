@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Logger } from '../../services/logger';
+import { downloadFCPXML } from '../../services/export/fcpxmlExport';
 
 const log = Logger.create('ExportPanel');
 import { FrameExporter, downloadBlob } from '../../engine/export';
@@ -817,6 +818,20 @@ export function ExportPanel() {
     }
   }, [startTime, endTime, filename, isExporting, audioSampleRate, audioBitrate, normalizeAudio]);
 
+  // Handle FCPXML export
+  const handleExportFCPXML = useCallback(() => {
+    const { clips, tracks, duration: timelineDuration } = useTimelineStore.getState();
+    const activeComp = getActiveComposition();
+
+    downloadFCPXML(clips, tracks, timelineDuration, {
+      projectName: activeComp?.name || filename || 'MasterSelects Export',
+      frameRate: activeComp?.frameRate || fps,
+      width: activeComp?.width || width,
+      height: activeComp?.height || height,
+      includeAudio,
+    });
+  }, [filename, fps, width, height, includeAudio, getActiveComposition]);
+
   // Handle render current frame
   const handleRenderFrame = useCallback(async () => {
     try {
@@ -976,6 +991,15 @@ export function ExportPanel() {
           title={!isAudioSupported ? 'Audio encoding not supported in this browser' : `Export as ${audioCodec?.toUpperCase() || 'audio'}`}
         >
           Export Audio
+        </button>
+        <button
+          className="btn"
+          onClick={handleExportFCPXML}
+          disabled={isExporting}
+          style={{ flex: 1 }}
+          title="Export timeline as Final Cut Pro XML (compatible with Resolve, Premiere)"
+        >
+          XML
         </button>
       </div>
 
