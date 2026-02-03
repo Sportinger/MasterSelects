@@ -54,12 +54,18 @@ function loadColumnOrder(): ColumnId[] {
 }
 
 export function MediaPanel() {
+  // Reactive data - subscribe to specific values only
+  const files = useMediaStore(state => state.files);
+  const compositions = useMediaStore(state => state.compositions);
+  const folders = useMediaStore(state => state.folders);
+  const selectedIds = useMediaStore(state => state.selectedIds);
+  const expandedFolderIds = useMediaStore(state => state.expandedFolderIds);
+  const fileSystemSupported = useMediaStore(state => state.fileSystemSupported);
+  const proxyFolderName = useMediaStore(state => state.proxyFolderName);
+  const activeCompositionId = useMediaStore(state => state.activeCompositionId);
+
+  // Actions from getState() - stable, no subscription needed
   const {
-    files,
-    compositions,
-    folders,
-    selectedIds,
-    expandedFolderIds,
     importFiles,
     importFilesWithPicker,
     createComposition,
@@ -78,15 +84,12 @@ export function MediaPanel() {
     updateComposition,
     generateProxy,
     cancelProxyGeneration,
-    fileSystemSupported,
-    proxyFolderName,
     pickProxyFolder,
     showInExplorer,
-    activeCompositionId,
     moveToFolder,
     createTextItem,
     getOrCreateTextFolder,
-  } = useMediaStore();
+  } = useMediaStore.getState();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
