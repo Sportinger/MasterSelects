@@ -1,7 +1,7 @@
 // App version - INCREMENT ON EVERY COMMIT!
 // Format: MAJOR.MINOR.PATCH
 // Increment PATCH (0.0.X) for each commit
-export const APP_VERSION = '1.1.8';
+export const APP_VERSION = '1.1.9';
 
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: {
@@ -55,6 +55,20 @@ interface RawChangeEntry extends ChangeEntry {
 
 const RAW_CHANGELOG: RawChangeEntry[] = [
   // === Feb 4, 2026 - Transitions & React Optimization ===
+  {
+    date: '2026-02-04',
+    type: 'refactor',
+    title: 'PropertiesPanel Code Splitting',
+    description: 'Split 61K file into 8 lazy-loaded modules for faster initial load',
+    commit: 'dbd9a0f',
+  },
+  {
+    date: '2026-02-04',
+    type: 'refactor',
+    title: 'Store Subscription Optimization',
+    description: 'Fixed 12+ components subscribing to entire store - now use getState() for actions',
+    commit: 'a739556',
+  },
   {
     date: '2026-02-04',
     type: 'new',
