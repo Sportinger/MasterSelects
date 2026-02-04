@@ -340,17 +340,15 @@ export function useEngine() {
       }
     };
 
-    // Always keep the engine running - it has idle detection to save power
-    // when nothing changes. Stopping the engine breaks scrubbing.
-    // NOTE: Do NOT include isPlaying in dependencies - that would create a new
-    // RenderLoop on every play/pause, causing memory accumulation and lag.
-    // The render callback reads isPlaying from store when needed.
+    // Start render loop - engine.start() now reuses existing loop if running,
+    // only updating the callback ref. This prevents memory leaks while allowing
+    // the callback to stay fresh with current closure values.
     engine.start(renderFrame);
 
     return () => {
       engine.stop();
     };
-  }, [isEngineReady]);
+  }, [isEngineReady, isPlaying]);
 
   // Subscribe to state changes that require re-render (wake from idle)
   useEffect(() => {
