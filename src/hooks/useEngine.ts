@@ -41,6 +41,12 @@ export function useEngine() {
         // Get and store GPU info
         const gpuInfo = engine.getGPUInfo();
         useEngineStore.getState().setGpuInfo(gpuInfo);
+
+        // Show Linux Vulkan warning if on Linux
+        const isLinux = navigator.platform.toLowerCase().includes('linux');
+        if (isLinux) {
+          useEngineStore.getState().setLinuxVulkanWarning(true);
+        }
       }
     }
 
@@ -273,11 +279,6 @@ export function useEngine() {
           lastStatsUpdate = now;
         }
 
-        // Skip actual rendering if engine is idle
-        if (engine.getIsIdle()) {
-          return;
-        }
-
         // Use high-frequency playhead position during playback
         const currentPlayhead = playheadState.isUsingInternalPosition
           ? playheadState.position
@@ -291,8 +292,14 @@ export function useEngine() {
           engine.requestRender();
         }
 
-        // Always try to use cached frame first (works even during RAM preview rendering)
+        // ALWAYS try cached frame first - even when idle!
+        // This enables instant scrubbing over cached RAM Preview frames
         if (engine.renderCachedFrame(currentPlayhead)) {
+          return;
+        }
+
+        // Skip actual rendering if engine is idle (but cache check above still runs)
+        if (engine.getIsIdle()) {
           return;
         }
 

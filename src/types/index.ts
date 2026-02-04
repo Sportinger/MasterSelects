@@ -221,6 +221,15 @@ export interface EngineStats {
 }
 
 // Timeline types
+
+// Transition stored on a clip (referencing transition module types)
+export interface TimelineTransition {
+  id: string;
+  type: string;  // TransitionType from transitions module
+  duration: number;  // seconds
+  linkedClipId: string;  // ID of the other clip in the transition
+}
+
 export interface ClipTransform {
   opacity: number;          // 0-1
   blendMode: BlendMode;
@@ -339,6 +348,9 @@ export interface TimelineClip {
   downloadError?: string;       // Error message if download failed
   youtubeVideoId?: string;      // YouTube video ID for pending downloads
   youtubeThumbnail?: string;    // Thumbnail URL for pending display
+  // Transition support
+  transitionIn?: TimelineTransition;   // Transition from previous clip
+  transitionOut?: TimelineTransition;  // Transition to next clip
 }
 
 export interface TimelineTrack {
@@ -399,6 +411,9 @@ export interface SerializableClip {
   preservesPitch?: boolean;  // Keep pitch when speed changes (default true)
   // Text clip support
   textProperties?: TextClipProperties;
+  // Transition support
+  transitionIn?: TimelineTransition;
+  transitionOut?: TimelineTransition;
 }
 
 // Serializable timeline marker (for project save/load)

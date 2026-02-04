@@ -24,7 +24,7 @@ interface UseExternalDropProps {
   addTrack: (type: 'video' | 'audio') => string | undefined;
   addClip: (trackId: string, file: File, startTime: number, duration?: number, mediaFileId?: string) => void;
   addCompClip: (trackId: string, comp: Composition, startTime: number) => void;
-  addTextClip: (trackId: string, startTime: number, duration?: number) => Promise<string | null>;
+  addTextClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => Promise<string | null>;
 }
 
 interface UseExternalDropReturn {
@@ -314,13 +314,13 @@ export function useExternalDrop({
         }
       }
 
-      // Handle text item drag
+      // Handle text item drag (skipMediaItem=true since it already exists in media panel)
       const textItemId = e.dataTransfer.getData('application/x-text-item-id');
       if (textItemId) {
         const mediaStore = useMediaStore.getState();
         const textItem = mediaStore.textItems.find((t) => t.id === textItemId);
         if (textItem) {
-          addTextClip(newTrackId, startTime, textItem.duration);
+          addTextClip(newTrackId, startTime, textItem.duration, true);
           return;
         }
       }
@@ -407,7 +407,7 @@ export function useExternalDrop({
         }
       }
 
-      // Handle text item drag from media panel
+      // Handle text item drag from media panel (skipMediaItem=true since it already exists)
       const textItemId = e.dataTransfer.getData('application/x-text-item-id');
       if (textItemId) {
         const mediaStore = useMediaStore.getState();
@@ -416,7 +416,7 @@ export function useExternalDrop({
           const rect = e.currentTarget.getBoundingClientRect();
           const x = e.clientX - rect.left + scrollX;
           const startTime = pixelToTime(x);
-          addTextClip(trackId, Math.max(0, startTime), textItem.duration);
+          addTextClip(trackId, Math.max(0, startTime), textItem.duration, true);
           return;
         }
       }

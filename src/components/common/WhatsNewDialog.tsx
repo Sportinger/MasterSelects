@@ -33,6 +33,14 @@ function ImproveIcon() {
   );
 }
 
+function RefactorIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M3 4h8M3 7h5M3 10h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function GitHubIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
@@ -60,6 +68,7 @@ function ChangeItem({ change }: { change: ChangeEntry }) {
           {change.type === 'new' && <NewIcon />}
           {change.type === 'fix' && <FixIcon />}
           {change.type === 'improve' && <ImproveIcon />}
+          {change.type === 'refactor' && <RefactorIcon />}
         </span>
         <span className="changelog-title">{change.title}</span>
         {hasExpandableContent && (
@@ -70,21 +79,23 @@ function ChangeItem({ change }: { change: ChangeEntry }) {
           </span>
         )}
       </div>
-      {expanded && (hasDescription || change.commit) && (
-        <div className="changelog-description">
-          {change.description && <span>{change.description}</span>}
-          {change.commit && (
-            <a
-              href={`https://github.com/Sportinger/MASterSelects/commit/${change.commit}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="changelog-commit-link"
-              onClick={handleCommitClick}
-            >
-              <GitHubIcon />
-              <span>{change.commit.substring(0, 7)}</span>
-            </a>
-          )}
+      {hasExpandableContent && (
+        <div className="changelog-description-wrapper">
+          <div className="changelog-description">
+            {change.description && <span>{change.description}</span>}
+            {change.commit && (
+              <a
+                href={`https://github.com/Sportinger/MASterSelects/commit/${change.commit}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="changelog-commit-link"
+                onClick={handleCommitClick}
+              >
+                <GitHubIcon />
+                <span>{change.commit.substring(0, 7)}</span>
+              </a>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -93,7 +104,7 @@ function ChangeItem({ change }: { change: ChangeEntry }) {
 
 export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
   const [isClosing, setIsClosing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'all' | 'new' | 'fix' | 'improve'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'new' | 'fix' | 'improve' | 'refactor'>('all');
 
   const groupedChangelog = useMemo(() => getGroupedChangelog(), []);
 
@@ -142,6 +153,7 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
       new: all.filter(c => c.type === 'new').length,
       fix: all.filter(c => c.type === 'fix').length,
       improve: all.filter(c => c.type === 'improve').length,
+      refactor: all.filter(c => c.type === 'refactor').length,
     };
   }, [groupedChangelog]);
 
@@ -183,6 +195,12 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
           >
             Improved <span className="changelog-tab-count">{counts.improve}</span>
           </button>
+          <button
+            className={`changelog-tab changelog-tab-refactor ${activeTab === 'refactor' ? 'active' : ''}`}
+            onClick={() => setActiveTab('refactor')}
+          >
+            Refactor <span className="changelog-tab-count">{counts.refactor}</span>
+          </button>
         </div>
 
         {/* Scrollable content */}
@@ -211,30 +229,33 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
             </div>
           )}
 
-          {filteredGroups.map((group, groupIndex) => (
-            <div key={group.label} className="changelog-group">
-              <div className="changelog-group-header">
-                <span className="changelog-group-label">{group.label}</span>
-                <span className="changelog-group-date">{group.dateRange}</span>
-                <div className="changelog-group-line" />
+          {filteredGroups.map((group, groupIndex) => {
+            // Split changes into left and right columns (alternating)
+            const leftChanges = group.changes.filter((_, i) => i % 2 === 0);
+            const rightChanges = group.changes.filter((_, i) => i % 2 === 1);
+
+            return (
+              <div key={group.label} className="changelog-group">
+                <div className="changelog-group-header">
+                  <span className="changelog-group-label">{group.label}</span>
+                  <span className="changelog-group-date">{group.dateRange}</span>
+                  <div className="changelog-group-line" />
+                </div>
+                <div className="changelog-group-items">
+                  <div className="changelog-column">
+                    {leftChanges.map((change, i) => (
+                      <ChangeItem key={`${groupIndex}-left-${i}`} change={change} />
+                    ))}
+                  </div>
+                  <div className="changelog-column">
+                    {rightChanges.map((change, i) => (
+                      <ChangeItem key={`${groupIndex}-right-${i}`} change={change} />
+                    ))}
+                  </div>
+                </div>
               </div>
-              <div className="changelog-group-items">
-                {group.changes.flatMap((change, i) => {
-                  const items = [];
-                  if (change.section) {
-                    items.push(
-                      <div key={`section-${groupIndex}-${i}`} className="changelog-section-divider">
-                        <span className="changelog-section-label">{change.section}</span>
-                        <div className="changelog-section-line" />
-                      </div>
-                    );
-                  }
-                  items.push(<ChangeItem key={`${groupIndex}-${i}`} change={change} />);
-                  return items;
-                })}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Footer */}

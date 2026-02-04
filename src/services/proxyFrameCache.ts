@@ -740,6 +740,65 @@ class ProxyFrameCache {
     log.debug(`Bulk preload started: ${framesToPreload.length} frames around frame ${frameIndex}`);
   }
 
+  // Preload ALL frames for a media file (for manual cache button)
+  // Returns a promise that resolves when preloading is complete
+  // onProgress callback receives (loadedFrames, totalFrames)
+  async preloadAllFrames(
+    mediaFileId: string,
+    totalFrames: number,
+    _fps: number,
+    onProgress?: (loaded: number, total: number) => void
+  ): Promise<void> {
+    log.info(`Starting full preload for ${mediaFileId}: ${totalFrames} frames`);
+
+    let loadedCount = 0;
+    const batchSize = 32; // Load 32 frames at a time
+
+    for (let startFrame = 0; startFrame < totalFrames; startFrame += batchSize) {
+      const endFrame = Math.min(startFrame + batchSize, totalFrames);
+      const batch: Promise<void>[] = [];
+
+      for (let frame = startFrame; frame < endFrame; frame++) {
+        const key = this.getKey(mediaFileId, frame);
+
+        // Skip if already cached
+        if (this.cache.has(key)) {
+          loadedCount++;
+          continue;
+        }
+
+        // Load frame
+        batch.push(
+          this.loadFrame(mediaFileId, frame).then(image => {
+            if (image) {
+              this.addToCache(mediaFileId, frame, image);
+            }
+            loadedCount++;
+          })
+        );
+      }
+
+      // Wait for batch to complete
+      await Promise.all(batch);
+
+      // Report progress
+      if (onProgress) {
+        onProgress(loadedCount, totalFrames);
+      }
+
+      // Yield to main thread
+      await new Promise(r => setTimeout(r, 0));
+    }
+
+    log.info(`Full preload complete for ${mediaFileId}: ${loadedCount}/${totalFrames} frames cached`);
+  }
+
+  // Cancel ongoing preload (for when user clicks stop or navigates away)
+  cancelPreload(): void {
+    this.preloadQueue = [];
+    log.debug('Preload cancelled');
+  }
+
   // Get cache stats with more detail
   getStats() {
     return {
@@ -768,6 +827,58 @@ class ProxyFrameCache {
   resetPerformanceCounters(): void {
     this.cacheHits = 0;
     this.cacheMisses = 0;
+  }
+
+  // Get cached frame ranges for a specific media file (for timeline display)
+  // Returns ranges in seconds relative to media file start
+  getCachedRanges(mediaFileId: string, fps: number = 30): Array<{ start: number; end: number }> {
+    // Collect all cached frame indices for this media file
+    const cachedFrames: number[] = [];
+    for (const [, entry] of this.cache) {
+      if (entry.mediaFileId === mediaFileId) {
+        cachedFrames.push(entry.frameIndex);
+      }
+    }
+
+    if (cachedFrames.length === 0) return [];
+
+    // Sort frames
+    cachedFrames.sort((a, b) => a - b);
+
+    // Convert to time ranges, merging adjacent frames
+    const ranges: Array<{ start: number; end: number }> = [];
+    const frameInterval = 1 / fps;
+    const maxGap = frameInterval * 3; // Allow gap of 3 frames before starting new range
+
+    let rangeStart = cachedFrames[0] / fps;
+    let rangeEnd = rangeStart + frameInterval;
+
+    for (let i = 1; i < cachedFrames.length; i++) {
+      const frameTime = cachedFrames[i] / fps;
+      if (frameTime - rangeEnd <= maxGap) {
+        // Extend current range
+        rangeEnd = frameTime + frameInterval;
+      } else {
+        // Save current range and start new one
+        ranges.push({ start: rangeStart, end: rangeEnd });
+        rangeStart = frameTime;
+        rangeEnd = frameTime + frameInterval;
+      }
+    }
+
+    // Add final range
+    ranges.push({ start: rangeStart, end: rangeEnd });
+
+    return ranges;
+  }
+
+  // Get all cached media file IDs
+  getCachedMediaIds(): string[] {
+    const ids = new Set<string>();
+    for (const entry of this.cache.values()) {
+      ids.add(entry.mediaFileId);
+    }
+    return Array.from(ids);
   }
 }
 

@@ -3,12 +3,13 @@
 // DEV: Disable changelog dialog for development
 const DEV_DISABLE_WHATS_NEW = false;
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
 import { Toolbar } from './components';
 import { DockContainer } from './components/dock';
 import { WelcomeOverlay } from './components/common/WelcomeOverlay';
 import { WhatsNewDialog } from './components/common/WhatsNewDialog';
 import { IndexedDBErrorDialog } from './components/common/IndexedDBErrorDialog';
+import { LinuxVulkanWarning } from './components/common/LinuxVulkanWarning';
 import { MobileApp } from './components/mobile';
 import { useGlobalHistory } from './hooks/useGlobalHistory';
 import { useClipPanelSync } from './hooks/useClipPanelSync';
@@ -18,8 +19,11 @@ import { projectDB } from './services/projectDB';
 import { projectFileService } from './services/projectFileService';
 import './App.css';
 
-// Dev test pages - access via ?test=parallel-decode
-import { ParallelDecodeTest } from './test/ParallelDecodeTest';
+// Dev test pages - lazy loaded to avoid bloating main bundle
+// Access via ?test=parallel-decode
+const ParallelDecodeTest = lazy(() =>
+  import('./test/ParallelDecodeTest').then(m => ({ default: m.ParallelDecodeTest }))
+);
 
 function App() {
   // Check for test mode via URL param
@@ -84,6 +88,7 @@ function App() {
     checkProject();
 
     // Poll for changes (handles cleared after failed restore)
+    // Using 2000ms interval to reduce CPU usage - project state changes are rare
     const interval = setInterval(async () => {
       // Check if IndexedDB has failed (could happen after initial load)
       if (projectDB.hasInitFailed()) {
@@ -100,7 +105,7 @@ function App() {
           setShowIndexedDBError(true);
         }
       }
-    }, 500);
+    }, 2000);
 
     return () => clearInterval(interval);
   }, []);
@@ -142,9 +147,13 @@ function App() {
 
   // === EARLY RETURNS AFTER ALL HOOKS ===
 
-  // Test mode
+  // Test mode - wrapped in Suspense for lazy-loaded component
   if (testMode === 'parallel-decode') {
-    return <ParallelDecodeTest />;
+    return (
+      <Suspense fallback={<div style={{ padding: 20 }}>Loading test...</div>}>
+        <ParallelDecodeTest />
+      </Suspense>
+    );
   }
 
   // Show mobile UI unless user explicitly requested desktop mode
@@ -155,6 +164,7 @@ function App() {
 
   return (
     <div className="app">
+      <LinuxVulkanWarning />
       <Toolbar />
       <DockContainer />
       {showWelcome && (

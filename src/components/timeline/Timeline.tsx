@@ -3,6 +3,41 @@
 
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
+import {
+  // Core data selectors (subscribe individually for optimal re-renders)
+  selectTracks,
+  selectClips,
+  selectPlayheadPosition,
+  selectDuration,
+  selectZoom,
+  selectScrollX,
+  selectIsPlaying,
+  selectSelectedClipIds,
+  selectMarkers,
+  // UI state selectors
+  selectSnappingEnabled,
+  selectInPoint,
+  selectOutPoint,
+  selectLoopPlayback,
+  selectToolMode,
+  selectThumbnailsEnabled,
+  selectWaveformsEnabled,
+  selectIsDraggingPlayhead,
+  // Preview/export selectors
+  selectRamPreviewEnabled,
+  selectRamPreviewProgress,
+  selectRamPreviewRange,
+  selectIsRamPreviewing,
+  selectIsExporting,
+  selectExportProgress,
+  selectExportRange,
+  selectIsProxyCaching,
+  selectProxyCacheProgress,
+  // Keyframe selectors
+  selectSelectedKeyframeIds,
+  selectClipKeyframes,
+  selectExpandedCurveProperties,
+} from '../../stores/timeline/selectors';
 import type { AnimatableProperty, TimelineClip as TimelineClipType } from '../../types';
 import { useMediaStore } from '../../stores/mediaStore';
 
@@ -30,117 +65,120 @@ import { usePlaybackLoop } from './hooks/usePlaybackLoop';
 import { useVideoPreload } from './hooks/useVideoPreload';
 import { useAutoFeatures } from './hooks/useAutoFeatures';
 import { useExternalDrop } from './hooks/useExternalDrop';
+import { useTransitionDrop } from './hooks/useTransitionDrop';
 import { usePickWhipDrag } from './hooks/usePickWhipDrag';
 import { useTimelineHelpers } from './hooks/useTimelineHelpers';
 import { usePlayheadSnap } from './hooks/usePlayheadSnap';
+import { useMarkerDrag } from './hooks/useMarkerDrag';
 import { MIN_ZOOM, MAX_ZOOM } from '../../stores/timeline/constants';
 import type { ContextMenuState } from './types';
 
 export function Timeline() {
+  // ===========================================
+  // OPTIMIZED STORE SUBSCRIPTIONS
+  // Each selector creates a separate subscription, so the component
+  // only re-renders when the specific value it uses changes.
+  // ===========================================
+
+  // Core data (frequently changing)
+  const tracks = useTimelineStore(selectTracks);
+  const clips = useTimelineStore(selectClips);
+  const playheadPosition = useTimelineStore(selectPlayheadPosition);
+  const duration = useTimelineStore(selectDuration);
+  const zoom = useTimelineStore(selectZoom);
+  const scrollX = useTimelineStore(selectScrollX);
+  const isPlaying = useTimelineStore(selectIsPlaying);
+  const selectedClipIds = useTimelineStore(selectSelectedClipIds);
+  const markers = useTimelineStore(selectMarkers);
+
+  // UI state (less frequent changes)
+  const snappingEnabled = useTimelineStore(selectSnappingEnabled);
+  const inPoint = useTimelineStore(selectInPoint);
+  const outPoint = useTimelineStore(selectOutPoint);
+  const loopPlayback = useTimelineStore(selectLoopPlayback);
+  const toolMode = useTimelineStore(selectToolMode);
+  const thumbnailsEnabled = useTimelineStore(selectThumbnailsEnabled);
+  const waveformsEnabled = useTimelineStore(selectWaveformsEnabled);
+  const isDraggingPlayhead = useTimelineStore(selectIsDraggingPlayhead);
+
+  // Preview/export state
+  const ramPreviewEnabled = useTimelineStore(selectRamPreviewEnabled);
+  const ramPreviewProgress = useTimelineStore(selectRamPreviewProgress);
+  const ramPreviewRange = useTimelineStore(selectRamPreviewRange);
+  const isRamPreviewing = useTimelineStore(selectIsRamPreviewing);
+  const isExporting = useTimelineStore(selectIsExporting);
+  const exportProgress = useTimelineStore(selectExportProgress);
+  const exportRange = useTimelineStore(selectExportRange);
+  const isProxyCaching = useTimelineStore(selectIsProxyCaching);
+  const proxyCacheProgress = useTimelineStore(selectProxyCacheProgress);
+
+  // Keyframe state
+  const selectedKeyframeIds = useTimelineStore(selectSelectedKeyframeIds);
+  const clipKeyframes = useTimelineStore(selectClipKeyframes);
+  const expandedCurveProperties = useTimelineStore(selectExpandedCurveProperties);
+
+  // ===========================================
+  // STABLE ACTION REFERENCES
+  // Actions are stable functions - get them once from getState() to avoid
+  // creating new object references that would cause infinite re-renders.
+  // ===========================================
+
+  // Get actions once - they're stable and don't change
+  const store = useTimelineStore.getState();
+
+  // Playback actions
+  const { play, pause, stop, playForward, playReverse, setPlayheadPosition, setDraggingPlayhead } = store;
+
+  // Track actions
+  const { addTrack, isTrackExpanded, toggleTrackExpanded, getExpandedTrackHeight, trackHasKeyframes, setTrackParent } = store;
+
+  // Clip actions
   const {
-    tracks,
-    clips,
-    playheadPosition,
-    duration,
-    zoom,
-    scrollX,
-    snappingEnabled,
-    toggleSnapping,
-    isPlaying,
-    selectedClipIds,
-    inPoint,
-    outPoint,
-    addTrack,
-    addClip,
-    addCompClip,
-    moveClip,
-    trimClip,
-    removeClip,
-    selectClip,
-    unlinkGroup,
-    setPlayheadPosition,
-    setZoom,
-    setScrollX,
-    play,
-    pause,
-    stop,
-    setInPoint,
-    setOutPoint,
-    setInPointAtPlayhead,
-    setOutPointAtPlayhead,
-    clearInOut,
-    getSnappedPosition,
-    getPositionWithResistance,
-    loopPlayback,
-    toggleLoopPlayback,
-    ramPreviewProgress,
-    ramPreviewRange,
-    isRamPreviewing,
-    isExporting,
-    exportProgress,
-    // exportCurrentTime, - unused, kept in store for future display
-    exportRange,
-    startRamPreview,
-    cancelRamPreview,
-    getCachedRanges,
-    isDraggingPlayhead,
-    setDraggingPlayhead,
-    ramPreviewEnabled,
-    toggleRamPreviewEnabled,
-    splitClipAtPlayhead,
-    toggleClipReverse,
-    updateClipTransform,
-    getInterpolatedTransform,
-    getInterpolatedEffects,
-    isTrackExpanded,
-    toggleTrackExpanded,
-    getExpandedTrackHeight,
-    getClipKeyframes,
-    selectKeyframe,
-    deselectAllKeyframes,
-    selectedKeyframeIds,
-    hasKeyframes,
-    trackHasKeyframes,
-    clipKeyframes,
-    addKeyframe,
-    moveKeyframe,
-    updateKeyframe,
-    removeKeyframe,
-    setPropertyValue,
-    expandedCurveProperties,
-    toggleCurveExpanded,
-    updateBezierHandle,
-    thumbnailsEnabled,
-    waveformsEnabled,
-    toggleThumbnailsEnabled,
-    toggleWaveformsEnabled,
-    generateWaveformForClip,
-    setDuration,
-    setClipParent,
-    setTrackParent,
-    getSourceTimeForClip,
-    getInterpolatedSpeed,
-    addTextClip,
-    toolMode,
-    setToolMode,
-    toggleCutTool,
-    splitClip,
-    // Markers
-    markers,
-    addMarker,
-    moveMarker,
-    removeMarker,
-    // Clipboard
-    copyClips,
-    pasteClips,
-  } = useTimelineStore();
+    addClip, addCompClip, addTextClip, moveClip, trimClip,
+    removeClip, selectClip, unlinkGroup, splitClip, splitClipAtPlayhead,
+    toggleClipReverse, updateClipTransform, setClipParent, generateWaveformForClip,
+  } = store;
+
+  // Transform getters
+  const {
+    getInterpolatedTransform, getInterpolatedEffects, getInterpolatedSpeed,
+    getSourceTimeForClip, getSnappedPosition, getPositionWithResistance,
+  } = store;
+
+  // Keyframe actions
+  const {
+    getClipKeyframes, selectKeyframe, deselectAllKeyframes, hasKeyframes,
+    addKeyframe, moveKeyframe, updateKeyframe, removeKeyframe,
+    setPropertyValue, toggleCurveExpanded, updateBezierHandle,
+  } = store;
+
+  // In/out point actions
+  const { setInPoint, setOutPoint, setInPointAtPlayhead, setOutPointAtPlayhead, clearInOut } = store;
+
+  // View actions
+  const { setZoom, setScrollX, setDuration, toggleSnapping } = store;
+
+  // Preview actions
+  const {
+    toggleLoopPlayback, toggleRamPreviewEnabled, startRamPreview,
+    cancelRamPreview, getCachedRanges, getProxyCachedRanges,
+    startProxyCachePreload, cancelProxyCachePreload,
+  } = store;
+
+  // Tool actions
+  const { setToolMode, toggleCutTool, toggleThumbnailsEnabled, toggleWaveformsEnabled } = store;
+
+  // Marker actions
+  const { addMarker, moveMarker, removeMarker } = store;
+
+  // Clipboard actions
+  const { copyClips, pasteClips } = store;
 
   const {
     getActiveComposition,
     getOpenCompositions,
     openCompositionTab,
     proxyEnabled,
-    setProxyEnabled,
     files: mediaFiles,
     currentlyGeneratingProxyId,
     showInExplorer,
@@ -169,6 +207,26 @@ export function Timeline() {
     splitClip(clipId, time);
     setToolMode('select');
   }, [splitClip, setToolMode]);
+
+  // Stable callbacks for TimelineControls (avoids re-renders from inline arrows)
+  const handleToggleProxy = useCallback(() => {
+    useMediaStore.getState().setProxyEnabled(!useMediaStore.getState().proxyEnabled);
+  }, []);
+
+  const handleToggleTranscriptMarkers = useCallback(() => {
+    setShowTranscriptMarkers(prev => !prev);
+  }, []);
+
+  const handleAddVideoTrack = useCallback(() => addTrack('video'), [addTrack]);
+  const handleAddAudioTrack = useCallback(() => addTrack('audio'), [addTrack]);
+
+  const handleAddTextClip = useCallback(() => {
+    const state = useTimelineStore.getState();
+    const videoTrack = state.tracks.find(t => t.type === 'video');
+    if (videoTrack) {
+      addTextClip(videoTrack.id, state.playheadPosition);
+    }
+  }, [addTextClip]);
 
   // Performance: Create lookup maps for O(1) clip/track access (must be before hooks that use them)
   const clipMap = useMemo(() => new Map(clips.map(c => [c.id, c])), [clips]);
@@ -262,6 +320,47 @@ export function Timeline() {
     addTextClip,
   });
 
+  // Transition drop handling for drag-and-drop transitions between clips
+  const {
+    activeJunction,
+    handleDragOver: handleTransitionDragOver,
+    handleDrop: handleTransitionDrop,
+    handleDragLeave: handleTransitionDragLeave,
+    isTransitionDrag,
+  } = useTransitionDrop();
+
+  // Combined drag handlers that check for transition drops first
+  const handleCombinedDragOver = useCallback((e: React.DragEvent, trackId: string) => {
+    if (isTransitionDrag(e)) {
+      const rect = timelineRef.current?.getBoundingClientRect();
+      if (rect) {
+        const mouseX = e.clientX - rect.left + scrollX;
+        const mouseTime = pixelToTime(mouseX);
+        handleTransitionDragOver(e, trackId, mouseTime);
+      }
+    } else {
+      handleTrackDragOver(e, trackId);
+    }
+  }, [isTransitionDrag, handleTransitionDragOver, handleTrackDragOver, scrollX, pixelToTime]);
+
+  const handleCombinedDrop = useCallback((e: React.DragEvent, trackId: string) => {
+    if (isTransitionDrag(e)) {
+      const rect = timelineRef.current?.getBoundingClientRect();
+      if (rect) {
+        const mouseX = e.clientX - rect.left + scrollX;
+        const mouseTime = pixelToTime(mouseX);
+        handleTransitionDrop(e, trackId, mouseTime);
+      }
+    } else {
+      handleTrackDrop(e, trackId);
+    }
+  }, [isTransitionDrag, handleTransitionDrop, handleTrackDrop, scrollX, pixelToTime]);
+
+  const handleCombinedDragLeave = useCallback((e: React.DragEvent) => {
+    handleTransitionDragLeave();
+    handleTrackDragLeave(e);
+  }, [handleTransitionDragLeave, handleTrackDragLeave]);
+
   // Vertical scroll position (custom scrollbar)
   const [scrollY, setScrollY] = useState(0);
 
@@ -272,183 +371,30 @@ export function Timeline() {
   // Transcript markers visibility toggle
   const [showTranscriptMarkers, setShowTranscriptMarkers] = useState(true);
 
-  // Timeline marker drag state
-  const [timelineMarkerDrag, setTimelineMarkerDrag] = useState<{
-    markerId: string;
-    startX: number;
-    originalTime: number;
-  } | null>(null);
-
-  // Drag-to-create marker state
-  const [markerCreateDrag, setMarkerCreateDrag] = useState<{
-    isDragging: boolean;
-    currentTime: number;
-    isOverTimeline: boolean;
-    dropAnimating: boolean;
-  } | null>(null);
-
   // Multicam dialog state
   const [multicamDialogOpen, setMulticamDialogOpen] = useState(false);
 
-  // Handle timeline marker drag start
-  const handleTimelineMarkerMouseDown = useCallback((e: React.MouseEvent, markerId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const marker = markers.find(m => m.id === markerId);
-    if (!marker) return;
-
-    setTimelineMarkerDrag({
-      markerId,
-      startX: e.clientX,
-      originalTime: marker.time,
-    });
-  }, [markers]);
-
-  // Handle timeline marker drag - effect for mouse move/up
-  useEffect(() => {
-    if (!timelineMarkerDrag) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!timelineRef.current) return;
-
-      const rect = timelineRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left + scrollX;
-      let time = pixelToTime(x);
-
-      // Apply snapping if enabled (and not holding Alt)
-      const shouldSnap = snappingEnabled !== e.altKey;
-      if (shouldSnap) {
-        const snapTimes = getSnapTargetTimes();
-        // Also snap to playhead
-        snapTimes.push(playheadPosition);
-        // Snap to in/out points if set
-        if (inPoint !== null) snapTimes.push(inPoint);
-        if (outPoint !== null) snapTimes.push(outPoint);
-
-        const snapThresholdTime = pixelToTime(10); // 10 pixels threshold
-        let closestSnap = time;
-        let minDist = Infinity;
-
-        for (const snapTime of snapTimes) {
-          const dist = Math.abs(time - snapTime);
-          if (dist < minDist && dist < snapThresholdTime) {
-            minDist = dist;
-            closestSnap = snapTime;
-          }
-        }
-        time = closestSnap;
-      }
-
-      // Clamp to valid range
-      time = Math.max(0, Math.min(time, duration));
-      moveMarker(timelineMarkerDrag.markerId, time);
-    };
-
-    const handleMouseUp = () => {
-      setTimelineMarkerDrag(null);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [timelineMarkerDrag, scrollX, snappingEnabled, duration, pixelToTime, getSnapTargetTimes, moveMarker, playheadPosition, inPoint, outPoint]);
-
-  // Handle drag-to-create marker - start dragging from button
-  const handleMarkerButtonDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setMarkerCreateDrag({
-      isDragging: true,
-      currentTime: playheadPosition,
-      isOverTimeline: false,
-      dropAnimating: false,
-    });
-  }, [playheadPosition]);
-
-  // Handle drag-to-create marker - mouse move/up effect
-  useEffect(() => {
-    if (!markerCreateDrag || !markerCreateDrag.isDragging) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      // Use timelineBodyRef for wider detection (includes ruler area)
-      const bodyRef = timelineBodyRef.current;
-      const trackRef = timelineRef.current;
-      if (!bodyRef || !trackRef) return;
-
-      const bodyRect = bodyRef.getBoundingClientRect();
-      const trackRect = trackRef.getBoundingClientRect();
-
-      // Calculate time from X position (using track area for proper offset)
-      const x = e.clientX - trackRect.left + scrollX;
-      let time = pixelToTime(x);
-
-      // Apply snapping if enabled (and not holding Alt)
-      const shouldSnap = snappingEnabled !== e.altKey;
-      if (shouldSnap) {
-        const snapTimes = getSnapTargetTimes();
-        snapTimes.push(playheadPosition);
-        if (inPoint !== null) snapTimes.push(inPoint);
-        if (outPoint !== null) snapTimes.push(outPoint);
-
-        const snapThresholdTime = pixelToTime(10);
-        let closestSnap = time;
-        let minDist = Infinity;
-
-        for (const snapTime of snapTimes) {
-          const dist = Math.abs(time - snapTime);
-          if (dist < minDist && dist < snapThresholdTime) {
-            minDist = dist;
-            closestSnap = snapTime;
-          }
-        }
-        time = closestSnap;
-      }
-
-      time = Math.max(0, Math.min(time, duration));
-
-      // Check if mouse is over the timeline body (more generous area)
-      const isOverTimeline = e.clientX >= bodyRect.left && e.clientX <= bodyRect.right &&
-                             e.clientY >= bodyRect.top && e.clientY <= bodyRect.bottom;
-
-      setMarkerCreateDrag(prev => prev ? { ...prev, currentTime: time, isOverTimeline } : null);
-    };
-
-    const handleMouseUp = (e: MouseEvent) => {
-      const bodyRef = timelineBodyRef.current;
-      if (!bodyRef || !markerCreateDrag) {
-        setMarkerCreateDrag(null);
-        return;
-      }
-
-      const bodyRect = bodyRef.getBoundingClientRect();
-      const isOverTimeline = e.clientX >= bodyRect.left && e.clientX <= bodyRect.right &&
-                             e.clientY >= bodyRect.top && e.clientY <= bodyRect.bottom;
-
-      if (isOverTimeline) {
-        // Add the marker and trigger drop animation
-        addMarker(markerCreateDrag.currentTime);
-        setMarkerCreateDrag(prev => prev ? { ...prev, isDragging: false, dropAnimating: true } : null);
-
-        // Clear animation after it completes
-        setTimeout(() => {
-          setMarkerCreateDrag(null);
-        }, 300);
-      } else {
-        setMarkerCreateDrag(null);
-      }
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [markerCreateDrag, scrollX, snappingEnabled, duration, pixelToTime, getSnapTargetTimes, addMarker, playheadPosition, inPoint, outPoint]);
+  // Marker drag operations - extracted to hook
+  const {
+    timelineMarkerDrag,
+    markerCreateDrag,
+    handleTimelineMarkerMouseDown,
+    handleMarkerButtonDragStart,
+  } = useMarkerDrag({
+    timelineRef,
+    timelineBodyRef,
+    markers,
+    scrollX,
+    snappingEnabled,
+    duration,
+    playheadPosition,
+    inPoint,
+    outPoint,
+    pixelToTime,
+    getSnapTargetTimes,
+    moveMarker,
+    addMarker,
+  });
 
   // Marquee selection - extracted to hook
   const { marquee, handleMarqueeMouseDown } = useMarqueeSelection({
@@ -542,6 +488,8 @@ export function Timeline() {
     isPlaying,
     play,
     pause,
+    playForward,
+    playReverse,
     setInPointAtPlayhead,
     setOutPointAtPlayhead,
     clearInOut,
@@ -858,20 +806,18 @@ export function Timeline() {
         onSetOutPoint={setOutPointAtPlayhead}
         onClearInOut={clearInOut}
         onToggleRamPreview={toggleRamPreviewEnabled}
-        onToggleProxy={() => setProxyEnabled(!proxyEnabled)}
-        onToggleTranscriptMarkers={() => setShowTranscriptMarkers(!showTranscriptMarkers)}
+        onToggleProxy={handleToggleProxy}
+        isProxyCaching={isProxyCaching}
+        proxyCacheProgress={proxyCacheProgress}
+        onStartProxyCachePreload={startProxyCachePreload}
+        onCancelProxyCachePreload={cancelProxyCachePreload}
+        onToggleTranscriptMarkers={handleToggleTranscriptMarkers}
         onToggleThumbnails={toggleThumbnailsEnabled}
         onToggleWaveforms={toggleWaveformsEnabled}
         onToggleCutTool={toggleCutTool}
-        onAddVideoTrack={() => addTrack('video')}
-        onAddAudioTrack={() => addTrack('audio')}
-        onAddTextClip={() => {
-          // Add text clip at playhead position on topmost video track
-          const videoTrack = tracks.find(t => t.type === 'video');
-          if (videoTrack) {
-            addTextClip(videoTrack.id, playheadPosition);
-          }
-        }}
+        onAddVideoTrack={handleAddVideoTrack}
+        onAddAudioTrack={handleAddAudioTrack}
+        onAddTextClip={handleAddTextClip}
         onSetDuration={setDuration}
         onFitToWindow={handleFitToWindow}
         formatTime={formatTime}
@@ -1052,10 +998,10 @@ export function Timeline() {
                 onClipMouseDown={handleClipMouseDown}
                 onClipContextMenu={handleClipContextMenu}
                 onTrimStart={handleTrimStart}
-                onDrop={(e) => handleTrackDrop(e, track.id)}
-                onDragOver={(e) => handleTrackDragOver(e, track.id)}
+                onDrop={(e) => handleCombinedDrop(e, track.id)}
+                onDragOver={(e) => handleCombinedDragOver(e, track.id)}
                 onDragEnter={(e) => handleTrackDragEnter(e, track.id)}
-                onDragLeave={handleTrackDragLeave}
+                onDragLeave={handleCombinedDragLeave}
                 renderClip={renderClip}
                 clipKeyframes={clipKeyframes}
                 renderKeyframeDiamonds={renderKeyframeDiamonds}
@@ -1066,6 +1012,98 @@ export function Timeline() {
                 onMoveKeyframe={moveKeyframe}
                 onUpdateBezierHandle={updateBezierHandle}
               />
+            );
+          })}
+
+          {/* Junction highlight for transition drop */}
+          {activeJunction && (
+            <div
+              className="transition-junction-highlight"
+              style={{
+                position: 'absolute',
+                left: timeToPixel(activeJunction.junctionTime) - 15,
+                width: 30,
+                top: 0,
+                bottom: 0,
+                background: 'linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.4), transparent)',
+                pointerEvents: 'none',
+                zIndex: 100,
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  top: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  background: '#3b82f6',
+                  color: 'white',
+                  padding: '4px 10px',
+                  borderRadius: 4,
+                  fontSize: 11,
+                  fontWeight: 500,
+                  whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                }}
+              >
+                Drop transition
+              </div>
+            </div>
+          )}
+
+          {/* Render existing transitions as junction elements */}
+          {clips.filter(c => c.transitionOut).map(clipA => {
+            const clipB = clips.find(c => c.id === clipA.transitionOut?.linkedClipId);
+            if (!clipB || !clipA.transitionOut) return null;
+
+            const track = tracks.find(t => t.id === clipA.trackId);
+            if (!track) return null;
+
+            // Calculate track position
+            const trackIndex = tracks.indexOf(track);
+            const trackTop = tracks
+              .slice(0, trackIndex)
+              .reduce((sum, t) => sum + (isTrackExpanded(t.id) ? getExpandedTrackHeight(t.id, t.height) : t.height), 0);
+            const trackHeight = isTrackExpanded(track.id) ? getExpandedTrackHeight(track.id, track.height) : track.height;
+
+            // Transition spans from clipB.startTime to clipA.startTime + clipA.duration
+            const transitionStart = clipB.startTime;
+            const transitionEnd = clipA.startTime + clipA.duration;
+            const transitionWidth = timeToPixel(transitionEnd - transitionStart);
+            const transitionLeft = timeToPixel(transitionStart);
+
+            return (
+              <div
+                key={clipA.transitionOut.id}
+                className="timeline-transition"
+                style={{
+                  position: 'absolute',
+                  left: transitionLeft,
+                  top: trackTop,
+                  width: Math.max(transitionWidth, 20),
+                  height: trackHeight,
+                  pointerEvents: 'none',
+                  zIndex: 50,
+                }}
+              >
+                {/* Transition visual */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 4,
+                    background: 'linear-gradient(90deg, rgba(74, 158, 255, 0.3), rgba(255, 107, 74, 0.3))',
+                    borderRadius: 4,
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.6 }}>
+                    <path d="M7 4v16M17 4v16M7 12h10" stroke="white" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </div>
+              </div>
             );
           })}
 
@@ -1201,6 +1239,23 @@ export function Timeline() {
                 width: Math.max(2, timeToPixel(range.end - range.start)),
               }}
               title={`Cached: ${formatTime(range.start)} - ${formatTime(range.end)}`}
+            />
+          ))}
+
+          {/* Proxy frame cache indicator (yellow) */}
+          {(() => {
+            const ranges = getProxyCachedRanges();
+            if (ranges.length > 0) console.log('[Timeline] Proxy cached ranges:', ranges);
+            return ranges;
+          })().map((range, i) => (
+            <div
+              key={`proxy-${i}`}
+              className="proxy-cache-indicator"
+              style={{
+                left: timeToPixel(range.start),
+                width: Math.max(2, timeToPixel(range.end - range.start)),
+              }}
+              title={`Proxy cached: ${formatTime(range.start)} - ${formatTime(range.end)}`}
             />
           ))}
 

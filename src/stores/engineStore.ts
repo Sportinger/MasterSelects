@@ -10,18 +10,25 @@ interface EngineState {
   isEngineReady: boolean;
   engineStats: EngineStats;
   gpuInfo: { vendor: string; device: string; description: string } | null;
+  linuxVulkanWarning: boolean;
 
   // Actions
   setEngineReady: (ready: boolean) => void;
   setEngineStats: (stats: EngineStats) => void;
   setGpuInfo: (info: { vendor: string; device: string; description: string } | null) => void;
+  setLinuxVulkanWarning: (show: boolean) => void;
+  dismissLinuxVulkanWarning: () => void;
 }
+
+// Check if Linux Vulkan warning was already dismissed
+const LINUX_VULKAN_DISMISSED_KEY = 'linux-vulkan-warning-dismissed';
 
 export const useEngineStore = create<EngineState>()(
   subscribeWithSelector((set) => ({
     // Initial state
     isEngineReady: false,
     gpuInfo: null,
+    linuxVulkanWarning: false,
     engineStats: {
       fps: 0,
       frameTime: 0,
@@ -46,6 +53,19 @@ export const useEngineStore = create<EngineState>()(
 
     setEngineStats: (stats: EngineStats) => {
       set({ engineStats: stats });
+    },
+
+    setLinuxVulkanWarning: (show: boolean) => {
+      // Don't show if already dismissed
+      if (show && localStorage.getItem(LINUX_VULKAN_DISMISSED_KEY)) {
+        return;
+      }
+      set({ linuxVulkanWarning: show });
+    },
+
+    dismissLinuxVulkanWarning: () => {
+      localStorage.setItem(LINUX_VULKAN_DISMISSED_KEY, 'true');
+      set({ linuxVulkanWarning: false });
     },
   }))
 );

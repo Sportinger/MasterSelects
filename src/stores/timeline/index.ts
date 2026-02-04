@@ -16,6 +16,7 @@ import { createSelectionSlice } from './selectionSlice';
 import { createKeyframeSlice } from './keyframeSlice';
 import { createMaskSlice } from './maskSlice';
 import { createMarkerSlice } from './markerSlice';
+import { createTransitionSlice } from './transitionSlice';
 import { createClipboardSlice } from './clipboardSlice';
 import { projectFileService } from '../../services/projectFileService';
 import type { ClipAnalysis, FrameAnalysisData } from '../../types';
@@ -28,6 +29,9 @@ export type { TimelineStore, TimelineClip, Keyframe } from './types';
 export { DEFAULT_TRANSFORM, DEFAULT_TRACKS, SNAP_THRESHOLD_SECONDS } from './constants';
 export { seekVideo, generateWaveform, generateThumbnails, getDefaultEffectParams } from './utils';
 
+// Re-export selectors for optimized store subscriptions
+export * from './selectors';
+
 export const useTimelineStore = create<TimelineStore>()(
   subscribeWithSelector((set, get) => {
     // Create all slices
@@ -38,6 +42,7 @@ export const useTimelineStore = create<TimelineStore>()(
     const keyframeActions = createKeyframeSlice(set, get);
     const maskActions = createMaskSlice(set, get);
     const markerActions = createMarkerSlice(set, get);
+    const transitionActions = createTransitionSlice(set, get);
     const clipboardActions = createClipboardSlice(set, get);
 
     // Utils that need to be defined inline due to cross-dependencies
@@ -473,6 +478,7 @@ export const useTimelineStore = create<TimelineStore>()(
             inPoint: null,
             outPoint: null,
             loopPlayback: false,
+            playbackSpeed: 1,
             selectedClipIds: new Set(),
             markers: [],
           });
@@ -1246,6 +1252,9 @@ export const useTimelineStore = create<TimelineStore>()(
       outPoint: null as number | null,
       loopPlayback: false,
 
+      // Playback speed (1 = normal, 2 = 2x, -1 = reverse, etc.)
+      playbackSpeed: 1,
+
       // Duration lock (when true, duration won't auto-update based on clips)
       durationLocked: false,
 
@@ -1255,6 +1264,10 @@ export const useTimelineStore = create<TimelineStore>()(
       ramPreviewRange: null as { start: number; end: number } | null,
       isRamPreviewing: false,
       cachedFrameTimes: new Set<number>(),
+
+      // Proxy cache preloading state
+      isProxyCaching: false,
+      proxyCacheProgress: null as number | null,
 
       // Export progress state
       isExporting: false,
@@ -1337,6 +1350,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...layerActions,
       ...maskActions,
       ...markerActions,
+      ...transitionActions,
       ...clipboardActions,
       ...utils,
     };

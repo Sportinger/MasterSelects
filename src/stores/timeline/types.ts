@@ -72,6 +72,9 @@ export interface TimelineState {
   outPoint: number | null;
   loopPlayback: boolean;
 
+  // Playback speed (1 = normal, 2 = 2x, -1 = reverse, etc.)
+  playbackSpeed: number;
+
   // Duration lock (when true, duration won't auto-update based on clips)
   durationLocked: boolean;
 
@@ -81,6 +84,10 @@ export interface TimelineState {
   ramPreviewRange: { start: number; end: number } | null;
   isRamPreviewing: boolean;
   cachedFrameTimes: Set<number>;
+
+  // Proxy cache preloading state
+  isProxyCaching: boolean;
+  proxyCacheProgress: number | null;  // 0-100 percentage
 
   // Export progress state
   isExporting: boolean;
@@ -162,7 +169,7 @@ export interface ClipActions {
   // Audio pitch preservation
   setClipPreservesPitch: (clipId: string, preservesPitch: boolean) => void;
   // Text clip actions
-  addTextClip: (trackId: string, startTime: number, duration?: number) => Promise<string | null>;
+  addTextClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => Promise<string | null>;
   updateTextProperties: (clipId: string, props: Partial<TextClipProperties>) => void;
   // YouTube pending download clips
   addPendingDownloadClip: (trackId: string, startTime: number, videoId: string, title: string, thumbnail: string, estimatedDuration?: number) => string;
@@ -190,6 +197,10 @@ export interface PlaybackActions {
   setOutPointAtPlayhead: () => void;
   setLoopPlayback: (loop: boolean) => void;
   toggleLoopPlayback: () => void;
+  setPlaybackSpeed: (speed: number) => void;
+  // JKL playback control
+  playForward: () => void;
+  playReverse: () => void;
   setDuration: (duration: number) => void;
   // Tool mode
   setToolMode: (mode: TimelineToolMode) => void;
@@ -206,7 +217,11 @@ export interface RamPreviewActions {
   clearRamPreview: () => void;
   addCachedFrame: (time: number) => void;
   getCachedRanges: () => Array<{ start: number; end: number }>;
+  getProxyCachedRanges: () => Array<{ start: number; end: number }>;
   invalidateCache: () => void;
+  // Proxy cache preloading
+  startProxyCachePreload: () => Promise<void>;
+  cancelProxyCachePreload: () => void;
   // Performance toggles
   toggleThumbnailsEnabled: () => void;
   toggleWaveformsEnabled: () => void;
@@ -275,6 +290,14 @@ export interface MarkerActions {
   updateMarker: (markerId: string, updates: Partial<Omit<TimelineMarker, 'id'>>) => void;
   moveMarker: (markerId: string, newTime: number) => void;
   clearMarkers: () => void;
+}
+
+// Transition actions interface
+export interface TransitionActions {
+  applyTransition: (clipAId: string, clipBId: string, type: string, duration: number) => void;
+  removeTransition: (clipId: string, edge: 'in' | 'out') => void;
+  updateTransitionDuration: (clipId: string, edge: 'in' | 'out', duration: number) => void;
+  findClipJunction: (trackId: string, time: number, threshold?: number) => { clipA: TimelineClip; clipB: TimelineClip; junctionTime: number } | null;
 }
 
 // Clipboard data for copy/paste
@@ -372,6 +395,7 @@ export interface TimelineStore extends
   LayerActions,
   MaskActions,
   MarkerActions,
+  TransitionActions,
   ClipboardActions,
   TimelineUtils {}
 
