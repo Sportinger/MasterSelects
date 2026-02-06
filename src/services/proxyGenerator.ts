@@ -367,6 +367,8 @@ class ProxyGeneratorGPU {
         this.duration = track.duration / track.timescale;
         this.totalFrames = Math.ceil(this.duration * PROXY_FPS);
 
+        log.info(`Duration: ${this.duration.toFixed(3)}s, totalFrames: ${this.totalFrames}, samples: ${expectedSamples}`);
+
         // Get codec config with fallback support
         const trak = this.mp4File!.getTrackById(track.id);
         const codecString = this.getCodecString(track.codec, trak);
@@ -749,7 +751,8 @@ class ProxyGeneratorGPU {
             }
           }
 
-          this.onProgress?.(Math.round((this.processedFrames / this.totalFrames) * 100));
+          // Clamp progress to 100% max to prevent >100% display issues
+          this.onProgress?.(Math.min(100, Math.round((this.processedFrames / this.totalFrames) * 100)));
 
           // Save DB batch periodically
           if (dbBatch.length >= DB_BATCH_SIZE) {
@@ -951,7 +954,8 @@ class ProxyGeneratorGPU {
           }
         }
 
-        this.onProgress?.(Math.round((this.processedFrames / this.totalFrames) * 100));
+        // Clamp progress to 100% max
+        this.onProgress?.(Math.min(100, Math.round((this.processedFrames / this.totalFrames) * 100)));
       } catch (e) {
         log.error('Final batch error', e);
         for (const frame of batchFrames) {
@@ -960,25 +964,41 @@ class ProxyGeneratorGPU {
       }
     }
 
-    // Save remaining DB batch
-    for (const f of dbBatch) {
-      await saveFrame(f);
+    // Save remaining DB batch (with error handling to ensure completion)
+    try {
+      for (const f of dbBatch) {
+        await saveFrame(f);
+      }
+    } catch (e) {
+      log.error('Failed to save remaining DB batch', e);
     }
 
-    // Clean up
+    // Clean up (with error handling to ensure completion)
     this.pendingBatchProcess = null;
-    this.resizePipeline.destroy();
+    try {
+      this.resizePipeline?.destroy();
+    } catch (e) {
+      log.error('Failed to destroy resize pipeline', e);
+    }
     this.resizePipeline = null;
 
+    // CRITICAL: Always call resolveGeneration to prevent Promise from hanging
+    const totalTime = performance.now() - startTime;
+
     if (this.isCancelled) {
+      log.info('Generation cancelled');
+      this.resolveGeneration?.(null);
+    } else if (this.processedFrames === 0) {
+      // No frames processed - this is an error state
+      log.error('No frames were processed!');
       this.resolveGeneration?.(null);
     } else {
-      const totalTime = performance.now() - startTime;
       const fps = this.processedFrames / (totalTime / 1000);
 
       log.info('GPU Processing Complete');
       log.info('Performance Summary', {
         totalFrames: this.processedFrames,
+        expectedFrames: this.totalFrames,
         totalBatches: batchCount,
         totalTime: `${(totalTime / 1000).toFixed(1)}s`,
         framesPerSecond: fps.toFixed(1),

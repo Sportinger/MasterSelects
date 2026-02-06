@@ -91,6 +91,29 @@ export class TextureManager {
     }
   }
 
+  // Re-upload canvas content to an existing cached GPU texture
+  // Used when canvas pixels changed (e.g. text re-rendered) but reference is the same
+  updateCanvasTexture(canvas: HTMLCanvasElement): boolean {
+    const width = canvas.width;
+    const height = canvas.height;
+    if (width === 0 || height === 0) return false;
+
+    const texture = this.canvasTextures.get(canvas);
+    if (!texture) return false;
+
+    try {
+      this.device.queue.copyExternalImageToTexture(
+        { source: canvas },
+        { texture },
+        [width, height]
+      );
+      return true;
+    } catch (e) {
+      log.error('Failed to update canvas texture', e);
+      return false;
+    }
+  }
+
   // Get cached canvas texture
   getCachedCanvasTexture(canvas: HTMLCanvasElement): GPUTexture | undefined {
     return this.canvasTextures.get(canvas);

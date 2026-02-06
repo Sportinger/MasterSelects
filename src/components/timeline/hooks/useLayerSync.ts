@@ -53,9 +53,6 @@ interface UseLayerSyncProps {
   isAudioTrackMuted: (track: TimelineTrack) => boolean;
 }
 
-// Throttle layer sync during playback to reduce CPU load
-const LAYER_SYNC_INTERVAL = 100; // Only do full layer sync every 100ms during playback
-
 export function useLayerSync({
   timelineRef,
   playheadPosition,
@@ -88,17 +85,14 @@ export function useLayerSync({
   const nativeDecoderLastFrameRef = useRef<{ [clipId: string]: number }>({});
   const nativeDecoderPendingRef = useRef<{ [clipId: string]: boolean }>({});
 
-  // Track which clips are currently active (to detect clip changes)
-  const activeClipIdsRef = useRef<string>('');
-
-  // Throttle layer sync during playback
-  const lastLayerSyncRef = useRef<number>(0);
-
   // Track current proxy frames for each clip (for smooth proxy playback)
   const proxyFramesRef = useRef<
     Map<string, { frameIndex: number; image: HTMLImageElement }>
   >(new Map());
   const proxyLoadingRef = useRef<Set<string>>(new Set());
+
+  // RAF debounce: batch rapid scrubbing into one sync per animation frame
+  const pendingRafRef = useRef<number | null>(null);
 
   // Apply pending seeks when scrubbing stops
   useEffect(() => {
@@ -309,10 +303,27 @@ export function useLayerSync({
     [isPlaying]
   );
 
+  // Cleanup pending RAF on unmount
+  useEffect(() => {
+    return () => {
+      if (pendingRafRef.current !== null) {
+        cancelAnimationFrame(pendingRafRef.current);
+        pendingRafRef.current = null;
+      }
+    };
+  }, []);
+
   // Main layer sync effect
   // PERFORMANCE: During playback, layerBuilder handles all sync in the RAF loop
   // This effect only runs when paused (for scrubbing, editing, etc.)
+  // RAF-debounced: rapid scrubbing batches into max 1 sync per animation frame
   useEffect(() => {
+    // Cancel any pending RAF sync from previous render
+    if (pendingRafRef.current !== null) {
+      cancelAnimationFrame(pendingRafRef.current);
+      pendingRafRef.current = null;
+    }
+
     // Skip all work during playback - layerBuilder handles video/audio sync in RAF
     if (isPlaying) {
       return;
@@ -327,17 +338,25 @@ export function useLayerSync({
     if (ramPreviewRange) {
       const inRange = playheadPosition >= ramPreviewRange.start && playheadPosition <= ramPreviewRange.end;
       if (inRange) {
-        if (engine.renderCachedFrame(playheadPosition)) {
+        const hit = engine.renderCachedFrame(playheadPosition);
+        if (hit) {
           return; // Cache hit - instant render, no video seek needed
         }
         // Cache miss within range - will fall through to regular render
       }
     } else {
       // No RAM preview range, but still try the cache in case frames were cached during playback
-      if (engine.renderCachedFrame(playheadPosition)) {
+      const hit = engine.renderCachedFrame(playheadPosition);
+      if (hit) {
         return;
       }
     }
+
+    // Debounce heavy layer sync via requestAnimationFrame.
+    // During rapid scrubbing, multiple playheadPosition changes within a single frame
+    // are batched — only the last scheduled sync actually executes.
+    pendingRafRef.current = requestAnimationFrame(() => {
+    pendingRafRef.current = null;
 
     let clipsAtTime = getClipsAtTime(playheadPosition);
 
@@ -366,41 +385,6 @@ export function useLayerSync({
             playheadPosition < c.startTime + c.duration
         );
       }
-    }
-
-    const currentActiveIds = clipsAtTime
-      .filter(
-        (c) =>
-          c.source?.type === 'video' ||
-          c.source?.type === 'image' ||
-          c.source?.type === 'text' ||
-          c.isComposition
-      )
-      .map((c) => c.id)
-      .sort()
-      .join(',');
-
-    // During playback, throttle the heavy layer sync work to reduce CPU load
-    const now = performance.now();
-    const timeSinceLastSync = now - lastLayerSyncRef.current;
-    const clipsChanged = activeClipIdsRef.current !== ('playing:' + currentActiveIds);
-
-    if (isPlaying) {
-      // Always ensure videos are playing (this is cheap)
-      clipsAtTime.forEach((clip) => {
-        if (clip.source?.videoElement?.paused) {
-          clip.source.videoElement.play().catch(() => {});
-        }
-      });
-      activeClipIdsRef.current = 'playing:' + currentActiveIds;
-
-      // Skip heavy layer sync if within throttle interval AND clips haven't changed
-      if (timeSinceLastSync < LAYER_SYNC_INTERVAL && !clipsChanged) {
-        return;
-      }
-      lastLayerSyncRef.current = now;
-    } else {
-      activeClipIdsRef.current = '';
     }
 
     const currentLayers = useTimelineStore.getState().layers;
@@ -1129,6 +1113,8 @@ export function useLayerSync({
 
     // Update audio status for stats display
     audioStatusTracker.updateStatus(audioPlayingCount, maxAudioDrift, hasAudioError);
+
+    }); // end requestAnimationFrame
   }, [
     playheadPosition,
     clips,

@@ -8,6 +8,8 @@ import { DEFAULT_TRANSFORM, DEFAULT_TEXT_PROPERTIES, DEFAULT_TEXT_DURATION } fro
 import { generateWaveform, generateWaveformFromBuffer, getDefaultEffectParams } from './utils';
 import { textRenderer } from '../../services/textRenderer';
 import { googleFontsService } from '../../services/googleFontsService';
+import { engine } from '../../engine/WebGPUEngine';
+import { layerBuilder } from '../../services/layerBuilder';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('ClipSlice');
@@ -679,27 +681,72 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
 
   updateTextProperties: (clipId, props) => {
     const { clips, invalidateCache } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip?.textProperties) return;
+
+    const newProps: TextClipProperties = { ...clip.textProperties, ...props };
+
+    // Reuse existing canvas - re-render text content in place
+    // This avoids creating new textures/references on every keystroke
+    const canvas = clip.source?.textCanvas || textRenderer.createCanvas(1920, 1080);
+    textRenderer.render(newProps, canvas);
+
+    // Re-upload canvas pixels to existing GPU texture (instant, no new allocation)
+    const texMgr = engine.getTextureManager();
+    if (texMgr) {
+      if (!texMgr.updateCanvasTexture(canvas)) {
+        // First time or canvas not cached yet - will be created on next render
+        log.debug('Canvas texture not cached yet, will create on render');
+      }
+    }
+
+    // Update store with new text properties
     set({
-      clips: clips.map(c => {
-        if (c.id !== clipId || !c.textProperties) return c;
-        const newProps: TextClipProperties = { ...c.textProperties, ...props };
-
-        if (props.fontFamily || props.fontWeight) {
-          googleFontsService.loadFont(props.fontFamily || c.textProperties.fontFamily, props.fontWeight || c.textProperties.fontWeight);
-        }
-
-        const canvas = textRenderer.createCanvas(1920, 1080);
-        textRenderer.render(newProps, canvas);
-
-        return {
-          ...c,
-          textProperties: newProps,
-          source: { ...c.source!, textCanvas: canvas },
-          name: newProps.text.substring(0, 20) || 'Text',
-        };
+      clips: clips.map(c => c.id !== clipId ? c : {
+        ...c,
+        textProperties: newProps,
+        source: { ...c.source!, textCanvas: canvas },
+        name: newProps.text.substring(0, 20) || 'Text',
       }),
     });
     invalidateCache();
+
+    // Force immediate render to show text changes live in preview
+    try {
+      layerBuilder.invalidateCache();
+      const layers = layerBuilder.buildLayersFromStore();
+      engine.render(layers);
+    } catch (e) {
+      log.debug('Direct render after text update failed', e);
+    }
+
+    // Handle async font loading - re-render when font is ready
+    if (props.fontFamily || props.fontWeight) {
+      const fontFamily = props.fontFamily || newProps.fontFamily;
+      const fontWeight = props.fontWeight || newProps.fontWeight;
+      googleFontsService.loadFont(fontFamily, fontWeight).then(() => {
+        const { clips: currentClips, invalidateCache: inv } = get();
+        const currentClip = currentClips.find(cl => cl.id === clipId);
+        if (!currentClip?.textProperties) return;
+
+        // Re-render with loaded font to same canvas
+        const currentCanvas = currentClip.source?.textCanvas;
+        if (currentCanvas) {
+          textRenderer.render(currentClip.textProperties, currentCanvas);
+          engine.getTextureManager()?.updateCanvasTexture(currentCanvas);
+        }
+        inv();
+
+        // Force immediate render after font load
+        try {
+          layerBuilder.invalidateCache();
+          const layers = layerBuilder.buildLayersFromStore();
+          engine.render(layers);
+        } catch (e) {
+          log.debug('Direct render after font load failed', e);
+        }
+      });
+    }
   },
 
   toggleClipReverse: (id) => {

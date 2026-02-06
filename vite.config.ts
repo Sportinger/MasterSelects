@@ -48,7 +48,7 @@ function browserLogBridge(): Plugin {
 }
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command, mode }) => ({
   plugins: [
     react(),
     browserLogBridge(),
@@ -62,6 +62,8 @@ export default defineConfig({
   ],
   define: {
     __APP_VERSION__: JSON.stringify(APP_VERSION),
+    // Show changelog: always in production builds, only with --mode changelog in dev
+    __SHOW_CHANGELOG__: command === 'build' || mode === 'changelog',
   },
   server: {
     headers: {
@@ -80,6 +82,16 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Force heavy libs into separate chunks (loaded on demand)
+          'mp4box': ['mp4box'],
+          'mp4-muxer': ['mp4-muxer'],
+          'webm-muxer': ['webm-muxer'],
+        },
+      },
+    },
   },
   optimizeDeps: {
     esbuildOptions: {
@@ -88,4 +100,4 @@ export default defineConfig({
     // Exclude transformers.js and onnxruntime from pre-bundling
     exclude: ['@huggingface/transformers', 'onnxruntime-web'],
   },
-})
+}))

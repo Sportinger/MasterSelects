@@ -97,6 +97,7 @@ export class ProjectCoreService {
         startIn: 'documents',
       });
 
+      await projectDB.storeHandle('projectsFolder', handle);
       const projectFolder = await handle.getDirectoryHandle(name, { create: true });
       return await this.initializeProject(projectFolder, name);
     } catch (e: any) {
@@ -342,23 +343,73 @@ export class ProjectCoreService {
     try {
       const parentHandle = await projectDB.getStoredHandle('projectsFolder');
       if (!parentHandle || parentHandle.kind !== 'directory') {
+        // No parent folder stored - just update the display name in project.json
+        log.info(`No parent folder handle, updating display name only to "${trimmedName}"`);
         this.projectData.name = trimmedName;
-        this.markDirty();
-        await this.saveProject();
+        this.projectData.updatedAt = new Date().toISOString();
+        await this.writeProjectJson(this.projectHandle, this.projectData);
+        this.isDirty = false;
         return true;
       }
 
       const parentDir = parentHandle as FileSystemDirectoryHandle;
 
+      // Verify we have write permission on the parent
+      const permission = await parentDir.queryPermission({ mode: 'readwrite' });
+      if (permission !== 'granted') {
+        // No permission on parent - just update display name in project.json
+        log.info(`No write permission on parent folder, updating display name only to "${trimmedName}"`);
+        this.projectData.name = trimmedName;
+        this.projectData.updatedAt = new Date().toISOString();
+        await this.writeProjectJson(this.projectHandle, this.projectData);
+        this.isDirty = false;
+        return true;
+      }
+
+      const oldName = this.projectHandle.name;
+
+      // If the folder name already matches the new name, just update project data
+      if (trimmedName === oldName) {
+        this.projectData.name = trimmedName;
+        this.projectData.updatedAt = new Date().toISOString();
+        await this.writeProjectJson(this.projectHandle, this.projectData);
+        this.isDirty = false;
+        log.info(`Project display name updated to "${trimmedName}"`);
+        return true;
+      }
+
+      // Check if a different folder with that name already exists
+      let existingFolder: FileSystemDirectoryHandle | null = null;
       try {
-        await parentDir.getDirectoryHandle(trimmedName, { create: false });
-        log.error('Folder with that name already exists');
-        return false;
+        existingFolder = await parentDir.getDirectoryHandle(trimmedName, { create: false });
       } catch {
         // Good - folder doesn't exist
       }
 
-      const oldName = this.projectHandle.name;
+      if (existingFolder) {
+        // Check if the existing folder is a leftover (no project.json = not a real project)
+        let hasProjectJson = false;
+        try {
+          await existingFolder.getFileHandle('project.json', { create: false });
+          hasProjectJson = true;
+        } catch {
+          // No project.json
+        }
+
+        if (hasProjectJson) {
+          log.error(`Folder "${trimmedName}" already contains a project`);
+          return false;
+        }
+
+        // Leftover folder without project.json - remove it
+        log.debug(`Removing leftover folder: ${trimmedName}`);
+        try {
+          await parentDir.removeEntry(trimmedName, { recursive: true });
+        } catch (e) {
+          log.error('Failed to remove leftover folder:', e);
+          return false;
+        }
+      }
 
       const newFolder = await parentDir.getDirectoryHandle(trimmedName, { create: true });
       await this.copyDirectoryContents(this.projectHandle, newFolder);
