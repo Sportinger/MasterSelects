@@ -241,7 +241,7 @@ export interface ExportActions {
 // Selection actions interface
 export interface SelectionActions {
   // Clip selection (multi-select support)
-  selectClip: (id: string | null, addToSelection?: boolean) => void;
+  selectClip: (id: string | null, addToSelection?: boolean, setPrimaryOnly?: boolean) => void;
   selectClips: (ids: string[]) => void;
   addClipToSelection: (id: string) => void;
   removeClipFromSelection: (id: string) => void;

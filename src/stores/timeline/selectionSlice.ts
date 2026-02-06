@@ -4,8 +4,14 @@ import type { SelectionActions, SliceCreator, Keyframe } from './types';
 
 export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) => ({
   // Clip selection (multi-select support)
-  selectClip: (id, addToSelection = false) => {
+  selectClip: (id, addToSelection = false, setPrimaryOnly = false) => {
     const { selectedClipIds, expandedCurveProperties, clips } = get();
+
+    // setPrimaryOnly: just update which clip is "focused" for Properties panel
+    if (setPrimaryOnly && id !== null) {
+      set({ primarySelectedClipId: id });
+      return;
+    }
 
     // Check if a specific clip has a curve editor open on its track
     const clipHasCurveEditorOpen = (clipId: string) => {
