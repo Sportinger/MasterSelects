@@ -97,6 +97,7 @@ export class ProjectCoreService {
         startIn: 'documents',
       });
 
+      await projectDB.storeHandle('projectsFolder', handle);
       const projectFolder = await handle.getDirectoryHandle(name, { create: true });
       return await this.initializeProject(projectFolder, name);
     } catch (e: any) {
@@ -342,6 +343,7 @@ export class ProjectCoreService {
     try {
       const parentHandle = await projectDB.getStoredHandle('projectsFolder');
       if (!parentHandle || parentHandle.kind !== 'directory') {
+        // No parent folder stored - just update the display name
         this.projectData.name = trimmedName;
         this.markDirty();
         await this.saveProject();
@@ -349,16 +351,46 @@ export class ProjectCoreService {
       }
 
       const parentDir = parentHandle as FileSystemDirectoryHandle;
+      const oldName = this.projectHandle.name;
 
+      // If the folder name already matches the new name, just update project data
+      if (trimmedName === oldName) {
+        this.projectData.name = trimmedName;
+        this.projectData.updatedAt = new Date().toISOString();
+        await this.writeProjectJson(this.projectHandle, this.projectData);
+        this.isDirty = false;
+        log.info(`Project display name updated to "${trimmedName}"`);
+        return true;
+      }
+
+      // Check if a different folder with that name already exists
+      let existingFolder: FileSystemDirectoryHandle | null = null;
       try {
-        await parentDir.getDirectoryHandle(trimmedName, { create: false });
-        log.error('Folder with that name already exists');
-        return false;
+        existingFolder = await parentDir.getDirectoryHandle(trimmedName, { create: false });
       } catch {
         // Good - folder doesn't exist
       }
 
-      const oldName = this.projectHandle.name;
+      if (existingFolder) {
+        // Check if the existing folder is empty or a leftover from a failed rename
+        let isEmpty = true;
+        for await (const _ of (existingFolder as any).values()) {
+          isEmpty = false;
+          break;
+        }
+        if (!isEmpty) {
+          log.error('Folder with that name already exists');
+          return false;
+        }
+        // Empty leftover folder - remove it first
+        log.debug(`Removing empty leftover folder: ${trimmedName}`);
+        try {
+          await parentDir.removeEntry(trimmedName, { recursive: true });
+        } catch (e) {
+          log.error('Failed to remove leftover folder:', e);
+          return false;
+        }
+      }
 
       const newFolder = await parentDir.getDirectoryHandle(trimmedName, { create: true });
       await this.copyDirectoryContents(this.projectHandle, newFolder);
