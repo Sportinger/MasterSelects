@@ -103,10 +103,16 @@ interface MediaStoreState {
   solidItems: SolidItem[];
 }
 
-// Callback to cancel pending debounced captures (set by useGlobalHistory)
-let cancelPendingCaptureCallback: (() => void) | null = null;
-export function setCancelPendingCapture(fn: () => void) {
-  cancelPendingCaptureCallback = fn;
+// Callback to flush pending debounced captures before undo/redo (set by useGlobalHistory)
+// Flush = execute the pending capture immediately so its state isn't lost
+let flushPendingCaptureCallback: (() => void) | null = null;
+let suppressCapturesCallback: (() => void) | null = null;
+export function setHistoryCallbacks(callbacks: {
+  flushPendingCapture: () => void;
+  suppressCaptures: () => void;
+}) {
+  flushPendingCaptureCallback = callbacks.flushPendingCapture;
+  suppressCapturesCallback = callbacks.suppressCaptures;
 }
 
 // Import stores dynamically to avoid circular dependencies
@@ -307,12 +313,17 @@ export const useHistoryStore = create<HistoryState>()(
     },
 
     undo: () => {
+      // End any stuck batch first (safety: lost mouseup etc.)
+      if (get().batchId !== null) {
+        get().endBatch();
+      }
+
+      // Flush pending debounced capture so we don't lose the latest state
+      flushPendingCaptureCallback?.();
+
+      // Re-read stacks after flush may have pushed new entries
       const { undoStack, currentSnapshot, redoStack } = get();
-
       if (undoStack.length === 0) return;
-
-      // Cancel any pending debounced capture to prevent race condition
-      cancelPendingCaptureCallback?.();
 
       set({ isApplying: true });
 
@@ -335,16 +346,24 @@ export const useHistoryStore = create<HistoryState>()(
         isApplying: false,
       });
 
-      log.debug(`Undo: ${previousSnapshot.label}`);
+      // Suppress auto-captures for 200ms to prevent cascading state changes from re-capturing
+      suppressCapturesCallback?.();
+
+      log.debug(`Undo: ${previousSnapshot.label} (stack: ${newUndoStack.length})`);
     },
 
     redo: () => {
+      // End any stuck batch first
+      if (get().batchId !== null) {
+        get().endBatch();
+      }
+
+      // Flush pending debounced capture
+      flushPendingCaptureCallback?.();
+
+      // Re-read stacks after flush
       const { redoStack, currentSnapshot, undoStack } = get();
-
       if (redoStack.length === 0) return;
-
-      // Cancel any pending debounced capture to prevent race condition
-      cancelPendingCaptureCallback?.();
 
       set({ isApplying: true });
 
@@ -367,7 +386,10 @@ export const useHistoryStore = create<HistoryState>()(
         isApplying: false,
       });
 
-      log.debug(`Redo: ${nextSnapshot.label}`);
+      // Suppress auto-captures for 200ms
+      suppressCapturesCallback?.();
+
+      log.debug(`Redo: ${nextSnapshot.label} (stack: ${newRedoStack.length})`);
     },
 
     canUndo: () => get().undoStack.length > 0,

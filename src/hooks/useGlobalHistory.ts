@@ -7,7 +7,7 @@ import { useDockStore } from '../stores/dockStore';
 import {
   useHistoryStore,
   initHistoryStoreRefs,
-  setCancelPendingCapture,
+  setHistoryCallbacks,
   captureSnapshot,
   undo,
   redo,
@@ -16,10 +16,23 @@ import { Logger } from '../services/logger';
 
 const log = Logger.create('History');
 
+// Shallow equality for subscription selectors — prevents callback from firing
+// on unrelated store changes (e.g. playheadPosition updates at 60fps)
+function shallowEqual<T extends Record<string, unknown>>(a: T, b: T): boolean {
+  if (a === b) return true;
+  const keysA = Object.keys(a);
+  if (keysA.length !== Object.keys(b).length) return false;
+  for (const key of keysA) {
+    if (!Object.is(a[key], b[key])) return false;
+  }
+  return true;
+}
+
 export function useGlobalHistory() {
   const initialized = useRef(false);
   const lastCaptureTime = useRef(0);
-  const pendingCapture = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingLabel = useRef('');
   const suppressUntil = useRef(0);
 
   // Initialize store references
@@ -43,14 +56,22 @@ export function useGlobalHistory() {
       },
     });
 
-    // Register cancel callback so undo/redo can cancel pending debounced captures
-    setCancelPendingCapture(() => {
-      if (pendingCapture.current) {
-        clearTimeout(pendingCapture.current);
-        pendingCapture.current = null;
-      }
-      // Suppress auto-captures for 200ms after undo/redo
-      suppressUntil.current = Date.now() + 200;
+    // Register callbacks so undo/redo can flush pending captures
+    setHistoryCallbacks({
+      flushPendingCapture: () => {
+        if (pendingTimer.current) {
+          clearTimeout(pendingTimer.current);
+          const label = pendingLabel.current;
+          pendingTimer.current = null;
+          pendingLabel.current = '';
+          // Execute the capture immediately so the state isn't lost
+          lastCaptureTime.current = Date.now();
+          captureSnapshot(label || 'pending');
+        }
+      },
+      suppressCaptures: () => {
+        suppressUntil.current = Date.now() + 250;
+      },
     });
 
     // Capture initial state
@@ -61,13 +82,15 @@ export function useGlobalHistory() {
 
   // Subscribe to store changes and capture snapshots
   useEffect(() => {
-    // Cancellable debounced capture — stores timer ID so undo/redo can cancel it
+    // Debounced capture — stores timer ID and label so undo/redo can flush it
     const debouncedCapture = (label: string) => {
-      if (pendingCapture.current) clearTimeout(pendingCapture.current);
-      pendingCapture.current = setTimeout(() => {
-        pendingCapture.current = null;
+      if (pendingTimer.current) clearTimeout(pendingTimer.current);
+      pendingLabel.current = label;
+      pendingTimer.current = setTimeout(() => {
+        pendingTimer.current = null;
+        pendingLabel.current = '';
 
-        // Suppress captures shortly after undo/redo to prevent race condition
+        // Suppress captures shortly after undo/redo to prevent cascade re-captures
         if (Date.now() < suppressUntil.current) return;
 
         // Don't capture during undo/redo application
@@ -82,6 +105,8 @@ export function useGlobalHistory() {
     };
 
     // Subscribe to timeline changes (clips, tracks, keyframes, markers)
+    // Using shallowEqual so callback only fires when these specific properties change,
+    // not on every store update (playheadPosition, isPlaying, etc.)
     const unsubTimeline = useTimelineStore.subscribe(
       (state) => ({
         clips: state.clips,
@@ -106,10 +131,10 @@ export function useGlobalHistory() {
           debouncedCapture('Modify markers');
         }
       },
-      { fireImmediately: false }
+      { equalityFn: shallowEqual, fireImmediately: false }
     );
 
-    // Subscribe to media changes (files, compositions, folders, textItems, solidItems)
+    // Subscribe to media changes
     const unsubMedia = useMediaStore.subscribe(
       (state) => ({
         files: state.files,
@@ -133,7 +158,7 @@ export function useGlobalHistory() {
           debouncedCapture('Modify solid items');
         }
       },
-      { fireImmediately: false }
+      { equalityFn: shallowEqual, fireImmediately: false }
     );
 
     // Subscribe to dock changes
@@ -149,10 +174,9 @@ export function useGlobalHistory() {
     );
 
     return () => {
-      // Cancel pending capture on cleanup
-      if (pendingCapture.current) {
-        clearTimeout(pendingCapture.current);
-        pendingCapture.current = null;
+      if (pendingTimer.current) {
+        clearTimeout(pendingTimer.current);
+        pendingTimer.current = null;
       }
       unsubTimeline();
       unsubMedia();
@@ -175,27 +199,21 @@ export function useGlobalHistory() {
       // Ctrl+Z or Cmd+Z for undo
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
-        if (useHistoryStore.getState().canUndo()) {
-          undo();
-        }
+        undo();
         return;
       }
 
       // Ctrl+Shift+Z or Cmd+Shift+Z for redo
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
         e.preventDefault();
-        if (useHistoryStore.getState().canRedo()) {
-          redo();
-        }
+        redo();
         return;
       }
 
       // Ctrl+Y or Cmd+Y for redo (alternative)
       if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
         e.preventDefault();
-        if (useHistoryStore.getState().canRedo()) {
-          redo();
-        }
+        redo();
         return;
       }
     };
