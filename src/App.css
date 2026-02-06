@@ -1862,13 +1862,13 @@ input, textarea {
   min-width: 0;
 }
 
-/* Labeled value cell: label + draggable number stacked */
+/* Labeled value cell: [label ... value] left/right aligned */
 .labeled-value {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 0;
+  justify-content: space-between;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 3px;
@@ -1877,16 +1877,17 @@ input, textarea {
 }
 
 .labeled-value:hover {
-  border-color: var(--accent);
+  border-color: #2d5a8e;
 }
 
 .labeled-value-label {
   font-size: 9px;
   color: var(--text-secondary);
-  padding: 0 4px;
+  padding: 0 5px;
   flex-shrink: 0;
   user-select: none;
   opacity: 0.6;
+  text-align: left;
 }
 
 /* Override draggable-number style when inside labeled-value */
@@ -1896,16 +1897,21 @@ input, textarea {
   border: none;
   background: transparent;
   border-radius: 0;
-  padding: 2px 4px 2px 0;
+  padding: 3px 5px 3px 0;
+  text-align: right;
+  color: #5b8abf;
 }
 
 .labeled-value .draggable-number:hover {
   background: transparent;
   border-color: transparent;
+  color: #7aabe0;
 }
 
-.labeled-value:hover .draggable-number {
-  color: var(--accent);
+.labeled-value:active .draggable-number,
+.labeled-value .draggable-number:active {
+  color: #9cc4f0;
+  background: transparent;
 }
 
 .properties-section .control-row input[type="range"] {
@@ -5912,18 +5918,18 @@ input[type="checkbox"] {
 /* ========== DRAGGABLE NUMBER ========== */
 .draggable-number {
   display: inline-block;
-  padding: 2px 6px;
+  padding: 3px 6px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 3px;
-  color: var(--accent);
+  color: #5b8abf;
   font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
   font-size: 11px;
   cursor: ew-resize;
   user-select: none;
   min-width: 50px;
   text-align: right;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
 /* When used as primary input in control-row (replacing slider + value) */
@@ -5933,13 +5939,13 @@ input[type="checkbox"] {
 }
 
 .draggable-number:hover {
-  border-color: var(--accent);
+  border-color: #2d5a8e;
   background: var(--bg-secondary);
+  color: #7aabe0;
 }
 
 .draggable-number:active {
-  background: var(--accent);
-  color: var(--bg-primary);
+  color: #9cc4f0;
   cursor: grabbing;
 }
 
