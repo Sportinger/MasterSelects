@@ -673,16 +673,7 @@ class ProxyGeneratorGPU {
       frame.close();
     }
 
-    // CRITICAL: Process frames early to release decoder memory
-    // NVIDIA hardware decoders have limited DPB (Decoded Picture Buffer, ~10-16 frames)
-    // Must process partial batches to prevent DPB deadlock
-    if (this.decodedFrames.size >= MIN_BATCH_SIZE && this.pendingBatchProcess) {
-      this.pendingBatchProcess();
-    }
   }
-
-  // Callback to trigger batch processing from decode loop
-  private pendingBatchProcess: (() => void) | null = null;
 
   private async processSamplesGPU(
     mediaFileId: string,
@@ -801,22 +792,13 @@ class ProxyGeneratorGPU {
       }
     };
 
-    // Set up callback for streaming processing
-    let processingPromise: Promise<void> | null = null;
-    this.pendingBatchProcess = () => {
-      if (!processingPromise) {
-        processingPromise = processAccumulatedFrames().then(() => {
-          processingPromise = null;
-        });
-      }
-    };
-
-    // Decode samples with streaming processing
+    // Decode samples with inline processing
+    // No callback mechanism - process frames directly in the decode loop
+    // to avoid concurrency issues and ensure DPB is freed regularly
     let decodeErrors = 0;
     let samplesDecoded = 0;
-    const MAX_PENDING_FRAMES = MIN_BATCH_SIZE * 2; // Keep low to prevent DPB exhaustion on NVIDIA
 
-    log.debug(`Starting streaming decode (max ${MAX_PENDING_FRAMES} pending frames)...`);
+    log.debug(`Starting decode (DPB-safe, process every ${MIN_BATCH_SIZE} frames)...`);
     const decodeStartTime = performance.now();
 
     for (let i = firstKeyframeIdx; i < sortedSamples.length; i++) {
@@ -830,18 +812,6 @@ class ProxyGeneratorGPU {
       if (this.decoder.state === 'closed') {
         log.error('Decoder was closed unexpectedly');
         break;
-      }
-
-      // Wait if we have too many pending frames (release decoder buffer pressure)
-      let waitCount = 0;
-      while (this.decodedFrames.size >= MAX_PENDING_FRAMES) {
-        await processAccumulatedFrames();
-        await new Promise(resolve => setTimeout(resolve, 5));
-        waitCount++;
-        if (waitCount > 400) { // 2 second timeout
-          log.warn(`Frame processing stalled, ${this.decodedFrames.size} frames pending`);
-          break;
-        }
       }
 
       const chunk = new EncodedVideoChunk({
@@ -868,9 +838,15 @@ class ProxyGeneratorGPU {
         }
       }
 
-      // Small yield to allow decoder output callback to fire
-      if (i % 10 === 0) {
+      // Yield every 5 samples to let decoder output callback fire
+      if (i % 5 === 0) {
         await new Promise(resolve => setTimeout(resolve, 0));
+      }
+
+      // Process decoded frames inline to free DPB before it fills up
+      // NVIDIA hardware decoders have ~10 frame DPB limit
+      if (this.decodedFrames.size >= MIN_BATCH_SIZE) {
+        await processAccumulatedFrames();
       }
     }
 
@@ -944,10 +920,6 @@ class ProxyGeneratorGPU {
     } catch (e) {
       // Ignore close errors
     }
-
-    // Disable streaming callback before processing remaining frames
-    // to prevent race conditions with decoder output callbacks
-    this.pendingBatchProcess = null;
 
     // Process any remaining frames
     log.debug(`Processing ${this.decodedFrames.size} remaining frames...`);
