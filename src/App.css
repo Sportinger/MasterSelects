@@ -1845,18 +1845,67 @@ input, textarea {
   white-space: nowrap;
 }
 
+/* Fixed-width property label for uniform alignment */
+.properties-section .control-row .prop-label {
+  width: 52px;
+  min-width: 52px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
 /* Multi-value inline row (X Y Z side by side) */
 .multi-value-row {
   display: flex;
   flex: 1;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
 }
 
-.multi-value-row .draggable-number {
+/* Labeled value cell: label + draggable number stacked */
+.labeled-value {
   flex: 1;
   min-width: 0;
-  text-align: right;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.labeled-value:hover {
+  border-color: var(--accent);
+}
+
+.labeled-value-label {
+  font-size: 9px;
+  color: var(--text-secondary);
+  padding: 0 4px;
+  flex-shrink: 0;
+  user-select: none;
+  opacity: 0.6;
+}
+
+/* Override draggable-number style when inside labeled-value */
+.labeled-value .draggable-number {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  padding: 2px 4px 2px 0;
+}
+
+.labeled-value .draggable-number:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
+.labeled-value:hover .draggable-number {
+  color: var(--accent);
 }
 
 .properties-section .control-row input[type="range"] {
