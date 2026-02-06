@@ -5934,7 +5934,7 @@ input[type="checkbox"] {
 }
 
 /* When used as primary input in control-row (replacing slider + value) */
-.control-row .draggable-number {
+.control-row > .draggable-number {
   flex: 1;
   text-align: right;
 }
