@@ -16,7 +16,8 @@ const PROXY_FPS = 30;
 const PROXY_QUALITY = 0.92;
 const PROXY_MAX_WIDTH = 1280; // Changed from 1920 for faster generation
 const WORKER_POOL_SIZE = navigator.hardwareConcurrency || 4;
-const BATCH_SIZE = ProxyResizePipeline.getBatchSize(); // 16 frames per GPU batch
+const BATCH_SIZE = ProxyResizePipeline.getBatchSize(); // 16 frames max per GPU batch
+const MIN_BATCH_SIZE = 4; // Process partial batches to prevent DPB deadlock on NVIDIA
 const DB_BATCH_SIZE = 10; // IndexedDB write batch size
 
 // MP4Box types
@@ -672,9 +673,10 @@ class ProxyGeneratorGPU {
       frame.close();
     }
 
-    // CRITICAL: Process frames when buffer gets full to release decoder memory
-    // NVIDIA hardware decoders have limited DPB (Decoded Picture Buffer)
-    if (this.decodedFrames.size >= BATCH_SIZE && this.pendingBatchProcess) {
+    // CRITICAL: Process frames early to release decoder memory
+    // NVIDIA hardware decoders have limited DPB (Decoded Picture Buffer, ~10-16 frames)
+    // Must process partial batches to prevent DPB deadlock
+    if (this.decodedFrames.size >= MIN_BATCH_SIZE && this.pendingBatchProcess) {
       this.pendingBatchProcess();
     }
   }
@@ -714,12 +716,13 @@ class ProxyGeneratorGPU {
     const dbBatch: { id: string; mediaFileId: string; frameIndex: number; blob: Blob }[] = [];
 
     // Helper function to process accumulated frames
+    // Uses MIN_BATCH_SIZE threshold to prevent DPB deadlock on NVIDIA GPUs
     const processAccumulatedFrames = async () => {
-      if (this.decodedFrames.size < BATCH_SIZE) return;
+      if (this.decodedFrames.size < MIN_BATCH_SIZE) return;
 
-      // Sort and get frames to process
+      // Sort and get frames to process (up to BATCH_SIZE for GPU efficiency)
       const sortedIndices = Array.from(this.decodedFrames.keys()).sort((a, b) => a - b);
-      const batchIndices = sortedIndices.slice(0, BATCH_SIZE);
+      const batchIndices = sortedIndices.slice(0, Math.min(BATCH_SIZE, sortedIndices.length));
       const batchFrames: VideoFrame[] = [];
       const batchFrameIndices: number[] = [];
 
@@ -811,7 +814,7 @@ class ProxyGeneratorGPU {
     // Decode samples with streaming processing
     let decodeErrors = 0;
     let samplesDecoded = 0;
-    const MAX_PENDING_FRAMES = BATCH_SIZE * 2; // Keep at most 2 batches worth of frames
+    const MAX_PENDING_FRAMES = MIN_BATCH_SIZE * 2; // Keep low to prevent DPB exhaustion on NVIDIA
 
     log.debug(`Starting streaming decode (max ${MAX_PENDING_FRAMES} pending frames)...`);
     const decodeStartTime = performance.now();
@@ -888,8 +891,8 @@ class ProxyGeneratorGPU {
     while (performance.now() - waitStart < maxWaitTime) {
       const currentFrameCount = this.decodedFrames.size + this.processedFrames;
 
-      // Process any accumulated frames
-      if (this.decodedFrames.size >= BATCH_SIZE) {
+      // Process any accumulated frames (use MIN_BATCH_SIZE to free DPB)
+      if (this.decodedFrames.size >= MIN_BATCH_SIZE) {
         await processAccumulatedFrames();
       }
 
