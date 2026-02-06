@@ -32,7 +32,7 @@ export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) =
     if (id === null) {
       // Don't clear selection if curve editor is open
       if (hasAnyCurveEditorOpen()) return;
-      set({ selectedClipIds: new Set() });
+      set({ selectedClipIds: new Set(), primarySelectedClipId: null });
       return;
     }
 
@@ -46,7 +46,7 @@ export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) =
       } else {
         newSet.add(id);
       }
-      set({ selectedClipIds: newSet });
+      set({ selectedClipIds: newSet, primarySelectedClipId: id });
     } else {
       // Normal click: select clip + its linked clip
       // Prevent if any curve editor is open (unless clicking on already selected clip)
@@ -56,7 +56,7 @@ export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) =
       const clip = clips.find(c => c.id === id);
       const linkedId = clip?.linkedClipId;
       const newSelection = linkedId ? new Set([id, linkedId]) : new Set([id]);
-      set({ selectedClipIds: newSelection });
+      set({ selectedClipIds: newSelection, primarySelectedClipId: id });
     }
   },
 
@@ -84,14 +84,14 @@ export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) =
       if (wouldDeselect) return;
     }
 
-    set({ selectedClipIds: new Set(ids) });
+    set({ selectedClipIds: new Set(ids), primarySelectedClipId: ids.length > 0 ? ids[0] : null });
   },
 
   addClipToSelection: (id) => {
     const { selectedClipIds } = get();
     const newSet = new Set(selectedClipIds);
     newSet.add(id);
-    set({ selectedClipIds: newSet });
+    set({ selectedClipIds: newSet, primarySelectedClipId: id });
   },
 
   removeClipFromSelection: (id) => {
@@ -125,7 +125,7 @@ export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) =
       }
     }
 
-    set({ selectedClipIds: new Set() });
+    set({ selectedClipIds: new Set(), primarySelectedClipId: null });
   },
 
   // Keyframe selection

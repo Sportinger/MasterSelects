@@ -62,6 +62,7 @@ export interface TimelineState {
   isPlaying: boolean;
   isDraggingPlayhead: boolean;
   selectedClipIds: Set<string>;
+  primarySelectedClipId: string | null; // The clip the user actually clicked (for Properties panel)
 
   // Render layers (populated by useLayerSync from timeline clips, used by engine)
   layers: Layer[];

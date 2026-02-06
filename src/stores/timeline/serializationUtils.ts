@@ -116,6 +116,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         loopPlayback: false,
         playbackSpeed: 1,
         selectedClipIds: new Set(),
+        primarySelectedClipId: null,
         markers: [],
       });
       return;
@@ -136,6 +137,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       outPoint: data.outPoint,
       loopPlayback: data.loopPlayback,
       selectedClipIds: new Set(),
+      primarySelectedClipId: null,
       // Clear keyframe state
       clipKeyframes: new Map<string, Keyframe[]>(),
       keyframeRecordingEnabled: new Set<string>(),
@@ -893,6 +895,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
     set({
       clips: [],
       selectedClipIds: new Set(),
+      primarySelectedClipId: null,
       cachedFrameTimes: new Set(),
       ramPreviewProgress: null,
       ramPreviewRange: null,

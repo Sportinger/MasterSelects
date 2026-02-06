@@ -24,13 +24,17 @@ export function PropertiesPanel() {
   const clips = useTimelineStore(state => state.clips);
   const tracks = useTimelineStore(state => state.tracks);
   const selectedClipIds = useTimelineStore(state => state.selectedClipIds);
+  const primarySelectedClipId = useTimelineStore(state => state.primarySelectedClipId);
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
   // Actions from getState() - stable, no subscription needed
   const { getInterpolatedTransform, getInterpolatedSpeed } = useTimelineStore.getState();
   const [activeTab, setActiveTab] = useState<PropertiesTab>('transform');
   const [lastClipId, setLastClipId] = useState<string | null>(null);
 
-  const selectedClipId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
+  // Use the primary (clicked) clip for properties, fall back to first selected
+  const selectedClipId = primarySelectedClipId && selectedClipIds.has(primarySelectedClipId)
+    ? primarySelectedClipId
+    : selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
   const selectedClip = clips.find(c => c.id === selectedClipId);
 
   // Check if it's an audio clip
