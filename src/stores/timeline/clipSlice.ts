@@ -704,6 +704,10 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
     });
     invalidateCache();
 
+    // Clear stale composite/RAM preview cache - without this, the render loop's
+    // renderCachedFrame() finds old cached frames and overwrites our fresh render
+    engine.clearCompositeCache();
+
     // Force immediate render for live text preview
     layerBuilder.invalidateCache();
     const layers = layerBuilder.buildLayersFromStore();
@@ -734,6 +738,7 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
             : cl),
         });
         inv();
+        engine.clearCompositeCache();
         layerBuilder.invalidateCache();
         engine.render(layerBuilder.buildLayersFromStore());
       });
