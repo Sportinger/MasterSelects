@@ -7,6 +7,10 @@ import { Logger } from '../services/logger';
 
 const log = Logger.create('EffectsPipeline');
 
+// Effects handled inline in the composite shader (no separate GPU pipeline needed)
+// These are applied as uniforms in the composite pass, eliminating separate render passes.
+export const INLINE_EFFECT_IDS = new Set(['brightness', 'contrast', 'saturation', 'invert']);
+
 // Effect instance interface (runtime data attached to clips)
 interface EffectInstance {
   id: string;
@@ -34,6 +38,8 @@ export class EffectsPipeline {
     if (this.initialized) return;
 
     for (const [id, effect] of EFFECT_REGISTRY) {
+      // Skip effects handled inline in the composite shader
+      if (INLINE_EFFECT_IDS.has(id)) continue;
       await this.createEffectPipeline(id, effect);
     }
 
