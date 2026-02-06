@@ -84,14 +84,41 @@ const FileTypeIcon = memo(({ type, isFolder, isExpanded }: { type?: string; isFo
 const log = Logger.create('MediaPanel');
 import { useMediaStore } from '../../stores/mediaStore';
 import type { MediaFile, Composition, ProjectItem } from '../../stores/mediaStore';
+import type { LabelColor } from '../../stores/mediaStore/types';
 import { useTimelineStore } from '../../stores/timeline';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { RelinkDialog } from '../common/RelinkDialog';
 
-// Column definitions
-type ColumnId = 'name' | 'duration' | 'resolution' | 'fps' | 'container' | 'codec' | 'audio' | 'bitrate' | 'size';
+// AE label color palette
+const LABEL_COLORS: { key: LabelColor; hex: string; name: string }[] = [
+  { key: 'none', hex: 'transparent', name: 'None' },
+  { key: 'red', hex: '#e2514c', name: 'Red' },
+  { key: 'yellow', hex: '#dbb63b', name: 'Yellow' },
+  { key: 'aqua', hex: '#4ec0c0', name: 'Aqua' },
+  { key: 'pink', hex: '#d77bba', name: 'Pink' },
+  { key: 'lavender', hex: '#a278c1', name: 'Lavender' },
+  { key: 'peach', hex: '#e8a264', name: 'Peach' },
+  { key: 'seafoam', hex: '#6bc488', name: 'Sea Foam' },
+  { key: 'blue', hex: '#4a90e2', name: 'Blue' },
+  { key: 'green', hex: '#6db849', name: 'Green' },
+  { key: 'purple', hex: '#8b5fc7', name: 'Purple' },
+  { key: 'orange', hex: '#e07934', name: 'Orange' },
+  { key: 'brown', hex: '#a57249', name: 'Brown' },
+  { key: 'fuchsia', hex: '#d14da1', name: 'Fuchsia' },
+  { key: 'cyan', hex: '#49bce3', name: 'Cyan' },
+  { key: 'tan', hex: '#c4a86c', name: 'Tan' },
+];
 
-const COLUMN_LABELS: Record<ColumnId, string> = {
+function getLabelHex(color?: LabelColor): string {
+  if (!color || color === 'none') return 'transparent';
+  return LABEL_COLORS.find(c => c.key === color)?.hex || 'transparent';
+}
+
+// Column definitions
+type ColumnId = 'label' | 'name' | 'duration' | 'resolution' | 'fps' | 'container' | 'codec' | 'audio' | 'bitrate' | 'size';
+
+const COLUMN_LABELS_MAP: Record<ColumnId, string> = {
+  label: '',
   name: 'Name',
   duration: 'Duration',
   resolution: 'Resolution',
@@ -103,7 +130,7 @@ const COLUMN_LABELS: Record<ColumnId, string> = {
   size: 'Size',
 };
 
-const DEFAULT_COLUMN_ORDER: ColumnId[] = ['name', 'duration', 'resolution', 'fps', 'container', 'codec', 'audio', 'bitrate', 'size'];
+const DEFAULT_COLUMN_ORDER: ColumnId[] = ['label', 'name', 'duration', 'resolution', 'fps', 'container', 'codec', 'audio', 'bitrate', 'size'];
 const STORAGE_KEY = 'media-panel-column-order';
 
 // Load column order from localStorage
@@ -117,12 +144,19 @@ function loadColumnOrder(): ColumnId[] {
           DEFAULT_COLUMN_ORDER.every(col => parsed.includes(col))) {
         return parsed;
       }
-      // If saved order is missing new columns, add them at the end
+      // If saved order is missing new columns, add them
       const missingColumns = DEFAULT_COLUMN_ORDER.filter(col => !parsed.includes(col));
       if (missingColumns.length > 0) {
         // Filter out any invalid columns and add missing ones
         const validColumns = parsed.filter(col => DEFAULT_COLUMN_ORDER.includes(col));
-        return [...validColumns, ...missingColumns];
+        // Ensure 'label' is always first
+        const result = [...validColumns, ...missingColumns];
+        const labelIdx = result.indexOf('label');
+        if (labelIdx > 0) {
+          result.splice(labelIdx, 1);
+          result.unshift('label');
+        }
+        return result;
       }
     }
   } catch {
@@ -169,6 +203,7 @@ export function MediaPanel() {
     getOrCreateTextFolder,
     createSolidItem,
     getOrCreateSolidFolder,
+    setLabelColor,
   } = useMediaStore.getState();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -181,6 +216,8 @@ export function MediaPanel() {
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [internalDragId, setInternalDragId] = useState<string | null>(null);
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
+  const [labelPickerItemId, setLabelPickerItemId] = useState<string | null>(null);
+  const [labelPickerPos, setLabelPickerPos] = useState<{ x: number; y: number } | null>(null);
 
   // Column order state
   const [columnOrder, setColumnOrder] = useState<ColumnId[]>(loadColumnOrder);
@@ -708,11 +745,34 @@ export function MediaPanel() {
     mediaFile: MediaFile | null
   ) => {
     switch (colId) {
+      case 'label': {
+        const labelColor = 'labelColor' in item ? (item as MediaFile).labelColor : undefined;
+        const hex = getLabelHex(labelColor);
+        return (
+          <div
+            className="media-col media-col-label"
+            onClick={(e) => {
+              e.stopPropagation();
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              setLabelPickerItemId(item.id);
+              setLabelPickerPos({ x: rect.left, y: rect.bottom + 2 });
+            }}
+          >
+            <span
+              className="media-label-dot"
+              style={{
+                background: hex === 'transparent' ? 'var(--border-color)' : hex,
+                opacity: hex === 'transparent' ? 0.4 : 1,
+              }}
+            />
+          </div>
+        );
+      }
       case 'name':
         return (
           <div
             className="media-col media-col-name"
-            style={{ paddingLeft: `${12 + depth * 16}px`, width: nameColumnWidth, minWidth: nameColumnWidth, maxWidth: nameColumnWidth }}
+            style={{ paddingLeft: `${4 + depth * 16}px`, width: nameColumnWidth, minWidth: nameColumnWidth, maxWidth: nameColumnWidth }}
           >
             <span className="media-item-icon">
               <FileTypeIcon
@@ -944,14 +1004,14 @@ export function MediaPanel() {
                   key={colId}
                   className={`media-col media-col-${colId} ${draggingColumn === colId ? 'dragging' : ''} ${dragOverColumn === colId ? 'drag-over' : ''}`}
                   style={colId === 'name' ? { width: nameColumnWidth, minWidth: nameColumnWidth, maxWidth: nameColumnWidth } : undefined}
-                  draggable
-                  onDragStart={(e) => handleColumnDragStart(e, colId)}
-                  onDragOver={(e) => handleColumnDragOver(e, colId)}
-                  onDragLeave={handleColumnDragLeave}
-                  onDrop={(e) => handleColumnDrop(e, colId)}
-                  onDragEnd={handleColumnDragEnd}
+                  draggable={colId !== 'label'}
+                  onDragStart={colId !== 'label' ? (e) => handleColumnDragStart(e, colId) : undefined}
+                  onDragOver={colId !== 'label' ? (e) => handleColumnDragOver(e, colId) : undefined}
+                  onDragLeave={colId !== 'label' ? handleColumnDragLeave : undefined}
+                  onDrop={colId !== 'label' ? (e) => handleColumnDrop(e, colId) : undefined}
+                  onDragEnd={colId !== 'label' ? handleColumnDragEnd : undefined}
                 >
-                  {COLUMN_LABELS[colId]}
+                  {COLUMN_LABELS_MAP[colId]}
                   {/* Resize handle after name column */}
                   {colId === 'name' && (
                     <div
@@ -1288,6 +1348,37 @@ export function MediaPanel() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Label Color Picker */}
+      {labelPickerItemId && labelPickerPos && (
+        <>
+          <div
+            className="label-picker-backdrop"
+            onClick={() => { setLabelPickerItemId(null); setLabelPickerPos(null); }}
+          />
+          <div
+            className="label-picker-popup"
+            style={{ position: 'fixed', left: labelPickerPos.x, top: labelPickerPos.y, zIndex: 10002 }}
+          >
+            {LABEL_COLORS.map(c => (
+              <span
+                key={c.key}
+                className={`label-picker-swatch ${c.key === 'none' ? 'none' : ''}`}
+                title={c.name}
+                style={{ background: c.key === 'none' ? 'var(--bg-tertiary)' : c.hex }}
+                onClick={() => {
+                  const ids = selectedIds.includes(labelPickerItemId) ? selectedIds : [labelPickerItemId];
+                  setLabelColor(ids, c.key);
+                  setLabelPickerItemId(null);
+                  setLabelPickerPos(null);
+                }}
+              >
+                {c.key === 'none' && <span className="label-picker-x">&times;</span>}
+              </span>
+            ))}
+          </div>
+        </>
       )}
 
       {/* Relink Dialog */}

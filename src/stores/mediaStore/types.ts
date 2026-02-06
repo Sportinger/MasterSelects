@@ -8,6 +8,9 @@ export type MediaType = 'video' | 'audio' | 'image' | 'composition' | 'text' | '
 // Proxy status for video files
 export type ProxyStatus = 'none' | 'generating' | 'ready' | 'error';
 
+// Label colors (AE-style)
+export type LabelColor = 'none' | 'red' | 'yellow' | 'blue' | 'green' | 'purple' | 'orange' | 'pink' | 'cyan' | 'brown' | 'lavender' | 'peach' | 'seafoam' | 'fuchsia' | 'tan' | 'aqua';
+
 // Base media item
 export interface MediaItem {
   id: string;
@@ -15,6 +18,7 @@ export interface MediaItem {
   type: MediaType;
   parentId: string | null;
   createdAt: number;
+  labelColor?: LabelColor;
 }
 
 // Imported file
@@ -84,6 +88,7 @@ export interface MediaFolder {
   parentId: string | null;
   isExpanded: boolean;
   createdAt: number;
+  labelColor?: LabelColor;
 }
 
 // Union type for all items
