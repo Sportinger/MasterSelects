@@ -1,11 +1,11 @@
 /* WebVJ Mixer - Dark Theme Styles */
 
 :root {
-  --bg-primary: #131313;
-  --bg-secondary: #1a1a1a;
-  --bg-tertiary: #222222;
-  --bg-hover: #2c2c2c;
-  --border-color: #0e0e0e;
+  --bg-primary: #0f0f0f;
+  --bg-secondary: #161616;
+  --bg-tertiary: #1e1e1e;
+  --bg-hover: #282828;
+  --border-color: #0a0a0a;
   --text-primary: #d4d4d4;
   --text-secondary: #999;
   --accent: #2D8CEB;
