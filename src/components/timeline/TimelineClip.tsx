@@ -800,6 +800,10 @@ function TimelineClipComponent({
         width,
         cursor: toolMode === 'cut' ? 'crosshair' : undefined,
         animationDelay: `${animationDelay}s`,
+        ...(isSolidClip && clip.solidColor ? {
+          background: clip.solidColor,
+          borderColor: clip.solidColor,
+        } : {}),
       }}
       data-clip-id={clip.id}
       onMouseDown={toolMode === 'cut' ? undefined : onMouseDown}
