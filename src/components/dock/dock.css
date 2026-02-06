@@ -98,7 +98,7 @@
 }
 
 .dock-resize-handle:hover::after,
-.dock-split.resizing .dock-resize-handle::after {
+.dock-resize-handle.active::after {
   background: var(--accent);
 }
 
