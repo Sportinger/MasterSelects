@@ -1,10 +1,9 @@
-// Proxy video generator using WebCodecs VideoEncoder + Mp4Muxer
-// Decodes source → resizes on OffscreenCanvas → encodes all-keyframe H.264 → single MP4
-// All keyframes = every frame independently decodable = instant random access for scrubbing
+// Proxy frame generator using WebCodecs VideoDecoder + OffscreenCanvas → WebP
+// Decodes source video with hardware VideoDecoder, resizes on OffscreenCanvas,
+// then saves individual WebP frames via convertToBlob for instant scrubbing.
 
 import { Logger } from './logger';
 import * as MP4BoxModule from 'mp4box';
-import { Muxer as Mp4Muxer, ArrayBufferTarget as Mp4Target } from 'mp4-muxer';
 
 const log = Logger.create('ProxyGenerator');
 
@@ -13,8 +12,7 @@ const MP4Box = (MP4BoxModule as any).default || MP4BoxModule;
 // Configuration
 const PROXY_FPS = 30;
 const PROXY_MAX_WIDTH = 1280;
-const PROXY_BITRATE = 5_000_000; // 5 Mbps
-const ENCODER_CODEC = 'avc1.4d0028'; // Main Profile L4.0
+const WEBP_QUALITY = 0.8;
 
 // MP4Box types
 interface MP4ArrayBuffer extends ArrayBuffer {
@@ -53,13 +51,7 @@ interface MP4File {
   getTrackById: (id: number) => any;
 }
 
-export interface GeneratorResult {
-  blob: Blob;
-  frameCount: number;
-  fps: number;
-}
-
-class ProxyGeneratorMP4 {
+class ProxyGeneratorWebCodecs {
   private mp4File: MP4File | null = null;
   private decoder: VideoDecoder | null = null;
 
@@ -72,33 +64,36 @@ class ProxyGeneratorMP4 {
   private duration = 0;
   private totalFrames = 0;
   private processedFrames = 0;
+  private savedFrameIndices = new Set<number>();
   private decodedFrames: Map<number, VideoFrame> = new Map();
 
   private resizeCanvas: OffscreenCanvas | null = null;
   private resizeCtx: OffscreenCanvasRenderingContext2D | null = null;
 
-  private encoder: VideoEncoder | null = null;
-  private muxer: Mp4Muxer<Mp4Target> | null = null;
-
   private onProgress: ((progress: number) => void) | null = null;
   private checkCancelled: (() => boolean) | null = null;
+  private saveFrame: ((frame: { frameIndex: number; blob: Blob }) => Promise<void>) | null = null;
   private isCancelled = false;
 
   async generate(
     file: File,
+    _mediaFileId: string,
     onProgress: (progress: number) => void,
     checkCancelled: () => boolean,
-  ): Promise<GeneratorResult | null> {
+    saveFrame: (frame: { frameIndex: number; blob: Blob }) => Promise<void>,
+  ): Promise<{ frameCount: number; fps: number } | null> {
     this.onProgress = onProgress;
     this.checkCancelled = checkCancelled;
+    this.saveFrame = saveFrame;
     this.isCancelled = false;
     this.processedFrames = 0;
+    this.savedFrameIndices.clear();
     this.samples = [];
     this.decodedFrames.clear();
 
     try {
-      if (!('VideoDecoder' in window) || !('VideoEncoder' in window)) {
-        throw new Error('WebCodecs not available');
+      if (!('VideoDecoder' in window)) {
+        throw new Error('WebCodecs VideoDecoder not available');
       }
 
       // Load file with MP4Box
@@ -109,24 +104,9 @@ class ProxyGeneratorMP4 {
 
       log.info(`Source: ${this.videoTrack!.video.width}x${this.videoTrack!.video.height} → Proxy: ${this.outputWidth}x${this.outputHeight} @ ${PROXY_FPS}fps`);
 
-      // Check encoder support
-      const encoderSupport = await VideoEncoder.isConfigSupported({
-        codec: ENCODER_CODEC,
-        width: this.outputWidth,
-        height: this.outputHeight,
-        bitrate: PROXY_BITRATE,
-        framerate: PROXY_FPS,
-      });
-      if (!encoderSupport.supported) {
-        throw new Error(`Encoder codec ${ENCODER_CODEC} not supported`);
-      }
-
       // Initialize resize canvas
       this.resizeCanvas = new OffscreenCanvas(this.outputWidth, this.outputHeight);
       this.resizeCtx = this.resizeCanvas.getContext('2d')!;
-
-      // Initialize encoder + muxer
-      this.initEncoderAndMuxer();
 
       // Initialize decoder
       this.initDecoder();
@@ -138,6 +118,7 @@ class ProxyGeneratorMP4 {
         log.warn('First decode attempt failed, trying without description...');
         this.decodedFrames.clear();
         this.processedFrames = 0;
+        this.savedFrameIndices.clear();
 
         if (this.codecConfig?.description) {
           const configWithoutDesc: VideoDecoderConfig = {
@@ -150,9 +131,6 @@ class ProxyGeneratorMP4 {
             log.info('Retrying without description...');
             this.codecConfig = configWithoutDesc;
             this.decoder?.close();
-            // Re-init encoder/muxer for clean state
-            this.encoder?.close();
-            this.initEncoderAndMuxer();
             this.initDecoder();
             await this.processSamples();
           } else {
@@ -174,20 +152,10 @@ class ProxyGeneratorMP4 {
         return null;
       }
 
-      // Flush encoder and finalize muxer
-      await this.encoder!.flush();
-      this.encoder!.close();
-      this.muxer!.finalize();
-
-      const { buffer } = this.muxer!.target;
-      const blob = new Blob([buffer], { type: 'video/mp4' });
-
-      log.info(`Proxy complete: ${this.processedFrames} frames, ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
-
+      log.info(`Proxy complete: ${this.processedFrames} frames saved as WebP`);
       this.cleanup();
 
       return {
-        blob,
         frameCount: this.processedFrames,
         fps: PROXY_FPS,
       };
@@ -196,40 +164,6 @@ class ProxyGeneratorMP4 {
       this.cleanup();
       throw error;
     }
-  }
-
-  private initEncoderAndMuxer() {
-    // Create muxer
-    this.muxer = new Mp4Muxer({
-      target: new Mp4Target(),
-      video: {
-        codec: 'avc',
-        width: this.outputWidth,
-        height: this.outputHeight,
-      },
-      fastStart: 'in-memory',
-    });
-
-    // Create encoder
-    this.encoder = new VideoEncoder({
-      output: (chunk, meta) => {
-        this.muxer!.addVideoChunk(chunk, meta);
-      },
-      error: (e) => {
-        log.error('Encoder error:', e);
-      },
-    });
-
-    this.encoder.configure({
-      codec: ENCODER_CODEC,
-      width: this.outputWidth,
-      height: this.outputHeight,
-      bitrate: PROXY_BITRATE,
-      framerate: PROXY_FPS,
-      latencyMode: 'quality',
-    });
-
-    log.debug(`Encoder configured: ${this.outputWidth}x${this.outputHeight} @ ${PROXY_BITRATE / 1_000_000}Mbps (all keyframes)`);
   }
 
   private async loadWithMP4Box(file: File): Promise<boolean> {
@@ -265,7 +199,7 @@ class ProxyGeneratorMP4 {
           height = Math.round((PROXY_MAX_WIDTH / width) * height);
           width = PROXY_MAX_WIDTH;
         }
-        // Ensure even dimensions for H.264
+        // Ensure even dimensions
         this.outputWidth = width & ~1;
         this.outputHeight = height & ~1;
 
@@ -459,7 +393,7 @@ class ProxyGeneratorMP4 {
     const timestamp = frame.timestamp / 1_000_000;
     const frameIndex = Math.round(timestamp * PROXY_FPS);
 
-    if (frameIndex >= 0 && frameIndex < this.totalFrames) {
+    if (frameIndex >= 0 && frameIndex < this.totalFrames && !this.savedFrameIndices.has(frameIndex)) {
       const existing = this.decodedFrames.get(frameIndex);
       if (existing) existing.close();
       this.decodedFrames.set(frameIndex, frame);
@@ -468,28 +402,40 @@ class ProxyGeneratorMP4 {
     }
   }
 
-  private encodeFrame(frame: VideoFrame, frameIndex: number) {
-    if (!this.encoder || !this.resizeCanvas || !this.resizeCtx) return;
+  private async saveDecodedFrame(frame: VideoFrame, frameIndex: number): Promise<void> {
+    if (!this.resizeCanvas || !this.resizeCtx || !this.saveFrame) return;
 
-    // Draw source frame onto resize canvas (bilinear filtering)
+    // Resize onto canvas
     this.resizeCtx.drawImage(frame, 0, 0, this.outputWidth, this.outputHeight);
     frame.close();
 
-    // Create new VideoFrame from resized canvas
-    const timestampMicros = Math.round(frameIndex * (1_000_000 / PROXY_FPS));
-    const durationMicros = Math.round(1_000_000 / PROXY_FPS);
-
-    const resizedFrame = new VideoFrame(this.resizeCanvas, {
-      timestamp: timestampMicros,
-      duration: durationMicros,
+    // Convert to WebP blob
+    const blob = await this.resizeCanvas.convertToBlob({
+      type: 'image/webp',
+      quality: WEBP_QUALITY,
     });
 
-    // Encode as keyframe (every frame is a keyframe for instant random access)
-    this.encoder.encode(resizedFrame, { keyFrame: true });
-    resizedFrame.close();
+    // Save via callback
+    await this.saveFrame({ frameIndex, blob });
 
+    this.savedFrameIndices.add(frameIndex);
     this.processedFrames++;
     this.onProgress?.(Math.min(100, Math.round((this.processedFrames / this.totalFrames) * 100)));
+  }
+
+  private async processAccumulatedFrames(): Promise<void> {
+    if (this.decodedFrames.size === 0) return;
+
+    const sortedIndices = Array.from(this.decodedFrames.keys()).sort((a, b) => a - b);
+    const batch = sortedIndices.slice(0, Math.min(8, sortedIndices.length));
+
+    for (const idx of batch) {
+      const frame = this.decodedFrames.get(idx);
+      if (frame) {
+        this.decodedFrames.delete(idx);
+        await this.saveDecodedFrame(frame, idx);
+      }
+    }
   }
 
   private async processSamples(): Promise<void> {
@@ -505,23 +451,6 @@ class ProxyGeneratorMP4 {
 
     const startTime = performance.now();
     let decodeErrors = 0;
-    let samplesDecoded = 0;
-
-    // Process frames inline as they're decoded (prevents DPB overflow)
-    const processAccumulatedFrames = () => {
-      if (this.decodedFrames.size < 4) return;
-
-      const sortedIndices = Array.from(this.decodedFrames.keys()).sort((a, b) => a - b);
-      const batch = sortedIndices.slice(0, Math.min(16, sortedIndices.length));
-
-      for (const idx of batch) {
-        const frame = this.decodedFrames.get(idx);
-        if (frame) {
-          this.decodedFrames.delete(idx);
-          this.encodeFrame(frame, idx);
-        }
-      }
-    };
 
     // Decode loop
     for (let i = firstKeyframeIdx; i < sortedSamples.length; i++) {
@@ -546,7 +475,6 @@ class ProxyGeneratorMP4 {
 
       try {
         this.decoder.decode(chunk);
-        samplesDecoded++;
       } catch {
         decodeErrors++;
         if (decodeErrors > 50) {
@@ -560,35 +488,10 @@ class ProxyGeneratorMP4 {
         await new Promise(resolve => setTimeout(resolve, 0));
       }
 
-      // Process decoded frames to free DPB
+      // Process decoded frames to free DPB (prevents NVIDIA overflow)
       if (this.decodedFrames.size >= 4) {
-        processAccumulatedFrames();
+        await this.processAccumulatedFrames();
       }
-    }
-
-    // Wait for decoder to finish
-    const maxWaitTime = 120000;
-    const waitStart = performance.now();
-    let lastCount = this.decodedFrames.size + this.processedFrames;
-    let stallCount = 0;
-
-    while (performance.now() - waitStart < maxWaitTime) {
-      if (this.decodedFrames.size >= 4) {
-        processAccumulatedFrames();
-      }
-
-      if (this.processedFrames >= this.totalFrames * 0.95) break;
-
-      const currentCount = this.decodedFrames.size + this.processedFrames;
-      if (currentCount === lastCount) {
-        stallCount++;
-        if (stallCount > 100) break; // 5s stall
-      } else {
-        stallCount = 0;
-        lastCount = currentCount;
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 50));
     }
 
     // Flush decoder
@@ -605,44 +508,34 @@ class ProxyGeneratorMP4 {
       if (this.decoder.state !== 'closed') this.decoder.close();
     } catch { /* ignore */ }
 
-    // Process remaining decoded frames
+    // Process all remaining decoded frames
     while (this.decodedFrames.size > 0) {
-      const sortedIndices = Array.from(this.decodedFrames.keys()).sort((a, b) => a - b);
-      for (const idx of sortedIndices) {
-        const frame = this.decodedFrames.get(idx);
-        if (frame) {
-          this.decodedFrames.delete(idx);
-          this.encodeFrame(frame, idx);
-        }
-      }
+      await this.processAccumulatedFrames();
     }
 
     const totalTime = performance.now() - startTime;
     const fps = this.processedFrames / (totalTime / 1000);
-    log.info(`Encode complete: ${this.processedFrames}/${this.totalFrames} frames in ${(totalTime / 1000).toFixed(1)}s (${fps.toFixed(1)} fps)`);
+    log.info(`Complete: ${this.processedFrames}/${this.totalFrames} frames in ${(totalTime / 1000).toFixed(1)}s (${fps.toFixed(1)} fps)`);
   }
 
   private cleanup() {
     try { this.decoder?.close(); } catch { /* ignore */ }
-    try { this.encoder?.close(); } catch { /* ignore */ }
     for (const frame of this.decodedFrames.values()) frame.close();
     this.decodedFrames.clear();
     this.resizeCanvas = null;
     this.resizeCtx = null;
     this.decoder = null;
-    this.encoder = null;
-    this.muxer = null;
   }
 }
 
 // Singleton instance
-let generatorInstance: ProxyGeneratorMP4 | null = null;
+let generatorInstance: ProxyGeneratorWebCodecs | null = null;
 
-export function getProxyGenerator(): ProxyGeneratorMP4 {
+export function getProxyGenerator(): ProxyGeneratorWebCodecs {
   if (!generatorInstance) {
-    generatorInstance = new ProxyGeneratorMP4();
+    generatorInstance = new ProxyGeneratorWebCodecs();
   }
   return generatorInstance;
 }
 
-export { ProxyGeneratorMP4, PROXY_FPS, PROXY_MAX_WIDTH };
+export { ProxyGeneratorWebCodecs, PROXY_FPS, PROXY_MAX_WIDTH };
