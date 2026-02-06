@@ -1,11 +1,25 @@
 // Maps panel type to actual component
 // Note: Effects, Transcript, Analysis are now integrated into PropertiesPanel
 
+import { lazy, Suspense } from 'react';
 import type { DockPanel, PreviewPanelData } from '../../types/dock';
 import { Preview } from '../preview';
-import { PropertiesPanel, MediaPanel, MultiCamPanel, AIChatPanel, AIVideoPanel, YouTubePanel, TransitionsPanel } from '../panels';
-import { ExportPanel } from '../export';
+import { PropertiesPanel, MediaPanel } from '../panels';
 import { Timeline } from '../timeline';
+
+// Lazy-loaded panels: only loaded when the user opens them
+// This keeps the initial bundle small by deferring export pipeline,
+// AI services, YouTube API, and multicam analysis code
+const ExportPanel = lazy(() => import('../export/ExportPanel').then(m => ({ default: m.ExportPanel })));
+const MultiCamPanel = lazy(() => import('../panels/MultiCamPanel').then(m => ({ default: m.MultiCamPanel })));
+const AIChatPanel = lazy(() => import('../panels/AIChatPanel').then(m => ({ default: m.AIChatPanel })));
+const AIVideoPanel = lazy(() => import('../panels/AIVideoPanel').then(m => ({ default: m.AIVideoPanel })));
+const YouTubePanel = lazy(() => import('../panels/YouTubePanel').then(m => ({ default: m.YouTubePanel })));
+const TransitionsPanel = lazy(() => import('../panels/TransitionsPanel').then(m => ({ default: m.TransitionsPanel })));
+
+function PanelLoading() {
+  return <div className="flex items-center justify-center h-full text-gray-500 text-sm">Loading...</div>;
+}
 
 interface DockPanelContentProps {
   panel: DockPanel;
@@ -18,7 +32,7 @@ export function DockPanelContent({ panel }: DockPanelContentProps) {
       return <Preview panelId={panel.id} compositionId={previewData?.compositionId ?? null} />;
     }
     case 'export':
-      return <ExportPanel />;
+      return <Suspense fallback={<PanelLoading />}><ExportPanel /></Suspense>;
     case 'clip-properties':
       return <PropertiesPanel />;
     case 'timeline':
@@ -26,15 +40,15 @@ export function DockPanelContent({ panel }: DockPanelContentProps) {
     case 'media':
       return <MediaPanel />;
     case 'multicam':
-      return <MultiCamPanel />;
+      return <Suspense fallback={<PanelLoading />}><MultiCamPanel /></Suspense>;
     case 'ai-chat':
-      return <AIChatPanel />;
+      return <Suspense fallback={<PanelLoading />}><AIChatPanel /></Suspense>;
     case 'ai-video':
-      return <AIVideoPanel />;
+      return <Suspense fallback={<PanelLoading />}><AIVideoPanel /></Suspense>;
     case 'youtube':
-      return <YouTubePanel />;
+      return <Suspense fallback={<PanelLoading />}><YouTubePanel /></Suspense>;
     case 'transitions':
-      return <TransitionsPanel />;
+      return <Suspense fallback={<PanelLoading />}><TransitionsPanel /></Suspense>;
     default:
       return <div className="panel-placeholder">Unknown panel: {panel.type}</div>;
   }

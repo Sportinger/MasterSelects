@@ -2,11 +2,18 @@
 
 import { CONTAINER_MAP, MEDIA_INFO_TIMEOUT } from '../constants';
 import { Logger } from '../../../services/logger';
-import * as MP4BoxModule from 'mp4box';
-
-const MP4Box = (MP4BoxModule as any).default || MP4BoxModule;
 
 const log = Logger.create('MediaInfo');
+
+// Lazy-load mp4box only when needed (saves ~200KB from initial bundle)
+let _MP4Box: any = null;
+async function getMP4Box() {
+  if (!_MP4Box) {
+    const mod = await import('mp4box');
+    _MP4Box = (mod as any).default || mod;
+  }
+  return _MP4Box;
+}
 
 export interface MediaInfo {
   width?: number;
@@ -104,6 +111,7 @@ function parseCodecName(codec: string): string {
  * Extract detailed media info using mp4box (for MP4/MOV/M4V files).
  */
 async function getMP4Info(file: File): Promise<Partial<MediaInfo>> {
+  const MP4Box = await getMP4Box();
   return new Promise((resolve) => {
     const mp4boxFile = MP4Box.createFile();
     let resolved = false;

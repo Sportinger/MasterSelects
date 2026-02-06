@@ -80,6 +80,16 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Force heavy libs into separate chunks (loaded on demand)
+          'mp4box': ['mp4box'],
+          'mp4-muxer': ['mp4-muxer'],
+          'webm-muxer': ['webm-muxer'],
+        },
+      },
+    },
   },
   optimizeDeps: {
     esbuildOptions: {

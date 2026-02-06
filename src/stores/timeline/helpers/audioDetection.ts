@@ -1,11 +1,19 @@
 // Audio detection helpers for various video container formats
 // Supports: MP4, MOV, M4V, 3GP (via MP4Box), WebM, MKV, AVI, etc.
 
-import * as MP4BoxModule from 'mp4box';
 import { Logger } from '../../../services/logger';
 
-const MP4Box = (MP4BoxModule as any).default || MP4BoxModule;
 const log = Logger.create('AudioDetection');
+
+// Lazy-load mp4box only when needed (saves ~200KB from initial bundle)
+let _MP4Box: any = null;
+async function getMP4Box() {
+  if (!_MP4Box) {
+    const mod = await import('mp4box');
+    _MP4Box = (mod as any).default || mod;
+  }
+  return _MP4Box;
+}
 
 // MP4-based containers that MP4Box can parse
 const MP4_CONTAINERS = ['mp4', 'm4v', 'mov', '3gp', 'mp4v'];
@@ -57,6 +65,7 @@ export async function detectVideoAudio(file: File): Promise<boolean> {
  * Returns null if detection fails.
  */
 async function detectAudioMP4Box(file: File): Promise<boolean | null> {
+  const MP4Box = await getMP4Box();
   return new Promise((resolve) => {
     const mp4boxFile = MP4Box.createFile();
     let resolved = false;
