@@ -369,13 +369,11 @@ export function useExternalDrop({
                 const file = await handle.getFile();
                 if (filePath) (file as any).path = filePath;
                 if (isMediaFile(file)) {
-                  const imported = await mediaStore.importFilesWithHandles([
-                    { file, handle, absolutePath: filePath },
-                  ]);
-                  if (imported.length > 0) {
-                    addClip(newTrackId, file, startTime, cachedDuration, imported[0].id);
-                    log.debug('Imported file with handle:', { name: file.name, absolutePath: filePath });
-                  }
+                  // Add clip immediately for instant visual feedback
+                  addClip(newTrackId, file, startTime, cachedDuration);
+                  // Fire-and-forget media import (loadVideoMedia will pick it up)
+                  mediaStore.importFilesWithHandles([{ file, handle, absolutePath: filePath }]);
+                  log.debug('Imported file with handle:', { name: file.name, absolutePath: filePath });
                   return;
                 }
               }
@@ -388,8 +386,10 @@ export function useExternalDrop({
           const file = item.getAsFile();
           if (file && filePath) (file as any).path = filePath;
           if (file && isMediaFile(file)) {
-            const importedFile = await mediaStore.importFile(file);
-            addClip(newTrackId, file, startTime, cachedDuration, importedFile?.id);
+            // Add clip immediately for instant visual feedback
+            addClip(newTrackId, file, startTime, cachedDuration);
+            // Fire-and-forget media import (loadVideoMedia will pick it up)
+            mediaStore.importFile(file);
           }
         }
       }
@@ -517,11 +517,11 @@ export function useExternalDrop({
                     return;
                   }
 
-                  const imported = await mediaStore.importFilesWithHandles([{ file, handle, absolutePath: filePath }]);
-                  if (imported.length > 0) {
-                    addClip(trackId, file, startTime, cachedDuration, imported[0].id);
-                    log.debug('Imported file with handle:', { name: file.name, absolutePath: filePath });
-                  }
+                  // Add clip immediately for instant visual feedback
+                  addClip(trackId, file, startTime, cachedDuration);
+                  // Fire-and-forget media import (loadVideoMedia will pick it up)
+                  mediaStore.importFilesWithHandles([{ file, handle, absolutePath: filePath }]);
+                  log.debug('Imported file with handle:', { name: file.name, absolutePath: filePath });
                   return;
                 }
               }
@@ -547,8 +547,10 @@ export function useExternalDrop({
               return;
             }
 
-            const importedFile = await mediaStore.importFile(file);
-            addClip(trackId, file, startTime, cachedDuration, importedFile?.id);
+            // Add clip immediately for instant visual feedback
+            addClip(trackId, file, startTime, cachedDuration);
+            // Fire-and-forget media import (loadVideoMedia will pick it up)
+            mediaStore.importFile(file);
           }
         }
       }
