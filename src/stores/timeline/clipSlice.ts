@@ -325,47 +325,51 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
   removeClip: (id) => {
     const { clips, selectedClipIds, updateDuration, invalidateCache } = get();
     const clipToRemove = clips.find(c => c.id === id);
+    if (!clipToRemove) return;
 
-    if (clipToRemove) {
-      // Clean up video resources
-      if (clipToRemove.source?.type === 'video' && clipToRemove.source.videoElement) {
-        const video = clipToRemove.source.videoElement;
+    // Determine whether to also remove the linked clip:
+    // Only remove linked clip if it is also currently selected
+    const linkedId = clipToRemove.linkedClipId;
+    const removeLinked = !!(linkedId && selectedClipIds.has(linkedId));
+    const idsToRemove = new Set([id]);
+    if (removeLinked && linkedId) idsToRemove.add(linkedId);
+
+    // Clean up resources for all clips being removed
+    for (const removeId of idsToRemove) {
+      const clip = clips.find(c => c.id === removeId);
+      if (!clip) continue;
+      if (clip.source?.type === 'video' && clip.source.videoElement) {
+        const video = clip.source.videoElement;
         video.pause();
         video.src = '';
         video.load();
         import('../../engine/WebGPUEngine').then(({ engine }) => engine.cleanupVideo(video));
       }
-      // Clean up audio resources
-      if (clipToRemove.source?.type === 'audio' && clipToRemove.source.audioElement) {
-        const audio = clipToRemove.source.audioElement;
+      if (clip.source?.type === 'audio' && clip.source.audioElement) {
+        const audio = clip.source.audioElement;
         audio.pause();
         audio.src = '';
         audio.load();
       }
-
-      // Revoke blob URLs via manager (handles all URL types for this clip)
-      blobUrlManager.revokeAll(id);
-
-      // Also cleanup linked clip
-      if (clipToRemove.linkedClipId) {
-        const linkedClip = clips.find(c => c.id === clipToRemove.linkedClipId);
-        if (linkedClip?.source?.type === 'audio' && linkedClip.source.audioElement) {
-          const audio = linkedClip.source.audioElement;
-          audio.pause();
-          audio.src = '';
-          audio.load();
-        }
-        // Revoke linked clip's blob URLs
-        blobUrlManager.revokeAll(clipToRemove.linkedClipId);
-      }
+      blobUrlManager.revokeAll(removeId);
     }
 
     const newSelectedIds = new Set(selectedClipIds);
-    newSelectedIds.delete(id);
-    if (clipToRemove?.linkedClipId) newSelectedIds.delete(clipToRemove.linkedClipId);
+    for (const removeId of idsToRemove) newSelectedIds.delete(removeId);
+
+    // Build updated clips: remove the clip(s) and clear linkedClipId on the survivor
+    const updatedClips = clips
+      .filter(c => !idsToRemove.has(c.id))
+      .map(c => {
+        // If a surviving clip was linked to a removed clip, clear the link
+        if (c.linkedClipId && idsToRemove.has(c.linkedClipId)) {
+          return { ...c, linkedClipId: undefined };
+        }
+        return c;
+      });
 
     set({
-      clips: clips.filter(c => c.id !== id && c.id !== clipToRemove?.linkedClipId),
+      clips: updatedClips,
       selectedClipIds: newSelectedIds,
     });
     updateDuration();

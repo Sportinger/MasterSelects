@@ -37,6 +37,7 @@ export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) =
     }
 
     if (addToSelection) {
+      // Shift+click: toggle only the clicked clip (independent selection)
       const newSet = new Set(selectedClipIds);
       if (newSet.has(id)) {
         // Trying to toggle off - prevent if this clip has curve editor open
@@ -47,12 +48,15 @@ export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) =
       }
       set({ selectedClipIds: newSet });
     } else {
-      // Selecting a single clip - would deselect others
+      // Normal click: select clip + its linked clip
       // Prevent if any curve editor is open (unless clicking on already selected clip)
       if (!selectedClipIds.has(id) && hasAnyCurveEditorOpen()) {
         return;
       }
-      set({ selectedClipIds: new Set([id]) });
+      const clip = clips.find(c => c.id === id);
+      const linkedId = clip?.linkedClipId;
+      const newSelection = linkedId ? new Set([id, linkedId]) : new Set([id]);
+      set({ selectedClipIds: newSelection });
     }
   },
 
