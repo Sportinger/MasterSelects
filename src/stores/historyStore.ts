@@ -4,8 +4,9 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { Logger } from '../services/logger';
-import type { TimelineClip, TimelineTrack, Layer } from '../types';
-import type { MediaFile, Composition, MediaFolder } from './mediaStore/types';
+import type { TimelineClip, TimelineTrack, Layer, Keyframe } from '../types';
+import type { MediaFile, Composition, MediaFolder, TextItem, SolidItem } from './mediaStore/types';
+import type { TimelineMarker } from './timeline/types';
 import type { DockNode } from '../types/dock';
 
 const log = Logger.create('History');
@@ -24,6 +25,8 @@ interface StateSnapshot {
     scrollX: number;
     layers: Layer[];
     selectedLayerId: string | null;
+    clipKeyframes: Record<string, Keyframe[]>;
+    markers: TimelineMarker[];
   };
 
   // Media state
@@ -33,6 +36,8 @@ interface StateSnapshot {
     folders: MediaFolder[];
     selectedIds: string[];
     expandedFolderIds: string[];
+    textItems: TextItem[];
+    solidItems: SolidItem[];
   };
 
   // Dock layout state
@@ -84,6 +89,8 @@ interface TimelineStoreState {
   scrollX: number;
   layers: Layer[];
   selectedLayerId: string | null;
+  clipKeyframes: Map<string, Keyframe[]>;
+  markers: TimelineMarker[];
 }
 
 interface MediaStoreState {
@@ -92,6 +99,14 @@ interface MediaStoreState {
   folders: MediaFolder[];
   selectedIds: string[];
   expandedFolderIds: string[];
+  textItems: TextItem[];
+  solidItems: SolidItem[];
+}
+
+// Callback to cancel pending debounced captures (set by useGlobalHistory)
+let cancelPendingCaptureCallback: (() => void) | null = null;
+export function setCancelPendingCapture(fn: () => void) {
+  cancelPendingCaptureCallback = fn;
 }
 
 // Import stores dynamically to avoid circular dependencies
@@ -149,6 +164,14 @@ function createSnapshot(label: string): StateSnapshot {
   const media = getMediaState?.() || ({} as any);
   const dock = getDockState?.() || ({} as any);
 
+  // Convert Map<string, Keyframe[]> to plain object for cloning
+  const keyframesObj: Record<string, Keyframe[]> = {};
+  if (timeline.clipKeyframes instanceof Map) {
+    timeline.clipKeyframes.forEach((kfs: Keyframe[], clipId: string) => {
+      keyframesObj[clipId] = deepClone(kfs);
+    });
+  }
+
   return {
     timestamp: Date.now(),
     label,
@@ -160,6 +183,8 @@ function createSnapshot(label: string): StateSnapshot {
       scrollX: timeline.scrollX || 0,
       layers: deepClone(timeline.layers || []),
       selectedLayerId: timeline.selectedLayerId || null,
+      clipKeyframes: keyframesObj,
+      markers: deepClone(timeline.markers || []),
     },
     media: {
       files: deepClone(media.files || []),
@@ -167,6 +192,8 @@ function createSnapshot(label: string): StateSnapshot {
       folders: deepClone(media.folders || []),
       selectedIds: [...(media.selectedIds || [])],
       expandedFolderIds: [...(media.expandedFolderIds || [])],
+      textItems: deepClone(media.textItems || []),
+      solidItems: deepClone(media.solidItems || []),
     },
     dock: {
       layout: deepClone(dock.layout || {}),
@@ -190,6 +217,14 @@ function applySnapshot(snapshot: StateSnapshot) {
       };
     });
 
+    // Convert plain object back to Map<string, Keyframe[]>
+    const restoredKeyframes = new Map<string, Keyframe[]>();
+    if (snapshot.timeline.clipKeyframes) {
+      for (const [clipId, kfs] of Object.entries(snapshot.timeline.clipKeyframes)) {
+        restoredKeyframes.set(clipId, deepClone(kfs));
+      }
+    }
+
     setTimelineState({
       clips: deepClone(snapshot.timeline.clips),
       tracks: deepClone(snapshot.timeline.tracks),
@@ -198,6 +233,8 @@ function applySnapshot(snapshot: StateSnapshot) {
       scrollX: snapshot.timeline.scrollX,
       layers: restoredLayers,
       selectedLayerId: snapshot.timeline.selectedLayerId,
+      clipKeyframes: restoredKeyframes,
+      markers: deepClone(snapshot.timeline.markers || []),
     });
   }
 
@@ -218,6 +255,8 @@ function applySnapshot(snapshot: StateSnapshot) {
       folders: deepClone(snapshot.media.folders),
       selectedIds: [...snapshot.media.selectedIds],
       expandedFolderIds: [...snapshot.media.expandedFolderIds],
+      textItems: deepClone(snapshot.media.textItems || []),
+      solidItems: deepClone(snapshot.media.solidItems || []),
     });
   }
 
@@ -272,6 +311,9 @@ export const useHistoryStore = create<HistoryState>()(
 
       if (undoStack.length === 0) return;
 
+      // Cancel any pending debounced capture to prevent race condition
+      cancelPendingCaptureCallback?.();
+
       set({ isApplying: true });
 
       // Pop from undo stack
@@ -300,6 +342,9 @@ export const useHistoryStore = create<HistoryState>()(
       const { redoStack, currentSnapshot, undoStack } = get();
 
       if (redoStack.length === 0) return;
+
+      // Cancel any pending debounced capture to prevent race condition
+      cancelPendingCaptureCallback?.();
 
       set({ isApplying: true });
 

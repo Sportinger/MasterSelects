@@ -1,6 +1,8 @@
 // Transform Tab - Position, Scale, Rotation, Opacity controls (AE-style compact layout)
+import { useCallback } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
+import { startBatch, endBatch } from '../../../stores/historyStore';
 import type { BlendMode, AnimatableProperty } from '../../../types';
 import {
   KeyframeToggle,
@@ -34,6 +36,9 @@ function LabeledValue({ label, ...props }: { label: string } & React.ComponentPr
 
 export function TransformTab({ clipId, transform, speed = 1 }: TransformTabProps) {
   const { setPropertyValue, updateClipTransform } = useTimelineStore.getState();
+
+  const handleBatchStart = useCallback(() => startBatch('Adjust transform'), []);
+  const handleBatchEnd = useCallback(() => endBatch(), []);
 
   const activeComp = useMediaStore.getState().getActiveComposition();
   const compWidth = activeComp?.width || 1920;
@@ -91,13 +96,15 @@ export function TransformTab({ clipId, transform, speed = 1 }: TransformTabProps
           <KeyframeToggle clipId={clipId} property="opacity" value={transform.opacity} />
           <label className="prop-label">Opacity</label>
           <DraggableNumber value={opacityPct} onChange={handleOpacityChange}
-            defaultValue={100} decimals={1} suffix="%" min={0} max={100} sensitivity={1} />
+            defaultValue={100} decimals={1} suffix="%" min={0} max={100} sensitivity={1}
+            onDragStart={handleBatchStart} onDragEnd={handleBatchEnd} />
         </div>
         <div className="control-row">
           <KeyframeToggle clipId={clipId} property="speed" value={speed} />
           <label className="prop-label">Speed</label>
           <DraggableNumber value={speedPct} onChange={handleSpeedChange}
-            defaultValue={100} decimals={0} suffix="%" min={-400} max={400} sensitivity={1} />
+            defaultValue={100} decimals={0} suffix="%" min={-400} max={400} sensitivity={1}
+            onDragStart={handleBatchStart} onDragEnd={handleBatchEnd} />
         </div>
       </div>
 
@@ -108,11 +115,14 @@ export function TransformTab({ clipId, transform, speed = 1 }: TransformTabProps
           <label className="prop-label">Position</label>
           <div className="multi-value-row">
             <LabeledValue label="X" value={posXPx} onChange={handlePosXChange}
-              defaultValue={0} decimals={1} sensitivity={0.5} />
+              defaultValue={0} decimals={1} sensitivity={0.5}
+              onDragStart={handleBatchStart} onDragEnd={handleBatchEnd} />
             <LabeledValue label="Y" value={posYPx} onChange={handlePosYChange}
-              defaultValue={0} decimals={1} sensitivity={0.5} />
+              defaultValue={0} decimals={1} sensitivity={0.5}
+              onDragStart={handleBatchStart} onDragEnd={handleBatchEnd} />
             <LabeledValue label="Z" value={posZPx} onChange={handlePosZChange}
-              defaultValue={0} decimals={1} sensitivity={0.5} />
+              defaultValue={0} decimals={1} sensitivity={0.5}
+              onDragStart={handleBatchStart} onDragEnd={handleBatchEnd} />
           </div>
         </div>
       </div>
@@ -124,11 +134,14 @@ export function TransformTab({ clipId, transform, speed = 1 }: TransformTabProps
           <label className="prop-label">Scale</label>
           <div className="multi-value-row">
             <LabeledValue label="All" value={uniformScalePct} onChange={handleUniformScaleChange}
-              defaultValue={100} decimals={1} suffix="%" min={1} sensitivity={1} />
+              defaultValue={100} decimals={1} suffix="%" min={1} sensitivity={1}
+              onDragStart={handleBatchStart} onDragEnd={handleBatchEnd} />
             <LabeledValue label="X" value={scaleXPct} onChange={handleScaleXChange}
-              defaultValue={100} decimals={1} suffix="%" min={1} sensitivity={1} />
+              defaultValue={100} decimals={1} suffix="%" min={1} sensitivity={1}
+              onDragStart={handleBatchStart} onDragEnd={handleBatchEnd} />
             <LabeledValue label="Y" value={scaleYPct} onChange={handleScaleYChange}
-              defaultValue={100} decimals={1} suffix="%" min={1} sensitivity={1} />
+              defaultValue={100} decimals={1} suffix="%" min={1} sensitivity={1}
+              onDragStart={handleBatchStart} onDragEnd={handleBatchEnd} />
           </div>
         </div>
       </div>
@@ -140,11 +153,14 @@ export function TransformTab({ clipId, transform, speed = 1 }: TransformTabProps
           <label className="prop-label">Rotation</label>
           <div className="multi-value-row">
             <LabeledValue label="X" value={transform.rotation.x} onChange={(v) => handlePropertyChange('rotation.x', v)}
-              defaultValue={0} decimals={1} suffix="°" min={-180} max={180} sensitivity={0.5} />
+              defaultValue={0} decimals={1} suffix="°" min={-180} max={180} sensitivity={0.5}
+              onDragStart={handleBatchStart} onDragEnd={handleBatchEnd} />
             <LabeledValue label="Y" value={transform.rotation.y} onChange={(v) => handlePropertyChange('rotation.y', v)}
-              defaultValue={0} decimals={1} suffix="°" min={-180} max={180} sensitivity={0.5} />
+              defaultValue={0} decimals={1} suffix="°" min={-180} max={180} sensitivity={0.5}
+              onDragStart={handleBatchStart} onDragEnd={handleBatchEnd} />
             <LabeledValue label="Z" value={transform.rotation.z} onChange={(v) => handlePropertyChange('rotation.z', v)}
-              defaultValue={0} decimals={1} suffix="°" min={-180} max={180} sensitivity={0.5} />
+              defaultValue={0} decimals={1} suffix="°" min={-180} max={180} sensitivity={0.5}
+              onDragStart={handleBatchStart} onDragEnd={handleBatchEnd} />
           </div>
         </div>
       </div>

@@ -7,6 +7,7 @@ import { useDockStore } from '../stores/dockStore';
 import {
   useHistoryStore,
   initHistoryStoreRefs,
+  setCancelPendingCapture,
   captureSnapshot,
   undo,
   redo,
@@ -15,18 +16,11 @@ import { Logger } from '../services/logger';
 
 const log = Logger.create('History');
 
-// Debounce helper for rapid state changes
-function debounce<T extends (...args: any[]) => void>(fn: T, delay: number): T {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  return ((...args: any[]) => {
-    if (timeoutId) clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => fn(...args), delay);
-  }) as T;
-}
-
 export function useGlobalHistory() {
   const initialized = useRef(false);
   const lastCaptureTime = useRef(0);
+  const pendingCapture = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suppressUntil = useRef(0);
 
   // Initialize store references
   useEffect(() => {
@@ -49,6 +43,16 @@ export function useGlobalHistory() {
       },
     });
 
+    // Register cancel callback so undo/redo can cancel pending debounced captures
+    setCancelPendingCapture(() => {
+      if (pendingCapture.current) {
+        clearTimeout(pendingCapture.current);
+        pendingCapture.current = null;
+      }
+      // Suppress auto-captures for 200ms after undo/redo
+      suppressUntil.current = Date.now() + 200;
+    });
+
     // Capture initial state
     captureSnapshot('initial');
 
@@ -57,27 +61,37 @@ export function useGlobalHistory() {
 
   // Subscribe to store changes and capture snapshots
   useEffect(() => {
-    // Debounced capture to avoid too many snapshots during rapid changes
-    const debouncedCapture = debounce((label: string) => {
-      const now = Date.now();
-      // Minimum 100ms between captures
-      if (now - lastCaptureTime.current < 100) return;
-      lastCaptureTime.current = now;
-      captureSnapshot(label);
-    }, 150);
+    // Cancellable debounced capture — stores timer ID so undo/redo can cancel it
+    const debouncedCapture = (label: string) => {
+      if (pendingCapture.current) clearTimeout(pendingCapture.current);
+      pendingCapture.current = setTimeout(() => {
+        pendingCapture.current = null;
 
-    // Subscribe to timeline changes
+        // Suppress captures shortly after undo/redo to prevent race condition
+        if (Date.now() < suppressUntil.current) return;
+
+        // Don't capture during undo/redo application
+        if (useHistoryStore.getState().isApplying) return;
+
+        const now = Date.now();
+        // Minimum 100ms between captures
+        if (now - lastCaptureTime.current < 100) return;
+        lastCaptureTime.current = now;
+        captureSnapshot(label);
+      }, 150);
+    };
+
+    // Subscribe to timeline changes (clips, tracks, keyframes, markers)
     const unsubTimeline = useTimelineStore.subscribe(
       (state) => ({
         clips: state.clips,
         tracks: state.tracks,
-        selectedClipIds: state.selectedClipIds,
+        clipKeyframes: state.clipKeyframes,
+        markers: state.markers,
       }),
       (curr, prev) => {
-        // Check if this is during undo/redo
         if (useHistoryStore.getState().isApplying) return;
 
-        // Determine what changed
         if (curr.clips !== prev.clips) {
           if (curr.clips.length !== prev.clips.length) {
             debouncedCapture(curr.clips.length > prev.clips.length ? 'Add clip' : 'Remove clip');
@@ -86,19 +100,23 @@ export function useGlobalHistory() {
           }
         } else if (curr.tracks !== prev.tracks) {
           debouncedCapture('Modify track');
-        } else if (curr.selectedClipIds !== prev.selectedClipIds) {
-          // Selection changes are not captured as separate undo steps
+        } else if (curr.clipKeyframes !== prev.clipKeyframes) {
+          debouncedCapture('Modify keyframes');
+        } else if (curr.markers !== prev.markers) {
+          debouncedCapture('Modify markers');
         }
       },
       { fireImmediately: false }
     );
 
-    // Subscribe to media changes
+    // Subscribe to media changes (files, compositions, folders, textItems, solidItems)
     const unsubMedia = useMediaStore.subscribe(
       (state) => ({
         files: state.files,
         compositions: state.compositions,
         folders: state.folders,
+        textItems: state.textItems,
+        solidItems: state.solidItems,
       }),
       (curr, prev) => {
         if (useHistoryStore.getState().isApplying) return;
@@ -109,6 +127,10 @@ export function useGlobalHistory() {
           debouncedCapture('Modify composition');
         } else if (curr.folders !== prev.folders) {
           debouncedCapture('Modify folder');
+        } else if (curr.textItems !== prev.textItems) {
+          debouncedCapture('Modify text items');
+        } else if (curr.solidItems !== prev.solidItems) {
+          debouncedCapture('Modify solid items');
         }
       },
       { fireImmediately: false }
@@ -127,6 +149,11 @@ export function useGlobalHistory() {
     );
 
     return () => {
+      // Cancel pending capture on cleanup
+      if (pendingCapture.current) {
+        clearTimeout(pendingCapture.current);
+        pendingCapture.current = null;
+      }
       unsubTimeline();
       unsubMedia();
       unsubDock();
