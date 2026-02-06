@@ -1020,6 +1020,10 @@ export class WebGPUEngine {
     return this.context.getDevice();
   }
 
+  getTextureManager(): TextureManager | null {
+    return this.textureManager;
+  }
+
   isDeviceValid(): boolean {
     return this.context.initialized && this.context.getDevice() !== null;
   }

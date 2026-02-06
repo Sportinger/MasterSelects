@@ -8,6 +8,8 @@ import { DEFAULT_TRANSFORM, DEFAULT_TEXT_PROPERTIES, DEFAULT_TEXT_DURATION } fro
 import { generateWaveform, generateWaveformFromBuffer, getDefaultEffectParams } from './utils';
 import { textRenderer } from '../../services/textRenderer';
 import { googleFontsService } from '../../services/googleFontsService';
+import { engine } from '../../engine/WebGPUEngine';
+import { layerBuilder } from '../../services/layerBuilder';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('ClipSlice');
@@ -684,8 +686,9 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
         if (c.id !== clipId || !c.textProperties) return c;
         const newProps: TextClipProperties = { ...c.textProperties, ...props };
 
-        if (props.fontFamily || props.fontWeight) {
-          googleFontsService.loadFont(props.fontFamily || c.textProperties.fontFamily, props.fontWeight || c.textProperties.fontWeight);
+        // Clean up old canvas texture from GPU cache
+        if (c.source?.textCanvas) {
+          engine.getTextureManager()?.removeCanvasTexture(c.source.textCanvas);
         }
 
         const canvas = textRenderer.createCanvas(1920, 1080);
@@ -700,6 +703,41 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
       }),
     });
     invalidateCache();
+
+    // Force immediate render for live text preview
+    layerBuilder.invalidateCache();
+    const layers = layerBuilder.buildLayersFromStore();
+    engine.render(layers);
+
+    // Handle async font loading - re-render when font is ready
+    if (props.fontFamily || props.fontWeight) {
+      const clip = get().clips.find(c => c.id === clipId);
+      if (!clip?.textProperties) return;
+      const fontFamily = props.fontFamily || clip.textProperties.fontFamily;
+      const fontWeight = props.fontWeight || clip.textProperties.fontWeight;
+      googleFontsService.loadFont(fontFamily, fontWeight).then(() => {
+        // Re-render text with loaded font
+        const { clips: currentClips, invalidateCache: inv } = get();
+        const currentClip = currentClips.find(cl => cl.id === clipId);
+        if (!currentClip?.textProperties) return;
+
+        // Clean up old canvas texture
+        if (currentClip.source?.textCanvas) {
+          engine.getTextureManager()?.removeCanvasTexture(currentClip.source.textCanvas);
+        }
+
+        const canvas = textRenderer.createCanvas(1920, 1080);
+        textRenderer.render(currentClip.textProperties, canvas);
+        set({
+          clips: currentClips.map(cl => cl.id === clipId
+            ? { ...cl, source: { ...cl.source!, textCanvas: canvas } }
+            : cl),
+        });
+        inv();
+        layerBuilder.invalidateCache();
+        engine.render(layerBuilder.buildLayersFromStore());
+      });
+    }
   },
 
   toggleClipReverse: (id) => {
