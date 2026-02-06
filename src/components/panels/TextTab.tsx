@@ -1,6 +1,6 @@
 /**
- * Text Tab Component - Typography controls for text clips
- * Part of PropertiesPanel
+ * Text Tab Component - Compact typography controls for text clips
+ * Inspired by After Effects / professional NLE text panels
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
@@ -8,41 +8,35 @@ import type { TextClipProperties } from '../../types';
 import { useTimelineStore } from '../../stores/timeline';
 import { googleFontsService, POPULAR_FONTS } from '../../services/googleFontsService';
 
-// Draggable number input component for quick value adjustments
-interface DraggableNumberProps {
+// Compact draggable number with icon label
+interface CompactNumberProps {
   value: number;
   onChange: (value: number) => void;
   min?: number;
   max?: number;
   step?: number;
   unit?: string;
-  label: string;
+  icon: React.ReactNode;
+  title: string;
 }
 
-function DraggableNumber({ value, onChange, min = 8, max = 500, step = 1, unit = 'px', label }: DraggableNumberProps) {
-  const [isDragging, setIsDragging] = useState(false);
+function CompactNumber({ value, onChange, min = 0, max = 999, step = 1, unit = 'px', icon, title }: CompactNumberProps) {
   const dragStartRef = useRef<{ x: number; value: number } | null>(null);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    // Don't start drag if clicking on the input itself
     if ((e.target as HTMLElement).tagName === 'INPUT') return;
-
     e.preventDefault();
-    setIsDragging(true);
     dragStartRef.current = { x: e.clientX, value };
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!dragStartRef.current) return;
       const delta = moveEvent.clientX - dragStartRef.current.x;
-      // Adjust sensitivity based on step size
       const sensitivity = step < 1 ? 0.5 : (step >= 10 ? 5 : 1);
       const newValue = dragStartRef.current.value + Math.round(delta / sensitivity) * step;
-      const clampedValue = Math.max(min, Math.min(max, newValue));
-      onChange(clampedValue);
+      onChange(Math.max(min, Math.min(max, newValue)));
     };
 
     const handleMouseUp = () => {
-      setIsDragging(false);
       dragStartRef.current = null;
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
@@ -53,26 +47,77 @@ function DraggableNumber({ value, onChange, min = 8, max = 500, step = 1, unit =
   }, [value, onChange, min, max, step]);
 
   return (
-    <div className="control-row">
-      <label
-        className={`draggable-label ${isDragging ? 'dragging' : ''}`}
-        onMouseDown={handleMouseDown}
-        style={{ cursor: 'ew-resize', userSelect: 'none' }}
-      >
-        {label}
-      </label>
+    <div className="tt-compact-num" title={title} onMouseDown={handleMouseDown}>
+      <span className="tt-num-icon">{icon}</span>
       <input
         type="number"
-        value={value}
-        onChange={(e) => onChange(Math.max(min, Math.min(max, parseInt(e.target.value) || min)))}
+        value={step < 1 ? value.toFixed(1) : value}
+        onChange={(e) => onChange(Math.max(min, Math.min(max, parseFloat(e.target.value) || min)))}
         min={min}
         max={max}
         step={step}
       />
-      <span className="unit">{unit}</span>
+      <span className="tt-num-unit">{unit}</span>
     </div>
   );
 }
+
+// SVG Icons as inline components
+const IconFontSize = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+    <text x="0" y="12" fontSize="11" fontWeight="bold" fontFamily="Arial">T</text>
+    <text x="7" y="12" fontSize="8" fontWeight="bold" fontFamily="Arial">T</text>
+  </svg>
+);
+
+const IconLineHeight = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+    <path d="M2 1h10M2 13h10M7 3v8M5 5l2-2 2 2M5 9l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+  </svg>
+);
+
+const IconLetterSpacing = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+    <text x="1" y="10" fontSize="9" fontWeight="bold" fontFamily="Arial">V</text>
+    <text x="7" y="10" fontSize="9" fontWeight="bold" fontFamily="Arial">A</text>
+  </svg>
+);
+
+const IconAlignLeft = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" strokeWidth="1.5" fill="none">
+    <path d="M1 2h12M1 5h8M1 8h10M1 11h6"/>
+  </svg>
+);
+
+const IconAlignCenter = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" strokeWidth="1.5" fill="none">
+    <path d="M1 2h12M3 5h8M2 8h10M4 11h6"/>
+  </svg>
+);
+
+const IconAlignRight = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" strokeWidth="1.5" fill="none">
+    <path d="M1 2h12M5 5h8M3 8h10M7 11h6"/>
+  </svg>
+);
+
+const IconAlignTop = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" strokeWidth="1.5" fill="none">
+    <path d="M2 1h10M7 4v9M5 6l2-2 2 2"/>
+  </svg>
+);
+
+const IconAlignMiddle = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" strokeWidth="1.5" fill="none">
+    <path d="M2 7h10M7 3v8M5 5l2-2 2 2M5 9l2 2 2-2"/>
+  </svg>
+);
+
+const IconAlignBottom = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" strokeWidth="1.5" fill="none">
+    <path d="M2 13h10M7 1v9M5 8l2 2 2-2"/>
+  </svg>
+);
 
 interface TextTabProps {
   clipId: string;
@@ -88,13 +133,13 @@ export function TextTab({ clipId, textProperties }: TextTabProps) {
     setLocalText(textProperties.text);
   }, [textProperties.text]);
 
-  // Debounced text update
+  // Debounced text update - 50ms for near-instant preview
   useEffect(() => {
     const timer = setTimeout(() => {
       if (localText !== textProperties.text) {
         updateTextProperties(clipId, { text: localText });
       }
-    }, 300);
+    }, 50);
     return () => clearTimeout(timer);
   }, [localText, clipId, textProperties.text, updateTextProperties]);
 
@@ -115,73 +160,52 @@ export function TextTab({ clipId, textProperties }: TextTabProps) {
   }, [clipId, updateTextProperties]);
 
   return (
-    <div className="text-tab">
+    <div className="tt">
       {/* Text Content */}
-      <div className="properties-section">
-        <h4>Content</h4>
+      <div className="tt-section">
         <textarea
-          className="text-content-input"
+          className="tt-textarea"
           value={localText}
           onChange={handleTextChange}
           placeholder="Enter text..."
-          rows={4}
+          rows={2}
         />
       </div>
 
-      {/* Font Selection */}
-      <div className="properties-section">
-        <h4>Font</h4>
+      {/* Font */}
+      <div className="tt-section">
+        <div className="tt-section-header">Text</div>
+        <select
+          className="tt-select-full"
+          value={textProperties.fontFamily}
+          onChange={(e) => updateProp('fontFamily', e.target.value)}
+          style={{ fontFamily: textProperties.fontFamily }}
+        >
+          {POPULAR_FONTS.map(font => (
+            <option key={font.family} value={font.family} style={{ fontFamily: font.family }}>
+              {font.family}
+            </option>
+          ))}
+        </select>
 
-        {/* Font Family */}
-        <div className="control-row">
-          <label>Family</label>
+        <div className="tt-row-2col">
           <select
-            value={textProperties.fontFamily}
-            onChange={(e) => updateProp('fontFamily', e.target.value)}
-            style={{ fontFamily: textProperties.fontFamily }}
-          >
-            {POPULAR_FONTS.map(font => (
-              <option key={font.family} value={font.family} style={{ fontFamily: font.family }}>
-                {font.family}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Font Size - Draggable */}
-        <DraggableNumber
-          label="Size"
-          value={textProperties.fontSize}
-          onChange={(v) => updateProp('fontSize', v)}
-          min={8}
-          max={500}
-          step={1}
-          unit="px"
-        />
-
-        {/* Font Weight */}
-        <div className="control-row">
-          <label>Weight</label>
-          <select
+            className="tt-select-full"
             value={textProperties.fontWeight}
             onChange={(e) => updateProp('fontWeight', parseInt(e.target.value))}
           >
-            <option value={100}>Thin (100)</option>
-            <option value={200}>Extra Light (200)</option>
-            <option value={300}>Light (300)</option>
-            <option value={400}>Regular (400)</option>
-            <option value={500}>Medium (500)</option>
-            <option value={600}>Semi Bold (600)</option>
-            <option value={700}>Bold (700)</option>
-            <option value={800}>Extra Bold (800)</option>
-            <option value={900}>Black (900)</option>
+            <option value={100}>Thin</option>
+            <option value={200}>Extra Light</option>
+            <option value={300}>Light</option>
+            <option value={400}>Regular</option>
+            <option value={500}>Medium</option>
+            <option value={600}>Semi Bold</option>
+            <option value={700}>Bold</option>
+            <option value={800}>Extra Bold</option>
+            <option value={900}>Black</option>
           </select>
-        </div>
-
-        {/* Font Style */}
-        <div className="control-row">
-          <label>Style</label>
           <select
+            className="tt-select-full"
             value={textProperties.fontStyle}
             onChange={(e) => updateProp('fontStyle', e.target.value as 'normal' | 'italic')}
           >
@@ -189,156 +213,113 @@ export function TextTab({ clipId, textProperties }: TextTabProps) {
             <option value="italic">Italic</option>
           </select>
         </div>
-      </div>
 
-      {/* Color */}
-      <div className="properties-section">
-        <h4>Color</h4>
-        <div className="control-row">
-          <label>Fill</label>
-          <input
-            type="color"
-            value={textProperties.color.startsWith('#') ? textProperties.color : '#ffffff'}
-            onChange={(e) => updateProp('color', e.target.value)}
+        {/* Size + Line Height */}
+        <div className="tt-row-2col">
+          <CompactNumber
+            icon={<IconFontSize />}
+            title="Font Size"
+            value={textProperties.fontSize}
+            onChange={(v) => updateProp('fontSize', v)}
+            min={8}
+            max={500}
+            unit="px"
           />
-          <input
-            type="text"
-            value={textProperties.color}
-            onChange={(e) => updateProp('color', e.target.value)}
-            placeholder="#ffffff"
-            style={{ width: '80px' }}
-          />
-        </div>
-      </div>
-
-      {/* Alignment */}
-      <div className="properties-section">
-        <h4>Alignment</h4>
-        <div className="control-row">
-          <label>Horizontal</label>
-          <div className="button-group">
-            <button
-              className={textProperties.textAlign === 'left' ? 'active' : ''}
-              onClick={() => updateProp('textAlign', 'left')}
-              title="Left"
-            >
-              L
-            </button>
-            <button
-              className={textProperties.textAlign === 'center' ? 'active' : ''}
-              onClick={() => updateProp('textAlign', 'center')}
-              title="Center"
-            >
-              C
-            </button>
-            <button
-              className={textProperties.textAlign === 'right' ? 'active' : ''}
-              onClick={() => updateProp('textAlign', 'right')}
-              title="Right"
-            >
-              R
-            </button>
-          </div>
-        </div>
-        <div className="control-row">
-          <label>Vertical</label>
-          <div className="button-group">
-            <button
-              className={textProperties.verticalAlign === 'top' ? 'active' : ''}
-              onClick={() => updateProp('verticalAlign', 'top')}
-              title="Top"
-            >
-              T
-            </button>
-            <button
-              className={textProperties.verticalAlign === 'middle' ? 'active' : ''}
-              onClick={() => updateProp('verticalAlign', 'middle')}
-              title="Middle"
-            >
-              M
-            </button>
-            <button
-              className={textProperties.verticalAlign === 'bottom' ? 'active' : ''}
-              onClick={() => updateProp('verticalAlign', 'bottom')}
-              title="Bottom"
-            >
-              B
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Spacing */}
-      <div className="properties-section">
-        <h4>Spacing</h4>
-        <div className="control-row">
-          <label>Line Height</label>
-          <input
-            type="range"
+          <CompactNumber
+            icon={<IconLineHeight />}
+            title="Line Height"
+            value={textProperties.lineHeight}
+            onChange={(v) => updateProp('lineHeight', v)}
             min={0.5}
             max={3}
             step={0.1}
-            value={textProperties.lineHeight}
-            onChange={(e) => updateProp('lineHeight', parseFloat(e.target.value))}
+            unit=""
           />
-          <span>{textProperties.lineHeight.toFixed(1)}</span>
         </div>
-        <div className="control-row">
-          <label>Letter Spacing</label>
-          <input
-            type="range"
+
+        {/* Letter Spacing */}
+        <div className="tt-row-2col">
+          <CompactNumber
+            icon={<IconLetterSpacing />}
+            title="Letter Spacing"
+            value={textProperties.letterSpacing}
+            onChange={(v) => updateProp('letterSpacing', v)}
             min={-10}
             max={50}
-            step={1}
-            value={textProperties.letterSpacing}
-            onChange={(e) => updateProp('letterSpacing', parseInt(e.target.value))}
+            unit="px"
           />
-          <span>{textProperties.letterSpacing}px</span>
+          <div className="tt-compact-num" style={{ visibility: 'hidden' }} />
         </div>
-      </div>
 
-      {/* Stroke (Outline) */}
-      <div className="properties-section">
-        <h4>
-          <label className="checkbox-label">
+        {/* Fill + Stroke inline */}
+        <div className="tt-color-row">
+          <input
+            type="color"
+            className="tt-color-swatch"
+            value={textProperties.color.startsWith('#') ? textProperties.color : '#ffffff'}
+            onChange={(e) => updateProp('color', e.target.value)}
+            title="Fill Color"
+          />
+          <span className="tt-color-label">Fill</span>
+          <input
+            type="text"
+            className="tt-color-hex"
+            value={textProperties.color}
+            onChange={(e) => updateProp('color', e.target.value)}
+          />
+        </div>
+
+        <div className="tt-color-row">
+          <label className="tt-toggle">
             <input
               type="checkbox"
               checked={textProperties.strokeEnabled}
               onChange={(e) => updateProp('strokeEnabled', e.target.checked)}
             />
-            Stroke
+            <span className="tt-toggle-box" />
           </label>
-        </h4>
-        {textProperties.strokeEnabled && (
-          <>
-            <div className="control-row">
-              <label>Color</label>
-              <input
-                type="color"
-                value={textProperties.strokeColor.startsWith('#') ? textProperties.strokeColor : '#000000'}
-                onChange={(e) => updateProp('strokeColor', e.target.value)}
-              />
-            </div>
-            <div className="control-row">
-              <label>Width</label>
-              <input
-                type="range"
-                min={1}
-                max={20}
-                step={0.5}
-                value={textProperties.strokeWidth}
-                onChange={(e) => updateProp('strokeWidth', parseFloat(e.target.value))}
-              />
-              <span>{textProperties.strokeWidth}px</span>
-            </div>
-          </>
-        )}
+          <input
+            type="color"
+            className="tt-color-swatch"
+            value={textProperties.strokeColor.startsWith('#') ? textProperties.strokeColor : '#000000'}
+            onChange={(e) => updateProp('strokeColor', e.target.value)}
+            title="Stroke Color"
+            disabled={!textProperties.strokeEnabled}
+          />
+          <span className="tt-color-label">Stroke</span>
+          {textProperties.strokeEnabled && (
+            <CompactNumber
+              icon={<></>}
+              title="Stroke Width"
+              value={textProperties.strokeWidth}
+              onChange={(v) => updateProp('strokeWidth', v)}
+              min={0.5}
+              max={20}
+              step={0.5}
+              unit="px"
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Alignment */}
+      <div className="tt-section">
+        <div className="tt-section-header">Paragraph</div>
+        <div className="tt-align-row">
+          <button className={textProperties.textAlign === 'left' ? 'active' : ''} onClick={() => updateProp('textAlign', 'left')} title="Left"><IconAlignLeft /></button>
+          <button className={textProperties.textAlign === 'center' ? 'active' : ''} onClick={() => updateProp('textAlign', 'center')} title="Center"><IconAlignCenter /></button>
+          <button className={textProperties.textAlign === 'right' ? 'active' : ''} onClick={() => updateProp('textAlign', 'right')} title="Right"><IconAlignRight /></button>
+          <div className="tt-align-sep" />
+          <button className={textProperties.verticalAlign === 'top' ? 'active' : ''} onClick={() => updateProp('verticalAlign', 'top')} title="Top"><IconAlignTop /></button>
+          <button className={textProperties.verticalAlign === 'middle' ? 'active' : ''} onClick={() => updateProp('verticalAlign', 'middle')} title="Middle"><IconAlignMiddle /></button>
+          <button className={textProperties.verticalAlign === 'bottom' ? 'active' : ''} onClick={() => updateProp('verticalAlign', 'bottom')} title="Bottom"><IconAlignBottom /></button>
+        </div>
       </div>
 
       {/* Shadow */}
-      <div className="properties-section">
-        <h4>
-          <label className="checkbox-label">
+      <div className="tt-section">
+        <div className="tt-section-header">
+          <label className="tt-toggle-header">
             <input
               type="checkbox"
               checked={textProperties.shadowEnabled}
@@ -346,81 +327,29 @@ export function TextTab({ clipId, textProperties }: TextTabProps) {
             />
             Shadow
           </label>
-        </h4>
+        </div>
         {textProperties.shadowEnabled && (
           <>
-            <div className="control-row">
-              <label>Color</label>
+            <div className="tt-color-row">
               <input
                 type="color"
-                value={textProperties.shadowColor.startsWith('#') || textProperties.shadowColor.startsWith('rgba')
-                  ? (textProperties.shadowColor.startsWith('#') ? textProperties.shadowColor : '#000000')
-                  : '#000000'}
+                className="tt-color-swatch"
+                value={textProperties.shadowColor.startsWith('#') ? textProperties.shadowColor : '#000000'}
                 onChange={(e) => updateProp('shadowColor', e.target.value)}
+                title="Shadow Color"
               />
+              <span className="tt-color-label">Color</span>
             </div>
-            <div className="control-row">
-              <label>Offset X</label>
-              <input
-                type="range"
-                min={-50}
-                max={50}
-                step={1}
-                value={textProperties.shadowOffsetX}
-                onChange={(e) => updateProp('shadowOffsetX', parseInt(e.target.value))}
-              />
-              <span>{textProperties.shadowOffsetX}px</span>
+            <div className="tt-row-2col">
+              <CompactNumber icon={<span style={{ fontSize: 9 }}>X</span>} title="Shadow Offset X" value={textProperties.shadowOffsetX} onChange={(v) => updateProp('shadowOffsetX', v)} min={-50} max={50} unit="px" />
+              <CompactNumber icon={<span style={{ fontSize: 9 }}>Y</span>} title="Shadow Offset Y" value={textProperties.shadowOffsetY} onChange={(v) => updateProp('shadowOffsetY', v)} min={-50} max={50} unit="px" />
             </div>
-            <div className="control-row">
-              <label>Offset Y</label>
-              <input
-                type="range"
-                min={-50}
-                max={50}
-                step={1}
-                value={textProperties.shadowOffsetY}
-                onChange={(e) => updateProp('shadowOffsetY', parseInt(e.target.value))}
-              />
-              <span>{textProperties.shadowOffsetY}px</span>
-            </div>
-            <div className="control-row">
-              <label>Blur</label>
-              <input
-                type="range"
-                min={0}
-                max={50}
-                step={1}
-                value={textProperties.shadowBlur}
-                onChange={(e) => updateProp('shadowBlur', parseInt(e.target.value))}
-              />
-              <span>{textProperties.shadowBlur}px</span>
+            <div className="tt-row-2col">
+              <CompactNumber icon={<span style={{ fontSize: 9 }}>B</span>} title="Shadow Blur" value={textProperties.shadowBlur} onChange={(v) => updateProp('shadowBlur', v)} min={0} max={50} unit="px" />
+              <div className="tt-compact-num" style={{ visibility: 'hidden' }} />
             </div>
           </>
         )}
-      </div>
-
-      {/* Font Preview */}
-      <div className="properties-section">
-        <h4>Preview</h4>
-        <div
-          className="text-preview"
-          style={{
-            fontFamily: textProperties.fontFamily,
-            fontSize: '24px',
-            fontWeight: textProperties.fontWeight,
-            fontStyle: textProperties.fontStyle,
-            color: textProperties.color,
-            textAlign: textProperties.textAlign,
-            WebkitTextStroke: textProperties.strokeEnabled
-              ? `${textProperties.strokeWidth / 4}px ${textProperties.strokeColor}`
-              : 'none',
-            textShadow: textProperties.shadowEnabled
-              ? `${textProperties.shadowOffsetX / 4}px ${textProperties.shadowOffsetY / 4}px ${textProperties.shadowBlur / 4}px ${textProperties.shadowColor}`
-              : 'none',
-          }}
-        >
-          {localText || 'Preview'}
-        </div>
       </div>
     </div>
   );

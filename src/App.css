@@ -1,11 +1,11 @@
 /* WebVJ Mixer - Dark Theme Styles */
 
 :root {
-  --bg-primary: #1a1a1a;
-  --bg-secondary: #222222;
-  --bg-tertiary: #292929;
-  --bg-hover: #333333;
-  --border-color: #141414;
+  --bg-primary: #131313;
+  --bg-secondary: #1a1a1a;
+  --bg-tertiary: #222222;
+  --bg-hover: #2c2c2c;
+  --border-color: #0e0e0e;
   --text-primary: #d4d4d4;
   --text-secondary: #999;
   --accent: #2D8CEB;
@@ -2066,97 +2066,318 @@ input, textarea {
 }
 
 /* Text Tab (embedded in PropertiesPanel) */
-.text-tab {
+/* ========== TEXT TAB (Compact AE-style) ========== */
+.tt {
   display: flex;
   flex-direction: column;
+  gap: 2px;
 }
 
-.text-tab .text-content-input {
+.tt-section {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tt-section:last-child {
+  border-bottom: none;
+}
+
+.tt-section-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+/* Textarea */
+.tt-textarea {
   width: 100%;
-  min-height: 80px;
-  padding: 8px;
+  min-height: 48px;
+  padding: 6px 8px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: 3px;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 12px;
   font-family: inherit;
   resize: vertical;
+  line-height: 1.4;
 }
 
-.text-tab .text-content-input:focus {
+.tt-textarea:focus {
   outline: none;
   border-color: var(--accent);
 }
 
-.text-tab .button-group {
-  display: flex;
-  gap: 2px;
-}
-
-.text-tab .button-group button {
-  flex: 1;
-  padding: 6px 8px;
-  background: var(--bg-tertiary);
+/* Full-width select */
+.tt-select-full {
+  width: 100%;
+  padding: 4px 8px;
+  background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  color: var(--text-secondary);
+  border-radius: 3px;
+  color: var(--text-primary);
   font-size: 11px;
-  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  margin-bottom: 4px;
 }
 
-.text-tab .button-group button:first-child {
-  border-radius: 4px 0 0 4px;
-}
-
-.text-tab .button-group button:last-child {
-  border-radius: 0 4px 4px 0;
-}
-
-.text-tab .button-group button:not(:first-child) {
-  border-left: none;
-}
-
-.text-tab .button-group button:hover {
-  background: var(--bg-hover);
-}
-
-.text-tab .button-group button.active {
-  background: var(--accent);
-  color: #000;
+.tt-select-full:focus {
+  outline: none;
   border-color: var(--accent);
 }
 
-.text-tab .unit {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-left: 4px;
+/* Two-column row */
+.tt-row-2col {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
 }
 
-.text-tab .checkbox-label {
+.tt-row-2col > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.tt-row-2col .tt-select-full {
+  margin-bottom: 0;
+}
+
+/* Compact number input with icon */
+.tt-compact-num {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 2px 4px;
+  cursor: ew-resize;
+  height: 24px;
+}
+
+.tt-compact-num:hover {
+  border-color: var(--accent);
+}
+
+.tt-num-icon {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.tt-compact-num input[type="number"] {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-size: 11px;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  padding: 0 2px;
+  -moz-appearance: textfield;
+}
+
+.tt-compact-num input[type="number"]::-webkit-inner-spin-button,
+.tt-compact-num input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.tt-compact-num input[type="number"]:focus {
+  outline: none;
+  color: var(--text-primary);
+}
+
+.tt-num-unit {
+  font-size: 9px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+/* Color row */
+.tt-color-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  cursor: pointer;
+  margin-bottom: 4px;
+  height: 24px;
 }
 
-.text-tab .checkbox-label input[type="checkbox"] {
-  width: 14px;
-  height: 14px;
-  cursor: pointer;
+.tt-color-row:last-child {
+  margin-bottom: 0;
 }
 
-.text-tab .text-preview {
-  padding: 16px;
+.tt-color-swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-appearance: none;
+  background: none;
+}
+
+.tt-color-swatch::-webkit-color-swatch-wrapper {
+  padding: 1px;
+}
+
+.tt-color-swatch::-webkit-color-swatch {
+  border: none;
+  border-radius: 2px;
+}
+
+.tt-color-swatch:disabled {
+  opacity: 0.4;
+}
+
+.tt-color-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-width: 36px;
+}
+
+.tt-color-hex {
+  flex: 1;
+  min-width: 0;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
-  min-height: 60px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 10px;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  padding: 2px 6px;
+  height: 22px;
+}
+
+.tt-color-hex:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Toggle checkbox */
+.tt-toggle {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tt-toggle input {
+  display: none;
+}
+
+.tt-toggle-box {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  background: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.tt-toggle input:checked + .tt-toggle-box {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.tt-toggle input:checked + .tt-toggle-box::after {
+  content: '';
+  width: 8px;
+  height: 5px;
+  border-left: 1.5px solid #000;
+  border-bottom: 1.5px solid #000;
+  transform: rotate(-45deg) translateY(-1px);
+}
+
+/* Toggle in section header */
+.tt-toggle-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tt-toggle-header input {
+  width: 12px;
+  height: 12px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+/* Alignment buttons row */
+.tt-align-row {
+  display: flex;
+  gap: 1px;
+  align-items: center;
+}
+
+.tt-align-row button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.1s;
+  padding: 0;
+}
+
+.tt-align-row button:first-child {
+  border-radius: 3px 0 0 3px;
+}
+
+.tt-align-row button:nth-child(3) {
+  border-radius: 0 3px 3px 0;
+}
+
+.tt-align-row button:nth-child(5) {
+  border-radius: 3px 0 0 3px;
+}
+
+.tt-align-row button:last-child {
+  border-radius: 0 3px 3px 0;
+}
+
+.tt-align-row button:not(:first-child) {
+  margin-left: -1px;
+}
+
+.tt-align-row button:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  z-index: 1;
+}
+
+.tt-align-row button.active {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+  z-index: 2;
+}
+
+.tt-align-sep {
+  width: 8px;
+  flex-shrink: 0;
 }
 
 /* Draggable number label - click and drag to adjust value */

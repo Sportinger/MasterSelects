@@ -9,7 +9,6 @@ import { generateWaveform, generateWaveformFromBuffer, getDefaultEffectParams } 
 import { textRenderer } from '../../services/textRenderer';
 import { googleFontsService } from '../../services/googleFontsService';
 import { engine } from '../../engine/WebGPUEngine';
-import { layerBuilder } from '../../services/layerBuilder';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('ClipSlice');
@@ -681,66 +680,52 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
 
   updateTextProperties: (clipId, props) => {
     const { clips, invalidateCache } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip?.textProperties) return;
+
+    const newProps: TextClipProperties = { ...clip.textProperties, ...props };
+
+    // Reuse existing canvas - re-render text content in place
+    // This avoids creating new textures/references on every keystroke
+    const canvas = clip.source?.textCanvas || textRenderer.createCanvas(1920, 1080);
+    textRenderer.render(newProps, canvas);
+
+    // Re-upload canvas pixels to existing GPU texture (instant, no new allocation)
+    const texMgr = engine.getTextureManager();
+    if (texMgr) {
+      if (!texMgr.updateCanvasTexture(canvas)) {
+        // First time or canvas not cached yet - will be created on next render
+        log.debug('Canvas texture not cached yet, will create on render');
+      }
+    }
+
+    // Update store with new text properties
     set({
-      clips: clips.map(c => {
-        if (c.id !== clipId || !c.textProperties) return c;
-        const newProps: TextClipProperties = { ...c.textProperties, ...props };
-
-        // Clean up old canvas texture from GPU cache
-        if (c.source?.textCanvas) {
-          engine.getTextureManager()?.removeCanvasTexture(c.source.textCanvas);
-        }
-
-        const canvas = textRenderer.createCanvas(1920, 1080);
-        textRenderer.render(newProps, canvas);
-
-        return {
-          ...c,
-          textProperties: newProps,
-          source: { ...c.source!, textCanvas: canvas },
-          name: newProps.text.substring(0, 20) || 'Text',
-        };
+      clips: clips.map(c => c.id !== clipId ? c : {
+        ...c,
+        textProperties: newProps,
+        source: { ...c.source!, textCanvas: canvas },
+        name: newProps.text.substring(0, 20) || 'Text',
       }),
     });
     invalidateCache();
 
-    // Clear stale composite/RAM preview cache - without this, the render loop's
-    // renderCachedFrame() finds old cached frames and overwrites our fresh render
-    engine.clearCompositeCache();
-
-    // Force immediate render for live text preview
-    layerBuilder.invalidateCache();
-    const layers = layerBuilder.buildLayersFromStore();
-    engine.render(layers);
-
     // Handle async font loading - re-render when font is ready
     if (props.fontFamily || props.fontWeight) {
-      const clip = get().clips.find(c => c.id === clipId);
-      if (!clip?.textProperties) return;
-      const fontFamily = props.fontFamily || clip.textProperties.fontFamily;
-      const fontWeight = props.fontWeight || clip.textProperties.fontWeight;
+      const fontFamily = props.fontFamily || newProps.fontFamily;
+      const fontWeight = props.fontWeight || newProps.fontWeight;
       googleFontsService.loadFont(fontFamily, fontWeight).then(() => {
-        // Re-render text with loaded font
         const { clips: currentClips, invalidateCache: inv } = get();
         const currentClip = currentClips.find(cl => cl.id === clipId);
         if (!currentClip?.textProperties) return;
 
-        // Clean up old canvas texture
-        if (currentClip.source?.textCanvas) {
-          engine.getTextureManager()?.removeCanvasTexture(currentClip.source.textCanvas);
+        // Re-render with loaded font to same canvas
+        const currentCanvas = currentClip.source?.textCanvas;
+        if (currentCanvas) {
+          textRenderer.render(currentClip.textProperties, currentCanvas);
+          engine.getTextureManager()?.updateCanvasTexture(currentCanvas);
         }
-
-        const canvas = textRenderer.createCanvas(1920, 1080);
-        textRenderer.render(currentClip.textProperties, canvas);
-        set({
-          clips: currentClips.map(cl => cl.id === clipId
-            ? { ...cl, source: { ...cl.source!, textCanvas: canvas } }
-            : cl),
-        });
         inv();
-        engine.clearCompositeCache();
-        layerBuilder.invalidateCache();
-        engine.render(layerBuilder.buildLayersFromStore());
       });
     }
   },
