@@ -9,6 +9,7 @@ import { generateWaveform, generateWaveformFromBuffer, getDefaultEffectParams } 
 import { textRenderer } from '../../services/textRenderer';
 import { googleFontsService } from '../../services/googleFontsService';
 import { engine } from '../../engine/WebGPUEngine';
+import { layerBuilder } from '../../services/layerBuilder';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('ClipSlice');
@@ -710,6 +711,15 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
     });
     invalidateCache();
 
+    // Force immediate render to show text changes live in preview
+    try {
+      layerBuilder.invalidateCache();
+      const layers = layerBuilder.buildLayersFromStore();
+      engine.render(layers);
+    } catch (e) {
+      log.debug('Direct render after text update failed', e);
+    }
+
     // Handle async font loading - re-render when font is ready
     if (props.fontFamily || props.fontWeight) {
       const fontFamily = props.fontFamily || newProps.fontFamily;
@@ -726,6 +736,15 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
           engine.getTextureManager()?.updateCanvasTexture(currentCanvas);
         }
         inv();
+
+        // Force immediate render after font load
+        try {
+          layerBuilder.invalidateCache();
+          const layers = layerBuilder.buildLayersFromStore();
+          engine.render(layers);
+        } catch (e) {
+          log.debug('Direct render after font load failed', e);
+        }
       });
     }
   },

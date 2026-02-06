@@ -159,6 +159,9 @@ export function TextTab({ clipId, textProperties }: TextTabProps) {
     updateTextProperties(clipId, { [key]: value } as Partial<TextClipProperties>);
   }, [clipId, updateTextProperties]);
 
+  // Get available weights for selected font
+  const availableWeights = googleFontsService.getAvailableWeights(textProperties.fontFamily);
+
   return (
     <div className="tt">
       {/* Text Content */}
@@ -178,7 +181,19 @@ export function TextTab({ clipId, textProperties }: TextTabProps) {
         <select
           className="tt-select-full"
           value={textProperties.fontFamily}
-          onChange={(e) => updateProp('fontFamily', e.target.value)}
+          onChange={(e) => {
+            const newFamily = e.target.value;
+            const weights = googleFontsService.getAvailableWeights(newFamily);
+            // Auto-adjust weight to nearest available for the new font
+            if (!weights.includes(textProperties.fontWeight)) {
+              const nearest = weights.reduce((prev, curr) =>
+                Math.abs(curr - textProperties.fontWeight) < Math.abs(prev - textProperties.fontWeight) ? curr : prev
+              );
+              updateTextProperties(clipId, { fontFamily: newFamily, fontWeight: nearest });
+            } else {
+              updateProp('fontFamily', newFamily);
+            }
+          }}
           style={{ fontFamily: textProperties.fontFamily }}
         >
           {POPULAR_FONTS.map(font => (
@@ -194,15 +209,19 @@ export function TextTab({ clipId, textProperties }: TextTabProps) {
             value={textProperties.fontWeight}
             onChange={(e) => updateProp('fontWeight', parseInt(e.target.value))}
           >
-            <option value={100}>Thin</option>
-            <option value={200}>Extra Light</option>
-            <option value={300}>Light</option>
-            <option value={400}>Regular</option>
-            <option value={500}>Medium</option>
-            <option value={600}>Semi Bold</option>
-            <option value={700}>Bold</option>
-            <option value={800}>Extra Bold</option>
-            <option value={900}>Black</option>
+            {availableWeights.map(w => (
+              <option key={w} value={w}>{
+                w === 100 ? 'Thin' :
+                w === 200 ? 'Extra Light' :
+                w === 300 ? 'Light' :
+                w === 400 ? 'Regular' :
+                w === 500 ? 'Medium' :
+                w === 600 ? 'Semi Bold' :
+                w === 700 ? 'Bold' :
+                w === 800 ? 'Extra Bold' :
+                w === 900 ? 'Black' : `${w}`
+              }</option>
+            ))}
           </select>
           <select
             className="tt-select-full"
