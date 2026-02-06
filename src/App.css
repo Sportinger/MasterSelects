@@ -1814,13 +1814,13 @@ input, textarea {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  padding: 12px;
-  margin-bottom: 8px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
 }
 
 .properties-section h4 {
-  margin: 0 0 10px 0;
-  font-size: 11px;
+  margin: 0 0 6px 0;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1830,8 +1830,8 @@ input, textarea {
 .properties-section .control-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: 6px;
+  margin-bottom: 3px;
 }
 
 .properties-section .control-row:last-child {
@@ -1842,6 +1842,21 @@ input, textarea {
   min-width: 20px;
   font-size: 11px;
   color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Multi-value inline row (X Y Z side by side) */
+.multi-value-row {
+  display: flex;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.multi-value-row .draggable-number {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
 }
 
 .properties-section .control-row input[type="range"] {

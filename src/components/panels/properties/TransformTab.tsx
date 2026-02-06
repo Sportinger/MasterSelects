@@ -1,4 +1,4 @@
-// Transform Tab - Position, Scale, Rotation, Opacity controls (AE-style values)
+// Transform Tab - Position, Scale, Rotation, Opacity controls (AE-style compact layout)
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import type { BlendMode, AnimatableProperty } from '../../../types';
@@ -37,7 +37,7 @@ export function TransformTab({ clipId, transform, speed = 1 }: TransformTabProps
   // Position: normalized (-1..1) → pixels, where 0 = center
   const posXPx = transform.position.x * (compWidth / 2);
   const posYPx = transform.position.y * (compHeight / 2);
-  const posZPx = transform.position.z * (compWidth / 2); // Z uses width as reference
+  const posZPx = transform.position.z * (compWidth / 2);
 
   const handlePosXChange = (px: number) => handlePropertyChange('position.x', px / (compWidth / 2));
   const handlePosYChange = (px: number) => handlePropertyChange('position.y', px / (compHeight / 2));
@@ -65,12 +65,11 @@ export function TransformTab({ clipId, transform, speed = 1 }: TransformTabProps
   const handleSpeedChange = (pct: number) => handlePropertyChange('speed', pct / 100);
 
   return (
-    <div className="properties-tab-content">
-      {/* Appearance */}
+    <div className="properties-tab-content transform-tab-compact">
+      {/* Appearance + Time row */}
       <div className="properties-section">
-        <h4>Appearance</h4>
         <div className="control-row">
-          <label>Blend Mode</label>
+          <label>Blend</label>
           <select
             value={transform.blendMode}
             onChange={(e) => updateClipTransform(clipId, { blendMode: e.target.value as BlendMode })}
@@ -90,11 +89,6 @@ export function TransformTab({ clipId, transform, speed = 1 }: TransformTabProps
           <DraggableNumber value={opacityPct} onChange={handleOpacityChange}
             defaultValue={100} decimals={1} suffix="%" min={0} max={100} sensitivity={1} />
         </div>
-      </div>
-
-      {/* Time/Speed */}
-      <div className="properties-section">
-        <h4>Time</h4>
         <div className="control-row">
           <KeyframeToggle clipId={clipId} property="speed" value={speed} />
           <label>Speed</label>
@@ -103,62 +97,52 @@ export function TransformTab({ clipId, transform, speed = 1 }: TransformTabProps
         </div>
       </div>
 
-      {/* Position */}
+      {/* Position - inline X Y Z */}
       <div className="properties-section">
-        <h4>Position</h4>
         <div className="control-row">
           <KeyframeToggle clipId={clipId} property="position.x" value={transform.position.x} />
-          <label>X</label>
-          <DraggableNumber value={posXPx} onChange={handlePosXChange}
-            defaultValue={0} decimals={1} suffix=" px" sensitivity={0.5} />
-        </div>
-        <div className="control-row">
-          <KeyframeToggle clipId={clipId} property="position.y" value={transform.position.y} />
-          <label>Y</label>
-          <DraggableNumber value={posYPx} onChange={handlePosYChange}
-            defaultValue={0} decimals={1} suffix=" px" sensitivity={0.5} />
-        </div>
-        <div className="control-row">
-          <KeyframeToggle clipId={clipId} property="position.z" value={transform.position.z} />
-          <label>Z</label>
-          <DraggableNumber value={posZPx} onChange={handlePosZChange}
-            defaultValue={0} decimals={1} suffix=" px" sensitivity={0.5} />
+          <label>Position</label>
+          <div className="multi-value-row">
+            <DraggableNumber value={posXPx} onChange={handlePosXChange}
+              defaultValue={0} decimals={1} sensitivity={0.5} />
+            <DraggableNumber value={posYPx} onChange={handlePosYChange}
+              defaultValue={0} decimals={1} sensitivity={0.5} />
+            <DraggableNumber value={posZPx} onChange={handlePosZChange}
+              defaultValue={0} decimals={1} sensitivity={0.5} />
+          </div>
         </div>
       </div>
 
-      {/* Scale */}
+      {/* Scale - inline Uniform / X / Y */}
       <div className="properties-section">
-        <h4>Scale</h4>
         <div className="control-row">
           <ScaleKeyframeToggle clipId={clipId} scaleX={transform.scale.x} scaleY={transform.scale.y} />
-          <label>Uniform</label>
-          <DraggableNumber value={uniformScalePct} onChange={handleUniformScaleChange}
-            defaultValue={100} decimals={1} suffix="%" min={1} sensitivity={1} />
-        </div>
-        {(['x', 'y'] as const).map(axis => (
-          <div className="control-row" key={axis}>
-            <span className="keyframe-toggle-placeholder" />
-            <label>{axis.toUpperCase()}</label>
-            <DraggableNumber
-              value={axis === 'x' ? scaleXPct : scaleYPct}
-              onChange={axis === 'x' ? handleScaleXChange : handleScaleYChange}
-              defaultValue={100} decimals={1} suffix="%" min={1} sensitivity={1}
-            />
+          <label>Scale</label>
+          <div className="multi-value-row">
+            <DraggableNumber value={uniformScalePct} onChange={handleUniformScaleChange}
+              defaultValue={100} decimals={1} suffix="%" min={1} sensitivity={1} />
+            <DraggableNumber value={scaleXPct} onChange={handleScaleXChange}
+              defaultValue={100} decimals={1} suffix="%" min={1} sensitivity={1} />
+            <DraggableNumber value={scaleYPct} onChange={handleScaleYChange}
+              defaultValue={100} decimals={1} suffix="%" min={1} sensitivity={1} />
           </div>
-        ))}
+        </div>
       </div>
 
-      {/* Rotation */}
+      {/* Rotation - inline X Y Z */}
       <div className="properties-section">
-        <h4>Rotation</h4>
-        {(['x', 'y', 'z'] as const).map(axis => (
-          <div className="control-row" key={axis}>
-            <KeyframeToggle clipId={clipId} property={`rotation.${axis}`} value={transform.rotation[axis]} />
-            <label>{axis.toUpperCase()}</label>
-            <DraggableNumber value={transform.rotation[axis]} onChange={(v) => handlePropertyChange(`rotation.${axis}`, v)}
+        <div className="control-row">
+          <KeyframeToggle clipId={clipId} property="rotation.z" value={transform.rotation.z} />
+          <label>Rotation</label>
+          <div className="multi-value-row">
+            <DraggableNumber value={transform.rotation.x} onChange={(v) => handlePropertyChange('rotation.x', v)}
+              defaultValue={0} decimals={1} suffix="°" min={-180} max={180} sensitivity={0.5} />
+            <DraggableNumber value={transform.rotation.y} onChange={(v) => handlePropertyChange('rotation.y', v)}
+              defaultValue={0} decimals={1} suffix="°" min={-180} max={180} sensitivity={0.5} />
+            <DraggableNumber value={transform.rotation.z} onChange={(v) => handlePropertyChange('rotation.z', v)}
               defaultValue={0} decimals={1} suffix="°" min={-180} max={180} sensitivity={0.5} />
           </div>
-        ))}
+        </div>
       </div>
 
       {/* Reset */}
