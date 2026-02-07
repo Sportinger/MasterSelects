@@ -523,7 +523,7 @@ export class ParallelDecodeManager {
         if (!clipDecoder.isDecoding) {
           // For first frame (targetSampleIndex near 0), ensure we decode from the start
           const decodeTarget = Math.max(targetSampleIndex + BUFFER_AHEAD_FRAMES, BUFFER_AHEAD_FRAMES);
-          await this.decodeAhead(clipDecoder, decodeTarget, true);
+          await this.decodeAhead(clipDecoder, decodeTarget, true, 0, targetSampleIndex);
         }
 
         // Small delay between attempts to allow async operations to complete
@@ -609,15 +609,22 @@ export class ParallelDecodeManager {
           // Use seekTargetSampleIndex if provided (the actual frame we need),
           // not targetSampleIndex (which may include buffer-ahead frames)
           const seekTarget = seekTargetSampleIndex ?? targetSampleIndex;
-          let keyframeIndex = seekTarget;
-          for (let i = seekTarget; i >= 0; i--) {
+          // Find keyframe by CTS (display time), not decode order.
+          // Due to B-frame reordering, a keyframe earlier in decode order
+          // can have a LATER CTS than the target, causing wrong frames to be decoded.
+          const targetCTS = clipDecoder.samples[seekTarget].cts;
+          let keyframeIndex = 0; // Default to first sample (always a keyframe)
+          for (let i = 0; i < clipDecoder.samples.length; i++) {
             if (clipDecoder.samples[i].is_sync) {
-              keyframeIndex = i;
-              break;
+              if (clipDecoder.samples[i].cts <= targetCTS) {
+                keyframeIndex = i;
+              } else {
+                break; // Keyframe CTS values increase monotonically
+              }
             }
           }
 
-          console.log(`[ParallelDecode] ${clipDecoder.clipName}: Seeking to keyframe at sample ${keyframeIndex} (seekTarget=${seekTarget}, bufferTarget=${targetSampleIndex}, distance=${seekTarget - keyframeIndex})`);
+          console.log(`[ParallelDecode] ${clipDecoder.clipName}: Seeking to keyframe at sample ${keyframeIndex} (CTS=${(clipDecoder.samples[keyframeIndex].cts / clipDecoder.videoTrack.timescale).toFixed(3)}s, seekTarget=${seekTarget}, targetCTS=${(targetCTS / clipDecoder.videoTrack.timescale).toFixed(3)}s, bufferTarget=${targetSampleIndex})`);
 
           // Reset decoder for seek
           clipDecoder.decoder.reset();
