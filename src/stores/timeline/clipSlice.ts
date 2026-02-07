@@ -14,6 +14,19 @@ import { Logger } from '../../services/logger';
 
 const log = Logger.create('ClipSlice');
 
+/** Deep clone properties that must not be shared between split clips */
+function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
+  return {
+    transform: structuredClone(clip.transform),
+    effects: clip.effects.map(e => structuredClone(e)),
+    ...(clip.masks ? { masks: clip.masks.map(m => structuredClone(m)) } : {}),
+    ...(clip.textProperties ? { textProperties: structuredClone(clip.textProperties) } : {}),
+    ...(clip.transitionIn ? { transitionIn: structuredClone(clip.transitionIn) } : {}),
+    ...(clip.transitionOut ? { transitionOut: structuredClone(clip.transitionOut) } : {}),
+    ...(clip.analysis ? { analysis: structuredClone(clip.analysis) } : {}),
+  };
+}
+
 // Import extracted modules
 import { detectMediaType } from './helpers/mediaTypeHelpers';
 import { loadVideoMedia } from './clip/addVideoClip';
@@ -497,20 +510,24 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
 
     const firstClip: TimelineClip = {
       ...clip,
+      ...deepCloneClipProps(clip),
       id: `clip-${timestamp}-${randomSuffix}-a`,
       duration: firstPartDuration,
       outPoint: splitInSource,
       linkedClipId: undefined,
+      transitionOut: undefined,
     };
 
     const secondClip: TimelineClip = {
       ...clip,
+      ...deepCloneClipProps(clip),
       id: `clip-${timestamp}-${randomSuffix}-b`,
       startTime: splitTime,
       duration: secondPartDuration,
       inPoint: splitInSource,
       linkedClipId: undefined,
       source: secondClipSource,
+      transitionIn: undefined,
     };
 
     const newClips: TimelineClip[] = clips.filter(c => c.id !== clipId && c.id !== clip.linkedClipId);
@@ -549,6 +566,7 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
 
         const linkedFirstClip: TimelineClip = {
           ...linkedClip,
+          ...deepCloneClipProps(linkedClip),
           id: `clip-${timestamp}-${randomSuffix}-linked-a`,
           duration: firstPartDuration,
           outPoint: linkedClip.inPoint + firstPartDuration,
@@ -556,6 +574,7 @@ export const createClipSlice: SliceCreator<ClipActions> = (set, get) => ({
         };
         const linkedSecondClip: TimelineClip = {
           ...linkedClip,
+          ...deepCloneClipProps(linkedClip),
           id: `clip-${timestamp}-${randomSuffix}-linked-b`,
           startTime: splitTime,
           duration: secondPartDuration,
