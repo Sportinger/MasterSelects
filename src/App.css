@@ -922,8 +922,8 @@ input, textarea {
     linear-gradient(-45deg, #303030 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, #303030 75%),
     linear-gradient(-45deg, transparent 75%, #303030 75%);
-  background-size: 16px 16px;
-  background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+  background-size: 48px 48px;
+  background-position: 0 0, 0 24px, 24px -24px, -24px 0px;
 }
 
 .preview-canvas {

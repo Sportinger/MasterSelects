@@ -52,7 +52,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     // Generate checkerboard pattern in pixel coordinates
     let pixelX = input.uv.x * uniforms.outputWidth;
     let pixelY = input.uv.y * uniforms.outputHeight;
-    let checkerSize = 8.0;
+    let checkerSize = 24.0;
     let cx = floor(pixelX / checkerSize);
     let cy = floor(pixelY / checkerSize);
     let checker = (u32(cx) + u32(cy)) % 2u;
