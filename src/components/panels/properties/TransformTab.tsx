@@ -7,6 +7,8 @@ import type { BlendMode, AnimatableProperty } from '../../../types';
 import {
   KeyframeToggle,
   ScaleKeyframeToggle,
+  PositionKeyframeToggle,
+  RotationKeyframeToggle,
   DraggableNumber,
   BLEND_MODE_GROUPS,
   formatBlendModeName,
@@ -111,7 +113,7 @@ export function TransformTab({ clipId, transform, speed = 1 }: TransformTabProps
       {/* Position */}
       <div className="properties-section">
         <div className="control-row">
-          <KeyframeToggle clipId={clipId} property="position.x" value={transform.position.x} />
+          <PositionKeyframeToggle clipId={clipId} x={transform.position.x} y={transform.position.y} z={transform.position.z} />
           <label className="prop-label">Position</label>
           <div className="multi-value-row">
             <LabeledValue label="X" value={posXPx} onChange={handlePosXChange}
@@ -149,7 +151,7 @@ export function TransformTab({ clipId, transform, speed = 1 }: TransformTabProps
       {/* Rotation */}
       <div className="properties-section">
         <div className="control-row">
-          <KeyframeToggle clipId={clipId} property="rotation.z" value={transform.rotation.z} />
+          <RotationKeyframeToggle clipId={clipId} x={transform.rotation.x} y={transform.rotation.y} z={transform.rotation.z} />
           <label className="prop-label">Rotation</label>
           <div className="multi-value-row">
             <LabeledValue label="X" value={transform.rotation.x} onChange={(v) => handlePropertyChange('rotation.x', v)}
