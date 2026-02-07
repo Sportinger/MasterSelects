@@ -523,7 +523,7 @@ export class ParallelDecodeManager {
         if (!clipDecoder.isDecoding) {
           // For first frame (targetSampleIndex near 0), ensure we decode from the start
           const decodeTarget = Math.max(targetSampleIndex + BUFFER_AHEAD_FRAMES, BUFFER_AHEAD_FRAMES);
-          await this.decodeAhead(clipDecoder, decodeTarget, true);
+          await this.decodeAhead(clipDecoder, decodeTarget, true, 0, targetSampleIndex);
         }
 
         // Small delay between attempts to allow async operations to complete
@@ -593,35 +593,78 @@ export class ParallelDecodeManager {
         // But ONLY seek if forceFlush is true (we actually need the frame now)
         // Background decodes should just continue forward, not seek
         const isTooFarAhead = targetSampleIndex > clipDecoder.sampleIndex + 30;
-        const isTooFarBehind = clipDecoder.sampleIndex > targetSampleIndex + 30;
+        // When seekTargetSampleIndex is provided, we need a specific frame NOW.
+        // If we've already decoded past that sample, we must seek back since
+        // decoders can only decode forward. Without seekTargetSampleIndex,
+        // use the original tolerance-based check.
+        const isTooFarBehind = seekTargetSampleIndex !== undefined
+          ? clipDecoder.sampleIndex > seekTargetSampleIndex
+          : clipDecoder.sampleIndex > targetSampleIndex + 30;
         const needsSeek = forceFlush && (isTooFarAhead || isTooFarBehind);
 
         // IMPORTANT: Do seek FIRST before calculating framesToDecode
         // Otherwise if we're past the target, framesToDecode will be negative and we'll return early
         if (needsSeek) {
           // Need to seek - find nearest keyframe before the ACTUAL target we need
-          // Use seekTargetSampleIndex if provided (the actual frame we need),
-          // not targetSampleIndex (which may include buffer-ahead frames)
           const seekTarget = seekTargetSampleIndex ?? targetSampleIndex;
-          let keyframeIndex = seekTarget;
-          for (let i = seekTarget; i >= 0; i--) {
+          // Find keyframe candidates by CTS (display time), not decode order.
+          // Due to B-frame reordering, a keyframe earlier in decode order
+          // can have a LATER CTS than the target, causing wrong frames to be decoded.
+          const targetCTS = clipDecoder.samples[seekTarget].cts;
+          const keyframeCandidates: number[] = [];
+          for (let i = 0; i < clipDecoder.samples.length; i++) {
             if (clipDecoder.samples[i].is_sync) {
-              keyframeIndex = i;
-              break;
+              if (clipDecoder.samples[i].cts <= targetCTS) {
+                keyframeCandidates.push(i);
+              } else {
+                break; // Keyframe CTS values increase monotonically
+              }
             }
           }
+          if (keyframeCandidates.length === 0) keyframeCandidates.push(0);
 
-          console.log(`[ParallelDecode] ${clipDecoder.clipName}: Seeking to keyframe at sample ${keyframeIndex} (seekTarget=${seekTarget}, bufferTarget=${targetSampleIndex}, distance=${seekTarget - keyframeIndex})`);
-
-          // Reset decoder for seek
-          clipDecoder.decoder.reset();
           const exportConfig: VideoDecoderConfig = {
             ...clipDecoder.codecConfig,
             hardwareAcceleration: 'prefer-software',
           };
-          clipDecoder.decoder.configure(exportConfig);
-          clipDecoder.sampleIndex = keyframeIndex;
-          clipDecoder.needsKeyframe = false; // Reset flag after seek
+
+          // Try keyframes from closest to earliest - some samples marked is_sync
+          // by MP4Box aren't real IDR keyframes (e.g. open-GOP recovery points).
+          // The decoder rejects these, so we fall back to earlier keyframes.
+          const maxAttempts = Math.min(keyframeCandidates.length, 5);
+          for (let k = keyframeCandidates.length - 1; k >= keyframeCandidates.length - maxAttempts; k--) {
+            const candidateIndex = keyframeCandidates[k];
+            const candidateSample = clipDecoder.samples[candidateIndex];
+            const candidateCTS = (candidateSample.cts / clipDecoder.videoTrack.timescale).toFixed(3);
+
+            clipDecoder.decoder.reset();
+            clipDecoder.decoder.configure(exportConfig);
+
+            const chunk = new EncodedVideoChunk({
+              type: 'key',
+              timestamp: (candidateSample.cts * 1_000_000) / candidateSample.timescale,
+              duration: (candidateSample.duration * 1_000_000) / candidateSample.timescale,
+              data: candidateSample.data,
+            });
+
+            try {
+              clipDecoder.decoder.decode(chunk);
+              clipDecoder.sampleIndex = candidateIndex + 1; // Already decoded this one
+              console.log(`[ParallelDecode] ${clipDecoder.clipName}: Seek keyframe accepted at sample ${candidateIndex} (CTS=${candidateCTS}s, targetCTS=${(targetCTS / clipDecoder.videoTrack.timescale).toFixed(3)}s, bufferTarget=${targetSampleIndex})`);
+              break;
+            } catch (e) {
+              console.log(`[ParallelDecode] ${clipDecoder.clipName}: Seek keyframe REJECTED at sample ${candidateIndex} (CTS=${candidateCTS}s) - not a real IDR, trying earlier`);
+              if (k === keyframeCandidates.length - maxAttempts) {
+                // Last attempt failed - reset and start from first sample
+                clipDecoder.decoder.reset();
+                clipDecoder.decoder.configure(exportConfig);
+                clipDecoder.sampleIndex = 0;
+                log.warn(`${clipDecoder.clipName}: No valid keyframe found after ${maxAttempts} attempts, starting from sample 0`);
+              }
+            }
+          }
+
+          clipDecoder.needsKeyframe = false;
 
           // Clear buffer since we're seeking
           for (const [, decodedFrame] of clipDecoder.frameBuffer) {

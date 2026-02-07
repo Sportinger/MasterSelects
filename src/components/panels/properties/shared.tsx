@@ -98,6 +98,90 @@ export function ScaleKeyframeToggle({ clipId, scaleX, scaleY }: { clipId: string
   );
 }
 
+// Master keyframe toggle for Position X, Y, Z together
+export function PositionKeyframeToggle({ clipId, x, y, z }: { clipId: string; x: number; y: number; z: number }) {
+  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe } = useTimelineStore.getState();
+
+  const xRec = isRecording(clipId, 'position.x');
+  const yRec = isRecording(clipId, 'position.y');
+  const zRec = isRecording(clipId, 'position.z');
+  const xKfs = hasKeyframes(clipId, 'position.x');
+  const yKfs = hasKeyframes(clipId, 'position.y');
+  const zKfs = hasKeyframes(clipId, 'position.z');
+
+  const anyRecording = xRec || yRec || zRec;
+  const anyHasKfs = xKfs || yKfs || zKfs;
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!anyRecording && !anyHasKfs) {
+      addKeyframe(clipId, 'position.x', x);
+      addKeyframe(clipId, 'position.y', y);
+      addKeyframe(clipId, 'position.z', z);
+    }
+    toggleKeyframeRecording(clipId, 'position.x');
+    toggleKeyframeRecording(clipId, 'position.y');
+    toggleKeyframeRecording(clipId, 'position.z');
+  };
+
+  return (
+    <button
+      className={`keyframe-toggle ${anyRecording ? 'recording' : ''} ${anyHasKfs ? 'has-keyframes' : ''}`}
+      onClick={handleClick}
+      title={anyRecording ? 'Stop recording position keyframes' : anyHasKfs ? 'Enable position keyframe recording' : 'Add position keyframes'}
+    >
+      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="13" r="7" />
+        <line x1="12" y1="13" x2="12" y2="9" />
+        <line x1="12" y1="2" x2="12" y2="5" />
+        <line x1="9" y1="3" x2="15" y2="3" />
+      </svg>
+    </button>
+  );
+}
+
+// Master keyframe toggle for Rotation X, Y, Z together
+export function RotationKeyframeToggle({ clipId, x, y, z }: { clipId: string; x: number; y: number; z: number }) {
+  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe } = useTimelineStore.getState();
+
+  const xRec = isRecording(clipId, 'rotation.x');
+  const yRec = isRecording(clipId, 'rotation.y');
+  const zRec = isRecording(clipId, 'rotation.z');
+  const xKfs = hasKeyframes(clipId, 'rotation.x');
+  const yKfs = hasKeyframes(clipId, 'rotation.y');
+  const zKfs = hasKeyframes(clipId, 'rotation.z');
+
+  const anyRecording = xRec || yRec || zRec;
+  const anyHasKfs = xKfs || yKfs || zKfs;
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!anyRecording && !anyHasKfs) {
+      addKeyframe(clipId, 'rotation.x', x);
+      addKeyframe(clipId, 'rotation.y', y);
+      addKeyframe(clipId, 'rotation.z', z);
+    }
+    toggleKeyframeRecording(clipId, 'rotation.x');
+    toggleKeyframeRecording(clipId, 'rotation.y');
+    toggleKeyframeRecording(clipId, 'rotation.z');
+  };
+
+  return (
+    <button
+      className={`keyframe-toggle ${anyRecording ? 'recording' : ''} ${anyHasKfs ? 'has-keyframes' : ''}`}
+      onClick={handleClick}
+      title={anyRecording ? 'Stop recording rotation keyframes' : anyHasKfs ? 'Enable rotation keyframe recording' : 'Add rotation keyframes'}
+    >
+      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="13" r="7" />
+        <line x1="12" y1="13" x2="12" y2="9" />
+        <line x1="12" y1="2" x2="12" y2="5" />
+        <line x1="9" y1="3" x2="15" y2="3" />
+      </svg>
+    </button>
+  );
+}
+
 // Precision slider with modifier key support
 interface PrecisionSliderProps {
   min: number;
