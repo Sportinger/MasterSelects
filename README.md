@@ -20,7 +20,7 @@ No Adobe subscription, no patience for cracks, and every free online editor felt
 
 **The vision:** A tool where AI can control *everything*. 50+ editing tools accessible via GPT. Plus a live video output for VJ performances (been doing video art for 16 years, so yeah, that matters to me).
 
-**The reality:** 3 weeks in, ~50 hours of coding, and I'm mass-producing features faster than I can stabilize them. Things break. A lot. But when it works, it *works*.
+**The reality:** ~75 hours of coding in, and I'm mass-producing features faster than I can stabilize them. Things break. A lot. But when it works, it *works*.
 
 Built with Claude as my pair-programmer. I'm not mass-prompting generic code - every feature gets debugged, refactored, and beaten into shape until it does what I need.
 
