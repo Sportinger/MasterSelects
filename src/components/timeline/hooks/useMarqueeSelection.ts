@@ -60,10 +60,6 @@ export function useMarqueeSelection({
   isTrackExpanded,
   getExpandedTrackHeight,
 }: UseMarqueeSelectionProps): UseMarqueeSelectionReturn {
-  // Marquee selection disabled
-  const noop = useCallback(() => {}, []);
-  return { marquee: null, handleMarqueeMouseDown: noop as unknown as (e: React.MouseEvent) => void };
-
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
   const marqueeRef = useRef(marquee);
   marqueeRef.current = marquee;

@@ -5,7 +5,7 @@ import type { TimelineClipProps } from './types';
 import { THUMB_WIDTH } from './constants';
 import type { ClipAnalysis } from '../../types';
 import { useTimelineStore } from '../../stores/timeline';
-import { PickWhip } from './PickWhip';
+// PickWhip disabled
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('TimelineClip');
@@ -528,9 +528,6 @@ function TimelineClipComponent({
   timeToPixel,
   pixelToTime,
   formatTime,
-  onPickWhipDragStart,
-  onPickWhipDragEnd,
-  onSetClipParent,
 }: TimelineClipProps) {
   const thumbnails = clip.thumbnails || [];
   const thumbnailsEnabled = useTimelineStore(s => s.thumbnailsEnabled);
@@ -722,9 +719,6 @@ function TimelineClipComponent({
   ]
     .filter(Boolean)
     .join(' ');
-
-  // Get parent clip name for tooltip
-  const parentClip = clip.parentClipId ? clips.find(c => c.id === clip.parentClipId) : null;
 
   // Cut tool snapping helper
   const snapCutTime = (rawTime: number, shouldSnap: boolean): number => {
@@ -1022,15 +1016,7 @@ function TimelineClipComponent({
             <span className="clip-text-icon" title="Text Clip">T</span>
           )}
           <span className="clip-name">{isTextClip && clip.textProperties ? clip.textProperties.text.slice(0, 30) || 'Text' : clip.name}</span>
-          <PickWhip
-            clipId={clip.id}
-            clipName={clip.name}
-            parentClipId={clip.parentClipId}
-            parentClipName={parentClip?.name}
-            onSetParent={onSetClipParent}
-            onDragStart={onPickWhipDragStart}
-            onDragEnd={onPickWhipDragEnd}
-          />
+          {/* PickWhip disabled */}
         </div>
         <span className="clip-duration">{formatTime(displayDuration)}</span>
       </div>
