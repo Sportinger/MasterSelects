@@ -1,6 +1,8 @@
 import { useRef, useEffect } from 'react';
 import { useGpuScope, type ScopeViewMode } from './useScopeAnalysis';
 
+const X_LABELS = [0, 64, 128, 192, 255];
+
 interface HistogramScopeProps {
   viewMode?: ScopeViewMode;
 }
@@ -29,8 +31,17 @@ export function HistogramScope({ viewMode = 'rgb' }: HistogramScopeProps) {
   }, []);
 
   return (
-    <div ref={containerRef} className="scope-canvas-container">
-      <canvas ref={canvasRef} />
+    <div className="scope-with-legend scope-with-legend-xy">
+      <div className="scope-canvas-area">
+        <div ref={containerRef} className="scope-canvas-container">
+          <canvas ref={canvasRef} />
+        </div>
+      </div>
+      <div className="scope-legend-x">
+        {X_LABELS.map((v) => (
+          <span key={v} className="scope-legend-label">{v}</span>
+        ))}
+      </div>
     </div>
   );
 }
