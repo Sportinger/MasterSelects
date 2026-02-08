@@ -193,7 +193,7 @@ function NativeHelperDialog({
         </h1>
 
         <p className="welcome-subtitle">
-          10x faster ProRes & DNxHD decoding
+          YouTube downloading & more
         </p>
 
         {/* Content Card */}
@@ -247,9 +247,10 @@ function NativeHelperDialog({
                 </div>
 
                 <p className="text-xs text-green-400 text-center pt-2">
-                  {(info as any).lite
-                    ? 'YouTube downloads enabled'
-                    : 'ProRes and DNxHD files will decode at native speed'}
+                  YouTube downloads enabled
+                </p>
+                <p className="text-xs text-zinc-500 text-center">
+                  Hardware acceleration coming soon
                 </p>
               </div>
             ) : turboModeEnabled ? (
@@ -257,8 +258,8 @@ function NativeHelperDialog({
               <div className="space-y-4">
                 <p className="text-sm text-zinc-400">
                   {isMac
-                    ? 'Download the MasterSelects Helper app to enable YouTube downloads and faster video decoding.'
-                    : 'The Native Helper enables YouTube downloads and hardware-accelerated video decoding.'}
+                    ? 'Download the MasterSelects Helper app to enable YouTube downloads.'
+                    : 'The Native Helper enables YouTube downloads.'}
                 </p>
 
                 {isMac ? (
@@ -338,7 +339,7 @@ function NativeHelperDialog({
             ) : (
               /* Disabled State */
               <p className="text-sm text-zinc-500 text-center py-4">
-                Enable Turbo Mode to use hardware-accelerated decoding for professional codecs.
+                Enable Turbo Mode to use YouTube downloading. Hardware acceleration coming soon.
               </p>
             )}
           </div>
