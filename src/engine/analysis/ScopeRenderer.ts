@@ -422,9 +422,10 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let py = u32(clamp(center - cr / 128.0 * scale, 0.0, f32(params.outSize - 1u)));
 
   let idx = py * params.outSize + px;
-  atomicAdd(&accumR[idx], u32(r) + 40u);
-  atomicAdd(&accumG[idx], u32(g) + 40u);
-  atomicAdd(&accumB[idx], u32(b) + 40u);
+  // Accumulate raw pixel color (no bias, preserves color ratios)
+  atomicAdd(&accumR[idx], u32(max(r, 1.0)));
+  atomicAdd(&accumG[idx], u32(max(g, 1.0)));
+  atomicAdd(&accumB[idx], u32(max(b, 1.0)));
 }
 `;
 
@@ -557,16 +558,25 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
     }
 
     let rv = params.refValue;
-    // Sharp trace
-    let rN = pow(clamp(sqrt(rCenter) / rv, 0.0, 1.0), 0.55);
-    let gN = pow(clamp(sqrt(gCenter) / rv, 0.0, 1.0), 0.55);
-    let bN = pow(clamp(sqrt(bCenter) / rv, 0.0, 1.0), 0.55);
-    // Soft bloom halo
-    let rG = pow(clamp(sqrt(rBloom) / rv, 0.0, 1.0), 0.5) * 0.15;
-    let gG = pow(clamp(sqrt(gBloom) / rv, 0.0, 1.0), 0.5) * 0.15;
-    let bG = pow(clamp(sqrt(bBloom) / rv, 0.0, 1.0), 0.5) * 0.15;
 
-    color = max(color, clamp(vec3f(rN + rG, gN + gG, bN + bG), vec3f(0.0), vec3f(1.0)));
+    // Density-based brightness (sum of channels)
+    let totalCenter = rCenter + gCenter + bCenter;
+    let totalBloom = rBloom + gBloom + bBloom;
+    let density = pow(clamp(sqrt(totalCenter / 3.0) / rv, 0.0, 1.0), 0.7);
+    let bloomD = pow(clamp(sqrt(totalBloom / 3.0) / rv, 0.0, 1.0), 0.6) * 0.18;
+
+    // Color ratios from accumulated data (preserves hue)
+    if (totalCenter > 0.0) {
+      let rRatio = rCenter / totalCenter;
+      let gRatio = gCenter / totalCenter;
+      let bRatio = bCenter / totalCenter;
+      // Scale ratios to visible range (neutral = 0.33 each, pure channel = 1.0)
+      let chromaColor = vec3f(rRatio, gRatio, bRatio) * 3.0;
+      // Blend: at low density show saturated color, at high density tend toward white
+      let whiteMix = density * density * 0.5;
+      let traceColor = mix(chromaColor, vec3f(1.0), whiteMix) * (density + bloomD);
+      color = max(color, clamp(traceColor, vec3f(0.0), vec3f(1.0)));
+    }
   }
 
   return vec4f(color, 1.0);
@@ -978,7 +988,7 @@ export class ScopeRenderer {
     const srcH = sourceTexture.height;
 
     d.queue.writeBuffer(this.vsComputeParams, 0, new Uint32Array([VS_SIZE, srcW, srcH, 0]));
-    const refValue = Math.sqrt(srcH * srcW / (VS_SIZE * VS_SIZE)) * 3.0;
+    const refValue = Math.sqrt(srcH * srcW / (VS_SIZE * VS_SIZE)) * 18.0;
     d.queue.writeBuffer(this.vsRenderParams, 0, new Float32Array([VS_SIZE, refValue, 0, 0]));
 
     const encoder = d.createCommandEncoder();
