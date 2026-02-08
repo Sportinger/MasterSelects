@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useScopeAnalysis, type ScopeTab } from './useScopeAnalysis';
+import type { ScopeTab } from './useScopeAnalysis';
 import { HistogramScope } from './HistogramScope';
 import { VectorscopeScope } from './VectorscopeScope';
 import { WaveformScope } from './WaveformScope';
@@ -13,7 +13,6 @@ const TABS: { id: ScopeTab; label: string }[] = [
 
 export function ScopesPanel() {
   const [activeTab, setActiveTab] = useState<ScopeTab>('waveform');
-  const { histogramData, vectorscopeData, waveformData } = useScopeAnalysis(activeTab, true);
 
   return (
     <div className="scopes-panel">
@@ -29,9 +28,9 @@ export function ScopesPanel() {
         ))}
       </div>
       <div className="scopes-content">
-        {activeTab === 'histogram' && <HistogramScope data={histogramData} />}
-        {activeTab === 'vectorscope' && <VectorscopeScope data={vectorscopeData} />}
-        {activeTab === 'waveform' && <WaveformScope data={waveformData} />}
+        {activeTab === 'histogram' && <HistogramScope />}
+        {activeTab === 'vectorscope' && <VectorscopeScope />}
+        {activeTab === 'waveform' && <WaveformScope />}
       </div>
     </div>
   );

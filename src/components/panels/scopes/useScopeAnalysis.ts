@@ -1,96 +1,111 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useEngineStore } from '../../../stores/engineStore';
-import {
-  computeHistogram,
-  computeVectorscope,
-  computeWaveform,
-  type HistogramData,
-} from '../../../engine/analysis/ScopeAnalyzer';
-
-const ANALYSIS_INTERVAL = 100; // ~10fps
-const PIXEL_STEP = 4; // sample every 4th pixel in each dimension
-const VECTORSCOPE_SIZE = 256;
-const WAVEFORM_WIDTH = 384;
-const WAVEFORM_HEIGHT = 256;
+import { ScopeRenderer } from '../../../engine/analysis/ScopeRenderer';
 
 export type ScopeTab = 'histogram' | 'vectorscope' | 'waveform';
 
-export interface ScopeAnalysisResult {
-  histogramData: HistogramData | null;
-  vectorscopeData: ImageData | null;
-  waveformData: ImageData | null;
-  isAnalyzing: boolean;
-}
+const INTERVAL = 66; // ~15fps
 
-export function useScopeAnalysis(
-  activeTab: ScopeTab,
+/**
+ * GPU-accelerated scope rendering hook.
+ * Reads directly from the composition texture — no readPixels overhead.
+ */
+export function useGpuScope(
+  canvasRef: React.RefObject<HTMLCanvasElement | null>,
+  scopeType: ScopeTab,
   visible: boolean
-): ScopeAnalysisResult {
+) {
   const isEngineReady = useEngineStore((s) => s.isEngineReady);
-  const [histogramData, setHistogramData] = useState<HistogramData | null>(null);
-  const [vectorscopeData, setVectorscopeData] = useState<ImageData | null>(null);
-  const [waveformData, setWaveformData] = useState<ImageData | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const rendererRef = useRef<ScopeRenderer | null>(null);
+  const ctxRef = useRef<GPUCanvasContext | null>(null);
+  const rafRef = useRef(0);
+  const lastTimeRef = useRef(0);
+  const initedRef = useRef(false);
 
-  const lastAnalysisTime = useRef(0);
-  const rafId = useRef(0);
-  const runningRef = useRef(false);
+  // Initialize WebGPU context + renderer
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !isEngineReady || !visible) return;
 
-  const analyze = useCallback(async () => {
-    if (runningRef.current) return;
-    runningRef.current = true;
-    setIsAnalyzing(true);
+    let destroyed = false;
+
+    const init = async () => {
+      const { engine } = await import('../../../engine/WebGPUEngine');
+      const device = engine.getDevice();
+      if (!device || destroyed) return;
+
+      const ctx = canvas.getContext('webgpu') as GPUCanvasContext;
+      if (!ctx) return;
+      const format = navigator.gpu.getPreferredCanvasFormat();
+      ctx.configure({ device, format, alphaMode: 'opaque' });
+      ctxRef.current = ctx;
+
+      if (!rendererRef.current) {
+        rendererRef.current = new ScopeRenderer(device, format);
+      }
+      initedRef.current = true;
+    };
+
+    init();
+
+    return () => {
+      destroyed = true;
+      initedRef.current = false;
+      ctxRef.current = null;
+    };
+  }, [canvasRef, isEngineReady, visible]);
+
+  // Render callback
+  const render = useCallback(async () => {
+    const renderer = rendererRef.current;
+    const ctx = ctxRef.current;
+    if (!renderer || !ctx) return;
 
     try {
       const { engine } = await import('../../../engine/WebGPUEngine');
-      const pixels = await engine.readPixels();
-      if (!pixels) {
-        runningRef.current = false;
-        setIsAnalyzing(false);
-        return;
-      }
+      const texture = engine.getLastRenderedTexture();
+      if (!texture) return;
 
-      const { width, height } = engine.getOutputDimensions();
-
-      if (activeTab === 'histogram') {
-        const data = computeHistogram(pixels, width, height, PIXEL_STEP);
-        setHistogramData(data);
-      } else if (activeTab === 'vectorscope') {
-        const data = computeVectorscope(pixels, width, height, PIXEL_STEP, VECTORSCOPE_SIZE);
-        setVectorscopeData(data);
+      if (scopeType === 'waveform') {
+        renderer.renderWaveform(texture, ctx);
+      } else if (scopeType === 'histogram') {
+        renderer.renderHistogram(texture, ctx);
       } else {
-        const data = computeWaveform(pixels, width, height, PIXEL_STEP, WAVEFORM_WIDTH, WAVEFORM_HEIGHT);
-        setWaveformData(data);
+        renderer.renderVectorscope(texture, ctx);
       }
     } catch {
-      // Engine not ready or GPU error — silently skip
-    } finally {
-      runningRef.current = false;
-      setIsAnalyzing(false);
+      // GPU error — skip frame
     }
-  }, [activeTab]);
+  }, [scopeType]);
 
+  // RAF render loop
   useEffect(() => {
-    if (!visible || !isEngineReady) return;
+    if (!isEngineReady || !visible) return;
 
     let cancelled = false;
 
-    const tick = (timestamp: number) => {
+    const tick = (time: number) => {
       if (cancelled) return;
-      if (timestamp - lastAnalysisTime.current >= ANALYSIS_INTERVAL) {
-        lastAnalysisTime.current = timestamp;
-        analyze();
+      if (initedRef.current && time - lastTimeRef.current >= INTERVAL) {
+        lastTimeRef.current = time;
+        render();
       }
-      rafId.current = requestAnimationFrame(tick);
+      rafRef.current = requestAnimationFrame(tick);
     };
 
-    rafId.current = requestAnimationFrame(tick);
+    rafRef.current = requestAnimationFrame(tick);
 
     return () => {
       cancelled = true;
-      cancelAnimationFrame(rafId.current);
+      cancelAnimationFrame(rafRef.current);
     };
-  }, [visible, isEngineReady, analyze]);
+  }, [isEngineReady, visible, render]);
 
-  return { histogramData, vectorscopeData, waveformData, isAnalyzing };
+  // Cleanup renderer on unmount
+  useEffect(() => {
+    return () => {
+      rendererRef.current?.destroy();
+      rendererRef.current = null;
+    };
+  }, []);
 }

@@ -1039,6 +1039,13 @@ export class WebGPUEngine {
     return this.context.getDevice();
   }
 
+  getLastRenderedTexture(): GPUTexture | null {
+    if (!this.renderTargetManager || !this.compositor) return null;
+    return this.compositor.getLastRenderWasPing()
+      ? this.renderTargetManager.getPingTexture()
+      : this.renderTargetManager.getPongTexture();
+  }
+
   getTextureManager(): TextureManager | null {
     return this.textureManager;
   }
