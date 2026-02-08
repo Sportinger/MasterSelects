@@ -387,7 +387,7 @@ export interface TimelineUtils {
   // Get position with magnetic resistance at clip edges - returns adjusted position and whether user has "broken through"
   // Uses pixel-based resistance (zoom converts time distance to pixels)
   // excludeClipIds: optional list of clip IDs to exclude from collision detection (for multi-select)
-  getPositionWithResistance: (clipId: string, desiredStartTime: number, trackId: string, duration: number, zoom?: number, excludeClipIds?: string[]) => { startTime: number; forcingOverlap: boolean };
+  getPositionWithResistance: (clipId: string, desiredStartTime: number, trackId: string, duration: number, zoom?: number, excludeClipIds?: string[]) => { startTime: number; forcingOverlap: boolean; noFreeSpace?: boolean };
   // Trim any clips that the placed clip overlaps with
   trimOverlappingClips: (clipId: string, startTime: number, trackId: string, duration: number) => void;
   getSerializableState: () => CompositionTimelineData;

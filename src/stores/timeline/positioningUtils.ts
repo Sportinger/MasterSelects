@@ -201,6 +201,16 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
 
     // Cross-track moves: never allow overlap, always snap to nearest free spot
     if (isTrackChange) {
+      // Verify the snap position is actually free (not overlapping another clip)
+      const snapEnd = snapToPosition + duration;
+      const snapOverlaps = otherClips.some(c => {
+        const cEnd = c.startTime + c.duration;
+        return !(snapEnd <= c.startTime || snapToPosition >= cEnd);
+      });
+      if (snapOverlaps) {
+        // Snap position also overlaps — signal no free space on this track
+        return { startTime: Math.max(0, desiredStartTime), forcingOverlap: false, noFreeSpace: true };
+      }
       return { startTime: Math.max(0, snapToPosition), forcingOverlap: false };
     }
 

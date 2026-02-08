@@ -29,7 +29,7 @@ interface UseClipDragProps {
   // Helpers
   pixelToTime: (pixel: number) => number;
   getSnappedPosition: (clipId: string, rawTime: number, trackId: string) => { startTime: number; snapped: boolean };
-  getPositionWithResistance: (clipId: string, rawTime: number, trackId: string, duration: number, zoom?: number, excludeClipIds?: string[]) => { startTime: number; forcingOverlap: boolean };
+  getPositionWithResistance: (clipId: string, rawTime: number, trackId: string, duration: number, zoom?: number, excludeClipIds?: string[]) => { startTime: number; forcingOverlap: boolean; noFreeSpace?: boolean };
 }
 
 interface UseClipDragReturn {
@@ -181,7 +181,7 @@ export function useClipDrag({
         }
 
         // Check primary clip with all related clips excluded
-        let { startTime: resistedTime, forcingOverlap } = getPositionWithResistance(
+        let { startTime: resistedTime, forcingOverlap, noFreeSpace } = getPositionWithResistance(
           drag.clipId,
           baseTime,
           newTrackId,
@@ -189,6 +189,27 @@ export function useClipDrag({
           undefined, // zoom
           allExcludedIds // exclude all selected clips and their linked clips
         );
+
+        // If no free space on target track (cross-track move), try other tracks of same type
+        if (noFreeSpace && newTrackId !== drag.originalTrackId) {
+          const targetTrack = tracks.find(t => t.id === newTrackId);
+          if (targetTrack) {
+            const altTracks = tracks.filter(t =>
+              t.type === targetTrack.type && t.id !== newTrackId && t.id !== drag.originalTrackId
+            );
+            for (const alt of altTracks) {
+              const altResult = getPositionWithResistance(
+                drag.clipId, baseTime, alt.id, clipDuration, undefined, allExcludedIds
+              );
+              if (!altResult.noFreeSpace) {
+                newTrackId = alt.id;
+                resistedTime = altResult.startTime;
+                forcingOverlap = altResult.forcingOverlap;
+                break;
+              }
+            }
+          }
+        }
 
         let timeDelta = resistedTime - (draggedClip?.startTime ?? drag.originalStartTime);
 
