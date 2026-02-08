@@ -108,6 +108,15 @@ The Speed property controls playback rate with full keyframe support:
 - Alt+drag to move independently
 - Split together with `C` key
 - Visual indicator: linked clips move together
+- **Linked selection:** Click a linked video/audio clip to select both
+- **Independent selection:** Shift+click for selecting only one side
+
+### Multi-Select Movement
+- **Shift+Click** to select multiple clips
+- Drag any selected clip to move all together
+- Group boundary collision prevents clips from overlapping
+- Visual preview shown for all selected clips during drag
+- Audio/video stay in sync during multi-drag
 
 ---
 
@@ -127,9 +136,11 @@ When enabled:
 
 ### Overlap Resistance
 When dragging clips over others:
-- **100 pixel resistance** must be pushed through
+- **100px horizontal resistance** must be pushed through
+- **100px vertical resistance** prevents accidental cross-track moves
 - Visual `.forcing-overlap` feedback
 - Auto-trims overlapped clips when forced
+- Smart overlap prevention on track changes: find free track or create new one
 
 ### Implementation
 ```typescript
@@ -239,7 +250,8 @@ Each track header contains:
 - Quick way to isolate content
 
 ### Track Height
-- Drag track dividers to resize
+- Drag track dividers to resize with continuous scrolling (no fixed steps)
+- Minimum 20px for ultra-compact view with single line of text
 - Expanded tracks show property rows
 - Height auto-adjusts for curve editors
 
@@ -253,10 +265,13 @@ Located in timeline toolbar:
 |---------|----------|----------|
 | Stop | - | Return to time 0 |
 | Play/Pause | `Space` | Toggle playback |
-| Loop | `L` | Toggle loop mode |
+| JKL Shuttle | `J`/`K`/`L` | Reverse / Pause / Forward playback |
+| Loop | `L` (no focus) | Toggle loop mode |
 | In Point | `I` | Set at playhead |
 | Out Point | `O` | Set at playhead |
 | Clear I/O | `X` | Clear markers |
+| Go to Start | `Home` | Jump to beginning |
+| Go to End | `End` | Jump to end |
 
 ### Duration Editing
 - Click duration display to edit
@@ -276,6 +291,23 @@ Located in timeline toolbar:
 - Generated for audio clips
 - Toggle: "Wave On/Off" button
 - 50 samples per second resolution
+
+### Keyframe Tick Marks
+- Small amber diamond markers at the bottom of clips
+- Show keyframe positions without expanding tracks
+- Visible at all zoom levels
+
+### Timeline Zoom
+- **Alt+Scroll**: Exponential zoom (8% per step) centered on playhead
+- Consistent zoom feel at all zoom levels
+
+### Vertical Scroll Snapping
+- Vertical scrolling snaps to track boundaries
+- Each scroll step moves exactly one layer
+
+### Video/Audio Separator
+- Green divider line between video and audio tracks
+- Clearer visual structure for track organization
 
 ### RAM Preview
 - Toggle: "RAM ON/OFF" button

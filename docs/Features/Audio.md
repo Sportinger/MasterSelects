@@ -133,14 +133,25 @@ Each EQ band can be animated:
 }
 ```
 
+### Live EQ via Web Audio
+- Real-time equalization using Web Audio API
+- Hear EQ changes instantly during playback
+- Changes apply in real-time without needing to re-render
+
 ### Properties Panel - Volume Tab
 When an audio clip is selected, the Properties panel shows the Volume tab:
 - **Volume slider**: 0-200% (with keyframe toggle)
 - **Keep Pitch checkbox**: Maintain original pitch when speed changes (default on)
 - **10 vertical EQ sliders**: One per frequency band
 - **Reset button**: Flattens all bands to 0dB
-- **Keyframe toggles**: Per parameter for animation
+- **Keyframe toggles**: Per parameter for animation (single toggle for all bands)
 - EQ effect is automatically added on first use
+
+### Audio Tab for Video Clips
+Video clips now have a dedicated **Audio** tab in the Properties panel:
+- Volume controls and keyframes for linked audio
+- Same EQ and volume controls as audio-only clips
+- Accessible without selecting the linked audio clip separately
 
 See [UI Panels - Properties Panel](./UI-Panels.md#properties-panel) for details.
 
@@ -405,7 +416,6 @@ See [Export](./Export.md) for full export documentation.
 - Audio meters/spectrum display
 - Loudness normalization
 - Noise reduction
-- Real-time effect preview
 
 ---
 

@@ -13,8 +13,12 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 - **Linked Clips**: Audio/Video bleiben beim Verschieben synchron
 - **Overlap Resistance**: Magnetischer Widerstand beim Überlappen (Video + Audio)
 - **Clip-Splitting**: Clips teilen mit C-Taste (splittet ALLE Clips am Playhead, oder nur ausgewählte)
+- **Multi-Select**: Shift+Klick für Mehrfachauswahl, gemeinsam verschieben
+- **Linked Clip Selection**: Klick wählt Video+Audio zusammen aus
+- **Solid Color Clips**: Farbige Solid-Layer erstellen
 - **Playhead**: Klicken zum Springen, Ziehen zum Scrubben
-- **Zoom**: Dynamischer Zoom mit Alt+Scroll-Rad (0.1 bis 200 px/s)
+- **JKL Playback**: Industry-Standard J/K/L Shortcuts
+- **Zoom**: Exponentieller Zoom mit Alt+Scroll (8% pro Schritt)
 - **Fit Button**: Zoom anpassen um ganze Komposition zu sehen
 - **Track-Höhe**: Individuelle Track-Höhen anpassbar
 - **Track Solo/Mute**: Audio-Tracks stumm schalten oder solo hören
@@ -225,24 +229,28 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 
 ---
 
-## 11. Mixer & Layer Grid
+## 11. Video Scopes
 
-### Grid-System
-- **Konfigurierbares Grid**: Rows × Columns (z.B. 5×5)
-- **Slot-basiert**: Jede Position = ein Video-Layer
-- **Drag-and-Drop**: Layer im Grid umordnen
-- **Gruppen**: Related Slots gruppieren
-- **Triggering**: Spalten/Reihen/Slots togglen
-
-### Layer-Controls
-- **Visibility**: Ein/Ausblenden
-- **Opacity**: 0-100% pro Layer
-- **Blend Mode**: Alle 25+ Blend-Modes
-- **Transform**: Position, Scale, Rotation pro Layer
+### GPU-beschleunigte Scopes
+- **Histogram**: RGB-Verteilungsgraph mit R/G/B/Luma View-Modes
+- **Vectorscope**: Farb-Vektoranalyse mit Phosphor-Glow
+- **Waveform**: DaVinci-style Waveform mit Sub-Pixel-Verteilung
+- **Unabhängige Panels**: Jeder Scope als eigenständiges dockbares Panel
+- **IRE Legende**: Broadcast-Referenz
+- **Zero-Copy**: Vollständig GPU-gerendert, kein readPixels Overhead
 
 ---
 
-## 12. UI Features
+## 12. Transitions
+
+### Features
+- **Crossfade-Transitions**: GPU-beschleunigte Überblendungen
+- **Transitions Panel**: Modular mit Drag-and-Drop
+- **Timeline-Integration**: Visuell auf Clips dargestellt
+
+---
+
+## 13. UI Features
 
 ### Dock-System
 - **Anpassbares Layout**: Panels per Drag-and-Drop
@@ -251,10 +259,10 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 - **Split Panes**: Vertikal/Horizontal teilen
 - **Layout-Persistenz**: Layouts speichern/laden
 
-### Panels
-- Timeline, Media Panel, Layer Panel, Effects Panel
-- Clip Properties, Analysis Panel, Transcript Panel
-- MultiCam Panel, AI Chat, Export Panel
+### Panels (14 Typen)
+- Timeline, Preview, Media Panel, Properties Panel
+- Export, Multicam, AI Chat, AI Video
+- YouTube, Transitions, Histogram, Vectorscope, Waveform, Slots
 
 ### Toolbar
 - **Projekt-Management**: New, Save, Load, Delete
@@ -285,10 +293,12 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 
 ### Funktionen
 - **Neues Projekt**: Leere Projekte erstellen
-- **Speichern**: Lokal mit IndexedDB
-- **Laden**: Vorherige Projekte öffnen
-- **Löschen**: Projekte entfernen
-- **Auto-Save**: Hintergrund-Speicherung
+- **Lokale Ordner**: Projekte in lokalen Ordnern speichern (File System Access API)
+- **Raw-Ordner**: Importierte Medien automatisch nach Raw/ kopiert
+- **Auto-Relink**: Fehlende Dateien automatisch aus Raw-Ordner wiederhergestellt
+- **Auto-Save**: Konfigurierbares Intervall (1-10 min)
+- **Backup-System**: Letzte 20 Backups automatisch
+- **Save As**: Projekt an neuen Ort exportieren
 
 ---
 

@@ -88,6 +88,26 @@ interface Keyframe {
 - Press `Delete` key
 - Or right-click → Delete
 
+### Copy/Paste Keyframes
+- **Copy:** `Ctrl+C` with keyframes selected copies only keyframes (not clips)
+- **Paste:** `Ctrl+V` pastes keyframes at playhead position on the selected clip
+- Pasted keyframes maintain relative timing between each other
+
+### Multi-Select Movement
+- Select multiple keyframes with `Shift+Click`
+- Drag any selected keyframe to move all by the same time delta
+- All selected keyframes move together maintaining relative spacing
+
+### Keyframe Toggle Off
+- Toggling keyframes off for a property saves the current value
+- All keyframes for that property are deleted cleanly
+- Property reverts to a static value
+
+### Tick Marks on Clips
+- Small amber diamond markers at the bottom of clip bars
+- Show keyframe positions without needing to expand tracks
+- Visible at all zoom levels for quick keyframe overview
+
 ### Batch Operations
 ```typescript
 addKeyframe(clipId, property, value, time?, easing)
@@ -137,6 +157,9 @@ Each easing mode shows unique diamond shape:
 - **SVG-based** with grid background
 - **Bezier curves** drawn between keyframes
 - **Value range** auto-computed with padding
+- **Auto-scale Y-axis** fits curve tightly to visible range
+- **Shift+wheel** to resize curve editor height
+- **Single editor open** — only one curve editor at a time to prevent UI clutter
 
 ### Keyframe Manipulation
 | Action | Effect |

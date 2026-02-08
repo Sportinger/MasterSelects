@@ -52,6 +52,11 @@ Projects are stored in a local folder you choose:
 ```
 MyProject/
 ├── project.json           # Main project file
+├── Raw/                   # Auto-copied media files (portable)
+│   ├── Interview_01.mp4
+│   └── Music.wav
+├── YT/                    # Downloaded YouTube videos
+│   └── video_title.mp4
 ├── Backups/               # Auto-backup folder
 │   ├── project_2026-01-11_14-00-00.json
 │   └── ... (last 20 backups)
@@ -64,9 +69,21 @@ MyProject/
     └── {mediaHash}.json
 ```
 
+### Auto-Copy to Raw Folder
+When importing media files, they are **automatically copied** to the project's `Raw/` folder:
+- Original files remain untouched at their source location
+- Project becomes portable — copy the folder to another machine
+- No broken links when moving projects between computers
+
+### Auto-Relink from Raw Folder
+When opening a project with missing media files:
+- App automatically checks the `Raw/` folder for matching files
+- Files are restored from Raw without user intervention
+- Eliminates manual relinking for projects with Raw copies
+
 ### Benefits of Local Storage
 - **No browser storage limits** - Use as much disk space as needed
-- **Portable projects** - Copy folder to move between machines
+- **Portable projects** - Copy folder (including Raw/) to move between machines
 - **External backup** - Use any backup tool on the folder
 - **Version control** - Can use Git for project history
 
@@ -248,6 +265,13 @@ Separate from project data:
 - Tab arrangements
 - Panel sizes
 - Stored in localStorage
+
+### View Toggle Persistence
+View toggle states are saved in the project file:
+- Thumbnail visibility (on/off)
+- Waveform visibility (on/off)
+- Scopes visibility
+- Restored when opening a project
 
 ### Actions
 ```typescript
