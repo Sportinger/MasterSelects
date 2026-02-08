@@ -80,7 +80,22 @@ export function useGpuScope(
     try {
       const { engine } = await import('../../../engine/WebGPUEngine');
       const texture = engine.getLastRenderedTexture();
-      if (!texture) return;
+      if (!texture) {
+        // No content — clear scope to black
+        const device = engine.getDevice();
+        if (device && ctx) {
+          const enc = device.createCommandEncoder();
+          enc.beginRenderPass({
+            colorAttachments: [{
+              view: ctx.getCurrentTexture().createView(),
+              loadOp: 'clear', storeOp: 'store',
+              clearValue: { r: 0.04, g: 0.04, b: 0.04, a: 1 },
+            }],
+          }).end();
+          device.queue.submit([enc.finish()]);
+        }
+        return;
+      }
 
       // Waveform: maintain source content aspect ratio
       if (scopeType === 'waveform') {
