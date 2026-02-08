@@ -151,6 +151,7 @@ export const useTimelineStore = create<TimelineStore>()(
       // Performance toggles (enabled by default)
       thumbnailsEnabled: true,
       waveformsEnabled: true,
+      showTranscriptMarkers: true,
 
       // Keyframe animation state
       clipKeyframes: new Map<string, Keyframe[]>(),

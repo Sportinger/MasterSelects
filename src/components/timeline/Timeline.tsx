@@ -172,9 +172,7 @@ export function Timeline() {
   // Stable callbacks for TimelineControls (avoids re-renders from inline arrows)
   const toggleProxyEnabled = useMediaStore(state => state.toggleProxyEnabled);
 
-  const handleToggleTranscriptMarkers = useCallback(() => {
-    setShowTranscriptMarkers(prev => !prev);
-  }, []);
+  // Use store toggle directly (no useCallback needed - stable store reference)
 
   const handleAddVideoTrack = useCallback(() => addTrack('video'), [addTrack]);
   const handleAddAudioTrack = useCallback(() => addTrack('audio'), [addTrack]);
@@ -330,8 +328,9 @@ export function Timeline() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const handleClipContextMenu = useClipContextMenu(selectedClipIds, selectClip, setContextMenu);
 
-  // Transcript markers visibility toggle
-  const [showTranscriptMarkers, setShowTranscriptMarkers] = useState(true);
+  // Transcript markers visibility toggle (from store for persistence)
+  const showTranscriptMarkers = useTimelineStore(s => s.showTranscriptMarkers);
+  const toggleTranscriptMarkers = useTimelineStore(s => s.toggleTranscriptMarkers);
 
   // Multicam dialog state
   const [multicamDialogOpen, setMulticamDialogOpen] = useState(false);
@@ -771,7 +770,7 @@ export function Timeline() {
         proxyCacheProgress={proxyCacheProgress}
         onStartProxyCachePreload={startProxyCachePreload}
         onCancelProxyCachePreload={cancelProxyCachePreload}
-        onToggleTranscriptMarkers={handleToggleTranscriptMarkers}
+        onToggleTranscriptMarkers={toggleTranscriptMarkers}
         onToggleThumbnails={toggleThumbnailsEnabled}
         onToggleWaveforms={toggleWaveformsEnabled}
         onToggleCutTool={toggleCutTool}

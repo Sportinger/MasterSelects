@@ -99,6 +99,7 @@ export interface TimelineState {
   // Performance toggles
   thumbnailsEnabled: boolean;
   waveformsEnabled: boolean;
+  showTranscriptMarkers: boolean;
 
   // Keyframe animation state
   clipKeyframes: Map<string, Keyframe[]>;
@@ -229,6 +230,10 @@ export interface RamPreviewActions {
   // Performance toggles
   toggleThumbnailsEnabled: () => void;
   toggleWaveformsEnabled: () => void;
+  setThumbnailsEnabled: (enabled: boolean) => void;
+  setWaveformsEnabled: (enabled: boolean) => void;
+  toggleTranscriptMarkers: () => void;
+  setShowTranscriptMarkers: (enabled: boolean) => void;
 }
 
 // Export progress actions interface
