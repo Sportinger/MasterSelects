@@ -147,19 +147,32 @@ export function useTimelineZoom({
           e.preventDefault();
           const maxScrollY = Math.max(0, contentHeight - viewportHeight);
           if (trackSnapPositions.length > 1) {
-            // Find current snap index (the highest snap position <= scrollY)
-            let currentIdx = 0;
-            for (let i = trackSnapPositions.length - 1; i >= 0; i--) {
-              if (trackSnapPositions[i] <= scrollY + 1) { // +1 tolerance for float rounding
-                currentIdx = i;
-                break;
+            // Compute raw target, then snap to nearest track boundary
+            const raw = scrollY + e.deltaY;
+            let best = trackSnapPositions[0];
+            let bestDist = Math.abs(raw - best);
+            for (let i = 1; i < trackSnapPositions.length; i++) {
+              const dist = Math.abs(raw - trackSnapPositions[i]);
+              if (dist < bestDist) {
+                best = trackSnapPositions[i];
+                bestDist = dist;
               }
             }
-            // Scroll direction determines next snap target
-            const nextIdx = e.deltaY > 0
-              ? Math.min(currentIdx + 1, trackSnapPositions.length - 1)
-              : Math.max(currentIdx - 1, 0);
-            setScrollY(Math.max(0, Math.min(maxScrollY, trackSnapPositions[nextIdx])));
+            // Ensure we move at least one track in scroll direction
+            if (best === scrollY && e.deltaY !== 0) {
+              let currentIdx = 0;
+              for (let i = trackSnapPositions.length - 1; i >= 0; i--) {
+                if (trackSnapPositions[i] <= scrollY + 1) {
+                  currentIdx = i;
+                  break;
+                }
+              }
+              const nextIdx = e.deltaY > 0
+                ? Math.min(currentIdx + 1, trackSnapPositions.length - 1)
+                : Math.max(currentIdx - 1, 0);
+              best = trackSnapPositions[nextIdx];
+            }
+            setScrollY(Math.max(0, Math.min(maxScrollY, best)));
           } else {
             setScrollY(Math.max(0, Math.min(maxScrollY, scrollY + e.deltaY)));
           }
