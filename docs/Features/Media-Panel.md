@@ -30,8 +30,8 @@ Import, organize, and manage media assets with folder structure and proxy genera
 
 #### Add Dropdown
 1. Click "Add" button
-2. Select: Import Media, New Composition, New Folder
-3. Choose files from picker
+2. Select: Import Media, New Composition, New Folder, New Solid, New Text
+3. Choose files from picker (for media import)
 
 #### Drag and Drop
 - Drag files directly into Media Panel
@@ -50,6 +50,19 @@ When supported (Chrome/Edge):
 | < 500MB | Full thumbnails/waveforms |
 | > 500MB | Skip auto-generation |
 | > 4GB | Audio waveform skipped |
+
+### Solid Color Clips
+- Create solid color clips from the Add dropdown → New Solid
+- Color picker for selecting the solid color
+- Uses composition dimensions automatically
+- Appears as colored bar on timeline
+- Useful for backgrounds, color mattes, and adjustment layers
+
+### Text Clips in Media Panel
+- Create text clips from the Add dropdown → New Text
+- Text items appear in media panel like regular files
+- Drag text clips from media panel to timeline
+- See [Text Clips](./Text-Clips.md) for full details
 
 ---
 
@@ -171,7 +184,8 @@ The media list displays items in a table with the following columns:
 
 | Column | Description | Example |
 |--------|-------------|---------|
-| **Name** | File name with icon and thumbnail | 🎥 Video.mp4 |
+| **Label** | Color label indicator | 🔴 🟡 🟢 🔵 |
+| **Name** | File name with AE-style file type icon | 📄 Video.mp4 |
 | **Duration** | Clip length (mm:ss) | 4:02 |
 | **Resolution** | Width × Height | 1920×1080 |
 | **FPS** | Frame rate | 25 |
@@ -181,7 +195,8 @@ The media list displays items in a table with the following columns:
 
 ### Column Customization
 
-**Reorder Columns:**
+**Sortable Columns:**
+- Click column headers to sort by that column
 - Drag column headers to rearrange
 - Order is saved in localStorage
 

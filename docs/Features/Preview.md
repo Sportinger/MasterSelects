@@ -164,8 +164,14 @@ getCachedRanges()          // For green indicator
 
 ### Visual Indicator
 - Green bar on timeline shows cached ranges
+- **Yellow indicator** on ruler shows proxy cache frames
 - Progress indicator during caching
 - 2-frame gap tolerance for ranges
+
+### Video Warmup Button
+- Cache button for preloading proxy frames before playback
+- Ensures smoother initial playback of proxy content
+- Shows progress during preload
 
 ---
 
@@ -200,18 +206,29 @@ Each preview can show different composition:
 ## Edit Mode
 
 ### Enabling Edit Mode
-Click "Edit" button in preview panel.
+- Click "Edit" button in preview panel
+- Or press `Tab` to toggle edit mode on/off
 
 ### Layer Selection
 - Click layer to select
-- Bounding box appears
-- Handles at corners/edges
+- Bounding box appears with corner and edge handles
+- Handles visible on hover
+
+### Transform Handles
+| Handle | Action | Effect |
+|--------|--------|--------|
+| Corner | Drag | Scale from corner |
+| Edge | Drag | Scale from edge |
+| Center | Drag | Move layer position |
+| Corner + `Shift` | Drag | Scale with locked aspect ratio |
 
 ### Drag Operations
 | Action | Effect |
 |--------|--------|
 | Drag center | Move layer position |
-| Drag corner | Scale layer |
+| Drag corner handle | Scale layer from corner |
+| Drag edge handle | Scale layer from edge |
+| `Shift` + drag corner | Lock aspect ratio during scale |
 
 ### Bounding Box
 ```typescript

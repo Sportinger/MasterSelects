@@ -82,6 +82,11 @@ Result:            Rectangle with hole
 - Drag vertex to reposition
 - Real-time preview update
 
+### Edge Dragging
+- Drag a line segment between two mask vertices to move both at once
+- Works alongside vertex and whole-mask dragging
+- Intuitive for reshaping mask boundaries
+
 ### Bezier Handles
 ```typescript
 interface BezierHandle {
@@ -181,6 +186,11 @@ On-screen text shows current mode instructions.
 ---
 
 ## Rendering Pipeline
+
+### Performance Optimizations
+- Skip history snapshots during mask dragging for smooth interaction
+- GPU texture updates throttled at 30fps instead of every frame
+- Targeted cache invalidation (only affected layers)
 
 ### CPU Generation
 ```typescript

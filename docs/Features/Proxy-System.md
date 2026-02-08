@@ -41,14 +41,20 @@ Large video files (4K, high bitrate) can be slow to scrub. Proxies provide:
 4. Generation starts in background
 
 ### Generation Process (GPU-Accelerated)
-The proxy generator uses a multi-stage GPU pipeline for maximum speed:
+The proxy generator uses a rewritten pipeline for maximum speed:
 
 1. **Video Decoding**: WebCodecs VideoDecoder with hardware acceleration
-2. **GPU Batch Resize**: 16 frames rendered to texture atlas per batch
-3. **Single Buffer Readback**: One GPU→CPU transfer per 16 frames
-4. **Parallel Encoding**: Worker pool encodes WebP frames simultaneously
+2. **GPU Batch Resize**: Frames rendered to texture atlas per batch
+3. **Single Buffer Readback**: GPU→CPU transfer per batch
+4. **Parallel JPEG Encoding**: Worker pool encodes frames simultaneously
 
 **Performance**: 4-10x faster than CPU-only processing
+
+### Resume from Disk
+- Proxy generation can be interrupted and **resumed from disk**
+- If generation is interrupted (browser close, crash), it picks up where it left off
+- Already-generated frames on disk are skipped automatically
+- No need to start over from scratch
 
 ### Technical Details
 - **Max Resolution**: 1280px width (configurable)
@@ -116,6 +122,8 @@ Editor automatically uses:
 - Proxy frames display in preview
 - Scrubbing uses proxy cache
 - Playback synced with timeline
+- **Yellow indicator** on timeline ruler shows cached proxy frames (proxy cache indicator)
+- **Warmup button**: Preload proxy frames into cache before playback for smoother start
 
 ### Preview Quality
 - Proxies shown during editing

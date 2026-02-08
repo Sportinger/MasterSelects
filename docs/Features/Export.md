@@ -2,7 +2,7 @@
 
 [← Back to Index](./README.md)
 
-Frame-by-frame video export with H.264/VP9 encoding and three export modes.
+Frame-by-frame video export with H.264/VP9 encoding and four export modes.
 
 ---
 
@@ -20,7 +20,7 @@ Frame-by-frame video export with H.264/VP9 encoding and three export modes.
 
 ## Export Modes
 
-MASterSelects offers three export modes optimized for different use cases:
+MASterSelects offers four export modes optimized for different use cases:
 
 ### WebCodecs Fast Mode
 
@@ -57,6 +57,15 @@ Pipeline: HTMLVideoElement → requestVideoFrameCallback → GPU Compositor → 
 - Supports broadcast-quality codecs
 - Requires SharedArrayBuffer headers
 - See [FFmpeg Export](#ffmpeg-export) section below
+
+### FCP XML Export
+
+**Best for: Interchange with other NLEs**
+
+- Exports timeline to Final Cut Pro XML format
+- Compatible with Premiere Pro, DaVinci Resolve, and other NLEs
+- Preserves clip positions, durations, and track layout
+- Useful for roundtripping between applications
 
 ---
 

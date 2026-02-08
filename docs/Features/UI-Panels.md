@@ -75,18 +75,23 @@ Resolume-style visual feedback:
 
 ## Available Panels
 
-MASterSelects has 9 dockable panel types:
+MASterSelects has 14 dockable panel types:
 
 | Panel | Purpose |
 |-------|---------|
 | **Preview** | Composition output canvas |
 | **Timeline** | Multi-track editor |
 | **Media** | Media browser and folders |
-| **Properties** | Unified clip editing (Transform, Effects, Masks, Volume) |
+| **Properties** | Unified clip editing (Transform, Effects, Masks, Audio) |
 | **Export** | Render settings and progress |
 | **Multicam** | Camera sync and EDL |
 | **AI Chat** | GPT-powered editing assistant |
-| **AI Video** | AI video generation (Kling) |
+| **AI Video** | AI video generation (PiAPI) |
+| **YouTube** | Search and download YouTube videos |
+| **Transitions** | Drag-drop transition library |
+| **Histogram** | GPU-accelerated histogram scope |
+| **Vectorscope** | Color vector analysis scope |
+| **Waveform** | Luma/RGB waveform monitor |
 | **Slots** | Layer slot management |
 
 ### Preview Panel
@@ -134,13 +139,38 @@ See [Properties Panel](#properties-panel) section below for details.
 - Context-aware editing commands
 - 50+ available tools
 
+### YouTube Panel
+- Search YouTube videos via Invidious or YouTube Data API
+- Video thumbnails, titles, channels, duration display
+- Quality/format selection before download
+- Download via Native Helper (yt-dlp) or Cobalt fallback
+- Downloads saved to project YT/ folder
+
 ### AI Video Panel
 - Text-to-video generation
 - Image-to-video animation
-- Kling AI integration
+- PiAPI integration for AI-powered video creation
 - Model/duration/aspect ratio selection
 - CFG scale and camera controls
 - Generation queue with status
+
+### Transitions Panel
+- Library of available transitions (crossfade)
+- Drag-drop to apply between clips
+- GPU-accelerated transition rendering
+
+### Video Scopes Panels
+Three independent scope panels with GPU-accelerated rendering:
+
+| Panel | Function |
+|-------|----------|
+| **Histogram** | RGB distribution graph with R/G/B/Luma view modes |
+| **Vectorscope** | Color vector analysis with smooth phosphor glow |
+| **Waveform** | DaVinci-style waveform with sub-pixel distribution |
+
+- View mode buttons: RGB, R, G, B, Luma
+- IRE legend for broadcast reference
+- Zero readPixels overhead — fully GPU-rendered
 
 ### Slots Panel
 - Layer slot grid
@@ -160,6 +190,7 @@ The unified Properties panel consolidates clip editing into a single tabbed inte
 | **Transform** | Position, Scale, Rotation, Opacity, Blend Mode |
 | **Effects** | GPU effects list with parameters |
 | **Masks** | Mask shapes with mode and feather controls |
+| **Audio** | Volume controls and keyframes for linked audio |
 
 ### Audio Clip Tabs
 
@@ -302,11 +333,18 @@ setPreviewQuality(quality) // 1, 0.5, or 0.25
 ### Opening
 Edit menu → Settings
 
+### Design
+- After Effects-style sidebar navigation
+- Categorized settings sections
+- Draggable dialog (no dark overlay)
+- Consolidated API key management
+
 ### Contents
-- API key management
+- API key management (all keys in one place)
 - Transcription provider selection
 - Language selection
-- Thumbnail/waveform toggles
+- Autosave interval
+- General preferences
 
 ### Storage
 Settings persisted in localStorage.

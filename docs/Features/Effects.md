@@ -225,8 +225,17 @@ This prevents the app from becoming unresponsive when quality values are set too
 3. Choose effect from dropdown (grouped by category)
 4. Adjust parameters with sliders or drag on values
 
+### Inline Effects (Composite Shader)
+The following effects run directly inside the composite shader with **no extra render passes**:
+- **Brightness**
+- **Contrast**
+- **Saturation**
+- **Invert**
+
+These are optimized for zero overhead since they're applied during compositing.
+
 ### Effect Order
-Effects process top-to-bottom (ping-pong rendering).
+All other effects process top-to-bottom (ping-pong rendering).
 
 ---
 

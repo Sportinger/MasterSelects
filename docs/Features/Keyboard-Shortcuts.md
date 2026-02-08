@@ -11,10 +11,14 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 | Shortcut | Action |
 |----------|--------|
 | `Space` | Play/Pause toggle |
+| `J` | Reverse playback (press multiple times for faster) |
+| `K` | Pause playback |
+| `L` | Forward playback (press multiple times for faster) |
 | `I` | Set In point at playhead |
 | `O` | Set Out point at playhead |
 | `X` | Clear In/Out points |
-| `L` | Toggle loop playback |
+| `Home` | Go to start of timeline |
+| `End` | Go to end of timeline |
 
 ---
 
@@ -25,7 +29,8 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 | `Scroll` | Vertical scroll |
 | `Shift + Scroll` | Horizontal scroll |
 | `Alt + Scroll` | Zoom (centered on playhead) |
-| `←` / `→` | Frame-by-frame (if implemented) |
+| `Alt + Scroll` | Zoom (exponential 8% per step, centered on playhead) |
+| `←` / `→` | Frame-by-frame |
 
 ---
 
@@ -35,9 +40,10 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 |----------|--------|
 | `C` | Cut tool - split clips at playhead (with snapping) |
 | `Alt + C` | Cut without snapping |
-| `Ctrl + C` | Copy selected clips |
-| `Ctrl + V` | Paste clips at playhead |
+| `Ctrl + C` | Copy selected clips or keyframes |
+| `Ctrl + V` | Paste clips or keyframes at playhead |
 | `Delete` / `Backspace` | Delete selected (keyframes first, then clips) |
+| `Tab` | Toggle edit mode in preview |
 | `Escape` | Deselect all |
 
 ---
@@ -47,9 +53,11 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 | Action | Method |
 |--------|--------|
 | Single select | Click clip |
-| Multi-select | `Ctrl + Click` |
-| Marquee select | Drag on empty area |
-| Extend marquee | `Shift + Drag` |
+| Multi-select | `Shift + Click` |
+| Add/remove from selection | `Ctrl + Click` |
+| Linked clip select | Click (selects both video + audio) |
+| Independent select | `Shift + Click` linked clip |
+| Move multi-selection | Drag any selected clip |
 | Deselect | Click empty or `Escape` |
 
 ---
@@ -61,6 +69,9 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 | Select keyframe | Click diamond |
 | Multi-select | `Shift + Click` |
 | Fine drag | `Shift + Drag` (10x slower) |
+| Copy keyframes | `Ctrl + C` (with keyframes selected) |
+| Paste keyframes | `Ctrl + V` (at playhead on selected clip) |
+| Move multi-select | Drag any selected keyframe |
 | Easing menu | Right-click keyframe |
 
 ---
@@ -145,8 +156,11 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 ### Preview Edit Mode
 | Action | Effect |
 |--------|--------|
+| `Tab` | Toggle edit mode on/off |
 | Drag center | Move layer |
-| Drag corner | Scale layer |
+| Drag corner handle | Scale layer |
+| Drag edge handle | Scale from edge |
+| `Shift + Drag` | Lock aspect ratio during scale |
 
 ### Curve Editor
 | Action | Effect |
@@ -163,19 +177,25 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 ```
 ┌─────────────────────────────────────────┐
 │           PLAYBACK                      │
-│  Space = Play    I/O = In/Out points   │
-│  X = Clear I/O   L = Loop              │
+│  Space = Play    J/K/L = Shuttle       │
+│  I/O = In/Out    X = Clear I/O         │
+│  Home/End = Start/End of timeline      │
 ├─────────────────────────────────────────┤
 │           EDITING                       │
 │  C = Cut/Split   Del = Delete          │
 │  Ctrl+C = Copy   Ctrl+V = Paste        │
 │  Ctrl+Z = Undo   Ctrl+Shift+Z = Redo   │
+│  Tab = Edit Mode                        │
+├─────────────────────────────────────────┤
+│           SELECTION                     │
+│  Shift+Click = Multi-select            │
+│  Ctrl+Click = Add/Remove               │
 ├─────────────────────────────────────────┤
 │           PROJECT                       │
 │  Ctrl+N = New    Ctrl+S = Save         │
 ├─────────────────────────────────────────┤
 │           NAVIGATION                    │
-│  Alt+Scroll = Zoom                     │
+│  Alt+Scroll = Zoom (exponential)       │
 │  Shift+Scroll = H-Scroll               │
 ├─────────────────────────────────────────┤
 │           BLEND MODES                   │

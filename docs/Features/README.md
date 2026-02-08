@@ -2,7 +2,7 @@
 
 **Professional WebGPU Video Compositor & Timeline Editor**
 
-Version 1.1.2 | February 2026
+Version 1.2.2 | February 2026
 
 ---
 
@@ -21,10 +21,13 @@ MASterSelects is a browser-based professional video editing application built on
 | **AI Video Generation** | PiAPI integration for AI-powered video creation |
 | **YouTube Integration** | Search, download, and edit YouTube videos directly |
 | **30+ GPU Effects** | Modular color, blur, distort, stylize, keying effects with quality controls |
+| **Video Scopes** | GPU-accelerated Histogram, Vectorscope, Waveform monitor (DaVinci-style) |
 | **Text Clips** | Typography with 50 Google Fonts, stroke, shadow effects |
-| **Professional Audio** | 10-band parametric EQ, audio master clock, varispeed scrubbing |
+| **Solid Color Clips** | Solid color layers with color picker and comp dimensions |
+| **Professional Audio** | 10-band parametric EQ with live Web Audio, audio master clock, varispeed |
 | **Multicam Support** | Audio-based cross-correlation synchronization |
-| **3 Export Modes** | WebCodecs Fast, HTMLVideo Precise, FFmpeg WASM (ProRes, DNxHR, HAP) |
+| **Transitions** | Crossfade transitions with GPU-accelerated rendering |
+| **4 Export Modes** | WebCodecs Fast, HTMLVideo Precise, FFmpeg WASM, FCP XML interchange |
 | **Parallel Decoding** | Multi-clip parallel decode for faster exports |
 | **Native Helper** | Optional 10x faster ProRes/DNxHD decode with hardware accel |
 | **Local Storage** | Project folder with Raw media, autosave, backups, smart relinking |
@@ -84,17 +87,25 @@ UI Framework      Custom dockable panel system with mobile support
 | Clip Operations | ✅ | Move, trim, split, delete, reverse |
 | Cut Tool | ✅ | `C` to split clips with snapping (Alt to disable) |
 | Copy/Paste | ✅ | `Ctrl+C/V` with effects, keyframes, masks preserved |
+| Multi-Select Movement | ✅ | Shift+Click to select multiple clips, drag as group with boundary collision |
 | Bezier Fade Curves | ✅ | Visual opacity fades with real-time preview |
 | Magnetic Snapping | ✅ | 0.1s snap distance with edge alignment |
 | Snap Toggle | ✅ | Toolbar button to enable/disable snapping |
-| Overlap Resistance | ✅ | 100px resistance with auto-trim |
-| Marquee Selection | ✅ | Rectangle selection with Shift modifier |
+| Overlap Resistance | ✅ | 100px horizontal + 100px vertical cross-track resistance |
 | Linked Audio | ✅ | Video-audio linking with Alt+drag override |
+| Linked Clip Selection | ✅ | Click linked video/audio to select both, Shift+Click for independent |
 | Nested Compositions | ✅ | Orange outline, boundary markers, recursive rendering |
 | Composition Tabs | ✅ | Multiple open compositions with tab navigation |
 | Clip Entrance Animation | ✅ | Smooth animation when switching compositions |
 | Track Controls | ✅ | Visibility, mute, solo, expand |
+| Smooth Track Height | ✅ | Continuous scrolling resize, minimum 20px for compact view |
+| Exponential Zoom | ✅ | Alt+Scroll with 8% per step, consistent at all zoom levels |
+| Vertical Scroll Snapping | ✅ | Scroll snaps to track boundaries, one layer per step |
+| Video/Audio Separator | ✅ | Green divider line between video and audio tracks |
 | Playback Looping | ✅ | In/Out points with loop mode |
+| JKL Playback | ✅ | Industry-standard J/K/L shortcuts for playback control |
+| Solid Color Clips | ✅ | Solid layers with color picker and comp dimensions |
+| Transitions | ✅ | Crossfade transitions with GPU-accelerated rendering |
 | Marker Drag-to-Create | ✅ | Drag M button to create markers with ghost preview |
 
 ### Text Clips
@@ -126,6 +137,10 @@ UI Framework      Custom dockable panel system with mobile support
 | Custom Bezier | ✅ | User-defined bezier curves with handles |
 | Recording Mode | ✅ | Auto-keyframe on value change |
 | Keyframe Selection | ✅ | Multi-select with Delete support |
+| Keyframe Copy/Paste | ✅ | Ctrl+C/V copies selected keyframes, paste at playhead |
+| Keyframe Tick Marks | ✅ | Amber diamond markers on clip bars show keyframe positions |
+| Multi-Select Movement | ✅ | Select multiple keyframes and move together by same time delta |
+| Curve Editor Auto-Scale | ✅ | Y-axis auto-scales to fit curve, Shift+wheel to resize height |
 
 ### GPU Effects & Compositing
 
@@ -142,6 +157,7 @@ UI Framework      Custom dockable panel system with mobile support
 - ✅ Draggable values with precision modifiers (Shift/Ctrl)
 - ✅ Quality parameters for blur/glow effects
 - ✅ Auto performance protection (resets if too slow)
+- ✅ **Inline effects:** Brightness, contrast, saturation, invert run inside composite shader (no extra render passes)
 
 ### Blend Modes (37 Total)
 
@@ -212,6 +228,8 @@ UI Framework      Custom dockable panel system with mobile support
 | Multicam Audio Sync | ✅ | Cross-correlation algorithm |
 | Audio Track Mute | ✅ | Per-track mute control |
 | Audio Solo | ✅ | Isolate audio tracks |
+| Live EQ via Web Audio | ✅ | Real-time equalization using Web Audio API, hear changes instantly |
+| Audio Tab for Video Clips | ✅ | Video clips have dedicated Audio tab with volume and keyframes |
 | Composition Audio | ✅ | Nested composition audio mixdown |
 
 ### Preview & Playback
@@ -226,7 +244,10 @@ UI Framework      Custom dockable panel system with mobile support
 | RAM Preview | ✅ | Cached playback with 900 frame limit |
 | Multiple Outputs | ✅ | Open multiple preview windows |
 | Per-Preview Grid | ✅ | Individual transparency grid toggle |
-| Edit Mode | ✅ | Direct manipulation in preview (Tab toggle) |
+| Edit Mode | ✅ | Direct manipulation in preview (Tab toggle) with corner/edge transform handles |
+| Transform Handles | ✅ | Corner and edge handles for scaling, Shift for aspect ratio lock |
+| Proxy Cache Indicator | ✅ | Yellow indicator on ruler shows cached proxy frames |
+| Video Warmup Button | ✅ | Cache button for preloading proxy frames before playback |
 | Scrubbing Cache | ✅ | 3-tier caching system (LRU 300 + last frame + composite) |
 | Statistics Overlay | ✅ | FPS, timing, idle status, GPU vendor |
 | Resolution Presets | ✅ | 480p to 4K preview |
@@ -253,6 +274,7 @@ UI Framework      Custom dockable panel system with mobile support
 | Single Frame Export | ✅ | PNG frame capture |
 | Progress Overlay | ✅ | Timeline progress bar with cancel |
 | Auto Fallback | ✅ | Falls back to Precise mode if Fast fails |
+| FCP XML Export | ✅ | Export timeline to Final Cut Pro XML for interchange with Premiere/Resolve |
 
 ### Project & Media Management
 
@@ -294,8 +316,11 @@ UI Framework      Custom dockable panel system with mobile support
 | Feature | Status | Details |
 |---------|--------|---------|
 | Dockable Panels | ✅ | Drag, resize, tab grouping |
-| 10 Panel Types | ✅ | Preview, Timeline, Media, Properties, Export, Multicam, AI Chat, AI Video, YouTube, Slots |
-| Unified Properties Panel | ✅ | Transform, Effects, Masks, Volume, Transcript, Analysis |
+| 14 Panel Types | ✅ | Preview, Timeline, Media, Properties, Export, Multicam, AI Chat, AI Video, YouTube, Transitions, Histogram, Vectorscope, Waveform, Slots |
+| Video Scopes | ✅ | GPU-accelerated Histogram, Vectorscope, Waveform monitor with RGB/R/G/B/Luma modes |
+| Transitions Panel | ✅ | Modular panel with drag-drop support for applying transitions |
+| Unified Properties Panel | ✅ | Transform, Effects, Masks, Audio, Transcript, Analysis |
+| AE-Style Settings Dialog | ✅ | Sidebar navigation with categorized settings, draggable |
 | Menu Bar | ✅ | File, Edit, View, Output, Audio, Info, Window |
 | Context Menus | ✅ | Right-click operations (viewport-bounded) |
 | WYSIWYG Thumbnails | ✅ | Thumbnails show effects applied to clips |
@@ -446,17 +471,20 @@ Supported formats: MP4, WebM, MOV, WAV, MP3, AAC, PNG, JPG, GIF, WebP
 | Category | Key | Action |
 |----------|-----|--------|
 | **Playback** | `Space` | Play/Pause |
-| | `L` | Toggle loop |
+| | `J` / `K` / `L` | Reverse / Pause / Forward (JKL shuttle) |
 | | `←` / `→` | Step frame |
-| | `Home` | Go to start |
+| | `Home` / `End` | Go to start / end |
 | **Editing** | `C` | Split at playhead |
 | | `Delete` | Delete selected |
+| | `Ctrl+C` / `Ctrl+V` | Copy/Paste clips or keyframes |
 | | `Ctrl+Z` | Undo |
 | | `Ctrl+Shift+Z` | Redo |
 | **Timeline** | `I` | Set In point |
 | | `O` | Set Out point |
 | | `X` | Clear In/Out |
-| | `-` / `=` | Zoom out/in |
+| | `Tab` | Toggle edit mode |
+| **Selection** | `Shift+Click` | Multi-select clips |
+| | `Shift++` / `Shift+-` | Cycle blend modes |
 | **Project** | `Ctrl+S` | Save project |
 | | `Ctrl+N` | New project |
 
@@ -517,8 +545,18 @@ The following features are planned but not currently available:
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| 1.1.2 | Feb 2026 | Nested comp export fixes, Windows build notice |
-| 1.1.1 | Feb 2026 | Cut tool, copy/paste, bezier fade curves, WYSIWYG thumbnails, Export V2, auto frame caching, UI state persistence, marker drag-to-create, major refactoring (WebGPUEngine, Timeline, FrameExporter, ClipSlice) |
+| 1.2.2 | Feb 2026 | Video Scopes (Histogram, Vectorscope, Waveform), keyframe copy/paste, keyframe tick marks, curve editor auto-scale, mask edge dragging, exponential zoom, cross-track resistance, vertical scroll snapping |
+| 1.2.1 | Feb 2026 | Linked clip selection, proxy resume from disk, proxy rewrite with parallel JPEG encoding, instant media import, split deep-clone fix |
+| 1.2.0 | Feb 2026 | Solid color clips, AE visual redesign, inline GPU effects (brightness/contrast/saturation/invert in composite shader), AE-style media panel, lazy-load panels |
+| 1.1.9 | Feb 2026 | React performance optimization, store subscription cleanup, PropertiesPanel code splitting, draggable settings dialog |
+| 1.1.8 | Feb 2026 | Transitions system, JKL playback shortcuts, multi-select clip/keyframe movement, FCP XML export, transform handles in edit mode, proxy cache indicator, settings dialog redesign |
+| 1.1.7 | Feb 2026 | Live EQ via Web Audio, audio tab for video clips, export crash fixes, texture lifecycle management |
+| 1.1.6 | Feb 2026 | Nested comp boundary markers, fade curve bezier display, ESLint cleanup |
+| 1.1.5 | Jan 2026 | WYSIWYG thumbnails, copy/paste clips, content-aware thumbnail sampling |
+| 1.1.4 | Jan 2026 | WebGPU thumbnail renderer for nested compositions |
+| 1.1.3 | Jan 2026 | Export System V2 with shared decoder pool, export planner |
+| 1.1.2 | Jan 2026 | Nested comp export fixes, Windows build notice |
+| 1.1.1 | Jan 2026 | Cut tool, bezier fade curves, auto frame caching, UI state persistence, marker drag-to-create, major refactoring (WebGPUEngine, Timeline, FrameExporter, ClipSlice), auto-copy to Raw folder |
 | 1.1.0 | Jan 2026 | Export mode selection, audio master clock, varispeed scrubbing, parallel decoding |
 | 1.0.9 | Jan 2026 | Layer caching, WebCodecs export optimization, case-insensitive file detection |
 | 1.0.8 | Jan 2026 | Native Helper YouTube download, NativeDecoder integration, FFmpeg audio export |
