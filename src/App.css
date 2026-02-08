@@ -5581,11 +5581,27 @@ input[type="checkbox"] {
   background: rgba(74, 144, 226, 0.3);
 }
 
+.media-column-headers .media-col.sorted {
+  color: var(--text-primary);
+}
+
+.media-sort-indicator {
+  font-size: 7px;
+  margin-left: 2px;
+  opacity: 0.7;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.media-column-headers .media-col:hover {
+  color: var(--text-primary);
+}
+
 /* Label color column */
 .media-col-label {
-  width: 18px;
-  min-width: 18px;
-  max-width: 18px;
+  width: 30px;
+  min-width: 30px;
+  max-width: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
