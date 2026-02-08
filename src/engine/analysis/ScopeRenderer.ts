@@ -420,8 +420,8 @@ struct Params { len: u32, _p0: u32, _p1: u32, _p2: u32 }
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3u) {
   if (gid.x >= params.len) { return; }
-  // Temporal decay: keep 70% of previous frame for smooth persistence
-  buf[gid.x] = u32(f32(buf[gid.x]) * 0.7);
+  // Temporal decay: no persistence (full clear)
+  buf[gid.x] = 0u;
 }
 `;
 
@@ -550,8 +550,8 @@ export class ScopeRenderer {
     const srcH = sourceTexture.height;
 
     d.queue.writeBuffer(this.wfComputeParams, 0, new Uint32Array([OUT_W, OUT_H, srcW, srcH]));
-    // Vertical spread + temporal accumulation → adjusted reference value
-    const refValue = Math.sqrt(srcH / OUT_H) * 55.0;
+    // Vertical spread, no temporal accumulation
+    const refValue = Math.sqrt(srcH / OUT_H) * 40.0;
     d.queue.writeBuffer(this.wfRenderParams, 0, new Float32Array([OUT_W, OUT_H, refValue, 0.95]));
 
     const encoder = d.createCommandEncoder();
