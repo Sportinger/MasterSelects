@@ -153,6 +153,18 @@ export function Timeline() {
   const scrollWrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
+  // Composition switch crossfade (200ms)
+  const [compFading, setCompFading] = useState(false);
+  const prevCompId = useRef(activeComposition?.id);
+  useEffect(() => {
+    if (activeComposition?.id !== prevCompId.current) {
+      prevCompId.current = activeComposition?.id;
+      setCompFading(true);
+      const timer = setTimeout(() => setCompFading(false), 20); // brief flash then fade in
+      return () => clearTimeout(timer);
+    }
+  }, [activeComposition?.id]);
+
   // Cut tool hover state (shared across linked clips)
   const [cutHoverInfo, setCutHoverInfo] = useState<{ clipId: string; time: number } | null>(null);
   const handleCutHover = useCallback((clipId: string | null, time: number | null) => {
@@ -808,7 +820,7 @@ export function Timeline() {
                 M
               </button>
             </div>
-            <div className="time-ruler-wrapper">
+            <div className={`time-ruler-wrapper ${compFading ? 'comp-fading' : ''}`}>
               <TimelineRuler
                 duration={duration}
                 zoom={zoom}
@@ -818,7 +830,7 @@ export function Timeline() {
               />
             </div>
           </div>
-          <div className="timeline-scroll-wrapper" ref={scrollWrapperRef}>
+          <div className={`timeline-scroll-wrapper ${compFading ? 'comp-fading' : ''}`} ref={scrollWrapperRef}>
             <div className="timeline-content-row" ref={contentRef} style={{ transform: `translateY(-${scrollY}px)` }}>
           <div className="track-headers">
             {/* New video track preview header - appears when dragging over new track zone */}
