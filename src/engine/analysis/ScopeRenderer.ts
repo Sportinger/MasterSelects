@@ -25,9 +25,6 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   if (gid.x >= params.srcW || gid.y >= params.srcH) { return; }
 
   let pixel = textureLoad(inputTex, vec2i(gid.xy), 0);
-  let r = min(u32(pixel.r * 255.0), 255u);
-  let g = min(u32(pixel.g * 255.0), 255u);
-  let b = min(u32(pixel.b * 255.0), 255u);
 
   // Sub-pixel X: distribute weight across 2 adjacent columns (scale 256)
   let fxPos = f32(gid.x) * f32(params.outW) / f32(params.srcW);
@@ -37,19 +34,47 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let w0 = u32((1.0 - frac) * 256.0);
   let w1 = 256u - w0;
 
-  let hm1 = params.outH - 1u;
+  let hm1 = f32(params.outH - 1u);
+  let maxY = i32(params.outH - 1u);
 
-  let ry = (hm1 - r * hm1 / 255u) * params.outW;
-  atomicAdd(&accumR[ry + x0], w0);
-  atomicAdd(&accumR[ry + x1], w1);
+  // Gaussian vertical spread kernel — 5 rows for smooth DaVinci-style traces
+  let gK = array<f32, 5>(0.06, 0.24, 0.40, 0.24, 0.06);
 
-  let gyp = (hm1 - g * hm1 / 255u) * params.outW;
-  atomicAdd(&accumG[gyp + x0], w0);
-  atomicAdd(&accumG[gyp + x1], w1);
+  // ── Red ──
+  let ryC = i32(hm1 - clamp(pixel.r, 0.0, 1.0) * hm1);
+  for (var d: i32 = -2; d <= 2; d += 1) {
+    let y = u32(clamp(ryC + d, 0, maxY));
+    let yw = gK[u32(d + 2)];
+    let idx = y * params.outW;
+    let wA = u32(f32(w0) * yw);
+    let wB = u32(f32(w1) * yw);
+    if (wA > 0u) { atomicAdd(&accumR[idx + x0], wA); }
+    if (wB > 0u) { atomicAdd(&accumR[idx + x1], wB); }
+  }
 
-  let byp = (hm1 - b * hm1 / 255u) * params.outW;
-  atomicAdd(&accumB[byp + x0], w0);
-  atomicAdd(&accumB[byp + x1], w1);
+  // ── Green ──
+  let gyC = i32(hm1 - clamp(pixel.g, 0.0, 1.0) * hm1);
+  for (var d: i32 = -2; d <= 2; d += 1) {
+    let y = u32(clamp(gyC + d, 0, maxY));
+    let yw = gK[u32(d + 2)];
+    let idx = y * params.outW;
+    let wA = u32(f32(w0) * yw);
+    let wB = u32(f32(w1) * yw);
+    if (wA > 0u) { atomicAdd(&accumG[idx + x0], wA); }
+    if (wB > 0u) { atomicAdd(&accumG[idx + x1], wB); }
+  }
+
+  // ── Blue ──
+  let byC = i32(hm1 - clamp(pixel.b, 0.0, 1.0) * hm1);
+  for (var d: i32 = -2; d <= 2; d += 1) {
+    let y = u32(clamp(byC + d, 0, maxY));
+    let yw = gK[u32(d + 2)];
+    let idx = y * params.outW;
+    let wA = u32(f32(w0) * yw);
+    let wB = u32(f32(w1) * yw);
+    if (wA > 0u) { atomicAdd(&accumB[idx + x0], wA); }
+    if (wB > 0u) { atomicAdd(&accumB[idx + x1], wB); }
+  }
 }
 `;
 
@@ -95,6 +120,11 @@ fn sampleAccum(acc: ptr<storage, array<u32>, read>, fx: f32, fy: f32, w: u32, h:
   return mix(mix(v00, v10, dx), mix(v01, v11, dx), dy);
 }
 
+// Nearest-neighbor read for bloom sampling
+fn readAccum(acc: ptr<storage, array<u32>, read>, x: i32, y: i32, w: i32, h: i32) -> f32 {
+  return f32((*acc)[u32(clamp(y, 0, h - 1)) * u32(w) + u32(clamp(x, 0, w - 1))]);
+}
+
 @fragment
 fn fs(in: VertexOutput) -> @location(0) vec4f {
   let uv = in.uv;
@@ -104,27 +134,46 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
 
   let w = u32(params.outW);
   let h = u32(params.outH);
+  let iw = i32(w);
+  let ih = i32(h);
 
   // Floating-point grid position for bilinear sampling
   let fx = uv.x * params.outW - 0.5;
   let fy = uv.y * params.outH - 0.5;
 
-  let rCount = sampleAccum(&accumR, fx, fy, w, h);
-  let gCount = sampleAccum(&accumG, fx, fy, w, h);
-  let bCount = sampleAccum(&accumB, fx, fy, w, h);
+  // Center value (bilinear — sharp trace)
+  let rCenter = sampleAccum(&accumR, fx, fy, w, h);
+  let gCenter = sampleAccum(&accumG, fx, fy, w, h);
+  let bCenter = sampleAccum(&accumB, fx, fy, w, h);
+
+  // Phosphor bloom: 3x3 gaussian at 4px step for soft glow
+  let ix = i32(fx + 0.5);
+  let iy = i32(fy + 0.5);
+  var rBloom = 0.0; var gBloom = 0.0; var bBloom = 0.0;
+  let bK = array<f32, 3>(0.25, 0.50, 0.25);
+  for (var by: i32 = -1; by <= 1; by += 1) {
+    for (var bx: i32 = -1; bx <= 1; bx += 1) {
+      let bw = bK[u32(bx + 1)] * bK[u32(by + 1)];
+      rBloom += readAccum(&accumR, ix + bx * 4, iy + by * 4, iw, ih) * bw;
+      gBloom += readAccum(&accumG, ix + bx * 4, iy + by * 4, iw, ih) * bw;
+      bBloom += readAccum(&accumB, ix + bx * 4, iy + by * 4, iw, ih) * bw;
+    }
+  }
 
   let rv = params.refValue;
-  let rN = clamp(sqrt(rCount) / rv, 0.0, 1.0);
-  let gN = clamp(sqrt(gCount) / rv, 0.0, 1.0);
-  let bN = clamp(sqrt(bCount) / rv, 0.0, 1.0);
-
-  // Conservative gamma — keep dim traces subtle, only dense areas glow
   let s = params.intensity;
-  var color = vec3f(
-    pow(rN, 0.75) * s,
-    pow(gN, 0.75) * s,
-    pow(bN, 0.75) * s,
-  );
+
+  // Tone-map: main trace (sharp) + bloom halo (soft phosphor glow)
+  let rT = pow(clamp(sqrt(rCenter) / rv, 0.0, 1.0), 0.65) * s;
+  let gT = pow(clamp(sqrt(gCenter) / rv, 0.0, 1.0), 0.65) * s;
+  let bT = pow(clamp(sqrt(bCenter) / rv, 0.0, 1.0), 0.65) * s;
+
+  let rG = pow(clamp(sqrt(rBloom) / rv, 0.0, 1.0), 0.50) * 0.30;
+  let gG = pow(clamp(sqrt(gBloom) / rv, 0.0, 1.0), 0.50) * 0.30;
+  let bG = pow(clamp(sqrt(bBloom) / rv, 0.0, 1.0), 0.50) * 0.30;
+
+  // Additive phosphor composite
+  var color = clamp(vec3f(rT + rG, gT + gG, bT + bG), vec3f(0.0), vec3f(1.0));
 
   // Grid: every 10 IRE (10% of height)
   let gridY = fract(uv.y * 10.0);
@@ -134,7 +183,7 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
     color = max(color, vec3f(0.55, 0.45, 0.12) * a);
   }
 
-  return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)), 1.0);
+  return vec4f(color, 1.0);
 }
 `;
 
@@ -362,6 +411,20 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
 }
 `;
 
+const DECAY_COMPUTE = /* wgsl */ `
+struct Params { len: u32, _p0: u32, _p1: u32, _p2: u32 }
+
+@group(0) @binding(0) var<storage, read_write> buf: array<u32>;
+@group(0) @binding(1) var<uniform> params: Params;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3u) {
+  if (gid.x >= params.len) { return; }
+  // Temporal decay: keep 70% of previous frame for smooth persistence
+  buf[gid.x] = u32(f32(buf[gid.x]) * 0.7);
+}
+`;
+
 // ──────────────── SCOPE RENDERER CLASS ────────────────
 
 const OUT_W = 1024;
@@ -382,6 +445,11 @@ export class ScopeRenderer {
   private wfAccumB!: GPUBuffer;
   private wfComputeParams!: GPUBuffer;
   private wfRenderParams!: GPUBuffer;
+
+  // Temporal decay
+  private decayPipeline!: GPUComputePipeline;
+  private decayBGL!: GPUBindGroupLayout;
+  private decayParams!: GPUBuffer;
 
   // Histogram
   private histComputePipeline!: GPUComputePipeline;
@@ -412,6 +480,7 @@ export class ScopeRenderer {
     this.initWaveform();
     this.initHistogram();
     this.initVectorscope();
+    this.initDecay();
   }
 
   // ──── WAVEFORM ────
@@ -459,22 +528,69 @@ export class ScopeRenderer {
     });
   }
 
+  private initDecay() {
+    const d = this.device;
+    this.decayBGL = d.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+      ],
+    });
+    const module = d.createShaderModule({ code: DECAY_COMPUTE });
+    this.decayPipeline = d.createComputePipeline({
+      layout: d.createPipelineLayout({ bindGroupLayouts: [this.decayBGL] }),
+      compute: { module, entryPoint: 'main' },
+    });
+    this.decayParams = d.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  }
+
   renderWaveform(sourceTexture: GPUTexture, ctx: GPUCanvasContext) {
     const d = this.device;
     const srcW = sourceTexture.width;
     const srcH = sourceTexture.height;
 
     d.queue.writeBuffer(this.wfComputeParams, 0, new Uint32Array([OUT_W, OUT_H, srcW, srcH]));
-    // Weights are 256x scaled from sub-pixel distribution → sqrt(256)=16 factor
-    const refValue = Math.sqrt(srcH / OUT_H) * 40.0;
-    d.queue.writeBuffer(this.wfRenderParams, 0, new Float32Array([OUT_W, OUT_H, refValue, 0.9]));
+    // Vertical spread + temporal accumulation → adjusted reference value
+    const refValue = Math.sqrt(srcH / OUT_H) * 55.0;
+    d.queue.writeBuffer(this.wfRenderParams, 0, new Float32Array([OUT_W, OUT_H, refValue, 0.95]));
 
     const encoder = d.createCommandEncoder();
 
-    // Clear accumulators
-    encoder.clearBuffer(this.wfAccumR);
-    encoder.clearBuffer(this.wfAccumG);
-    encoder.clearBuffer(this.wfAccumB);
+    // Temporal decay: fade previous frame instead of clearing (smooth persistence)
+    const bufLen = OUT_W * OUT_H;
+    d.queue.writeBuffer(this.decayParams, 0, new Uint32Array([bufLen, 0, 0, 0]));
+
+    const decayBG_R = d.createBindGroup({
+      layout: this.decayBGL,
+      entries: [
+        { binding: 0, resource: { buffer: this.wfAccumR } },
+        { binding: 1, resource: { buffer: this.decayParams } },
+      ],
+    });
+    const decayBG_G = d.createBindGroup({
+      layout: this.decayBGL,
+      entries: [
+        { binding: 0, resource: { buffer: this.wfAccumG } },
+        { binding: 1, resource: { buffer: this.decayParams } },
+      ],
+    });
+    const decayBG_B = d.createBindGroup({
+      layout: this.decayBGL,
+      entries: [
+        { binding: 0, resource: { buffer: this.wfAccumB } },
+        { binding: 1, resource: { buffer: this.decayParams } },
+      ],
+    });
+
+    const dp = encoder.beginComputePass();
+    dp.setPipeline(this.decayPipeline);
+    dp.setBindGroup(0, decayBG_R);
+    dp.dispatchWorkgroups(Math.ceil(bufLen / 256));
+    dp.setBindGroup(0, decayBG_G);
+    dp.dispatchWorkgroups(Math.ceil(bufLen / 256));
+    dp.setBindGroup(0, decayBG_B);
+    dp.dispatchWorkgroups(Math.ceil(bufLen / 256));
+    dp.end();
 
     // Compute pass
     const computeBG = d.createBindGroup({
@@ -739,6 +855,7 @@ export class ScopeRenderer {
       this.wfAccumR, this.wfAccumG, this.wfAccumB, this.wfComputeParams, this.wfRenderParams,
       this.histR, this.histG, this.histB, this.histL, this.histComputeParams, this.histRenderParams,
       this.vsAccumR, this.vsAccumG, this.vsAccumB, this.vsComputeParams, this.vsRenderParams,
+      this.decayParams,
     ];
     for (const b of bufs) b?.destroy();
   }
