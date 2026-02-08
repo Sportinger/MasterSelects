@@ -1,7 +1,7 @@
 // Timeline component - Main orchestrator for video editing timeline
 // Composes TimelineRuler, TimelineControls, TimelineHeader, TimelineTrack, TimelineClip, TimelineKeyframes
 
-import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../../stores/timeline';
 import {
@@ -821,52 +821,56 @@ export function Timeline() {
                 <span className="track-header-preview-label">+ New Video Track</span>
               </div>
             )}
-            {tracks.map((track) => {
+            {tracks.map((track, i) => {
               const isDimmed =
                 (track.type === 'video' && anyVideoSolo && !track.solo) ||
                 (track.type === 'audio' && anyAudioSolo && !track.solo);
               const isExpanded = isTrackExpanded(track.id);
               const dynamicHeight = getExpandedTrackHeight(track.id, track.height);
+              // Insert separator when transitioning from video to audio
+              const showSeparator = i > 0 && track.type === 'audio' && tracks[i - 1].type === 'video';
 
               return (
-                <TimelineHeader
-                  key={track.id}
-                  track={track}
-                  tracks={tracks}
-                  isDimmed={isDimmed}
-                  isExpanded={isExpanded}
-                  dynamicHeight={dynamicHeight}
-                  hasKeyframes={trackHasKeyframes(track.id)}
-                  selectedClipIds={selectedClipIds}
-                  clips={clips}
-                  playheadPosition={playheadPosition}
-                  onToggleExpand={() => toggleTrackExpanded(track.id)}
-                  onToggleSolo={() =>
-                    useTimelineStore.getState().setTrackSolo(track.id, !track.solo)
-                  }
-                  onToggleMuted={() =>
-                    useTimelineStore.getState().setTrackMuted(track.id, !track.muted)
-                  }
-                  onToggleVisible={() =>
-                    useTimelineStore.getState().setTrackVisible(track.id, !track.visible)
-                  }
-                  onRenameTrack={(name) =>
-                    useTimelineStore.getState().renameTrack(track.id, name)
-                  }
-                  onWheel={(e) => handleTrackHeaderWheel(e, track.id)}
-                  clipKeyframes={clipKeyframes}
-                  getClipKeyframes={getClipKeyframes}
-                  getInterpolatedTransform={getInterpolatedTransform}
-                  getInterpolatedEffects={getInterpolatedEffects}
-                  addKeyframe={addKeyframe}
-                  setPlayheadPosition={setPlayheadPosition}
-                  setPropertyValue={setPropertyValue}
-                  expandedCurveProperties={expandedCurveProperties}
-                  onToggleCurveExpanded={toggleCurveExpanded}
-                  onSetTrackParent={setTrackParent}
-                  onTrackPickWhipDragStart={handleTrackPickWhipDragStart}
-                  onTrackPickWhipDragEnd={handleTrackPickWhipDragEnd}
-                />
+                <React.Fragment key={track.id}>
+                  {showSeparator && <div className="track-type-separator" key="video-audio-sep" />}
+                  <TimelineHeader
+                    track={track}
+                    tracks={tracks}
+                    isDimmed={isDimmed}
+                    isExpanded={isExpanded}
+                    dynamicHeight={dynamicHeight}
+                    hasKeyframes={trackHasKeyframes(track.id)}
+                    selectedClipIds={selectedClipIds}
+                    clips={clips}
+                    playheadPosition={playheadPosition}
+                    onToggleExpand={() => toggleTrackExpanded(track.id)}
+                    onToggleSolo={() =>
+                      useTimelineStore.getState().setTrackSolo(track.id, !track.solo)
+                    }
+                    onToggleMuted={() =>
+                      useTimelineStore.getState().setTrackMuted(track.id, !track.muted)
+                    }
+                    onToggleVisible={() =>
+                      useTimelineStore.getState().setTrackVisible(track.id, !track.visible)
+                    }
+                    onRenameTrack={(name) =>
+                      useTimelineStore.getState().renameTrack(track.id, name)
+                    }
+                    onWheel={(e) => handleTrackHeaderWheel(e, track.id)}
+                    clipKeyframes={clipKeyframes}
+                    getClipKeyframes={getClipKeyframes}
+                    getInterpolatedTransform={getInterpolatedTransform}
+                    getInterpolatedEffects={getInterpolatedEffects}
+                    addKeyframe={addKeyframe}
+                    setPlayheadPosition={setPlayheadPosition}
+                    setPropertyValue={setPropertyValue}
+                    expandedCurveProperties={expandedCurveProperties}
+                    onToggleCurveExpanded={toggleCurveExpanded}
+                    onSetTrackParent={setTrackParent}
+                    onTrackPickWhipDragStart={handleTrackPickWhipDragStart}
+                    onTrackPickWhipDragEnd={handleTrackPickWhipDragEnd}
+                  />
+                </React.Fragment>
               );
             })}
             {/* New audio track preview header - appears when dragging over new track zone or linked audio needs new track */}
@@ -929,16 +933,18 @@ export function Timeline() {
                 </div>
               )}
 
-              {tracks.map((track) => {
+              {tracks.map((track, i) => {
                 const isDimmed =
                   (track.type === 'video' && anyVideoSolo && !track.solo) ||
                   (track.type === 'audio' && anyAudioSolo && !track.solo);
                 const isExpanded = isTrackExpanded(track.id);
                 const dynamicHeight = getExpandedTrackHeight(track.id, track.height);
+                const showSeparator = i > 0 && track.type === 'audio' && tracks[i - 1].type === 'video';
 
                 return (
+                  <React.Fragment key={track.id}>
+                  {showSeparator && <div className="track-type-separator" />}
                   <TimelineTrack
-                key={track.id}
                 track={track}
                 clips={clips}
                 isDimmed={isDimmed}
@@ -974,6 +980,7 @@ export function Timeline() {
                 onMoveKeyframe={moveKeyframe}
                 onUpdateBezierHandle={updateBezierHandle}
               />
+              </React.Fragment>
             );
           })}
 

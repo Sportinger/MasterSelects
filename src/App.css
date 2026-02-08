@@ -3183,6 +3183,13 @@ input[type="checkbox"] {
   background: linear-gradient(90deg, rgba(45, 107, 74, 0.15), transparent);
 }
 
+/* Green separator line between video and audio track sections */
+.track-type-separator {
+  height: 2px;
+  background: #4CAF50;
+  flex-shrink: 0;
+}
+
 /* Preview header shown when dragging media to create new track */
 .track-header-preview {
   display: flex;
