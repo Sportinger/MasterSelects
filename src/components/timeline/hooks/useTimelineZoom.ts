@@ -114,11 +114,12 @@ export function useTimelineZoom({
         // Calculate dynamic minimum zoom with padding to see end marker
         const dynamicMinZoom = Math.max(MIN_ZOOM, (viewportWidth - END_PADDING) / duration);
 
-        // Adjust delta based on current zoom level for smoother zooming
-        // Use smaller steps at low zoom levels for precision
-        const zoomFactor = zoom < 1 ? 0.1 : zoom < 10 ? 1 : 5;
-        const delta = e.deltaY > 0 ? -zoomFactor : zoomFactor;
-        const newZoom = Math.max(dynamicMinZoom, Math.min(MAX_ZOOM, zoom + delta));
+        // Exponential zoom: each scroll step changes zoom by a constant ratio
+        // This feels consistent at all zoom levels (same % change per step)
+        const zoomMultiplier = 1.15; // 15% per scroll step
+        const newZoom = Math.max(dynamicMinZoom, Math.min(MAX_ZOOM,
+          e.deltaY > 0 ? zoom / zoomMultiplier : zoom * zoomMultiplier
+        ));
 
         // Calculate max scroll with padding
         const maxScrollX = Math.max(0, duration * newZoom - viewportWidth + END_PADDING);
