@@ -159,6 +159,7 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
     const currentZoom = zoom ?? storeZoom;
     const movingClip = clips.find(c => c.id === clipId);
     const excludeSet = new Set(excludeClipIds || []);
+    const isTrackChange = movingClip ? movingClip.trackId !== trackId : false;
 
     // Get other clips on the TARGET track (excluding the moving clip, its linked clip, and any excluded clips)
     const otherClips = clips.filter(c =>
@@ -198,6 +199,11 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
     const snapToPosition = distToSnapBefore < distToSnapAfter ? snapBeforePosition : snapAfterPosition;
     const distToSnapTime = Math.min(distToSnapBefore, distToSnapAfter);
 
+    // Cross-track moves: never allow overlap, always snap to nearest free spot
+    if (isTrackChange) {
+      return { startTime: Math.max(0, snapToPosition), forcingOverlap: false };
+    }
+
     // Convert time distance to PIXELS using current zoom level
     const distToSnapPixels = distToSnapTime * currentZoom;
 
@@ -205,7 +211,7 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
     if (distToSnapPixels < OVERLAP_RESISTANCE_PIXELS) {
       return { startTime: Math.max(0, snapToPosition), forcingOverlap: false };
     } else {
-      // User has pushed through the resistance - allow overlap
+      // User has pushed through the resistance - allow overlap (same track only)
       return { startTime: Math.max(0, desiredStartTime), forcingOverlap: true };
     }
   },
