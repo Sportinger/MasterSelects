@@ -144,6 +144,14 @@ function NativeHelperDialog({
     setChecking(false);
   };
 
+  // Auto-check connection when dialog opens
+  useEffect(() => {
+    if (turboModeEnabled && status !== 'connected') {
+      void handleRetry();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Handle Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
