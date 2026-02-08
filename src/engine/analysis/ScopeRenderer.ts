@@ -305,8 +305,8 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
   let bVal = sampleHist(&histB, fx);
   let lVal = sampleHist(&histL, fx);
 
-  // Sqrt scaling, normalized to total pixels
-  let scale = 1.0 / sqrt(params.totalPixels * 0.012);
+  // Sqrt scaling, normalized to total pixels (0.08 = expect peak bin ~8% of pixels)
+  let scale = 1.0 / sqrt(params.totalPixels * 0.08);
   let rH = sqrt(rVal) * scale;
   let gH = sqrt(gVal) * scale;
   let bH = sqrt(bVal) * scale;
