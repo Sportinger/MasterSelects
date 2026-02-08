@@ -3184,10 +3184,9 @@ input[type="checkbox"] {
 }
 
 /* Green separator line between video and audio track sections */
-.track-type-separator {
-  height: 2px;
-  background: #4CAF50;
-  flex-shrink: 0;
+.track-header.video + .track-header.audio,
+.track-lane.video + .track-lane.audio {
+  border-top: 2px solid #4CAF50;
 }
 
 /* Preview header shown when dragging media to create new track */
