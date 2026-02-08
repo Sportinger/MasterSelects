@@ -413,14 +413,16 @@ export function Timeline() {
     return false;
   }, [anyAudioSolo]);
 
-  // Calculate total content height for vertical scrollbar
-  const contentHeight = useMemo(() => {
+  // Calculate total content height and track snap positions for vertical scrollbar
+  const { contentHeight, trackSnapPositions } = useMemo(() => {
     let totalHeight = 0;
+    const snapPositions: number[] = [0];
     for (const track of tracks) {
       const isExpanded = isTrackExpanded(track.id);
       totalHeight += isExpanded ? getExpandedTrackHeight(track.id, track.height) : track.height;
+      snapPositions.push(totalHeight);
     }
-    return totalHeight;
+    return { contentHeight: totalHeight, trackSnapPositions: snapPositions };
   }, [tracks, isTrackExpanded, getExpandedTrackHeight]);
 
   // Track viewport height for scrollbar
@@ -557,6 +559,7 @@ export function Timeline() {
     playheadPosition,
     contentHeight,
     viewportHeight,
+    trackSnapPositions,
     setZoom,
     setScrollX,
     setScrollY,

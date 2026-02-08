@@ -16,6 +16,7 @@ interface UseTimelineZoomProps {
   playheadPosition: number;
   contentHeight: number;
   viewportHeight: number;
+  trackSnapPositions: number[];
 
   // Actions
   setZoom: (zoom: number) => void;
@@ -37,6 +38,7 @@ export function useTimelineZoom({
   playheadPosition,
   contentHeight,
   viewportHeight,
+  trackSnapPositions,
   setZoom,
   setScrollX,
   setScrollY,
@@ -140,18 +142,34 @@ export function useTimelineZoom({
           const maxScrollX = Math.max(0, duration * zoom - viewportWidth + END_PADDING);
           setScrollX(Math.max(0, Math.min(maxScrollX, scrollX + e.deltaX)));
         }
-        // Handle vertical scroll with custom scrollbar
+        // Handle vertical scroll with track snapping
         if (e.deltaY !== 0 && !e.shiftKey && !e.ctrlKey && !e.altKey) {
           e.preventDefault();
           const maxScrollY = Math.max(0, contentHeight - viewportHeight);
-          setScrollY(Math.max(0, Math.min(maxScrollY, scrollY + e.deltaY)));
+          if (trackSnapPositions.length > 1) {
+            // Find current snap index (the highest snap position <= scrollY)
+            let currentIdx = 0;
+            for (let i = trackSnapPositions.length - 1; i >= 0; i--) {
+              if (trackSnapPositions[i] <= scrollY + 1) { // +1 tolerance for float rounding
+                currentIdx = i;
+                break;
+              }
+            }
+            // Scroll direction determines next snap target
+            const nextIdx = e.deltaY > 0
+              ? Math.min(currentIdx + 1, trackSnapPositions.length - 1)
+              : Math.max(currentIdx - 1, 0);
+            setScrollY(Math.max(0, Math.min(maxScrollY, trackSnapPositions[nextIdx])));
+          } else {
+            setScrollY(Math.max(0, Math.min(maxScrollY, scrollY + e.deltaY)));
+          }
         }
       }
     };
 
     el.addEventListener('wheel', handleWheel, { passive: false });
     return () => el.removeEventListener('wheel', handleWheel);
-  }, [timelineBodyRef, zoom, scrollX, scrollY, playheadPosition, duration, contentHeight, viewportHeight, setZoom, setScrollX, setScrollY]);
+  }, [timelineBodyRef, zoom, scrollX, scrollY, playheadPosition, duration, contentHeight, viewportHeight, trackSnapPositions, setZoom, setScrollX, setScrollY]);
 
   return {
     handleSetZoom,
