@@ -532,6 +532,8 @@ function TimelineClipComponent({
   onSetClipParent,
 }: TimelineClipProps) {
   const thumbnails = clip.thumbnails || [];
+  const thumbnailsEnabled = useTimelineStore(s => s.thumbnailsEnabled);
+  const waveformsEnabled = useTimelineStore(s => s.waveformsEnabled);
 
   // Subscribe to playhead position only when cut tool is active (avoids re-renders during playback)
   const playheadPosition = useTimelineStore((state) =>
@@ -890,7 +892,7 @@ function TimelineClipComponent({
         </div>
       )}
       {/* Audio waveform */}
-      {isAudioClip && clip.waveform && clip.waveform.length > 0 && (
+      {waveformsEnabled && isAudioClip && clip.waveform && clip.waveform.length > 0 && (
         <div className="clip-waveform">
           <Waveform
             waveform={clip.waveform}
@@ -903,7 +905,7 @@ function TimelineClipComponent({
         </div>
       )}
       {/* Nested composition mixdown waveform - shown overlaid on thumbnails */}
-      {clip.isComposition && clip.mixdownWaveform && clip.mixdownWaveform.length > 0 && (
+      {waveformsEnabled && clip.isComposition && clip.mixdownWaveform && clip.mixdownWaveform.length > 0 && (
         <div className="clip-mixdown-waveform">
           <Waveform
             waveform={clip.mixdownWaveform}
@@ -922,7 +924,7 @@ function TimelineClipComponent({
         </div>
       )}
       {/* Segment-based thumbnails for nested compositions */}
-      {clip.isComposition && clip.clipSegments && clip.clipSegments.length > 0 && !isAudioClip && (
+      {thumbnailsEnabled && clip.isComposition && clip.clipSegments && clip.clipSegments.length > 0 && !isAudioClip && (
         <div className="clip-thumbnails clip-thumbnails-segments">
           {clip.clipSegments.map((segment, segIdx) => {
             const segmentWidth = (segment.endNorm - segment.startNorm) * 100;
@@ -967,7 +969,7 @@ function TimelineClipComponent({
         </div>
       )}
       {/* Regular thumbnail filmstrip - for non-composition clips */}
-      {thumbnails.length > 0 && !isAudioClip && !(clip.isComposition && clip.clipSegments && clip.clipSegments.length > 0) && (
+      {thumbnailsEnabled && thumbnails.length > 0 && !isAudioClip && !(clip.isComposition && clip.clipSegments && clip.clipSegments.length > 0) && (
         <div className="clip-thumbnails">
           {Array.from({ length: visibleThumbs }).map((_, i) => {
             // Calculate thumbnail index based on displayInPoint/displayOutPoint (trim-aware, live during trim)
