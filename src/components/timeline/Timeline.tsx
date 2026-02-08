@@ -542,12 +542,13 @@ export function Timeline() {
       if (e.altKey) {
         e.preventDefault();
         e.stopPropagation();
-        const delta = e.deltaY > 0 ? -10 : 10;
+        // Continuous scaling: use actual deltaY for smooth resizing
+        const delta = -e.deltaY * 0.2;
         useTimelineStore.getState().scaleTracksOfType(track.type, delta);
       } else if (e.shiftKey) {
         e.preventDefault();
         e.stopPropagation();
-        const delta = e.deltaY > 0 ? -10 : 10;
+        const delta = -e.deltaY * 0.2;
         useTimelineStore.getState().setTrackHeight(trackId, track.height + delta);
       }
     },
