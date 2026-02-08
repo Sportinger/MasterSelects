@@ -159,6 +159,4 @@
   display: block;
 }
 
-.vectorscope-container {
-  aspect-ratio: 1 / 1;
-}
+/* Vectorscope: canvas stays square via ResizeObserver, container fills panel */

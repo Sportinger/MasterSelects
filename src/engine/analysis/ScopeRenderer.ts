@@ -281,6 +281,14 @@ struct Params {
 @group(0) @binding(3) var<storage, read> histL: array<u32>;
 @group(0) @binding(4) var<uniform> params: Params;
 
+// Linear interpolation between bins for smooth curves
+fn sampleHist(hist: ptr<storage, array<u32>, read>, fx: f32) -> f32 {
+  let b0 = u32(clamp(fx, 0.0, 255.0));
+  let b1 = min(b0 + 1u, 255u);
+  let t = fract(fx);
+  return mix(f32((*hist)[b0]), f32((*hist)[b1]), t);
+}
+
 @fragment
 fn fs(in: VertexOutput) -> @location(0) vec4f {
   let uv = in.uv;
@@ -288,12 +296,14 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
     return vec4f(0.04, 0.04, 0.04, 1.0);
   }
 
-  let bin = min(u32(uv.x * 256.0), 255u);
-  let rVal = f32(histR[bin]);
-  let gVal = f32(histG[bin]);
-  let bVal = f32(histB[bin]);
-  let lVal = f32(histL[bin]);
   let mode = u32(params.mode);
+
+  // Smooth bin position (linear interpolation between adjacent bins)
+  let fx = uv.x * 255.0;
+  let rVal = sampleHist(&histR, fx);
+  let gVal = sampleHist(&histG, fx);
+  let bVal = sampleHist(&histB, fx);
+  let lVal = sampleHist(&histL, fx);
 
   // Sqrt scaling, normalized to total pixels
   let scale = 1.0 / sqrt(params.totalPixels * 0.012);
@@ -302,62 +312,82 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
   let bH = sqrt(bVal) * scale;
   let lH = sqrt(lVal) * scale;
 
-  // Y coordinate: 0 = top (highest count), 1 = bottom (zero)
+  // Y coordinate: 0 = bottom (zero), 1 = top (highest count)
   let y = 1.0 - uv.y;
 
-  // Filled area based on mode
+  // Anti-aliased edge width (in normalized Y units)
+  let aaW = 0.004;
+
+  // Filled area with soft anti-aliased top edge
   var color = vec3f(0.0);
 
   if (mode == 0u) {
-    // RGB: all channels
-    if (y < lH) { color += vec3f(0.10, 0.10, 0.10); }
-    if (y < rH) { color += vec3f(0.55, 0.07, 0.07); }
-    if (y < gH) { color += vec3f(0.07, 0.50, 0.07); }
-    if (y < bH) { color += vec3f(0.07, 0.07, 0.55); }
+    // RGB overlay: soft semi-transparent fills with additive blending
+    let lFill = smoothstep(lH, lH - aaW, y);
+    let rFill = smoothstep(rH, rH - aaW, y);
+    let gFill = smoothstep(gH, gH - aaW, y);
+    let bFill = smoothstep(bH, bH - aaW, y);
+    // Gradient: brighter near top edge, dimmer at bottom
+    let rGrad = 0.35 + 0.35 * (y / max(rH, 0.001));
+    let gGrad = 0.35 + 0.35 * (y / max(gH, 0.001));
+    let bGrad = 0.35 + 0.35 * (y / max(bH, 0.001));
+    color += vec3f(0.08) * lFill;
+    color += vec3f(rGrad, 0.05, 0.05) * rFill;
+    color += vec3f(0.05, gGrad, 0.05) * gFill;
+    color += vec3f(0.05, 0.05, bGrad) * bFill;
   } else if (mode == 1u) {
-    // Red only
-    if (y < rH) { color = vec3f(0.7, 0.12, 0.12); }
+    let fill = smoothstep(rH, rH - aaW, y);
+    let grad = 0.3 + 0.5 * (y / max(rH, 0.001));
+    color = vec3f(grad, 0.08, 0.08) * fill;
   } else if (mode == 2u) {
-    // Green only
-    if (y < gH) { color = vec3f(0.12, 0.65, 0.12); }
+    let fill = smoothstep(gH, gH - aaW, y);
+    let grad = 0.3 + 0.5 * (y / max(gH, 0.001));
+    color = vec3f(0.08, grad, 0.08) * fill;
   } else if (mode == 3u) {
-    // Blue only
-    if (y < bH) { color = vec3f(0.12, 0.12, 0.7); }
+    let fill = smoothstep(bH, bH - aaW, y);
+    let grad = 0.3 + 0.5 * (y / max(bH, 0.001));
+    color = vec3f(0.08, 0.08, grad) * fill;
   } else {
-    // Luma only
-    if (y < lH) { color = vec3f(0.55, 0.55, 0.55); }
+    let fill = smoothstep(lH, lH - aaW, y);
+    let grad = 0.3 + 0.4 * (y / max(lH, 0.001));
+    color = vec3f(grad) * fill;
   }
 
-  // Edge glow at the top of each bar
-  let edgeW = 0.008;
+  // Bright edge glow at the top of each fill (phosphor-style)
+  let edgeW = 0.006;
   if (mode == 0u) {
-    if (abs(y - rH) < edgeW && y <= rH + edgeW) { color += vec3f(0.5, 0.1, 0.1); }
-    if (abs(y - gH) < edgeW && y <= gH + edgeW) { color += vec3f(0.1, 0.5, 0.1); }
-    if (abs(y - bH) < edgeW && y <= bH + edgeW) { color += vec3f(0.1, 0.1, 0.5); }
+    let rEdge = smoothstep(edgeW, 0.0, abs(y - rH)) * step(y, rH + edgeW);
+    let gEdge = smoothstep(edgeW, 0.0, abs(y - gH)) * step(y, gH + edgeW);
+    let bEdge = smoothstep(edgeW, 0.0, abs(y - bH)) * step(y, bH + edgeW);
+    color += vec3f(0.6, 0.12, 0.12) * rEdge;
+    color += vec3f(0.12, 0.55, 0.12) * gEdge;
+    color += vec3f(0.12, 0.12, 0.6) * bEdge;
   } else if (mode == 1u) {
-    if (abs(y - rH) < edgeW && y <= rH + edgeW) { color += vec3f(0.6, 0.15, 0.15); }
+    let e = smoothstep(edgeW, 0.0, abs(y - rH)) * step(y, rH + edgeW);
+    color += vec3f(0.7, 0.18, 0.18) * e;
   } else if (mode == 2u) {
-    if (abs(y - gH) < edgeW && y <= gH + edgeW) { color += vec3f(0.15, 0.6, 0.15); }
+    let e = smoothstep(edgeW, 0.0, abs(y - gH)) * step(y, gH + edgeW);
+    color += vec3f(0.18, 0.65, 0.18) * e;
   } else if (mode == 3u) {
-    if (abs(y - bH) < edgeW && y <= bH + edgeW) { color += vec3f(0.15, 0.15, 0.6); }
+    let e = smoothstep(edgeW, 0.0, abs(y - bH)) * step(y, bH + edgeW);
+    color += vec3f(0.18, 0.18, 0.7) * e;
   } else {
-    if (abs(y - lH) < edgeW && y <= lH + edgeW) { color += vec3f(0.5, 0.5, 0.5); }
+    let e = smoothstep(edgeW, 0.0, abs(y - lH)) * step(y, lH + edgeW);
+    color += vec3f(0.6) * e;
   }
 
-  // Grid lines at 64, 128, 192
+  // Grid lines at 64, 128, 192 (anti-aliased)
   let gridBins = array<f32, 3>(64.0, 128.0, 192.0);
   for (var i = 0u; i < 3u; i++) {
     let gx = gridBins[i] / 256.0;
-    if (abs(uv.x - gx) < 0.002) {
-      color = max(color, vec3f(0.12));
-    }
+    let gAA = smoothstep(0.003, 0.001, abs(uv.x - gx));
+    color = max(color, vec3f(0.10) * gAA);
   }
   // Horizontal grid at 25%, 50%, 75%
   for (var i = 1u; i < 4u; i++) {
     let gy = f32(i) * 0.25;
-    if (abs(y - gy) < 0.003) {
-      color = max(color, vec3f(0.08));
-    }
+    let hAA = smoothstep(0.004, 0.001, abs(y - gy));
+    color = max(color, vec3f(0.07) * hAA);
   }
 
   return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)), 1.0);
@@ -387,7 +417,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let cr = 0.5 * r - 0.4187 * g - 0.0813 * b;
 
   let center = f32(params.outSize) * 0.5;
-  let scale = center * 0.82;
+  let scale = center * 0.92;
   let px = u32(clamp(center + cb / 128.0 * scale, 0.0, f32(params.outSize - 1u)));
   let py = u32(clamp(center - cr / 128.0 * scale, 0.0, f32(params.outSize - 1u)));
 
@@ -417,36 +447,69 @@ struct Params { outSize: f32, refValue: f32, _p0: f32, _p1: f32 }
 @group(0) @binding(2) var<storage, read> accumB: array<u32>;
 @group(0) @binding(3) var<uniform> params: Params;
 
+// Bilinear sample from accumulator
+fn sampleVS(acc: ptr<storage, array<u32>, read>, fx: f32, fy: f32, sz: u32) -> f32 {
+  let x0 = u32(clamp(fx, 0.0, f32(sz - 1u)));
+  let y0 = u32(clamp(fy, 0.0, f32(sz - 1u)));
+  let x1 = min(x0 + 1u, sz - 1u);
+  let y1 = min(y0 + 1u, sz - 1u);
+  let dx = fract(fx);
+  let dy = fract(fy);
+  let v00 = f32((*acc)[y0 * sz + x0]);
+  let v10 = f32((*acc)[y0 * sz + x1]);
+  let v01 = f32((*acc)[y1 * sz + x0]);
+  let v11 = f32((*acc)[y1 * sz + x1]);
+  return mix(mix(v00, v10, dx), mix(v01, v11, dx), dy);
+}
+
+// Nearest read for bloom
+fn readVS(acc: ptr<storage, array<u32>, read>, x: i32, y: i32, sz: i32) -> f32 {
+  return f32((*acc)[u32(clamp(y, 0, sz - 1)) * u32(sz) + u32(clamp(x, 0, sz - 1))]);
+}
+
 @fragment
 fn fs(in: VertexOutput) -> @location(0) vec4f {
   let uv = in.uv;
   let size = params.outSize;
+  let sz = u32(size);
+  let isz = i32(sz);
   let center = 0.5;
   let d = distance(uv, vec2f(center));
+  let gratScale = 0.92;
 
   // Background
   var color = vec3f(0.04);
 
-  // Graticule circles at 25% and 75% saturation
-  let radius75 = 0.82 * 0.5 * 0.75;
-  let radius25 = 0.82 * 0.5 * 0.25;
-  if (abs(d - radius75) < 0.002) { color = vec3f(0.18); }
-  if (abs(d - radius25) < 0.002) { color = vec3f(0.12); }
+  // Graticule: outer circle (100% saturation boundary) + 75% + 25%
+  let radiusFull = gratScale * 0.5;
+  let radius75 = gratScale * 0.5 * 0.75;
+  let radius25 = gratScale * 0.5 * 0.25;
+  let lineW = 1.2 / size; // ~1.2px anti-aliased
+  let aa = smoothstep(0.0, lineW, abs(d - radiusFull));
+  color = mix(vec3f(0.20), color, aa);
+  let aa75 = smoothstep(0.0, lineW, abs(d - radius75));
+  color = mix(vec3f(0.14), color, aa75);
+  let aa25 = smoothstep(0.0, lineW, abs(d - radius25));
+  color = mix(vec3f(0.10), color, aa25);
 
-  // Crosshair
-  if ((abs(uv.x - center) < 0.001 && d < radius75 + 0.02) ||
-      (abs(uv.y - center) < 0.001 && d < radius75 + 0.02)) {
-    color = max(color, vec3f(0.12));
+  // Crosshair (anti-aliased)
+  let crossW = 0.8 / size;
+  if (d < radiusFull + 0.01) {
+    let axH = smoothstep(0.0, crossW, abs(uv.y - center));
+    let axV = smoothstep(0.0, crossW, abs(uv.x - center));
+    color = mix(vec3f(0.12), color, axH);
+    color = mix(vec3f(0.12), color, axV);
   }
 
-  // Skin tone line (~123 degrees from Cb+ axis = ~33 degrees in standard orientation)
+  // Skin tone line (~123 degrees)
   let angle = atan2(-(uv.y - center), uv.x - center);
   let skinAngle = radians(123.0);
-  if (abs(angle - skinAngle) < 0.008 && d < radius75 + 0.02 && d > 0.01) {
-    color = max(color, vec3f(0.25, 0.18, 0.08));
+  let skinAA = smoothstep(0.0, crossW, abs(angle - skinAngle));
+  if (d < radiusFull + 0.01 && d > 0.01) {
+    color = mix(vec3f(0.28, 0.20, 0.08), color, skinAA);
   }
 
-  // BT.709 color targets (R, MG, B, CY, G, YL)
+  // BT.709 color targets (R, MG, B, CY, G, YL) — placed on 75% ring
   let targetAngles = array<f32, 6>(
     radians(103.0), radians(61.0), radians(-13.0),
     radians(-77.0), radians(-119.0), radians(167.0)
@@ -455,32 +518,55 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
     vec3f(0.6, 0.15, 0.15), vec3f(0.5, 0.15, 0.5), vec3f(0.15, 0.15, 0.6),
     vec3f(0.15, 0.5, 0.5), vec3f(0.15, 0.5, 0.15), vec3f(0.5, 0.5, 0.1)
   );
+  let dotR = 8.0 / size;
+  let ringW = 2.0 / size;
   for (var i = 0u; i < 6u; i++) {
     let ta = targetAngles[i];
     let tx = center + cos(ta) * radius75;
     let ty = center - sin(ta) * radius75;
     let td = distance(uv, vec2f(tx, ty));
-    if (td < 0.018) {
-      color = max(color, targetColors[i] * 0.8);
-      if (td > 0.013) { color = max(color, targetColors[i]); }
-    }
+    // Filled dot with ring outline
+    let dotAA = smoothstep(dotR, dotR - ringW, td);
+    let ringAA = smoothstep(ringW * 0.5, 0.0, abs(td - dotR));
+    color = mix(color, targetColors[i] * 0.5, dotAA);
+    color = mix(color, targetColors[i], ringAA);
   }
 
-  // Data: read accumulator
+  // Data: bilinear center + bloom glow
   if (uv.x >= 0.0 && uv.x < 1.0 && uv.y >= 0.0 && uv.y < 1.0) {
-    let gx = min(u32(uv.x * size), u32(size) - 1u);
-    let gy = min(u32(uv.y * size), u32(size) - 1u);
-    let idx = gy * u32(size) + gx;
-    let rVal = f32(accumR[idx]);
-    let gVal = f32(accumG[idx]);
-    let bVal = f32(accumB[idx]);
-    if (rVal > 0.0 || gVal > 0.0 || bVal > 0.0) {
-      let rv = params.refValue;
-      let rN = pow(clamp(sqrt(rVal) / rv, 0.0, 1.0), 0.55);
-      let gN = pow(clamp(sqrt(gVal) / rv, 0.0, 1.0), 0.55);
-      let bN = pow(clamp(sqrt(bVal) / rv, 0.0, 1.0), 0.55);
-      color = max(color, vec3f(rN, gN, bN));
+    let fx = uv.x * size - 0.5;
+    let fy = uv.y * size - 0.5;
+
+    // Sharp center (bilinear)
+    let rCenter = sampleVS(&accumR, fx, fy, sz);
+    let gCenter = sampleVS(&accumG, fx, fy, sz);
+    let bCenter = sampleVS(&accumB, fx, fy, sz);
+
+    // Bloom: 3x3 gaussian at 3px step
+    let ix = i32(fx + 0.5);
+    let iy = i32(fy + 0.5);
+    var rBloom = 0.0; var gBloom = 0.0; var bBloom = 0.0;
+    let bK = array<f32, 3>(0.25, 0.50, 0.25);
+    for (var by: i32 = -1; by <= 1; by += 1) {
+      for (var bx: i32 = -1; bx <= 1; bx += 1) {
+        let bw = bK[u32(bx + 1)] * bK[u32(by + 1)];
+        rBloom += readVS(&accumR, ix + bx * 3, iy + by * 3, isz) * bw;
+        gBloom += readVS(&accumG, ix + bx * 3, iy + by * 3, isz) * bw;
+        bBloom += readVS(&accumB, ix + bx * 3, iy + by * 3, isz) * bw;
+      }
     }
+
+    let rv = params.refValue;
+    // Sharp trace
+    let rN = pow(clamp(sqrt(rCenter) / rv, 0.0, 1.0), 0.55);
+    let gN = pow(clamp(sqrt(gCenter) / rv, 0.0, 1.0), 0.55);
+    let bN = pow(clamp(sqrt(bCenter) / rv, 0.0, 1.0), 0.55);
+    // Soft bloom halo
+    let rG = pow(clamp(sqrt(rBloom) / rv, 0.0, 1.0), 0.5) * 0.15;
+    let gG = pow(clamp(sqrt(gBloom) / rv, 0.0, 1.0), 0.5) * 0.15;
+    let bG = pow(clamp(sqrt(bBloom) / rv, 0.0, 1.0), 0.5) * 0.15;
+
+    color = max(color, clamp(vec3f(rN + rG, gN + gG, bN + bG), vec3f(0.0), vec3f(1.0)));
   }
 
   return vec4f(color, 1.0);
@@ -505,7 +591,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
 
 const OUT_W = 1024;
 const OUT_H = 512;
-const VS_SIZE = 320; // vectorscope grid size
+const VS_SIZE = 512; // vectorscope grid size (high-res)
 
 export class ScopeRenderer {
   private device: GPUDevice;
