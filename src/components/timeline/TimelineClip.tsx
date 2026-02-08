@@ -568,10 +568,17 @@ function TimelineClipComponent({
   const clipEntranceKey = useTimelineStore(s => s.clipEntranceAnimationKey);
   const mountKeyRef = useRef(clipEntranceKey);
 
-  // Calculate stagger delay based on track index (vertical) + startTime (horizontal)
-  const trackIndex = track ? tracks.findIndex(t => t.id === track.id) : 0;
-  // 80ms per track + 20ms per second of timeline position
-  const animationDelay = (trackIndex * 0.08) + Math.min(clip.startTime * 0.02, 0.5);
+  // Calculate stagger delay: sort all clips by track order + startTime, then 20ms per clip
+  const clipStaggerIndex = (() => {
+    const sorted = [...clips].sort((a, b) => {
+      const aTrack = tracks.findIndex(t => t.id === a.trackId);
+      const bTrack = tracks.findIndex(t => t.id === b.trackId);
+      if (aTrack !== bTrack) return aTrack - bTrack;
+      return a.startTime - b.startTime;
+    });
+    return sorted.findIndex(c => c.id === clip.id);
+  })();
+  const animationDelay = Math.max(0, clipStaggerIndex) * 0.02;
 
   // Determine animation class:
   // - 'exiting': apply exit animation
