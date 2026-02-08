@@ -135,7 +135,7 @@ export function useClipDrag({
 
         // Track change requires BOTH a time delay (300ms) AND a vertical distance (20px from grab point)
         const TRACK_CHANGE_DELAY_MS = 300;
-        const TRACK_CHANGE_RESISTANCE_PX = 20;
+        const TRACK_CHANGE_RESISTANCE_PX = 100;
         const trackChangeAllowed = Date.now() - drag.dragStartTime >= TRACK_CHANGE_DELAY_MS
           && Math.abs(mouseY - drag.grabY) >= TRACK_CHANGE_RESISTANCE_PX;
 
