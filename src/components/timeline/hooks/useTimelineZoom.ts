@@ -116,7 +116,7 @@ export function useTimelineZoom({
 
         // Exponential zoom: each scroll step changes zoom by a constant ratio
         // This feels consistent at all zoom levels (same % change per step)
-        const zoomMultiplier = 1.15; // 15% per scroll step
+        const zoomMultiplier = 1.08; // 8% per scroll step
         const newZoom = Math.max(dynamicMinZoom, Math.min(MAX_ZOOM,
           e.deltaY > 0 ? zoom / zoomMultiplier : zoom * zoomMultiplier
         ));

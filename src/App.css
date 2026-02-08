@@ -4580,6 +4580,31 @@ input[type="checkbox"] {
 }
 
 /* Fade curve container - SVG bezier curve showing opacity animation */
+/* Keyframe tick marks on clip bar */
+.clip-keyframe-ticks {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.keyframe-tick {
+  position: absolute;
+  bottom: 1px;
+  width: 4px;
+  height: 4px;
+  background: #f59e0b;
+  transform: translateX(-50%) rotate(45deg);
+  opacity: 0.7;
+}
+
+.timeline-clip.selected .keyframe-tick {
+  opacity: 1;
+}
+
 .fade-curve-container {
   position: absolute;
   top: 0;

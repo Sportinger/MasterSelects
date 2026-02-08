@@ -271,6 +271,7 @@ export interface TimelineClipProps {
     handleIn?: { x: number; y: number };
     handleOut?: { x: number; y: number };
   }>;  // Opacity keyframes for fade curve visualization
+  allKeyframeTimes: number[];  // Unique keyframe times for tick marks on clip bar
   timeToPixel: (time: number) => number;
   pixelToTime: (pixel: number) => number;
   formatTime: (seconds: number) => string;

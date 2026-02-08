@@ -524,6 +524,7 @@ function TimelineClipComponent({
   fadeInDuration,
   fadeOutDuration,
   opacityKeyframes,
+  allKeyframeTimes,
   timeToPixel,
   pixelToTime,
   formatTime,
@@ -1099,6 +1100,22 @@ function TimelineClipComponent({
       {clip.analysisStatus === 'analyzing' && (
         <div className="clip-analyzing-indicator">
           <div className="analyzing-progress" style={{ width: `${clip.analysisProgress || 0}%` }} />
+        </div>
+      )}
+      {/* Keyframe tick marks on clip bar */}
+      {allKeyframeTimes.length > 0 && (
+        <div className="clip-keyframe-ticks">
+          {allKeyframeTimes.map((time, i) => {
+            const xPercent = (time / displayDuration) * 100;
+            if (xPercent < 0 || xPercent > 100) return null;
+            return (
+              <div
+                key={i}
+                className="keyframe-tick"
+                style={{ left: `${xPercent}%` }}
+              />
+            );
+          })}
         </div>
       )}
       {/* Fade curve - SVG bezier curve showing opacity animation */}
