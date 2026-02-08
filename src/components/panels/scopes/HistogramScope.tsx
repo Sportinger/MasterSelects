@@ -1,11 +1,15 @@
 import { useRef, useEffect } from 'react';
-import { useGpuScope } from './useScopeAnalysis';
+import { useGpuScope, type ScopeViewMode } from './useScopeAnalysis';
 
-export function HistogramScope() {
+interface HistogramScopeProps {
+  viewMode?: ScopeViewMode;
+}
+
+export function HistogramScope({ viewMode = 'rgb' }: HistogramScopeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useGpuScope(canvasRef, 'histogram', true);
+  useGpuScope(canvasRef, 'histogram', true, viewMode);
 
   useEffect(() => {
     const container = containerRef.current;

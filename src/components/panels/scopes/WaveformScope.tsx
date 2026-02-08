@@ -1,32 +1,18 @@
-import { useRef, useEffect } from 'react';
-import { useGpuScope } from './useScopeAnalysis';
+import { useRef } from 'react';
+import { useGpuScope, type ScopeViewMode } from './useScopeAnalysis';
 
-export function WaveformScope() {
+interface WaveformScopeProps {
+  viewMode?: ScopeViewMode;
+}
+
+export function WaveformScope({ viewMode = 'rgb' }: WaveformScopeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
-  useGpuScope(canvasRef, 'waveform', true);
-
-  // Responsive resize
-  useEffect(() => {
-    const container = containerRef.current;
-    const canvas = canvasRef.current;
-    if (!container || !canvas) return;
-
-    const ro = new ResizeObserver((entries) => {
-      const { width, height } = entries[0].contentRect;
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = Math.round(width * dpr);
-      canvas.height = Math.round(height * dpr);
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-    });
-    ro.observe(container);
-    return () => ro.disconnect();
-  }, []);
+  // Canvas sizing is handled inside useGpuScope (aspect-ratio-aware)
+  useGpuScope(canvasRef, 'waveform', true, viewMode);
 
   return (
-    <div ref={containerRef} className="scope-canvas-container">
+    <div className="scope-canvas-container">
       <canvas ref={canvasRef} />
     </div>
   );
