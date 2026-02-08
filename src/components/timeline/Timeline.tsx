@@ -170,10 +170,7 @@ export function Timeline() {
   }, [splitClip, setToolMode]);
 
   // Stable callbacks for TimelineControls (avoids re-renders from inline arrows)
-  const setProxyEnabled = useMediaStore(state => state.setProxyEnabled);
-  const handleToggleProxy = useCallback(() => {
-    setProxyEnabled(!proxyEnabled);
-  }, [setProxyEnabled, proxyEnabled]);
+  const toggleProxyEnabled = useMediaStore(state => state.toggleProxyEnabled);
 
   const handleToggleTranscriptMarkers = useCallback(() => {
     setShowTranscriptMarkers(prev => !prev);
@@ -769,7 +766,7 @@ export function Timeline() {
         onSetOutPoint={setOutPointAtPlayhead}
         onClearInOut={clearInOut}
         onToggleRamPreview={toggleRamPreviewEnabled}
-        onToggleProxy={handleToggleProxy}
+        onToggleProxy={toggleProxyEnabled}
         isProxyCaching={isProxyCaching}
         proxyCacheProgress={proxyCacheProgress}
         onStartProxyCachePreload={startProxyCachePreload}

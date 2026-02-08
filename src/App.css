@@ -5140,11 +5140,16 @@ input[type="checkbox"] {
   background: var(--bg-tertiary);
 }
 
-.view-dropdown-item input[type="checkbox"] {
+.view-check {
   width: 14px;
-  height: 14px;
-  accent-color: var(--accent-color);
-  cursor: pointer;
+  font-size: 11px;
+  text-align: center;
+  color: transparent;
+  flex-shrink: 0;
+}
+
+.view-check.checked {
+  color: var(--accent-color, #4a9eff);
 }
 
 .btn-danger {
