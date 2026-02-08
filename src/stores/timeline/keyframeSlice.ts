@@ -438,21 +438,15 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
   // Curve editor expansion
   toggleCurveExpanded: (trackId, property) => {
     const { expandedCurveProperties } = get();
-    const newMap = new Map(expandedCurveProperties);
-    const trackProps = newMap.get(trackId) || new Set<AnimatableProperty>();
-    const newTrackProps = new Set(trackProps);
+    const isCurrentlyExpanded = expandedCurveProperties.get(trackId)?.has(property) ?? false;
 
-    if (newTrackProps.has(property)) {
-      newTrackProps.delete(property);
-    } else {
-      newTrackProps.add(property);
-    }
+    // Only one curve editor open at a time: close all, then open the new one
+    const newMap = new Map<string, Set<AnimatableProperty>>();
 
-    if (newTrackProps.size === 0) {
-      newMap.delete(trackId);
-    } else {
-      newMap.set(trackId, newTrackProps);
+    if (!isCurrentlyExpanded) {
+      newMap.set(trackId, new Set([property]));
     }
+    // If toggling off the currently open one, newMap stays empty (all closed)
 
     set({ expandedCurveProperties: newMap });
   },
