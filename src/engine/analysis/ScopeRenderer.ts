@@ -65,6 +65,21 @@ struct RenderParams {
 @group(0) @binding(2) var<storage, read> accumB: array<u32>;
 @group(0) @binding(3) var<uniform> params: RenderParams;
 
+// Bilinear sample helper: reads accumulator with interpolation
+fn sampleAccum(acc: ptr<storage, array<u32>, read>, fx: f32, fy: f32, w: u32, h: u32) -> f32 {
+  let x0 = u32(clamp(fx, 0.0, f32(w - 1u)));
+  let y0 = u32(clamp(fy, 0.0, f32(h - 1u)));
+  let x1 = min(x0 + 1u, w - 1u);
+  let y1 = min(y0 + 1u, h - 1u);
+  let dx = fract(fx);
+  let dy = fract(fy);
+  let v00 = f32((*acc)[y0 * w + x0]);
+  let v10 = f32((*acc)[y0 * w + x1]);
+  let v01 = f32((*acc)[y1 * w + x0]);
+  let v11 = f32((*acc)[y1 * w + x1]);
+  return mix(mix(v00, v10, dx), mix(v01, v11, dx), dy);
+}
+
 @fragment
 fn fs(in: VertexOutput) -> @location(0) vec4f {
   let uv = in.uv;
@@ -72,20 +87,23 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
     return vec4f(0.04, 0.04, 0.04, 1.0);
   }
 
-  let gx = min(u32(uv.x * params.outW), u32(params.outW) - 1u);
-  let gy = min(u32(uv.y * params.outH), u32(params.outH) - 1u);
-  let idx = gy * u32(params.outW) + gx;
+  let w = u32(params.outW);
+  let h = u32(params.outH);
 
-  let rCount = f32(accumR[idx]);
-  let gCount = f32(accumG[idx]);
-  let bCount = f32(accumB[idx]);
+  // Floating-point grid position for bilinear sampling
+  let fx = uv.x * params.outW - 0.5;
+  let fy = uv.y * params.outH - 0.5;
+
+  let rCount = sampleAccum(&accumR, fx, fy, w, h);
+  let gCount = sampleAccum(&accumG, fx, fy, w, h);
+  let bCount = sampleAccum(&accumB, fx, fy, w, h);
 
   let rv = params.refValue;
   let rN = clamp(sqrt(rCount) / rv, 0.0, 1.0);
   let gN = clamp(sqrt(gCount) / rv, 0.0, 1.0);
   let bN = clamp(sqrt(bCount) / rv, 0.0, 1.0);
 
-  // Boost intensity
+  // Gamma + intensity
   let s = params.intensity;
   var color = vec3f(
     pow(rN, 0.55) * s,
@@ -96,8 +114,8 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
   // Grid: every 10 IRE (10% of height)
   let gridY = fract(uv.y * 10.0);
   let dGrid = min(gridY, 1.0 - gridY) * params.outH * 0.5;
-  if (dGrid < 0.6) {
-    let a = 0.18 * (1.0 - dGrid / 0.6);
+  if (dGrid < 0.8) {
+    let a = 0.15 * (1.0 - dGrid / 0.8);
     color = max(color, vec3f(0.55, 0.45, 0.12) * a);
   }
 
@@ -331,8 +349,8 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
 
 // ──────────────── SCOPE RENDERER CLASS ────────────────
 
-const OUT_W = 512;
-const OUT_H = 256;
+const OUT_W = 1024;
+const OUT_H = 512;
 const VS_SIZE = 320; // vectorscope grid size
 
 export class ScopeRenderer {
