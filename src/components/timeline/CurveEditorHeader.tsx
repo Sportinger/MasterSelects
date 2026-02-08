@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import type { AnimatableProperty, Keyframe } from '../../types';
-import { CURVE_EDITOR_HEIGHT } from '../../stores/timeline/constants';
+import { useTimelineStore } from '../../stores/timeline';
 
 export interface CurveEditorHeaderProps {
   property: AnimatableProperty;
@@ -92,7 +92,7 @@ export const CurveEditorHeader: React.FC<CurveEditorHeaderProps> = ({
   keyframes,
   onClose,
 }) => {
-  const height = CURVE_EDITOR_HEIGHT;
+  const height = useTimelineStore(s => s.curveEditorHeight);
   const padding = { top: 20, bottom: 20 };
 
   // Compute value range

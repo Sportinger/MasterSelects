@@ -1,7 +1,7 @@
 // Keyframe-related actions slice
 
 import type { KeyframeActions, SliceCreator, Keyframe, AnimatableProperty, ClipTransform } from './types';
-import { DEFAULT_TRANSFORM, PROPERTY_ROW_HEIGHT, CURVE_EDITOR_HEIGHT } from './constants';
+import { DEFAULT_TRANSFORM, PROPERTY_ROW_HEIGHT, MIN_CURVE_EDITOR_HEIGHT, MAX_CURVE_EDITOR_HEIGHT } from './constants';
 import {
   getInterpolatedClipTransform,
   getKeyframeAtTime,
@@ -417,7 +417,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     if (trackCurveProps) {
       trackCurveProps.forEach(prop => {
         if (uniqueProperties.has(prop)) {
-          extraHeight += CURVE_EDITOR_HEIGHT;
+          extraHeight += get().curveEditorHeight;
         }
       });
     }
@@ -461,6 +461,10 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     const { expandedCurveProperties } = get();
     const trackProps = expandedCurveProperties.get(trackId);
     return trackProps?.has(property) ?? false;
+  },
+
+  setCurveEditorHeight: (height) => {
+    set({ curveEditorHeight: Math.round(Math.max(MIN_CURVE_EDITOR_HEIGHT, Math.min(MAX_CURVE_EDITOR_HEIGHT, height))) });
   },
 
   // Bezier handle manipulation

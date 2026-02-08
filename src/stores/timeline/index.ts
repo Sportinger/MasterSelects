@@ -160,6 +160,7 @@ export const useTimelineStore = create<TimelineStore>()(
       expandedTrackPropertyGroups: new Map<string, Set<string>>(),
       selectedKeyframeIds: new Set<string>(),
       expandedCurveProperties: new Map<string, Set<import('../../types').AnimatableProperty>>(),
+      curveEditorHeight: 250,
 
       // Mask state
       maskEditMode: 'none' as const,

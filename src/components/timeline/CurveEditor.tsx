@@ -3,7 +3,8 @@
 import React, { useCallback, useRef, useState, useMemo } from 'react';
 import type { AnimatableProperty, Keyframe, BezierHandle, EasingType } from '../../types';
 import { PRESET_BEZIER } from '../../utils/keyframeInterpolation';
-import { CURVE_EDITOR_HEIGHT, BEZIER_HANDLE_SIZE } from '../../stores/timeline/constants';
+import { BEZIER_HANDLE_SIZE } from '../../stores/timeline/constants';
+import { useTimelineStore } from '../../stores/timeline';
 
 export interface CurveEditorProps {
   trackId: string;
@@ -13,7 +14,6 @@ export interface CurveEditorProps {
   clipStartTime: number;
   clipDuration: number;
   width: number;
-  scrollX: number;
   selectedKeyframeIds: Set<string>;
   onSelectKeyframe: (id: string, addToSelection: boolean) => void;
   onMoveKeyframe: (id: string, newTime: number, newValue: number) => void;
@@ -133,7 +133,6 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
   clipStartTime,
   clipDuration,
   width,
-  scrollX,
   selectedKeyframeIds,
   onSelectKeyframe,
   onMoveKeyframe,
@@ -153,7 +152,8 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
     startHandleY?: number;
   } | null>(null);
 
-  const height = CURVE_EDITOR_HEIGHT;
+  const height = useTimelineStore(s => s.curveEditorHeight);
+  const setCurveEditorHeight = useTimelineStore(s => s.setCurveEditorHeight);
   const padding = { top: 20, right: 10, bottom: 20, left: 10 };
 
   // Sort keyframes by time
@@ -168,15 +168,15 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
     [sortedKeyframes, property]
   );
 
-  // Convert time to X position
+  // Convert time to X position (absolute coords — parent handles scrolling via translateX)
   const timeToX = useCallback((time: number) => {
-    return timeToPixel(clipStartTime + time) - scrollX;
-  }, [timeToPixel, clipStartTime, scrollX]);
+    return timeToPixel(clipStartTime + time);
+  }, [timeToPixel, clipStartTime]);
 
   // Convert X position to time
   const xToTime = useCallback((x: number) => {
-    return pixelToTime(x + scrollX) - clipStartTime;
-  }, [pixelToTime, scrollX, clipStartTime]);
+    return pixelToTime(x) - clipStartTime;
+  }, [pixelToTime, clipStartTime]);
 
   // Convert value to Y position (inverted because SVG Y goes down)
   const valueToY = useCallback((value: number) => {
@@ -354,6 +354,16 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
     }
   }, [onSelectKeyframe]);
 
+  // Shift+wheel to resize curve editor height
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      const delta = e.deltaY > 0 ? 20 : -20;
+      setCurveEditorHeight(height + delta);
+    }
+  }, [height, setCurveEditorHeight]);
+
   return (
     <svg
       ref={svgRef}
@@ -364,6 +374,7 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
       onClick={handleSvgClick}
+      onWheel={handleWheel}
     >
       {/* Background */}
       <rect x={0} y={0} width={width} height={height} fill="var(--bg-tertiary)" />

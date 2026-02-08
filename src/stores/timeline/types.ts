@@ -108,6 +108,7 @@ export interface TimelineState {
   expandedTrackPropertyGroups: Map<string, Set<string>>;
   selectedKeyframeIds: Set<string>;
   expandedCurveProperties: Map<string, Set<AnimatableProperty>>;  // trackId -> expanded curve editors
+  curveEditorHeight: number;
 
   // Mask state
   maskEditMode: MaskEditMode;
@@ -281,6 +282,7 @@ export interface KeyframeActions {
   // Curve editor expansion
   toggleCurveExpanded: (trackId: string, property: AnimatableProperty) => void;
   isCurveExpanded: (trackId: string, property: AnimatableProperty) => boolean;
+  setCurveEditorHeight: (height: number) => void;
   // Bezier handle manipulation
   updateBezierHandle: (keyframeId: string, handle: 'in' | 'out', position: BezierHandle) => void;
 }

@@ -34,6 +34,8 @@ export const GROUP_HEADER_HEIGHT = 20;
 
 // Curve editor constants
 export const CURVE_EDITOR_HEIGHT = 250;
+export const MIN_CURVE_EDITOR_HEIGHT = 80;
+export const MAX_CURVE_EDITOR_HEIGHT = 600;
 export const BEZIER_HANDLE_SIZE = 8;
 
 // Default durations
