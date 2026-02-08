@@ -183,6 +183,7 @@ export const useTimelineStore = create<TimelineStore>()(
 
       // Clipboard state for copy/paste
       clipboardData: null as import('./types').ClipboardClipData[] | null,
+      clipboardKeyframes: null as import('./types').ClipboardKeyframeData[] | null,
     };
 
     // Layer actions (render layers for engine, moved from mixerStore)

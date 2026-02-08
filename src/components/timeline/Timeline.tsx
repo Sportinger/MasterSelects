@@ -135,7 +135,7 @@ export function Timeline() {
   const { addMarker, moveMarker, removeMarker } = store;
 
   // Clipboard actions
-  const { copyClips, pasteClips } = store;
+  const { copyClips, pasteClips, copyKeyframes, pasteKeyframes } = store;
 
   const getActiveComposition = useMediaStore(state => state.getActiveComposition);
   const getOpenCompositions = useMediaStore(state => state.getOpenCompositions);
@@ -470,6 +470,8 @@ export function Timeline() {
     updateClipTransform,
     copyClips,
     pasteClips,
+    copyKeyframes,
+    pasteKeyframes,
     toolMode,
     toggleCutTool,
     clipMap,

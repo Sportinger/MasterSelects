@@ -345,8 +345,20 @@ export interface ClipboardClipData {
   compositionId?: string;
 }
 
+// Clipboard data for keyframe copy/paste
+export interface ClipboardKeyframeData {
+  clipId: string;
+  property: AnimatableProperty;
+  time: number;        // relative time within the copied set (0 = earliest)
+  value: number;
+  easing: EasingType;
+  handleIn?: BezierHandle;
+  handleOut?: BezierHandle;
+}
+
 export interface ClipboardState {
   clipboardData: ClipboardClipData[] | null;
+  clipboardKeyframes: ClipboardKeyframeData[] | null;
 }
 
 // Clipboard actions interface
@@ -354,6 +366,8 @@ export interface ClipboardActions {
   copyClips: () => void;
   pasteClips: () => void;
   hasClipboardData: () => boolean;
+  copyKeyframes: () => void;
+  pasteKeyframes: () => void;
 }
 
 // Mask actions interface
