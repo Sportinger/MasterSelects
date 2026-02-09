@@ -25,6 +25,11 @@ function ClippyMascot({ isClosing }: { isClosing: boolean }) {
   useEffect(() => {
     if (isClosing && phase !== 'outro') {
       setPhase('outro');
+      const outro = outroRef.current;
+      if (outro) {
+        outro.currentTime = 0;
+        outro.play().catch(() => {});
+      }
     }
   }, [isClosing, phase]);
 
@@ -60,7 +65,7 @@ function ClippyMascot({ isClosing }: { isClosing: boolean }) {
       <video
         ref={outroRef}
         className="tutorial-clippy"
-        autoPlay
+        preload="auto"
         muted
         playsInline
         disablePictureInPicture
