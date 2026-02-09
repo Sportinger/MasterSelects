@@ -598,21 +598,25 @@ export function Toolbar() {
                 })}
               </div>
               <div className="menu-separator" />
-              <div className="menu-submenu">
-                <span className="menu-label">Scopes</span>
-                {SCOPE_PANEL_TYPES.map((type) => {
-                  const config = PANEL_CONFIGS[type];
-                  const isVisible = isPanelTypeVisible(type);
-                  return (
-                    <button
-                      key={type}
-                      className={`menu-option ${isVisible ? 'checked' : ''}`}
-                      onClick={() => togglePanelType(type)}
-                    >
-                      <span>{isVisible ? '✓ ' : '   '}{config.title}</span>
-                    </button>
-                  );
-                })}
+              <div className="menu-item-with-submenu">
+                <button className="menu-option">
+                  <span>Scopes</span>
+                </button>
+                <div className="menu-nested-submenu">
+                  {SCOPE_PANEL_TYPES.map((type) => {
+                    const config = PANEL_CONFIGS[type];
+                    const isVisible = isPanelTypeVisible(type);
+                    return (
+                      <button
+                        key={type}
+                        className={`menu-option ${isVisible ? 'checked' : ''}`}
+                        onClick={() => togglePanelType(type)}
+                      >
+                        <span>{isVisible ? '✓ ' : '   '}{config.title}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div className="menu-separator" />
               <button className="menu-option" onClick={handleNewOutput} disabled={!isEngineReady}>
