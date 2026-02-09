@@ -8,7 +8,7 @@ export type PanelType = 'preview' | 'timeline' | 'clip-properties' | 'media' | '
 export const SCOPE_PANEL_TYPES: PanelType[] = ['scope-waveform', 'scope-histogram', 'scope-vectorscope'];
 
 // WIP panel types — shown grayed out with bug icon in View menu
-export const WIP_PANEL_TYPES: PanelType[] = ['multicam', 'transitions'];
+export const WIP_PANEL_TYPES: PanelType[] = ['multicam', 'transitions', 'ai-segment'];
 
 // Panel-specific data for configurable panels
 export interface PreviewPanelData {
