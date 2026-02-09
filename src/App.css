@@ -9210,7 +9210,7 @@ input[type="checkbox"] {
 }
 
 .tutorial-backdrop.closing {
-  animation: tutorial-fade-out 5s ease forwards;
+  animation: tutorial-fade-out 1.8s ease forwards;
 }
 
 @keyframes tutorial-fade-in {

@@ -232,8 +232,8 @@ export function TutorialOverlay({ onClose, part = 1 }: Props) {
     if (closingRef.current) return;
     closingRef.current = true;
     setIsClosing(true);
-    // Wait for clippy outro animation (~5s), then close
-    setTimeout(onClose, 5000);
+    // Wait for clippy outro animation (~1.7s), then close
+    setTimeout(onClose, 1800);
   }, [onClose]);
 
   const advance = useCallback(() => {
