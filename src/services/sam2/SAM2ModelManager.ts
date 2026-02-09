@@ -10,15 +10,15 @@ const MODEL_DIR = 'sam2-models';
 
 const MODEL_FILES: SAM2ModelFile[] = [
   {
-    name: 'sam2_hiera_small_encoder.fp16.onnx',
-    url: 'https://huggingface.co/pschroedl/sam2-small-onnx-fp16/resolve/main/sam2_hiera_small_encoder.fp16.onnx',
-    fallbackUrl: 'https://huggingface.co/pschroedl/sam2-small-onnx-fp16/resolve/main/sam2_hiera_small_encoder.fp16.onnx',
-    sizeBytes: 82_000_000, // ~82 MB
+    name: 'sam2_hiera_small.encoder.onnx',
+    url: 'https://huggingface.co/vietanhdev/segment-anything-2-onnx-models/resolve/main/sam2_hiera_small.encoder.onnx',
+    fallbackUrl: 'https://huggingface.co/shubham0204/sam2-onnx-models/resolve/main/sam2_hiera_small_encoder.onnx',
+    sizeBytes: 163_000_000, // ~163 MB
   },
   {
-    name: 'sam2_hiera_small_decoder.onnx',
-    url: 'https://huggingface.co/pschroedl/sam2-small-onnx-fp16/resolve/main/sam2_hiera_small_decoder.onnx',
-    fallbackUrl: 'https://huggingface.co/pschroedl/sam2-small-onnx-fp16/resolve/main/sam2_hiera_small_decoder.onnx',
+    name: 'sam2_hiera_small.decoder.onnx',
+    url: 'https://huggingface.co/vietanhdev/segment-anything-2-onnx-models/resolve/main/sam2_hiera_small.decoder.onnx',
+    fallbackUrl: 'https://huggingface.co/shubham0204/sam2-onnx-models/resolve/main/sam2_hiera_small_decoder.onnx',
     sizeBytes: 21_000_000, // ~21 MB
   },
 ];

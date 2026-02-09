@@ -107,15 +107,25 @@ async function encodeFrame(imageData: ImageData, frameIndex: number) {
 
   try {
     const inputTensor = preprocessImage(imageData);
-    const feeds: Record<string, ort.Tensor> = { image: inputTensor };
+
+    // Detect the encoder's expected input name
+    const encoderInputName = encoderSession.inputNames[0] ?? 'image';
+    const feeds: Record<string, ort.Tensor> = { [encoderInputName]: inputTensor };
 
     const results = await encoderSession.run(feeds);
 
-    // Store embeddings — exact output names depend on the ONNX model export
-    // Common SAM2 encoder outputs: image_embeddings, high_res_feats_0, high_res_feats_1
-    currentEmbedding = results['image_embeddings'] ?? results[Object.keys(results)[0]];
+    // Store embeddings — names from vietanhdev/segment-anything-2-onnx-models export
+    // Fallback: try common alternative names, then first output key
+    currentEmbedding = results['image_embed'] ?? results['image_embeddings'] ?? results[Object.keys(results)[0]];
     currentHighResFeatures0 = results['high_res_feats_0'] ?? null;
     currentHighResFeatures1 = results['high_res_feats_1'] ?? null;
+
+    // Log output names for debugging on first encode
+    if (frameIndex === 0) {
+      const outputNames = Object.keys(results);
+      const shapes = outputNames.map(k => `${k}: [${results[k].dims.join(',')}]`);
+      post({ type: 'progress', stage: `Encoder outputs: ${shapes.join(', ')}`, progress: 100 });
+    }
 
     post({ type: 'embedding-ready', frameIndex });
   } catch (e) {
@@ -165,34 +175,56 @@ async function decodePrompt(
   try {
     const { point_coords, point_labels } = buildPointTensors(points);
 
-    // Build decoder feeds
-    const feeds: Record<string, ort.Tensor> = {
-      image_embeddings: currentEmbedding,
-      point_coords,
-      point_labels,
-    };
+    // Detect decoder input names dynamically
+    const decoderInputNames = decoderSession.inputNames;
 
-    // Add high-res features if available
-    if (currentHighResFeatures0) feeds['high_res_feats_0'] = currentHighResFeatures0;
-    if (currentHighResFeatures1) feeds['high_res_feats_1'] = currentHighResFeatures1;
+    // Build decoder feeds — use the actual input names the model expects
+    const feeds: Record<string, ort.Tensor> = {};
+
+    // Image embedding — try common names
+    const embedName = decoderInputNames.find(n => n.includes('image_embed')) ?? 'image_embed';
+    feeds[embedName] = currentEmbedding;
+
+    // Point prompts
+    feeds['point_coords'] = point_coords;
+    feeds['point_labels'] = point_labels;
+
+    // Add high-res features if the decoder expects them
+    if (currentHighResFeatures0 && decoderInputNames.includes('high_res_feats_0')) {
+      feeds['high_res_feats_0'] = currentHighResFeatures0;
+    }
+    if (currentHighResFeatures1 && decoderInputNames.includes('high_res_feats_1')) {
+      feeds['high_res_feats_1'] = currentHighResFeatures1;
+    }
 
     // Add mask input (empty for first prediction)
-    const maskInputSize = 256; // SAM2 decoder expects 256x256 mask input
-    feeds['mask_input'] = new ort.Tensor(
-      'float32',
-      new Float32Array(maskInputSize * maskInputSize),
-      [1, 1, maskInputSize, maskInputSize]
-    );
-    feeds['has_mask_input'] = new ort.Tensor('float32', new Float32Array([0]), [1]);
+    if (decoderInputNames.includes('mask_input')) {
+      const maskInputSize = 256; // SAM2 decoder expects 256x256 mask input
+      feeds['mask_input'] = new ort.Tensor(
+        'float32',
+        new Float32Array(maskInputSize * maskInputSize),
+        [1, 1, maskInputSize, maskInputSize]
+      );
+    }
+    if (decoderInputNames.includes('has_mask_input')) {
+      feeds['has_mask_input'] = new ort.Tensor('float32', new Float32Array([0]), [1]);
+    }
 
-    // Original image size for proper mask scaling
-    feeds['orig_im_size'] = new ort.Tensor('int64', BigInt64Array.from([BigInt(imageHeight), BigInt(imageWidth)]), [2]);
+    // Original image size — only add if the model expects it
+    if (decoderInputNames.includes('orig_im_size')) {
+      feeds['orig_im_size'] = new ort.Tensor('int64', BigInt64Array.from([BigInt(imageHeight), BigInt(imageWidth)]), [2]);
+    }
 
     const results = await decoderSession.run(feeds);
 
-    // Extract mask — output is typically 'masks' [1, N, H, W] and 'scores' [1, N]
-    const masksOutput = results['masks'] ?? results[Object.keys(results)[0]];
-    const scoresOutput = results['iou_predictions'] ?? results['scores'] ?? null;
+    // Log decoder output names on first run for debugging
+    const outputNames = Object.keys(results);
+    const shapes = outputNames.map(k => `${k}: [${results[k].dims.join(',')}]`);
+    post({ type: 'progress', stage: `Decoder outputs: ${shapes.join(', ')}`, progress: 100 });
+
+    // Extract mask — try common output names
+    const masksOutput = results['masks'] ?? results['low_res_masks'] ?? results[outputNames[0]];
+    const scoresOutput = results['iou_predictions'] ?? results['scores'] ?? results['iou_scores'] ?? null;
 
     if (!masksOutput) {
       post({ type: 'error', error: 'No mask output from decoder' });
@@ -278,36 +310,45 @@ async function propagateFrame(imageData: ImageData, frameIndex: number) {
   try {
     // Encode the new frame
     const inputTensor = preprocessImage(imageData);
-    const encoderResults = await encoderSession.run({ image: inputTensor });
+    const encoderInputName = encoderSession.inputNames[0] ?? 'image';
+    const encoderResults = await encoderSession.run({ [encoderInputName]: inputTensor });
 
-    const embedding = encoderResults['image_embeddings'] ?? encoderResults[Object.keys(encoderResults)[0]];
+    const embedding = encoderResults['image_embed'] ?? encoderResults['image_embeddings'] ?? encoderResults[Object.keys(encoderResults)[0]];
     const highRes0 = encoderResults['high_res_feats_0'] ?? null;
     const highRes1 = encoderResults['high_res_feats_1'] ?? null;
 
     // Use previous mask as prompt (memory-based propagation)
+    const decoderInputNames = decoderSession.inputNames;
+    const embedName = decoderInputNames.find(n => n.includes('image_embed')) ?? 'image_embed';
     const feeds: Record<string, ort.Tensor> = {
-      image_embeddings: embedding,
+      [embedName]: embedding,
       // Use empty point prompts for propagation (mask-guided)
       point_coords: new ort.Tensor('float32', new Float32Array([ENCODER_INPUT_SIZE / 2, ENCODER_INPUT_SIZE / 2]), [1, 1, 2]),
       point_labels: new ort.Tensor('float32', new Float32Array([-1]), [1, 1]), // -1 = padding
     };
 
-    if (highRes0) feeds['high_res_feats_0'] = highRes0;
-    if (highRes1) feeds['high_res_feats_1'] = highRes1;
+    if (highRes0 && decoderInputNames.includes('high_res_feats_0')) feeds['high_res_feats_0'] = highRes0;
+    if (highRes1 && decoderInputNames.includes('high_res_feats_1')) feeds['high_res_feats_1'] = highRes1;
 
     // Add memory if available
-    if (memoryBank) feeds['memory_bank'] = memoryBank;
-    if (memoryPositions) feeds['memory_pos'] = memoryPositions;
+    if (memoryBank && decoderInputNames.includes('memory_bank')) feeds['memory_bank'] = memoryBank;
+    if (memoryPositions && decoderInputNames.includes('memory_pos')) feeds['memory_pos'] = memoryPositions;
 
     // Empty mask input for propagation (memory carries the mask info)
-    const maskInputSize = 256;
-    feeds['mask_input'] = new ort.Tensor(
-      'float32',
-      new Float32Array(maskInputSize * maskInputSize),
-      [1, 1, maskInputSize, maskInputSize]
-    );
-    feeds['has_mask_input'] = new ort.Tensor('float32', new Float32Array([0]), [1]);
-    feeds['orig_im_size'] = new ort.Tensor('int64', BigInt64Array.from([BigInt(imageData.height), BigInt(imageData.width)]), [2]);
+    if (decoderInputNames.includes('mask_input')) {
+      const maskInputSize = 256;
+      feeds['mask_input'] = new ort.Tensor(
+        'float32',
+        new Float32Array(maskInputSize * maskInputSize),
+        [1, 1, maskInputSize, maskInputSize]
+      );
+    }
+    if (decoderInputNames.includes('has_mask_input')) {
+      feeds['has_mask_input'] = new ort.Tensor('float32', new Float32Array([0]), [1]);
+    }
+    if (decoderInputNames.includes('orig_im_size')) {
+      feeds['orig_im_size'] = new ort.Tensor('int64', BigInt64Array.from([BigInt(imageData.height), BigInt(imageData.width)]), [2]);
+    }
 
     const results = await decoderSession.run(feeds);
 
@@ -316,7 +357,8 @@ async function propagateFrame(imageData: ImageData, frameIndex: number) {
     if (results['memory_pos']) memoryPositions = results['memory_pos'];
 
     // Extract mask
-    const masksOutput = results['masks'] ?? results[Object.keys(results)[0]];
+    const outputNames = Object.keys(results);
+    const masksOutput = results['masks'] ?? results['low_res_masks'] ?? results[outputNames[0]];
     if (!masksOutput) {
       post({ type: 'error', error: 'No mask output during propagation' });
       return;

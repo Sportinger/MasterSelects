@@ -117,7 +117,7 @@ export function SAM2Panel() {
           <div className="sam2-overlay-content">
             <span className="sam2-icon">✨</span>
             <p>AI Segmentation requires a one-time model download</p>
-            <span className="sam2-size-hint">SAM 2 Small — ~103 MB, cached locally</span>
+            <span className="sam2-size-hint">SAM 2 Small — ~184 MB, cached locally</span>
 
             {modelStatus === 'downloading' ? (
               <>

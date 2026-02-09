@@ -89,7 +89,6 @@ export default defineConfig(({ command, mode }) => ({
           'mp4box': ['mp4box'],
           'mp4-muxer': ['mp4-muxer'],
           'webm-muxer': ['webm-muxer'],
-          'onnxruntime': ['onnxruntime-web'],
         },
       },
     },
