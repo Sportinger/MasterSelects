@@ -139,12 +139,22 @@ export function useClipDrag({
         const trackChangeAllowed = Date.now() - drag.dragStartTime >= TRACK_CHANGE_DELAY_MS
           && Math.abs(mouseY - drag.grabY) >= TRACK_CHANGE_RESISTANCE_PX;
 
+        // Determine the required track type from the dragged clip's source
+        const clipForTrackCheck = clipMap.get(drag.clipId);
+        const sourceType = clipForTrackCheck?.source?.type;
+        const requiredTrackType: 'video' | 'audio' | null =
+          sourceType === 'audio' ? 'audio' :
+          (sourceType === 'video' || sourceType === 'image' || sourceType === 'text' || sourceType === 'solid') ? 'video' :
+          null;
+
         let currentY = 24;
         let newTrackId = drag.currentTrackId; // Keep current track by default
         for (const track of tracks) {
           if (mouseY >= currentY && mouseY < currentY + track.height) {
             // Only change to a different track if both delay and distance thresholds are met
-            if (trackChangeAllowed || track.id === drag.originalTrackId) {
+            // AND the track type matches (video clips can't go on audio tracks and vice versa)
+            const trackTypeMatches = !requiredTrackType || track.type === requiredTrackType;
+            if ((trackChangeAllowed || track.id === drag.originalTrackId) && trackTypeMatches) {
               newTrackId = track.id;
             }
             break;

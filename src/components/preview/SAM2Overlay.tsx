@@ -12,6 +12,8 @@ import type { SAM2Point } from '../../services/sam2/types';
 interface SAM2OverlayProps {
   canvasWidth: number;
   canvasHeight: number;
+  displayWidth?: number;
+  displayHeight?: number;
 }
 
 const POINT_RADIUS = 6;
