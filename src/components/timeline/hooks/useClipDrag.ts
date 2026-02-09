@@ -139,12 +139,22 @@ export function useClipDrag({
         const trackChangeAllowed = Date.now() - drag.dragStartTime >= TRACK_CHANGE_DELAY_MS
           && Math.abs(mouseY - drag.grabY) >= TRACK_CHANGE_RESISTANCE_PX;
 
+        // Determine the required track type from the dragged clip's source
+        const clipForTrackCheck = clipMap.get(drag.clipId);
+        const sourceType = clipForTrackCheck?.source?.type;
+        const requiredTrackType: 'video' | 'audio' | null =
+          sourceType === 'audio' ? 'audio' :
+          (sourceType === 'video' || sourceType === 'image' || sourceType === 'text' || sourceType === 'solid') ? 'video' :
+          null;
+
         let currentY = 24;
         let newTrackId = drag.currentTrackId; // Keep current track by default
         for (const track of tracks) {
           if (mouseY >= currentY && mouseY < currentY + track.height) {
             // Only change to a different track if both delay and distance thresholds are met
-            if (trackChangeAllowed || track.id === drag.originalTrackId) {
+            // AND the track type matches (video clips can't go on audio tracks and vice versa)
+            const trackTypeMatches = !requiredTrackType || track.type === requiredTrackType;
+            if ((trackChangeAllowed || track.id === drag.originalTrackId) && trackTypeMatches) {
               newTrackId = track.id;
             }
             break;
@@ -351,7 +361,7 @@ export function useClipDrag({
             // skipLinked depends on whether linked clip is also selected
             const draggedClip = currentClipMap.get(drag.clipId);
             const draggedLinkedInSelection = !!(draggedClip?.linkedClipId && currentSelectedIds.has(draggedClip.linkedClipId));
-            moveClip(drag.clipId, finalStartTime, drag.currentTrackId, draggedLinkedInSelection, drag.altKeyPressed, true, allExcludedIds);
+            moveClip(drag.clipId, finalStartTime, drag.currentTrackId, draggedLinkedInSelection, drag.altKeyPressed, false, allExcludedIds);
             movedClipIds.add(drag.clipId);
             // If linked clip was moved via skipLinked=false, mark it as moved
             if (draggedClip?.linkedClipId && !draggedLinkedInSelection && !drag.altKeyPressed) {
@@ -367,7 +377,7 @@ export function useClipDrag({
                 // If linked clip is also selected, skip it (will be moved in its own iteration)
                 // If linked clip is NOT selected, move it with this clip (skipLinked=false)
                 const linkedInSelection = !!(selectedClip.linkedClipId && currentSelectedIds.has(selectedClip.linkedClipId));
-                moveClip(selectedId, newTime, selectedClip.trackId, linkedInSelection, true, true, allExcludedIds); // skipGroup, skipTrim always true
+                moveClip(selectedId, newTime, selectedClip.trackId, linkedInSelection, true, false, allExcludedIds); // skipGroup always true, skipTrim false
                 movedClipIds.add(selectedId);
                 // If linked clip was moved via skipLinked=false, mark it as moved
                 if (selectedClip.linkedClipId && !linkedInSelection) {

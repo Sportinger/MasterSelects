@@ -61,3 +61,13 @@ public/test-videos/
 # Rust build artifacts
 tools/helpers/*/target/
 helpers/*/target/
+masterselects-helper/
+
+# Browser automation logs
+.browser-logs.json
+
+# Project folders (user media)
+Wonder/
+
+# Windows artifacts
+nul

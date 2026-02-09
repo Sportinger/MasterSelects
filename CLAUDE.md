@@ -245,7 +245,7 @@ useEngine hook
 
 ## 9. React/Next.js Best Practices (Vercel Engineering)
 
-> Vollständige Dokumentation: [REACT-BEST-PRACTICES.md](./REACT-BEST-PRACTICES.md) | [GitHub Source](https://github.com/vercel-labs/agent-skills/tree/main/skills/react-best-practices)
+> Vollständige Dokumentation: [REACT-BEST-PRACTICES.md](./docs/REACT-BEST-PRACTICES.md) | [GitHub Source](https://github.com/vercel-labs/agent-skills/tree/main/skills/react-best-practices)
 
 ### Prioritäten nach Impact
 1. **CRITICAL:** Eliminating Waterfalls, Bundle Size

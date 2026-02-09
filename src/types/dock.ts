@@ -2,13 +2,16 @@
 
 // Panel types that can be docked
 // Note: Effects, Transcript, Analysis are now integrated into Properties panel
-export type PanelType = 'preview' | 'timeline' | 'clip-properties' | 'media' | 'export' | 'multicam' | 'ai-chat' | 'ai-video' | 'youtube' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
+export type PanelType = 'preview' | 'timeline' | 'clip-properties' | 'media' | 'export' | 'multicam' | 'ai-chat' | 'ai-video' | 'ai-segment' | 'youtube' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
+
+// AI panel types for grouping in View menu
+export const AI_PANEL_TYPES: PanelType[] = ['ai-chat', 'ai-video', 'ai-segment'];
 
 // Scope panel types for filtering in View menu
 export const SCOPE_PANEL_TYPES: PanelType[] = ['scope-waveform', 'scope-histogram', 'scope-vectorscope'];
 
 // WIP panel types — shown grayed out with bug icon in View menu
-export const WIP_PANEL_TYPES: PanelType[] = ['multicam', 'transitions'];
+export const WIP_PANEL_TYPES: PanelType[] = ['multicam', 'transitions', 'ai-segment'];
 
 // Panel-specific data for configurable panels
 export interface PreviewPanelData {
@@ -160,6 +163,13 @@ export const PANEL_CONFIGS: Record<PanelType, PanelConfig> = {
     icon: 'Blend',
     minWidth: 200,
     minHeight: 200,
+    closable: false,
+  },
+  'ai-segment': {
+    type: 'ai-segment',
+    title: 'AI Segment',
+    minWidth: 280,
+    minHeight: 300,
     closable: false,
   },
   'scope-waveform': {

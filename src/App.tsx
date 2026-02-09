@@ -14,6 +14,7 @@ import { WelcomeOverlay } from './components/common/WelcomeOverlay';
 import { WhatsNewDialog } from './components/common/WhatsNewDialog';
 import { IndexedDBErrorDialog } from './components/common/IndexedDBErrorDialog';
 import { LinuxVulkanWarning } from './components/common/LinuxVulkanWarning';
+import { TutorialOverlay } from './components/common/TutorialOverlay';
 import { MobileApp } from './components/mobile';
 import { useGlobalHistory } from './hooks/useGlobalHistory';
 import { useClipPanelSync } from './hooks/useClipPanelSync';
@@ -54,6 +55,14 @@ function App() {
 
   // What's New dialog state - show on every refresh after welcome (if any)
   const [showWhatsNew, setShowWhatsNew] = useState(false);
+
+  // Tutorial state
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialPart, setTutorialPart] = useState<1 | 2>(1);
+  const hasSeenTutorial = useSettingsStore((s) => s.hasSeenTutorial);
+  const setHasSeenTutorial = useSettingsStore((s) => s.setHasSeenTutorial);
+  const hasSeenTutorialPart2 = useSettingsStore((s) => s.hasSeenTutorialPart2);
+  const setHasSeenTutorialPart2 = useSettingsStore((s) => s.setHasSeenTutorialPart2);
 
   // IndexedDB error dialog state
   const [showIndexedDBError, setShowIndexedDBError] = useState(false);
@@ -138,11 +147,51 @@ function App() {
     // After welcome, show What's New with small delay for animation
     if (!!SHOW_CHANGELOG) {
       setTimeout(() => setShowWhatsNew(true), 300);
+    } else if (!hasSeenTutorial) {
+      // No changelog → start tutorial directly
+      setTimeout(() => setShowTutorial(true), 200);
     }
-  }, []);
+  }, [hasSeenTutorial]);
 
   const handleWhatsNewClose = useCallback(() => {
     setShowWhatsNew(false);
+    if (!hasSeenTutorial) {
+      setTimeout(() => setShowTutorial(true), 200);
+    }
+  }, [hasSeenTutorial]);
+
+  const handleTutorialClose = useCallback(() => {
+    if (tutorialPart === 1 && !hasSeenTutorialPart2) {
+      // Part 1 finished, auto-start Part 2
+      setTutorialPart(2);
+      setHasSeenTutorial(true);
+    } else if (tutorialPart === 2) {
+      // Part 2 finished
+      setShowTutorial(false);
+      setHasSeenTutorial(true);
+      setHasSeenTutorialPart2(true);
+    } else {
+      // Part 1 re-triggered manually (Part 2 already seen)
+      setShowTutorial(false);
+    }
+  }, [tutorialPart, hasSeenTutorialPart2, setHasSeenTutorial, setHasSeenTutorialPart2]);
+
+  // Listen for manual tutorial trigger from View menu
+  useEffect(() => {
+    const handleStartTutorial = () => {
+      setTutorialPart(1);
+      setShowTutorial(true);
+    };
+    const handleStartTimelineTutorial = () => {
+      setTutorialPart(2);
+      setShowTutorial(true);
+    };
+    window.addEventListener('start-tutorial', handleStartTutorial);
+    window.addEventListener('start-timeline-tutorial', handleStartTimelineTutorial);
+    return () => {
+      window.removeEventListener('start-tutorial', handleStartTutorial);
+      window.removeEventListener('start-timeline-tutorial', handleStartTimelineTutorial);
+    };
   }, []);
 
   const handleIndexedDBErrorClose = useCallback(() => {
@@ -179,6 +228,9 @@ function App() {
       )}
       {showIndexedDBError && (
         <IndexedDBErrorDialog onClose={handleIndexedDBErrorClose} />
+      )}
+      {showTutorial && (
+        <TutorialOverlay onClose={handleTutorialClose} part={tutorialPart} />
       )}
     </div>
   );

@@ -64,12 +64,18 @@ interface SettingsState {
 
   // First-run state
   hasCompletedSetup: boolean;
+  hasSeenTutorial: boolean;
+  hasSeenTutorialPart2: boolean;
+
+  // User background (which program they come from)
+  userBackground: string | null;
 
   // UI state
   isSettingsOpen: boolean;
 
   // Output settings (moved from mixerStore)
   outputWindows: OutputWindow[];
+  // Default resolution for new compositions (active composition drives the engine)
   outputResolution: { width: number; height: number };
   fps: number;
 
@@ -87,6 +93,9 @@ interface SettingsState {
   setGpuPowerPreference: (preference: GPUPowerPreference) => void;
   setCopyMediaToProject: (enabled: boolean) => void;
   setHasCompletedSetup: (completed: boolean) => void;
+  setHasSeenTutorial: (seen: boolean) => void;
+  setHasSeenTutorialPart2: (seen: boolean) => void;
+  setUserBackground: (bg: string) => void;
   openSettings: () => void;
   closeSettings: () => void;
   toggleSettings: () => void;
@@ -130,6 +139,9 @@ export const useSettingsStore = create<SettingsState>()(
       gpuPowerPreference: 'high-performance', // Prefer dGPU by default
       copyMediaToProject: true, // Copy imported files to Raw/ folder by default
       hasCompletedSetup: false, // Show welcome overlay on first run
+      hasSeenTutorial: false, // Show tutorial on first run
+      hasSeenTutorialPart2: false, // Show timeline tutorial after part 1
+      userBackground: null, // Which program the user comes from
       isSettingsOpen: false,
 
       // Output settings (moved from mixerStore)
@@ -199,6 +211,18 @@ export const useSettingsStore = create<SettingsState>()(
         set({ hasCompletedSetup: completed });
       },
 
+      setHasSeenTutorial: (seen) => {
+        set({ hasSeenTutorial: seen });
+      },
+
+      setHasSeenTutorialPart2: (seen) => {
+        set({ hasSeenTutorialPart2: seen });
+      },
+
+      setUserBackground: (bg) => {
+        set({ userBackground: bg });
+      },
+
       openSettings: () => set({ isSettingsOpen: true }),
       closeSettings: () => set({ isSettingsOpen: false }),
       toggleSettings: () => set((state) => ({ isSettingsOpen: !state.isSettingsOpen })),
@@ -252,6 +276,9 @@ export const useSettingsStore = create<SettingsState>()(
         gpuPowerPreference: state.gpuPowerPreference,
         copyMediaToProject: state.copyMediaToProject,
         hasCompletedSetup: state.hasCompletedSetup,
+        hasSeenTutorial: state.hasSeenTutorial,
+        hasSeenTutorialPart2: state.hasSeenTutorialPart2,
+        userBackground: state.userBackground,
         outputResolution: state.outputResolution,
         fps: state.fps,
       }),

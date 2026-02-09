@@ -3,7 +3,7 @@
 
 import type { TimelineClip, TimelineTrack, CompositionTimelineData, SerializableClip, Keyframe } from '../../../types';
 import type { Composition } from '../types';
-import { DEFAULT_TRANSFORM } from '../constants';
+import { DEFAULT_TRANSFORM, calculateNativeScale } from '../constants';
 import { useMediaStore } from '../../mediaStore';
 import { initWebCodecsPlayer } from '../helpers/webCodecsHelpers';
 import { findOrCreateAudioTrack, createCompositionAudioClip } from '../helpers/audioTrackHelpers';
@@ -229,7 +229,7 @@ export function createCompClipPlaceholder(params: AddCompClipParams): TimelineCl
     inPoint: 0,
     outPoint: compDuration,
     source: { type: 'video', naturalDuration: compDuration },
-    transform: { ...DEFAULT_TRANSFORM },
+    transform: { ...DEFAULT_TRANSFORM, scale: calculateNativeScale(composition.width, composition.height) },
     effects: [],
     isLoading: true,
     isComposition: true,

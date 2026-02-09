@@ -11,6 +11,8 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore, type PreviewQuality } from '../../stores/settingsStore';
 import { MaskOverlay } from './MaskOverlay';
+import { SAM2Overlay } from './SAM2Overlay';
+import { useSAM2Store } from '../../stores/sam2Store';
 import { previewRenderManager } from '../../services/previewRenderManager';
 import type { EngineStats, Layer } from '../../types';
 
@@ -218,11 +220,11 @@ function StatsOverlay({ stats, resolution, expanded, onToggle }: {
 export function Preview({ panelId, compositionId }: PreviewProps) {
   const { isEngineReady, registerPreviewCanvas, unregisterPreviewCanvas, registerIndependentPreviewCanvas, unregisterIndependentPreviewCanvas } = useEngine();
   const { engineStats } = useEngineStore();
-  const { outputResolution } = useSettingsStore();
   const { clips, selectedClipIds, selectClip, updateClipTransform, maskEditMode, layers, selectedLayerId, selectLayer, updateLayer } = useTimelineStore();
   const { compositions, activeCompositionId } = useMediaStore();
   const { addPreviewPanel, updatePanelData, closePanelById } = useDockStore();
   const { previewQuality, setPreviewQuality, showTransparencyGrid, setShowTransparencyGrid } = useSettingsStore();
+  const sam2Active = useSAM2Store((s) => s.isActive);
 
   // Get first selected clip for preview
   const selectedClipId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
@@ -237,6 +239,11 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
   // Determine which composition this preview is showing
   const displayedCompId = compositionId ?? activeCompositionId;
   const displayedComp = compositions.find(c => c.id === displayedCompId);
+
+  // Engine resolution = active composition dimensions (fallback to settingsStore default)
+  const effectiveResolution = displayedComp
+    ? { width: displayedComp.width, height: displayedComp.height }
+    : useSettingsStore.getState().outputResolution;
 
   // Is this an independent preview? (user explicitly selected a composition, not "Active")
   // If compositionId is null, it means "Active" is selected -> use main render loop
@@ -410,8 +417,8 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
   // This matches the shader's transform calculation exactly
   const calculateLayerBounds = useCallback((layer: Layer, canvasW: number, canvasH: number, forcePos?: { x: number; y: number }) => {
     // Get source dimensions
-    let sourceWidth = outputResolution.width;
-    let sourceHeight = outputResolution.height;
+    let sourceWidth = effectiveResolution.width;
+    let sourceHeight = effectiveResolution.height;
 
     if (layer.source?.videoElement) {
       sourceWidth = layer.source.videoElement.videoWidth || sourceWidth;
@@ -423,7 +430,7 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
 
     // Calculate aspect ratios (same as shader)
     const sourceAspect = sourceWidth / sourceHeight;
-    const outputAspect = outputResolution.width / outputResolution.height;
+    const outputAspect = effectiveResolution.width / effectiveResolution.height;
     const aspectRatio = sourceAspect / outputAspect;
 
     // Calculate display size in canvas coordinates
@@ -469,7 +476,7 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
       height: displayHeight,
       rotation: rotationValue,
     };
-  }, [outputResolution]);
+  }, [effectiveResolution]);
 
   // Calculate canvas size to fit container while maintaining aspect ratio
   useEffect(() => {
@@ -485,7 +492,7 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
       // Track container size for overlay
       setContainerSize({ width: containerWidth, height: containerHeight });
 
-      const videoAspect = outputResolution.width / outputResolution.height;
+      const videoAspect = effectiveResolution.width / effectiveResolution.height;
       const containerAspect = containerWidth / containerHeight;
 
       let width: number;
@@ -513,7 +520,7 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
     }
 
     return () => resizeObserver.disconnect();
-  }, [outputResolution.width, outputResolution.height]);
+  }, [effectiveResolution.width, effectiveResolution.height]);
 
   // Handle zoom with scroll wheel in edit mode
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -1147,7 +1154,7 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
 
       <StatsOverlay
         stats={engineStats}
-        resolution={outputResolution}
+        resolution={effectiveResolution}
         expanded={statsExpanded}
         onToggle={() => setStatsExpanded(!statsExpanded)}
       />
@@ -1162,8 +1169,8 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
           <>
             <canvas
               ref={canvasRef}
-              width={outputResolution.width}
-              height={outputResolution.height}
+              width={effectiveResolution.width}
+              height={effectiveResolution.height}
               className="preview-canvas"
               style={{
                 width: canvasSize.width,
@@ -1172,8 +1179,14 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
             />
             {maskEditMode !== 'none' && (
               <MaskOverlay
-                canvasWidth={outputResolution.width}
-                canvasHeight={outputResolution.height}
+                canvasWidth={effectiveResolution.width}
+                canvasHeight={effectiveResolution.height}
+              />
+            )}
+            {sam2Active && (
+              <SAM2Overlay
+                canvasWidth={effectiveResolution.width}
+                canvasHeight={effectiveResolution.height}
               />
             )}
           </>

@@ -6,6 +6,7 @@ import { useEngineStore } from '../stores/engineStore';
 import { useTimelineStore } from '../stores/timeline';
 import { useMediaStore } from '../stores/mediaStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useSAM2Store, maskToImageData } from '../stores/sam2Store';
 import type { ClipMask, MaskVertex } from '../types';
 import { generateMaskTexture } from '../utils/maskRenderer';
 import { layerBuilder, playheadState } from '../services/layerBuilder';
@@ -64,27 +65,53 @@ export function useEngine() {
     }
   }, [isEngineReady]);
 
-  // Update engine resolution when outputResolution or previewQuality changes
+  // Update engine resolution from active composition (fallback: settingsStore default)
   useEffect(() => {
     if (!isEngineReady) return;
 
     const updateResolution = () => {
-      const { outputResolution, previewQuality } = useSettingsStore.getState();
+      const { previewQuality } = useSettingsStore.getState();
+      const { activeCompositionId, compositions } = useMediaStore.getState();
+
+      // Active composition drives engine resolution; fallback to settingsStore default
+      let baseWidth: number;
+      let baseHeight: number;
+      if (activeCompositionId) {
+        const activeComp = compositions.find(c => c.id === activeCompositionId);
+        if (activeComp) {
+          baseWidth = activeComp.width;
+          baseHeight = activeComp.height;
+        } else {
+          const { outputResolution } = useSettingsStore.getState();
+          baseWidth = outputResolution.width;
+          baseHeight = outputResolution.height;
+        }
+      } else {
+        const { outputResolution } = useSettingsStore.getState();
+        baseWidth = outputResolution.width;
+        baseHeight = outputResolution.height;
+      }
 
       // Apply preview quality scaling to base resolution
-      const scaledWidth = Math.round(outputResolution.width * previewQuality);
-      const scaledHeight = Math.round(outputResolution.height * previewQuality);
+      const scaledWidth = Math.round(baseWidth * previewQuality);
+      const scaledHeight = Math.round(baseHeight * previewQuality);
 
       engine.setResolution(scaledWidth, scaledHeight);
-      log.info(`Resolution set to ${scaledWidth}×${scaledHeight} (${previewQuality * 100}% of ${outputResolution.width}×${outputResolution.height})`);
+      log.info(`Resolution set to ${scaledWidth}×${scaledHeight} (${previewQuality * 100}% of ${baseWidth}×${baseHeight})`);
     };
 
     // Initial update
     updateResolution();
 
-    // Subscribe to outputResolution changes
-    const unsubscribeResolution = useSettingsStore.subscribe(
-      (state) => state.outputResolution,
+    // Subscribe to active composition changes (comp switch → resolution update)
+    const unsubscribeActiveComp = useMediaStore.subscribe(
+      (state) => state.activeCompositionId,
+      () => updateResolution()
+    );
+
+    // Subscribe to composition data changes (resize of active comp)
+    const unsubscribeCompositions = useMediaStore.subscribe(
+      (state) => state.compositions,
       () => updateResolution()
     );
 
@@ -106,7 +133,8 @@ export function useEngine() {
     );
 
     return () => {
-      unsubscribeResolution();
+      unsubscribeActiveComp();
+      unsubscribeCompositions();
       unsubscribeSettings();
       unsubscribeTransparency();
     };
@@ -117,6 +145,21 @@ export function useEngine() {
 
   // Helper function to process a single clip's mask
   const processClipMask = useCallback((clip: { id: string; masks?: import('../types').ClipMask[] }, engineDimensions: { width: number; height: number }) => {
+    // Check for SAM2 AI mask (takes priority over bezier masks)
+    const sam2State = useSAM2Store.getState();
+    if (sam2State.isActive && sam2State.currentClipId === clip.id && sam2State.liveMask) {
+      const mask = sam2State.liveMask;
+      const maskImageData = maskToImageData(mask.maskData, mask.width, mask.height, sam2State.inverted);
+      const cacheKey = clip.id;
+      // Use a unique version key for SAM2 masks
+      const sam2Version = `sam2_${mask.maskData.length}_${sam2State.inverted}_${engineDimensions.width}x${engineDimensions.height}`;
+      if (maskVersionRef.current.get(cacheKey) !== sam2Version) {
+        maskVersionRef.current.set(cacheKey, sam2Version);
+        engine.updateMaskTexture(clip.id, maskImageData);
+      }
+      return;
+    }
+
     if (clip.masks && clip.masks.length > 0) {
       // Create version string - includes feather since blur is applied on CPU
       const maskVersion = `${getMaskShapeHash(clip.masks)}_${engineDimensions.width}x${engineDimensions.height}`;
@@ -254,11 +297,23 @@ export function useEngine() {
       }
     );
 
+    // Subscribe to SAM2 live mask changes
+    const unsubscribeSAM2 = useSAM2Store.subscribe(
+      (state) => state.liveMask,
+      () => {
+        // Force regeneration when SAM2 mask changes
+        const clipId = useSAM2Store.getState().currentClipId;
+        if (clipId) maskVersionRef.current.delete(clipId);
+        updateMaskTextures();
+      }
+    );
+
     return () => {
       unsubscribeClips();
       unsubscribeTracks();
       unsubscribeComp();
       unsubscribeDragging();
+      unsubscribeSAM2();
     };
   }, [isEngineReady, updateMaskTextures]);
 
@@ -381,12 +436,6 @@ export function useEngine() {
       () => engine.requestRender()
     );
 
-    // Output resolution changes
-    const unsubResolution = useSettingsStore.subscribe(
-      (state) => state.outputResolution,
-      () => engine.requestRender()
-    );
-
     // Settings changes (transparency grid, preview quality)
     const unsubSettings = useSettingsStore.subscribe(
       (state) => [state.showTransparencyGrid, state.previewQuality],
@@ -405,7 +454,6 @@ export function useEngine() {
       unsubClips();
       unsubTracks();
       unsubLayers();
-      unsubResolution();
       unsubSettings();
       unsubActiveComp();
     };

@@ -9193,3 +9193,288 @@ input[type="checkbox"] {
   background: rgba(0, 0, 0, 0.4);
   border-color: rgba(255, 255, 255, 0.4);
 }
+
+/* ============================================
+   Tutorial Overlay
+   ============================================ */
+
+.tutorial-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10001;
+  cursor: pointer;
+  animation: tutorial-fade-in 300ms ease forwards;
+}
+
+.tutorial-backdrop.closing .tutorial-overlay-svg,
+.tutorial-backdrop.closing .tutorial-tooltip,
+.tutorial-backdrop.closing .tutorial-highlight-ring {
+  animation: tutorial-fade-out 400ms ease forwards;
+}
+
+.tutorial-clippy-wrapper {
+  position: fixed;
+  width: 340px;
+  pointer-events: none;
+  z-index: 10003;
+  transition: left 400ms ease, top 400ms ease, width 400ms ease;
+}
+
+.tutorial-clippy-wrapper--welcome {
+  width: 480px;
+}
+
+@keyframes tutorial-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes tutorial-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+.tutorial-overlay-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.tutorial-tooltip {
+  position: fixed;
+  width: 340px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 20px;
+  z-index: 10002;
+  pointer-events: none;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  animation: tutorial-tooltip-in 300ms ease forwards;
+  overflow: visible;
+  transition: left 400ms ease, top 400ms ease, width 400ms ease;
+}
+
+.tutorial-tooltip-content {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.tutorial-tooltip-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.tutorial-clippy {
+  position: absolute;
+  width: 120px;
+  height: auto;
+  top: -55px;
+  right: -35px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+  z-index: 1;
+}
+
+@keyframes tutorial-tooltip-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.tutorial-tooltip-arrow {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  transform: rotate(45deg);
+}
+
+/* Arrow positions — points toward the highlighted panel */
+.tutorial-tooltip-arrow--top {
+  bottom: -7px;
+  left: 50%;
+  margin-left: -6px;
+  border-top: none;
+  border-left: none;
+}
+
+.tutorial-tooltip-arrow--bottom {
+  top: -7px;
+  left: 50%;
+  margin-left: -6px;
+  border-bottom: none;
+  border-right: none;
+}
+
+.tutorial-tooltip-arrow--left {
+  right: -7px;
+  top: 50%;
+  margin-top: -6px;
+  border-bottom: none;
+  border-left: none;
+}
+
+.tutorial-tooltip-arrow--right {
+  left: -7px;
+  top: 50%;
+  margin-top: -6px;
+  border-top: none;
+  border-right: none;
+}
+
+.tutorial-tooltip-step {
+  font-size: 11px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.tutorial-tooltip-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.tutorial-tooltip-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.tutorial-dots {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.tutorial-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  transition: background 300ms ease;
+}
+
+.tutorial-dot.active {
+  background: var(--accent);
+}
+
+.tutorial-dot.completed {
+  background: rgba(45, 140, 235, 0.4);
+}
+
+.tutorial-tooltip-hint {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+/* Part 2: Yellow highlight ring for timeline element steps */
+.tutorial-highlight-ring {
+  position: fixed;
+  border: 2px solid #FFD700;
+  border-radius: 8px;
+  z-index: 10002;
+  pointer-events: none;
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.4), inset 0 0 12px rgba(255, 215, 0, 0.1);
+  animation: tutorial-ring-pulse 1.5s ease-in-out infinite;
+  transition: left 400ms ease, top 400ms ease, width 400ms ease, height 400ms ease;
+}
+
+@keyframes tutorial-ring-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(255, 215, 0, 0.4), inset 0 0 12px rgba(255, 215, 0, 0.1); }
+  50% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.7), inset 0 0 20px rgba(255, 215, 0, 0.2); }
+}
+
+/* Tutorial Welcome Screen — wider tooltip for the button grid */
+.tutorial-tooltip--welcome {
+  width: 480px;
+  pointer-events: auto;
+  cursor: default;
+}
+
+.tutorial-welcome-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.tutorial-welcome-subtitle {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.tutorial-welcome-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.tutorial-welcome-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tutorial-welcome-btn:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+  transform: translateY(-1px);
+}
+
+.tutorial-welcome-icon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tutorial-welcome-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.tutorial-welcome-icon--beginner {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #2ECC71 0%, #1A8A4A 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  color: #fff;
+}
+
+.tutorial-welcome-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-align: center;
+  white-space: nowrap;
+}

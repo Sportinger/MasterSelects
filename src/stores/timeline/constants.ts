@@ -1,6 +1,8 @@
 // Timeline store constants and default values
 
 import type { ClipTransform, TimelineTrack, TextClipProperties } from '../../types';
+import { useMediaStore } from '../mediaStore';
+import { useSettingsStore } from '../settingsStore';
 
 // Default transform for new clips
 export const DEFAULT_TRANSFORM: ClipTransform = {
@@ -10,6 +12,51 @@ export const DEFAULT_TRANSFORM: ClipTransform = {
   scale: { x: 1, y: 1 },
   rotation: { x: 0, y: 0, z: 0 },
 };
+
+/**
+ * Calculate native pixel scale for a source in the active composition.
+ * The shader fits source to output (fill), so scale 1.0 = fill composition.
+ * Native scale = sourceSize / compSize makes content appear at actual pixel size.
+ *
+ * Returns {x: 1, y: 1} if comp dimensions are unknown (safe fallback = fill).
+ */
+export function calculateNativeScale(sourceWidth: number, sourceHeight: number): { x: number; y: number } {
+  const { activeCompositionId, compositions } = useMediaStore.getState();
+  let compW: number;
+  let compH: number;
+
+  if (activeCompositionId) {
+    const comp = compositions.find(c => c.id === activeCompositionId);
+    if (comp) {
+      compW = comp.width;
+      compH = comp.height;
+    } else {
+      return { x: 1, y: 1 };
+    }
+  } else {
+    const { outputResolution } = useSettingsStore.getState();
+    compW = outputResolution.width;
+    compH = outputResolution.height;
+  }
+
+  // The shader fits source to output maintaining aspect ratio:
+  // - If same aspect: effective shader scale = compW / sourceW
+  // - To display at native pixels: userScale = sourceW / compW
+  // But the shader fits by the DOMINANT axis, so we need to match that logic.
+  const sourceAspect = sourceWidth / sourceHeight;
+  const compAspect = compW / compH;
+
+  let nativeScale: number;
+  if (sourceAspect >= compAspect) {
+    // Source wider or equal — shader fits to width
+    nativeScale = sourceWidth / compW;
+  } else {
+    // Source taller — shader fits to height
+    nativeScale = sourceHeight / compH;
+  }
+
+  return { x: nativeScale, y: nativeScale };
+}
 
 // Default timeline tracks
 // Note: Video tracks are numbered so that the highest number is at the top (first in array)

@@ -2,7 +2,7 @@
 // Handles video file loading, WebCodecs initialization, thumbnails, and linked audio
 
 import type { TimelineClip, TimelineTrack } from '../../../types';
-import { DEFAULT_TRANSFORM } from '../constants';
+import { DEFAULT_TRANSFORM, calculateNativeScale } from '../constants';
 import { generateThumbnails } from '../utils';
 import { useMediaStore } from '../../mediaStore';
 import { useSettingsStore } from '../../settingsStore';
@@ -148,6 +148,9 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
       // Decode initial frame so preview isn't black
       await nativeDecoder.seekToFrame(0);
 
+      // Calculate native pixel scale so content appears at actual size
+      const nativeScale = calculateNativeScale(nativeDecoder.width, nativeDecoder.height);
+
       updateClip(clipId, {
         duration: naturalDuration,
         outPoint: naturalDuration,
@@ -158,6 +161,7 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
           nativeDecoder,
           filePath,
         },
+        transform: { ...DEFAULT_TRANSFORM, scale: nativeScale },
         isLoading: false,
       });
 
@@ -198,11 +202,17 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
       log.warn('Duration unknown, estimated from file size', { file: file.name, duration: naturalDuration.toFixed(2), size: file.size });
     }
 
+    // Calculate native pixel scale so content appears at actual size
+    const nativeScale = (video.videoWidth && video.videoHeight)
+      ? calculateNativeScale(video.videoWidth, video.videoHeight)
+      : { x: 1, y: 1 };
+
     // Set isLoading: false immediately so clip becomes interactive
     updateClip(clipId, {
       duration: naturalDuration,
       outPoint: naturalDuration,
       source: { type: 'video', videoElement: video, naturalDuration, mediaFileId },
+      transform: { ...DEFAULT_TRANSFORM, scale: nativeScale },
       isLoading: false,
     });
 
