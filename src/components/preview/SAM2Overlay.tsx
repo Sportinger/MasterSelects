@@ -12,8 +12,6 @@ import type { SAM2Point } from '../../services/sam2/types';
 interface SAM2OverlayProps {
   canvasWidth: number;
   canvasHeight: number;
-  displayWidth: number;
-  displayHeight: number;
 }
 
 const POINT_RADIUS = 6;
@@ -21,7 +19,7 @@ const FOREGROUND_COLOR = '#27AE60'; // green
 const BACKGROUND_COLOR = '#E74C3C'; // red
 const MASK_COLOR = [41, 128, 235]; // blue overlay for mask
 
-export function SAM2Overlay({ canvasWidth, canvasHeight, displayWidth, displayHeight }: SAM2OverlayProps) {
+export function SAM2Overlay({ canvasWidth, canvasHeight }: SAM2OverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const points = useSAM2Store((s) => s.points);
@@ -205,8 +203,10 @@ export function SAM2Overlay({ canvasWidth, canvasHeight, displayWidth, displayHe
       onContextMenu={handleContextMenu}
       style={{
         position: 'absolute',
-        width: displayWidth,
-        height: displayHeight,
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
         pointerEvents: 'auto',
         cursor: modelStatus === 'ready' && !isProcessing ? 'crosshair' : 'default',
         zIndex: 50,

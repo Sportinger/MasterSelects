@@ -8,21 +8,17 @@ const log = Logger.create('SAM2ModelManager');
 // Model file definitions
 const MODEL_DIR = 'sam2-models';
 
-// Models from webgpu-sam2 project CDN — ORT-optimized encoder + ONNX decoder
-// These are proven to work in-browser with onnxruntime-web
-// Encoder uses .ort format (ORT-optimized, same size, faster load)
-// Decoder uses .onnx format (doesn't convert well to .ort)
 const MODEL_FILES: SAM2ModelFile[] = [
   {
-    name: 'sam2_hiera_small.encoder.ort',
-    url: 'https://sam2-model-download.b-cdn.net/sam2_hiera_small.encoder.with_runtime_opt.ort',
-    fallbackUrl: 'https://storage.googleapis.com/lb-artifacts-testing-public/sam2/sam2_hiera_small.encoder.ort',
-    sizeBytes: 163_000_000, // ~163 MB
+    name: 'sam2_hiera_small_encoder.fp16.onnx',
+    url: 'https://huggingface.co/pschroedl/sam2-small-onnx-fp16/resolve/main/sam2_hiera_small_encoder.fp16.onnx',
+    fallbackUrl: 'https://huggingface.co/pschroedl/sam2-small-onnx-fp16/resolve/main/sam2_hiera_small_encoder.fp16.onnx',
+    sizeBytes: 82_000_000, // ~82 MB
   },
   {
-    name: 'sam2_hiera_small.decoder.onnx',
-    url: 'https://sam2-model-download.b-cdn.net/sam2_hiera_small.decoder.onnx',
-    fallbackUrl: 'https://huggingface.co/vietanhdev/segment-anything-2-onnx-models/resolve/main/sam2_hiera_small.decoder.onnx',
+    name: 'sam2_hiera_small_decoder.onnx',
+    url: 'https://huggingface.co/pschroedl/sam2-small-onnx-fp16/resolve/main/sam2_hiera_small_decoder.onnx',
+    fallbackUrl: 'https://huggingface.co/pschroedl/sam2-small-onnx-fp16/resolve/main/sam2_hiera_small_decoder.onnx',
     sizeBytes: 21_000_000, // ~21 MB
   },
 ];
@@ -58,8 +54,6 @@ export class SAM2ModelManager {
 
   /** Download models to OPFS with progress callback */
   async downloadModels(onProgress: (progress: number) => void): Promise<void> {
-    // Clear any stale/incompatible cached models first
-    await this.clearCache();
     const dir = await this.getModelDir();
 
     // Request persistent storage

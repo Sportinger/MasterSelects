@@ -7,8 +7,6 @@ import { useTimelineStore } from '../stores/timeline';
 import { useMediaStore } from '../stores/mediaStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSAM2Store, maskToImageData } from '../stores/sam2Store';
-import { getSavedTargetMeta } from '../stores/sliceStore';
-import { reconnectOutputManager } from '../components/outputManager/OutputManagerBoot';
 import type { ClipMask, MaskVertex } from '../types';
 import { generateMaskTexture } from '../utils/maskRenderer';
 import { layerBuilder, playheadState } from '../services/layerBuilder';
