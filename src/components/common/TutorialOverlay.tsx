@@ -1,6 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useDockStore } from '../../stores/dockStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import type { PanelType } from '../../types/dock';
+
+const WELCOME_BUTTONS = [
+  { id: 'premiere', label: 'Premiere Pro', abbr: 'Pr', className: 'tutorial-welcome-icon--premiere' },
+  { id: 'davinci', label: 'DaVinci Resolve', abbr: 'Da', className: 'tutorial-welcome-icon--davinci' },
+  { id: 'finalcut', label: 'Final Cut Pro', abbr: 'Fc', className: 'tutorial-welcome-icon--finalcut' },
+  { id: 'aftereffects', label: 'After Effects', abbr: 'Ae', className: 'tutorial-welcome-icon--aftereffects' },
+  { id: 'beginner', label: 'Beginner', abbr: '★', className: 'tutorial-welcome-icon--beginner' },
+] as const;
 
 function ClippyMascot({ isClosing }: { isClosing: boolean }) {
   const [useWebP, setUseWebP] = useState(false);
@@ -172,11 +181,13 @@ interface Props {
 }
 
 export function TutorialOverlay({ onClose, part = 1 }: Props) {
+  const [welcomePhase, setWelcomePhase] = useState<boolean>(part === 1);
   const [stepIndex, setStepIndex] = useState(0);
   const [panelRect, setPanelRect] = useState<DOMRect | null>(null);
   const [highlightRect, setHighlightRect] = useState<DOMRect | null>(null);
   const [isClosing, setIsClosing] = useState(false);
   const activatePanelType = useDockStore((s) => s.activatePanelType);
+  const setUserBackground = useSettingsStore((s) => s.setUserBackground);
   const closingRef = useRef(false);
 
   const isPart2 = part === 2;
@@ -289,6 +300,34 @@ export function TutorialOverlay({ onClose, part = 1 }: Props) {
 
     return { left, top };
   };
+
+  const handleWelcomeSelect = useCallback((id: string) => {
+    setUserBackground(id);
+    setWelcomePhase(false);
+  }, [setUserBackground]);
+
+  // Welcome screen for Part 1
+  if (welcomePhase) {
+    return (
+      <div className="tutorial-welcome" onClick={(e) => e.stopPropagation()}>
+        <ClippyMascot isClosing={false} />
+        <div className="tutorial-welcome-title">Welcome! Where are you coming from?</div>
+        <div className="tutorial-welcome-subtitle">This helps us tailor tips to your experience</div>
+        <div className="tutorial-welcome-grid">
+          {WELCOME_BUTTONS.map((btn) => (
+            <button
+              key={btn.id}
+              className="tutorial-welcome-btn"
+              onClick={() => handleWelcomeSelect(btn.id)}
+            >
+              <div className={`tutorial-welcome-icon ${btn.className}`}>{btn.abbr}</div>
+              <div className="tutorial-welcome-label">{btn.label}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

@@ -9395,3 +9395,106 @@ input[type="checkbox"] {
   0%, 100% { box-shadow: 0 0 12px rgba(255, 215, 0, 0.4), inset 0 0 12px rgba(255, 215, 0, 0.1); }
   50% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.7), inset 0 0 20px rgba(255, 215, 0, 0.2); }
 }
+
+/* Tutorial Welcome Screen */
+.tutorial-welcome {
+  position: fixed;
+  inset: 0;
+  z-index: 10003;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  background: rgba(0, 0, 0, 0.85);
+  animation: tutorial-welcome-fadein 0.4s ease;
+}
+
+@keyframes tutorial-welcome-fadein {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.tutorial-welcome-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #fff;
+  text-align: center;
+  margin-top: 8px;
+}
+
+.tutorial-welcome-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-top: -20px;
+}
+
+.tutorial-welcome-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  max-width: 640px;
+}
+
+.tutorial-welcome-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 16px;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 100px;
+}
+
+.tutorial-welcome-btn:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+.tutorial-welcome-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.5px;
+}
+
+.tutorial-welcome-icon--premiere {
+  background: linear-gradient(135deg, #9999FF 0%, #00005B 100%);
+}
+
+.tutorial-welcome-icon--davinci {
+  background: linear-gradient(135deg, #FF6B35 0%, #CC2200 100%);
+}
+
+.tutorial-welcome-icon--finalcut {
+  background: linear-gradient(135deg, #9B59B6 0%, #3B0A9E 100%);
+}
+
+.tutorial-welcome-icon--aftereffects {
+  background: linear-gradient(135deg, #9999FF 0%, #00005B 100%);
+}
+
+.tutorial-welcome-icon--beginner {
+  background: linear-gradient(135deg, #2ECC71 0%, #1A8A4A 100%);
+  font-size: 26px;
+}
+
+.tutorial-welcome-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #fff;
+  text-align: center;
+  white-space: nowrap;
+}
