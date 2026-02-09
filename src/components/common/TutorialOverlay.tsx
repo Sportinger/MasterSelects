@@ -330,9 +330,13 @@ export function TutorialOverlay({ onClose, part = 1 }: Props) {
         }} />
       )}
 
+      {/* Clippy in own container so it doesn't fade with tooltip */}
+      <div className="tutorial-clippy-wrapper" style={getTooltipStyle()}>
+        <ClippyMascot isClosing={isClosing} />
+      </div>
+
       <div className="tutorial-tooltip" style={getTooltipStyle()}>
         <div className={`tutorial-tooltip-arrow tutorial-tooltip-arrow--${step.tooltipPosition}`} />
-        <ClippyMascot isClosing={isClosing} />
         <div className="tutorial-tooltip-content">
           <div className="tutorial-tooltip-text">
             <div className="tutorial-tooltip-step">Step {stepIndex + 1} of {steps.length}</div>

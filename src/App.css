@@ -9209,8 +9209,17 @@ input[type="checkbox"] {
   animation: tutorial-fade-in 300ms ease forwards;
 }
 
-.tutorial-backdrop.closing {
-  animation: tutorial-fade-out 1.8s ease forwards;
+.tutorial-backdrop.closing .tutorial-overlay-svg,
+.tutorial-backdrop.closing .tutorial-tooltip,
+.tutorial-backdrop.closing .tutorial-highlight-ring {
+  animation: tutorial-fade-out 400ms ease forwards;
+}
+
+.tutorial-clippy-wrapper {
+  position: fixed;
+  width: 340px;
+  pointer-events: none;
+  z-index: 10003;
 }
 
 @keyframes tutorial-fade-in {
@@ -9219,9 +9228,8 @@ input[type="checkbox"] {
 }
 
 @keyframes tutorial-fade-out {
-  0%   { opacity: 1; }
-  70%  { opacity: 1; }
-  100% { opacity: 0; }
+  from { opacity: 1; }
+  to   { opacity: 0; }
 }
 
 .tutorial-overlay-svg {
