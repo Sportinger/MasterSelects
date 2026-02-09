@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useDockStore } from '../../stores/dockStore';
 import type { PanelType } from '../../types/dock';
 
-interface TutorialStep {
+// Part 1: Panel-level steps (existing)
+interface PanelStep {
   groupId: string;
   panelType: PanelType;
   title: string;
@@ -10,7 +11,7 @@ interface TutorialStep {
   tooltipPosition: 'top' | 'bottom' | 'left' | 'right';
 }
 
-const TUTORIAL_STEPS: TutorialStep[] = [
+const PANEL_STEPS: PanelStep[] = [
   {
     groupId: 'timeline-group',
     panelType: 'timeline',
@@ -41,44 +42,116 @@ const TUTORIAL_STEPS: TutorialStep[] = [
   },
 ];
 
+// Part 2: Timeline element-level steps
+interface TimelineStep {
+  selector: string;
+  title: string;
+  description: string;
+  tooltipPosition: 'top' | 'bottom' | 'left' | 'right';
+}
+
+const TIMELINE_STEPS: TimelineStep[] = [
+  {
+    selector: '.timeline-controls',
+    title: 'Playback',
+    description: 'Play, Stop und Loop — steuere die Wiedergabe deiner Composition.',
+    tooltipPosition: 'bottom',
+  },
+  {
+    selector: '.timeline-time',
+    title: 'Timecode',
+    description: 'Aktuelle Position und Gesamtdauer. Klicke auf die Dauer um sie zu ändern.',
+    tooltipPosition: 'bottom',
+  },
+  {
+    selector: '.timeline-zoom',
+    title: 'Tools & Zoom',
+    description: 'Snapping, Cut-Tool, Zoom und Fit — kontrolliere die Timeline-Ansicht.',
+    tooltipPosition: 'bottom',
+  },
+  {
+    selector: '.timeline-inout-controls',
+    title: 'In/Out Points',
+    description: 'Setze In- (I) und Out-Punkte (O) um den Export-Bereich festzulegen.',
+    tooltipPosition: 'bottom',
+  },
+  {
+    selector: '.timeline-tracks-controls',
+    title: 'Tracks',
+    description: 'Füge Video-, Audio- oder Text-Tracks hinzu.',
+    tooltipPosition: 'bottom',
+  },
+  {
+    selector: '.timeline-navigator',
+    title: 'Navigator',
+    description: 'Scrolle und zoome die Timeline. Ziehe die Kanten um hinein/herauszuzoomen.',
+    tooltipPosition: 'top',
+  },
+];
+
 const TOOLTIP_GAP = 16;
 
 interface Props {
   onClose: () => void;
+  part?: 1 | 2;
 }
 
-export function TutorialOverlay({ onClose }: Props) {
+export function TutorialOverlay({ onClose, part = 1 }: Props) {
   const [stepIndex, setStepIndex] = useState(0);
   const [panelRect, setPanelRect] = useState<DOMRect | null>(null);
+  const [highlightRect, setHighlightRect] = useState<DOMRect | null>(null);
   const [isClosing, setIsClosing] = useState(false);
   const activatePanelType = useDockStore((s) => s.activatePanelType);
   const closingRef = useRef(false);
 
-  const step = TUTORIAL_STEPS[stepIndex];
+  const isPart2 = part === 2;
+  const steps = isPart2 ? TIMELINE_STEPS : PANEL_STEPS;
+  const step = steps[stepIndex];
 
-  // Find and measure the target panel
-  const measurePanel = useCallback(() => {
-    const el = document.querySelector(`[data-group-id="${step.groupId}"]`);
-    if (el) {
-      setPanelRect(el.getBoundingClientRect());
+  // Find and measure targets
+  const measureTargets = useCallback(() => {
+    if (isPart2) {
+      // Part 2: Always measure the timeline panel for the SVG mask cutout
+      const timelineEl = document.querySelector('[data-group-id="timeline-group"]');
+      if (timelineEl) {
+        setPanelRect(timelineEl.getBoundingClientRect());
+      } else {
+        setPanelRect(null);
+      }
+      // Measure the specific element for the highlight ring
+      const targetEl = document.querySelector((step as TimelineStep).selector);
+      if (targetEl) {
+        setHighlightRect(targetEl.getBoundingClientRect());
+      } else {
+        setHighlightRect(null);
+      }
     } else {
-      setPanelRect(null);
+      // Part 1: Measure the panel group
+      const el = document.querySelector(`[data-group-id="${(step as PanelStep).groupId}"]`);
+      if (el) {
+        setPanelRect(el.getBoundingClientRect());
+      } else {
+        setPanelRect(null);
+      }
+      setHighlightRect(null);
     }
-  }, [step.groupId]);
+  }, [isPart2, step]);
 
   // Activate the correct tab and measure on step change
   useEffect(() => {
-    activatePanelType(step.panelType);
+    if (!isPart2) {
+      activatePanelType((step as PanelStep).panelType);
+    }
     // Small delay to let tab switch render before measuring
-    const timer = setTimeout(measurePanel, 50);
+    const timer = setTimeout(measureTargets, 50);
     return () => clearTimeout(timer);
-  }, [step, activatePanelType, measurePanel]);
+  }, [step, isPart2, activatePanelType, measureTargets]);
 
   // Re-measure on resize
   useEffect(() => {
-    window.addEventListener('resize', measurePanel);
-    return () => window.removeEventListener('resize', measurePanel);
-  }, [measurePanel]);
+    window.addEventListener('resize', measureTargets);
+    return () => window.removeEventListener('resize', measureTargets);
+  }, [measureTargets]);
 
   const close = useCallback(() => {
     if (closingRef.current) return;
@@ -89,12 +162,12 @@ export function TutorialOverlay({ onClose }: Props) {
 
   const advance = useCallback(() => {
     if (isClosing) return;
-    if (stepIndex < TUTORIAL_STEPS.length - 1) {
+    if (stepIndex < steps.length - 1) {
       setStepIndex(stepIndex + 1);
     } else {
       close();
     }
-  }, [stepIndex, isClosing, close]);
+  }, [stepIndex, steps.length, isClosing, close]);
 
   // Escape to close
   useEffect(() => {
@@ -106,8 +179,10 @@ export function TutorialOverlay({ onClose }: Props) {
   }, [close]);
 
   // Compute tooltip position clamped to viewport
+  // For Part 2, position relative to the highlight ring; for Part 1, relative to the panel
   const getTooltipStyle = (): React.CSSProperties => {
-    if (!panelRect) return { opacity: 0 };
+    const anchorRect = isPart2 ? highlightRect : panelRect;
+    if (!anchorRect) return { opacity: 0 };
 
     const tooltipW = 300;
     const tooltipH = 160;
@@ -119,17 +194,17 @@ export function TutorialOverlay({ onClose }: Props) {
     let top = 0;
 
     if (pos === 'top') {
-      left = panelRect.left + panelRect.width / 2 - tooltipW / 2;
-      top = panelRect.top - tooltipH - TOOLTIP_GAP;
+      left = anchorRect.left + anchorRect.width / 2 - tooltipW / 2;
+      top = anchorRect.top - tooltipH - TOOLTIP_GAP;
     } else if (pos === 'bottom') {
-      left = panelRect.left + panelRect.width / 2 - tooltipW / 2;
-      top = panelRect.bottom + TOOLTIP_GAP;
+      left = anchorRect.left + anchorRect.width / 2 - tooltipW / 2;
+      top = anchorRect.bottom + TOOLTIP_GAP;
     } else if (pos === 'left') {
-      left = panelRect.left - tooltipW - TOOLTIP_GAP;
-      top = panelRect.top + panelRect.height / 2 - tooltipH / 2;
+      left = anchorRect.left - tooltipW - TOOLTIP_GAP;
+      top = anchorRect.top + anchorRect.height / 2 - tooltipH / 2;
     } else if (pos === 'right') {
-      left = panelRect.right + TOOLTIP_GAP;
-      top = panelRect.top + panelRect.height / 2 - tooltipH / 2;
+      left = anchorRect.right + TOOLTIP_GAP;
+      top = anchorRect.top + anchorRect.height / 2 - tooltipH / 2;
     }
 
     // Clamp to viewport
@@ -169,13 +244,23 @@ export function TutorialOverlay({ onClose }: Props) {
         />
       </svg>
 
+      {/* Part 2: Yellow highlight ring over the target element */}
+      {isPart2 && highlightRect && (
+        <div className="tutorial-highlight-ring" style={{
+          left: highlightRect.left - 4,
+          top: highlightRect.top - 4,
+          width: highlightRect.width + 8,
+          height: highlightRect.height + 8,
+        }} />
+      )}
+
       <div className="tutorial-tooltip" style={getTooltipStyle()}>
         <div className={`tutorial-tooltip-arrow tutorial-tooltip-arrow--${step.tooltipPosition}`} />
-        <div className="tutorial-tooltip-step">Step {stepIndex + 1} of {TUTORIAL_STEPS.length}</div>
+        <div className="tutorial-tooltip-step">Step {stepIndex + 1} of {steps.length}</div>
         <div className="tutorial-tooltip-title">{step.title}</div>
         <div className="tutorial-tooltip-desc">{step.description}</div>
         <div className="tutorial-dots">
-          {TUTORIAL_STEPS.map((_, i) => (
+          {steps.map((_: PanelStep | TimelineStep, i: number) => (
             <span
               key={i}
               className={`tutorial-dot ${i === stepIndex ? 'active' : ''} ${i < stepIndex ? 'completed' : ''}`}
@@ -183,7 +268,7 @@ export function TutorialOverlay({ onClose }: Props) {
           ))}
         </div>
         <div className="tutorial-tooltip-hint">
-          {stepIndex < TUTORIAL_STEPS.length - 1 ? 'Click anywhere to continue' : 'Click to finish'}
+          {stepIndex < steps.length - 1 ? 'Click anywhere to continue' : 'Click to finish'}
         </div>
       </div>
     </div>

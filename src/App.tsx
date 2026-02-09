@@ -58,8 +58,11 @@ function App() {
 
   // Tutorial state
   const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialPart, setTutorialPart] = useState<1 | 2>(1);
   const hasSeenTutorial = useSettingsStore((s) => s.hasSeenTutorial);
   const setHasSeenTutorial = useSettingsStore((s) => s.setHasSeenTutorial);
+  const hasSeenTutorialPart2 = useSettingsStore((s) => s.hasSeenTutorialPart2);
+  const setHasSeenTutorialPart2 = useSettingsStore((s) => s.setHasSeenTutorialPart2);
 
   // IndexedDB error dialog state
   const [showIndexedDBError, setShowIndexedDBError] = useState(false);
@@ -158,15 +161,37 @@ function App() {
   }, [hasSeenTutorial]);
 
   const handleTutorialClose = useCallback(() => {
-    setShowTutorial(false);
-    setHasSeenTutorial(true);
-  }, [setHasSeenTutorial]);
+    if (tutorialPart === 1 && !hasSeenTutorialPart2) {
+      // Part 1 finished, auto-start Part 2
+      setTutorialPart(2);
+      setHasSeenTutorial(true);
+    } else if (tutorialPart === 2) {
+      // Part 2 finished
+      setShowTutorial(false);
+      setHasSeenTutorial(true);
+      setHasSeenTutorialPart2(true);
+    } else {
+      // Part 1 re-triggered manually (Part 2 already seen)
+      setShowTutorial(false);
+    }
+  }, [tutorialPart, hasSeenTutorialPart2, setHasSeenTutorial, setHasSeenTutorialPart2]);
 
   // Listen for manual tutorial trigger from View menu
   useEffect(() => {
-    const handleStartTutorial = () => setShowTutorial(true);
+    const handleStartTutorial = () => {
+      setTutorialPart(1);
+      setShowTutorial(true);
+    };
+    const handleStartTimelineTutorial = () => {
+      setTutorialPart(2);
+      setShowTutorial(true);
+    };
     window.addEventListener('start-tutorial', handleStartTutorial);
-    return () => window.removeEventListener('start-tutorial', handleStartTutorial);
+    window.addEventListener('start-timeline-tutorial', handleStartTimelineTutorial);
+    return () => {
+      window.removeEventListener('start-tutorial', handleStartTutorial);
+      window.removeEventListener('start-timeline-tutorial', handleStartTimelineTutorial);
+    };
   }, []);
 
   const handleIndexedDBErrorClose = useCallback(() => {
@@ -205,7 +230,7 @@ function App() {
         <IndexedDBErrorDialog onClose={handleIndexedDBErrorClose} />
       )}
       {showTutorial && (
-        <TutorialOverlay onClose={handleTutorialClose} />
+        <TutorialOverlay onClose={handleTutorialClose} part={tutorialPart} />
       )}
     </div>
   );

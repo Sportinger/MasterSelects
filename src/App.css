@@ -9344,3 +9344,20 @@ input[type="checkbox"] {
   color: var(--text-secondary);
   opacity: 0.7;
 }
+
+/* Part 2: Yellow highlight ring for timeline element steps */
+.tutorial-highlight-ring {
+  position: fixed;
+  border: 2px solid #FFD700;
+  border-radius: 8px;
+  z-index: 10002;
+  pointer-events: none;
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.4), inset 0 0 12px rgba(255, 215, 0, 0.1);
+  animation: tutorial-ring-pulse 1.5s ease-in-out infinite;
+  transition: left 400ms ease, top 400ms ease, width 400ms ease, height 400ms ease;
+}
+
+@keyframes tutorial-ring-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(255, 215, 0, 0.4), inset 0 0 12px rgba(255, 215, 0, 0.1); }
+  50% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.7), inset 0 0 20px rgba(255, 215, 0, 0.2); }
+}

@@ -65,6 +65,7 @@ interface SettingsState {
   // First-run state
   hasCompletedSetup: boolean;
   hasSeenTutorial: boolean;
+  hasSeenTutorialPart2: boolean;
 
   // UI state
   isSettingsOpen: boolean;
@@ -90,6 +91,7 @@ interface SettingsState {
   setCopyMediaToProject: (enabled: boolean) => void;
   setHasCompletedSetup: (completed: boolean) => void;
   setHasSeenTutorial: (seen: boolean) => void;
+  setHasSeenTutorialPart2: (seen: boolean) => void;
   openSettings: () => void;
   closeSettings: () => void;
   toggleSettings: () => void;
@@ -134,6 +136,7 @@ export const useSettingsStore = create<SettingsState>()(
       copyMediaToProject: true, // Copy imported files to Raw/ folder by default
       hasCompletedSetup: false, // Show welcome overlay on first run
       hasSeenTutorial: false, // Show tutorial on first run
+      hasSeenTutorialPart2: false, // Show timeline tutorial after part 1
       isSettingsOpen: false,
 
       // Output settings (moved from mixerStore)
@@ -207,6 +210,10 @@ export const useSettingsStore = create<SettingsState>()(
         set({ hasSeenTutorial: seen });
       },
 
+      setHasSeenTutorialPart2: (seen) => {
+        set({ hasSeenTutorialPart2: seen });
+      },
+
       openSettings: () => set({ isSettingsOpen: true }),
       closeSettings: () => set({ isSettingsOpen: false }),
       toggleSettings: () => set((state) => ({ isSettingsOpen: !state.isSettingsOpen })),
@@ -261,6 +268,7 @@ export const useSettingsStore = create<SettingsState>()(
         copyMediaToProject: state.copyMediaToProject,
         hasCompletedSetup: state.hasCompletedSetup,
         hasSeenTutorial: state.hasSeenTutorial,
+        hasSeenTutorialPart2: state.hasSeenTutorialPart2,
         outputResolution: state.outputResolution,
         fps: state.fps,
       }),

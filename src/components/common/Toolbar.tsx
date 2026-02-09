@@ -648,6 +648,9 @@ export function Toolbar() {
               <button className="menu-option" onClick={() => { window.dispatchEvent(new CustomEvent('start-tutorial')); closeMenu(); }}>
                 <span>Tutorial</span>
               </button>
+              <button className="menu-option" onClick={() => { window.dispatchEvent(new CustomEvent('start-timeline-tutorial')); closeMenu(); }}>
+                <span>Timeline Tutorial</span>
+              </button>
             </div>
           )}
         </div>
