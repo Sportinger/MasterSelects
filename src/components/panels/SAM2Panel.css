@@ -1,0 +1,416 @@
+/* SAM 2 AI Segmentation Panel */
+
+.sam2-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  position: relative;
+}
+
+/* Blur content when model not ready */
+.sam2-panel.needs-download > *:not(.sam2-overlay) {
+  filter: blur(2px);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Download Overlay */
+.sam2-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.sam2-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  max-width: 260px;
+}
+
+.sam2-overlay-content .sam2-icon {
+  font-size: 28px;
+}
+
+.sam2-overlay-content p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.sam2-overlay-content .sam2-size-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.sam2-download-btn {
+  padding: 8px 20px;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  color: var(--bg-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.sam2-download-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.sam2-download-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Progress bar */
+.sam2-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.sam2-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+.sam2-progress-text {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* Loading state */
+.sam2-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.sam2-loading .sam2-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: sam2-spin 0.8s linear infinite;
+}
+
+@keyframes sam2-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Panel content */
+.sam2-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Empty state */
+.sam2-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 24px;
+}
+
+.sam2-empty .sam2-empty-icon {
+  font-size: 32px;
+  opacity: 0.5;
+}
+
+.sam2-empty p {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* Section groups */
+.sam2-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sam2-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+}
+
+/* Action buttons row */
+.sam2-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.sam2-btn {
+  flex: 1;
+  padding: 7px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.sam2-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.sam2-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sam2-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.sam2-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-primary);
+}
+
+.sam2-btn.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.sam2-btn.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.sam2-btn.danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: white;
+}
+
+/* Points list */
+.sam2-points-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.sam2-point-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--text-secondary);
+}
+
+.sam2-point-item:hover {
+  background: var(--bg-hover);
+}
+
+.sam2-point-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sam2-point-dot.foreground {
+  background: var(--success);
+}
+
+.sam2-point-dot.background {
+  background: var(--danger);
+}
+
+.sam2-point-remove {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.sam2-point-item:hover .sam2-point-remove {
+  opacity: 1;
+}
+
+.sam2-point-remove:hover {
+  color: var(--danger);
+}
+
+/* Slider controls */
+.sam2-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sam2-slider-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-width: 50px;
+}
+
+.sam2-slider-row input[type="range"] {
+  flex: 1;
+  height: 3px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  outline: none;
+}
+
+.sam2-slider-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+.sam2-slider-value {
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-width: 30px;
+  text-align: right;
+  font-family: monospace;
+}
+
+/* Propagation section */
+.sam2-propagation {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.sam2-propagation-btns {
+  display: flex;
+  gap: 6px;
+}
+
+.sam2-propagation-progress {
+  font-size: 11px;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Status bar */
+.sam2-status {
+  padding: 6px 12px;
+  border-top: 1px solid var(--border-color);
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.sam2-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sam2-status-dot.ready {
+  background: var(--success);
+}
+
+.sam2-status-dot.processing {
+  background: var(--warning);
+  animation: sam2-pulse 1s ease-in-out infinite;
+}
+
+.sam2-status-dot.error {
+  background: var(--danger);
+}
+
+@keyframes sam2-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Checkbox row */
+.sam2-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.sam2-checkbox-row input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+/* Error display */
+.sam2-error {
+  padding: 8px;
+  background: rgba(231, 76, 60, 0.1);
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--danger);
+}
+
+.sam2-error button {
+  margin-top: 6px;
+  padding: 4px 10px;
+  background: var(--danger);
+  border: none;
+  border-radius: 3px;
+  color: white;
+  font-size: 11px;
+  cursor: pointer;
+}

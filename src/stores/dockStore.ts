@@ -81,6 +81,7 @@ const DEFAULT_LAYOUT: DockLayout = {
               { id: 'media', type: 'media', title: 'Media' },
               { id: 'ai-chat', type: 'ai-chat', title: 'AI Chat' },
               { id: 'ai-video', type: 'ai-video', title: 'AI Video' },
+              { id: 'ai-segment', type: 'ai-segment', title: 'AI Segment' },
               { id: 'youtube', type: 'youtube', title: 'YouTube' },
             ],
             activeIndex: 0, // Media active

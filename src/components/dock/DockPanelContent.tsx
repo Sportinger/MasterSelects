@@ -16,6 +16,7 @@ const AIChatPanel = lazy(() => import('../panels/AIChatPanel').then(m => ({ defa
 const AIVideoPanel = lazy(() => import('../panels/AIVideoPanel').then(m => ({ default: m.AIVideoPanel })));
 const YouTubePanel = lazy(() => import('../panels/YouTubePanel').then(m => ({ default: m.YouTubePanel })));
 const TransitionsPanel = lazy(() => import('../panels/TransitionsPanel').then(m => ({ default: m.TransitionsPanel })));
+const SAM2Panel = lazy(() => import('../panels/SAM2Panel').then(m => ({ default: m.SAM2Panel })));
 const WaveformPanel = lazy(() => import('../panels/scopes/WaveformPanel').then(m => ({ default: m.WaveformPanel })));
 const HistogramPanel = lazy(() => import('../panels/scopes/HistogramPanel').then(m => ({ default: m.HistogramPanel })));
 const VectorscopePanel = lazy(() => import('../panels/scopes/VectorscopePanel').then(m => ({ default: m.VectorscopePanel })));
@@ -48,6 +49,8 @@ export function DockPanelContent({ panel }: DockPanelContentProps) {
       return <Suspense fallback={<PanelLoading />}><AIChatPanel /></Suspense>;
     case 'ai-video':
       return <Suspense fallback={<PanelLoading />}><AIVideoPanel /></Suspense>;
+    case 'ai-segment':
+      return <Suspense fallback={<PanelLoading />}><SAM2Panel /></Suspense>;
     case 'youtube':
       return <Suspense fallback={<PanelLoading />}><YouTubePanel /></Suspense>;
     case 'transitions':

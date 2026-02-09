@@ -11,6 +11,8 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore, type PreviewQuality } from '../../stores/settingsStore';
 import { MaskOverlay } from './MaskOverlay';
+import { SAM2Overlay } from './SAM2Overlay';
+import { useSAM2Store } from '../../stores/sam2Store';
 import { previewRenderManager } from '../../services/previewRenderManager';
 import type { EngineStats, Layer } from '../../types';
 
@@ -222,6 +224,7 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
   const { compositions, activeCompositionId } = useMediaStore();
   const { addPreviewPanel, updatePanelData, closePanelById } = useDockStore();
   const { previewQuality, setPreviewQuality, showTransparencyGrid, setShowTransparencyGrid } = useSettingsStore();
+  const sam2Active = useSAM2Store((s) => s.isActive);
 
   // Get first selected clip for preview
   const selectedClipId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
@@ -1176,6 +1179,12 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
             />
             {maskEditMode !== 'none' && (
               <MaskOverlay
+                canvasWidth={effectiveResolution.width}
+                canvasHeight={effectiveResolution.height}
+              />
+            )}
+            {sam2Active && (
+              <SAM2Overlay
                 canvasWidth={effectiveResolution.width}
                 canvasHeight={effectiveResolution.height}
               />
