@@ -3,6 +3,7 @@
 
 import { useEffect, useCallback, useRef } from 'react';
 import { MIN_ZOOM, MAX_ZOOM } from '../../../stores/timeline/constants';
+import { useTimelineStore } from '../../../stores/timeline';
 
 interface UseTimelineZoomProps {
   // Refs
@@ -104,6 +105,19 @@ export function useTimelineZoom({
       // Don't zoom when hovering over track headers (first column for height adjustment)
       const target = e.target as HTMLElement;
       const isOverTrackHeaders = target.closest('.track-headers') !== null;
+
+      // Ctrl+Shift+Scroll: toggle slot grid view
+      if (e.ctrlKey && e.shiftKey) {
+        e.preventDefault();
+        const store = useTimelineStore.getState();
+        const delta = e.deltaY > 0 ? 0.04 : -0.04;
+        let target = Math.max(0, Math.min(1, store.slotGridProgress + delta));
+        // Snap thresholds
+        if (target < 0.05) target = 0;
+        if (target > 0.95) target = 1;
+        store.setSlotGridProgress(target);
+        return;
+      }
 
       if ((e.ctrlKey || e.altKey) && !isOverTrackHeaders) {
         e.preventDefault();

@@ -181,6 +181,9 @@ export const useTimelineStore = create<TimelineStore>()(
       // Clip animation phase for enter/exit transitions
       clipAnimationPhase: 'idle' as const,
 
+      // Slot grid view progress (0 = full timeline, 1 = full grid view)
+      slotGridProgress: 0,
+
       // Clipboard state for copy/paste
       clipboardData: null as import('./types').ClipboardClipData[] | null,
       clipboardKeyframes: null as import('./types').ClipboardKeyframeData[] | null,

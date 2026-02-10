@@ -9478,3 +9478,53 @@ input[type="checkbox"] {
   text-align: center;
   white-space: nowrap;
 }
+
+/* ============================
+   Slot Grid View
+   ============================ */
+
+.slot-grid-container {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px;
+  background: #111;
+}
+
+.slot-grid {
+  display: grid;
+  gap: 8px;
+  justify-content: center;
+}
+
+.slot-grid-item {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid transparent;
+  background: #1a1a1a;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+
+.slot-grid-item:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.1);
+  transform: scale(1.03);
+}
+
+.slot-grid-item.active {
+  border-color: #4a9eff;
+  box-shadow: 0 0 12px rgba(74, 158, 255, 0.3);
+}
+
+.slot-grid-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #666;
+  font-size: 13px;
+}

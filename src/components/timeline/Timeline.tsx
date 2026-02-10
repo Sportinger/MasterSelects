@@ -27,6 +27,7 @@ import { ParentChildLink } from './ParentChildLink';
 import { PhysicsCable } from './PhysicsCable';
 import { TimelineNavigator } from './TimelineNavigator';
 import { VerticalScrollbar } from './VerticalScrollbar';
+import { SlotGrid } from './SlotGrid';
 import { useTimelineKeyboard } from './hooks/useTimelineKeyboard';
 import { useTimelineZoom } from './hooks/useTimelineZoom';
 import { usePlayheadDrag } from './hooks/usePlayheadDrag';
@@ -64,7 +65,7 @@ export function Timeline() {
     useTimelineStore(useShallow(selectPlaybackState));
 
   // View state (changes on zoom/scroll)
-  const { zoom, scrollX } =
+  const { zoom, scrollX, slotGridProgress } =
     useTimelineStore(useShallow(selectViewState));
 
   // UI settings (rarely changes)
@@ -799,7 +800,17 @@ export function Timeline() {
       />
 
       <div className="timeline-body" ref={timelineBodyRef}>
-        <div className="timeline-body-content">
+        {/* SlotGrid overlay - fades in when slotGridProgress > 0.6 */}
+        {slotGridProgress > 0.6 && (
+          <SlotGrid
+            opacity={Math.min(1, (slotGridProgress - 0.6) / 0.4)}
+          />
+        )}
+        <div className="timeline-body-content" style={{
+          opacity: slotGridProgress >= 1 ? 0 : 1 - slotGridProgress,
+          pointerEvents: slotGridProgress >= 1 ? 'none' : 'auto',
+          display: slotGridProgress >= 1 ? 'none' : undefined,
+        }}>
           <div className="timeline-header-row">
             <div className="ruler-header">
               <span>Time</span>
