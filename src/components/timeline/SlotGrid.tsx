@@ -1,7 +1,7 @@
-// SlotGrid - CSS Grid container showing composition slots with MiniTimeline canvases
-// Fades in over the timeline when Ctrl+Shift+Scroll triggers the transition
+// SlotGrid - Resolume-style grid with row labels (layers) on left, column numbers on top
+// Compositions fill slots left-to-right, top-to-bottom; remaining slots are empty
 
-import { useCallback, useMemo, useRef, useEffect, useState } from 'react';
+import { Fragment, useCallback, useMemo, useRef, useEffect, useState } from 'react';
 import { useMediaStore } from '../../stores/mediaStore';
 import { animateSlotGrid } from './slotGridAnimation';
 import { MiniTimeline } from './MiniTimeline';
@@ -11,34 +11,29 @@ interface SlotGridProps {
   opacity: number;
 }
 
-const SLOT_MIN_SIZE = 120;
-const SLOT_MAX_SIZE = 180;
+const GRID_COLS = 8;
+const GRID_ROWS = 4;
 
 export function SlotGrid({ opacity }: SlotGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [slotSize, setSlotSize] = useState(140);
-  const [gridDimensions, setGridDimensions] = useState({ cols: 4, rows: 3 });
+  const [slotSize, setSlotSize] = useState(120);
 
   const compositions = useMediaStore(state => state.compositions);
   const activeCompositionId = useMediaStore(state => state.activeCompositionId);
   const openCompositionTab = useMediaStore(state => state.openCompositionTab);
 
-  // Auto-calculate slot size and grid dimensions based on container size
+  // Auto-calculate slot size based on available space
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const containerWidth = entry.contentRect.width;
-        const containerHeight = entry.contentRect.height;
-        const cols = Math.max(1, Math.floor(containerWidth / SLOT_MIN_SIZE));
-        const size = Math.min(SLOT_MAX_SIZE, Math.floor((containerWidth - (cols - 1) * 8 - 16) / cols));
-        const finalSize = Math.max(SLOT_MIN_SIZE, size);
-        setSlotSize(finalSize);
-        // Calculate rows that fit in container height (slot + 8px gap)
-        const rows = Math.max(1, Math.floor((containerHeight - 12) / (finalSize + 8)));
-        setGridDimensions({ cols, rows });
+        const availableWidth = entry.contentRect.width - 32 - 16; // minus row label width + padding
+        const availableHeight = entry.contentRect.height - 28 - 16; // minus col header height + padding
+        const sizeByWidth = Math.floor((availableWidth - (GRID_COLS - 1) * 6) / GRID_COLS);
+        const sizeByHeight = Math.floor((availableHeight - (GRID_ROWS - 1) * 6) / GRID_ROWS);
+        setSlotSize(Math.max(60, Math.min(sizeByWidth, sizeByHeight)));
       }
     });
 
@@ -46,7 +41,7 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     return () => observer.disconnect();
   }, []);
 
-  // Handle Ctrl+Shift+Scroll on the SlotGrid itself (to allow scrolling back to timeline)
+  // Handle Ctrl+Shift+Scroll on the SlotGrid itself
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -62,7 +57,6 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     return () => container.removeEventListener('wheel', handleWheel);
   }, []);
 
-  // Handle slot click: switch composition and animate zoom-in
   const handleSlotClick = useCallback((comp: Composition) => {
     openCompositionTab(comp.id);
     animateSlotGrid(0);
@@ -72,9 +66,15 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     return [...compositions].sort((a, b) => a.name.localeCompare(b.name));
   }, [compositions]);
 
-  // Total slots to fill the grid
-  const totalSlots = gridDimensions.cols * gridDimensions.rows;
-  const emptySlotCount = Math.max(0, totalSlots - sortedCompositions.length);
+  // Build a flat slot map: index → composition or null
+  const totalSlots = GRID_COLS * GRID_ROWS;
+  const slotMap = useMemo(() => {
+    const map: (Composition | null)[] = new Array(totalSlots).fill(null);
+    sortedCompositions.forEach((comp, i) => {
+      if (i < totalSlots) map[i] = comp;
+    });
+    return map;
+  }, [sortedCompositions, totalSlots]);
 
   return (
     <div
@@ -83,33 +83,56 @@ export function SlotGrid({ opacity }: SlotGridProps) {
       style={{ opacity }}
     >
       <div
-        className="slot-grid"
+        className="slot-grid-resolume"
         style={{
-          gridTemplateColumns: `repeat(${gridDimensions.cols}, ${slotSize}px)`,
+          gridTemplateColumns: `32px repeat(${GRID_COLS}, ${slotSize}px)`,
+          gridAutoRows: `${slotSize}px`,
         }}
       >
-        {sortedCompositions.map((comp) => {
-          const isActive = comp.id === activeCompositionId;
-          return (
-            <div
-              key={comp.id}
-              className={`slot-grid-item ${isActive ? 'active' : ''}`}
-              onClick={() => handleSlotClick(comp)}
-              title={comp.name}
-            >
-              <MiniTimeline
-                timelineData={comp.timelineData}
-                compositionName={comp.name}
-                compositionDuration={comp.duration}
-                isActive={isActive}
-                width={slotSize - 4}
-                height={slotSize - 4}
-              />
+        {/* Empty corner */}
+        <div className="slot-grid-corner" />
+
+        {/* Column headers */}
+        {Array.from({ length: GRID_COLS }, (_, i) => (
+          <div key={`col-${i}`} className="slot-grid-col-header">
+            {i + 1}
+          </div>
+        ))}
+
+        {/* Rows: label + slots */}
+        {Array.from({ length: GRID_ROWS }, (_, rowIndex) => (
+          <Fragment key={`row-${rowIndex}`}>
+            <div className="slot-grid-row-label">
+              {String.fromCharCode(65 + rowIndex)}
             </div>
-          );
-        })}
-        {Array.from({ length: emptySlotCount }, (_, i) => (
-          <div key={`empty-${i}`} className="slot-grid-item empty" />
+            {Array.from({ length: GRID_COLS }, (_, colIndex) => {
+              const slotIndex = rowIndex * GRID_COLS + colIndex;
+              const comp = slotMap[slotIndex];
+              if (comp) {
+                const isActive = comp.id === activeCompositionId;
+                return (
+                  <div
+                    key={slotIndex}
+                    className={`slot-grid-item ${isActive ? 'active' : ''}`}
+                    onClick={() => handleSlotClick(comp)}
+                    title={comp.name}
+                  >
+                    <MiniTimeline
+                      timelineData={comp.timelineData}
+                      compositionName={comp.name}
+                      compositionDuration={comp.duration}
+                      isActive={isActive}
+                      width={slotSize - 4}
+                      height={slotSize - 4}
+                    />
+                  </div>
+                );
+              }
+              return (
+                <div key={slotIndex} className="slot-grid-item empty" />
+              );
+            })}
+          </Fragment>
         ))}
       </div>
     </div>
