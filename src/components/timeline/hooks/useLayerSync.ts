@@ -77,13 +77,8 @@ export function useLayerSync({
   isVideoTrackVisible,
   isAudioTrackMuted,
 }: UseLayerSyncProps): void {
-  // Track last seek time to throttle during scrubbing
-  const lastSeekRef = useRef<{ [clipId: string]: number }>({});
-  const pendingSeekRef = useRef<{ [clipId: string]: number }>({});
-
-  // Native decoder throttling
-  const nativeDecoderLastFrameRef = useRef<{ [clipId: string]: number }>({});
-  const nativeDecoderPendingRef = useRef<{ [clipId: string]: boolean }>({});
+  // Native decoder throttling (unused - sync handled by LayerBuilderService)
+  // Kept for potential future use
 
   // Track current proxy frames for each clip (for smooth proxy playback)
   const proxyFramesRef = useRef<
@@ -94,18 +89,9 @@ export function useLayerSync({
   // RAF debounce: batch rapid scrubbing into one sync per animation frame
   const pendingRafRef = useRef<number | null>(null);
 
-  // Apply pending seeks when scrubbing stops
-  useEffect(() => {
-    if (isDraggingPlayhead) return;
-
-    Object.entries(pendingSeekRef.current).forEach(([clipId, seekTime]) => {
-      const clip = clipMap.get(clipId);
-      if (clip?.source?.videoElement) {
-        clip.source.videoElement.currentTime = seekTime;
-      }
-    });
-    pendingSeekRef.current = {};
-  }, [isDraggingPlayhead, clipMap]);
+  // NOTE: Video element sync (play/pause/currentTime) has been removed from useLayerSync.
+  // All video sync is now handled exclusively by LayerBuilderService via the render loop
+  // to avoid dual-sync race conditions that caused frame flickering.
 
   // Helper: Check if effects have changed
   const effectsChanged = useCallback(
@@ -153,31 +139,7 @@ export function useLayerSync({
         if (!nestedClip) continue;
 
         const nestedLocalTime = clipTime - nestedClip.startTime;
-        const nestedClipTime = nestedClip.reversed
-          ? nestedClip.outPoint - nestedLocalTime
-          : nestedLocalTime + nestedClip.inPoint;
-
-        // Update video currentTime and WebCodecsPlayer
-        if (nestedClip.source?.videoElement) {
-          const video = nestedClip.source.videoElement;
-          const webCodecsPlayer = nestedClip.source.webCodecsPlayer;
-          const timeDiff = Math.abs(video.currentTime - nestedClipTime);
-          if (timeDiff > 0.05) {
-            video.currentTime = nestedClipTime;
-          }
-          // Seek WebCodecsPlayer for nested clips (critical for preview during playback)
-          if (webCodecsPlayer) {
-            const wcTimeDiff = Math.abs(webCodecsPlayer.currentTime - nestedClipTime);
-            if (wcTimeDiff > 0.05) {
-              webCodecsPlayer.seek(nestedClipTime);
-            }
-          }
-          if (isPlaying && video.paused) {
-            video.play().catch(() => {});
-          } else if (!isPlaying && !video.paused) {
-            video.pause();
-          }
-        }
+        // Video sync for nested clips handled by LayerBuilderService.syncNestedCompVideos()
 
         // Get keyframes for the nested clip from store
         const { clipKeyframes: storeClipKeyframes } = useTimelineStore.getState();
@@ -455,33 +417,7 @@ export function useLayerSync({
         const clipLocalTime = playheadPosition - clip.startTime;
         const keyframeLocalTime = clipLocalTime;
 
-        // Calculate source time using speed integration (handles keyframes)
-        const sourceTime = getSourceTimeForClip(clip.id, clipLocalTime);
-        const initialSpeed = getInterpolatedSpeed(clip.id, 0);
-        const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
-        const clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
-
-        // Calculate target frame and throttle seeks
-        const fps = nativeDecoder.fps || 25;
-        const targetFrame = Math.round(clipTime * fps);
-        const lastFrame = nativeDecoderLastFrameRef.current[clip.id] ?? -1;
-        const isPending = nativeDecoderPendingRef.current[clip.id] || false;
-
-        // Only seek if frame changed and no pending seek
-        if (targetFrame !== lastFrame && !isPending) {
-          nativeDecoderLastFrameRef.current[clip.id] = targetFrame;
-          nativeDecoderPendingRef.current[clip.id] = true;
-
-          // Use fast scrub (scaled down) during playhead drag for smoother scrubbing
-          nativeDecoder.seekToFrame(targetFrame, isDraggingPlayhead)
-            .then(() => {
-              nativeDecoderPendingRef.current[clip.id] = false;
-            })
-            .catch((err) => {
-              nativeDecoderPendingRef.current[clip.id] = false;
-              log.warn('NativeDecoder seek failed:', err);
-            });
-        }
+        // Native decoder seeking handled by LayerBuilderService
 
         const transform = getInterpolatedTransform(clip.id, keyframeLocalTime);
         const nativeInterpolatedEffects = getInterpolatedEffects(clip.id, keyframeLocalTime);
@@ -537,7 +473,6 @@ export function useLayerSync({
         const clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
         const video = clip.source.videoElement;
         const webCodecsPlayer = clip.source.webCodecsPlayer;
-        const timeDiff = Math.abs(video.currentTime - clipTime);
 
         const mediaStore = useMediaStore.getState();
         const mediaFile = mediaStore.files.find(
@@ -569,21 +504,7 @@ export function useLayerSync({
           const cacheKey = `${mediaFile.id}_${clip.id}`;
           const cached = proxyFramesRef.current.get(cacheKey);
 
-          if (!video.muted) {
-            video.muted = true;
-          }
-          if (isPlaying && video.paused) {
-            video.play().catch(() => {});
-          } else if (!isPlaying && !video.paused) {
-            video.pause();
-          }
-
-          if (!isPlaying) {
-            const timeDiff2 = Math.abs(video.currentTime - clipTime);
-            if (timeDiff2 > 0.1) {
-              video.currentTime = clipTime;
-            }
-          }
+          // Video element sync (mute/play/pause/seek) handled by LayerBuilderService
 
           const loadKey = `${mediaFile.id}_${frameIndex}`;
           const cachedInService = proxyFrameCache.getCachedFrame(
@@ -735,54 +656,7 @@ export function useLayerSync({
             }
           }
         } else {
-          if (webCodecsPlayer) {
-            const wcTimeDiff = Math.abs(webCodecsPlayer.currentTime - clipTime);
-            if (wcTimeDiff > 0.05) {
-              webCodecsPlayer.seek(clipTime);
-            }
-          }
-
-          if (clip.reversed) {
-            if (!video.paused) {
-              video.pause();
-            }
-            const seekThreshold = isDraggingPlayhead ? 0.1 : 0.03;
-            if (timeDiff > seekThreshold) {
-              const now = performance.now();
-              const lastSeek = lastSeekRef.current[clip.id] || 0;
-              if (now - lastSeek > 33) {
-                video.currentTime = clipTime;
-                lastSeekRef.current[clip.id] = now;
-              }
-            }
-          } else {
-            if (isPlaying && video.paused) {
-              video.play().catch(() => {});
-            } else if (!isPlaying && !video.paused) {
-              video.pause();
-            }
-
-            if (!isPlaying) {
-              const seekThreshold = isDraggingPlayhead ? 0.1 : 0.05;
-
-              if (timeDiff > seekThreshold) {
-                const now = performance.now();
-                const lastSeek = lastSeekRef.current[clip.id] || 0;
-
-                if (isDraggingPlayhead && now - lastSeek < 80) {
-                  pendingSeekRef.current[clip.id] = clipTime;
-                } else {
-                  if (isDraggingPlayhead && 'fastSeek' in video) {
-                    video.fastSeek(clipTime);
-                  } else {
-                    video.currentTime = clipTime;
-                  }
-                  lastSeekRef.current[clip.id] = now;
-                  delete pendingSeekRef.current[clip.id];
-                }
-              }
-            }
-          }
+          // Video element sync (play/pause/seek/WebCodecs) handled by LayerBuilderService
 
           const transform = getInterpolatedTransform(clip.id, keyframeLocalTime);
           const videoInterpolatedEffects = getInterpolatedEffects(
@@ -945,9 +819,9 @@ export function useLayerSync({
 
     if (layersChanged) {
       useTimelineStore.setState({ layers: newLayers });
-      // Trigger one-shot render when paused (render loop not running)
-      // This ensures text edits, property changes, etc. update the preview immediately
-      engine.render(newLayers);
+      // Wake render loop to pick up the new layers
+      // Don't render directly to avoid dual-render race conditions with the render loop
+      engine.requestRender();
     }
 
     // Audio sync with status tracking
