@@ -65,8 +65,11 @@ export function Timeline() {
     useTimelineStore(useShallow(selectPlaybackState));
 
   // View state (changes on zoom/scroll)
-  const { zoom, scrollX, slotGridProgress } =
+  const { zoom, scrollX } =
     useTimelineStore(useShallow(selectViewState));
+
+  // Slot grid progress - direct selector for reliable reactivity
+  const slotGridProgress = useTimelineStore(state => state.slotGridProgress);
 
   // UI settings (rarely changes)
   const { snappingEnabled, inPoint, outPoint, loopPlayback, toolMode, thumbnailsEnabled, waveformsEnabled } =
@@ -799,17 +802,25 @@ export function Timeline() {
         parseTime={parseTime}
       />
 
-      <div className="timeline-body" ref={timelineBodyRef}>
-        {/* SlotGrid overlay - fades in when slotGridProgress > 0.6 */}
-        {slotGridProgress > 0.6 && (
+      <div className="timeline-body" ref={timelineBodyRef} style={{
+        perspective: slotGridProgress > 0 ? '1200px' : undefined,
+        perspectiveOrigin: '50% 50%',
+      }}>
+        {/* SlotGrid overlay - fades in during transition */}
+        {slotGridProgress > 0.3 && (
           <SlotGrid
-            opacity={Math.min(1, (slotGridProgress - 0.6) / 0.4)}
+            opacity={Math.min(1, (slotGridProgress - 0.3) / 0.5)}
+            progress={slotGridProgress}
           />
         )}
         <div className="timeline-body-content" style={{
-          opacity: slotGridProgress >= 1 ? 0 : 1 - slotGridProgress,
-          pointerEvents: slotGridProgress >= 1 ? 'none' : 'auto',
+          opacity: slotGridProgress >= 1 ? 0 : 1 - slotGridProgress * 0.8,
+          pointerEvents: slotGridProgress >= 0.5 ? 'none' : 'auto',
           display: slotGridProgress >= 1 ? 'none' : undefined,
+          transform: slotGridProgress > 0
+            ? `rotateX(${slotGridProgress * 35}deg) scale(${1 - slotGridProgress * 0.3}) translateY(${slotGridProgress * 20}px)`
+            : undefined,
+          transformOrigin: 'center bottom',
         }}>
           <div className="timeline-header-row">
             <div className="ruler-header">

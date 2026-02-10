@@ -79,7 +79,6 @@ export const selectPlaybackState = (state: TimelineStore) => ({
 export const selectViewState = (state: TimelineStore) => ({
   zoom: state.zoom,
   scrollX: state.scrollX,
-  slotGridProgress: state.slotGridProgress,
 });
 
 // UI settings (rarely changes)

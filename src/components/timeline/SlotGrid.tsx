@@ -9,12 +9,13 @@ import type { Composition } from '../../stores/mediaStore';
 
 interface SlotGridProps {
   opacity: number;
+  progress: number;
 }
 
 const SLOT_MIN_SIZE = 120;
 const SLOT_MAX_SIZE = 180;
 
-export function SlotGrid({ opacity }: SlotGridProps) {
+export function SlotGrid({ opacity, progress }: SlotGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [slotSize, setSlotSize] = useState(140);
 
@@ -80,7 +81,11 @@ export function SlotGrid({ opacity }: SlotGridProps) {
       <div
         ref={containerRef}
         className="slot-grid-container"
-        style={{ opacity }}
+        style={{
+          opacity,
+          transform: `rotateX(${(1 - progress) * -25}deg) scale(${0.7 + progress * 0.3}) translateY(${(1 - progress) * 30}px)`,
+          transformOrigin: 'center top',
+        }}
       >
         <div className="slot-grid-empty">
           No compositions
@@ -93,7 +98,11 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     <div
       ref={containerRef}
       className="slot-grid-container"
-      style={{ opacity }}
+      style={{
+        opacity,
+        transform: `rotateX(${(1 - progress) * -25}deg) scale(${0.7 + progress * 0.3}) translateY(${(1 - progress) * 30}px)`,
+        transformOrigin: 'center top',
+      }}
     >
       <div
         className="slot-grid"
