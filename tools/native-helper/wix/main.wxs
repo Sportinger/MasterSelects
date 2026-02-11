@@ -33,6 +33,9 @@
             <ComponentRef Id='DLL_avutil' />
             <ComponentRef Id='DLL_swresample' />
             <ComponentRef Id='DLL_swscale' />
+            <ComponentRef Id='DLL_avdevice' />
+            <ComponentRef Id='DLL_avfilter' />
+            <ComponentRef Id='DLL_postproc' />
             <ComponentRef Id='FFmpegExe' />
 
             <Feature Id='ShortcutsFeature' Title='Shortcuts' Description='Start Menu and Desktop shortcuts' Level='1'>
@@ -105,6 +108,27 @@
             <File Name='swscale-8.dll' Source='target\release\swscale-8.dll' />
             <RegistryValue Root='HKCU' Key='Software\MasterSelects\Helper\DLLs'
                 Name='swscale' Type='integer' Value='1' KeyPath='yes' />
+        </Component>
+
+        <Component Id='DLL_avdevice' Directory='INSTALLDIR'
+                   Guid='A1B2C3D4-2222-4000-8000-000000000006'>
+            <File Name='avdevice-61.dll' Source='target\release\avdevice-61.dll' />
+            <RegistryValue Root='HKCU' Key='Software\MasterSelects\Helper\DLLs'
+                Name='avdevice' Type='integer' Value='1' KeyPath='yes' />
+        </Component>
+
+        <Component Id='DLL_avfilter' Directory='INSTALLDIR'
+                   Guid='A1B2C3D4-2222-4000-8000-000000000007'>
+            <File Name='avfilter-10.dll' Source='target\release\avfilter-10.dll' />
+            <RegistryValue Root='HKCU' Key='Software\MasterSelects\Helper\DLLs'
+                Name='avfilter' Type='integer' Value='1' KeyPath='yes' />
+        </Component>
+
+        <Component Id='DLL_postproc' Directory='INSTALLDIR'
+                   Guid='A1B2C3D4-2222-4000-8000-000000000008'>
+            <File Name='postproc-58.dll' Source='target\release\postproc-58.dll' />
+            <RegistryValue Root='HKCU' Key='Software\MasterSelects\Helper\DLLs'
+                Name='postproc' Type='integer' Value='1' KeyPath='yes' />
         </Component>
 
         <Component Id='FFmpegExe' Directory='INSTALLDIR'

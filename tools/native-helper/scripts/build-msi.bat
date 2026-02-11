@@ -58,11 +58,14 @@ copy /y "%FFMPEG_BIN%\avformat-61.dll"   "%RELEASE_DIR%\" >nul 2>&1
 copy /y "%FFMPEG_BIN%\avutil-59.dll"     "%RELEASE_DIR%\" >nul 2>&1
 copy /y "%FFMPEG_BIN%\swresample-5.dll"  "%RELEASE_DIR%\" >nul 2>&1
 copy /y "%FFMPEG_BIN%\swscale-8.dll"     "%RELEASE_DIR%\" >nul 2>&1
+copy /y "%FFMPEG_BIN%\avdevice-61.dll"   "%RELEASE_DIR%\" >nul 2>&1
+copy /y "%FFMPEG_BIN%\avfilter-10.dll"   "%RELEASE_DIR%\" >nul 2>&1
+copy /y "%FFMPEG_BIN%\postproc-58.dll"   "%RELEASE_DIR%\" >nul 2>&1
 copy /y "%FFMPEG_BIN%\ffmpeg.exe"        "%RELEASE_DIR%\" >nul 2>&1
 
 REM Verify all files exist
 set "MISSING=0"
-for %%F in (masterselects-helper.exe avcodec-61.dll avformat-61.dll avutil-59.dll swresample-5.dll swscale-8.dll ffmpeg.exe) do (
+for %%F in (masterselects-helper.exe avcodec-61.dll avformat-61.dll avutil-59.dll swresample-5.dll swscale-8.dll avdevice-61.dll avfilter-10.dll postproc-58.dll ffmpeg.exe) do (
     if not exist "%RELEASE_DIR%\%%F" (
         echo       MISSING: %%F
         set "MISSING=1"
@@ -72,7 +75,7 @@ if "%MISSING%"=="1" (
     echo ERROR: Some required files are missing!
     exit /b 1
 )
-echo       OK (7 files)
+echo       OK (10 files)
 
 REM --- Step 3: Build MSI ---
 echo [3/3] Building MSI installer...
