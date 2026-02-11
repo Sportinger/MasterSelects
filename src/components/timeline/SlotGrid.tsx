@@ -182,15 +182,23 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     if (compOnLayer && compOnLayer === activeCompositionId) {
       // Deactivated comp was the editor-active one
       if (stillActive.length > 0) {
-        // Remember if playback was running before the switch
-        const wasPlaying = useTimelineStore.getState().isPlaying;
-        // Switch editor to another still-active layer's comp
-        // (openCompositionTab → loadState → pause() internally, so we re-play after)
-        useMediaStore.getState().openCompositionTab(stillActive[0][1]!, { skipAnimation: true });
-        if (wasPlaying) {
-          // Resume playback after comp switch so other layers keep running
-          setTimeout(() => useTimelineStore.getState().play(), 50);
-        }
+        // Don't promote another slot to editor (green→blue) — remaining slots stay green.
+        // Save current editor's timeline state, then clear activeCompositionId.
+        // Avoids openCompositionTab/setActiveComposition which call pause() globally.
+        const ts = useTimelineStore.getState();
+        ts.setPlayheadPosition(
+          playheadState.isUsingInternalPosition
+            ? playheadState.position
+            : ts.playheadPosition
+        );
+        const timelineData = ts.getSerializableState();
+        const { compositions: freshComps } = useMediaStore.getState();
+        useMediaStore.setState({
+          activeCompositionId: null,
+          compositions: freshComps.map(c =>
+            c.id === compOnLayer ? { ...c, timelineData } : c
+          ),
+        });
       } else {
         // No layers left — stop everything
         useTimelineStore.getState().stop();
