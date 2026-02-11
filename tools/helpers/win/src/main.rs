@@ -1,4 +1,4 @@
-//! MasterSelects Helper Lite - YouTube downloader only (no FFmpeg required)
+//! MasterSelects Helper Lite - Video downloader using yt-dlp (no FFmpeg required)
 
 use anyhow::Result;
 use clap::Parser;
@@ -17,7 +17,7 @@ use warp::Filter;
 
 #[derive(Parser, Debug)]
 #[command(name = "masterselects-helper-lite")]
-#[command(about = "YouTube downloader helper for MasterSelects (no FFmpeg)")]
+#[command(about = "Video downloader helper for MasterSelects (no FFmpeg)")]
 #[command(version)]
 struct Args {
     #[arg(short, long, default_value = "9876")]
@@ -31,6 +31,12 @@ enum Command {
     Info { id: String },
     ListFormats { id: String, url: String },
     DownloadYoutube {
+        id: String,
+        url: String,
+        format_id: Option<String>,
+        output_dir: Option<String>,
+    },
+    Download {
         id: String,
         url: String,
         format_id: Option<String>,
@@ -209,6 +215,10 @@ async fn handle_command(cmd: Command) -> Response {
             handle_download(&id, &url, format_id.as_deref(), output_dir.as_deref(), None).await
         }
 
+        Command::Download { id, url, format_id, output_dir } => {
+            handle_download(&id, &url, format_id.as_deref(), output_dir.as_deref(), None).await
+        }
+
         Command::GetFile { id, path } => {
             handle_get_file(&id, &path)
         }
@@ -230,8 +240,8 @@ fn get_deno_args() -> Vec<String> {
 async fn handle_list_formats(id: &str, url: &str) -> Response {
     use std::process::Stdio;
 
-    if !url.contains("youtube.com") && !url.contains("youtu.be") {
-        return Response::error(id, "INVALID_URL", "Not a valid YouTube URL");
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Response::error(id, "INVALID_URL", "URL must start with http:// or https://");
     }
 
     let ytdlp_cmd = get_ytdlp_command();
@@ -258,15 +268,16 @@ async fn handle_list_formats(id: &str, url: &str) -> Response {
                     let duration = info.get("duration").and_then(|v| v.as_f64()).unwrap_or(0.0);
                     let thumbnail = info.get("thumbnail").and_then(|v| v.as_str()).unwrap_or("");
 
-                    // Parse formats
+                    // Detect platform from extractor field
+                    let platform = info.get("extractor_key").and_then(|v| v.as_str()).unwrap_or("generic");
+
+                    // Parse formats — collect video-only formats by resolution
                     let mut recommendations = Vec::new();
                     if let Some(formats) = info.get("formats").and_then(|v| v.as_array()) {
                         let mut by_height: HashMap<i64, Vec<&serde_json::Value>> = HashMap::new();
 
                         for fmt in formats {
-                            let acodec = fmt.get("acodec").and_then(|v| v.as_str()).unwrap_or("none");
                             let vcodec = fmt.get("vcodec").and_then(|v| v.as_str()).unwrap_or("none");
-                            let ext = fmt.get("ext").and_then(|v| v.as_str()).unwrap_or("");
 
                             // Skip audio-only and AV1
                             if vcodec == "none" || vcodec.contains("av01") {
@@ -318,6 +329,53 @@ async fn handle_list_formats(id: &str, url: &str) -> Response {
                                 }
                             }
                         }
+
+                        // Fallback: if no separate video-only formats found (common for TikTok, Instagram),
+                        // add a "Best available" option using the best combined format
+                        if recommendations.is_empty() {
+                            // Look for combined (video+audio) formats
+                            let mut best_combined: Option<&serde_json::Value> = None;
+                            let mut best_score: i64 = 0;
+
+                            for fmt in formats {
+                                let vcodec = fmt.get("vcodec").and_then(|v| v.as_str()).unwrap_or("none");
+                                let acodec = fmt.get("acodec").and_then(|v| v.as_str()).unwrap_or("none");
+                                if vcodec == "none" { continue; }
+
+                                let height = fmt.get("height").and_then(|v| v.as_i64()).unwrap_or(0);
+                                let tbr = fmt.get("tbr").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                                let score = height * 1000 + tbr as i64;
+
+                                if score > best_score {
+                                    best_score = score;
+                                    best_combined = Some(fmt);
+                                }
+                            }
+
+                            if let Some(fmt) = best_combined {
+                                let format_id = fmt.get("format_id").and_then(|v| v.as_str()).unwrap_or("best");
+                                let height = fmt.get("height").and_then(|v| v.as_i64()).unwrap_or(0);
+                                let fps = fmt.get("fps").and_then(|v| v.as_f64()).unwrap_or(30.0);
+                                let filesize = fmt.get("filesize").and_then(|v| v.as_i64())
+                                    .or_else(|| fmt.get("filesize_approx").and_then(|v| v.as_i64()));
+
+                                let label = if height > 0 {
+                                    format!("Best available ({}p, {:.0}fps)", height, fps)
+                                } else {
+                                    "Best available".to_string()
+                                };
+
+                                recommendations.push(serde_json::json!({
+                                    "id": format_id,
+                                    "label": label,
+                                    "resolution": if height > 0 { format!("{}p", height) } else { "?".to_string() },
+                                    "vcodec": serde_json::Value::Null,
+                                    "acodec": serde_json::Value::Null,
+                                    "needsMerge": false,
+                                    "filesize": filesize,
+                                }));
+                            }
+                        }
                     }
 
                     Response::ok(id, serde_json::json!({
@@ -325,6 +383,7 @@ async fn handle_list_formats(id: &str, url: &str) -> Response {
                         "uploader": uploader,
                         "duration": duration,
                         "thumbnail": thumbnail,
+                        "platform": platform,
                         "recommendations": recommendations,
                     }))
                 }
@@ -346,8 +405,8 @@ async fn handle_download(id: &str, url: &str, format_id: Option<&str>, output_di
     use std::process::Stdio;
     use tokio::io::{AsyncBufReadExt, BufReader};
 
-    if !url.contains("youtube.com") && !url.contains("youtu.be") {
-        return Response::error(id, "INVALID_URL", "Not a valid YouTube URL");
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Response::error(id, "INVALID_URL", "URL must start with http:// or https://");
     }
 
     let download_dir = output_dir.map(PathBuf::from).unwrap_or_else(get_download_dir);
@@ -361,9 +420,9 @@ async fn handle_download(id: &str, url: &str, format_id: Option<&str>, output_di
     let output_template = download_dir.join("%(title)s.%(ext)s").to_string_lossy().to_string();
 
     let format_str = if let Some(fid) = format_id {
-        format!("{}+bestaudio[ext=m4a]/{}+bestaudio/best", fid, fid)
+        format!("{}+bestaudio[ext=m4a]/{}+bestaudio/{}/best", fid, fid, fid)
     } else {
-        "bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best".to_string()
+        "bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=mp4]/best".to_string()
     };
 
     let ytdlp_cmd = get_ytdlp_command();
@@ -516,6 +575,9 @@ async fn handle_websocket(stream: TcpStream) {
                             Command::DownloadYoutube { id, url, format_id, output_dir } => {
                                 handle_download(&id, &url, format_id.as_deref(), output_dir.as_deref(), Some(write.clone())).await
                             }
+                            Command::Download { id, url, format_id, output_dir } => {
+                                handle_download(&id, &url, format_id.as_deref(), output_dir.as_deref(), Some(write.clone())).await
+                            }
                             other => handle_command(other).await,
                         };
                         let json = serde_json::to_string(&response).unwrap();
@@ -624,7 +686,7 @@ async fn main() -> Result<()> {
     println!();
     println!("========================================");
     println!("  MasterSelects Helper Lite v{}", env!("CARGO_PKG_VERSION"));
-    println!("  (YouTube downloader - no FFmpeg)");
+    println!("  (Video downloader - no FFmpeg)");
     println!("========================================");
     println!("  WebSocket: ws://127.0.0.1:{}", args.port);
     println!("  HTTP:      http://127.0.0.1:{}", http_port);

@@ -58,8 +58,9 @@ export function isDownloadAvailable(): boolean {
   return NativeHelperClient.isConnected();
 }
 
-// Download video from YouTube using Native Helper + yt-dlp
-export async function downloadYouTubeVideo(
+// Download video from any yt-dlp-supported URL using Native Helper
+export async function downloadVideo(
+  url: string,
   videoId: string,
   title: string,
   thumbnail: string,
@@ -97,12 +98,10 @@ export async function downloadYouTubeVideo(
     progress.progress = 5;
     notifySubscribers(progress);
 
-    const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
-
     // Request download from Native Helper
-    log.info(`Starting download: ${videoId}`);
+    log.info(`Starting download: ${videoId} (${url})`);
 
-    const result = await NativeHelperClient.downloadYouTube(youtubeUrl, formatId, (percent) => {
+    const result = await NativeHelperClient.download(url, formatId, (percent) => {
       progress.progress = 5 + (percent * 0.9); // 5% to 95%
       notifySubscribers(progress);
     });
@@ -129,7 +128,7 @@ export async function downloadYouTubeVideo(
       const savedFile = await projectFileService.saveYouTubeDownload(blob, title);
       if (savedFile) {
         file = savedFile;
-        log.info('Saved to project YT folder');
+        log.info('Saved to project downloads folder');
       } else {
         // Fallback to in-memory file
         const sanitizedTitle = title.replace(/[^a-zA-Z0-9\s-]/g, '').substring(0, 100);
@@ -154,6 +153,18 @@ export async function downloadYouTubeVideo(
     notifySubscribers(progress);
     throw error;
   }
+}
+
+// Download video from YouTube (backward-compatible wrapper)
+export async function downloadYouTubeVideo(
+  videoId: string,
+  title: string,
+  thumbnail: string,
+  formatId?: string,
+  onProgress?: DownloadCallback
+): Promise<File> {
+  const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  return downloadVideo(youtubeUrl, videoId, title, thumbnail, formatId, onProgress);
 }
 
 // Cancel a download

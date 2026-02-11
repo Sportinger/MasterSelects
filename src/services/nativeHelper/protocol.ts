@@ -116,6 +116,14 @@ export interface ListFormatsCommand {
   url: string;
 }
 
+export interface DownloadCommand {
+  cmd: 'download';
+  id: string;
+  url: string;
+  format_id?: string;
+  output_dir?: string;
+}
+
 export interface FormatInfo {
   format_id: string;
   ext: string;
@@ -144,6 +152,7 @@ export interface VideoInfo {
   thumbnail: string;
   duration: number;
   uploader: string;
+  platform?: string;
   recommendations: FormatRecommendation[];
   allFormats: FormatInfo[];
 }
@@ -169,6 +178,7 @@ export type Command =
   | PingCommand
   | DownloadYouTubeCommand
   | ListFormatsCommand
+  | DownloadCommand
   | GetFileCommand;
 
 // Encode settings

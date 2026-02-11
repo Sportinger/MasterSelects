@@ -152,7 +152,7 @@ export const PANEL_CONFIGS: Record<PanelType, PanelConfig> = {
   },
   youtube: {
     type: 'youtube',
-    title: 'YouTube',
+    title: 'Downloads',
     minWidth: 300,
     minHeight: 400,
     closable: false,

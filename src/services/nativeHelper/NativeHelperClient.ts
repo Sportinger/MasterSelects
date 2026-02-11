@@ -344,7 +344,7 @@ class NativeHelperClientImpl {
   }
 
   /**
-   * List available formats for a YouTube video
+   * List available formats for a video URL (YouTube, TikTok, Instagram, etc.)
    */
   async listFormats(url: string): Promise<VideoInfo | null> {
     const id = this.nextId();
@@ -363,6 +363,7 @@ class NativeHelperClientImpl {
             thumbnail: response.thumbnail,
             duration: response.duration,
             uploader: response.uploader,
+            platform: response.platform,
             recommendations: response.recommendations,
             allFormats: response.allFormats,
           });
@@ -439,6 +440,70 @@ class NativeHelperClientImpl {
       // Send download command
       const cmd: any = {
         cmd: 'download_youtube',
+        id,
+        url,
+      };
+
+      if (formatId) {
+        cmd.format_id = formatId;
+      }
+
+      this.sendRaw(JSON.stringify(cmd)).catch((err) => {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(id);
+        this.progressCallbacks.delete(id);
+        reject(err);
+      });
+    });
+  }
+
+  /**
+   * Download a video from any yt-dlp-supported platform
+   */
+  async download(
+    url: string,
+    formatId?: string,
+    onProgress?: (percent: number) => void
+  ): Promise<{ success: boolean; path?: string; error?: string }> {
+    const id = this.nextId();
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        this.progressCallbacks.delete(id);
+        reject(new Error('Download timeout'));
+      }, 600000);
+
+      if (onProgress) {
+        this.progressCallbacks.set(id, onProgress);
+      }
+
+      this.pendingRequests.set(id, (response: any) => {
+        if (response.type === 'progress' && response.percent !== undefined) {
+          const progressCb = this.progressCallbacks.get(id);
+          if (progressCb) {
+            progressCb(response.percent);
+          }
+          return;
+        }
+
+        clearTimeout(timeout);
+        this.progressCallbacks.delete(id);
+        if (response.ok) {
+          resolve({
+            success: true,
+            path: response.path,
+          });
+        } else {
+          resolve({
+            success: false,
+            error: response.error?.message || 'Download failed',
+          });
+        }
+      });
+
+      const cmd: any = {
+        cmd: 'download',
         id,
         url,
       };

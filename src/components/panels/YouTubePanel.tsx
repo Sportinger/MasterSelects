@@ -5,7 +5,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useYouTubeStore, type YouTubeVideo as StoreYouTubeVideo } from '../../stores/youtubeStore';
-import { downloadYouTubeVideo, subscribeToDownload, isDownloadAvailable, type DownloadProgress } from '../../services/youtubeDownloader';
+import { downloadYouTubeVideo, downloadVideo, subscribeToDownload, isDownloadAvailable, type DownloadProgress } from '../../services/youtubeDownloader';
 import { NativeHelperClient } from '../../services/nativeHelper';
 import type { VideoInfo } from '../../services/nativeHelper';
 import './YouTubePanel.css';
@@ -18,6 +18,8 @@ interface YouTubeVideo {
   duration: string;
   durationSeconds: number;
   views?: string;
+  platform?: string;
+  sourceUrl?: string;
 }
 
 // Convert store video to panel format
@@ -30,6 +32,8 @@ function storeToPanel(v: StoreYouTubeVideo): YouTubeVideo {
     duration: v.duration || '?:??',
     durationSeconds: v.durationSeconds || 0,
     views: v.viewCount,
+    platform: v.platform,
+    sourceUrl: v.sourceUrl,
   };
 }
 
@@ -44,6 +48,8 @@ function panelToStore(v: YouTubeVideo): StoreYouTubeVideo {
     duration: v.duration,
     durationSeconds: v.durationSeconds,
     viewCount: v.views,
+    platform: v.platform,
+    sourceUrl: v.sourceUrl,
   };
 }
 
@@ -59,6 +65,35 @@ function extractVideoId(input: string): string | null {
     if (match) return match[1];
   }
   return null;
+}
+
+// Detect platform from URL
+function detectPlatform(url: string): string | null {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) return 'youtube';
+    if (hostname.includes('tiktok.com')) return 'tiktok';
+    if (hostname.includes('instagram.com')) return 'instagram';
+    if (hostname.includes('twitter.com') || hostname.includes('x.com')) return 'twitter';
+    if (hostname.includes('facebook.com') || hostname.includes('fb.watch')) return 'facebook';
+    if (hostname.includes('reddit.com')) return 'reddit';
+    if (hostname.includes('vimeo.com')) return 'vimeo';
+    if (hostname.includes('twitch.tv')) return 'twitch';
+    if (hostname.includes('dailymotion.com')) return 'dailymotion';
+    return 'generic';
+  } catch {
+    return null;
+  }
+}
+
+// Check if a string looks like a supported video URL (not YouTube-specific)
+function isSupportedVideoUrl(input: string): boolean {
+  try {
+    const url = new URL(input);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 // Get video info via YouTube oEmbed (supports CORS!)
@@ -262,62 +297,97 @@ export function YouTubePanel() {
       const videoId = extractVideoId(input);
 
       if (videoId) {
-        // Direct video URL/ID - get info and show it
+        // YouTube URL/ID - get info via oEmbed
         const videoInfo = await getVideoInfo(videoId);
         if (videoInfo) {
-          // Add to store (handles duplicates)
+          videoInfo.platform = 'youtube';
+          videoInfo.sourceUrl = `https://www.youtube.com/watch?v=${videoId}`;
           addVideos([panelToStore(videoInfo)]);
-          // Clear input for next paste
           setQuery('');
-          // Auto-download if enabled
           if (autoDownload) {
             downloadVideoOnly(videoInfo);
           }
         } else {
           setError('Could not load video info');
         }
+      } else if (isSupportedVideoUrl(input)) {
+        // Non-YouTube video URL — use yt-dlp to get metadata
+        const platform = detectPlatform(input);
+        if (!helperConnected) {
+          setError('Native Helper required for non-YouTube URLs');
+        } else {
+          const info = await NativeHelperClient.listFormats(input);
+          if (info) {
+            // Generate a stable ID from the URL
+            const urlId = btoa(input).replace(/[^a-zA-Z0-9]/g, '').substring(0, 16);
+            const video: YouTubeVideo = {
+              id: urlId,
+              title: info.title || 'Untitled',
+              thumbnail: info.thumbnail || '',
+              channel: info.uploader || 'Unknown',
+              duration: info.duration ? formatDuration(Math.round(info.duration)) : '?:??',
+              durationSeconds: Math.round(info.duration || 0),
+              platform: platform || info.platform || 'generic',
+              sourceUrl: input,
+            };
+            addVideos([panelToStore(video)]);
+            setQuery('');
+            if (autoDownload) {
+              downloadVideoOnly(video);
+            }
+          } else {
+            setError('Could not load video info. URL may not be supported.');
+          }
+        }
       } else if (youtubeApiKey) {
-        // Search query with API key
+        // Search query with API key (YouTube search only)
         const videos = await searchYouTubeAPI(input);
-        // Add all to store
-        addVideos(videos.map(panelToStore));
+        const videosWithPlatform = videos.map(v => ({
+          ...v,
+          platform: 'youtube' as const,
+          sourceUrl: `https://www.youtube.com/watch?v=${v.id}`,
+        }));
+        addVideos(videosWithPlatform.map(panelToStore));
       } else {
-        // No API key and not a URL
-        setError('Paste a YouTube URL, or add API key in settings for search');
+        setError('Paste a video URL, or add YouTube API key in settings for search');
       }
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [query, youtubeApiKey, autoDownload]);
+  }, [query, youtubeApiKey, autoDownload, helperConnected]);
 
   // Handle Enter key
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') handleSearch();
   };
 
-  // Handle paste - auto-add if it's a YouTube URL
+  // Handle paste - auto-add if it's a video URL
   const handlePaste = (e: React.ClipboardEvent) => {
     const pastedText = e.clipboardData.getData('text').trim();
     const videoId = extractVideoId(pastedText);
 
-    if (videoId) {
+    if (videoId || isSupportedVideoUrl(pastedText)) {
       e.preventDefault();
       setQuery(pastedText);
-      // Trigger search immediately with pasted text
       handleSearch(pastedText);
     }
   };
 
+  // Get the source URL for a video (handles both YouTube and other platforms)
+  const getVideoUrl = (video: YouTubeVideo): string => {
+    return video.sourceUrl || `https://www.youtube.com/watch?v=${video.id}`;
+  };
+
   // Open video in new tab
-  const openVideo = (videoId: string) => {
-    window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank');
+  const openVideo = (video: YouTubeVideo) => {
+    window.open(getVideoUrl(video), '_blank');
   };
 
   // Copy video URL
-  const copyVideoUrl = (videoId: string) => {
-    navigator.clipboard.writeText(`https://www.youtube.com/watch?v=${videoId}`);
+  const copyVideoUrl = (video: YouTubeVideo) => {
+    navigator.clipboard.writeText(getVideoUrl(video));
   };
 
   // Drag handlers
@@ -337,7 +407,7 @@ export function YouTubePanel() {
     setError(null);
 
     try {
-      const url = `https://www.youtube.com/watch?v=${video.id}`;
+      const url = getVideoUrl(video);
       const info = await NativeHelperClient.listFormats(url);
 
       if (info && info.recommendations.length > 0) {
@@ -388,16 +458,19 @@ export function YouTubePanel() {
     });
 
     try {
-      const file = await downloadYouTubeVideo(video.id, video.title, video.thumbnail, formatId);
+      const videoUrl = getVideoUrl(video);
+      const file = video.sourceUrl && video.platform !== 'youtube'
+        ? await downloadVideo(videoUrl, video.id, video.title, video.thumbnail, formatId)
+        : await downloadYouTubeVideo(video.id, video.title, video.thumbnail, formatId);
       // Trigger browser download
-      const url = URL.createObjectURL(file);
+      const blobUrl = URL.createObjectURL(file);
       const a = document.createElement('a');
-      a.href = url;
+      a.href = blobUrl;
       a.download = `${video.title.replace(/[^a-zA-Z0-9 ]/g, '')}.mp4`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(blobUrl);
     } catch (err) {
       setError(`Download failed: ${(err as Error).message}`);
     } finally {
@@ -449,7 +522,10 @@ export function YouTubePanel() {
     });
 
     try {
-      const file = await downloadYouTubeVideo(video.id, video.title, video.thumbnail, formatId);
+      const videoUrl = getVideoUrl(video);
+      const file = video.sourceUrl && video.platform !== 'youtube'
+        ? await downloadVideo(videoUrl, video.id, video.title, video.thumbnail, formatId)
+        : await downloadYouTubeVideo(video.id, video.title, video.thumbnail, formatId);
       await completeDownload(clipId, file);
     } catch (err) {
       setDownloadError(clipId, (err as Error).message);
@@ -473,7 +549,7 @@ export function YouTubePanel() {
           <input
             type="text"
             className="youtube-search-input"
-            placeholder={youtubeApiKey ? "Search or paste URL..." : "Paste YouTube URL..."}
+            placeholder={youtubeApiKey ? "Search or paste video URL..." : "Paste video URL (YouTube, TikTok, Instagram, ...)"}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -522,7 +598,7 @@ export function YouTubePanel() {
         )}
         {!youtubeApiKey && helperConnected && (
           <div className="youtube-hint">
-            Paste YouTube URLs to add videos. Add API key for search.
+            Paste video URLs to add videos. Add YouTube API key for search.
           </div>
         )}
       </div>
@@ -549,7 +625,7 @@ export function YouTubePanel() {
                 draggable
                 onDragStart={(e) => handleDragStart(e, video)}
                 onDragEnd={handleDragEnd}
-                onClick={() => openVideo(video.id)}
+                onClick={() => openVideo(video)}
               >
                 <div className="video-thumbnail">
                   <img src={video.thumbnail} alt={video.title} loading="lazy" draggable={false} />
@@ -579,7 +655,7 @@ export function YouTubePanel() {
                     </button>
                     <button
                       className="btn-copy-url"
-                      onClick={(e) => { e.stopPropagation(); copyVideoUrl(video.id); }}
+                      onClick={(e) => { e.stopPropagation(); copyVideoUrl(video); }}
                       title="Copy URL"
                     >
                       Copy
@@ -605,16 +681,16 @@ export function YouTubePanel() {
           </div>
         ) : (
           <div className="youtube-empty">
-            <span className="youtube-icon">YouTube</span>
+            <span className="youtube-icon">Downloads</span>
             {youtubeApiKey ? (
               <>
-                <p>Search for videos</p>
-                <span>Or paste a YouTube URL</span>
+                <p>Search or paste a video URL</p>
+                <span>YouTube, TikTok, Instagram, Twitter/X, Vimeo, ...</span>
               </>
             ) : (
               <>
-                <p>Paste a YouTube URL</p>
-                <span>e.g. youtube.com/watch?v=...</span>
+                <p>Paste a video URL</p>
+                <span>YouTube, TikTok, Instagram, Twitter/X, Vimeo, ...</span>
               </>
             )}
           </div>
