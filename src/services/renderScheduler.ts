@@ -247,7 +247,9 @@ class RenderSchedulerService {
       }
 
       // Skip if active comp — main loop handles it
-      if (compId === activeCompId) continue;
+      // Exception: layer-filtered sources need independent rendering even for active comp
+      const needsIndependentRender = target.source.type === 'layer' || target.source.type === 'layer-index';
+      if (compId === activeCompId && !needsIndependentRender) continue;
 
       // Optimization: copy pre-rendered nested comp texture instead of re-rendering
       const nestedInfo = this.getNestedCompInfo(compId);
@@ -291,10 +293,8 @@ class RenderSchedulerService {
         evalLayers = idx < evalLayers.length ? [evalLayers[idx]] : [];
       }
 
-      // Render to the target canvas
-      if (evalLayers.length > 0) {
-        engine.renderToPreviewCanvas(targetId, evalLayers as Layer[]);
-      }
+      // Render to the target canvas (empty = black)
+      engine.renderToPreviewCanvas(targetId, evalLayers as Layer[]);
     }
   }
 
