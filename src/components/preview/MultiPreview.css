@@ -6,7 +6,7 @@
   flex-direction: column;
   height: 100%;
   width: 100%;
-  background: var(--bg-canvas);
+  background: var(--bg-primary);
   position: relative;
   overflow: hidden;
 }
@@ -44,7 +44,7 @@
   aspect-ratio: 16 / 9;
   width: 100%;
   max-height: 100%;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--border-color);
 }
 
 /* When container is wider than 16:9, constrain width by height */
@@ -58,7 +58,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-canvas);
+  background: var(--bg-primary);
   overflow: hidden;
   min-width: 0;
   min-height: 0;
