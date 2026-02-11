@@ -457,19 +457,42 @@ class ProxyFrameCache {
       this.audioContext = new AudioContext();
       this.scrubGain = this.audioContext.createGain();
       this.scrubGain.connect(this.audioContext.destination);
-      this.scrubGain.gain.value = 0.85; // Slightly lower for scrubbing
+      this.scrubGain.gain.value = 0.85;
+      log.debug(`AudioContext created, state: ${this.audioContext.state}`);
     }
     return this.audioContext;
   }
 
   /**
    * Ensure AudioContext is running - MUST be called from a user gesture (mousedown/click).
-   * Chrome's autoplay policy blocks AudioContext.resume() from rAF callbacks.
+   * Chrome's autoplay policy requires user gesture to unlock audio.
+   * If the existing context is stuck suspended, replace it with a fresh one.
    */
   ensureAudioContextResumed(): void {
-    const ctx = this.getAudioContext();
-    if (ctx.state === 'suspended') {
-      ctx.resume();
+    if (!this.audioContext) {
+      // Create fresh context in user gesture → starts "running" automatically
+      this.getAudioContext();
+      log.debug(`AudioContext created in user gesture, state: ${this.audioContext!.state}`);
+      return;
+    }
+
+    if (this.audioContext.state === 'suspended') {
+      log.debug('AudioContext suspended, attempting resume from user gesture...');
+      // Try resume first
+      this.audioContext.resume().then(() => {
+        log.debug(`AudioContext after resume: ${this.audioContext?.state}`);
+      });
+
+      // If still suspended after a tick, replace with fresh context created in gesture
+      // (Chrome sometimes ignores resume on contexts created outside gestures)
+      if (this.audioContext.state === 'suspended') {
+        log.debug('Replacing suspended AudioContext with fresh one');
+        try { this.audioContext.close(); } catch { /* ignore */ }
+        this.audioContext = null as any;
+        this.scrubGain = null;
+        this.getAudioContext();
+        log.debug(`Fresh AudioContext state: ${this.audioContext!.state}`);
+      }
     }
   }
 
@@ -923,3 +946,18 @@ class ProxyFrameCache {
 
 // Singleton instance
 export const proxyFrameCache = new ProxyFrameCache();
+
+// Global user interaction listener to unlock AudioContext as early as possible.
+// Chrome requires a user gesture to start/resume AudioContext.
+// This fires on the FIRST interaction with the page (any click, key, touch).
+if (typeof document !== 'undefined') {
+  const unlockAudio = () => {
+    proxyFrameCache.ensureAudioContextResumed();
+    document.removeEventListener('mousedown', unlockAudio);
+    document.removeEventListener('keydown', unlockAudio);
+    document.removeEventListener('touchstart', unlockAudio);
+  };
+  document.addEventListener('mousedown', unlockAudio, { capture: true });
+  document.addEventListener('keydown', unlockAudio, { capture: true });
+  document.addEventListener('touchstart', unlockAudio, { capture: true });
+}
