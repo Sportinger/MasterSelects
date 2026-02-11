@@ -29,6 +29,14 @@ export function TargetPreview({ targetId }: TargetPreviewProps) {
     };
   }, [targetId]);
 
+  // Request a render frame whenever slice config changes (engine idle when paused)
+  const sliceConfig = useSliceStore((s) => targetId ? s.configs.get(targetId) : undefined);
+  useEffect(() => {
+    if (sliceConfig) {
+      engine.requestRender();
+    }
+  }, [sliceConfig]);
+
   useEffect(() => {
     if (!canvasRef.current || !source) {
       // Cleanup if no source
