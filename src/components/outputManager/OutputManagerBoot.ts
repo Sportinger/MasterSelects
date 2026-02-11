@@ -368,14 +368,21 @@ function getOutputManagerStyles(): string {
       margin: 2px 0;
     }
 
-    /* Preview Wrapper (for overlay positioning) */
+    /* Preview Wrapper (zoom/pan container) */
     .om-preview-wrapper {
       position: relative;
       flex: 1;
+      overflow: hidden;
+      min-height: 0;
+      cursor: default;
+    }
+    .om-preview-viewport {
+      position: relative;
+      width: 100%;
+      height: 100%;
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 0;
     }
 
     /* Preview */
@@ -497,14 +504,56 @@ function getOutputManagerStyles(): string {
       touch-action: none;
     }
 
+    /* Context Menu */
+    .om-context-menu-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 200;
+    }
+    .om-context-menu {
+      position: fixed;
+      background: #1e1e1e;
+      border: 1px solid #444;
+      border-radius: 4px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      padding: 4px 0;
+      min-width: 160px;
+      z-index: 201;
+    }
+    .om-context-menu-item {
+      display: block;
+      width: 100%;
+      background: none;
+      color: #ccc;
+      border: none;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-size: 12px;
+      text-align: left;
+    }
+    .om-context-menu-item:hover {
+      background: #2a2a2a;
+      color: #fff;
+    }
+
     /* Footer */
     .om-footer {
       display: flex;
       justify-content: flex-end;
+      align-items: center;
+      gap: 12px;
       padding: 8px 16px;
       background: #161616;
       border-top: 1px solid #2a2a2a;
       flex-shrink: 0;
+    }
+    .om-zoom-label {
+      font-size: 11px;
+      color: #666;
+      font-variant-numeric: tabular-nums;
     }
     .om-save-exit-btn {
       background: #2D8CEB;

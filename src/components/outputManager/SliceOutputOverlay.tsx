@@ -1,7 +1,8 @@
 // SliceOutputOverlay - SVG overlay for dragging corner pin warp points
 // Uses setPointerCapture + SVG getScreenCTM for correct coordinate mapping
+// Right-click context menu: "Match Input Shape"
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useSliceStore } from '../../stores/sliceStore';
 import type { Point2D } from '../../types/outputSlice';
 
@@ -45,12 +46,20 @@ interface DragState {
   offsetY: number;
 }
 
+interface ContextMenu {
+  x: number;
+  y: number;
+  sliceId: string;
+}
+
 export function SliceOutputOverlay({ targetId, width, height }: SliceOutputOverlayProps) {
   const config = useSliceStore((s) => s.configs.get(targetId));
   const selectSlice = useSliceStore((s) => s.selectSlice);
   const setCornerPinCorner = useSliceStore((s) => s.setCornerPinCorner);
+  const matchInputToOutput = useSliceStore((s) => s.matchInputToOutput);
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<DragState | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
 
   const handlePointerDown = useCallback((
     e: React.PointerEvent,
@@ -111,87 +120,131 @@ export function SliceOutputOverlay({ targetId, width, height }: SliceOutputOverl
     dragRef.current = null;
   }, []);
 
+  const handleContextMenu = useCallback((e: React.MouseEvent, sliceId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    selectSlice(targetId, sliceId);
+    setContextMenu({ x: e.clientX, y: e.clientY, sliceId });
+  }, [targetId, selectSlice]);
+
+  const handleMatchInputShape = useCallback(() => {
+    if (contextMenu) {
+      matchInputToOutput(targetId, contextMenu.sliceId);
+    }
+    setContextMenu(null);
+  }, [targetId, contextMenu, matchInputToOutput]);
+
+  const handleCloseMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
   if (!config || config.slices.length === 0) return null;
 
   const selectedSliceId = config.selectedSliceId;
 
   return (
-    <svg
-      ref={svgRef}
-      className="om-slice-overlay"
-      viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="xMidYMid meet"
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onLostPointerCapture={handlePointerUp}
-    >
-      {config.slices.map((slice, idx) => {
-        if (!slice.enabled || slice.warp.mode !== 'cornerPin') return null;
+    <>
+      <svg
+        ref={svgRef}
+        className="om-slice-overlay"
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="xMidYMid meet"
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onLostPointerCapture={handlePointerUp}
+        onClick={handleCloseMenu}
+      >
+        {config.slices.map((slice, idx) => {
+          if (!slice.enabled || slice.warp.mode !== 'cornerPin') return null;
 
-        const color = SLICE_COLORS[idx % SLICE_COLORS.length];
-        const isSelected = slice.id === selectedSliceId;
-        const corners = slice.warp.corners;
+          const color = SLICE_COLORS[idx % SLICE_COLORS.length];
+          const isSelected = slice.id === selectedSliceId;
+          const corners = slice.warp.corners;
 
-        // Convert normalized coords to SVG viewBox coords
-        const pts = corners.map((c: Point2D) => ({
-          x: c.x * width,
-          y: c.y * height,
-        }));
+          // Convert normalized coords to SVG viewBox coords
+          const pts = corners.map((c: Point2D) => ({
+            x: c.x * width,
+            y: c.y * height,
+          }));
 
-        const pathData = `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y} L ${pts[2].x} ${pts[2].y} L ${pts[3].x} ${pts[3].y} Z`;
+          const pathData = `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y} L ${pts[2].x} ${pts[2].y} L ${pts[3].x} ${pts[3].y} Z`;
 
-        return (
-          <g key={slice.id} onClick={() => selectSlice(targetId, slice.id)}>
-            {/* Quad fill */}
-            <path
-              d={pathData}
-              fill={isSelected ? `${color}15` : 'transparent'}
-              stroke={color}
-              strokeWidth={isSelected ? 2 : 1}
-              strokeOpacity={isSelected ? 1 : 0.5}
-            />
+          return (
+            <g
+              key={slice.id}
+              onClick={() => selectSlice(targetId, slice.id)}
+              onContextMenu={(e) => handleContextMenu(e, slice.id)}
+            >
+              {/* Quad fill */}
+              <path
+                d={pathData}
+                fill={isSelected ? `${color}15` : 'transparent'}
+                stroke={color}
+                strokeWidth={isSelected ? 2 : 1}
+                strokeOpacity={isSelected ? 1 : 0.5}
+              />
 
-            {/* Corner points */}
-            {pts.map((pt, ci) => (
-              <g key={ci}>
-                {/* Larger invisible hit area */}
-                <circle
-                  cx={pt.x}
-                  cy={pt.y}
-                  r={POINT_RADIUS * 2.5}
-                  fill="transparent"
-                  style={{ cursor: 'grab' }}
-                  onPointerDown={(e) => handlePointerDown(e, slice.id, ci)}
-                />
-                {/* Visible point */}
-                <circle
-                  cx={pt.x}
-                  cy={pt.y}
-                  r={isSelected ? POINT_RADIUS : POINT_RADIUS - 1}
-                  fill={isSelected ? color : `${color}88`}
-                  stroke={isSelected ? '#fff' : color}
-                  strokeWidth={isSelected ? 2 : 1}
-                  style={{ cursor: 'grab', pointerEvents: 'none' }}
-                />
-                {/* Corner label (only for selected slice) */}
-                {isSelected && (
-                  <text
-                    x={pt.x}
-                    y={pt.y - POINT_RADIUS - 4}
-                    textAnchor="middle"
-                    fill={color}
-                    fontSize={10}
-                    fontWeight="bold"
-                    style={{ pointerEvents: 'none' }}
-                  >
-                    {CORNER_LABELS[ci]}
-                  </text>
-                )}
-              </g>
-            ))}
-          </g>
-        );
-      })}
-    </svg>
+              {/* Corner points */}
+              {pts.map((pt, ci) => (
+                <g key={ci}>
+                  {/* Larger invisible hit area */}
+                  <circle
+                    cx={pt.x}
+                    cy={pt.y}
+                    r={POINT_RADIUS * 2.5}
+                    fill="transparent"
+                    style={{ cursor: 'grab' }}
+                    onPointerDown={(e) => handlePointerDown(e, slice.id, ci)}
+                  />
+                  {/* Visible point */}
+                  <circle
+                    cx={pt.x}
+                    cy={pt.y}
+                    r={isSelected ? POINT_RADIUS : POINT_RADIUS - 1}
+                    fill={isSelected ? color : `${color}88`}
+                    stroke={isSelected ? '#fff' : color}
+                    strokeWidth={isSelected ? 2 : 1}
+                    style={{ cursor: 'grab', pointerEvents: 'none' }}
+                  />
+                  {/* Corner label (only for selected slice) */}
+                  {isSelected && (
+                    <text
+                      x={pt.x}
+                      y={pt.y - POINT_RADIUS - 4}
+                      textAnchor="middle"
+                      fill={color}
+                      fontSize={10}
+                      fontWeight="bold"
+                      style={{ pointerEvents: 'none' }}
+                    >
+                      {CORNER_LABELS[ci]}
+                    </text>
+                  )}
+                </g>
+              ))}
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Context menu */}
+      {contextMenu && (
+        <div
+          className="om-context-menu-backdrop"
+          onClick={handleCloseMenu}
+          onContextMenu={(e) => { e.preventDefault(); handleCloseMenu(); }}
+        >
+          <div
+            className="om-context-menu"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button className="om-context-menu-item" onClick={handleMatchInputShape}>
+              Match Input Shape
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

@@ -105,7 +105,7 @@ export class SlicePipeline {
   private buildCornerPinVertices(data: Float32Array, offset: number, slice: OutputSlice): number {
     const corners = (slice.warp as { mode: 'cornerPin'; corners: [Point2D, Point2D, Point2D, Point2D] }).corners;
     const [tl, tr, br, bl] = corners;
-    const rect = slice.inputRect;
+    const [itl, itr, ibr, ibl] = slice.inputCorners;
 
     for (let row = 0; row < SUBDIVISIONS; row++) {
       for (let col = 0; col < SUBDIVISIONS; col++) {
@@ -120,11 +120,11 @@ export class SlicePipeline {
         const p11 = bilinear(tl, tr, br, bl, t1, s1);
         const p01 = bilinear(tl, tr, br, bl, t0, s1);
 
-        // Input UVs (lerp within inputRect)
-        const uv00 = lerpUV(rect, t0, s0);
-        const uv10 = lerpUV(rect, t1, s0);
-        const uv11 = lerpUV(rect, t1, s1);
-        const uv01 = lerpUV(rect, t0, s1);
+        // Input UVs (bilinear interpolation of input corners)
+        const uv00 = bilinearUV(itl, itr, ibr, ibl, t0, s0);
+        const uv10 = bilinearUV(itl, itr, ibr, ibl, t1, s0);
+        const uv11 = bilinearUV(itl, itr, ibr, ibl, t1, s1);
+        const uv01 = bilinearUV(itl, itr, ibr, ibl, t0, s1);
 
         // Triangle 1: p00, p10, p11
         offset = pushVertex(data, offset, p00, uv00);
@@ -202,11 +202,11 @@ function bilinear(tl: Point2D, tr: Point2D, br: Point2D, bl: Point2D, s: number,
   return { x: x * 2 - 1, y: 1 - y * 2 };
 }
 
-/** Interpolate UV coordinates within an input rect */
-function lerpUV(rect: { x: number; y: number; width: number; height: number }, s: number, t: number): Point2D {
+/** Bilinear interpolation of 4 input corners for UV coordinates (stays in 0-1 UV space) */
+function bilinearUV(tl: Point2D, tr: Point2D, br: Point2D, bl: Point2D, s: number, t: number): Point2D {
   return {
-    x: rect.x + s * rect.width,
-    y: rect.y + t * rect.height,
+    x: (1 - s) * (1 - t) * tl.x + s * (1 - t) * tr.x + s * t * br.x + (1 - s) * t * bl.x,
+    y: (1 - s) * (1 - t) * tl.y + s * (1 - t) * tr.y + s * t * br.y + (1 - s) * t * bl.y,
   };
 }
 

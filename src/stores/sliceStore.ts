@@ -7,11 +7,10 @@ import { useMediaStore } from './mediaStore';
 import type {
   OutputSlice,
   TargetSliceConfig,
-  SliceInputRect,
   SliceWarp,
   Point2D,
 } from '../types/outputSlice';
-import { createDefaultSlice } from '../types/outputSlice';
+import { createDefaultSlice, DEFAULT_CORNERS, migrateSlice } from '../types/outputSlice';
 
 interface SliceState {
   configs: Map<string, TargetSliceConfig>;
@@ -28,10 +27,12 @@ interface SliceActions {
   removeSlice: (targetId: string, sliceId: string) => void;
   selectSlice: (targetId: string, sliceId: string | null) => void;
   setSliceEnabled: (targetId: string, sliceId: string, enabled: boolean) => void;
-  setSliceInputRect: (targetId: string, sliceId: string, rect: SliceInputRect) => void;
+  setInputCorner: (targetId: string, sliceId: string, cornerIndex: number, point: Point2D) => void;
   setCornerPinCorner: (targetId: string, sliceId: string, cornerIndex: number, point: Point2D) => void;
   updateWarp: (targetId: string, sliceId: string, warp: SliceWarp) => void;
   resetSliceWarp: (targetId: string, sliceId: string) => void;
+  matchInputToOutput: (targetId: string, sliceId: string) => void;
+  matchOutputToInput: (targetId: string, sliceId: string) => void;
   saveToLocalStorage: () => void;
   loadFromLocalStorage: () => void;
 }
@@ -155,12 +156,16 @@ export const useSliceStore = create<SliceState & SliceActions>()((set, get) => (
     });
   },
 
-  setSliceInputRect: (targetId, sliceId, rect) => {
+  setInputCorner: (targetId, sliceId, cornerIndex, point) => {
     set((state) => {
       const config = state.configs.get(targetId);
       if (!config) return state;
       const next = new Map(state.configs);
-      next.set(targetId, updateSliceInConfig(config, sliceId, (s) => ({ ...s, inputRect: rect })));
+      next.set(targetId, updateSliceInConfig(config, sliceId, (s) => {
+        const corners = [...s.inputCorners] as [Point2D, Point2D, Point2D, Point2D];
+        corners[cornerIndex] = point;
+        return { ...s, inputCorners: corners };
+      }));
       return { configs: next };
     });
   },
@@ -197,15 +202,47 @@ export const useSliceStore = create<SliceState & SliceActions>()((set, get) => (
       const next = new Map(state.configs);
       next.set(targetId, updateSliceInConfig(config, sliceId, (s) => ({
         ...s,
-        inputRect: { x: 0, y: 0, width: 1, height: 1 },
+        inputCorners: [...DEFAULT_CORNERS] as [Point2D, Point2D, Point2D, Point2D],
         warp: {
           mode: 'cornerPin' as const,
-          corners: [
-            { x: 0, y: 0 },
-            { x: 1, y: 0 },
-            { x: 1, y: 1 },
-            { x: 0, y: 1 },
-          ] as [Point2D, Point2D, Point2D, Point2D],
+          corners: [...DEFAULT_CORNERS] as [Point2D, Point2D, Point2D, Point2D],
+        },
+      })));
+      return { configs: next };
+    });
+  },
+
+  matchInputToOutput: (targetId, sliceId) => {
+    set((state) => {
+      const config = state.configs.get(targetId);
+      if (!config) return state;
+      const slice = config.slices.find((s) => s.id === sliceId);
+      if (!slice || slice.warp.mode !== 'cornerPin') return state;
+      // Copy output warp corners → input corners
+      const outputCorners = slice.warp.corners;
+      const next = new Map(state.configs);
+      next.set(targetId, updateSliceInConfig(config, sliceId, (s) => ({
+        ...s,
+        inputCorners: [...outputCorners] as [Point2D, Point2D, Point2D, Point2D],
+      })));
+      return { configs: next };
+    });
+  },
+
+  matchOutputToInput: (targetId, sliceId) => {
+    set((state) => {
+      const config = state.configs.get(targetId);
+      if (!config) return state;
+      const slice = config.slices.find((s) => s.id === sliceId);
+      if (!slice || slice.warp.mode !== 'cornerPin') return state;
+      // Copy input corners → output warp corners
+      const inputCorners = slice.inputCorners;
+      const next = new Map(state.configs);
+      next.set(targetId, updateSliceInConfig(config, sliceId, (s) => ({
+        ...s,
+        warp: {
+          mode: 'cornerPin' as const,
+          corners: [...inputCorners] as [Point2D, Point2D, Point2D, Point2D],
         },
       })));
       return { configs: next };
@@ -229,6 +266,10 @@ export const useSliceStore = create<SliceState & SliceActions>()((set, get) => (
       const raw = localStorage.getItem(key);
       if (!raw) return;
       const parsed = JSON.parse(raw) as Record<string, TargetSliceConfig>;
+      // Migrate legacy slices that used inputRect
+      for (const config of Object.values(parsed)) {
+        config.slices = config.slices.map((s) => migrateSlice(s));
+      }
       const configs = deserializeConfigs(parsed);
       set({ configs });
     } catch (e) {

@@ -6,6 +6,7 @@ export interface Point2D {
   y: number;
 }
 
+/** @deprecated Use inputCorners instead */
 export interface SliceInputRect {
   x: number;       // top-left X (0-1 normalized)
   y: number;       // top-left Y (0-1 normalized)
@@ -33,7 +34,7 @@ export interface OutputSlice {
   id: string;
   name: string;
   enabled: boolean;
-  inputRect: SliceInputRect;
+  inputCorners: [Point2D, Point2D, Point2D, Point2D]; // TL, TR, BR, BL (0-1 normalized)
   warp: SliceWarp;
 }
 
@@ -47,13 +48,25 @@ export interface TargetSliceConfig {
 
 let sliceCounter = 0;
 
+export const DEFAULT_CORNERS: [Point2D, Point2D, Point2D, Point2D] = [
+  { x: 0, y: 0 }, // TL
+  { x: 1, y: 0 }, // TR
+  { x: 1, y: 1 }, // BR
+  { x: 0, y: 1 }, // BL
+];
+
 export function createDefaultSlice(name?: string): OutputSlice {
   const id = `slice_${Date.now()}_${++sliceCounter}`;
   return {
     id,
     name: name ?? `Slice ${sliceCounter}`,
     enabled: true,
-    inputRect: { x: 0, y: 0, width: 1, height: 1 },
+    inputCorners: [
+      { x: 0, y: 0 }, // TL
+      { x: 1, y: 0 }, // TR
+      { x: 1, y: 1 }, // BR
+      { x: 0, y: 1 }, // BL
+    ],
     warp: {
       mode: 'cornerPin',
       corners: [
@@ -63,6 +76,21 @@ export function createDefaultSlice(name?: string): OutputSlice {
         { x: 0, y: 1 }, // BL
       ],
     },
+  };
+}
+
+/** Migrate legacy slices that have inputRect instead of inputCorners */
+export function migrateSlice(slice: OutputSlice & { inputRect?: SliceInputRect }): OutputSlice {
+  if (slice.inputCorners) return slice;
+  const r = slice.inputRect ?? { x: 0, y: 0, width: 1, height: 1 };
+  return {
+    ...slice,
+    inputCorners: [
+      { x: r.x, y: r.y },
+      { x: r.x + r.width, y: r.y },
+      { x: r.x + r.width, y: r.y + r.height },
+      { x: r.x, y: r.y + r.height },
+    ],
   };
 }
 
