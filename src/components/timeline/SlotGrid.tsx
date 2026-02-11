@@ -126,7 +126,7 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     openCompositionTab(comp.id, { skipAnimation: true, playFromStart: true });
   }, [activateOnLayer, openCompositionTab]);
 
-  // Click empty slot = fully deactivate that layer (stop + remove from active slots)
+  // Click empty slot = fully deactivate that layer
   const handleEmptySlotClick = useCallback((slotIndex: number) => {
     const layerIndex = Math.floor(slotIndex / GRID_COLS);
     const { activeLayerSlots, activeCompositionId } = useMediaStore.getState();
@@ -134,22 +134,25 @@ export function SlotGrid({ opacity }: SlotGridProps) {
 
     deactivateLayer(layerIndex);
 
-    if (compOnLayer && compOnLayer === activeCompositionId) {
-      // Deactivated comp was the editor-active one — stop playback and clear
-      useTimelineStore.getState().stop();
+    // Check which layers are still active after removing this one
+    const remaining = { ...activeLayerSlots };
+    delete remaining[layerIndex];
+    const stillActive = Object.entries(remaining)
+      .filter(([, id]) => id != null)
+      .sort(([a], [b]) => Number(a) - Number(b)); // prefer top layer (A first)
 
-      // Switch editor to another still-active layer's comp, or null if none left
-      const remaining = { ...activeLayerSlots };
-      delete remaining[layerIndex];
-      const stillActive = Object.entries(remaining)
-        .filter(([, id]) => id != null)
-        .sort(([a], [b]) => Number(a) - Number(b)); // prefer top layer (A first)
+    if (compOnLayer && compOnLayer === activeCompositionId) {
+      // Deactivated comp was the editor-active one
       if (stillActive.length > 0) {
-        useMediaStore.getState().openCompositionTab(stillActive[0][1]!, { skipAnimation: true });
+        // Switch editor to another still-active layer's comp (keep playback running)
+        useMediaStore.getState().openCompositionTab(stillActive[0][1]!, { skipAnimation: true, playFromStart: false });
       } else {
+        // No layers left — stop everything
+        useTimelineStore.getState().stop();
         useMediaStore.getState().setActiveComposition(null);
       }
     }
+    // If deactivated comp was NOT the editor-active one, other layers keep playing
   }, [deactivateLayer]);
 
   // Click column header = activate all compositions in that column
