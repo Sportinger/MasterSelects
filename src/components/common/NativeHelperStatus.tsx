@@ -71,23 +71,24 @@ export function NativeHelperStatus() {
     };
   }, [checkConnection, setNativeHelperConnected]);
 
-  // Upgrade/downgrade clips when helper connection changes
+  // Upgrade/downgrade clips when native decode setting or connection changes
+  const nativeDecodeEnabled = useSettingsStore((s) => s.nativeDecodeEnabled);
   const prevConnectedRef = useRef(false);
   useEffect(() => {
-    const isNowConnected = status === 'connected' && turboModeEnabled;
+    const isNowConnected = status === 'connected' && nativeDecodeEnabled;
     const wasConnected = prevConnectedRef.current;
     prevConnectedRef.current = isNowConnected;
 
     if (isNowConnected && !wasConnected) {
-      // Helper just connected — upgrade all clips + watch for new ones
+      // Helper connected + decode enabled — upgrade all clips + watch for new ones
       void upgradeAllClipsToNativeDecoder();
       startClipWatcher();
     } else if (!isNowConnected && wasConnected) {
-      // Helper disconnected or turbo off — downgrade + stop watching
+      // Helper disconnected or decode off — downgrade + stop watching
       stopClipWatcher();
       downgradeAllClipsFromNativeDecoder();
     }
-  }, [status, turboModeEnabled]);
+  }, [status, nativeDecodeEnabled]);
 
   const isConnected = status === 'connected';
 
@@ -135,7 +136,7 @@ function NativeHelperDialog({
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [checking, setChecking] = useState(false);
 
-  const { turboModeEnabled, setTurboModeEnabled } = useSettingsStore();
+  const { turboModeEnabled, setTurboModeEnabled, nativeDecodeEnabled, setNativeDecodeEnabled } = useSettingsStore();
 
   const platform = useMemo(() => detectPlatform(), []);
   const isMac = platform === 'mac';
@@ -226,15 +227,25 @@ function NativeHelperDialog({
         {/* Content Card */}
         <div className="welcome-folder-card">
           <div className="info-content">
-            {/* Enable Toggle */}
-            <label className="flex items-center gap-3 mb-4 cursor-pointer">
+            {/* Enable Toggles */}
+            <label className="flex items-center gap-3 mb-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={turboModeEnabled}
                 onChange={(e) => setTurboModeEnabled(e.target.checked)}
                 className="w-4 h-4 rounded"
               />
-              <span className="text-sm text-zinc-300">Enable Turbo Mode</span>
+              <span className="text-sm text-zinc-300">Enable Native Helper (Downloads)</span>
+            </label>
+            <label className="flex items-center gap-3 mb-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={nativeDecodeEnabled}
+                onChange={(e) => setNativeDecodeEnabled(e.target.checked)}
+                className="w-4 h-4 rounded"
+                disabled={!turboModeEnabled}
+              />
+              <span className={`text-sm ${turboModeEnabled ? 'text-zinc-300' : 'text-zinc-500'}`}>Turbo Decode/Encode (FFmpeg)</span>
             </label>
 
             {isConnected && info ? (

@@ -103,6 +103,7 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
     autosaveEnabled,
     autosaveInterval,
     turboModeEnabled,
+    nativeDecodeEnabled,
     nativeHelperPort,
     nativeHelperConnected,
     forceDesktopMode,
@@ -117,6 +118,7 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
     setAutosaveEnabled,
     setAutosaveInterval,
     setTurboModeEnabled,
+    setNativeDecodeEnabled,
     setNativeHelperPort,
     setGpuPowerPreference,
     setCopyMediaToProject,
@@ -397,12 +399,23 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
               <div className="settings-group-title">Native Helper (Turbo Mode)</div>
 
               <label className="settings-row">
-                <span className="settings-label">Enable Turbo Mode</span>
+                <span className="settings-label">Enable Native Helper</span>
                 <input
                   type="checkbox"
                   checked={turboModeEnabled}
                   onChange={(e) => setTurboModeEnabled(e.target.checked)}
                   className="settings-checkbox"
+                />
+              </label>
+
+              <label className="settings-row">
+                <span className="settings-label">Native Decode/Encode (Turbo)</span>
+                <input
+                  type="checkbox"
+                  checked={nativeDecodeEnabled}
+                  onChange={(e) => setNativeDecodeEnabled(e.target.checked)}
+                  className="settings-checkbox"
+                  disabled={!turboModeEnabled}
                 />
               </label>
 
@@ -426,7 +439,7 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
                 </span>
               </div>
               <p className="settings-hint">
-                Uses native FFmpeg for faster video decoding when available.
+                Native Helper enables downloads (yt-dlp). Turbo decode uses FFmpeg for faster video decoding.
               </p>
             </div>
           </div>

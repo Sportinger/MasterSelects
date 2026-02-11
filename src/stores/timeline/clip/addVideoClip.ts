@@ -118,8 +118,8 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
 
   // Use native decoder when Turbo Mode is on and helper is connected
   // FFmpeg can decode all formats (H.264, ProRes, DNxHD, etc.) with HW acceleration
-  const { turboModeEnabled, nativeHelperConnected } = useSettingsStore.getState();
-  const useNativeDecoder = turboModeEnabled && nativeHelperConnected;
+  const { nativeDecodeEnabled, nativeHelperConnected } = useSettingsStore.getState();
+  const useNativeDecoder = nativeDecodeEnabled && nativeHelperConnected;
 
   let nativeDecoder: NativeDecoder | null = null;
   let video: HTMLVideoElement | null = null;

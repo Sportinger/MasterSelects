@@ -47,7 +47,8 @@ interface SettingsState {
   autosaveInterval: AutosaveInterval;  // in minutes
 
   // Native Helper (Turbo Mode)
-  turboModeEnabled: boolean;  // Use native helper for decoding when available
+  turboModeEnabled: boolean;  // Connect to native helper (downloads, yt-dlp)
+  nativeDecodeEnabled: boolean;  // Use native FFmpeg decode/encode (Turbo decode)
   nativeHelperPort: number;   // WebSocket port (default 9876)
   nativeHelperConnected: boolean;  // Current connection status
 
@@ -87,6 +88,7 @@ interface SettingsState {
   setAutosaveEnabled: (enabled: boolean) => void;
   setAutosaveInterval: (interval: AutosaveInterval) => void;
   setTurboModeEnabled: (enabled: boolean) => void;
+  setNativeDecodeEnabled: (enabled: boolean) => void;
   setNativeHelperPort: (port: number) => void;
   setNativeHelperConnected: (connected: boolean) => void;
   setForceDesktopMode: (force: boolean) => void;
@@ -131,7 +133,8 @@ export const useSettingsStore = create<SettingsState>()(
       showTransparencyGrid: false, // Don't show checkerboard by default
       autosaveEnabled: true, // Autosave enabled by default
       autosaveInterval: 5, // 5 minutes default interval
-      turboModeEnabled: true, // Try to use native helper by default
+      turboModeEnabled: true, // Connect to native helper by default (downloads)
+      nativeDecodeEnabled: false, // Native FFmpeg decode off by default
       nativeHelperPort: 9876, // Default WebSocket port
       nativeHelperConnected: false, // Not connected initially
       forceDesktopMode: false, // Use responsive detection by default
@@ -184,6 +187,10 @@ export const useSettingsStore = create<SettingsState>()(
 
       setTurboModeEnabled: (enabled) => {
         set({ turboModeEnabled: enabled });
+      },
+
+      setNativeDecodeEnabled: (enabled) => {
+        set({ nativeDecodeEnabled: enabled });
       },
 
       setNativeHelperPort: (port) => {
@@ -271,6 +278,7 @@ export const useSettingsStore = create<SettingsState>()(
         autosaveEnabled: state.autosaveEnabled,
         autosaveInterval: state.autosaveInterval,
         turboModeEnabled: state.turboModeEnabled,
+        nativeDecodeEnabled: state.nativeDecodeEnabled,
         nativeHelperPort: state.nativeHelperPort,
         forceDesktopMode: state.forceDesktopMode,
         gpuPowerPreference: state.gpuPowerPreference,
