@@ -607,6 +607,16 @@ export class WebGPUEngine {
     return this.renderLoop?.getIsIdle() ?? false;
   }
 
+  /**
+   * Ensure the scrubbing cache has at least one frame for this video.
+   * Called before seeking to provide a fallback frame during seek.
+   */
+  ensureVideoFrameCached(video: HTMLVideoElement): void {
+    if (this.scrubbingCache && !this.scrubbingCache.getLastFrame(video)) {
+      this.scrubbingCache.captureVideoFrame(video);
+    }
+  }
+
   updatePlayheadTracking(playhead: number): boolean {
     return this.renderLoop?.updatePlayheadTracking(playhead) ?? false;
   }

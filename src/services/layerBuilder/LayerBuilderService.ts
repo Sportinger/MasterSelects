@@ -914,6 +914,11 @@ export class LayerBuilderService {
       const webCodecsPlayer = nestedClip.source.webCodecsPlayer;
       const timeDiff = Math.abs(video.currentTime - nestedClipTime);
 
+      // Pre-capture: ensure scrubbing cache has a frame before seeking
+      if (!video.seeking && video.readyState >= 2) {
+        engine.ensureVideoFrameCached(video);
+      }
+
       // During playback: let video play naturally (like regular clips)
       if (ctx.isPlaying) {
         if (video.paused) {
@@ -1013,15 +1018,12 @@ export class LayerBuilderService {
     // Normal video sync
     const timeDiff = Math.abs(video.currentTime - timeInfo.clipTime);
 
-    // Force first-frame decode for videos that haven't played yet (e.g. after reload)
-    // importExternalTexture needs the video to have presented at least one frame
-    if (!ctx.isPlaying && video.played.length === 0 && !video.seeking && !this.forceDecodeInProgress.has(clip.id)) {
-      this.forceVideoFrameDecode(clip.id, video);
-      return; // Skip seeking until first frame is decoded
+    // Pre-capture: ensure scrubbing cache has a frame BEFORE seeking
+    // After reload the cache is empty; without this, seeking makes importExternalTexture
+    // fail and there's no cached fallback → blank canvas
+    if (!video.seeking && video.readyState >= 2) {
+      engine.ensureVideoFrameCached(video);
     }
-
-    // Skip all sync while force-decode is in progress to avoid interference
-    if (this.forceDecodeInProgress.has(clip.id)) return;
 
     // Reverse playback: either clip is reversed OR timeline playbackSpeed is negative
     // H.264 can't play backwards, so we seek frame-by-frame
