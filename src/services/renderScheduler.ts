@@ -24,6 +24,8 @@ interface NestedCompInfo {
 class RenderSchedulerService {
   private registeredTargets: Set<string> = new Set();
   private preparedCompositions: Set<string> = new Set();
+  // Track compositions currently being prepared (to avoid duplicate prepareComposition calls)
+  private preparingCompositions: Set<string> = new Set();
   private rafId: number | null = null;
   private isRunning = false;
   private lastFrameTime = 0;
@@ -260,6 +262,18 @@ class RenderSchedulerService {
           }
           // Fall through to independent rendering
         }
+      }
+
+      // If composition isn't ready, trigger (re-)preparation and skip this frame
+      if (!compositionRenderer.isReady(compId)) {
+        if (!this.preparingCompositions.has(compId)) {
+          this.preparingCompositions.add(compId);
+          compositionRenderer.prepareComposition(compId).then((ready) => {
+            this.preparingCompositions.delete(compId);
+            log.debug(`Composition ${compId} auto-prepared in render loop: ${ready}`);
+          });
+        }
+        continue;
       }
 
       // Calculate playhead time for this composition

@@ -41,6 +41,9 @@ class CompositionRendererService {
   // Callbacks for when a composition is ready
   private readyCallbacks: Map<string, (() => void)[]> = new Map();
 
+  // Throttle "not ready" warnings per composition (avoid spam at 60fps)
+  private notReadyWarned: Map<string, number> = new Map();
+
   /**
    * Prepare a composition for rendering - loads all video/image sources
    */
@@ -181,6 +184,7 @@ class CompositionRendererService {
     await Promise.all(loadPromises);
 
     sources.isReady = true;
+    this.notReadyWarned.delete(compositionId);
     log.info(`Composition ready: ${composition.name}, ${sources.clipSources.size} sources loaded`);
 
     if (sources.clipSources.size === 0 && clips.length > 0) {
@@ -261,7 +265,13 @@ class CompositionRendererService {
   evaluateAtTime(compositionId: string, time: number): EvaluatedLayer[] {
     const sources = this.compositionSources.get(compositionId);
     if (!sources?.isReady) {
-      log.warn(`evaluateAtTime: sources not ready for ${compositionId}`);
+      // Throttle warning: only log once per second per composition to avoid 60fps spam
+      const now = Date.now();
+      const lastWarned = this.notReadyWarned.get(compositionId) || 0;
+      if (now - lastWarned > 1000) {
+        log.warn(`evaluateAtTime: sources not ready for ${compositionId}`);
+        this.notReadyWarned.set(compositionId, now);
+      }
       return [];
     }
 
