@@ -1323,7 +1323,7 @@ export class LayerBuilderService {
       if (ctx.isDraggingPlayhead && !isMuted) {
         const video = clip.source.videoElement;
         if (!video.muted) video.muted = true;
-        proxyFrameCache.playScrubAudio(mediaFileId, timeInfo.clipTime);
+        proxyFrameCache.playScrubAudio(mediaFileId, timeInfo.clipTime, undefined, video.currentSrc || video.src);
       } else if (!ctx.isDraggingPlayhead) {
         proxyFrameCache.stopScrubAudio();
       }
