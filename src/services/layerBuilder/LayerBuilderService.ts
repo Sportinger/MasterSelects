@@ -105,6 +105,14 @@ export class LayerBuilderService {
     // Create frame context (single store read)
     const ctx = createFrameContext();
 
+    // No active editor composition → no primary layers to build
+    // (all active comps are background layers managed by layerPlaybackManager)
+    const hasActiveComp = useMediaStore.getState().activeCompositionId != null;
+    if (!hasActiveComp) {
+      this.layerCache.invalidate();
+      return this.mergeBackgroundLayers([], ctx.playheadPosition);
+    }
+
     // Check cache (only for primary layers — background layers are cheap to rebuild)
     const cacheResult = this.layerCache.checkCache(ctx);
     let primaryLayers: Layer[];

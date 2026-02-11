@@ -192,6 +192,19 @@ export function SlotGrid({ opacity }: SlotGridProps) {
             : ts.playheadPosition
         );
         const timelineData = ts.getSerializableState();
+
+        // Stop editor playback and pause all video/audio elements in timeline clips
+        // so the deactivated comp doesn't keep playing in the preview
+        useTimelineStore.setState({ isPlaying: false });
+        for (const clip of ts.clips) {
+          if (clip.source?.videoElement && !clip.source.videoElement.paused) {
+            clip.source.videoElement.pause();
+          }
+          if (clip.source?.audioElement && !clip.source.audioElement.paused) {
+            clip.source.audioElement.pause();
+          }
+        }
+
         const { compositions: freshComps } = useMediaStore.getState();
         useMediaStore.setState({
           activeCompositionId: null,
