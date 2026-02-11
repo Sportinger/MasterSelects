@@ -28,12 +28,33 @@ export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
   const [qualityOpen, setQualityOpen] = useState(false);
   const [sourceOpen, setSourceOpen] = useState(false);
   const sourceDropdownRef = useRef<HTMLDivElement>(null);
+  const [highlightedSlot, setHighlightedSlot] = useState<number | null>(null);
 
   const isAutoMode = data.sourceCompositionId !== null;
   const sourceComp = useMemo(
     () => compositions.find((c) => c.id === data.sourceCompositionId),
     [compositions, data.sourceCompositionId]
   );
+
+  // Highlight slots on 1/2/3/4 key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const idx = parseInt(e.key) - 1;
+      if (idx >= 0 && idx <= 3) setHighlightedSlot(idx);
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const idx = parseInt(e.key) - 1;
+      if (idx >= 0 && idx <= 3) setHighlightedSlot((prev) => (prev === idx ? null : prev));
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -174,6 +195,7 @@ export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
               compositionId={slot.compositionId}
               showTransparencyGrid={data.showTransparencyGrid}
               onCompositionChange={(compId) => handleSlotCompositionChange(index, compId)}
+              highlighted={highlightedSlot === index}
               autoSource={
                 isAutoMode && data.sourceCompositionId
                   ? { compositionId: data.sourceCompositionId, layerIndex: index }

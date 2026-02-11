@@ -15,6 +15,7 @@ interface MultiPreviewSlotProps {
   compositionId: string | null;
   showTransparencyGrid: boolean;
   onCompositionChange: (compositionId: string | null) => void;
+  highlighted?: boolean;
   // Auto-distribute mode: render the Nth layer of a composition
   autoSource?: { compositionId: string; layerIndex: number } | null;
 }
@@ -25,6 +26,7 @@ export function MultiPreviewSlot({
   compositionId,
   showTransparencyGrid,
   onCompositionChange,
+  highlighted = false,
   autoSource = null,
 }: MultiPreviewSlotProps) {
   const { isEngineReady } = useEngine();
@@ -151,7 +153,7 @@ export function MultiPreviewSlot({
   );
 
   return (
-    <div className="multi-preview-slot" ref={containerRef}>
+    <div className={`multi-preview-slot ${highlighted ? 'highlighted' : ''}`} ref={containerRef}>
       {/* Hover-visible composition dropdown (custom mode only) */}
       {autoSource ? (
         <div className="multi-preview-slot-dropdown-wrapper">
