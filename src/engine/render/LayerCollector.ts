@@ -211,13 +211,14 @@ export class LayerCollector {
 
       // After page reload, importExternalTexture returns a valid GPUExternalTexture
       // but the frame data is black/empty because the GPU decoder hasn't presented a frame.
-      // Use pre-cached frame (from createImageBitmap during restore) until video has been played.
+      // syncClipVideo triggers a brief play() to activate the GPU surface.
+      // Once the video plays, the next render sees it playing → sets videoGpuReady.
       if (!this.videoGpuReady.has(video) && !deps.isExporting) {
-        // Check if the video is actively playing — that means the GPU decoder is active
+        // Video is actively playing (warmup in progress) — GPU decoder is now active
         if (!video.paused && !video.seeking) {
           this.videoGpuReady.add(video);
         } else {
-          // Use pre-cached frame (populated by engine.preCacheVideoFrame during restore)
+          // Video is paused and GPU not ready — use cached frame if warmup already captured one
           const cachedFrame = deps.scrubbingCache?.getLastFrame(video);
           if (cachedFrame) {
             deps.setLastVideoTime(videoKey, currentTime);
@@ -231,7 +232,7 @@ export class LayerCollector {
               sourceHeight: cachedFrame.height,
             };
           }
-          // No cached frame yet — createImageBitmap still pending, skip for now
+          // No cached frame yet — warmup not started or still in progress
           return null;
         }
       }

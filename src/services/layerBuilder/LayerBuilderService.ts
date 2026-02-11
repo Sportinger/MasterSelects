@@ -79,6 +79,14 @@ export class LayerBuilderService {
   // Active audio proxies tracking
   private activeAudioProxies = new Map<string, HTMLAudioElement>();
 
+  // Videos currently being warmed up (brief play to activate GPU surface)
+  // After page reload, video GPU surfaces are empty — all sync rendering APIs
+  // (importExternalTexture, canvas.drawImage, copyExternalImageToTexture) return black.
+  // The ONLY way to populate the GPU surface is video.play().
+  // We do this lazily on first scrub attempt, not during restore, because
+  // the render loop's syncClipVideo would immediately pause the warmup video.
+  private warmingUpVideos = new WeakSet<HTMLVideoElement>();
+
   /**
    * Invalidate all caches (layer cache and transform cache)
    */
@@ -1015,12 +1023,51 @@ export class LayerBuilderService {
       return;
     }
 
+    // Skip sync during GPU surface warmup — the video is playing briefly
+    // to activate Chrome's GPU decoder. Don't pause or seek it.
+    if (this.warmingUpVideos.has(video)) return;
+
+    // Warmup: after page reload, video GPU surfaces are empty.
+    // importExternalTexture, canvas.drawImage, etc. all return black.
+    // The ONLY fix is video.play() to activate the GPU compositor.
+    // We do this here (not during restore) because restore-time warmup
+    // gets immediately killed by this very function's "pause if not playing" logic.
+    if (!ctx.isPlaying && video.readyState >= 2 && !video.seeking &&
+        video.played.length === 0 && !this.warmingUpVideos.has(video)) {
+      this.warmingUpVideos.add(video);
+      const targetTime = timeInfo.clipTime;
+      video.play().then(() => {
+        // Wait for actual frame presentation via requestVideoFrameCallback
+        const rvfc = (video as any).requestVideoFrameCallback;
+        if (typeof rvfc === 'function') {
+          rvfc.call(video, () => {
+            // Frame is now presented to GPU — capture it
+            engine.ensureVideoFrameCached(video);
+            video.pause();
+            video.currentTime = targetTime;
+            this.warmingUpVideos.delete(video);
+            engine.requestRender();
+          });
+        } else {
+          // Fallback: wait 100ms for frame presentation
+          setTimeout(() => {
+            engine.ensureVideoFrameCached(video);
+            video.pause();
+            video.currentTime = targetTime;
+            this.warmingUpVideos.delete(video);
+            engine.requestRender();
+          }, 100);
+        }
+      }).catch(() => {
+        this.warmingUpVideos.delete(video);
+      });
+      return; // Skip normal sync — warmup is handling video state
+    }
+
     // Normal video sync
     const timeDiff = Math.abs(video.currentTime - timeInfo.clipTime);
 
     // Pre-capture: ensure scrubbing cache has a frame BEFORE seeking
-    // After reload the cache is empty; without this, seeking makes importExternalTexture
-    // fail and there's no cached fallback → blank canvas
     if (!video.seeking && video.readyState >= 2) {
       engine.ensureVideoFrameCached(video);
     }

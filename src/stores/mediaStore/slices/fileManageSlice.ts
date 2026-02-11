@@ -227,17 +227,7 @@ export async function updateTimelineClips(mediaFileId: string, file: File): Prom
             mediaFileId,
           },
         });
-        // Warm up decoder - present first frame for GPU texture import
-        // Must wait for requestVideoFrameCallback so a frame is actually
-        // submitted to the GPU compositor before pausing
-        video.play().then(() => {
-          const rvfc = (video as any).requestVideoFrameCallback;
-          if (typeof rvfc === 'function') {
-            rvfc.call(video, () => { video.pause(); });
-          } else {
-            setTimeout(() => video.pause(), 100);
-          }
-        }).catch(() => {});
+        // GPU surface warmup happens lazily in syncClipVideo on first scrub
       }, { once: true });
 
       video.addEventListener('error', () => {

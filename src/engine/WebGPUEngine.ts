@@ -617,6 +617,20 @@ export class WebGPUEngine {
     }
   }
 
+  /**
+   * Pre-cache a video frame using createImageBitmap (async forced decode).
+   * This is the ONLY way to get a real frame from a never-played video after reload.
+   * Call from canplaythrough handlers during project restore.
+   */
+  async preCacheVideoFrame(video: HTMLVideoElement): Promise<boolean> {
+    if (!this.scrubbingCache) return false;
+    const success = await this.scrubbingCache.captureVideoFrameViaImageBitmap(video);
+    if (success) {
+      this.requestRender();
+    }
+    return success;
+  }
+
   updatePlayheadTracking(playhead: number): boolean {
     return this.renderLoop?.updatePlayheadTracking(playhead) ?? false;
   }

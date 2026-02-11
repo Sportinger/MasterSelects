@@ -364,48 +364,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                 video.load();
 
                 video.addEventListener('loadedmetadata', async () => {
-                  // Force browser to decode actual video frames by playing briefly
-                  // This ensures readyState reaches HAVE_CURRENT_DATA (2) or higher
-                  try {
-                    await video.play();
-                    // Wait for actual frame presentation before pausing
-                    await new Promise<void>((resolve) => {
-                      const rvfc = (video as any).requestVideoFrameCallback;
-                      if (typeof rvfc === 'function') {
-                        rvfc.call(video, () => { video.pause(); resolve(); });
-                      } else {
-                        setTimeout(() => { video.pause(); resolve(); }, 100);
-                      }
-                    });
-                    video.currentTime = 0;
-
-                    // Wait for the seek to complete and frame to be decoded
-                    await new Promise<void>((resolve) => {
-                      const checkReady = () => {
-                        if (video.readyState >= 2) {
-                          resolve();
-                        } else {
-                          requestAnimationFrame(checkReady);
-                        }
-                      };
-                      video.addEventListener('seeked', () => {
-                        checkReady();
-                      }, { once: true });
-                      checkReady();
-                    });
-                  } catch (e) {
-                    // play() might fail due to autoplay policy, try alternative approach
-                    log.debug('Play failed for nested video, trying seek approach', { nestedClipId: nestedClip.id, error: e });
-                    video.currentTime = 0.001;
-                    await new Promise<void>((resolve) => {
-                      const onSeeked = () => {
-                        video.removeEventListener('seeked', onSeeked);
-                        resolve();
-                      };
-                      video.addEventListener('seeked', onSeeked);
-                      setTimeout(resolve, 500);
-                    });
-                  }
+                  // GPU surface warmup happens lazily in syncClipVideo on first scrub
 
                   // Set up basic video source first
                   const videoSource: TimelineClip['source'] = {
@@ -791,21 +750,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
             ),
           }));
 
-          // Warm up decoder - play briefly to present first frame for GPU texture import
-          // Without this, scrubbing after reload shows nothing until user plays first
-          // Must wait for requestVideoFrameCallback so a frame is actually
-          // submitted to the GPU compositor before pausing
-          try {
-            await video.play();
-            await new Promise<void>((resolve) => {
-              const rvfc = (video as any).requestVideoFrameCallback;
-              if (typeof rvfc === 'function') {
-                rvfc.call(video, () => { video.pause(); resolve(); });
-              } else {
-                setTimeout(() => { video.pause(); resolve(); }, 100);
-              }
-            });
-          } catch { /* autoplay blocked */ }
+          // GPU surface warmup happens lazily in syncClipVideo on first scrub
 
           // Try to initialize WebCodecsPlayer for hardware-accelerated decoding
           const hasWebCodecs = 'VideoDecoder' in window && 'VideoFrame' in window;
