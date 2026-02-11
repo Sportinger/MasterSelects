@@ -20,11 +20,12 @@ function detectPlatform(): 'mac' | 'windows' | 'linux' | 'unknown' {
 }
 
 // GitHub releases download URLs
-const GITHUB_RELEASES = 'https://github.com/Sportinger/MASterSelects/releases/latest';
+const NATIVE_HELPER_RELEASE = 'https://github.com/Sportinger/MasterSelects/releases/tag/native-helper-v0.2.0';
+const GITHUB_RELEASES = NATIVE_HELPER_RELEASE;
 const DOWNLOAD_LINKS = {
-  windows: 'https://github.com/Sportinger/MASterSelects/releases/latest',
-  mac: 'https://github.com/Sportinger/MASterSelects/releases/latest',
-  linux: 'https://github.com/Sportinger/MASterSelects/releases/latest',
+  windows: 'https://github.com/Sportinger/MasterSelects/releases/download/native-helper-v0.2.0/MasterSelects-NativeHelper-v0.2.0-windows-x64.zip',
+  mac: NATIVE_HELPER_RELEASE,
+  linux: NATIVE_HELPER_RELEASE,
 } as const;
 
 
