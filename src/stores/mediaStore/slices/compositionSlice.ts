@@ -106,16 +106,24 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
     // Same comp already active + playFromStart → just restart playback (no reload)
     if (id === activeCompositionId && options?.playFromStart) {
       const ts = useTimelineStore.getState();
+      // Stop first to reset everything cleanly, then restart
+      ts.pause();
       ts.setPlayheadPosition(0);
-      // Also reset the high-frequency playhead and audio master so the
-      // RAF loop picks up position 0 immediately
+      // Reset the high-frequency playhead and audio master
       playheadState.position = 0;
       playheadState.hasMasterAudio = false;
       playheadState.masterAudioElement = null;
       playheadState.playbackJustStarted = true;
-      if (!ts.isPlaying) {
-        ts.play();
+      // Seek all video/audio elements back to their in-points
+      for (const clip of ts.clips) {
+        if (clip.source?.videoElement) {
+          clip.source.videoElement.currentTime = clip.inPoint;
+        }
+        if (clip.source?.audioElement) {
+          clip.source.audioElement.currentTime = clip.inPoint;
+        }
       }
+      ts.play();
       return;
     }
     // Inline setActiveComposition logic

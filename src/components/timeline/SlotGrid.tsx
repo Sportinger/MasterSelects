@@ -2,9 +2,10 @@
 // Compositions fill slots left-to-right, top-to-bottom; remaining slots are empty
 // Click = play from start (stay in grid), Drag = reorder/move to any slot, Bottom strip = preview
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
+import { playheadState } from '../../services/layerBuilder';
 import { animateSlotGrid } from './slotGridAnimation';
 import { MiniTimeline } from './MiniTimeline';
 import type { Composition } from '../../stores/mediaStore';
@@ -178,6 +179,7 @@ export function SlotGrid({ opacity }: SlotGridProps) {
                       width={SLOT_SIZE - 4}
                       height={SLOT_SIZE - 4}
                     />
+                    {isActive && <LivePlayhead duration={comp.duration} slotSize={SLOT_SIZE - 4} />}
                     <div
                       className={`slot-grid-preview-strip${isPreviewed ? ' active' : ''}`}
                       onClick={(e) => handlePreviewClick(e, comp)}
@@ -207,3 +209,44 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     </div>
   );
 }
+
+/** Live playhead indicator — reads from high-frequency playheadState via rAF */
+const LivePlayhead = memo(function LivePlayhead({ duration, slotSize }: { duration: number; slotSize: number }) {
+  const lineRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const line = lineRef.current;
+    if (!line || duration <= 0) return;
+
+    let rafId: number;
+    const padding = 3;
+    const trackWidth = slotSize - padding * 2;
+
+    const update = () => {
+      const pos = playheadState.isUsingInternalPosition
+        ? playheadState.position
+        : useTimelineStore.getState().playheadPosition;
+      const pct = Math.max(0, Math.min(1, pos / duration));
+      line.style.left = `${padding + pct * trackWidth}px`;
+      rafId = requestAnimationFrame(update);
+    };
+
+    rafId = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(rafId);
+  }, [duration, slotSize]);
+
+  return (
+    <div
+      ref={lineRef}
+      style={{
+        position: 'absolute',
+        top: 19,
+        bottom: 3,
+        width: 1.5,
+        background: '#ff3b3b',
+        pointerEvents: 'none',
+        zIndex: 1,
+      }}
+    />
+  );
+});
