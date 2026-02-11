@@ -885,6 +885,9 @@ async function reloadNestedCompositionClips(): Promise<void> {
           // Trigger state update
           const currentClips = timelineStore.clips;
           useTimelineStore.setState({ clips: [...currentClips] });
+
+          // Warm up decoder - present first frame for GPU texture import
+          video.play().then(() => video.pause()).catch(() => {});
         }, { once: true });
 
         video.load();

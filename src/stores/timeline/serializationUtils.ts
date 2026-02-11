@@ -783,6 +783,10 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
             ),
           }));
 
+          // Warm up decoder - play briefly to present first frame for GPU texture import
+          // Without this, scrubbing after reload shows nothing until user plays first
+          try { await video.play(); video.pause(); } catch { /* autoplay blocked */ }
+
           // Try to initialize WebCodecsPlayer for hardware-accelerated decoding
           const hasWebCodecs = 'VideoDecoder' in window && 'VideoFrame' in window;
           if (hasWebCodecs) {

@@ -227,6 +227,8 @@ export async function updateTimelineClips(mediaFileId: string, file: File): Prom
             mediaFileId,
           },
         });
+        // Warm up decoder - present first frame for GPU texture import
+        video.play().then(() => video.pause()).catch(() => {});
       }, { once: true });
 
       video.addEventListener('error', () => {
