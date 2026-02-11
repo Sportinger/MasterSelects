@@ -171,38 +171,16 @@ export class LayerBuilderService {
       if (layerIndex === primaryLayerIndex) {
         // Insert primary layers at this position, applying layer opacity
         const layerOpacity = layerOpacities[layerIndex] ?? 1;
-        if (layerOpacity < 1 && primaryLayers.length > 0) {
-          if (primaryLayers.length === 1) {
-            // Single clip: apply opacity directly — avoids NestedCompRenderer
-            // which may not support all decoder types (nativeDecoder, etc.)
-            const layer = primaryLayers[0];
+        // Filter out undefined entries from sparse arrays (buildLayers uses layers[trackIndex]=...)
+        const actualPrimaryLayers = primaryLayers.filter((l): l is Layer => l != null);
+        if (layerOpacity < 1 && actualPrimaryLayers.length > 0) {
+          // Apply per-clip opacity multiplication — simpler and works with all decoder types
+          // (nativeDecoder, WebCodecs, HTMLVideo, etc.) without needing NestedCompRenderer
+          for (const layer of actualPrimaryLayers) {
             merged.push({ ...layer, opacity: layer.opacity * layerOpacity });
-          } else {
-            // Multiple clips: wrap as nested composition so opacity
-            // applies to the flattened result, not per-clip
-            const comp = useMediaStore.getState().compositions.find(c => c.id === activeCompositionId);
-            const nestedData: import('../../types').NestedCompositionData = {
-              compositionId: `__layer-opacity-${layerIndex}__`,
-              layers: primaryLayers,
-              width: comp?.width ?? 1920,
-              height: comp?.height ?? 1080,
-              currentTime: playheadPosition,
-            };
-            merged.push({
-              id: `primary-layer-wrapper-${layerIndex}`,
-              name: `Layer ${String.fromCharCode(65 + layerIndex)}: Primary`,
-              visible: true,
-              opacity: layerOpacity,
-              blendMode: 'normal',
-              source: { type: 'image', nestedComposition: nestedData },
-              effects: [],
-              position: { x: 0, y: 0, z: 0 },
-              scale: { x: 1, y: 1 },
-              rotation: { x: 0, y: 0, z: 0 },
-            });
           }
         } else {
-          merged.push(...primaryLayers);
+          merged.push(...actualPrimaryLayers);
         }
       } else {
         // Build background layer from LayerPlaybackManager
@@ -215,7 +193,7 @@ export class LayerBuilderService {
 
     // If primary comp is not in any slot, add its layers on top
     if (primaryLayerIndex === -1 && primaryLayers.length > 0) {
-      merged.push(...primaryLayers);
+      merged.push(...primaryLayers.filter((l): l is Layer => l != null));
     }
 
     return merged;
