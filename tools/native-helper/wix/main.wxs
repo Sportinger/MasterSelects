@@ -26,7 +26,7 @@
 
         <MediaTemplate EmbedCab='yes' />
 
-        <Feature Id='Complete' Title='MasterSelects Helper' Level='1'>
+        <Feature Id='MainApp' Title='MasterSelects Helper' Description='Core application and FFmpeg libraries' Level='1' Absent='disallow' Display='expand'>
             <ComponentRef Id='MainExecutable' />
             <ComponentRef Id='DLL_avcodec' />
             <ComponentRef Id='DLL_avformat' />
@@ -34,10 +34,14 @@
             <ComponentRef Id='DLL_swresample' />
             <ComponentRef Id='DLL_swscale' />
             <ComponentRef Id='FFmpegExe' />
-            <ComponentRef Id='StartMenuShortcut' />
+
+            <Feature Id='ShortcutsFeature' Title='Shortcuts' Description='Start Menu and Desktop shortcuts' Level='1'>
+                <ComponentRef Id='StartMenuShortcut' />
+                <ComponentRef Id='DesktopShortcut' />
+            </Feature>
         </Feature>
 
-        <UIRef Id='WixUI_Minimal' />
+        <UIRef Id='WixUI_FeatureTree' />
         <WixVariable Id='WixUILicenseRtf' Value='wix\License.rtf' />
 
         <Property Id='ARPHELPLINK' Value='https://masterselects.app' />
@@ -52,6 +56,7 @@
             <Directory Id='ProgramMenuFolder'>
                 <Directory Id='ApplicationProgramsFolder' Name='MasterSelects Helper' />
             </Directory>
+            <Directory Id='DesktopFolder' Name='Desktop' />
         </Directory>
     </Fragment>
 
@@ -113,7 +118,7 @@
     <Fragment>
         <Component Id='StartMenuShortcut' Directory='ApplicationProgramsFolder'
                    Guid='A1B2C3D4-4444-4000-8000-000000000001'>
-            <Shortcut Id='AppShortcut'
+            <Shortcut Id='StartMenuLink'
                 Name='MasterSelects Helper'
                 Description='Video codec acceleration for MasterSelects'
                 Target='[INSTALLDIR]masterselects-helper.exe'
@@ -121,7 +126,18 @@
             <RemoveFolder Id='CleanShortcutFolder'
                 Directory='ApplicationProgramsFolder' On='uninstall' />
             <RegistryValue Root='HKCU' Key='Software\MasterSelects\Helper'
-                Name='ShortcutInstalled' Type='integer' Value='1' KeyPath='yes' />
+                Name='StartMenuShortcut' Type='integer' Value='1' KeyPath='yes' />
+        </Component>
+
+        <Component Id='DesktopShortcut' Directory='DesktopFolder'
+                   Guid='A1B2C3D4-5555-4000-8000-000000000001'>
+            <Shortcut Id='DesktopLink'
+                Name='MasterSelects Helper'
+                Description='Video codec acceleration for MasterSelects'
+                Target='[INSTALLDIR]masterselects-helper.exe'
+                WorkingDirectory='INSTALLDIR' />
+            <RegistryValue Root='HKCU' Key='Software\MasterSelects\Helper'
+                Name='DesktopShortcut' Type='integer' Value='1' KeyPath='yes' />
         </Component>
     </Fragment>
 
