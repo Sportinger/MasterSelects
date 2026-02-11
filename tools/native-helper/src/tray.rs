@@ -5,8 +5,9 @@
 
 #![cfg(windows)]
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
@@ -17,16 +18,30 @@ use windows_sys::Win32::System::Console::GetConsoleWindow;
 use windows_sys::Win32::System::Threading::CreateMutexW;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
+use crate::updater;
+
 const APP_NAME: &str = "MasterSelects Helper";
 const REGISTRY_KEY_NAME: &str = "MasterSelects Helper";
 const MUTEX_NAME: &str = "Global\\MasterSelectsNativeHelper";
 const FIRST_RUN_REGISTRY_VALUE: &str = "MasterSelectsHelperFirstRunDone";
+
+/// Current state of the auto-updater
+pub enum UpdateStatus {
+    Idle,
+    Checking,
+    Available { version: String, url: String },
+    Downloading,
+    ReadyToInstall(PathBuf),
+    UpToDate,
+    Failed(String),
+}
 
 /// Shared state between tray UI thread and server thread (lock-free)
 pub struct TrayState {
     pub running: AtomicBool,
     pub quit_requested: AtomicBool,
     pub connection_count: AtomicU32,
+    pub update_status: Mutex<UpdateStatus>,
 }
 
 impl TrayState {
@@ -35,6 +50,7 @@ impl TrayState {
             running: AtomicBool::new(false),
             quit_requested: AtomicBool::new(false),
             connection_count: AtomicU32::new(0),
+            update_status: Mutex::new(UpdateStatus::Idle),
         }
     }
 }
@@ -73,6 +89,8 @@ pub fn run_tray(state: Arc<TrayState>, port: u16) -> Result<()> {
 
     let open_downloads = MenuItem::new("Open Downloads Folder", true, None);
 
+    let update_item = MenuItem::new("Check for Updates", true, None);
+
     let quit_item = MenuItem::new("Quit", true, None);
 
     menu.append(&title_item)?;
@@ -81,6 +99,7 @@ pub fn run_tray(state: Arc<TrayState>, port: u16) -> Result<()> {
     menu.append(&PredefinedMenuItem::separator())?;
     menu.append(&autostart_item)?;
     menu.append(&open_downloads)?;
+    menu.append(&update_item)?;
     menu.append(&PredefinedMenuItem::separator())?;
     menu.append(&quit_item)?;
 
@@ -94,14 +113,25 @@ pub fn run_tray(state: Arc<TrayState>, port: u16) -> Result<()> {
     // Capture menu item IDs for event matching
     let autostart_id = autostart_item.id().clone();
     let open_downloads_id = open_downloads.id().clone();
+    let update_id = update_item.id().clone();
     let quit_id = quit_item.id().clone();
 
     // Show welcome dialog on first launch
     show_first_run_dialog();
 
+    // Kick off background update check after a short delay
+    {
+        let st = state.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(3));
+            run_update_check(&st);
+        });
+    }
+
     // Message pump
     let menu_receiver = MenuEvent::receiver();
     let mut last_tooltip_update = Instant::now();
+    let mut last_update_menu_text = String::new();
 
     loop {
         // Pump Win32 messages (keeps tray icon responsive)
@@ -136,10 +166,12 @@ pub fn run_tray(state: Arc<TrayState>, port: u16) -> Result<()> {
                 let dir = crate::utils::get_download_dir();
                 let _ = std::fs::create_dir_all(&dir);
                 let _ = std::process::Command::new("explorer").arg(&dir).spawn();
+            } else if event.id == update_id {
+                handle_update_click(&state);
             }
         }
 
-        // Update tooltip and status every second
+        // Update tooltip, status, and update menu item every second
         if last_tooltip_update.elapsed() >= Duration::from_secs(1) {
             let conns = state.connection_count.load(Ordering::Relaxed);
             let running = state.running.load(Ordering::Relaxed);
@@ -163,6 +195,38 @@ pub fn run_tray(state: Arc<TrayState>, port: u16) -> Result<()> {
             tray.set_tooltip(Some(&tooltip)).ok();
             status_item.set_text(format!("Status: {}", status_str));
 
+            // Sync update menu item text with current UpdateStatus
+            let new_text = get_update_menu_text(&state);
+            if new_text != last_update_menu_text {
+                update_item.set_text(&new_text);
+                last_update_menu_text = new_text;
+            }
+
+            // If update is ReadyToInstall, launch msiexec and quit
+            let should_install = {
+                let lock = state.update_status.lock().unwrap();
+                matches!(&*lock, UpdateStatus::ReadyToInstall(_))
+            };
+            if should_install {
+                let msi_path = {
+                    let lock = state.update_status.lock().unwrap();
+                    if let UpdateStatus::ReadyToInstall(p) = &*lock {
+                        Some(p.clone())
+                    } else {
+                        None
+                    }
+                };
+                if let Some(path) = msi_path {
+                    if let Err(e) = updater::install_update(&path) {
+                        eprintln!("Failed to launch installer: {}", e);
+                    } else {
+                        // Quit so the installer can replace files
+                        state.quit_requested.store(true, Ordering::Relaxed);
+                        break;
+                    }
+                }
+            }
+
             last_tooltip_update = Instant::now();
         }
 
@@ -170,6 +234,92 @@ pub fn run_tray(state: Arc<TrayState>, port: u16) -> Result<()> {
     }
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Update helpers
+// ---------------------------------------------------------------------------
+
+/// Run the update check (blocking, call from a background thread)
+fn run_update_check(state: &Arc<TrayState>) {
+    {
+        let mut lock = state.update_status.lock().unwrap();
+        *lock = UpdateStatus::Checking;
+    }
+
+    match updater::check_for_update() {
+        Ok(Some(info)) => {
+            let mut lock = state.update_status.lock().unwrap();
+            *lock = UpdateStatus::Available {
+                version: info.version,
+                url: info.download_url,
+            };
+        }
+        Ok(None) => {
+            let mut lock = state.update_status.lock().unwrap();
+            *lock = UpdateStatus::UpToDate;
+        }
+        Err(e) => {
+            eprintln!("Update check failed: {}", e);
+            let mut lock = state.update_status.lock().unwrap();
+            *lock = UpdateStatus::Failed(e.to_string());
+        }
+    }
+}
+
+/// Handle click on the update menu item
+fn handle_update_click(state: &Arc<TrayState>) {
+    let action = {
+        let lock = state.update_status.lock().unwrap();
+        match &*lock {
+            UpdateStatus::Idle | UpdateStatus::UpToDate | UpdateStatus::Failed(_) => {
+                "check".to_string()
+            }
+            UpdateStatus::Available { url, .. } => url.clone(),
+            _ => String::new(), // Checking or Downloading — ignore click
+        }
+    };
+
+    if action == "check" {
+        // Spawn a fresh check
+        let st = state.clone();
+        std::thread::spawn(move || run_update_check(&st));
+    } else if !action.is_empty() {
+        // action = download URL → start download
+        let url = action;
+        let st = state.clone();
+        {
+            let mut lock = st.update_status.lock().unwrap();
+            *lock = UpdateStatus::Downloading;
+        }
+        std::thread::spawn(move || {
+            match updater::download_update(&url) {
+                Ok(path) => {
+                    let mut lock = st.update_status.lock().unwrap();
+                    *lock = UpdateStatus::ReadyToInstall(path);
+                }
+                Err(e) => {
+                    eprintln!("Download failed: {}", e);
+                    let mut lock = st.update_status.lock().unwrap();
+                    *lock = UpdateStatus::Failed(e.to_string());
+                }
+            }
+        });
+    }
+}
+
+/// Get the display text for the update menu item based on current status
+fn get_update_menu_text(state: &Arc<TrayState>) -> String {
+    let lock = state.update_status.lock().unwrap();
+    match &*lock {
+        UpdateStatus::Idle => "Check for Updates".to_string(),
+        UpdateStatus::Checking => "Checking for updates...".to_string(),
+        UpdateStatus::Available { version, .. } => format!("Update to v{}", version),
+        UpdateStatus::Downloading => "Downloading update...".to_string(),
+        UpdateStatus::ReadyToInstall(_) => "Installing update...".to_string(),
+        UpdateStatus::UpToDate => "Up to date".to_string(),
+        UpdateStatus::Failed(_) => "Update check failed (retry)".to_string(),
+    }
 }
 
 // ---------------------------------------------------------------------------

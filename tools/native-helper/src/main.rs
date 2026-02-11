@@ -17,6 +17,8 @@ mod server;
 mod session;
 #[cfg(windows)]
 mod tray;
+#[cfg(windows)]
+mod updater;
 mod utils;
 
 use clap::Parser;
