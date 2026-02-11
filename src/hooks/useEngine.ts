@@ -394,12 +394,17 @@ export function useEngine() {
         // Build layers directly from stores (single source of truth)
         const layers = layerBuilder.buildLayersFromStore();
 
-        // Sync video and audio elements
+        // Render FIRST, before seeking video elements
+        // This ensures we always have a displayable frame even after page reload
+        // when the scrubbing cache is empty. The video is at its previous position
+        // (not yet seeking), so importExternalTexture succeeds and populates the cache.
+        // After sync seeks the video, the 'seeked' event triggers a re-render
+        // with the correct frame.
+        engine.render(layers);
+
+        // Sync video and audio elements (seek to target time for next frame)
         layerBuilder.syncVideoElements();
         layerBuilder.syncAudioElements();
-
-        // Render layers (layerBuilder already handles mask properties)
-        engine.render(layers);
 
         // Cache rendered frame for instant scrubbing (like Premiere's playback caching)
         // Only cache if RAM preview is enabled and we're playing (not generating RAM preview)
