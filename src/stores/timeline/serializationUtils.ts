@@ -368,7 +368,15 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                   // This ensures readyState reaches HAVE_CURRENT_DATA (2) or higher
                   try {
                     await video.play();
-                    video.pause();
+                    // Wait for actual frame presentation before pausing
+                    await new Promise<void>((resolve) => {
+                      const rvfc = (video as any).requestVideoFrameCallback;
+                      if (typeof rvfc === 'function') {
+                        rvfc.call(video, () => { video.pause(); resolve(); });
+                      } else {
+                        setTimeout(() => { video.pause(); resolve(); }, 100);
+                      }
+                    });
                     video.currentTime = 0;
 
                     // Wait for the seek to complete and frame to be decoded
@@ -785,7 +793,19 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
 
           // Warm up decoder - play briefly to present first frame for GPU texture import
           // Without this, scrubbing after reload shows nothing until user plays first
-          try { await video.play(); video.pause(); } catch { /* autoplay blocked */ }
+          // Must wait for requestVideoFrameCallback so a frame is actually
+          // submitted to the GPU compositor before pausing
+          try {
+            await video.play();
+            await new Promise<void>((resolve) => {
+              const rvfc = (video as any).requestVideoFrameCallback;
+              if (typeof rvfc === 'function') {
+                rvfc.call(video, () => { video.pause(); resolve(); });
+              } else {
+                setTimeout(() => { video.pause(); resolve(); }, 100);
+              }
+            });
+          } catch { /* autoplay blocked */ }
 
           // Try to initialize WebCodecsPlayer for hardware-accelerated decoding
           const hasWebCodecs = 'VideoDecoder' in window && 'VideoFrame' in window;

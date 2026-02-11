@@ -887,7 +887,16 @@ async function reloadNestedCompositionClips(): Promise<void> {
           useTimelineStore.setState({ clips: [...currentClips] });
 
           // Warm up decoder - present first frame for GPU texture import
-          video.play().then(() => video.pause()).catch(() => {});
+          // Must wait for requestVideoFrameCallback so a frame is actually
+          // submitted to the GPU compositor before pausing
+          video.play().then(() => {
+            const rvfc = (video as any).requestVideoFrameCallback;
+            if (typeof rvfc === 'function') {
+              rvfc.call(video, () => { video.pause(); });
+            } else {
+              setTimeout(() => video.pause(), 100);
+            }
+          }).catch(() => {});
         }, { once: true });
 
         video.load();
