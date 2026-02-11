@@ -53,7 +53,7 @@ export function SlotGrid({ opacity }: SlotGridProps) {
           if (!slotEl) return; // Not over a filled slot — block transition
           const compId = slotEl.getAttribute('data-comp-id');
           if (compId) {
-            useMediaStore.getState().openCompositionTab(compId, { skipAnimation: true, playFromStart: true });
+            useMediaStore.getState().openCompositionTab(compId, { skipAnimation: true });
           }
           animateSlotGrid(0);
         }
