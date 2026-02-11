@@ -66,40 +66,52 @@ export function SlotGrid({ opacity }: SlotGridProps) {
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; compId: string } | null>(null);
 
-  // Track previous layer slots to diff — only process layers that actually changed
-  const prevLayerSlotsRef = useRef<Record<number, string | null>>({});
+  // Track previous "desired background layers" to diff — only process layers that actually changed
+  // A layer is "desired background" when it has a comp assigned AND that comp is NOT the editor comp
+  const prevDesiredRef = useRef<Record<number, string>>({});
 
-  // Sync LayerPlaybackManager when activeLayerSlots changes — only process CHANGED layers
+  // Sync LayerPlaybackManager when activeLayerSlots OR activeCompositionId changes
+  // This handles: slot assignment changes, AND editor comp switches (which change which layers
+  // are "background" vs "editor-managed" even if activeLayerSlots didn't change)
   useEffect(() => {
-    const { activeCompositionId, compositions } = useMediaStore.getState();
-    const prev = prevLayerSlotsRef.current;
+    const { compositions } = useMediaStore.getState();
 
-    // Collect all layer indices that exist in either prev or current
+    // Compute desired background layers: assigned AND not the current editor comp
+    const desired: Record<number, string> = {};
+    for (const [key, compId] of Object.entries(activeLayerSlots)) {
+      if (compId && compId !== activeCompositionId) {
+        desired[Number(key)] = compId;
+      }
+    }
+
+    const prev = prevDesiredRef.current;
+
+    // Collect all layer indices from both prev and current desired sets
     const allLayerIndices = new Set([
       ...Object.keys(prev).map(Number),
-      ...Object.keys(activeLayerSlots).map(Number),
+      ...Object.keys(desired).map(Number),
     ]);
 
     for (const layerIndex of allLayerIndices) {
       const prevCompId = prev[layerIndex] ?? null;
-      const newCompId = activeLayerSlots[layerIndex] ?? null;
+      const newCompId = desired[layerIndex] ?? null;
       if (prevCompId === newCompId) continue; // unchanged — skip
 
-      // Deactivate old (unless it's the editor comp — editor handles its own playback)
-      if (prevCompId && prevCompId !== activeCompositionId) {
+      // Deactivate old background layer
+      if (prevCompId) {
         layerPlaybackManager.deactivateLayer(layerIndex);
       }
 
-      // Activate new (unless it's the editor comp)
-      if (newCompId && newCompId !== activeCompositionId) {
+      // Activate new background layer
+      if (newCompId) {
         const comp = compositions.find(c => c.id === newCompId);
         const savedPosition = comp?.timelineData?.playheadPosition ?? 0;
         layerPlaybackManager.activateLayer(layerIndex, newCompId, savedPosition);
       }
     }
 
-    prevLayerSlotsRef.current = { ...activeLayerSlots };
-  }, [activeLayerSlots]);
+    prevDesiredRef.current = desired;
+  }, [activeLayerSlots, activeCompositionId]);
 
   // Dismiss context menu on click-outside
   useEffect(() => {
@@ -442,6 +454,8 @@ const SlotTimeOverlay = memo(function SlotTimeOverlay({
   // Local wall-clock anchor for background layers — completely independent of global state
   const startedAtRef = useRef<number>(0);
   const wasActiveRef = useRef(false);
+  // Track editor→background transitions to re-anchor wall-clock from saved position
+  const wasEditorRef = useRef(false);
 
   // When slot becomes active, anchor the wall-clock
   useEffect(() => {
@@ -478,7 +492,16 @@ const SlotTimeOverlay = memo(function SlotTimeOverlay({
         pos = playheadState.isUsingInternalPosition
           ? playheadState.position
           : useTimelineStore.getState().playheadPosition;
+        wasEditorRef.current = true;
       } else {
+        // Detect editor→background transition: re-anchor wall-clock from saved position
+        // so background playhead continues from where the editor left off
+        if (wasEditorRef.current) {
+          const comp = useMediaStore.getState().compositions.find(c => c.id === compId);
+          const savedPos = comp?.timelineData?.playheadPosition ?? 0;
+          startedAtRef.current = performance.now() - savedPos * 1000;
+          wasEditorRef.current = false;
+        }
         // Background layer: pure local wall-clock, never reads from any shared state
         const elapsed = (performance.now() - startedAtRef.current) / 1000;
         pos = duration > 0 ? elapsed % duration : 0;
