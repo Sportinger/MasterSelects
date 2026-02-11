@@ -131,7 +131,7 @@ export const useSettingsStore = create<SettingsState>()(
       showTransparencyGrid: false, // Don't show checkerboard by default
       autosaveEnabled: true, // Autosave enabled by default
       autosaveInterval: 5, // 5 minutes default interval
-      turboModeEnabled: false, // Disabled by default, enable in Settings > Performance
+      turboModeEnabled: true, // Try to use native helper by default
       nativeHelperPort: 9876, // Default WebSocket port
       nativeHelperConnected: false, // Not connected initially
       forceDesktopMode: false, // Use responsive detection by default
