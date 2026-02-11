@@ -243,20 +243,29 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
     }
     doSetActiveComposition(set, get, activeCompositionId, comp.id, compositions, { skipAnimation: true });
 
-    // After microtask (let loadState settle), add media as a clip
-    queueMicrotask(() => {
+    // After short delay (let loadState settle for empty comp), add media as a clip
+    // then flush timeline state back to composition so MiniTimeline shows correct preview
+    setTimeout(async () => {
       const ts = useTimelineStore.getState();
       const videoTrack = ts.tracks.find(t => t.type === 'video');
       const audioTrack = ts.tracks.find(t => t.type === 'audio');
 
       if (mediaFile.file) {
         if ((mediaFile.type === 'video' || mediaFile.type === 'image') && videoTrack) {
-          ts.addClip(videoTrack.id, mediaFile.file, 0, mediaFile.duration, mediaFile.id);
+          await ts.addClip(videoTrack.id, mediaFile.file, 0, mediaFile.duration, mediaFile.id);
         } else if (mediaFile.type === 'audio' && audioTrack) {
-          ts.addClip(audioTrack.id, mediaFile.file, 0, mediaFile.duration, mediaFile.id);
+          await ts.addClip(audioTrack.id, mediaFile.file, 0, mediaFile.duration, mediaFile.id);
         }
       }
-    });
+
+      // Save timeline state back to composition's timelineData for MiniTimeline preview
+      const timelineData = useTimelineStore.getState().getSerializableState();
+      set((state) => ({
+        compositions: state.compositions.map((c) =>
+          c.id === comp.id ? { ...c, timelineData } : c
+        ),
+      }));
+    }, 100);
   },
 
   setPreviewComposition: (id: string | null) => {

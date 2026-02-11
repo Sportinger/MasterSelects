@@ -1124,11 +1124,13 @@ export class LayerBuilderService {
     const lastSeek = this.lastSeekRef[clipId] || 0;
     const threshold = ctx.isDraggingPlayhead ? 50 : 33;
     if (ctx.now - lastSeek > threshold) {
-      if (ctx.isDraggingPlayhead && 'fastSeek' in video) {
-        video.fastSeek(time);
-      } else {
-        video.currentTime = time;
-      }
+      // Always use currentTime for exact-frame seeking.
+      // fastSeek jumps to nearest keyframe which causes janky scrubbing for
+      // long-GOP codecs (H.264 phone footage: keyframes every 2-5s = only 3-6
+      // unique frames per 30s). currentTime decodes to the exact frame.
+      // The RVFC callback below ensures we only re-render when the decoded
+      // frame is actually ready, so the longer decode time is handled gracefully.
+      video.currentTime = time;
       this.lastSeekRef[clipId] = ctx.now;
 
       // Use RVFC to trigger re-render when the decoded frame is actually ready.
@@ -1141,7 +1143,9 @@ export class LayerBuilderService {
         }
         this.rvfcHandles[clipId] = rvfc.call(video, () => {
           delete this.rvfcHandles[clipId];
-          engine.requestRender();
+          // Use requestNewFrameRender to bypass the scrub rate limiter -
+          // a fresh decoded frame should be displayed immediately
+          engine.requestNewFrameRender();
         });
       }
     }

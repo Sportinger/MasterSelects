@@ -429,6 +429,11 @@ export class WebGPUEngine {
     this.renderLoop?.setIsScrubbing(scrubbing);
   }
 
+  // Called by RVFC when a new decoded frame is ready - bypasses scrub rate limiter
+  requestNewFrameRender(): void {
+    this.renderLoop?.requestNewFrameRender();
+  }
+
   // === TEXTURE MANAGEMENT ===
 
   createImageTexture(image: HTMLImageElement): GPUTexture | null {

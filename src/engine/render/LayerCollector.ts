@@ -251,6 +251,11 @@ export class LayerCollector {
           deps.scrubbingCache?.setLastCaptureTime(video, now);
         }
 
+        // Populate per-time scrubbing cache: store this frame indexed by video time
+        // so scrubbing back to a previously visited position shows the frame instantly
+        // from cache instead of waiting for a new decode cycle
+        deps.scrubbingCache?.cacheFrameAtTime(video, currentTime);
+
         this.currentDecoder = 'HTMLVideo';
         this.hasVideo = true;
         return {

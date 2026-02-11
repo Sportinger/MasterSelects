@@ -27,6 +27,7 @@ export class RenderLoop {
   private hasActiveVideo = false;
   private isPlaying = false;
   private isScrubbing = false;
+  private newFrameReady = false; // Set by RVFC to bypass scrub limiter
   private lastRenderTime = 0;
 
   // Health monitoring - detect frozen render loop
@@ -103,14 +104,14 @@ export class RenderLoop {
             return;
           }
         } else if (this.isScrubbing) {
-          // Scrubbing: ~30fps - avoids 4-5 wasted renders per seek cycle
-          // Video seeks take ~50-80ms, so rendering at 60fps just re-composites
-          // the same cached frame. 30fps catches the seeked frame promptly
-          // while halving GPU work.
-          if (timeSinceLastRender < this.SCRUB_FRAME_TIME) {
+          // Scrubbing: ~30fps baseline to avoid wasted renders while video seeks.
+          // BUT: if RVFC signaled a new decoded frame is ready, render immediately
+          // to minimize latency between decode completion and display.
+          if (!this.newFrameReady && timeSinceLastRender < this.SCRUB_FRAME_TIME) {
             this.animationId = requestAnimationFrame(loop);
             return;
           }
+          this.newFrameReady = false;
         }
         this.lastRenderTime = timestamp;
       }
@@ -212,6 +213,13 @@ export class RenderLoop {
     if (this.isIdle) {
       this.isIdle = false;
     }
+  }
+
+  // Called by RVFC when a new decoded video frame is ready.
+  // Bypasses the scrub rate limiter so the fresh frame is displayed immediately.
+  requestNewFrameRender(): void {
+    this.newFrameReady = true;
+    this.requestRender();
   }
 
   getIsIdle(): boolean {
