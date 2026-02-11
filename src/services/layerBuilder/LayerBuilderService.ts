@@ -16,6 +16,7 @@ import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation'
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
+import { engine } from '../../engine/WebGPUEngine';
 
 const log = Logger.create('LayerBuilder');
 
@@ -45,6 +46,7 @@ function getClipEQGains(ctx: FrameContext, clip: TimelineClip, clipLocalTime: nu
 
   return EQ_BAND_PARAMS.map(param => (eqEffect.params?.[param] as number) ?? 0);
 }
+
 
 /**
  * LayerBuilderService - Builds render layers from timeline state
@@ -925,15 +927,21 @@ export class LayerBuilderService {
         // When paused: pause video and seek to exact time
         if (!video.paused) video.pause();
 
+        // Force first-frame decode for videos that haven't played yet (e.g. after reload)
+        if (video.played.length === 0 && !video.seeking && !this.forceDecodeInProgress.has(nestedClip.id)) {
+          this.forceVideoFrameDecode(nestedClip.id, video);
+        }
+
         const seekThreshold = ctx.isDraggingPlayhead ? 0.1 : 0.05;
         if (timeDiff > seekThreshold) {
           this.throttledSeek(nestedClip.id, video, nestedClipTime, ctx);
+          video.addEventListener('seeked', () => engine.requestRender(), { once: true });
         }
 
         // If video readyState < 2 (no frame data), force decode via play/pause
         // This can happen after seeking to unbuffered regions
         if (video.readyState < 2 && !video.seeking) {
-          this.forceNestedVideoFrameDecode(nestedClip.id, video);
+          this.forceVideoFrameDecode(nestedClip.id, video);
         }
       }
 
@@ -952,23 +960,26 @@ export class LayerBuilderService {
 
   /**
    * Force video to decode current frame by briefly playing
-   * Used when video readyState drops below 2 after seeking
+   * Used when video has never played (after reload) or readyState drops below 2
    */
-  private forceNestedVideoFrameDecode(clipId: string, video: HTMLVideoElement): void {
+  private forceVideoFrameDecode(clipId: string, video: HTMLVideoElement): void {
     if (this.forceDecodeInProgress.has(clipId)) return;
     this.forceDecodeInProgress.add(clipId);
 
     const currentTime = video.currentTime;
+    video.muted = true; // Prevent autoplay restrictions
     video.play()
       .then(() => {
         video.pause();
         video.currentTime = currentTime;
         this.forceDecodeInProgress.delete(clipId);
+        engine.requestRender();
       })
       .catch(() => {
         // Fallback: tiny seek to trigger decode
         video.currentTime = currentTime + 0.001;
         this.forceDecodeInProgress.delete(clipId);
+        engine.requestRender();
       });
   }
 
@@ -1002,6 +1013,16 @@ export class LayerBuilderService {
     // Normal video sync
     const timeDiff = Math.abs(video.currentTime - timeInfo.clipTime);
 
+    // Force first-frame decode for videos that haven't played yet (e.g. after reload)
+    // importExternalTexture needs the video to have presented at least one frame
+    if (!ctx.isPlaying && video.played.length === 0 && !video.seeking && !this.forceDecodeInProgress.has(clip.id)) {
+      this.forceVideoFrameDecode(clip.id, video);
+      return; // Skip seeking until first frame is decoded
+    }
+
+    // Skip all sync while force-decode is in progress to avoid interference
+    if (this.forceDecodeInProgress.has(clip.id)) return;
+
     // Reverse playback: either clip is reversed OR timeline playbackSpeed is negative
     // H.264 can't play backwards, so we seek frame-by-frame
     const isReversePlayback = clip.reversed || ctx.playbackSpeed < 0;
@@ -1013,6 +1034,7 @@ export class LayerBuilderService {
       const seekThreshold = ctx.isDraggingPlayhead ? 0.1 : 0.02;
       if (timeDiff > seekThreshold) {
         this.throttledSeek(clip.id, video, timeInfo.clipTime, ctx);
+        video.addEventListener('seeked', () => engine.requestRender(), { once: true });
       }
     } else if (ctx.playbackSpeed !== 1) {
       // Non-standard forward speed (2x, 4x, etc.): seek frame-by-frame for accuracy
@@ -1020,6 +1042,7 @@ export class LayerBuilderService {
       const seekThreshold = ctx.isDraggingPlayhead ? 0.1 : 0.03;
       if (timeDiff > seekThreshold) {
         this.throttledSeek(clip.id, video, timeInfo.clipTime, ctx);
+        video.addEventListener('seeked', () => engine.requestRender(), { once: true });
       }
     } else {
       // Normal 1x forward playback: let video play naturally
@@ -1033,6 +1056,12 @@ export class LayerBuilderService {
         const seekThreshold = ctx.isDraggingPlayhead ? 0.1 : 0.05;
         if (timeDiff > seekThreshold) {
           this.throttledSeek(clip.id, video, timeInfo.clipTime, ctx);
+          video.addEventListener('seeked', () => engine.requestRender(), { once: true });
+        }
+
+        // Force decode if readyState dropped after seek
+        if (video.readyState < 2 && !video.seeking) {
+          this.forceVideoFrameDecode(clip.id, video);
         }
       }
     }
