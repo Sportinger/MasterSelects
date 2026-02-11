@@ -3,6 +3,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import type { MarkerDragState } from '../types';
+import { proxyFrameCache } from '../../../services/proxyFrameCache';
 
 interface UsePlayheadDragProps {
   // Refs
@@ -74,6 +75,9 @@ export function usePlayheadDrag({
       const time = pixelToTime(x);
       setPlayheadPosition(Math.max(0, Math.min(time, duration)));
 
+      // Resume AudioContext from user gesture (Chrome blocks resume() from rAF)
+      proxyFrameCache.ensureAudioContextResumed();
+
       setDraggingPlayhead(true);
     },
     [
@@ -103,6 +107,10 @@ export function usePlayheadDrag({
       if (isRamPreviewing) {
         cancelRamPreview();
       }
+
+      // Resume AudioContext from user gesture (Chrome blocks resume() from rAF)
+      proxyFrameCache.ensureAudioContextResumed();
+
       setDraggingPlayhead(true);
     },
     [isPlaying, pause, isRamPreviewing, cancelRamPreview, setDraggingPlayhead]

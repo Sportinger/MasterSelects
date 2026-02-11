@@ -463,6 +463,17 @@ class ProxyFrameCache {
   }
 
   /**
+   * Ensure AudioContext is running - MUST be called from a user gesture (mousedown/click).
+   * Chrome's autoplay policy blocks AudioContext.resume() from rAF callbacks.
+   */
+  ensureAudioContextResumed(): void {
+    const ctx = this.getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+  }
+
+  /**
    * Get AudioBuffer for a media file (decode on first request)
    * Works with BOTH proxy audio AND original video files
    */
