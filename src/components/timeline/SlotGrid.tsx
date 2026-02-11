@@ -435,7 +435,6 @@ const SlotTimeOverlay = memo(function SlotTimeOverlay({
     if (!isActive) {
       line.style.display = 'none';
       timeEl.textContent = `00:00.00 / ${durationStr}`;
-      lastPosRef.current = 0;
       return;
     }
 
