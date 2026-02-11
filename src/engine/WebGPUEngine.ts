@@ -8,6 +8,7 @@ import { WebGPUContext, type GPUPowerPreference } from './core/WebGPUContext';
 import { TextureManager } from './texture/TextureManager';
 import { MaskTextureManager } from './texture/MaskTextureManager';
 import { CacheManager } from './managers/CacheManager';
+import { ExportCanvasManager } from './managers/ExportCanvasManager';
 import { CompositorPipeline } from './pipeline/CompositorPipeline';
 import { EffectsPipeline } from '../effects/EffectsPipeline';
 import { OutputPipeline } from './pipeline/OutputPipeline';
@@ -47,6 +48,7 @@ export class WebGPUEngine {
   private textureManager: TextureManager | null = null;
   private maskTextureManager: MaskTextureManager | null = null;
   private cacheManager: CacheManager = new CacheManager();
+  private exportCanvasManager: ExportCanvasManager = new ExportCanvasManager();
   private videoFrameManager: VideoFrameManager;
 
   // Pipelines
@@ -66,17 +68,11 @@ export class WebGPUEngine {
 
   // State flags
   private isRecoveringFromDeviceLoss = false;
-  private isGeneratingRamPreview = false;
-  private isExporting = false;
   private lastRenderHadContent = false;
 
   // Track whether play has ever been pressed — persists across RenderLoop recreations.
   // Before first play, idle detection is suppressed so video GPU surfaces stay warm.
   private hasEverPlayed = false;
-
-  // Export canvas (OffscreenCanvas for zero-copy VideoFrame creation)
-  private exportCanvas: OffscreenCanvas | null = null;
-  private exportCanvasContext: GPUCanvasContext | null = null;
 
   constructor() {
     this.context = new WebGPUContext();
@@ -171,7 +167,7 @@ export class WebGPUEngine {
 
     this.renderLoop = new RenderLoop(this.performanceStats, {
       isRecovering: () => this.isRecoveringFromDeviceLoss || this.context.recovering,
-      isExporting: () => this.isExporting,
+      isExporting: () => this.exportCanvasManager.getIsExporting(),
       onRender: () => {}, // Set by start()
     });
   }
@@ -494,93 +490,35 @@ export class WebGPUEngine {
   }
 
   setGeneratingRamPreview(generating: boolean): void {
-    this.isGeneratingRamPreview = generating;
+    this.exportCanvasManager.setGeneratingRamPreview(generating);
   }
 
   setExporting(exporting: boolean): void {
-    this.isExporting = exporting;
+    this.exportCanvasManager.setExporting(exporting);
     if (exporting) this.cacheManager.clearVideoTimeTracking();
-    log.info('Export mode', { enabled: exporting });
   }
 
   getIsExporting(): boolean {
-    return this.isExporting;
+    return this.exportCanvasManager.getIsExporting();
   }
 
-  /**
-   * Initialize export canvas for zero-copy VideoFrame creation.
-   * Call this before starting export with the target resolution.
-   */
   initExportCanvas(width: number, height: number): boolean {
     const device = this.context.getDevice();
     if (!device) {
       log.error('Cannot init export canvas: no device');
       return false;
     }
-
-    // Create OffscreenCanvas at export resolution
-    this.exportCanvas = new OffscreenCanvas(width, height);
-    const ctx = this.exportCanvas.getContext('webgpu');
-    if (!ctx) {
-      log.error('Failed to get WebGPU context from OffscreenCanvas');
-      this.exportCanvas = null;
-      return false;
-    }
-
-    // Configure with same settings as preview canvases
-    const preferredFormat = navigator.gpu.getPreferredCanvasFormat();
-    ctx.configure({
-      device,
-      format: preferredFormat,
-      alphaMode: 'premultiplied',
-    });
-
-    this.exportCanvasContext = ctx;
-    log.info('Export canvas initialized', { width, height, format: preferredFormat });
-    return true;
+    return this.exportCanvasManager.initExportCanvas(device, width, height);
   }
 
-  /**
-   * Create VideoFrame directly from the export canvas (zero-copy path).
-   * Must call render() first to populate the canvas.
-   * Waits for GPU work to complete before capturing the frame.
-   */
   async createVideoFrameFromExport(timestamp: number, duration: number): Promise<VideoFrame | null> {
-    if (!this.exportCanvas) {
-      log.error('Export canvas not initialized');
-      return null;
-    }
-
     const device = this.context.getDevice();
-    if (!device) {
-      log.error('No GPU device');
-      return null;
-    }
-
-    // CRITICAL: Wait for GPU to finish rendering before capturing frame
-    await device.queue.onSubmittedWorkDone();
-
-    try {
-      // Create VideoFrame directly from OffscreenCanvas - browser handles GPU→VideoFrame
-      const frame = new VideoFrame(this.exportCanvas, {
-        timestamp,
-        duration,
-        alpha: 'discard', // We don't need alpha channel in export
-      });
-      return frame;
-    } catch (e) {
-      log.error('Failed to create VideoFrame from export canvas', e);
-      return null;
-    }
+    if (!device) return null;
+    return this.exportCanvasManager.createVideoFrameFromExport(device, timestamp, duration);
   }
 
-  /**
-   * Cleanup export canvas after export completes.
-   */
   cleanupExportCanvas(): void {
-    this.exportCanvasContext = null;
-    this.exportCanvas = null;
-    log.debug('Export canvas cleaned up');
+    this.exportCanvasManager.cleanupExportCanvas();
   }
 
   // === RENDER LOOP ===
@@ -627,7 +565,7 @@ export class WebGPUEngine {
     // Create new loop with the callback
     this.renderLoop = new RenderLoop(this.performanceStats, {
       isRecovering: () => this.isRecoveringFromDeviceLoss || this.context.recovering,
-      isExporting: () => this.isExporting,
+      isExporting: () => this.exportCanvasManager.getIsExporting(),
       onRender: renderCallback,
     });
 
@@ -671,7 +609,7 @@ export class WebGPUEngine {
       scrubbingCache: this.cacheManager.getScrubbingCache(),
       getLastVideoTime: (key) => this.cacheManager.getLastVideoTime(key),
       setLastVideoTime: (key, time) => this.cacheManager.setLastVideoTime(key, time),
-      isExporting: this.isExporting,
+      isExporting: this.exportCanvasManager.getIsExporting(),
     });
     const importTime = performance.now() - t1;
 
@@ -726,7 +664,7 @@ export class WebGPUEngine {
     // Output
     this.outputPipeline!.updateResolution(width, height);
 
-    const skipCanvas = this.isGeneratingRamPreview || this.isExporting;
+    const skipCanvas = this.exportCanvasManager.shouldSkipPreviewOutput();
     if (!skipCanvas) {
       // Output to main preview canvas (legacy — no grid)
       if (this.previewContext) {
@@ -763,9 +701,10 @@ export class WebGPUEngine {
     }
 
     // Render to export canvas for zero-copy VideoFrame creation (never show grid)
-    if (this.isExporting && this.exportCanvasContext) {
+    const exportCtx = this.exportCanvasManager.getExportCanvasContext();
+    if (this.exportCanvasManager.getIsExporting() && exportCtx) {
       const exportBindGroup = this.outputPipeline!.createOutputBindGroup(this.sampler, result.finalView, false);
-      this.outputPipeline!.renderToCanvas(commandEncoder, this.exportCanvasContext, exportBindGroup);
+      this.outputPipeline!.renderToCanvas(commandEncoder, exportCtx, exportBindGroup);
     }
 
     // Batch submit all command buffers in single call
@@ -851,11 +790,12 @@ export class WebGPUEngine {
       }
     }
     // Also clear export canvas when exporting (needed for empty frames at export boundaries)
-    if (this.isExporting && this.exportCanvasContext) {
+    const emptyExportCtx = this.exportCanvasManager.getExportCanvasContext();
+    if (this.exportCanvasManager.getIsExporting() && emptyExportCtx) {
       try {
         const pass = commandEncoder.beginRenderPass({
           colorAttachments: [{
-            view: this.exportCanvasContext.getCurrentTexture().createView(),
+            view: emptyExportCtx.getCurrentTexture().createView(),
             clearValue: { r: 0, g: 0, b: 0, a: 1 },
             loadOp: 'clear',
             storeOp: 'store',
@@ -1333,6 +1273,7 @@ export class WebGPUEngine {
     this.textureManager?.destroy();
     this.maskTextureManager?.destroy();
     this.cacheManager.destroy();
+    this.exportCanvasManager.destroy();
     this.videoFrameManager.destroy();
     this.compositorPipeline?.destroy();
     this.effectsPipeline?.destroy();
