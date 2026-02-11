@@ -471,7 +471,7 @@ class ProxyFrameCache {
     const cached = this.audioBufferCache.get(mediaFileId);
     if (cached) return cached;
 
-    // Skip files that have no audio (failed decoding before)
+    // Skip files that have no audio (failed decoding = audio doesn't exist)
     if (this.audioBufferFailed.has(mediaFileId)) {
       return null;
     }
@@ -480,6 +480,13 @@ class ProxyFrameCache {
     if (this.audioBufferLoading.has(mediaFileId)) {
       return null; // Loading in progress
     }
+
+    // Cooldown for "source not found" - retry after 3 seconds (source may become available)
+    const lastAttempt = this.audioBufferRetryTime.get(mediaFileId);
+    if (lastAttempt && performance.now() - lastAttempt < 3000) {
+      return null;
+    }
+
     this.audioBufferLoading.add(mediaFileId);
 
     try {
@@ -521,9 +528,20 @@ class ProxyFrameCache {
         }
       }
 
+      // Try 4: Direct File object from media store (e.g. YouTube downloads)
+      if (!arrayBuffer && mediaFile?.file) {
+        log.debug(`Loading from File object: ${mediaFileId}`);
+        try {
+          arrayBuffer = await mediaFile.file.arrayBuffer();
+        } catch (e) {
+          log.warn('Failed to read File object', e);
+        }
+      }
+
       if (!arrayBuffer) {
         log.warn(`No audio source found for ${mediaFileId}`);
-        this.audioBufferFailed.add(mediaFileId);
+        // Use cooldown instead of permanent failure - source may become available later
+        this.audioBufferRetryTime.set(mediaFileId, performance.now());
         this.audioBufferLoading.delete(mediaFileId);
         return null;
       }
@@ -535,6 +553,7 @@ class ProxyFrameCache {
       // Cache it
       this.audioBufferCache.set(mediaFileId, audioBuffer);
       this.audioBufferLoading.delete(mediaFileId);
+      this.audioBufferRetryTime.delete(mediaFileId);
       log.debug(`Decoded ${mediaFileId}: ${audioBuffer.duration.toFixed(1)}s, ${audioBuffer.numberOfChannels}ch`);
 
       return audioBuffer;
@@ -549,6 +568,8 @@ class ProxyFrameCache {
 
   // Track loading state to prevent duplicate loads
   private audioBufferLoading = new Set<string>();
+  // Cooldown for "source not found" retries (not permanent failure like audioBufferFailed)
+  private audioBufferRetryTime = new Map<string, number>();
 
 
   /**
