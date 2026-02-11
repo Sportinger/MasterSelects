@@ -15,7 +15,7 @@ import { useTimelineStore } from '../stores/timeline';
 import { AudioMixer, type AudioTrackData } from '../engine/audio/AudioMixer';
 import { audioExtractor } from '../engine/audio/AudioExtractor';
 import type { TimelineClip, TimelineTrack, SerializableClip } from '../types';
-import { generateWaveformFromBuffer } from '../stores/timeline/utils';
+import { generateWaveformFromBuffer } from '../stores/timeline/helpers/waveformHelpers';
 
 export interface CompositionMixdownResult {
   buffer: AudioBuffer;

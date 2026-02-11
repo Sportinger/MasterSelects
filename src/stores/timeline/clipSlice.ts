@@ -5,7 +5,8 @@
 import type { TimelineClip, TimelineTrack, Effect, EffectType, TextClipProperties } from '../../types';
 import type { ClipActions, SliceCreator, Composition } from './types';
 import { DEFAULT_TRANSFORM, DEFAULT_TEXT_PROPERTIES, DEFAULT_TEXT_DURATION } from './constants';
-import { generateWaveform, generateWaveformFromBuffer, getDefaultEffectParams } from './utils';
+import { getDefaultEffectParams } from './utils';
+import { generateWaveform, generateWaveformFromBuffer } from './helpers/waveformHelpers';
 import { textRenderer } from '../../services/textRenderer';
 import { googleFontsService } from '../../services/googleFontsService';
 import { engine } from '../../engine/WebGPUEngine';

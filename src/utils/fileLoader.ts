@@ -163,24 +163,3 @@ export function createImageFromFile(file: File): Promise<HTMLImageElement> {
   });
 }
 
-// Generate video thumbnail
-export async function generateVideoThumbnail(
-  video: HTMLVideoElement,
-  time = 0
-): Promise<string> {
-  return new Promise((resolve) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 160;
-    canvas.height = 90;
-
-    video.currentTime = time;
-
-    video.onseeked = () => {
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      }
-      resolve(canvas.toDataURL('image/jpeg', 0.7));
-    };
-  });
-}

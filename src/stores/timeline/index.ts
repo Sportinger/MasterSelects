@@ -24,7 +24,7 @@ const log = Logger.create('Timeline');
 // Re-export types for convenience
 export type { TimelineStore, TimelineClip, Keyframe } from './types';
 export { DEFAULT_TRANSFORM, DEFAULT_TRACKS, SNAP_THRESHOLD_SECONDS } from './constants';
-export { seekVideo, generateWaveform, generateThumbnails, getDefaultEffectParams } from './utils';
+export { seekVideo, getDefaultEffectParams } from './utils';
 
 // Re-export selectors for optimized store subscriptions
 export * from './selectors';
