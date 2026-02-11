@@ -162,6 +162,7 @@ export function isAudioEffect(type: EffectType): boolean {
   return type === 'audio-eq' || type === 'audio-volume';
 }
 
+/** @deprecated Use RenderTarget from renderTarget.ts instead */
 export interface OutputWindow {
   id: string;
   name: string;
@@ -522,3 +523,16 @@ export interface Keyframe {
   handleIn?: BezierHandle;   // Bezier control point for curve entering this keyframe
   handleOut?: BezierHandle;  // Bezier control point for curve leaving this keyframe
 }
+
+// Re-export RenderTarget types
+export type {
+  RenderSourceType,
+  RenderSourceActiveComp,
+  RenderSourceComposition,
+  RenderSourceLayer,
+  RenderSourceSlot,
+  RenderSourceProgram,
+  RenderSource,
+  RenderDestinationType,
+  RenderTarget,
+} from './renderTarget';
