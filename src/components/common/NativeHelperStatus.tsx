@@ -23,7 +23,7 @@ function detectPlatform(): 'mac' | 'windows' | 'linux' | 'unknown' {
 const NATIVE_HELPER_RELEASE = 'https://github.com/Sportinger/MasterSelects/releases/tag/native-helper-v0.2.0';
 const GITHUB_RELEASES = NATIVE_HELPER_RELEASE;
 const DOWNLOAD_LINKS = {
-  windows: 'https://github.com/Sportinger/MasterSelects/releases/download/native-helper-v0.2.0/MasterSelects-NativeHelper-v0.2.0-windows-x64.zip',
+  windows: 'https://github.com/Sportinger/MasterSelects/releases/download/native-helper-v0.2.0/MasterSelects-NativeHelper-v0.2.0-windows-x64.msi',
   mac: NATIVE_HELPER_RELEASE,
   linux: NATIVE_HELPER_RELEASE,
 } as const;
@@ -320,6 +320,17 @@ function NativeHelperDialog({
                 >
                   Download for {platformLabel}
                 </a>
+
+                {platform === 'windows' && (
+                  <div className="bg-zinc-900 rounded-lg p-3 space-y-2">
+                    <p className="text-xs text-zinc-500 font-medium">Installation:</p>
+                    <ol className="text-xs text-zinc-400 space-y-1.5 list-decimal list-inside">
+                      <li>Run the MSI installer</li>
+                      <li>The helper starts in the system tray (notification area)</li>
+                      <li>Right-click the tray icon for options</li>
+                    </ol>
+                  </div>
+                )}
 
                 {platform === 'mac' && (
                   <div className="bg-zinc-900 rounded-lg p-3 space-y-2">
