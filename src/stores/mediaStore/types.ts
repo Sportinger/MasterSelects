@@ -120,6 +120,9 @@ export interface MediaState {
   slotAssignments: Record<string, number>;  // compId → slotIndex
   previewCompositionId: string | null;
 
+  // Multi-layer playback (Resolume-style)
+  activeLayerSlots: Record<number, string | null>;  // layerIndex (0=A..3=D) → compositionId
+
   // Selection
   selectedIds: string[];
   expandedFolderIds: string[];

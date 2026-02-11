@@ -449,6 +449,12 @@ export function useEngine() {
       () => engine.requestRender()
     );
 
+    // Active layer slots changes (multi-layer playback)
+    const unsubLayerSlots = useMediaStore.subscribe(
+      (state) => state.activeLayerSlots,
+      () => engine.requestRender()
+    );
+
     return () => {
       unsubPlayhead();
       unsubClips();
@@ -456,6 +462,7 @@ export function useEngine() {
       unsubLayers();
       unsubSettings();
       unsubActiveComp();
+      unsubLayerSlots();
     };
   }, [isEngineReady]);
 

@@ -10,9 +10,11 @@ import { LayerCache } from './LayerCache';
 import { TransformCache } from './TransformCache';
 import { AudioSyncHandler, createAudioSyncState, finalizeAudioSync, resumeAudioContextIfNeeded } from './AudioSyncHandler';
 import { proxyFrameCache } from '../proxyFrameCache';
+import { layerPlaybackManager } from '../layerPlaybackManager';
 import { Logger } from '../logger';
 import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
 import { useTimelineStore } from '../../stores/timeline';
+import { useMediaStore } from '../../stores/mediaStore';
 import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 
 const log = Logger.create('LayerBuilder');
@@ -91,23 +93,76 @@ export class LayerBuilderService {
     // Create frame context (single store read)
     const ctx = createFrameContext();
 
-    // Check cache
+    // Check cache (only for primary layers — background layers are cheap to rebuild)
     const cacheResult = this.layerCache.checkCache(ctx);
+    let primaryLayers: Layer[];
     if (cacheResult.useCache) {
-      return cacheResult.layers;
+      primaryLayers = cacheResult.layers;
+    } else {
+      primaryLayers = this.buildLayers(ctx);
+      // Preload upcoming nested comp frames during playback
+      if (ctx.isPlaying) {
+        this.preloadUpcomingNestedCompFrames(ctx);
+      }
     }
 
-    // Build layers
-    const layers = this.buildLayers(ctx);
+    // Merge background layers from active layer slots
+    const mergedLayers = this.mergeBackgroundLayers(primaryLayers, ctx.playheadPosition);
 
-    // Preload upcoming nested comp frames during playback
-    if (ctx.isPlaying) {
-      this.preloadUpcomingNestedCompFrames(ctx);
+    // Cache merged result
+    this.layerCache.setCachedLayers(mergedLayers);
+    return mergedLayers;
+  }
+
+  /**
+   * Merge primary (editor) layers with background composition layers.
+   * Render order: D (bottom) → C → B → A (top)
+   * The primary composition's layers go at the position of its layer slot.
+   */
+  private mergeBackgroundLayers(primaryLayers: Layer[], playheadPosition: number): Layer[] {
+    const { activeLayerSlots, activeCompositionId } = useMediaStore.getState();
+    const slotEntries = Object.entries(activeLayerSlots);
+
+    // No active layer slots → return primary layers as-is (backwards compatible)
+    if (slotEntries.length === 0) {
+      return primaryLayers;
     }
 
-    // Cache and return
-    this.layerCache.setCachedLayers(layers);
-    return layers;
+    // Find which layer the primary (editor) composition is on
+    let primaryLayerIndex = -1;
+    for (const [key, compId] of slotEntries) {
+      if (compId === activeCompositionId) {
+        primaryLayerIndex = Number(key);
+        break;
+      }
+    }
+
+    // Collect all layer indices, sorted D=3 (bottom) → A=0 (top)
+    const layerIndices = slotEntries
+      .map(([key]) => Number(key))
+      .sort((a, b) => b - a); // Descending = bottom to top
+
+    const merged: Layer[] = [];
+
+    for (const layerIndex of layerIndices) {
+      if (layerIndex === primaryLayerIndex) {
+        // Insert primary layers at this position
+        merged.push(...primaryLayers);
+      } else {
+        // Build background layer from LayerPlaybackManager
+        const bgLayer = layerPlaybackManager.buildLayersForLayer(layerIndex, playheadPosition);
+        if (bgLayer) {
+          merged.push(bgLayer);
+        }
+      }
+    }
+
+    // If primary comp is not in any slot, add its layers on top
+    if (primaryLayerIndex === -1 && primaryLayers.length > 0) {
+      merged.push(...primaryLayers);
+    }
+
+    return merged;
   }
 
   /**
@@ -815,6 +870,9 @@ export class LayerBuilderService {
         }
       }
     }
+
+    // Sync background layer video elements
+    layerPlaybackManager.syncVideoElements(ctx.playheadPosition, ctx.isPlaying);
   }
 
   /**
@@ -1075,6 +1133,9 @@ export class LayerBuilderService {
 
     // Pause inactive audio
     this.pauseInactiveAudio(ctx);
+
+    // Sync background layer audio elements
+    layerPlaybackManager.syncAudioElements(ctx.playheadPosition, ctx.isPlaying);
 
     // Finalize
     finalizeAudioSync(state, ctx.isPlaying);

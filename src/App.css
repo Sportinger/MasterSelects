@@ -9514,6 +9514,16 @@ input[type="checkbox"] {
   border-radius: 3px;
 }
 
+.slot-grid-col-header-clickable {
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.slot-grid-col-header-clickable:hover {
+  background: #2a2a2a;
+  color: #ccc;
+}
+
 .slot-grid-row-label {
   display: flex;
   align-items: center;
@@ -9544,6 +9554,11 @@ input[type="checkbox"] {
 .slot-grid-item.active {
   border-color: #4a9eff;
   box-shadow: 0 0 12px rgba(74, 158, 255, 0.3);
+}
+
+.slot-grid-item.layer-active {
+  border-color: #4aff6e;
+  box-shadow: 0 0 12px rgba(74, 255, 110, 0.3);
 }
 
 .slot-grid-item.drag-over {

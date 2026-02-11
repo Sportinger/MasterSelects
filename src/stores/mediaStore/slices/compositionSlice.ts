@@ -26,6 +26,11 @@ export interface CompositionActions {
   moveSlot: (compId: string, toSlotIndex: number) => void;
   setPreviewComposition: (id: string | null) => void;
   getSlotMap: (totalSlots: number) => (Composition | null)[];
+  // Multi-layer playback (Resolume-style)
+  activateOnLayer: (compositionId: string, layerIndex: number) => void;
+  deactivateLayer: (layerIndex: number) => void;
+  activateColumn: (colIndex: number) => void;
+  deactivateAllLayers: () => void;
 }
 
 export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (set, get) => ({
@@ -216,6 +221,67 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
     }
 
     return map;
+  },
+
+  // === Multi-layer playback (Resolume-style) ===
+
+  activateOnLayer: (compositionId: string, layerIndex: number) => {
+    const { activeLayerSlots } = get();
+    // If same comp already on this layer, it'll be restarted by the caller
+    const newSlots = { ...activeLayerSlots };
+    // Remove this comp from any other layer it might be on
+    for (const [key, val] of Object.entries(newSlots)) {
+      if (val === compositionId) {
+        delete newSlots[Number(key)];
+      }
+    }
+    newSlots[layerIndex] = compositionId;
+    set({ activeLayerSlots: newSlots });
+  },
+
+  deactivateLayer: (layerIndex: number) => {
+    const { activeLayerSlots } = get();
+    const newSlots = { ...activeLayerSlots };
+    delete newSlots[layerIndex];
+    set({ activeLayerSlots: newSlots });
+  },
+
+  activateColumn: (colIndex: number) => {
+    const GRID_COLS = 12;
+    const GRID_ROWS = 4;
+    const TOTAL_SLOTS = GRID_COLS * GRID_ROWS;
+    // Build slot map inline (same logic as getSlotMap but avoids unknown type from index signature)
+    const { compositions, slotAssignments } = get();
+    const slotMap: (Composition | null)[] = new Array(TOTAL_SLOTS).fill(null);
+    const assigned = new Set<string>();
+    for (const [compId, slotIdx] of Object.entries(slotAssignments)) {
+      if (slotIdx >= 0 && slotIdx < TOTAL_SLOTS) {
+        const comp = compositions.find(c => c.id === compId);
+        if (comp) { slotMap[slotIdx] = comp; assigned.add(compId); }
+      }
+    }
+    const unassigned = compositions.filter(c => !assigned.has(c.id)).sort((a, b) => a.name.localeCompare(b.name));
+    let nextEmpty = 0;
+    for (const comp of unassigned) {
+      while (nextEmpty < TOTAL_SLOTS && slotMap[nextEmpty] !== null) nextEmpty++;
+      if (nextEmpty >= TOTAL_SLOTS) break;
+      slotMap[nextEmpty] = comp;
+      nextEmpty++;
+    }
+
+    const newSlots: Record<number, string | null> = {};
+    for (let row = 0; row < GRID_ROWS; row++) {
+      const slotIndex = row * GRID_COLS + colIndex;
+      const comp = slotMap[slotIndex];
+      if (comp) {
+        newSlots[row] = comp.id;
+      }
+    }
+    set({ activeLayerSlots: newSlots });
+  },
+
+  deactivateAllLayers: () => {
+    set({ activeLayerSlots: {} });
   },
 });
 

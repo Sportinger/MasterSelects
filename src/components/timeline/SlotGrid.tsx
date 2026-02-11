@@ -1,11 +1,13 @@
 // SlotGrid - Resolume-style grid with row labels (layers) on left, column numbers on top
-// Compositions fill slots left-to-right, top-to-bottom; remaining slots are empty
-// Click = play from start (stay in grid), Drag = reorder/move to any slot, Bottom strip = preview
+// Multi-layer playback: each row (A-D) can have an active composition playing simultaneously
+// Click = activate on layer + play from start, Drag = reorder/move to any slot
+// Column header click = activate all compositions in that column
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { playheadState } from '../../services/layerBuilder';
+import { layerPlaybackManager } from '../../services/layerPlaybackManager';
 import { animateSlotGrid } from './slotGridAnimation';
 import { MiniTimeline } from './MiniTimeline';
 import type { Composition } from '../../stores/mediaStore';
@@ -26,14 +28,59 @@ export function SlotGrid({ opacity }: SlotGridProps) {
   const activeCompositionId = useMediaStore(state => state.activeCompositionId);
   const previewCompositionId = useMediaStore(state => state.previewCompositionId);
   const slotAssignments = useMediaStore(state => state.slotAssignments);
+  const activeLayerSlots = useMediaStore(state => state.activeLayerSlots);
   const openCompositionTab = useMediaStore(state => state.openCompositionTab);
+  const activateOnLayer = useMediaStore(state => state.activateOnLayer);
+  const deactivateLayer = useMediaStore(state => state.deactivateLayer);
+  const activateColumn = useMediaStore(state => state.activateColumn);
   const moveSlot = useMediaStore(state => state.moveSlot);
   const setPreviewComposition = useMediaStore(state => state.setPreviewComposition);
   const getSlotMap = useMediaStore(state => state.getSlotMap);
 
+  // Build a set of active composition IDs from activeLayerSlots
+  const activeLayerCompIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const compId of Object.values(activeLayerSlots)) {
+      if (compId) ids.add(compId);
+    }
+    return ids;
+  }, [activeLayerSlots]);
+
   // Drag state
   const [dragCompId, setDragCompId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  // Sync LayerPlaybackManager when activeLayerSlots changes
+  useEffect(() => {
+    const { activeCompositionId } = useMediaStore.getState();
+
+    // Determine which layers need activation/deactivation in the playback manager
+    const currentManagerLayers = new Set(layerPlaybackManager.getActiveLayerIndices());
+    const desiredLayers = new Map<number, string>();
+
+    for (const [key, compId] of Object.entries(activeLayerSlots)) {
+      if (compId && compId !== activeCompositionId) {
+        desiredLayers.set(Number(key), compId);
+      }
+    }
+
+    // Deactivate layers no longer needed
+    for (const layerIndex of currentManagerLayers) {
+      if (!desiredLayers.has(layerIndex)) {
+        layerPlaybackManager.deactivateLayer(layerIndex);
+      }
+    }
+
+    // Activate new layers
+    for (const [layerIndex, compId] of desiredLayers) {
+      const existing = layerPlaybackManager.getLayerState(layerIndex);
+      if (!existing || existing.compositionId !== compId) {
+        // Save current timeline state before loading background comp
+        // (the comp's timelineData might be stale if it's the editor comp)
+        layerPlaybackManager.activateLayer(layerIndex, compId);
+      }
+    }
+  }, [activeLayerSlots]);
 
   // Handle Ctrl+Shift+Scroll on the SlotGrid itself
   useEffect(() => {
@@ -68,16 +115,36 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     return () => container.removeEventListener('wheel', handleWheel);
   }, []);
 
-  // Click = play from start (re-click restarts)
-  const handleSlotClick = useCallback((comp: Composition) => {
-    openCompositionTab(comp.id, { skipAnimation: true, playFromStart: true });
-  }, [openCompositionTab]);
+  // Click = activate on layer + play from start (re-click restarts)
+  const handleSlotClick = useCallback((comp: Composition, slotIndex: number) => {
+    const layerIndex = Math.floor(slotIndex / GRID_COLS);
 
-  // Click empty slot = stop playback and deselect
-  const handleEmptySlotClick = useCallback(() => {
-    useTimelineStore.getState().stop();
-    useMediaStore.getState().setActiveComposition(null);
-  }, []);
+    // Activate this composition on its layer
+    activateOnLayer(comp.id, layerIndex);
+
+    // Also open in timeline editor and play from start
+    openCompositionTab(comp.id, { skipAnimation: true, playFromStart: true });
+  }, [activateOnLayer, openCompositionTab]);
+
+  // Click empty slot = deactivate that layer
+  const handleEmptySlotClick = useCallback((slotIndex: number) => {
+    const layerIndex = Math.floor(slotIndex / GRID_COLS);
+    deactivateLayer(layerIndex);
+  }, [deactivateLayer]);
+
+  // Click column header = activate all compositions in that column
+  const handleColumnClick = useCallback((colIndex: number) => {
+    const slotMap = getSlotMap(TOTAL_SLOTS);
+    activateColumn(colIndex);
+    // Open topmost (row A first) filled slot in that column in editor
+    for (let row = 0; row < GRID_ROWS; row++) {
+      const comp = slotMap[row * GRID_COLS + colIndex];
+      if (comp) {
+        openCompositionTab(comp.id, { skipAnimation: true, playFromStart: true });
+        break;
+      }
+    }
+  }, [activateColumn, getSlotMap, openCompositionTab]);
 
   // Preview strip click
   const handlePreviewClick = useCallback((e: React.MouseEvent, comp: Composition) => {
@@ -148,9 +215,14 @@ export function SlotGrid({ opacity }: SlotGridProps) {
         {/* Empty corner */}
         <div className="slot-grid-corner" />
 
-        {/* Column headers */}
+        {/* Column headers — clickable to activate column */}
         {Array.from({ length: GRID_COLS }, (_, i) => (
-          <div key={`col-${i}`} className="slot-grid-col-header">
+          <div
+            key={`col-${i}`}
+            className="slot-grid-col-header slot-grid-col-header-clickable"
+            onClick={() => handleColumnClick(i)}
+            title={`Activate column ${i + 1}`}
+          >
             {i + 1}
           </div>
         ))}
@@ -167,15 +239,22 @@ export function SlotGrid({ opacity }: SlotGridProps) {
               const isDragOver = slotIndex === dragOverIndex && dragCompId !== null;
 
               if (comp) {
-                const isActive = comp.id === activeCompositionId;
+                const isEditorActive = comp.id === activeCompositionId;
+                const isLayerActive = activeLayerCompIds.has(comp.id);
                 const isPreviewed = comp.id === previewCompositionId;
                 const isSelf = comp.id === dragCompId;
                 return (
                   <div
                     key={slotIndex}
-                    className={`slot-grid-item${isActive ? ' active' : ''}${isPreviewed ? ' previewed' : ''}${isDragOver && !isSelf ? ' drag-over' : ''}`}
+                    className={
+                      `slot-grid-item` +
+                      `${isEditorActive ? ' active' : ''}` +
+                      `${isLayerActive && !isEditorActive ? ' layer-active' : ''}` +
+                      `${isPreviewed ? ' previewed' : ''}` +
+                      `${isDragOver && !isSelf ? ' drag-over' : ''}`
+                    }
                     data-comp-id={comp.id}
-                    onClick={() => handleSlotClick(comp)}
+                    onClick={() => handleSlotClick(comp, slotIndex)}
                     title={comp.name}
                     draggable
                     onDragStart={(e) => handleDragStart(e, comp)}
@@ -189,11 +268,11 @@ export function SlotGrid({ opacity }: SlotGridProps) {
                       timelineData={comp.timelineData}
                       compositionName={comp.name}
                       compositionDuration={comp.duration}
-                      isActive={isActive}
+                      isActive={isEditorActive}
                       width={SLOT_SIZE - 4}
                       height={SLOT_SIZE - 4}
                     />
-                    {isActive && <LivePlayhead duration={comp.duration} slotSize={SLOT_SIZE - 4} />}
+                    {(isEditorActive || isLayerActive) && <LivePlayhead duration={comp.duration} slotSize={SLOT_SIZE - 4} />}
                     <div
                       className={`slot-grid-preview-strip${isPreviewed ? ' active' : ''}`}
                       onClick={(e) => handlePreviewClick(e, comp)}
@@ -209,7 +288,7 @@ export function SlotGrid({ opacity }: SlotGridProps) {
                 <div
                   key={slotIndex}
                   className={`slot-grid-item empty${isDragOver ? ' drag-over' : ''}`}
-                  onClick={handleEmptySlotClick}
+                  onClick={() => handleEmptySlotClick(slotIndex)}
                   onDragEnter={handleDragEnter}
                   onDragOver={(e) => handleDragOver(e, slotIndex)}
                   onDragLeave={handleDragLeave}
