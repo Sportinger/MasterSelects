@@ -163,6 +163,13 @@ export interface GetFileCommand {
   path: string;
 }
 
+export interface LocateCommand {
+  cmd: 'locate';
+  id: string;
+  filename: string;
+  search_dirs?: string[];
+}
+
 export type Command =
   | AuthCommand
   | OpenCommand
@@ -179,7 +186,8 @@ export type Command =
   | DownloadYouTubeCommand
   | ListFormatsCommand
   | DownloadCommand
-  | GetFileCommand;
+  | GetFileCommand
+  | LocateCommand;
 
 // Encode settings
 export interface EncodeOutput {

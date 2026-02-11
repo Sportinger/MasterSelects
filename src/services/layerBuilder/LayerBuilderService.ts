@@ -1111,7 +1111,7 @@ export class LayerBuilderService {
 
       nativeDecoder.seekToFrame(targetFrame, ctx.isDraggingPlayhead)
         .then(() => { state!.isPending = false; })
-        .catch(() => { state!.isPending = false; });
+        .catch((err: unknown) => { state!.isPending = false; console.warn('[NH] seek failed frame', targetFrame, err); });
     }
   }
 

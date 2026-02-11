@@ -3,6 +3,7 @@
 use anyhow::Result;
 use rand::Rng;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
@@ -169,6 +170,11 @@ impl Session {
 
             Command::GetFile { id, path } => {
                 let response = self.handle_get_file(&id, &path);
+                (Some(response), None)
+            }
+
+            Command::Locate { id, filename, search_dirs } => {
+                let response = self.handle_locate(&id, &filename, &search_dirs);
                 (Some(response), None)
             }
 
@@ -415,6 +421,49 @@ impl Session {
         };
 
         Response::ok(id, serde_json::to_value(info).unwrap())
+    }
+
+    fn handle_locate(&self, id: &str, filename: &str, extra_dirs: &[String]) -> Response {
+        // Sanitize filename: reject path traversal attempts
+        if filename.contains('/') || filename.contains('\\') || filename.contains("..") {
+            return Response::error(id, error_codes::INVALID_PATH, "Filename must not contain path separators");
+        }
+
+        // Build list of directories to search
+        let mut search_dirs: Vec<PathBuf> = Vec::new();
+
+        // Add extra dirs first (highest priority)
+        for dir in extra_dirs {
+            let p = PathBuf::from(dir);
+            if p.is_absolute() && p.is_dir() {
+                search_dirs.push(p);
+            }
+        }
+
+        // Common user directories
+        if let Some(d) = dirs::desktop_dir() { search_dirs.push(d); }
+        if let Some(d) = dirs::download_dir() { search_dirs.push(d); }
+        if let Some(d) = dirs::video_dir() { search_dirs.push(d); }
+        if let Some(d) = dirs::document_dir() { search_dirs.push(d); }
+        if let Some(d) = dirs::home_dir() { search_dirs.push(d); }
+
+        // Search each directory for the file
+        for dir in &search_dirs {
+            let candidate = dir.join(filename);
+            if candidate.is_file() {
+                info!("Located file '{}' at {}", filename, candidate.display());
+                return Response::ok(id, serde_json::json!({
+                    "found": true,
+                    "path": candidate.to_string_lossy()
+                }));
+            }
+        }
+
+        debug!("File '{}' not found in {} directories", filename, search_dirs.len());
+        Response::ok(id, serde_json::json!({
+            "found": false,
+            "searched": search_dirs.iter().map(|d| d.to_string_lossy().to_string()).collect::<Vec<_>>()
+        }))
     }
 
     fn handle_get_file(&self, id: &str, path: &str) -> Response {

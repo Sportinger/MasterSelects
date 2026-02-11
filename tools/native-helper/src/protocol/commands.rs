@@ -119,6 +119,15 @@ pub enum Command {
         id: String,
         path: String,
     },
+
+    /// Locate a file by name in common directories
+    Locate {
+        id: String,
+        filename: String,
+        /// Optional additional directories to search
+        #[serde(default)]
+        search_dirs: Vec<String>,
+    },
 }
 
 fn default_scale() -> f32 {

@@ -24,6 +24,7 @@ export interface NativeDecoderOptions {
  */
 export class NativeDecoder {
   private fileId: string;
+  private filePath: string;
   private metadata: FileMetadata;
   private options: Required<NativeDecoderOptions>;
 
@@ -32,9 +33,11 @@ export class NativeDecoder {
   private pendingDecode: Promise<void> | null = null;
   private lastPrefetchFrame = -1;
   private closed = false;
+  private reopening = false;
 
-  private constructor(fileId: string, metadata: FileMetadata, options: NativeDecoderOptions) {
+  private constructor(fileId: string, filePath: string, metadata: FileMetadata, options: NativeDecoderOptions) {
     this.fileId = fileId;
+    this.filePath = filePath;
     this.metadata = metadata;
     this.options = {
       scrubScale: options.scrubScale ?? 0.5,
@@ -63,7 +66,7 @@ export class NativeDecoder {
     const metadata = await NativeHelperClient.openFile(filePath);
     log.debug('Got metadata:', metadata);
 
-    return new NativeDecoder(metadata.file_id, metadata, options ?? {});
+    return new NativeDecoder(metadata.file_id, filePath, metadata, options ?? {});
   }
 
   /**
@@ -200,17 +203,42 @@ export class NativeDecoder {
 
   // Private methods
 
-  private async decodeFrame(frame: number, fastScrub: boolean): Promise<void> {
+  /**
+   * Reopen the file after a connection loss / session reset.
+   * Returns true if reopen succeeded.
+   */
+  private async tryReopen(): Promise<boolean> {
+    if (this.reopening) return false;
+    this.reopening = true;
     try {
-      const scale = fastScrub ? this.options.scrubScale : 1.0;
+      log.info('Reopening file after session reset:', this.filePath);
+      if (!NativeHelperClient.isConnected()) {
+        const ok = await NativeHelperClient.connect();
+        if (!ok) return false;
+      }
+      const metadata = await NativeHelperClient.openFile(this.filePath);
+      this.fileId = metadata.file_id;
+      this.metadata = metadata;
+      log.info('Reopened successfully, new fileId:', this.fileId);
+      return true;
+    } catch (e) {
+      log.error('Reopen failed', e);
+      return false;
+    } finally {
+      this.reopening = false;
+    }
+  }
 
+  private async decodeFrame(frame: number, fastScrub: boolean): Promise<void> {
+    const scale = fastScrub ? this.options.scrubScale : 1.0;
+
+    const doOneDecode = async () => {
       const decoded = await NativeHelperClient.decodeFrame(this.fileId, frame, {
         format: 'rgba8',
         scale,
       });
 
       // Create ImageBitmap from decoded data
-      // Ensure we have a proper Uint8ClampedArray with ArrayBuffer (not SharedArrayBuffer)
       const pixelData = new Uint8ClampedArray(decoded.data);
       const imageData = new ImageData(pixelData, decoded.width, decoded.height);
       const bitmap = await createImageBitmap(imageData);
@@ -222,7 +250,20 @@ export class NativeDecoder {
 
       this.currentFrame = bitmap;
       this.currentFrameNum = frame;
+    };
+
+    try {
+      await doOneDecode();
     } catch (err) {
+      // If file not open (session reset after reconnect), try reopening once
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('not open') || msg.includes('NOT_OPEN') || msg.includes('Connection lost')) {
+        const reopened = await this.tryReopen();
+        if (reopened) {
+          await doOneDecode();
+          return;
+        }
+      }
       log.error('Decode failed', err);
       throw err;
     }

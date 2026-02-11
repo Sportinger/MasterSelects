@@ -33,7 +33,7 @@ function StatsOverlay({ stats, resolution, expanded, onToggle }: {
 }) {
   const fpsColor = stats.fps >= 55 ? '#4f4' : stats.fps >= 30 ? '#ff4' : '#f44';
   const dropColor = stats.drops.lastSecond > 0 ? '#f44' : '#4f4';
-  const decoderColor = stats.decoder === 'WebCodecs' ? '#4f4' : stats.decoder === 'HTMLVideo' ? '#fa4' : '#888';
+  const decoderColor = stats.decoder === 'NativeHelper' ? '#4af' : stats.decoder === 'WebCodecs' ? '#4f4' : stats.decoder === 'ParallelDecode' ? '#a4f' : stats.decoder.startsWith('HTMLVideo') ? '#fa4' : '#888';
   // Render time color: green < 10ms, yellow < 16.67ms (60fps target), red >= 16.67ms
   const renderTime = stats.timing.total;
   const renderTimeColor = renderTime < 10 ? '#4f4' : renderTime < 16.67 ? '#ff4' : '#f44';
@@ -69,7 +69,7 @@ function StatsOverlay({ stats, resolution, expanded, onToggle }: {
           <span style={{ color: '#888', marginLeft: 6, fontSize: 9 }}>[IDLE]</span>
         )}
         {stats.decoder !== 'none' && !stats.isIdle && (
-          <span style={{ color: decoderColor, marginLeft: 6, fontSize: 9 }}>[{stats.decoder === 'WebCodecs' ? 'WC' : 'HTML'}]</span>
+          <span style={{ color: decoderColor, marginLeft: 6, fontSize: 9 }}>[{stats.decoder === 'WebCodecs' ? 'WC' : stats.decoder === 'NativeHelper' ? 'NH' : stats.decoder === 'ParallelDecode' ? 'PD' : 'HTML'}]</span>
         )}
         {stats.drops.lastSecond > 0 && (
           <span style={{ color: '#f44', marginLeft: 6 }}>▼{stats.drops.lastSecond}</span>

@@ -209,14 +209,34 @@ class NativeHelperClientImpl {
     const id = this.nextId();
 
     return new Promise((resolve, reject) => {
-      // Register frame callback
-      this.frameCallbacks.set(id, resolve);
+      let settled = false;
+
+      const cleanup = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        this.frameCallbacks.delete(id);
+        this.pendingRequests.delete(id);
+      };
 
       // Set timeout
-      const timeout = setTimeout(() => {
-        this.frameCallbacks.delete(id);
+      const timer = setTimeout(() => {
+        cleanup();
         reject(new Error('Decode timeout'));
       }, 10000);
+
+      // Register frame callback (for binary success response)
+      this.frameCallbacks.set(id, (frame) => {
+        cleanup();
+        resolve(frame);
+      });
+
+      // Also register in pendingRequests (for JSON error responses)
+      this.pendingRequests.set(id, (response) => {
+        cleanup();
+        const err = (response as any).error;
+        reject(new Error(err?.message || 'Decode failed'));
+      });
 
       // Send decode command
       const cmd: Command = {
@@ -230,12 +250,9 @@ class NativeHelperClientImpl {
       };
 
       this.sendRaw(JSON.stringify(cmd)).catch((err) => {
-        clearTimeout(timeout);
-        this.frameCallbacks.delete(id);
+        cleanup();
         reject(err);
       });
-
-      // Clear timeout on success (handled in handleMessage)
     });
   }
 
@@ -522,6 +539,25 @@ class NativeHelperClientImpl {
   }
 
   /**
+   * Locate a file by name in common directories (Desktop, Downloads, Videos, Documents, Home)
+   * Returns the absolute path if found, or null if not found.
+   */
+  async locateFile(filename: string, searchDirs?: string[]): Promise<string | null> {
+    const id = this.nextId();
+    const cmd: any = { cmd: 'locate', id, filename };
+    if (searchDirs?.length) {
+      cmd.search_dirs = searchDirs;
+    }
+    const response = await this.send(cmd);
+    if (!response.ok) return null;
+    const data = response as any;
+    if (data.found && data.path) {
+      return data.path as string;
+    }
+    return null;
+  }
+
+  /**
    * Get a downloaded file from the Native Helper via HTTP (fast) or WebSocket fallback
    */
   async getDownloadedFile(path: string): Promise<ArrayBuffer | null> {
@@ -595,11 +631,13 @@ class NativeHelperClientImpl {
   }
 
   private handleDisconnect(): void {
-    // Reject all pending requests
+    // Reject all pending requests (including decode error handlers)
     this.pendingRequests.forEach((callback) => {
       callback({ id: '', ok: false, error: { code: 'DISCONNECTED', message: 'Connection lost' } });
     });
     this.pendingRequests.clear();
+    // Frame callbacks are cleaned up by the pendingRequests error handler above
+    // (decodeFrame registers in both maps, cleanup removes from both)
     this.frameCallbacks.clear();
 
     // Auto-reconnect only if:
