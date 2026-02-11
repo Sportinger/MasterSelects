@@ -2,6 +2,164 @@
   {
     "date": "2026-02-11",
     "type": "new",
+    "title": "Tutorial Campaign System",
+    "description": "14 interactive tutorials across 4 categories (Basics, Editing, Creative, Output) accessible from Info > Tutorials. Each campaign walks through a specific feature area with spotlight highlights and Clippy mascot. Completion tracking persisted across sessions.",
+    "section": "Tutorials",
+    "commits": [
+      "57eb0b7"
+    ]
+  },
+  {
+    "date": "2026-02-11",
+    "type": "new",
+    "title": "Source Monitor",
+    "description": "Double-click a video or image in the Media Panel to preview the raw source file in a dedicated preview window.",
+    "section": "Media",
+    "commits": [
+      "962af02"
+    ]
+  },
+  {
+    "date": "2026-02-11",
+    "type": "new",
+    "title": "NativeDecoder Auto-Upgrade & JPEG Compression",
+    "description": "All video clips automatically upgrade to NativeDecoder when the helper connects. Frame transfers compressed from 8MB to ~150KB via JPEG encoding. Includes frame pre-buffering for smooth playback and recursive file locate for late-loaded clips.",
+    "section": "Native Helper",
+    "commits": [
+      "05d155f",
+      "c84fb3e",
+      "01a6d04",
+      "d063fdd",
+      "4072a27"
+    ]
+  },
+  {
+    "date": "2026-02-11",
+    "type": "new",
+    "title": "Custom Slot View with Manual Assignment",
+    "description": "Slot grid now uses manual assignment only via media drop and context menu. Slots show thumbnail previews with time overlays, per-layer vertical opacity sliders, and clean compact UI with hidden toolbar/composition tabs.",
+    "section": "Slot Grid",
+    "commits": [
+      "0dbe1cb",
+      "a9c2222",
+      "ef3add3",
+      "64f8764",
+      "c29f8a3",
+      "8362d22",
+      "c8d36ed",
+      "7104b56"
+    ]
+  },
+  {
+    "date": "2026-02-11",
+    "type": "improve",
+    "title": "Scrubbing & Seeking Improvements",
+    "description": "Hybrid seeking with fastSeek for instant feedback + deferred precise seek. Improved smoothness with exact-frame seeking, per-time cache, and RVFC bypass. Canvas-first video path until GPU decoder is active. Lazy GPU surface warmup after reload.",
+    "section": "Playback",
+    "commits": [
+      "dba7a80",
+      "8f9ea72",
+      "393adc9",
+      "74e1cfa",
+      "ce0d967",
+      "6a64e66"
+    ]
+  },
+  {
+    "date": "2026-02-11",
+    "type": "fix",
+    "title": "Scrub audio stability fixes",
+    "description": "Fix multiple audio race conditions: AudioContext close killing pending decodeAudioData, onended from old source clobbering new source, stuck AudioContext after refresh. Retry with cooldown instead of permanent failure.",
+    "section": "Audio",
+    "commits": [
+      "0be833a",
+      "7aa2fb6",
+      "b3a6b03",
+      "9c83b97",
+      "0b914f9",
+      "6b1e269"
+    ]
+  },
+  {
+    "date": "2026-02-11",
+    "type": "fix",
+    "title": "Slot Grid multi-layer playback fixes",
+    "description": "Fix layer-isolated slot architecture with independent playheads per slot. Fix deactivated comp still rendering in preview, editor slot promotion bug, background layer restart, slot time overlay cross-layer interference, and slot playhead jump on comp switch.",
+    "section": "Slot Grid",
+    "commits": [
+      "2bb12ac",
+      "80a475d",
+      "fcbc551",
+      "fd10a00",
+      "1ec49ad",
+      "48bc044",
+      "b66642d",
+      "9e80186",
+      "7f625dc",
+      "bfa2156",
+      "c88ad5a",
+      "c086f4f"
+    ]
+  },
+  {
+    "date": "2026-02-11",
+    "type": "fix",
+    "title": "Layer opacity rendering fixes",
+    "description": "Fix single-layer opacity black screen, layer opacity flickering from cached stale merged layers, opacity slider not triggering re-render, and nested comp wrapper for primary layer opacity.",
+    "section": "Rendering",
+    "commits": [
+      "b7475d4",
+      "0fb6a3a",
+      "cd9dbc3",
+      "d50754a",
+      "0ff2369",
+      "b58140b"
+    ]
+  },
+  {
+    "date": "2026-02-11",
+    "type": "fix",
+    "title": "Engine idle detection stability",
+    "description": "Suppress idle until first play instead of time-based grace period. Fix engine going idle before video GPU warmup completes after reload.",
+    "section": "Engine",
+    "commits": [
+      "b830b2b",
+      "1a7579c",
+      "297c206",
+      "6e01a90"
+    ]
+  },
+  {
+    "date": "2026-02-11",
+    "type": "fix",
+    "title": "GPU texture memory leak fix",
+    "description": "Reuse textures for NativeDecoder frames instead of creating new ones. Canvas fallback for video frames not yet presented to GPU.",
+    "section": "Engine",
+    "commits": [
+      "8777ba3",
+      "fffb174"
+    ]
+  },
+  {
+    "date": "2026-02-11",
+    "type": "improve",
+    "title": "Test coverage expansion (517 → 1679 tests)",
+    "description": "Added comprehensive tests across 20 test files: clipSlice, maskSlice, compositionSlice, fileManageSlice, exportUtils, AI tools, effects registry, serialization, and more.",
+    "section": "Testing",
+    "commits": [
+      "e0e9ce0",
+      "61656a2",
+      "0270c12",
+      "2ebe6a1",
+      "9fb64e6",
+      "ac2e16c",
+      "ba39f22",
+      "66b20a2"
+    ]
+  },
+  {
+    "date": "2026-02-11",
+    "type": "new",
     "title": "Output Manager Slice System with Corner Pin Warp",
     "description": "Full slice system for output targets with corner pin warping, inline rename, mask layers, drag-drop reordering, and auto-save/load of configurations.",
     "section": "Output Manager",
