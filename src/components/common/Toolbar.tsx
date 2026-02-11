@@ -26,6 +26,7 @@ import {
   syncStoresToProject,
 } from '../../services/projectSync';
 import { APP_VERSION } from '../../version';
+import { openOutputManager } from '../outputManager/OutputManagerBoot';
 
 type MenuId = 'file' | 'edit' | 'view' | 'output' | 'window' | 'info' | null;
 
@@ -676,6 +677,9 @@ export function Toolbar() {
             <div className="menu-dropdown">
               <button className="menu-option" onClick={handleNewOutput} disabled={!isEngineReady}>
                 <span>New Output Window</span>
+              </button>
+              <button className="menu-option" onClick={() => { openOutputManager(); setOpenMenu(null); }}>
+                <span>Open Output Manager</span>
               </button>
               {outputTargets.length > 0 && (
                 <>
