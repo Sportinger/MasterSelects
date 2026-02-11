@@ -14,7 +14,7 @@ tokio = { version = "1", features = ["full", "process"] }
 tokio-tungstenite = "0.24"
 futures-util = "0.3"
 
-# FFmpeg bindings - disable filters since libavfilter isn't available
+# FFmpeg bindings - supports FFmpeg 7.1 (disable filters since libavfilter isn't needed)
 ffmpeg-next = { version = "7", default-features = false, features = ["codec", "format", "software-scaling"] }
 
 # Serialization

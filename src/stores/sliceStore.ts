@@ -4,6 +4,7 @@
 import { create } from 'zustand';
 import { useRenderTargetStore } from './renderTargetStore';
 import { useMediaStore } from './mediaStore';
+import type { RenderSource } from '../types/renderTarget';
 import type {
   OutputSlice,
   TargetSliceConfig,
@@ -253,8 +254,19 @@ export const useSliceStore = create<SliceState & SliceActions>()((set, get) => (
     const { configs } = get();
     const key = getStorageKey();
     try {
+      // Save slice configs
       const data = JSON.stringify(serializeConfigs(configs));
       localStorage.setItem(key, data);
+
+      // Also save output target metadata for reconnection after refresh
+      const targets = useRenderTargetStore.getState().targets;
+      const targetMeta: Array<{ id: string; name: string; source: RenderSource }> = [];
+      for (const t of targets.values()) {
+        if (t.destinationType === 'window' || t.destinationType === 'tab') {
+          targetMeta.push({ id: t.id, name: t.name, source: t.source });
+        }
+      }
+      localStorage.setItem(key + '_targets', JSON.stringify(targetMeta));
     } catch (e) {
       console.error('Failed to save Output Manager config:', e);
     }
@@ -277,6 +289,18 @@ export const useSliceStore = create<SliceState & SliceActions>()((set, get) => (
     }
   },
 }));
+
+/** Get saved target metadata from localStorage (for reconnection) */
+export function getSavedTargetMeta(): Array<{ id: string; name: string; source: RenderSource }> {
+  const key = getStorageKey();
+  try {
+    const raw = localStorage.getItem(key + '_targets');
+    if (!raw) return [];
+    return JSON.parse(raw) as Array<{ id: string; name: string; source: RenderSource }>;
+  } catch {
+    return [];
+  }
+}
 
 // Cleanup subscription: remove orphaned configs when targets are removed
 useRenderTargetStore.subscribe(

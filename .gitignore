@@ -60,8 +60,12 @@ public/test-videos/
 
 # Rust build artifacts
 tools/helpers/*/target/
+tools/native-helper/target/
 helpers/*/target/
 masterselects-helper/
+
+# Native helper - bundled FFmpeg binaries (too large for git)
+tools/native-helper/ffmpeg/
 
 # Browser automation logs
 .browser-logs.json

@@ -7,6 +7,8 @@ import { useTimelineStore } from '../stores/timeline';
 import { useMediaStore } from '../stores/mediaStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSAM2Store, maskToImageData } from '../stores/sam2Store';
+import { getSavedTargetMeta } from '../stores/sliceStore';
+import { reconnectOutputManager } from '../components/outputManager/OutputManagerBoot';
 import type { ClipMask, MaskVertex } from '../types';
 import { generateMaskTexture } from '../utils/maskRenderer';
 import { layerBuilder, playheadState } from '../services/layerBuilder';
@@ -48,6 +50,20 @@ export function useEngine() {
         const isLinux = navigator.platform.toLowerCase().includes('linux');
         if (isLinux) {
           useEngineStore.getState().setLinuxVulkanWarning(true);
+        }
+
+        // Reconnect to existing output windows and Output Manager after refresh
+        try {
+          reconnectOutputManager();
+          const savedTargets = getSavedTargetMeta();
+          if (savedTargets.length > 0) {
+            const count = engine.reconnectOutputWindows(savedTargets);
+            if (count > 0) {
+              log.info(`Reconnected ${count} output window(s) after refresh`);
+            }
+          }
+        } catch (e) {
+          log.warn('Failed to reconnect output windows', e);
         }
       }
     }

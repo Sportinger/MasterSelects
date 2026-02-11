@@ -105,8 +105,37 @@ export class OutputWindowManager {
       useRenderTargetStore.getState().deactivateTarget(id);
     };
 
+    // Ensure window gets foreground focus (fixes Windows drag issue)
+    outputWindow.focus();
+
     log.info('Created output window', { id, name });
     return { window: outputWindow, canvas };
+  }
+
+  /**
+   * Try to reconnect to an existing output window after page refresh.
+   * Returns the window + its existing canvas, or null if not found.
+   */
+  reconnectWindow(id: string): { window: Window; canvas: HTMLCanvasElement } | null {
+    // window.open with same name returns existing window if still open
+    const existing = window.open('', `output_${id}`);
+    if (!existing || existing.closed) return null;
+
+    // Check if this window has our canvas (means it was previously opened by us)
+    const canvas = existing.document.querySelector('canvas');
+    if (!canvas) {
+      // It's a freshly opened blank popup — close it
+      existing.close();
+      return null;
+    }
+
+    // Re-setup the close handler
+    existing.onbeforeunload = () => {
+      useRenderTargetStore.getState().deactivateTarget(id);
+    };
+
+    log.info('Reconnected to existing output window', { id });
+    return { window: existing, canvas };
   }
 
   updateResolution(width: number, height: number): void {

@@ -1,5 +1,6 @@
 // Bootstrap function to inject Output Manager React root into a popup window
 // Since same-origin popups share the JS heap, all stores and engine work directly
+// Supports reconnection after page refresh via named windows
 
 import { createRoot } from 'react-dom/client';
 import { createElement } from 'react';
@@ -14,26 +15,17 @@ export function closeOutputManager(): void {
   managerWindow = null;
 }
 
-export function openOutputManager(): void {
-  // If already open, focus it
-  if (managerWindow && !managerWindow.closed) {
-    managerWindow.focus();
-    return;
-  }
-
-  const win = window.open(
-    '',
-    'output_manager',
-    'width=900,height=600,menubar=no,toolbar=no,location=no,status=no'
-  );
-
-  if (!win) {
-    console.error('Failed to open Output Manager (popup blocked?)');
-    return;
-  }
-
+/**
+ * Inject (or re-inject after refresh) the Output Manager UI into a popup window.
+ * Clears existing DOM content and mounts fresh React root + styles.
+ */
+function injectOutputManagerUI(win: Window): void {
   managerWindow = win;
   win.document.title = 'Output Manager';
+
+  // Clear existing DOM (important for reconnection after refresh)
+  win.document.head.innerHTML = '';
+  win.document.body.innerHTML = '';
 
   // Inject the main app stylesheet
   const mainStylesheet = document.querySelector('link[rel="stylesheet"]') as HTMLLinkElement | null;
@@ -67,6 +59,57 @@ export function openOutputManager(): void {
     reactRoot.unmount();
     managerWindow = null;
   };
+
+  // Ensure window gets foreground focus (fixes Windows drag issue)
+  // Delayed focus helps with Windows popup activation
+  win.focus();
+  setTimeout(() => win.focus(), 100);
+}
+
+export function openOutputManager(): void {
+  // If already open, focus it
+  if (managerWindow && !managerWindow.closed) {
+    managerWindow.focus();
+    return;
+  }
+
+  const win = window.open(
+    '',
+    'output_manager',
+    'width=900,height=600,menubar=no,toolbar=no,location=no,status=no'
+  );
+
+  if (!win) {
+    console.error('Failed to open Output Manager (popup blocked?)');
+    return;
+  }
+
+  injectOutputManagerUI(win);
+}
+
+/**
+ * Try to reconnect to an existing Output Manager popup after page refresh.
+ * Returns true if reconnection succeeded.
+ */
+export function reconnectOutputManager(): boolean {
+  // window.open with same name returns existing window reference
+  const win = window.open('', 'output_manager');
+  if (!win || win.closed) return false;
+
+  // Check if the window has content (means it was previously opened)
+  // A freshly created blank popup has about:blank with empty body
+  // We need to check if this is truly our old window vs a newly created one
+  if (win.location.href === 'about:blank' && win.document.body && win.document.body.children.length > 0) {
+    // This is our old window — re-inject UI
+    injectOutputManagerUI(win);
+    return true;
+  }
+
+  // It was a fresh blank window we just accidentally created — close it
+  if (win !== managerWindow) {
+    win.close();
+  }
+  return false;
 }
 
 function getOutputManagerStyles(): string {

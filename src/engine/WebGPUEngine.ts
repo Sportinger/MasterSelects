@@ -335,6 +335,41 @@ export class WebGPUEngine {
     useRenderTargetStore.getState().unregisterTarget(id);
   }
 
+  /**
+   * After page refresh, try to reconnect to existing output windows by name.
+   * Takes an array of {id, name, source} from saved metadata.
+   */
+  reconnectOutputWindows(savedTargets: Array<{ id: string; name: string; source: import('../types/renderTarget').RenderSource }>): number {
+    if (!this.outputWindowManager) return 0;
+
+    let reconnected = 0;
+    for (const saved of savedTargets) {
+      const result = this.outputWindowManager.reconnectWindow(saved.id);
+      if (!result) continue;
+
+      // Re-register canvas with WebGPU
+      const gpuContext = this.registerTargetCanvas(saved.id, result.canvas);
+      if (!gpuContext) continue;
+
+      // Register as render target
+      useRenderTargetStore.getState().registerTarget({
+        id: saved.id,
+        name: saved.name,
+        source: saved.source,
+        destinationType: 'window',
+        enabled: true,
+        canvas: result.canvas,
+        context: gpuContext,
+        window: result.window,
+        isFullscreen: false,
+      });
+
+      reconnected++;
+    }
+
+    return reconnected;
+  }
+
   // === MASK MANAGEMENT ===
 
   updateMaskTexture(layerId: string, imageData: ImageData | null): void {

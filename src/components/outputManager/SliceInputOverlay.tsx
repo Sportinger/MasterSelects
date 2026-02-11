@@ -29,8 +29,8 @@ function clientToNormalized(
   const svgX = inv.a * clientX + inv.c * clientY + inv.e;
   const svgY = inv.b * clientX + inv.d * clientY + inv.f;
   return {
-    x: Math.max(0, Math.min(1, svgX / vbWidth)),
-    y: Math.max(0, Math.min(1, svgY / vbHeight)),
+    x: svgX / vbWidth,
+    y: svgY / vbHeight,
   };
 }
 
@@ -52,7 +52,7 @@ export function SliceInputOverlay({ targetId, width, height }: SliceInputOverlay
   const config = useSliceStore((s) => s.configs.get(targetId));
   const selectSlice = useSliceStore((s) => s.selectSlice);
   const setInputCorner = useSliceStore((s) => s.setInputCorner);
-  const matchOutputToInput = useSliceStore((s) => s.matchOutputToInput);
+  const matchInputToOutput = useSliceStore((s) => s.matchInputToOutput);
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
@@ -98,8 +98,8 @@ export function SliceInputOverlay({ targetId, width, height }: SliceInputOverlay
     const pos = clientToNormalized(svg, e.clientX, e.clientY, width, height);
     if (!pos) return;
 
-    const x = Math.max(0, Math.min(1, pos.x + drag.offsetX));
-    const y = Math.max(0, Math.min(1, pos.y + drag.offsetY));
+    const x = pos.x + drag.offsetX;
+    const y = pos.y + drag.offsetY;
 
     setInputCorner(targetId, drag.sliceId, drag.cornerIndex, { x, y });
   }, [targetId, width, height, setInputCorner]);
@@ -122,10 +122,10 @@ export function SliceInputOverlay({ targetId, width, height }: SliceInputOverlay
 
   const handleMatchOutputShape = useCallback(() => {
     if (contextMenu) {
-      matchOutputToInput(targetId, contextMenu.sliceId);
+      matchInputToOutput(targetId, contextMenu.sliceId);
     }
     setContextMenu(null);
-  }, [targetId, contextMenu, matchOutputToInput]);
+  }, [targetId, contextMenu, matchInputToOutput]);
 
   const handleCloseMenu = useCallback(() => {
     setContextMenu(null);

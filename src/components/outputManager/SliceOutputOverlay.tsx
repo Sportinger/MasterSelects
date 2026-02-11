@@ -32,8 +32,8 @@ function clientToNormalized(
   const svgX = inv.a * clientX + inv.c * clientY + inv.e;
   const svgY = inv.b * clientX + inv.d * clientY + inv.f;
   return {
-    x: Math.max(0, Math.min(1, svgX / vbWidth)),
-    y: Math.max(0, Math.min(1, svgY / vbHeight)),
+    x: svgX / vbWidth,
+    y: svgY / vbHeight,
   };
 }
 
@@ -56,7 +56,7 @@ export function SliceOutputOverlay({ targetId, width, height }: SliceOutputOverl
   const config = useSliceStore((s) => s.configs.get(targetId));
   const selectSlice = useSliceStore((s) => s.selectSlice);
   const setCornerPinCorner = useSliceStore((s) => s.setCornerPinCorner);
-  const matchInputToOutput = useSliceStore((s) => s.matchInputToOutput);
+  const matchOutputToInput = useSliceStore((s) => s.matchOutputToInput);
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
@@ -105,8 +105,8 @@ export function SliceOutputOverlay({ targetId, width, height }: SliceOutputOverl
     if (!pos) return;
 
     // Apply offset so corner stays under the pointer where it was grabbed
-    const x = Math.max(0, Math.min(1, pos.x + drag.offsetX));
-    const y = Math.max(0, Math.min(1, pos.y + drag.offsetY));
+    const x = pos.x + drag.offsetX;
+    const y = pos.y + drag.offsetY;
 
     setCornerPinCorner(targetId, drag.sliceId, drag.cornerIndex, { x, y });
   }, [targetId, width, height, setCornerPinCorner]);
@@ -129,10 +129,10 @@ export function SliceOutputOverlay({ targetId, width, height }: SliceOutputOverl
 
   const handleMatchInputShape = useCallback(() => {
     if (contextMenu) {
-      matchInputToOutput(targetId, contextMenu.sliceId);
+      matchOutputToInput(targetId, contextMenu.sliceId);
     }
     setContextMenu(null);
-  }, [targetId, contextMenu, matchInputToOutput]);
+  }, [targetId, contextMenu, matchOutputToInput]);
 
   const handleCloseMenu = useCallback(() => {
     setContextMenu(null);
