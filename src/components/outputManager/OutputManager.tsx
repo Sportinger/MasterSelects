@@ -1,17 +1,30 @@
 // OutputManager - main component for managing output targets
 // Renders in a popup window, manages source routing for all output windows
 
-import { useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { TargetList } from './TargetList';
 import { TargetPreview } from './TargetPreview';
 import { TabBar } from './TabBar';
 import { SliceInputOverlay } from './SliceInputOverlay';
 import { SliceOutputOverlay } from './SliceOutputOverlay';
 import { useSliceStore } from '../../stores/sliceStore';
+import { closeOutputManager } from './OutputManagerBoot';
 
 export function OutputManager() {
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const activeTab = useSliceStore((s) => s.activeTab);
+  const saveToLocalStorage = useSliceStore((s) => s.saveToLocalStorage);
+  const loadFromLocalStorage = useSliceStore((s) => s.loadFromLocalStorage);
+
+  // Auto-load saved config on mount
+  useEffect(() => {
+    loadFromLocalStorage();
+  }, [loadFromLocalStorage]);
+
+  const handleSaveAndExit = useCallback(() => {
+    saveToLocalStorage();
+    closeOutputManager();
+  }, [saveToLocalStorage]);
 
   return (
     <div className="om-container">
@@ -29,6 +42,11 @@ export function OutputManager() {
             {selectedTargetId && activeTab === 'output' && (
               <SliceOutputOverlay targetId={selectedTargetId} width={1920} height={1080} />
             )}
+          </div>
+          <div className="om-footer">
+            <button className="om-save-exit-btn" onClick={handleSaveAndExit}>
+              Save &amp; Exit
+            </button>
           </div>
         </div>
         <div className="om-sidebar">

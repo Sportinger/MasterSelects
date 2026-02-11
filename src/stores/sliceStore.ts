@@ -3,6 +3,7 @@
 
 import { create } from 'zustand';
 import { useRenderTargetStore } from './renderTargetStore';
+import { useMediaStore } from './mediaStore';
 import type {
   OutputSlice,
   TargetSliceConfig,
@@ -31,6 +32,34 @@ interface SliceActions {
   setCornerPinCorner: (targetId: string, sliceId: string, cornerIndex: number, point: Point2D) => void;
   updateWarp: (targetId: string, sliceId: string, warp: SliceWarp) => void;
   resetSliceWarp: (targetId: string, sliceId: string) => void;
+  saveToLocalStorage: () => void;
+  loadFromLocalStorage: () => void;
+}
+
+/** Build localStorage key from current project name */
+function getStorageKey(): string {
+  const name = useMediaStore.getState().currentProjectName || 'Untitled Project';
+  // Sanitize: replace non-alphanumeric with underscore
+  const safe = name.replace(/[^a-zA-Z0-9_\- ]/g, '_').trim();
+  return `Outputmanager_${safe}`;
+}
+
+/** Serialize configs Map to a JSON-safe object */
+function serializeConfigs(configs: Map<string, TargetSliceConfig>): Record<string, TargetSliceConfig> {
+  const obj: Record<string, TargetSliceConfig> = {};
+  for (const [key, value] of configs) {
+    obj[key] = value;
+  }
+  return obj;
+}
+
+/** Deserialize JSON object back to configs Map */
+function deserializeConfigs(obj: Record<string, TargetSliceConfig>): Map<string, TargetSliceConfig> {
+  const map = new Map<string, TargetSliceConfig>();
+  for (const key of Object.keys(obj)) {
+    map.set(key, obj[key]);
+  }
+  return map;
 }
 
 function updateSliceInConfig(
@@ -181,6 +210,30 @@ export const useSliceStore = create<SliceState & SliceActions>()((set, get) => (
       })));
       return { configs: next };
     });
+  },
+
+  saveToLocalStorage: () => {
+    const { configs } = get();
+    const key = getStorageKey();
+    try {
+      const data = JSON.stringify(serializeConfigs(configs));
+      localStorage.setItem(key, data);
+    } catch (e) {
+      console.error('Failed to save Output Manager config:', e);
+    }
+  },
+
+  loadFromLocalStorage: () => {
+    const key = getStorageKey();
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Record<string, TargetSliceConfig>;
+      const configs = deserializeConfigs(parsed);
+      set({ configs });
+    } catch (e) {
+      console.error('Failed to load Output Manager config:', e);
+    }
   },
 }));
 

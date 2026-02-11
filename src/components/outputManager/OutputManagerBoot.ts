@@ -7,6 +7,13 @@ import { OutputManager } from './OutputManager';
 
 let managerWindow: Window | null = null;
 
+export function closeOutputManager(): void {
+  if (managerWindow && !managerWindow.closed) {
+    managerWindow.close();
+  }
+  managerWindow = null;
+}
+
 export function openOutputManager(): void {
   // If already open, focus it
   if (managerWindow && !managerWindow.closed) {
@@ -488,6 +495,29 @@ function getOutputManagerStyles(): string {
       width: 100%;
       height: 100%;
       touch-action: none;
+    }
+
+    /* Footer */
+    .om-footer {
+      display: flex;
+      justify-content: flex-end;
+      padding: 8px 16px;
+      background: #161616;
+      border-top: 1px solid #2a2a2a;
+      flex-shrink: 0;
+    }
+    .om-save-exit-btn {
+      background: #2D8CEB;
+      color: white;
+      border: none;
+      padding: 6px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .om-save-exit-btn:hover {
+      background: #4DA3F0;
     }
   `;
 }
