@@ -1,70 +1,82 @@
 # MasterSelects Native Helper
 
-Native WebSocket server for MasterSelects that enables YouTube video downloads.
+Cross-platform video codec helper providing hardware-accelerated video decoding/encoding and video downloads for the MasterSelects web application.
 
-## Requirements
+## Features
 
-- Node.js 18+
-- yt-dlp (`brew install yt-dlp`)
+- **Video Decoding**: FFmpeg-based decoding of H.264, ProRes, DNxHD, and more
+- **Video Encoding**: ProRes, DNxHD, H.264, H.265, VP9, FFV1, UTVideo, MJPEG
+- **Frame Cache**: LRU cache for decoded frames with configurable size
+- **Video Downloads**: yt-dlp integration for YouTube, TikTok, Instagram, Twitter, etc.
+- **WebSocket Protocol**: Binary frame transfer with LZ4 compression
+- **HTTP File Server**: Direct file serving with CORS support
 
-## Installation
+## Prerequisites
 
+### All Platforms
+- [Rust](https://rustup.rs/) (stable)
+- [LLVM/Clang](https://releases.llvm.org/) (for bindgen during compilation)
+
+### Windows
+
+1. **FFmpeg 7.1 shared libraries** (required for compilation and runtime):
+   - Download from [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds/releases)
+   - Look for: `ffmpeg-n7.1*-win64-gpl-shared-7.1.zip`
+   - Extract to: `tools/native-helper/ffmpeg/win64/`
+   - Expected structure: `ffmpeg/win64/{bin,include,lib}/`
+
+2. **LLVM/Clang**: `winget install LLVM.LLVM`
+
+### Linux
 ```bash
-cd native-helper
-npm install
+sudo apt install libavcodec-dev libavformat-dev libswscale-dev libavutil-dev clang pkg-config
 ```
 
-## Usage
-
+### macOS
 ```bash
-# Start the server
-npm start
-
-# Or with auto-reload during development
-npm run dev
+brew install ffmpeg llvm pkg-config
 ```
 
-The server runs on `ws://127.0.0.1:9876` and downloads to `~/Movies/MasterSelects Downloads/`.
+## Building
 
-## Commands
+### Windows
+```bash
+set FFMPEG_DIR=path\to\tools\native-helper\ffmpeg\win64
+set LIBCLANG_PATH=C:\Program Files\LLVM\lib
+cargo build --release
 
-| Command | Description |
-|---------|-------------|
-| `ping` | Health check |
-| `info` | Server info and yt-dlp status |
-| `download_youtube` | Download a YouTube video |
-| `get_file` | Retrieve a downloaded file |
-| `cancel_download` | Cancel an active download |
+# Copy DLLs next to binary for runtime
+copy ffmpeg\win64\bin\*.dll target\release\
+copy ffmpeg\win64\bin\ffmpeg.exe target\release\
+```
+
+### Linux / macOS
+```bash
+cargo build --release
+```
+
+## Running
+
+```bash
+./target/release/masterselects-helper          # Default: WS on :9876, HTTP on :9877
+./target/release/masterselects-helper --port 9876 --cache-mb 4096
+./target/release/masterselects-helper --background
+```
 
 ## Protocol
 
-All messages are JSON over WebSocket.
+WebSocket (JSON commands + binary frames) on port 9876, HTTP file server on port 9877.
 
-### Download YouTube
-
-```json
-{
-  "cmd": "download_youtube",
-  "id": "req_1",
-  "url": "https://youtube.com/watch?v=..."
-}
-```
-
-Response:
-```json
-{
-  "id": "req_1",
-  "ok": true,
-  "path": "/Users/.../video.mp4",
-  "filename": "video.mp4"
-}
-```
-
-Progress updates:
-```json
-{
-  "id": "req_1",
-  "progress": 0.45,
-  "status": "downloading"
-}
-```
+| Command | Description |
+|---------|-------------|
+| `ping` | Connection keepalive |
+| `info` | System info (FFmpeg version, HW accel, cache stats) |
+| `open` | Open a video file for decoding |
+| `decode` | Decode a specific frame (returns binary) |
+| `close` | Close an open file |
+| `start_encode` | Start an FFmpeg encode job |
+| `encode_frame` | Send a frame for encoding (binary follows) |
+| `finish_encode` | Finalize encoding |
+| `list_formats` | List available download formats for a URL |
+| `download` | Download a video with progress streaming |
+| `get_file` | Get a file as base64 |

@@ -69,13 +69,12 @@ npm run lint                 # ESLint check
 - `npm run dev:changelog` nur wenn User Changelog sehen will
 - Production builds zeigen Changelog automatisch
 
-### Native Helper (optional)
+### Native Helper (optional, cross-platform)
 ```bash
-# Windows (YouTube):
-cd tools/helpers/win && cargo run --release
+# All platforms (FFmpeg decode/encode + yt-dlp downloads):
+cd tools/native-helper && cargo run --release
 
-# Linux/Mac (FFmpeg decode):
-cd tools/helpers/linux && cargo run --release  # oder /mac
+# Windows: requires FFMPEG_DIR + LIBCLANG_PATH env vars (see tools/native-helper/README.md)
 ```
 Ports: WebSocket `9876`, HTTP `9877`
 
