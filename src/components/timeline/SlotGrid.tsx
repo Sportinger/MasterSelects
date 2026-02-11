@@ -86,12 +86,14 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     }
 
     // Activate new layers
+    const { compositions } = useMediaStore.getState();
     for (const [layerIndex, compId] of desiredLayers) {
       const existing = layerPlaybackManager.getLayerState(layerIndex);
       if (!existing || existing.compositionId !== compId) {
-        // Save current timeline state before loading background comp
-        // (the comp's timelineData might be stale if it's the editor comp)
-        layerPlaybackManager.activateLayer(layerIndex, compId);
+        // Resume from saved playhead position so background layers don't restart
+        const comp = compositions.find(c => c.id === compId);
+        const savedPosition = comp?.timelineData?.playheadPosition ?? 0;
+        layerPlaybackManager.activateLayer(layerIndex, compId, savedPosition);
       }
     }
   }, [activeLayerSlots]);

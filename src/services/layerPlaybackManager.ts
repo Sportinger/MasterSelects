@@ -28,7 +28,7 @@ class LayerPlaybackManager {
   /**
    * Activate a composition on a layer — loads its timelineData and creates media elements
    */
-  activateLayer(layerIndex: number, compositionId: string): void {
+  activateLayer(layerIndex: number, compositionId: string, initialElapsed?: number): void {
     // Deactivate current layer first
     this.deactivateLayer(layerIndex);
 
@@ -48,7 +48,7 @@ class LayerPlaybackManager {
         clips: [],
         tracks: timelineData?.tracks || [],
         duration: comp.duration,
-        activatedAt: performance.now(),
+        activatedAt: performance.now() - (initialElapsed ?? 0) * 1000,
         pausedAt: null,
       });
       return;
