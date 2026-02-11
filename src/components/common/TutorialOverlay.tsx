@@ -177,10 +177,11 @@ const TOOLTIP_GAP = 16;
 
 interface Props {
   onClose: () => void;
+  onSkip?: () => void;
   part?: 1 | 2;
 }
 
-export function TutorialOverlay({ onClose, part = 1 }: Props) {
+export function TutorialOverlay({ onClose, onSkip, part = 1 }: Props) {
   // stepIndex -1 = welcome screen (only part 1), 0+ = normal steps
   const [stepIndex, setStepIndex] = useState(part === 1 ? -1 : 0);
   const [panelRect, setPanelRect] = useState<DOMRect | null>(null);
@@ -248,6 +249,16 @@ export function TutorialOverlay({ onClose, part = 1 }: Props) {
     setIsClosing(true);
     setTimeout(onClose, 1800);
   }, [onClose]);
+
+  const skip = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    if (onSkip) {
+      onSkip();
+    } else {
+      onClose();
+    }
+  }, [onClose, onSkip]);
 
   const advance = useCallback(() => {
     if (isClosing || isWelcome) return;
@@ -394,6 +405,7 @@ export function TutorialOverlay({ onClose, part = 1 }: Props) {
                     </button>
                   ))}
                 </div>
+                <button className="tutorial-skip-btn" onClick={skip}>Skip Tutorial</button>
               </>
             ) : (
               <>
@@ -411,6 +423,7 @@ export function TutorialOverlay({ onClose, part = 1 }: Props) {
                 <div className="tutorial-tooltip-hint">
                   {stepIndex < steps.length - 1 ? 'Click anywhere to continue' : 'Click to finish'}
                 </div>
+                <button className="tutorial-skip-btn" onClick={(e) => { e.stopPropagation(); skip(); }}>Skip</button>
               </>
             )}
           </div>

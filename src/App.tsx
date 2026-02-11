@@ -176,6 +176,12 @@ function App() {
     }
   }, [tutorialPart, hasSeenTutorialPart2, setHasSeenTutorial, setHasSeenTutorialPart2]);
 
+  const handleTutorialSkip = useCallback(() => {
+    setShowTutorial(false);
+    setHasSeenTutorial(true);
+    setHasSeenTutorialPart2(true);
+  }, [setHasSeenTutorial, setHasSeenTutorialPart2]);
+
   // Listen for manual tutorial trigger from View menu
   useEffect(() => {
     const handleStartTutorial = () => {
@@ -230,7 +236,7 @@ function App() {
         <IndexedDBErrorDialog onClose={handleIndexedDBErrorClose} />
       )}
       {showTutorial && (
-        <TutorialOverlay key={tutorialPart} onClose={handleTutorialClose} part={tutorialPart} />
+        <TutorialOverlay key={tutorialPart} onClose={handleTutorialClose} onSkip={handleTutorialSkip} part={tutorialPart} />
       )}
     </div>
   );
