@@ -35,16 +35,16 @@
 
 /* 2x2 grid that maintains 16:9 as a whole.
    Each cell is 16:9, 2 cols + 2 rows = total 16:9.
-   Uses height:100% + aspect-ratio to derive width from available height,
-   then max-width:100% prevents overflow when panel is narrow. */
+   max-width + max-height prevent overflow in both directions;
+   aspect-ratio picks the smaller constraint automatically. */
 .multi-preview-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
   gap: 1px;
   aspect-ratio: 16 / 9;
-  height: 100%;
   max-width: 100%;
+  max-height: 100%;
   background: var(--border-color);
 }
 
