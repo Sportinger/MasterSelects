@@ -1,6 +1,6 @@
 // Toolbar component - After Effects style menu bar
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('Toolbar');
@@ -32,13 +32,14 @@ type MenuId = 'file' | 'edit' | 'view' | 'output' | 'window' | 'info' | null;
 export function Toolbar() {
   const { isEngineReady, createOutputWindow } = useEngine();
   const { gpuInfo } = useEngineStore();
-  const outputTargets = useRenderTargetStore((s) => {
+  const targets = useRenderTargetStore((s) => s.targets);
+  const outputTargets = useMemo(() => {
     const result: { id: string; name: string }[] = [];
-    for (const t of s.targets.values()) {
+    for (const t of targets.values()) {
       if (t.destinationType === 'window') result.push({ id: t.id, name: t.name });
     }
     return result;
-  });
+  }, [targets]);
   const { resetLayout, isPanelTypeVisible, togglePanelType, saveLayoutAsDefault } = useDockStore();
   const { isSupported: midiSupported, isEnabled: midiEnabled, enableMIDI, disableMIDI, devices } = useMIDI();
   const {
