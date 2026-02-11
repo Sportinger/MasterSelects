@@ -201,9 +201,16 @@ impl VideoDecoder {
             self.seek_to_frame(target_frame)?;
         }
 
+        // Pre-calculate PTS conversion factors (avoids borrow conflict in loop)
+        let tb_num = self.time_base.0 as f64;
+        let tb_den = self.time_base.1 as f64;
+        let fps = self.fps;
+
         // Decode frames until we reach target
         let mut decoded_frame = None;
-        let mut current_frame = self.last_decoded_frame.unwrap_or(0);
+        let mut frames_decoded = 0u32;
+        let mut last_known = self.last_decoded_frame;
+        let max_frames = 300; // Safety limit to prevent infinite loops
 
         'decode: loop {
             // Read packets
@@ -217,18 +224,28 @@ impl VideoDecoder {
                 // Receive frames
                 let mut frame = VideoFrame::empty();
                 while self.decoder.receive_frame(&mut frame).is_ok() {
-                    trace!("Decoded frame {}", current_frame);
+                    // Use PTS to determine actual frame number
+                    let current_frame = if let Some(pts) = frame.pts() {
+                        let time_sec = pts as f64 * tb_num / tb_den;
+                        (time_sec * fps).round() as u32
+                    } else {
+                        // Fallback: sequential counting from last known position
+                        last_known.map(|f| f + 1).unwrap_or(0)
+                    };
 
-                    if current_frame == target_frame {
+                    trace!("Decoded frame {} (target: {}, pts: {:?})", current_frame, target_frame, frame.pts());
+
+                    last_known = Some(current_frame);
+                    frames_decoded += 1;
+
+                    if current_frame >= target_frame {
                         decoded_frame = Some(frame.clone());
                         self.last_decoded_frame = Some(current_frame);
                         break 'decode;
                     }
 
-                    current_frame += 1;
-
-                    if current_frame > target_frame {
-                        warn!("Overshot target frame {} (at {})", target_frame, current_frame);
+                    if frames_decoded >= max_frames {
+                        warn!("Hit max decode limit ({}) seeking to frame {}", max_frames, target_frame);
                         break 'decode;
                     }
                 }
@@ -238,7 +255,12 @@ impl VideoDecoder {
             break;
         }
 
-        let frame = decoded_frame.ok_or_else(|| anyhow!("Frame {} not found", target_frame))?;
+        // Update tracking for sequential decode optimization
+        if decoded_frame.is_some() {
+            self.last_decoded_frame = last_known;
+        }
+
+        let frame = decoded_frame.ok_or_else(|| anyhow!("Frame {} not found (decoded {} frames)", target_frame, frames_decoded))?;
 
         // Convert to target format
         let output = self.convert_frame(&frame)?;
