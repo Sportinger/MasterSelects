@@ -290,6 +290,26 @@ export const useSliceStore = create<SliceState & SliceActions>()((set, get) => (
   },
 }));
 
+// Auto-save configs to localStorage on every change (debounced 500ms)
+let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let prevConfigs: Map<string, TargetSliceConfig> | null = null;
+useSliceStore.subscribe((state) => {
+  if (state.configs !== prevConfigs) {
+    prevConfigs = state.configs;
+    if (autoSaveTimer) clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(() => {
+      useSliceStore.getState().saveToLocalStorage();
+    }, 500);
+  }
+});
+
+// Auto-load configs from localStorage on module init
+try {
+  useSliceStore.getState().loadFromLocalStorage();
+} catch {
+  // Ignore errors during initial load
+}
+
 /** Get saved target metadata from localStorage (for reconnection) */
 export function getSavedTargetMeta(): Array<{ id: string; name: string; source: RenderSource }> {
   const key = getStorageKey();
