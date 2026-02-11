@@ -1,12 +1,37 @@
 // Manages external output windows (fullscreen, secondary displays)
+// Simplified: only handles window lifecycle. State lives in renderTargetStore.
 
-import type { OutputWindow } from '../core/types';
+import { useRenderTargetStore } from '../../stores/renderTargetStore';
+import { useSliceStore } from '../../stores/sliceStore';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('OutputWindowManager');
+const OPEN_WINDOWS_KEY = 'masterselects-output-windows-open';
+
+/** Track which output window IDs are currently open (survives page refresh within same tab session) */
+function markWindowOpen(id: string): void {
+  try {
+    const ids: string[] = JSON.parse(sessionStorage.getItem(OPEN_WINDOWS_KEY) || '[]');
+    if (!ids.includes(id)) ids.push(id);
+    sessionStorage.setItem(OPEN_WINDOWS_KEY, JSON.stringify(ids));
+  } catch { /* ignore */ }
+}
+
+function markWindowClosed(id: string): void {
+  try {
+    const ids: string[] = JSON.parse(sessionStorage.getItem(OPEN_WINDOWS_KEY) || '[]');
+    sessionStorage.setItem(OPEN_WINDOWS_KEY, JSON.stringify(ids.filter(i => i !== id)));
+  } catch { /* ignore */ }
+}
+
+function isWindowKnownOpen(id: string): boolean {
+  try {
+    const ids: string[] = JSON.parse(sessionStorage.getItem(OPEN_WINDOWS_KEY) || '[]');
+    return ids.includes(id);
+  } catch { return false; }
+}
 
 export class OutputWindowManager {
-  private outputWindows: Map<string, OutputWindow> = new Map();
   private outputWidth: number;
   private outputHeight: number;
 
@@ -15,12 +40,22 @@ export class OutputWindowManager {
     this.outputHeight = height;
   }
 
-  createOutputWindow(id: string, name: string, device: GPUDevice): OutputWindow | null {
-    const outputWindow = window.open(
-      '',
-      `output_${id}`,
-      'width=960,height=540,menubar=no,toolbar=no,location=no,status=no'
-    );
+  /**
+   * Creates a popup window with a canvas element.
+   * Does NOT configure WebGPU - that's done by engine.registerTargetCanvas().
+   * Returns the window + canvas for the caller to wire up.
+   * Optional geometry restores previous position/size/screen.
+   */
+  createWindow(id: string, name: string, geometry?: {
+    screenX?: number; screenY?: number; outerWidth?: number; outerHeight?: number;
+  }): { window: Window; canvas: HTMLCanvasElement } | null {
+    const w = geometry?.outerWidth ?? 960;
+    const h = geometry?.outerHeight ?? 540;
+    let features = `width=${w},height=${h},menubar=no,toolbar=no,location=no,status=no`;
+    if (geometry?.screenX != null && geometry?.screenY != null) {
+      features += `,left=${geometry.screenX},top=${geometry.screenY}`;
+    }
+    const outputWindow = window.open('', `output_${id}`, features);
 
     if (!outputWindow) {
       log.error('Failed to open window (popup blocked?)');
@@ -34,7 +69,7 @@ export class OutputWindowManager {
     const canvas = outputWindow.document.createElement('canvas');
     canvas.width = this.outputWidth;
     canvas.height = this.outputHeight;
-    canvas.style.cssText = 'display:block;background:#000;';
+    canvas.style.cssText = 'display:block;background:#000;width:100%;height:100%;';
     outputWindow.document.body.appendChild(canvas);
 
     // Aspect ratio locking
@@ -79,22 +114,7 @@ export class OutputWindowManager {
       setTimeout(() => { resizing = false; }, 50);
     };
 
-    canvas.style.width = '100%';
-    canvas.style.height = '100%';
     outputWindow.addEventListener('resize', enforceAspectRatio);
-
-    let context: GPUCanvasContext | null = null;
-
-    if (device) {
-      context = canvas.getContext('webgpu');
-      if (context) {
-        context.configure({
-          device,
-          format: navigator.gpu.getPreferredCanvasFormat(),
-          alphaMode: 'premultiplied',
-        });
-      }
-    }
 
     // Fullscreen button
     const fullscreenBtn = outputWindow.document.createElement('button');
@@ -110,33 +130,65 @@ export class OutputWindowManager {
       fullscreenBtn.style.display = outputWindow.document.fullscreenElement ? 'none' : 'block';
     });
 
+    // Track that this window is open (for reconnection guard after refresh)
+    markWindowOpen(id);
+
+    // When window is closed by user, save geometry then deactivate (keep entry grayed out)
     outputWindow.onbeforeunload = () => {
-      this.outputWindows.delete(id);
+      markWindowClosed(id);
+      // Trigger a save so geometry is captured with current window position/size
+      try { useSliceStore.getState().saveToLocalStorage(); } catch { /* ignore */ }
+      useRenderTargetStore.getState().deactivateTarget(id);
     };
 
-    const output: OutputWindow = {
-      id,
-      name,
-      window: outputWindow,
-      canvas,
-      context,
-      isFullscreen: false,
-    };
+    // Ensure popup gets foreground activation on Windows:
+    // Blur the parent first to release foreground lock, then focus the popup
+    // from its own context so the OS allows it to become the foreground window.
+    window.blur();
+    outputWindow.focus();
+    outputWindow.setTimeout(() => outputWindow.focus(), 50);
+    outputWindow.setTimeout(() => outputWindow.focus(), 200);
 
-    this.outputWindows.set(id, output);
-    return output;
+    log.info('Created output window', { id, name });
+    return { window: outputWindow, canvas };
   }
 
-  closeOutputWindow(id: string): void {
-    const output = this.outputWindows.get(id);
-    if (output?.window) {
-      output.window.close();
+  /**
+   * Try to reconnect to an existing output window after page refresh.
+   * Returns the window + its existing canvas, or null if not found.
+   */
+  reconnectWindow(id: string): { window: Window; canvas: HTMLCanvasElement } | null {
+    // Only attempt reconnection if we know this window was open in this session.
+    // Without this guard, window.open creates a blank popup that steals focus
+    // and causes the dock tabs to jump on page refresh.
+    if (!isWindowKnownOpen(id)) {
+      return null;
     }
-    this.outputWindows.delete(id);
-  }
 
-  getOutputWindows(): Map<string, OutputWindow> {
-    return this.outputWindows;
+    const existing = window.open('', `output_${id}`);
+    if (!existing || existing.closed) {
+      markWindowClosed(id);
+      return null;
+    }
+
+    // Check if this window has our canvas (means it was previously opened by us)
+    const canvas = existing.document.querySelector('canvas');
+    if (!canvas) {
+      // It's a freshly opened blank popup — close it
+      existing.close();
+      markWindowClosed(id);
+      return null;
+    }
+
+    // Re-setup the close handler (save geometry before deactivating)
+    existing.onbeforeunload = () => {
+      markWindowClosed(id);
+      try { useSliceStore.getState().saveToLocalStorage(); } catch { /* ignore */ }
+      useRenderTargetStore.getState().deactivateTarget(id);
+    };
+
+    log.info('Reconnected to existing output window', { id });
+    return { window: existing, canvas };
   }
 
   updateResolution(width: number, height: number): void {
@@ -145,9 +197,12 @@ export class OutputWindowManager {
   }
 
   destroy(): void {
-    for (const output of this.outputWindows.values()) {
-      output.window?.close();
+    // Close all output windows via the render target store
+    const store = useRenderTargetStore.getState();
+    for (const target of store.targets.values()) {
+      if (target.destinationType === 'window' && target.window && !target.window.closed) {
+        target.window.close();
+      }
     }
-    this.outputWindows.clear();
   }
 }

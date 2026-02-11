@@ -2,7 +2,7 @@
 
 **Professional WebGPU Video Compositor & Timeline Editor**
 
-Version 1.2.2 | February 2026
+Version 1.2.4 | February 2026
 
 ---
 
@@ -17,9 +17,9 @@ MASterSelects is a browser-based professional video editing application built on
 | **WebGPU Rendering** | Hardware-accelerated compositing with zero-copy video textures at 60fps |
 | **Multi-track Timeline** | Professional NLE with video/audio tracks, nested compositions, and multicam |
 | **Keyframe Animation** | Full property animation with bezier curve editor and 5 easing modes |
-| **AI Integration** | 50+ intelligent editing tools via OpenAI function calling (GPT-4/GPT-5) |
+| **AI Integration** | 33 intelligent editing tools via OpenAI function calling (GPT-4/GPT-5) |
 | **AI Video Generation** | PiAPI integration for AI-powered video creation |
-| **YouTube Integration** | Search, download, and edit YouTube videos directly |
+| **Download Panel** | Download videos from YouTube, TikTok, Instagram, Twitter/X and more |
 | **30+ GPU Effects** | Modular color, blur, distort, stylize, keying effects with quality controls |
 | **Video Scopes** | GPU-accelerated Histogram, Vectorscope, Waveform monitor (DaVinci-style) |
 | **Text Clips** | Typography with 50 Google Fonts, stroke, shadow effects |
@@ -29,6 +29,8 @@ MASterSelects is a browser-based professional video editing application built on
 | **Transitions** | Crossfade transitions with GPU-accelerated rendering |
 | **4 Export Modes** | WebCodecs Fast, HTMLVideo Precise, FFmpeg WASM, FCP XML interchange |
 | **Parallel Decoding** | Multi-clip parallel decode for faster exports |
+| **Output Manager** | Source routing, slice management, corner pin warping, multi-window control |
+| **Slot Grid** | Resolume-style 4x12 grid with multi-layer playback and column activation |
 | **Native Helper** | Optional 10x faster ProRes/DNxHD decode with hardware accel |
 | **Local Storage** | Project folder with Raw media, autosave, backups, smart relinking |
 | **Mobile Support** | Responsive UI with touch gestures |
@@ -40,14 +42,14 @@ MASterSelects is a browser-based professional video editing application built on
 ```
 Frontend          React 19 + TypeScript + Vite 7.2
 State Management  Zustand with modular slice architecture
-GPU Rendering     WebGPU + WGSL shaders (2,000+ lines)
+GPU Rendering     WebGPU + WGSL shaders (2,400+ lines)
 GPU Effects       30+ modular effects with individual WGSL shaders
 Video Decoding    WebCodecs API with hardware acceleration + parallel decode
 Video Encoding    WebCodecs (Fast/Precise) + FFmpeg WASM (ProRes, DNxHR, HAP)
 Audio Processing  Web Audio API, audio master clock, varispeed scrubbing
 AI Services       OpenAI GPT-4/GPT-5 function calling, PiAPI video generation
 Persistence       File System Access API + local project folders with Raw media
-Native Helper     Rust + FFmpeg (Linux/Mac) or yt-dlp (Windows)
+Native Helper     Rust + FFmpeg + yt-dlp (unified cross-platform)
 UI Framework      Custom dockable panel system with mobile support
 ```
 
@@ -60,9 +62,10 @@ UI Framework      Custom dockable panel system with mobile support
 | [Timeline](./Timeline.md) | Multi-track editing, clips, snapping, compositions, multicam |
 | [Keyframes](./Keyframes.md) | Animation system, curve editor, bezier interpolation |
 | [Preview & Playback](./Preview.md) | RAM Preview, scrubbing, multiple outputs, edit mode |
+| [Output Manager](./Preview.md#output-manager) | Source routing, slices, corner pin warping, mask layers |
 | [Effects](./Effects.md) | 30+ modular GPU effects, 37 blend modes, transforms |
 | [Masks](./Masks.md) | Shape masks, pen tool, GPU feathering |
-| [AI Integration](./AI-Integration.md) | 50+ AI tools, transcription, AI video generation |
+| [AI Integration](./AI-Integration.md) | 33 AI tools, transcription, AI video generation |
 | [Media Panel](./Media-Panel.md) | Import, folder organization, columns, compositions |
 | [Audio](./Audio.md) | 10-band EQ, audio master clock, varispeed scrubbing |
 | [Text Clips](./Text-Clips.md) | Typography, 50 Google Fonts, stroke, shadow |
@@ -71,6 +74,7 @@ UI Framework      Custom dockable panel system with mobile support
 | [GPU Engine](./GPU-Engine.md) | WebGPU architecture, modular render pipeline |
 | [Project Persistence](./Project-Persistence.md) | Local folders, Raw media, autosave, backups |
 | [Proxy System](./Proxy-System.md) | GPU-accelerated proxy generation |
+| [Download Panel](./YouTube.md) | YouTube, TikTok, Instagram, Twitter/X downloads |
 | [Native Helper](./Native-Helper.md) | Turbo Mode for ProRes/DNxHD, YouTube downloads |
 | [Keyboard Shortcuts](./Keyboard-Shortcuts.md) | Complete shortcut reference |
 | [Debugging](./Debugging.md) | Logger service, module filtering, AI-agent inspection |
@@ -107,6 +111,24 @@ UI Framework      Custom dockable panel system with mobile support
 | Solid Color Clips | ✅ | Solid layers with color picker and comp dimensions |
 | Transitions | ✅ | Crossfade transitions with GPU-accelerated rendering |
 | Marker Drag-to-Create | ✅ | Drag M button to create markers with ghost preview |
+
+### Output Manager
+
+| Feature | Status | Details |
+|---------|--------|---------|
+| RenderTarget System | ✅ | Unified rendering to multiple independent outputs |
+| Output Manager | ✅ | Source routing, slice management, multi-window control |
+| Corner Pin Warping | ✅ | Slice system with 4-corner warping for projection mapping |
+| Mask Layers | ✅ | Per-slice mask layers with invert and drag-drop reorder |
+| Output Persistence | ✅ | Auto-save per project, window geometry preservation |
+
+### Slot Grid
+
+| Feature | Status | Details |
+|---------|--------|---------|
+| Slot Grid | ✅ | Resolume-style 4x12 grid with click-to-play activation |
+| Multi-Layer Playback | ✅ | 4 independent layers (A-D) with wall-clock time |
+| Column Activation | ✅ | Click column header to activate entire column |
 
 ### Text Clips
 
@@ -191,15 +213,16 @@ UI Framework      Custom dockable panel system with mobile support
 | Feature | Status | Details |
 |---------|--------|---------|
 | GPT-4 Chat | ✅ | Natural language editing commands |
-| 50+ AI Tools | ✅ | Clip, track, keyframe, effect operations |
+| 33 AI Tools | ✅ | Clip, track, keyframe, effect operations |
 | Local Whisper | ✅ | Browser-based transcription |
 | OpenAI Whisper API | ✅ | Cloud transcription service |
 | AssemblyAI | ✅ | Professional transcription |
 | Deepgram | ✅ | Fast transcription service |
 | Multicam EDL | ✅ | AI-generated edit decision lists |
 | Context Awareness | ✅ | AI knows timeline state |
+| SAM2 Segmentation | ✅ | Click-to-segment with WebGPU ONNX inference |
 
-### YouTube Integration
+### Download Panel
 
 | Feature | Status | Details |
 |---------|--------|---------|
@@ -212,6 +235,8 @@ UI Framework      Custom dockable panel system with mobile support
 | Project Storage | ✅ | Downloads saved to project YT/ folder |
 | H.264 Preference | ✅ | Prefers H.264 over AV1/VP9 for compatibility |
 | Dual API Support | ✅ | Invidious (no key) or YouTube Data API (optional) |
+| Multi-Platform Download | ✅ | TikTok, Instagram, Twitter/X, Facebook, Reddit, Vimeo, Twitch |
+| Platform Subfolders | ✅ | Downloads organized by platform in project folder |
 
 ### Audio
 
@@ -299,15 +324,14 @@ UI Framework      Custom dockable panel system with mobile support
 
 | Feature | Status | Details |
 |---------|--------|---------|
-| Windows Lite Build | ✅ | YouTube downloads only (~10MB, no FFmpeg) |
-| Linux/Mac Full Build | ✅ | ProRes/DNxHD decode + YouTube downloads |
-| ProRes Decoding | ✅ | All profiles at native speed (Linux/Mac) |
-| DNxHD/DNxHR Decoding | ✅ | All profiles at native speed (Linux/Mac) |
+| Unified Cross-Platform Build | ✅ | FFmpeg decode/encode + yt-dlp downloads on all platforms |
+| ProRes Decoding | ✅ | All profiles at native speed |
+| DNxHD/DNxHR Decoding | ✅ | All profiles at native speed |
 | Hardware Acceleration | ✅ | VAAPI (Intel/AMD), NVDEC (NVIDIA) |
 | YouTube Downloads | ✅ | yt-dlp integration with quality selection |
 | Frame Cache | ✅ | LRU cache up to 2GB |
 | Background Prefetch | ✅ | Frames loaded ahead of playhead |
-| Native Encoding | ✅ | 10x faster ProRes/DNxHD export (Linux/Mac) |
+| Native Encoding | ✅ | 10x faster ProRes/DNxHD export |
 | Auto-Detection | ✅ | Toolbar shows "⚡ Turbo" when connected |
 | Download Link | ✅ | Click indicator for helper download |
 
@@ -332,6 +356,8 @@ UI Framework      Custom dockable panel system with mobile support
 | Desktop Mode Toggle | ✅ | Option to view full UI on mobile |
 | What's New Dialog | ✅ | Time-grouped changelog on refresh |
 | Welcome Overlay | ✅ | Project folder selection on launch |
+| Tutorial System | ✅ | Spotlight-based panel intro with Clippy mascot |
+| Welcome Screen | ✅ | Program selection (Premiere, Resolve, FCP, AE, Beginner) |
 
 ---
 
@@ -378,11 +404,14 @@ UI Framework      Custom dockable panel system with mobile support
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `composite.wgsl` | 743 | Layer compositing, 37 blend modes |
+| `composite.wgsl` | 618 | Layer compositing, 37 blend modes |
 | `opticalflow.wgsl` | 326 | Motion analysis, scene detection |
 | `effects.wgsl` | 243 | GPU effect implementations |
-| `output.wgsl` | 40 | Final output passthrough |
-| **Total** | **1,352** | |
+| `output.wgsl` | 71 | Final output passthrough |
+| `slice.wgsl` | 33 | Output slice rendering |
+| `common.wgsl` | 154 | Shared effect utilities |
+| 30 effect shaders | ~954 | Individual GPU effect shaders |
+| **Total** | **~2,400** | |
 
 ### Zustand Store Architecture
 
@@ -529,6 +558,35 @@ See [Keyboard Shortcuts](./Keyboard-Shortcuts.md) for complete reference.
 
 ---
 
+## Test Coverage
+
+Overview of unit test coverage across feature areas. Run all tests with `npx vitest run`.
+
+| Feature Doc | Test Files | Tests | Notes |
+|-------------|-----------|-------|-------|
+| [Timeline](./Timeline.md) | 5 | 347 | Clips (104), tracks (66), selection (49), playback (88), markers (50) |
+| [Keyframes](./Keyframes.md) | 2 | 214 | Keyframe CRUD (94), easing, bezier interpolation (120) |
+| [Preview](./Preview.md) | — | — | GPU-dependent, not unit testable |
+| [Export](./Export.md) | 1 | 109 | FCP XML, time calculations, codecs, presets |
+| [Audio](./Audio.md) | 2 | 172 | AudioUtils (127), cross-correlation (45) |
+| [Effects](./Effects.md) | 2 | 128 | Registry (94), type helpers (34) |
+| [GPU Engine](./GPU-Engine.md) | 1 | 56 | Transform composition, cycle detection |
+| [Masks](./Masks.md) | 1 | 78 | Mask CRUD, modes, vertices, workflows |
+| [AI Integration](./AI-Integration.md) | 1 | 132 | Tool definitions, schemas, MODIFYING_TOOLS |
+| [Text Clips](./Text-Clips.md) | 1 | 104 | Covered by clipSlice tests |
+| [Media Panel](./Media-Panel.md) | 2 | 205 | Files (106), compositions (99) |
+| [Proxy System](./Proxy-System.md) | — | — | Hardware-dependent |
+| [Download Panel](./YouTube.md) | — | — | Requires network/native helper |
+| [Project Persistence](./Project-Persistence.md) | 2 | 145 | Serialization (86), undo/redo (59) |
+| [Native Helper](./Native-Helper.md) | — | — | Rust binary, tested separately |
+| [Keyboard Shortcuts](./Keyboard-Shortcuts.md) | 1 | 88 | Playback, speed integration (83) |
+| [UI Panels](./UI-Panels.md) | — | — | React component-level UI |
+| [Multicam AI](./Multicam-AI.md) | 1 | 45 | Audio sync cross-correlation |
+
+**Total: ~1,679 tests across 20 test files**
+
+---
+
 ## Not Yet Implemented
 
 The following features are planned but not currently available:
@@ -545,6 +603,8 @@ The following features are planned but not currently available:
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 1.2.4 | Feb 2026 | Slot Grid (Resolume-style multi-layer composition), Output Manager (source routing, corner pin warping, mask layers, persistence), Download Panel (multi-platform: TikTok, Instagram, Twitter/X), unified native helper, render loop watchdog |
+| 1.2.3 | Feb 2026 | Tutorial system (Clippy mascot, welcome screen, panel intro, timeline deep-dive), SAM2 AI segmentation, composition resolution drives render pipeline, Vitest test suite (182 tests) |
 | 1.2.2 | Feb 2026 | Video Scopes (Histogram, Vectorscope, Waveform), keyframe copy/paste, keyframe tick marks, curve editor auto-scale, mask edge dragging, exponential zoom, cross-track resistance, vertical scroll snapping |
 | 1.2.1 | Feb 2026 | Linked clip selection, proxy resume from disk, proxy rewrite with parallel JPEG encoding, instant media import, split deep-clone fix |
 | 1.2.0 | Feb 2026 | Solid color clips, AE visual redesign, inline GPU effects (brightness/contrast/saturation/invert in composite shader), AE-style media panel, lazy-load panels |

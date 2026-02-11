@@ -97,14 +97,15 @@ export class LayerCollector {
       if (source.nativeDecoder) {
         const bitmap = source.nativeDecoder.getCurrentFrame();
         if (bitmap) {
-          const texture = deps.textureManager.createImageBitmapTexture(bitmap);
+          const texture = deps.textureManager.createImageBitmapTexture(bitmap, layer.id);
           if (texture) {
             this.currentDecoder = 'NativeHelper';
             return {
               layer,
               isVideo: false,
+              isDynamic: true,
               externalTexture: null,
-              textureView: texture.createView(),
+              textureView: deps.textureManager.getDynamicTextureView(layer.id) ?? texture.createView(),
               sourceWidth: bitmap.width,
               sourceHeight: bitmap.height,
             };
@@ -131,7 +132,10 @@ export class LayerCollector {
       }
 
       // 3. Try WebCodecs VideoFrame
-      if (source.webCodecsPlayer) {
+      // Skip for videos that haven't been played yet — after page reload,
+      // VideoFrame from a never-played video produces black/empty frames.
+      // Fall through to tryHTMLVideo which has a canvas-based fallback.
+      if (source.webCodecsPlayer && (!source.videoElement || this.videoGpuReady.has(source.videoElement))) {
         const frame = source.webCodecsPlayer.getCurrentFrame();
         if (frame) {
           const extTex = deps.textureManager.importVideoTexture(frame);
@@ -159,6 +163,10 @@ export class LayerCollector {
     return null;
   }
 
+  // Track videos where importExternalTexture produces valid (non-black) frames
+  // After page reload, importExternalTexture returns black until the video is played
+  private videoGpuReady = new WeakSet<HTMLVideoElement>();
+
   private tryHTMLVideo(layer: Layer, video: HTMLVideoElement, deps: LayerCollectorDeps): LayerRenderData | null {
     const videoKey = video.src || layer.id;
 
@@ -185,10 +193,23 @@ export class LayerCollector {
         }
       }
 
-      // If video is seeking, prefer cached frame to avoid frame jumps
-      // This prevents visual glitches from H.264 decoder showing intermediate I-frames during seek
-      // Applies to both playback and paused states (e.g., after clip move or effect change)
+      // If video is seeking, try per-time scrubbing cache first (exact frame for this position),
+      // then fall back to generic last-frame cache
       if (video.seeking && !deps.isExporting) {
+        // Try per-time cache: if we've visited this position before, show the exact frame
+        const cachedView = deps.scrubbingCache?.getCachedFrame(video.src, currentTime);
+        if (cachedView) {
+          this.currentDecoder = 'HTMLVideo(scrub-cache)';
+          return {
+            layer,
+            isVideo: false,
+            externalTexture: null,
+            textureView: cachedView,
+            sourceWidth: video.videoWidth,
+            sourceHeight: video.videoHeight,
+          };
+        }
+        // Fall back to generic last-frame cache
         const lastFrame = deps.scrubbingCache?.getLastFrame(video);
         if (lastFrame) {
           this.currentDecoder = 'HTMLVideo(seeking-cache)';
@@ -203,19 +224,52 @@ export class LayerCollector {
         }
       }
 
-      // Import external texture
+      // After page reload, importExternalTexture returns a valid GPUExternalTexture
+      // but the frame data is black/empty because the GPU decoder hasn't presented a frame.
+      // syncClipVideo triggers a brief play() to activate the GPU surface.
+      // Once the video plays, the next render sees it playing → sets videoGpuReady.
+      if (!this.videoGpuReady.has(video) && !deps.isExporting) {
+        // Video is actively playing (warmup in progress) — GPU decoder is now active
+        if (!video.paused && !video.seeking) {
+          this.videoGpuReady.add(video);
+        } else {
+          // Video is paused and GPU not ready — use cached frame if warmup already captured one
+          const cachedFrame = deps.scrubbingCache?.getLastFrame(video);
+          if (cachedFrame) {
+            deps.setLastVideoTime(videoKey, currentTime);
+            this.currentDecoder = 'HTMLVideo(cached)';
+            return {
+              layer,
+              isVideo: false,
+              externalTexture: null,
+              textureView: cachedFrame.view,
+              sourceWidth: cachedFrame.width,
+              sourceHeight: cachedFrame.height,
+            };
+          }
+          // No cached frame yet — warmup not started or still in progress
+          return null;
+        }
+      }
+
+      // Import external texture (zero-copy GPU path)
       log.debug('Attempting to import video as external texture...');
       const extTex = deps.textureManager.importVideoTexture(video);
       if (extTex) {
         deps.setLastVideoTime(videoKey, currentTime);
 
-        // Cache frame for pause fallback
+        // Cache frame for pause/seek fallback (50ms = ~20fps capture rate for fresh fallback frames)
         const now = performance.now();
         const lastCapture = deps.scrubbingCache?.getLastCaptureTime(video) || 0;
-        if (now - lastCapture > 200) {
+        if (now - lastCapture > 50) {
           deps.scrubbingCache?.captureVideoFrame(video);
           deps.scrubbingCache?.setLastCaptureTime(video, now);
         }
+
+        // Populate per-time scrubbing cache: store this frame indexed by video time
+        // so scrubbing back to a previously visited position shows the frame instantly
+        // from cache instead of waiting for a new decode cycle
+        deps.scrubbingCache?.cacheFrameAtTime(video, currentTime);
 
         this.currentDecoder = 'HTMLVideo';
         this.hasVideo = true;

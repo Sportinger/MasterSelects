@@ -3,6 +3,7 @@
 
 import { useEffect, useCallback, useRef } from 'react';
 import { MIN_ZOOM, MAX_ZOOM } from '../../../stores/timeline/constants';
+import { animateSlotGrid } from '../slotGridAnimation';
 
 interface UseTimelineZoomProps {
   // Refs
@@ -104,6 +105,13 @@ export function useTimelineZoom({
       // Don't zoom when hovering over track headers (first column for height adjustment)
       const target = e.target as HTMLElement;
       const isOverTrackHeaders = target.closest('.track-headers') !== null;
+
+      // Ctrl+Shift+Scroll: toggle slot grid view (single trigger, 250ms animation)
+      if (e.ctrlKey && e.shiftKey) {
+        e.preventDefault();
+        animateSlotGrid(e.deltaY > 0 ? 1 : 0);
+        return;
+      }
 
       if ((e.ctrlKey || e.altKey) && !isOverTrackHeaders) {
         e.preventDefault();

@@ -457,21 +457,47 @@ class ProxyFrameCache {
       this.audioContext = new AudioContext();
       this.scrubGain = this.audioContext.createGain();
       this.scrubGain.connect(this.audioContext.destination);
-      this.scrubGain.gain.value = 0.85; // Slightly lower for scrubbing
+      this.scrubGain.gain.value = 0.85;
+      log.debug(`AudioContext created, state: ${this.audioContext.state}`);
     }
     return this.audioContext;
+  }
+
+  /**
+   * Ensure AudioContext is running - MUST be called from a user gesture (mousedown/click).
+   * Chrome's autoplay policy requires resume() from a user gesture to unlock audio.
+   * IMPORTANT: Do NOT close/replace the AudioContext here - that kills pending decodeAudioData()
+   * calls which permanently blacklists audio files. Just resume() - Chrome honors it from gestures.
+   */
+  ensureAudioContextResumed(): void {
+    if (!this.audioContext) {
+      // Create fresh context in user gesture → starts "running" automatically
+      this.getAudioContext();
+      log.debug(`AudioContext created in user gesture, state: ${this.audioContext!.state}`);
+      return;
+    }
+
+    if (this.audioContext.state === 'suspended') {
+      // resume() from a user gesture is always honored by Chrome
+      // Don't check synchronously after - resume() is async but Chrome will process it
+      this.audioContext.resume().then(() => {
+        log.debug(`AudioContext resumed: ${this.audioContext?.state}`);
+      }).catch(() => {
+        log.warn('AudioContext resume failed');
+      });
+    }
   }
 
   /**
    * Get AudioBuffer for a media file (decode on first request)
    * Works with BOTH proxy audio AND original video files
    */
-  async getAudioBuffer(mediaFileId: string): Promise<AudioBuffer | null> {
+  async getAudioBuffer(mediaFileId: string, videoElementSrc?: string): Promise<AudioBuffer | null> {
     // Check cache
     const cached = this.audioBufferCache.get(mediaFileId);
     if (cached) return cached;
 
-    // Skip files that have no audio (failed decoding before)
+    // Skip files that have no audio (failed decoding = audio doesn't exist)
     if (this.audioBufferFailed.has(mediaFileId)) {
       return null;
     }
@@ -480,6 +506,13 @@ class ProxyFrameCache {
     if (this.audioBufferLoading.has(mediaFileId)) {
       return null; // Loading in progress
     }
+
+    // Cooldown for "source not found" - retry after 3 seconds (source may become available)
+    const lastAttempt = this.audioBufferRetryTime.get(mediaFileId);
+    if (lastAttempt && performance.now() - lastAttempt < 3000) {
+      return null;
+    }
+
     this.audioBufferLoading.add(mediaFileId);
 
     try {
@@ -521,8 +554,31 @@ class ProxyFrameCache {
         }
       }
 
+      // Try 4: Direct File object from media store (e.g. YouTube downloads)
+      if (!arrayBuffer && mediaFile?.file) {
+        log.debug(`Loading from File object: ${mediaFileId}`);
+        try {
+          arrayBuffer = await mediaFile.file.arrayBuffer();
+        } catch (e) {
+          log.warn('Failed to read File object', e);
+        }
+      }
+
+      // Try 5: Video element's current source URL (guaranteed valid if video is playing)
+      if (!arrayBuffer && videoElementSrc) {
+        log.debug(`Loading from video element src: ${mediaFileId}`);
+        try {
+          const response = await fetch(videoElementSrc);
+          arrayBuffer = await response.arrayBuffer();
+        } catch (e) {
+          log.warn('Failed to fetch video element src', e);
+        }
+      }
+
       if (!arrayBuffer) {
         log.warn(`No audio source found for ${mediaFileId}`);
+        // Use cooldown instead of permanent failure - source may become available later
+        this.audioBufferRetryTime.set(mediaFileId, performance.now());
         this.audioBufferLoading.delete(mediaFileId);
         return null;
       }
@@ -534,20 +590,30 @@ class ProxyFrameCache {
       // Cache it
       this.audioBufferCache.set(mediaFileId, audioBuffer);
       this.audioBufferLoading.delete(mediaFileId);
+      this.audioBufferRetryTime.delete(mediaFileId);
       log.debug(`Decoded ${mediaFileId}: ${audioBuffer.duration.toFixed(1)}s, ${audioBuffer.numberOfChannels}ch`);
 
       return audioBuffer;
-    } catch (e) {
-      // Mark as failed so we don't keep retrying (video probably has no audio track)
-      this.audioBufferFailed.add(mediaFileId);
+    } catch (e: any) {
       this.audioBufferLoading.delete(mediaFileId);
-      log.debug(`No audio in ${mediaFileId} (or decode failed)`);
+      // Only permanently blacklist for actual "no audio track" decode errors (EncodingError).
+      // Context-related errors (InvalidStateError from closed context) should use retry cooldown
+      // so the buffer can be decoded on a new/resumed context.
+      if (e?.name === 'EncodingError') {
+        this.audioBufferFailed.add(mediaFileId);
+        log.debug(`No audio track in ${mediaFileId}`);
+      } else {
+        this.audioBufferRetryTime.set(mediaFileId, performance.now());
+        log.debug(`Audio decode error for ${mediaFileId} (will retry): ${e?.message || e}`);
+      }
       return null;
     }
   }
 
   // Track loading state to prevent duplicate loads
   private audioBufferLoading = new Set<string>();
+  // Cooldown for "source not found" retries (not permanent failure like audioBufferFailed)
+  private audioBufferRetryTime = new Map<string, number>();
 
 
   /**
@@ -555,11 +621,11 @@ class ProxyFrameCache {
    * Audio plays continuously and follows the scrub position/speed
    * Like Premiere Pro / DaVinci Resolve
    */
-  playScrubAudio(mediaFileId: string, targetTime: number, _duration: number = 0.15): void {
+  playScrubAudio(mediaFileId: string, targetTime: number, _duration: number = 0.15, videoElementSrc?: string): void {
     const buffer = this.audioBufferCache.get(mediaFileId);
     if (!buffer) {
       log.debug(`No AudioBuffer for ${mediaFileId} - loading...`);
-      this.getAudioBuffer(mediaFileId);
+      this.getAudioBuffer(mediaFileId, videoElementSrc);
       return;
     }
 
@@ -609,9 +675,14 @@ class ProxyFrameCache {
       this.scrubCurrentMediaId = mediaFileId;
       this.scrubIsActive = true;
 
-      this.scrubSource.onended = () => {
-        this.scrubIsActive = false;
-        this.scrubSource = null;
+      // Guard: only deactivate if THIS source is still the current one
+      // (onended fires asynchronously and could clobber a newer source)
+      const thisSource = this.scrubSource;
+      thisSource.onended = () => {
+        if (this.scrubSource === thisSource) {
+          this.scrubIsActive = false;
+          this.scrubSource = null;
+        }
       };
     } else if (this.scrubSource && timeDelta > 0.001) {
       // Calculate where audio SHOULD be vs where it IS
@@ -652,6 +723,7 @@ class ProxyFrameCache {
   stopScrubAudio(): void {
     if (this.scrubSource) {
       try {
+        this.scrubSource.onended = null; // Prevent async callback from clobbering new source
         this.scrubSource.stop();
         this.scrubSource.disconnect();
       } catch { /* ignore */ }
@@ -884,3 +956,18 @@ class ProxyFrameCache {
 
 // Singleton instance
 export const proxyFrameCache = new ProxyFrameCache();
+
+// Global user interaction listener to unlock AudioContext as early as possible.
+// Chrome requires a user gesture to start/resume AudioContext.
+// This fires on the FIRST interaction with the page (any click, key, touch).
+if (typeof document !== 'undefined') {
+  const unlockAudio = () => {
+    proxyFrameCache.ensureAudioContextResumed();
+    document.removeEventListener('mousedown', unlockAudio);
+    document.removeEventListener('keydown', unlockAudio);
+    document.removeEventListener('touchstart', unlockAudio);
+  };
+  document.addEventListener('mousedown', unlockAudio, { capture: true });
+  document.addEventListener('keydown', unlockAudio, { capture: true });
+  document.addEventListener('touchstart', unlockAudio, { capture: true });
+}

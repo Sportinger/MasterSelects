@@ -10,10 +10,13 @@ import { LayerCache } from './LayerCache';
 import { TransformCache } from './TransformCache';
 import { AudioSyncHandler, createAudioSyncState, finalizeAudioSync, resumeAudioContextIfNeeded } from './AudioSyncHandler';
 import { proxyFrameCache } from '../proxyFrameCache';
+import { layerPlaybackManager } from '../layerPlaybackManager';
 import { Logger } from '../logger';
 import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
 import { useTimelineStore } from '../../stores/timeline';
+import { useMediaStore } from '../../stores/mediaStore';
 import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
+import { engine } from '../../engine/WebGPUEngine';
 
 const log = Logger.create('LayerBuilder');
 
@@ -43,6 +46,7 @@ function getClipEQGains(ctx: FrameContext, clip: TimelineClip, clipLocalTime: nu
 
   return EQ_BAND_PARAMS.map(param => (eqEffect.params?.[param] as number) ?? 0);
 }
+
 
 /**
  * LayerBuilderService - Builds render layers from timeline state
@@ -75,6 +79,16 @@ export class LayerBuilderService {
   // Active audio proxies tracking
   private activeAudioProxies = new Map<string, HTMLAudioElement>();
 
+  // Videos currently being warmed up (brief play to activate GPU surface)
+  // After page reload, video GPU surfaces are empty — all sync rendering APIs
+  // (importExternalTexture, canvas.drawImage, copyExternalImageToTexture) return black.
+  // The ONLY way to populate the GPU surface is video.play().
+  // We do this lazily on first scrub attempt, not during restore, because
+  // the render loop's syncClipVideo would immediately pause the warmup video.
+  private warmingUpVideos = new WeakSet<HTMLVideoElement>();
+  // Cooldown for failed warmup attempts (avoids spamming play() every frame)
+  private warmupRetryCooldown = new WeakMap<HTMLVideoElement, number>();
+
   /**
    * Invalidate all caches (layer cache and transform cache)
    */
@@ -91,23 +105,98 @@ export class LayerBuilderService {
     // Create frame context (single store read)
     const ctx = createFrameContext();
 
-    // Check cache
+    // No active editor composition → no primary layers to build
+    // (all active comps are background layers managed by layerPlaybackManager)
+    const hasActiveComp = useMediaStore.getState().activeCompositionId != null;
+    if (!hasActiveComp) {
+      this.layerCache.invalidate();
+      return this.mergeBackgroundLayers([], ctx.playheadPosition);
+    }
+
+    // Check cache (only for primary layers — background layers are cheap to rebuild)
     const cacheResult = this.layerCache.checkCache(ctx);
+    let primaryLayers: Layer[];
     if (cacheResult.useCache) {
-      return cacheResult.layers;
+      primaryLayers = cacheResult.layers;
+    } else {
+      primaryLayers = this.buildLayers(ctx);
+      // Preload upcoming nested comp frames during playback
+      if (ctx.isPlaying) {
+        this.preloadUpcomingNestedCompFrames(ctx);
+      }
     }
 
-    // Build layers
-    const layers = this.buildLayers(ctx);
+    // Cache primary layers only — background layers are rebuilt fresh each frame
+    // (caching merged layers would cause double-rendering of background layers on cache hit)
+    this.layerCache.setCachedLayers(primaryLayers);
 
-    // Preload upcoming nested comp frames during playback
-    if (ctx.isPlaying) {
-      this.preloadUpcomingNestedCompFrames(ctx);
+    // Merge background layers from active layer slots
+    return this.mergeBackgroundLayers(primaryLayers, ctx.playheadPosition);
+  }
+
+  /**
+   * Merge primary (editor) layers with background composition layers.
+   * Render order: D (bottom) → C → B → A (top)
+   * The primary composition's layers go at the position of its layer slot.
+   */
+  private mergeBackgroundLayers(primaryLayers: Layer[], playheadPosition: number): Layer[] {
+    const { activeLayerSlots, activeCompositionId } = useMediaStore.getState();
+    const slotEntries = Object.entries(activeLayerSlots);
+
+    // No active layer slots → return primary layers as-is (backwards compatible)
+    if (slotEntries.length === 0) {
+      return primaryLayers;
     }
 
-    // Cache and return
-    this.layerCache.setCachedLayers(layers);
-    return layers;
+    // Find which layer the primary (editor) composition is on
+    let primaryLayerIndex = -1;
+    for (const [key, compId] of slotEntries) {
+      if (compId === activeCompositionId) {
+        primaryLayerIndex = Number(key);
+        break;
+      }
+    }
+
+    // Collect all layer indices, sorted A=0 (top) → D=3 (bottom)
+    // layers[0] is rendered last (on top) by the compositor's reverse iteration
+    const layerIndices = slotEntries
+      .map(([key]) => Number(key))
+      .sort((a, b) => a - b); // Ascending: A=0 first (top) → D=3 last (bottom)
+
+    const merged: Layer[] = [];
+
+    const { layerOpacities } = useMediaStore.getState();
+
+    for (const layerIndex of layerIndices) {
+      if (layerIndex === primaryLayerIndex) {
+        // Insert primary layers at this position, applying layer opacity
+        const layerOpacity = layerOpacities[layerIndex] ?? 1;
+        // Filter out undefined entries from sparse arrays (buildLayers uses layers[trackIndex]=...)
+        const actualPrimaryLayers = primaryLayers.filter((l): l is Layer => l != null);
+        if (layerOpacity < 1 && actualPrimaryLayers.length > 0) {
+          // Apply per-clip opacity multiplication — simpler and works with all decoder types
+          // (nativeDecoder, WebCodecs, HTMLVideo, etc.) without needing NestedCompRenderer
+          for (const layer of actualPrimaryLayers) {
+            merged.push({ ...layer, opacity: layer.opacity * layerOpacity });
+          }
+        } else {
+          merged.push(...actualPrimaryLayers);
+        }
+      } else {
+        // Build background layer from LayerPlaybackManager
+        const bgLayer = layerPlaybackManager.buildLayersForLayer(layerIndex, playheadPosition);
+        if (bgLayer) {
+          merged.push(bgLayer);
+        }
+      }
+    }
+
+    // If primary comp is not in any slot, add its layers on top
+    if (primaryLayerIndex === -1 && primaryLayers.length > 0) {
+      merged.push(...primaryLayers.filter((l): l is Layer => l != null));
+    }
+
+    return merged;
   }
 
   /**
@@ -815,6 +904,9 @@ export class LayerBuilderService {
         }
       }
     }
+
+    // Sync background layer video elements
+    layerPlaybackManager.syncVideoElements(ctx.playheadPosition, ctx.isPlaying);
   }
 
   /**
@@ -853,6 +945,11 @@ export class LayerBuilderService {
       const webCodecsPlayer = nestedClip.source.webCodecsPlayer;
       const timeDiff = Math.abs(video.currentTime - nestedClipTime);
 
+      // Pre-capture: ensure scrubbing cache has a frame before seeking
+      if (!video.seeking && video.readyState >= 2) {
+        engine.ensureVideoFrameCached(video);
+      }
+
       // During playback: let video play naturally (like regular clips)
       if (ctx.isPlaying) {
         if (video.paused) {
@@ -866,15 +963,21 @@ export class LayerBuilderService {
         // When paused: pause video and seek to exact time
         if (!video.paused) video.pause();
 
+        // Force first-frame decode for videos that haven't played yet (e.g. after reload)
+        if (video.played.length === 0 && !video.seeking && !this.forceDecodeInProgress.has(nestedClip.id)) {
+          this.forceVideoFrameDecode(nestedClip.id, video);
+        }
+
         const seekThreshold = ctx.isDraggingPlayhead ? 0.1 : 0.05;
         if (timeDiff > seekThreshold) {
           this.throttledSeek(nestedClip.id, video, nestedClipTime, ctx);
+          video.addEventListener('seeked', () => engine.requestRender(), { once: true });
         }
 
         // If video readyState < 2 (no frame data), force decode via play/pause
         // This can happen after seeking to unbuffered regions
         if (video.readyState < 2 && !video.seeking) {
-          this.forceNestedVideoFrameDecode(nestedClip.id, video);
+          this.forceVideoFrameDecode(nestedClip.id, video);
         }
       }
 
@@ -893,23 +996,26 @@ export class LayerBuilderService {
 
   /**
    * Force video to decode current frame by briefly playing
-   * Used when video readyState drops below 2 after seeking
+   * Used when video has never played (after reload) or readyState drops below 2
    */
-  private forceNestedVideoFrameDecode(clipId: string, video: HTMLVideoElement): void {
+  private forceVideoFrameDecode(clipId: string, video: HTMLVideoElement): void {
     if (this.forceDecodeInProgress.has(clipId)) return;
     this.forceDecodeInProgress.add(clipId);
 
     const currentTime = video.currentTime;
+    video.muted = true; // Prevent autoplay restrictions
     video.play()
       .then(() => {
         video.pause();
         video.currentTime = currentTime;
         this.forceDecodeInProgress.delete(clipId);
+        engine.requestRender();
       })
       .catch(() => {
         // Fallback: tiny seek to trigger decode
         video.currentTime = currentTime + 0.001;
         this.forceDecodeInProgress.delete(clipId);
+        engine.requestRender();
       });
   }
 
@@ -940,8 +1046,58 @@ export class LayerBuilderService {
       return;
     }
 
+    // Skip sync during GPU surface warmup — the video is playing briefly
+    // to activate Chrome's GPU decoder. Don't pause or seek it.
+    if (this.warmingUpVideos.has(video)) return;
+
+    // Warmup: after page reload, video GPU surfaces are empty.
+    // importExternalTexture, canvas.drawImage, etc. all return black.
+    // The ONLY fix is video.play() to activate the GPU compositor.
+    // We do this here (not during restore) because restore-time warmup
+    // gets immediately killed by this very function's "pause if not playing" logic.
+    const hasSrc = !!(video.src || video.currentSrc);
+    const warmupCooldown = this.warmupRetryCooldown.get(video);
+    const cooldownOk = !warmupCooldown || performance.now() - warmupCooldown > 2000;
+    if (!ctx.isPlaying && !video.seeking && hasSrc && cooldownOk &&
+        video.played.length === 0 && !this.warmingUpVideos.has(video)) {
+      this.warmingUpVideos.add(video);
+      const targetTime = timeInfo.clipTime;
+      video.play().then(() => {
+        // Wait for actual frame presentation via requestVideoFrameCallback
+        const rvfc = (video as any).requestVideoFrameCallback;
+        if (typeof rvfc === 'function') {
+          rvfc.call(video, () => {
+            // Frame is now presented to GPU — capture it
+            engine.ensureVideoFrameCached(video);
+            video.pause();
+            video.currentTime = targetTime;
+            this.warmingUpVideos.delete(video);
+            engine.requestRender();
+          });
+        } else {
+          // Fallback: wait 100ms for frame presentation
+          setTimeout(() => {
+            engine.ensureVideoFrameCached(video);
+            video.pause();
+            video.currentTime = targetTime;
+            this.warmingUpVideos.delete(video);
+            engine.requestRender();
+          }, 100);
+        }
+      }).catch(() => {
+        this.warmingUpVideos.delete(video);
+        this.warmupRetryCooldown.set(video, performance.now());
+      });
+      return; // Skip normal sync — warmup is handling video state
+    }
+
     // Normal video sync
     const timeDiff = Math.abs(video.currentTime - timeInfo.clipTime);
+
+    // Pre-capture: ensure scrubbing cache has a frame BEFORE seeking
+    if (!video.seeking && video.readyState >= 2) {
+      engine.ensureVideoFrameCached(video);
+    }
 
     // Reverse playback: either clip is reversed OR timeline playbackSpeed is negative
     // H.264 can't play backwards, so we seek frame-by-frame
@@ -950,15 +1106,14 @@ export class LayerBuilderService {
     if (isReversePlayback) {
       // For reverse: pause video and seek to each frame
       if (!video.paused) video.pause();
-      // Use tighter threshold for smoother reverse playback
-      const seekThreshold = ctx.isDraggingPlayhead ? 0.1 : 0.02;
+      const seekThreshold = ctx.isDraggingPlayhead ? 0.04 : 0.02;
       if (timeDiff > seekThreshold) {
         this.throttledSeek(clip.id, video, timeInfo.clipTime, ctx);
       }
     } else if (ctx.playbackSpeed !== 1) {
       // Non-standard forward speed (2x, 4x, etc.): seek frame-by-frame for accuracy
       if (!video.paused) video.pause();
-      const seekThreshold = ctx.isDraggingPlayhead ? 0.1 : 0.03;
+      const seekThreshold = ctx.isDraggingPlayhead ? 0.04 : 0.03;
       if (timeDiff > seekThreshold) {
         this.throttledSeek(clip.id, video, timeInfo.clipTime, ctx);
       }
@@ -971,27 +1126,91 @@ export class LayerBuilderService {
       }
 
       if (!ctx.isPlaying) {
-        const seekThreshold = ctx.isDraggingPlayhead ? 0.1 : 0.05;
+        // 0.04s ≈ slightly more than 1 frame at 30fps.
+        // Previous 0.1s threshold skipped up to 3 frames during slow scrubbing.
+        const seekThreshold = ctx.isDraggingPlayhead ? 0.04 : 0.04;
         if (timeDiff > seekThreshold) {
           this.throttledSeek(clip.id, video, timeInfo.clipTime, ctx);
+        }
+
+        // Force decode if readyState dropped after seek
+        if (video.readyState < 2 && !video.seeking) {
+          this.forceVideoFrameDecode(clip.id, video);
         }
       }
     }
   }
 
   /**
-   * Throttled video seek
+   * Hybrid seeking strategy for smooth scrubbing on all codec types:
+   *
+   * During drag (fast scrubbing):
+   *   Phase 1: fastSeek → instant keyframe feedback (<10ms, shows nearest I-frame)
+   *   Phase 2: deferred precise seek → exact frame when scrubbing pauses (debounced 120ms)
+   *
+   * This solves the long-GOP problem: YouTube/phone videos with 5-7s keyframe distance
+   * previously showed a stale cached frame for 100-300ms per seek (currentTime decodes
+   * from keyframe to target). Now the user sees the nearest keyframe immediately, then
+   * the exact frame fills in when they pause.
+   *
+   * When not dragging (single click / arrow keys): precise seek via currentTime.
+   *
+   * RVFC (requestVideoFrameCallback) triggers re-render when the decoded frame is
+   * actually presented to the compositor — more accurate than the 'seeked' event.
    */
+  private rvfcHandles: Record<string, number> = {};
+  private preciseSeekTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+  private latestSeekTargets: Record<string, number> = {};
+
   private throttledSeek(clipId: string, video: HTMLVideoElement, time: number, ctx: FrameContext): void {
     const lastSeek = this.lastSeekRef[clipId] || 0;
-    const threshold = ctx.isDraggingPlayhead ? 80 : 33;
+    const threshold = ctx.isDraggingPlayhead ? 50 : 33;
     if (ctx.now - lastSeek > threshold) {
       if (ctx.isDraggingPlayhead && 'fastSeek' in video) {
+        // Phase 1: Instant keyframe feedback via fastSeek.
+        // For all-intra codecs this IS the exact frame. For long-GOP codecs
+        // this shows the nearest keyframe — better than a stale cached frame.
         video.fastSeek(time);
+
+        // Phase 2: Schedule deferred precise seek for exact frame.
+        // Debounced: resets on each new scrub position, only fires when
+        // the user pauses or slows their scrubbing.
+        this.latestSeekTargets[clipId] = time;
+        clearTimeout(this.preciseSeekTimers[clipId]);
+        this.preciseSeekTimers[clipId] = setTimeout(() => {
+          const target = this.latestSeekTargets[clipId];
+          // Only do precise seek if the fastSeek landed far from the target
+          // (i.e., this is a long-GOP video where fastSeek shows a different frame)
+          if (target !== undefined && Math.abs(video.currentTime - target) > 0.01) {
+            video.currentTime = target;
+            // Register RVFC for when the precise frame arrives
+            this.registerRVFC(clipId, video);
+          }
+        }, 120);
       } else {
+        // Not dragging: precise seek immediately (click, arrow keys, etc.)
         video.currentTime = time;
+        clearTimeout(this.preciseSeekTimers[clipId]);
       }
       this.lastSeekRef[clipId] = ctx.now;
+
+      // Register RVFC to trigger re-render when the decoded frame is presented.
+      this.registerRVFC(clipId, video);
+    }
+  }
+
+  private registerRVFC(clipId: string, video: HTMLVideoElement): void {
+    const rvfc = (video as any).requestVideoFrameCallback;
+    if (typeof rvfc === 'function') {
+      const prevHandle = this.rvfcHandles[clipId];
+      if (prevHandle !== undefined) {
+        (video as any).cancelVideoFrameCallback(prevHandle);
+      }
+      this.rvfcHandles[clipId] = rvfc.call(video, () => {
+        delete this.rvfcHandles[clipId];
+        // Bypass the scrub rate limiter — a fresh decoded frame should be displayed immediately
+        engine.requestNewFrameRender();
+      });
     }
   }
 
@@ -1023,7 +1242,7 @@ export class LayerBuilderService {
 
       nativeDecoder.seekToFrame(targetFrame, ctx.isDraggingPlayhead)
         .then(() => { state!.isPending = false; })
-        .catch(() => { state!.isPending = false; });
+        .catch((err: unknown) => { state!.isPending = false; console.warn('[NH] seek failed frame', targetFrame, err); });
     }
   }
 
@@ -1075,6 +1294,9 @@ export class LayerBuilderService {
 
     // Pause inactive audio
     this.pauseInactiveAudio(ctx);
+
+    // Sync background layer audio elements
+    layerPlaybackManager.syncAudioElements(ctx.playheadPosition, ctx.isPlaying);
 
     // Finalize
     finalizeAudioSync(state, ctx.isPlaying);
@@ -1128,7 +1350,7 @@ export class LayerBuilderService {
       if (ctx.isDraggingPlayhead && !isMuted) {
         const video = clip.source.videoElement;
         if (!video.muted) video.muted = true;
-        proxyFrameCache.playScrubAudio(mediaFileId, timeInfo.clipTime);
+        proxyFrameCache.playScrubAudio(mediaFileId, timeInfo.clipTime, undefined, video.currentSrc || video.src);
       } else if (!ctx.isDraggingPlayhead) {
         proxyFrameCache.stopScrubAudio();
       }

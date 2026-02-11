@@ -7,7 +7,7 @@ import { generateThumbnails } from '../utils';
 import { useMediaStore } from '../../mediaStore';
 import { useSettingsStore } from '../../settingsStore';
 import { NativeDecoder } from '../../../services/nativeHelper';
-import { isProfessionalCodecFile } from '../helpers/mediaTypeHelpers';
+import { NativeHelperClient } from '../../../services/nativeHelper/NativeHelperClient';
 import {
   initWebCodecsPlayer,
   warmUpVideoDecoder,
@@ -116,10 +116,10 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
     setClips,
   } = params;
 
-  // Check if this is a professional codec file that needs Native Helper
-  const isProfessional = isProfessionalCodecFile(file);
+  // Use native decoder when Turbo Mode is on and helper is connected
+  // FFmpeg can decode all formats (H.264, ProRes, DNxHD, etc.) with HW acceleration
   const { turboModeEnabled, nativeHelperConnected } = useSettingsStore.getState();
-  const useNativeDecoder = isProfessional && turboModeEnabled && nativeHelperConnected;
+  const useNativeDecoder = turboModeEnabled && nativeHelperConnected;
 
   let nativeDecoder: NativeDecoder | null = null;
   let video: HTMLVideoElement | null = null;
@@ -133,10 +133,19 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
         : null;
       let filePath = mediaFile?.absolutePath || (file as any).path;
 
-      // If no absolute path, try common locations
-      if (!filePath || !filePath.startsWith('/')) {
-        filePath = `/home/admin/Desktop/${file.name}`;
-        log.debug('No absolute path found, trying', { filePath });
+      // Check if we have a valid absolute path (Unix: /... , Windows: C:\...)
+      const isAbsolute = filePath && (filePath.startsWith('/') || /^[A-Za-z]:[/\\]/.test(filePath));
+
+      // If no absolute path, ask the native helper to locate the file
+      if (!isAbsolute) {
+        log.debug('No absolute path found, asking native helper to locate', { filename: file.name });
+        const located = await NativeHelperClient.locateFile(file.name);
+        if (located) {
+          filePath = located;
+          log.debug('Native helper located file', { filePath });
+        } else {
+          throw new Error(`Could not locate file "${file.name}" on disk. Try importing via File > Open.`);
+        }
       }
 
       log.debug('Opening with Native Helper', { file: file.name });

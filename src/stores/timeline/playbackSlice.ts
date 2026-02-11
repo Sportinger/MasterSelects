@@ -955,4 +955,9 @@ export const createPlaybackSlice: SliceCreator<PlaybackAndRamPreviewActions> = (
   setClipAnimationPhase: (phase: 'idle' | 'exiting' | 'entering') => {
     set({ clipAnimationPhase: phase });
   },
+
+  // Slot grid view progress
+  setSlotGridProgress: (progress: number) => {
+    set({ slotGridProgress: Math.max(0, Math.min(1, progress)) });
+  },
 });

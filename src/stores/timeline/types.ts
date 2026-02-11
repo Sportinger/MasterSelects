@@ -128,6 +128,9 @@ export interface TimelineState {
 
   // Clip animation phase for enter/exit transitions
   clipAnimationPhase: 'idle' | 'exiting' | 'entering';
+
+  // Slot grid view progress (0 = full timeline, 1 = full grid view)
+  slotGridProgress: number;
 }
 
 // Track actions interface
@@ -213,6 +216,8 @@ export interface PlaybackActions {
   toggleCutTool: () => void;
   // Clip animation phase for composition transitions
   setClipAnimationPhase: (phase: 'idle' | 'exiting' | 'entering') => void;
+  // Slot grid view
+  setSlotGridProgress: (progress: number) => void;
 }
 
 // RAM Preview actions interface

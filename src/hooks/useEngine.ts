@@ -7,9 +7,12 @@ import { useTimelineStore } from '../stores/timeline';
 import { useMediaStore } from '../stores/mediaStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSAM2Store, maskToImageData } from '../stores/sam2Store';
+import { getSavedTargetMeta } from '../stores/sliceStore';
+import { reconnectOutputManager } from '../components/outputManager/OutputManagerBoot';
 import type { ClipMask, MaskVertex } from '../types';
 import { generateMaskTexture } from '../utils/maskRenderer';
 import { layerBuilder, playheadState } from '../services/layerBuilder';
+import { layerPlaybackManager } from '../services/layerPlaybackManager';
 import { Logger } from '../services/logger';
 
 const log = Logger.create('Engine');
@@ -47,6 +50,20 @@ export function useEngine() {
         const isLinux = navigator.platform.toLowerCase().includes('linux');
         if (isLinux) {
           useEngineStore.getState().setLinuxVulkanWarning(true);
+        }
+
+        // Reconnect to existing output windows and Output Manager after refresh
+        try {
+          reconnectOutputManager();
+          const savedTargets = getSavedTargetMeta();
+          if (savedTargets.length > 0) {
+            const count = engine.reconnectOutputWindows(savedTargets);
+            if (count > 0) {
+              log.info(`Reconnected ${count} output window(s) after refresh`);
+            }
+          }
+        } catch (e) {
+          log.warn('Failed to reconnect output windows', e);
         }
       }
     }
@@ -317,11 +334,20 @@ export function useEngine() {
     };
   }, [isEngineReady, updateMaskTextures]);
 
-  // Update engine playing state for frame rate limiting
+  // Update engine playing/scrubbing state for frame rate limiting
   useEffect(() => {
     if (!isEngineReady) return;
     engine.setIsPlaying(isPlaying);
   }, [isEngineReady, isPlaying]);
+
+  useEffect(() => {
+    if (!isEngineReady) return;
+    const unsub = useTimelineStore.subscribe(
+      (state) => state.isDraggingPlayhead,
+      (isDragging) => { engine.setIsScrubbing(isDragging); }
+    );
+    return unsub;
+  }, [isEngineReady]);
 
   // Render loop - optimized with direct layer building (bypasses React state)
   useEffect(() => {
@@ -353,14 +379,14 @@ export function useEngine() {
           engine.requestRender();
         }
 
-        // ALWAYS try cached frame first - even when idle!
-        // This enables instant scrubbing over cached RAM Preview frames
-        if (engine.renderCachedFrame(currentPlayhead)) {
-          return;
+        // Keep engine awake when background layers are playing (independent of global playhead)
+        if (layerPlaybackManager.hasActiveLayers()) {
+          engine.requestRender();
         }
 
-        // Skip actual rendering if engine is idle (but cache check above still runs)
-        if (engine.getIsIdle()) {
+        // Try cached RAM Preview frame first (instant scrubbing over pre-rendered frames)
+        if (engine.renderCachedFrame(currentPlayhead)) {
+          layerBuilder.syncAudioElements();
           return;
         }
 
@@ -372,12 +398,17 @@ export function useEngine() {
         // Build layers directly from stores (single source of truth)
         const layers = layerBuilder.buildLayersFromStore();
 
-        // Sync video and audio elements
+        // Render FIRST, before seeking video elements
+        // This ensures we always have a displayable frame even after page reload
+        // when the scrubbing cache is empty. The video is at its previous position
+        // (not yet seeking), so importExternalTexture succeeds and populates the cache.
+        // After sync seeks the video, the 'seeked' event triggers a re-render
+        // with the correct frame.
+        engine.render(layers);
+
+        // Sync video and audio elements (seek to target time for next frame)
         layerBuilder.syncVideoElements();
         layerBuilder.syncAudioElements();
-
-        // Render layers (layerBuilder already handles mask properties)
-        engine.render(layers);
 
         // Cache rendered frame for instant scrubbing (like Premiere's playback caching)
         // Only cache if RAM preview is enabled and we're playing (not generating RAM preview)
@@ -449,6 +480,18 @@ export function useEngine() {
       () => engine.requestRender()
     );
 
+    // Active layer slots changes (multi-layer playback)
+    const unsubLayerSlots = useMediaStore.subscribe(
+      (state) => state.activeLayerSlots,
+      () => engine.requestRender()
+    );
+
+    // Layer opacity changes (per-layer opacity sliders in slot view)
+    const unsubLayerOpacities = useMediaStore.subscribe(
+      (state) => state.layerOpacities,
+      () => engine.requestRender()
+    );
+
     return () => {
       unsubPlayhead();
       unsubClips();
@@ -456,6 +499,8 @@ export function useEngine() {
       unsubLayers();
       unsubSettings();
       unsubActiveComp();
+      unsubLayerSlots();
+      unsubLayerOpacities();
     };
   }, [isEngineReady]);
 
@@ -468,30 +513,12 @@ export function useEngine() {
     engine.closeOutputWindow(id);
   }, []);
 
-  const registerPreviewCanvas = useCallback((id: string, canvas: HTMLCanvasElement) => {
-    engine.registerPreviewCanvas(id, canvas);
+  const restoreOutputWindow = useCallback((id: string) => {
+    return engine.restoreOutputWindow(id);
   }, []);
 
-  const unregisterPreviewCanvas = useCallback((id: string) => {
-    engine.unregisterPreviewCanvas(id);
-  }, []);
-
-  // Independent canvas registration - NOT rendered by main loop
-  const registerIndependentPreviewCanvas = useCallback((id: string, canvas: HTMLCanvasElement, compositionId?: string) => {
-    engine.registerIndependentPreviewCanvas(id, canvas, compositionId);
-  }, []);
-
-  const unregisterIndependentPreviewCanvas = useCallback((id: string) => {
-    engine.unregisterIndependentPreviewCanvas(id);
-  }, []);
-
-  // Update which composition an independent canvas is showing
-  const setIndependentCanvasComposition = useCallback((canvasId: string, compositionId: string) => {
-    engine.setIndependentCanvasComposition(canvasId, compositionId);
-  }, []);
-
-  const renderToPreviewCanvas = useCallback((canvasId: string, layers: import('../types').Layer[]) => {
-    engine.renderToPreviewCanvas(canvasId, layers);
+  const removeOutputTarget = useCallback((id: string) => {
+    engine.removeOutputTarget(id);
   }, []);
 
   return {
@@ -500,11 +527,7 @@ export function useEngine() {
     isPlaying,
     createOutputWindow,
     closeOutputWindow,
-    registerPreviewCanvas,
-    unregisterPreviewCanvas,
-    registerIndependentPreviewCanvas,
-    unregisterIndependentPreviewCanvas,
-    setIndependentCanvasComposition,
-    renderToPreviewCanvas,
+    restoreOutputWindow,
+    removeOutputTarget,
   };
 }

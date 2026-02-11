@@ -162,15 +162,6 @@ export function isAudioEffect(type: EffectType): boolean {
   return type === 'audio-eq' || type === 'audio-volume';
 }
 
-export interface OutputWindow {
-  id: string;
-  name: string;
-  window: Window | null;
-  canvas: HTMLCanvasElement | null;
-  context: GPUCanvasContext | null;
-  isFullscreen: boolean;
-}
-
 export interface Project {
   id: string;
   name: string;
@@ -209,7 +200,7 @@ export interface EngineStats {
   layerCount: number;
   targetFps: number;
   // Decoder info
-  decoder: 'WebCodecs' | 'HTMLVideo' | 'HTMLVideo(cached)' | 'HTMLVideo(paused-cache)' | 'HTMLVideo(seeking-cache)' | 'NativeHelper' | 'ParallelDecode' | 'none';
+  decoder: 'WebCodecs' | 'HTMLVideo' | 'HTMLVideo(cached)' | 'HTMLVideo(paused-cache)' | 'HTMLVideo(seeking-cache)' | 'HTMLVideo(scrub-cache)' | 'NativeHelper' | 'ParallelDecode' | 'none';
   // Audio status
   audio: {
     playing: number;       // Number of audio elements currently playing
@@ -522,3 +513,16 @@ export interface Keyframe {
   handleIn?: BezierHandle;   // Bezier control point for curve entering this keyframe
   handleOut?: BezierHandle;  // Bezier control point for curve leaving this keyframe
 }
+
+// Re-export RenderTarget types
+export type {
+  RenderSourceType,
+  RenderSourceActiveComp,
+  RenderSourceComposition,
+  RenderSourceLayer,
+  RenderSourceSlot,
+  RenderSourceProgram,
+  RenderSource,
+  RenderDestinationType,
+  RenderTarget,
+} from './renderTarget';

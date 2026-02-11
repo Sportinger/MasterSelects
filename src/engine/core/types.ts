@@ -1,6 +1,6 @@
 // Engine-specific types and interfaces
 // Re-export common types from main types file for convenience
-export type { Layer, BlendMode, OutputWindow, EngineStats, Effect, EffectType } from '../../types';
+export type { Layer, BlendMode, EngineStats, Effect, EffectType } from '../../types';
 import type { Layer } from '../../types';
 
 // Blend mode to shader index mapping
@@ -55,6 +55,8 @@ export const BLEND_MODE_MAP: Record<string, number> = {
 export interface LayerRenderData {
   layer: Layer;
   isVideo: boolean;
+  /** Texture changes every frame (e.g. NativeDecoder) — skip bind group cache */
+  isDynamic?: boolean;
   externalTexture: GPUExternalTexture | null;
   textureView: GPUTextureView | null;
   sourceWidth: number;
@@ -94,7 +96,7 @@ export interface DetailedStats {
   dropsThisSecond: number;
   lastDropReason: 'none' | 'slow_raf' | 'slow_render' | 'slow_import';
   lastRafTime: number;
-  decoder: 'WebCodecs' | 'HTMLVideo' | 'HTMLVideo(cached)' | 'HTMLVideo(paused-cache)' | 'HTMLVideo(seeking-cache)' | 'NativeHelper' | 'ParallelDecode' | 'none';
+  decoder: 'WebCodecs' | 'HTMLVideo' | 'HTMLVideo(cached)' | 'HTMLVideo(paused-cache)' | 'HTMLVideo(seeking-cache)' | 'HTMLVideo(scrub-cache)' | 'NativeHelper' | 'ParallelDecode' | 'none';
 }
 
 // Profile data for performance tracking

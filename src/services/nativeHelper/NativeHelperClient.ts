@@ -18,6 +18,7 @@ import type {
 import {
   parseFrameHeader,
   isCompressed,
+  isJpeg,
 } from './protocol';
 
 // LZ4 decompression (we'll use a simple implementation or skip for now)
@@ -40,6 +41,8 @@ export interface DecodedFrame {
   frameNum: number;
   data: Uint8ClampedArray;
   requestId: number;
+  /** If true, data contains JPEG bytes — use createImageBitmap(Blob) instead of ImageData */
+  isJpeg?: boolean;
 }
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -209,14 +212,34 @@ class NativeHelperClientImpl {
     const id = this.nextId();
 
     return new Promise((resolve, reject) => {
-      // Register frame callback
-      this.frameCallbacks.set(id, resolve);
+      let settled = false;
+
+      const cleanup = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        this.frameCallbacks.delete(id);
+        this.pendingRequests.delete(id);
+      };
 
       // Set timeout
-      const timeout = setTimeout(() => {
-        this.frameCallbacks.delete(id);
+      const timer = setTimeout(() => {
+        cleanup();
         reject(new Error('Decode timeout'));
       }, 10000);
+
+      // Register frame callback (for binary success response)
+      this.frameCallbacks.set(id, (frame) => {
+        cleanup();
+        resolve(frame);
+      });
+
+      // Also register in pendingRequests (for JSON error responses)
+      this.pendingRequests.set(id, (response) => {
+        cleanup();
+        const err = (response as any).error;
+        reject(new Error(err?.message || 'Decode failed'));
+      });
 
       // Send decode command
       const cmd: Command = {
@@ -230,12 +253,9 @@ class NativeHelperClientImpl {
       };
 
       this.sendRaw(JSON.stringify(cmd)).catch((err) => {
-        clearTimeout(timeout);
-        this.frameCallbacks.delete(id);
+        cleanup();
         reject(err);
       });
-
-      // Clear timeout on success (handled in handleMessage)
     });
   }
 
@@ -344,7 +364,7 @@ class NativeHelperClientImpl {
   }
 
   /**
-   * List available formats for a YouTube video
+   * List available formats for a video URL (YouTube, TikTok, Instagram, etc.)
    */
   async listFormats(url: string): Promise<VideoInfo | null> {
     const id = this.nextId();
@@ -363,6 +383,7 @@ class NativeHelperClientImpl {
             thumbnail: response.thumbnail,
             duration: response.duration,
             uploader: response.uploader,
+            platform: response.platform,
             recommendations: response.recommendations,
             allFormats: response.allFormats,
           });
@@ -457,6 +478,89 @@ class NativeHelperClientImpl {
   }
 
   /**
+   * Download a video from any yt-dlp-supported platform
+   */
+  async download(
+    url: string,
+    formatId?: string,
+    onProgress?: (percent: number) => void
+  ): Promise<{ success: boolean; path?: string; error?: string }> {
+    const id = this.nextId();
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        this.progressCallbacks.delete(id);
+        reject(new Error('Download timeout'));
+      }, 600000);
+
+      if (onProgress) {
+        this.progressCallbacks.set(id, onProgress);
+      }
+
+      this.pendingRequests.set(id, (response: any) => {
+        if (response.type === 'progress' && response.percent !== undefined) {
+          const progressCb = this.progressCallbacks.get(id);
+          if (progressCb) {
+            progressCb(response.percent);
+          }
+          return;
+        }
+
+        clearTimeout(timeout);
+        this.progressCallbacks.delete(id);
+        if (response.ok) {
+          resolve({
+            success: true,
+            path: response.path,
+          });
+        } else {
+          resolve({
+            success: false,
+            error: response.error?.message || 'Download failed',
+          });
+        }
+      });
+
+      const cmd: any = {
+        cmd: 'download',
+        id,
+        url,
+      };
+
+      if (formatId) {
+        cmd.format_id = formatId;
+      }
+
+      this.sendRaw(JSON.stringify(cmd)).catch((err) => {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(id);
+        this.progressCallbacks.delete(id);
+        reject(err);
+      });
+    });
+  }
+
+  /**
+   * Locate a file by name in common directories (Desktop, Downloads, Videos, Documents, Home)
+   * Returns the absolute path if found, or null if not found.
+   */
+  async locateFile(filename: string, searchDirs?: string[]): Promise<string | null> {
+    const id = this.nextId();
+    const cmd: any = { cmd: 'locate', id, filename };
+    if (searchDirs?.length) {
+      cmd.search_dirs = searchDirs;
+    }
+    const response = await this.send(cmd);
+    if (!response.ok) return null;
+    const data = response as any;
+    if (data.found && data.path) {
+      return data.path as string;
+    }
+    return null;
+  }
+
+  /**
    * Get a downloaded file from the Native Helper via HTTP (fast) or WebSocket fallback
    */
   async getDownloadedFile(path: string): Promise<ArrayBuffer | null> {
@@ -530,11 +634,13 @@ class NativeHelperClientImpl {
   }
 
   private handleDisconnect(): void {
-    // Reject all pending requests
+    // Reject all pending requests (including decode error handlers)
     this.pendingRequests.forEach((callback) => {
       callback({ id: '', ok: false, error: { code: 'DISCONNECTED', message: 'Connection lost' } });
     });
     this.pendingRequests.clear();
+    // Frame callbacks are cleaned up by the pendingRequests error handler above
+    // (decodeFrame registers in both maps, cleanup removes from both)
     this.frameCallbacks.clear();
 
     // Auto-reconnect only if:
@@ -585,9 +691,10 @@ class NativeHelperClientImpl {
       const payloadStart = 16;
       const payload = new Uint8Array(data, payloadStart);
 
-      // Decompress if needed
-      if (isCompressed(header.flags)) {
-        // TODO: Use proper LZ4 decompression
+      const jpegFrame = isJpeg(header.flags);
+
+      // Decompress if needed (LZ4 — not used when JPEG is active)
+      if (!jpegFrame && isCompressed(header.flags)) {
         log.warn('LZ4 decompression not implemented, using raw data');
       }
 
@@ -597,6 +704,7 @@ class NativeHelperClientImpl {
         frameNum: header.frameNum,
         data: new Uint8ClampedArray(payload),
         requestId: header.requestId,
+        isJpeg: jpegFrame,
       };
 
       // Find callback by request ID pattern

@@ -19,6 +19,7 @@ export const FRAME_FLAGS = {
   COMPRESSED: 0x01,
   SCALED: 0x02,
   DELTA: 0x04,
+  JPEG: 0x08,
 } as const;
 
 // Magic bytes
@@ -116,6 +117,14 @@ export interface ListFormatsCommand {
   url: string;
 }
 
+export interface DownloadCommand {
+  cmd: 'download';
+  id: string;
+  url: string;
+  format_id?: string;
+  output_dir?: string;
+}
+
 export interface FormatInfo {
   format_id: string;
   ext: string;
@@ -144,6 +153,7 @@ export interface VideoInfo {
   thumbnail: string;
   duration: number;
   uploader: string;
+  platform?: string;
   recommendations: FormatRecommendation[];
   allFormats: FormatInfo[];
 }
@@ -152,6 +162,13 @@ export interface GetFileCommand {
   cmd: 'get_file';
   id: string;
   path: string;
+}
+
+export interface LocateCommand {
+  cmd: 'locate';
+  id: string;
+  filename: string;
+  search_dirs?: string[];
 }
 
 export type Command =
@@ -169,7 +186,9 @@ export type Command =
   | PingCommand
   | DownloadYouTubeCommand
   | ListFormatsCommand
-  | GetFileCommand;
+  | DownloadCommand
+  | GetFileCommand
+  | LocateCommand;
 
 // Encode settings
 export interface EncodeOutput {
@@ -293,6 +312,13 @@ export function isCompressed(flags: number): boolean {
  */
 export function isScaled(flags: number): boolean {
   return (flags & FRAME_FLAGS.SCALED) !== 0;
+}
+
+/**
+ * Check if frame payload is JPEG-encoded
+ */
+export function isJpeg(flags: number): boolean {
+  return (flags & FRAME_FLAGS.JPEG) !== 0;
 }
 
 // Error codes

@@ -55,8 +55,12 @@ MyProject/
 ├── Raw/                   # Auto-copied media files (portable)
 │   ├── Interview_01.mp4
 │   └── Music.wav
-├── YT/                    # Downloaded YouTube videos
-│   └── video_title.mp4
+├── Downloads/             # Downloaded videos (platform subfolders)
+│   ├── YouTube/
+│   │   └── video_title.mp4
+│   ├── TikTok/
+│   ├── Instagram/
+│   └── Twitter/
 ├── Backups/               # Auto-backup folder
 │   ├── project_2026-01-11_14-00-00.json
 │   └── ... (last 20 backups)
@@ -273,6 +277,19 @@ View toggle states are saved in the project file:
 - Scopes visibility
 - Restored when opening a project
 
+### Output Manager Persistence
+The Output Manager window state is tracked via `localStorage`:
+- `masterselects-om-open` key stores whether the Output Manager was open
+- On page refresh, the app detects the existing popup and reconnects via `reconnectOutputManager()`
+- Uses `sessionStorage` guard to prevent false reconnection on fresh tabs
+- Window position and size preserved by the browser's named window (`output_manager`)
+
+### Composition Resolution Persistence
+Each composition stores its own resolution (width/height) in the project file:
+- Resolution is saved per composition, not globally
+- Changing resolution adjusts clip transforms proportionally (auto-reposition)
+- Restored when opening a project or switching compositions
+
 ### Actions
 ```typescript
 saveLayoutAsDefault()  // View menu
@@ -282,6 +299,13 @@ resetLayout()          // View menu
 ---
 
 ## Troubleshooting
+
+### IndexedDB Error Dialog
+If IndexedDB storage becomes corrupted, an error dialog appears automatically:
+- Explains the issue and provides instructions for clearing site data
+- Offers a "Refresh" button to reload the app after clearing
+- Dismissable via Escape key or backdrop click
+- Source: `src/components/common/IndexedDBErrorDialog.tsx`
 
 ### Project Not Loading
 1. Check if `project.json` exists in folder
@@ -317,6 +341,17 @@ resetLayout()          // View menu
 - [Timeline](./Timeline.md) - Timeline data
 - [Audio](./Audio.md) - Transcript persistence
 - [UI Panels](./UI-Panels.md) - Layout saving
+
+---
+
+## Tests
+
+| Test File | Tests | Coverage |
+|-----------|-------|----------|
+| [`serialization.test.ts`](../../tests/unit/serialization.test.ts) | 86 | Serialize/deserialize, round-trip |
+| [`historyStore.test.ts`](../../tests/stores/historyStore.test.ts) | 16 | Undo/redo |
+
+Run tests: `npx vitest run`
 
 ---
 

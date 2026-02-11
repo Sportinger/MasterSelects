@@ -27,6 +27,7 @@ import { ParentChildLink } from './ParentChildLink';
 import { PhysicsCable } from './PhysicsCable';
 import { TimelineNavigator } from './TimelineNavigator';
 import { VerticalScrollbar } from './VerticalScrollbar';
+import { SlotGrid } from './SlotGrid';
 import { useTimelineKeyboard } from './hooks/useTimelineKeyboard';
 import { useTimelineZoom } from './hooks/useTimelineZoom';
 import { usePlayheadDrag } from './hooks/usePlayheadDrag';
@@ -66,6 +67,9 @@ export function Timeline() {
   // View state (changes on zoom/scroll)
   const { zoom, scrollX } =
     useTimelineStore(useShallow(selectViewState));
+
+  // Slot grid progress - direct selector for reliable reactivity
+  const slotGridProgress = useTimelineStore(state => state.slotGridProgress);
 
   // UI settings (rarely changes)
   const { snappingEnabled, inPoint, outPoint, loopPlayback, toolMode, thumbnailsEnabled, waveformsEnabled } =
@@ -752,8 +756,15 @@ export function Timeline() {
   // anyVideoSolo and anyAudioSolo are already memoized at the top of the component
 
   return (
-    <div className={`timeline-container ${clipDrag || clipTrim ? 'is-dragging' : ''}`}>
-      <TimelineControls
+    <div
+      className={`timeline-container ${clipDrag || clipTrim ? 'is-dragging' : ''}`}
+      onMouseDown={() => {
+        if (useMediaStore.getState().sourceMonitorFileId) {
+          useMediaStore.getState().setSourceMonitorFile(null);
+        }
+      }}
+    >
+      {slotGridProgress < 1 && <TimelineControls
         isPlaying={isPlaying}
         loopPlayback={loopPlayback}
         playheadPosition={playheadPosition}
@@ -796,10 +807,21 @@ export function Timeline() {
         onFitToWindow={handleFitToWindow}
         formatTime={formatTime}
         parseTime={parseTime}
-      />
+      />}
 
       <div className="timeline-body" ref={timelineBodyRef}>
-        <div className="timeline-body-content">
+        {/* SlotGrid — fades in over timeline */}
+        {slotGridProgress > 0 && (
+          <SlotGrid opacity={slotGridProgress} />
+        )}
+        {/* Timeline content — fades out with subtle scale-back */}
+        <div className="timeline-body-content" style={slotGridProgress > 0 ? {
+          opacity: 1 - slotGridProgress,
+          transform: `scale(${1 - slotGridProgress * 0.05})`,
+          transformOrigin: 'center center',
+          pointerEvents: (slotGridProgress >= 0.5 ? 'none' : 'auto') as React.CSSProperties['pointerEvents'],
+          display: slotGridProgress >= 1 ? 'none' as const : undefined,
+        } : undefined}>
           <div className="timeline-header-row">
             <div className="ruler-header">
               <span>Time</span>
@@ -1400,26 +1422,30 @@ export function Timeline() {
           )}
         </div>{/* timeline-body-content */}
 
-        {/* Vertical Scrollbar */}
-        <VerticalScrollbar
-          scrollY={scrollY}
-          contentHeight={contentHeight}
-          viewportHeight={viewportHeight}
-          onScrollChange={setScrollY}
-        />
+        {/* Vertical Scrollbar — hide when slot grid is active */}
+        {slotGridProgress < 1 && (
+          <VerticalScrollbar
+            scrollY={scrollY}
+            contentHeight={contentHeight}
+            viewportHeight={viewportHeight}
+            onScrollChange={setScrollY}
+          />
+        )}
       </div>{/* timeline-body */}
 
-      {/* Timeline Navigator - horizontal scrollbar with zoom handles */}
-      <TimelineNavigator
-        duration={duration}
-        scrollX={scrollX}
-        zoom={zoom}
-        viewportWidth={timelineBodyRef.current?.querySelector('.track-lanes-scroll')?.parentElement?.clientWidth ?? 800}
-        minZoom={MIN_ZOOM}
-        maxZoom={MAX_ZOOM}
-        onScrollChange={setScrollX}
-        onZoomChange={handleSetZoom}
-      />
+      {/* Timeline Navigator - horizontal scrollbar with zoom handles — hide when slot grid is active */}
+      {slotGridProgress < 1 && (
+        <TimelineNavigator
+          duration={duration}
+          scrollX={scrollX}
+          zoom={zoom}
+          viewportWidth={timelineBodyRef.current?.querySelector('.track-lanes-scroll')?.parentElement?.clientWidth ?? 800}
+          minZoom={MIN_ZOOM}
+          maxZoom={MAX_ZOOM}
+          onScrollChange={setScrollX}
+          onZoomChange={handleSetZoom}
+        />
+      )}
 
       {/* Pick whip drag line - physics cable (clip parenting) */}
       {pickWhipDrag && (

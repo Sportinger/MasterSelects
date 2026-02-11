@@ -2,7 +2,7 @@
 
 [← Back to Index](./README.md)
 
-GPU-accelerated visual effects with 37 blend modes and 9 shader effects.
+GPU-accelerated visual effects with 37 blend modes and 30 shader effects.
 
 ---
 
@@ -295,6 +295,17 @@ Final Output
 - [Keyframes](./Keyframes.md) - Animation system
 - [GPU Engine](./GPU-Engine.md) - Rendering pipeline
 - [Keyboard Shortcuts](./Keyboard-Shortcuts.md)
+
+---
+
+## Tests
+
+| Test File | Tests | Coverage |
+|-----------|-------|----------|
+| [`effectsRegistry.test.ts`](../../tests/unit/effectsRegistry.test.ts) | 94 | Registry, parameters, categories, packUniforms, animatable |
+| [`typeHelpers.test.ts`](../../tests/unit/typeHelpers.test.ts) | 34 | Effect property parsing, isAudioEffect |
+
+Run tests: `npx vitest run`
 
 ---
 

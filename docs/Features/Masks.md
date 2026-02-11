@@ -189,6 +189,9 @@ On-screen text shows current mode instructions.
 
 ### Performance Optimizations
 - Skip history snapshots during mask dragging for smooth interaction
+- Vertex and handle updates throttled to 60fps (16ms interval) during drag operations
+- Whole-mask dragging also throttled to ~60fps to prevent excessive store updates
+- Mask texture regeneration skipped entirely during active drag for smooth interaction
 - GPU texture updates throttled at 30fps instead of every frame
 - Targeted cache invalidation (only affected layers)
 
@@ -216,6 +219,16 @@ generateMaskTexture(masks, width, height)
 - Transforms with layer position/scale
 - Applied in output frame space
 - SVG overlay preserves aspect ratio
+
+---
+
+## Tests
+
+| Test File | Tests | Coverage |
+|-----------|-------|----------|
+| [`maskSlice.test.ts`](../../tests/stores/timeline/maskSlice.test.ts) | 78 | Mask CRUD, modes, vertices, preset shapes, workflows |
+
+Run tests: `npx vitest run`
 
 ---
 

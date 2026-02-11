@@ -2,6 +2,7 @@
 // Synchronizes mediaStore and timelineStore with projectFileService
 
 import { Logger } from './logger';
+import { engine } from '../engine/WebGPUEngine';
 import { useMediaStore, type MediaFile, type Composition, type MediaFolder } from '../stores/mediaStore';
 import { getMediaInfo } from '../stores/mediaStore/helpers/mediaInfoHelpers';
 import { createThumbnail } from '../stores/mediaStore/helpers/thumbnailHelpers';
@@ -202,6 +203,7 @@ export async function syncStoresToProject(): Promise<void> {
     projectData.activeCompositionId = freshState.activeCompositionId;
     projectData.openCompositionIds = freshState.openCompositionIds;
     projectData.expandedFolderIds = freshState.expandedFolderIds;
+    projectData.slotAssignments = freshState.slotAssignments;
 
     // Save YouTube panel state
     const youtubeState = useYouTubeStore.getState().getState();
@@ -499,6 +501,7 @@ export async function loadProjectToStores(): Promise<void> {
     activeCompositionId: projectData.activeCompositionId,
     openCompositionIds: projectData.openCompositionIds || [],
     expandedFolderIds: projectData.expandedFolderIds || [],
+    slotAssignments: projectData.slotAssignments || {},
   });
 
   // Load active composition's timeline
@@ -885,6 +888,9 @@ async function reloadNestedCompositionClips(): Promise<void> {
           // Trigger state update
           const currentClips = timelineStore.clips;
           useTimelineStore.setState({ clips: [...currentClips] });
+
+          // Pre-cache frame via createImageBitmap for immediate scrubbing without play()
+          engine.preCacheVideoFrame(video);
         }, { once: true });
 
         video.load();
@@ -1015,7 +1021,7 @@ export function closeCurrentProject(): void {
 export function setupAutoSync(): void {
   // Subscribe to store changes and mark project dirty
   useMediaStore.subscribe(
-    (state) => [state.files, state.compositions, state.folders],
+    (state) => [state.files, state.compositions, state.folders, state.slotAssignments],
     () => {
       if (projectFileService.isProjectOpen()) {
         projectFileService.markDirty();

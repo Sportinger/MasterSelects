@@ -8,6 +8,7 @@ import { useMediaStore } from '../mediaStore';
 import { calculateNestedClipBoundaries, buildClipSegments } from './clip/addCompClip';
 import { projectFileService } from '../../services/projectFileService';
 import { Logger } from '../../services/logger';
+import { engine } from '../../engine/WebGPUEngine';
 
 const log = Logger.create('Timeline');
 
@@ -363,42 +364,12 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                 // Force browser to start loading
                 video.load();
 
+                // Pre-cache frame for immediate scrubbing (needs readyState >= 2, so use canplaythrough)
+                video.addEventListener('canplaythrough', () => {
+                  engine.preCacheVideoFrame(video);
+                }, { once: true });
+
                 video.addEventListener('loadedmetadata', async () => {
-                  // Force browser to decode actual video frames by playing briefly
-                  // This ensures readyState reaches HAVE_CURRENT_DATA (2) or higher
-                  try {
-                    await video.play();
-                    video.pause();
-                    video.currentTime = 0;
-
-                    // Wait for the seek to complete and frame to be decoded
-                    await new Promise<void>((resolve) => {
-                      const checkReady = () => {
-                        if (video.readyState >= 2) {
-                          resolve();
-                        } else {
-                          requestAnimationFrame(checkReady);
-                        }
-                      };
-                      video.addEventListener('seeked', () => {
-                        checkReady();
-                      }, { once: true });
-                      checkReady();
-                    });
-                  } catch (e) {
-                    // play() might fail due to autoplay policy, try alternative approach
-                    log.debug('Play failed for nested video, trying seek approach', { nestedClipId: nestedClip.id, error: e });
-                    video.currentTime = 0.001;
-                    await new Promise<void>((resolve) => {
-                      const onSeeked = () => {
-                        video.removeEventListener('seeked', onSeeked);
-                        resolve();
-                      };
-                      video.addEventListener('seeked', onSeeked);
-                      setTimeout(resolve, 500);
-                    });
-                  }
-
                   // Set up basic video source first
                   const videoSource: TimelineClip['source'] = {
                     type: 'video',
@@ -696,6 +667,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           mediaFileId: serializedClip.mediaFileId, // Preserve mediaFileId for cache lookups
           naturalDuration: serializedClip.naturalDuration,
         },
+        mediaFileId: serializedClip.mediaFileId, // Restore top-level mediaFileId for audio/proxy lookup
         needsReload: needsReload, // Flag for UI to show reload indicator
         thumbnails: serializedClip.thumbnails,
         linkedClipId: serializedClip.linkedClipId,
@@ -782,6 +754,10 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                 : c
             ),
           }));
+
+          // Pre-cache frame via createImageBitmap for immediate scrubbing without play()
+          // createImageBitmap is the ONLY API that decodes a frame from a never-played video after reload
+          engine.preCacheVideoFrame(video);
 
           // Try to initialize WebCodecsPlayer for hardware-accelerated decoding
           const hasWebCodecs = 'VideoDecoder' in window && 'VideoFrame' in window;

@@ -6,8 +6,6 @@ import { create } from 'zustand';
 import { subscribeWithSelector, persist } from 'zustand/middleware';
 import { apiKeyManager, type ApiKeyType } from '../services/apiKeyManager';
 import { Logger } from '../services/logger';
-import type { OutputWindow } from '../types';
-
 const log = Logger.create('SettingsStore');
 
 // Transcription provider options
@@ -70,11 +68,13 @@ interface SettingsState {
   // User background (which program they come from)
   userBackground: string | null;
 
+  // Tutorial campaign completion tracking
+  completedTutorials: string[];
+
   // UI state
   isSettingsOpen: boolean;
 
-  // Output settings (moved from mixerStore)
-  outputWindows: OutputWindow[];
+  // Output settings
   // Default resolution for new compositions (active composition drives the engine)
   outputResolution: { width: number; height: number };
   fps: number;
@@ -96,13 +96,12 @@ interface SettingsState {
   setHasSeenTutorial: (seen: boolean) => void;
   setHasSeenTutorialPart2: (seen: boolean) => void;
   setUserBackground: (bg: string) => void;
+  completeTutorial: (campaignId: string) => void;
   openSettings: () => void;
   closeSettings: () => void;
   toggleSettings: () => void;
 
   // Output actions
-  addOutputWindow: (output: OutputWindow) => void;
-  removeOutputWindow: (id: string) => void;
   setResolution: (width: number, height: number) => void;
 
   // Helpers
@@ -142,10 +141,10 @@ export const useSettingsStore = create<SettingsState>()(
       hasSeenTutorial: false, // Show tutorial on first run
       hasSeenTutorialPart2: false, // Show timeline tutorial after part 1
       userBackground: null, // Which program the user comes from
+      completedTutorials: [], // Campaign IDs that have been completed
       isSettingsOpen: false,
 
-      // Output settings (moved from mixerStore)
-      outputWindows: [],
+      // Output settings
       outputResolution: { width: 1920, height: 1080 },
       fps: 60,
 
@@ -223,17 +222,18 @@ export const useSettingsStore = create<SettingsState>()(
         set({ userBackground: bg });
       },
 
+      completeTutorial: (campaignId) => {
+        const current = get().completedTutorials;
+        if (!current.includes(campaignId)) {
+          set({ completedTutorials: [...current, campaignId] });
+        }
+      },
+
       openSettings: () => set({ isSettingsOpen: true }),
       closeSettings: () => set({ isSettingsOpen: false }),
       toggleSettings: () => set((state) => ({ isSettingsOpen: !state.isSettingsOpen })),
 
       // Output actions
-      addOutputWindow: (output) => {
-        set((state) => ({ outputWindows: [...state.outputWindows, output] }));
-      },
-      removeOutputWindow: (id) => {
-        set((state) => ({ outputWindows: state.outputWindows.filter((o) => o.id !== id) }));
-      },
       setResolution: (width, height) => {
         set({ outputResolution: { width, height } });
       },
@@ -279,6 +279,7 @@ export const useSettingsStore = create<SettingsState>()(
         hasSeenTutorial: state.hasSeenTutorial,
         hasSeenTutorialPart2: state.hasSeenTutorialPart2,
         userBackground: state.userBackground,
+        completedTutorials: state.completedTutorials,
         outputResolution: state.outputResolution,
         fps: state.fps,
       }),

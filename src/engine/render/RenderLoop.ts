@@ -23,9 +23,18 @@ export class RenderLoop {
   private renderRequested = false;
   private lastRenderedPlayhead = -1;
 
-  // Frame rate limiting (only during playback, not scrubbing)
+  // When true, idle detection is completely suppressed (engine always renders).
+  // Used after page reload: video GPU surfaces need the render loop running
+  // so syncClipVideo warmup (play()/RVFC) can complete. Without this, the
+  // engine goes idle after 1s and scrubbing produces black frames.
+  // Cleared when setIsPlaying(true) is called (first play warms up videos).
+  private idleSuppressed = false;
+
+  // Frame rate limiting
   private hasActiveVideo = false;
   private isPlaying = false;
+  private isScrubbing = false;
+  private newFrameReady = false; // Set by RVFC to bypass scrub limiter
   private lastRenderTime = 0;
 
   // Health monitoring - detect frozen render loop
@@ -35,6 +44,7 @@ export class RenderLoop {
 
   private readonly IDLE_TIMEOUT = 1000; // 1s before idle
   private readonly VIDEO_FRAME_TIME = 16.67; // ~60fps target
+  private readonly SCRUB_FRAME_TIME = 33; // ~30fps during scrubbing (avoids wasted renders while video seeks)
   private readonly WATCHDOG_INTERVAL = 2000; // Check every 2s
   private readonly WATCHDOG_STALL_THRESHOLD = 3000; // 3s without render = stalled
 
@@ -65,16 +75,18 @@ export class RenderLoop {
       const rafGap = lastTimestamp > 0 ? timestamp - lastTimestamp : 0;
       lastTimestamp = timestamp;
 
-      // Idle detection
-      const timeSinceActivity = timestamp - this.lastActivityTime;
-      if (!this.isIdle && !this.renderRequested && timeSinceActivity > this.IDLE_TIMEOUT) {
-        this.isIdle = true;
-        log.debug('Entering idle mode');
-      }
+      // Idle detection (suppressed until first play to allow video GPU warmup)
+      if (!this.idleSuppressed) {
+        const timeSinceActivity = timestamp - this.lastActivityTime;
+        if (!this.isIdle && !this.renderRequested && timeSinceActivity > this.IDLE_TIMEOUT) {
+          this.isIdle = true;
+          log.debug('Entering idle mode');
+        }
 
-      if (this.isIdle && this.renderRequested) {
-        this.isIdle = false;
-        log.debug('Waking from idle');
+        if (this.isIdle && this.renderRequested) {
+          this.isIdle = false;
+          log.debug('Waking from idle');
+        }
       }
 
       this.renderRequested = false;
@@ -85,20 +97,30 @@ export class RenderLoop {
         return;
       }
 
-      // Skip stats when idle (but still allow occasional renders for UI updates)
+      // Skip rendering when idle (but keep RAF loop alive)
       if (this.isIdle) {
         this.animationId = requestAnimationFrame(loop);
         return;
       }
 
-      // Frame rate limiting for video - ONLY during playback, not scrubbing
-      // This reduces GPU load and prevents frame sync issues from excessive rendering
-      // But we never skip renders during scrubbing (when paused)
-      if (this.hasActiveVideo && this.isPlaying) {
+      // Frame rate limiting for video
+      if (this.hasActiveVideo) {
         const timeSinceLastRender = timestamp - this.lastRenderTime;
-        if (timeSinceLastRender < this.VIDEO_FRAME_TIME) {
-          this.animationId = requestAnimationFrame(loop);
-          return;
+        if (this.isPlaying) {
+          // Playback: ~60fps target
+          if (timeSinceLastRender < this.VIDEO_FRAME_TIME) {
+            this.animationId = requestAnimationFrame(loop);
+            return;
+          }
+        } else if (this.isScrubbing) {
+          // Scrubbing: ~30fps baseline to avoid wasted renders while video seeks.
+          // BUT: if RVFC signaled a new decoded frame is ready, render immediately
+          // to minimize latency between decode completion and display.
+          if (!this.newFrameReady && timeSinceLastRender < this.SCRUB_FRAME_TIME) {
+            this.animationId = requestAnimationFrame(loop);
+            return;
+          }
+          this.newFrameReady = false;
         }
         this.lastRenderTime = timestamp;
       }
@@ -202,6 +224,13 @@ export class RenderLoop {
     }
   }
 
+  // Called by RVFC when a new decoded video frame is ready.
+  // Bypasses the scrub rate limiter so the fresh frame is displayed immediately.
+  requestNewFrameRender(): void {
+    this.newFrameReady = true;
+    this.requestRender();
+  }
+
   getIsIdle(): boolean {
     return this.isIdle;
   }
@@ -227,7 +256,30 @@ export class RenderLoop {
     this.hasActiveVideo = hasVideo;
   }
 
+  /**
+   * Suppress idle detection — engine renders every frame until unsuppressed.
+   * Used after page reload before the first play to keep video GPU surfaces warm.
+   */
+  suppressIdle(): void {
+    this.idleSuppressed = true;
+    this.isIdle = false;
+    log.info('Idle suppressed (waiting for first play)');
+  }
+
   setIsPlaying(playing: boolean): void {
     this.isPlaying = playing;
+    if (playing && this.idleSuppressed) {
+      // First play — video GPU surfaces are now warm, enable idle detection
+      this.idleSuppressed = false;
+      log.info('Idle suppression lifted (first play)');
+    }
+  }
+
+  setIsScrubbing(scrubbing: boolean): void {
+    this.isScrubbing = scrubbing;
+    if (scrubbing) {
+      // Reset render time so first scrub frame renders immediately
+      this.lastRenderTime = 0;
+    }
   }
 }

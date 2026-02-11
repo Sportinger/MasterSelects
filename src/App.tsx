@@ -15,6 +15,9 @@ import { WhatsNewDialog } from './components/common/WhatsNewDialog';
 import { IndexedDBErrorDialog } from './components/common/IndexedDBErrorDialog';
 import { LinuxVulkanWarning } from './components/common/LinuxVulkanWarning';
 import { TutorialOverlay } from './components/common/TutorialOverlay';
+import { TutorialCampaignDialog } from './components/common/TutorialCampaignDialog';
+import { getCampaignById } from './components/common/tutorialCampaigns';
+import type { CampaignStep } from './components/common/tutorialCampaigns';
 import { MobileApp } from './components/mobile';
 import { useGlobalHistory } from './hooks/useGlobalHistory';
 import { useClipPanelSync } from './hooks/useClipPanelSync';
@@ -56,13 +59,18 @@ function App() {
   // What's New dialog state - show on every refresh after welcome (if any)
   const [showWhatsNew, setShowWhatsNew] = useState(false);
 
-  // Tutorial state
+  // Tutorial state (legacy part 1/2)
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialPart, setTutorialPart] = useState<1 | 2>(1);
   const hasSeenTutorial = useSettingsStore((s) => s.hasSeenTutorial);
   const setHasSeenTutorial = useSettingsStore((s) => s.setHasSeenTutorial);
   const hasSeenTutorialPart2 = useSettingsStore((s) => s.hasSeenTutorialPart2);
   const setHasSeenTutorialPart2 = useSettingsStore((s) => s.setHasSeenTutorialPart2);
+
+  // Campaign tutorial state
+  const [showCampaignDialog, setShowCampaignDialog] = useState(false);
+  const [activeCampaign, setActiveCampaign] = useState<{ id: string; title: string; steps: CampaignStep[] } | null>(null);
+  const completeTutorial = useSettingsStore((s) => s.completeTutorial);
 
   // IndexedDB error dialog state
   const [showIndexedDBError, setShowIndexedDBError] = useState(false);
@@ -176,7 +184,32 @@ function App() {
     }
   }, [tutorialPart, hasSeenTutorialPart2, setHasSeenTutorial, setHasSeenTutorialPart2]);
 
-  // Listen for manual tutorial trigger from View menu
+  const handleTutorialSkip = useCallback(() => {
+    setShowTutorial(false);
+    setHasSeenTutorial(true);
+    setHasSeenTutorialPart2(true);
+  }, [setHasSeenTutorial, setHasSeenTutorialPart2]);
+
+  // Campaign tutorial handlers
+  const handleStartCampaign = useCallback((campaignId: string) => {
+    const campaign = getCampaignById(campaignId);
+    if (!campaign) return;
+    setShowCampaignDialog(false);
+    setActiveCampaign({ id: campaign.id, title: campaign.title, steps: campaign.steps });
+  }, []);
+
+  const handleCampaignClose = useCallback(() => {
+    if (activeCampaign) {
+      completeTutorial(activeCampaign.id);
+    }
+    setActiveCampaign(null);
+  }, [activeCampaign, completeTutorial]);
+
+  const handleCampaignSkip = useCallback(() => {
+    setActiveCampaign(null);
+  }, []);
+
+  // Listen for manual tutorial trigger from Info menu
   useEffect(() => {
     const handleStartTutorial = () => {
       setTutorialPart(1);
@@ -186,11 +219,16 @@ function App() {
       setTutorialPart(2);
       setShowTutorial(true);
     };
+    const handleOpenCampaignDialog = () => {
+      setShowCampaignDialog(true);
+    };
     window.addEventListener('start-tutorial', handleStartTutorial);
     window.addEventListener('start-timeline-tutorial', handleStartTimelineTutorial);
+    window.addEventListener('open-tutorial-campaigns', handleOpenCampaignDialog);
     return () => {
       window.removeEventListener('start-tutorial', handleStartTutorial);
       window.removeEventListener('start-timeline-tutorial', handleStartTimelineTutorial);
+      window.removeEventListener('open-tutorial-campaigns', handleOpenCampaignDialog);
     };
   }, []);
 
@@ -230,7 +268,22 @@ function App() {
         <IndexedDBErrorDialog onClose={handleIndexedDBErrorClose} />
       )}
       {showTutorial && (
-        <TutorialOverlay key={tutorialPart} onClose={handleTutorialClose} part={tutorialPart} />
+        <TutorialOverlay key={tutorialPart} onClose={handleTutorialClose} onSkip={handleTutorialSkip} part={tutorialPart} />
+      )}
+      {showCampaignDialog && (
+        <TutorialCampaignDialog
+          onClose={() => setShowCampaignDialog(false)}
+          onStartCampaign={handleStartCampaign}
+        />
+      )}
+      {activeCampaign && (
+        <TutorialOverlay
+          key={`campaign-${activeCampaign.id}`}
+          onClose={handleCampaignClose}
+          onSkip={handleCampaignSkip}
+          campaignSteps={activeCampaign.steps}
+          campaignTitle={activeCampaign.title}
+        />
       )}
     </div>
   );

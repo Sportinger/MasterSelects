@@ -10,6 +10,8 @@ export interface YouTubeVideo {
   duration?: string;
   durationSeconds?: number;
   viewCount?: string;
+  platform?: string;
+  sourceUrl?: string;
 }
 
 interface YouTubeState {
