@@ -486,6 +486,12 @@ export function useEngine() {
       () => engine.requestRender()
     );
 
+    // Layer opacity changes (per-layer opacity sliders in slot view)
+    const unsubLayerOpacities = useMediaStore.subscribe(
+      (state) => state.layerOpacities,
+      () => engine.requestRender()
+    );
+
     return () => {
       unsubPlayhead();
       unsubClips();
@@ -494,6 +500,7 @@ export function useEngine() {
       unsubSettings();
       unsubActiveComp();
       unsubLayerSlots();
+      unsubLayerOpacities();
     };
   }, [isEngineReady]);
 
