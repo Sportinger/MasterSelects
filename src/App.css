@@ -9559,12 +9559,13 @@ input[type="checkbox"] {
 .slot-grid-item.empty {
   background: #151515;
   border: 1px dashed rgba(255, 255, 255, 0.06);
-  cursor: default;
+  cursor: pointer;
 }
 
 .slot-grid-item.empty:hover {
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: none;
+  border-color: rgba(255, 255, 255, 0.2);
+  background: #1a1a1a;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.05);
 }
 
 .slot-grid-item.empty.drag-over {

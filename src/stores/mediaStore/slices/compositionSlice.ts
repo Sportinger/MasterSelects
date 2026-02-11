@@ -5,6 +5,7 @@ import { generateId } from '../helpers/importPipeline';
 import { useTimelineStore } from '../../timeline';
 import { useSettingsStore } from '../../settingsStore';
 import { compositionRenderer } from '../../../services/compositionRenderer';
+import { playheadState } from '../../../services/layerBuilder';
 
 export interface CompositionSwitchOptions {
   skipAnimation?: boolean;
@@ -106,6 +107,12 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
     if (id === activeCompositionId && options?.playFromStart) {
       const ts = useTimelineStore.getState();
       ts.setPlayheadPosition(0);
+      // Also reset the high-frequency playhead and audio master so the
+      // RAF loop picks up position 0 immediately
+      playheadState.position = 0;
+      playheadState.hasMasterAudio = false;
+      playheadState.masterAudioElement = null;
+      playheadState.playbackJustStarted = true;
       if (!ts.isPlaying) {
         ts.play();
       }
