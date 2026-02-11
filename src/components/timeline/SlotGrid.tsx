@@ -1,6 +1,6 @@
 // SlotGrid - Resolume-style grid with row labels (layers) on left, column numbers on top
 // Compositions fill slots left-to-right, top-to-bottom; remaining slots are empty
-// Click = play from start (stay in grid), Drag = reorder, Bottom strip = preview
+// Click = play from start (stay in grid), Drag = reorder/move to any slot, Bottom strip = preview
 
 import { Fragment, useCallback, useMemo, useRef, useEffect, useState } from 'react';
 import { useMediaStore } from '../../stores/mediaStore';
@@ -14,6 +14,7 @@ interface SlotGridProps {
 
 const GRID_COLS = 8;
 const GRID_ROWS = 4;
+const TOTAL_SLOTS = GRID_COLS * GRID_ROWS;
 
 export function SlotGrid({ opacity }: SlotGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -22,12 +23,12 @@ export function SlotGrid({ opacity }: SlotGridProps) {
   const activeCompositionId = useMediaStore(state => state.activeCompositionId);
   const previewCompositionId = useMediaStore(state => state.previewCompositionId);
   const openCompositionTab = useMediaStore(state => state.openCompositionTab);
-  const reorderSlot = useMediaStore(state => state.reorderSlot);
+  const moveSlot = useMediaStore(state => state.moveSlot);
   const setPreviewComposition = useMediaStore(state => state.setPreviewComposition);
-  const getSlotOrderedCompositions = useMediaStore(state => state.getSlotOrderedCompositions);
+  const getSlotMap = useMediaStore(state => state.getSlotMap);
 
   // Drag state
-  const [dragFromIndex, setDragFromIndex] = useState<number | null>(null);
+  const [dragCompId, setDragCompId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Auto-calculate slot size based on available space
@@ -37,8 +38,8 @@ export function SlotGrid({ opacity }: SlotGridProps) {
 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const availableWidth = entry.contentRect.width - 32 - 16; // minus row label width + padding
-        const availableHeight = entry.contentRect.height - 28 - 16; // minus col header height + padding
+        const availableWidth = entry.contentRect.width - 32 - 16;
+        const availableHeight = entry.contentRect.height - 28 - 16;
         const sizeByWidth = Math.floor((availableWidth - (GRID_COLS - 1) * 6) / GRID_COLS);
         const sizeByHeight = Math.floor((availableHeight - (GRID_ROWS - 1) * 6) / GRID_ROWS);
         setSlotSize(Math.max(60, Math.min(sizeByWidth, sizeByHeight)));
@@ -73,7 +74,6 @@ export function SlotGrid({ opacity }: SlotGridProps) {
   // Preview strip click
   const handlePreviewClick = useCallback((e: React.MouseEvent, comp: Composition) => {
     e.stopPropagation();
-    // Toggle preview off if already previewing this comp
     if (previewCompositionId === comp.id) {
       setPreviewComposition(null);
     } else {
@@ -81,11 +81,11 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     }
   }, [previewCompositionId, setPreviewComposition]);
 
-  // Drag handlers
-  const handleDragStart = useCallback((e: React.DragEvent, slotIndex: number) => {
-    setDragFromIndex(slotIndex);
+  // Drag handlers — track comp ID, not slot index
+  const handleDragStart = useCallback((e: React.DragEvent, comp: Composition) => {
+    setDragCompId(comp.id);
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(slotIndex));
+    e.dataTransfer.setData('text/plain', comp.id);
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent, slotIndex: number) => {
@@ -98,34 +98,25 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     setDragOverIndex(null);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent, toIndex: number) => {
+  const handleDrop = useCallback((e: React.DragEvent, toSlotIndex: number) => {
     e.preventDefault();
-    const fromIndex = dragFromIndex;
-    setDragFromIndex(null);
+    const compId = dragCompId;
+    setDragCompId(null);
     setDragOverIndex(null);
-    if (fromIndex !== null && fromIndex !== toIndex) {
-      reorderSlot(fromIndex, toIndex);
+    if (compId) {
+      moveSlot(compId, toSlotIndex);
     }
-  }, [dragFromIndex, reorderSlot]);
+  }, [dragCompId, moveSlot]);
 
   const handleDragEnd = useCallback(() => {
-    setDragFromIndex(null);
+    setDragCompId(null);
     setDragOverIndex(null);
   }, []);
 
-  const sortedCompositions = useMemo(() => {
-    return getSlotOrderedCompositions();
-  }, [getSlotOrderedCompositions]);
-
-  // Build a flat slot map: index → composition or null
-  const totalSlots = GRID_COLS * GRID_ROWS;
+  // Build slot map from assignments
   const slotMap = useMemo(() => {
-    const map: (Composition | null)[] = new Array(totalSlots).fill(null);
-    sortedCompositions.forEach((comp, i) => {
-      if (i < totalSlots) map[i] = comp;
-    });
-    return map;
-  }, [sortedCompositions, totalSlots]);
+    return getSlotMap(TOTAL_SLOTS);
+  }, [getSlotMap]);
 
   return (
     <div
@@ -159,18 +150,20 @@ export function SlotGrid({ opacity }: SlotGridProps) {
             {Array.from({ length: GRID_COLS }, (_, colIndex) => {
               const slotIndex = rowIndex * GRID_COLS + colIndex;
               const comp = slotMap[slotIndex];
+              const isDragOver = slotIndex === dragOverIndex && dragCompId !== null;
+
               if (comp) {
                 const isActive = comp.id === activeCompositionId;
                 const isPreviewed = comp.id === previewCompositionId;
-                const isDragOver = slotIndex === dragOverIndex && dragFromIndex !== null && dragFromIndex !== slotIndex;
+                const isSelf = comp.id === dragCompId;
                 return (
                   <div
                     key={slotIndex}
-                    className={`slot-grid-item${isActive ? ' active' : ''}${isPreviewed ? ' previewed' : ''}${isDragOver ? ' drag-over' : ''}`}
+                    className={`slot-grid-item${isActive ? ' active' : ''}${isPreviewed ? ' previewed' : ''}${isDragOver && !isSelf ? ' drag-over' : ''}`}
                     onClick={() => handleSlotClick(comp)}
                     title={comp.name}
                     draggable
-                    onDragStart={(e) => handleDragStart(e, slotIndex)}
+                    onDragStart={(e) => handleDragStart(e, comp)}
                     onDragOver={(e) => handleDragOver(e, slotIndex)}
                     onDragLeave={handleDragLeave}
                     onDrop={(e) => handleDrop(e, slotIndex)}
@@ -194,10 +187,11 @@ export function SlotGrid({ opacity }: SlotGridProps) {
                   </div>
                 );
               }
+
               return (
                 <div
                   key={slotIndex}
-                  className="slot-grid-item empty"
+                  className={`slot-grid-item empty${isDragOver ? ' drag-over' : ''}`}
                   onDragOver={(e) => handleDragOver(e, slotIndex)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, slotIndex)}

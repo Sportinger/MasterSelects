@@ -117,7 +117,7 @@ export interface MediaState {
   openCompositionIds: string[];
 
   // Slot grid
-  slotOrder: string[];
+  slotAssignments: Record<string, number>;  // compId → slotIndex
   previewCompositionId: string | null;
 
   // Selection

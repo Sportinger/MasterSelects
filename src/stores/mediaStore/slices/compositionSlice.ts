@@ -22,9 +22,9 @@ export interface CompositionActions {
   closeCompositionTab: (id: string) => void;
   getOpenCompositions: () => Composition[];
   reorderCompositionTabs: (fromIndex: number, toIndex: number) => void;
-  reorderSlot: (fromIndex: number, toIndex: number) => void;
+  moveSlot: (compId: string, toSlotIndex: number) => void;
   setPreviewComposition: (id: string | null) => void;
-  getSlotOrderedCompositions: () => Composition[];
+  getSlotMap: (totalSlots: number) => (Composition | null)[];
 }
 
 export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (set, get) => ({
@@ -102,6 +102,14 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
     if (!openCompositionIds.includes(id)) {
       set({ openCompositionIds: [...openCompositionIds, id] });
     }
+    // Same comp already active + playFromStart → just restart playback (no reload)
+    if (id === activeCompositionId && options?.playFromStart) {
+      const ts = useTimelineStore.getState();
+      ts.pause();
+      ts.setPlayheadPosition(0);
+      ts.play();
+      return;
+    }
     // Inline setActiveComposition logic
     doSetActiveComposition(set, get, activeCompositionId, id, compositions, options);
   },
@@ -139,53 +147,59 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
     set({ openCompositionIds: newOrder });
   },
 
-  reorderSlot: (fromIndex: number, toIndex: number) => {
-    const { compositions, slotOrder } = get();
-    // Build ordered list inline (same logic as getSlotOrderedCompositions)
-    let ordered: Composition[];
-    if (slotOrder.length === 0) {
-      ordered = [...compositions].sort((a, b) => a.name.localeCompare(b.name));
-    } else {
-      ordered = [];
-      for (const id of slotOrder) {
-        const comp = compositions.find((c: Composition) => c.id === id);
-        if (comp) ordered.push(comp);
-      }
-      for (const comp of compositions) {
-        if (!slotOrder.includes(comp.id)) ordered.push(comp);
+  moveSlot: (compId: string, toSlotIndex: number) => {
+    const { slotAssignments } = get();
+    const newAssignments = { ...slotAssignments };
+    // Remove any comp currently at the target slot
+    for (const [id, idx] of Object.entries(newAssignments)) {
+      if (idx === toSlotIndex && id !== compId) {
+        // Swap: move displaced comp to the dragged comp's old slot
+        const oldSlot = newAssignments[compId];
+        if (oldSlot !== undefined) {
+          newAssignments[id] = oldSlot;
+        } else {
+          delete newAssignments[id];
+        }
+        break;
       }
     }
-    if (fromIndex < 0 || fromIndex >= ordered.length) return;
-    if (toIndex < 0 || toIndex >= ordered.length) return;
-    if (fromIndex === toIndex) return;
-
-    const ids = ordered.map((c: Composition) => c.id);
-    const [moved] = ids.splice(fromIndex, 1);
-    ids.splice(toIndex, 0, moved);
-    set({ slotOrder: ids });
+    newAssignments[compId] = toSlotIndex;
+    set({ slotAssignments: newAssignments });
   },
 
   setPreviewComposition: (id: string | null) => {
     set({ previewCompositionId: id });
   },
 
-  getSlotOrderedCompositions: () => {
-    const { compositions, slotOrder } = get();
-    if (slotOrder.length === 0) {
-      return [...compositions].sort((a, b) => a.name.localeCompare(b.name));
-    }
-    const ordered: Composition[] = [];
-    for (const id of slotOrder) {
-      const comp = compositions.find(c => c.id === id);
-      if (comp) ordered.push(comp);
-    }
-    // Append any compositions not in slotOrder
-    for (const comp of compositions) {
-      if (!slotOrder.includes(comp.id)) {
-        ordered.push(comp);
+  getSlotMap: (totalSlots: number) => {
+    const { compositions, slotAssignments } = get();
+    const map: (Composition | null)[] = new Array(totalSlots).fill(null);
+    const assigned = new Set<string>();
+
+    // Place explicitly assigned compositions
+    for (const [compId, slotIdx] of Object.entries(slotAssignments)) {
+      if (slotIdx >= 0 && slotIdx < totalSlots) {
+        const comp = compositions.find((c: Composition) => c.id === compId);
+        if (comp) {
+          map[slotIdx] = comp;
+          assigned.add(compId);
+        }
       }
     }
-    return ordered;
+
+    // Fill unassigned compositions into remaining empty slots (alphabetical)
+    const unassigned = compositions
+      .filter((c: Composition) => !assigned.has(c.id))
+      .sort((a: Composition, b: Composition) => a.name.localeCompare(b.name));
+    let nextEmpty = 0;
+    for (const comp of unassigned) {
+      while (nextEmpty < totalSlots && map[nextEmpty] !== null) nextEmpty++;
+      if (nextEmpty >= totalSlots) break;
+      map[nextEmpty] = comp;
+      nextEmpty++;
+    }
+
+    return map;
   },
 });
 
