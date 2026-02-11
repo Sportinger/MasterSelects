@@ -129,7 +129,15 @@ export function SlotGrid({ opacity }: SlotGridProps) {
   // Click empty slot = deactivate that layer
   const handleEmptySlotClick = useCallback((slotIndex: number) => {
     const layerIndex = Math.floor(slotIndex / GRID_COLS);
+    const { activeLayerSlots, activeCompositionId } = useMediaStore.getState();
+    const compOnLayer = activeLayerSlots[layerIndex];
+
     deactivateLayer(layerIndex);
+
+    // If the deactivated comp was the editor-active one, stop playback
+    if (compOnLayer && compOnLayer === activeCompositionId) {
+      useTimelineStore.getState().stop();
+    }
   }, [deactivateLayer]);
 
   // Click column header = activate all compositions in that column

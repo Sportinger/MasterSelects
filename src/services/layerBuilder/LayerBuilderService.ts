@@ -137,10 +137,11 @@ export class LayerBuilderService {
       }
     }
 
-    // Collect all layer indices, sorted D=3 (bottom) → A=0 (top)
+    // Collect all layer indices, sorted A=0 (top) → D=3 (bottom)
+    // layers[0] is rendered last (on top) by the compositor's reverse iteration
     const layerIndices = slotEntries
       .map(([key]) => Number(key))
-      .sort((a, b) => b - a); // Descending = bottom to top
+      .sort((a, b) => a - b); // Ascending: A=0 first (top) → D=3 last (bottom)
 
     const merged: Layer[] = [];
 
