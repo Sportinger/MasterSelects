@@ -734,11 +734,15 @@ export function Toolbar() {
           </button>
           {openMenu === 'info' && (
             <div className="menu-dropdown">
+              <button className="menu-option" onClick={() => { window.dispatchEvent(new CustomEvent('open-tutorial-campaigns')); closeMenu(); }}>
+                <span>Tutorials</span>
+              </button>
+              <div className="menu-separator" />
               <button className="menu-option" onClick={() => { window.dispatchEvent(new CustomEvent('start-tutorial')); closeMenu(); }}>
-                <span>Tutorial</span>
+                <span>Quick Tour</span>
               </button>
               <button className="menu-option" onClick={() => { window.dispatchEvent(new CustomEvent('start-timeline-tutorial')); closeMenu(); }}>
-                <span>Timeline Tutorial</span>
+                <span>Timeline Tour</span>
               </button>
               <div className="menu-separator" />
               <button className="menu-option" onClick={() => { setShowInfoDialog(true); closeMenu(); }}>

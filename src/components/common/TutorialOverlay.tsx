@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { PanelType } from '../../types/dock';
+import type { CampaignStep } from './tutorialCampaigns';
 
 const WELCOME_BUTTONS = [
   { id: 'premiere', label: 'Premiere Pro', logo: '/logo-premiere.svg' },
@@ -86,7 +87,7 @@ function ClippyMascot({ isClosing }: { isClosing: boolean }) {
   );
 }
 
-// Part 1: Panel-level steps (existing)
+// Legacy step types (kept for part 1/2 backward compat)
 interface PanelStep {
   groupId: string;
   panelType: PanelType;
@@ -126,7 +127,6 @@ const PANEL_STEPS: PanelStep[] = [
   },
 ];
 
-// Part 2: Timeline element-level steps
 interface TimelineStep {
   selector: string;
   title: string;
@@ -179,11 +179,16 @@ interface Props {
   onClose: () => void;
   onSkip?: () => void;
   part?: 1 | 2;
+  // Campaign mode: provide steps from a TutorialCampaign
+  campaignSteps?: CampaignStep[];
+  campaignTitle?: string;
 }
 
-export function TutorialOverlay({ onClose, onSkip, part = 1 }: Props) {
-  // stepIndex -1 = welcome screen (only part 1), 0+ = normal steps
-  const [stepIndex, setStepIndex] = useState(part === 1 ? -1 : 0);
+export function TutorialOverlay({ onClose, onSkip, part = 1, campaignSteps, campaignTitle }: Props) {
+  const isCampaignMode = !!campaignSteps;
+
+  // stepIndex -1 = welcome screen (only part 1, not campaign mode), 0+ = normal steps
+  const [stepIndex, setStepIndex] = useState(part === 1 && !isCampaignMode ? -1 : 0);
   const [panelRect, setPanelRect] = useState<DOMRect | null>(null);
   const [highlightRect, setHighlightRect] = useState<DOMRect | null>(null);
   const [isClosing, setIsClosing] = useState(false);
@@ -191,51 +196,76 @@ export function TutorialOverlay({ onClose, onSkip, part = 1 }: Props) {
   const setUserBackground = useSettingsStore((s) => s.setUserBackground);
   const closingRef = useRef(false);
 
-  const isPart2 = part === 2;
   const isWelcome = stepIndex === -1;
-  const steps = isPart2 ? TIMELINE_STEPS : PANEL_STEPS;
+
+  // Determine steps based on mode
+  const steps: (PanelStep | TimelineStep | CampaignStep)[] = isCampaignMode
+    ? campaignSteps
+    : (part === 2 ? TIMELINE_STEPS : PANEL_STEPS);
+
   const step = isWelcome ? null : steps[stepIndex];
+
+  // Determine if current step has an element-level highlight (ring)
+  const hasElementHighlight = isCampaignMode
+    ? !!(step as CampaignStep)?.selector
+    : part === 2;
 
   // Find and measure targets
   const measureTargets = useCallback(() => {
     if (isWelcome) {
-      // No panel to highlight during welcome
       setPanelRect(null);
       setHighlightRect(null);
       return;
     }
-    if (isPart2) {
-      const timelineEl = document.querySelector('[data-group-id="timeline-group"]');
-      if (timelineEl) {
-        setPanelRect(timelineEl.getBoundingClientRect());
+
+    if (isCampaignMode) {
+      const cStep = step as CampaignStep;
+
+      // Panel spotlight
+      if (cStep.panelGroupId) {
+        const panelEl = document.querySelector(`[data-group-id="${cStep.panelGroupId}"]`);
+        setPanelRect(panelEl ? panelEl.getBoundingClientRect() : null);
       } else {
         setPanelRect(null);
       }
-      const targetEl = document.querySelector((step as TimelineStep).selector);
-      if (targetEl) {
-        setHighlightRect(targetEl.getBoundingClientRect());
+
+      // Element highlight ring
+      if (cStep.selector) {
+        const targetEl = document.querySelector(cStep.selector);
+        setHighlightRect(targetEl ? targetEl.getBoundingClientRect() : null);
       } else {
         setHighlightRect(null);
       }
+    } else if (part === 2) {
+      // Legacy Part 2
+      const timelineEl = document.querySelector('[data-group-id="timeline-group"]');
+      setPanelRect(timelineEl ? timelineEl.getBoundingClientRect() : null);
+      const targetEl = document.querySelector((step as TimelineStep).selector);
+      setHighlightRect(targetEl ? targetEl.getBoundingClientRect() : null);
     } else {
+      // Legacy Part 1
       const el = document.querySelector(`[data-group-id="${(step as PanelStep).groupId}"]`);
-      if (el) {
-        setPanelRect(el.getBoundingClientRect());
-      } else {
-        setPanelRect(null);
-      }
+      setPanelRect(el ? el.getBoundingClientRect() : null);
       setHighlightRect(null);
     }
-  }, [isPart2, isWelcome, step]);
+  }, [isCampaignMode, part, isWelcome, step]);
 
   // Activate the correct tab and measure on step change
   useEffect(() => {
-    if (!isPart2 && step) {
+    if (isWelcome) return;
+
+    if (isCampaignMode) {
+      const cStep = step as CampaignStep;
+      if (cStep.panelType) {
+        activatePanelType(cStep.panelType);
+      }
+    } else if (part === 1 && step) {
       activatePanelType((step as PanelStep).panelType);
     }
+
     const timer = setTimeout(measureTargets, 50);
     return () => clearTimeout(timer);
-  }, [step, isPart2, activatePanelType, measureTargets]);
+  }, [step, isCampaignMode, part, isWelcome, activatePanelType, measureTargets]);
 
   // Re-measure on resize
   useEffect(() => {
@@ -275,7 +305,7 @@ export function TutorialOverlay({ onClose, onSkip, part = 1 }: Props) {
     return () => window.removeEventListener('keydown', handleKey);
   }, [close]);
 
-  // Compute tooltip position: centered for welcome, anchored to panel for steps
+  // Compute tooltip position
   const getTooltipStyle = (): React.CSSProperties => {
     if (isWelcome) {
       const vw = window.innerWidth;
@@ -287,7 +317,9 @@ export function TutorialOverlay({ onClose, onSkip, part = 1 }: Props) {
         top: vh / 2 - tooltipH / 2,
       };
     }
-    const anchorRect = isPart2 ? highlightRect : panelRect;
+
+    // For element-level steps, anchor to highlight; otherwise anchor to panel
+    const anchorRect = hasElementHighlight ? (highlightRect ?? panelRect) : panelRect;
     if (!anchorRect) return { opacity: 0 };
 
     const tooltipW = 380;
@@ -356,8 +388,8 @@ export function TutorialOverlay({ onClose, onSkip, part = 1 }: Props) {
         />
       </svg>
 
-      {/* Part 2: Yellow highlight ring over the target element */}
-      {isPart2 && highlightRect && (
+      {/* Yellow highlight ring over the target element */}
+      {hasElementHighlight && highlightRect && (
         <div className="tutorial-highlight-ring" style={{
           left: highlightRect.left - 4,
           top: highlightRect.top - 4,
@@ -406,11 +438,13 @@ export function TutorialOverlay({ onClose, onSkip, part = 1 }: Props) {
               </>
             ) : (
               <>
-                <div className="tutorial-tooltip-step">Step {stepIndex + 1} of {steps.length}</div>
+                <div className="tutorial-tooltip-step">
+                  {campaignTitle ? `${campaignTitle} — ` : ''}Step {stepIndex + 1} of {steps.length}
+                </div>
                 <div className="tutorial-tooltip-title">{step!.title}</div>
                 <div className="tutorial-tooltip-desc">{step!.description}</div>
                 <div className="tutorial-dots">
-                  {steps.map((_: PanelStep | TimelineStep, i: number) => (
+                  {steps.map((_: PanelStep | TimelineStep | CampaignStep, i: number) => (
                     <span
                       key={i}
                       className={`tutorial-dot ${i === stepIndex ? 'active' : ''} ${i < stepIndex ? 'completed' : ''}`}

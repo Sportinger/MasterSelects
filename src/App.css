@@ -9527,6 +9527,169 @@ input[type="checkbox"] {
 }
 
 /* ============================
+   Tutorial Campaign Dialog
+   ============================ */
+
+.tutorial-campaign-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: tutorial-fade-in 200ms ease forwards;
+}
+
+.tutorial-campaign-dialog {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  width: 640px;
+  max-width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  animation: tutorial-tooltip-in 200ms ease forwards;
+}
+
+.tutorial-campaign-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.tutorial-campaign-header-text {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.tutorial-campaign-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tutorial-campaign-progress {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.tutorial-campaign-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.tutorial-campaign-close:hover {
+  color: var(--text-primary);
+}
+
+.tutorial-campaign-body {
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.tutorial-campaign-category-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin: 0 0 8px;
+}
+
+.tutorial-campaign-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tutorial-campaign-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.tutorial-campaign-card:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.tutorial-campaign-card.completed {
+  opacity: 0.7;
+}
+
+.tutorial-campaign-card.completed:hover {
+  opacity: 1;
+}
+
+.tutorial-campaign-card-icon {
+  font-size: 22px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tutorial-campaign-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.tutorial-campaign-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.tutorial-campaign-card-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.tutorial-campaign-card-meta {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tutorial-campaign-card-check {
+  color: #2ECC71;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+/* ============================
    Slot Grid View (Resolume-style)
    ============================ */
 

@@ -68,6 +68,9 @@ interface SettingsState {
   // User background (which program they come from)
   userBackground: string | null;
 
+  // Tutorial campaign completion tracking
+  completedTutorials: string[];
+
   // UI state
   isSettingsOpen: boolean;
 
@@ -93,6 +96,7 @@ interface SettingsState {
   setHasSeenTutorial: (seen: boolean) => void;
   setHasSeenTutorialPart2: (seen: boolean) => void;
   setUserBackground: (bg: string) => void;
+  completeTutorial: (campaignId: string) => void;
   openSettings: () => void;
   closeSettings: () => void;
   toggleSettings: () => void;
@@ -137,6 +141,7 @@ export const useSettingsStore = create<SettingsState>()(
       hasSeenTutorial: false, // Show tutorial on first run
       hasSeenTutorialPart2: false, // Show timeline tutorial after part 1
       userBackground: null, // Which program the user comes from
+      completedTutorials: [], // Campaign IDs that have been completed
       isSettingsOpen: false,
 
       // Output settings
@@ -217,6 +222,13 @@ export const useSettingsStore = create<SettingsState>()(
         set({ userBackground: bg });
       },
 
+      completeTutorial: (campaignId) => {
+        const current = get().completedTutorials;
+        if (!current.includes(campaignId)) {
+          set({ completedTutorials: [...current, campaignId] });
+        }
+      },
+
       openSettings: () => set({ isSettingsOpen: true }),
       closeSettings: () => set({ isSettingsOpen: false }),
       toggleSettings: () => set((state) => ({ isSettingsOpen: !state.isSettingsOpen })),
@@ -267,6 +279,7 @@ export const useSettingsStore = create<SettingsState>()(
         hasSeenTutorial: state.hasSeenTutorial,
         hasSeenTutorialPart2: state.hasSeenTutorialPart2,
         userBackground: state.userBackground,
+        completedTutorials: state.completedTutorials,
         outputResolution: state.outputResolution,
         fps: state.fps,
       }),
