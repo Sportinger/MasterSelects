@@ -9491,9 +9491,6 @@ input[type="checkbox"] {
   padding: 8px;
   background: #111;
   pointer-events: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .slot-grid-resolume {

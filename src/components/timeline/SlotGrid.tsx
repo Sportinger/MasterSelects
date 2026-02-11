@@ -12,13 +12,15 @@ interface SlotGridProps {
   opacity: number;
 }
 
-const GRID_COLS = 8;
+const SLOT_SIZE = 100; // fixed slot size in px
 const GRID_ROWS = 4;
-const TOTAL_SLOTS = GRID_COLS * GRID_ROWS;
+const GAP = 6;
+const LABEL_WIDTH = 32;
+const PADDING = 8;
 
 export function SlotGrid({ opacity }: SlotGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [slotSize, setSlotSize] = useState(120);
+  const [gridCols, setGridCols] = useState(8);
 
   const activeCompositionId = useMediaStore(state => state.activeCompositionId);
   const previewCompositionId = useMediaStore(state => state.previewCompositionId);
@@ -31,18 +33,16 @@ export function SlotGrid({ opacity }: SlotGridProps) {
   const [dragCompId, setDragCompId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  // Auto-calculate slot size based on available space
+  // Calculate how many columns fit the available width
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const availableWidth = entry.contentRect.width - 32 - 16;
-        const availableHeight = entry.contentRect.height - 28 - 16;
-        const sizeByWidth = Math.floor((availableWidth - (GRID_COLS - 1) * 6) / GRID_COLS);
-        const sizeByHeight = Math.floor((availableHeight - (GRID_ROWS - 1) * 6) / GRID_ROWS);
-        setSlotSize(Math.max(60, Math.min(sizeByWidth, sizeByHeight)));
+        const availableWidth = entry.contentRect.width - LABEL_WIDTH - PADDING * 2;
+        const cols = Math.max(4, Math.floor((availableWidth + GAP) / (SLOT_SIZE + GAP)));
+        setGridCols(cols);
       }
     });
 
@@ -118,10 +118,12 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     setDragOverIndex(null);
   }, []);
 
+  const totalSlots = gridCols * GRID_ROWS;
+
   // Build slot map from assignments
   const slotMap = useMemo(() => {
-    return getSlotMap(TOTAL_SLOTS);
-  }, [getSlotMap]);
+    return getSlotMap(totalSlots);
+  }, [getSlotMap, totalSlots]);
 
   return (
     <div
@@ -132,15 +134,15 @@ export function SlotGrid({ opacity }: SlotGridProps) {
       <div
         className="slot-grid-resolume"
         style={{
-          gridTemplateColumns: `32px repeat(${GRID_COLS}, ${slotSize}px)`,
-          gridAutoRows: `${slotSize}px`,
+          gridTemplateColumns: `${LABEL_WIDTH}px repeat(${gridCols}, ${SLOT_SIZE}px)`,
+          gridAutoRows: `${SLOT_SIZE}px`,
         }}
       >
         {/* Empty corner */}
         <div className="slot-grid-corner" />
 
         {/* Column headers */}
-        {Array.from({ length: GRID_COLS }, (_, i) => (
+        {Array.from({ length: gridCols }, (_, i) => (
           <div key={`col-${i}`} className="slot-grid-col-header">
             {i + 1}
           </div>
@@ -152,8 +154,8 @@ export function SlotGrid({ opacity }: SlotGridProps) {
             <div className="slot-grid-row-label">
               {String.fromCharCode(65 + rowIndex)}
             </div>
-            {Array.from({ length: GRID_COLS }, (_, colIndex) => {
-              const slotIndex = rowIndex * GRID_COLS + colIndex;
+            {Array.from({ length: gridCols }, (_, colIndex) => {
+              const slotIndex = rowIndex * gridCols + colIndex;
               const comp = slotMap[slotIndex];
               const isDragOver = slotIndex === dragOverIndex && dragCompId !== null;
 
@@ -180,8 +182,8 @@ export function SlotGrid({ opacity }: SlotGridProps) {
                       compositionName={comp.name}
                       compositionDuration={comp.duration}
                       isActive={isActive}
-                      width={slotSize - 4}
-                      height={slotSize - 4}
+                      width={SLOT_SIZE - 4}
+                      height={SLOT_SIZE - 4}
                     />
                     <div
                       className={`slot-grid-preview-strip${isPreviewed ? ' active' : ''}`}
