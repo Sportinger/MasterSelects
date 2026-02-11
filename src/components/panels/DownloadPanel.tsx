@@ -535,13 +535,6 @@ export function DownloadPanel() {
     }
   };
 
-  // Auto-download when video is added to results (reserved for future use)
-  // const handleVideoAdded = async (video: YouTubeVideo) => {
-  //   if (autoDownload && !downloadingVideos.has(video.id)) {
-  //     downloadVideoOnly(video);
-  //   }
-  // };
-
   return (
     <div className="youtube-panel">
       <div className="youtube-header">

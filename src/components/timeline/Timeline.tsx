@@ -1241,7 +1241,6 @@ export function Timeline() {
           {/* Proxy frame cache indicator (yellow) */}
           {(() => {
             const ranges = getProxyCachedRanges();
-            if (ranges.length > 0) console.log('[Timeline] Proxy cached ranges:', ranges);
             return ranges;
           })().map((range, i) => (
             <div

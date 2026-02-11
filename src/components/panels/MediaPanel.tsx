@@ -925,7 +925,6 @@ export function MediaPanel() {
     const isMediaFile = !isFolder && 'type' in item && item.type !== 'composition' && item.type !== 'text' && item.type !== 'solid';
     const hasFile = isMediaFile && 'file' in item && !!(item as MediaFile).file;
     const isImporting = isMediaFile && !!(item as MediaFile).isImporting;
-    const canDrag = true;
     const isDragTarget = isFolder && dragOverFolderId === item.id;
     const isBeingDragged = internalDragId === item.id;
     const mediaFile = isMediaFile ? (item as MediaFile) : null;
@@ -934,7 +933,7 @@ export function MediaPanel() {
       <div key={item.id}>
         <div
           className={`media-item ${isSelected ? 'selected' : ''} ${isFolder ? 'folder' : ''} ${isMediaFile && !hasFile ? 'no-file' : ''} ${isImporting ? 'importing' : ''} ${isDragTarget ? 'drag-target' : ''} ${isBeingDragged ? 'dragging' : ''}`}
-          draggable={canDrag}
+          draggable
           onDragStart={(e) => handleDragStart(e, item)}
           onDragEnd={handleDragEnd}
           onDragOver={isFolder ? (e) => handleFolderDragOver(e, item.id) : undefined}

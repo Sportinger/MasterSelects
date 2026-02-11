@@ -45,8 +45,19 @@ http = "1"
 warp = "0.3"
 
 [target.'cfg(windows)'.dependencies]
-# Windows-specific APIs for DLL loading
-windows-sys = { version = "0.59", features = ["Win32_System_LibraryLoader", "Win32_Foundation"] }
+# Windows-specific APIs for DLL loading, console hiding, message pump, mutex
+windows-sys = { version = "0.59", features = [
+    "Win32_System_LibraryLoader", "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell",
+    "Win32_System_Console", "Win32_System_Threading",
+] }
+# System tray icon (Tauri-maintained)
+tray-icon = "0.19"
+# Registry for auto-start
+winreg = "0.55"
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
 
 [profile.release]
 opt-level = 3
