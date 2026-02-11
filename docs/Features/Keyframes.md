@@ -262,7 +262,7 @@ baseHeight
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
 | [`keyframeSlice.test.ts`](../../tests/stores/timeline/keyframeSlice.test.ts) | 14 | Keyframe CRUD operations |
-| [`keyframeInterpolation.test.ts`](../../tests/unit/keyframeInterpolation.test.ts) | 52 | Easing, bezier, interpolation |
+| [`keyframeInterpolation.test.ts`](../../tests/unit/keyframeInterpolation.test.ts) | 120 | Easing, bezier, interpolation |
 
 Run tests: `npx vitest run`
 

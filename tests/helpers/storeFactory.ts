@@ -62,6 +62,18 @@ function getInitialState(): Partial<TimelineStore> {
     thumbnailsEnabled: false,
     waveformsEnabled: false,
     showTranscriptMarkers: false,
+    // Clip animation / slot grid
+    clipAnimationPhase: 'idle' as const,
+    slotGridProgress: 0,
+    // RAM Preview state
+    ramPreviewEnabled: false,
+    ramPreviewProgress: null,
+    ramPreviewRange: null,
+    isRamPreviewing: false,
+    cachedFrameTimes: new Set<number>(),
+    // Proxy cache state
+    isProxyCaching: false,
+    proxyCacheProgress: null,
     // Stub functions that slices might call on other slices
     invalidateCache: () => {},
   };
@@ -122,9 +134,95 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
         set({ toolMode: toolMode === 'cut' ? 'select' : 'cut' } as any);
       },
       setClipAnimationPhase: (phase: string) => set({ clipAnimationPhase: phase } as any),
-      playForward: () => {},
-      playReverse: () => {},
-      setDuration: () => {},
+      setSlotGridProgress: (progress: number) => set({ slotGridProgress: Math.max(0, Math.min(1, progress)) } as any),
+      playForward: () => {
+        const { isPlaying, playbackSpeed, play } = get() as any;
+        if (!isPlaying) {
+          set({ playbackSpeed: 1 } as any);
+          play();
+        } else if (playbackSpeed < 0) {
+          set({ playbackSpeed: 1 } as any);
+        } else {
+          const newSpeed = playbackSpeed >= 8 ? 8 : playbackSpeed * 2;
+          set({ playbackSpeed: newSpeed } as any);
+        }
+      },
+      playReverse: () => {
+        const { isPlaying, playbackSpeed, play } = get() as any;
+        if (!isPlaying) {
+          set({ playbackSpeed: -1 } as any);
+          play();
+        } else if (playbackSpeed > 0) {
+          set({ playbackSpeed: -1 } as any);
+        } else {
+          const newSpeed = playbackSpeed <= -8 ? -8 : playbackSpeed * 2;
+          set({ playbackSpeed: newSpeed } as any);
+        }
+      },
+      setDuration: (duration: number) => {
+        const clampedDuration = Math.max(1, duration);
+        set({ duration: clampedDuration, durationLocked: true } as any);
+        // Clamp playhead if beyond new duration
+        const { playheadPosition, inPoint, outPoint } = get();
+        if (playheadPosition > clampedDuration) {
+          set({ playheadPosition: clampedDuration } as any);
+        }
+        if (inPoint !== null && inPoint > clampedDuration) {
+          set({ inPoint: clampedDuration } as any);
+        }
+        if (outPoint !== null && outPoint > clampedDuration) {
+          set({ outPoint: clampedDuration } as any);
+        }
+      },
+      // Performance toggles
+      toggleThumbnailsEnabled: () => set({ thumbnailsEnabled: !(get() as any).thumbnailsEnabled } as any),
+      toggleWaveformsEnabled: () => set({ waveformsEnabled: !(get() as any).waveformsEnabled } as any),
+      setThumbnailsEnabled: (enabled: boolean) => set({ thumbnailsEnabled: enabled } as any),
+      setWaveformsEnabled: (enabled: boolean) => set({ waveformsEnabled: enabled } as any),
+      toggleTranscriptMarkers: () => set({ showTranscriptMarkers: !(get() as any).showTranscriptMarkers } as any),
+      setShowTranscriptMarkers: (enabled: boolean) => set({ showTranscriptMarkers: enabled } as any),
+      // RAM preview actions (simplified for testing)
+      toggleRamPreviewEnabled: () => {
+        const { ramPreviewEnabled } = get() as any;
+        if (ramPreviewEnabled) {
+          set({ ramPreviewEnabled: false, isRamPreviewing: false, ramPreviewProgress: null, ramPreviewRange: null, cachedFrameTimes: new Set() } as any);
+        } else {
+          set({ ramPreviewEnabled: true } as any);
+        }
+      },
+      cancelRamPreview: () => {
+        set({ isRamPreviewing: false, ramPreviewProgress: null } as any);
+      },
+      addCachedFrame: (time: number) => {
+        const quantized = Math.round(time * 30) / 30;
+        const { cachedFrameTimes } = get() as any;
+        if (!cachedFrameTimes.has(quantized)) {
+          const newSet = new Set(cachedFrameTimes);
+          newSet.add(quantized);
+          set({ cachedFrameTimes: newSet } as any);
+        }
+      },
+      getCachedRanges: () => {
+        const { cachedFrameTimes } = get() as any;
+        if (cachedFrameTimes.size === 0) return [];
+        const times = Array.from(cachedFrameTimes as Set<number>).sort((a: number, b: number) => a - b);
+        const ranges: Array<{ start: number; end: number }> = [];
+        const frameInterval = 1 / 30;
+        const gap = frameInterval * 2;
+        let rangeStart = times[0];
+        let rangeEnd = times[0];
+        for (let i = 1; i < times.length; i++) {
+          if ((times[i] as number) - rangeEnd <= gap) {
+            rangeEnd = times[i] as number;
+          } else {
+            ranges.push({ start: rangeStart, end: rangeEnd + frameInterval });
+            rangeStart = times[i] as number;
+            rangeEnd = times[i] as number;
+          }
+        }
+        ranges.push({ start: rangeStart, end: rangeEnd + frameInterval });
+        return ranges;
+      },
     };
 
     // Stub actions that some slices call on others

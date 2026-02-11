@@ -294,7 +294,7 @@ Toolbar button to restore file permissions:
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
 | [`fileManageSlice.test.ts`](../../tests/stores/mediaStore/fileManageSlice.test.ts) | 106 | Files, folders, solids, text items, selection, labels |
-| [`compositionSlice.test.ts`](../../tests/stores/mediaStore/compositionSlice.test.ts) | 29 | Compositions |
+| [`compositionSlice.test.ts`](../../tests/stores/mediaStore/compositionSlice.test.ts) | 99 | Compositions |
 
 Run tests: `npx vitest run`
 

@@ -429,7 +429,7 @@ See [Export](./Export.md) for full export documentation.
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
 | [`audioUtils.test.ts`](../../tests/unit/audioUtils.test.ts) | 43 | Volume, EQ, timing, speed |
-| [`crossCorrelation.test.ts`](../../tests/unit/crossCorrelation.test.ts) | 6 | Audio sync cross-correlation |
+| [`crossCorrelation.test.ts`](../../tests/unit/crossCorrelation.test.ts) | 45 | Audio sync cross-correlation |
 
 Run tests: `npx vitest run`
 

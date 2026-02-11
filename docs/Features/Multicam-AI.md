@@ -557,6 +557,6 @@ LLM gibt Confidence mit. UI kann Low-Confidence Cuts markieren für manuelle Rev
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
-| [`crossCorrelation.test.ts`](../../tests/unit/crossCorrelation.test.ts) | 6 | Audio sync cross-correlation |
+| [`crossCorrelation.test.ts`](../../tests/unit/crossCorrelation.test.ts) | 45 | Audio sync cross-correlation |
 
 Run tests: `npx vitest run`
