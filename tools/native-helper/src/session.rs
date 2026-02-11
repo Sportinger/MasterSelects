@@ -103,10 +103,17 @@ impl Session {
                 scale,
                 compression,
             } => {
+                info!("Decode request: file={} frame={}", file_id, frame);
                 let result = self.handle_decode(&id, &file_id, frame, format, scale, compression);
                 match result {
-                    Ok(binary) => (None, Some(binary)),
-                    Err(response) => (Some(response), None),
+                    Ok(binary) => {
+                        info!("Decode OK: frame={} size={} bytes", frame, binary.len());
+                        (None, Some(binary))
+                    },
+                    Err(response) => {
+                        warn!("Decode FAILED: frame={} err={:?}", frame, response);
+                        (Some(response), None)
+                    },
                 }
             }
 

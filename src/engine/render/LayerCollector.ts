@@ -103,6 +103,7 @@ export class LayerCollector {
             return {
               layer,
               isVideo: false,
+              isDynamic: true,
               externalTexture: null,
               textureView: texture.createView(),
               sourceWidth: bitmap.width,

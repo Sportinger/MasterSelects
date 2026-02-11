@@ -227,8 +227,8 @@ export class Compositor {
         // effectTempView/effectTempView2 depending on effect count parity.
         // Don't use the bind group cache in this case - it would return a stale bind group
         // pointing to the wrong texture view.
-        const cacheLayerId = complexEffects ? undefined : layer.id;
-        if (complexEffects) {
+        const cacheLayerId = (complexEffects || data.isDynamic) ? undefined : layer.id;
+        if (complexEffects || data.isDynamic) {
           // Invalidate any stale cached bind group for this layer
           this.compositorPipeline.invalidateBindGroupCache(layer.id);
         }

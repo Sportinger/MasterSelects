@@ -55,6 +55,8 @@ export const BLEND_MODE_MAP: Record<string, number> = {
 export interface LayerRenderData {
   layer: Layer;
   isVideo: boolean;
+  /** Texture changes every frame (e.g. NativeDecoder) — skip bind group cache */
+  isDynamic?: boolean;
   externalTexture: GPUExternalTexture | null;
   textureView: GPUTextureView | null;
   sourceWidth: number;
