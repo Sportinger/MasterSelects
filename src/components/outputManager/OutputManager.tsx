@@ -7,7 +7,8 @@ import { TargetPreview } from './TargetPreview';
 import { TabBar } from './TabBar';
 import { SliceInputOverlay } from './SliceInputOverlay';
 import { SliceOutputOverlay } from './SliceOutputOverlay';
-import { useSliceStore } from '../../stores/sliceStore';
+import { useSliceStore, getSavedTargetMeta } from '../../stores/sliceStore';
+import { useRenderTargetStore } from '../../stores/renderTargetStore';
 import { closeOutputManager } from './OutputManagerBoot';
 
 const MIN_ZOOM = 0.25;
@@ -26,9 +27,29 @@ export function OutputManager() {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const panStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
 
-  // Auto-load saved config on mount
+  // On mount: load saved configs and restore saved targets as deactivated entries
   useEffect(() => {
     loadFromLocalStorage();
+
+    // Restore saved targets that don't exist yet in renderTargetStore
+    // They'll appear as "closed" (grayed out) with a Restore button
+    const savedTargets = getSavedTargetMeta();
+    const store = useRenderTargetStore.getState();
+    for (const saved of savedTargets) {
+      if (!store.targets.has(saved.id)) {
+        store.registerTarget({
+          id: saved.id,
+          name: saved.name,
+          source: saved.source,
+          destinationType: 'window',
+          enabled: false,
+          canvas: null,
+          context: null,
+          window: null,
+          isFullscreen: false,
+        });
+      }
+    }
   }, [loadFromLocalStorage]);
 
   const handleSaveAndExit = useCallback(() => {

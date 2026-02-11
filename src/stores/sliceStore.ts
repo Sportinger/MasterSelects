@@ -259,6 +259,8 @@ export const useSliceStore = create<SliceState & SliceActions>()((set, get) => (
       localStorage.setItem(key, data);
 
       // Also save output target metadata for reconnection after refresh
+      // Only overwrite if there are actual window/tab targets registered
+      // (avoids wiping saved metadata during post-refresh auto-save when store is empty)
       const targets = useRenderTargetStore.getState().targets;
       const targetMeta: Array<{ id: string; name: string; source: RenderSource }> = [];
       for (const t of targets.values()) {
@@ -266,7 +268,9 @@ export const useSliceStore = create<SliceState & SliceActions>()((set, get) => (
           targetMeta.push({ id: t.id, name: t.name, source: t.source });
         }
       }
-      localStorage.setItem(key + '_targets', JSON.stringify(targetMeta));
+      if (targetMeta.length > 0) {
+        localStorage.setItem(key + '_targets', JSON.stringify(targetMeta));
+      }
     } catch (e) {
       console.error('Failed to save Output Manager config:', e);
     }
