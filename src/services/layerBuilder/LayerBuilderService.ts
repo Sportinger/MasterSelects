@@ -118,12 +118,12 @@ export class LayerBuilderService {
       }
     }
 
-    // Merge background layers from active layer slots
-    const mergedLayers = this.mergeBackgroundLayers(primaryLayers, ctx.playheadPosition);
+    // Cache primary layers only — background layers are rebuilt fresh each frame
+    // (caching merged layers would cause double-rendering of background layers on cache hit)
+    this.layerCache.setCachedLayers(primaryLayers);
 
-    // Cache merged result
-    this.layerCache.setCachedLayers(mergedLayers);
-    return mergedLayers;
+    // Merge background layers from active layer slots
+    return this.mergeBackgroundLayers(primaryLayers, ctx.playheadPosition);
   }
 
   /**
