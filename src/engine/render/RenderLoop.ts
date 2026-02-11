@@ -23,11 +23,12 @@ export class RenderLoop {
   private renderRequested = false;
   private lastRenderedPlayhead = -1;
 
-  // Startup grace period — suppress idle after start() so video GPU surfaces
-  // have time to warm up (play()/RVFC in syncClipVideo is async ~100-200ms).
-  // Without this, the engine goes idle after 1s and scrubbing doesn't work
-  // until the user presses play.
-  private startedAt = 0;
+  // When true, idle detection is completely suppressed (engine always renders).
+  // Used after page reload: video GPU surfaces need the render loop running
+  // so syncClipVideo warmup (play()/RVFC) can complete. Without this, the
+  // engine goes idle after 1s and scrubbing produces black frames.
+  // Cleared when setIsPlaying(true) is called (first play warms up videos).
+  private idleSuppressed = false;
 
   // Frame rate limiting
   private hasActiveVideo = false;
@@ -42,7 +43,6 @@ export class RenderLoop {
   private renderCount = 0;
 
   private readonly IDLE_TIMEOUT = 1000; // 1s before idle
-  private readonly STARTUP_GRACE_PERIOD = 5000; // 5s grace after start — no idle
   private readonly VIDEO_FRAME_TIME = 16.67; // ~60fps target
   private readonly SCRUB_FRAME_TIME = 33; // ~30fps during scrubbing (avoids wasted renders while video seeks)
   private readonly WATCHDOG_INTERVAL = 2000; // Check every 2s
@@ -63,7 +63,6 @@ export class RenderLoop {
     this.isRunning = true;
     this.lastActivityTime = performance.now();
     this.lastSuccessfulRender = performance.now();
-    this.startedAt = performance.now();
     this.isIdle = false;
     this.renderCount = 0;
     log.info('Starting');
@@ -76,9 +75,8 @@ export class RenderLoop {
       const rafGap = lastTimestamp > 0 ? timestamp - lastTimestamp : 0;
       lastTimestamp = timestamp;
 
-      // Idle detection (suppressed during startup grace period)
-      const inGracePeriod = (timestamp - this.startedAt) < this.STARTUP_GRACE_PERIOD;
-      if (!inGracePeriod) {
+      // Idle detection (suppressed until first play to allow video GPU warmup)
+      if (!this.idleSuppressed) {
         const timeSinceActivity = timestamp - this.lastActivityTime;
         if (!this.isIdle && !this.renderRequested && timeSinceActivity > this.IDLE_TIMEOUT) {
           this.isIdle = true;
@@ -258,8 +256,23 @@ export class RenderLoop {
     this.hasActiveVideo = hasVideo;
   }
 
+  /**
+   * Suppress idle detection — engine renders every frame until unsuppressed.
+   * Used after page reload before the first play to keep video GPU surfaces warm.
+   */
+  suppressIdle(): void {
+    this.idleSuppressed = true;
+    this.isIdle = false;
+    log.info('Idle suppressed (waiting for first play)');
+  }
+
   setIsPlaying(playing: boolean): void {
     this.isPlaying = playing;
+    if (playing && this.idleSuppressed) {
+      // First play — video GPU surfaces are now warm, enable idle detection
+      this.idleSuppressed = false;
+      log.info('Idle suppression lifted (first play)');
+    }
   }
 
   setIsScrubbing(scrubbing: boolean): void {

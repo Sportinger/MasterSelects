@@ -74,6 +74,10 @@ export class WebGPUEngine {
   // Video time tracking (for optimization)
   private lastVideoTime: Map<string, number> = new Map();
 
+  // Track whether play has ever been pressed — persists across RenderLoop recreations.
+  // Before first play, idle detection is suppressed so video GPU surfaces stay warm.
+  private hasEverPlayed = false;
+
   // RAM preview playback
   private ramPlaybackCanvas: HTMLCanvasElement | null = null;
   private ramPlaybackCtx: CanvasRenderingContext2D | null = null;
@@ -423,6 +427,7 @@ export class WebGPUEngine {
   }
 
   setIsPlaying(playing: boolean): void {
+    if (playing) this.hasEverPlayed = true;
     this.renderLoop?.setIsPlaying(playing);
   }
 
@@ -657,6 +662,14 @@ export class WebGPUEngine {
       isExporting: () => this.isExporting,
       onRender: renderCallback,
     });
+
+    // Suppress idle until user presses play for the first time.
+    // After page reload, video GPU surfaces are empty and need the render loop
+    // running continuously so syncClipVideo warmup can complete.
+    if (!this.hasEverPlayed) {
+      this.renderLoop.suppressIdle();
+    }
+
     this.renderLoop.start();
   }
 
