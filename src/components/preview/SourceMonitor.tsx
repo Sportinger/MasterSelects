@@ -17,6 +17,7 @@ export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
   const [isScrubbing, setIsScrubbing] = useState(false);
 
   const isVideo = file.type === 'video';
+  const fps = file.fps || 30;
 
   // Keyboard handler: Space = play/pause, Escape = close
   useEffect(() => {
@@ -32,13 +33,7 @@ export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
         onClose();
       } else if (e.key === ' ' && isVideo) {
         e.preventDefault();
-        const video = videoRef.current;
-        if (!video) return;
-        if (video.paused) {
-          video.play();
-        } else {
-          video.pause();
-        }
+        togglePlayback();
       }
     };
 
@@ -90,8 +85,7 @@ export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
     };
   }, []);
 
-  // Toggle play/pause on video click
-  const handleVideoClick = useCallback(() => {
+  const togglePlayback = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
@@ -99,6 +93,31 @@ export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
     } else {
       video.pause();
     }
+  }, []);
+
+  // Frame step
+  const stepFrame = useCallback((direction: 1 | -1) => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.pause();
+    const frameDuration = 1 / fps;
+    video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + direction * frameDuration));
+    setCurrentTime(video.currentTime);
+  }, [fps]);
+
+  // Go to start / end
+  const goToStart = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.currentTime = 0;
+    setCurrentTime(0);
+  }, []);
+
+  const goToEnd = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.currentTime = video.duration;
+    setCurrentTime(video.duration);
   }, []);
 
   // Scrub bar interaction
@@ -143,7 +162,7 @@ export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
             ref={videoRef}
             src={file.url}
             className="source-monitor-video"
-            onClick={handleVideoClick}
+            onClick={togglePlayback}
             playsInline
           />
         ) : (
@@ -156,29 +175,57 @@ export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
       </div>
 
       {isVideo && (
-        <div className="source-monitor-scrub" onMouseDown={handleScrubMouseDown} ref={scrubRef}>
-          <span className="source-monitor-time">{formatTime(currentTime)}</span>
-          <div className="source-monitor-scrub-track">
-            <div className="source-monitor-scrub-fill" style={{ width: `${progress}%` }} />
-            <div className="source-monitor-scrub-handle" style={{ left: `${progress}%` }} />
+        <div className="source-monitor-toolbar">
+          {/* Transport controls */}
+          <div className="source-monitor-transport">
+            <button className="btn btn-sm" onClick={goToStart} title="Go to start">
+              ⏮
+            </button>
+            <button className="btn btn-sm" onClick={() => stepFrame(-1)} title="Previous frame">
+              ⏪
+            </button>
+            <button
+              className={`btn btn-sm ${isPlaying ? 'btn-active' : ''}`}
+              onClick={togglePlayback}
+              title={isPlaying ? 'Pause [Space]' : 'Play [Space]'}
+            >
+              {isPlaying ? '⏸' : '▶'}
+            </button>
+            <button className="btn btn-sm" onClick={() => stepFrame(1)} title="Next frame">
+              ⏩
+            </button>
+            <button className="btn btn-sm" onClick={goToEnd} title="Go to end">
+              ⏭
+            </button>
           </div>
-          <span className="source-monitor-time">{formatTime(duration)}</span>
-          <button
-            className="source-monitor-play-btn"
-            onClick={(e) => { e.stopPropagation(); handleVideoClick(); }}
-            title={isPlaying ? 'Pause' : 'Play'}
-          >
-            {isPlaying ? '⏸' : '▶'}
-          </button>
+
+          {/* Timecode display */}
+          <div className="source-monitor-timecode">
+            <span className="timeline-time">{formatTimecode(currentTime, fps)}</span>
+            <span className="source-monitor-time-sep">/</span>
+            <span className="timeline-time">{formatTimecode(duration, fps)}</span>
+          </div>
+
+          {/* Scrub bar */}
+          <div className="source-monitor-scrub" onMouseDown={handleScrubMouseDown} ref={scrubRef}>
+            <div className="source-monitor-scrub-track">
+              <div className="source-monitor-scrub-fill" style={{ width: `${progress}%` }} />
+              <div className="source-monitor-scrub-handle" style={{ left: `${progress}%` }} />
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
+function formatTimecode(seconds: number, fps: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
   const s = Math.floor(seconds % 60);
-  const f = Math.floor((seconds % 1) * 100);
-  return `${m}:${s.toString().padStart(2, '0')}.${f.toString().padStart(2, '0')}`;
+  const f = Math.floor((seconds % 1) * fps);
+  if (h > 0) {
+    return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}:${f.toString().padStart(2, '0')}`;
+  }
+  return `${m}:${s.toString().padStart(2, '0')}:${f.toString().padStart(2, '0')}`;
 }

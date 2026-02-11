@@ -7074,12 +7074,12 @@ input[type="checkbox"] {
 
 /* ========== SOURCE MONITOR ========== */
 .source-monitor {
+  position: absolute;
+  inset: 28px 0 0 0; /* below preview-controls bar */
   display: flex;
   flex-direction: column;
-  flex: 1;
-  background: #111;
-  min-height: 0;
-  overflow: hidden;
+  background: var(--bg-primary);
+  z-index: 15;
 }
 
 .source-monitor-media {
@@ -7089,6 +7089,7 @@ input[type="checkbox"] {
   justify-content: center;
   min-height: 0;
   overflow: hidden;
+  background: #000;
 }
 
 .source-monitor-video,
@@ -7103,71 +7104,102 @@ input[type="checkbox"] {
   cursor: pointer;
 }
 
-.source-monitor-scrub {
+/* Toolbar - matches timeline-toolbar style */
+.source-monitor-toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 24px;
-  padding: 0 8px;
-  background: rgba(0, 0, 0, 0.7);
+  padding: 3px 8px;
+  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border-color);
+  min-height: 30px;
   flex-shrink: 0;
-  cursor: pointer;
-  user-select: none;
 }
 
-.source-monitor-time {
+.source-monitor-transport {
+  display: flex;
+  gap: 2px;
+}
+
+.source-monitor-transport .btn {
+  min-width: 24px;
+  padding: 3px 4px;
   font-size: 10px;
-  color: #999;
-  font-family: monospace;
-  white-space: nowrap;
-  min-width: 52px;
+  line-height: 1;
+}
+
+.source-monitor-timecode {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.source-monitor-timecode .timeline-time {
+  min-width: auto;
+  padding: 2px 5px;
+  font-size: 11px;
+}
+
+.source-monitor-time-sep {
+  color: var(--text-secondary);
+  font-size: 10px;
+  opacity: 0.5;
+}
+
+/* Scrub bar */
+.source-monitor-scrub {
+  flex: 1;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  padding: 0 2px;
 }
 
 .source-monitor-scrub-track {
   flex: 1;
   height: 4px;
-  background: #333;
+  background: var(--bg-primary);
   border-radius: 2px;
   position: relative;
 }
 
+.source-monitor-scrub:hover .source-monitor-scrub-track {
+  height: 6px;
+}
+
 .source-monitor-scrub-fill {
   height: 100%;
-  background: #4a90e2;
+  background: var(--accent);
   border-radius: 2px;
   position: absolute;
   top: 0;
   left: 0;
+  pointer-events: none;
 }
 
 .source-monitor-scrub-handle {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--text-primary);
   position: absolute;
   top: 50%;
   transform: translate(-50%, -50%);
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
 }
 
-.source-monitor-play-btn {
-  background: none;
-  border: none;
-  color: #ccc;
-  font-size: 12px;
-  cursor: pointer;
-  padding: 0 2px;
-  line-height: 1;
+.source-monitor-scrub:hover .source-monitor-scrub-handle {
+  opacity: 1;
 }
 
-.source-monitor-play-btn:hover {
-  color: #fff;
-}
-
+/* Header controls */
 .preview-source-label {
   font-size: 11px;
-  color: #e0e0e0;
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -7179,17 +7211,17 @@ input[type="checkbox"] {
 .preview-close-source-btn {
   background: none;
   border: none;
-  color: #999;
+  color: var(--text-secondary);
   font-size: 13px;
   cursor: pointer;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: 2px;
   line-height: 1;
 }
 
 .preview-close-source-btn:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  background: var(--bg-hover);
 }
 
 /* ========== CONTEXT MENU ========== */
