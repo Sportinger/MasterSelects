@@ -106,17 +106,6 @@ function MiniTimelineInner({
       }
     });
 
-    // Draw playhead for active composition
-    if (isActive && timelineData.playheadPosition !== undefined) {
-      const playheadX = padding + (timelineData.playheadPosition / duration) * (width - padding * 2);
-      ctx.strokeStyle = '#ff3b3b';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(playheadX, trackAreaTop);
-      ctx.lineTo(playheadX, height - padding);
-      ctx.stroke();
-    }
-
     // Draw composition name label
     drawLabel(ctx, compositionName, width);
   }, [timelineData, compositionName, compositionDuration, isActive, width, height]);
