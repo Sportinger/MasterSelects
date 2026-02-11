@@ -15,6 +15,9 @@ vi.mock('../src/engine/WebGPUEngine', () => ({
     requestRender: vi.fn(),
     cleanupVideo: vi.fn(),
     clearVideoCache: vi.fn(),
+    getTextureManager: vi.fn().mockReturnValue({
+      updateCanvasTexture: vi.fn().mockReturnValue(true),
+    }),
   },
   WebGPUEngine: vi.fn(),
 }))
@@ -23,10 +26,39 @@ vi.mock('../src/engine/WebCodecsPlayer', () => ({
   WebCodecsPlayer: vi.fn(),
 }))
 
+// Mock services needed by clipSlice and its sub-modules
+vi.mock('../src/services/textRenderer', () => ({
+  textRenderer: {
+    createCanvas: vi.fn().mockReturnValue(document.createElement('canvas')),
+    render: vi.fn(),
+  },
+}))
+
+vi.mock('../src/services/googleFontsService', () => ({
+  googleFontsService: {
+    loadFont: vi.fn().mockResolvedValue(undefined),
+  },
+}))
+
+vi.mock('../src/services/thumbnailRenderer', () => ({
+  thumbnailRenderer: {
+    generateClipThumbnails: vi.fn().mockResolvedValue([]),
+  },
+}))
+
+vi.mock('../src/services/nativeHelper', () => ({
+  NativeDecoder: vi.fn(),
+}))
+
+vi.mock('../src/services/nativeHelper/NativeHelperClient', () => ({
+  NativeHelperClient: vi.fn(),
+}))
+
 vi.mock('../src/services/layerBuilder', () => ({
   layerBuilder: {
     invalidateCache: vi.fn(),
     buildLayers: vi.fn().mockReturnValue([]),
+    buildLayersFromStore: vi.fn().mockReturnValue([]),
   },
 }))
 
@@ -64,6 +96,11 @@ vi.mock('../src/stores/mediaStore', () => ({
       outputResolution: { width: 1920, height: 1080 },
       addMediaFile: vi.fn(),
       updateComposition: vi.fn(),
+      getActiveComposition: vi.fn().mockReturnValue({ width: 1920, height: 1080 }),
+      getOrCreateTextFolder: vi.fn().mockReturnValue('text-folder-1'),
+      createTextItem: vi.fn(),
+      getOrCreateSolidFolder: vi.fn().mockReturnValue('solid-folder-1'),
+      createSolidItem: vi.fn(),
     })),
     setState: vi.fn(),
     subscribe: vi.fn(),

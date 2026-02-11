@@ -15,6 +15,9 @@ import { createSelectionSlice } from '../../src/stores/timeline/selectionSlice';
 import { createTrackSlice } from '../../src/stores/timeline/trackSlice';
 import { createKeyframeSlice } from '../../src/stores/timeline/keyframeSlice';
 import { createMarkerSlice } from '../../src/stores/timeline/markerSlice';
+import { createMaskSlice } from '../../src/stores/timeline/maskSlice';
+import { createClipSlice } from '../../src/stores/timeline/clipSlice';
+import { createPositioningUtils } from '../../src/stores/timeline/positioningUtils';
 
 // Minimal initial state sufficient for testing slices
 function getInitialState(): Partial<TimelineStore> {
@@ -49,6 +52,16 @@ function getInitialState(): Partial<TimelineStore> {
     curveEditorHeight: 250,
     markers: [] as TimelineMarker[],
     toolMode: 'select' as const,
+    // Mask state
+    maskEditMode: 'none' as const,
+    activeMaskId: null,
+    selectedVertexIds: new Set<string>(),
+    maskDrawStart: null,
+    maskDragging: false,
+    // Performance toggles (needed by clipSlice)
+    thumbnailsEnabled: false,
+    waveformsEnabled: false,
+    showTranscriptMarkers: false,
     // Stub functions that slices might call on other slices
     invalidateCache: () => {},
   };
@@ -64,6 +77,9 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
     const trackActions = createTrackSlice(set as any, get as any);
     const keyframeActions = createKeyframeSlice(set as any, get as any);
     const markerActions = createMarkerSlice(set as any, get as any);
+    const maskActions = createMaskSlice(set as any, get as any);
+    const clipActions = createClipSlice(set as any, get as any);
+    const positioningUtils = createPositioningUtils(set as any, get as any);
 
     // Simple playback actions (inlined to avoid importing playbackSlice which pulls in engine)
     const playbackActions = {
@@ -112,14 +128,8 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
     };
 
     // Stub actions that some slices call on others
+    // Note: updateClipTransform and updateClipEffect are now provided by clipSlice
     const stubActions = {
-      updateClipTransform: (id: string, transform: any) => {
-        const { clips } = get();
-        set({
-          clips: clips.map(c => c.id === id ? { ...c, transform: { ...c.transform, ...transform } } : c),
-        } as any);
-      },
-      updateClipEffect: () => {},
       updateDuration: () => {},
     };
 
@@ -129,6 +139,9 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
       ...trackActions,
       ...keyframeActions,
       ...markerActions,
+      ...maskActions,
+      ...clipActions,
+      ...positioningUtils,
       ...playbackActions,
       ...stubActions,
       ...overrides,
