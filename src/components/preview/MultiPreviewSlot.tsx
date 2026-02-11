@@ -15,6 +15,8 @@ interface MultiPreviewSlotProps {
   compositionId: string | null;
   showTransparencyGrid: boolean;
   onCompositionChange: (compositionId: string | null) => void;
+  // Auto-distribute mode: render the Nth layer of a composition
+  autoSource?: { compositionId: string; layerIndex: number } | null;
 }
 
 export function MultiPreviewSlot({
@@ -23,6 +25,7 @@ export function MultiPreviewSlot({
   compositionId,
   showTransparencyGrid,
   onCompositionChange,
+  autoSource = null,
 }: MultiPreviewSlotProps) {
   const { isEngineReady } = useEngine();
   const compositions = useMediaStore((s) => s.compositions);
@@ -49,9 +52,12 @@ export function MultiPreviewSlot({
   useEffect(() => {
     if (!isEngineReady || !canvasRef.current) return;
 
-    const source = compositionId
-      ? { type: 'composition' as const, compositionId }
-      : { type: 'activeComp' as const };
+    // Determine source: auto mode (layer-index) vs custom mode (composition/activeComp)
+    const source = autoSource
+      ? { type: 'layer-index' as const, compositionId: autoSource.compositionId, layerIndex: autoSource.layerIndex }
+      : compositionId
+        ? { type: 'composition' as const, compositionId }
+        : { type: 'activeComp' as const };
 
     const isIndependent = source.type !== 'activeComp';
 
@@ -82,7 +88,7 @@ export function MultiPreviewSlot({
       useRenderTargetStore.getState().unregisterTarget(targetId);
       engine.unregisterTargetCanvas(targetId);
     };
-  }, [isEngineReady, targetId, compositionId, slotIndex, showTransparencyGrid]);
+  }, [isEngineReady, targetId, compositionId, slotIndex, showTransparencyGrid, autoSource?.compositionId, autoSource?.layerIndex]);
 
   // Sync transparency grid flag without full re-registration
   useEffect(() => {
@@ -146,39 +152,45 @@ export function MultiPreviewSlot({
 
   return (
     <div className="multi-preview-slot" ref={containerRef}>
-      {/* Hover-visible composition dropdown */}
-      <div className="multi-preview-slot-dropdown-wrapper" ref={dropdownRef}>
-        <button
-          className="multi-preview-slot-dropdown-btn"
-          onClick={() => setSelectorOpen(!selectorOpen)}
-          title="Select composition"
-        >
-          <span className="multi-preview-slot-comp-name">
-            {compositionId === null ? 'Active' : displayedComp?.name || 'None'}
-          </span>
-          <span className="preview-comp-arrow">▼</span>
-        </button>
-        {selectorOpen && (
-          <div className="multi-preview-slot-dropdown">
-            <button
-              className={`preview-comp-option ${compositionId === null ? 'active' : ''}`}
-              onClick={() => handleSelect(null)}
-            >
-              Active Composition
-            </button>
-            <div className="preview-comp-separator" />
-            {compositions.map((comp) => (
+      {/* Hover-visible composition dropdown (custom mode only) */}
+      {autoSource ? (
+        <div className="multi-preview-slot-dropdown-wrapper">
+          <span className="multi-preview-slot-label">Layer {autoSource.layerIndex + 1}</span>
+        </div>
+      ) : (
+        <div className="multi-preview-slot-dropdown-wrapper" ref={dropdownRef}>
+          <button
+            className="multi-preview-slot-dropdown-btn"
+            onClick={() => setSelectorOpen(!selectorOpen)}
+            title="Select composition"
+          >
+            <span className="multi-preview-slot-comp-name">
+              {compositionId === null ? 'Active' : displayedComp?.name || 'None'}
+            </span>
+            <span className="preview-comp-arrow">▼</span>
+          </button>
+          {selectorOpen && (
+            <div className="multi-preview-slot-dropdown">
               <button
-                key={comp.id}
-                className={`preview-comp-option ${compositionId === comp.id ? 'active' : ''}`}
-                onClick={() => handleSelect(comp.id)}
+                className={`preview-comp-option ${compositionId === null ? 'active' : ''}`}
+                onClick={() => handleSelect(null)}
               >
-                {comp.name}
+                Active Composition
               </button>
-            ))}
-          </div>
-        )}
-      </div>
+              <div className="preview-comp-separator" />
+              {compositions.map((comp) => (
+                <button
+                  key={comp.id}
+                  className={`preview-comp-option ${compositionId === comp.id ? 'active' : ''}`}
+                  onClick={() => handleSelect(comp.id)}
+                >
+                  {comp.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Canvas */}
       <div className={`preview-canvas-wrapper ${showTransparencyGrid ? 'show-transparency-grid' : ''}`}>

@@ -286,6 +286,9 @@ class RenderSchedulerService {
       if (target.source.type === 'layer') {
         const layerIds = target.source.layerIds;
         evalLayers = evalLayers.filter(l => layerIds.includes(l.id));
+      } else if (target.source.type === 'layer-index') {
+        const idx = target.source.layerIndex;
+        evalLayers = idx < evalLayers.length ? [evalLayers[idx]] : [];
       }
 
       // Render to the target canvas

@@ -197,7 +197,7 @@ export const useRenderTargetStore = create<RenderTargetState & RenderTargetActio
         if (target.source.type === 'composition' && target.source.compositionId !== activeCompId) {
           result.push(target);
         }
-        if (target.source.type === 'layer' || target.source.type === 'slot') {
+        if (target.source.type === 'layer' || target.source.type === 'layer-index' || target.source.type === 'slot') {
           result.push(target);
         }
       }
@@ -213,6 +213,8 @@ export const useRenderTargetStore = create<RenderTargetState & RenderTargetActio
         case 'composition':
           return source.compositionId;
         case 'layer':
+          return source.compositionId;
+        case 'layer-index':
           return source.compositionId;
         case 'slot': {
           // Resolve slot to composition via activeLayerSlots

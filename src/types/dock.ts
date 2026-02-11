@@ -24,6 +24,7 @@ export interface MultiPreviewSlotData {
 }
 
 export interface MultiPreviewPanelData {
+  sourceCompositionId: string | null; // null = custom mode (per-slot), string = auto-distribute layers
   slots: [MultiPreviewSlotData, MultiPreviewSlotData, MultiPreviewSlotData, MultiPreviewSlotData];
   showTransparencyGrid: boolean;
 }

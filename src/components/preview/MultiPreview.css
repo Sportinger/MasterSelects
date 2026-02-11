@@ -129,3 +129,14 @@
   padding: 4px 0;
   z-index: 100;
 }
+
+/* Layer label shown in auto-distribute mode */
+.multi-preview-slot-label {
+  padding: 2px 8px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  backdrop-filter: blur(4px);
+}

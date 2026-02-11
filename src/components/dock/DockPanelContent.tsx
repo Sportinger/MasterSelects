@@ -23,6 +23,7 @@ const VectorscopePanel = lazy(() => import('../panels/scopes/VectorscopePanel').
 const MultiPreviewPanel = lazy(() => import('../preview/MultiPreviewPanel').then(m => ({ default: m.MultiPreviewPanel })));
 
 const DEFAULT_MULTI_PREVIEW_DATA: MultiPreviewPanelData = {
+  sourceCompositionId: null,
   slots: [{ compositionId: null }, { compositionId: null }, { compositionId: null }, { compositionId: null }],
   showTransparencyGrid: false,
 };

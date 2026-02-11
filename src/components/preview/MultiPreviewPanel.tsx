@@ -1,8 +1,10 @@
 // Multi Preview Panel — 2x2 grid of independent preview slots
-// Shared controls: transparency toggle, quality selector, stats overlay
+// Shared controls: source dropdown, transparency toggle, quality selector, stats overlay
+// Source modes: "Custom" (per-slot composition) or a composition (auto-distributes first 4 video layers)
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useEngineStore } from '../../stores/engineStore';
+import { useMediaStore } from '../../stores/mediaStore';
 import { useSettingsStore, type PreviewQuality } from '../../stores/settingsStore';
 import { useDockStore } from '../../stores/dockStore';
 import { StatsOverlay } from './StatsOverlay';
@@ -17,12 +19,45 @@ interface MultiPreviewPanelProps {
 
 export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
   const { engineStats } = useEngineStore();
+  const compositions = useMediaStore((s) => s.compositions);
   const { previewQuality, setPreviewQuality } = useSettingsStore();
   const updatePanelData = useDockStore((s) => s.updatePanelData);
   const outputResolution = useSettingsStore((s) => s.outputResolution);
 
   const [statsExpanded, setStatsExpanded] = useState(false);
   const [qualityOpen, setQualityOpen] = useState(false);
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const sourceDropdownRef = useRef<HTMLDivElement>(null);
+
+  const isAutoMode = data.sourceCompositionId !== null;
+  const sourceComp = useMemo(
+    () => compositions.find((c) => c.id === data.sourceCompositionId),
+    [compositions, data.sourceCompositionId]
+  );
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    if (!sourceOpen && !qualityOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (sourceOpen && sourceDropdownRef.current && !sourceDropdownRef.current.contains(target)) {
+        setSourceOpen(false);
+      }
+      if (qualityOpen) {
+        setQualityOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [sourceOpen, qualityOpen]);
+
+  const handleSourceChange = useCallback(
+    (compositionId: string | null) => {
+      updatePanelData(panelId, { ...data, sourceCompositionId: compositionId });
+      setSourceOpen(false);
+    },
+    [panelId, data, updatePanelData]
+  );
 
   const handleSlotCompositionChange = useCallback(
     (slotIndex: number, compositionId: string | null) => {
@@ -41,7 +76,39 @@ export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
     <div className="multi-preview-container">
       {/* Shared controls bar */}
       <div className="preview-controls multi-preview-controls">
-        <span className="multi-preview-title">Multi Preview</span>
+        {/* Source composition dropdown */}
+        <div className="preview-comp-dropdown-wrapper" ref={sourceDropdownRef}>
+          <button
+            className="preview-comp-dropdown-btn"
+            onClick={() => setSourceOpen(!sourceOpen)}
+            title="Select source: Custom (per-slot) or a composition (auto-distribute layers)"
+          >
+            <span className="preview-comp-name">
+              {isAutoMode ? sourceComp?.name || 'Unknown' : 'Custom'}
+            </span>
+            <span className="preview-comp-arrow">▼</span>
+          </button>
+          {sourceOpen && (
+            <div className="preview-comp-dropdown">
+              <button
+                className={`preview-comp-option ${!isAutoMode ? 'active' : ''}`}
+                onClick={() => handleSourceChange(null)}
+              >
+                Custom
+              </button>
+              <div className="preview-comp-separator" />
+              {compositions.map((comp) => (
+                <button
+                  key={comp.id}
+                  className={`preview-comp-option ${data.sourceCompositionId === comp.id ? 'active' : ''}`}
+                  onClick={() => handleSourceChange(comp.id)}
+                >
+                  {comp.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Transparency toggle */}
         <button
@@ -107,6 +174,11 @@ export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
               compositionId={slot.compositionId}
               showTransparencyGrid={data.showTransparencyGrid}
               onCompositionChange={(compId) => handleSlotCompositionChange(index, compId)}
+              autoSource={
+                isAutoMode && data.sourceCompositionId
+                  ? { compositionId: data.sourceCompositionId, layerIndex: index }
+                  : null
+              }
             />
           ))}
         </div>
