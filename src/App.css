@@ -9531,6 +9531,7 @@ input[type="checkbox"] {
 }
 
 .slot-grid-item {
+  position: relative;
   border-radius: 4px;
   overflow: hidden;
   cursor: pointer;
@@ -9549,6 +9550,16 @@ input[type="checkbox"] {
   box-shadow: 0 0 12px rgba(74, 158, 255, 0.3);
 }
 
+.slot-grid-item.drag-over {
+  border-color: #ff9800;
+  box-shadow: 0 0 12px rgba(255, 152, 0, 0.4);
+}
+
+.slot-grid-item.previewed {
+  border-color: #ff9800;
+  box-shadow: 0 0 10px rgba(255, 152, 0, 0.3);
+}
+
 .slot-grid-item.empty {
   background: #151515;
   border: 1px dashed rgba(255, 255, 255, 0.06);
@@ -9558,4 +9569,40 @@ input[type="checkbox"] {
 .slot-grid-item.empty:hover {
   border-color: rgba(255, 255, 255, 0.1);
   box-shadow: none;
+}
+
+/* Preview strip at bottom of filled slots */
+.slot-grid-preview-strip {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  transition: opacity 0.15s;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.slot-grid-item:hover .slot-grid-preview-strip {
+  opacity: 1;
+}
+
+.slot-grid-preview-strip:hover {
+  background: rgba(255, 152, 0, 0.3);
+  color: #ff9800;
+}
+
+.slot-grid-preview-strip.active {
+  opacity: 1;
+  background: rgba(255, 152, 0, 0.4);
+  color: #ff9800;
 }

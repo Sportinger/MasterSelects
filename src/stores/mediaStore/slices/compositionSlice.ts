@@ -6,6 +6,11 @@ import { useTimelineStore } from '../../timeline';
 import { useSettingsStore } from '../../settingsStore';
 import { compositionRenderer } from '../../../services/compositionRenderer';
 
+export interface CompositionSwitchOptions {
+  skipAnimation?: boolean;
+  playFromStart?: boolean;
+}
+
 export interface CompositionActions {
   createComposition: (name: string, settings?: Partial<Composition>) => Composition;
   duplicateComposition: (id: string) => Composition | null;
@@ -13,10 +18,13 @@ export interface CompositionActions {
   updateComposition: (id: string, updates: Partial<Composition>) => void;
   setActiveComposition: (id: string | null) => void;
   getActiveComposition: () => Composition | undefined;
-  openCompositionTab: (id: string) => void;
+  openCompositionTab: (id: string, options?: CompositionSwitchOptions) => void;
   closeCompositionTab: (id: string) => void;
   getOpenCompositions: () => Composition[];
   reorderCompositionTabs: (fromIndex: number, toIndex: number) => void;
+  reorderSlot: (fromIndex: number, toIndex: number) => void;
+  setPreviewComposition: (id: string | null) => void;
+  getSlotOrderedCompositions: () => Composition[];
 }
 
 export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (set, get) => ({
@@ -89,13 +97,13 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
     return compositions.find((c) => c.id === activeCompositionId);
   },
 
-  openCompositionTab: (id: string) => {
+  openCompositionTab: (id: string, options?: CompositionSwitchOptions) => {
     const { openCompositionIds, activeCompositionId, compositions } = get();
     if (!openCompositionIds.includes(id)) {
       set({ openCompositionIds: [...openCompositionIds, id] });
     }
     // Inline setActiveComposition logic
-    doSetActiveComposition(set, get, activeCompositionId, id, compositions);
+    doSetActiveComposition(set, get, activeCompositionId, id, compositions, options);
   },
 
   closeCompositionTab: (id: string) => {
@@ -129,6 +137,55 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
     const [moved] = newOrder.splice(fromIndex, 1);
     newOrder.splice(toIndex, 0, moved);
     set({ openCompositionIds: newOrder });
+  },
+
+  reorderSlot: (fromIndex: number, toIndex: number) => {
+    const { compositions, slotOrder } = get();
+    // Build ordered list inline (same logic as getSlotOrderedCompositions)
+    let ordered: Composition[];
+    if (slotOrder.length === 0) {
+      ordered = [...compositions].sort((a, b) => a.name.localeCompare(b.name));
+    } else {
+      ordered = [];
+      for (const id of slotOrder) {
+        const comp = compositions.find((c: Composition) => c.id === id);
+        if (comp) ordered.push(comp);
+      }
+      for (const comp of compositions) {
+        if (!slotOrder.includes(comp.id)) ordered.push(comp);
+      }
+    }
+    if (fromIndex < 0 || fromIndex >= ordered.length) return;
+    if (toIndex < 0 || toIndex >= ordered.length) return;
+    if (fromIndex === toIndex) return;
+
+    const ids = ordered.map((c: Composition) => c.id);
+    const [moved] = ids.splice(fromIndex, 1);
+    ids.splice(toIndex, 0, moved);
+    set({ slotOrder: ids });
+  },
+
+  setPreviewComposition: (id: string | null) => {
+    set({ previewCompositionId: id });
+  },
+
+  getSlotOrderedCompositions: () => {
+    const { compositions, slotOrder } = get();
+    if (slotOrder.length === 0) {
+      return [...compositions].sort((a, b) => a.name.localeCompare(b.name));
+    }
+    const ordered: Composition[] = [];
+    for (const id of slotOrder) {
+      const comp = compositions.find(c => c.id === id);
+      if (comp) ordered.push(comp);
+    }
+    // Append any compositions not in slotOrder
+    for (const comp of compositions) {
+      if (!slotOrder.includes(comp.id)) {
+        ordered.push(comp);
+      }
+    }
+    return ordered;
   },
 });
 
@@ -278,9 +335,11 @@ function doSetActiveComposition(
   get: () => MediaState,
   currentActiveId: string | null,
   newId: string | null,
-  compositions: Composition[]
+  compositions: Composition[],
+  options?: CompositionSwitchOptions
 ): void {
   const timelineStore = useTimelineStore.getState();
+  const skipAnimation = options?.skipAnimation ?? false;
 
   // Calculate synced playhead for nested composition navigation
   const syncedPlayhead = calculateSyncedPlayhead(
@@ -302,6 +361,12 @@ function doSetActiveComposition(
     compositionRenderer.invalidateCompositionAndParents(currentActiveId);
   }
 
+  if (skipAnimation) {
+    // Skip exit/enter animations entirely
+    finishCompositionSwitch(set, get, newId, savedCompId, syncedPlayhead, options);
+    return;
+  }
+
   // Trigger exit animation for current clips
   const hasExistingClips = timelineStore.clips.length > 0;
   if (hasExistingClips && newId !== currentActiveId) {
@@ -310,11 +375,11 @@ function doSetActiveComposition(
 
     // Wait for exit animation, then load new composition
     setTimeout(async () => {
-      await finishCompositionSwitch(set, get, newId, savedCompId, syncedPlayhead);
+      await finishCompositionSwitch(set, get, newId, savedCompId, syncedPlayhead, options);
     }, 350); // Exit animation duration
   } else {
     // No existing clips or same comp, load immediately
-    finishCompositionSwitch(set, get, newId, savedCompId, syncedPlayhead);
+    finishCompositionSwitch(set, get, newId, savedCompId, syncedPlayhead, options);
   }
 }
 
@@ -326,9 +391,12 @@ async function finishCompositionSwitch(
   get: () => MediaState,
   newId: string | null,
   savedCompId: string | null,
-  syncedPlayhead: number | null
+  syncedPlayhead: number | null,
+  options?: CompositionSwitchOptions
 ): Promise<void> {
   const timelineStore = useTimelineStore.getState();
+  const skipAnimation = options?.skipAnimation ?? false;
+  const playFromStart = options?.playFromStart ?? false;
 
   // Update active composition
   set({ activeCompositionId: newId });
@@ -339,7 +407,10 @@ async function finishCompositionSwitch(
     const newComp = freshCompositions.find((c) => c.id === newId);
     await timelineStore.loadState(newComp?.timelineData);
 
-    if (syncedPlayhead !== null && syncedPlayhead >= 0) {
+    if (playFromStart) {
+      timelineStore.setPlayheadPosition(0);
+      timelineStore.play();
+    } else if (syncedPlayhead !== null && syncedPlayhead >= 0) {
       timelineStore.setPlayheadPosition(syncedPlayhead);
     }
     // zoom and scrollX are restored by loadState() from composition's timelineData
@@ -350,13 +421,18 @@ async function finishCompositionSwitch(
       timelineStore.refreshCompClipNestedData(savedCompId);
     }
 
-    // Trigger entrance animation for new clips
-    timelineStore.setClipAnimationPhase('entering');
-
-    // Reset to idle after entrance animation completes
-    setTimeout(() => {
+    if (skipAnimation) {
+      // Skip entrance animation — go straight to idle
       timelineStore.setClipAnimationPhase('idle');
-    }, 700); // Entrance animation duration (0.6s + buffer)
+    } else {
+      // Trigger entrance animation for new clips
+      timelineStore.setClipAnimationPhase('entering');
+
+      // Reset to idle after entrance animation completes
+      setTimeout(() => {
+        timelineStore.setClipAnimationPhase('idle');
+      }, 700); // Entrance animation duration (0.6s + buffer)
+    }
   } else {
     timelineStore.clearTimeline();
     timelineStore.setClipAnimationPhase('idle');

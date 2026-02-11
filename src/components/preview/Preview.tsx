@@ -236,8 +236,15 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [, setCompReady] = useState(false);
 
+  const previewCompositionId = useMediaStore(state => state.previewCompositionId);
+
   // Determine which composition this preview is showing
-  const displayedCompId = compositionId ?? activeCompositionId;
+  // When in "Active" mode (compositionId === null) but a slot preview is active,
+  // override to show the previewed composition independently
+  const slotPreviewActive = compositionId === null && previewCompositionId !== null;
+  const displayedCompId = slotPreviewActive
+    ? previewCompositionId
+    : (compositionId ?? activeCompositionId);
   const displayedComp = compositions.find(c => c.id === displayedCompId);
 
   // Engine resolution = active composition dimensions (fallback to settingsStore default)
@@ -248,7 +255,8 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
   // Is this an independent preview? (user explicitly selected a composition, not "Active")
   // If compositionId is null, it means "Active" is selected -> use main render loop
   // If compositionId is set to ANY value, use independent render loop with that composition's data
-  const isIndependentComp = compositionId !== null;
+  // Also independent when slot preview is active
+  const isIndependentComp = compositionId !== null || slotPreviewActive;
 
   // Track which registration mode is active to properly clean up on change
   const registrationModeRef = useRef<'main' | 'independent' | null>(null);
@@ -279,13 +287,16 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
       unregisterIndependentPreviewCanvas(panelId);
     }
 
+    // The effective composition ID for independent mode (handles slot preview override)
+    const effectiveCompId = slotPreviewActive ? previewCompositionId : compositionId;
+
     // Register with new mode
     if (targetMode === 'main') {
       log.debug(`[${panelId}] Registering with main canvas map (Active mode)`);
       registerPreviewCanvas(panelId, canvasRef.current);
     } else {
-      log.debug(`[${panelId}] Registering with independent canvas map (composition: ${compositionId})`);
-      registerIndependentPreviewCanvas(panelId, canvasRef.current, compositionId || undefined);
+      log.debug(`[${panelId}] Registering with independent canvas map (composition: ${effectiveCompId})`);
+      registerIndependentPreviewCanvas(panelId, canvasRef.current, effectiveCompId || undefined);
     }
 
     registrationModeRef.current = targetMode;
@@ -300,28 +311,29 @@ export function Preview({ panelId, compositionId }: PreviewProps) {
       }
       registrationModeRef.current = null;
     };
-  }, [isEngineReady, isIndependentComp, panelId, compositionId, registerPreviewCanvas, unregisterPreviewCanvas, registerIndependentPreviewCanvas, unregisterIndependentPreviewCanvas]);
+  }, [isEngineReady, isIndependentComp, panelId, compositionId, previewCompositionId, slotPreviewActive, registerPreviewCanvas, unregisterPreviewCanvas, registerIndependentPreviewCanvas, unregisterIndependentPreviewCanvas]);
 
   // For independent composition: register with centralized PreviewRenderManager
   // The manager handles preparation, render loop, and nested composition sync
+  const effectiveIndependentCompId = slotPreviewActive ? previewCompositionId : compositionId;
   useEffect(() => {
-    if (!isIndependentComp || !compositionId || !isEngineReady) {
+    if (!isIndependentComp || !effectiveIndependentCompId || !isEngineReady) {
       setCompReady(false);
       return;
     }
 
-    log.debug(`[${panelId}] Registering with PreviewRenderManager for composition: ${compositionId}`);
+    log.debug(`[${panelId}] Registering with PreviewRenderManager for composition: ${effectiveIndependentCompId}`);
 
     // Register with the centralized render manager
     // It handles: preparation, single RAF loop, nested comp sync
-    previewRenderManager.register(panelId, compositionId);
+    previewRenderManager.register(panelId, effectiveIndependentCompId);
     setCompReady(true);
 
     return () => {
       log.debug(`[${panelId}] Unregistering from PreviewRenderManager`);
       previewRenderManager.unregister(panelId);
     };
-  }, [isIndependentComp, compositionId, isEngineReady, panelId]);
+  }, [isIndependentComp, effectiveIndependentCompId, isEngineReady, panelId]);
 
   // Composition selector state
   const [selectorOpen, setSelectorOpen] = useState(false);

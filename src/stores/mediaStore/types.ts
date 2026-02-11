@@ -116,6 +116,10 @@ export interface MediaState {
   activeCompositionId: string | null;
   openCompositionIds: string[];
 
+  // Slot grid
+  slotOrder: string[];
+  previewCompositionId: string | null;
+
   // Selection
   selectedIds: string[];
   expandedFolderIds: string[];

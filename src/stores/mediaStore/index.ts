@@ -50,6 +50,8 @@ export const useMediaStore = create<MediaStoreState>()(
     solidItems: [],
     activeCompositionId: 'comp-1',
     openCompositionIds: ['comp-1'],
+    slotOrder: [],
+    previewCompositionId: null,
     selectedIds: [],
     expandedFolderIds: [],
     currentProjectId: null,

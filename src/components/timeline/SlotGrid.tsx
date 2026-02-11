@@ -1,5 +1,6 @@
 // SlotGrid - Resolume-style grid with row labels (layers) on left, column numbers on top
 // Compositions fill slots left-to-right, top-to-bottom; remaining slots are empty
+// Click = play from start (stay in grid), Drag = reorder, Bottom strip = preview
 
 import { Fragment, useCallback, useMemo, useRef, useEffect, useState } from 'react';
 import { useMediaStore } from '../../stores/mediaStore';
@@ -18,9 +19,16 @@ export function SlotGrid({ opacity }: SlotGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [slotSize, setSlotSize] = useState(120);
 
-  const compositions = useMediaStore(state => state.compositions);
   const activeCompositionId = useMediaStore(state => state.activeCompositionId);
+  const previewCompositionId = useMediaStore(state => state.previewCompositionId);
   const openCompositionTab = useMediaStore(state => state.openCompositionTab);
+  const reorderSlot = useMediaStore(state => state.reorderSlot);
+  const setPreviewComposition = useMediaStore(state => state.setPreviewComposition);
+  const getSlotOrderedCompositions = useMediaStore(state => state.getSlotOrderedCompositions);
+
+  // Drag state
+  const [dragFromIndex, setDragFromIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Auto-calculate slot size based on available space
   useEffect(() => {
@@ -57,14 +65,57 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     return () => container.removeEventListener('wheel', handleWheel);
   }, []);
 
+  // Click = play from start, stay in grid
   const handleSlotClick = useCallback((comp: Composition) => {
-    openCompositionTab(comp.id);
-    animateSlotGrid(0);
+    openCompositionTab(comp.id, { skipAnimation: true, playFromStart: true });
   }, [openCompositionTab]);
 
+  // Preview strip click
+  const handlePreviewClick = useCallback((e: React.MouseEvent, comp: Composition) => {
+    e.stopPropagation();
+    // Toggle preview off if already previewing this comp
+    if (previewCompositionId === comp.id) {
+      setPreviewComposition(null);
+    } else {
+      setPreviewComposition(comp.id);
+    }
+  }, [previewCompositionId, setPreviewComposition]);
+
+  // Drag handlers
+  const handleDragStart = useCallback((e: React.DragEvent, slotIndex: number) => {
+    setDragFromIndex(slotIndex);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(slotIndex));
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, slotIndex: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIndex(slotIndex);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverIndex(null);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, toIndex: number) => {
+    e.preventDefault();
+    const fromIndex = dragFromIndex;
+    setDragFromIndex(null);
+    setDragOverIndex(null);
+    if (fromIndex !== null && fromIndex !== toIndex) {
+      reorderSlot(fromIndex, toIndex);
+    }
+  }, [dragFromIndex, reorderSlot]);
+
+  const handleDragEnd = useCallback(() => {
+    setDragFromIndex(null);
+    setDragOverIndex(null);
+  }, []);
+
   const sortedCompositions = useMemo(() => {
-    return [...compositions].sort((a, b) => a.name.localeCompare(b.name));
-  }, [compositions]);
+    return getSlotOrderedCompositions();
+  }, [getSlotOrderedCompositions]);
 
   // Build a flat slot map: index → composition or null
   const totalSlots = GRID_COLS * GRID_ROWS;
@@ -110,12 +161,20 @@ export function SlotGrid({ opacity }: SlotGridProps) {
               const comp = slotMap[slotIndex];
               if (comp) {
                 const isActive = comp.id === activeCompositionId;
+                const isPreviewed = comp.id === previewCompositionId;
+                const isDragOver = slotIndex === dragOverIndex && dragFromIndex !== null && dragFromIndex !== slotIndex;
                 return (
                   <div
                     key={slotIndex}
-                    className={`slot-grid-item ${isActive ? 'active' : ''}`}
+                    className={`slot-grid-item${isActive ? ' active' : ''}${isPreviewed ? ' previewed' : ''}${isDragOver ? ' drag-over' : ''}`}
                     onClick={() => handleSlotClick(comp)}
                     title={comp.name}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, slotIndex)}
+                    onDragOver={(e) => handleDragOver(e, slotIndex)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, slotIndex)}
+                    onDragEnd={handleDragEnd}
                   >
                     <MiniTimeline
                       timelineData={comp.timelineData}
@@ -125,11 +184,24 @@ export function SlotGrid({ opacity }: SlotGridProps) {
                       width={slotSize - 4}
                       height={slotSize - 4}
                     />
+                    <div
+                      className={`slot-grid-preview-strip${isPreviewed ? ' active' : ''}`}
+                      onClick={(e) => handlePreviewClick(e, comp)}
+                      title="Preview this composition"
+                    >
+                      PRV
+                    </div>
                   </div>
                 );
               }
               return (
-                <div key={slotIndex} className="slot-grid-item empty" />
+                <div
+                  key={slotIndex}
+                  className="slot-grid-item empty"
+                  onDragOver={(e) => handleDragOver(e, slotIndex)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, slotIndex)}
+                />
               );
             })}
           </Fragment>
