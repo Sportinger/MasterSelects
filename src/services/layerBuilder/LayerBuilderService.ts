@@ -86,6 +86,8 @@ export class LayerBuilderService {
   // We do this lazily on first scrub attempt, not during restore, because
   // the render loop's syncClipVideo would immediately pause the warmup video.
   private warmingUpVideos = new WeakSet<HTMLVideoElement>();
+  // Cooldown for failed warmup attempts (avoids spamming play() every frame)
+  private warmupRetryCooldown = new WeakMap<HTMLVideoElement, number>();
 
   /**
    * Invalidate all caches (layer cache and transform cache)
@@ -1032,7 +1034,10 @@ export class LayerBuilderService {
     // The ONLY fix is video.play() to activate the GPU compositor.
     // We do this here (not during restore) because restore-time warmup
     // gets immediately killed by this very function's "pause if not playing" logic.
-    if (!ctx.isPlaying && video.readyState >= 2 && !video.seeking &&
+    const hasSrc = !!(video.src || video.currentSrc);
+    const warmupCooldown = this.warmupRetryCooldown.get(video);
+    const cooldownOk = !warmupCooldown || performance.now() - warmupCooldown > 2000;
+    if (!ctx.isPlaying && !video.seeking && hasSrc && cooldownOk &&
         video.played.length === 0 && !this.warmingUpVideos.has(video)) {
       this.warmingUpVideos.add(video);
       const targetTime = timeInfo.clipTime;
@@ -1060,6 +1065,7 @@ export class LayerBuilderService {
         }
       }).catch(() => {
         this.warmingUpVideos.delete(video);
+        this.warmupRetryCooldown.set(video, performance.now());
       });
       return; // Skip normal sync — warmup is handling video state
     }
