@@ -185,7 +185,7 @@ export class ParallelDecodeManager {
       clipInfo,
       isDecoding: false,
       pendingDecode: null,
-      needsKeyframe: false,
+      needsKeyframe: true, // Decoder was just configure()'d — first chunk must be a keyframe
     };
 
     this.clipDecoders.set(clipInfo.clipId, clipDecoder);
@@ -763,26 +763,46 @@ export class ParallelDecodeManager {
 
         log.debug(`${clipDecoder.clipName}: Decoding ${framesToDecode} frames (from sample ${clipDecoder.sampleIndex} to ${clipDecoder.sampleIndex + framesToDecode}), forceFlush=${forceFlush}, needsSeek=${needsSeek} (ahead=${isTooFarAhead}, behind=${isTooFarBehind}), batchSize=${batchSize}`);
 
-        // After flush, we need to start from a keyframe
+        // After flush/configure, decoder requires next chunk to be a keyframe.
+        // Reset decoder and start from nearest keyframe (same approach as seek path).
         if (clipDecoder.needsKeyframe && !needsSeek) {
-          const currentSample = clipDecoder.samples[clipDecoder.sampleIndex];
-          if (currentSample && !currentSample.is_sync) {
-            // Back up to previous keyframe
-            for (let i = clipDecoder.sampleIndex - 1; i >= 0; i--) {
+          let keyframeIndex = clipDecoder.sampleIndex;
+          // Find nearest keyframe at or before current position
+          if (!clipDecoder.samples[keyframeIndex]?.is_sync) {
+            for (let i = keyframeIndex - 1; i >= 0; i--) {
               if (clipDecoder.samples[i].is_sync) {
-                log.debug(`${clipDecoder.clipName}: after flush, backing up to keyframe at sample ${i}`);
-                clipDecoder.sampleIndex = i;
+                keyframeIndex = i;
                 break;
               }
             }
           }
+          // Reset decoder to clean state and start from keyframe
+          clipDecoder.decoder.reset();
+          clipDecoder.decoder.configure(clipDecoder.codecConfig);
+          clipDecoder.sampleIndex = keyframeIndex;
           clipDecoder.needsKeyframe = false;
+          log.debug(`${clipDecoder.clipName}: needsKeyframe - reset decoder, starting from keyframe at sample ${keyframeIndex}`);
         }
 
         // Queue frames for decode (non-blocking - output callback handles results)
         let decodedCount = 0;
+        let needsKeyframeRecovery = false;
         for (let i = 0; i < framesToDecode && clipDecoder.sampleIndex < clipDecoder.samples.length; i++) {
           const sample = clipDecoder.samples[clipDecoder.sampleIndex];
+
+          // Safety: if decoder rejected a delta frame, skip until next keyframe
+          if (needsKeyframeRecovery && !sample.is_sync) {
+            clipDecoder.sampleIndex++;
+            continue;
+          }
+          if (needsKeyframeRecovery && sample.is_sync) {
+            // Found a keyframe — reset decoder to clean state before feeding it
+            clipDecoder.decoder.reset();
+            clipDecoder.decoder.configure(clipDecoder.codecConfig);
+            needsKeyframeRecovery = false;
+            log.debug(`${clipDecoder.clipName}: keyframe recovery at sample ${clipDecoder.sampleIndex}`);
+          }
+
           clipDecoder.sampleIndex++;
 
           const chunk = new EncodedVideoChunk({
@@ -796,7 +816,14 @@ export class ParallelDecodeManager {
             clipDecoder.decoder.decode(chunk);
             decodedCount++;
           } catch (e) {
-            log.warn(`${clipDecoder.clipName}: decode error at sample ${clipDecoder.sampleIndex - 1}: ${e}`);
+            const msg = e instanceof Error ? e.message : String(e);
+            if (msg.includes('key frame')) {
+              // Decoder needs a keyframe — skip delta frames until we find one
+              needsKeyframeRecovery = true;
+              log.debug(`${clipDecoder.clipName}: key frame required at sample ${clipDecoder.sampleIndex - 1}, scanning for next keyframe`);
+            } else {
+              log.warn(`${clipDecoder.clipName}: decode error at sample ${clipDecoder.sampleIndex - 1}: ${e}`);
+            }
           }
         }
 
