@@ -278,6 +278,9 @@ export function AIChatPanel() {
         });
 
         // Execute each tool call
+        // IMPORTANT: Always add a tool result for every tool_call to keep
+        // the conversation valid for the OpenAI API. If a tool crashes,
+        // we still send an error result back.
         for (const toolCall of toolCalls) {
           setCurrentToolAction(`Executing: ${toolCall.name}`);
 
@@ -288,7 +291,12 @@ export function AIChatPanel() {
             args = {};
           }
 
-          const result = await executeAITool(toolCall.name, args);
+          let result: { success: boolean; data?: unknown; error?: string };
+          try {
+            result = await executeAITool(toolCall.name, args);
+          } catch (toolErr) {
+            result = { success: false, error: toolErr instanceof Error ? toolErr.message : String(toolErr) };
+          }
 
           const toolResultMessage: Message = {
             id: toolCall.id,
