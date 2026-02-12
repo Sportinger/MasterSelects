@@ -138,15 +138,22 @@ export function initHistoryStoreRefs(stores: {
 }
 
 // Deep clone helper (handles most objects, excluding DOM elements and functions)
-function deepClone<T>(obj: T): T {
+// Uses a WeakSet to detect circular references and avoid infinite recursion
+function deepClone<T>(obj: T, seen?: WeakSet<object>): T {
   if (obj === null || typeof obj !== 'object') return obj;
   if (obj instanceof Date) return new Date(obj.getTime()) as T;
-  if (Array.isArray(obj)) return obj.map(deepClone) as T;
 
   // Skip cloning DOM elements, HTMLMediaElements, File objects, etc.
   if (obj instanceof Element || obj instanceof HTMLMediaElement || obj instanceof File) {
     return obj; // Return reference, don't clone
   }
+
+  // Circular reference detection
+  if (!seen) seen = new WeakSet();
+  if (seen.has(obj as object)) return obj; // Break cycle, return reference
+  seen.add(obj as object);
+
+  if (Array.isArray(obj)) return obj.map(item => deepClone(item, seen)) as T;
 
   const cloned = {} as T;
   for (const key in obj) {
@@ -157,7 +164,7 @@ function deepClone<T>(obj: T): T {
       if (value instanceof Element || value instanceof HTMLMediaElement) {
         cloned[key] = value; // Keep reference
       } else {
-        cloned[key] = deepClone(value);
+        cloned[key] = deepClone(value, seen);
       }
     }
   }
