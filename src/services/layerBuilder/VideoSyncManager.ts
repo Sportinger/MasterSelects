@@ -1,0 +1,420 @@
+// VideoSyncManager - Handles video element synchronization with playhead
+// Extracted from LayerBuilderService for separation of concerns
+
+import type { TimelineClip } from '../../types';
+import type { FrameContext, NativeDecoderState } from './types';
+import { LAYER_BUILDER_CONSTANTS } from './types';
+import { createFrameContext, getClipTimeInfo, getMediaFileForClip } from './FrameContext';
+import { layerPlaybackManager } from '../layerPlaybackManager';
+import { engine } from '../../engine/WebGPUEngine';
+
+export class VideoSyncManager {
+  // Native decoder state
+  private nativeDecoderState = new Map<string, NativeDecoderState>();
+
+  // Video sync throttling
+  private lastVideoSyncFrame = -1;
+  private lastVideoSyncPlaying = false;
+  private lastSeekRef: Record<string, number> = {};
+
+  // Videos currently being warmed up (brief play to activate GPU surface)
+  // After page reload, video GPU surfaces are empty — all sync rendering APIs
+  // (importExternalTexture, canvas.drawImage, copyExternalImageToTexture) return black.
+  // The ONLY way to populate the GPU surface is video.play().
+  // We do this lazily on first scrub attempt, not during restore, because
+  // the render loop's syncClipVideo would immediately pause the warmup video.
+  private warmingUpVideos = new WeakSet<HTMLVideoElement>();
+  // Cooldown for failed warmup attempts (avoids spamming play() every frame)
+  private warmupRetryCooldown = new WeakMap<HTMLVideoElement, number>();
+
+  // Track which videos are being force-decoded to avoid duplicate calls
+  private forceDecodeInProgress = new Set<string>();
+
+  // Hybrid seek state
+  private rvfcHandles: Record<string, number> = {};
+  private preciseSeekTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+  private latestSeekTargets: Record<string, number> = {};
+
+  /**
+   * Sync video elements to current playhead
+   */
+  syncVideoElements(): void {
+    const ctx = createFrameContext();
+
+    // Skip if same frame during playback
+    if (ctx.isPlaying && !ctx.isDraggingPlayhead &&
+        ctx.frameNumber === this.lastVideoSyncFrame &&
+        ctx.isPlaying === this.lastVideoSyncPlaying) {
+      return;
+    }
+    this.lastVideoSyncFrame = ctx.frameNumber;
+    this.lastVideoSyncPlaying = ctx.isPlaying;
+
+    // Sync each clip at playhead
+    for (const clip of ctx.clipsAtTime) {
+      this.syncClipVideo(clip, ctx);
+
+      // Sync nested composition videos
+      if (clip.isComposition && clip.nestedClips && clip.nestedClips.length > 0) {
+        this.syncNestedCompVideos(clip, ctx);
+      }
+    }
+
+    // Pause videos not at playhead
+    for (const clip of ctx.clips) {
+      if (clip.source?.videoElement) {
+        const isAtPlayhead = ctx.clipsByTrackId.has(clip.trackId) &&
+          ctx.clipsByTrackId.get(clip.trackId)?.id === clip.id;
+        if (!isAtPlayhead && !clip.source.videoElement.paused) {
+          clip.source.videoElement.pause();
+        }
+      }
+
+      // Pause nested comp videos not at playhead
+      if (clip.isComposition && clip.nestedClips) {
+        const isAtPlayhead = ctx.clipsByTrackId.has(clip.trackId) &&
+          ctx.clipsByTrackId.get(clip.trackId)?.id === clip.id;
+        if (!isAtPlayhead) {
+          for (const nestedClip of clip.nestedClips) {
+            if (nestedClip.source?.videoElement && !nestedClip.source.videoElement.paused) {
+              nestedClip.source.videoElement.pause();
+            }
+          }
+        }
+      }
+    }
+
+    // Sync background layer video elements
+    layerPlaybackManager.syncVideoElements(ctx.playheadPosition, ctx.isPlaying);
+  }
+
+  /**
+   * Sync nested composition video elements
+   * Uses same logic as regular clips: play during playback, seek when paused
+   * Also ensures videos have decoded frames (readyState >= 2) for rendering
+   */
+  private syncNestedCompVideos(compClip: TimelineClip, ctx: FrameContext): void {
+    if (!compClip.nestedClips || !compClip.nestedTracks) return;
+
+    // Calculate time within the composition
+    const compLocalTime = ctx.playheadPosition - compClip.startTime;
+    const compTime = compLocalTime + compClip.inPoint;
+
+    for (const nestedClip of compClip.nestedClips) {
+      if (!nestedClip.source?.videoElement) continue;
+
+      // Check if nested clip is active at current comp time
+      const isActive = compTime >= nestedClip.startTime && compTime < nestedClip.startTime + nestedClip.duration;
+
+      if (!isActive) {
+        // Pause if not active
+        if (!nestedClip.source.videoElement.paused) {
+          nestedClip.source.videoElement.pause();
+        }
+        continue;
+      }
+
+      // Calculate time within the nested clip
+      const nestedLocalTime = compTime - nestedClip.startTime;
+      const nestedClipTime = nestedClip.reversed
+        ? nestedClip.outPoint - nestedLocalTime
+        : nestedLocalTime + nestedClip.inPoint;
+
+      const video = nestedClip.source.videoElement;
+      const webCodecsPlayer = nestedClip.source.webCodecsPlayer;
+      const timeDiff = Math.abs(video.currentTime - nestedClipTime);
+
+      // Pre-capture: ensure scrubbing cache has a frame before seeking
+      if (!video.seeking && video.readyState >= 2) {
+        engine.ensureVideoFrameCached(video);
+      }
+
+      // During playback: let video play naturally (like regular clips)
+      if (ctx.isPlaying) {
+        if (video.paused) {
+          video.play().catch(() => {});
+        }
+        // Only seek if significantly out of sync (>0.5s)
+        if (timeDiff > 0.5) {
+          video.currentTime = nestedClipTime;
+        }
+      } else {
+        // When paused: pause video and seek to exact time
+        if (!video.paused) video.pause();
+
+        // Force first-frame decode for videos that haven't played yet (e.g. after reload)
+        if (video.played.length === 0 && !video.seeking && !this.forceDecodeInProgress.has(nestedClip.id)) {
+          this.forceVideoFrameDecode(nestedClip.id, video);
+        }
+
+        const seekThreshold = ctx.isDraggingPlayhead ? 0.1 : 0.05;
+        if (timeDiff > seekThreshold) {
+          this.throttledSeek(nestedClip.id, video, nestedClipTime, ctx);
+          video.addEventListener('seeked', () => engine.requestRender(), { once: true });
+        }
+
+        // If video readyState < 2 (no frame data), force decode via play/pause
+        // This can happen after seeking to unbuffered regions
+        if (video.readyState < 2 && !video.seeking) {
+          this.forceVideoFrameDecode(nestedClip.id, video);
+        }
+      }
+
+      // Sync WebCodecsPlayer only when not playing (it handles its own playback)
+      if (webCodecsPlayer && !ctx.isPlaying) {
+        const wcTimeDiff = Math.abs(webCodecsPlayer.currentTime - nestedClipTime);
+        if (wcTimeDiff > 0.05) {
+          webCodecsPlayer.seek(nestedClipTime);
+        }
+      }
+    }
+  }
+
+  /**
+   * Force video to decode current frame by briefly playing
+   * Used when video has never played (after reload) or readyState drops below 2
+   */
+  private forceVideoFrameDecode(clipId: string, video: HTMLVideoElement): void {
+    if (this.forceDecodeInProgress.has(clipId)) return;
+    this.forceDecodeInProgress.add(clipId);
+
+    const currentTime = video.currentTime;
+    video.muted = true; // Prevent autoplay restrictions
+    video.play()
+      .then(() => {
+        video.pause();
+        video.currentTime = currentTime;
+        this.forceDecodeInProgress.delete(clipId);
+        engine.requestRender();
+      })
+      .catch(() => {
+        // Fallback: tiny seek to trigger decode
+        video.currentTime = currentTime + 0.001;
+        this.forceDecodeInProgress.delete(clipId);
+        engine.requestRender();
+      });
+  }
+
+  /**
+   * Sync a single clip's video element
+   */
+  private syncClipVideo(clip: TimelineClip, ctx: FrameContext): void {
+    // Handle native decoder
+    if (clip.source?.nativeDecoder) {
+      this.syncNativeDecoder(clip, ctx);
+      return;
+    }
+
+    if (!clip.source?.videoElement) return;
+
+    const video = clip.source.videoElement;
+    const timeInfo = getClipTimeInfo(ctx, clip);
+    const mediaFile = getMediaFileForClip(ctx, clip);
+
+    // Check proxy mode
+    const useProxy = ctx.proxyEnabled && mediaFile?.proxyFps &&
+      (mediaFile.proxyStatus === 'ready' || mediaFile.proxyStatus === 'generating');
+
+    if (useProxy) {
+      // In proxy mode: pause video
+      if (!video.paused) video.pause();
+      if (!video.muted) video.muted = true;
+      return;
+    }
+
+    // Skip sync during GPU surface warmup — the video is playing briefly
+    // to activate Chrome's GPU decoder. Don't pause or seek it.
+    if (this.warmingUpVideos.has(video)) return;
+
+    // Warmup: after page reload, video GPU surfaces are empty.
+    // importExternalTexture, canvas.drawImage, etc. all return black.
+    // The ONLY fix is video.play() to activate the GPU compositor.
+    // We do this here (not during restore) because restore-time warmup
+    // gets immediately killed by this very function's "pause if not playing" logic.
+    const hasSrc = !!(video.src || video.currentSrc);
+    const warmupCooldown = this.warmupRetryCooldown.get(video);
+    const cooldownOk = !warmupCooldown || performance.now() - warmupCooldown > 2000;
+    if (!ctx.isPlaying && !video.seeking && hasSrc && cooldownOk &&
+        video.played.length === 0 && !this.warmingUpVideos.has(video)) {
+      this.warmingUpVideos.add(video);
+      const targetTime = timeInfo.clipTime;
+      video.play().then(() => {
+        // Wait for actual frame presentation via requestVideoFrameCallback
+        const rvfc = (video as any).requestVideoFrameCallback;
+        if (typeof rvfc === 'function') {
+          rvfc.call(video, () => {
+            // Frame is now presented to GPU — capture it
+            engine.ensureVideoFrameCached(video);
+            video.pause();
+            video.currentTime = targetTime;
+            this.warmingUpVideos.delete(video);
+            engine.requestRender();
+          });
+        } else {
+          // Fallback: wait 100ms for frame presentation
+          setTimeout(() => {
+            engine.ensureVideoFrameCached(video);
+            video.pause();
+            video.currentTime = targetTime;
+            this.warmingUpVideos.delete(video);
+            engine.requestRender();
+          }, 100);
+        }
+      }).catch(() => {
+        this.warmingUpVideos.delete(video);
+        this.warmupRetryCooldown.set(video, performance.now());
+      });
+      return; // Skip normal sync — warmup is handling video state
+    }
+
+    // Normal video sync
+    const timeDiff = Math.abs(video.currentTime - timeInfo.clipTime);
+
+    // Pre-capture: ensure scrubbing cache has a frame BEFORE seeking
+    if (!video.seeking && video.readyState >= 2) {
+      engine.ensureVideoFrameCached(video);
+    }
+
+    // Reverse playback: either clip is reversed OR timeline playbackSpeed is negative
+    // H.264 can't play backwards, so we seek frame-by-frame
+    const isReversePlayback = clip.reversed || ctx.playbackSpeed < 0;
+
+    if (isReversePlayback) {
+      // For reverse: pause video and seek to each frame
+      if (!video.paused) video.pause();
+      const seekThreshold = ctx.isDraggingPlayhead ? 0.04 : 0.02;
+      if (timeDiff > seekThreshold) {
+        this.throttledSeek(clip.id, video, timeInfo.clipTime, ctx);
+      }
+    } else if (ctx.playbackSpeed !== 1) {
+      // Non-standard forward speed (2x, 4x, etc.): seek frame-by-frame for accuracy
+      if (!video.paused) video.pause();
+      const seekThreshold = ctx.isDraggingPlayhead ? 0.04 : 0.03;
+      if (timeDiff > seekThreshold) {
+        this.throttledSeek(clip.id, video, timeInfo.clipTime, ctx);
+      }
+    } else {
+      // Normal 1x forward playback: let video play naturally
+      if (ctx.isPlaying && video.paused) {
+        video.play().catch(() => {});
+      } else if (!ctx.isPlaying && !video.paused) {
+        video.pause();
+      }
+
+      if (!ctx.isPlaying) {
+        // 0.04s ≈ slightly more than 1 frame at 30fps.
+        // Previous 0.1s threshold skipped up to 3 frames during slow scrubbing.
+        const seekThreshold = ctx.isDraggingPlayhead ? 0.04 : 0.04;
+        if (timeDiff > seekThreshold) {
+          this.throttledSeek(clip.id, video, timeInfo.clipTime, ctx);
+        }
+
+        // Force decode if readyState dropped after seek
+        if (video.readyState < 2 && !video.seeking) {
+          this.forceVideoFrameDecode(clip.id, video);
+        }
+      }
+    }
+  }
+
+  /**
+   * Hybrid seeking strategy for smooth scrubbing on all codec types:
+   *
+   * During drag (fast scrubbing):
+   *   Phase 1: fastSeek → instant keyframe feedback (<10ms, shows nearest I-frame)
+   *   Phase 2: deferred precise seek → exact frame when scrubbing pauses (debounced 120ms)
+   *
+   * This solves the long-GOP problem: YouTube/phone videos with 5-7s keyframe distance
+   * previously showed a stale cached frame for 100-300ms per seek (currentTime decodes
+   * from keyframe to target). Now the user sees the nearest keyframe immediately, then
+   * the exact frame fills in when they pause.
+   *
+   * When not dragging (single click / arrow keys): precise seek via currentTime.
+   *
+   * RVFC (requestVideoFrameCallback) triggers re-render when the decoded frame is
+   * actually presented to the compositor — more accurate than the 'seeked' event.
+   */
+  private throttledSeek(clipId: string, video: HTMLVideoElement, time: number, ctx: FrameContext): void {
+    const lastSeek = this.lastSeekRef[clipId] || 0;
+    const threshold = ctx.isDraggingPlayhead ? 50 : 33;
+    if (ctx.now - lastSeek > threshold) {
+      if (ctx.isDraggingPlayhead && 'fastSeek' in video) {
+        // Phase 1: Instant keyframe feedback via fastSeek.
+        // For all-intra codecs this IS the exact frame. For long-GOP codecs
+        // this shows the nearest keyframe — better than a stale cached frame.
+        video.fastSeek(time);
+
+        // Phase 2: Schedule deferred precise seek for exact frame.
+        // Debounced: resets on each new scrub position, only fires when
+        // the user pauses or slows their scrubbing.
+        this.latestSeekTargets[clipId] = time;
+        clearTimeout(this.preciseSeekTimers[clipId]);
+        this.preciseSeekTimers[clipId] = setTimeout(() => {
+          const target = this.latestSeekTargets[clipId];
+          // Only do precise seek if the fastSeek landed far from the target
+          // (i.e., this is a long-GOP video where fastSeek shows a different frame)
+          if (target !== undefined && Math.abs(video.currentTime - target) > 0.01) {
+            video.currentTime = target;
+            // Register RVFC for when the precise frame arrives
+            this.registerRVFC(clipId, video);
+          }
+        }, 120);
+      } else {
+        // Not dragging: precise seek immediately (click, arrow keys, etc.)
+        video.currentTime = time;
+        clearTimeout(this.preciseSeekTimers[clipId]);
+      }
+      this.lastSeekRef[clipId] = ctx.now;
+
+      // Register RVFC to trigger re-render when the decoded frame is presented.
+      this.registerRVFC(clipId, video);
+    }
+  }
+
+  private registerRVFC(clipId: string, video: HTMLVideoElement): void {
+    const rvfc = (video as any).requestVideoFrameCallback;
+    if (typeof rvfc === 'function') {
+      const prevHandle = this.rvfcHandles[clipId];
+      if (prevHandle !== undefined) {
+        (video as any).cancelVideoFrameCallback(prevHandle);
+      }
+      this.rvfcHandles[clipId] = rvfc.call(video, () => {
+        delete this.rvfcHandles[clipId];
+        // Bypass the scrub rate limiter — a fresh decoded frame should be displayed immediately
+        engine.requestNewFrameRender();
+      });
+    }
+  }
+
+  /**
+   * Sync native decoder
+   */
+  private syncNativeDecoder(clip: TimelineClip, ctx: FrameContext): void {
+    const nativeDecoder = clip.source!.nativeDecoder!;
+    const timeInfo = getClipTimeInfo(ctx, clip);
+
+    const fps = nativeDecoder.fps || 25;
+    const targetFrame = Math.round(timeInfo.clipTime * fps);
+
+    // Get or create state
+    let state = this.nativeDecoderState.get(clip.id);
+    if (!state) {
+      state = { lastSeekTime: 0, lastSeekFrame: -1, isPending: false };
+      this.nativeDecoderState.set(clip.id, state);
+    }
+
+    const timeSinceLastSeek = ctx.now - state.lastSeekTime;
+    const shouldSeek = !state.isPending &&
+      (targetFrame !== state.lastSeekFrame || timeSinceLastSeek > 100);
+
+    if (shouldSeek && timeSinceLastSeek >= LAYER_BUILDER_CONSTANTS.NATIVE_SEEK_THROTTLE_MS) {
+      state.lastSeekTime = ctx.now;
+      state.lastSeekFrame = targetFrame;
+      state.isPending = true;
+
+      nativeDecoder.seekToFrame(targetFrame, ctx.isDraggingPlayhead)
+        .then(() => { state!.isPending = false; })
+        .catch((err: unknown) => { state!.isPending = false; console.warn('[NH] seek failed frame', targetFrame, err); });
+    }
+  }
+}
