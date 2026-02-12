@@ -10,7 +10,7 @@ import { Logger } from '../services/logger';
 const log = Logger.create('SettingsStore');
 
 // Theme mode options
-export type ThemeMode = 'dark' | 'light' | 'midnight' | 'system' | 'crazy';
+export type ThemeMode = 'dark' | 'light' | 'midnight' | 'system' | 'crazy' | 'custom';
 
 // Transcription provider options
 export type TranscriptionProvider = 'local' | 'openai' | 'assemblyai' | 'deepgram';
@@ -38,6 +38,8 @@ export type AutosaveInterval = 1 | 2 | 5 | 10;
 interface SettingsState {
   // Theme
   theme: ThemeMode;
+  customHue: number;        // 0-360 hue for custom theme
+  customBrightness: number; // 0-100 brightness (0=dark, 100=light)
 
   // API Keys
   apiKeys: APIKeys;
@@ -89,6 +91,8 @@ interface SettingsState {
 
   // Actions
   setTheme: (theme: ThemeMode) => void;
+  setCustomHue: (hue: number) => void;
+  setCustomBrightness: (brightness: number) => void;
   setApiKey: (provider: keyof APIKeys, key: string) => void;
   setTranscriptionProvider: (provider: TranscriptionProvider) => void;
   setPreviewQuality: (quality: PreviewQuality) => void;
@@ -128,6 +132,8 @@ export const useSettingsStore = create<SettingsState>()(
       (set, get) => ({
       // Initial state
       theme: 'dark' as ThemeMode,
+      customHue: 210,       // Default: blue
+      customBrightness: 15, // Default: dark
       apiKeys: {
         openai: '',
         assemblyai: '',
@@ -162,6 +168,8 @@ export const useSettingsStore = create<SettingsState>()(
 
       // Actions
       setTheme: (theme) => set({ theme }),
+      setCustomHue: (hue) => set({ customHue: hue }),
+      setCustomBrightness: (brightness) => set({ customBrightness: brightness }),
 
       setApiKey: (provider, key) => {
         set((state) => ({
@@ -305,6 +313,8 @@ export const useSettingsStore = create<SettingsState>()(
       // Don't persist transient UI state like isSettingsOpen
       partialize: (state) => ({
         theme: state.theme,
+        customHue: state.customHue,
+        customBrightness: state.customBrightness,
         transcriptionProvider: state.transcriptionProvider,
         previewQuality: state.previewQuality,
         showTransparencyGrid: state.showTransparencyGrid,

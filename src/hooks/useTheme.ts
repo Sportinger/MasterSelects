@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 import type { ThemeMode } from '../stores/settingsStore';
 
-type ResolvedTheme = 'dark' | 'light' | 'midnight' | 'crazy';
+type ResolvedTheme = 'dark' | 'light' | 'midnight' | 'crazy' | 'custom';
 
 function resolveTheme(theme: ThemeMode): ResolvedTheme {
   if (theme === 'system') {
@@ -11,59 +11,151 @@ function resolveTheme(theme: ThemeMode): ResolvedTheme {
   return theme;
 }
 
-/** Generate a random hue-shifted color palette and apply as CSS custom properties */
+/** Generate a colorful random palette — each section gets its own distinct hue */
 function applyCrazyColors(root: HTMLElement) {
   const hue = () => Math.floor(Math.random() * 360);
-  const sat = () => 40 + Math.floor(Math.random() * 40); // 40-80%
-  const light = (base: number, range: number) => base + Math.floor(Math.random() * range);
+  const sat = () => 50 + Math.floor(Math.random() * 40); // 50-90%
 
-  // Generate a random palette
-  const h1 = hue(), h2 = hue(), h3 = hue();
+  // 6 distinct hues for maximum variety
+  const hBg = hue();
+  const hBorder = (hBg + 60 + Math.floor(Math.random() * 60)) % 360;
+  const hText = (hBorder + 60 + Math.floor(Math.random() * 60)) % 360;
+  const hAccent = (hText + 60 + Math.floor(Math.random() * 60)) % 360;
+  const hStatus = (hAccent + 60 + Math.floor(Math.random() * 60)) % 360;
+  const hChat = (hStatus + 60 + Math.floor(Math.random() * 60)) % 360;
 
-  root.style.setProperty('--bg-primary', `hsl(${h1}, ${sat()}%, ${light(8, 10)}%)`);
-  root.style.setProperty('--bg-secondary', `hsl(${h1}, ${sat()}%, ${light(12, 8)}%)`);
-  root.style.setProperty('--bg-tertiary', `hsl(${h1}, ${sat()}%, ${light(16, 8)}%)`);
-  root.style.setProperty('--bg-hover', `hsl(${h1}, ${sat()}%, ${light(22, 8)}%)`);
-  root.style.setProperty('--bg-active', `hsl(${h1}, ${sat()}%, ${light(26, 6)}%)`);
-  root.style.setProperty('--bg-elevated', `hsl(${h1}, ${sat()}%, ${light(18, 6)}%)`);
-  root.style.setProperty('--bg-input', `hsl(${h1}, ${sat()}%, ${light(10, 6)}%)`);
+  // Backgrounds — deep saturated tones
+  root.style.setProperty('--bg-primary', `hsl(${hBg}, ${sat()}%, 10%)`);
+  root.style.setProperty('--bg-secondary', `hsl(${hBg}, ${sat()}%, 14%)`);
+  root.style.setProperty('--bg-tertiary', `hsl(${hBg}, ${sat()}%, 18%)`);
+  root.style.setProperty('--bg-hover', `hsl(${hBg}, ${sat()}%, 24%)`);
+  root.style.setProperty('--bg-active', `hsl(${hBg}, ${sat()}%, 28%)`);
+  root.style.setProperty('--bg-elevated', `hsl(${hBg}, ${sat()}%, 20%)`);
+  root.style.setProperty('--bg-input', `hsl(${hBg}, ${sat()}%, 12%)`);
 
-  root.style.setProperty('--border-color', `hsl(${h1}, ${sat()}%, ${light(20, 10)}%)`);
-  root.style.setProperty('--border-subtle', `hsl(${h1}, ${sat()}%, ${light(28, 10)}%)`);
-  root.style.setProperty('--border-strong', `hsl(${h1}, ${sat()}%, ${light(35, 10)}%)`);
+  // Borders — different hue from bg
+  root.style.setProperty('--border-color', `hsl(${hBorder}, ${sat()}%, 25%)`);
+  root.style.setProperty('--border-subtle', `hsl(${hBorder}, ${sat()}%, 32%)`);
+  root.style.setProperty('--border-strong', `hsl(${hBorder}, ${sat()}%, 40%)`);
 
-  root.style.setProperty('--text-primary', `hsl(${h2}, ${sat()}%, ${light(80, 15)}%)`);
-  root.style.setProperty('--text-secondary', `hsl(${h2}, ${sat()}%, ${light(60, 15)}%)`);
-  root.style.setProperty('--text-muted', `hsl(${h2}, ${sat()}%, ${light(45, 10)}%)`);
+  // Text — contrasting hue
+  root.style.setProperty('--text-primary', `hsl(${hText}, ${sat() - 10}%, 88%)`);
+  root.style.setProperty('--text-secondary', `hsl(${hText}, ${sat() - 10}%, 68%)`);
+  root.style.setProperty('--text-muted', `hsl(${hText}, ${sat() - 20}%, 50%)`);
 
-  root.style.setProperty('--accent', `hsl(${h3}, ${sat() + 15}%, ${light(50, 15)}%)`);
-  root.style.setProperty('--accent-hover', `hsl(${h3}, ${sat() + 15}%, ${light(60, 10)}%)`);
-  root.style.setProperty('--accent-dim', `hsla(${h3}, ${sat() + 15}%, 50%, 0.15)`);
-  root.style.setProperty('--accent-subtle', `hsla(${h3}, ${sat() + 15}%, 50%, 0.1)`);
-  root.style.setProperty('--accent-timeline', `hsl(${h3}, ${sat() + 15}%, ${light(50, 15)}%)`);
+  // Accent — vivid contrasting color
+  const aSat = sat() + 15;
+  root.style.setProperty('--accent', `hsl(${hAccent}, ${aSat}%, 55%)`);
+  root.style.setProperty('--accent-hover', `hsl(${hAccent}, ${aSat}%, 65%)`);
+  root.style.setProperty('--accent-dim', `hsla(${hAccent}, ${aSat}%, 55%, 0.15)`);
+  root.style.setProperty('--accent-subtle', `hsla(${hAccent}, ${aSat}%, 55%, 0.1)`);
+  root.style.setProperty('--accent-timeline', `hsl(${hAccent}, ${aSat}%, 55%)`);
 
-  root.style.setProperty('--tab-active-bg', `hsl(${h1}, ${sat()}%, ${light(24, 8)}%)`);
-  root.style.setProperty('--scrollbar-thumb', `hsl(${h1}, ${sat()}%, ${light(30, 10)}%)`);
-  root.style.setProperty('--scrollbar-thumb-hover', `hsl(${h1}, ${sat()}%, ${light(40, 10)}%)`);
+  // Component tokens
+  root.style.setProperty('--tab-active-bg', `hsl(${hBg}, ${sat()}%, 26%)`);
+  root.style.setProperty('--scrollbar-thumb', `hsl(${hBorder}, ${sat()}%, 35%)`);
+  root.style.setProperty('--scrollbar-thumb-hover', `hsl(${hBorder}, ${sat()}%, 45%)`);
 
-  root.style.setProperty('--timeline-grid-video', `hsl(${h3}, ${sat()}%, ${light(14, 6)}%)`);
-  root.style.setProperty('--timeline-grid-audio', `hsl(${(h3 + 120) % 360}, ${sat()}%, ${light(14, 6)}%)`);
+  // Timeline grid — accent-tinted
+  root.style.setProperty('--timeline-grid-video', `hsl(${hAccent}, ${sat()}%, 16%)`);
+  root.style.setProperty('--timeline-grid-audio', `hsl(${(hAccent + 120) % 360}, ${sat()}%, 16%)`);
 
-  root.style.setProperty('--chat-user-bg', `hsl(${h2}, ${sat()}%, ${light(20, 10)}%)`);
-  root.style.setProperty('--chat-user-border', `hsl(${h2}, ${sat()}%, ${light(28, 10)}%)`);
+  // Chat — its own hue
+  root.style.setProperty('--chat-user-bg', `hsl(${hChat}, ${sat()}%, 22%)`);
+  root.style.setProperty('--chat-user-border', `hsl(${hChat}, ${sat()}%, 30%)`);
 
-  const h4 = hue();
-  root.style.setProperty('--danger', `hsl(${h4}, 70%, 50%)`);
-  root.style.setProperty('--success', `hsl(${(h4 + 120) % 360}, 60%, 45%)`);
-  root.style.setProperty('--warning', `hsl(${(h4 + 60) % 360}, 70%, 50%)`);
-  root.style.setProperty('--purple', `hsl(${(h4 + 180) % 360}, 60%, 55%)`);
+  // Status colors — distinct from each other
+  root.style.setProperty('--danger', `hsl(${hStatus}, 75%, 52%)`);
+  root.style.setProperty('--success', `hsl(${(hStatus + 120) % 360}, 65%, 45%)`);
+  root.style.setProperty('--warning', `hsl(${(hStatus + 50) % 360}, 75%, 52%)`);
+  root.style.setProperty('--purple', `hsl(${(hStatus + 200) % 360}, 65%, 58%)`);
 
-  root.style.setProperty('--shadow-md', `0 4px 16px hsla(${h1}, 80%, 20%, 0.5)`);
-  root.style.setProperty('--shadow-lg', `0 8px 32px hsla(${h1}, 80%, 20%, 0.5)`);
+  // Shadows
+  root.style.setProperty('--shadow-md', `0 4px 16px hsla(${hBg}, 80%, 10%, 0.5)`);
+  root.style.setProperty('--shadow-lg', `0 8px 32px hsla(${hBg}, 80%, 10%, 0.5)`);
 }
 
-/** Remove all inline style overrides set by crazy theme */
-function clearCrazyColors(root: HTMLElement) {
+/** Generate a monochromatic palette from a single hue + brightness */
+function applyCustomColors(root: HTMLElement, hue: number, brightness: number) {
+  // brightness: 0 = very dark, 100 = very light
+  // We map brightness to a base lightness for backgrounds
+  const isLight = brightness > 50;
+  const baseSat = 15; // subtle saturation for a professional look
+
+  if (isLight) {
+    // Light mode: backgrounds are light, text is dark
+    const bgBase = 85 + (brightness - 50) * 0.3; // 85-100%
+    root.style.setProperty('--bg-primary', `hsl(${hue}, ${baseSat}%, ${bgBase}%)`);
+    root.style.setProperty('--bg-secondary', `hsl(${hue}, ${baseSat}%, ${bgBase - 4}%)`);
+    root.style.setProperty('--bg-tertiary', `hsl(${hue}, ${baseSat}%, ${bgBase - 8}%)`);
+    root.style.setProperty('--bg-hover', `hsl(${hue}, ${baseSat}%, ${bgBase - 14}%)`);
+    root.style.setProperty('--bg-active', `hsl(${hue}, ${baseSat}%, ${bgBase - 18}%)`);
+    root.style.setProperty('--bg-elevated', `hsl(${hue}, ${baseSat}%, ${Math.min(bgBase + 2, 100)}%)`);
+    root.style.setProperty('--bg-input', `hsl(${hue}, ${baseSat}%, ${Math.min(bgBase + 2, 100)}%)`);
+
+    root.style.setProperty('--border-color', `hsl(${hue}, ${baseSat}%, ${bgBase - 20}%)`);
+    root.style.setProperty('--border-subtle', `hsl(${hue}, ${baseSat}%, ${bgBase - 12}%)`);
+    root.style.setProperty('--border-strong', `hsl(${hue}, ${baseSat + 5}%, ${bgBase - 28}%)`);
+
+    root.style.setProperty('--text-primary', `hsl(${hue}, ${baseSat + 10}%, 15%)`);
+    root.style.setProperty('--text-secondary', `hsl(${hue}, ${baseSat}%, 35%)`);
+    root.style.setProperty('--text-muted', `hsl(${hue}, ${baseSat - 5}%, 55%)`);
+
+    root.style.setProperty('--tab-active-bg', `hsl(${hue}, ${baseSat}%, ${bgBase - 14}%)`);
+    root.style.setProperty('--scrollbar-thumb', `hsl(${hue}, ${baseSat}%, ${bgBase - 22}%)`);
+    root.style.setProperty('--scrollbar-thumb-hover', `hsl(${hue}, ${baseSat}%, ${bgBase - 30}%)`);
+
+    root.style.setProperty('--chat-user-bg', `hsl(${hue}, ${baseSat + 8}%, ${bgBase - 10}%)`);
+    root.style.setProperty('--chat-user-border', `hsl(${hue}, ${baseSat + 8}%, ${bgBase - 18}%)`);
+
+    root.style.setProperty('--timeline-grid-video', `hsl(${hue}, ${baseSat}%, ${bgBase - 8}%)`);
+    root.style.setProperty('--timeline-grid-audio', `hsl(${(hue + 30) % 360}, ${baseSat}%, ${bgBase - 8}%)`);
+  } else {
+    // Dark mode: backgrounds are dark, text is light
+    const bgBase = 4 + brightness * 0.28; // 4-18%
+    root.style.setProperty('--bg-primary', `hsl(${hue}, ${baseSat}%, ${bgBase}%)`);
+    root.style.setProperty('--bg-secondary', `hsl(${hue}, ${baseSat}%, ${bgBase + 3}%)`);
+    root.style.setProperty('--bg-tertiary', `hsl(${hue}, ${baseSat}%, ${bgBase + 6}%)`);
+    root.style.setProperty('--bg-hover', `hsl(${hue}, ${baseSat}%, ${bgBase + 12}%)`);
+    root.style.setProperty('--bg-active', `hsl(${hue}, ${baseSat}%, ${bgBase + 16}%)`);
+    root.style.setProperty('--bg-elevated', `hsl(${hue}, ${baseSat}%, ${bgBase + 8}%)`);
+    root.style.setProperty('--bg-input', `hsl(${hue}, ${baseSat}%, ${bgBase + 2}%)`);
+
+    root.style.setProperty('--border-color', `hsl(${hue}, ${baseSat}%, ${bgBase + 12}%)`);
+    root.style.setProperty('--border-subtle', `hsl(${hue}, ${baseSat}%, ${bgBase + 18}%)`);
+    root.style.setProperty('--border-strong', `hsl(${hue}, ${baseSat + 5}%, ${bgBase + 25}%)`);
+
+    root.style.setProperty('--text-primary', `hsl(${hue}, ${baseSat - 5}%, 88%)`);
+    root.style.setProperty('--text-secondary', `hsl(${hue}, ${baseSat - 5}%, 65%)`);
+    root.style.setProperty('--text-muted', `hsl(${hue}, ${baseSat - 8}%, 48%)`);
+
+    root.style.setProperty('--tab-active-bg', `hsl(${hue}, ${baseSat}%, ${bgBase + 14}%)`);
+    root.style.setProperty('--scrollbar-thumb', `hsl(${hue}, ${baseSat}%, ${bgBase + 20}%)`);
+    root.style.setProperty('--scrollbar-thumb-hover', `hsl(${hue}, ${baseSat}%, ${bgBase + 28}%)`);
+
+    root.style.setProperty('--chat-user-bg', `hsl(${hue}, ${baseSat + 8}%, ${bgBase + 10}%)`);
+    root.style.setProperty('--chat-user-border', `hsl(${hue}, ${baseSat + 8}%, ${bgBase + 18}%)`);
+
+    root.style.setProperty('--timeline-grid-video', `hsl(${hue}, ${baseSat}%, ${bgBase + 6}%)`);
+    root.style.setProperty('--timeline-grid-audio', `hsl(${(hue + 30) % 360}, ${baseSat}%, ${bgBase + 6}%)`);
+  }
+
+  // Accent — always vivid, based on hue
+  const accentSat = 70;
+  const accentLight = isLight ? 45 : 55;
+  root.style.setProperty('--accent', `hsl(${hue}, ${accentSat}%, ${accentLight}%)`);
+  root.style.setProperty('--accent-hover', `hsl(${hue}, ${accentSat}%, ${accentLight + 10}%)`);
+  root.style.setProperty('--accent-dim', `hsla(${hue}, ${accentSat}%, ${accentLight}%, 0.15)`);
+  root.style.setProperty('--accent-subtle', `hsla(${hue}, ${accentSat}%, ${accentLight}%, 0.1)`);
+  root.style.setProperty('--accent-timeline', `hsl(${hue}, ${accentSat}%, ${accentLight}%)`);
+
+  // Shadows
+  root.style.setProperty('--shadow-md', `0 4px 16px hsla(${hue}, 30%, 5%, ${isLight ? 0.12 : 0.5})`);
+  root.style.setProperty('--shadow-lg', `0 8px 32px hsla(${hue}, 30%, 5%, ${isLight ? 0.15 : 0.5})`);
+}
+
+/** Remove all inline style overrides set by crazy/custom theme */
+function clearInlineColors(root: HTMLElement) {
   const props = [
     '--bg-primary', '--bg-secondary', '--bg-tertiary', '--bg-hover', '--bg-active',
     '--bg-elevated', '--bg-input', '--border-color', '--border-subtle', '--border-strong',
@@ -81,7 +173,8 @@ function clearCrazyColors(root: HTMLElement) {
 export function useTheme() {
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
-  const crazyInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const customHue = useSettingsStore((s) => s.customHue);
+  const customBrightness = useSettingsStore((s) => s.customBrightness);
 
   const resolvedTheme = useMemo(() => resolveTheme(theme), [theme]);
 
@@ -89,29 +182,17 @@ export function useTheme() {
     const root = document.documentElement;
     const resolved = resolveTheme(theme);
 
-    // Clean up previous crazy interval
-    if (crazyInterval.current) {
-      clearInterval(crazyInterval.current);
-      crazyInterval.current = null;
-    }
-
-    // Clear any inline crazy overrides before switching
-    clearCrazyColors(root);
+    // Clear any inline overrides before switching
+    clearInlineColors(root);
 
     // Add transition class for smooth switching
     root.classList.add('theme-transitioning');
     root.dataset.theme = resolved;
 
     if (theme === 'crazy') {
-      // Apply random colors immediately, then re-randomize every 5 seconds
       applyCrazyColors(root);
-      crazyInterval.current = setInterval(() => {
-        root.classList.add('theme-transitioning');
-        applyCrazyColors(root);
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => root.classList.remove('theme-transitioning'));
-        });
-      }, 5000);
+    } else if (theme === 'custom') {
+      applyCustomColors(root, customHue, customBrightness);
     }
 
     requestAnimationFrame(() => {
@@ -127,14 +208,7 @@ export function useTheme() {
       mql.addEventListener('change', handler);
       return () => mql.removeEventListener('change', handler);
     }
-
-    return () => {
-      if (crazyInterval.current) {
-        clearInterval(crazyInterval.current);
-        crazyInterval.current = null;
-      }
-    };
-  }, [theme]);
+  }, [theme, customHue, customBrightness]);
 
   return { theme, resolvedTheme, setTheme };
 }

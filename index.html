@@ -25,8 +25,8 @@
           if (theme === 'system') {
             theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
           }
-          if (theme === 'crazy') {
-            theme = 'dark'; // Crazy theme starts from dark base, JS applies random colors
+          if (theme === 'crazy' || theme === 'custom') {
+            theme = 'dark'; // Crazy/Custom themes start from dark base, JS applies colors
           }
           if (theme !== 'dark') {
             document.documentElement.dataset.theme = theme;
