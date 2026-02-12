@@ -701,8 +701,8 @@ export async function createCompLinkedAudioClip(params: CreateCompLinkedAudioPar
     }
   }
 
-  // Find or create audio track
-  const { trackId: audioTrackId, newTrack } = findOrCreateAudioTrack(tracks);
+  // Find or create audio track (with collision check)
+  const { trackId: audioTrackId, newTrack } = findOrCreateAudioTrack(tracks, get().clips, compClipStartTime, compDuration);
   if (newTrack) {
     set({ tracks: [...get().tracks, newTrack] });
     log.debug('Created new audio track for nested comp', { composition: composition.name });
