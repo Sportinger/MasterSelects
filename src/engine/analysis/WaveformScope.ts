@@ -200,10 +200,10 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
   let bT = pow(clamp(sqrt(bCenter) / rv, 0.0, 1.0), 0.75) * s;
   let lT = pow(clamp(sqrt(lCenter) / rv, 0.0, 1.0), 0.75) * s;
 
-  let rG = pow(clamp(sqrt(rBloom) / rv, 0.0, 1.0), 0.65) * 0.12;
-  let gG = pow(clamp(sqrt(gBloom) / rv, 0.0, 1.0), 0.65) * 0.12;
-  let bG = pow(clamp(sqrt(bBloom) / rv, 0.0, 1.0), 0.65) * 0.12;
-  let lG = pow(clamp(sqrt(lBloom) / rv, 0.0, 1.0), 0.65) * 0.12;
+  let rG = pow(clamp(sqrt(rBloom) / rv, 0.0, 1.0), 0.65) * 0.22;
+  let gG = pow(clamp(sqrt(gBloom) / rv, 0.0, 1.0), 0.65) * 0.22;
+  let bG = pow(clamp(sqrt(bBloom) / rv, 0.0, 1.0), 0.65) * 0.22;
+  let lG = pow(clamp(sqrt(lBloom) / rv, 0.0, 1.0), 0.65) * 0.22;
 
   // Additive phosphor composite based on mode
   var color: vec3f;
@@ -350,8 +350,8 @@ export class WaveformScope {
     const srcH = sourceTexture.height;
 
     d.queue.writeBuffer(this.computeParams, 0, new Uint32Array([this.outW, this.outH, srcW, srcH]));
-    // refValue adjusted for 5x5 Gaussian kernel (peak cell values ~2.5x lower than 2-col spread)
-    const refValue = Math.sqrt(srcH / this.outH) * 25.0;
+    // refValue: lower = brighter traces. Adjusted for 5x5 compute kernel + 9-tap render smoothing
+    const refValue = Math.sqrt(srcH / this.outH) * 16.0;
     // Bloom step scales with output resolution for consistent glow size
     const bloomStep = Math.max(4, Math.round(this.outW / 200));
     const paramsData = new ArrayBuffer(32);
