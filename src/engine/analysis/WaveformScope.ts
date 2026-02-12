@@ -242,11 +242,10 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
 }
 `;
 
-export const OUT_W = 1024;
-export const OUT_H = 512;
-
 export class WaveformScope {
   private device: GPUDevice;
+  readonly outW: number;
+  readonly outH: number;
 
   private computePipeline!: GPUComputePipeline;
   private renderPipeline!: GPURenderPipeline;
@@ -263,15 +262,17 @@ export class WaveformScope {
   private decayBGL!: GPUBindGroupLayout;
   private decayParams!: GPUBuffer;
 
-  constructor(device: GPUDevice, format: GPUTextureFormat) {
+  constructor(device: GPUDevice, format: GPUTextureFormat, outW = 1024, outH = 512) {
     this.device = device;
+    this.outW = outW;
+    this.outH = outH;
     this.initWaveform(format);
     this.initDecay();
   }
 
   private initWaveform(format: GPUTextureFormat) {
     const d = this.device;
-    const bufSize = OUT_W * OUT_H * 4;
+    const bufSize = this.outW * this.outH * 4;
 
     this.accumR = d.createBuffer({ size: bufSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
     this.accumG = d.createBuffer({ size: bufSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
@@ -336,17 +337,17 @@ export class WaveformScope {
     const srcW = sourceTexture.width;
     const srcH = sourceTexture.height;
 
-    d.queue.writeBuffer(this.computeParams, 0, new Uint32Array([OUT_W, OUT_H, srcW, srcH]));
-    const refValue = Math.sqrt(srcH / OUT_H) * 40.0;
+    d.queue.writeBuffer(this.computeParams, 0, new Uint32Array([this.outW, this.outH, srcW, srcH]));
+    const refValue = Math.sqrt(srcH / this.outH) * 40.0;
     const paramsData = new ArrayBuffer(32);
-    new Float32Array(paramsData, 0, 4).set([OUT_W, OUT_H, refValue, 0.9]);
+    new Float32Array(paramsData, 0, 4).set([this.outW, this.outH, refValue, 0.9]);
     new Uint32Array(paramsData, 16, 4).set([mode, 0, 0, 0]);
     d.queue.writeBuffer(this.renderParams, 0, paramsData);
 
     const encoder = d.createCommandEncoder();
 
     // Temporal decay
-    const bufLen = OUT_W * OUT_H;
+    const bufLen = this.outW * this.outH;
     d.queue.writeBuffer(this.decayParams, 0, new Uint32Array([bufLen, 0, 0, 0]));
 
     const decayBG_R = d.createBindGroup({
