@@ -11,6 +11,7 @@ import { startBatch, endBatch } from '../../stores/historyStore';
 import type { ToolResult } from './types';
 import { MODIFYING_TOOLS } from './types';
 import { executeToolInternal } from './handlers';
+import { handleExecuteBatch } from './handlers/batch';
 
 // Re-export types
 export type { ToolResult, ToolDefinition } from './types';
@@ -25,6 +26,7 @@ export {
   analysisToolDefinitions,
   previewToolDefinitions,
   mediaToolDefinitions,
+  batchToolDefinitions,
 } from './definitions';
 
 // Re-export utilities
@@ -38,6 +40,23 @@ export { executeToolInternal } from './handlers';
  * Main entry point for AI chat integration
  */
 export async function executeAITool(toolName: string, args: Record<string, unknown>): Promise<ToolResult> {
+  // Special-case: executeBatch wraps all sub-actions in a single undo group
+  if (toolName === 'executeBatch') {
+    startBatch('AI: batch');
+    try {
+      const result = await handleExecuteBatch(args);
+      endBatch();
+      return result;
+    } catch (error) {
+      endBatch();
+      log.error('Error executing batch', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+
   const timelineStore = useTimelineStore.getState();
   const mediaStore = useMediaStore.getState();
 

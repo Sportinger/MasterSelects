@@ -14,6 +14,7 @@ export const MODIFYING_TOOLS = new Set([
   // Media tools
   'createMediaFolder', 'renameMediaItem', 'deleteMediaItem', 'moveMediaItems',
   'createComposition',
+  'executeBatch',
 ]);
 
 // Tool definition type (OpenAI function calling format)

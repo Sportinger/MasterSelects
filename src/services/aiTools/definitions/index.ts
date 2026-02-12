@@ -6,6 +6,7 @@ import { trackToolDefinitions } from './tracks';
 import { analysisToolDefinitions } from './analysis';
 import { previewToolDefinitions } from './preview';
 import { mediaToolDefinitions } from './media';
+import { batchToolDefinitions } from './batch';
 
 // Combined tool definitions array (OpenAI function calling format)
 export const AI_TOOLS = [
@@ -15,6 +16,7 @@ export const AI_TOOLS = [
   ...previewToolDefinitions,
   ...analysisToolDefinitions,
   ...mediaToolDefinitions,
+  ...batchToolDefinitions,
 ];
 
 // Re-export individual definition sets for selective use
@@ -25,4 +27,5 @@ export {
   analysisToolDefinitions,
   previewToolDefinitions,
   mediaToolDefinitions,
+  batchToolDefinitions,
 };

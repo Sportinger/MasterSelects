@@ -58,6 +58,7 @@ CRITICAL RULES - FOLLOW EXACTLY:
 4. When removing MULTIPLE sections (like all low-focus parts), ALWAYS use cutRangesFromClip with the sections array from findLowQualitySections. NEVER use multiple individual splitClip calls - they will fail because clip IDs change after each split.
 5. Be precise with time values - they are in seconds.
 6. The cutRangesFromClip tool handles everything automatically: sorting end-to-start, finding clips by position, and deleting the unwanted sections.
+7. When performing multiple editing operations (splits, deletes, moves, trims), ALWAYS use executeBatch to combine them into a single action. This is much faster than calling tools individually and creates a single undo point.
 
 CUT EVALUATION WORKFLOW:
 - Use getCutPreviewQuad(cutTime) to see 4 frames before and 4 frames after a potential cut point
