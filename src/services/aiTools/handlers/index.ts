@@ -22,6 +22,7 @@ import {
   handleTrimClip,
   handleSplitClipEvenly,
   handleSplitClipAtTimes,
+  handleReorderClips,
   handleSelectClips,
   handleClearSelection,
 } from './clips';
@@ -73,6 +74,7 @@ const timelineHandlers: Record<string, (args: Record<string, unknown>, store: Re
   trimClip: handleTrimClip,
   splitClipEvenly: handleSplitClipEvenly,
   splitClipAtTimes: handleSplitClipAtTimes,
+  reorderClips: handleReorderClips,
   selectClips: handleSelectClips,
   clearSelection: handleClearSelection,
   createTrack: handleCreateTrack,
@@ -141,6 +143,7 @@ export {
   handleTrimClip,
   handleSplitClipEvenly,
   handleSplitClipAtTimes,
+  handleReorderClips,
   handleSelectClips,
   handleClearSelection,
   // Tracks

@@ -8,7 +8,7 @@ export interface ToolResult {
 
 // Tools that modify the timeline or media (need history tracking)
 export const MODIFYING_TOOLS = new Set([
-  'splitClip', 'splitClipEvenly', 'splitClipAtTimes', 'deleteClip', 'deleteClips', 'moveClip', 'trimClip',
+  'splitClip', 'splitClipEvenly', 'splitClipAtTimes', 'reorderClips', 'deleteClip', 'deleteClips', 'moveClip', 'trimClip',
   'createTrack', 'deleteTrack', 'setTrackVisibility', 'setTrackMuted',
   'cutRangesFromClip',
   // Media tools

@@ -227,6 +227,24 @@ export const clipToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'reorderClips',
+      description: 'Reorder clips by placing them sequentially in the given order. Provide clip IDs in the desired playback order — the tool calculates all new positions and moves everything (including linked audio) in a single operation. Much faster and more reliable than using executeBatch with multiple moveClip calls.',
+      parameters: {
+        type: 'object',
+        properties: {
+          clipIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of clip IDs in the desired playback order. Clips will be placed sequentially starting from the earliest clip position.',
+          },
+        },
+        required: ['clipIds'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'selectClips',
       description: 'Select one or more clips in the timeline.',
       parameters: {
