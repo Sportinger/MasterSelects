@@ -363,6 +363,78 @@ export async function handleSplitClipAtTimes(
   };
 }
 
+export async function handleReorderClips(
+  args: Record<string, unknown>,
+  _timelineStore: TimelineStore
+): Promise<ToolResult> {
+  const clipIds = args.clipIds as string[];
+
+  if (!clipIds || clipIds.length < 2) {
+    return { success: false, error: 'Need at least 2 clip IDs to reorder' };
+  }
+
+  // Get fresh state
+  const state = useTimelineStore.getState();
+  const allClips = state.clips;
+
+  // Resolve all clips and validate
+  const orderedClips = clipIds.map(id => allClips.find(c => c.id === id));
+  const missing = clipIds.filter((_id, i) => !orderedClips[i]);
+  if (missing.length > 0) {
+    return { success: false, error: `Clips not found: ${missing.join(', ')}` };
+  }
+
+  // Find the earliest startTime among the clips to reorder
+  const startPosition = Math.min(...orderedClips.map(c => c!.startTime));
+
+  // Build a map of new positions: clipId -> newStartTime
+  const newPositions = new Map<string, number>();
+  let currentTime = startPosition;
+
+  for (const clip of orderedClips) {
+    newPositions.set(clip!.id, currentTime);
+    currentTime += clip!.duration;
+  }
+
+  // Also move linked audio clips (same delta as their video clip)
+  for (const clip of orderedClips) {
+    if (clip!.linkedClipId) {
+      const linkedClip = allClips.find(c => c.id === clip!.linkedClipId);
+      if (linkedClip && !newPositions.has(linkedClip.id)) {
+        const delta = newPositions.get(clip!.id)! - clip!.startTime;
+        newPositions.set(linkedClip.id, linkedClip.startTime + delta);
+      }
+    }
+  }
+
+  // Apply all position changes in a single set() call
+  useTimelineStore.setState({
+    clips: allClips.map(c => {
+      const newStart = newPositions.get(c.id);
+      if (newStart !== undefined) {
+        return { ...c, startTime: Math.max(0, newStart) };
+      }
+      return c;
+    }),
+  });
+
+  // Update duration and invalidate cache once
+  useTimelineStore.getState().updateDuration();
+  useTimelineStore.getState().invalidateCache();
+
+  return {
+    success: true,
+    data: {
+      reorderedCount: clipIds.length,
+      newOrder: clipIds.map((id, i) => ({
+        clipId: id,
+        newStartTime: newPositions.get(id),
+        position: i + 1,
+      })),
+    },
+  };
+}
+
 export async function handleSelectClips(
   args: Record<string, unknown>,
   timelineStore: TimelineStore
