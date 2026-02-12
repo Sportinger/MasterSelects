@@ -1,441 +1,67 @@
 // Export Panel - embedded panel for frame-by-frame video export
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { Logger } from '../../services/logger';
 import { downloadFCPXML } from '../../services/export/fcpxmlExport';
 
 const log = Logger.create('ExportPanel');
 import { FrameExporter, downloadBlob } from '../../engine/export';
-import type { ExportProgress, VideoCodec, ContainerFormat } from '../../engine/export';
-import { AudioExportPipeline, AudioEncoderWrapper, type AudioCodec } from '../../engine/audio';
+import type { VideoCodec, ContainerFormat } from '../../engine/export';
+import { AudioExportPipeline } from '../../engine/audio';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { engine } from '../../engine/WebGPUEngine';
 import {
   getFFmpegBridge,
-  FFmpegBridge,
   PRORES_PROFILES,
   DNXHR_PROFILES,
   CONTAINER_FORMATS,
-  PLATFORM_PRESETS,
   getCodecInfo,
 } from '../../engine/ffmpeg';
 import { CodecSelector } from './CodecSelector';
 import type {
   FFmpegExportSettings,
   FFmpegProgress,
-  FFmpegVideoCodec,
   FFmpegContainer,
   ProResProfile,
   DnxhrProfile,
 } from '../../engine/ffmpeg';
-import type { Layer, LayerSource, TimelineClip, TimelineTrack } from '../../types';
-
-type EncoderType = 'webcodecs' | 'htmlvideo' | 'ffmpeg';
-
-// Helper: Seek all video clips to exact time for frame-accurate export
-async function seekAllClipsToTime(time: number): Promise<void> {
-  const { clips, tracks, getSourceTimeForClip, getInterpolatedSpeed } = useTimelineStore.getState();
-  const seekPromises: Promise<void>[] = [];
-
-  // Get clips at this time
-  const clipsAtTime = clips.filter(
-    c => time >= c.startTime && time < c.startTime + c.duration
-  );
-
-  log.debug(`seekAllClipsToTime: time=${time.toFixed(3)}, total clips=${clips.length}, clips at time=${clipsAtTime.length}`);
-
-  for (const clip of clipsAtTime) {
-    const track = tracks.find(t => t.id === clip.trackId);
-    if (!track?.visible) continue;
-
-    // Handle nested composition clips
-    if (clip.isComposition && clip.nestedClips) {
-      const clipLocalTime = time - clip.startTime;
-      const nestedTime = clipLocalTime + (clip.inPoint || 0);
-
-      for (const nestedClip of clip.nestedClips) {
-        if (nestedTime >= nestedClip.startTime && nestedTime < nestedClip.startTime + nestedClip.duration) {
-          if (nestedClip.source?.videoElement) {
-            const nestedLocalTime = nestedTime - nestedClip.startTime;
-            const nestedClipTime = nestedClip.reversed
-              ? nestedClip.outPoint - nestedLocalTime
-              : nestedLocalTime + nestedClip.inPoint;
-
-            // Always seek the HTMLVideoElement since that's what we use for texture rendering
-            seekPromises.push(seekVideo(nestedClip.source.videoElement, nestedClipTime));
-          }
-        }
-      }
-      continue;
-    }
-
-    // Handle regular video clips
-    if (clip.source?.type === 'video' && clip.source.videoElement) {
-      const clipLocalTime = time - clip.startTime;
-      let clipTime: number;
-
-      try {
-        const sourceTime = getSourceTimeForClip(clip.id, clipLocalTime);
-        const initialSpeed = getInterpolatedSpeed(clip.id, 0);
-        const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
-        clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
-      } catch {
-        clipTime = clip.reversed
-          ? clip.outPoint - clipLocalTime
-          : clipLocalTime + clip.inPoint;
-        clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, clipTime));
-      }
-
-      // Always seek the HTMLVideoElement since that's what we use for texture rendering
-      seekPromises.push(seekVideo(clip.source.videoElement, clipTime));
-    }
-  }
-
-  log.debug(`seekAllClipsToTime: Waiting for ${seekPromises.length} seek promises...`);
-  await Promise.all(seekPromises);
-  log.debug('seekAllClipsToTime: All seeks complete');
-}
-
-// Helper: Seek HTMLVideoElement to exact time
-function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
-  return new Promise((resolve) => {
-    const targetTime = Math.max(0, Math.min(time, video.duration || 0));
-
-    // If already at target time, just wait for frame
-    if (Math.abs(video.currentTime - targetTime) < 0.01 && !video.seeking && video.readyState >= 3) {
-      requestAnimationFrame(() => resolve());
-      return;
-    }
-
-    // Set timeout in case seek never completes
-    const timeout = setTimeout(() => {
-      video.removeEventListener('seeked', onSeeked);
-      resolve();
-    }, 500);
-
-    const onSeeked = () => {
-      clearTimeout(timeout);
-      video.removeEventListener('seeked', onSeeked);
-      // Wait one frame for the video texture to update
-      requestAnimationFrame(() => resolve());
-    };
-
-    video.addEventListener('seeked', onSeeked);
-    video.currentTime = targetTime;
-  });
-}
-
-// Helper: Build render layers at specific time
-function buildLayersAtTime(time: number): Layer[] {
-  const { clips, tracks, getInterpolatedTransform, getInterpolatedEffects } = useTimelineStore.getState();
-  const layers: Layer[] = [];
-
-  const videoTracks = tracks.filter(t => t.type === 'video');
-  const anyVideoSolo = videoTracks.some(t => t.solo);
-
-  const isTrackVisible = (track: TimelineTrack) => {
-    if (!track.visible) return false;
-    if (anyVideoSolo) return track.solo;
-    return true;
-  };
-
-  const clipsAtTime = clips.filter(
-    c => time >= c.startTime && time < c.startTime + c.duration
-  );
-
-  // Sort by track order - lower index tracks should be first in array (render on top)
-  // WebGPU renders layers[0] on top, layers[end] on bottom
-  const sortedTracks = [...videoTracks].sort((a, b) => {
-    const aIndex = tracks.indexOf(a);
-    const bIndex = tracks.indexOf(b);
-    return aIndex - bIndex; // Lower index (top track) first = renders on top
-  });
-
-  for (const track of sortedTracks) {
-    if (!isTrackVisible(track)) continue;
-
-    const trackClips = clipsAtTime.filter(c => c.trackId === track.id);
-
-    for (const clip of trackClips) {
-      const layer = buildLayerFromClip(clip, time, getInterpolatedTransform, getInterpolatedEffects);
-      if (layer) {
-        layers.push(layer);
-      }
-    }
-  }
-
-  return layers;
-}
-
-// Helper: Build a single layer from a clip
-function buildLayerFromClip(
-  clip: TimelineClip,
-  time: number,
-  getInterpolatedTransform: (clipId: string, localTime: number) => any,
-  getInterpolatedEffects: (clipId: string, localTime: number) => any
-): Layer | null {
-  const clipLocalTime = time - clip.startTime;
-  const transform = getInterpolatedTransform(clip.id, clipLocalTime);
-  const effects = getInterpolatedEffects(clip.id, clipLocalTime);
-
-  // Handle nested compositions
-  if (clip.isComposition && clip.nestedClips && clip.nestedTracks) {
-    // For nested compositions, we need to get the rendered frame from nested clips
-    // This is simplified - full implementation would recurse
-    return null;
-  }
-
-  // Handle video/image clips
-  if (clip.source?.videoElement || clip.source?.imageElement) {
-    // For export, we need to use HTMLVideoElement (not WebCodecsPlayer)
-    // because we control seeking via video.currentTime
-    // WebCodecsPlayer has its own playback and doesn't follow currentTime
-    const exportSource: LayerSource = {
-      type: clip.source.videoElement ? 'video' : 'image',
-      videoElement: clip.source.videoElement,
-      imageElement: clip.source.imageElement,
-      // webCodecsPlayer explicitly omitted - force HTMLVideoElement path during export
-    };
-
-    return {
-      id: clip.id,
-      name: clip.name || clip.id,
-      source: exportSource,
-      visible: true,
-      opacity: transform.opacity ?? 1,
-      blendMode: transform.blendMode ?? 'normal',
-      // Compositor expects position/scale/rotation in this format
-      position: {
-        x: transform.x ?? 0,
-        y: transform.y ?? 0,
-        z: 0,
-      },
-      scale: {
-        x: transform.scaleX ?? 1,
-        y: transform.scaleY ?? 1,
-      },
-      rotation: transform.rotation ?? 0,
-      effects: effects || [],
-    };
-  }
-
-  return null;
-}
+import { seekAllClipsToTime, buildLayersAtTime } from './exportHelpers';
+import { useExportState, type EncoderType } from './useExportState';
 
 export function ExportPanel() {
   const { duration, inPoint, outPoint, playheadPosition, startExport, setExportProgress, endExport } = useTimelineStore();
   const { getActiveComposition } = useMediaStore();
   const composition = getActiveComposition();
 
-  // Encoder selection
-  const [encoder, setEncoder] = useState<EncoderType>('webcodecs');
-
-  // Shared settings
-  const [width, setWidth] = useState(composition?.width ?? 1920);
-  const [height, setHeight] = useState(composition?.height ?? 1080);
-  const [customWidth, setCustomWidth] = useState(composition?.width ?? 1920);
-  const [customHeight, setCustomHeight] = useState(composition?.height ?? 1080);
-  const [useCustomResolution, setUseCustomResolution] = useState(false);
-  const [fps, setFps] = useState(composition?.frameRate ?? 30);
-  const [customFps, setCustomFps] = useState(30);
-  const [useCustomFps, setUseCustomFps] = useState(false);
-  const [useInOut, setUseInOut] = useState(true);
-  const [filename, setFilename] = useState('export');
-
-  // WebCodecs settings
-  const [bitrate, setBitrate] = useState(15_000_000);
-  const [containerFormat, setContainerFormat] = useState<ContainerFormat>('mp4');
-  const [videoCodec, setVideoCodec] = useState<VideoCodec>('h264');
-  const [codecSupport, setCodecSupport] = useState<Record<VideoCodec, boolean>>({
-    h264: true, h265: false, vp9: false, av1: false
-  });
-  const [rateControl, setRateControl] = useState<'vbr' | 'cbr'>('vbr');
-
-  // FFmpeg settings (default to ProRes which is most universally useful)
-  const [ffmpegCodec, setFfmpegCodec] = useState<FFmpegVideoCodec>('prores');
-  const [ffmpegContainer, setFfmpegContainer] = useState<FFmpegContainer>('mov');
-  const [ffmpegPreset, setFfmpegPreset] = useState<string>('');
-  const [proresProfile, setProresProfile] = useState<ProResProfile>('hq');
-  const [dnxhrProfile, setDnxhrProfile] = useState<DnxhrProfile>('dnxhr_hq');
-  // HAP not available in this FFmpeg build
-  const [ffmpegQuality, setFfmpegQuality] = useState(18);
-  const [ffmpegBitrate, setFfmpegBitrate] = useState(20_000_000);
-  const [ffmpegRateControl, setFfmpegRateControl] = useState<'crf' | 'cbr' | 'vbr'>('crf');
-
-  // FFmpeg loading state
-  const [isFFmpegLoading, setIsFFmpegLoading] = useState(false);
-  const [isFFmpegReady, setIsFFmpegReady] = useState(false);
-  const [ffmpegLoadError, setFfmpegLoadError] = useState<string | null>(null);
-
-  // Audio settings
-  const [includeAudio, setIncludeAudio] = useState(true);
-  const [audioSampleRate, setAudioSampleRate] = useState<44100 | 48000>(48000);
-  const [audioBitrate, setAudioBitrate] = useState(256000);
-  const [normalizeAudio, setNormalizeAudio] = useState(false);
-
-  // Export state
-  const [isExporting, setIsExporting] = useState(false);
-  const [progress, setProgress] = useState<ExportProgress | null>(null);
-  const [ffmpegProgress, setFfmpegProgress] = useState<FFmpegProgress | null>(null);
-  const [exportPhase, setExportPhase] = useState<'idle' | 'rendering' | 'audio' | 'encoding'>('idle');
-  const [error, setError] = useState<string | null>(null);
-  const [exporter, setExporter] = useState<FrameExporter | null>(null);
-
-  // Check WebCodecs support
-  const [isSupported, setIsSupported] = useState(true);
-  const [isAudioSupported, setIsAudioSupported] = useState(true);
-  const [audioCodec, setAudioCodec] = useState<AudioCodec | null>(null);
-
-  // Check FFmpeg support
-  const isFFmpegSupported = FFmpegBridge.isSupported();
-  const isFFmpegMultiThreaded = FFmpegBridge.isMultiThreaded();
-
-  useEffect(() => {
-    setIsSupported(FrameExporter.isSupported());
-    // Check audio encoder support and detect codec
-    AudioEncoderWrapper.detectSupportedCodec().then(result => {
-      if (result) {
-        setIsAudioSupported(true);
-        setAudioCodec(result.codec);
-        log.info(`Audio codec detected: ${result.codec.toUpperCase()}`);
-      } else {
-        setIsAudioSupported(false);
-        setIncludeAudio(false);
-        log.warn('No audio encoding supported in this browser');
-      }
-    });
-  }, []);
-
-  // Check codec support when resolution changes
-  useEffect(() => {
-    const checkSupport = async () => {
-      const actualWidth = useCustomResolution ? customWidth : width;
-      const actualHeight = useCustomResolution ? customHeight : height;
-
-      const support: Record<VideoCodec, boolean> = {
-        h264: await FrameExporter.checkCodecSupport('h264', actualWidth, actualHeight),
-        h265: await FrameExporter.checkCodecSupport('h265', actualWidth, actualHeight),
-        vp9: await FrameExporter.checkCodecSupport('vp9', actualWidth, actualHeight),
-        av1: await FrameExporter.checkCodecSupport('av1', actualWidth, actualHeight),
-      };
-      setCodecSupport(support);
-
-      // If current codec is not supported, select first supported one
-      const availableCodecs = FrameExporter.getVideoCodecs(containerFormat);
-      if (!support[videoCodec]) {
-        const firstSupported = availableCodecs.find(c => support[c.id]);
-        if (firstSupported) {
-          setVideoCodec(firstSupported.id);
-        }
-      }
-    };
-    checkSupport();
-  }, [width, height, customWidth, customHeight, useCustomResolution, containerFormat, videoCodec]);
-
-  // Update video codec when container changes
-  useEffect(() => {
-    const availableCodecs = FrameExporter.getVideoCodecs(containerFormat);
-    if (!availableCodecs.find(c => c.id === videoCodec)) {
-      setVideoCodec(availableCodecs[0].id);
-    }
-  }, [containerFormat, videoCodec]);
+  // All export state, effects, and simple handlers extracted to hook
+  const {
+    encoder, setEncoder,
+    width, height,
+    customWidth, setCustomWidth, customHeight, setCustomHeight,
+    useCustomResolution, setUseCustomResolution,
+    fps, setFps, customFps, setCustomFps, useCustomFps, setUseCustomFps,
+    useInOut, setUseInOut, filename, setFilename,
+    bitrate, setBitrate, containerFormat, setContainerFormat,
+    videoCodec, setVideoCodec, codecSupport, rateControl, setRateControl,
+    ffmpegCodec, ffmpegContainer, ffmpegPreset,
+    proresProfile, setProresProfile, dnxhrProfile, setDnxhrProfile,
+    ffmpegQuality, setFfmpegQuality, ffmpegBitrate, ffmpegRateControl,
+    isFFmpegLoading, isFFmpegReady, ffmpegLoadError,
+    includeAudio, setIncludeAudio, audioSampleRate, setAudioSampleRate,
+    audioBitrate, setAudioBitrate, normalizeAudio, setNormalizeAudio,
+    isExporting, setIsExporting, progress, setProgress,
+    ffmpegProgress, setFfmpegProgress, exportPhase, setExportPhase,
+    error, setError, exporter, setExporter,
+    isSupported, isAudioSupported, audioCodec,
+    isFFmpegSupported, isFFmpegMultiThreaded,
+    handleResolutionChange, loadFFmpeg, applyFFmpegPreset,
+    handleFFmpegContainerChange, handleFFmpegCodecChange,
+  } = useExportState(composition);
 
   // Compute actual start/end based on In/Out markers
   const startTime = useInOut && inPoint !== null ? inPoint : 0;
   const endTime = useInOut && outPoint !== null ? outPoint : duration;
-
-  // Update recommended bitrate when resolution changes
-  useEffect(() => {
-    setBitrate(FrameExporter.getRecommendedBitrate(width, height, fps));
-  }, [width, height, fps]);
-
-  // Handle resolution preset change
-  const handleResolutionChange = useCallback((value: string) => {
-    const [w, h] = value.split('x').map(Number);
-    setWidth(w);
-    setHeight(h);
-  }, []);
-
-  // Load FFmpeg on demand
-  const loadFFmpeg = useCallback(async () => {
-    if (isFFmpegReady) return;
-
-    setIsFFmpegLoading(true);
-    setFfmpegLoadError(null);
-
-    try {
-      const ffmpeg = getFFmpegBridge();
-      await ffmpeg.load();
-      setIsFFmpegReady(true);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to load FFmpeg';
-      setFfmpegLoadError(msg);
-      log.error('FFmpeg load error', e);
-    } finally {
-      setIsFFmpegLoading(false);
-    }
-  }, [isFFmpegReady]);
-
-  // Apply FFmpeg platform preset
-  const applyFFmpegPreset = useCallback((presetId: string) => {
-    const presetConfig = PLATFORM_PRESETS[presetId];
-    if (!presetConfig) {
-      setFfmpegPreset('');
-      return;
-    }
-
-    setFfmpegCodec(presetConfig.codec);
-    setFfmpegContainer(presetConfig.container);
-
-    if (presetConfig.quality !== undefined) {
-      setFfmpegRateControl('crf');
-      setFfmpegQuality(presetConfig.quality);
-    }
-    if (presetConfig.bitrate !== undefined) {
-      setFfmpegRateControl('vbr');
-      setFfmpegBitrate(presetConfig.bitrate);
-    }
-    if (presetConfig.proresProfile) {
-      setProresProfile(presetConfig.proresProfile);
-    }
-    if (presetConfig.dnxhrProfile) {
-      setDnxhrProfile(presetConfig.dnxhrProfile);
-    }
-    // HAP not available in this build
-
-    setFfmpegPreset(presetId);
-  }, []);
-
-  // Handle FFmpeg container change
-  // NOTE: ASYNCIFY build only supports mov, mkv, avi, mxf
-  const handleFFmpegContainerChange = useCallback((newContainer: FFmpegContainer) => {
-    setFfmpegContainer(newContainer);
-    setFfmpegPreset('');
-
-    const codecInfo = getCodecInfo(ffmpegCodec);
-    if (codecInfo && !codecInfo.containers.includes(newContainer)) {
-      // Select appropriate codec for container
-      if (newContainer === 'mxf') {
-        setFfmpegCodec('dnxhd');
-      } else if (newContainer === 'mov') {
-        setFfmpegCodec('prores');
-      } else if (newContainer === 'mkv' || newContainer === 'avi') {
-        setFfmpegCodec('mjpeg');
-      }
-    }
-  }, [ffmpegCodec]);
-
-  // Handle FFmpeg codec change
-  const handleFFmpegCodecChange = useCallback((newCodec: FFmpegVideoCodec) => {
-    setFfmpegCodec(newCodec);
-    setFfmpegPreset('');
-
-    const codecInfo = getCodecInfo(newCodec);
-    if (codecInfo && !codecInfo.containers.includes(ffmpegContainer)) {
-      setFfmpegContainer(codecInfo.containers[0]);
-    }
-  }, [ffmpegContainer]);
 
   // Handle export (WebCodecs)
   const handleExport = useCallback(async () => {

@@ -5,8 +5,12 @@
 import { create } from 'zustand';
 import { subscribeWithSelector, persist } from 'zustand/middleware';
 import { apiKeyManager, type ApiKeyType } from '../services/apiKeyManager';
+import { projectFileService } from '../services/project/ProjectFileService';
 import { Logger } from '../services/logger';
 const log = Logger.create('SettingsStore');
+
+// Theme mode options
+export type ThemeMode = 'dark' | 'light' | 'midnight' | 'system' | 'crazy' | 'custom';
 
 // Transcription provider options
 export type TranscriptionProvider = 'local' | 'openai' | 'assemblyai' | 'deepgram';
@@ -32,6 +36,11 @@ interface APIKeys {
 export type AutosaveInterval = 1 | 2 | 5 | 10;
 
 interface SettingsState {
+  // Theme
+  theme: ThemeMode;
+  customHue: number;        // 0-360 hue for custom theme
+  customBrightness: number; // 0-100 brightness (0=dark, 100=light)
+
   // API Keys
   apiKeys: APIKeys;
 
@@ -47,7 +56,8 @@ interface SettingsState {
   autosaveInterval: AutosaveInterval;  // in minutes
 
   // Native Helper (Turbo Mode)
-  turboModeEnabled: boolean;  // Use native helper for decoding when available
+  turboModeEnabled: boolean;  // Connect to native helper (downloads, yt-dlp)
+  nativeDecodeEnabled: boolean;  // Use native FFmpeg decode/encode (Turbo decode)
   nativeHelperPort: number;   // WebSocket port (default 9876)
   nativeHelperConnected: boolean;  // Current connection status
 
@@ -80,6 +90,9 @@ interface SettingsState {
   fps: number;
 
   // Actions
+  setTheme: (theme: ThemeMode) => void;
+  setCustomHue: (hue: number) => void;
+  setCustomBrightness: (brightness: number) => void;
   setApiKey: (provider: keyof APIKeys, key: string) => void;
   setTranscriptionProvider: (provider: TranscriptionProvider) => void;
   setPreviewQuality: (quality: PreviewQuality) => void;
@@ -87,6 +100,7 @@ interface SettingsState {
   setAutosaveEnabled: (enabled: boolean) => void;
   setAutosaveInterval: (interval: AutosaveInterval) => void;
   setTurboModeEnabled: (enabled: boolean) => void;
+  setNativeDecodeEnabled: (enabled: boolean) => void;
   setNativeHelperPort: (port: number) => void;
   setNativeHelperConnected: (connected: boolean) => void;
   setForceDesktopMode: (force: boolean) => void;
@@ -117,6 +131,9 @@ export const useSettingsStore = create<SettingsState>()(
     persist(
       (set, get) => ({
       // Initial state
+      theme: 'dark' as ThemeMode,
+      customHue: 210,       // Default: blue
+      customBrightness: 15, // Default: dark
       apiKeys: {
         openai: '',
         assemblyai: '',
@@ -131,7 +148,8 @@ export const useSettingsStore = create<SettingsState>()(
       showTransparencyGrid: false, // Don't show checkerboard by default
       autosaveEnabled: true, // Autosave enabled by default
       autosaveInterval: 5, // 5 minutes default interval
-      turboModeEnabled: true, // Try to use native helper by default
+      turboModeEnabled: true, // Connect to native helper by default (downloads)
+      nativeDecodeEnabled: false, // Native FFmpeg decode off by default
       nativeHelperPort: 9876, // Default WebSocket port
       nativeHelperConnected: false, // Not connected initially
       forceDesktopMode: false, // Use responsive detection by default
@@ -149,6 +167,10 @@ export const useSettingsStore = create<SettingsState>()(
       fps: 60,
 
       // Actions
+      setTheme: (theme) => set({ theme }),
+      setCustomHue: (hue) => set({ customHue: hue }),
+      setCustomBrightness: (brightness) => set({ customBrightness: brightness }),
+
       setApiKey: (provider, key) => {
         set((state) => ({
           apiKeys: {
@@ -156,10 +178,17 @@ export const useSettingsStore = create<SettingsState>()(
             [provider]: key,
           },
         }));
-        // Also save to encrypted IndexedDB
-        apiKeyManager.storeKeyByType(provider as ApiKeyType, key).catch((err) => {
-          log.error('Failed to save API key:', err);
-        });
+        // Save to encrypted IndexedDB + project file
+        apiKeyManager.storeKeyByType(provider as ApiKeyType, key)
+          .then(() => {
+            // Also update .keys.enc in the project folder if a project is open
+            if (projectFileService.isProjectOpen()) {
+              return projectFileService.saveKeysFile();
+            }
+          })
+          .catch((err) => {
+            log.error('Failed to save API key:', err);
+          });
       },
 
       setTranscriptionProvider: (provider) => {
@@ -184,6 +213,10 @@ export const useSettingsStore = create<SettingsState>()(
 
       setTurboModeEnabled: (enabled) => {
         set({ turboModeEnabled: enabled });
+      },
+
+      setNativeDecodeEnabled: (enabled) => {
+        set({ nativeDecodeEnabled: enabled });
       },
 
       setNativeHelperPort: (port) => {
@@ -250,9 +283,23 @@ export const useSettingsStore = create<SettingsState>()(
       },
 
       // Load API keys from encrypted IndexedDB (call on app startup)
+      // Falls back to .keys.enc in the project folder if IndexedDB is empty
       loadApiKeys: async () => {
         try {
           const keys = await apiKeyManager.getAllKeys();
+          const hasAnyKey = Object.values(keys).some((v) => v !== '');
+
+          if (!hasAnyKey && projectFileService.isProjectOpen()) {
+            // IndexedDB empty — try restoring from project file
+            const restored = await projectFileService.loadKeysFile();
+            if (restored) {
+              const restoredKeys = await apiKeyManager.getAllKeys();
+              set({ apiKeys: restoredKeys });
+              log.info('API keys restored from project file');
+              return;
+            }
+          }
+
           set({ apiKeys: keys });
           log.info('API keys loaded from encrypted storage');
         } catch (err) {
@@ -265,12 +312,16 @@ export const useSettingsStore = create<SettingsState>()(
       // Don't persist API keys in localStorage - they go to encrypted IndexedDB
       // Don't persist transient UI state like isSettingsOpen
       partialize: (state) => ({
+        theme: state.theme,
+        customHue: state.customHue,
+        customBrightness: state.customBrightness,
         transcriptionProvider: state.transcriptionProvider,
         previewQuality: state.previewQuality,
         showTransparencyGrid: state.showTransparencyGrid,
         autosaveEnabled: state.autosaveEnabled,
         autosaveInterval: state.autosaveInterval,
         turboModeEnabled: state.turboModeEnabled,
+        nativeDecodeEnabled: state.nativeDecodeEnabled,
         nativeHelperPort: state.nativeHelperPort,
         forceDesktopMode: state.forceDesktopMode,
         gpuPowerPreference: state.gpuPowerPreference,

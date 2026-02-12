@@ -1,0 +1,168 @@
+<?xml version='1.0' encoding='windows-1252'?>
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+
+    <Product
+        Id='*'
+        Name='MasterSelects Helper'
+        UpgradeCode='B8F3C4A1-2D7E-4F9B-A6C8-1E5D9F0B3A72'
+        Manufacturer='MasterSelects'
+        Language='1033'
+        Codepage='1252'
+        Version='$(var.Version)'>
+
+        <Package Id='*'
+            Keywords='Installer'
+            Description='MasterSelects Native Helper'
+            Manufacturer='MasterSelects'
+            InstallerVersion='450'
+            Languages='1033'
+            Compressed='yes'
+            InstallScope='perUser'
+            SummaryCodepage='1252' />
+
+        <MajorUpgrade
+            Schedule='afterInstallInitialize'
+            DowngradeErrorMessage='A newer version of [ProductName] is already installed.' />
+
+        <MediaTemplate EmbedCab='yes' />
+
+        <Feature Id='MainApp' Title='MasterSelects Helper' Description='Core application and FFmpeg libraries' Level='1' Absent='disallow' Display='expand'>
+            <ComponentRef Id='MainExecutable' />
+            <ComponentRef Id='DLL_avcodec' />
+            <ComponentRef Id='DLL_avformat' />
+            <ComponentRef Id='DLL_avutil' />
+            <ComponentRef Id='DLL_swresample' />
+            <ComponentRef Id='DLL_swscale' />
+            <ComponentRef Id='DLL_avdevice' />
+            <ComponentRef Id='DLL_avfilter' />
+            <ComponentRef Id='DLL_postproc' />
+            <ComponentRef Id='FFmpegExe' />
+
+            <Feature Id='ShortcutsFeature' Title='Shortcuts' Description='Start Menu and Desktop shortcuts' Level='1'>
+                <ComponentRef Id='StartMenuShortcut' />
+                <ComponentRef Id='DesktopShortcut' />
+            </Feature>
+        </Feature>
+
+        <UIRef Id='WixUI_FeatureTree' />
+        <WixVariable Id='WixUILicenseRtf' Value='wix\License.rtf' />
+
+        <Property Id='ARPHELPLINK' Value='https://masterselects.app' />
+
+    </Product>
+
+    <Fragment>
+        <Directory Id='TARGETDIR' Name='SourceDir'>
+            <Directory Id='LocalAppDataFolder'>
+                <Directory Id='INSTALLDIR' Name='MasterSelects Helper' />
+            </Directory>
+            <Directory Id='ProgramMenuFolder'>
+                <Directory Id='ApplicationProgramsFolder' Name='MasterSelects Helper' />
+            </Directory>
+            <Directory Id='DesktopFolder' Name='Desktop' />
+        </Directory>
+    </Fragment>
+
+    <Fragment>
+        <Component Id='MainExecutable' Directory='INSTALLDIR'
+                   Guid='A1B2C3D4-1111-4000-8000-000000000001'>
+            <File Id='masterselects_helper_exe'
+                Name='masterselects-helper.exe'
+                Source='target\release\masterselects-helper.exe' />
+            <RegistryValue Root='HKCU' Key='Software\MasterSelects\Helper'
+                Name='ExePath' Type='string'
+                Value='[INSTALLDIR]masterselects-helper.exe' KeyPath='yes' />
+            <RemoveFolder Id='CleanInstallDir' Directory='INSTALLDIR' On='uninstall' />
+        </Component>
+
+        <Component Id='DLL_avcodec' Directory='INSTALLDIR'
+                   Guid='A1B2C3D4-2222-4000-8000-000000000001'>
+            <File Name='avcodec-61.dll' Source='target\release\avcodec-61.dll' />
+            <RegistryValue Root='HKCU' Key='Software\MasterSelects\Helper\DLLs'
+                Name='avcodec' Type='integer' Value='1' KeyPath='yes' />
+        </Component>
+
+        <Component Id='DLL_avformat' Directory='INSTALLDIR'
+                   Guid='A1B2C3D4-2222-4000-8000-000000000002'>
+            <File Name='avformat-61.dll' Source='target\release\avformat-61.dll' />
+            <RegistryValue Root='HKCU' Key='Software\MasterSelects\Helper\DLLs'
+                Name='avformat' Type='integer' Value='1' KeyPath='yes' />
+        </Component>
+
+        <Component Id='DLL_avutil' Directory='INSTALLDIR'
+                   Guid='A1B2C3D4-2222-4000-8000-000000000003'>
+            <File Name='avutil-59.dll' Source='target\release\avutil-59.dll' />
+            <RegistryValue Root='HKCU' Key='Software\MasterSelects\Helper\DLLs'
+                Name='avutil' Type='integer' Value='1' KeyPath='yes' />
+        </Component>
+
+        <Component Id='DLL_swresample' Directory='INSTALLDIR'
+                   Guid='A1B2C3D4-2222-4000-8000-000000000004'>
+            <File Name='swresample-5.dll' Source='target\release\swresample-5.dll' />
+            <RegistryValue Root='HKCU' Key='Software\MasterSelects\Helper\DLLs'
+                Name='swresample' Type='integer' Value='1' KeyPath='yes' />
+        </Component>
+
+        <Component Id='DLL_swscale' Directory='INSTALLDIR'
+                   Guid='A1B2C3D4-2222-4000-8000-000000000005'>
+            <File Name='swscale-8.dll' Source='target\release\swscale-8.dll' />
+            <RegistryValue Root='HKCU' Key='Software\MasterSelects\Helper\DLLs'
+                Name='swscale' Type='integer' Value='1' KeyPath='yes' />
+        </Component>
+
+        <Component Id='DLL_avdevice' Directory='INSTALLDIR'
+                   Guid='A1B2C3D4-2222-4000-8000-000000000006'>
+            <File Name='avdevice-61.dll' Source='target\release\avdevice-61.dll' />
+            <RegistryValue Root='HKCU' Key='Software\MasterSelects\Helper\DLLs'
+                Name='avdevice' Type='integer' Value='1' KeyPath='yes' />
+        </Component>
+
+        <Component Id='DLL_avfilter' Directory='INSTALLDIR'
+                   Guid='A1B2C3D4-2222-4000-8000-000000000007'>
+            <File Name='avfilter-10.dll' Source='target\release\avfilter-10.dll' />
+            <RegistryValue Root='HKCU' Key='Software\MasterSelects\Helper\DLLs'
+                Name='avfilter' Type='integer' Value='1' KeyPath='yes' />
+        </Component>
+
+        <Component Id='DLL_postproc' Directory='INSTALLDIR'
+                   Guid='A1B2C3D4-2222-4000-8000-000000000008'>
+            <File Name='postproc-58.dll' Source='target\release\postproc-58.dll' />
+            <RegistryValue Root='HKCU' Key='Software\MasterSelects\Helper\DLLs'
+                Name='postproc' Type='integer' Value='1' KeyPath='yes' />
+        </Component>
+
+        <Component Id='FFmpegExe' Directory='INSTALLDIR'
+                   Guid='A1B2C3D4-3333-4000-8000-000000000001'>
+            <File Name='ffmpeg.exe' Source='target\release\ffmpeg.exe' />
+            <RegistryValue Root='HKCU' Key='Software\MasterSelects\Helper\DLLs'
+                Name='ffmpeg_exe' Type='integer' Value='1' KeyPath='yes' />
+        </Component>
+    </Fragment>
+
+    <Fragment>
+        <Component Id='StartMenuShortcut' Directory='ApplicationProgramsFolder'
+                   Guid='A1B2C3D4-4444-4000-8000-000000000001'>
+            <Shortcut Id='StartMenuLink'
+                Name='MasterSelects Helper'
+                Description='Video codec acceleration for MasterSelects'
+                Target='[INSTALLDIR]masterselects-helper.exe'
+                WorkingDirectory='INSTALLDIR' />
+            <RemoveFolder Id='CleanShortcutFolder'
+                Directory='ApplicationProgramsFolder' On='uninstall' />
+            <RegistryValue Root='HKCU' Key='Software\MasterSelects\Helper'
+                Name='StartMenuShortcut' Type='integer' Value='1' KeyPath='yes' />
+        </Component>
+
+        <Component Id='DesktopShortcut' Directory='DesktopFolder'
+                   Guid='A1B2C3D4-5555-4000-8000-000000000001'>
+            <Shortcut Id='DesktopLink'
+                Name='MasterSelects Helper'
+                Description='Video codec acceleration for MasterSelects'
+                Target='[INSTALLDIR]masterselects-helper.exe'
+                WorkingDirectory='INSTALLDIR' />
+            <RegistryValue Root='HKCU' Key='Software\MasterSelects\Helper'
+                Name='DesktopShortcut' Type='integer' Value='1' KeyPath='yes' />
+        </Component>
+    </Fragment>
+
+</Wix>

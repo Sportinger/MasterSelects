@@ -7,6 +7,7 @@ import {
   previewToolDefinitions,
   analysisToolDefinitions,
   mediaToolDefinitions,
+  batchToolDefinitions,
 } from '../../src/services/aiTools/definitions/index';
 import { MODIFYING_TOOLS } from '../../src/services/aiTools/types';
 import type { ToolDefinition } from '../../src/services/aiTools/types';
@@ -26,8 +27,8 @@ function getProp(tool: ToolDefinition, propName: string): Record<string, unknown
 // ─── Tool count validation ─────────────────────────────────────────────────
 
 describe('AI_TOOLS combined array', () => {
-  it('contains exactly 33 tool definitions', () => {
-    expect(AI_TOOLS).toHaveLength(33);
+  it('contains exactly 36 tool definitions', () => {
+    expect(AI_TOOLS).toHaveLength(36);
   });
 
   it('equals the sum of all category arrays', () => {
@@ -37,12 +38,13 @@ describe('AI_TOOLS combined array', () => {
       trackToolDefinitions.length +
       previewToolDefinitions.length +
       analysisToolDefinitions.length +
-      mediaToolDefinitions.length;
+      mediaToolDefinitions.length +
+      batchToolDefinitions.length;
 
     expect(AI_TOOLS).toHaveLength(expectedLength);
   });
 
-  it('preserves category ordering (timeline, clips, tracks, preview, analysis, media)', () => {
+  it('preserves category ordering (timeline, clips, tracks, preview, analysis, media, batch)', () => {
     const expected = [
       ...timelineToolDefinitions,
       ...clipToolDefinitions,
@@ -50,6 +52,7 @@ describe('AI_TOOLS combined array', () => {
       ...previewToolDefinitions,
       ...analysisToolDefinitions,
       ...mediaToolDefinitions,
+      ...batchToolDefinitions,
     ];
     expect(AI_TOOLS).toEqual(expected);
   });
@@ -66,8 +69,12 @@ describe('category tool counts', () => {
     expect(timelineToolDefinitions).toHaveLength(3);
   });
 
-  it('clipToolDefinitions has 10 tools', () => {
-    expect(clipToolDefinitions).toHaveLength(10);
+  it('clipToolDefinitions has 12 tools', () => {
+    expect(clipToolDefinitions).toHaveLength(12);
+  });
+
+  it('batchToolDefinitions has 1 tool', () => {
+    expect(batchToolDefinitions).toHaveLength(1);
   });
 
   it('trackToolDefinitions has 4 tools', () => {
@@ -95,7 +102,7 @@ describe('category membership', () => {
     expect(names).toEqual(['getTimelineState', 'setPlayhead', 'setInOutPoints']);
   });
 
-  it('clipToolDefinitions contains the expected 10 clip tools', () => {
+  it('clipToolDefinitions contains the expected 12 clip tools', () => {
     const names = clipToolDefinitions.map((t) => t.function.name);
     expect(names).toEqual([
       'getClipDetails',
@@ -106,9 +113,16 @@ describe('category membership', () => {
       'moveClip',
       'trimClip',
       'cutRangesFromClip',
+      'splitClipEvenly',
+      'splitClipAtTimes',
       'selectClips',
       'clearSelection',
     ]);
+  });
+
+  it('batchToolDefinitions contains exactly executeBatch', () => {
+    const names = batchToolDefinitions.map((t) => t.function.name);
+    expect(names).toEqual(['executeBatch']);
   });
 
   it('trackToolDefinitions contains the expected 4 track tools', () => {
@@ -273,6 +287,7 @@ describe('uniqueness', () => {
       { name: 'preview', tools: previewToolDefinitions },
       { name: 'analysis', tools: analysisToolDefinitions },
       { name: 'media', tools: mediaToolDefinitions },
+      { name: 'batch', tools: batchToolDefinitions },
     ];
 
     for (const cat of categories) {
@@ -314,6 +329,8 @@ describe('expected tools exist', () => {
 
   it('includes core clip editing tools', () => {
     expect(toolNames).toContain('splitClip');
+    expect(toolNames).toContain('splitClipEvenly');
+    expect(toolNames).toContain('splitClipAtTimes');
     expect(toolNames).toContain('deleteClip');
     expect(toolNames).toContain('moveClip');
     expect(toolNames).toContain('trimClip');
@@ -366,13 +383,18 @@ describe('expected tools exist', () => {
     expect(toolNames).toContain('moveMediaItems');
   });
 
-  it('has exactly 33 expected tool names covering all tools', () => {
+  it('includes batch tool', () => {
+    expect(toolNames).toContain('executeBatch');
+  });
+
+  it('has exactly 36 expected tool names covering all tools', () => {
     const allExpectedNames = [
       // Timeline (3)
       'getTimelineState', 'setPlayhead', 'setInOutPoints',
-      // Clips (10)
+      // Clips (12)
       'getClipDetails', 'getClipsInTimeRange', 'splitClip', 'deleteClip', 'deleteClips',
-      'moveClip', 'trimClip', 'cutRangesFromClip', 'selectClips', 'clearSelection',
+      'moveClip', 'trimClip', 'cutRangesFromClip', 'splitClipEvenly', 'splitClipAtTimes',
+      'selectClips', 'clearSelection',
       // Tracks (4)
       'createTrack', 'deleteTrack', 'setTrackVisibility', 'setTrackMuted',
       // Preview (3)
@@ -383,6 +405,8 @@ describe('expected tools exist', () => {
       // Media (7)
       'getMediaItems', 'createMediaFolder', 'renameMediaItem', 'deleteMediaItem',
       'moveMediaItems', 'createComposition', 'selectMediaItems',
+      // Batch (1)
+      'executeBatch',
     ];
     const actualNames = AI_TOOLS.map((t) => t.function.name);
     expect(actualNames.sort()).toEqual(allExpectedNames.sort());
@@ -398,11 +422,17 @@ describe('MODIFYING_TOOLS set', () => {
 
   it('contains all destructive clip operations', () => {
     expect(MODIFYING_TOOLS.has('splitClip')).toBe(true);
+    expect(MODIFYING_TOOLS.has('splitClipEvenly')).toBe(true);
+    expect(MODIFYING_TOOLS.has('splitClipAtTimes')).toBe(true);
     expect(MODIFYING_TOOLS.has('deleteClip')).toBe(true);
     expect(MODIFYING_TOOLS.has('deleteClips')).toBe(true);
     expect(MODIFYING_TOOLS.has('moveClip')).toBe(true);
     expect(MODIFYING_TOOLS.has('trimClip')).toBe(true);
     expect(MODIFYING_TOOLS.has('cutRangesFromClip')).toBe(true);
+  });
+
+  it('contains batch execution tool', () => {
+    expect(MODIFYING_TOOLS.has('executeBatch')).toBe(true);
   });
 
   it('contains all destructive track operations', () => {
@@ -455,8 +485,8 @@ describe('MODIFYING_TOOLS set', () => {
   });
 
   it('has the expected total count of modifying tools', () => {
-    // 6 clip + 4 track + 5 media = 15
-    expect(MODIFYING_TOOLS.size).toBe(15);
+    // 8 clip + 4 track + 5 media + 1 batch = 18
+    expect(MODIFYING_TOOLS.size).toBe(18);
   });
 });
 
@@ -876,11 +906,11 @@ describe('array parameter schemas', () => {
       }
     }
 
-    // There should be exactly 7 array properties across all tools
+    // There should be exactly 8 array properties across all tools
     // deleteClips.clipIds, selectClips.clipIds, cutRangesFromClip.ranges,
-    // getFramesAtTimes.times, moveMediaItems.itemIds, selectMediaItems.itemIds,
-    // (no others expected)
-    expect(arrayProps.length).toBe(6);
+    // splitClipAtTimes.times, getFramesAtTimes.times, moveMediaItems.itemIds,
+    // selectMediaItems.itemIds, executeBatch.actions
+    expect(arrayProps.length).toBe(8);
 
     // Verify string arrays
     for (const name of ['deleteClips', 'selectClips']) {
@@ -896,12 +926,14 @@ describe('array parameter schemas', () => {
     expect(rangesMatch).toBeDefined();
     expect(rangesMatch!.itemType).toBe('object');
 
-    // Verify times is number array
-    const timesMatch = arrayProps.find(
-      (a) => a.toolName === 'getFramesAtTimes' && a.propName === 'times'
-    );
-    expect(timesMatch).toBeDefined();
-    expect(timesMatch!.itemType).toBe('number');
+    // Verify times is number array (getFramesAtTimes and splitClipAtTimes)
+    for (const name of ['getFramesAtTimes', 'splitClipAtTimes']) {
+      const timesMatch = arrayProps.find(
+        (a) => a.toolName === name && a.propName === 'times'
+      );
+      expect(timesMatch).toBeDefined();
+      expect(timesMatch!.itemType).toBe('number');
+    }
 
     // Verify media array properties
     for (const name of ['moveMediaItems', 'selectMediaItems']) {
@@ -909,6 +941,13 @@ describe('array parameter schemas', () => {
       expect(match).toBeDefined();
       expect(match!.itemType).toBe('string');
     }
+
+    // Verify batch actions is object array
+    const batchMatch = arrayProps.find(
+      (a) => a.toolName === 'executeBatch' && a.propName === 'actions'
+    );
+    expect(batchMatch).toBeDefined();
+    expect(batchMatch!.itemType).toBe('object');
   });
 });
 

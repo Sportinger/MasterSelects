@@ -4,11 +4,12 @@
 
 // === Source Types ===
 
-export type RenderSourceType = 'activeComp' | 'composition' | 'layer' | 'slot' | 'program';
+export type RenderSourceType = 'activeComp' | 'composition' | 'layer' | 'layer-index' | 'slot' | 'program';
 
 export interface RenderSourceActiveComp { type: 'activeComp' }
 export interface RenderSourceComposition { type: 'composition'; compositionId: string }
 export interface RenderSourceLayer { type: 'layer'; compositionId: string; layerIds: string[] }
+export interface RenderSourceLayerIndex { type: 'layer-index'; compositionId: string; layerIndex: number }
 export interface RenderSourceSlot { type: 'slot'; slotIndex: number }
 export interface RenderSourceProgram { type: 'program' }  // main mix output
 
@@ -16,6 +17,7 @@ export type RenderSource =
   | RenderSourceActiveComp
   | RenderSourceComposition
   | RenderSourceLayer
+  | RenderSourceLayerIndex
   | RenderSourceSlot
   | RenderSourceProgram;
 
@@ -31,6 +33,7 @@ export interface RenderTarget {
   source: RenderSource;
   destinationType: RenderDestinationType;
   enabled: boolean;
+  showTransparencyGrid: boolean;
   // Runtime state (not serialized)
   canvas: HTMLCanvasElement | null;
   context: GPUCanvasContext | null;

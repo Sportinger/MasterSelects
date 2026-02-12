@@ -40,6 +40,8 @@ export {
 export { LayerCache } from './LayerCache';
 export { TransformCache } from './TransformCache';
 export { AudioSyncHandler, createAudioSyncState, finalizeAudioSync } from './AudioSyncHandler';
+export { VideoSyncManager } from './VideoSyncManager';
+export { AudioTrackSyncManager } from './AudioTrackSyncManager';
 export { LayerBuilderService } from './LayerBuilderService';
 
 // Singleton instance (backward compatible)

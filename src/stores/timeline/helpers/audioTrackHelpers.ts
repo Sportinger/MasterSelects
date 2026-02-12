@@ -10,32 +10,52 @@ export interface FindOrCreateAudioTrackResult {
 }
 
 /**
- * Find existing audio track or create a new one.
+ * Find existing audio track without overlap or create a new one.
  * Used for linked audio clips from video and composition clips.
  */
 export function findOrCreateAudioTrack(
   tracks: TimelineTrack[],
+  clips: TimelineClip[],
+  startTime: number,
+  duration: number,
   preferredId?: string
 ): FindOrCreateAudioTrackResult {
-  // Try to use preferred track if provided
+  const endTime = startTime + duration;
+
+  // Try to use preferred track if provided (only if no overlap)
   if (preferredId) {
     const preferred = tracks.find(t => t.id === preferredId && t.type === 'audio');
     if (preferred) {
-      return { trackId: preferred.id, newTrack: null };
+      const trackClips = clips.filter(c => c.trackId === preferred.id);
+      const hasOverlap = trackClips.some(c => {
+        const clipEnd = c.startTime + c.duration;
+        return !(endTime <= c.startTime || startTime >= clipEnd);
+      });
+      if (!hasOverlap) {
+        return { trackId: preferred.id, newTrack: null };
+      }
     }
   }
 
-  // Find first audio track
+  // Find first audio track without overlap
   const audioTracks = tracks.filter(t => t.type === 'audio');
-  if (audioTracks.length > 0) {
-    return { trackId: audioTracks[0].id, newTrack: null };
+  for (const track of audioTracks) {
+    const trackClips = clips.filter(c => c.trackId === track.id);
+    const hasOverlap = trackClips.some(c => {
+      const clipEnd = c.startTime + c.duration;
+      return !(endTime <= c.startTime || startTime >= clipEnd);
+    });
+    if (!hasOverlap) {
+      return { trackId: track.id, newTrack: null };
+    }
   }
 
-  // Create new audio track
+  // All audio tracks have overlap — create new one
+  const audioCount = audioTracks.length;
   const newTrackId = `track-${Date.now()}-audio`;
   const newTrack: TimelineTrack = {
     id: newTrackId,
-    name: 'Audio 1',
+    name: `Audio ${audioCount + 1}`,
     type: 'audio',
     height: 60,
     muted: false,

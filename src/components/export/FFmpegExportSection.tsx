@@ -56,10 +56,6 @@ export function FFmpegExportSection({
   // Codec-specific settings
   const [proresProfile, setProresProfile] = useState<ProResProfile>('hq');
   const [dnxhrProfile, setDnxhrProfile] = useState<DnxhrProfile>('dnxhr_hq');
-  // HAP not available in this FFmpeg build (requires libsnappy)
-  // const [hapFormat, setHapFormat] = useState<HapFormat>('hap_q');
-  // const [hapChunks, setHapChunks] = useState(4);
-
   // Quality settings
   const [useQuality, setUseQuality] = useState(true);
   const [quality, setQuality] = useState(18);
@@ -120,11 +116,6 @@ export function FFmpegExportSection({
     if (presetConfig.dnxhrProfile) {
       setDnxhrProfile(presetConfig.dnxhrProfile);
     }
-    // HAP not available
-    // if (presetConfig.hapFormat) {
-    //   setHapFormat(presetConfig.hapFormat);
-    // }
-
     setPreset(presetId);
   }, []);
 
@@ -189,9 +180,6 @@ export function FFmpegExportSection({
         bitrate: !useQuality ? bitrate : undefined,
         proresProfile: codec === 'prores' ? proresProfile : undefined,
         dnxhrProfile: codec === 'dnxhd' ? dnxhrProfile : undefined,
-        // HAP not available in this build
-        hapFormat: undefined,
-        hapChunks: undefined,
       };
 
       // Render frames

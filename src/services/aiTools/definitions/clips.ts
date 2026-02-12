@@ -184,6 +184,67 @@ export const clipToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'splitClipEvenly',
+      description: 'Split a clip into N equal parts. This is much faster than using executeBatch with individual splitClip calls. Handles linked audio automatically.',
+      parameters: {
+        type: 'object',
+        properties: {
+          clipId: {
+            type: 'string',
+            description: 'The ID of the clip to split',
+          },
+          parts: {
+            type: 'number',
+            description: 'Number of equal parts to split into (minimum 2)',
+          },
+        },
+        required: ['clipId', 'parts'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'splitClipAtTimes',
+      description: 'Split a clip at multiple specific times in a single operation. This is much faster than using executeBatch with individual splitClip calls. Handles linked audio and changing clip IDs automatically.',
+      parameters: {
+        type: 'object',
+        properties: {
+          clipId: {
+            type: 'string',
+            description: 'The ID of the clip to split',
+          },
+          times: {
+            type: 'array',
+            items: { type: 'number' },
+            description: 'Array of timeline times (in seconds) where to split the clip',
+          },
+        },
+        required: ['clipId', 'times'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'reorderClips',
+      description: 'Reorder clips by placing them sequentially in the given order. Provide clip IDs in the desired playback order — the tool calculates all new positions and moves everything (including linked audio) in a single operation. Much faster and more reliable than using executeBatch with multiple moveClip calls.',
+      parameters: {
+        type: 'object',
+        properties: {
+          clipIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of clip IDs in the desired playback order. Clips will be placed sequentially starting from the earliest clip position.',
+          },
+        },
+        required: ['clipIds'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'selectClips',
       description: 'Select one or more clips in the timeline.',
       parameters: {

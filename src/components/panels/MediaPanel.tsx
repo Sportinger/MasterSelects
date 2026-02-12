@@ -1,105 +1,22 @@
 // Media Panel - Project browser like After Effects
 
-import React, { useCallback, useRef, useState, useEffect, memo } from 'react';
+import React, { useCallback, useRef, useState, useEffect } from 'react';
 import { Logger } from '../../services/logger';
-
-// Small file-type icons (AE style) - inline SVGs, 14px
-const FileTypeIcon = memo(({ type }: { type?: string }) => {
-  const size = 14;
-  const style: React.CSSProperties = { width: size, height: size, flexShrink: 0, display: 'block' };
-
-  switch (type) {
-    case 'video':
-      return (
-        <svg style={style} viewBox="0 0 16 16" fill="none">
-          <rect x="1" y="3" width="14" height="10" rx="1.5" fill="#4a6fa5" stroke="#6b9bd2" strokeWidth="0.7"/>
-          <rect x="3" y="5" width="3" height="3" rx="0.5" fill="#2a4a75" opacity="0.7"/>
-          <rect x="7" y="5" width="3" height="3" rx="0.5" fill="#2a4a75" opacity="0.7"/>
-          <rect x="11" y="5" width="3" height="3" rx="0.5" fill="#2a4a75" opacity="0.7"/>
-          <rect x="3" y="9" width="3" height="3" rx="0.5" fill="#2a4a75" opacity="0.7"/>
-          <rect x="7" y="9" width="3" height="3" rx="0.5" fill="#2a4a75" opacity="0.7"/>
-          <rect x="11" y="9" width="3" height="3" rx="0.5" fill="#2a4a75" opacity="0.7"/>
-        </svg>
-      );
-    case 'audio':
-      return (
-        <svg style={style} viewBox="0 0 16 16" fill="none">
-          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#4a7a4a" stroke="#6aaa6a" strokeWidth="0.7"/>
-          <path d="M4 6v4M6 5v6M8 4v8M10 5v6M12 6v4" stroke="#8fdf8f" strokeWidth="1.2" strokeLinecap="round"/>
-        </svg>
-      );
-    case 'image':
-      return (
-        <svg style={style} viewBox="0 0 16 16" fill="none">
-          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#5a6a8a" stroke="#7a9aba" strokeWidth="0.7"/>
-          <circle cx="5.5" cy="6" r="1.5" fill="#aaccee"/>
-          <path d="M1.5 11l3.5-3 2.5 2 3-4 4 5v0.5c0 .55-.45 1-1 1h-12c-.55 0-1-.45-1-1z" fill="#7a9aba" opacity="0.8"/>
-        </svg>
-      );
-    case 'composition':
-      return (
-        <svg style={style} viewBox="0 0 16 16" fill="none">
-          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#7a5a8a" stroke="#aa7abb" strokeWidth="0.7"/>
-          <circle cx="8" cy="8" r="3.5" stroke="#cc99dd" strokeWidth="1" fill="none"/>
-          <circle cx="8" cy="8" r="1" fill="#cc99dd"/>
-        </svg>
-      );
-    case 'text':
-      return (
-        <svg style={style} viewBox="0 0 16 16" fill="none">
-          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#8a6a5a" stroke="#bb9a7a" strokeWidth="0.7"/>
-          <text x="8" y="11.5" textAnchor="middle" fill="#eeddcc" fontSize="9" fontWeight="bold" fontFamily="sans-serif">T</text>
-        </svg>
-      );
-    case 'solid':
-      return (
-        <svg style={style} viewBox="0 0 16 16" fill="none">
-          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#777" stroke="#999" strokeWidth="0.7"/>
-          <rect x="4" y="5" width="8" height="6" rx="0.5" fill="#bbb"/>
-        </svg>
-      );
-    default:
-      return (
-        <svg style={style} viewBox="0 0 16 16" fill="none">
-          <path d="M4 1.5h5.5l4 4V14c0 .55-.45 1-1 1H4c-.55 0-1-.45-1-1V2.5c0-.55.45-1 1-1z" fill="#5a5a5a" stroke="#888" strokeWidth="0.7"/>
-          <path d="M9.5 1.5v4h4" stroke="#888" strokeWidth="0.7" fill="#6a6a6a"/>
-        </svg>
-      );
-  }
-});
+import { FileTypeIcon } from './media/FileTypeIcon';
+import { LABEL_COLORS, getLabelHex } from './media/labelColors';
+import { CompositionSettingsDialog } from './media/CompositionSettingsDialog';
+import { SolidSettingsDialog } from './media/SolidSettingsDialog';
+import { LabelColorPicker } from './media/LabelColorPicker';
 
 const log = Logger.create('MediaPanel');
 import { useMediaStore } from '../../stores/mediaStore';
 import type { MediaFile, Composition, ProjectItem, SolidItem } from '../../stores/mediaStore';
-import type { LabelColor } from '../../stores/mediaStore/types';
 import { useTimelineStore } from '../../stores/timeline';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { RelinkDialog } from '../common/RelinkDialog';
 
-// AE label color palette (exported for reuse in TimelineClip)
-export const LABEL_COLORS: { key: LabelColor; hex: string; name: string }[] = [
-  { key: 'none', hex: 'transparent', name: 'None' },
-  { key: 'red', hex: '#e2514c', name: 'Red' },
-  { key: 'yellow', hex: '#dbb63b', name: 'Yellow' },
-  { key: 'aqua', hex: '#4ec0c0', name: 'Aqua' },
-  { key: 'pink', hex: '#d77bba', name: 'Pink' },
-  { key: 'lavender', hex: '#a278c1', name: 'Lavender' },
-  { key: 'peach', hex: '#e8a264', name: 'Peach' },
-  { key: 'seafoam', hex: '#6bc488', name: 'Sea Foam' },
-  { key: 'blue', hex: '#4a90e2', name: 'Blue' },
-  { key: 'green', hex: '#6db849', name: 'Green' },
-  { key: 'purple', hex: '#8b5fc7', name: 'Purple' },
-  { key: 'orange', hex: '#e07934', name: 'Orange' },
-  { key: 'brown', hex: '#a57249', name: 'Brown' },
-  { key: 'fuchsia', hex: '#d14da1', name: 'Fuchsia' },
-  { key: 'cyan', hex: '#49bce3', name: 'Cyan' },
-  { key: 'tan', hex: '#c4a86c', name: 'Tan' },
-];
-
-export function getLabelHex(color?: LabelColor): string {
-  if (!color || color === 'none') return 'transparent';
-  return LABEL_COLORS.find(c => c.key === color)?.hex || 'transparent';
-}
+// Re-export for backward compatibility
+export { LABEL_COLORS, getLabelHex } from './media/labelColors';
 
 // Column definitions
 type ColumnId = 'label' | 'name' | 'duration' | 'resolution' | 'fps' | 'container' | 'codec' | 'audio' | 'bitrate' | 'size';
@@ -925,7 +842,6 @@ export function MediaPanel() {
     const isMediaFile = !isFolder && 'type' in item && item.type !== 'composition' && item.type !== 'text' && item.type !== 'solid';
     const hasFile = isMediaFile && 'file' in item && !!(item as MediaFile).file;
     const isImporting = isMediaFile && !!(item as MediaFile).isImporting;
-    const canDrag = true;
     const isDragTarget = isFolder && dragOverFolderId === item.id;
     const isBeingDragged = internalDragId === item.id;
     const mediaFile = isMediaFile ? (item as MediaFile) : null;
@@ -934,7 +850,7 @@ export function MediaPanel() {
       <div key={item.id}>
         <div
           className={`media-item ${isSelected ? 'selected' : ''} ${isFolder ? 'folder' : ''} ${isMediaFile && !hasFile ? 'no-file' : ''} ${isImporting ? 'importing' : ''} ${isDragTarget ? 'drag-target' : ''} ${isBeingDragged ? 'dragging' : ''}`}
-          draggable={canDrag}
+          draggable
           onDragStart={(e) => handleDragStart(e, item)}
           onDragEnd={handleDragEnd}
           onDragOver={isFolder ? (e) => handleFolderDragOver(e, item.id) : undefined}
@@ -1280,329 +1196,48 @@ export function MediaPanel() {
         );
       })()}
 
-      {/* Composition Settings Dialog - Clean, no blur */}
+      {/* Composition Settings Dialog */}
       {settingsDialog && (
-        <div
-          className="comp-settings-overlay"
-          onClick={() => setSettingsDialog(null)}
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'transparent',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10001,
-          }}
-        >
-          <div
-            className="comp-settings-dialog"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: '#1e1e1e',
-              border: '1px solid #3a3a3a',
-              borderRadius: '6px',
-              padding: '20px',
-              minWidth: '340px',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
-            }}
-          >
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '14px', fontWeight: 500, color: '#e0e0e0' }}>Composition Settings</h3>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              {/* Width */}
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', color: '#888' }}>Width</label>
-                <input
-                  type="number"
-                  value={settingsDialog.width}
-                  onChange={(e) => setSettingsDialog({
-                    ...settingsDialog,
-                    width: Math.max(1, parseInt(e.target.value) || 1920),
-                  })}
-                  min="1"
-                  max="7680"
-                  style={{ width: '100%', padding: '6px 8px', background: '#2a2a2a', border: '1px solid #3a3a3a', borderRadius: '4px', color: '#fff', fontSize: '13px' }}
-                />
-              </div>
-
-              {/* Height */}
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', color: '#888' }}>Height</label>
-                <input
-                  type="number"
-                  value={settingsDialog.height}
-                  onChange={(e) => setSettingsDialog({
-                    ...settingsDialog,
-                    height: Math.max(1, parseInt(e.target.value) || 1080),
-                  })}
-                  min="1"
-                  max="4320"
-                  style={{ width: '100%', padding: '6px 8px', background: '#2a2a2a', border: '1px solid #3a3a3a', borderRadius: '4px', color: '#fff', fontSize: '13px' }}
-                />
-              </div>
-
-              {/* Frame Rate */}
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', color: '#888' }}>Frame Rate</label>
-                <select
-                  value={settingsDialog.frameRate}
-                  onChange={(e) => setSettingsDialog({
-                    ...settingsDialog,
-                    frameRate: Number(e.target.value),
-                  })}
-                  style={{ width: '100%', padding: '6px 8px', background: '#2a2a2a', border: '1px solid #3a3a3a', borderRadius: '4px', color: '#fff', fontSize: '13px' }}
-                >
-                  <option value={23.976}>23.976 fps</option>
-                  <option value={24}>24 fps</option>
-                  <option value={25}>25 fps (PAL)</option>
-                  <option value={29.97}>29.97 fps (NTSC)</option>
-                  <option value={30}>30 fps</option>
-                  <option value={50}>50 fps</option>
-                  <option value={59.94}>59.94 fps</option>
-                  <option value={60}>60 fps</option>
-                </select>
-              </div>
-
-              {/* Duration */}
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', color: '#888' }}>Duration (sec)</label>
-                <input
-                  type="number"
-                  value={settingsDialog.duration}
-                  onChange={(e) => setSettingsDialog({
-                    ...settingsDialog,
-                    duration: Math.max(1, parseFloat(e.target.value) || 60),
-                  })}
-                  min="1"
-                  max="86400"
-                  step="1"
-                  style={{ width: '100%', padding: '6px 8px', background: '#2a2a2a', border: '1px solid #3a3a3a', borderRadius: '4px', color: '#fff', fontSize: '13px' }}
-                />
-              </div>
-            </div>
-
-            {/* Resolution Presets */}
-            <div style={{ marginTop: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', color: '#888' }}>Presets</label>
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {[
-                  { label: '1080p', w: 1920, h: 1080 },
-                  { label: '4K', w: 3840, h: 2160 },
-                  { label: '720p', w: 1280, h: 720 },
-                  { label: '9:16', w: 1080, h: 1920 },
-                  { label: '1:1', w: 1080, h: 1080 },
-                ].map((preset) => (
-                  <button
-                    key={preset.label}
-                    onClick={() => setSettingsDialog({ ...settingsDialog, width: preset.w, height: preset.h })}
-                    style={{
-                      padding: '4px 8px',
-                      fontSize: '11px',
-                      background: settingsDialog.width === preset.w && settingsDialog.height === preset.h ? '#4a90e2' : '#2a2a2a',
-                      border: '1px solid #3a3a3a',
-                      borderRadius: '3px',
-                      color: '#fff',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Buttons */}
-            <div style={{ display: 'flex', gap: '8px', marginTop: '16px', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setSettingsDialog(null)}
-                style={{ padding: '6px 16px', background: '#2a2a2a', border: '1px solid #3a3a3a', borderRadius: '4px', color: '#fff', cursor: 'pointer', fontSize: '12px' }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveCompositionSettings}
-                style={{ padding: '6px 16px', background: '#4a90e2', border: 'none', borderRadius: '4px', color: '#fff', cursor: 'pointer', fontSize: '12px' }}
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
+        <CompositionSettingsDialog
+          settings={settingsDialog}
+          onSettingsChange={setSettingsDialog}
+          onSave={saveCompositionSettings}
+          onCancel={() => setSettingsDialog(null)}
+        />
       )}
 
       {/* Solid Settings Dialog */}
       {solidSettingsDialog && (
-        <div
-          className="comp-settings-overlay"
-          onClick={() => setSolidSettingsDialog(null)}
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'transparent',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10001,
+        <SolidSettingsDialog
+          settings={solidSettingsDialog}
+          onSettingsChange={setSolidSettingsDialog}
+          onSave={() => {
+            if (solidSettingsDialog) {
+              updateSolidItem(solidSettingsDialog.solidItemId, {
+                color: solidSettingsDialog.color,
+                width: solidSettingsDialog.width,
+                height: solidSettingsDialog.height,
+              });
+              setSolidSettingsDialog(null);
+            }
           }}
-        >
-          <div
-            className="comp-settings-dialog"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: '#1e1e1e',
-              border: '1px solid #3a3a3a',
-              borderRadius: '6px',
-              padding: '20px',
-              minWidth: '340px',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
-            }}
-          >
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '14px', fontWeight: 500, color: '#e0e0e0' }}>Solid Settings</h3>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              {/* Width */}
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', color: '#888' }}>Width</label>
-                <input
-                  type="number"
-                  value={solidSettingsDialog.width}
-                  onChange={(e) => setSolidSettingsDialog({
-                    ...solidSettingsDialog,
-                    width: Math.max(1, parseInt(e.target.value) || 1920),
-                  })}
-                  min="1"
-                  max="7680"
-                  style={{ width: '100%', padding: '6px 8px', background: '#2a2a2a', border: '1px solid #3a3a3a', borderRadius: '4px', color: '#fff', fontSize: '13px' }}
-                />
-              </div>
-
-              {/* Height */}
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', color: '#888' }}>Height</label>
-                <input
-                  type="number"
-                  value={solidSettingsDialog.height}
-                  onChange={(e) => setSolidSettingsDialog({
-                    ...solidSettingsDialog,
-                    height: Math.max(1, parseInt(e.target.value) || 1080),
-                  })}
-                  min="1"
-                  max="4320"
-                  style={{ width: '100%', padding: '6px 8px', background: '#2a2a2a', border: '1px solid #3a3a3a', borderRadius: '4px', color: '#fff', fontSize: '13px' }}
-                />
-              </div>
-
-              {/* Color */}
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', color: '#888' }}>Color</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input
-                    type="color"
-                    value={solidSettingsDialog.color}
-                    onChange={(e) => setSolidSettingsDialog({ ...solidSettingsDialog, color: e.target.value })}
-                    style={{ width: '36px', height: '28px', padding: '0', border: '1px solid #3a3a3a', borderRadius: '4px', cursor: 'pointer', background: 'transparent' }}
-                  />
-                  <span style={{ fontSize: '12px', color: '#ccc', fontFamily: 'monospace' }}>
-                    {solidSettingsDialog.color}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Resolution Presets */}
-            <div style={{ marginTop: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', color: '#888' }}>Presets</label>
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {[
-                  { label: '1080p', w: 1920, h: 1080 },
-                  { label: '4K', w: 3840, h: 2160 },
-                  { label: '720p', w: 1280, h: 720 },
-                  { label: '9:16', w: 1080, h: 1920 },
-                  { label: '1:1', w: 1080, h: 1080 },
-                ].map((preset) => (
-                  <button
-                    key={preset.label}
-                    onClick={() => setSolidSettingsDialog({ ...solidSettingsDialog, width: preset.w, height: preset.h })}
-                    style={{
-                      padding: '4px 8px',
-                      fontSize: '11px',
-                      background: solidSettingsDialog.width === preset.w && solidSettingsDialog.height === preset.h ? '#4a90e2' : '#2a2a2a',
-                      border: '1px solid #3a3a3a',
-                      borderRadius: '3px',
-                      color: '#fff',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Buttons */}
-            <div style={{ display: 'flex', gap: '8px', marginTop: '16px', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setSolidSettingsDialog(null)}
-                style={{ padding: '6px 16px', background: '#2a2a2a', border: '1px solid #3a3a3a', borderRadius: '4px', color: '#fff', cursor: 'pointer', fontSize: '12px' }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (solidSettingsDialog) {
-                    updateSolidItem(solidSettingsDialog.solidItemId, {
-                      color: solidSettingsDialog.color,
-                      width: solidSettingsDialog.width,
-                      height: solidSettingsDialog.height,
-                    });
-                    setSolidSettingsDialog(null);
-                  }
-                }}
-                style={{ padding: '6px 16px', background: '#4a90e2', border: 'none', borderRadius: '4px', color: '#fff', cursor: 'pointer', fontSize: '12px' }}
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
+          onCancel={() => setSolidSettingsDialog(null)}
+        />
       )}
 
       {/* Label Color Picker */}
       {labelPickerItemId && labelPickerPos && (
-        <>
-          <div
-            className="label-picker-backdrop"
-            onClick={() => { setLabelPickerItemId(null); setLabelPickerPos(null); }}
-          />
-          <div
-            className="label-picker-popup"
-            style={{ position: 'fixed', left: labelPickerPos.x, top: labelPickerPos.y, zIndex: 10002 }}
-          >
-            {LABEL_COLORS.map(c => (
-              <span
-                key={c.key}
-                className={`label-picker-swatch ${c.key === 'none' ? 'none' : ''}`}
-                title={c.name}
-                style={{ background: c.key === 'none' ? 'var(--bg-tertiary)' : c.hex }}
-                onClick={() => {
-                  const ids = selectedIds.includes(labelPickerItemId) ? selectedIds : [labelPickerItemId];
-                  setLabelColor(ids, c.key);
-                  setLabelPickerItemId(null);
-                  setLabelPickerPos(null);
-                }}
-              >
-                {c.key === 'none' && <span className="label-picker-x">&times;</span>}
-              </span>
-            ))}
-          </div>
-        </>
+        <LabelColorPicker
+          position={labelPickerPos}
+          selectedIds={selectedIds}
+          labelPickerItemId={labelPickerItemId}
+          onSelect={(ids, colorKey) => {
+            setLabelColor(ids, colorKey as any);
+            setLabelPickerItemId(null);
+            setLabelPickerPos(null);
+          }}
+          onClose={() => { setLabelPickerItemId(null); setLabelPickerPos(null); }}
+        />
       )}
 
       {/* Relink Dialog */}

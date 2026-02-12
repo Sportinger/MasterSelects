@@ -41,10 +41,34 @@ class CompositionRendererService {
   // Callbacks for when a composition is ready
   private readyCallbacks: Map<string, (() => void)[]> = new Map();
 
+  // Throttle "not ready" warnings per composition (avoid spam at 60fps)
+  private notReadyWarned: Map<string, number> = new Map();
+
+  // Track in-flight preparation promises to deduplicate concurrent calls
+  private preparingPromises: Map<string, Promise<boolean>> = new Map();
+
   /**
    * Prepare a composition for rendering - loads all video/image sources
+   * Deduplicates concurrent calls for the same composition.
    */
   async prepareComposition(compositionId: string): Promise<boolean> {
+    // If already preparing this composition, return the existing promise
+    const existing = this.preparingPromises.get(compositionId);
+    if (existing) {
+      log.debug(`prepareComposition: already in-flight for ${compositionId}, reusing promise`);
+      return existing;
+    }
+
+    const promise = this._doPrepareComposition(compositionId);
+    this.preparingPromises.set(compositionId, promise);
+    try {
+      return await promise;
+    } finally {
+      this.preparingPromises.delete(compositionId);
+    }
+  }
+
+  private async _doPrepareComposition(compositionId: string): Promise<boolean> {
     log.info(`prepareComposition called for ${compositionId}`);
 
     // Already prepared?
@@ -181,6 +205,7 @@ class CompositionRendererService {
     await Promise.all(loadPromises);
 
     sources.isReady = true;
+    this.notReadyWarned.delete(compositionId);
     log.info(`Composition ready: ${composition.name}, ${sources.clipSources.size} sources loaded`);
 
     if (sources.clipSources.size === 0 && clips.length > 0) {
@@ -261,7 +286,13 @@ class CompositionRendererService {
   evaluateAtTime(compositionId: string, time: number): EvaluatedLayer[] {
     const sources = this.compositionSources.get(compositionId);
     if (!sources?.isReady) {
-      log.warn(`evaluateAtTime: sources not ready for ${compositionId}`);
+      // Log at debug level — this is a normal transient state during loading, not an error
+      const now = Date.now();
+      const lastWarned = this.notReadyWarned.get(compositionId) || 0;
+      if (now - lastWarned > 2000) {
+        log.debug(`evaluateAtTime: sources not ready for ${compositionId}`);
+        this.notReadyWarned.set(compositionId, now);
+      }
       return [];
     }
 

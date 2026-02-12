@@ -3,7 +3,7 @@
 
 import type { TimelineClip, TimelineTrack } from '../../../types';
 import { DEFAULT_TRANSFORM, calculateNativeScale } from '../constants';
-import { generateThumbnails } from '../utils';
+import { generateVideoThumbnails } from '../helpers/thumbnailHelpers';
 import { useMediaStore } from '../../mediaStore';
 import { useSettingsStore } from '../../settingsStore';
 import { NativeDecoder } from '../../../services/nativeHelper';
@@ -118,8 +118,8 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
 
   // Use native decoder when Turbo Mode is on and helper is connected
   // FFmpeg can decode all formats (H.264, ProRes, DNxHD, etc.) with HW acceleration
-  const { turboModeEnabled, nativeHelperConnected } = useSettingsStore.getState();
-  const useNativeDecoder = turboModeEnabled && nativeHelperConnected;
+  const { nativeDecodeEnabled, nativeHelperConnected } = useSettingsStore.getState();
+  const useNativeDecoder = nativeDecodeEnabled && nativeHelperConnected;
 
   let nativeDecoder: NativeDecoder | null = null;
   let video: HTMLVideoElement | null = null;
@@ -345,7 +345,7 @@ async function generateThumbnailsAsync(
     });
 
     log.debug('Starting thumbnail generation', { file: fileName });
-    const thumbnails = await generateThumbnails(video, duration);
+    const thumbnails = await generateVideoThumbnails(video, duration);
     log.debug('Thumbnails complete', { count: thumbnails.length, file: fileName });
 
     setClips(clips => clips.map(c => c.id === clipId ? { ...c, thumbnails } : c));

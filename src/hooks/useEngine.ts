@@ -13,6 +13,7 @@ import type { ClipMask, MaskVertex } from '../types';
 import { generateMaskTexture } from '../utils/maskRenderer';
 import { layerBuilder, playheadState } from '../services/layerBuilder';
 import { layerPlaybackManager } from '../services/layerPlaybackManager';
+import { renderScheduler } from '../services/renderScheduler';
 import { Logger } from '../services/logger';
 
 const log = Logger.create('Engine');
@@ -138,22 +139,10 @@ export function useEngine() {
       () => updateResolution()
     );
 
-    // Subscribe to transparency grid setting
-    const updateTransparencyGrid = () => {
-      const { showTransparencyGrid } = useSettingsStore.getState();
-      engine.setShowTransparencyGrid(showTransparencyGrid);
-    };
-    updateTransparencyGrid(); // Initial update
-    const unsubscribeTransparency = useSettingsStore.subscribe(
-      (state) => state.showTransparencyGrid,
-      () => updateTransparencyGrid()
-    );
-
     return () => {
       unsubscribeActiveComp();
       unsubscribeCompositions();
       unsubscribeSettings();
-      unsubscribeTransparency();
     };
   }, [isEngineReady]);
 
@@ -398,6 +387,10 @@ export function useEngine() {
         // Build layers directly from stores (single source of truth)
         const layers = layerBuilder.buildLayersFromStore();
 
+        // Share pre-built layers with renderScheduler so multi-preview
+        // can reuse them instead of re-evaluating and re-seeking videos
+        renderScheduler.setActiveCompLayers(layers);
+
         // Render FIRST, before seeking video elements
         // This ensures we always have a displayable frame even after page reload
         // when the scrubbing cache is empty. The video is at its previous position
@@ -467,11 +460,10 @@ export function useEngine() {
       () => engine.requestRender()
     );
 
-    // Settings changes (transparency grid, preview quality)
+    // Settings changes (preview quality)
     const unsubSettings = useSettingsStore.subscribe(
-      (state) => [state.showTransparencyGrid, state.previewQuality],
-      () => engine.requestRender(),
-      { equalityFn: (a, b) => a[0] === b[0] && a[1] === b[1] }
+      (state) => state.previewQuality,
+      () => engine.requestRender()
     );
 
     // Active composition changes

@@ -30,6 +30,9 @@ interface RenderTargetActions {
   setTargetWindow: (id: string, win: Window) => void;
   setTargetFullscreen: (id: string, isFullscreen: boolean) => void;
 
+  // Transparency grid
+  setTargetTransparencyGrid: (id: string, show: boolean) => void;
+
   // UI selection
   setSelectedTarget: (id: string | null) => void;
 
@@ -148,6 +151,16 @@ export const useRenderTargetStore = create<RenderTargetState & RenderTargetActio
       });
     },
 
+    setTargetTransparencyGrid: (id, show) => {
+      set((state) => {
+        const target = state.targets.get(id);
+        if (!target) return state;
+        const next = new Map(state.targets);
+        next.set(id, { ...target, showTransparencyGrid: show });
+        return { targets: next };
+      });
+    },
+
     setSelectedTarget: (id) => {
       set({ selectedTargetId: id });
     },
@@ -184,7 +197,7 @@ export const useRenderTargetStore = create<RenderTargetState & RenderTargetActio
         if (target.source.type === 'composition' && target.source.compositionId !== activeCompId) {
           result.push(target);
         }
-        if (target.source.type === 'layer' || target.source.type === 'slot') {
+        if (target.source.type === 'layer' || target.source.type === 'layer-index' || target.source.type === 'slot') {
           result.push(target);
         }
       }
@@ -200,6 +213,8 @@ export const useRenderTargetStore = create<RenderTargetState & RenderTargetActio
         case 'composition':
           return source.compositionId;
         case 'layer':
+          return source.compositionId;
+        case 'layer-index':
           return source.compositionId;
         case 'slot': {
           // Resolve slot to composition via activeLayerSlots

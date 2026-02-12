@@ -101,7 +101,7 @@ export async function buildClipSegments(
     return [];
   }
 
-  const { generateThumbnails } = await import('../utils');
+  const { generateVideoThumbnails } = await import('../helpers/thumbnailHelpers');
 
   // Get visible video track IDs
   const videoTrackIds = new Set(
@@ -141,7 +141,7 @@ export async function buildClipSegments(
           // Calculate thumb count based on segment width, minimum 1
           const segmentWidth = endNorm - startNorm;
           const thumbCount = Math.max(1, Math.ceil(segmentWidth * 10)); // ~10 thumbs for full width
-          thumbnails = await generateThumbnails(video, clipDuration, inPoint, thumbCount);
+          thumbnails = await generateVideoThumbnails(video, clipDuration, { offset: inPoint, maxCount: thumbCount });
         } catch (e) {
           log.warn('Failed to generate segment thumbnails', { clipId: serializedClip.id, error: e });
         }
@@ -622,8 +622,8 @@ async function generateCompThumbnailsFallback(params: GenerateCompThumbnailsPara
   const firstVideoClipId = firstVideoClip?.id;
   if (!firstVideoClipId) return;
 
-  // Import generateThumbnails lazily for fallback
-  const { generateThumbnails } = await import('../utils');
+  // Import generateVideoThumbnails lazily for fallback
+  const { generateVideoThumbnails } = await import('../helpers/thumbnailHelpers');
 
   let attempts = 0;
   const maxAttempts = 50; // 5 seconds max (50 * 100ms)
@@ -638,7 +638,7 @@ async function generateCompThumbnailsFallback(params: GenerateCompThumbnailsPara
 
     if (video && video.readyState >= 2) {
       try {
-        const thumbnails = await generateThumbnails(video, compDuration);
+        const thumbnails = await generateVideoThumbnails(video, compDuration);
         set({ clips: updateClipById(get().clips, clipId, { thumbnails }) });
         log.debug('Generated fallback thumbnails for nested comp', { clipId, count: thumbnails.length });
       } catch (e) {
@@ -701,8 +701,8 @@ export async function createCompLinkedAudioClip(params: CreateCompLinkedAudioPar
     }
   }
 
-  // Find or create audio track
-  const { trackId: audioTrackId, newTrack } = findOrCreateAudioTrack(tracks);
+  // Find or create audio track (with collision check)
+  const { trackId: audioTrackId, newTrack } = findOrCreateAudioTrack(tracks, get().clips, compClipStartTime, compDuration);
   if (newTrack) {
     set({ tracks: [...get().tracks, newTrack] });
     log.debug('Created new audio track for nested comp', { composition: composition.name });

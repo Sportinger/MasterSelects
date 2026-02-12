@@ -58,6 +58,10 @@ CRITICAL RULES - FOLLOW EXACTLY:
 4. When removing MULTIPLE sections (like all low-focus parts), ALWAYS use cutRangesFromClip with the sections array from findLowQualitySections. NEVER use multiple individual splitClip calls - they will fail because clip IDs change after each split.
 5. Be precise with time values - they are in seconds.
 6. The cutRangesFromClip tool handles everything automatically: sorting end-to-start, finding clips by position, and deleting the unwanted sections.
+7. When performing multiple editing operations (splits, deletes, moves, trims), ALWAYS use executeBatch to combine them into a single action. This is much faster than calling tools individually and creates a single undo point.
+8. The timeline state is already included in this prompt — do NOT call getTimelineState unless you specifically need updated clip IDs after performing edits.
+9. For splitting clips into equal parts, use splitClipEvenly. For splitting at specific times, use splitClipAtTimes. These are much faster than executeBatch with individual splitClip calls.
+10. For reordering/shuffling clips, use reorderClips with the clip IDs in the desired order. This is much faster and more reliable than executeBatch with multiple moveClip calls.
 
 CUT EVALUATION WORKFLOW:
 - Use getCutPreviewQuad(cutTime) to see 4 frames before and 4 frames after a potential cut point
@@ -232,7 +236,7 @@ export function AIChatPanel() {
     try {
       const apiMessages = buildAPIMessages(userContent);
       let iterationCount = 0;
-      const maxIterations = 10; // Prevent infinite loops
+      const maxIterations = 50; // Safety limit for tool iterations
 
       while (iterationCount < maxIterations) {
         iterationCount++;
@@ -275,6 +279,9 @@ export function AIChatPanel() {
         });
 
         // Execute each tool call
+        // IMPORTANT: Always add a tool result for every tool_call to keep
+        // the conversation valid for the OpenAI API. If a tool crashes,
+        // we still send an error result back.
         for (const toolCall of toolCalls) {
           setCurrentToolAction(`Executing: ${toolCall.name}`);
 
@@ -285,7 +292,12 @@ export function AIChatPanel() {
             args = {};
           }
 
-          const result = await executeAITool(toolCall.name, args);
+          let result: { success: boolean; data?: unknown; error?: string };
+          try {
+            result = await executeAITool(toolCall.name, args);
+          } catch (toolErr) {
+            result = { success: false, error: toolErr instanceof Error ? toolErr.message : String(toolErr) };
+          }
 
           const toolResultMessage: Message = {
             id: toolCall.id,

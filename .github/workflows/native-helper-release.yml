@@ -1,0 +1,110 @@
+name: Native Helper Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v0.2.0)'
+        required: true
+        default: 'v0.2.0'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: MasterSelects-NativeHelper-linux-x64
+            ext: ''
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: MasterSelects-NativeHelper-macos-arm64
+            ext: ''
+          - os: macos-13
+            target: x86_64-apple-darwin
+            artifact: MasterSelects-NativeHelper-macos-x64
+            ext: ''
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libavcodec-dev libavformat-dev libswscale-dev libavutil-dev clang pkg-config
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install ffmpeg llvm pkg-config
+          echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> $GITHUB_ENV
+
+      - name: Build
+        working-directory: tools/native-helper
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        working-directory: tools/native-helper
+        run: |
+          mkdir -p release
+          cp target/${{ matrix.target }}/release/masterselects-helper release/
+          chmod +x release/masterselects-helper
+          cd release && tar czf ../${{ matrix.artifact }}.tar.gz *
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        working-directory: tools/native-helper
+        run: |
+          mkdir -p release
+          cp target/${{ matrix.target }}/release/masterselects-helper release/
+          chmod +x release/masterselects-helper
+          cd release && tar czf ../${{ matrix.artifact }}.tar.gz *
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: tools/native-helper/${{ matrix.artifact }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: native-helper-${{ github.event.inputs.version }}
+          name: Native Helper ${{ github.event.inputs.version }}
+          body: |
+            ## MasterSelects Native Helper ${{ github.event.inputs.version }}
+
+            Cross-platform video codec helper for MasterSelects.
+
+            ### Downloads
+            - **Windows x64**: Upload manually (includes FFmpeg DLLs)
+            - **macOS ARM (Apple Silicon)**: `MasterSelects-NativeHelper-macos-arm64.tar.gz`
+            - **macOS x64 (Intel)**: `MasterSelects-NativeHelper-macos-x64.tar.gz`
+            - **Linux x64**: `MasterSelects-NativeHelper-linux-x64.tar.gz`
+
+            ### Requirements
+            - **macOS/Linux**: FFmpeg libraries must be installed (`brew install ffmpeg` / `apt install libavcodec-dev`)
+            - **All platforms**: Install [yt-dlp](https://github.com/yt-dlp/yt-dlp) for video downloads
+          files: |
+            artifacts/**/*.tar.gz
+          draft: false
+          prerelease: false

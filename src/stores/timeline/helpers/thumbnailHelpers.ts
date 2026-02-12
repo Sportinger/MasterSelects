@@ -12,6 +12,7 @@ export interface ThumbnailOptions {
   height?: number;
   quality?: number;
   intervalSeconds?: number;
+  offset?: number;
 }
 
 /**
@@ -30,6 +31,7 @@ export async function generateVideoThumbnails(
     height = 40,
     quality = 0.6,
     intervalSeconds = 30,
+    offset = 0,
   } = options;
 
   const thumbnails: string[] = [];
@@ -50,12 +52,13 @@ export async function generateVideoThumbnails(
   // Calculate number of thumbnails (more for longer videos, up to maxCount)
   const thumbCount = Math.max(1, Math.min(maxCount, Math.ceil(duration / intervalSeconds)));
 
-  // Generate from 0% to 100% of duration
+  // Generate from 0% to 100% of duration (with optional offset for trimmed clips)
   for (let i = 0; i < thumbCount; i++) {
     // Use (thumbCount - 1) as divisor so last thumbnail is at 100%
-    const time = thumbCount > 1 ? (i / (thumbCount - 1)) * duration : 0;
+    const relativeTime = thumbCount > 1 ? (i / (thumbCount - 1)) * duration : 0;
+    const absoluteTime = offset + relativeTime;
     // Clamp to slightly before end to avoid seek issues
-    const clampedTime = Math.min(time, duration - 0.01);
+    const clampedTime = Math.min(absoluteTime, video.duration - 0.01);
     try {
       await seekVideo(video, clampedTime);
       ctx.drawImage(video, 0, 0, thumbWidth, thumbHeight);
