@@ -200,10 +200,10 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
   let bT = pow(clamp(sqrt(bCenter) / rv, 0.0, 1.0), 0.75) * s;
   let lT = pow(clamp(sqrt(lCenter) / rv, 0.0, 1.0), 0.75) * s;
 
-  let rG = pow(clamp(sqrt(rBloom) / rv, 0.0, 1.0), 0.65) * 0.22;
-  let gG = pow(clamp(sqrt(gBloom) / rv, 0.0, 1.0), 0.65) * 0.22;
-  let bG = pow(clamp(sqrt(bBloom) / rv, 0.0, 1.0), 0.65) * 0.22;
-  let lG = pow(clamp(sqrt(lBloom) / rv, 0.0, 1.0), 0.65) * 0.22;
+  let rG = 0.0;
+  let gG = 0.0;
+  let bG = 0.0;
+  let lG = 0.0;
 
   // Additive phosphor composite based on mode
   var color: vec3f;
