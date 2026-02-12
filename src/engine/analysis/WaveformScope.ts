@@ -113,8 +113,8 @@ struct RenderParams {
   intensity: f32,
   mode: u32,   // 0=RGB, 1=R, 2=G, 3=B, 4=Luma
   bloomStep: u32,
-  _pad1: u32,
-  _pad2: u32,
+  srcW: u32,
+  _pad: u32,
 }
 
 @group(0) @binding(0) var<storage, read> accumR: array<u32>;
@@ -123,19 +123,23 @@ struct RenderParams {
 @group(0) @binding(3) var<uniform> params: RenderParams;
 @group(0) @binding(4) var<storage, read> accumL: array<u32>;
 
-// Bilinear sample helper: reads accumulator with interpolation
-fn sampleAccum(acc: ptr<storage, array<u32>, read>, fx: f32, fy: f32, w: u32, h: u32) -> f32 {
-  let x0 = u32(clamp(fx, 0.0, f32(w - 1u)));
+// Adaptive horizontal smooth sample: 9-tap Gaussian that widens when outW > srcW
+fn smoothSample(acc: ptr<storage, array<u32>, read>, fx: f32, fy: f32, w: u32, h: u32, step: f32, sigma: f32) -> f32 {
   let y0 = u32(clamp(fy, 0.0, f32(h - 1u)));
-  let x1 = min(x0 + 1u, w - 1u);
   let y1 = min(y0 + 1u, h - 1u);
-  let dx = fract(fx);
   let dy = fract(fy);
-  let v00 = f32((*acc)[y0 * w + x0]);
-  let v10 = f32((*acc)[y0 * w + x1]);
-  let v01 = f32((*acc)[y1 * w + x0]);
-  let v11 = f32((*acc)[y1 * w + x1]);
-  return mix(mix(v00, v10, dx), mix(v01, v11, dx), dy);
+  let inv2s2 = -0.5 / (sigma * sigma);
+  var sum = 0.0;
+  var wt = 0.0;
+  for (var i: i32 = -4; i <= 4; i += 1) {
+    let sx = clamp(fx + f32(i) * step, 0.0, f32(w - 1u));
+    let xi = u32(sx);
+    let gw = exp(f32(i * i) * inv2s2);
+    let v = mix(f32((*acc)[y0 * w + xi]), f32((*acc)[y1 * w + xi]), dy);
+    sum += v * gw;
+    wt += gw;
+  }
+  return sum / max(wt, 0.001);
 }
 
 // Nearest-neighbor read for bloom sampling
@@ -156,15 +160,20 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
   let ih = i32(h);
   let mode = params.mode;
 
-  // Floating-point grid position for bilinear sampling
+  // Adaptive smooth sampling: step & sigma widen when accumulator is sparse
+  let ratio = params.outW / max(f32(params.srcW), 1.0);
+  let sStep = max(1.0, ratio * 0.6);
+  let sSigma = max(0.8, ratio * 0.8);
+
+  // Floating-point grid position
   let fx = uv.x * params.outW - 0.5;
   let fy = uv.y * params.outH - 0.5;
 
-  // Center value (bilinear — sharp trace)
-  let rCenter = sampleAccum(&accumR, fx, fy, w, h);
-  let gCenter = sampleAccum(&accumG, fx, fy, w, h);
-  let bCenter = sampleAccum(&accumB, fx, fy, w, h);
-  let lCenter = sampleAccum(&accumL, fx, fy, w, h);
+  // Center value (adaptive smooth — bridges sparse columns)
+  let rCenter = smoothSample(&accumR, fx, fy, w, h, sStep, sSigma);
+  let gCenter = smoothSample(&accumG, fx, fy, w, h, sStep, sSigma);
+  let bCenter = smoothSample(&accumB, fx, fy, w, h, sStep, sSigma);
+  let lCenter = smoothSample(&accumL, fx, fy, w, h, sStep, sSigma);
 
   // Phosphor bloom: 3x3 gaussian at adaptive step for soft glow
   let ix = i32(fx + 0.5);
@@ -347,7 +356,7 @@ export class WaveformScope {
     const bloomStep = Math.max(4, Math.round(this.outW / 200));
     const paramsData = new ArrayBuffer(32);
     new Float32Array(paramsData, 0, 4).set([this.outW, this.outH, refValue, 0.9]);
-    new Uint32Array(paramsData, 16, 4).set([mode, bloomStep, 0, 0]);
+    new Uint32Array(paramsData, 16, 4).set([mode, bloomStep, srcW, 0]);
     d.queue.writeBuffer(this.renderParams, 0, paramsData);
 
     const encoder = d.createCommandEncoder();
