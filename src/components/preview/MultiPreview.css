@@ -104,7 +104,7 @@
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  background: rgba(0, 0, 0, 0.7);
+  background: var(--preview-overlay-bg);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-secondary);
@@ -115,9 +115,9 @@
 }
 
 .multi-preview-slot-dropdown-btn:hover {
-  background: rgba(0, 0, 0, 0.9);
+  background: var(--preview-overlay-bg-hover);
   color: var(--text-primary);
-  border-color: #555;
+  border-color: var(--border-strong);
 }
 
 .multi-preview-slot-comp-name {
@@ -144,7 +144,7 @@
 /* Layer label shown in auto-distribute mode */
 .multi-preview-slot-label {
   padding: 2px 8px;
-  background: rgba(0, 0, 0, 0.7);
+  background: var(--preview-overlay-bg);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-secondary);

@@ -276,6 +276,14 @@
   --marker-purple: var(--purple);
   --marker-cyan: var(--cyan-500);
 
+  /* Timeline grid lines (subtle tinted vertical lines) */
+  --timeline-grid-video: #282830;
+  --timeline-grid-audio: #283028;
+
+  /* Preview overlay buttons (over dark canvas) */
+  --preview-overlay-bg: rgba(0, 0, 0, 0.6);
+  --preview-overlay-bg-hover: rgba(0, 0, 0, 0.8);
+
   /* Backward compat aliases for panels that used different names */
   --accent-primary: var(--accent);
   --accent-success: var(--success);
@@ -354,6 +362,14 @@
   --scrollbar-thumb: #bbb;
   --scrollbar-thumb-hover: #999;
 
+  /* Timeline grid - light tinted lines */
+  --timeline-grid-video: #d0d0d8;
+  --timeline-grid-audio: #c8d8c8;
+
+  /* Preview overlay - frosted glass on dark canvas */
+  --preview-overlay-bg: rgba(255, 255, 255, 0.2);
+  --preview-overlay-bg-hover: rgba(255, 255, 255, 0.35);
+
   /* Compat aliases */
   --accent-primary: var(--accent);
   --accent-danger: #ef5350;
@@ -403,6 +419,10 @@
   --scrollbar-track: #080808;
   --scrollbar-thumb: #2a2a2a;
   --scrollbar-thumb-hover: #3a3a3a;
+
+  /* Timeline grid - deeper black tinted lines */
+  --timeline-grid-video: #101018;
+  --timeline-grid-audio: #081008;
 }
 
 /* ═══════════════════════════════════════════
@@ -3894,8 +3914,8 @@ input[type="checkbox"] {
     90deg,
     var(--bg-secondary),
     var(--bg-secondary) calc(var(--grid-size, 50px) - 1px),
-    #282830 calc(var(--grid-size, 50px) - 1px),
-    #282830 var(--grid-size, 50px)
+    var(--timeline-grid-video) calc(var(--grid-size, 50px) - 1px),
+    var(--timeline-grid-video) var(--grid-size, 50px)
   );
 }
 
@@ -3904,8 +3924,8 @@ input[type="checkbox"] {
     90deg,
     var(--bg-secondary),
     var(--bg-secondary) calc(var(--grid-size, 50px) - 1px),
-    #283028 calc(var(--grid-size, 50px) - 1px),
-    #283028 var(--grid-size, 50px)
+    var(--timeline-grid-audio) calc(var(--grid-size, 50px) - 1px),
+    var(--timeline-grid-audio) var(--grid-size, 50px)
   );
 }
 
@@ -7163,17 +7183,18 @@ input[type="checkbox"] {
 
 .preview-edit-btn {
   padding: 4px 10px;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--preview-overlay-bg);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-secondary);
   font-size: 11px;
   cursor: pointer;
   transition: all 0.15s;
+  backdrop-filter: blur(4px);
 }
 
 .preview-edit-btn:hover {
-  background: rgba(0, 0, 0, 0.8);
+  background: var(--preview-overlay-bg-hover);
   color: var(--text-primary);
   border-color: var(--gray-300);
 }
@@ -7187,25 +7208,27 @@ input[type="checkbox"] {
 .preview-zoom-label {
   font-size: 11px;
   color: var(--text-secondary);
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--preview-overlay-bg);
   padding: 4px 8px;
   border-radius: 4px;
   font-family: monospace;
+  backdrop-filter: blur(4px);
 }
 
 .preview-reset-btn {
   padding: 4px 8px;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--preview-overlay-bg);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-secondary);
   font-size: 11px;
   cursor: pointer;
   transition: all 0.15s;
+  backdrop-filter: blur(4px);
 }
 
 .preview-reset-btn:hover {
-  background: rgba(0, 0, 0, 0.8);
+  background: var(--preview-overlay-bg-hover);
   color: var(--text-primary);
 }
 
@@ -7229,17 +7252,18 @@ input[type="checkbox"] {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--preview-overlay-bg);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-secondary);
   font-size: 11px;
   cursor: pointer;
   transition: all 0.15s;
+  backdrop-filter: blur(4px);
 }
 
 .preview-comp-dropdown-btn:hover {
-  background: rgba(0, 0, 0, 0.8);
+  background: var(--preview-overlay-bg-hover);
   color: var(--text-primary);
   border-color: var(--gray-300);
 }
@@ -7301,7 +7325,7 @@ input[type="checkbox"] {
 
 .preview-add-btn {
   padding: 4px 8px;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--preview-overlay-bg);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-secondary);
@@ -7310,6 +7334,7 @@ input[type="checkbox"] {
   cursor: pointer;
   transition: all 0.15s;
   line-height: 1;
+  backdrop-filter: blur(4px);
 }
 
 .preview-add-btn:hover {
@@ -7320,7 +7345,7 @@ input[type="checkbox"] {
 
 .preview-close-btn {
   padding: 4px 8px;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--preview-overlay-bg);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-secondary);
@@ -7329,6 +7354,7 @@ input[type="checkbox"] {
   cursor: pointer;
   transition: all 0.15s;
   line-height: 1;
+  backdrop-filter: blur(4px);
 }
 
 .preview-close-btn:hover {
@@ -7382,17 +7408,18 @@ input[type="checkbox"] {
   width: 22px;
   height: 22px;
   padding: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--preview-overlay-bg);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-secondary);
   font-size: 11px;
   cursor: pointer;
   transition: all 0.15s ease;
+  backdrop-filter: blur(4px);
 }
 
 .preview-transparency-toggle:hover {
-  background: rgba(0, 0, 0, 0.8);
+  background: var(--preview-overlay-bg-hover);
   color: var(--text-primary);
   border-color: var(--gray-300);
 }
@@ -7412,17 +7439,18 @@ input[type="checkbox"] {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--preview-overlay-bg);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-secondary);
   font-size: 11px;
   cursor: pointer;
   transition: all 0.15s;
+  backdrop-filter: blur(4px);
 }
 
 .preview-quality-dropdown-btn:hover {
-  background: rgba(0, 0, 0, 0.8);
+  background: var(--preview-overlay-bg-hover);
   color: var(--text-primary);
   border-color: var(--gray-300);
 }
