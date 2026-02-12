@@ -1,6 +1,77 @@
 [
   {
     "date": "2026-02-12",
+    "type": "fix",
+    "title": "Default Layout: Hide WIP panels",
+    "description": "AI Segment tab is no longer shown by default in the left sidebar since it's a WIP panel. Downloads tab remains visible by default.",
+    "section": "UI",
+    "commits": ["400c246"]
+  },
+  {
+    "date": "2026-02-12",
+    "type": "fix",
+    "title": "Export Stability Overhaul",
+    "description": "Fixed multiple export freeze and crash issues: decoder flush timeout with automatic recovery, keyframe recovery in WebCodecsExportMode, MP4Box async onReady race condition, hardware acceleration probing via isConfigSupported(), closed decoder errors, multi-layer pulsing artifacts, and increased buffer sizes for long keyframe intervals.",
+    "section": "Export",
+    "commits": [
+      "6f5d84e",
+      "cf6bbb3",
+      "e8b7737",
+      "25de961",
+      "d457d96",
+      "785f8c6",
+      "5352435",
+      "9e9a24e",
+      "0f5e83c"
+    ]
+  },
+  {
+    "date": "2026-02-12",
+    "type": "fix",
+    "title": "Stack Overflow Prevention",
+    "description": "Fixed stack overflows in deepClone (circular reference detection via WeakSet), splitClipEvenly/splitClipAtTimes (rewritten to single setState), and executeBatch (large batch operations).",
+    "section": "Core",
+    "commits": [
+      "41799b8",
+      "590c050",
+      "682b453",
+      "cb7370e"
+    ]
+  },
+  {
+    "date": "2026-02-12",
+    "type": "new",
+    "title": "AI Tools: reorderClips & executeBatch improvements",
+    "description": "Added reorderClips compound tool for AI-driven clip reordering. Fixed executeBatch to handle flat action format. Increased AI iteration limit to 50. Fixed broken conversation when tool execution throws.",
+    "section": "AI",
+    "commits": [
+      "552ebee",
+      "c01d1a0",
+      "34cb925"
+    ]
+  },
+  {
+    "date": "2026-02-12",
+    "type": "fix",
+    "title": "Nested Composition Audio Overlap",
+    "description": "Fixed audio track overlap when adding nested compositions to the timeline.",
+    "section": "Timeline",
+    "commits": [
+      "6f5d84e"
+    ]
+  },
+  {
+    "date": "2026-02-12",
+    "type": "refactor",
+    "title": "Extract WebCodecsExportMode",
+    "description": "Separated WebCodecsExportMode into its own module from WebCodecsPlayer for cleaner architecture.",
+    "section": "Export",
+    "commits": [
+      "41911af"
+    ]
+  },
+  {
+    "date": "2026-02-12",
     "type": "new",
     "title": "Multi Preview Panel",
     "description": "2x2 grid of independent composition previews with auto-distribute source mode, keyboard highlight (1-4 keys), 16:9 scaling grid, and optimized rendering that reuses main loop layers and evaluates once per frame.",
