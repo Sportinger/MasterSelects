@@ -466,16 +466,14 @@ export class ParallelDecodeManager {
         const decodeTarget = targetSampleIndex + BUFFER_AHEAD_FRAMES;
         log.debug(`"${clipInfo.clipName}": Triggering decode - samples=${clipDecoder.samples.length}, targetIdx=${targetSampleIndex}, currentIdx=${clipDecoder.sampleIndex}, decodeTarget=${decodeTarget}, frameInBuffer=${frameInBuffer}, isBehindTarget=${isBehindTarget}, needsBackSeek=${needsDecodingBack}`);
 
-        // Only await if frame is NOT in buffer - that's the only case we need it NOW
+        // Decode WITHOUT flush first — let output callback deliver frames async.
+        // This avoids the expensive flush→needsKeyframe→reset→re-decode-from-keyframe cycle.
+        // The retry loop below will flush only if the frame hasn't appeared.
         if (!frameInBuffer) {
-          // Need frame NOW - await the decode with flush
-          // IMPORTANT: Pass the actual targetSampleIndex for seek calculation, not decodeTarget
-          // Otherwise we might seek to a keyframe AFTER the frame we need
-          log.debug(`"${clipInfo.clipName}": Awaiting decode (frame not in buffer)`);
-          await this.decodeAhead(clipDecoder, decodeTarget, true, 0, targetSampleIndex);
-          log.debug(`"${clipInfo.clipName}": After decode - buffer=${clipDecoder.frameBuffer.size} frames, decoderState=${clipDecoder.decoder.state}`);
+          log.debug(`"${clipInfo.clipName}": Decode without flush (frame not in buffer)`);
+          await this.decodeAhead(clipDecoder, decodeTarget, false, 0, targetSampleIndex);
         } else {
-          // Frame already in buffer - background decode for future frames (no seek needed)
+          // Frame already in buffer - background decode for future frames
           log.debug(`"${clipInfo.clipName}": Background decode (frame in buffer)`);
           this.decodeAhead(clipDecoder, decodeTarget, false);
         }
@@ -487,16 +485,18 @@ export class ParallelDecodeManager {
       }
     }
 
-    // Wait for clips that don't have their frame yet - keep decoding until we have it
+    // Wait for clips that still need their frame — escalating strategy:
+    // 1. Wait for async output callback (no flush)
+    // 2. Flush only if frame hasn't appeared
+    // 3. Re-decode with flush as last resort
     for (const clipDecoder of clipsNeedingFlush) {
       const clipInfo = clipDecoder.clipInfo;
       const sourceTime = this.timelineToSourceTime(clipInfo, timelineTime);
       const targetTimestamp = sourceTime * 1_000_000;
       const targetSampleIndex = this.findSampleIndexForTime(clipDecoder, sourceTime);
 
-      // Loop until frame is in buffer (max 15 attempts - more patience for complex videos)
-      for (let attempt = 0; attempt < 15; attempt++) {
-        // Wait for pending decode
+      for (let attempt = 0; attempt < 10; attempt++) {
+        // Wait for pending decode to complete
         if (clipDecoder.pendingDecode) {
           await clipDecoder.pendingDecode;
         }
@@ -517,35 +517,23 @@ export class ParallelDecodeManager {
           break;
         }
 
-        // Log progress every 3 attempts
-        if (attempt % 3 === 0 && attempt > 0) {
-          log.debug(`"${clipDecoder.clipName}": Attempt ${attempt + 1}/15 - buffer=${clipDecoder.frameBuffer.size}, samples=${clipDecoder.samples.length}, decodeQueue=${clipDecoder.decoder.decodeQueueSize}`);
-        }
-
-        // Still missing - flush decoder queue if there are pending frames
-        if (clipDecoder.decoder.decodeQueueSize > 0) {
+        // Escalating strategy
+        if (attempt < 2) {
+          // First 2 attempts: just wait briefly for async output callback
+          await new Promise(r => setTimeout(r, 5));
+        } else if (attempt < 5 && clipDecoder.decoder.decodeQueueSize > 0) {
+          // Attempts 2-4: flush decoder queue to force output
+          log.debug(`"${clipDecoder.clipName}": Flushing decoder (attempt ${attempt + 1}, queue=${clipDecoder.decoder.decodeQueueSize})`);
           await clipDecoder.decoder.flush();
-          clipDecoder.needsKeyframe = true; // After flush, next decode needs keyframe
-          continue; // Check again after flush
-        }
-
-        // If samples haven't loaded yet, wait a bit
-        if (clipDecoder.samples.length === 0) {
-          await new Promise(r => setTimeout(r, 50));
-          continue;
-        }
-
-        // Trigger decode if we haven't decoded enough yet
-        if (!clipDecoder.isDecoding) {
-          // For first frame (targetSampleIndex near 0), ensure we decode from the start
+          clipDecoder.needsKeyframe = true;
+        } else if (!clipDecoder.isDecoding) {
+          // Attempts 5+: re-decode with forceFlush (last resort)
+          log.debug(`"${clipDecoder.clipName}": Re-decode with flush (attempt ${attempt + 1})`);
           const decodeTarget = Math.max(targetSampleIndex + BUFFER_AHEAD_FRAMES, BUFFER_AHEAD_FRAMES);
           await this.decodeAhead(clipDecoder, decodeTarget, true, 0, targetSampleIndex);
+        } else {
+          await new Promise(r => setTimeout(r, 10));
         }
-
-        // Small delay between attempts to allow async operations to complete
-        // Use shorter delay for early attempts, longer for later ones
-        const delay = attempt < 5 ? 10 : 30;
-        await new Promise(r => setTimeout(r, delay));
       }
 
       // Final check - throw error if frame still not found

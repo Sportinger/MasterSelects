@@ -191,8 +191,9 @@ export class RenderLoop {
     const now = performance.now();
     const timeSinceRender = now - this.lastSuccessfulRender;
 
-    // During recovery, don't interfere
+    // During recovery or export, don't interfere
     if (this.callbacks.isRecovering()) return;
+    if (this.callbacks.isExporting()) return;
 
     // Check if we're stalled (no render for too long while we should be rendering)
     if (timeSinceRender > this.WATCHDOG_STALL_THRESHOLD) {
