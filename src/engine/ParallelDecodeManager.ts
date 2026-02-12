@@ -124,21 +124,96 @@ export class ParallelDecodeManager {
 
   /**
    * Initialize a single clip decoder - LAZY MODE
-   * Resolves immediately after getting codec config, samples extracted on-demand
+   * Phase 1: Parse MP4 synchronously (onReady must be sync to not break MP4Box pipeline)
+   * Phase 2: Async hwAccel probing
+   * Phase 3: Configure decoder and start sample extraction
    */
   private async initializeClip(clipInfo: ClipInfo): Promise<void> {
+    // Phase 1: Parse MP4 and extract track info (sync onReady)
+    const parseResult = await this.parseMP4TrackInfo(clipInfo);
+
+    // Phase 2: Async hardware acceleration probing
+    const hwAccel = await this.findSupportedHwAccel(parseResult.baseConfig, clipInfo.clipName);
+
+    const codecConfig: VideoDecoderConfig = {
+      ...parseResult.baseConfig,
+      hardwareAcceleration: hwAccel,
+    };
+
+    // Phase 3: Configure decoder
+    const decoder = new VideoDecoder({
+      output: (frame) => {
+        if (!this.isActive) {
+          frame.close();
+          return;
+        }
+        const clipDecoder = this.clipDecoders.get(clipInfo.clipId);
+        if (clipDecoder) {
+          this.handleDecodedFrame(clipDecoder, frame);
+        } else {
+          log.warn(`Frame output for unknown clip ${clipInfo.clipId}`);
+          frame.close();
+        }
+      },
+      error: (e) => {
+        if (!this.isActive) return;
+        log.error(`Decoder error for ${clipInfo.clipName}: ${e.message || e}`);
+      },
+    });
+
+    try {
+      decoder.configure(codecConfig);
+      log.info(`Decoder configured for "${clipInfo.clipName}": ${codecConfig.codec} ${parseResult.videoTrack.video.width}x${parseResult.videoTrack.video.height} (hwAccel=${hwAccel})`);
+    } catch (e) {
+      log.error(`Failed to configure decoder for "${clipInfo.clipName}":`, e);
+      throw e;
+    }
+
+    const clipDecoder: ClipDecoder = {
+      clipId: clipInfo.clipId,
+      clipName: clipInfo.clipName,
+      decoder,
+      samples: parseResult.samples,
+      sampleIndex: 0,
+      videoTrack: parseResult.videoTrack,
+      codecConfig,
+      frameBuffer: new Map(),
+      sortedTimestamps: [],
+      oldestTimestamp: Infinity,
+      newestTimestamp: -Infinity,
+      lastDecodedTimestamp: 0,
+      clipInfo,
+      isDecoding: false,
+      pendingDecode: null,
+      needsKeyframe: false,
+    };
+
+    this.clipDecoders.set(clipInfo.clipId, clipDecoder);
+    log.info(`Clip "${clipInfo.clipName}" initialized: ${parseResult.videoTrack.video.width}x${parseResult.videoTrack.video.height} (${parseResult.samples.length} samples ready)`);
+  }
+
+  /**
+   * Parse MP4 file and extract track info + samples synchronously.
+   * onReady MUST be sync — MP4Box calls it during appendBuffer, and an async
+   * callback would yield control before setExtractionOptions/start/flush,
+   * causing MP4Box to never deliver samples.
+   */
+  private parseMP4TrackInfo(clipInfo: ClipInfo): Promise<{
+    videoTrack: MP4VideoTrack;
+    baseConfig: VideoDecoderConfig;
+    samples: Sample[];
+  }> {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error(`MP4 parsing timeout for clip "${clipInfo.clipName}"`));
-      }, 5000); // Reduced - we only wait for codec info now
+      }, 5000);
 
       const mp4File = MP4Box.createFile() as MP4File;
-      let videoTrack: MP4VideoTrack | null = null;
-      let resolved = false;
+      const collectedSamples: Sample[] = [];
 
-      mp4File.onReady = async (info) => {
-       try {
-        videoTrack = info.videoTracks[0];
+      // SYNC onReady — no await allowed here!
+      mp4File.onReady = (info) => {
+        const videoTrack = info.videoTracks[0];
         if (!videoTrack) {
           clearTimeout(timeout);
           reject(new Error(`No video track in clip "${clipInfo.clipName}"`));
@@ -172,109 +247,35 @@ export class ParallelDecodeManager {
           description,
         };
 
-        // Find a supported hardware acceleration mode
-        const hwAccel = await this.findSupportedHwAccel(baseConfig, clipInfo.clipName);
-
-        const codecConfig: VideoDecoderConfig = {
-          ...baseConfig,
-          hardwareAcceleration: hwAccel,
-        };
-
-        // Create VideoDecoder immediately (don't wait for samples)
-        const decoder = new VideoDecoder({
-          output: (frame) => {
-            // Always close frame if cleanup has started
-            if (!this.isActive) {
-              frame.close();
-              return;
-            }
-            const clipDecoder = this.clipDecoders.get(clipInfo.clipId);
-            if (clipDecoder) {
-              this.handleDecodedFrame(clipDecoder, frame);
-            } else {
-              log.warn(`Frame output for unknown clip ${clipInfo.clipId}`);
-              frame.close();
-            }
-          },
-          error: (e) => {
-            if (!this.isActive) return; // Ignore errors during cleanup
-            log.error(`Decoder error for ${clipInfo.clipName}: ${e.message || e}`);
-          },
-        });
-
-        try {
-          decoder.configure(codecConfig);
-          log.info(`Decoder configured for "${clipInfo.clipName}": ${codec} ${videoTrack.video.width}x${videoTrack.video.height} (hwAccel=${hwAccel})`);
-        } catch (e) {
-          log.error(`Failed to configure decoder for "${clipInfo.clipName}":`, e);
-          throw e;
-        }
-
-        const clipDecoder: ClipDecoder = {
-          clipId: clipInfo.clipId,
-          clipName: clipInfo.clipName,
-          decoder,
-          samples: [], // Start empty - filled lazily by onSamples
-          sampleIndex: 0,
-          videoTrack,
-          codecConfig,
-          frameBuffer: new Map(),
-          sortedTimestamps: [],
-          oldestTimestamp: Infinity,
-          newestTimestamp: -Infinity,
-          lastDecodedTimestamp: 0,
-          clipInfo,
-          isDecoding: false,
-          pendingDecode: null,
-          needsKeyframe: false,
-        };
-
-        this.clipDecoders.set(clipInfo.clipId, clipDecoder);
-
-        // Start sample extraction (non-blocking)
+        // Start sample extraction SYNCHRONOUSLY before appendBuffer returns
         mp4File.setExtractionOptions(videoTrack.id, null, { nbSamples: Infinity });
         mp4File.start();
-        // flush() must be called AFTER start() — signals "no more data" to MP4Box
-        // so it extracts all remaining samples. Previously this was called outside
-        // onReady which worked when onReady was sync, but now that onReady is async
-        // (due to await findSupportedHwAccel), flush() was racing ahead of start().
-        mp4File.flush();
 
-        // RESOLVE IMMEDIATELY - don't wait for samples!
-        clearTimeout(timeout);
-        log.info(`Clip "${clipInfo.clipName}" initialized: ${videoTrack.video.width}x${videoTrack.video.height} (samples loading in background)`);
-        resolved = true;
-        resolve();
-       } catch (e) {
-        clearTimeout(timeout);
-        if (!resolved) reject(e);
-       }
+        // Resolve will happen after appendBuffer+flush complete (samples collected via onSamples)
+        // Use setTimeout(0) to resolve after the synchronous appendBuffer+flush chain completes
+        setTimeout(() => {
+          clearTimeout(timeout);
+          log.info(`"${clipInfo.clipName}" parsed: ${codec} ${videoTrack.video.width}x${videoTrack.video.height}, ${collectedSamples.length} samples`);
+          resolve({ videoTrack, baseConfig, samples: collectedSamples });
+        }, 0);
       };
 
       mp4File.onSamples = (_trackId, _ref, newSamples) => {
-        // Samples arrive asynchronously - add them to the decoder's sample list
-        const clipDecoder = this.clipDecoders.get(clipInfo.clipId);
-        if (clipDecoder) {
-          const prevCount = clipDecoder.samples.length;
-          clipDecoder.samples.push(...newSamples);
-          if (prevCount === 0) {
-            log.info(`"${clipInfo.clipName}": First ${newSamples.length} samples received`);
-          }
-        }
+        collectedSamples.push(...newSamples);
       };
 
       mp4File.onError = (e) => {
         clearTimeout(timeout);
-        if (!resolved) {
-          reject(new Error(`MP4 parsing error for "${clipInfo.clipName}": ${e}`));
-        }
+        reject(new Error(`MP4 parsing error for "${clipInfo.clipName}": ${e}`));
       };
 
-      // Feed buffer to MP4Box — flush() is called inside onReady after start()
+      // Feed entire buffer — onReady fires sync during appendBuffer,
+      // which sets up extraction before flush() signals end-of-data
       const mp4Buffer = clipInfo.fileData as MP4ArrayBuffer;
       mp4Buffer.fileStart = 0;
       try {
         mp4File.appendBuffer(mp4Buffer);
+        mp4File.flush();
       } catch (e) {
         clearTimeout(timeout);
         reject(new Error(`MP4Box appendBuffer failed for "${clipInfo.clipName}": ${e}`));
