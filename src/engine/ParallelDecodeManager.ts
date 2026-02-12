@@ -136,7 +136,8 @@ export class ParallelDecodeManager {
       let videoTrack: MP4VideoTrack | null = null;
       let resolved = false;
 
-      mp4File.onReady = (info) => {
+      mp4File.onReady = async (info) => {
+       try {
         videoTrack = info.videoTracks[0];
         if (!videoTrack) {
           clearTimeout(timeout);
@@ -163,13 +164,20 @@ export class ParallelDecodeManager {
           log.warn(`Failed to extract codec description for ${clipInfo.clipName}: ${e}`);
         }
 
-        const codecConfig: VideoDecoderConfig = {
+        const baseConfig: VideoDecoderConfig = {
           codec,
           codedWidth: videoTrack.video.width,
           codedHeight: videoTrack.video.height,
-          hardwareAcceleration: 'prefer-software', // More reliable for export
           optimizeForLatency: true,
           description,
+        };
+
+        // Find a supported hardware acceleration mode
+        const hwAccel = await this.findSupportedHwAccel(baseConfig, clipInfo.clipName);
+
+        const codecConfig: VideoDecoderConfig = {
+          ...baseConfig,
+          hardwareAcceleration: hwAccel,
         };
 
         // Create VideoDecoder immediately (don't wait for samples)
@@ -191,13 +199,12 @@ export class ParallelDecodeManager {
           error: (e) => {
             if (!this.isActive) return; // Ignore errors during cleanup
             log.error(`Decoder error for ${clipInfo.clipName}: ${e.message || e}`);
-            // Don't throw - let decoding continue if possible
           },
         });
 
         try {
           decoder.configure(codecConfig);
-          log.info(`Decoder configured for "${clipInfo.clipName}": ${codec} ${videoTrack.video.width}x${videoTrack.video.height}`);
+          log.info(`Decoder configured for "${clipInfo.clipName}": ${codec} ${videoTrack.video.width}x${videoTrack.video.height} (hwAccel=${hwAccel})`);
         } catch (e) {
           log.error(`Failed to configure decoder for "${clipInfo.clipName}":`, e);
           throw e;
@@ -233,6 +240,10 @@ export class ParallelDecodeManager {
         log.info(`Clip "${clipInfo.clipName}" initialized: ${videoTrack.video.width}x${videoTrack.video.height} (samples loading in background)`);
         resolved = true;
         resolve();
+       } catch (e) {
+        clearTimeout(timeout);
+        if (!resolved) reject(e);
+       }
       };
 
       mp4File.onSamples = (_trackId, _ref, newSamples) => {
@@ -559,9 +570,14 @@ export class ParallelDecodeManager {
   /**
    * Recreate a decoder that has entered the permanent 'closed' state due to an error.
    * WebCodecs decoders cannot be reset() once closed - a full recreate is needed.
+   * Re-checks hardware acceleration support since the original mode may have been the cause.
    */
-  private recreateDecoder(clipDecoder: ClipDecoder): void {
+  private async recreateDecoder(clipDecoder: ClipDecoder): Promise<void> {
     log.warn(`${clipDecoder.clipName}: Recreating closed decoder`);
+
+    // Re-check hardware acceleration — the original mode may have caused the failure
+    const hwAccel = await this.findSupportedHwAccel(clipDecoder.codecConfig, clipDecoder.clipName);
+    const newConfig: VideoDecoderConfig = { ...clipDecoder.codecConfig, hardwareAcceleration: hwAccel };
 
     // Create new decoder with same callbacks
     const newDecoder = new VideoDecoder({
@@ -583,16 +599,17 @@ export class ParallelDecodeManager {
       },
     });
 
-    // Configure with existing codec config
+    // Configure with updated codec config
     try {
-      newDecoder.configure(clipDecoder.codecConfig);
+      newDecoder.configure(newConfig);
     } catch (e) {
       log.error(`${clipDecoder.clipName}: Failed to configure recreated decoder: ${e}`);
       throw e;
     }
 
-    // Replace decoder
+    // Replace decoder and config
     clipDecoder.decoder = newDecoder;
+    clipDecoder.codecConfig = newConfig;
     clipDecoder.needsKeyframe = true;
     clipDecoder.sampleIndex = 0;
 
@@ -605,7 +622,7 @@ export class ParallelDecodeManager {
     clipDecoder.oldestTimestamp = Infinity;
     clipDecoder.newestTimestamp = -Infinity;
 
-    log.info(`${clipDecoder.clipName}: Decoder recreated successfully`);
+    log.info(`${clipDecoder.clipName}: Decoder recreated successfully (hwAccel=${hwAccel})`);
   }
 
   /**
@@ -629,7 +646,7 @@ export class ParallelDecodeManager {
     // Check if decoder is still valid - recreate if closed
     if (!clipDecoder.decoder || clipDecoder.decoder.state === 'closed') {
       log.warn(`${clipDecoder.clipName}: Decoder is ${clipDecoder.decoder?.state || 'null'}, recreating...`);
-      this.recreateDecoder(clipDecoder);
+      await this.recreateDecoder(clipDecoder);
     }
 
     clipDecoder.isDecoding = true;
@@ -639,7 +656,7 @@ export class ParallelDecodeManager {
         // Double-check decoder state inside async block - recreate if closed
         if (!clipDecoder.decoder || clipDecoder.decoder.state === 'closed') {
           log.warn(`${clipDecoder.clipName}: Decoder closed during decode setup, recreating...`);
-          this.recreateDecoder(clipDecoder);
+          await this.recreateDecoder(clipDecoder);
         }
         // Check if we need to seek (target is far from current position - either ahead OR behind)
         // But ONLY seek if forceFlush is true (we actually need the frame now)
@@ -675,10 +692,7 @@ export class ParallelDecodeManager {
           }
           if (keyframeCandidates.length === 0) keyframeCandidates.push(0);
 
-          const exportConfig: VideoDecoderConfig = {
-            ...clipDecoder.codecConfig,
-            hardwareAcceleration: 'prefer-software',
-          };
+          const exportConfig = clipDecoder.codecConfig;
 
           // Try keyframes from closest to earliest - some samples marked is_sync
           // by MP4Box aren't real IDR keyframes (e.g. open-GOP recovery points).
@@ -995,6 +1009,35 @@ export class ParallelDecodeManager {
    */
   hasClip(clipId: string): boolean {
     return this.clipDecoders.has(clipId);
+  }
+
+  /**
+   * Find a supported hardwareAcceleration mode for the given config.
+   * Tries prefer-software first (most reliable for export), then prefer-hardware, then no-preference.
+   */
+  private async findSupportedHwAccel(
+    baseConfig: VideoDecoderConfig,
+    clipName: string
+  ): Promise<HardwareAcceleration> {
+    const modes: HardwareAcceleration[] = ['prefer-software', 'prefer-hardware', 'no-preference'];
+
+    for (const mode of modes) {
+      try {
+        const result = await VideoDecoder.isConfigSupported({ ...baseConfig, hardwareAcceleration: mode });
+        if (result.supported) {
+          if (mode !== 'prefer-software') {
+            log.info(`"${clipName}": prefer-software not supported, using ${mode}`);
+          }
+          return mode;
+        }
+      } catch {
+        // isConfigSupported threw — skip this mode
+      }
+    }
+
+    // None explicitly supported — fall back to no-preference and let configure() decide
+    log.warn(`"${clipName}": No hwAccel mode reported as supported for codec ${baseConfig.codec}, trying no-preference`);
+    return 'no-preference';
   }
 
   /**
