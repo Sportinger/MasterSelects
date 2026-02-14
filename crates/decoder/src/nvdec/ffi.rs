@@ -152,65 +152,72 @@ pub enum CudaVideoCreateFlags {
 ///
 /// This struct configures the NVDEC decoder instance. Fields match the
 /// C header layout exactly — padding and reserved fields are included.
+///
+/// Reference: NVIDIA Video Codec SDK `cuviddec.h`
 #[repr(C)]
 #[derive(Clone)]
 pub struct CuvidDecodeCreateInfo {
-    /// Coded width (from SPS).
+    /// Coded sequence width (ulWidth).
     pub coded_width: u32,
-    /// Coded height (from SPS).
+    /// Coded sequence height (ulHeight).
     pub coded_height: u32,
-    /// Maximum number of decode surfaces (DPB size).
+    /// Maximum number of internal decode surfaces (ulNumDecodeSurfaces).
     pub num_decode_surfaces: u32,
-    /// Codec type (cudaVideoCodec).
+    /// Codec type (CodecType: cudaVideoCodec).
     pub codec_type: CudaVideoCodec,
-    /// Chroma format (cudaVideoChromaFormat).
+    /// Chroma format (ChromaFormat: cudaVideoChromaFormat).
     pub chroma_format: CudaVideoChromaFormat,
-    /// Reserved for internal use.
-    pub reserved1: u32,
+    /// Decoder creation flags (ulCreationFlags: cudaVideoCreateFlags).
+    pub creation_flags: u32,
     /// Bit depth minus 8 (0 = 8-bit, 2 = 10-bit).
     pub bit_depth_minus8: u32,
-    /// Internal format conversion: 0 = native.
-    pub output_format: CudaVideoSurfaceFormat,
-    /// Deinterlace mode.
-    pub deinterlace_mode: CudaVideoDeinterlaceMode,
-    /// Bitrate (informational, may be 0).
-    pub bitrate: u32,
+    /// Set 1 only if video has all intra frames (ulIntraDecodeOnly).
+    pub intra_decode_only: u32,
+    /// Max width for reconfiguration (ulMaxWidth).
+    pub max_width: u32,
+    /// Max height for reconfiguration (ulMaxHeight).
+    pub max_height: u32,
+    /// Reserved for future use (Reserved1).
+    pub reserved1: u32,
 
-    // Display area
+    // Display area — area of the frame that should be displayed.
+    // Matches C struct { short left; short top; short right; short bottom; }
     /// Display area left.
-    pub display_left: u32,
+    pub display_left: i16,
     /// Display area top.
-    pub display_top: u32,
+    pub display_top: i16,
     /// Display area right.
-    pub display_right: u32,
+    pub display_right: i16,
     /// Display area bottom.
-    pub display_bottom: u32,
+    pub display_bottom: i16,
 
-    // Target output size (may differ from coded size for scaling)
-    /// Target output width.
+    /// Output surface format (OutputFormat: cudaVideoSurfaceFormat).
+    pub output_format: CudaVideoSurfaceFormat,
+    /// Deinterlace mode (DeinterlaceMode: cudaVideoDeinterlaceMode).
+    pub deinterlace_mode: CudaVideoDeinterlaceMode,
+
+    /// Post-processed output width (ulTargetWidth).
     pub target_width: u32,
-    /// Target output height.
+    /// Post-processed output height (ulTargetHeight).
     pub target_height: u32,
-    /// Number of output surfaces.
+    /// Maximum number of output surfaces simultaneously mapped (ulNumOutputSurfaces).
     pub num_output_surfaces: u32,
-    /// CUDA video context lock (0 for no lock).
+    /// CUDA video context lock (vidLock). NULL for no lock.
     pub vidlock: *mut c_void,
 
-    // Target rectangle (for output cropping/scaling)
-    /// Target rect top.
-    pub target_rect_top: i16,
-    /// Target rect bottom.
-    pub target_rect_bottom: i16,
+    // Target rectangle — for output cropping/scaling.
+    // Matches C struct { short left; short top; short right; short bottom; }
     /// Target rect left.
     pub target_rect_left: i16,
+    /// Target rect top.
+    pub target_rect_top: i16,
     /// Target rect right.
     pub target_rect_right: i16,
+    /// Target rect bottom.
+    pub target_rect_bottom: i16,
 
-    /// Enable histogram output (SM 7.0+).
-    pub enable_histogram: u32,
-
-    /// Reserved padding to match C struct size.
-    pub reserved2: [u32; 4],
+    /// Reserved padding to match C struct size (Reserved2[5]).
+    pub reserved2: [u32; 5],
 }
 
 // SAFETY: CuvidDecodeCreateInfo is a plain-old-data struct with
@@ -340,52 +347,61 @@ impl Default for CuvidProcParams {
 
 /// Video format information from the parser sequence callback.
 /// Matches `CUVIDEOFORMAT` from `nvcuvid.h`.
+///
+/// Reference: NVIDIA Video Codec SDK `nvcuvid.h`
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct CuVideoFormat {
     /// Codec (cudaVideoCodec).
     pub codec: CudaVideoCodec,
+
+    // frame_rate: struct { unsigned int numerator; unsigned int denominator; }
     /// Frame rate numerator.
     pub frame_rate_num: u32,
     /// Frame rate denominator.
     pub frame_rate_den: u32,
+
     /// Progressive sequence flag.
     pub progressive_sequence: u8,
-    /// Bit depth of luma component.
+    /// Bit depth of luma component minus 8.
     pub bit_depth_luma_minus8: u8,
-    /// Bit depth of chroma component.
+    /// Bit depth of chroma component minus 8.
     pub bit_depth_chroma_minus8: u8,
-    /// Minimum number of DPB surfaces needed.
+    /// Minimum number of decode surfaces needed (min_num_decode_surfaces).
+    /// In older SDK versions this was `reserved1`.
     pub min_num_decode_surfaces: u8,
+
     /// Coded width.
     pub coded_width: u32,
     /// Coded height.
     pub coded_height: u32,
 
-    // Display area
+    // display_area: struct { int left; int top; int right; int bottom; }
     /// Display area left.
-    pub display_area_left: u32,
+    pub display_area_left: i32,
     /// Display area top.
-    pub display_area_top: u32,
+    pub display_area_top: i32,
     /// Display area right.
-    pub display_area_right: u32,
+    pub display_area_right: i32,
     /// Display area bottom.
-    pub display_area_bottom: u32,
+    pub display_area_bottom: i32,
 
-    /// Chroma format.
+    /// Chroma format (cudaVideoChromaFormat).
     pub chroma_format: CudaVideoChromaFormat,
-    /// Bitrate.
+    /// Bitrate (informational, may be 0).
     pub bitrate: u32,
 
+    // display_aspect_ratio: struct { int x; int y; }
     /// Display aspect ratio X.
-    pub display_aspect_ratio_x: u32,
+    pub display_aspect_ratio_x: i32,
     /// Display aspect ratio Y.
-    pub display_aspect_ratio_y: u32,
+    pub display_aspect_ratio_y: i32,
 
-    /// Video signal description flags.
+    // video_signal_description: bit fields packed into 4 bytes
+    /// Video signal description (packed bit fields).
     pub video_signal_description_flags: u32,
 
-    /// Sequence area width.
+    /// Sequence header data length.
     pub seqhdr_data_length: u32,
 }
 

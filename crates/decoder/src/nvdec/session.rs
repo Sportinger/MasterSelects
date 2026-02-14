@@ -229,14 +229,11 @@ unsafe extern "C" fn sequence_callback(user_data: *mut c_void, format: *mut CuVi
 
     // Compute display dimensions from the display area rectangle.
     // Fall back to coded dimensions if the display area is empty.
-    state.width = fmt.display_area_right.saturating_sub(fmt.display_area_left);
-    state.height = fmt.display_area_bottom.saturating_sub(fmt.display_area_top);
-    if state.width == 0 {
-        state.width = fmt.coded_width;
-    }
-    if state.height == 0 {
-        state.height = fmt.coded_height;
-    }
+    // display_area fields are i32 in CUVIDEOFORMAT.
+    let disp_w = (fmt.display_area_right - fmt.display_area_left).max(0) as u32;
+    let disp_h = (fmt.display_area_bottom - fmt.display_area_top).max(0) as u32;
+    state.width = if disp_w > 0 { disp_w } else { fmt.coded_width };
+    state.height = if disp_h > 0 { disp_h } else { fmt.coded_height };
     state.format = Some(fmt.clone());
 
     // Destroy existing decoder if we're handling a resolution change
@@ -273,14 +270,18 @@ unsafe extern "C" fn sequence_callback(user_data: *mut c_void, format: *mut CuVi
         num_decode_surfaces,
         codec_type: fmt.codec,
         chroma_format: fmt.chroma_format,
+        creation_flags: 0, // cudaVideoCreate_Default
         bit_depth_minus8: fmt.bit_depth_luma_minus8 as u32,
+        intra_decode_only: 0,
+        max_width: fmt.coded_width,
+        max_height: fmt.coded_height,
+        reserved1: 0,
         output_format,
         deinterlace_mode: CudaVideoDeinterlaceMode::Adaptive,
-        bitrate: fmt.bitrate,
-        display_left: fmt.display_area_left,
-        display_top: fmt.display_area_top,
-        display_right: fmt.display_area_right,
-        display_bottom: fmt.display_area_bottom,
+        display_left: fmt.display_area_left as i16,
+        display_top: fmt.display_area_top as i16,
+        display_right: fmt.display_area_right as i16,
+        display_bottom: fmt.display_area_bottom as i16,
         target_width: state.width,
         target_height: state.height,
         num_output_surfaces: 2,

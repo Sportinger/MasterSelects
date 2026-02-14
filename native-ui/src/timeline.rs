@@ -840,15 +840,17 @@ fn show_main_area(ui: &mut egui::Ui, state: &mut TimelineState) {
                 );
             }
 
-            // ── Click to seek ──────────────────────────────────────
+            // ── Click or drag to seek / scrub ─────────────────────
+            // Covers the ruler and track lanes so you can scrub anywhere
+            let scrub_height = RULER_HEIGHT + tracks_total_height;
             let interact_rect =
-                Rect::from_min_size(origin, Vec2::new(scroll_rect.width(), RULER_HEIGHT));
+                Rect::from_min_size(origin, Vec2::new(scroll_rect.width(), scrub_height));
             let ruler_response = scroll_ui.interact(
                 interact_rect,
                 scroll_ui.id().with("ruler_seek"),
-                egui::Sense::click(),
+                egui::Sense::click_and_drag(),
             );
-            if ruler_response.clicked() {
+            if ruler_response.clicked() || ruler_response.dragged() {
                 if let Some(pos) = ruler_response.interact_pointer_pos() {
                     let new_time = ((pos.x - origin.x) / pps).clamp(0.0, state.total_duration);
                     state.action = Some(TimelineAction::Seek(new_time));

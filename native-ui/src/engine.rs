@@ -1061,6 +1061,8 @@ fn nvdec_decode_loop(
 
     let mut playing = false;
     let mut frame_num: u64 = 0;
+    let mut sent_first_frame = false;
+    let mut need_seek_frame = false;
 
     // Re-bind CUDA context to this thread (safety: we're on the decode thread)
     if let Err(e) = cuda_ctx.bind_to_thread() {
@@ -1092,6 +1094,7 @@ fn nvdec_decode_loop(
                     tracing::warn!("Demuxer seek failed: {e}");
                 }
                 frame_num = (time_secs * fps).round() as u64;
+                need_seek_frame = true; // Decode one frame at the new position
                 tracing::debug!(
                     "Decode thread (NVDEC): seek to {:.2}s (frame ~{})",
                     time_secs,
@@ -1109,7 +1112,7 @@ fn nvdec_decode_loop(
             }
         }
 
-        if !playing {
+        if !playing && sent_first_frame && !need_seek_frame {
             thread::sleep(Duration::from_millis(10));
             continue;
         }
@@ -1152,6 +1155,19 @@ fn nvdec_decode_loop(
                                         "Decode thread (NVDEC): frame channel closed, exiting"
                                     );
                                     return;
+                                }
+
+                                if !sent_first_frame {
+                                    sent_first_frame = true;
+                                    tracing::info!("NVDEC: first frame sent ({}x{})", width, height);
+                                }
+
+                                if need_seek_frame {
+                                    need_seek_frame = false;
+                                    // After sending the seek frame, pause if not playing
+                                    if !playing {
+                                        continue;
+                                    }
                                 }
 
                                 frame_num += 1;
@@ -1413,6 +1429,8 @@ fn real_decode_loop(
 
     let mut playing = false;
     let mut frame_num: u64 = 0;
+    let mut sent_first_frame = false;
+    let mut need_seek_frame = false;
 
     loop {
         // Check for commands (non-blocking)
@@ -1430,6 +1448,7 @@ fn real_decode_loop(
                     tracing::warn!("Decode thread (real): seek failed: {}", e);
                 }
                 frame_num = (time_secs * fps).round() as u64;
+                need_seek_frame = true;
                 tracing::debug!(
                     "Decode thread (real): seek to {:.2}s (frame ~{})",
                     time_secs,
@@ -1447,7 +1466,7 @@ fn real_decode_loop(
             }
         }
 
-        if !playing {
+        if !playing && sent_first_frame && !need_seek_frame {
             thread::sleep(Duration::from_millis(10));
             continue;
         }
@@ -1481,6 +1500,18 @@ fn real_decode_loop(
                     Err(_) => {
                         tracing::info!("Decode thread (real): frame channel closed, exiting");
                         return;
+                    }
+                }
+
+                if !sent_first_frame {
+                    sent_first_frame = true;
+                    tracing::info!("Real decode: first frame sent ({}x{})", width, height);
+                }
+
+                if need_seek_frame {
+                    need_seek_frame = false;
+                    if !playing {
+                        continue;
                     }
                 }
 
@@ -1518,6 +1549,8 @@ fn synthetic_decode_loop(
 
     let mut playing = false;
     let mut current_frame: u64 = 0;
+    let mut sent_first_frame = false;
+    let mut need_seek_frame = false;
 
     loop {
         // Check for commands (non-blocking)
@@ -1532,6 +1565,7 @@ fn synthetic_decode_loop(
             }
             Ok(DecodeCommand::Seek(time_secs)) => {
                 current_frame = (time_secs * fps).round() as u64;
+                need_seek_frame = true;
                 tracing::debug!(
                     "Decode thread (synthetic): seek to {:.2}s (frame {})",
                     time_secs,
@@ -1549,7 +1583,7 @@ fn synthetic_decode_loop(
             }
         }
 
-        if !playing {
+        if !playing && sent_first_frame && !need_seek_frame {
             thread::sleep(Duration::from_millis(10));
             continue;
         }
@@ -1575,6 +1609,18 @@ fn synthetic_decode_loop(
             Err(_) => {
                 tracing::info!("Decode thread (synthetic): frame channel closed, exiting");
                 return;
+            }
+        }
+
+        if !sent_first_frame {
+            sent_first_frame = true;
+            tracing::info!("Synthetic decode: first frame sent ({}x{})", width, height);
+        }
+
+        if need_seek_frame {
+            need_seek_frame = false;
+            if !playing {
+                continue;
             }
         }
 

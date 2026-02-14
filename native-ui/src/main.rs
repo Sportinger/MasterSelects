@@ -16,6 +16,13 @@ mod toolbar;
 use app::MasterSelectsApp;
 
 fn main() -> eframe::Result<()> {
+    // Initialize tracing so we can see engine logs in the console
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .init();
+
+    tracing::info!("MasterSelects starting...");
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("MasterSelects")

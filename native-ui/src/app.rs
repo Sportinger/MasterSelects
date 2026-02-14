@@ -265,6 +265,21 @@ impl MasterSelectsApp {
                     });
                 }
 
+                // Add corresponding audio clip to the first audio track
+                if let Some(audio_track) = self
+                    .timeline
+                    .tracks
+                    .iter_mut()
+                    .find(|t| t.track_type == crate::timeline::TrackType::Audio)
+                {
+                    audio_track.clips.push(crate::timeline::Clip {
+                        name: info.file_name.clone(),
+                        start: 0.0,
+                        duration: info.duration_secs as f32,
+                        color: egui::Color32::from_rgb(0x2e, 0x8b, 0x57),
+                    });
+                }
+
                 // Update timeline duration
                 if info.duration_secs as f32 > self.timeline.total_duration {
                     self.timeline.total_duration = info.duration_secs as f32;
