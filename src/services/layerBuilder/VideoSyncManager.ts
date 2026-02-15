@@ -60,12 +60,13 @@ export class VideoSyncManager {
       }
     }
 
-    // Pause videos not at playhead
+    // Pause videos not at playhead (but skip clips being prerolled)
     for (const clip of ctx.clips) {
       if (clip.source?.videoElement) {
         const isAtPlayhead = ctx.clipsByTrackId.has(clip.trackId) &&
           ctx.clipsByTrackId.get(clip.trackId)?.id === clip.id;
-        if (!isAtPlayhead && !clip.source.videoElement.paused) {
+        const isPrerolling = this.prerollingClips.has(clip.id);
+        if (!isAtPlayhead && !isPrerolling && !clip.source.videoElement.paused) {
           clip.source.videoElement.pause();
         }
       }
@@ -76,7 +77,8 @@ export class VideoSyncManager {
           ctx.clipsByTrackId.get(clip.trackId)?.id === clip.id;
         if (!isAtPlayhead) {
           for (const nestedClip of clip.nestedClips) {
-            if (nestedClip.source?.videoElement && !nestedClip.source.videoElement.paused) {
+            const isNestedPrerolling = this.prerollingClips.has(nestedClip.id);
+            if (nestedClip.source?.videoElement && !nestedClip.source.videoElement.paused && !isNestedPrerolling) {
               nestedClip.source.videoElement.pause();
             }
           }
@@ -392,6 +394,11 @@ export class VideoSyncManager {
         video.play().catch(() => {});
       } else if (!ctx.isPlaying && !video.paused) {
         video.pause();
+      }
+
+      // Clean up preroll state — clip is now actively playing
+      if (this.prerollingClips.has(clip.id)) {
+        this.prerollingClips.delete(clip.id);
       }
 
       if (!ctx.isPlaying) {

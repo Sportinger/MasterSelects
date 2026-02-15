@@ -5,24 +5,17 @@ import { NativeHelperClient } from '../../nativeHelper';
 import { downloadVideo } from '../../youtubeDownloader';
 import { useYouTubeStore } from '../../../stores/youtubeStore';
 import { useTimelineStore } from '../../../stores/timeline';
-import { useSettingsStore } from '../../../stores/settingsStore';
 import type { ToolResult } from '../types';
 
 const log = Logger.create('AITool:YouTube');
 
-// --- Helpers (replicated from DownloadPanel) ---
-
-function parseISO8601Duration(duration: string): number {
-  const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-  if (!match) return 0;
-  return parseInt(match[1] || '0') * 3600 + parseInt(match[2] || '0') * 60 + parseInt(match[3] || '0');
-}
+// --- Helpers ---
 
 function formatDuration(seconds: number): string {
   if (!seconds) return '?:??';
   const hrs = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
+  const secs = Math.floor(seconds % 60);
   if (hrs > 0) {
     return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
@@ -37,66 +30,68 @@ function formatViews(count: number): string {
 
 // --- Handlers ---
 
-export async function handleSearchYouTube(args: Record<string, unknown>): Promise<ToolResult> {
+export async function handleSearchVideos(args: Record<string, unknown>): Promise<ToolResult> {
   const query = args.query as string;
-  const maxResults = Math.min(Math.max((args.maxResults as number) || 10, 1), 20);
+  const maxResults = Math.min(Math.max((args.maxResults as number) || 5, 1), 20);
+  const maxDuration = args.maxDuration as number | undefined;
+  const minDuration = args.minDuration as number | undefined;
 
   if (!query) {
     return { success: false, error: 'query is required' };
   }
 
-  const youtubeApiKey = useSettingsStore.getState().apiKeys.youtube;
-  if (!youtubeApiKey) {
-    return { success: false, error: 'YouTube API key not configured. Please set it in Settings > API Keys.' };
+  if (!NativeHelperClient.isConnected()) {
+    return { success: false, error: 'Native Helper not connected. Please start the helper application and enable Turbo Mode in settings.' };
   }
 
   try {
-    // Search YouTube Data API v3
-    const searchResponse = await fetch(
-      `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=${maxResults}&q=${encodeURIComponent(query)}&key=${youtubeApiKey}`
-    );
+    // Request extra results if filtering by duration (some may be filtered out)
+    const requestCount = (maxDuration || minDuration) ? Math.min(maxResults * 3, 20) : maxResults;
+    const results = await NativeHelperClient.searchVideos(query, requestCount);
 
-    if (!searchResponse.ok) {
-      const errorData = await searchResponse.json();
-      throw new Error(errorData.error?.message || 'YouTube API error');
+    if (!results) {
+      return { success: false, error: 'Search failed. yt-dlp may not be installed or the Native Helper timed out.' };
     }
 
-    const searchData = await searchResponse.json();
-    const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
+    // Apply duration filters
+    let filtered = results;
+    if (maxDuration) {
+      filtered = filtered.filter(r => r.duration != null && r.duration <= maxDuration);
+    }
+    if (minDuration) {
+      filtered = filtered.filter(r => r.duration != null && r.duration >= minDuration);
+    }
 
-    // Get video details (duration, views)
-    const detailsResponse = await fetch(
-      `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,statistics&id=${videoIds}&key=${youtubeApiKey}`
-    );
+    // Limit to requested count
+    filtered = filtered.slice(0, maxResults);
 
-    const detailsData = await detailsResponse.json();
-    const detailsMap = new Map(detailsData.items?.map((item: any) => [item.id, item]) || []);
-
-    const videos = searchData.items.map((item: any) => {
-      const details = detailsMap.get(item.id.videoId) as any;
-      const durationSeconds = details?.contentDetails?.duration
-        ? parseISO8601Duration(details.contentDetails.duration)
-        : 0;
-      return {
-        id: item.id.videoId,
-        title: item.snippet.title,
-        thumbnail: item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.default?.url,
-        channelTitle: item.snippet.channelTitle,
-        publishedAt: item.snippet.publishedAt,
-        durationSeconds,
-        duration: formatDuration(durationSeconds),
-        viewCount: details?.statistics?.viewCount
-          ? formatViews(parseInt(details.statistics.viewCount))
-          : undefined,
-        url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
-      };
-    });
+    // Format for AI response
+    const videos = filtered.map(r => ({
+      id: r.id,
+      title: r.title,
+      url: r.url,
+      thumbnail: r.thumbnail,
+      channelTitle: r.uploader,
+      durationSeconds: r.duration,
+      duration: r.duration ? formatDuration(r.duration) : '?:??',
+      viewCount: r.view_count ? formatViews(r.view_count) : undefined,
+    }));
 
     // Add results to YouTube store (appears in Downloads panel)
-    useYouTubeStore.getState().addVideos(videos);
+    useYouTubeStore.getState().addVideos(videos.map(v => ({
+      id: v.id,
+      title: v.title,
+      thumbnail: v.thumbnail,
+      channelTitle: v.channelTitle,
+      publishedAt: '',
+      durationSeconds: v.durationSeconds || 0,
+      duration: v.duration,
+      viewCount: v.viewCount,
+      sourceUrl: v.url,
+    })));
     useYouTubeStore.getState().setLastQuery(query);
 
-    log.info(`YouTube search: "${query}" returned ${videos.length} results`);
+    log.info(`Video search: "${query}" returned ${videos.length} results`);
 
     return {
       success: true,
@@ -107,10 +102,10 @@ export async function handleSearchYouTube(args: Record<string, unknown>): Promis
       },
     };
   } catch (error) {
-    log.error('YouTube search failed', error);
+    log.error('Video search failed', error);
     return {
       success: false,
-      error: `YouTube search failed: ${(error as Error).message}`,
+      error: `Video search failed: ${(error as Error).message}`,
     };
   }
 }
