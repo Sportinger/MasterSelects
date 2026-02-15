@@ -28,7 +28,8 @@ import { detectMediaType } from './helpers/mediaTypeHelpers';
 import { loadVideoMedia } from './clip/addVideoClip';
 import { createAudioClipPlaceholder, loadAudioMedia } from './clip/addAudioClip';
 import { createImageClipPlaceholder, loadImageMedia } from './clip/addImageClip';
-import { createVideoElement, createAudioElement, initWebCodecsPlayer } from './helpers/webCodecsHelpers';
+// createVideoElement, createAudioElement, initWebCodecsPlayer no longer needed for split
+// (split clips share the original element for seamless playback)
 import {
   createCompClipPlaceholder,
   loadNestedClips,
@@ -440,43 +441,18 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     const timestamp = Date.now();
     const randomSuffix = Math.random().toString(36).substr(2, 5);
 
-    // Create new video/audio elements for the second clip to avoid sharing HTMLMediaElements
-    // This is critical: both clips need their own elements for independent seeking/playback
+    // Share video/audio elements between split clips on the same track.
+    // Since clips on the same track are never active simultaneously, the shared
+    // element plays through the cut point seamlessly — zero seek, zero stutter.
+    // The pause loop in VideoSyncManager/AudioTrackSyncManager checks for shared
+    // elements before pausing, so the playing element won't be interrupted.
     let secondClipSource = clip.source;
-    if (clip.source?.type === 'video' && clip.source.videoElement && clip.file) {
-      const newVideo = createVideoElement(clip.file);
-      // Pre-buffer: seek to split point immediately so data is available
-      // when the preroll system needs it. Without this, the new element only
-      // has metadata loaded and may produce black frames at the cut point.
-      newVideo.preload = 'auto';
-      newVideo.addEventListener('loadedmetadata', () => {
-        newVideo.currentTime = splitInSource;
-      }, { once: true });
-      secondClipSource = {
-        ...clip.source,
-        videoElement: newVideo,
-        webCodecsPlayer: undefined, // Will be initialized async below
-      };
-      // Initialize WebCodecsPlayer for the new video element asynchronously
-      initWebCodecsPlayer(newVideo, clip.name).then(player => {
-        if (player) {
-          const { clips: currentClips } = get();
-          const secondClipId = `clip-${timestamp}-${randomSuffix}-b`;
-          set({
-            clips: currentClips.map(c => {
-              if (c.id !== secondClipId || !c.source) return c;
-              return { ...c, source: { ...c.source, webCodecsPlayer: player } };
-            }),
-          });
-        }
-      });
-    } else if (clip.source?.type === 'audio' && clip.source.audioElement && clip.file) {
-      // Handle audio-only clips - create new audio element for second clip
-      const newAudio = createAudioElement(clip.file);
-      secondClipSource = {
-        ...clip.source,
-        audioElement: newAudio,
-      };
+    if (clip.source?.type === 'video' && clip.source.videoElement) {
+      // Share video element + WebCodecsPlayer — video plays through the cut
+      secondClipSource = { ...clip.source };
+    } else if (clip.source?.type === 'audio' && clip.source.audioElement) {
+      // Share audio element — audio plays through the cut
+      secondClipSource = { ...clip.source };
     }
 
     const firstClip: TimelineClip = {
@@ -506,12 +482,14 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     if (clip.linkedClipId) {
       const linkedClip = clips.find(c => c.id === clip.linkedClipId);
       if (linkedClip) {
-        // Create new audio element for linked second clip
+        // Share audio element between linked split clips on the same track.
+        // Audio plays through the cut point seamlessly — no seek, no overlap.
+        // For composition audio (mixdownBuffer), we must create a new element
+        // since the mixdown buffer is different per clip segment.
         let linkedSecondSource = linkedClip.source;
         if (linkedClip.source?.type === 'audio' && linkedClip.source.audioElement) {
-          // For composition audio clips, use mixdownBuffer to create new audio element
           if (linkedClip.mixdownBuffer) {
-            // Async create audio from mixdown buffer
+            // Composition audio: needs separate element from mixdown buffer
             import('../../services/compositionAudioMixer').then(({ compositionAudioMixer }) => {
               const newAudio = compositionAudioMixer.createAudioElement(linkedClip.mixdownBuffer!);
               const { clips: currentClips } = get();
@@ -523,15 +501,10 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
                 }),
               });
             });
-            // Source will be updated async, use existing for now
             linkedSecondSource = { ...linkedClip.source };
-          } else if (linkedClip.file && linkedClip.file.size > 0) {
-            // Regular audio file (not empty composition placeholder)
-            const newAudio = createAudioElement(linkedClip.file);
-            linkedSecondSource = {
-              ...linkedClip.source,
-              audioElement: newAudio,
-            };
+          } else {
+            // Regular audio: share element — plays through cuts
+            linkedSecondSource = { ...linkedClip.source };
           }
         }
 

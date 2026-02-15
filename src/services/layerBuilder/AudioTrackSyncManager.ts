@@ -232,7 +232,14 @@ export class AudioTrackSyncManager {
       const isAtPlayhead = ctx.clipsAtTime.some(c => c.id === clip.id);
 
       if (clip.source?.audioElement && !isAtPlayhead && !clip.source.audioElement.paused) {
-        audioRoutingManager.fadeOutAndPause(clip.source.audioElement);
+        // Don't pause if an active clip shares this audio element (split clips)
+        const audio = clip.source.audioElement;
+        const sharedByActiveClip = ctx.clipsAtTime.some(
+          active => active.source?.audioElement === audio
+        );
+        if (!sharedByActiveClip) {
+          audioRoutingManager.fadeOutAndPause(audio);
+        }
       }
 
       if (clip.mixdownAudio && !isAtPlayhead && !clip.mixdownAudio.paused) {

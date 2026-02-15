@@ -7,9 +7,8 @@ import { LAYER_BUILDER_CONSTANTS } from './types';
 import { createFrameContext, getClipTimeInfo, getMediaFileForClip } from './FrameContext';
 import { layerPlaybackManager } from '../layerPlaybackManager';
 import { engine } from '../../engine/WebGPUEngine';
-import { Logger } from '../logger';
-
-const log = Logger.create('VideoSync');
+// import { Logger } from '../logger';
+// const log = Logger.create('VideoSync');
 
 export class VideoSyncManager {
   // Native decoder state
@@ -76,7 +75,10 @@ export class VideoSyncManager {
       const timeInfo = getClipTimeInfo(ctx, clip);
 
       // Unmute (preroll was muted) — keep playing for GPU surface
-      video.muted = false;
+      // Only unmute if no linked audio clip (linked audio handles audio separately)
+      if (!clip.linkedClipId) {
+        video.muted = false;
+      }
 
       // Seek to correct position (video was ~0.5s ahead from preroll)
       const timeDiff = Math.abs(video.currentTime - timeInfo.clipTime);
@@ -118,53 +120,72 @@ export class VideoSyncManager {
       if (prev && prev.clipId !== clip.id) {
         // Transition detected — find previous clip for source comparison
         const prevClip = ctx.clips.find(c => c.id === prev.clipId);
+
         if (prevClip?.source?.videoElement) {
-          // Check same source: File object identity is most reliable after split
-          // (both clips share the same File reference). Fall back to mediaFileId.
-          const isSameFile = clip.file && prevClip.file && clip.file === prevClip.file;
-          const isSameMediaId = (
+          // Check same source — multiple strategies (File ref, mediaFileId, file name+size)
+          const isSameFileRef = !!(clip.file && prevClip.file && clip.file === prevClip.file);
+          const isSameMediaId = !!(
             (clip.source.mediaFileId && prevClip.source?.mediaFileId &&
               clip.source.mediaFileId === prevClip.source.mediaFileId) ||
             (clip.mediaFileId && prevClip.mediaFileId &&
               clip.mediaFileId === prevClip.mediaFileId)
           );
-          const isSameSource = isSameFile || isSameMediaId;
+          // Fallback: compare file name + size (works after project reload when File ref is lost)
+          const isSameFileName = !!(
+            clip.file && prevClip.file &&
+            clip.file.name === prevClip.file.name &&
+            clip.file.size === prevClip.file.size
+          );
+          const isSameSource = isSameFileRef || isSameMediaId || isSameFileName;
 
-          const isContiguousTimeline = Math.abs(prev.endTime - clip.startTime) < 0.001;
+          const isContiguousTimeline = Math.abs(prev.endTime - clip.startTime) < 0.016; // ~1 frame tolerance
           const isContiguousSource = Math.abs(prev.outPoint - clip.inPoint) < 0.02; // ~1 frame
 
+          // TEMPORARY: always log transitions to console for debugging
+          console.warn('[VideoSync] Transition detected:', {
+            isSameSource, isSameFileRef, isSameMediaId, isSameFileName,
+            isContiguousTimeline, isContiguousSource,
+            prevEnd: prev.endTime.toFixed(4), clipStart: clip.startTime.toFixed(4),
+            prevOut: prev.outPoint.toFixed(4), clipIn: clip.inPoint.toFixed(4),
+            clipFile: clip.file?.name, prevFile: prevClip.file?.name,
+            clipMediaId: clip.source.mediaFileId || clip.mediaFileId,
+            prevMediaId: prevClip.source?.mediaFileId || prevClip.mediaFileId,
+          });
+
           if (isSameSource && isContiguousTimeline && isContiguousSource) {
-            // SWAP: give the playing video to the new clip.
-            // The playing video is already at the correct position
-            // (outPoint of prev ≈ inPoint of clip).
             const playingVideo = prevClip.source.videoElement;
-            const playingWC = prevClip.source.webCodecsPlayer;
             const idleVideo = clip.source.videoElement;
-            const idleWC = clip.source.webCodecsPlayer;
 
-            clip.source.videoElement = playingVideo;
-            clip.source.webCodecsPlayer = playingWC;
-            prevClip.source.videoElement = idleVideo;
-            prevClip.source.webCodecsPlayer = idleWC;
+            if (playingVideo === idleVideo) {
+              // Shared element (split clips) — video plays through the cut point
+              // No swap needed, just cancel preroll
+              this.prerollingClips.delete(clip.id);
+            } else if (!playingVideo.paused && playingVideo.readyState >= 2) {
+              // Different elements — swap them
+              const playingWC = prevClip.source.webCodecsPlayer;
+              const idleWC = clip.source.webCodecsPlayer;
+              clip.source.videoElement = playingVideo;
+              clip.source.webCodecsPlayer = playingWC;
+              prevClip.source.videoElement = idleVideo;
+              prevClip.source.webCodecsPlayer = idleWC;
 
-            // Cancel preroll — video is already playing at the correct position
-            this.prerollingClips.delete(clip.id);
+              // Cancel preroll — video is already playing at the correct position
+              this.prerollingClips.delete(clip.id);
 
-            log.debug('Continuous playback handoff', {
-              from: prevClip.name || prev.clipId,
-              to: clip.name || clip.id,
-              videoTime: playingVideo.currentTime.toFixed(3),
-              clipInPoint: clip.inPoint.toFixed(3),
-            });
-          } else if (!isSameSource) {
-            log.debug('Transition: different source', {
-              file: !!isSameFile,
-              mediaId: !!isSameMediaId,
-              clipFile: !!clip.file,
-              prevFile: !!prevClip.file,
-              sameRef: clip.file === prevClip.file,
-            });
+              console.warn('[VideoSync] ✓ HANDOFF:', clip.name,
+                'video@', playingVideo.currentTime.toFixed(3),
+                'clipInPoint:', clip.inPoint.toFixed(3),
+                'drift:', Math.abs(playingVideo.currentTime - clip.inPoint).toFixed(4));
+            } else {
+              console.warn('[VideoSync] ✗ Skip handoff: video not ready',
+                'paused:', playingVideo.paused,
+                'readyState:', playingVideo.readyState);
+            }
           }
+        } else {
+          console.warn('[VideoSync] ✗ prevClip not found or no videoElement',
+            'prevClipId:', prev.clipId, 'found:', !!prevClip,
+            'hasSource:', !!prevClip?.source, 'hasVideo:', !!prevClip?.source?.videoElement);
         }
       }
 
@@ -204,14 +225,21 @@ export class VideoSyncManager {
       }
     }
 
-    // Pause videos not at playhead (but skip clips being prerolled)
+    // Pause videos not at playhead (but skip clips being prerolled or sharing elements)
     for (const clip of ctx.clips) {
       if (clip.source?.videoElement) {
         const isAtPlayhead = ctx.clipsByTrackId.has(clip.trackId) &&
           ctx.clipsByTrackId.get(clip.trackId)?.id === clip.id;
         const isPrerolling = this.prerollingClips.has(clip.id);
         if (!isAtPlayhead && !isPrerolling && !clip.source.videoElement.paused) {
-          clip.source.videoElement.pause();
+          // Don't pause if an active clip shares this video element (split clips)
+          const video = clip.source.videoElement;
+          const sharedByActiveClip = Array.from(ctx.clipsByTrackId.values()).some(
+            active => active.source?.videoElement === video
+          );
+          if (!sharedByActiveClip) {
+            video.pause();
+          }
         }
       }
 
@@ -273,12 +301,16 @@ export class VideoSyncManager {
 
       const timeUntilStart = clip.startTime - ctx.playheadPosition;
 
-      // Skip preload for clips that will receive continuous playback handoff:
-      // same source + contiguous with the currently active clip on the same track.
+      // Skip preload for clips that share a video element with the active clip,
+      // or will receive continuous playback handoff (same source + contiguous).
       // The video element will just keep playing through the cut point.
       if (clip.source?.videoElement && !clip.reversed) {
         const activeClip = ctx.clipsByTrackId.get(clip.trackId);
         if (activeClip?.source?.videoElement) {
+          // Shared element (split clips) — always skip preload
+          if (clip.source.videoElement === activeClip.source.videoElement) {
+            continue;
+          }
           const isSameFile = clip.file && activeClip.file && clip.file === activeClip.file;
           const isSameMediaId = (
             (clip.source.mediaFileId && activeClip.source?.mediaFileId &&
@@ -605,7 +637,10 @@ export class VideoSyncManager {
       const wasPrerolling = this.prerollingClips.has(clip.id);
       if (wasPrerolling) {
         this.prerollingClips.delete(clip.id);
-        video.muted = false; // Preroll muted the video — restore for audio playback
+        // Only unmute if no linked audio clip (linked audio handles audio separately)
+        if (!clip.linkedClipId) {
+          video.muted = false;
+        }
       }
 
       if (ctx.isPlaying && video.paused) {
