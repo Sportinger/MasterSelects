@@ -12,31 +12,32 @@ export class DirtyTracker {
   /**
    * Update dirty state for all nodes in the graph.
    * Call this once per frame before evaluation.
+   *
+   * IMPORTANT: Do NOT update version fields here — they must remain at the
+   * values from the last successful evaluation so that computeFlags() can
+   * detect changes. Versions are updated in cacheEvaluation() instead.
    */
-  update(graph: SceneGraph, time: number): void {
-    for (const [nodeId, node] of graph.nodeById) {
+  update(graph: SceneGraph, _time: number): void {
+    for (const [nodeId] of graph.nodeById) {
       const state = this.tracked.get(nodeId);
 
       if (!state) {
-        // New node — always dirty
+        // New node — create with mismatched versions to force dirty.
+        // lastEvaluation: null also guarantees getOrReuse() returns null.
         this.tracked.set(nodeId, {
           nodeId,
-          version: node.version,
-          transformVersion: node.transformVersion,
-          effectsVersion: node.effectsVersion,
-          structureVersion: node.structureVersion,
-          lastTime: time,
+          version: -1,
+          transformVersion: -1,
+          effectsVersion: -1,
+          structureVersion: -1,
+          lastTime: -1,
           lastEvaluation: null,
         });
         continue;
       }
 
-      // Update versions
-      state.lastTime = time;
-      state.version = node.version;
-      state.transformVersion = node.transformVersion;
-      state.effectsVersion = node.effectsVersion;
-      state.structureVersion = node.structureVersion;
+      // Don't update versions or lastTime here — leave them at the values
+      // from the last cacheEvaluation() call so dirty detection works.
     }
 
     // Remove tracked nodes that no longer exist in the graph
@@ -70,11 +71,20 @@ export class DirtyTracker {
 
   /**
    * Store the evaluation result for a node (called after evaluating).
+   * Also updates version fields so the NEXT frame's dirty check can detect changes.
    */
-  cacheEvaluation(nodeId: string, evaluation: EvaluatedNode): void {
+  cacheEvaluation(nodeId: string, evaluation: EvaluatedNode, currentTime: number): void {
     const state = this.tracked.get(nodeId);
     if (state) {
       state.lastEvaluation = evaluation;
+      // Update versions NOW (after evaluation) so next frame's computeFlags()
+      // compares the new node versions against these cached versions.
+      const node = evaluation.sceneNode;
+      state.version = node.version;
+      state.transformVersion = node.transformVersion;
+      state.effectsVersion = node.effectsVersion;
+      state.structureVersion = node.structureVersion;
+      state.lastTime = currentTime;
     }
     this.prevEvaluations.set(nodeId, evaluation);
   }

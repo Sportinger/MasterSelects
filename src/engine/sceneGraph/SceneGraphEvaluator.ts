@@ -112,7 +112,7 @@ export class SceneGraphEvaluator {
     }
 
     // Cache the evaluation for dirty tracking reuse in subsequent frames
-    this.dirtyTracker.cacheEvaluation(node.id, evaluated);
+    this.dirtyTracker.cacheEvaluation(node.id, evaluated, currentTime);
 
     results.push(evaluated);
   }
