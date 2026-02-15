@@ -35,6 +35,10 @@ export class VideoSyncManager {
   private preciseSeekTimers: Record<string, ReturnType<typeof setTimeout>> = {};
   private latestSeekTargets: Record<string, number> = {};
 
+  // Sorted clips cache for efficient preload (early-break optimization)
+  private sortedClipsByStart: TimelineClip[] = [];
+  private lastClipsRef: TimelineClip[] = [];
+
   /**
    * Pre-render step: finalize prerolled clips that are now active.
    * Seeks prerolled videos to correct position and unmutes BEFORE render.
@@ -139,17 +143,30 @@ export class VideoSyncManager {
    * Preload video elements for clips about to become active.
    * Two-phase strategy:
    *   - 2s+ out: seek to start position and pause (buffering)
-   *   - <0.5s out: start playing muted so decoder is warm (preroll)
-   * This eliminates the 1-2 frame stutter on clip transitions.
+   *   - <0.5s out: start playing muted from smart position (preroll)
+   *
+   * Smart preroll: starts from (inPoint - timeUntilStart) so the video
+   * naturally arrives at inPoint when the clip becomes active — no seek needed
+   * at transition. This eliminates stutter with many short clips.
+   *
+   * Uses sorted clips with early break for O(k) iteration instead of O(n).
    */
   private preloadUpcomingClips(ctx: FrameContext): void {
     const lookaheadSec = 2;
     const prerollSec = 0.5; // Start playing muted when clip is <0.5s away
     const lookaheadEnd = ctx.playheadPosition + lookaheadSec;
 
-    for (const clip of ctx.clips) {
-      // Only care about clips that START within the lookahead window
-      if (clip.startTime <= ctx.playheadPosition || clip.startTime > lookaheadEnd) continue;
+    // Re-sort clips by startTime when the clips array reference changes
+    // (Zustand returns same array reference if nothing changed)
+    if (ctx.clips !== this.lastClipsRef) {
+      this.sortedClipsByStart = [...ctx.clips].sort((a, b) => a.startTime - b.startTime);
+      this.lastClipsRef = ctx.clips;
+    }
+
+    // Iterate sorted clips with early break — only visits clips in the lookahead window
+    for (const clip of this.sortedClipsByStart) {
+      if (clip.startTime <= ctx.playheadPosition) continue; // Skip past clips
+      if (clip.startTime > lookaheadEnd) break; // Sorted: all remaining are past lookahead
 
       const timeUntilStart = clip.startTime - ctx.playheadPosition;
 
@@ -185,7 +202,12 @@ export class VideoSyncManager {
   /**
    * Preload a single video element.
    * Phase 1 (>0.5s): seek to inPoint + pause (buffer ahead)
-   * Phase 2 (<0.5s): play muted from inPoint (decoder warm-up)
+   * Phase 2 (<0.5s): play muted from smart position (decoder warm-up)
+   *
+   * Smart preroll: Instead of starting from inPoint (which causes a backward
+   * seek at transition because the video drifts to inPoint + prerollDuration),
+   * we start from (inPoint - timeUntilStart). This way the video naturally
+   * arrives at inPoint when the clip becomes active — zero seek needed.
    */
   private preloadVideoElement(
     clipId: string,
@@ -194,15 +216,19 @@ export class VideoSyncManager {
     timeUntilStart: number,
     prerollSec: number
   ): void {
-    const targetTime = clip.reversed ? clip.outPoint : clip.inPoint;
-    const timeDiff = Math.abs(video.currentTime - targetTime);
+    const inPoint = clip.reversed ? clip.outPoint : clip.inPoint;
 
     if (timeUntilStart <= prerollSec) {
       // Phase 2: Preroll — play muted so decoder is warm
+      // Smart position: start from (inPoint - timeUntilStart) so by the time
+      // the clip becomes active, the video naturally arrives at inPoint.
+      // For clips where inPoint < timeUntilStart (e.g. inPoint=0), we clamp to 0
+      // and accept a small drift that finalizePrerolls() will correct.
       if (!this.prerollingClips.has(clipId)) {
-        // Seek to start position first if needed
+        const prerollStart = Math.max(0, inPoint - timeUntilStart);
+        const timeDiff = Math.abs(video.currentTime - prerollStart);
         if (timeDiff > 0.1 && !video.seeking) {
-          video.currentTime = targetTime;
+          video.currentTime = prerollStart;
         }
         video.muted = true;
         // Add to prerollingClips BEFORE play() to prevent the pause loop
@@ -218,9 +244,10 @@ export class VideoSyncManager {
         });
       }
     } else {
-      // Phase 1: Seek and pause (buffer ahead of time)
+      // Phase 1: Seek to inPoint and pause (buffer ahead of time)
+      const timeDiff = Math.abs(video.currentTime - inPoint);
       if (timeDiff > 0.1 && !video.seeking) {
-        video.currentTime = targetTime;
+        video.currentTime = inPoint;
         // Cache frame at inPoint after seek completes — this frame will be
         // used by tryHTMLVideo when the clip transitions from preroll to active,
         // preventing a wrong-frame flash on the first render
