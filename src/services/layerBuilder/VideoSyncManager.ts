@@ -7,8 +7,9 @@ import { LAYER_BUILDER_CONSTANTS } from './types';
 import { createFrameContext, getClipTimeInfo, getMediaFileForClip } from './FrameContext';
 import { layerPlaybackManager } from '../layerPlaybackManager';
 import { engine } from '../../engine/WebGPUEngine';
-// import { Logger } from '../logger';
-// const log = Logger.create('VideoSync');
+import { Logger } from '../logger';
+
+const log = Logger.create('VideoSync');
 
 export class VideoSyncManager {
   // Native decoder state
@@ -141,17 +142,6 @@ export class VideoSyncManager {
           const isContiguousTimeline = Math.abs(prev.endTime - clip.startTime) < 0.016; // ~1 frame tolerance
           const isContiguousSource = Math.abs(prev.outPoint - clip.inPoint) < 0.02; // ~1 frame
 
-          // TEMPORARY: always log transitions to console for debugging
-          console.warn('[VideoSync] Transition detected:', {
-            isSameSource, isSameFileRef, isSameMediaId, isSameFileName,
-            isContiguousTimeline, isContiguousSource,
-            prevEnd: prev.endTime.toFixed(4), clipStart: clip.startTime.toFixed(4),
-            prevOut: prev.outPoint.toFixed(4), clipIn: clip.inPoint.toFixed(4),
-            clipFile: clip.file?.name, prevFile: prevClip.file?.name,
-            clipMediaId: clip.source.mediaFileId || clip.mediaFileId,
-            prevMediaId: prevClip.source?.mediaFileId || prevClip.mediaFileId,
-          });
-
           if (isSameSource && isContiguousTimeline && isContiguousSource) {
             const playingVideo = prevClip.source.videoElement;
             const idleVideo = clip.source.videoElement;
@@ -171,21 +161,8 @@ export class VideoSyncManager {
 
               // Cancel preroll — video is already playing at the correct position
               this.prerollingClips.delete(clip.id);
-
-              console.warn('[VideoSync] ✓ HANDOFF:', clip.name,
-                'video@', playingVideo.currentTime.toFixed(3),
-                'clipInPoint:', clip.inPoint.toFixed(3),
-                'drift:', Math.abs(playingVideo.currentTime - clip.inPoint).toFixed(4));
-            } else {
-              console.warn('[VideoSync] ✗ Skip handoff: video not ready',
-                'paused:', playingVideo.paused,
-                'readyState:', playingVideo.readyState);
             }
           }
-        } else {
-          console.warn('[VideoSync] ✗ prevClip not found or no videoElement',
-            'prevClipId:', prev.clipId, 'found:', !!prevClip,
-            'hasSource:', !!prevClip?.source, 'hasVideo:', !!prevClip?.source?.videoElement);
         }
       }
 
@@ -225,11 +202,20 @@ export class VideoSyncManager {
       }
     }
 
-    // Pause videos not at playhead (but skip clips being prerolled or sharing elements)
+    // Pause videos/players not at playhead (but skip clips being prerolled or sharing elements)
     for (const clip of ctx.clips) {
+      const isAtPlayhead = ctx.clipsByTrackId.has(clip.trackId) &&
+        ctx.clipsByTrackId.get(clip.trackId)?.id === clip.id;
+
+      // Pause WebCodecs players not at playhead
+      if (clip.source?.webCodecsPlayer && !clip.source.videoElement && !isAtPlayhead) {
+        // No preroll needed for WebCodecs — seek is instant
+        if (clip.source.audioPlayer?.isPlaying) {
+          clip.source.audioPlayer.pause();
+        }
+      }
+
       if (clip.source?.videoElement) {
-        const isAtPlayhead = ctx.clipsByTrackId.has(clip.trackId) &&
-          ctx.clipsByTrackId.get(clip.trackId)?.id === clip.id;
         const isPrerolling = this.prerollingClips.has(clip.id);
         if (!isAtPlayhead && !isPrerolling && !clip.source.videoElement.paused) {
           // Don't pause if an active clip shares this video element (split clips)
@@ -332,6 +318,10 @@ export class VideoSyncManager {
 
       if (clip.source?.videoElement) {
         this.preloadVideoElement(clip.id, clip.source.videoElement, clip, timeUntilStart, prerollSec);
+      } else if (clip.source?.webCodecsPlayer && timeUntilStart <= prerollSec) {
+        // WebCodecs: pre-seek to inPoint (instant, no warmup needed)
+        const inPoint = clip.reversed ? clip.outPoint : clip.inPoint;
+        clip.source.webCodecsPlayer.seek(inPoint);
       }
 
       if (clip.source?.nativeDecoder) {
@@ -541,6 +531,12 @@ export class VideoSyncManager {
       return;
     }
 
+    // WebCodecs Full Mode — no HTMLVideoElement needed
+    if (clip.source?.webCodecsPlayer && !clip.source.videoElement) {
+      this.syncWebCodecsPlayer(clip, ctx);
+      return;
+    }
+
     if (!clip.source?.videoElement) return;
 
     const video = clip.source.videoElement;
@@ -688,6 +684,66 @@ export class VideoSyncManager {
   }
 
   /**
+   * Sync a clip using WebCodecs Full Mode (no HTMLVideoElement).
+   * Much simpler than the HTMLVideoElement path — no warmup, no readyState,
+   * no GPU surface issues, no fastSeek hybrid. Just seek() and the frame is there.
+   */
+  private syncWebCodecsPlayer(clip: TimelineClip, ctx: FrameContext): void {
+    const player = clip.source!.webCodecsPlayer!;
+    const timeInfo = getClipTimeInfo(ctx, clip);
+
+    if (!player.ready) return;
+
+    const drift = Math.abs(player.currentTime - timeInfo.clipTime);
+
+    if (ctx.isPlaying) {
+      // During playback: let decoder advance, correct drift
+      if (!player.isPlaying) {
+        player.seek(timeInfo.clipTime);
+      }
+
+      // Drift correction: if decoder is too far off, re-seek
+      if (drift > 0.15) {
+        player.seek(timeInfo.clipTime);
+      }
+    } else {
+      // When paused or scrubbing: frame-accurate seek
+      const seekThreshold = ctx.isDraggingPlayhead ? 0.04 : 0.02;
+      if (drift > seekThreshold) {
+        const lastSeek = this.lastSeekRef[clip.id] || 0;
+        const throttle = ctx.isDraggingPlayhead ? 50 : 33;
+        if (ctx.now - lastSeek > throttle) {
+          player.seek(timeInfo.clipTime);
+          this.lastSeekRef[clip.id] = ctx.now;
+          engine.requestRender();
+        }
+      }
+    }
+
+    // Audio sync via WebCodecsAudioPlayer
+    if (clip.source?.audioPlayer) {
+      const audioPlayer = clip.source.audioPlayer;
+      if (ctx.isPlaying && !ctx.isDraggingPlayhead) {
+        const absSpeed = Math.abs(ctx.playbackSpeed);
+        if (!audioPlayer.isPlaying) {
+          audioPlayer.play(timeInfo.clipTime, absSpeed);
+        } else {
+          // Correct audio drift
+          const audioDrift = Math.abs(audioPlayer.currentTime - timeInfo.clipTime);
+          if (audioDrift > 0.1) {
+            audioPlayer.play(timeInfo.clipTime, absSpeed);
+          }
+        }
+      } else if (ctx.isDraggingPlayhead) {
+        // Scrub audio snippet
+        audioPlayer.playScrubSnippet(timeInfo.clipTime);
+      } else {
+        audioPlayer.pause();
+      }
+    }
+  }
+
+  /**
    * Hybrid seeking strategy for smooth scrubbing on all codec types:
    *
    * During drag (fast scrubbing):
@@ -784,7 +840,10 @@ export class VideoSyncManager {
 
       nativeDecoder.seekToFrame(targetFrame, ctx.isDraggingPlayhead)
         .then(() => { state!.isPending = false; })
-        .catch((err: unknown) => { state!.isPending = false; console.warn('[NH] seek failed frame', targetFrame, err); });
+        .catch((err: unknown) => {
+          state!.isPending = false;
+          log.warn('Native decoder seek failed', { clipId: clip.id, targetFrame, err });
+        });
     }
   }
 }

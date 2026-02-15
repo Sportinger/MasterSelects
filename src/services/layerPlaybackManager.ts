@@ -274,7 +274,7 @@ class LayerPlaybackManager {
       },
     };
 
-    if (clip.source?.videoElement) {
+    if (clip.source?.videoElement || clip.source?.webCodecsPlayer) {
       return {
         ...baseLayer,
         source: {
@@ -310,20 +310,29 @@ class LayerPlaybackManager {
       const time = this.getLayerTime(state);
 
       for (const clip of state.clips) {
-        if (!clip.source?.videoElement) continue;
-
-        const video = clip.source.videoElement;
         const isActive = time >= clip.startTime && time < clip.startTime + clip.duration;
+        const clipLocalTime = time - clip.startTime;
+        const clipTime = clip.reversed
+          ? clip.outPoint - clipLocalTime
+          : clipLocalTime + clip.inPoint;
+
+        // WebCodecs Full Mode path
+        if (clip.source?.webCodecsPlayer && !clip.source.videoElement) {
+          const player = clip.source.webCodecsPlayer;
+          if (!isActive) continue;
+          const drift = Math.abs(player.currentTime - clipTime);
+          if (drift > 0.15) player.seek(clipTime);
+          continue;
+        }
+
+        // HTMLVideoElement path (legacy)
+        if (!clip.source?.videoElement) continue;
+        const video = clip.source.videoElement;
 
         if (!isActive) {
           if (!video.paused) video.pause();
           continue;
         }
-
-        const clipLocalTime = time - clip.startTime;
-        const clipTime = clip.reversed
-          ? clip.outPoint - clipLocalTime
-          : clipLocalTime + clip.inPoint;
 
         const timeDiff = Math.abs(video.currentTime - clipTime);
 
