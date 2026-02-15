@@ -88,6 +88,7 @@ function SpeakerBlock({
 // =============================================================================
 
 const LANGUAGES = [
+  { code: 'auto', name: 'Auto-Detect' },
   { code: 'de', name: 'Deutsch' },
   { code: 'en', name: 'English' },
   { code: 'es', name: 'Español' },
@@ -110,8 +111,8 @@ export function TranscriptPanel() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showMarkersGlobal, setShowMarkersGlobal] = useState(true);
   const [language, setLanguage] = useState(() => {
-    // Load from localStorage or default to German
-    return localStorage.getItem('transcriptLanguage') || 'de';
+    // Load from localStorage or default to auto-detect
+    return localStorage.getItem('transcriptLanguage') || 'auto';
   });
   const containerRef = useRef<HTMLDivElement>(null);
 
