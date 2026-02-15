@@ -8,7 +8,6 @@ import { useMediaStore } from '../mediaStore';
 import { calculateNestedClipBoundaries, buildClipSegments } from './clip/addCompClip';
 import { projectFileService } from '../../services/projectFileService';
 import { Logger } from '../../services/logger';
-import { engine } from '../../engine/WebGPUEngine';
 
 const log = Logger.create('Timeline');
 
@@ -351,84 +350,43 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
               const nestedFileUrl = URL.createObjectURL(nestedFileRef);
 
               if (nestedType === 'video') {
-                const video = document.createElement('video');
-                video.src = nestedFileUrl;
-                video.muted = true;
-                video.playsInline = true;
-                video.preload = 'auto';
-                video.crossOrigin = 'anonymous';
+                // WebCodecs Full Mode: load via WebCodecsPlayer
+                import('./helpers/webCodecsHelpers').then(async ({ initWebCodecsFullMode }) => {
+                  try {
+                    const { player, audioPlayer } = await initWebCodecsFullMode(nestedFileRef);
+                    nestedClip.source = {
+                      type: 'video',
+                      webCodecsPlayer: player,
+                      audioPlayer: audioPlayer ?? undefined,
+                      naturalDuration: player.duration,
+                    };
+                    nestedClip.isLoading = false;
 
-                // Force browser to start loading
-                video.load();
+                    log.info('Nested video loaded via WebCodecs', {
+                      nestedClipId: nestedClip.id,
+                      nestedClipName: nestedClip.name,
+                      compClipId: compClip.id,
+                    });
 
-                // Pre-cache frame for immediate scrubbing (needs readyState >= 2, so use canplaythrough)
-                video.addEventListener('canplaythrough', () => {
-                  engine.preCacheVideoFrame(video);
-                }, { once: true });
-
-                video.addEventListener('loadedmetadata', async () => {
-                  // Set up basic video source first
-                  const videoSource: TimelineClip['source'] = {
-                    type: 'video',
-                    videoElement: video,
-                    naturalDuration: video.duration,
-                  };
-                  nestedClip.source = videoSource;
-                  nestedClip.isLoading = false;
-
-                  // Initialize WebCodecsPlayer for hardware-accelerated decoding
-                  const hasWebCodecs = 'VideoDecoder' in window && 'VideoFrame' in window;
-                  if (hasWebCodecs) {
-                    try {
-                      const { WebCodecsPlayer } = await import('../../engine/WebCodecsPlayer');
-                      log.debug('Initializing WebCodecsPlayer for nested comp', { file: nestedFileRef.name });
-
-                      const webCodecsPlayer = new WebCodecsPlayer({
-                        loop: false,
-                        useSimpleMode: true,
-                        onError: (error) => {
-                          log.warn('WebCodecs error in nested comp', { error: error.message });
-                        },
-                      });
-
-                      webCodecsPlayer.attachToVideoElement(video);
-                      log.debug('WebCodecsPlayer ready for nested comp', { file: nestedFileRef.name });
-
-                      // Update nested clip source with webCodecsPlayer
-                      nestedClip.source = {
-                        ...nestedClip.source,
-                        webCodecsPlayer,
-                      };
-                    } catch (err) {
-                      log.warn('WebCodecsPlayer init failed in nested comp', err);
-                    }
+                    // Properly update state with the new nested clip source
+                    set(state => ({
+                      clips: state.clips.map(c => {
+                        if (c.id !== compClip.id || !c.nestedClips) return c;
+                        return {
+                          ...c,
+                          nestedClips: c.nestedClips.map(nc =>
+                            nc.id === nestedClip.id
+                              ? { ...nc, source: nestedClip.source, isLoading: false }
+                              : nc
+                          ),
+                        };
+                      }),
+                    }));
+                  } catch (err) {
+                    log.warn('WebCodecs init failed for nested video', err);
+                    nestedClip.isLoading = false;
                   }
-
-                  log.info('Nested video loaded', {
-                    nestedClipId: nestedClip.id,
-                    nestedClipName: nestedClip.name,
-                    compClipId: compClip.id,
-                    hasSource: !!nestedClip.source,
-                    hasVideoElement: !!nestedClip.source?.videoElement,
-                    readyState: video.readyState,
-                  });
-
-                  // Properly update state with the new nested clip source
-                  // This ensures React/Zustand detects the change
-                  set(state => ({
-                    clips: state.clips.map(c => {
-                      if (c.id !== compClip.id || !c.nestedClips) return c;
-                      return {
-                        ...c,
-                        nestedClips: c.nestedClips.map(nc =>
-                          nc.id === nestedClip.id
-                            ? { ...nc, source: nestedClip.source, isLoading: false }
-                            : nc
-                        ),
-                      };
-                    }),
-                  }));
-                }, { once: true });
+                });
               } else if (nestedType === 'image') {
                 const img = new Image();
                 img.src = nestedFileUrl;
@@ -725,74 +683,32 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       const fileUrl = URL.createObjectURL(mediaFile.file!);
 
       if (type === 'video') {
-        const video = document.createElement('video');
-        video.src = fileUrl;
-        video.muted = true;
-        video.playsInline = true;
-        video.preload = 'auto';
-        video.crossOrigin = 'anonymous';
-
-        video.addEventListener('canplaythrough', async () => {
-          // First set up the basic video source
-          set(state => ({
-            clips: state.clips.map(c =>
-              c.id === clip.id
-                ? {
-                    ...c,
-                    source: {
-                      type: 'video',
-                      videoElement: video,
-                      naturalDuration: video.duration,
-                      mediaFileId: serializedClip.mediaFileId, // Needed for multicam sync
-                    },
-                    isLoading: false,
-                  }
-                : c
-            ),
-          }));
-
-          // Pre-cache frame via createImageBitmap for immediate scrubbing without play()
-          // createImageBitmap is the ONLY API that decodes a frame from a never-played video after reload
-          engine.preCacheVideoFrame(video);
-
-          // Try to initialize WebCodecsPlayer for hardware-accelerated decoding
-          const hasWebCodecs = 'VideoDecoder' in window && 'VideoFrame' in window;
-          if (hasWebCodecs) {
-            try {
-              const { WebCodecsPlayer } = await import('../../engine/WebCodecsPlayer');
-              log.debug('Initializing WebCodecsPlayer for restored clip', { clip: clip.name });
-
-              const webCodecsPlayer = new WebCodecsPlayer({
-                loop: false,
-                useSimpleMode: true, // Use VideoFrame from HTMLVideoElement (more compatible)
-                onError: (error) => {
-                  log.warn('WebCodecs error', { error: error.message });
-                },
-              });
-
-              // Attach to existing video element
-              webCodecsPlayer.attachToVideoElement(video);
-              log.debug('WebCodecsPlayer ready for restored clip', { clip: clip.name });
-
-              // Update clip source with webCodecsPlayer
-              set(state => ({
-                clips: state.clips.map(c =>
-                  c.id === clip.id && c.source?.type === 'video'
-                    ? {
-                        ...c,
-                        source: {
-                          ...c.source,
-                          webCodecsPlayer,
-                        },
-                      }
-                    : c
-                ),
-              }));
-            } catch (err) {
-              log.warn('WebCodecsPlayer init failed for restored clip, using HTMLVideoElement', err);
-            }
+        // WebCodecs Full Mode: load via WebCodecsPlayer
+        import('./helpers/webCodecsHelpers').then(async ({ initWebCodecsFullMode }) => {
+          try {
+            const { player, audioPlayer } = await initWebCodecsFullMode(mediaFile.file!);
+            set(state => ({
+              clips: state.clips.map(c =>
+                c.id === clip.id
+                  ? {
+                      ...c,
+                      source: {
+                        type: 'video' as const,
+                        webCodecsPlayer: player,
+                        audioPlayer: audioPlayer ?? undefined,
+                        naturalDuration: player.duration,
+                        mediaFileId: serializedClip.mediaFileId,
+                      },
+                      isLoading: false,
+                    }
+                  : c
+              ),
+            }));
+            log.debug('WebCodecs restored clip', { clip: clip.name });
+          } catch (err) {
+            log.warn('WebCodecs init failed for restored clip', err);
           }
-        }, { once: true });
+        });
       } else if (type === 'audio') {
         // Audio clips - create audio element (works for both pure audio files and linked audio from video)
         const audio = document.createElement('audio');
@@ -847,6 +763,12 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
 
     // Clean up media elements
     clips.forEach(clip => {
+      if (clip.source?.webCodecsPlayer) {
+        clip.source.webCodecsPlayer.destroy();
+      }
+      if (clip.source?.audioPlayer) {
+        clip.source.audioPlayer.destroy();
+      }
       if (clip.source?.videoElement) {
         clip.source.videoElement.pause();
         clip.source.videoElement.src = '';
@@ -854,9 +776,6 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       if (clip.source?.audioElement) {
         clip.source.audioElement.pause();
         clip.source.audioElement.src = '';
-      }
-      if (clip.source?.webCodecsPlayer) {
-        clip.source.webCodecsPlayer.destroy();
       }
     });
 

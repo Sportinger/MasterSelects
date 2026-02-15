@@ -307,62 +307,33 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         const sourceType = newClip.source?.type;
 
         if (sourceType === 'video') {
-          const video = document.createElement('video');
-          video.src = fileUrl;
-          video.muted = true;
-          video.playsInline = true;
-          video.preload = 'auto';
-          video.crossOrigin = 'anonymous';
-
-          video.addEventListener('canplaythrough', async () => {
-            set(state => ({
-              clips: state.clips.map(c =>
-                c.id === newClip.id
-                  ? {
-                      ...c,
-                      file: mediaFile.file!,
-                      source: {
-                        type: 'video' as const,
-                        videoElement: video,
-                        naturalDuration: video.duration,
-                        mediaFileId,
-                      },
-                      isLoading: false,
-                      needsReload: false,
-                    }
-                  : c
-              ),
-            }));
-
-            // Try to initialize WebCodecsPlayer
-            const hasWebCodecs = 'VideoDecoder' in window && 'VideoFrame' in window;
-            if (hasWebCodecs) {
-              try {
-                const { WebCodecsPlayer } = await import('../../engine/WebCodecsPlayer');
-                const webCodecsPlayer = new WebCodecsPlayer({
-                  loop: false,
-                  useSimpleMode: true,
-                  onError: (error) => {
-                    log.warn('WebCodecs error', { error: error.message });
-                  },
-                });
-                webCodecsPlayer.attachToVideoElement(video);
-
-                set(state => ({
-                  clips: state.clips.map(c =>
-                    c.id === newClip.id && c.source?.type === 'video'
-                      ? {
-                          ...c,
-                          source: { ...c.source, webCodecsPlayer },
-                        }
-                      : c
-                  ),
-                }));
-              } catch (err) {
-                log.warn('WebCodecsPlayer init failed for pasted clip', err);
-              }
+          // WebCodecs Full Mode: load via WebCodecsPlayer
+          import('./helpers/webCodecsHelpers').then(async ({ initWebCodecsFullMode }) => {
+            try {
+              const { player, audioPlayer } = await initWebCodecsFullMode(mediaFile.file!);
+              set(state => ({
+                clips: state.clips.map(c =>
+                  c.id === newClip.id
+                    ? {
+                        ...c,
+                        file: mediaFile.file!,
+                        source: {
+                          type: 'video' as const,
+                          webCodecsPlayer: player,
+                          audioPlayer: audioPlayer ?? undefined,
+                          naturalDuration: player.duration,
+                          mediaFileId,
+                        },
+                        isLoading: false,
+                        needsReload: false,
+                      }
+                    : c
+                ),
+              }));
+            } catch (err) {
+              log.warn('WebCodecs init failed for pasted clip', err);
             }
-          }, { once: true });
+          });
         } else if (sourceType === 'audio') {
           const audio = document.createElement('audio');
           audio.src = fileUrl;

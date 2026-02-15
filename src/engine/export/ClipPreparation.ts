@@ -147,7 +147,7 @@ async function initializeFastMode(
     log.debug(`Loaded ${clip.name} (${(fileData.byteLength / 1024 / 1024).toFixed(1)}MB, ${fileType})`);
 
     // Create dedicated WebCodecs player for export
-    const exportPlayer = new WebCodecsPlayer({ useSimpleMode: false, loop: false });
+    const exportPlayer = new WebCodecsPlayer({ loop: false });
 
     const endParse = log.time(`loadArrayBuffer "${clip.name}"`);
     try {

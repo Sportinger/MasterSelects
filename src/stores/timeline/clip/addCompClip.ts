@@ -5,7 +5,7 @@ import type { TimelineClip, TimelineTrack, CompositionTimelineData, Serializable
 import type { Composition } from '../types';
 import { DEFAULT_TRANSFORM, calculateNativeScale } from '../constants';
 import { useMediaStore } from '../../mediaStore';
-import { initWebCodecsPlayer } from '../helpers/webCodecsHelpers';
+import { initWebCodecsFullMode } from '../helpers/webCodecsHelpers';
 import { findOrCreateAudioTrack, createCompositionAudioClip } from '../helpers/audioTrackHelpers';
 import { generateSilentWaveform } from '../helpers/waveformHelpers';
 import { generateCompClipId, generateClipId, generateNestedClipId } from '../helpers/idGenerator';
@@ -358,7 +358,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
     const fileUrl = blobUrlManager.create(nestedClip.id, mediaFile.file, urlType as 'video' | 'audio' | 'image');
 
     if (type === 'video') {
-      loadVideoNestedClip(compClipId, nestedClip.id, fileUrl, mediaFile.file.name, get, set);
+      loadVideoNestedClip(compClipId, nestedClip.id, mediaFile.file, get, set);
     } else if (type === 'audio') {
       loadAudioNestedClip(compClipId, nestedClip.id, fileUrl, get, set);
     } else if (type === 'image') {
@@ -387,71 +387,18 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
 function loadVideoNestedClip(
   compClipId: string,
   nestedClipId: string,
-  fileUrl: string,
-  fileName: string,
+  file: File,
   get: CompClipStoreGet,
   set: CompClipStoreSet
 ): void {
-  const video = document.createElement('video');
-  video.src = fileUrl;
-  video.muted = true;
-  video.playsInline = true;
-  video.preload = 'auto';
-  video.crossOrigin = 'anonymous';
-
-  // Force browser to start loading
-  video.load();
-
-  video.addEventListener('loadedmetadata', async () => {
-    // Force browser to decode actual video frames by playing briefly
-    // This ensures readyState reaches HAVE_CURRENT_DATA (2) or higher
-    try {
-      await video.play();
-      video.pause();
-      video.currentTime = 0;
-
-      // Wait for the seek to complete and frame to be decoded
-      await new Promise<void>((resolve) => {
-        const checkReady = () => {
-          if (video.readyState >= 2) {
-            resolve();
-          } else {
-            // Keep checking until ready
-            requestAnimationFrame(checkReady);
-          }
-        };
-        video.addEventListener('seeked', () => {
-          checkReady();
-        }, { once: true });
-        // Fallback: also check immediately in case already ready
-        checkReady();
-      });
-    } catch (e) {
-      // play() might fail due to autoplay policy, try alternative approach
-      log.debug('Play failed, trying seek approach', { nestedClipId, error: e });
-      video.currentTime = 0.001; // Seek slightly to trigger frame decode
-      await new Promise<void>((resolve) => {
-        const onSeeked = () => {
-          video.removeEventListener('seeked', onSeeked);
-          resolve();
-        };
-        video.addEventListener('seeked', onSeeked);
-        // Timeout fallback
-        setTimeout(resolve, 500);
-      });
-    }
-
+  // WebCodecs Full Mode: load via WebCodecsPlayer
+  initWebCodecsFullMode(file).then(({ player, audioPlayer }) => {
     const source: TimelineClip['source'] = {
       type: 'video',
-      videoElement: video,
-      naturalDuration: video.duration,
+      webCodecsPlayer: player,
+      audioPlayer: audioPlayer ?? undefined,
+      naturalDuration: player.duration,
     };
-
-    // Initialize WebCodecsPlayer
-    const webCodecsPlayer = await initWebCodecsPlayer(video, fileName);
-    if (webCodecsPlayer) {
-      source.webCodecsPlayer = webCodecsPlayer;
-    }
 
     // Immutably update the nested clip inside the comp clip
     const updatedClips = updateNestedClipInCompClip(get().clips, compClipId, nestedClipId, {
@@ -468,13 +415,10 @@ function loadVideoNestedClip(
     log.debug('Nested video loaded', {
       compClipId,
       nestedClipId,
-      fileName,
-      readyState: video.readyState
+      fileName: file.name,
     });
-  }, { once: true });
-
-  video.addEventListener('error', (e) => {
-    log.error('Nested video load error', { compClipId, nestedClipId, fileName, error: e });
+  }).catch((e) => {
+    log.error('Nested video load error', { compClipId, nestedClipId, fileName: file.name, error: e });
   });
 }
 

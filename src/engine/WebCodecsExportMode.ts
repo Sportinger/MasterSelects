@@ -20,7 +20,6 @@ export interface ExportModePlayer {
   getFrameRate(): number;
   getCurrentFrame(): VideoFrame | null;
   setCurrentFrame(frame: VideoFrame | null): void;
-  isSimpleMode(): boolean;
   seekAsync(time: number): Promise<void>;
 }
 
@@ -58,13 +57,6 @@ export class WebCodecsExportMode {
    */
   async prepareForSequentialExport(startTimeSeconds: number): Promise<void> {
     const endPrepare = log.time('prepareForSequentialExport');
-
-    // Simple mode: browser handles decoding
-    if (this.player.isSimpleMode()) {
-      this.isActive = true;
-      endPrepare();
-      return;
-    }
 
     const samples = this.player.getSamples();
 
@@ -281,11 +273,6 @@ export class WebCodecsExportMode {
    * Simple approach: find closest frame in buffer, decode more if needed.
    */
   async seekDuringExport(timeSeconds: number): Promise<void> {
-    if (this.player.isSimpleMode()) {
-      await this.player.seekAsync(timeSeconds);
-      return;
-    }
-
     if (!this.isActive) {
       log.warn(`seekDuringExport: not in export mode at ${timeSeconds.toFixed(3)}s`);
       return;

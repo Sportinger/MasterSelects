@@ -18,10 +18,6 @@ export interface WebCodecsPlayerOptions {
   onFrame?: (frame: VideoFrame) => void;
   onReady?: (width: number, height: number) => void;
   onError?: (error: Error) => void;
-  // Use simple VideoFrame extraction from HTMLVideoElement instead of MP4Box demuxing
-  useSimpleMode?: boolean;
-  // Use MediaStreamTrackProcessor for VideoFrame extraction (best performance)
-  useStreamMode?: boolean;
 }
 
 export class WebCodecsPlayer implements ExportModePlayer {
@@ -42,11 +38,6 @@ export class WebCodecsPlayer implements ExportModePlayer {
   // Audio track info extracted from MP4Box
   private audioTrackInfo: AudioTrackInfo | null = null;
 
-  // Simple mode (VideoFrame from HTMLVideoElement)
-  private useSimpleMode = false;
-  private videoElement: HTMLVideoElement | null = null;
-  private videoFrameCallbackId: number | null = null;
-
   public width = 0;
   public height = 0;
   public ready = false;
@@ -54,10 +45,6 @@ export class WebCodecsPlayer implements ExportModePlayer {
   private onFrame?: (frame: VideoFrame) => void;
   private onReady?: (width: number, height: number) => void;
   private onError?: (error: Error) => void;
-
-  // Stream mode (MediaStreamTrackProcessor)
-  private streamReader: ReadableStreamDefaultReader<VideoFrame> | null = null;
-  private streamActive = false;
 
   // Export mode (delegated to WebCodecsExportMode)
   private exportMode: WebCodecsExportMode;
@@ -76,8 +63,6 @@ export class WebCodecsPlayer implements ExportModePlayer {
   getFrameRate(): number { return this.frameRate; }
   getCurrentFrame(): VideoFrame | null { return this.currentFrame; }
   setCurrentFrame(frame: VideoFrame | null): void { this.currentFrame = frame; }
-  isSimpleMode(): boolean { return this.useSimpleMode; }
-  getVideoElement(): HTMLVideoElement | null { return this.videoElement; }
 
   // Audio track info accessors
   hasAudioTrack(): boolean { return this.audioTrackInfo !== null; }
@@ -89,228 +74,18 @@ export class WebCodecsPlayer implements ExportModePlayer {
     this.onFrame = options.onFrame;
     this.onReady = options.onReady;
     this.onError = options.onError;
-    this.useSimpleMode = options.useSimpleMode ?? false;
-  }
-
-  // Stream mode: Use captureStream + MediaStreamTrackProcessor for best performance
-  // This gives us VideoFrames without blocking the main thread
-  async attachWithStream(video: HTMLVideoElement): Promise<void> {
-    if (!('MediaStreamTrackProcessor' in window)) {
-      throw new Error('MediaStreamTrackProcessor not supported');
-    }
-
-    this.isAttachedToExternal = true;
-    this.videoElement = video;
-    this.width = video.videoWidth;
-    this.height = video.videoHeight;
-
-    // Capture stream from video
-    // Note: captureStream is not in the standard HTMLVideoElement type but exists in browsers
-    const stream = (video as HTMLVideoElement & { captureStream(): MediaStream }).captureStream();
-    const videoTrack = stream.getVideoTracks()[0];
-
-    if (!videoTrack) {
-      throw new Error('No video track in stream');
-    }
-
-    // Create processor to get VideoFrames
-    const processor = new (window as any).MediaStreamTrackProcessor({ track: videoTrack });
-    this.streamReader = processor.readable.getReader();
-
-    this.ready = true;
-    log.info(`Stream attached: ${this.width}x${this.height}`);
-
-    // Start reading frames
-    this.startStreamCapture();
-
-    this.onReady?.(this.width, this.height);
-  }
-
-  private async startStreamCapture(): Promise<void> {
-    if (!this.streamReader || this.streamActive) return;
-
-    this.streamActive = true;
-    log.debug('Starting stream frame capture');
-
-    try {
-      while (this.streamActive) {
-        const { value: frame, done } = await this.streamReader.read();
-
-        if (done) {
-          log.debug('Stream ended');
-          break;
-        }
-
-        if (frame) {
-          // Close previous frame
-          if (this.currentFrame) {
-            this.currentFrame.close();
-          }
-          this.currentFrame = frame;
-          this.onFrame?.(frame);
-        }
-      }
-    } catch (e) {
-      log.warn('Error reading frames from stream', e);
-    }
-
-    this.streamActive = false;
-  }
-
-  private stopStreamCapture(): void {
-    this.streamActive = false;
-    if (this.streamReader) {
-      this.streamReader.cancel().catch(() => {});
-      this.streamReader = null;
-    }
   }
 
   async loadFile(file: File): Promise<void> {
-    // Check VideoFrame support (needed for both modes)
     if (!('VideoFrame' in window)) {
       throw new Error('VideoFrame API not supported in this browser');
     }
-
-    // Simple mode: use HTMLVideoElement + VideoFrame (no MP4Box parsing needed)
-    if (this.useSimpleMode) {
-      await this.loadFileSimple(file);
-      return;
-    }
-
-    // Full mode: use MP4Box + VideoDecoder
     if (!('VideoDecoder' in window)) {
       throw new Error('WebCodecs VideoDecoder not supported in this browser');
     }
 
     const arrayBuffer = await file.arrayBuffer();
     await this.loadArrayBuffer(arrayBuffer);
-  }
-
-  // Track if we're attached to an external video (Timeline's video element)
-  private isAttachedToExternal = false;
-  private boundOnPlay: (() => void) | null = null;
-  private boundOnPause: (() => void) | null = null;
-  private boundOnSeeked: (() => void) | null = null;
-
-  // Use an existing video element instead of creating one (for timeline integration)
-  attachToVideoElement(video: HTMLVideoElement): void {
-    if (!('VideoFrame' in window)) {
-      throw new Error('VideoFrame API not supported');
-    }
-
-    this.useSimpleMode = true;
-    this.isAttachedToExternal = true;
-    this.videoElement = video;
-    this.width = video.videoWidth;
-    this.height = video.videoHeight;
-    this.ready = true;
-
-    log.info(`Simple mode attached to existing video: ${this.width}x${this.height}`);
-
-    // Listen to video element events - Timeline controls the video, we just capture frames
-    this.boundOnPlay = () => {
-      if (this._isPlaying) return; // Already playing
-      log.debug('Video play event - starting frame capture');
-      this._isPlaying = true;
-      this.startSimpleFrameCapture();
-    };
-    this.boundOnPause = () => {
-      if (!this._isPlaying) return; // Already paused
-      log.debug('Video pause event');
-      this._isPlaying = false;
-      this.stopSimpleFrameCapture();
-      // Capture the paused frame
-      this.captureCurrentFrame();
-    };
-    this.boundOnSeeked = () => {
-      // Only capture on seek if not playing (playing captures continuously)
-      if (!this._isPlaying) {
-        this.captureCurrentFrame();
-      }
-    };
-    // No timeupdate listener - requestVideoFrameCallback is more efficient
-
-    video.addEventListener('play', this.boundOnPlay);
-    video.addEventListener('pause', this.boundOnPause);
-    video.addEventListener('seeked', this.boundOnSeeked);
-
-    // Capture initial frame
-    if (video.readyState >= 2) {
-      this.captureCurrentFrame();
-    }
-
-    // If video is already playing, start capture
-    if (!video.paused) {
-      this._isPlaying = true;
-      this.startSimpleFrameCapture();
-    }
-  }
-
-  // Simple mode: Create VideoFrames directly from HTMLVideoElement
-  private async loadFileSimple(file: File): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const video = document.createElement('video');
-      video.src = URL.createObjectURL(file);
-      video.muted = true;
-      video.playsInline = true;
-      video.preload = 'auto';
-      video.loop = this.loop;
-
-      const timeout = setTimeout(() => {
-        reject(new Error('Video load timeout'));
-      }, 10000);
-
-      video.onloadedmetadata = () => {
-        this.width = video.videoWidth;
-        this.height = video.videoHeight;
-        this.videoElement = video;
-
-        // Estimate frame rate (assume 30fps if unknown)
-        this.frameRate = 30;
-        this.frameInterval = 1000 / this.frameRate;
-
-        log.debug(`Video loaded: ${this.width}x${this.height}`);
-      };
-
-      video.oncanplay = () => {
-        clearTimeout(timeout);
-        this.ready = true;
-
-        // Create initial frame
-        this.captureCurrentFrame();
-
-        log.info(`Simple mode READY: ${this.width}x${this.height}`);
-        this.onReady?.(this.width, this.height);
-        resolve();
-      };
-
-      video.onerror = () => {
-        clearTimeout(timeout);
-        reject(new Error('Failed to load video'));
-      };
-
-      video.load();
-    });
-  }
-
-  // Capture current video frame as VideoFrame
-  private captureCurrentFrame(): void {
-    if (!this.videoElement || this.videoElement.readyState < 2) return;
-
-    // Close previous frame
-    if (this.currentFrame) {
-      this.currentFrame.close();
-    }
-
-    // Create new VideoFrame from video element
-    try {
-      this.currentFrame = new VideoFrame(this.videoElement, {
-        timestamp: this.videoElement.currentTime * 1_000_000,
-      });
-      this.onFrame?.(this.currentFrame);
-    } catch (e) {
-      // Ignore frame capture errors (can happen during seek)
-    }
   }
 
   async loadArrayBuffer(buffer: ArrayBuffer): Promise<void> {
@@ -533,94 +308,25 @@ export class WebCodecsPlayer implements ExportModePlayer {
   play(): void {
     if (this._isPlaying || !this.ready) return;
     this._isPlaying = true;
-
-    if (this.useSimpleMode && this.videoElement) {
-      // If attached to external video, don't control it - just ensure frame capture is running
-      // Timeline controls the video element, we get notified via events
-      if (!this.isAttachedToExternal) {
-        this.videoElement.play().catch(() => {});
-      }
-      this.startSimpleFrameCapture();
-    } else {
-      this.lastFrameTime = performance.now();
-      this.scheduleNextFrame();
-    }
+    this.lastFrameTime = performance.now();
+    this.scheduleNextFrame();
   }
 
   pause(): void {
     this._isPlaying = false;
-
-    if (this.useSimpleMode && this.videoElement) {
-      // If attached to external video, don't control it - Timeline controls it
-      if (!this.isAttachedToExternal) {
-        this.videoElement.pause();
-      }
-      this.stopSimpleFrameCapture();
-    } else {
-      if (this.animationId !== null) {
-        cancelAnimationFrame(this.animationId);
-        this.animationId = null;
-      }
+    if (this.animationId !== null) {
+      cancelAnimationFrame(this.animationId);
+      this.animationId = null;
     }
   }
 
   stop(): void {
     this.pause();
-
-    if (this.useSimpleMode && this.videoElement) {
-      // If attached to external video, don't control it
-      if (!this.isAttachedToExternal) {
-        this.videoElement.currentTime = 0;
-      }
-    } else {
-      this.sampleIndex = 0;
-    }
+    this.sampleIndex = 0;
 
     if (this.currentFrame) {
       this.currentFrame.close();
       this.currentFrame = null;
-    }
-  }
-
-  // Simple mode frame capture using requestVideoFrameCallback
-  private startSimpleFrameCapture(): void {
-    if (!this.videoElement || !('requestVideoFrameCallback' in this.videoElement)) {
-      // Fallback to requestAnimationFrame
-      this.startSimpleFrameCaptureRAF();
-      return;
-    }
-
-    const captureFrame = () => {
-      if (!this._isPlaying || !this.videoElement) return;
-
-      this.captureCurrentFrame();
-
-      this.videoFrameCallbackId = this.videoElement.requestVideoFrameCallback(captureFrame);
-    };
-
-    this.videoFrameCallbackId = this.videoElement.requestVideoFrameCallback(captureFrame);
-  }
-
-  private startSimpleFrameCaptureRAF(): void {
-    const captureFrame = () => {
-      if (!this._isPlaying) return;
-
-      this.captureCurrentFrame();
-
-      this.animationId = requestAnimationFrame(captureFrame);
-    };
-
-    this.animationId = requestAnimationFrame(captureFrame);
-  }
-
-  private stopSimpleFrameCapture(): void {
-    if (this.videoFrameCallbackId !== null && this.videoElement && 'cancelVideoFrameCallback' in this.videoElement) {
-      (this.videoElement as any).cancelVideoFrameCallback(this.videoFrameCallbackId);
-      this.videoFrameCallbackId = null;
-    }
-    if (this.animationId !== null) {
-      cancelAnimationFrame(this.animationId);
-      this.animationId = null;
     }
   }
 
@@ -702,22 +408,6 @@ export class WebCodecsPlayer implements ExportModePlayer {
   }
 
   seek(timeSeconds: number): void {
-    // Simple mode: direct seek on video element
-    if (this.useSimpleMode && this.videoElement) {
-      this.videoElement.currentTime = timeSeconds;
-      // Capture frame immediately and after seek completes
-      this.captureCurrentFrame();
-
-      // Also capture when seeked event fires
-      const onSeeked = () => {
-        this.captureCurrentFrame();
-        this.videoElement?.removeEventListener('seeked', onSeeked);
-      };
-      this.videoElement.addEventListener('seeked', onSeeked);
-      return;
-    }
-
-    // Full mode: decode from keyframe
     if (!this.videoTrack || this.samples.length === 0 || !this.decoder) return;
 
     const targetTime = timeSeconds * this.videoTrack.timescale;
@@ -772,96 +462,6 @@ export class WebCodecsPlayer implements ExportModePlayer {
    * Use this for export where we need guaranteed frame accuracy
    */
   async seekAsync(timeSeconds: number): Promise<void> {
-    // Simple mode: seek video element and wait for frame
-    if (this.useSimpleMode && this.videoElement) {
-      return new Promise<void>((resolve) => {
-        const video = this.videoElement!;
-        let resolved = false;
-
-        const doResolve = () => {
-          if (resolved) return;
-          resolved = true;
-          this.captureCurrentFrame();
-          resolve();
-        };
-
-        // Longer timeout for export - we need accurate frames
-        const timeout = setTimeout(() => {
-          if (!resolved) {
-            log.warn(`seekAsync timeout at ${timeSeconds}, readyState: ${video.readyState}`);
-            doResolve();
-          }
-        }, 2000);
-
-        // Wait for video to have enough data (readyState >= 2 means HAVE_CURRENT_DATA)
-        const waitForReady = (callback: () => void) => {
-          if (video.readyState >= 2 && !video.seeking) {
-            callback();
-            return;
-          }
-          // Poll until ready or timeout
-          let retries = 0;
-          const maxRetries = 60; // 60 * 16ms ≈ 1 second
-          const checkReady = () => {
-            retries++;
-            if (video.readyState >= 2 && !video.seeking) {
-              callback();
-            } else if (retries < maxRetries) {
-              requestAnimationFrame(checkReady);
-            } else {
-              // Give up waiting for readyState, proceed anyway
-              log.warn(`waitForReady gave up after ${retries} retries, readyState: ${video.readyState}`);
-              callback();
-            }
-          };
-          requestAnimationFrame(checkReady);
-        };
-
-        const waitForFrame = () => {
-          // First ensure video has data, then wait for frame callback
-          waitForReady(() => {
-            // Use requestVideoFrameCallback if available for precise frame timing
-            if ('requestVideoFrameCallback' in video) {
-              (video as any).requestVideoFrameCallback(() => {
-                clearTimeout(timeout);
-                doResolve();
-              });
-              // Also set a shorter backup timeout since rvfc may not fire when paused
-              setTimeout(() => {
-                if (!resolved && video.readyState >= 2) {
-                  clearTimeout(timeout);
-                  doResolve();
-                }
-              }, 100);
-            } else {
-              // Fallback: wait two animation frames
-              requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                  clearTimeout(timeout);
-                  doResolve();
-                });
-              });
-            }
-          });
-        };
-
-        const onSeeked = () => {
-          video.removeEventListener('seeked', onSeeked);
-          waitForFrame();
-        };
-
-        if (Math.abs(video.currentTime - timeSeconds) < 0.01 && !video.seeking) {
-          // Already at position, just wait for frame
-          waitForFrame();
-          return;
-        }
-
-        video.addEventListener('seeked', onSeeked);
-        video.currentTime = timeSeconds;
-      });
-    }
-
-    // Full mode: decode and flush
     if (!this.videoTrack || this.samples.length === 0 || !this.decoder) {
       return;
     }
@@ -939,9 +539,6 @@ export class WebCodecsPlayer implements ExportModePlayer {
   }
 
   get duration(): number {
-    if (this.useSimpleMode && this.videoElement) {
-      return this.videoElement.duration || 0;
-    }
     if (!this.videoTrack) return 0;
     return this.videoTrack.duration / this.videoTrack.timescale;
   }
@@ -951,9 +548,6 @@ export class WebCodecsPlayer implements ExportModePlayer {
   }
 
   get currentTime(): number {
-    if (this.useSimpleMode && this.videoElement) {
-      return this.videoElement.currentTime;
-    }
     if (!this.videoTrack || this.samples.length === 0 || this.sampleIndex === 0) return 0;
     const sample = this.samples[Math.min(this.sampleIndex - 1, this.samples.length - 1)];
     return sample.cts / sample.timescale;
@@ -962,30 +556,6 @@ export class WebCodecsPlayer implements ExportModePlayer {
   destroy(): void {
     this.stop();
 
-    // Stream mode cleanup
-    this.stopStreamCapture();
-
-    // Simple mode cleanup
-    if (this.videoElement) {
-      // Remove event listeners if attached to external video
-      if (this.isAttachedToExternal) {
-        if (this.boundOnPlay) this.videoElement.removeEventListener('play', this.boundOnPlay);
-        if (this.boundOnPause) this.videoElement.removeEventListener('pause', this.boundOnPause);
-        if (this.boundOnSeeked) this.videoElement.removeEventListener('seeked', this.boundOnSeeked);
-        this.boundOnPlay = null;
-        this.boundOnPause = null;
-        this.boundOnSeeked = null;
-        // Don't clear src or pause - Timeline owns the video element
-      } else {
-        this.videoElement.pause();
-        this.videoElement.src = '';
-      }
-      this.videoElement = null;
-    }
-
-    this.isAttachedToExternal = false;
-
-    // Full mode cleanup
     if (this.decoder) {
       this.decoder.close();
       this.decoder = null;
@@ -995,7 +565,6 @@ export class WebCodecsPlayer implements ExportModePlayer {
     this.exportMode.destroy();
 
     if (this.currentFrame) {
-      // Only close if not already closed in buffer cleanup
       try {
         this.currentFrame.close();
       } catch {
