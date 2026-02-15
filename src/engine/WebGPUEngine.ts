@@ -573,6 +573,15 @@ export class WebGPUEngine {
   }
 
   /**
+   * Mark a video element as GPU-ready (importExternalTexture will produce valid frames).
+   * Called during preroll when a video plays muted — tryHTMLVideo never sees prerolled
+   * videos (not at playhead), so this bridges the gap to prevent black frames on transition.
+   */
+  markVideoGpuReady(video: HTMLVideoElement): void {
+    this.layerCollector?.markVideoGpuReady(video);
+  }
+
+  /**
    * Pre-cache a video frame using createImageBitmap (async forced decode).
    * This is the ONLY way to get a real frame from a never-played video after reload.
    * Call from canplaythrough handlers during project restore.

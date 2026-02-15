@@ -445,6 +445,13 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     let secondClipSource = clip.source;
     if (clip.source?.type === 'video' && clip.source.videoElement && clip.file) {
       const newVideo = createVideoElement(clip.file);
+      // Pre-buffer: seek to split point immediately so data is available
+      // when the preroll system needs it. Without this, the new element only
+      // has metadata loaded and may produce black frames at the cut point.
+      newVideo.preload = 'auto';
+      newVideo.addEventListener('loadedmetadata', () => {
+        newVideo.currentTime = splitInSource;
+      }, { once: true });
       secondClipSource = {
         ...clip.source,
         videoElement: newVideo,

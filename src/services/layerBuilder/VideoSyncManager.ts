@@ -37,9 +37,11 @@ export class VideoSyncManager {
 
   /**
    * Pre-render step: finalize prerolled clips that are now active.
-   * Pauses prerolled videos and seeks to correct position BEFORE render,
-   * so the first render frame of a new clip shows the correct frame
-   * instead of a frame 0.5s ahead from the preroll playback.
+   * Seeks prerolled videos to correct position and unmutes BEFORE render.
+   * Does NOT pause — the video must stay playing so the GPU surface remains
+   * active (videoGpuReady) and importExternalTexture produces valid frames.
+   * The scrubbing cache from preroll phase 1 provides the correct frame
+   * while the seek completes.
    *
    * Must be called BEFORE engine.render() in the render callback.
    */
@@ -57,10 +59,10 @@ export class VideoSyncManager {
       const video = clip.source.videoElement;
       const timeInfo = getClipTimeInfo(ctx, clip);
 
-      // Clip is now active — stop preroll and seek to correct position
-      video.pause();
+      // Unmute (preroll was muted) — keep playing for GPU surface
       video.muted = false;
 
+      // Seek to correct position (video was ~0.5s ahead from preroll)
       const timeDiff = Math.abs(video.currentTime - timeInfo.clipTime);
       if (timeDiff > 0.05) {
         video.currentTime = timeInfo.clipTime;
@@ -206,7 +208,12 @@ export class VideoSyncManager {
         // Add to prerollingClips BEFORE play() to prevent the pause loop
         // from killing the preroll during the async .then() gap
         this.prerollingClips.add(clipId);
-        video.play().catch(() => {
+        video.play().then(() => {
+          // Mark GPU-ready: during preroll the video plays muted but
+          // tryHTMLVideo never runs for it (not at playhead).
+          // Without this, the first render of the clip returns null → black frame.
+          engine.markVideoGpuReady(video);
+        }).catch(() => {
           this.prerollingClips.delete(clipId);
         });
       }

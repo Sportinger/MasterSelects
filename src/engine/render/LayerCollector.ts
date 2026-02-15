@@ -167,6 +167,15 @@ export class LayerCollector {
   // After page reload, importExternalTexture returns black until the video is played
   private videoGpuReady = new WeakSet<HTMLVideoElement>();
 
+  /**
+   * Mark a video as GPU-ready externally (e.g., after preroll playback).
+   * During preroll, the video plays muted but tryHTMLVideo never runs for it
+   * (not at playhead), so videoGpuReady is never set. This method bridges that gap.
+   */
+  markVideoGpuReady(video: HTMLVideoElement): void {
+    this.videoGpuReady.add(video);
+  }
+
   private tryHTMLVideo(layer: Layer, video: HTMLVideoElement, deps: LayerCollectorDeps): LayerRenderData | null {
     const videoKey = video.src || layer.id;
 
