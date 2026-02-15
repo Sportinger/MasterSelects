@@ -103,8 +103,10 @@ export class RenderLoop {
         return;
       }
 
-      // Frame rate limiting for video
-      if (this.hasActiveVideo) {
+      // Frame rate limiting — always cap at ~60fps during playback,
+      // ~30fps during scrubbing. Previously only active when hasActiveVideo
+      // was true, which caused uncapped frame rates when video import failed.
+      {
         const timeSinceLastRender = timestamp - this.lastRenderTime;
         if (this.isPlaying) {
           // Playback: ~60fps target
@@ -112,7 +114,7 @@ export class RenderLoop {
             this.animationId = requestAnimationFrame(loop);
             return;
           }
-        } else if (this.isScrubbing) {
+        } else if (this.isScrubbing && this.hasActiveVideo) {
           // Scrubbing: ~30fps baseline to avoid wasted renders while video seeks.
           // BUT: if RVFC signaled a new decoded frame is ready, render immediately
           // to minimize latency between decode completion and display.
