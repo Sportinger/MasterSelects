@@ -5,6 +5,7 @@ import { NativeHelperClient } from '../../nativeHelper';
 import { downloadVideo } from '../../youtubeDownloader';
 import { useYouTubeStore } from '../../../stores/youtubeStore';
 import { useTimelineStore } from '../../../stores/timeline';
+import { useMediaStore } from '../../../stores/mediaStore';
 import type { ToolResult } from '../types';
 
 const log = Logger.create('AITool:YouTube');
@@ -180,6 +181,8 @@ export async function handleDownloadAndImportVideo(args: Record<string, unknown>
   const title = args.title as string;
   const formatId = args.formatId as string | undefined;
   const thumbnail = (args.thumbnail as string) || '';
+  const compositionId = args.compositionId as string | undefined;
+  const explicitStartTime = args.startTime as number | undefined;
 
   if (!url) {
     return { success: false, error: 'url is required' };
@@ -190,6 +193,18 @@ export async function handleDownloadAndImportVideo(args: Record<string, unknown>
 
   if (!NativeHelperClient.isConnected()) {
     return { success: false, error: 'Native Helper not connected. Please start the helper application and enable Turbo Mode in settings.' };
+  }
+
+  // Switch to target composition if specified
+  if (compositionId) {
+    const mediaStore = useMediaStore.getState();
+    const comp = mediaStore.compositions.find(c => c.id === compositionId);
+    if (!comp) {
+      return { success: false, error: `Composition not found: ${compositionId}` };
+    }
+    mediaStore.openCompositionTab(compositionId);
+    // Wait a tick for state to propagate
+    await new Promise(resolve => setTimeout(resolve, 50));
   }
 
   // Extract video ID for tracking
@@ -208,8 +223,13 @@ export async function handleDownloadAndImportVideo(args: Record<string, unknown>
     }
   }
 
-  // Add pending clip at end of timeline
-  const startTime = timelineStore.duration || 0;
+  // Calculate start time:
+  // 1. Explicit startTime from args takes priority
+  // 2. If no clips exist, place at 0 (not at default duration of 60)
+  // 3. Otherwise append after last clip
+  const startTime = explicitStartTime ?? (timelineStore.clips.length > 0
+    ? Math.max(...timelineStore.clips.map(c => c.startTime + c.duration))
+    : 0);
   const clipId = timelineStore.addPendingDownloadClip(
     videoTrack.id,
     startTime,
