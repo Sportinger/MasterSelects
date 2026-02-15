@@ -78,7 +78,7 @@ export class AudioSyncHandler {
     // Only set new timeout if none active
     if (!this.scrubAudioTimeout) {
       this.scrubAudioTimeout = setTimeout(() => {
-        element.pause();
+        audioRoutingManager.fadeOutAndPause(element);
         this.scrubAudioTimeout = null;
       }, LAYER_BUILDER_CONSTANTS.SCRUB_AUDIO_DURATION);
     }
@@ -134,10 +134,16 @@ export class AudioSyncHandler {
       state.masterSet = true;
     }
 
-    // Track drift for stats (informational only)
+    // Track drift and correct if too large
     const timeDiff = element.currentTime - clipTime;
-    if (Math.abs(timeDiff) > state.maxAudioDrift) {
-      state.maxAudioDrift = Math.abs(timeDiff);
+    const absDrift = Math.abs(timeDiff);
+    if (absDrift > state.maxAudioDrift) {
+      state.maxAudioDrift = absDrift;
+    }
+
+    // Corrective seek when audio drifts more than ~2 frames at 60fps (33ms)
+    if (absDrift > LAYER_BUILDER_CONSTANTS.AUDIO_DRIFT_THRESHOLD && !element.paused) {
+      element.currentTime = clipTime;
     }
 
     // Count playing audio
@@ -147,11 +153,11 @@ export class AudioSyncHandler {
   }
 
   /**
-   * Pause element if currently playing
+   * Pause element if currently playing, using fade-out to prevent audio pops
    */
   private pauseIfPlaying(element: HTMLAudioElement | HTMLVideoElement): void {
     if (!element.paused) {
-      element.pause();
+      audioRoutingManager.fadeOutAndPause(element);
     }
   }
 

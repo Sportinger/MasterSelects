@@ -367,7 +367,10 @@ export function useEngine() {
         // When stopped/scrubbing, only renders when playhead actually moves
         if (currentPlayhead !== lastPlayhead) {
           lastPlayhead = currentPlayhead;
-          engine.requestRender();
+          // Use updatePlayheadTracking instead of requestRender so that
+          // large playhead jumps (seeks, cut points) bypass the frame rate
+          // limiter and render immediately without stutter.
+          engine.updatePlayheadTracking(currentPlayhead);
         }
 
         // Keep engine awake when background layers are playing (independent of global playhead)
@@ -404,16 +407,15 @@ export function useEngine() {
         // shows the correct frame instead of one 0.5s ahead from preroll
         layerBuilder.finalizePrerolls();
 
-        // Render FIRST, before seeking video elements
-        // This ensures we always have a displayable frame even after page reload
-        // when the scrubbing cache is empty. The video is at its previous position
-        // (not yet seeking), so importExternalTexture succeeds and populates the cache.
-        // After sync seeks the video, the 'seeked' event triggers a re-render
-        // with the correct frame.
+        // Sync video elements BEFORE render so the video is seeked to the
+        // correct frame before the engine imports its texture. This prevents
+        // 1-frame flicker at cut points where the new clip's video would
+        // otherwise still show the old/un-seeked frame.
+        layerBuilder.syncVideoElements();
+
         engine.render(layers);
 
-        // Sync video and audio elements (seek to target time for next frame)
-        layerBuilder.syncVideoElements();
+        // Sync audio elements after render (audio is not visual, no flicker concern)
         layerBuilder.syncAudioElements();
 
         // Cache rendered frame for instant scrubbing (like Premiere's playback caching)

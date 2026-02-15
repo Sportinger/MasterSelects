@@ -257,16 +257,16 @@ export class AudioTrackSyncManager {
     playheadState.hasMasterAudio = false;
     playheadState.masterAudioElement = null;
 
-    // Pause all audio elements
+    // Fade out and pause all audio elements to prevent pops
     for (const clip of ctx.clips) {
       if (clip.source?.audioElement && !clip.source.audioElement.paused) {
-        clip.source.audioElement.pause();
+        audioRoutingManager.fadeOutAndPause(clip.source.audioElement);
       }
       if (clip.source?.videoElement && !clip.source.videoElement.muted) {
         clip.source.videoElement.muted = true;
       }
       if (clip.mixdownAudio && !clip.mixdownAudio.paused) {
-        clip.mixdownAudio.pause();
+        audioRoutingManager.fadeOutAndPause(clip.mixdownAudio);
       }
     }
   }
