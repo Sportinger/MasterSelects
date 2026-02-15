@@ -176,6 +176,18 @@ export class LayerCollector {
     this.videoGpuReady.add(video);
   }
 
+  /**
+   * Check if a cached frame's video time is close enough to the expected time.
+   * At clip boundaries, the video may be seeking to a new position while the cache
+   * holds a frame from the previous clip's position. If the time difference exceeds
+   * ~1 frame (0.034s at 30fps), the cached frame likely belongs to a different clip
+   * and would cause a visible flash of the wrong content.
+   */
+  private isCachedFrameTimeValid(cachedVideoTime: number | undefined, expectedTime: number): boolean {
+    if (cachedVideoTime === undefined) return false;
+    return Math.abs(cachedVideoTime - expectedTime) < 0.034;
+  }
+
   private tryHTMLVideo(layer: Layer, video: HTMLVideoElement, deps: LayerCollectorDeps): LayerRenderData | null {
     const videoKey = video.src || layer.id;
 
@@ -203,7 +215,7 @@ export class LayerCollector {
       }
 
       // If video is seeking, try per-time scrubbing cache first (exact frame for this position),
-      // then fall back to generic last-frame cache
+      // then fall back to generic last-frame cache (only if time-proximate)
       if (video.seeking && !deps.isExporting) {
         // Try per-time cache: if we've visited this position before, show the exact frame
         const cachedView = deps.scrubbingCache?.getCachedFrame(video.src, currentTime);
@@ -218,9 +230,12 @@ export class LayerCollector {
             sourceHeight: video.videoHeight,
           };
         }
-        // Fall back to generic last-frame cache
+        // Fall back to generic last-frame cache, but only if the cached frame
+        // was captured near the current expected time. At clip boundaries, the
+        // cached frame belongs to the previous clip's position and would cause
+        // a visible flash of wrong content.
         const lastFrame = deps.scrubbingCache?.getLastFrame(video);
-        if (lastFrame) {
+        if (lastFrame && this.isCachedFrameTimeValid(lastFrame.videoTime, currentTime)) {
           this.currentDecoder = 'HTMLVideo(seeking-cache)';
           return {
             layer,
@@ -231,6 +246,8 @@ export class LayerCollector {
             sourceHeight: lastFrame.height,
           };
         }
+        // Cache frame is from a different time (likely a clip transition) — skip it
+        // and return null to show transparency instead of wrong-clip flash
       }
 
       // After page reload, importExternalTexture returns a valid GPUExternalTexture
@@ -243,8 +260,9 @@ export class LayerCollector {
           this.videoGpuReady.add(video);
         } else {
           // Video is paused and GPU not ready — use cached frame if warmup already captured one
+          // Only use if time-proximate to avoid wrong-clip flash at transitions
           const cachedFrame = deps.scrubbingCache?.getLastFrame(video);
-          if (cachedFrame) {
+          if (cachedFrame && this.isCachedFrameTimeValid(cachedFrame.videoTime, currentTime)) {
             deps.setLastVideoTime(videoKey, currentTime);
             this.currentDecoder = 'HTMLVideo(cached)';
             return {
@@ -292,9 +310,10 @@ export class LayerCollector {
         };
       }
 
-      // Fallback to cache
+      // Fallback to cache — only use if the cached frame is time-proximate
+      // to avoid showing a frame from a different clip at cut boundaries
       const lastFrame = deps.scrubbingCache?.getLastFrame(video);
-      if (lastFrame) {
+      if (lastFrame && this.isCachedFrameTimeValid(lastFrame.videoTime, currentTime)) {
         this.currentDecoder = 'HTMLVideo(cached)';
         return {
           layer,
@@ -306,9 +325,9 @@ export class LayerCollector {
         };
       }
     } else {
-      // Video not ready - try cache
+      // Video not ready - try cache, but only if time-proximate
       const lastFrame = deps.scrubbingCache?.getLastFrame(video);
-      if (lastFrame) {
+      if (lastFrame && this.isCachedFrameTimeValid(lastFrame.videoTime, video.currentTime)) {
         return {
           layer,
           isVideo: false,
