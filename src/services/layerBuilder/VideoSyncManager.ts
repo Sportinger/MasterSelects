@@ -168,9 +168,12 @@ export class VideoSyncManager {
           video.currentTime = targetTime;
         }
         video.muted = true;
-        video.play().then(() => {
-          this.prerollingClips.add(clipId);
-        }).catch(() => {});
+        // Add to prerollingClips BEFORE play() to prevent the pause loop
+        // from killing the preroll during the async .then() gap
+        this.prerollingClips.add(clipId);
+        video.play().catch(() => {
+          this.prerollingClips.delete(clipId);
+        });
       }
     } else {
       // Phase 1: Seek and pause (buffer ahead of time)
@@ -390,15 +393,41 @@ export class VideoSyncManager {
       }
     } else {
       // Normal 1x forward playback: let video play naturally
-      if (ctx.isPlaying && video.paused) {
-        video.play().catch(() => {});
-      } else if (!ctx.isPlaying && !video.paused) {
-        video.pause();
+
+      // Clean up preroll state FIRST — need to know if this clip just
+      // transitioned from preroll to active for position correction below
+      const wasPrerolling = this.prerollingClips.has(clip.id);
+      if (wasPrerolling) {
+        this.prerollingClips.delete(clip.id);
+        video.muted = false; // Preroll muted the video — restore for audio playback
       }
 
-      // Clean up preroll state — clip is now actively playing
-      if (this.prerollingClips.has(clip.id)) {
-        this.prerollingClips.delete(clip.id);
+      if (ctx.isPlaying && video.paused) {
+        // Video is paused but should be playing — seek to correct position
+        // (preroll drift or stale position from previous pause)
+        if (timeDiff > 0.05) {
+          video.currentTime = timeInfo.clipTime;
+        }
+        video.play().catch(() => {});
+      } else if (ctx.isPlaying && !video.paused) {
+        // Video is already playing — correct drift
+        if (wasPrerolling) {
+          // Just transitioned from preroll: video was playing from inPoint
+          // for ~0.5s, so it's significantly ahead. Always correct.
+          if (timeDiff > 0.05) {
+            video.currentTime = timeInfo.clipTime;
+          }
+        } else if (timeDiff > 0.15) {
+          // Ongoing playback: correct if drift > 0.15s (~4-5 frames at 30fps)
+          video.currentTime = timeInfo.clipTime;
+        }
+      } else if (!ctx.isPlaying && !video.paused) {
+        // Stopping playback: pause and seek to exact playhead position
+        // to prevent "jump back one frame" visual artifact
+        video.pause();
+        if (timeDiff > 0.02) {
+          video.currentTime = timeInfo.clipTime;
+        }
       }
 
       if (!ctx.isPlaying) {

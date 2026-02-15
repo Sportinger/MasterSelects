@@ -107,17 +107,16 @@ export class AudioSyncHandler {
     // Check if we have EQ to apply (any non-zero gain)
     const hasEQ = eqGains && eqGains.some(g => Math.abs(g) > 0.01);
 
+    // Ensure all audio goes through Web Audio for smooth fade-outs
+    audioRoutingManager.ensureRoute(element);
+
     if (hasEQ) {
       // Use Web Audio routing for volume + EQ
       // This handles both volume and EQ through the audio graph
       audioRoutingManager.applyEffects(element, volume, eqGains!);
     } else {
-      // Simple volume-only path (no Web Audio overhead)
-      // HTMLMediaElement.volume only accepts [0, 1] range - clamp to prevent errors
-      const targetVolume = Math.max(0, Math.min(1, volume));
-      if (Math.abs(element.volume - targetVolume) > 0.01) {
-        element.volume = targetVolume;
-      }
+      // Volume-only path — use smooth ramp via gain node
+      audioRoutingManager.setVolume(element, volume);
     }
 
     // Start playback if paused

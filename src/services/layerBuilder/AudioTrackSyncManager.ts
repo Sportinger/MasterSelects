@@ -7,6 +7,7 @@ import { LAYER_BUILDER_CONSTANTS } from './types';
 import { playheadState } from './PlayheadState';
 import { createFrameContext, getClipTimeInfo, getMediaFileForClip, getClipForTrack, isVideoTrackVisible } from './FrameContext';
 import { AudioSyncHandler, createAudioSyncState, finalizeAudioSync, resumeAudioContextIfNeeded } from './AudioSyncHandler';
+import { audioRoutingManager } from '../audioRoutingManager';
 import { proxyFrameCache } from '../proxyFrameCache';
 import { layerPlaybackManager } from '../layerPlaybackManager';
 
@@ -189,10 +190,10 @@ export class AudioTrackSyncManager {
       }
     }
 
-    // Pause inactive audio proxies
+    // Fade out and pause inactive audio proxies (prevents audio pop)
     for (const [clipId, audioProxy] of this.activeAudioProxies) {
       if (!activeVideoClipIds.has(clipId) && !audioProxy.paused) {
-        audioProxy.pause();
+        audioRoutingManager.fadeOutAndPause(audioProxy);
         this.activeAudioProxies.delete(clipId);
       }
     }
@@ -231,11 +232,11 @@ export class AudioTrackSyncManager {
       const isAtPlayhead = ctx.clipsAtTime.some(c => c.id === clip.id);
 
       if (clip.source?.audioElement && !isAtPlayhead && !clip.source.audioElement.paused) {
-        clip.source.audioElement.pause();
+        audioRoutingManager.fadeOutAndPause(clip.source.audioElement);
       }
 
       if (clip.mixdownAudio && !isAtPlayhead && !clip.mixdownAudio.paused) {
-        clip.mixdownAudio.pause();
+        audioRoutingManager.fadeOutAndPause(clip.mixdownAudio);
       }
     }
   }

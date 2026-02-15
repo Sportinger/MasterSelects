@@ -42,61 +42,7 @@ import {
 } from './helpers/idGenerator';
 import { blobUrlManager } from './helpers/blobUrlManager';
 import { updateClipById } from './helpers/clipStateHelpers';
-import { thumbnailRenderer } from '../../services/thumbnailRenderer';
-
-// Debounce map for thumbnail regeneration per clip
-const thumbnailDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const THUMBNAIL_DEBOUNCE_MS = 500; // Wait 500ms after last change before regenerating
-
-/**
- * Debounced thumbnail regeneration for a clip with effects.
- * Only regenerates after changes stop for THUMBNAIL_DEBOUNCE_MS.
- */
-async function regenerateClipThumbnails(
-  clipId: string,
-  getClip: () => TimelineClip | undefined,
-  setClips: (updater: (clips: TimelineClip[]) => TimelineClip[]) => void
-): Promise<void> {
-  // Clear any existing debounce timer for this clip
-  const existingTimer = thumbnailDebounceTimers.get(clipId);
-  if (existingTimer) {
-    clearTimeout(existingTimer);
-  }
-
-  // Set new debounce timer
-  const timer = setTimeout(async () => {
-    thumbnailDebounceTimers.delete(clipId);
-
-    const clip = getClip();
-    if (!clip || !clip.source) {
-      return;
-    }
-
-    // Skip composition clips - they have their own thumbnail generation
-    if (clip.isComposition) {
-      return;
-    }
-
-    // Skip audio-only clips
-    if (clip.source.type === 'audio') {
-      return;
-    }
-
-    log.debug('Regenerating thumbnails for clip with effects', { clipId: clip.id, name: clip.name });
-
-    try {
-      const thumbnails = await thumbnailRenderer.generateClipThumbnails(clip, { count: 10 });
-      if (thumbnails.length > 0) {
-        setClips(clips => updateClipById(clips, clipId, { thumbnails }));
-        log.debug('Updated thumbnails for clip', { clipId, count: thumbnails.length });
-      }
-    } catch (e) {
-      log.warn('Failed to regenerate clip thumbnails', e);
-    }
-  }, THUMBNAIL_DEBOUNCE_MS);
-
-  thumbnailDebounceTimers.set(clipId, timer);
-}
+import { thumbnailCache } from '../../services/thumbnailCache';
 
 export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   addClip: async (trackId, file, startTime, providedDuration, mediaFileId) => {
@@ -645,7 +591,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   },
 
   updateClipTransform: (id, transform) => {
-    const { clips, invalidateCache, thumbnailsEnabled } = get();
+    const { clips, invalidateCache } = get();
     set({
       clips: clips.map(c => {
         if (c.id !== id) return c;
@@ -662,30 +608,26 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       }),
     });
     invalidateCache();
-
-    // Regenerate thumbnails with new transform (debounced)
-    if (thumbnailsEnabled) {
-      regenerateClipThumbnails(
-        id,
-        () => get().clips.find(c => c.id === id),
-        (updater) => set({ clips: updater(get().clips) })
-      );
-    }
   },
 
   toggleClipReverse: (id) => {
     const { clips, invalidateCache } = get();
+    const clip = clips.find(c => c.id === id);
     set({
       clips: clips.map(c => {
         if (c.id !== id) return c;
         return {
           ...c,
           reversed: !c.reversed,
-          thumbnails: c.thumbnails ? [...c.thumbnails].reverse() : c.thumbnails,
         };
       }),
     });
     invalidateCache();
+    // Invalidate on-demand thumbnail cache for this media
+    const mediaFileId = clip?.mediaFileId || clip?.source?.mediaFileId;
+    if (mediaFileId) {
+      thumbnailCache.invalidate(mediaFileId);
+    }
   },
 
   // ========== WAVEFORM GENERATION ==========
