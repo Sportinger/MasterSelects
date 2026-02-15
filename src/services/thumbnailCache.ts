@@ -3,7 +3,7 @@
 // Uses LRU eviction, priority queue, and pooled video elements
 
 import { create } from 'zustand';
-import { seekVideo } from '../stores/timeline/utils';
+import { WebCodecsPlayer } from '../engine/WebCodecsPlayer';
 import { Logger } from './logger';
 
 const log = Logger.create('ThumbnailCache');
@@ -81,10 +81,9 @@ interface QueueItem {
 const pendingQueue: QueueItem[] = [];
 const inFlightTimes = new Set<string>(); // "mediaFileId:time" keys currently being generated
 
-// Video element pool
+// WebCodecsPlayer pool for thumbnail generation
 interface GeneratorSlot {
-  video: HTMLVideoElement;
-  blobUrl: string;
+  player: WebCodecsPlayer;
   mediaFileId: string;
   busy: boolean;
   idleTimer: ReturnType<typeof setTimeout> | null;
@@ -100,7 +99,7 @@ thumbCanvas.width = 160;
 thumbCanvas.height = 90;
 const thumbCtx = thumbCanvas.getContext('2d')!;
 
-function getOrCreateGenerator(mediaFileId: string, file: File): GeneratorSlot | null {
+async function getOrCreateGenerator(mediaFileId: string, file: File): Promise<GeneratorSlot | null> {
   // Reuse existing slot for same media
   const existing = generatorSlots.find(s => s.mediaFileId === mediaFileId && !s.busy);
   if (existing) {
@@ -114,27 +113,26 @@ function getOrCreateGenerator(mediaFileId: string, file: File): GeneratorSlot | 
   // Try to find a free slot
   const freeSlot = generatorSlots.find(s => !s.busy);
   if (freeSlot) {
-    // Release old video and create new one for this media
     if (freeSlot.idleTimer) {
       clearTimeout(freeSlot.idleTimer);
       freeSlot.idleTimer = null;
     }
-    URL.revokeObjectURL(freeSlot.blobUrl);
-    const blobUrl = URL.createObjectURL(file);
-    freeSlot.video.src = blobUrl;
-    freeSlot.blobUrl = blobUrl;
+    // Destroy old player and create new one
+    freeSlot.player.destroy();
+    const player = new WebCodecsPlayer({ loop: false });
+    const buffer = await file.arrayBuffer();
+    await player.loadArrayBuffer(buffer);
+    freeSlot.player = player;
     freeSlot.mediaFileId = mediaFileId;
     return freeSlot;
   }
 
   // Create new slot if under limit
   if (generatorSlots.length < MAX_GENERATORS) {
-    const blobUrl = URL.createObjectURL(file);
-    const video = document.createElement('video');
-    video.preload = 'auto';
-    video.muted = true;
-    video.src = blobUrl;
-    const slot: GeneratorSlot = { video, blobUrl, mediaFileId, busy: false, idleTimer: null };
+    const player = new WebCodecsPlayer({ loop: false });
+    const buffer = await file.arrayBuffer();
+    await player.loadArrayBuffer(buffer);
+    const slot: GeneratorSlot = { player, mediaFileId, busy: false, idleTimer: null };
     generatorSlots.push(slot);
     return slot;
   }
@@ -148,9 +146,7 @@ function releaseGenerator(slot: GeneratorSlot) {
   slot.idleTimer = setTimeout(() => {
     const idx = generatorSlots.indexOf(slot);
     if (idx !== -1) {
-      URL.revokeObjectURL(slot.blobUrl);
-      slot.video.removeAttribute('src');
-      slot.video.load();
+      slot.player.destroy();
       generatorSlots.splice(idx, 1);
     }
   }, IDLE_RELEASE_MS);
@@ -185,7 +181,15 @@ async function processQueue() {
     return;
   }
 
-  const slot = getOrCreateGenerator(item.mediaFileId, item.file);
+  let slot: GeneratorSlot | null = null;
+  try {
+    slot = await getOrCreateGenerator(item.mediaFileId, item.file);
+  } catch (e) {
+    log.warn('Failed to create thumbnail generator', { mediaFileId: item.mediaFileId, error: e });
+    pendingQueue.splice(idx, 1);
+    scheduleProcessQueue();
+    return;
+  }
   if (!slot) {
     // All generators busy, retry later
     scheduleProcessQueue();
@@ -221,22 +225,18 @@ async function processQueue() {
   let generated = 0;
   for (const bi of batchItems) {
     try {
-      // Wait for video metadata if needed
-      if (slot.video.readyState < 1) {
-        await new Promise<void>((resolve) => {
-          const onReady = () => { resolve(); };
-          if (slot.video.readyState >= 1) { resolve(); return; }
-          slot.video.addEventListener('loadedmetadata', onReady, { once: true });
-          setTimeout(resolve, 2000); // timeout fallback
-        });
+      const clampedTime = Math.min(Math.max(0, bi.time), (slot.player.duration || 1) - 0.01);
+      await slot.player.seekAsync(clampedTime);
+      const frame = slot.player.getCurrentFrame();
+      if (frame) {
+        // Draw VideoFrame to canvas for thumbnail
+        const bitmap = await createImageBitmap(frame);
+        thumbCtx.drawImage(bitmap, 0, 0, 160, 90);
+        bitmap.close();
+        const dataURL = thumbCanvas.toDataURL('image/jpeg', 0.6);
+        addToCache(bi.mediaFileId, bi.time, dataURL);
+        generated++;
       }
-
-      const clampedTime = Math.min(Math.max(0, bi.time), (slot.video.duration || 1) - 0.01);
-      await seekVideo(slot.video, clampedTime);
-      thumbCtx.drawImage(slot.video, 0, 0, 160, 90);
-      const dataURL = thumbCanvas.toDataURL('image/jpeg', 0.6);
-      addToCache(bi.mediaFileId, bi.time, dataURL);
-      generated++;
     } catch (e) {
       log.warn('Thumb gen failed', { mediaFileId: bi.mediaFileId, time: bi.time, error: e });
     }
@@ -338,9 +338,7 @@ export const thumbnailCache = {
     // Release all generators
     for (const slot of generatorSlots) {
       if (slot.idleTimer) clearTimeout(slot.idleTimer);
-      URL.revokeObjectURL(slot.blobUrl);
-      slot.video.removeAttribute('src');
-      slot.video.load();
+      slot.player.destroy();
     }
     generatorSlots.length = 0;
     useThumbnailCacheStore.setState({ versions: {} });

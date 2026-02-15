@@ -575,6 +575,11 @@ class ThumbnailRendererService {
     const seekPromises: Promise<void>[] = [];
 
     for (const layer of layers) {
+      // WebCodecs Full Mode (no HTMLVideoElement)
+      if (layer.source?.webCodecsPlayer && !layer.source.videoElement) {
+        seekPromises.push(layer.source.webCodecsPlayer.seekAsync(time));
+        continue;
+      }
       if (layer.source?.videoElement) {
         const video = layer.source.videoElement;
         seekPromises.push(this.seekVideoAndWait(video, time));
@@ -633,7 +638,26 @@ class ThumbnailRendererService {
       const layer = layers[i];
       if (!layer?.visible || !layer.source || layer.opacity === 0) continue;
 
-      // Video element
+      // WebCodecs Full Mode (no HTMLVideoElement)
+      if (layer.source.webCodecsPlayer && !layer.source.videoElement) {
+        const frame = layer.source.webCodecsPlayer.getCurrentFrame();
+        if (frame) {
+          const extTex = textureManager.importVideoTexture(frame);
+          if (extTex) {
+            result.push({
+              layer,
+              isVideo: true,
+              externalTexture: extTex,
+              textureView: null,
+              sourceWidth: frame.displayWidth,
+              sourceHeight: frame.displayHeight,
+            });
+            continue;
+          }
+        }
+      }
+
+      // Video element (legacy)
       if (layer.source.videoElement) {
         const video = layer.source.videoElement;
         if (video.readyState >= 2) {
@@ -730,6 +754,7 @@ class ThumbnailRendererService {
         type: string;
         videoElement?: HTMLVideoElement;
         imageElement?: HTMLImageElement;
+        webCodecsPlayer?: import('../engine/WebCodecsPlayer').WebCodecsPlayer;
         naturalDuration?: number;
       } | null;
       transform?: {
@@ -803,6 +828,7 @@ class ThumbnailRendererService {
         type: string;
         videoElement?: HTMLVideoElement;
         imageElement?: HTMLImageElement;
+        webCodecsPlayer?: import('../engine/WebCodecsPlayer').WebCodecsPlayer;
       } | null;
       transform?: {
         position?: { x: number; y: number; z?: number };
@@ -842,7 +868,9 @@ class ThumbnailRendererService {
     };
 
     // Seek video to correct time
-    if (clip.source.videoElement) {
+    if (clip.source.webCodecsPlayer && !clip.source.videoElement) {
+      await clip.source.webCodecsPlayer.seekAsync(time);
+    } else if (clip.source.videoElement) {
       await this.seekVideoAndWait(clip.source.videoElement, time);
     }
 

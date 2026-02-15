@@ -2,6 +2,7 @@
 
 import { THUMBNAIL_TIMEOUT } from '../constants';
 import { projectFileService } from '../../../services/projectFileService';
+import { WebCodecsPlayer } from '../../../engine/WebCodecsPlayer';
 import { Logger } from '../../../services/logger';
 
 const log = Logger.create('Thumbnail');
@@ -13,58 +14,53 @@ export async function createThumbnail(
   file: File,
   type: 'video' | 'image'
 ): Promise<string | undefined> {
-  return new Promise((resolve) => {
-    if (type === 'image') {
-      resolve(URL.createObjectURL(file));
-      return;
+  if (type === 'image') {
+    return URL.createObjectURL(file);
+  }
+
+  if (type === 'video') {
+    try {
+      const player = new WebCodecsPlayer({ loop: false });
+      const buffer = await file.arrayBuffer();
+
+      // Race with timeout
+      const loadPromise = player.loadArrayBuffer(buffer);
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout')), THUMBNAIL_TIMEOUT)
+      );
+      await Promise.race([loadPromise, timeoutPromise]);
+
+      // Seek to 10% of duration (or 1s, whichever is smaller)
+      const seekTime = Math.min(1, player.duration * 0.1);
+      await player.seekAsync(seekTime);
+
+      const frame = player.getCurrentFrame();
+      if (!frame) {
+        player.destroy();
+        return undefined;
+      }
+
+      // Draw VideoFrame to canvas
+      const bitmap = await createImageBitmap(frame);
+      const canvas = document.createElement('canvas');
+      canvas.width = 160;
+      canvas.height = 90;
+      const ctx = canvas.getContext('2d');
+      let result: string | undefined;
+      if (ctx) {
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        result = canvas.toDataURL('image/jpeg', 0.7);
+      }
+      bitmap.close();
+      player.destroy();
+      return result;
+    } catch (e) {
+      log.warn('Thumbnail generation failed', { file: file.name, error: e });
+      return undefined;
     }
+  }
 
-    if (type === 'video') {
-      const video = document.createElement('video');
-      const url = URL.createObjectURL(file);
-      video.src = url;
-      video.muted = true;
-      video.playsInline = true;
-
-      const timeout = setTimeout(() => {
-        log.warn('Timeout:', file.name);
-        URL.revokeObjectURL(url);
-        resolve(undefined);
-      }, THUMBNAIL_TIMEOUT);
-
-      const cleanup = () => {
-        clearTimeout(timeout);
-        URL.revokeObjectURL(url);
-      };
-
-      video.onloadedmetadata = () => {
-        video.currentTime = Math.min(1, video.duration * 0.1);
-      };
-
-      video.onseeked = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 160;
-        canvas.height = 90;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          resolve(canvas.toDataURL('image/jpeg', 0.7));
-        } else {
-          resolve(undefined);
-        }
-        cleanup();
-      };
-
-      video.onerror = () => {
-        cleanup();
-        resolve(undefined);
-      };
-
-      video.load();
-    } else {
-      resolve(undefined);
-    }
-  });
+  return undefined;
 }
 
 /**
