@@ -803,6 +803,10 @@ export class VideoSyncManager {
       // Paused/scrub/reverse/variable speed: frame-accurate seek mode.
       if (player.isPlaying) {
         player.pause();
+        // Don't seek on the same frame as pause — the current frame is close
+        // enough and an immediate seek would cause a visible jump backwards.
+        // Next sync call will correct if needed (user scrubs, etc.).
+        return;
       }
 
       const seekThreshold = ctx.isDraggingPlayhead ? 0.04 : 0.02;
