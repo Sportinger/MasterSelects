@@ -398,19 +398,19 @@ export class WebCodecsPlayer implements ExportModePlayer {
 
     // Cancel pending scheduler jobs and abort any in-progress seek
     this.seekScheduler.reset();
-    this.seekToken++;
-    this.pendingSeekTime = null;
-    if (this.deferredSeekFrame) {
-      try { this.deferredSeekFrame.close(); } catch {}
-      this.deferredSeekFrame = null;
+    if (this.seekInProgress) {
+      this.seekToken++;
+      this.pendingSeekTime = null;
+      this.seekInProgress = false;
+      if (this.deferredSeekFrame) {
+        try { this.deferredSeekFrame.close(); } catch {}
+        this.deferredSeekFrame = null;
+      }
     }
 
-    // Set seekInProgress so the decoder output callback defers frames
-    // instead of committing them — prevents visible fast-forward flicker
-    // from intermediate keyframe→target frames.
-    this.seekInProgress = true;
-
-    // Reset decoder and decode from nearest keyframe to target
+    // Reset decoder and decode from nearest keyframe to target.
+    // Intermediate decoder outputs fire asynchronously (between RAF ticks)
+    // and only the last committed frame is visible on the next render.
     this.decoder.reset();
     this.decoder.configure(this.codecConfig);
 
@@ -441,28 +441,7 @@ export class WebCodecsPlayer implements ExportModePlayer {
       keyframeIndex,
       framesToDecode: targetIndex - keyframeIndex + 1,
     });
-
-    // Flush decoder to get the final frame at target position.
-    // The RAF decode loop starts after flush — decodeNextFrame() no-ops
-    // while seekInProgress is true, so no frames are skipped.
-    const token = this.seekToken;
-    this.decoder.flush().then(() => {
-      if (token !== this.seekToken || !this._isPlaying) return;
-
-      // Commit only the final deferred frame (the target frame)
-      if (this.deferredSeekFrame) {
-        const frame = this.deferredSeekFrame;
-        this.deferredSeekFrame = null;
-        this.commitFrame(frame);
-      }
-
-      this.seekInProgress = false;
-      this.scheduleNextFrame();
-    }).catch(() => {
-      if (token !== this.seekToken) return;
-      this.seekInProgress = false;
-      this.scheduleNextFrame();
-    });
+    this.scheduleNextFrame();
   }
 
   pause(): void {
