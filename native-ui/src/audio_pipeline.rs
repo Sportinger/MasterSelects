@@ -216,6 +216,12 @@ impl AudioPipeline {
             return;
         }
 
+        // Flush stale data from the ring buffer before resuming.
+        // This prevents old audio from playing briefly when restarting.
+        if let Some(ref out) = self.output {
+            out.flush();
+        }
+
         if let Some(ref mut out) = self.output {
             if let Err(e) = out.play() {
                 warn!(error = %e, "Failed to start audio output");
@@ -224,7 +230,7 @@ impl AudioPipeline {
 
         self.clock.start();
         self.state = AudioPlaybackState::Playing;
-        debug!("Audio pipeline: play");
+        info!("Audio pipeline: play (output={})", self.output.is_some());
     }
 
     /// Pause playback, keeping the current position.

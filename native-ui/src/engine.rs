@@ -23,7 +23,6 @@ use crossbeam::channel::{self, Receiver, Sender, TryRecvError};
 use ms_common::kernel::{KernelArgs, KernelId};
 use ms_common::{HwDecoder, Rational, Resolution, VideoCodec};
 use ms_decoder::nvdec::{NvDecoder, NvcuvidLibrary};
-use ms_decoder::software::nv12_to_rgba;
 use ms_demux::mkv::MkvDemuxer;
 use ms_demux::mp4::Mp4Demuxer;
 use ms_demux::probe::detect_format;
@@ -168,6 +167,11 @@ pub struct EngineOrchestrator {
     /// Height of the last frame.
     last_frame_height: u32,
 
+    // -- Seek state --
+    /// True while waiting for the decode thread to produce a seek frame.
+    /// Used to keep requesting repaints until the frame arrives.
+    seek_pending: bool,
+
     // -- GPU pipeline info --
     /// GPU device name (populated when decode pipeline initializes).
     gpu_info: Option<String>,
@@ -195,6 +199,7 @@ impl EngineOrchestrator {
             last_frame: None,
             last_frame_width: 0,
             last_frame_height: 0,
+            seek_pending: false,
             gpu_info: None,
             gpu_decode_active: false,
             gpu_info_rx: None,
@@ -266,8 +271,8 @@ impl EngineOrchestrator {
     /// to sensible defaults so the pipeline can still be exercised with
     /// synthetic frames.
     pub fn open_file(&mut self, path: PathBuf) -> Result<()> {
-        // Stop any existing pipeline first
-        self.stop_pipeline();
+        // Close any existing pipeline first
+        self.close();
 
         self.state = EngineState::Loading;
         self.current_time_secs = 0.0;
@@ -397,14 +402,36 @@ impl EngineOrchestrator {
 
         if let Some(tx) = &self.cmd_tx {
             let _ = tx.send(DecodeCommand::Seek(self.current_time_secs));
+            // Mark seek pending so update() keeps requesting repaints
+            // until the decode thread delivers the seek frame.
+            self.seek_pending = true;
         }
 
         tracing::debug!("Engine: seek to {:.2}s", self.current_time_secs);
     }
 
-    /// Stop playback and close the current file.
+    /// Stop playback and reset to the beginning.
+    ///
+    /// Unlike closing a file, this preserves the decode pipeline so playback
+    /// can be restarted without re-opening the file.
     pub fn stop(&mut self) {
         tracing::info!("Engine: stop");
+        if self.cmd_tx.is_some() {
+            // Pipeline exists: pause and seek to the beginning.
+            if self.state == EngineState::Playing {
+                self.pause();
+            }
+            self.seek(0.0);
+            self.state = EngineState::Paused;
+        }
+    }
+
+    /// Close the current file and tear down the decode pipeline completely.
+    ///
+    /// After this call the engine is in [`EngineState::Idle`] and a new
+    /// file must be opened before playback can resume.
+    pub fn close(&mut self) {
+        tracing::info!("Engine: close");
         self.stop_pipeline();
         self.state = EngineState::Idle;
         self.file_info = None;
@@ -446,7 +473,19 @@ impl EngineOrchestrator {
             EngineState::Paused | EngineState::Loading => {
                 // In Paused/Loading, still poll for frames (the first frame
                 // after open, or frames that were in-flight before pause)
-                self.poll_and_display(ctx, bridge);
+                let got_frame = self.poll_and_display(ctx, bridge);
+
+                if got_frame && self.seek_pending {
+                    // Seek frame arrived — clear the pending flag
+                    self.seek_pending = false;
+                }
+
+                if self.seek_pending {
+                    // Keep repainting until the decode thread delivers
+                    // the seek frame (prevents preview from freezing
+                    // after the user stops scrubbing).
+                    ctx.request_repaint();
+                }
             }
             EngineState::Idle => {
                 // No file loaded: show the test pattern
@@ -482,7 +521,9 @@ impl EngineOrchestrator {
     }
 
     /// Poll the frame channel and display the most recent frame.
-    fn poll_and_display(&mut self, ctx: &egui::Context, bridge: &mut PreviewBridge) {
+    ///
+    /// Returns `true` if a new frame was received from the decode thread.
+    fn poll_and_display(&mut self, ctx: &egui::Context, bridge: &mut PreviewBridge) -> bool {
         let mut newest_frame: Option<DecodedFrame> = None;
 
         // Drain all available frames, keeping only the newest.
@@ -511,15 +552,18 @@ impl EngineOrchestrator {
             self.last_frame_height = frame.height;
 
             bridge.update_from_rgba_bytes(ctx, &frame.rgba_data, frame.width, frame.height);
+            true
         } else if let Some(ref last) = self.last_frame {
             // No new frame available; redisplay the cached frame
             bridge.update_from_rgba_bytes(ctx, last, self.last_frame_width, self.last_frame_height);
+            false
         } else {
             // No frames at all yet; show black
             let w = self.preview_width;
             let h = self.preview_height;
             let black = vec![0u8; w as usize * h as usize * 4];
             bridge.update_from_rgba_bytes(ctx, &black, w, h);
+            false
         }
     }
 
@@ -667,7 +711,7 @@ impl EngineOrchestrator {
 
 impl Drop for EngineOrchestrator {
     fn drop(&mut self) {
-        self.stop_pipeline();
+        self.close();
     }
 }
 
@@ -1057,12 +1101,17 @@ fn nvdec_decode_loop(
     cmd_rx: &Receiver<DecodeCommand>,
 ) {
     let fps = info.fps.as_f64();
-    let frame_duration = Duration::from_secs_f64(1.0 / fps);
 
     let mut playing = false;
     let mut frame_num: u64 = 0;
     let mut sent_first_frame = false;
     let mut need_seek_frame = false;
+
+    // Wall-clock sync: when playback starts, we record the wall-clock instant
+    // and the PTS of the first frame. Subsequent frames wait until their PTS
+    // offset from the base has elapsed on the wall clock.
+    let mut wall_base: Option<Instant> = None;
+    let mut pts_base: f64 = 0.0;
 
     // Re-bind CUDA context to this thread (safety: we're on the decode thread)
     if let Err(e) = cuda_ctx.bind_to_thread() {
@@ -1075,46 +1124,110 @@ fn nvdec_decode_loop(
     let mut rgba_gpu_buf: Option<GpuRgbaBuffer> = None;
 
     loop {
-        // Check for commands (non-blocking)
-        match cmd_rx.try_recv() {
-            Ok(DecodeCommand::Play) => {
-                playing = true;
-                tracing::debug!("Decode thread (NVDEC): play");
-            }
-            Ok(DecodeCommand::Pause) => {
-                playing = false;
-                tracing::debug!("Decode thread (NVDEC): pause");
-            }
-            Ok(DecodeCommand::Seek(time_secs)) => {
-                // Reset decoder state for seeking
-                if let Err(e) = decoder.reset() {
-                    tracing::warn!("NVDEC reset on seek failed: {e}");
+        // Drain all pending commands, coalescing consecutive seeks.
+        // This is critical for scrubbing performance: if the user drags
+        // the timeline quickly, many Seek commands accumulate. We only
+        // execute the last one, avoiding redundant NVDEC resets.
+        let mut last_seek: Option<f64> = None;
+        loop {
+            match cmd_rx.try_recv() {
+                Ok(DecodeCommand::Play) => {
+                    playing = true;
+                    // Don't set wall_base here — set it lazily when the
+                    // first decoded frame is produced. This prevents the
+                    // "catch-up speedup" when there's a delay between the
+                    // Play command and the first available frame.
+                    wall_base = None;
+                    tracing::debug!("Decode thread (NVDEC): play");
                 }
-                if let Err(e) = demuxer.seek(time_secs) {
-                    tracing::warn!("Demuxer seek failed: {e}");
+                Ok(DecodeCommand::Pause) => {
+                    playing = false;
+                    wall_base = None;
+                    tracing::debug!("Decode thread (NVDEC): pause");
                 }
-                frame_num = (time_secs * fps).round() as u64;
-                need_seek_frame = true; // Decode one frame at the new position
-                tracing::debug!(
-                    "Decode thread (NVDEC): seek to {:.2}s (frame ~{})",
-                    time_secs,
-                    frame_num,
-                );
+                Ok(DecodeCommand::Seek(time_secs)) => {
+                    last_seek = Some(time_secs);
+                }
+                Ok(DecodeCommand::Stop) => {
+                    tracing::info!("Decode thread (NVDEC): stop command received");
+                    return;
+                }
+                Err(crossbeam::channel::TryRecvError::Empty) => break,
+                Err(crossbeam::channel::TryRecvError::Disconnected) => {
+                    tracing::info!(
+                        "Decode thread (NVDEC): command channel disconnected, exiting"
+                    );
+                    return;
+                }
             }
-            Ok(DecodeCommand::Stop) => {
-                tracing::info!("Decode thread (NVDEC): stop command received");
-                return;
+        }
+        // Execute only the most recent seek (if any)
+        if let Some(time_secs) = last_seek {
+            if let Err(e) = decoder.reset() {
+                tracing::warn!("NVDEC reset on seek failed: {e}");
             }
-            Err(crossbeam::channel::TryRecvError::Empty) => {}
-            Err(crossbeam::channel::TryRecvError::Disconnected) => {
-                tracing::info!("Decode thread (NVDEC): command channel disconnected, exiting");
-                return;
+            if let Err(e) = demuxer.seek(time_secs) {
+                tracing::warn!("Demuxer seek failed: {e}");
             }
+            frame_num = (time_secs * fps).round() as u64;
+            pts_base = time_secs;
+            wall_base = None; // Reset — will be set on first decoded frame
+            need_seek_frame = true;
+            tracing::debug!(
+                "Decode thread (NVDEC): seek to {:.2}s (frame ~{})",
+                time_secs,
+                frame_num,
+            );
         }
 
         if !playing && sent_first_frame && !need_seek_frame {
-            thread::sleep(Duration::from_millis(10));
-            continue;
+            // Block until a command arrives instead of busy-polling with
+            // sleep. This wakes instantly on seek/play commands, making
+            // scrubbing much more responsive.
+            match cmd_rx.recv_timeout(Duration::from_millis(100)) {
+                Ok(DecodeCommand::Play) => {
+                    playing = true;
+                    wall_base = None;
+                    tracing::debug!("Decode thread (NVDEC): play (from wait)");
+                }
+                Ok(DecodeCommand::Pause) => {
+                    playing = false;
+                    wall_base = None;
+                }
+                Ok(DecodeCommand::Seek(time_secs)) => {
+                    // Set up the seek state; the standard drain loop at
+                    // the top of the outer loop will coalesce any further
+                    // queued seeks on the next iteration.
+                    if let Err(e) = decoder.reset() {
+                        tracing::warn!("NVDEC reset on seek failed: {e}");
+                    }
+                    if let Err(e) = demuxer.seek(time_secs) {
+                        tracing::warn!("Demuxer seek failed: {e}");
+                    }
+                    frame_num = (time_secs * fps).round() as u64;
+                    pts_base = time_secs;
+                    wall_base = None;
+                    need_seek_frame = true;
+                    tracing::debug!(
+                        "Decode thread (NVDEC): seek to {:.2}s (frame ~{}) [from wait]",
+                        time_secs,
+                        frame_num,
+                    );
+                }
+                Ok(DecodeCommand::Stop) => {
+                    tracing::info!("Decode thread (NVDEC): stop command received");
+                    return;
+                }
+                Err(crossbeam::channel::RecvTimeoutError::Timeout) => {
+                    continue;
+                }
+                Err(crossbeam::channel::RecvTimeoutError::Disconnected) => {
+                    tracing::info!(
+                        "Decode thread (NVDEC): command channel disconnected, exiting"
+                    );
+                    return;
+                }
+            }
         }
 
         // Read the next real video packet from the demuxer
@@ -1128,20 +1241,39 @@ fn nvdec_decode_loop(
                         // Decoded frame available on GPU (NV12 format)
                         let width = gpu_frame.resolution.width;
                         let height = gpu_frame.resolution.height;
-                        let pitch = gpu_frame.pitch;
 
                         let convert_result = if let Some(km) = kernel_mgr {
                             // GPU path: NV12->RGBA kernel on GPU, then copy RGBA to CPU
                             gpu_nv12_to_rgba_and_readback(km, &gpu_frame, &mut rgba_gpu_buf)
                         } else {
-                            // CPU fallback: copy NV12 to CPU, then convert on CPU
-                            cpu_nv12_copy_and_convert(gpu_frame.device_ptr, width, height, pitch)
+                            Err(anyhow::anyhow!(
+                                "No GPU NV12->RGBA kernel available. Build with nvcc + cl.exe in PATH."
+                            ))
                         };
 
                         match convert_result {
                             Ok(rgba_data) => {
                                 // Release the NVDEC surface now that we have the data
                                 decoder.release_frame(&gpu_frame);
+
+                                // PTS-based wall-clock pacing: wait until this frame's
+                                // presentation time relative to playback start.
+                                if playing {
+                                    if let Some(wb) = wall_base {
+                                        let target_offset = pts_secs - pts_base;
+                                        let elapsed = wb.elapsed().as_secs_f64();
+                                        if target_offset > elapsed {
+                                            let wait = Duration::from_secs_f64(
+                                                target_offset - elapsed,
+                                            );
+                                            thread::sleep(wait);
+                                        }
+                                    } else {
+                                        // First decoded frame during playback — set the base
+                                        wall_base = Some(Instant::now());
+                                        pts_base = pts_secs;
+                                    }
+                                }
 
                                 let decoded = DecodedFrame {
                                     rgba_data,
@@ -1200,9 +1332,6 @@ fn nvdec_decode_loop(
                         tracing::error!("NVDEC decode error: {e}");
                     }
                 }
-
-                // Pace to target FPS
-                thread::sleep(frame_duration);
             }
             None => {
                 // End of stream -- flush remaining frames from decoder
@@ -1212,17 +1341,13 @@ fn nvdec_decode_loop(
                         for gpu_frame in &frames {
                             let width = gpu_frame.resolution.width;
                             let height = gpu_frame.resolution.height;
-                            let pitch = gpu_frame.pitch;
 
                             let convert_result = if let Some(km) = kernel_mgr {
                                 gpu_nv12_to_rgba_and_readback(km, gpu_frame, &mut rgba_gpu_buf)
                             } else {
-                                cpu_nv12_copy_and_convert(
-                                    gpu_frame.device_ptr,
-                                    width,
-                                    height,
-                                    pitch,
-                                )
+                                Err(anyhow::anyhow!(
+                                    "No GPU NV12->RGBA kernel available."
+                                ))
                             };
 
                             if let Ok(rgba_data) = convert_result {
@@ -1364,49 +1489,6 @@ fn gpu_nv12_to_rgba_and_readback(
     Ok(rgba_host)
 }
 
-/// CPU fallback: Copy NV12 frame data from GPU to CPU and convert to RGBA on CPU.
-///
-/// This is the Phase 0 approach used when the CUDA NV12->RGBA kernel is not
-/// available (e.g., nvcc was not found at build time).
-fn cpu_nv12_copy_and_convert(
-    device_ptr: u64,
-    width: u32,
-    height: u32,
-    pitch: u32,
-) -> Result<Vec<u8>> {
-    let y_size = pitch as usize * height as usize;
-    let uv_size = pitch as usize * (height as usize / 2);
-    let total_nv12_size = y_size + uv_size;
-
-    // Allocate host buffer for the NV12 data
-    let mut nv12_host = vec![0u8; total_nv12_size];
-
-    // Copy NV12 (Y + UV planes) from GPU to CPU
-    // SAFETY: device_ptr is a valid CUdeviceptr from NVDEC's cuvidMapVideoFrame64.
-    // nv12_host is a newly allocated buffer of exactly total_nv12_size bytes.
-    // We perform a synchronous copy so the data is available immediately.
-    unsafe {
-        let result = cudarc::driver::sys::cuMemcpyDtoH_v2(
-            nv12_host.as_mut_ptr() as *mut c_void,
-            device_ptr,
-            total_nv12_size,
-        );
-        result
-            .result()
-            .map_err(|e| anyhow::anyhow!("cuMemcpyDtoH failed: {e:?}"))?;
-    }
-
-    // Split into Y and UV planes
-    let y_plane = &nv12_host[..y_size];
-    let uv_plane = &nv12_host[y_size..];
-
-    // Convert NV12 to RGBA using BT.709 CPU conversion
-    let rgba = nv12_to_rgba(y_plane, uv_plane, width, height, pitch, pitch)
-        .map_err(|e| anyhow::anyhow!("NV12->RGBA conversion failed: {e}"))?;
-
-    Ok(rgba)
-}
-
 // ---------------------------------------------------------------------------
 // Software decode loops (fallbacks)
 // ---------------------------------------------------------------------------
@@ -1425,50 +1507,103 @@ fn real_decode_loop(
     let width = info.resolution.width;
     let height = info.resolution.height;
     let fps = info.fps.as_f64();
-    let frame_duration = Duration::from_secs_f64(1.0 / fps);
 
     let mut playing = false;
     let mut frame_num: u64 = 0;
     let mut sent_first_frame = false;
     let mut need_seek_frame = false;
 
+    // Wall-clock sync
+    let mut wall_base: Option<Instant> = None;
+    let mut pts_base: f64 = 0.0;
+
     loop {
-        // Check for commands (non-blocking)
-        match cmd_rx.try_recv() {
-            Ok(DecodeCommand::Play) => {
-                playing = true;
-                tracing::debug!("Decode thread (real): play");
-            }
-            Ok(DecodeCommand::Pause) => {
-                playing = false;
-                tracing::debug!("Decode thread (real): pause");
-            }
-            Ok(DecodeCommand::Seek(time_secs)) => {
-                if let Err(e) = demuxer.seek(time_secs) {
-                    tracing::warn!("Decode thread (real): seek failed: {}", e);
+        // Drain all pending commands, coalescing consecutive seeks.
+        let mut last_seek: Option<f64> = None;
+        loop {
+            match cmd_rx.try_recv() {
+                Ok(DecodeCommand::Play) => {
+                    playing = true;
+                    wall_base = None; // Lazy — set on first decoded frame
+                    tracing::debug!("Decode thread (real): play");
                 }
-                frame_num = (time_secs * fps).round() as u64;
-                need_seek_frame = true;
-                tracing::debug!(
-                    "Decode thread (real): seek to {:.2}s (frame ~{})",
-                    time_secs,
-                    frame_num,
-                );
+                Ok(DecodeCommand::Pause) => {
+                    playing = false;
+                    wall_base = None;
+                    tracing::debug!("Decode thread (real): pause");
+                }
+                Ok(DecodeCommand::Seek(time_secs)) => {
+                    last_seek = Some(time_secs);
+                }
+                Ok(DecodeCommand::Stop) => {
+                    tracing::info!("Decode thread (real): stop command received");
+                    return;
+                }
+                Err(crossbeam::channel::TryRecvError::Empty) => break,
+                Err(crossbeam::channel::TryRecvError::Disconnected) => {
+                    tracing::info!(
+                        "Decode thread (real): command channel disconnected, exiting"
+                    );
+                    return;
+                }
             }
-            Ok(DecodeCommand::Stop) => {
-                tracing::info!("Decode thread (real): stop command received");
-                return;
+        }
+        if let Some(time_secs) = last_seek {
+            if let Err(e) = demuxer.seek(time_secs) {
+                tracing::warn!("Decode thread (real): seek failed: {}", e);
             }
-            Err(crossbeam::channel::TryRecvError::Empty) => {}
-            Err(crossbeam::channel::TryRecvError::Disconnected) => {
-                tracing::info!("Decode thread (real): command channel disconnected, exiting");
-                return;
-            }
+            frame_num = (time_secs * fps).round() as u64;
+            pts_base = time_secs;
+            wall_base = None;
+            need_seek_frame = true;
+            tracing::debug!(
+                "Decode thread (real): seek to {:.2}s (frame ~{})",
+                time_secs,
+                frame_num,
+            );
         }
 
         if !playing && sent_first_frame && !need_seek_frame {
-            thread::sleep(Duration::from_millis(10));
-            continue;
+            // Block until a command arrives instead of busy-polling with
+            // sleep. Wakes instantly on seek/play commands.
+            match cmd_rx.recv_timeout(Duration::from_millis(100)) {
+                Ok(DecodeCommand::Play) => {
+                    playing = true;
+                    wall_base = None;
+                    tracing::debug!("Decode thread (real): play (from wait)");
+                }
+                Ok(DecodeCommand::Pause) => {
+                    playing = false;
+                    wall_base = None;
+                }
+                Ok(DecodeCommand::Seek(time_secs)) => {
+                    if let Err(e) = demuxer.seek(time_secs) {
+                        tracing::warn!("Decode thread (real): seek failed: {}", e);
+                    }
+                    frame_num = (time_secs * fps).round() as u64;
+                    pts_base = time_secs;
+                    wall_base = None;
+                    need_seek_frame = true;
+                    tracing::debug!(
+                        "Decode thread (real): seek to {:.2}s (frame ~{}) [from wait]",
+                        time_secs,
+                        frame_num,
+                    );
+                }
+                Ok(DecodeCommand::Stop) => {
+                    tracing::info!("Decode thread (real): stop command received");
+                    return;
+                }
+                Err(crossbeam::channel::RecvTimeoutError::Timeout) => {
+                    continue;
+                }
+                Err(crossbeam::channel::RecvTimeoutError::Disconnected) => {
+                    tracing::info!(
+                        "Decode thread (real): command channel disconnected, exiting"
+                    );
+                    return;
+                }
+            }
         }
 
         // Read the next real video packet from the demuxer
@@ -1487,6 +1622,21 @@ fn real_decode_loop(
                 // Software fallback: generate synthetic RGBA pixels but use the
                 // real PTS for timing. (NVDEC path is in nvdec_decode_loop.)
                 let rgba_data = generate_synthetic_frame(width, height, frame_num, pts_secs);
+
+                // PTS-based wall-clock pacing
+                if playing {
+                    if let Some(wb) = wall_base {
+                        let target_offset = pts_secs - pts_base;
+                        let elapsed = wb.elapsed().as_secs_f64();
+                        if target_offset > elapsed {
+                            let wait = Duration::from_secs_f64(target_offset - elapsed);
+                            thread::sleep(wait);
+                        }
+                    } else {
+                        wall_base = Some(Instant::now());
+                        pts_base = pts_secs;
+                    }
+                }
 
                 let decoded = DecodedFrame {
                     rgba_data,
@@ -1516,9 +1666,6 @@ fn real_decode_loop(
                 }
 
                 frame_num += 1;
-
-                // Pace to target FPS
-                thread::sleep(frame_duration);
             }
             None => {
                 // End of stream
@@ -1544,7 +1691,6 @@ fn synthetic_decode_loop(
     let width = info.resolution.width;
     let height = info.resolution.height;
     let fps = info.fps.as_f64();
-    let frame_duration = Duration::from_secs_f64(1.0 / fps);
     let total_frames = (info.duration_secs * fps).ceil() as u64;
 
     let mut playing = false;
@@ -1552,40 +1698,91 @@ fn synthetic_decode_loop(
     let mut sent_first_frame = false;
     let mut need_seek_frame = false;
 
+    // Wall-clock sync
+    let mut wall_base: Option<Instant> = None;
+    let mut pts_base: f64 = 0.0;
+
     loop {
-        // Check for commands (non-blocking)
-        match cmd_rx.try_recv() {
-            Ok(DecodeCommand::Play) => {
-                playing = true;
-                tracing::debug!("Decode thread (synthetic): play");
+        // Drain all pending commands, coalescing consecutive seeks.
+        let mut last_seek: Option<f64> = None;
+        loop {
+            match cmd_rx.try_recv() {
+                Ok(DecodeCommand::Play) => {
+                    playing = true;
+                    wall_base = None; // Lazy — set on first decoded frame
+                    tracing::debug!("Decode thread (synthetic): play");
+                }
+                Ok(DecodeCommand::Pause) => {
+                    playing = false;
+                    wall_base = None;
+                    tracing::debug!("Decode thread (synthetic): pause");
+                }
+                Ok(DecodeCommand::Seek(time_secs)) => {
+                    last_seek = Some(time_secs);
+                }
+                Ok(DecodeCommand::Stop) => {
+                    tracing::info!("Decode thread (synthetic): stop command received");
+                    return;
+                }
+                Err(crossbeam::channel::TryRecvError::Empty) => break,
+                Err(crossbeam::channel::TryRecvError::Disconnected) => {
+                    tracing::info!(
+                        "Decode thread (synthetic): command channel disconnected, exiting"
+                    );
+                    return;
+                }
             }
-            Ok(DecodeCommand::Pause) => {
-                playing = false;
-                tracing::debug!("Decode thread (synthetic): pause");
-            }
-            Ok(DecodeCommand::Seek(time_secs)) => {
-                current_frame = (time_secs * fps).round() as u64;
-                need_seek_frame = true;
-                tracing::debug!(
-                    "Decode thread (synthetic): seek to {:.2}s (frame {})",
-                    time_secs,
-                    current_frame,
-                );
-            }
-            Ok(DecodeCommand::Stop) => {
-                tracing::info!("Decode thread (synthetic): stop command received");
-                return;
-            }
-            Err(crossbeam::channel::TryRecvError::Empty) => {}
-            Err(crossbeam::channel::TryRecvError::Disconnected) => {
-                tracing::info!("Decode thread (synthetic): command channel disconnected, exiting");
-                return;
-            }
+        }
+        if let Some(time_secs) = last_seek {
+            current_frame = (time_secs * fps).round() as u64;
+            pts_base = time_secs;
+            wall_base = None;
+            need_seek_frame = true;
+            tracing::debug!(
+                "Decode thread (synthetic): seek to {:.2}s (frame {})",
+                time_secs,
+                current_frame,
+            );
         }
 
         if !playing && sent_first_frame && !need_seek_frame {
-            thread::sleep(Duration::from_millis(10));
-            continue;
+            // Block until a command arrives instead of busy-polling with
+            // sleep. Wakes instantly on seek/play commands.
+            match cmd_rx.recv_timeout(Duration::from_millis(100)) {
+                Ok(DecodeCommand::Play) => {
+                    playing = true;
+                    wall_base = None;
+                    tracing::debug!("Decode thread (synthetic): play (from wait)");
+                }
+                Ok(DecodeCommand::Pause) => {
+                    playing = false;
+                    wall_base = None;
+                }
+                Ok(DecodeCommand::Seek(time_secs)) => {
+                    current_frame = (time_secs * fps).round() as u64;
+                    pts_base = time_secs;
+                    wall_base = None;
+                    need_seek_frame = true;
+                    tracing::debug!(
+                        "Decode thread (synthetic): seek to {:.2}s (frame {}) [from wait]",
+                        time_secs,
+                        current_frame,
+                    );
+                }
+                Ok(DecodeCommand::Stop) => {
+                    tracing::info!("Decode thread (synthetic): stop command received");
+                    return;
+                }
+                Err(crossbeam::channel::RecvTimeoutError::Timeout) => {
+                    continue;
+                }
+                Err(crossbeam::channel::RecvTimeoutError::Disconnected) => {
+                    tracing::info!(
+                        "Decode thread (synthetic): command channel disconnected, exiting"
+                    );
+                    return;
+                }
+            }
         }
 
         // Check if we've reached the end
@@ -1596,6 +1793,21 @@ fn synthetic_decode_loop(
 
         let pts_secs = current_frame as f64 / fps;
         let rgba_data = generate_synthetic_frame(width, height, current_frame, pts_secs);
+
+        // PTS-based wall-clock pacing
+        if playing {
+            if let Some(wb) = wall_base {
+                let target_offset = pts_secs - pts_base;
+                let elapsed = wb.elapsed().as_secs_f64();
+                if target_offset > elapsed {
+                    let wait = Duration::from_secs_f64(target_offset - elapsed);
+                    thread::sleep(wait);
+                }
+            } else {
+                wall_base = Some(Instant::now());
+                pts_base = pts_secs;
+            }
+        }
 
         let decoded = DecodedFrame {
             rgba_data,
@@ -1625,7 +1837,6 @@ fn synthetic_decode_loop(
         }
 
         current_frame += 1;
-        thread::sleep(frame_duration);
     }
 }
 
@@ -1848,8 +2059,12 @@ mod tests {
         assert_eq!(*engine.state(), EngineState::Paused);
         assert!(engine.file_info().is_some());
 
-        // Clean up
+        // stop() preserves pipeline, state becomes Paused
         engine.stop();
+        assert_eq!(*engine.state(), EngineState::Paused);
+
+        // close() tears down completely
+        engine.close();
         assert_eq!(*engine.state(), EngineState::Idle);
     }
 
@@ -1870,7 +2085,7 @@ mod tests {
         engine.toggle_play_pause();
         assert_eq!(*engine.state(), EngineState::Paused);
 
-        engine.stop();
+        engine.close();
     }
 
     #[test]
@@ -1889,7 +2104,7 @@ mod tests {
         engine.seek(-5.0);
         assert!(engine.current_time_secs() >= 0.0);
 
-        engine.stop();
+        engine.close();
     }
 
     #[test]

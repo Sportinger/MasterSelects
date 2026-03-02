@@ -74,6 +74,7 @@ tools/native-helper/ffmpeg/
 
 # Browser automation logs
 .browser-logs.json
+.artifacts/
 
 # Project folders (user media)
 Wonder/

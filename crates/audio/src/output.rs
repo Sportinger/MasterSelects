@@ -32,6 +32,9 @@ pub struct AudioOutput {
     sender: Sender<Vec<f32>>,
     /// Whether the stream is currently playing.
     playing: Arc<AtomicBool>,
+    /// When set, the CPAL callback drains stale data from the ring buffer
+    /// without outputting it, then clears the flag.
+    flush_pending: Arc<AtomicBool>,
     /// Shared counter of total samples consumed by the output callback.
     samples_played: Arc<parking_lot::Mutex<u64>>,
     /// Output sample rate.
@@ -68,6 +71,8 @@ impl AudioOutput {
         let (sender, receiver) = bounded::<Vec<f32>>(RING_BUFFER_CHUNKS);
         let playing = Arc::new(AtomicBool::new(false));
         let playing_cb = Arc::clone(&playing);
+        let flush_pending = Arc::new(AtomicBool::new(false));
+        let flush_pending_cb = Arc::clone(&flush_pending);
         let samples_played = Arc::new(Mutex::new(0u64));
         let samples_played_cb = Arc::clone(&samples_played);
 
@@ -79,6 +84,17 @@ impl AudioOutput {
                 &config,
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                     // This callback runs on the audio thread. It must NEVER block or allocate.
+
+                    // If a flush was requested, drain all stale data without outputting it.
+                    if flush_pending_cb.load(Ordering::Acquire) {
+                        let mut rem = remainder.lock();
+                        rem.clear();
+                        while receiver.try_recv().is_ok() {}
+                        flush_pending_cb.store(false, Ordering::Release);
+                        data.fill(0.0);
+                        return;
+                    }
+
                     if !playing_cb.load(Ordering::Relaxed) {
                         // Fill with silence when paused
                         data.fill(0.0);
@@ -143,6 +159,7 @@ impl AudioOutput {
             stream: Some(stream),
             sender,
             playing,
+            flush_pending,
             samples_played,
             sample_rate,
             channels,
@@ -157,7 +174,7 @@ impl AudioOutput {
             stream
                 .play()
                 .map_err(|e| AudioError::StreamPlay(format!("{e}")))?;
-            self.playing.store(true, Ordering::Relaxed);
+            self.playing.store(true, Ordering::SeqCst);
             debug!("Audio output playing");
         }
         Ok(())
@@ -165,9 +182,12 @@ impl AudioOutput {
 
     /// Pause audio playback.
     ///
-    /// The CPAL stream remains open but outputs silence.
+    /// The CPAL stream keeps running but the callback outputs silence
+    /// when the playing flag is false. We intentionally do NOT call
+    /// `stream.pause()` because WASAPI on Windows doesn't reliably
+    /// resume after pause.
     pub fn pause(&mut self) -> Result<(), AudioError> {
-        self.playing.store(false, Ordering::Relaxed);
+        self.playing.store(false, Ordering::SeqCst);
         debug!("Audio output paused");
         Ok(())
     }
@@ -215,12 +235,12 @@ impl AudioOutput {
 
     /// Drain any pending samples from the ring buffer.
     ///
-    /// Useful when seeking — clears stale audio data.
+    /// Sets a flag that the CPAL callback checks — on the next callback
+    /// invocation it drains the ring buffer without outputting, then
+    /// clears the flag. This ensures stale audio data is discarded.
     pub fn flush(&self) {
-        while self.sender.try_send(Vec::new()).is_ok() {}
-        // Actually we should drain the receiver, but we don't own it.
-        // Instead, just mark position and let the callback drain naturally.
-        debug!("Audio output flushed");
+        self.flush_pending.store(true, Ordering::Release);
+        debug!("Audio output flush requested");
     }
 }
 

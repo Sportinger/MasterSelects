@@ -157,16 +157,27 @@ fn compile_cuda_kernels(kernel_dir: &Path, out_dir: &Path) {
         //   --use_fast_math  : Enable fast math intrinsics
         //   -o               : Output file
         //   -Wno-deprecated-gpu-targets : Suppress deprecation warnings for older archs
-        let status = Command::new(&nvcc)
-            .arg("--ptx")
+        let mut cmd = Command::new(&nvcc);
+        cmd.arg("--ptx")
             .arg("-arch=sm_75")
             .arg("-O3")
             .arg("--use_fast_math")
             .arg("-Wno-deprecated-gpu-targets")
             .arg("-o")
             .arg(&ptx_output)
-            .arg(cu_file)
-            .status();
+            .arg(cu_file);
+
+        // On Windows, nvcc needs cl.exe (MSVC) as host compiler. If it's not
+        // in PATH, try to find it from Visual Studio Build Tools.
+        if cfg!(target_os = "windows") {
+            if let Some(cl_dir) = find_msvc_cl_dir() {
+                let current_path = env::var("PATH").unwrap_or_default();
+                let new_path = format!("{};{}", cl_dir.display(), current_path);
+                cmd.env("PATH", new_path);
+            }
+        }
+
+        let status = cmd.status();
 
         match status {
             Ok(s) if s.success() => {
@@ -351,6 +362,52 @@ fn compile_vulkan_shaders(kernel_dir: &Path, out_dir: &Path) {
 // =============================================================================
 // Helpers
 // =============================================================================
+
+/// Find the directory containing MSVC `cl.exe` for nvcc's host compiler.
+///
+/// Searches common Visual Studio installation paths. Returns the directory
+/// containing cl.exe (not the executable itself) so it can be added to PATH.
+#[cfg(target_os = "windows")]
+fn find_msvc_cl_dir() -> Option<PathBuf> {
+    let vs_paths = [
+        r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC",
+        r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC",
+        r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC",
+        r"C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Tools\MSVC",
+        r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC",
+    ];
+
+    for vs_path in &vs_paths {
+        let msvc_dir = Path::new(vs_path);
+        if !msvc_dir.exists() {
+            continue;
+        }
+        // Find the latest version directory
+        if let Ok(entries) = fs::read_dir(msvc_dir) {
+            let mut versions: Vec<PathBuf> = entries
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| p.is_dir())
+                .collect();
+            versions.sort();
+            if let Some(latest) = versions.last() {
+                let cl_dir = latest.join("bin").join("Hostx64").join("x64");
+                let cl_exe = cl_dir.join("cl.exe");
+                if cl_exe.exists() {
+                    println!("cargo:warning=Found MSVC cl.exe at: {}", cl_exe.display());
+                    return Some(cl_dir);
+                }
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(not(target_os = "windows"))]
+fn find_msvc_cl_dir() -> Option<PathBuf> {
+    None
+}
 
 /// Collect all files with the given extension from a directory (non-recursive).
 fn collect_files(dir: &Path, extension: &str) -> Vec<PathBuf> {

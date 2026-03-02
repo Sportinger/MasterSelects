@@ -1,4 +1,5 @@
 mod app;
+mod audio_pipeline;
 mod bridge;
 #[allow(dead_code)]
 mod engine;

@@ -187,10 +187,11 @@ impl Session {
                 (Some(response), None)
             }
 
-            // Download commands are handled in server.rs with WsSender
+            // Download/search commands are handled in server.rs with WsSender
             Command::DownloadYoutube { id, .. }
             | Command::Download { id, .. }
-            | Command::ListFormats { id, .. } => {
+            | Command::ListFormats { id, .. }
+            | Command::SearchVideo { id, .. } => {
                 let response = Response::error(&id, error_codes::INTERNAL_ERROR, "Download commands should be handled by server");
                 (Some(response), None)
             }

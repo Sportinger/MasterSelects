@@ -69,13 +69,22 @@ impl AudioDecoder {
 
         let reader = probed.format;
 
-        // Find the first audio track
+        // Find the first audio track.
+        // Prefer tracks that have channels set (definitive audio track).
+        // Fall back to tracks that have a sample_rate but no channels yet
+        // (some AAC encoders don't include channel info in the container).
         let track = reader
             .tracks()
             .iter()
             .find(|t| {
                 t.codec_params.codec != symphonia::core::codecs::CODEC_TYPE_NULL
                     && t.codec_params.channels.is_some()
+            })
+            .or_else(|| {
+                reader.tracks().iter().find(|t| {
+                    t.codec_params.codec != symphonia::core::codecs::CODEC_TYPE_NULL
+                        && t.codec_params.sample_rate.is_some()
+                })
             })
             .ok_or(AudioError::NoAudioTrack)?;
 
@@ -89,7 +98,7 @@ impl AudioDecoder {
         let channels = codec_params
             .channels
             .map(|c| c.count() as u16)
-            .ok_or_else(|| AudioError::Decode("No channel info in codec params".to_string()))?;
+            .unwrap_or(2); // Default to stereo if not specified in container
 
         let duration = if let Some(n_frames) = codec_params.n_frames {
             TimeCode::from_secs(n_frames as f64 / sample_rate as f64)

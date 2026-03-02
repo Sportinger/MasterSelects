@@ -1,5 +1,6 @@
 use eframe::egui;
 
+use crate::audio_pipeline::AudioPipeline;
 use crate::bridge::PreviewBridge;
 use crate::engine::EngineOrchestrator;
 use crate::media_panel::{MediaFile, MediaKind, MediaPanelState};
@@ -29,6 +30,7 @@ pub struct MasterSelectsApp {
     pub right_panel_width: f32,
     pub bridge: PreviewBridge,
     pub engine: EngineOrchestrator,
+    pub audio: AudioPipeline,
 
     // Real application state
     pub app_state: AppState,
@@ -55,6 +57,7 @@ impl MasterSelectsApp {
             right_panel_width: 340.0,
             bridge: PreviewBridge::new(1920, 1080),
             engine: EngineOrchestrator::new(),
+            audio: AudioPipeline::new(),
 
             // Initialize real application state
             app_state: AppState::default(),
@@ -84,6 +87,11 @@ impl MasterSelectsApp {
         {
             self.capture_snapshot("Import media");
             self.engine.open_file(path.clone()).ok();
+
+            // Load audio from the same file (MP4/MKV contain audio tracks)
+            if let Err(e) = self.audio.load_file(&path) {
+                tracing::warn!("Audio load failed: {e}");
+            }
 
             // Add file to the media panel
             let file_name = path
@@ -391,6 +399,11 @@ impl MasterSelectsApp {
         // Space - Play/Pause toggle
         if ctx.input(|i| i.key_pressed(egui::Key::Space)) {
             self.engine.toggle_play_pause();
+            if matches!(self.engine.state(), crate::engine::EngineState::Playing) {
+                self.audio.play();
+            } else {
+                self.audio.pause();
+            }
         }
 
         // Ctrl+I - Import media file
@@ -539,9 +552,21 @@ impl MasterSelectsApp {
                 ToolbarAction::ExportStart => {
                     self.set_status("Export started".to_string());
                 }
-                ToolbarAction::Play => self.engine.toggle_play_pause(),
-                ToolbarAction::Pause => self.engine.toggle_play_pause(),
+                ToolbarAction::Play => {
+                    self.engine.toggle_play_pause();
+                    if matches!(self.engine.state(), crate::engine::EngineState::Playing) {
+                        self.audio.play();
+                    } else {
+                        self.audio.pause();
+                    }
+                }
+                ToolbarAction::Pause => {
+                    self.engine.toggle_play_pause();
+                    self.audio.pause();
+                }
                 ToolbarAction::Stop => {
+                    self.engine.stop();
+                    self.audio.stop();
                     self.set_status("Stopped".to_string());
                 }
             }
@@ -595,13 +620,21 @@ impl MasterSelectsApp {
                 }
                 TimelineAction::PlayPause => {
                     self.engine.toggle_play_pause();
+                    // Sync audio pipeline to engine state
+                    if matches!(self.engine.state(), crate::engine::EngineState::Playing) {
+                        self.audio.play();
+                    } else {
+                        self.audio.pause();
+                    }
                 }
                 TimelineAction::Stop => {
                     self.engine.stop();
+                    self.audio.stop();
                     self.set_status("Stopped".to_string());
                 }
                 TimelineAction::Seek(time) => {
                     self.engine.seek(time as f64);
+                    self.audio.seek(time as f64);
                 }
             }
         }
@@ -773,8 +806,9 @@ impl eframe::App for MasterSelectsApp {
         // 2. Check auto-save
         self.check_auto_save();
 
-        // 3. Pump engine frames
+        // 3. Pump engine frames + audio
         self.engine.update(ctx, &mut self.bridge);
+        self.audio.update();
 
         // 4. Toolbar at top
         crate::toolbar::show_toolbar(ctx, &mut self.toolbar);

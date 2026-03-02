@@ -131,28 +131,9 @@ export class LayerCollector {
         }
       }
 
-      // 3. Try WebCodecs VideoFrame
-      // Skip for videos that haven't been played yet — after page reload,
-      // VideoFrame from a never-played video produces black/empty frames.
-      // Fall through to tryHTMLVideo which has a canvas-based fallback.
-      if (source.webCodecsPlayer && (!source.videoElement || this.videoGpuReady.has(source.videoElement))) {
-        const frame = source.webCodecsPlayer.getCurrentFrame();
-        if (frame) {
-          const extTex = deps.textureManager.importVideoTexture(frame);
-          if (extTex) {
-            this.currentDecoder = 'WebCodecs';
-            this.hasVideo = true;
-            return {
-              layer,
-              isVideo: true,
-              externalTexture: extTex,
-              textureView: null,
-              sourceWidth: frame.displayWidth,
-              sourceHeight: frame.displayHeight,
-            };
-          }
-        }
-      }
+      // 3. WebCodecs VideoFrame — disabled for playback (causes lag).
+      //    WebCodecs is still used for export via WebCodecsExportMode.
+      //    HTMLVideoElement (tier 4) handles playback rendering.
 
       // 4. Try HTMLVideoElement (fallback)
       if (source.videoElement) {
