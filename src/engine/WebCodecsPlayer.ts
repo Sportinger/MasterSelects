@@ -29,7 +29,8 @@ export class WebCodecsPlayer implements ExportModePlayer {
   private decoder: VideoDecoder | null = null;
   private currentFrame: VideoFrame | null = null;
   private samples: Sample[] = [];
-  private sampleIndex = 0;
+  private sampleIndex = 0;    // Display position (which sample is currently shown)
+  private feedIndex = 0;       // Feed position (how far we've fed the decoder)
   private _isPlaying = false;
   private loop: boolean;
   private frameRate = 30;
@@ -38,6 +39,12 @@ export class WebCodecsPlayer implements ExportModePlayer {
   private animationId: number | null = null;
   private videoTrack: MP4VideoTrack | null = null;
   private codecConfig: VideoDecoderConfig | null = null;
+
+  // Frame buffer: decoder outputs go here, display picks from here
+  private frameBuffer: VideoFrame[] = [];
+  private static readonly MAX_FRAME_BUFFER = 8;
+  private static readonly FEED_LOOKAHEAD = 10;
+  private static readonly FEED_QUEUE_TARGET = 5;
 
   // Simple mode (VideoFrame from HTMLVideoElement)
   private useSimpleMode = false;
@@ -67,7 +74,7 @@ export class WebCodecsPlayer implements ExportModePlayer {
   getDecoder(): VideoDecoder | null { return this.decoder; }
   getSamples(): Sample[] { return this.samples; }
   getSampleIndex(): number { return this.sampleIndex; }
-  setSampleIndex(index: number): void { this.sampleIndex = index; }
+  setSampleIndex(index: number): void { this.sampleIndex = index; this.feedIndex = index; }
   getVideoTrackTimescale(): number | null { return this.videoTrack?.timescale ?? null; }
   getCodecConfig(): VideoDecoderConfig | null { return this.codecConfig; }
   getFrameRate(): number { return this.frameRate; }
@@ -476,8 +483,15 @@ export class WebCodecsPlayer implements ExportModePlayer {
         // In export mode, buffer ALL frames via export mode handler
         if (this.exportMode.isInExportMode) {
           this.exportMode.handleDecoderOutput(frame);
+        } else if (this._isPlaying) {
+          // Playback mode: buffer frame for time-controlled presentation
+          this.frameBuffer.push(frame);
+          // Evict oldest if buffer overflows
+          while (this.frameBuffer.length > WebCodecsPlayer.MAX_FRAME_BUFFER) {
+            this.frameBuffer.shift()!.close();
+          }
         } else {
-          // Normal mode: just keep current frame
+          // Paused/seeking: show frame immediately
           if (this.currentFrame) {
             this.currentFrame.close();
           }
@@ -533,7 +547,12 @@ export class WebCodecsPlayer implements ExportModePlayer {
       }
       this.startSimpleFrameCapture();
     } else {
+      // Sync feedIndex to sampleIndex on play start
+      if (this.feedIndex < this.sampleIndex) {
+        this.feedIndex = this.sampleIndex;
+      }
       this.lastFrameTime = performance.now();
+      this.lastRAFTime = 0;
       this.scheduleNextFrame();
     }
   }
@@ -568,8 +587,10 @@ export class WebCodecsPlayer implements ExportModePlayer {
       }
     } else {
       this.sampleIndex = 0;
+      this.feedIndex = 0;
     }
 
+    this.clearFrameBuffer();
     if (this.currentFrame) {
       this.currentFrame.close();
       this.currentFrame = null;
@@ -620,12 +641,6 @@ export class WebCodecsPlayer implements ExportModePlayer {
 
   private lastRAFTime = 0;
 
-  // Number of samples to keep ahead in the decoder pipeline.
-  // HW decoders buffer B-frames until a keyframe flushes the GOP.
-  // Feeding only 1 sample per rAF leaves the pipeline empty after a flush,
-  // causing ~330ms stalls at GOP boundaries. Pre-feeding keeps it full.
-  private static readonly PREFEED_TARGET = 5;
-
   private scheduleNextFrame(): void {
     if (!this._isPlaying) return;
 
@@ -639,21 +654,85 @@ export class WebCodecsPlayer implements ExportModePlayer {
       }
       this.lastRAFTime = now;
 
+      // Keep decoder pipeline fed ahead of display
+      this.pumpDecoder();
+
       const elapsed = now - this.lastFrameTime;
 
       if (elapsed >= this.frameInterval) {
-        // Feed samples to keep decoder pipeline full.
-        // Always decode at least 1 per interval, plus top up to PREFEED_TARGET.
-        const queueSize = this.decoder?.decodeQueueSize ?? 0;
-        const toFeed = Math.max(1, WebCodecsPlayer.PREFEED_TARGET - queueSize);
-        for (let i = 0; i < toFeed; i++) {
-          this.decodeNextFrame();
-        }
+        // Present next buffered frame at the video's natural frame rate
+        this.presentBufferedFrame();
         this.lastFrameTime = now - (elapsed % this.frameInterval);
       }
 
       this.scheduleNextFrame();
     });
+  }
+
+  /** Feed samples to the decoder, staying ahead of the display position */
+  private pumpDecoder(): void {
+    if (!this.decoder || this.samples.length === 0) return;
+
+    while (
+      this.feedIndex < this.samples.length &&
+      this.feedIndex - this.sampleIndex < WebCodecsPlayer.FEED_LOOKAHEAD &&
+      this.decoder.decodeQueueSize < WebCodecsPlayer.FEED_QUEUE_TARGET
+    ) {
+      const sample = this.samples[this.feedIndex];
+      const chunk = new EncodedVideoChunk({
+        type: sample.is_sync ? 'key' : 'delta',
+        timestamp: (sample.cts * 1_000_000) / sample.timescale,
+        duration: (sample.duration * 1_000_000) / sample.timescale,
+        data: sample.data,
+      });
+
+      try {
+        this.decoder.decode(chunk);
+        const queueSize = this.decoder.decodeQueueSize;
+        wcPipelineMonitor.record('decode_feed', {
+          sampleIdx: this.feedIndex,
+          type: sample.is_sync ? 'key' : 'delta',
+          queueSize,
+        });
+        if (queueSize > 3) {
+          wcPipelineMonitor.record('queue_pressure', { queueSize });
+        }
+      } catch {
+        // Skip decode errors
+      }
+
+      this.feedIndex++;
+    }
+
+    // Handle loop
+    if (this.feedIndex >= this.samples.length && this.loop) {
+      this.feedIndex = 0;
+      this.sampleIndex = 0;
+      this.decoder.reset();
+      this.decoder.configure(this.codecConfig!);
+      this.clearFrameBuffer();
+    }
+  }
+
+  /** Present the oldest frame from the buffer */
+  private presentBufferedFrame(): void {
+    if (this.frameBuffer.length === 0) return;
+
+    const frame = this.frameBuffer.shift()!;
+    if (this.currentFrame) {
+      this.currentFrame.close();
+    }
+    this.currentFrame = frame;
+    this.sampleIndex++;
+    this.onFrame?.(frame);
+  }
+
+  /** Close all buffered frames */
+  private clearFrameBuffer(): void {
+    for (const f of this.frameBuffer) {
+      f.close();
+    }
+    this.frameBuffer.length = 0;
   }
 
   private decodeFirstFrame(): void {
@@ -672,55 +751,13 @@ export class WebCodecsPlayer implements ExportModePlayer {
 
     try {
       this.decoder.decode(chunk);
-      this.sampleIndex = 1;
+      this.sampleIndex = 0;
+      this.feedIndex = 1;
     } catch {
       // Ignore decode errors on first frame
     }
   }
 
-  private decodeNextFrame(): void {
-    if (!this.decoder || this.samples.length === 0) return;
-
-    // Get next sample
-    if (this.sampleIndex >= this.samples.length) {
-      if (this.loop) {
-        this.sampleIndex = 0;
-        // Reset decoder for loop
-        this.decoder.reset();
-        this.decoder.configure(this.codecConfig!);
-      } else {
-        this.pause();
-        return;
-      }
-    }
-
-    const sample = this.samples[this.sampleIndex];
-    this.sampleIndex++;
-
-    // Create EncodedVideoChunk from sample
-    const chunk = new EncodedVideoChunk({
-      type: sample.is_sync ? 'key' : 'delta',
-      timestamp: (sample.cts * 1_000_000) / sample.timescale, // Convert to microseconds
-      duration: (sample.duration * 1_000_000) / sample.timescale,
-      data: sample.data,
-    });
-
-    // Decode
-    try {
-      this.decoder.decode(chunk);
-      const queueSize = this.decoder.decodeQueueSize;
-      wcPipelineMonitor.record('decode_feed', {
-        sampleIdx: this.sampleIndex - 1,
-        type: sample.is_sync ? 'key' : 'delta',
-        queueSize,
-      });
-      if (queueSize > 3) {
-        wcPipelineMonitor.record('queue_pressure', { queueSize });
-      }
-    } catch {
-      // Silently skip decode errors - can happen during seek or loop
-    }
-  }
 
   // Check if there's a valid frame available
   hasFrame(): boolean {
@@ -809,7 +846,9 @@ export class WebCodecsPlayer implements ExportModePlayer {
       }
     }
 
-    this.sampleIndex = targetIndex + 1;
+    this.sampleIndex = targetIndex;
+    this.feedIndex = targetIndex + 1;
+    this.clearFrameBuffer();
 
     wcPipelineMonitor.record('seek_end', {
       target: timeSeconds,
@@ -964,7 +1003,9 @@ export class WebCodecsPlayer implements ExportModePlayer {
     // Flush to ensure all frames are decoded
     await this.decoder.flush();
 
-    this.sampleIndex = targetIndex + 1;
+    this.sampleIndex = targetIndex;
+    this.feedIndex = targetIndex + 1;
+    this.clearFrameBuffer();
   }
 
   // ==================== EXPORT MODE (delegated to WebCodecsExportMode) ====================
