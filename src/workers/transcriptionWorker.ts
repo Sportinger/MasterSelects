@@ -32,8 +32,9 @@ function getModelName(language: string): string {
   return 'onnx-community/whisper-tiny';
 }
 
-function supportsWordTimestamps(language: string): boolean {
-  return language === 'en';
+function supportsWordTimestamps(_language: string): boolean {
+  // Word-level timestamps work for all languages in transformers.js whisper
+  return true;
 }
 
 /**
