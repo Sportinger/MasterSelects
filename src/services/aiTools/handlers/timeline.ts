@@ -30,7 +30,7 @@ export async function handleGetTimelineState(
       endTime: clip.startTime + clip.duration,
       duration: clip.duration,
       hasAnalysis: clip.analysisStatus === 'ready',
-      hasTranscript: !!clip.transcript?.length,
+      hasTranscript: clip.transcriptStatus === 'ready' || !!clip.transcript?.length,
     };
   }).filter(Boolean);
 
