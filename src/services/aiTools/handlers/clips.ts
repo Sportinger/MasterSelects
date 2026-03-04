@@ -261,12 +261,12 @@ export async function handleSplitClip(
   // Visual feedback: split glow at cut position
   if (isAIExecutionActive()) {
     const store = useTimelineStore.getState();
-    store.addAIOverlay({ type: 'split-glow', trackId: clip.trackId, timePosition: splitTime, duration: 600 });
+    store.addAIOverlay({ type: 'split-glow', trackId: clip.trackId, timePosition: splitTime, duration: 1000 });
     // Also show on linked audio track
     if (withLinked && clip.linkedClipId) {
       const linked = store.clips.find(c => c.linkedClipId === clip.linkedClipId || c.id === clip.linkedClipId);
       if (linked && linked.trackId !== clip.trackId) {
-        store.addAIOverlay({ type: 'split-glow', trackId: linked.trackId, timePosition: splitTime, duration: 600 });
+        store.addAIOverlay({ type: 'split-glow', trackId: linked.trackId, timePosition: splitTime, duration: 1000 });
       }
     }
   }
@@ -573,15 +573,34 @@ export async function handleSplitClipEvenly(
     splitTimes.push(clipStart + partDuration * i);
   }
 
-  // Single-setState batch split — no stack overflow possible
-  splitClipBatch(clip, splitTimes, withLinked);
-
-  // Visual feedback: glow at each split point
+  // Staggered split: each cut happens one by one with visual feedback
   if (isAIExecutionActive()) {
-    const store = useTimelineStore.getState();
-    for (const t of splitTimes) {
-      store.addAIOverlay({ type: 'split-glow', trackId: clip.trackId, timePosition: t, duration: 600 });
+    const STAGGER_MS = 300;
+    const trackId = clip.trackId;
+    // Do first split immediately
+    splitClipBatch(clip, [splitTimes[0]], withLinked);
+    useTimelineStore.getState().addAIOverlay({
+      type: 'split-glow', trackId, timePosition: splitTimes[0], duration: 1000,
+    });
+    // Schedule remaining splits
+    for (let i = 1; i < splitTimes.length; i++) {
+      const t = splitTimes[i];
+      await new Promise(resolve => setTimeout(resolve, STAGGER_MS));
+      // Find the clip that contains this split time
+      const currentClips = useTimelineStore.getState().clips;
+      const target = currentClips.find(c =>
+        c.trackId === trackId && c.startTime < t && c.startTime + c.duration > t + 0.001
+      );
+      if (target) {
+        splitClipBatch(target, [t], withLinked);
+      }
+      useTimelineStore.getState().addAIOverlay({
+        type: 'split-glow', trackId, timePosition: t, duration: 1000,
+      });
     }
+  } else {
+    // Non-AI execution: do all splits at once (no visual feedback)
+    splitClipBatch(clip, splitTimes, withLinked);
   }
 
   return {
@@ -615,15 +634,32 @@ export async function handleSplitClipAtTimes(
     return { success: false, error: `No valid split times within clip range (${clipStart}s - ${clipEnd}s)` };
   }
 
-  // Single-setState batch split — no stack overflow possible
-  splitClipBatch(clip, validTimes, withLinked);
-
-  // Visual feedback: glow at each split point
+  // Staggered split: each cut happens one by one with visual feedback
   if (isAIExecutionActive()) {
-    const store = useTimelineStore.getState();
-    for (const t of validTimes) {
-      store.addAIOverlay({ type: 'split-glow', trackId: clip.trackId, timePosition: t, duration: 600 });
+    const STAGGER_MS = 300;
+    const trackId = clip.trackId;
+    // Do first split immediately
+    splitClipBatch(clip, [validTimes[0]], withLinked);
+    useTimelineStore.getState().addAIOverlay({
+      type: 'split-glow', trackId, timePosition: validTimes[0], duration: 1000,
+    });
+    // Schedule remaining splits
+    for (let i = 1; i < validTimes.length; i++) {
+      const t = validTimes[i];
+      await new Promise(resolve => setTimeout(resolve, STAGGER_MS));
+      const currentClips = useTimelineStore.getState().clips;
+      const target = currentClips.find(c =>
+        c.trackId === trackId && c.startTime < t && c.startTime + c.duration > t + 0.001
+      );
+      if (target) {
+        splitClipBatch(target, [t], withLinked);
+      }
+      useTimelineStore.getState().addAIOverlay({
+        type: 'split-glow', trackId, timePosition: t, duration: 1000,
+      });
     }
+  } else {
+    splitClipBatch(clip, validTimes, withLinked);
   }
 
   return {
@@ -679,27 +715,62 @@ export async function handleReorderClips(
     }
   }
 
-  // Visual feedback: animate moves for all reordered clips
+  // Staggered reorder: move clips one by one with visual feedback
   if (isAIExecutionActive()) {
-    const store = useTimelineStore.getState();
-    for (const [cId, newStart] of newPositions) {
-      const c = allClips.find(cl => cl.id === cId);
-      if (c && Math.abs(c.startTime - newStart) > 0.01) {
-        store.setAIMovingClip(cId, c.startTime, 200);
+    const STAGGER_MS = 150;
+
+    // Build ordered list of moves (only clips that actually move)
+    const moves: { clipId: string; linkedId?: string; newStart: number; linkedNewStart?: number }[] = [];
+    for (const clip of orderedClips) {
+      const newStart = newPositions.get(clip!.id)!;
+      if (Math.abs(clip!.startTime - newStart) > 0.01) {
+        const linkedId = withLinked && clip!.linkedClipId ? clip!.linkedClipId : undefined;
+        const linkedNewStart = linkedId ? newPositions.get(linkedId) : undefined;
+        moves.push({ clipId: clip!.id, linkedId, newStart, linkedNewStart });
       }
     }
-  }
 
-  // Apply all position changes in a single set() call
-  useTimelineStore.setState({
-    clips: allClips.map(c => {
-      const newStart = newPositions.get(c.id);
-      if (newStart !== undefined) {
-        return { ...c, startTime: Math.max(0, newStart) };
+    for (let i = 0; i < moves.length; i++) {
+      const { clipId, linkedId, newStart, linkedNewStart } = moves[i];
+      const store = useTimelineStore.getState();
+
+      // Set FLIP animation data before moving
+      const currentClip = store.clips.find(c => c.id === clipId);
+      if (currentClip) {
+        store.setAIMovingClip(clipId, currentClip.startTime, 200);
       }
-      return c;
-    }),
-  });
+      if (linkedId) {
+        const linkedClip = store.clips.find(c => c.id === linkedId);
+        if (linkedClip) {
+          store.setAIMovingClip(linkedId, linkedClip.startTime, 200);
+        }
+      }
+
+      // Move this clip (and linked) to new position
+      useTimelineStore.setState({
+        clips: store.clips.map(c => {
+          if (c.id === clipId) return { ...c, startTime: Math.max(0, newStart) };
+          if (c.id === linkedId && linkedNewStart !== undefined) return { ...c, startTime: Math.max(0, linkedNewStart) };
+          return c;
+        }),
+      });
+
+      if (i < moves.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, STAGGER_MS));
+      }
+    }
+  } else {
+    // Non-AI: apply all at once
+    useTimelineStore.setState({
+      clips: allClips.map(c => {
+        const newStart = newPositions.get(c.id);
+        if (newStart !== undefined) {
+          return { ...c, startTime: Math.max(0, newStart) };
+        }
+        return c;
+      }),
+    });
+  }
 
   // Update duration and invalidate cache once
   useTimelineStore.getState().updateDuration();

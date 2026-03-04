@@ -12,11 +12,12 @@ export const createAIActionFeedbackSlice: SliceCreator<AIActionFeedbackActions> 
     const current = get().aiActionOverlays;
     set({ aiActionOverlays: [...current, entry] });
 
-    // Auto-cleanup after animation duration + buffer
+    // Auto-cleanup after animation delay + duration + buffer
+    const totalTime = (overlay.animationDelay || 0) + overlay.duration + 50;
     setTimeout(() => {
       const overlays = get().aiActionOverlays;
       set({ aiActionOverlays: overlays.filter(o => o.id !== id) });
-    }, overlay.duration + 50);
+    }, totalTime);
 
     return id;
   },

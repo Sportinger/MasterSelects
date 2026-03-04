@@ -54,6 +54,7 @@ export interface AIActionOverlay {
   clipColor?: string;      // background color (for delete ghost)
   createdAt: number;
   duration: number;        // animation duration in ms
+  animationDelay?: number; // delay before animation starts in ms (for staggering)
 }
 
 export interface AIMovingClip {

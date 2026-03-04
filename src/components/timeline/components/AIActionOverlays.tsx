@@ -62,13 +62,17 @@ function OverlayElement({
         />
       );
 
-    case 'delete-ghost':
+    case 'delete-ghost': {
+      // Width needs to be calculated as pixel difference, not absolute timeToPixel
+      const widthPx = overlay.width
+        ? timeToPixel(overlay.timePosition + overlay.width) - timeToPixel(overlay.timePosition)
+        : 4;
       return (
         <div
           className="ai-delete-ghost"
           style={{
             left: timeToPixel(overlay.timePosition),
-            width: Math.max(timeToPixel(overlay.width || 0), 4),
+            width: Math.max(widthPx, 4),
             top: layout.top + 4,
             height: layout.height - 8,
             backgroundColor: overlay.clipColor ? `${overlay.clipColor}66` : undefined,
@@ -79,6 +83,7 @@ function OverlayElement({
           )}
         </div>
       );
+    }
 
     case 'trim-highlight':
       return (
