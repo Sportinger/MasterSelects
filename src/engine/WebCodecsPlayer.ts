@@ -620,6 +620,12 @@ export class WebCodecsPlayer implements ExportModePlayer {
 
   private lastRAFTime = 0;
 
+  // Number of samples to keep ahead in the decoder pipeline.
+  // HW decoders buffer B-frames until a keyframe flushes the GOP.
+  // Feeding only 1 sample per rAF leaves the pipeline empty after a flush,
+  // causing ~330ms stalls at GOP boundaries. Pre-feeding keeps it full.
+  private static readonly PREFEED_TARGET = 5;
+
   private scheduleNextFrame(): void {
     if (!this._isPlaying) return;
 
@@ -636,7 +642,13 @@ export class WebCodecsPlayer implements ExportModePlayer {
       const elapsed = now - this.lastFrameTime;
 
       if (elapsed >= this.frameInterval) {
-        this.decodeNextFrame();
+        // Feed samples to keep decoder pipeline full.
+        // Always decode at least 1 per interval, plus top up to PREFEED_TARGET.
+        const queueSize = this.decoder?.decodeQueueSize ?? 0;
+        const toFeed = Math.max(1, WebCodecsPlayer.PREFEED_TARGET - queueSize);
+        for (let i = 0; i < toFeed; i++) {
+          this.decodeNextFrame();
+        }
         this.lastFrameTime = now - (elapsed % this.frameInterval);
       }
 
