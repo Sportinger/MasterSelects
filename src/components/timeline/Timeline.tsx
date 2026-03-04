@@ -184,17 +184,6 @@ export function Timeline() {
 
   // Use store toggle directly (no useCallback needed - stable store reference)
 
-  const handleAddVideoTrack = useCallback(() => addTrack('video'), [addTrack]);
-  const handleAddAudioTrack = useCallback(() => addTrack('audio'), [addTrack]);
-
-  const handleAddTextClip = useCallback(() => {
-    const state = useTimelineStore.getState();
-    const videoTrack = state.tracks.find(t => t.type === 'video');
-    if (videoTrack) {
-      addTextClip(videoTrack.id, state.playheadPosition);
-    }
-  }, [addTextClip]);
-
   // Performance: Create lookup maps for O(1) clip/track access (must be before hooks that use them)
   const clipMap = useMemo(() => new Map(clips.map(c => [c.id, c])), [clips]);
   const trackMap = useMemo(() => new Map(tracks.map(t => [t.id, t])), [tracks]);
@@ -806,9 +795,6 @@ export function Timeline() {
         onToggleThumbnails={toggleThumbnailsEnabled}
         onToggleWaveforms={toggleWaveformsEnabled}
         onToggleCutTool={toggleCutTool}
-        onAddVideoTrack={handleAddVideoTrack}
-        onAddAudioTrack={handleAddAudioTrack}
-        onAddTextClip={handleAddTextClip}
         onSetDuration={setDuration}
         onFitToWindow={handleFitToWindow}
         formatTime={formatTime}

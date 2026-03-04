@@ -39,9 +39,6 @@ function TimelineControlsComponent({
   onToggleThumbnails,
   onToggleWaveforms,
   onToggleCutTool,
-  onAddVideoTrack,
-  onAddAudioTrack,
-  onAddTextClip,
   onSetDuration,
   onFitToWindow,
   formatTime,
@@ -271,17 +268,7 @@ function TimelineControlsComponent({
           )}
         </div>
       </div>
-      <div className="timeline-tracks-controls">
-        <button className="btn btn-sm" onClick={onAddVideoTrack}>
-          + Video Track
-        </button>
-        <button className="btn btn-sm" onClick={onAddAudioTrack}>
-          + Audio Track
-        </button>
-        <button className="btn btn-sm" onClick={onAddTextClip} title="Add text clip at playhead">
-          + Text
-        </button>
-      </div>
+      {/* Track add buttons removed - use right-click on track headers instead */}
     </div>
   );
 }
