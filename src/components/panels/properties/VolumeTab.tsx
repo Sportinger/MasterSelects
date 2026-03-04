@@ -3,7 +3,12 @@ import { useEffect } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { createEffectProperty } from '../../../types';
 import { EQ_FREQUENCIES } from '../../../services/audioManager';
-import { EffectKeyframeToggle, EQKeyframeToggle, EQ_BAND_PARAMS } from './shared';
+import { DraggableNumber, EffectKeyframeToggle, EQKeyframeToggle, EQ_BAND_PARAMS } from './shared';
+
+// dB conversion helpers (internal gain 0–2 ↔ display dB)
+const SILENCE_THRESHOLD_DB = -60;
+const gainToDb = (gain: number): number => gain <= 0 ? SILENCE_THRESHOLD_DB : Math.max(SILENCE_THRESHOLD_DB, 20 * Math.log10(gain));
+const dbToGain = (db: number): number => db <= SILENCE_THRESHOLD_DB ? 0 : Math.pow(10, db / 20);
 
 interface VolumeTabProps {
   clipId: string;
@@ -68,9 +73,16 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
           {volumeEffect && (
             <EffectKeyframeToggle clipId={clipId} effectId={volumeEffect.id} paramName="volume" value={volume} />
           )}
-          <input type="range" min="0" max="2" step="0.01" value={volume}
-            onChange={(e) => handleVolumeChange(parseFloat(e.target.value))} />
-          <span className="value">{Math.round(volume * 100)}%</span>
+          <DraggableNumber
+            value={gainToDb(volume)}
+            onChange={(db) => handleVolumeChange(dbToGain(db))}
+            defaultValue={0}
+            min={SILENCE_THRESHOLD_DB}
+            max={6}
+            decimals={1}
+            suffix=" dB"
+            sensitivity={4}
+          />
         </div>
       </div>
 
