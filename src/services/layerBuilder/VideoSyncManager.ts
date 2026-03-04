@@ -5,8 +5,10 @@ import type { TimelineClip } from '../../types';
 import type { FrameContext, NativeDecoderState } from './types';
 import { LAYER_BUILDER_CONSTANTS } from './types';
 import { createFrameContext, getClipTimeInfo, getMediaFileForClip } from './FrameContext';
+import { playheadState } from './PlayheadState';
 import { layerPlaybackManager } from '../layerPlaybackManager';
 import { engine } from '../../engine/WebGPUEngine';
+import { useTimelineStore } from '../../stores/timeline';
 import { MAX_NESTING_DEPTH } from '../../stores/timeline/constants';
 
 export class VideoSyncManager {
@@ -17,6 +19,9 @@ export class VideoSyncManager {
   private lastVideoSyncFrame = -1;
   private lastVideoSyncPlaying = false;
   private lastSeekRef: Record<string, number> = {};
+
+  // Track per-clip playing state to detect playing→paused transitions
+  private clipWasPlaying = new Set<string>();
 
   // Videos currently being warmed up (brief play to activate GPU surface)
   // After page reload, video GPU surfaces are empty — all sync rendering APIs
@@ -340,6 +345,7 @@ export class VideoSyncManager {
       }
 
       if (ctx.isPlaying) {
+        this.clipWasPlaying.add(clip.id);
         if (video.paused) {
           // Seek to correct source time before playing (important for speed-adjusted clips)
           video.currentTime = timeInfo.clipTime;
@@ -350,6 +356,31 @@ export class VideoSyncManager {
           video.currentTime = timeInfo.clipTime;
         }
       } else {
+        // Playing → Paused transition: snap playhead to where the video actually is
+        // instead of seeking the video back to the playhead (which causes visible frame jump).
+        // The video was playing freely with up to 0.3s drift — we keep its current frame
+        // and move the playhead to match.
+        const justStopped = this.clipWasPlaying.has(clip.id);
+        if (justStopped) {
+          this.clipWasPlaying.delete(clip.id);
+          if (!video.paused) {
+            video.pause();
+          }
+          // Convert video.currentTime back to timeline position
+          // clipTime = startPoint + sourceTime, where for speed=1: clipTime = inPoint + localTime
+          // localTime = playheadPosition - clip.startTime
+          // So: playheadPosition = clip.startTime + (video.currentTime - clip.inPoint) / speed
+          const effectiveSpeed = timeInfo.absSpeed > 0.01 ? timeInfo.absSpeed : 1;
+          const videoClipTime = video.currentTime;
+          const newPlayheadPos = clip.reversed
+            ? clip.startTime + (clip.outPoint - videoClipTime) / effectiveSpeed
+            : clip.startTime + (videoClipTime - clip.inPoint) / effectiveSpeed;
+          // Update both internal and store playhead to match video position
+          playheadState.position = newPlayheadPos;
+          useTimelineStore.setState({ playheadPosition: newPlayheadPos });
+          return; // Skip seek — video is already showing the correct frame
+        }
+
         if (!video.paused) {
           video.pause();
         }
