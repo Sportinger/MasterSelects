@@ -376,10 +376,16 @@ export class ParallelDecodeManager {
     // Apply clip speed: at 2x speed, we advance through source twice as fast
     const speedAdjusted = clipLocalTime * (clipInfo.speed || 1);
 
+    let sourceTime: number;
     if (clipInfo.reversed) {
-      return clipInfo.outPoint - speedAdjusted;
+      sourceTime = clipInfo.outPoint - speedAdjusted;
+    } else {
+      sourceTime = clipInfo.inPoint + speedAdjusted;
     }
-    return clipInfo.inPoint + speedAdjusted;
+
+    // Clamp to valid source range — prevents EOF decoder stalls when
+    // timeline time slightly overshoots the source video's duration
+    return Math.max(clipInfo.inPoint, Math.min(sourceTime, clipInfo.outPoint - 0.001));
   }
 
   /**
