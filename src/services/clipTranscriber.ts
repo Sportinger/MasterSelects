@@ -3,9 +3,11 @@
 
 import { Logger } from './logger';
 import { useTimelineStore } from '../stores/timeline';
-import { triggerTimelineSave } from '../stores/mediaStore';
+import { triggerTimelineSave, useMediaStore } from '../stores/mediaStore';
+import type { MediaFile } from '../stores/mediaStore/types';
 import { useSettingsStore } from '../stores/settingsStore';
 import type { TranscriptWord, TranscriptStatus } from '../types';
+import { projectFileService } from './project/ProjectFileService';
 
 const log = Logger.create('ClipTranscriber');
 
@@ -141,6 +143,13 @@ export async function transcribeClip(clipId: string, language: string = 'auto'):
       message: undefined,
     });
     triggerTimelineSave();
+
+    // Propagate transcript to MediaFile for badge display + carry-over
+    const mediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
+    if (mediaFileId && words.length > 0) {
+      propagateTranscriptToMediaFile(mediaFileId, words);
+    }
+
     log.info(`Complete: ${words.length} words for ${clip.name}`);
 
   } catch (error) {
@@ -252,6 +261,50 @@ function updateClipTranscript(
   });
 
   useTimelineStore.setState({ clips });
+}
+
+/**
+ * Propagate transcript to MediaFile for badge display and carry-over to new clips.
+ * Merges with existing transcript if the MediaFile already has words from a different region.
+ */
+function propagateTranscriptToMediaFile(mediaFileId: string, words: TranscriptWord[]): void {
+  try {
+    const mediaState = useMediaStore.getState();
+    const file = mediaState.files.find((f: MediaFile) => f.id === mediaFileId);
+    if (!file) return;
+
+    // Merge with existing transcript if present
+    let mergedWords = words;
+    if (file.transcript?.length) {
+      const existing = file.transcript;
+      const merged = [...existing];
+      for (const word of words) {
+        const duplicate = merged.some(
+          (w: TranscriptWord) => Math.abs(w.start - word.start) < 0.05 && Math.abs(w.end - word.end) < 0.05
+        );
+        if (!duplicate) {
+          merged.push(word);
+        }
+      }
+      mergedWords = merged.sort((a, b) => a.start - b.start);
+    }
+
+    useMediaStore.setState({
+      files: mediaState.files.map((f: MediaFile) =>
+        f.id === mediaFileId
+          ? { ...f, transcriptStatus: 'ready' as TranscriptStatus, transcript: mergedWords }
+          : f
+      ),
+    });
+    // Persist transcript to project folder (TRANSCRIPTS/{mediaId}.json)
+    projectFileService.saveTranscript(mediaFileId, mergedWords).then(saved => {
+      if (saved) log.debug('Transcript saved to project folder', { mediaFileId });
+    }).catch(() => { /* no project open */ });
+
+    log.debug('Propagated transcript to MediaFile', { mediaFileId, wordCount: mergedWords.length });
+  } catch (e) {
+    log.warn('Failed to propagate transcript to MediaFile', e);
+  }
 }
 
 /**

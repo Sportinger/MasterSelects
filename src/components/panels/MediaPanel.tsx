@@ -793,6 +793,9 @@ export function MediaPanel() {
                 <span className="proxy-percent">{(item as MediaFile).proxyProgress || 0}%</span>
               </span>
             )}
+            {'transcriptStatus' in item && (item as MediaFile).transcriptStatus === 'ready' && (
+              <span className="media-item-transcript-badge" title="Transcript available">T</span>
+            )}
           </div>
         );
       case 'duration':

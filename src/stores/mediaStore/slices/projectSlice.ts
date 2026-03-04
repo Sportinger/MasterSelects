@@ -102,6 +102,19 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
             }
           }
 
+          // Check for existing transcript on disk
+          let transcriptStatus: import('../../../types').TranscriptStatus = 'none';
+          let transcript: import('../../../types').TranscriptWord[] | undefined;
+          if (projectFileService.isProjectOpen()) {
+            try {
+              const saved = await projectFileService.getTranscript(mediaFile.id);
+              if (saved && Array.isArray(saved) && saved.length > 0) {
+                transcriptStatus = 'ready';
+                transcript = saved as import('../../../types').TranscriptWord[];
+              }
+            } catch { /* no transcript file */ }
+          }
+
           return {
             ...mediaFile,
             file,
@@ -113,6 +126,8 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
             proxyFrameCount,
             proxyFps: proxyFrameCount ? PROXY_FPS : undefined,
             proxyProgress: proxyFrameCount ? 100 : 0,
+            transcriptStatus,
+            transcript,
             duration: stored.duration ?? mediaFile.duration,
             width: stored.width ?? mediaFile.width,
             height: stored.height ?? mediaFile.height,

@@ -131,6 +131,18 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       set({ clips: updater(get().clips) });
     };
 
+    // Look up transcript from MediaFile for carry-over to new clips
+    let sourceTranscript: import('../../types').TranscriptWord[] | undefined;
+    if (mediaFileId) {
+      try {
+        const { useMediaStore } = await import('../mediaStore');
+        const mf = useMediaStore.getState().files.find((f: { id: string }) => f.id === mediaFileId);
+        if (mf?.transcriptStatus === 'ready' && mf.transcript?.length) {
+          sourceTranscript = mf.transcript;
+        }
+      } catch { /* mediaStore not ready */ }
+    }
+
     // Handle video files
     if (mediaType === 'video') {
       // Use function form of set() to ensure we get fresh state
@@ -189,6 +201,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
           transform: { ...DEFAULT_TRANSFORM },
           effects: [],
           isLoading: true,
+          ...(sourceTranscript ? { transcript: sourceTranscript, transcriptStatus: 'ready' as const } : {}),
         };
 
         // Create audio clip
@@ -235,6 +248,11 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     // Handle audio files
     if (mediaType === 'audio') {
       const audioClip = createAudioClipPlaceholder({ trackId, file, startTime, estimatedDuration, mediaFileId });
+      // Carry over transcript from MediaFile if available
+      if (sourceTranscript) {
+        audioClip.transcript = sourceTranscript;
+        audioClip.transcriptStatus = 'ready';
+      }
       set({ clips: [...clips, audioClip] });
       updateDuration();
 

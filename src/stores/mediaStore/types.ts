@@ -1,6 +1,6 @@
 // MediaStore types - extracted from mediaStore.ts
 
-import type { CompositionTimelineData } from '../../types';
+import type { CompositionTimelineData, TranscriptWord, TranscriptStatus } from '../../types';
 
 // Media item types
 export type MediaType = 'video' | 'audio' | 'image' | 'composition' | 'text' | 'solid';
@@ -45,6 +45,9 @@ export interface MediaFile extends MediaItem {
   proxyFps?: number;
   hasProxyAudio?: boolean;
   proxyVideoUrl?: string;
+  // Transcript support
+  transcriptStatus?: TranscriptStatus;
+  transcript?: TranscriptWord[];
   // File System Access API
   hasFileHandle?: boolean;
   filePath?: string;
