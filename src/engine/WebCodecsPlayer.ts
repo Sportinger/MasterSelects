@@ -3,6 +3,7 @@
 // Export mode delegated to WebCodecsExportMode
 
 import { Logger } from '../services/logger';
+import { wcPipelineMonitor } from '../services/wcPipelineMonitor';
 const log = Logger.create('WebCodecsPlayer');
 
 import * as MP4BoxModule from 'mp4box';
@@ -467,6 +468,11 @@ export class WebCodecsPlayer implements ExportModePlayer {
 
     this.decoder = new VideoDecoder({
       output: (frame) => {
+        wcPipelineMonitor.record('decode_output', {
+          ts: frame.timestamp,
+          queueSize: this.decoder?.decodeQueueSize ?? 0,
+        });
+
         // In export mode, buffer ALL frames via export mode handler
         if (this.exportMode.isInExportMode) {
           this.exportMode.handleDecoderOutput(frame);
@@ -515,6 +521,10 @@ export class WebCodecsPlayer implements ExportModePlayer {
     if (this._isPlaying || !this.ready) return;
     this._isPlaying = true;
 
+    if (!this.useSimpleMode) {
+      wcPipelineMonitor.record('play');
+    }
+
     if (this.useSimpleMode && this.videoElement) {
       // If attached to external video, don't control it - just ensure frame capture is running
       // Timeline controls the video element, we get notified via events
@@ -529,6 +539,9 @@ export class WebCodecsPlayer implements ExportModePlayer {
   }
 
   pause(): void {
+    if (this._isPlaying && !this.useSimpleMode) {
+      wcPipelineMonitor.record('pause');
+    }
     this._isPlaying = false;
 
     if (this.useSimpleMode && this.videoElement) {
@@ -672,6 +685,15 @@ export class WebCodecsPlayer implements ExportModePlayer {
     // Decode
     try {
       this.decoder.decode(chunk);
+      const queueSize = this.decoder.decodeQueueSize;
+      wcPipelineMonitor.record('decode_feed', {
+        sampleIdx: this.sampleIndex - 1,
+        type: sample.is_sync ? 'key' : 'delta',
+        queueSize,
+      });
+      if (queueSize > 3) {
+        wcPipelineMonitor.record('queue_pressure', { queueSize });
+      }
     } catch {
       // Silently skip decode errors - can happen during seek or loop
     }
@@ -713,6 +735,7 @@ export class WebCodecsPlayer implements ExportModePlayer {
     // Full mode: decode from keyframe
     if (!this.videoTrack || this.samples.length === 0 || !this.decoder) return;
 
+    const seekStart = performance.now();
     const targetTime = timeSeconds * this.videoTrack.timescale;
 
     // Find sample with CTS closest to target time
@@ -737,6 +760,12 @@ export class WebCodecsPlayer implements ExportModePlayer {
       }
     }
 
+    const framesDecoded = targetIndex - keyframeIndex + 1;
+    wcPipelineMonitor.record('seek_start', {
+      target: timeSeconds,
+      keyframeDist: framesDecoded,
+    });
+
     // Reset decoder
     this.decoder.reset();
     this.decoder.configure(this.codecConfig!);
@@ -758,6 +787,12 @@ export class WebCodecsPlayer implements ExportModePlayer {
     }
 
     this.sampleIndex = targetIndex + 1;
+
+    wcPipelineMonitor.record('seek_end', {
+      target: timeSeconds,
+      framesDecoded,
+      durationMs: Math.round(performance.now() - seekStart),
+    });
   }
 
   /**

@@ -10,6 +10,7 @@ import { layerPlaybackManager } from '../layerPlaybackManager';
 import { engine } from '../../engine/WebGPUEngine';
 import { useTimelineStore } from '../../stores/timeline';
 import { MAX_NESTING_DEPTH } from '../../stores/timeline/constants';
+import { wcPipelineMonitor } from '../wcPipelineMonitor';
 
 export class VideoSyncManager {
   // Native decoder state
@@ -550,6 +551,10 @@ export class VideoSyncManager {
       // Drift correction: if WebCodecs time drifts from expected, seek
       const wcDrift = Math.abs(wcp.currentTime - timeInfo.clipTime);
       if (wcDrift > 0.3) {
+        wcPipelineMonitor.record('drift_correct', {
+          drift: Math.round(wcDrift * 1000) / 1000,
+          target: Math.round(timeInfo.clipTime * 1000) / 1000,
+        });
         wcp.seek(timeInfo.clipTime);
       }
       // Keep audio in sync

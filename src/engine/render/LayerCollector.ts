@@ -4,6 +4,7 @@ import type { Layer, LayerRenderData, DetailedStats } from '../core/types';
 import type { TextureManager } from '../texture/TextureManager';
 import type { ScrubbingCache } from '../texture/ScrubbingCache';
 import { Logger } from '../../services/logger';
+import { wcPipelineMonitor } from '../../services/wcPipelineMonitor';
 
 const log = Logger.create('LayerCollector');
 
@@ -152,6 +153,11 @@ export class LayerCollector {
           if (frame) {
             const extTex = deps.textureManager.importVideoTexture(frame);
             if (extTex) {
+              if (source.webCodecsPlayer.isFullMode()) {
+                wcPipelineMonitor.record('frame_read', {
+                  frameTs: frame.timestamp,
+                });
+              }
               this.currentDecoder = source.webCodecsPlayer.isFullMode()
                 ? 'WebCodecs'       // Echtes WebCodecs (VideoDecoder API)
                 : 'HTMLVideo(VF)';  // VideoFrame-Wrapper um HTMLVideo
