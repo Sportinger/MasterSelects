@@ -137,9 +137,10 @@ export class RenderLoop {
         }
       }
 
-      // Record RAF gap for stats
+      // Record RAF gap for stats (pass scrubbing state so intentional
+      // 30fps rate-limiting doesn't inflate drop counts)
       if (lastTimestamp > 0) {
-        this.performanceStats.recordRafGap(rafGap);
+        this.performanceStats.recordRafGap(rafGap, this.isScrubbing);
       }
 
       // Reset per-second counters

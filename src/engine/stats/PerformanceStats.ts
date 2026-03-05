@@ -51,12 +51,16 @@ export class PerformanceStats {
     this.lastLayerCount = count;
   }
 
-  recordRafGap(gap: number): void {
+  recordRafGap(gap: number, isScrubbing = false): void {
     this.detailedStats.rafGap = this.detailedStats.rafGap * 0.9 + gap * 0.1;
 
-    // Detect frame drops - gap > 2x target means missed frames
-    if (gap > this.TARGET_FRAME_TIME * 2) {
-      const missedFrames = Math.max(1, Math.round(gap / this.TARGET_FRAME_TIME) - 1);
+    // During scrubbing, the render loop intentionally limits to ~30fps (33ms).
+    // Use the scrub frame time as baseline so intentional skips aren't counted as drops.
+    const targetTime = isScrubbing ? 33 : this.TARGET_FRAME_TIME;
+    const dropThreshold = targetTime * 2;
+
+    if (gap > dropThreshold) {
+      const missedFrames = Math.max(1, Math.round(gap / targetTime) - 1);
       this.detailedStats.dropsTotal += missedFrames;
       this.detailedStats.dropsThisSecond += missedFrames;
       this.detailedStats.lastDropReason = 'slow_raf';

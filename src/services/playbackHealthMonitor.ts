@@ -199,6 +199,8 @@ export class PlaybackHealthMonitor {
       if (lc) {
         for (const clip of videoClips) {
           const video = clip.source!.videoElement!;
+          // Skip if video is currently warming up — warmup will handle GPU readiness
+          if (vsm.isVideoWarmingUp(video)) continue;
           if (!video.paused && !lc.isVideoGpuReady(video)) {
             if (this.recordAnomaly('GPU_SURFACE_COLD', clip.id, 'playing video not GPU-ready')) {
               lc.resetVideoGpuReady(video);
@@ -275,15 +277,25 @@ export class PlaybackHealthMonitor {
       engine.requestRender();
       return;
     }
-    // Normal mid-file recovery
-    video.play().then(() => {
-      video.pause();
-      video.currentTime = time;
-      engine.requestRender();
-    }).catch(() => {
+
+    const { isPlaying } = useTimelineStore.getState();
+    if (isPlaying) {
+      // During playback: just nudge time to unstick decoder.
+      // Do NOT pause — that races with AudioSyncHandler and causes
+      // "play() interrupted by pause()" errors.
       video.currentTime = time + 0.001;
       engine.requestRender();
-    });
+    } else {
+      // When paused: play/pause cycle to force GPU decode
+      video.play().then(() => {
+        video.pause();
+        video.currentTime = time;
+        engine.requestRender();
+      }).catch(() => {
+        video.currentTime = time + 0.001;
+        engine.requestRender();
+      });
+    }
   }
 
   private recoverSeekStuck(video: HTMLVideoElement): void {
