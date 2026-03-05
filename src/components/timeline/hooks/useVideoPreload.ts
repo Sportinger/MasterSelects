@@ -39,7 +39,12 @@ export function useVideoPreload({
       : playheadPosition;
     const lookaheadPosition = currentPosition + LOOKAHEAD_TIME;
 
-    // Helper to preload a video element - seeks and forces buffering
+    // Helper to preload a video element - seeks to trigger buffering.
+    // NOTE: We intentionally do NOT call play() here. GPU surface warmup
+    // is handled by VideoSyncManager.warmupUpcomingClips() which uses
+    // requestVideoFrameCallback to confirm actual frame presentation.
+    // A 50ms play()/pause() here would set played.length > 0 without
+    // actually warming the GPU surface, causing the proper warmup to be skipped.
     const preloadVideo = (
       video: HTMLVideoElement,
       targetTime: number,
@@ -50,23 +55,6 @@ export function useVideoPreload({
       // Only preload if significantly different (avoid repeated preloading)
       if (timeDiff > 0.1) {
         video.currentTime = Math.max(0, targetTime);
-
-        // Force buffer by briefly playing then pausing
-        // This triggers the browser to actually fetch the video data
-        const wasPlaying = !video.paused;
-        if (!wasPlaying) {
-          video
-            .play()
-            .then(() => {
-              // Immediately pause after play starts buffering
-              setTimeout(() => {
-                if (!wasPlaying) video.pause();
-              }, 50);
-            })
-            .catch(() => {
-              // Ignore play errors (e.g., autoplay policy)
-            });
-        }
       }
     };
 

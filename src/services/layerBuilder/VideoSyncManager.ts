@@ -555,13 +555,19 @@ export class VideoSyncManager {
 
   // --- Proactive GPU Warmup ---
 
-  private static readonly LOOKAHEAD_TIME = 0.5; // seconds ahead to look for upcoming clips
+  // Videos whose GPU surface has been confirmed active via RVFC
+  private gpuWarmedUp = new WeakSet<HTMLVideoElement>();
+  private static readonly LOOKAHEAD_TIME = 0.5; // seconds
 
   /**
    * Warm up video elements for clips that will become active within LOOKAHEAD_TIME.
    * Each split clip has its own HTMLVideoElement with a cold GPU surface.
    * Without proactive warmup, crossing a cut boundary causes a black frame
    * while the GPU decoder activates (~100-500ms stutter).
+   *
+   * Note: useVideoPreload.ts also does lookahead (2s) and calls play()/pause(50ms),
+   * but 50ms doesn't guarantee GPU surface activation. This method uses
+   * requestVideoFrameCallback to confirm actual frame presentation.
    */
   private warmupUpcomingClips(ctx: FrameContext): void {
     const lookaheadEnd = ctx.playheadPosition + VideoSyncManager.LOOKAHEAD_TIME;
@@ -575,8 +581,8 @@ export class VideoSyncManager {
       // Is this clip about to become active? (starts within lookahead window, not yet active)
       if (clipStart <= ctx.playheadPosition || clipStart > lookaheadEnd) continue;
 
-      // Skip if already warm or warming up
-      if (video.played.length > 0 || this.warmingUpVideos.has(video)) continue;
+      // Skip if GPU already confirmed warm, or warmup in progress
+      if (this.gpuWarmedUp.has(video) || this.warmingUpVideos.has(video)) continue;
 
       // Skip if no source loaded
       if (!video.src && !video.currentSrc) continue;
@@ -587,7 +593,7 @@ export class VideoSyncManager {
 
       // Start proactive warmup: briefly play to activate GPU surface
       this.warmingUpVideos.add(video);
-      const clipTime = clip.inPoint; // Seek to clip's in-point after warmup
+      const clipTime = clip.inPoint;
 
       video.muted = true; // Prevent audio blip during warmup
       video.play().then(() => {
@@ -598,6 +604,7 @@ export class VideoSyncManager {
             video.pause();
             video.currentTime = this.safeSeekTime(video, clipTime);
             this.warmingUpVideos.delete(video);
+            this.gpuWarmedUp.add(video);
             vfPipelineMonitor.record('vf_gpu_ready', { clipId: clip.id, proactive: 'true' });
           });
         } else {
@@ -606,6 +613,7 @@ export class VideoSyncManager {
             video.pause();
             video.currentTime = this.safeSeekTime(video, clipTime);
             this.warmingUpVideos.delete(video);
+            this.gpuWarmedUp.add(video);
             vfPipelineMonitor.record('vf_gpu_ready', { clipId: clip.id, proactive: 'true', fallback: 'true' });
           }, 50);
         }
