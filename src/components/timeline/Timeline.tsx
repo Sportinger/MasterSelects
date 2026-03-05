@@ -267,6 +267,7 @@ export function Timeline() {
     handleTrackDrop,
     handleNewTrackDragOver,
     handleNewTrackDrop,
+    handleContainerDragLeave,
   } = useExternalDrop({
     timelineRef,
     scrollX,
@@ -447,6 +448,20 @@ export function Timeline() {
     window.addEventListener('resize', updateViewportHeight);
     return () => window.removeEventListener('resize', updateViewportHeight);
   }, []);
+
+  // Auto-scroll to bottom when audio drop zone appears during drag
+  useEffect(() => {
+    if (!externalDrag) return;
+    // Audio drop zone is visible when dragging audio files or videos with audio
+    const audioDropZoneVisible = externalDrag.isAudio || externalDrag.hasAudio !== false;
+    if (audioDropZoneVisible && contentRef.current) {
+      const actualHeight = contentRef.current.scrollHeight;
+      const maxScroll = Math.max(0, actualHeight - viewportHeight);
+      if (maxScroll > scrollY) {
+        setScrollY(maxScroll);
+      }
+    }
+  }, [externalDrag, contentHeight, viewportHeight, scrollY]);
 
   // Performance: Memoize proxy-ready file count
   const mediaFilesWithProxyCount = useMemo(
@@ -932,6 +947,8 @@ export function Timeline() {
             }}
             className={`timeline-tracks ${clipDrag ? 'dragging-clip' : ''} ${marquee ? 'marquee-selecting' : ''}`}
             onMouseDown={handleMarqueeMouseDown}
+            onDragOver={(e) => e.preventDefault()}
+            onDragLeave={handleContainerDragLeave}
           >
             <div className={`track-lanes-scroll ${clipAnimationPhase === 'exiting' ? 'phase-exiting' : clipAnimationPhase === 'entering' ? 'phase-entering' : ''}`} style={{
               transform: `translateX(-${scrollX}px)`,

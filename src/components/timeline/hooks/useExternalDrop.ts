@@ -38,6 +38,7 @@ interface UseExternalDropReturn {
   handleTrackDrop: (e: React.DragEvent, trackId: string) => Promise<void>;
   handleNewTrackDragOver: (e: React.DragEvent, trackType: 'video' | 'audio') => void;
   handleNewTrackDrop: (e: React.DragEvent, trackType: 'video' | 'audio') => Promise<void>;
+  handleContainerDragLeave: (e: React.DragEvent) => void;
 }
 
 /**
@@ -284,7 +285,10 @@ export function useExternalDrop({
     dragCounterRef.current--;
 
     if (dragCounterRef.current === 0) {
-      setExternalDrag(null);
+      // Don't null out externalDrag — just clear trackId so no preview shows on any track.
+      // The state stays alive so drop zones remain mounted and reachable.
+      // Full cleanup happens when drag leaves the timeline container (handleContainerDragLeave).
+      setExternalDrag((prev) => prev ? { ...prev, trackId: '' } : null);
     }
   }, []);
 
@@ -625,6 +629,17 @@ export function useExternalDrop({
     [scrollX, pixelToTime, addCompClip, addClip, addTextClip, addSolidClip, externalDrag, tracks, timelineRef]
   );
 
+  // Container-level drag leave: fully clear externalDrag when cursor leaves the timeline area
+  const handleContainerDragLeave = useCallback((e: React.DragEvent) => {
+    const container = e.currentTarget as HTMLElement;
+    const related = e.relatedTarget as Node | null;
+    // Only clear when cursor truly leaves the container (not entering a child)
+    if (!related || !container.contains(related)) {
+      dragCounterRef.current = 0;
+      setExternalDrag(null);
+    }
+  }, []);
+
   return {
     externalDrag,
     setExternalDrag,
@@ -635,5 +650,6 @@ export function useExternalDrop({
     handleTrackDrop,
     handleNewTrackDragOver,
     handleNewTrackDrop,
+    handleContainerDragLeave,
   };
 }
