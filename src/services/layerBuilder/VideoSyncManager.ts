@@ -338,6 +338,11 @@ export class VideoSyncManager {
     const clipAbsSpeed = timeInfo.absSpeed;
     const needsClipSpeedAdjust = clipAbsSpeed > 0.01 && Math.abs(clipAbsSpeed - 1) > 0.01;
 
+    // Speed keyframes: variable speed requires frame-by-frame seeking because
+    // video.playbackRate (instantaneous) diverges from the integrated speed curve
+    // (clipTime) within seconds, causing constant drift correction → SEEK_STUCK.
+    const hasSpeedKeyframes = ctx.hasKeyframes(clip.id, 'speed');
+
     if (isReversePlayback) {
       // For reverse: pause video and seek to each frame
       if (!video.paused) video.pause();
@@ -345,9 +350,12 @@ export class VideoSyncManager {
       if (timeDiff > seekThreshold) {
         this.throttledSeek(clip.id, video, timeInfo.clipTime, ctx);
       }
-    } else if (ctx.playbackSpeed !== 1) {
-      // Non-standard forward speed (2x, 4x, etc.): seek frame-by-frame for accuracy
+    } else if (ctx.playbackSpeed !== 1 || hasSpeedKeyframes) {
+      // Non-standard forward speed (2x, 4x, etc.) or variable speed keyframes:
+      // seek frame-by-frame for accuracy
       if (!video.paused) video.pause();
+      // Clean up clipWasPlaying in case this clip was previously in the normal path
+      this.clipWasPlaying.delete(clip.id);
       const seekThreshold = ctx.isDraggingPlayhead ? 0.04 : 0.03;
       if (timeDiff > seekThreshold) {
         this.throttledSeek(clip.id, video, timeInfo.clipTime, ctx);

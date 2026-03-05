@@ -4,6 +4,7 @@ import type {
   TimelineClip,
   TimelineTrack,
   Effect,
+  AnimatableProperty,
 } from '../../types';
 
 /**
@@ -37,7 +38,7 @@ export interface FrameContext {
   getInterpolatedEffects: (clipId: string, localTime: number) => Effect[];
   getInterpolatedSpeed: (clipId: string, localTime: number) => number;
   getSourceTimeForClip: (clipId: string, localTime: number) => number;
-  hasKeyframes: (clipId: string) => boolean;
+  hasKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;
 
   // Timing
   now: number;
