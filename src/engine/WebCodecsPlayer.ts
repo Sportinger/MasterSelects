@@ -75,6 +75,11 @@ export class WebCodecsPlayer implements ExportModePlayer {
   private ctsSorted: { idx: number; cts: number }[] = [];
   private ctsSortedSampleCount = 0;
 
+  // Seek target filtering: during a seek, intermediate GOP frames are decoded
+  // before the target. This prevents the renderer from showing them.
+  // Set by seek()/fastSeek(), cleared when target frame arrives in output callback.
+  private seekTargetUs: number | null = null;
+
   // ExportModePlayer interface implementation
   getDecoder(): VideoDecoder | null { return this.decoder; }
   getSamples(): Sample[] { return this.samples; }
@@ -83,7 +88,12 @@ export class WebCodecsPlayer implements ExportModePlayer {
   getVideoTrackTimescale(): number | null { return this.videoTrack?.timescale ?? null; }
   getCodecConfig(): VideoDecoderConfig | null { return this.codecConfig; }
   getFrameRate(): number { return this.frameRate; }
-  getCurrentFrame(): VideoFrame | null { return this.currentFrame; }
+  getCurrentFrame(): VideoFrame | null {
+    // During a seek, don't return intermediate GOP-traversal frames.
+    // The renderer falls through to HTMLVideoElement fallback until the target frame arrives.
+    if (this.seekTargetUs !== null) return null;
+    return this.currentFrame;
+  }
   setCurrentFrame(frame: VideoFrame | null): void { this.currentFrame = frame; }
   isSimpleMode(): boolean { return this.useSimpleMode; }
   isFullMode(): boolean { return !this.useSimpleMode && this.ready; }
@@ -502,17 +512,29 @@ export class WebCodecsPlayer implements ExportModePlayer {
         } else if (this._isPlaying) {
           // Playback mode: buffer frame for time-controlled presentation
           this.frameBuffer.push(frame);
-          // Evict oldest if buffer overflows
+          // Evict oldest if buffer overflows, but protect currentFrame
           while (this.frameBuffer.length > WebCodecsPlayer.MAX_FRAME_BUFFER) {
+            const oldest = this.frameBuffer[0];
+            if (oldest === this.currentFrame) break; // Don't close the displayed frame
             this.frameBuffer.shift()!.close();
           }
         } else {
-          // Paused/seeking: show frame immediately
+          // Paused/seeking: update currentFrame
           if (this.currentFrame) {
             this.currentFrame.close();
           }
           this.currentFrame = frame;
-          this.onFrame?.(frame);
+
+          // During a seek, only clear seekTargetUs when target frame arrives.
+          // This prevents getCurrentFrame() from returning intermediate GOP frames.
+          if (this.seekTargetUs !== null) {
+            const frameDurationUs = 1_000_000 / this.frameRate;
+            if (Math.abs(frame.timestamp - this.seekTargetUs) < frameDurationUs * 1.5) {
+              this.seekTargetUs = null; // Target reached — getCurrentFrame() now returns this frame
+            }
+          } else {
+            this.onFrame?.(frame);
+          }
         }
 
         // Resolve any pending frame wait
@@ -799,6 +821,9 @@ export class WebCodecsPlayer implements ExportModePlayer {
   advanceToTime(timeSeconds: number): void {
     if (this.useSimpleMode || !this.decoder || this.samples.length === 0 || !this.videoTrack) return;
 
+    // Clear any pending seek target from paused seeking
+    this.seekTargetUs = null;
+
     // Auto-enter playing state so decoder output routes to frame buffer
     if (!this._isPlaying) {
       this._isPlaying = true;
@@ -817,6 +842,7 @@ export class WebCodecsPlayer implements ExportModePlayer {
     const targetCts = timeSeconds * this.videoTrack.timescale;
     const targetIdx = this.findSampleNearCts(targetCts);
     const targetUs = timeSeconds * 1_000_000;
+    const frameDurationUs = 1_000_000 / this.frameRate;
 
     // Check if decoder needs repositioning:
     // - target is behind current position (backward jump)
@@ -836,15 +862,15 @@ export class WebCodecsPlayer implements ExportModePlayer {
       });
     }
 
-    // Pump decoder: feed samples ahead of target position
+    // Pump decoder: feed samples ahead of target position.
+    // During seeks, bypass queue limit to push all GOP frames at once —
+    // the decoder processes them off-main-thread in one burst.
     const feedTarget = Math.min(
       targetIdx + WebCodecsPlayer.FEED_LOOKAHEAD,
       this.samples.length
     );
-    while (
-      this.feedIndex < feedTarget &&
-      this.decoder.decodeQueueSize < WebCodecsPlayer.FEED_QUEUE_TARGET
-    ) {
+    while (this.feedIndex < feedTarget) {
+      if (!needsSeek && this.decoder.decodeQueueSize >= WebCodecsPlayer.FEED_QUEUE_TARGET) break;
       const sample = this.samples[this.feedIndex];
       const chunk = new EncodedVideoChunk({
         type: sample.is_sync ? 'key' : 'delta',
@@ -860,11 +886,14 @@ export class WebCodecsPlayer implements ExportModePlayer {
 
     this.sampleIndex = targetIdx;
 
-    // Pick the frame closest to target time from the decode buffer
+    // Pick the frame closest to target time from the decode buffer.
+    // CRITICAL: Only accept frames within 1.5 frame-durations of the target.
+    // This prevents showing intermediate GOP-traversal frames during seeks —
+    // without this, the renderer would flash through keyframe → target visibly.
     if (this.frameBuffer.length > 0) {
-      let bestIdx = 0;
-      let bestDiff = Math.abs(this.frameBuffer[0].timestamp - targetUs);
-      for (let i = 1; i < this.frameBuffer.length; i++) {
+      let bestIdx = -1;
+      let bestDiff = Infinity;
+      for (let i = 0; i < this.frameBuffer.length; i++) {
         const diff = Math.abs(this.frameBuffer[i].timestamp - targetUs);
         if (diff < bestDiff) {
           bestDiff = diff;
@@ -872,20 +901,34 @@ export class WebCodecsPlayer implements ExportModePlayer {
         }
       }
 
-      // Close frames before the best one (they're in the past)
-      for (let i = 0; i < bestIdx; i++) {
-        this.frameBuffer[i].close();
-      }
+      const acceptable = bestIdx >= 0 && bestDiff < frameDurationUs * 1.5;
 
-      const frame = this.frameBuffer[bestIdx];
-      if (this.currentFrame && this.currentFrame !== frame) {
-        this.currentFrame.close();
+      if (acceptable) {
+        // Accept this frame — close everything before it
+        for (let i = 0; i < bestIdx; i++) {
+          if (this.frameBuffer[i] !== this.currentFrame) {
+            this.frameBuffer[i].close();
+          }
+        }
+        const frame = this.frameBuffer[bestIdx];
+        if (this.currentFrame && this.currentFrame !== frame) {
+          this.currentFrame.close();
+        }
+        this.currentFrame = frame;
+        this.onFrame?.(frame);
+        this.frameBuffer.splice(0, bestIdx + 1);
+      } else {
+        // No acceptable frame yet — clean up stale past frames but keep future ones.
+        // The decoder is still producing frames; the right one will arrive soon.
+        const expireThreshold = targetUs - frameDurationUs * 2;
+        while (
+          this.frameBuffer.length > 0 &&
+          this.frameBuffer[0].timestamp < expireThreshold &&
+          this.frameBuffer[0] !== this.currentFrame
+        ) {
+          this.frameBuffer.shift()!.close();
+        }
       }
-      this.currentFrame = frame;
-      this.onFrame?.(frame);
-
-      // Remove consumed frames from buffer
-      this.frameBuffer.splice(0, bestIdx + 1);
     }
   }
 
@@ -956,6 +999,12 @@ export class WebCodecsPlayer implements ExportModePlayer {
     const targetIndex = this.findSampleNearCts(targetTime);
     const keyframeIndex = this.findKeyframeBefore(targetIndex);
     const framesDecoded = targetIndex - keyframeIndex + 1;
+
+    // Set seek target — getCurrentFrame() returns null until target frame arrives.
+    // This prevents the renderer from showing intermediate GOP-traversal frames.
+    const targetSample = this.samples[targetIndex];
+    this.seekTargetUs = (targetSample.cts * 1_000_000) / targetSample.timescale;
+
     wcPipelineMonitor.record('seek_start', {
       target: timeSeconds,
       keyframeDist: framesDecoded,
@@ -1031,6 +1080,9 @@ export class WebCodecsPlayer implements ExportModePlayer {
         break;
       }
     }
+
+    // fastSeek shows keyframe directly — no GOP traversal, so no seekTargetUs needed
+    this.seekTargetUs = null;
 
     // Reset decoder and decode just the keyframe
     this.decoder.reset();
