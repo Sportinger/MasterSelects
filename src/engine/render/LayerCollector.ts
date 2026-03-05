@@ -182,11 +182,10 @@ export class LayerCollector {
         }
       }
 
-      // 4. Try HTMLVideoElement (fallback)
-      // WebCodecs (step 3) has priority — if it returned a frame, we never get here.
-      // This fallback covers: WebCodecs startup (samples loading), seeks (proximity
-      // filter active), and decoder catch-up. Better to show HTMLVideoElement than nothing.
-      if (source.videoElement) {
+      // 4. HTMLVideoElement fallback — DISABLED for testing.
+      // In full WebCodecs mode, we want to see pure WebCodecs output
+      // to identify timing/decode issues without HTMLVideo masking them.
+      if (source.videoElement && !source.webCodecsPlayer?.isFullMode()) {
         return this.tryHTMLVideo(layer, source.videoElement, deps);
       }
     }
