@@ -260,8 +260,8 @@ export class LayerCollector {
         // Video is actively playing (warmup in progress) — GPU decoder is now active
         if (!video.paused && !video.seeking) {
           this.videoGpuReady.add(video);
-        } else {
-          // Video is paused and GPU not ready — use cached frame if warmup already captured one
+        } else if (!deps.isPlaying) {
+          // When paused: use cached frame if available, or skip rendering
           const cachedFrame = deps.scrubbingCache?.getLastFrame(video);
           if (cachedFrame) {
             deps.setLastVideoTime(videoKey, currentTime);
@@ -278,6 +278,9 @@ export class LayerCollector {
           // No cached frame yet — warmup not started or still in progress
           return null;
         }
+        // During playback: fall through to importExternalTexture anyway.
+        // May show a brief flash but avoids black frame at cut boundaries.
+        // Proactive warmup should prevent this in most cases.
       }
 
       // Import external texture (zero-copy GPU path)

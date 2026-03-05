@@ -82,12 +82,13 @@ export class VideoSyncManager {
       }
     }
 
-    // Pause videos not at playhead
+    // Pause videos not at playhead (but don't pause videos during GPU warmup)
     for (const clip of ctx.clips) {
       if (clip.source?.videoElement) {
         const isAtPlayhead = ctx.clipsByTrackId.has(clip.trackId) &&
           ctx.clipsByTrackId.get(clip.trackId)?.id === clip.id;
-        if (!isAtPlayhead && !clip.source.videoElement.paused) {
+        if (!isAtPlayhead && !clip.source.videoElement.paused &&
+            !this.warmingUpVideos.has(clip.source.videoElement)) {
           clip.source.videoElement.pause();
         }
       }
@@ -104,6 +105,13 @@ export class VideoSyncManager {
           }
         }
       }
+    }
+
+    // Proactive GPU warmup: look ahead 0.5s and warm up video elements
+    // for clips that are about to enter the frame. Without this, split clips
+    // stutter at cut boundaries because each HTMLVideoElement needs GPU activation.
+    if (ctx.isPlaying) {
+      this.warmupUpcomingClips(ctx);
     }
 
     // Sync background layer video elements
@@ -541,6 +549,69 @@ export class VideoSyncManager {
         vfPipelineMonitor.record('vf_seek_done', { clipId });
         // Bypass the scrub rate limiter — a fresh decoded frame should be displayed immediately
         engine.requestNewFrameRender();
+      });
+    }
+  }
+
+  // --- Proactive GPU Warmup ---
+
+  private static readonly LOOKAHEAD_TIME = 0.5; // seconds ahead to look for upcoming clips
+
+  /**
+   * Warm up video elements for clips that will become active within LOOKAHEAD_TIME.
+   * Each split clip has its own HTMLVideoElement with a cold GPU surface.
+   * Without proactive warmup, crossing a cut boundary causes a black frame
+   * while the GPU decoder activates (~100-500ms stutter).
+   */
+  private warmupUpcomingClips(ctx: FrameContext): void {
+    const lookaheadEnd = ctx.playheadPosition + VideoSyncManager.LOOKAHEAD_TIME;
+
+    for (const clip of ctx.clips) {
+      if (!clip.source?.videoElement) continue;
+
+      const video = clip.source.videoElement;
+      const clipStart = clip.startTime;
+
+      // Is this clip about to become active? (starts within lookahead window, not yet active)
+      if (clipStart <= ctx.playheadPosition || clipStart > lookaheadEnd) continue;
+
+      // Skip if already warm or warming up
+      if (video.played.length > 0 || this.warmingUpVideos.has(video)) continue;
+
+      // Skip if no source loaded
+      if (!video.src && !video.currentSrc) continue;
+
+      // Cooldown check
+      const warmupCooldown = this.warmupRetryCooldown.get(video);
+      if (warmupCooldown && performance.now() - warmupCooldown < 2000) continue;
+
+      // Start proactive warmup: briefly play to activate GPU surface
+      this.warmingUpVideos.add(video);
+      const clipTime = clip.inPoint; // Seek to clip's in-point after warmup
+
+      video.muted = true; // Prevent audio blip during warmup
+      video.play().then(() => {
+        const rvfc = (video as any).requestVideoFrameCallback;
+        if (typeof rvfc === 'function') {
+          rvfc.call(video, () => {
+            engine.ensureVideoFrameCached(video);
+            video.pause();
+            video.currentTime = this.safeSeekTime(video, clipTime);
+            this.warmingUpVideos.delete(video);
+            vfPipelineMonitor.record('vf_gpu_ready', { clipId: clip.id, proactive: 'true' });
+          });
+        } else {
+          setTimeout(() => {
+            engine.ensureVideoFrameCached(video);
+            video.pause();
+            video.currentTime = this.safeSeekTime(video, clipTime);
+            this.warmingUpVideos.delete(video);
+            vfPipelineMonitor.record('vf_gpu_ready', { clipId: clip.id, proactive: 'true', fallback: 'true' });
+          }, 50);
+        }
+      }).catch(() => {
+        this.warmingUpVideos.delete(video);
+        this.warmupRetryCooldown.set(video, performance.now());
       });
     }
   }
