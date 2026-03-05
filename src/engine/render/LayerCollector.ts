@@ -15,6 +15,7 @@ export interface LayerCollectorDeps {
   getLastVideoTime: (key: string) => number | undefined;
   setLastVideoTime: (key: string, time: number) => void;
   isExporting: boolean;
+  isPlaying: boolean;
 }
 
 export class LayerCollector {
@@ -285,18 +286,20 @@ export class LayerCollector {
       if (extTex) {
         deps.setLastVideoTime(videoKey, currentTime);
 
-        // Cache frame for pause/seek fallback (50ms = ~20fps capture rate for fresh fallback frames)
-        const now = performance.now();
-        const lastCapture = deps.scrubbingCache?.getLastCaptureTime(video) || 0;
-        if (now - lastCapture > 50) {
-          deps.scrubbingCache?.captureVideoFrame(video);
-          deps.scrubbingCache?.setLastCaptureTime(video, now);
-        }
+        // Cache frame for pause/seek fallback — skip during playback to save GPU bandwidth.
+        // With 4+ videos, the GPU copies (copyExternalImageToTexture per video at 20fps)
+        // waste significant bandwidth that's needed for rendering + effects.
+        if (!deps.isPlaying) {
+          const now = performance.now();
+          const lastCapture = deps.scrubbingCache?.getLastCaptureTime(video) || 0;
+          if (now - lastCapture > 50) {
+            deps.scrubbingCache?.captureVideoFrame(video);
+            deps.scrubbingCache?.setLastCaptureTime(video, now);
+          }
 
-        // Populate per-time scrubbing cache: store this frame indexed by video time
-        // so scrubbing back to a previously visited position shows the frame instantly
-        // from cache instead of waiting for a new decode cycle
-        deps.scrubbingCache?.cacheFrameAtTime(video, currentTime);
+          // Populate per-time scrubbing cache: store this frame indexed by video time
+          deps.scrubbingCache?.cacheFrameAtTime(video, currentTime);
+        }
 
         this.currentDecoder = 'HTMLVideo';
         this.hasVideo = true;

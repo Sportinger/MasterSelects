@@ -338,9 +338,10 @@ export class VideoSyncManager {
     const clipAbsSpeed = timeInfo.absSpeed;
     const needsClipSpeedAdjust = clipAbsSpeed > 0.01 && Math.abs(clipAbsSpeed - 1) > 0.01;
 
-    // Speed keyframes: variable speed requires frame-by-frame seeking because
-    // video.playbackRate (instantaneous) diverges from the integrated speed curve
-    // (clipTime) within seconds, causing constant drift correction → SEEK_STUCK.
+    // Speed keyframes: variable speed uses playbackRate + relaxed drift correction.
+    // The per-frame drift between instantaneous playbackRate and the integrated curve
+    // is tiny (<100ms over 10s for typical ramps). Frequent seeking causes decoder
+    // stalls (SEEK_STUCK), so we use a high threshold and let playbackRate handle it.
     const hasSpeedKeyframes = ctx.hasKeyframes(clip.id, 'speed');
 
     if (isReversePlayback) {
@@ -350,11 +351,9 @@ export class VideoSyncManager {
       if (timeDiff > seekThreshold) {
         this.throttledSeek(clip.id, video, timeInfo.clipTime, ctx);
       }
-    } else if (ctx.playbackSpeed !== 1 || hasSpeedKeyframes) {
-      // Non-standard forward speed (2x, 4x, etc.) or variable speed keyframes:
-      // seek frame-by-frame for accuracy
+    } else if (ctx.playbackSpeed !== 1) {
+      // Non-standard forward transport speed (2x, 4x, etc.): seek frame-by-frame
       if (!video.paused) video.pause();
-      // Clean up clipWasPlaying in case this clip was previously in the normal path
       this.clipWasPlaying.delete(clip.id);
       const seekThreshold = ctx.isDraggingPlayhead ? 0.04 : 0.03;
       if (timeDiff > seekThreshold) {
@@ -362,8 +361,8 @@ export class VideoSyncManager {
       }
     } else {
       // Normal forward playback (transport speed = 1x)
-      // Apply clip-level speed via video.playbackRate (e.g. 2x, 0.5x)
-      if (needsClipSpeedAdjust) {
+      // Apply clip-level speed via video.playbackRate (e.g. 2x, 0.5x, or speed keyframes)
+      if (needsClipSpeedAdjust || hasSpeedKeyframes) {
         const targetRate = Math.max(0.0625, Math.min(16, clipAbsSpeed));
         if (Math.abs(video.playbackRate - targetRate) > 0.01) {
           video.playbackRate = targetRate;
@@ -391,8 +390,11 @@ export class VideoSyncManager {
           video.play().catch(() => {});
           vfPipelineMonitor.record('vf_play', { clipId: clip.id });
         }
-        // Drift correction during playback (especially needed for speed-adjusted clips)
-        if (timeDiff > 0.3) {
+        // Drift correction during playback.
+        // For speed-keyframed clips: playbackRate follows the curve closely, drift is
+        // small. Use a high threshold to avoid decoder stalls (SEEK_STUCK) from frequent seeks.
+        const driftThreshold = hasSpeedKeyframes ? 1.5 : 0.3;
+        if (timeDiff > driftThreshold) {
           vfPipelineMonitor.record('vf_drift', {
             clipId: clip.id,
             driftMs: Math.round(timeDiff * 1000),

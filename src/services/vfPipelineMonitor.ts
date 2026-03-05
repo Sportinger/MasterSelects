@@ -18,6 +18,7 @@ export type VFPipelineEventType =
   | 'vf_drift'           // drift correction during playback
   // Audio
   | 'audio_drift'        // audio element drift from expected time
+  | 'audio_drift_correct'// audio re-synced (drift > 300ms)
   | 'audio_status'       // status transition (sync/drift/silent/error)
   | 'audio_master_change'// master audio element changed
   | 'audio_rate_change'  // playbackRate changed

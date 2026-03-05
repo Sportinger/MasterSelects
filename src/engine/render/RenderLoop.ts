@@ -268,6 +268,10 @@ export class RenderLoop {
     log.info('Idle suppressed (waiting for first play)');
   }
 
+  getIsPlaying(): boolean {
+    return this.isPlaying;
+  }
+
   setIsPlaying(playing: boolean): void {
     this.isPlaying = playing;
     if (playing && this.idleSuppressed) {

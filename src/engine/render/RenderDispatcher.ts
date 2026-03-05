@@ -84,6 +84,7 @@ export class RenderDispatcher {
       getLastVideoTime: (key) => d.cacheManager.getLastVideoTime(key),
       setLastVideoTime: (key, time) => d.cacheManager.setLastVideoTime(key, time),
       isExporting: d.exportCanvasManager.getIsExporting(),
+      isPlaying: d.renderLoop?.getIsPlaying() ?? false,
     });
     const importTime = performance.now() - t1;
 

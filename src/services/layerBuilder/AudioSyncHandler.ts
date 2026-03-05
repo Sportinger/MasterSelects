@@ -141,9 +141,17 @@ export class AudioSyncHandler {
       state.masterSet = true;
     }
 
-    // Track drift for stats (informational only)
+    // Audio drift correction: if audio drifts > 0.3s from expected position, re-sync.
+    // Without this, audio can drift indefinitely (user reported 1300ms delay).
     const timeDiff = element.currentTime - clipTime;
-    if (Math.abs(timeDiff) > 0.05) {
+    if (Math.abs(timeDiff) > 0.3) {
+      vfPipelineMonitor.record('audio_drift_correct', {
+        type,
+        driftMs: Math.round(timeDiff * 1000),
+        clipId: clip.id,
+      });
+      element.currentTime = clipTime;
+    } else if (Math.abs(timeDiff) > 0.05) {
       vfPipelineMonitor.record('audio_drift', {
         type,
         driftMs: Math.round(timeDiff * 1000),
