@@ -96,23 +96,50 @@ export function useExternalDrop({
       const x = e.clientX - rect.left + scrollX;
       const startTime = pixelToTime(x);
 
+      // Determine target track type
+      const targetTrack = tracks.find((t) => t.id === trackId);
+      const isVideoTrack = targetTrack?.type === 'video';
+      const isAudioTrack = targetTrack?.type === 'audio';
+
       if (e.dataTransfer.types.includes('application/x-composition-id')) {
+        // Compositions only on video tracks
+        if (isAudioTrack) {
+          setExternalDrag((prev) => prev ? { ...prev, x: e.clientX, y: e.clientY } : { trackId: '', startTime, x: e.clientX, y: e.clientY, duration: 5, isVideo: true });
+          return;
+        }
         setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration: 5, isVideo: true });
         return;
       }
 
       if (e.dataTransfer.types.includes('application/x-media-file-id')) {
         const isAudioDrag = e.dataTransfer.types.includes('application/x-media-is-audio');
+        // Audio files only on audio tracks, non-audio only on video tracks
+        if (isAudioDrag && isVideoTrack) {
+          setExternalDrag((prev) => prev ? { ...prev, x: e.clientX, y: e.clientY } : { trackId: '', startTime, x: e.clientX, y: e.clientY, duration: 5, isVideo: false, isAudio: true });
+          return;
+        }
+        if (!isAudioDrag && isAudioTrack) {
+          setExternalDrag((prev) => prev ? { ...prev, x: e.clientX, y: e.clientY } : { trackId: '', startTime, x: e.clientX, y: e.clientY, duration: 5, isVideo: true });
+          return;
+        }
         setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration: 5, isVideo: !isAudioDrag, isAudio: isAudioDrag });
         return;
       }
 
       if (e.dataTransfer.types.includes('application/x-text-item-id')) {
+        if (isAudioTrack) {
+          setExternalDrag((prev) => prev ? { ...prev, x: e.clientX, y: e.clientY } : { trackId: '', startTime, x: e.clientX, y: e.clientY, duration: 5, isVideo: true });
+          return;
+        }
         setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration: 5, isVideo: true });
         return;
       }
 
       if (e.dataTransfer.types.includes('application/x-solid-item-id')) {
+        if (isAudioTrack) {
+          setExternalDrag((prev) => prev ? { ...prev, x: e.clientX, y: e.clientY } : { trackId: '', startTime, x: e.clientX, y: e.clientY, duration: 5, isVideo: true });
+          return;
+        }
         setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration: 5, isVideo: true });
         return;
       }
@@ -156,10 +183,16 @@ export function useExternalDrop({
           }
         }
 
+        // Audio files on video tracks: keep externalDrag alive but don't assign this track
+        if (fileIsAudio && isVideoTrack) {
+          setExternalDrag((prev) => prev ? { ...prev, x: e.clientX, y: e.clientY } : { trackId: '', startTime, x: e.clientX, y: e.clientY, duration: dur, isAudio: true, isVideo: false });
+          return;
+        }
+
         setExternalDrag({ trackId, startTime, x: e.clientX, y: e.clientY, duration: dur, hasAudio, isAudio: fileIsAudio, isVideo: !fileIsAudio });
       }
     },
-    [scrollX, pixelToTime]
+    [scrollX, pixelToTime, tracks]
   );
 
   // Handle external file drag over track
@@ -189,12 +222,15 @@ export function useExternalDrop({
         // Audio files can only go on audio tracks
         if (isAudioDrag && isVideoTrack) {
           e.dataTransfer.dropEffect = 'none';
+          // Keep externalDrag alive (so drop zones stay visible) but clear trackId
+          setExternalDrag((prev) => prev ? { ...prev, trackId: '', x: e.clientX, y: e.clientY, startTime } : null);
           return;
         }
 
         // Text, solid, composition items can only go on video tracks
         if ((isTextDrag || isSolidDrag || isCompDrag) && isAudioTrack) {
           e.dataTransfer.dropEffect = 'none';
+          setExternalDrag((prev) => prev ? { ...prev, trackId: '', x: e.clientX, y: e.clientY, startTime } : null);
           return;
         }
 
