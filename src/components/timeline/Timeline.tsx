@@ -449,25 +449,33 @@ export function Timeline() {
     return () => window.removeEventListener('resize', updateViewportHeight);
   }, []);
 
-  // Auto-scroll to show relevant drop zone during drag
+  // Auto-scroll based on which track type is being hovered during drag
   useEffect(() => {
     if (!externalDrag) return;
-    if (externalDrag.isAudio) {
-      // Audio files: scroll to bottom to show audio drop zone
-      if (contentRef.current) {
-        const actualHeight = contentRef.current.scrollHeight;
-        const maxScroll = Math.max(0, actualHeight - viewportHeight);
-        if (maxScroll > scrollY) {
-          setScrollY(maxScroll);
-        }
+
+    // Determine if we're hovering over an audio or video area
+    const hoveredTrack = tracks.find((t) => t.id === externalDrag.trackId);
+    const isOverAudio = hoveredTrack?.type === 'audio' ||
+      externalDrag.newTrackType === 'audio' ||
+      // For audio-only files, always scroll to bottom
+      externalDrag.isAudio;
+    const isOverVideo = hoveredTrack?.type === 'video' ||
+      externalDrag.newTrackType === 'video';
+
+    if (isOverAudio && contentRef.current) {
+      // Scroll to bottom to show audio tracks / audio drop zone
+      const actualHeight = contentRef.current.scrollHeight;
+      const maxScroll = Math.max(0, actualHeight - viewportHeight);
+      if (maxScroll > scrollY) {
+        setScrollY(maxScroll);
       }
-    } else {
-      // Video files: scroll to top to show video drop zone
+    } else if (isOverVideo) {
+      // Scroll to top to show video tracks / video drop zone
       if (scrollY > 0) {
         setScrollY(0);
       }
     }
-  }, [externalDrag, contentHeight, viewportHeight, scrollY]);
+  }, [externalDrag, tracks, contentHeight, viewportHeight, scrollY]);
 
   // Performance: Memoize proxy-ready file count
   const mediaFilesWithProxyCount = useMemo(
