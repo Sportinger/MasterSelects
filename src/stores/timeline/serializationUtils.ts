@@ -168,6 +168,10 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
     // Restore clips - need to recreate media elements from file references
     const mediaStore = useMediaStore.getState();
 
+    // Share one WebCodecsPlayer per source file — avoids parsing the same MP4
+    // dozens of times for split clips. Key = mediaFileId, Value = Promise<WebCodecsPlayer|null>.
+    const sharedWcPlayers = new Map<string, Promise<import('../../engine/WebCodecsPlayer').WebCodecsPlayer | null>>();
+
     for (const serializedClip of data.clips) {
       // Handle composition clips specially
       if (serializedClip.isComposition && serializedClip.compositionId) {
@@ -540,19 +544,20 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                   nestedClip.source = videoSource;
                   nestedClip.isLoading = false;
 
-                  // Initialize WebCodecsPlayer for hardware-accelerated decoding
+                  // Initialize WebCodecsPlayer — share per source file
                   const hasWebCodecs = 'VideoDecoder' in window && 'VideoFrame' in window;
-                  if (hasWebCodecs) {
+                  const nestedMediaId = nestedSerializedClip.mediaFileId;
+                  if (hasWebCodecs && nestedMediaId) {
                     try {
-                      const { initWebCodecsPlayer } = await import('./helpers/webCodecsHelpers');
-                      log.debug('Initializing WebCodecsPlayer for nested comp', { file: nestedFileRef.name });
-
-                      const webCodecsPlayer = await initWebCodecsPlayer(video, nestedFileRef.name, nestedFileRef);
-
+                      if (!sharedWcPlayers.has(nestedMediaId)) {
+                        const initPromise = import('./helpers/webCodecsHelpers').then(async ({ initWebCodecsPlayer }) => {
+                          log.debug('Creating shared WebCodecsPlayer (nested)', { file: nestedFileRef.name, mediaFileId: nestedMediaId });
+                          return initWebCodecsPlayer(video, nestedFileRef.name, nestedFileRef);
+                        });
+                        sharedWcPlayers.set(nestedMediaId, initPromise);
+                      }
+                      const webCodecsPlayer = await sharedWcPlayers.get(nestedMediaId)!;
                       if (webCodecsPlayer) {
-                        log.debug('WebCodecsPlayer ready for nested comp', { file: nestedFileRef.name, fullMode: webCodecsPlayer.isFullMode() });
-
-                        // Update nested clip source with webCodecsPlayer
                         nestedClip.source = {
                           ...nestedClip.source,
                           webCodecsPlayer,
@@ -921,19 +926,29 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           // createImageBitmap is the ONLY API that decodes a frame from a never-played video after reload
           engine.preCacheVideoFrame(video);
 
-          // Try to initialize WebCodecsPlayer for hardware-accelerated decoding
+          // Initialize WebCodecsPlayer — share one per source file.
+          // Split clips from the same source reuse one decoder to avoid
+          // parsing the same MP4 multiple times (each parse holds all
+          // samples in RAM — duplicates crash the browser).
           const hasWebCodecs = 'VideoDecoder' in window && 'VideoFrame' in window;
-          if (hasWebCodecs) {
+          const mediaId = serializedClip.mediaFileId;
+          if (hasWebCodecs && mediaId) {
             try {
-              const { initWebCodecsPlayer } = await import('./helpers/webCodecsHelpers');
-              log.debug('Initializing WebCodecsPlayer for restored clip', { clip: clip.name });
+              // Reuse existing player or create one for this source file
+              if (!sharedWcPlayers.has(mediaId)) {
+                const initPromise = import('./helpers/webCodecsHelpers').then(async ({ initWebCodecsPlayer }) => {
+                  log.debug('Creating shared WebCodecsPlayer', { file: clip.name, mediaFileId: mediaId });
+                  return initWebCodecsPlayer(video, clip.name, mediaFile.file || undefined);
+                });
+                sharedWcPlayers.set(mediaId, initPromise);
+              }
 
-              const webCodecsPlayer = await initWebCodecsPlayer(video, clip.name, mediaFile.file || undefined);
+              const webCodecsPlayer = await sharedWcPlayers.get(mediaId)!;
 
               if (webCodecsPlayer) {
-                log.debug('WebCodecsPlayer ready for restored clip', { clip: clip.name, fullMode: webCodecsPlayer.isFullMode() });
+                log.debug('WebCodecsPlayer attached to clip', { clip: clip.name, fullMode: webCodecsPlayer.isFullMode(), shared: true });
 
-                // Update clip source with webCodecsPlayer
+                // Update clip source with shared webCodecsPlayer
                 set(state => ({
                   clips: state.clips.map(c =>
                     c.id === clip.id && c.source?.type === 'video'
