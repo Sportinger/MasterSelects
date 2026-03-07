@@ -9,6 +9,7 @@ import { calculateNestedClipBoundaries, buildClipSegments } from './clip/addComp
 import { projectFileService } from '../../services/projectFileService';
 import { Logger } from '../../services/logger';
 import { engine } from '../../engine/WebGPUEngine';
+import { layerBuilder } from '../../services/layerBuilder';
 
 const log = Logger.create('Timeline');
 
@@ -1020,48 +1021,21 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
     // Stop playback
     pause();
 
-    // Clean up media elements
-    // Track destroyed WebCodecsPlayers to avoid double-destroy on shared instances
-    // (split clips share the same WebCodecsPlayer)
-    const destroyedPlayers = new Set<object>();
-    clips.forEach(clip => {
-      if (clip.source?.videoElement) {
-        clip.source.videoElement.pause();
-        if (clip.source.videoElement.src) {
-          URL.revokeObjectURL(clip.source.videoElement.src);
-        }
-        clip.source.videoElement.src = '';
-      }
-      if (clip.source?.audioElement) {
-        clip.source.audioElement.pause();
-        if (clip.source.audioElement.src) {
-          URL.revokeObjectURL(clip.source.audioElement.src);
-        }
-        clip.source.audioElement.src = '';
-      }
-      if (clip.source?.webCodecsPlayer && !destroyedPlayers.has(clip.source.webCodecsPlayer)) {
-        destroyedPlayers.add(clip.source.webCodecsPlayer);
-        clip.source.webCodecsPlayer.destroy();
-      }
-    });
-
-    // Clear GPU caches — scrubbing textures, composite cache, video time tracking.
-    // Without this, GPU memory accumulates on every composition switch → crash.
-    engine.clearCaches();
-
-    // Clear layers so preview shows black
-    set({ layers: [] });
-
+    // CRITICAL: Clear clips and layers from state FIRST, before destroying
+    // media resources. The rAF render loop reads clips from the store —
+    // if we destroy WebCodecsPlayers/VideoFrames while clips still reference
+    // them, the render loop can pass a closed VideoFrame to
+    // importExternalTexture → GPU process crash (STATUS_BREAKPOINT).
     const { tracks } = get();
     set({
       clips: [],
+      layers: [],
       selectedClipIds: new Set(),
       primarySelectedClipId: null,
       cachedFrameTimes: new Set(),
       ramPreviewProgress: null,
       ramPreviewRange: null,
       isRamPreviewing: false,
-      // Clear keyframe state
       clipKeyframes: new Map<string, Keyframe[]>(),
       keyframeRecordingEnabled: new Set<string>(),
       expandedTracks: new Set<string>(tracks.filter(t => t.type === 'video').map(t => t.id)),
@@ -1069,5 +1043,42 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       selectedKeyframeIds: new Set<string>(),
       expandedCurveProperties: new Map<string, Set<import('../../types').AnimatableProperty>>(),
     });
+
+    // NOW destroy media resources — render loop already sees empty clips/layers.
+    // Track destroyed WebCodecsPlayers to avoid double-destroy on shared instances.
+    const destroyedPlayers = new Set<object>();
+
+    const cleanupClip = (clip: TimelineClip) => {
+      if (clip.source?.videoElement) {
+        const video = clip.source.videoElement;
+        video.pause();
+        if (video.src) URL.revokeObjectURL(video.src);
+        video.removeAttribute('src');
+        video.load(); // Forces Chrome to release GPU decoder surface
+      }
+      if (clip.source?.audioElement) {
+        const audio = clip.source.audioElement;
+        audio.pause();
+        if (audio.src) URL.revokeObjectURL(audio.src);
+        audio.removeAttribute('src');
+        audio.load();
+      }
+      if (clip.source?.webCodecsPlayer && !destroyedPlayers.has(clip.source.webCodecsPlayer)) {
+        destroyedPlayers.add(clip.source.webCodecsPlayer);
+        clip.source.webCodecsPlayer.destroy();
+      }
+      // Recursively clean up nested composition clips
+      if (clip.nestedClips) {
+        clip.nestedClips.forEach(cleanupClip);
+      }
+    };
+
+    clips.forEach(cleanupClip);
+
+    // Clear GPU caches — scrubbing textures, composite cache, video time tracking.
+    engine.clearCaches();
+
+    // Reset VideoSyncManager — clear stale references to old video elements.
+    layerBuilder.getVideoSyncManager().reset();
   },
 });

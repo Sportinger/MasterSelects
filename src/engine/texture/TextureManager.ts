@@ -219,8 +219,9 @@ export class TextureManager {
         return null;
       }
     } else if (source instanceof VideoFrame) {
-      if (source.codedWidth === 0 || source.codedHeight === 0) {
-        log.debug('VideoFrame has zero dimensions');
+      // Guard against closed VideoFrames — passing a closed frame to
+      // importExternalTexture crashes the GPU process (STATUS_BREAKPOINT).
+      if ((source as any).closed || source.codedWidth === 0 || source.codedHeight === 0) {
         return null;
       }
     } else {

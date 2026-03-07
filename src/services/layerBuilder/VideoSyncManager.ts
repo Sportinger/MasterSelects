@@ -64,6 +64,29 @@ export class VideoSyncManager {
   private handoffElements = new Set<HTMLVideoElement>();
 
   /**
+   * Reset all per-clip state. Called during composition switch to prevent
+   * stale references to destroyed video elements / WebCodecsPlayers.
+   */
+  reset(): void {
+    this.lastTrackState.clear();
+    this.activeHandoffs.clear();
+    this.handoffElements.clear();
+    this.lastSeekRef = {};
+    this.clipWasPlaying.clear();
+    this.forceDecodeInProgress.clear();
+    this.rvfcHandles = {};
+    this.latestSeekTargets = {};
+    this.lastWcFastSeekTarget = {};
+    this.lastVideoSyncFrame = -1;
+    this.lastVideoSyncPlaying = false;
+    // Clear debounce timers
+    for (const id of Object.values(this.preciseSeekTimers)) clearTimeout(id);
+    this.preciseSeekTimers = {};
+    for (const id of Object.values(this.wcPreciseSeekTimers)) clearTimeout(id);
+    this.wcPreciseSeekTimers = {};
+  }
+
+  /**
    * Clamp seek time to valid range, preventing EOF decoder stalls.
    * H.264 B-frame decoders stall when seeking to exactly video.duration
    * because they wait for reference frames that don't exist.
