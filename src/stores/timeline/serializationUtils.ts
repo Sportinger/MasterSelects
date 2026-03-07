@@ -1006,19 +1006,33 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
     pause();
 
     // Clean up media elements
+    // Track destroyed WebCodecsPlayers to avoid double-destroy on shared instances
+    // (split clips share the same WebCodecsPlayer)
+    const destroyedPlayers = new Set<object>();
     clips.forEach(clip => {
       if (clip.source?.videoElement) {
         clip.source.videoElement.pause();
+        if (clip.source.videoElement.src) {
+          URL.revokeObjectURL(clip.source.videoElement.src);
+        }
         clip.source.videoElement.src = '';
       }
       if (clip.source?.audioElement) {
         clip.source.audioElement.pause();
+        if (clip.source.audioElement.src) {
+          URL.revokeObjectURL(clip.source.audioElement.src);
+        }
         clip.source.audioElement.src = '';
       }
-      if (clip.source?.webCodecsPlayer) {
+      if (clip.source?.webCodecsPlayer && !destroyedPlayers.has(clip.source.webCodecsPlayer)) {
+        destroyedPlayers.add(clip.source.webCodecsPlayer);
         clip.source.webCodecsPlayer.destroy();
       }
     });
+
+    // Clear GPU caches — scrubbing textures, composite cache, video time tracking.
+    // Without this, GPU memory accumulates on every composition switch → crash.
+    engine.clearCaches();
 
     // Clear layers so preview shows black
     set({ layers: [] });
