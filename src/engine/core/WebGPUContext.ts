@@ -199,7 +199,7 @@ export class WebGPUContext {
       context.configure({
         device: this.device,
         format: preferredFormat,
-        alphaMode: 'premultiplied',
+        alphaMode: 'opaque',
       });
       log.debug(`Canvas configured with preferred format: ${preferredFormat}`);
     }
