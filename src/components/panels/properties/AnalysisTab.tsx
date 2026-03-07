@@ -5,7 +5,7 @@ import type { FrameAnalysisData, SceneSegment, SceneDescriptionStatus } from '..
 
 interface AnalysisTabProps {
   clipId: string;
-  analysis: { frames: FrameAnalysisData[] } | undefined;
+  analysis: { frames: FrameAnalysisData[]; sampleInterval?: number } | undefined;
   analysisStatus: 'none' | 'analyzing' | 'ready' | 'error';
   analysisProgress: number;
   clipStartTime: number;
@@ -68,9 +68,28 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
     };
   }, [analysis]);
 
+  // Calculate coverage of clip's range from analysis frames
+  const clipCoverage = useMemo(() => {
+    if (!analysis?.frames.length) return 0;
+    const clipDuration = outPoint - inPoint;
+    if (clipDuration <= 0) return 0;
+    const sampleIntervalSec = (analysis.sampleInterval || 500) / 1000;
+    const framesInRange = analysis.frames.filter(
+      (f: FrameAnalysisData) => f.timestamp >= inPoint - 0.01 && f.timestamp <= outPoint + 0.01
+    );
+    return Math.min(1, (framesInRange.length * sampleIntervalSec) / clipDuration);
+  }, [analysis, inPoint, outPoint]);
+
+  const isPartial = analysisStatus === 'ready' && clipCoverage > 0 && clipCoverage < 0.98;
+
   const handleAnalyze = useCallback(async () => {
     const { analyzeClip } = await import('../../../services/clipAnalyzer');
     await analyzeClip(clipId);
+  }, [clipId]);
+
+  const handleContinue = useCallback(async () => {
+    const { analyzeClip } = await import('../../../services/clipAnalyzer');
+    await analyzeClip(clipId, { continueMode: true });
   }, [clipId]);
 
   const handleCancel = useCallback(async () => {
@@ -126,11 +145,23 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
           )}
           {analysisStatus === 'ready' && (
             <>
+              {isPartial && (
+                <button className="btn btn-sm btn-accent" onClick={handleContinue}>Continue ({Math.round(clipCoverage * 100)}%)</button>
+              )}
               <button className="btn btn-sm" onClick={handleAnalyze}>Re-analyze</button>
               <button className="btn btn-sm btn-danger" onClick={handleClear}>Clear</button>
             </>
           )}
         </div>
+        {/* Coverage bar */}
+        {analysisStatus === 'ready' && clipCoverage > 0 && (
+          <div className="coverage-bar" style={{ marginTop: '4px' }}>
+            <div className="coverage-bar-bg">
+              <div className="coverage-bar-fill analysis-fill" style={{ width: `${Math.round(clipCoverage * 100)}%` }} />
+            </div>
+            <span className="coverage-bar-text">{Math.round(clipCoverage * 100)}% analyzed</span>
+          </div>
+        )}
       </div>
 
       {/* Progress */}
@@ -183,7 +214,7 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
       )}
 
       {/* Empty state */}
-      {analysisStatus !== 'ready' && analysisStatus !== 'analyzing' && (
+      {analysisStatus !== 'ready' && analysisStatus !== 'analyzing' && !analysis?.frames.length && (
         <div className="analysis-empty-state">
           Click "Analyze Clip" to detect focus, motion, and faces.
         </div>

@@ -191,6 +191,7 @@ export function PropertiesPanel() {
               transcriptProgress={selectedClip.transcriptProgress || 0}
               clipStartTime={selectedClip.startTime}
               inPoint={selectedClip.inPoint}
+              outPoint={selectedClip.outPoint}
             />
           )}
           {activeTab === 'analysis' && !isAudioClip && (

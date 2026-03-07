@@ -93,14 +93,23 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
     let transcriptStatus: import('../../types').TranscriptStatus = 'none';
     let transcript: import('../../types').TranscriptWord[] | undefined;
     let transcriptCoverage = 0;
+    let transcribedRanges: [number, number][] | undefined;
     if (projectFileService.isProjectOpen()) {
       try {
         const saved = await projectFileService.getTranscript(pm.id);
-        if (saved && Array.isArray(saved) && saved.length > 0) {
-          transcriptStatus = 'ready';
-          transcript = saved as import('../../types').TranscriptWord[];
-          if (pm.duration && pm.duration > 0) {
-            transcriptCoverage = calcRangeCoverage(transcript.map(w => [w.start, w.end]), pm.duration);
+        if (saved) {
+          // New format: { words, transcribedRanges }
+          const words = saved.words as import('../../types').TranscriptWord[];
+          if (words && words.length > 0) {
+            transcriptStatus = 'ready';
+            transcript = words;
+            transcribedRanges = saved.transcribedRanges;
+            if (pm.duration && pm.duration > 0) {
+              // Prefer transcribed ranges for coverage (silence is still "transcribed")
+              transcriptCoverage = transcribedRanges?.length
+                ? calcRangeCoverage(transcribedRanges, pm.duration)
+                : calcRangeCoverage(transcript.map(w => [w.start, w.end]), pm.duration);
+            }
           }
         }
       } catch { /* no transcript file */ }
@@ -150,6 +159,7 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
       transcriptStatus,
       transcript,
       transcriptCoverage,
+      transcribedRanges,
       analysisStatus,
       analysisCoverage,
     });

@@ -3020,6 +3020,52 @@ input, textarea {
   gap: 6px;
 }
 
+/* Coverage bar for analysis/transcript tabs */
+.coverage-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.coverage-bar-bg {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.coverage-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.coverage-bar-fill.analysis-fill {
+  background: #e88a1a;
+}
+
+.coverage-bar-fill.transcript-fill {
+  background: var(--accent);
+}
+
+.coverage-bar-text {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Accent button for Continue actions */
+.btn-accent {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-color: var(--accent) !important;
+}
+
+.btn-accent:hover {
+  filter: brightness(1.15);
+}
+
 .analysis-progress-bar {
   height: 4px;
   background: var(--bg-tertiary);

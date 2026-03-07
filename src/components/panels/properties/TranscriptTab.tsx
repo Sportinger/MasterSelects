@@ -26,9 +26,10 @@ interface TranscriptTabProps {
   transcriptProgress: number;
   clipStartTime: number;
   inPoint: number;
+  outPoint: number;
 }
 
-export function TranscriptTab({ clipId, transcript, transcriptStatus, transcriptProgress, clipStartTime, inPoint }: TranscriptTabProps) {
+export function TranscriptTab({ clipId, transcript, transcriptStatus, transcriptProgress, clipStartTime, inPoint, outPoint }: TranscriptTabProps) {
   // Reactive data - subscribe to specific value only
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
   // Actions from getState() - stable, no subscription needed
@@ -63,9 +64,29 @@ export function TranscriptTab({ clipId, transcript, transcriptStatus, transcript
     setPlayheadPosition(Math.max(0, timelinePosition));
   }, [clipStartTime, inPoint, setPlayheadPosition]);
 
+  // Calculate coverage from transcript words within clip range
+  const clipCoverage = useMemo(() => {
+    if (!transcript.length) return 0;
+    const clipDuration = outPoint - inPoint;
+    if (clipDuration <= 0) return 0;
+    const wordsInRange = transcript.filter(w => w.end > inPoint && w.start < outPoint);
+    if (wordsInRange.length === 0) return 0;
+    // Use the envelope of word timestamps as proxy for transcribed range
+    const minStart = Math.max(inPoint, Math.min(...wordsInRange.map(w => w.start)));
+    const maxEnd = Math.min(outPoint, Math.max(...wordsInRange.map(w => w.end)));
+    return Math.min(1, (maxEnd - minStart) / clipDuration);
+  }, [transcript, inPoint, outPoint]);
+
+  const isPartial = transcriptStatus === 'ready' && clipCoverage > 0 && clipCoverage < 0.98;
+
   const handleTranscribe = useCallback(async () => {
     const { transcribeClip } = await import('../../../services/clipTranscriber');
     await transcribeClip(clipId, language);
+  }, [clipId, language]);
+
+  const handleContinue = useCallback(async () => {
+    const { transcribeClip } = await import('../../../services/clipTranscriber');
+    await transcribeClip(clipId, language, { continueMode: true });
   }, [clipId, language]);
 
   const handleCancel = useCallback(async () => {
@@ -103,11 +124,23 @@ export function TranscriptTab({ clipId, transcript, transcriptStatus, transcript
           )}
           {transcriptStatus === 'ready' && (
             <>
+              {isPartial && (
+                <button className="btn btn-sm btn-accent" onClick={handleContinue}>Continue ({Math.round(clipCoverage * 100)}%)</button>
+              )}
               <button className="btn btn-sm" onClick={handleTranscribe}>Re-transcribe</button>
               <button className="btn btn-sm btn-danger" onClick={handleDelete}>Delete</button>
             </>
           )}
         </div>
+        {/* Coverage bar */}
+        {transcriptStatus === 'ready' && clipCoverage > 0 && (
+          <div className="coverage-bar" style={{ marginTop: '4px' }}>
+            <div className="coverage-bar-bg">
+              <div className="coverage-bar-fill transcript-fill" style={{ width: `${Math.round(clipCoverage * 100)}%` }} />
+            </div>
+            <span className="coverage-bar-text">{Math.round(clipCoverage * 100)}% transcribed</span>
+          </div>
+        )}
       </div>
 
       {/* Progress */}

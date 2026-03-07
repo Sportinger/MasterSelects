@@ -281,10 +281,48 @@ export function cancelAnalysis(): void {
 }
 
 /**
+ * Find uncovered time gaps within a range given a set of covered ranges.
+ */
+function findGaps(
+  coveredRanges: [number, number][],
+  rangeStart: number,
+  rangeEnd: number
+): [number, number][] {
+  // Sort and merge covered ranges, clipped to [rangeStart, rangeEnd]
+  const clipped: [number, number][] = [];
+  for (const [s, e] of coveredRanges) {
+    const cs = Math.max(s, rangeStart);
+    const ce = Math.min(e, rangeEnd);
+    if (cs < ce) clipped.push([cs, ce]);
+  }
+  clipped.sort((a, b) => a[0] - b[0]);
+
+  const merged: [number, number][] = [];
+  for (const range of clipped) {
+    if (merged.length > 0 && range[0] <= merged[merged.length - 1][1]) {
+      merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], range[1]);
+    } else {
+      merged.push([...range]);
+    }
+  }
+
+  // Find gaps
+  const gaps: [number, number][] = [];
+  let cursor = rangeStart;
+  for (const [s, e] of merged) {
+    if (cursor < s) gaps.push([cursor, s]);
+    cursor = Math.max(cursor, e);
+  }
+  if (cursor < rangeEnd) gaps.push([cursor, rangeEnd]);
+  return gaps;
+}
+
+/**
  * Analyze a clip for focus, motion, and faces
  * Only analyzes the trimmed portion (inPoint to outPoint)
+ * When continueMode is true, only analyzes uncovered gaps.
  */
-export async function analyzeClip(clipId: string): Promise<void> {
+export async function analyzeClip(clipId: string, options?: { continueMode?: boolean }): Promise<void> {
   // Prevent concurrent analysis
   if (isAnalyzing) {
     log.warn('Already analyzing');
@@ -316,11 +354,35 @@ export async function analyzeClip(clipId: string): Promise<void> {
   updateClipAnalysis(clipId, { status: 'analyzing', progress: 0 });
 
   // Check for cached analysis first (from project folder, not browser cache)
-  const mediaFileId = clip.mediaFileId;
+  const mediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
   const inPoint = clip.inPoint ?? 0;
   const outPoint = clip.outPoint ?? clip.duration;
+  const continueMode = options?.continueMode ?? false;
 
-  if (mediaFileId && projectFileService.isProjectOpen()) {
+  // In continue mode, find gaps in existing coverage
+  let analysisGaps: [number, number][] | null = null;
+  if (continueMode && mediaFileId && projectFileService.isProjectOpen()) {
+    try {
+      const rangeKeys = await projectFileService.getAnalysisRanges(mediaFileId);
+      const coveredRanges: [number, number][] = rangeKeys.map(key => {
+        const [s, e] = key.split('-').map(Number);
+        return [s, e];
+      });
+      analysisGaps = findGaps(coveredRanges, inPoint, outPoint);
+      if (analysisGaps.length === 0) {
+        log.info('No gaps to analyze, clip is fully covered');
+        isAnalyzing = false;
+        currentClipId = null;
+        return;
+      }
+      log.info(`Continue mode: ${analysisGaps.length} gaps to analyze`, { gaps: analysisGaps });
+    } catch (err) {
+      log.warn('Failed to get analysis ranges for continue mode', err);
+      analysisGaps = null; // Fall back to full analysis
+    }
+  }
+
+  if (!continueMode && mediaFileId && projectFileService.isProjectOpen()) {
     try {
       const cachedAnalysis = await projectFileService.getAnalysis(mediaFileId, inPoint, outPoint);
       if (cachedAnalysis) {
@@ -385,121 +447,134 @@ export async function analyzeClip(clipId: string): Promise<void> {
       throw new Error('Could not get canvas context');
     }
 
-    // Use clip trim points (inPoint/outPoint) to analyze only the visible portion
-    const inPoint = clip.inPoint ?? 0;
-    const outPoint = clip.outPoint ?? video.duration;
-    const analysisStartTime = inPoint;
-    const analysisEndTime = Math.min(outPoint, video.duration);
-    const analysisDuration = analysisEndTime - analysisStartTime;
+    // Determine ranges to analyze
+    const ranges: [number, number][] = analysisGaps
+      ? analysisGaps.map(([s, e]) => [s, Math.min(e, video.duration)])
+      : [[inPoint, Math.min(outPoint, video.duration)]];
 
-    const totalSamples = Math.ceil((analysisDuration * 1000) / SAMPLE_INTERVAL_MS);
-    const frames: FrameAnalysisData[] = [];
+    // Calculate total samples across all ranges for progress reporting
+    const totalSamples = ranges.reduce((sum, [s, e]) => {
+      return sum + Math.ceil(((e - s) * 1000) / SAMPLE_INTERVAL_MS);
+    }, 0);
+
+    let processedSamples = 0;
+    const newFrames: FrameAnalysisData[] = [];
     let previousFrame: ImageData | null = null;
 
-    log.info(`Analyzing ${totalSamples} frames from ${analysisStartTime.toFixed(1)}s to ${analysisEndTime.toFixed(1)}s (${analysisDuration.toFixed(1)}s)`);
+    log.info(`Analyzing ${totalSamples} frames across ${ranges.length} range(s)${continueMode ? ' (continue mode)' : ''}`);
 
-    // Analyze frames
-    for (let i = 0; i < totalSamples; i++) {
-      // Check for cancellation
-      if (shouldCancel) {
-        log.info('Analysis cancelled');
-        updateClipAnalysis(clipId, { status: 'none', progress: 0 });
-        return;
-      }
+    for (const [rangeStart, rangeEnd] of ranges) {
+      const rangeDuration = rangeEnd - rangeStart;
+      const rangeSamples = Math.ceil((rangeDuration * 1000) / SAMPLE_INTERVAL_MS);
 
-      // Calculate timestamp relative to analysis start (which is inPoint)
-      const relativeTime = (i * SAMPLE_INTERVAL_MS) / 1000;
-      const absoluteTime = analysisStartTime + relativeTime;
-
-      // Extract frame
-      const frame = await extractFrame(video, absoluteTime, canvas, ctx);
-
-      // Analyze motion using GPU or CPU
-      let motionResult: MotionResult;
-      const analysisStart = performance.now();
-
+      // Reset flow analyzer between ranges (different video regions)
       if (gpuAvailable) {
-        // GPU path: create ImageBitmap and use optical flow
-        const bitmap = await createImageBitmap(canvas);
-        motionResult = await analyzeMotionGPU(bitmap);
-        bitmap.close();
-      } else {
-        // CPU fallback: use grid-based analysis
-        motionResult = analyzeMotion(frame, previousFrame);
+        resetOpticalFlowAnalyzer();
+      }
+      previousFrame = null;
+
+      const rangeFrames: FrameAnalysisData[] = [];
+
+      for (let i = 0; i < rangeSamples; i++) {
+        if (shouldCancel) {
+          log.info('Analysis cancelled');
+          updateClipAnalysis(clipId, { status: continueMode ? 'ready' : 'none', progress: 0 });
+          return;
+        }
+
+        const relativeTime = (i * SAMPLE_INTERVAL_MS) / 1000;
+        const absoluteTime = rangeStart + relativeTime;
+
+        const frame = await extractFrame(video, absoluteTime, canvas, ctx);
+
+        let motionResult: MotionResult;
+        const analysisStart = performance.now();
+
+        if (gpuAvailable) {
+          const bitmap = await createImageBitmap(canvas);
+          motionResult = await analyzeMotionGPU(bitmap);
+          bitmap.close();
+        } else {
+          motionResult = analyzeMotion(frame, previousFrame);
+        }
+
+        const analysisTime = performance.now() - analysisStart;
+        if (processedSamples === 0) {
+          log.debug(`First frame analysis took ${analysisTime.toFixed(1)}ms (${gpuAvailable ? 'GPU' : 'CPU'})`);
+        }
+
+        const focus = analyzeSharpness(frame);
+        const faceCount = detectFaceCount(frame);
+
+        rangeFrames.push({
+          timestamp: absoluteTime,
+          motion: motionResult.total,
+          globalMotion: motionResult.global,
+          localMotion: motionResult.local,
+          focus,
+          brightness: 0.5,
+          faceCount,
+          isSceneCut: motionResult.isSceneCut,
+        });
+
+        previousFrame = frame;
+        processedSamples++;
+
+        const progress = Math.round((processedSamples / totalSamples) * 100);
+
+        // In continue mode, show merged frames (existing + new) for real-time graph
+        const existingFrames = continueMode ? (clip.analysis?.frames || []) : [];
+        const allSoFar = [...existingFrames, ...newFrames, ...rangeFrames];
+        allSoFar.sort((a, b) => a.timestamp - b.timestamp);
+        const partialAnalysis: ClipAnalysis = { frames: allSoFar, sampleInterval: SAMPLE_INTERVAL_MS };
+        updateClipAnalysis(clipId, { progress, analysis: partialAnalysis });
+
+        if (processedSamples % 5 === 0) {
+          await new Promise(r => setTimeout(r, 0));
+        }
       }
 
-      const analysisTime = performance.now() - analysisStart;
-      if (i === 0) {
-        log.debug(`First frame analysis took ${analysisTime.toFixed(1)}ms (${gpuAvailable ? 'GPU' : 'CPU'})`);
-      }
+      newFrames.push(...rangeFrames);
 
-      const focus = analyzeSharpness(frame);
-      const faceCount = detectFaceCount(frame);
-
-      frames.push({
-        // Store timestamp relative to the source file (for overlay rendering)
-        timestamp: absoluteTime,
-        motion: motionResult.total,
-        globalMotion: motionResult.global,
-        localMotion: motionResult.local,
-        focus,
-        brightness: 0.5, // TODO: Calculate actual brightness from frame
-        faceCount,
-        isSceneCut: motionResult.isSceneCut,
-      });
-
-      previousFrame = frame;
-
-      // Update progress and analysis data in real-time
-      const progress = Math.round(((i + 1) / totalSamples) * 100);
-
-      // Update with current frames for real-time graph rendering
-      const partialAnalysis: ClipAnalysis = {
-        frames: [...frames],
-        sampleInterval: SAMPLE_INTERVAL_MS,
-      };
-      updateClipAnalysis(clipId, { progress, analysis: partialAnalysis });
-
-      // Yield to UI every 5 frames
-      if (i % 5 === 0) {
-        await new Promise(r => setTimeout(r, 0));
+      // Save each range to project folder immediately
+      if (mediaFileId && projectFileService.isProjectOpen()) {
+        try {
+          await projectFileService.saveAnalysis(mediaFileId, rangeStart, rangeEnd, rangeFrames, SAMPLE_INTERVAL_MS);
+          log.debug('Saved analysis range', { range: `${rangeStart.toFixed(1)}-${rangeEnd.toFixed(1)}` });
+        } catch (err) {
+          log.warn('Failed to save analysis range', err);
+        }
       }
     }
 
-    // Final cancellation check
     if (shouldCancel) {
       log.info('Analysis cancelled');
-      updateClipAnalysis(clipId, { status: 'none', progress: 0 });
+      updateClipAnalysis(clipId, { status: continueMode ? 'ready' : 'none', progress: 0 });
       return;
     }
 
-    // Store analysis results
-    const analysis: ClipAnalysis = {
-      frames,
-      sampleInterval: SAMPLE_INTERVAL_MS,
-    };
+    // Merge with existing frames if continue mode
+    let finalFrames = newFrames;
+    if (continueMode && clip.analysis?.frames.length) {
+      finalFrames = [...clip.analysis.frames, ...newFrames];
+      finalFrames.sort((a, b) => a.timestamp - b.timestamp);
+      // Deduplicate by timestamp
+      const seen = new Set<number>();
+      finalFrames = finalFrames.filter(f => {
+        const ts = Math.round(f.timestamp * 1000);
+        if (seen.has(ts)) return false;
+        seen.add(ts);
+        return true;
+      });
+    }
+
+    const analysis: ClipAnalysis = { frames: finalFrames, sampleInterval: SAMPLE_INTERVAL_MS };
 
     updateClipAnalysis(clipId, {
       status: 'ready',
       progress: 100,
       analysis,
     });
-
-    // Save to project folder (not browser cache)
-    if (mediaFileId && projectFileService.isProjectOpen()) {
-      try {
-        await projectFileService.saveAnalysis(
-          mediaFileId,
-          analysisStartTime,
-          analysisEndTime,
-          frames,
-          SAMPLE_INTERVAL_MS
-        );
-        log.info('Analysis saved to project folder');
-      } catch (err) {
-        log.warn('Failed to save analysis to project folder', err);
-      }
-    }
 
     // Propagate analysis status to MediaFile for badge display
     if (mediaFileId) {

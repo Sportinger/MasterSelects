@@ -49,6 +49,7 @@ export interface MediaFile extends MediaItem {
   transcriptStatus?: TranscriptStatus;
   transcript?: TranscriptWord[];
   transcriptCoverage?: number;  // 0-1, how much of total duration is transcribed
+  transcribedRanges?: [number, number][];  // Time ranges that have been transcribed
   // Analysis support (CV or AI describe)
   analysisStatus?: AnalysisStatus;
   analysisCoverage?: number;    // 0-1, how much of total duration is analyzed

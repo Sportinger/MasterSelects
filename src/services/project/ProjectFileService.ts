@@ -412,16 +412,22 @@ class ProjectFileService {
   // TRANSCRIPT SERVICE DELEGATION
   // ============================================
 
-  async saveTranscript(mediaId: string, transcript: unknown): Promise<boolean> {
+  async saveTranscript(mediaId: string, transcript: unknown, transcribedRanges?: [number, number][]): Promise<boolean> {
     const handle = this.coreService.getProjectHandle();
     if (!handle) return false;
-    return this.transcriptService.saveTranscript(handle, mediaId, transcript);
+    return this.transcriptService.saveTranscript(handle, mediaId, transcript, transcribedRanges);
   }
 
-  async getTranscript(mediaId: string): Promise<unknown | null> {
+  async getTranscript(mediaId: string): Promise<{ words: unknown[]; transcribedRanges?: [number, number][] } | null> {
     const handle = this.coreService.getProjectHandle();
     if (!handle) return null;
     return this.transcriptService.getTranscript(handle, mediaId);
+  }
+
+  async getTranscribedRanges(mediaId: string): Promise<[number, number][]> {
+    const handle = this.coreService.getProjectHandle();
+    if (!handle) return [];
+    return this.transcriptService.getTranscribedRanges(handle, mediaId);
   }
 }
 

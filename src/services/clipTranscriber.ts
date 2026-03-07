@@ -52,10 +52,46 @@ function getWorker(): Worker {
 }
 
 /**
+ * Find uncovered time gaps within a range given a set of covered ranges.
+ */
+function findGaps(
+  coveredRanges: [number, number][],
+  rangeStart: number,
+  rangeEnd: number
+): [number, number][] {
+  const clipped: [number, number][] = [];
+  for (const [s, e] of coveredRanges) {
+    const cs = Math.max(s, rangeStart);
+    const ce = Math.min(e, rangeEnd);
+    if (cs < ce) clipped.push([cs, ce]);
+  }
+  clipped.sort((a, b) => a[0] - b[0]);
+
+  const merged: [number, number][] = [];
+  for (const range of clipped) {
+    if (merged.length > 0 && range[0] <= merged[merged.length - 1][1]) {
+      merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], range[1]);
+    } else {
+      merged.push([...range]);
+    }
+  }
+
+  const gaps: [number, number][] = [];
+  let cursor = rangeStart;
+  for (const [s, e] of merged) {
+    if (cursor < s) gaps.push([cursor, s]);
+    cursor = Math.max(cursor, e);
+  }
+  if (cursor < rangeEnd) gaps.push([cursor, rangeEnd]);
+  return gaps;
+}
+
+/**
  * Extract audio from a clip's file and transcribe it
  * Uses the configured provider (local Whisper, OpenAI, AssemblyAI, or Deepgram)
+ * When continueMode is true, only transcribes uncovered time ranges.
  */
-export async function transcribeClip(clipId: string, language: string = 'auto'): Promise<void> {
+export async function transcribeClip(clipId: string, language: string = 'auto', options?: { continueMode?: boolean }): Promise<void> {
   if (isTranscribing) {
     log.warn('Already transcribing');
     return;
@@ -95,11 +131,34 @@ export async function transcribeClip(clipId: string, language: string = 'auto'):
     return;
   }
 
+  const continueMode = options?.continueMode ?? false;
+  const mediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
+
+  // In continue mode, find uncovered gaps
+  const inPoint = clip.inPoint || 0;
+  const outPoint = clip.outPoint || clip.duration;
+  let transcriptionGaps: [number, number][] | null = null;
+
+  if (continueMode && mediaFileId && projectFileService.isProjectOpen()) {
+    try {
+      const transcribedRanges = await projectFileService.getTranscribedRanges(mediaFileId);
+      transcriptionGaps = findGaps(transcribedRanges, inPoint, outPoint);
+      if (transcriptionGaps.length === 0) {
+        log.info('No gaps to transcribe, clip is fully covered');
+        return;
+      }
+      log.info(`Continue mode: ${transcriptionGaps.length} gaps to transcribe`, { gaps: transcriptionGaps });
+    } catch (err) {
+      log.warn('Failed to get transcribed ranges for continue mode', err);
+      transcriptionGaps = null;
+    }
+  }
+
   isTranscribing = true;
   currentClipId = clipId;
 
   const providerName = transcriptionProvider === 'local' ? 'Local Whisper' : transcriptionProvider.toUpperCase();
-  log.info(`Starting transcription for ${clip.name} using ${providerName}`);
+  log.info(`Starting transcription for ${clip.name} using ${providerName}${continueMode ? ' (continue mode)' : ''}`);
 
   // Update status to transcribing
   updateClipTranscript(clipId, {
@@ -109,70 +168,94 @@ export async function transcribeClip(clipId: string, language: string = 'auto'):
   });
 
   try {
-    // Extract audio on main thread (AudioContext not available in workers)
-    // Only extract the portion between inPoint and outPoint (the trimmed clip region)
-    const inPoint = clip.inPoint || 0;
-    const outPoint = clip.outPoint || clip.duration;
-    const clipDuration = outPoint - inPoint;
+    // Determine ranges to transcribe
+    const ranges = transcriptionGaps || [[inPoint, outPoint]];
+    const allNewWords: TranscriptWord[] = [];
+    const totalDuration = ranges.reduce((sum, [s, e]) => sum + (e - s), 0);
+    let processedDuration = 0;
 
-    log.debug(`Extracting audio from ${inPoint.toFixed(1)}s to ${outPoint.toFixed(1)}s (${clipDuration.toFixed(1)}s)`);
+    for (let ri = 0; ri < ranges.length; ri++) {
+      const [rangeStart, rangeEnd] = ranges[ri];
+      const rangeDuration = rangeEnd - rangeStart;
 
-    const audioBuffer = await extractAudioBuffer(clip.file, inPoint, outPoint);
-    const audioDuration = audioBuffer.duration;
+      log.debug(`Extracting audio from ${rangeStart.toFixed(1)}s to ${rangeEnd.toFixed(1)}s (${rangeDuration.toFixed(1)}s)`);
 
-    log.debug(`Audio extracted: ${audioDuration.toFixed(1)}s`);
+      const audioBuffer = await extractAudioBuffer(clip.file, rangeStart, rangeEnd);
+      const audioDuration = audioBuffer.duration;
 
-    let words: TranscriptWord[];
+      log.debug(`Audio extracted: ${audioDuration.toFixed(1)}s`);
 
-    if (transcriptionProvider === 'local') {
-      // Local Whisper via Web Worker
-      const audioData = await resampleAudio(audioBuffer, 16000);
-      updateClipTranscript(clipId, {
-        progress: 5,
-        message: 'Starting local transcription...',
-      });
-      words = await runWorkerTranscription(clipId, audioData, language, audioDuration, inPoint);
-    } else {
-      // Cloud API transcription
-      updateClipTranscript(clipId, {
-        progress: 10,
-        message: `Uploading to ${providerName}...`,
-      });
+      // Calculate progress offset for this range
+      const progressBase = Math.round((processedDuration / totalDuration) * 100);
+      const progressScale = rangeDuration / totalDuration;
 
-      // Convert audio buffer to appropriate format for API
-      const audioBlob = await audioBufferToWav(audioBuffer);
+      let words: TranscriptWord[];
 
-      switch (transcriptionProvider) {
-        case 'openai':
-          words = await transcribeWithOpenAI(clipId, audioBlob, language, apiKey!, inPoint);
-          break;
-        case 'assemblyai':
-          words = await transcribeWithAssemblyAI(clipId, audioBlob, language, apiKey!, inPoint);
-          break;
-        case 'deepgram':
-          words = await transcribeWithDeepgram(clipId, audioBlob, language, apiKey!, inPoint);
-          break;
-        default:
-          throw new Error(`Unknown provider: ${transcriptionProvider}`);
+      if (transcriptionProvider === 'local') {
+        const audioData = await resampleAudio(audioBuffer, 16000);
+        updateClipTranscript(clipId, {
+          progress: progressBase + Math.round(5 * progressScale),
+          message: ranges.length > 1 ? `Transcribing range ${ri + 1}/${ranges.length}...` : 'Starting local transcription...',
+        });
+        words = await runWorkerTranscription(clipId, audioData, language, audioDuration, rangeStart);
+      } else {
+        updateClipTranscript(clipId, {
+          progress: progressBase + Math.round(10 * progressScale),
+          message: ranges.length > 1 ? `Uploading range ${ri + 1}/${ranges.length} to ${providerName}...` : `Uploading to ${providerName}...`,
+        });
+
+        const audioBlob = await audioBufferToWav(audioBuffer);
+
+        switch (transcriptionProvider) {
+          case 'openai':
+            words = await transcribeWithOpenAI(clipId, audioBlob, language, apiKey!, rangeStart);
+            break;
+          case 'assemblyai':
+            words = await transcribeWithAssemblyAI(clipId, audioBlob, language, apiKey!, rangeStart);
+            break;
+          case 'deepgram':
+            words = await transcribeWithDeepgram(clipId, audioBlob, language, apiKey!, rangeStart);
+            break;
+          default:
+            throw new Error(`Unknown provider: ${transcriptionProvider}`);
+        }
       }
+
+      allNewWords.push(...words);
+      processedDuration += rangeDuration;
+    }
+
+    // Merge with existing words if continue mode
+    let finalWords = allNewWords;
+    if (continueMode && clip.transcript?.length) {
+      const existing = clip.transcript;
+      const merged = [...existing];
+      for (const word of allNewWords) {
+        const duplicate = merged.some(
+          (w: TranscriptWord) => Math.abs(w.start - word.start) < 0.05 && Math.abs(w.end - word.end) < 0.05
+        );
+        if (!duplicate) merged.push(word);
+      }
+      finalWords = merged.sort((a, b) => a.start - b.start);
     }
 
     // Complete
     updateClipTranscript(clipId, {
       status: 'ready',
       progress: 100,
-      words,
+      words: finalWords,
       message: undefined,
     });
     triggerTimelineSave();
 
     // Propagate transcript to MediaFile for badge display + carry-over
-    const mediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
-    if (mediaFileId && words.length > 0) {
-      propagateTranscriptToMediaFile(mediaFileId, words);
+    if (mediaFileId && finalWords.length > 0) {
+      // Collect all transcribed ranges (existing + new)
+      const newRanges: [number, number][] = ranges.map(([s, e]) => [s, e]);
+      propagateTranscriptToMediaFile(mediaFileId, finalWords, newRanges);
     }
 
-    log.info(`Complete: ${words.length} words for ${clip.name}`);
+    log.info(`Complete: ${finalWords.length} words for ${clip.name}`);
 
   } catch (error) {
     log.error('Transcription failed', error);
@@ -288,8 +371,9 @@ function updateClipTranscript(
 /**
  * Propagate transcript to MediaFile for badge display and carry-over to new clips.
  * Merges with existing transcript if the MediaFile already has words from a different region.
+ * Also tracks transcribed ranges for continue mode.
  */
-function propagateTranscriptToMediaFile(mediaFileId: string, words: TranscriptWord[]): void {
+function propagateTranscriptToMediaFile(mediaFileId: string, words: TranscriptWord[], newRanges?: [number, number][]): void {
   try {
     const mediaState = useMediaStore.getState();
     const file = mediaState.files.find((f: MediaFile) => f.id === mediaFileId);
@@ -311,25 +395,53 @@ function propagateTranscriptToMediaFile(mediaFileId: string, words: TranscriptWo
       mergedWords = merged.sort((a, b) => a.start - b.start);
     }
 
-    // Calculate transcript coverage (union of word ranges / total duration)
-    const transcriptCoverage = file.duration ? calcCoverage(mergedWords.map(w => [w.start, w.end]), file.duration) : 0;
+    // Calculate transcript coverage from transcribed ranges (not word ranges - silence is still transcribed)
+    let transcriptCoverage = 0;
+    if (file.duration && file.duration > 0) {
+      // Merge existing transcribed ranges with new ones
+      const existingRanges = (file as any).transcribedRanges || [];
+      const allRanges = [...existingRanges, ...(newRanges || [])];
+      transcriptCoverage = allRanges.length > 0 ? calcCoverage(allRanges, file.duration) : 0;
+    }
+
+    // Merge transcribed ranges for storage
+    const existingRanges: [number, number][] = (file as any).transcribedRanges || [];
+    const mergedRanges = mergeRanges([...existingRanges, ...(newRanges || [])]);
 
     useMediaStore.setState({
       files: mediaState.files.map((f: MediaFile) =>
         f.id === mediaFileId
-          ? { ...f, transcriptStatus: 'ready' as TranscriptStatus, transcript: mergedWords, transcriptCoverage }
+          ? { ...f, transcriptStatus: 'ready' as TranscriptStatus, transcript: mergedWords, transcriptCoverage, transcribedRanges: mergedRanges }
           : f
       ),
     });
-    // Persist transcript to project folder (TRANSCRIPTS/{mediaId}.json)
-    projectFileService.saveTranscript(mediaFileId, mergedWords).then(saved => {
+    // Persist transcript + ranges to project folder (TRANSCRIPTS/{mediaId}.json)
+    projectFileService.saveTranscript(mediaFileId, mergedWords, mergedRanges).then(saved => {
       if (saved) log.debug('Transcript saved to project folder', { mediaFileId });
     }).catch(() => { /* no project open */ });
 
-    log.debug('Propagated transcript to MediaFile', { mediaFileId, wordCount: mergedWords.length });
+    log.debug('Propagated transcript to MediaFile', { mediaFileId, wordCount: mergedWords.length, coverage: transcriptCoverage.toFixed(2) });
   } catch (e) {
     log.warn('Failed to propagate transcript to MediaFile', e);
   }
+}
+
+/**
+ * Merge and sort a list of ranges, combining overlapping ones.
+ */
+function mergeRanges(ranges: [number, number][]): [number, number][] {
+  if (ranges.length === 0) return [];
+  const sorted = [...ranges].sort((a, b) => a[0] - b[0]);
+  const merged: [number, number][] = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    const last = merged[merged.length - 1];
+    if (sorted[i][0] <= last[1]) {
+      last[1] = Math.max(last[1], sorted[i][1]);
+    } else {
+      merged.push([...sorted[i]]);
+    }
+  }
+  return merged;
 }
 
 /**
