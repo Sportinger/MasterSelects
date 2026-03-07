@@ -10,8 +10,39 @@ import { projectFileService } from '../../services/projectFileService';
 import { Logger } from '../../services/logger';
 import { engine } from '../../engine/WebGPUEngine';
 import { layerBuilder } from '../../services/layerBuilder';
+import type { WebCodecsPlayer } from '../../engine/WebCodecsPlayer';
 
 const log = Logger.create('Timeline');
+
+// Global WebCodecsPlayer cache — persists across composition switches.
+// Each player holds the parsed MP4 samples (~fileSize of memory via file.arrayBuffer()).
+// Re-creating them on every comp switch reads the entire file again → OOM crash.
+// Instead, cache by mediaFileId and reuse across switches.
+const globalWcpCache = new Map<string, WebCodecsPlayer>();
+
+/** Get or create a WebCodecsPlayer for a source file. Reuses cached players. */
+async function getOrCreateWcp(
+  mediaFileId: string,
+  video: HTMLVideoElement,
+  fileName: string,
+  file?: File
+): Promise<WebCodecsPlayer | null> {
+  // Reuse cached player if available
+  const cached = globalWcpCache.get(mediaFileId);
+  if (cached && !cached.isDestroyed?.()) {
+    log.debug('Reusing cached WebCodecsPlayer', { mediaFileId, fileName });
+    return cached;
+  }
+
+  // Create new player
+  const { initWebCodecsPlayer } = await import('./helpers/webCodecsHelpers');
+  const player = await initWebCodecsPlayer(video, fileName, file);
+  if (player) {
+    globalWcpCache.set(mediaFileId, player);
+    log.debug('Created & cached WebCodecsPlayer', { mediaFileId, fileName, fullMode: player.isFullMode() });
+  }
+  return player;
+}
 
 type SerializationUtils = Pick<TimelineUtils, 'getSerializableState' | 'loadState' | 'clearTimeline'>;
 
@@ -168,10 +199,6 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
 
     // Restore clips - need to recreate media elements from file references
     const mediaStore = useMediaStore.getState();
-
-    // Share one WebCodecsPlayer per source file — avoids parsing the same MP4
-    // dozens of times for split clips. Key = mediaFileId, Value = Promise<WebCodecsPlayer|null>.
-    const sharedWcPlayers = new Map<string, Promise<import('../../engine/WebCodecsPlayer').WebCodecsPlayer | null>>();
 
     for (const serializedClip of data.clips) {
       // Handle composition clips specially
@@ -545,19 +572,14 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                   nestedClip.source = videoSource;
                   nestedClip.isLoading = false;
 
-                  // Initialize WebCodecsPlayer — share per source file
+                  // Get or reuse cached WebCodecsPlayer
                   const hasWebCodecs = 'VideoDecoder' in window && 'VideoFrame' in window;
                   const nestedMediaId = nestedSerializedClip.mediaFileId;
                   if (hasWebCodecs && nestedMediaId) {
                     try {
-                      if (!sharedWcPlayers.has(nestedMediaId)) {
-                        const initPromise = import('./helpers/webCodecsHelpers').then(async ({ initWebCodecsPlayer }) => {
-                          log.debug('Creating shared WebCodecsPlayer (nested)', { file: nestedFileRef.name, mediaFileId: nestedMediaId });
-                          return initWebCodecsPlayer(video, nestedFileRef.name, nestedFileRef);
-                        });
-                        sharedWcPlayers.set(nestedMediaId, initPromise);
-                      }
-                      const webCodecsPlayer = await sharedWcPlayers.get(nestedMediaId)!;
+                      const webCodecsPlayer = await getOrCreateWcp(
+                        nestedMediaId, video, nestedFileRef.name, nestedFileRef
+                      );
                       if (webCodecsPlayer) {
                         nestedClip.source = {
                           ...nestedClip.source,
@@ -927,27 +949,18 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           // createImageBitmap is the ONLY API that decodes a frame from a never-played video after reload
           engine.preCacheVideoFrame(video);
 
-          // Initialize WebCodecsPlayer — share one per source file.
-          // Split clips from the same source reuse one decoder to avoid
-          // parsing the same MP4 multiple times (each parse holds all
-          // samples in RAM — duplicates crash the browser).
+          // Get or reuse a cached WebCodecsPlayer for this source file.
+          // The global cache avoids re-reading entire files via file.arrayBuffer()
+          // on every composition switch — the main cause of OOM crashes.
           const hasWebCodecs = 'VideoDecoder' in window && 'VideoFrame' in window;
           const mediaId = serializedClip.mediaFileId;
           if (hasWebCodecs && mediaId) {
             try {
-              // Reuse existing player or create one for this source file
-              if (!sharedWcPlayers.has(mediaId)) {
-                const initPromise = import('./helpers/webCodecsHelpers').then(async ({ initWebCodecsPlayer }) => {
-                  log.debug('Creating shared WebCodecsPlayer', { file: clip.name, mediaFileId: mediaId });
-                  return initWebCodecsPlayer(video, clip.name, mediaFile.file || undefined);
-                });
-                sharedWcPlayers.set(mediaId, initPromise);
-              }
-
-              const webCodecsPlayer = await sharedWcPlayers.get(mediaId)!;
+              const webCodecsPlayer = await getOrCreateWcp(
+                mediaId, video, clip.name, mediaFile.file || undefined
+              );
 
               if (webCodecsPlayer) {
-                log.debug('WebCodecsPlayer attached to clip', { clip: clip.name, fullMode: webCodecsPlayer.isFullMode(), shared: true });
 
                 // Update clip source with shared webCodecsPlayer
                 set(state => ({
@@ -1043,39 +1056,37 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       expandedCurveProperties: new Map<string, Set<import('../../types').AnimatableProperty>>(),
     });
 
-    // Defer ALL resource destruction to next frame — guarantees the render
-    // loop has processed the empty clips/layers before we close any
-    // VideoFrames, destroy decoders, or release GPU surfaces.
-    requestAnimationFrame(() => {
-      const destroyedPlayers = new Set<object>();
+    // Clean up media elements. WebCodecsPlayers are NOT destroyed —
+    // they're kept in globalWcpCache and reused by the next composition.
+    // This avoids re-reading entire video files via file.arrayBuffer()
+    // on every comp switch (the #1 cause of OOM crashes).
+    const cleanupClip = (clip: TimelineClip) => {
+      if (clip.source?.videoElement) {
+        const video = clip.source.videoElement;
+        video.pause();
+        try { if (video.src) URL.revokeObjectURL(video.src); } catch {}
+        video.removeAttribute('src');
+        video.load();
+      }
+      if (clip.source?.audioElement) {
+        const audio = clip.source.audioElement;
+        audio.pause();
+        try { if (audio.src) URL.revokeObjectURL(audio.src); } catch {}
+        audio.removeAttribute('src');
+        audio.load();
+      }
+      // WebCodecsPlayers stay in globalWcpCache — don't destroy them.
+      // Pause them so the decoder isn't running while detached.
+      if (clip.source?.webCodecsPlayer?.isPlaying) {
+        clip.source.webCodecsPlayer.pause();
+      }
+      if (clip.nestedClips) {
+        clip.nestedClips.forEach(cleanupClip);
+      }
+    };
 
-      const cleanupClip = (clip: TimelineClip) => {
-        if (clip.source?.videoElement) {
-          const video = clip.source.videoElement;
-          video.pause();
-          try { if (video.src) URL.revokeObjectURL(video.src); } catch {}
-          video.removeAttribute('src');
-          video.load();
-        }
-        if (clip.source?.audioElement) {
-          const audio = clip.source.audioElement;
-          audio.pause();
-          try { if (audio.src) URL.revokeObjectURL(audio.src); } catch {}
-          audio.removeAttribute('src');
-          audio.load();
-        }
-        if (clip.source?.webCodecsPlayer && !destroyedPlayers.has(clip.source.webCodecsPlayer)) {
-          destroyedPlayers.add(clip.source.webCodecsPlayer);
-          clip.source.webCodecsPlayer.destroy();
-        }
-        if (clip.nestedClips) {
-          clip.nestedClips.forEach(cleanupClip);
-        }
-      };
-
-      clips.forEach(cleanupClip);
-      engine.clearCaches();
-      layerBuilder.getVideoSyncManager().reset();
-    });
+    clips.forEach(cleanupClip);
+    engine.clearCaches();
+    layerBuilder.getVideoSyncManager().reset();
   },
 });

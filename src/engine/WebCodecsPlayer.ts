@@ -33,6 +33,7 @@ export class WebCodecsPlayer implements ExportModePlayer {
   private sampleIndex = 0;    // Display position (which sample is currently shown)
   private feedIndex = 0;       // Feed position (how far we've fed the decoder)
   private _isPlaying = false;
+  private _destroyed = false;
   private loop: boolean;
   private frameRate = 30;
   private frameInterval = 1000 / 30;
@@ -107,6 +108,7 @@ export class WebCodecsPlayer implements ExportModePlayer {
   }
   isSimpleMode(): boolean { return this.useSimpleMode; }
   isFullMode(): boolean { return !this.useSimpleMode && this.ready; }
+  isDestroyed(): boolean { return this._destroyed; }
   isSeeking(): boolean { return this.seekTargetUs !== null; }
   getPendingSeekTime(): number | null { return this.seekTargetUs !== null ? this.seekTargetUs / 1_000_000 : null; }
   getVideoElement(): HTMLVideoElement | null { return this.videoElement; }
@@ -1564,6 +1566,7 @@ export class WebCodecsPlayer implements ExportModePlayer {
   }
 
   destroy(): void {
+    this._destroyed = true;
     this.stop();
 
     // Stream mode cleanup
