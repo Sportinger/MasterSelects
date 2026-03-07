@@ -4,10 +4,13 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTimelineStore } from '../../stores/timeline';
+import { useMediaStore } from '../../stores/mediaStore';
 import { useYouTubeStore, type YouTubeVideo as StoreYouTubeVideo } from '../../stores/youtubeStore';
 import { downloadYouTubeVideo, downloadVideo, subscribeToDownload, isDownloadAvailable, type DownloadProgress } from '../../services/youtubeDownloader';
 import { NativeHelperClient } from '../../services/nativeHelper';
 import type { VideoInfo } from '../../services/nativeHelper';
+import { projectFileService } from '../../services/projectFileService';
+import { setExternalDragPayload, clearExternalDragPayload } from '../timeline/utils/externalDragSession';
 import './DownloadPanel.css';
 
 interface YouTubeVideo {
@@ -176,6 +179,7 @@ export function DownloadPanel() {
   const [autoDownload, setAutoDownload] = useState(false);
   const [downloadingVideos, setDownloadingVideos] = useState<Set<string>>(new Set());
   const [helperConnected, setHelperConnected] = useState(isDownloadAvailable());
+  const [downloadedVideos, setDownloadedVideos] = useState<Set<string>>(new Set());
 
   // YouTube store - videos persist with project
   const storeVideos = useYouTubeStore(s => s.videos);
@@ -205,6 +209,25 @@ export function DownloadPanel() {
     });
     return unsubscribe;
   }, []);
+
+  // Check which videos are already downloaded
+  useEffect(() => {
+    if (!projectFileService.isProjectOpen()) return;
+    let cancelled = false;
+    (async () => {
+      const found = new Set<string>();
+      for (const v of storeVideos) {
+        const exists = await projectFileService.checkDownloadExists(v.title, v.platform || 'youtube');
+        if (cancelled) return;
+        if (exists) found.add(v.id);
+      }
+      setDownloadedVideos(found);
+    })();
+    return () => { cancelled = true; };
+  }, [storeVideos]);
+
+  // Import file from mediaStore
+  const importFile = useMediaStore(s => s.importFile);
 
   // Timeline store actions
   const addPendingDownloadClip = useTimelineStore(s => s.addPendingDownloadClip);
@@ -390,14 +413,61 @@ export function DownloadPanel() {
     navigator.clipboard.writeText(getVideoUrl(video));
   };
 
-  // Drag handlers
+  // Pre-import downloaded files so they're ready for instant drag
+  const importedMediaRef = useRef<Map<string, { mediaId: string; file: File; duration?: number; hasAudio?: boolean }>>(new Map());
+
+  // When downloadedVideos changes, pre-import them into media store
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      for (const video of results) {
+        if (!downloadedVideos.has(video.id)) continue;
+        if (importedMediaRef.current.has(video.id)) continue;
+        const file = await projectFileService.getDownloadFile(video.title, video.platform || 'youtube');
+        if (cancelled || !file) continue;
+        const mediaFile = await importFile(file);
+        if (cancelled || !mediaFile) continue;
+        importedMediaRef.current.set(video.id, {
+          mediaId: mediaFile.id,
+          file,
+          duration: mediaFile.duration || video.durationSeconds,
+          hasAudio: mediaFile.hasAudio !== false,
+        });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [downloadedVideos, results]);
+
+  // Drag handlers — downloaded videos can be dragged directly to timeline
   const handleDragStart = (e: React.DragEvent, video: YouTubeVideo) => {
-    e.dataTransfer.setData('application/x-youtube-video', JSON.stringify(video));
-    e.dataTransfer.effectAllowed = 'copy';
     setDraggingVideo(video.id);
+    clearExternalDragPayload();
+
+    const imported = importedMediaRef.current.get(video.id);
+    if (imported) {
+      // Already downloaded + imported — drag as media file to timeline
+      setExternalDragPayload({
+        kind: 'media-file',
+        id: imported.mediaId,
+        duration: imported.duration,
+        hasAudio: imported.hasAudio,
+        isAudio: false,
+        isVideo: true,
+        file: imported.file,
+      });
+      e.dataTransfer.setData('application/x-media-file-id', imported.mediaId);
+      e.dataTransfer.effectAllowed = 'copyMove';
+    } else {
+      // Not downloaded yet — just visual drag, no timeline drop
+      e.dataTransfer.setData('text/plain', video.title);
+      e.dataTransfer.effectAllowed = 'copy';
+    }
   };
 
-  const handleDragEnd = () => setDraggingVideo(null);
+  const handleDragEnd = () => {
+    setDraggingVideo(null);
+    clearExternalDragPayload();
+  };
 
   // Show format selection dialog before download
   const showFormatDialog = async (video: YouTubeVideo, mode: 'download' | 'timeline') => {
@@ -459,18 +529,13 @@ export function DownloadPanel() {
 
     try {
       const videoUrl = getVideoUrl(video);
-      const file = video.sourceUrl && video.platform !== 'youtube'
-        ? await downloadVideo(videoUrl, video.id, video.title, video.thumbnail, formatId, undefined, video.platform)
-        : await downloadYouTubeVideo(video.id, video.title, video.thumbnail, formatId);
-      // Trigger browser download
-      const blobUrl = URL.createObjectURL(file);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = `${video.title.replace(/[^a-zA-Z0-9 ]/g, '')}.mp4`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
+      if (video.sourceUrl && video.platform !== 'youtube') {
+        await downloadVideo(videoUrl, video.id, video.title, video.thumbnail, formatId, undefined, video.platform);
+      } else {
+        await downloadYouTubeVideo(video.id, video.title, video.thumbnail, formatId);
+      }
+      // Mark as downloaded
+      setDownloadedVideos(prev => new Set(prev).add(video.id));
     } catch (err) {
       setError(`Download failed: ${(err as Error).message}`);
     } finally {
@@ -527,6 +592,7 @@ export function DownloadPanel() {
         ? await downloadVideo(videoUrl, video.id, video.title, video.thumbnail, formatId, undefined, video.platform)
         : await downloadYouTubeVideo(video.id, video.title, video.thumbnail, formatId);
       await completeDownload(clipId, file);
+      setDownloadedVideos(prev => new Set(prev).add(video.id));
     } catch (err) {
       setDownloadError(clipId, (err as Error).message);
     } finally {
@@ -628,16 +694,30 @@ export function DownloadPanel() {
                     <span className="video-channel">{video.channel}</span>
                   </div>
                   <span className="video-duration">{video.duration}</span>
+                  {downloadedVideos.has(video.id) && (
+                    <span className="video-downloaded-badge" title="Downloaded — drag to timeline">✓</span>
+                  )}
                   {/* Action buttons */}
                   <div className="video-actions">
-                    <button
-                      className={`btn-download ${!helperConnected ? 'disabled' : ''}`}
-                      onClick={(e) => { e.stopPropagation(); downloadVideoOnly(video); }}
-                      title={helperConnected ? "Download video" : "Native Helper required for download"}
-                      disabled={downloadingVideos.has(video.id) || fetchingFormats === video.id || !helperConnected}
-                    >
-                      {downloadingVideos.has(video.id) || fetchingFormats === video.id ? '...' : '↓'}
-                    </button>
+                    {downloadedVideos.has(video.id) ? (
+                      <button
+                        className="btn-download btn-redownload"
+                        onClick={(e) => { e.stopPropagation(); downloadVideoOnly(video); }}
+                        title="Re-download video"
+                        disabled={downloadingVideos.has(video.id) || fetchingFormats === video.id || !helperConnected}
+                      >
+                        {downloadingVideos.has(video.id) || fetchingFormats === video.id ? '...' : '↻'}
+                      </button>
+                    ) : (
+                      <button
+                        className={`btn-download ${!helperConnected ? 'disabled' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); downloadVideoOnly(video); }}
+                        title={helperConnected ? "Download video" : "Native Helper required for download"}
+                        disabled={downloadingVideos.has(video.id) || fetchingFormats === video.id || !helperConnected}
+                      >
+                        {downloadingVideos.has(video.id) || fetchingFormats === video.id ? '...' : '↓'}
+                      </button>
+                    )}
                     <button
                       className={`btn-add-timeline ${fetchingFormats === video.id ? 'loading' : ''}`}
                       onClick={(e) => { e.stopPropagation(); addVideoToTimeline(video); }}

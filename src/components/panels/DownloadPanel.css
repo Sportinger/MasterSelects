@@ -318,6 +318,34 @@
   border-radius: 3px;
 }
 
+/* Downloaded badge */
+.video-downloaded-badge {
+  position: absolute;
+  top: var(--sp-1);
+  right: var(--sp-1);
+  background: rgba(34, 197, 94, 0.9);
+  color: white;
+  font-size: var(--font-xs);
+  font-weight: var(--font-bold);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
+
+/* Redownload button */
+.btn-redownload {
+  background: rgba(100, 100, 100, 0.9) !important;
+  font-size: var(--font-lg) !important;
+}
+
+.btn-redownload:hover:not(:disabled) {
+  background: rgba(150, 150, 150, 0.9) !important;
+}
+
 /* Info overlay on thumbnail */
 .video-info-overlay {
   position: absolute;

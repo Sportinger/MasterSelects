@@ -244,6 +244,62 @@ export class RawMediaService {
     twitch: 'Twitch',
   };
 
+  /** Sanitize a title to a safe filename */
+  static sanitizeDownloadName(title: string): string {
+    return title.replace(/[^a-zA-Z0-9\s\-_]/g, '').substring(0, 100).trim();
+  }
+
+  /** Get the expected filename for a download */
+  static getDownloadFileName(title: string): string {
+    return `${RawMediaService.sanitizeDownloadName(title)}.mp4`;
+  }
+
+  /** Get the expected folder path for a platform download */
+  static getDownloadFolderPath(platform: string): string {
+    const subfolder = RawMediaService.PLATFORM_FOLDERS[platform] || 'Other';
+    return `Downloads/${subfolder}`;
+  }
+
+  /**
+   * Check if a downloaded file already exists in the project
+   */
+  async checkDownloadExists(
+    projectHandle: FileSystemDirectoryHandle,
+    title: string,
+    platform: string
+  ): Promise<boolean> {
+    try {
+      const folderPath = RawMediaService.getDownloadFolderPath(platform);
+      const folder = await this.fileStorage.navigateToFolder(projectHandle, folderPath, false);
+      if (!folder) return false;
+      const fileName = RawMediaService.getDownloadFileName(title);
+      await folder.getFileHandle(fileName, { create: false });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Read a downloaded file back from the project's Downloads folder
+   */
+  async getDownloadFile(
+    projectHandle: FileSystemDirectoryHandle,
+    title: string,
+    platform: string
+  ): Promise<File | null> {
+    try {
+      const folderPath = RawMediaService.getDownloadFolderPath(platform);
+      const folder = await this.fileStorage.navigateToFolder(projectHandle, folderPath, false);
+      if (!folder) return null;
+      const fileName = RawMediaService.getDownloadFileName(title);
+      const fileHandle = await folder.getFileHandle(fileName, { create: false });
+      return await fileHandle.getFile();
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * Save a downloaded video to the project's Downloads/<platform> folder
    * Returns the File object with correct name for timeline use
@@ -256,7 +312,7 @@ export class RawMediaService {
   ): Promise<File | null> {
     try {
       // Sanitize filename
-      const sanitizedTitle = title.replace(/[^a-zA-Z0-9\s\-_]/g, '').substring(0, 100).trim();
+      const sanitizedTitle = RawMediaService.sanitizeDownloadName(title);
       const fileName = `${sanitizedTitle}.mp4`;
 
       // Determine subfolder from platform

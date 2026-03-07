@@ -245,6 +245,18 @@ class ProjectFileService {
     return this.rawMediaService.saveDownload(handle, blob, title, platform);
   }
 
+  async checkDownloadExists(title: string, platform: string): Promise<boolean> {
+    const handle = this.coreService.getProjectHandle();
+    if (!handle) return false;
+    return this.rawMediaService.checkDownloadExists(handle, title, platform);
+  }
+
+  async getDownloadFile(title: string, platform: string): Promise<File | null> {
+    const handle = this.coreService.getProjectHandle();
+    if (!handle) return null;
+    return this.rawMediaService.getDownloadFile(handle, title, platform);
+  }
+
   // ============================================
   // CACHE SERVICE DELEGATION
   // ============================================
