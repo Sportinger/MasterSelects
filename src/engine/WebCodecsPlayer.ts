@@ -968,14 +968,10 @@ export class WebCodecsPlayer implements ExportModePlayer {
     if (this.useSimpleMode || !this.decoder || this.samples.length === 0 || !this.videoTrack) return;
 
     const startingPlayback = !this._isPlaying;
-    const hadPendingPreciseSeek = this.seekTargetUs !== null;
-    const hadPendingAdvanceSeek = this.pendingAdvanceSeekTargetIdx !== null;
-    const hadQueuedDecodeBacklog =
-      this.getEffectiveDecodeQueueSize() > 0 ||
-      this.frameBuffer.length > 0;
-    const shouldRestartPlaybackPipeline =
-      startingPlayback &&
-      (hadPendingPreciseSeek || hadPendingAdvanceSeek || hadQueuedDecodeBacklog);
+    // Always restart pipeline when starting playback — pause() resets the
+    // decoder to "unconfigured" state and clears the frame buffer, so we
+    // need to reconfigure and re-feed from a keyframe.
+    const shouldRestartPlaybackPipeline = startingPlayback;
 
     // Clear any pending seek target from paused seeking
     this.seekTargetUs = null;
@@ -1025,7 +1021,10 @@ export class WebCodecsPlayer implements ExportModePlayer {
       const feedDistFromKeyframe = this.feedIndex - keyframeForTarget;
       const isFeedPositionedCorrectly =
         feedDistFromKeyframe >= 0 && feedDistFromKeyframe <= 8;
-      if (isFeedPositionedCorrectly) {
+      const isDecoderReady = this.decoder?.state === 'configured';
+      if (isFeedPositionedCorrectly && isDecoderReady && this.frameBuffer.length > 0) {
+        // Decoder is configured, positioned correctly, AND has decoded frames
+        // available — safe to skip the heavyweight reset+configure.
         wcPipelineMonitor.record('seek_skip', {
           reason: 'reset_already_positioned',
           feedIndex: this.feedIndex,
