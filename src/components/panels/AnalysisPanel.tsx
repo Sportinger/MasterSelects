@@ -1,12 +1,17 @@
 // Analysis Panel - Focus, Motion, and Face detection for clips
 
 import { useCallback, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../../stores/timeline';
 import type { FrameAnalysisData } from '../../types';
 import './AnalysisPanel.css';
 
 export function AnalysisPanel() {
-  const { clips, selectedClipIds, playheadPosition } = useTimelineStore();
+  const { clips, selectedClipIds, playheadPosition } = useTimelineStore(useShallow(s => ({
+    clips: s.clips,
+    selectedClipIds: s.selectedClipIds,
+    playheadPosition: s.playheadPosition,
+  })));
 
   // Get first selected clip ID
   const selectedClipId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;

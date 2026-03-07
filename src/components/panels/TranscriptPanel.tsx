@@ -2,6 +2,7 @@
 // Shows individual words with real-time highlighting during playback
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../../stores/timeline';
 import type { TranscriptWord } from '../../types';
 import './TranscriptPanel.css';
@@ -122,7 +123,12 @@ export function TranscriptPanel() {
     selectedClipIds,
     playheadPosition,
     setPlayheadPosition,
-  } = useTimelineStore();
+  } = useTimelineStore(useShallow(s => ({
+    clips: s.clips,
+    selectedClipIds: s.selectedClipIds,
+    playheadPosition: s.playheadPosition,
+    setPlayheadPosition: s.setPlayheadPosition,
+  })));
 
   // Get first selected clip ID
   const selectedClipId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;

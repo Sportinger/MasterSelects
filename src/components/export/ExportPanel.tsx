@@ -8,6 +8,7 @@ const log = Logger.create('ExportPanel');
 import { FrameExporter, downloadBlob } from '../../engine/export';
 import type { VideoCodec, ContainerFormat } from '../../engine/export';
 import { AudioExportPipeline } from '../../engine/audio';
+import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { engine } from '../../engine/WebGPUEngine';
@@ -30,8 +31,18 @@ import { seekAllClipsToTime, buildLayersAtTime } from './exportHelpers';
 import { useExportState, type EncoderType } from './useExportState';
 
 export function ExportPanel() {
-  const { duration, inPoint, outPoint, playheadPosition, startExport, setExportProgress, endExport } = useTimelineStore();
-  const { getActiveComposition } = useMediaStore();
+  const { duration, inPoint, outPoint, playheadPosition, startExport, setExportProgress, endExport } = useTimelineStore(useShallow(s => ({
+    duration: s.duration,
+    inPoint: s.inPoint,
+    outPoint: s.outPoint,
+    playheadPosition: s.playheadPosition,
+    startExport: s.startExport,
+    setExportProgress: s.setExportProgress,
+    endExport: s.endExport,
+  })));
+  const { getActiveComposition } = useMediaStore(useShallow(s => ({
+    getActiveComposition: s.getActiveComposition,
+  })));
   const composition = getActiveComposition();
 
   // All export state, effects, and simple handlers extracted to hook

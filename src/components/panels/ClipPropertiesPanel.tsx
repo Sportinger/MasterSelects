@@ -1,6 +1,7 @@
 // Clip Properties Panel - Shows transform controls for selected timeline clip
 
 import { useRef, useCallback, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import type { BlendMode, AnimatableProperty, MaskMode, ClipMask } from '../../types';
@@ -198,7 +199,12 @@ interface MaskItemProps {
 }
 
 function MaskItem({ clipId, mask, isActive, onSelect }: MaskItemProps) {
-  const { updateMask, removeMask, setActiveMask, setMaskEditMode } = useTimelineStore();
+  const { updateMask, removeMask, setActiveMask, setMaskEditMode } = useTimelineStore(useShallow(s => ({
+    updateMask: s.updateMask,
+    removeMask: s.removeMask,
+    setActiveMask: s.setActiveMask,
+    setMaskEditMode: s.setMaskEditMode,
+  })));
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(mask.name);
 
@@ -408,7 +414,20 @@ export function ClipPropertiesPanel() {
     maskEditMode,
     setMaskEditMode,
     updateClipTransform,
-  } = useTimelineStore();
+  } = useTimelineStore(useShallow(s => ({
+    clips: s.clips,
+    selectedClipIds: s.selectedClipIds,
+    setPropertyValue: s.setPropertyValue,
+    playheadPosition: s.playheadPosition,
+    getInterpolatedTransform: s.getInterpolatedTransform,
+    addRectangleMask: s.addRectangleMask,
+    addEllipseMask: s.addEllipseMask,
+    activeMaskId: s.activeMaskId,
+    setActiveMask: s.setActiveMask,
+    maskEditMode: s.maskEditMode,
+    setMaskEditMode: s.setMaskEditMode,
+    updateClipTransform: s.updateClipTransform,
+  })));
   // Get first selected clip for properties panel
   const selectedClipId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
   const selectedClip = clips.find(c => c.id === selectedClipId);
