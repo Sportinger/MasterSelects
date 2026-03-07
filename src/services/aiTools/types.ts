@@ -29,6 +29,7 @@ export const MODIFYING_TOOLS = new Set([
   'addTransition', 'removeTransition',
   // Masks
   'addMask', 'addRectangleMask', 'addEllipseMask', 'removeMask', 'updateMask',
+  'addVertex', 'removeVertex', 'updateVertex',
 ]);
 
 // Tool definition type (OpenAI function calling format)

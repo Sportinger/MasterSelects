@@ -107,6 +107,9 @@ import {
   handleAddMask,
   handleRemoveMask,
   handleUpdateMask,
+  handleAddVertex,
+  handleRemoveVertex,
+  handleUpdateVertex,
 } from './masks';
 
 // Handler registry - maps tool names to handler functions
@@ -167,6 +170,9 @@ const timelineHandlers: Record<string, (args: Record<string, unknown>, store: Re
   addMask: handleAddMask,
   removeMask: handleRemoveMask,
   updateMask: handleUpdateMask,
+  addVertex: handleAddVertex,
+  removeVertex: handleRemoveVertex,
+  updateVertex: handleUpdateVertex,
 };
 
 const mediaHandlers: Record<string, (args: Record<string, unknown>, store: ReturnType<typeof useMediaStore.getState>) => Promise<ToolResult>> = {
@@ -315,4 +321,7 @@ export {
   handleAddMask,
   handleRemoveMask,
   handleUpdateMask,
+  handleAddVertex,
+  handleRemoveVertex,
+  handleUpdateVertex,
 };
