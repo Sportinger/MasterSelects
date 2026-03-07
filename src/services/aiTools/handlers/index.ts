@@ -100,6 +100,15 @@ import {
   handleRemoveTransition,
 } from './transitions';
 
+import {
+  handleGetMasks,
+  handleAddRectangleMask,
+  handleAddEllipseMask,
+  handleAddMask,
+  handleRemoveMask,
+  handleUpdateMask,
+} from './masks';
+
 // Handler registry - maps tool names to handler functions
 const timelineHandlers: Record<string, (args: Record<string, unknown>, store: ReturnType<typeof useTimelineStore.getState>) => Promise<ToolResult>> = {
   getTimelineState: handleGetTimelineState,
@@ -151,6 +160,13 @@ const timelineHandlers: Record<string, (args: Record<string, unknown>, store: Re
   // Transitions
   addTransition: handleAddTransition,
   removeTransition: handleRemoveTransition,
+  // Masks
+  getMasks: handleGetMasks,
+  addRectangleMask: handleAddRectangleMask,
+  addEllipseMask: handleAddEllipseMask,
+  addMask: handleAddMask,
+  removeMask: handleRemoveMask,
+  updateMask: handleUpdateMask,
 };
 
 const mediaHandlers: Record<string, (args: Record<string, unknown>, store: ReturnType<typeof useMediaStore.getState>) => Promise<ToolResult>> = {
@@ -292,4 +308,11 @@ export {
   // Transitions
   handleAddTransition,
   handleRemoveTransition,
+  // Masks
+  handleGetMasks,
+  handleAddRectangleMask,
+  handleAddEllipseMask,
+  handleAddMask,
+  handleRemoveMask,
+  handleUpdateMask,
 };
