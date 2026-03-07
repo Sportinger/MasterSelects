@@ -768,6 +768,7 @@ export class WebCodecsPlayer implements ExportModePlayer {
   private pumpDecoder(): void {
     if (!this.decoder || this.samples.length === 0) return;
 
+    let pumpCount = 0;
     while (
       this.feedIndex < this.samples.length &&
       this.feedIndex - this.sampleIndex < WebCodecsPlayer.FEED_LOOKAHEAD &&
@@ -783,20 +784,25 @@ export class WebCodecsPlayer implements ExportModePlayer {
 
       try {
         this.decoder.decode(chunk);
-        const queueSize = this.decoder.decodeQueueSize;
-        wcPipelineMonitor.record('decode_feed', {
-          sampleIdx: this.feedIndex,
-          type: sample.is_sync ? 'key' : 'delta',
-          queueSize,
-        });
-        if (queueSize > 3) {
-          wcPipelineMonitor.record('queue_pressure', { queueSize });
-        }
+        this.noteDecodeQueued();
+        pumpCount++;
       } catch {
         // Skip decode errors
       }
 
       this.feedIndex++;
+    }
+    // Record feed summary once per pump cycle to reduce event overhead
+    if (pumpCount > 0) {
+      const queueSize = this.getEffectiveDecodeQueueSize();
+      wcPipelineMonitor.record('decode_feed', {
+        fed: pumpCount,
+        queueSize,
+        mode: 'pump',
+      });
+      if (queueSize >= WebCodecsPlayer.FEED_QUEUE_TARGET) {
+        wcPipelineMonitor.record('queue_pressure', { queueSize });
+      }
     }
 
     // Handle loop
@@ -1098,8 +1104,8 @@ export class WebCodecsPlayer implements ExportModePlayer {
     const queueLimit = keepAdvanceFeedActive
       ? WebCodecsPlayer.ADVANCE_SEEK_QUEUE_TARGET
       : WebCodecsPlayer.FEED_QUEUE_TARGET;
-    const queuePressureThreshold = Math.max(3, queueLimit - 2);
     let hitQueueCap = false;
+    let feedCount = 0;
     while (this.feedIndex < feedTarget) {
       if (this.getEffectiveDecodeQueueSize() >= queueLimit) {
         hitQueueCap = true;
@@ -1114,30 +1120,30 @@ export class WebCodecsPlayer implements ExportModePlayer {
       });
       try {
         this.decoder.decode(chunk);
-        const queueSize = this.noteDecodeQueued();
-        wcPipelineMonitor.record('decode_feed', {
-          sampleIdx: this.feedIndex,
-          type: sample.is_sync ? 'key' : 'delta',
-          queueSize,
-          mode: needsSeek
-            ? 'advance_seek'
-            : keepPendingAdvanceSeekAlive
-              ? 'advance_pending'
-              : 'advance',
-        });
-        if (queueSize >= queuePressureThreshold) {
-          wcPipelineMonitor.record('queue_pressure', {
-            queueSize,
-            queueLimit,
-            mode: needsSeek
-              ? 'advance_seek'
-              : keepPendingAdvanceSeekAlive
-                ? 'advance_pending'
-                : 'advance',
-          });
-        }
+        this.noteDecodeQueued();
+        feedCount++;
       } catch { /* skip decode errors */ }
       this.feedIndex++;
+    }
+    // Record feed summary once per advanceToTime call (not per sample)
+    // to reduce event overhead and GC pressure in the hot path
+    if (feedCount > 0) {
+      const queueSize = this.getEffectiveDecodeQueueSize();
+      wcPipelineMonitor.record('decode_feed', {
+        fed: feedCount,
+        queueSize,
+        mode: needsSeek
+          ? 'advance_seek'
+          : keepPendingAdvanceSeekAlive
+            ? 'advance_pending'
+            : 'advance',
+      });
+      if (queueSize >= queueLimit) {
+        wcPipelineMonitor.record('queue_pressure', {
+          queueSize,
+          queueLimit,
+        });
+      }
     }
 
     if (needsSeek && hitQueueCap) {
