@@ -1,0 +1,117 @@
+import { useEngineStore } from '../../../stores/engineStore';
+import type { ToolResult } from '../types';
+
+function collectSnapshot() {
+  const { engineStats, gpuInfo, isEngineReady } = useEngineStore.getState();
+  const s = engineStats;
+
+  const snapshot: Record<string, unknown> = {
+    timestamp: Date.now(),
+    engineReady: isEngineReady,
+    fps: s.fps,
+    targetFps: s.targetFps,
+    isIdle: s.isIdle,
+    timing: {
+      rafGap: round(s.timing.rafGap),
+      importTexture: round(s.timing.importTexture),
+      renderPass: round(s.timing.renderPass),
+      submit: round(s.timing.submit),
+      total: round(s.timing.total),
+    },
+    drops: s.drops,
+    decoder: s.decoder,
+    layerCount: s.layerCount,
+    audio: s.audio,
+  };
+
+  if (s.playback) {
+    snapshot.playback = {
+      status: s.playback.status,
+      pipeline: s.playback.pipeline,
+      frameEvents: s.playback.frameEvents,
+      cadenceFps: round(s.playback.cadenceFps),
+      avgFrameGapMs: round(s.playback.avgFrameGapMs),
+      p95FrameGapMs: round(s.playback.p95FrameGapMs),
+      maxFrameGapMs: round(s.playback.maxFrameGapMs),
+      stalls: s.playback.stalls,
+      seeks: s.playback.seeks,
+      advanceSeeks: s.playback.advanceSeeks,
+      driftCorrections: s.playback.driftCorrections,
+      readyStateDrops: s.playback.readyStateDrops,
+      queuePressureEvents: s.playback.queuePressureEvents,
+      healthAnomalies: s.playback.healthAnomalies,
+      activeVideos: s.playback.activeVideos,
+      seekingVideos: s.playback.seekingVideos,
+      warmingUpVideos: s.playback.warmingUpVideos,
+      coldVideos: s.playback.coldVideos,
+      worstReadyState: s.playback.worstReadyState,
+      avgDecodeLatencyMs: s.playback.avgDecodeLatencyMs ? round(s.playback.avgDecodeLatencyMs) : undefined,
+      avgSeekLatencyMs: s.playback.avgSeekLatencyMs ? round(s.playback.avgSeekLatencyMs) : undefined,
+      avgQueueDepth: s.playback.avgQueueDepth ? round(s.playback.avgQueueDepth) : undefined,
+      maxQueueDepth: s.playback.maxQueueDepth ? round(s.playback.maxQueueDepth) : undefined,
+      avgAudioDriftMs: s.playback.avgAudioDriftMs ? round(s.playback.avgAudioDriftMs) : undefined,
+      lastAnomalyType: s.playback.lastAnomalyType,
+    };
+  }
+
+  if (s.webCodecsInfo) {
+    snapshot.webCodecs = s.webCodecsInfo;
+  }
+
+  if (gpuInfo) {
+    snapshot.gpu = gpuInfo;
+  }
+
+  return snapshot;
+}
+
+function round(v: number): number {
+  return Math.round(v * 100) / 100;
+}
+
+export async function handleGetStats(): Promise<ToolResult> {
+  return {
+    success: true,
+    data: collectSnapshot(),
+  };
+}
+
+export async function handleGetStatsHistory(
+  args: Record<string, unknown>
+): Promise<ToolResult> {
+  const samples = Math.min(Math.max((args.samples as number) || 5, 1), 30);
+  const intervalMs = Math.max((args.intervalMs as number) || 200, 100);
+
+  const history: Record<string, unknown>[] = [];
+
+  // Collect first sample immediately
+  history.push(collectSnapshot());
+
+  // Collect remaining samples
+  for (let i = 1; i < samples; i++) {
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+    history.push(collectSnapshot());
+  }
+
+  // Compute summary
+  const fpsList = history.map(s => s.fps as number);
+  const totalList = history.map(s => (s.timing as { total: number }).total);
+
+  return {
+    success: true,
+    data: {
+      samples: history.length,
+      intervalMs,
+      durationMs: (samples - 1) * intervalMs,
+      summary: {
+        fpsMin: Math.min(...fpsList),
+        fpsMax: Math.max(...fpsList),
+        fpsAvg: round(fpsList.reduce((a, b) => a + b, 0) / fpsList.length),
+        renderTimeMin: Math.min(...totalList),
+        renderTimeMax: Math.max(...totalList),
+        renderTimeAvg: round(totalList.reduce((a, b) => a + b, 0) / totalList.length),
+      },
+      snapshots: history,
+    },
+  };
+}

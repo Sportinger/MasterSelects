@@ -112,6 +112,11 @@ import {
   handleUpdateVertex,
 } from './masks';
 
+import {
+  handleGetStats,
+  handleGetStatsHistory,
+} from './stats';
+
 // Handler registry - maps tool names to handler functions
 const timelineHandlers: Record<string, (args: Record<string, unknown>, store: ReturnType<typeof useTimelineStore.getState>) => Promise<ToolResult>> = {
   getTimelineState: handleGetTimelineState,
@@ -194,6 +199,9 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>) => P
   removeKeyframe: handleRemoveKeyframe,
   undo: handleUndo,
   redo: handleRedo,
+  // Stats
+  getStats: handleGetStats,
+  getStatsHistory: handleGetStatsHistory,
 };
 
 // YouTube handlers - self-contained, fetch their own stores
@@ -324,4 +332,7 @@ export {
   handleAddVertex,
   handleRemoveVertex,
   handleUpdateVertex,
+  // Stats
+  handleGetStats,
+  handleGetStatsHistory,
 };

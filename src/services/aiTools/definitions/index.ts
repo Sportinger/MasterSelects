@@ -14,6 +14,7 @@ import { keyframeToolDefinitions } from './keyframes';
 import { playbackToolDefinitions } from './playback';
 import { transitionToolDefinitions } from './transitions';
 import { maskToolDefinitions } from './masks';
+import { statsToolDefinitions } from './stats';
 
 // Combined tool definitions array (OpenAI function calling format)
 export const AI_TOOLS = [
@@ -31,6 +32,7 @@ export const AI_TOOLS = [
   ...playbackToolDefinitions,
   ...transitionToolDefinitions,
   ...maskToolDefinitions,
+  ...statsToolDefinitions,
 ];
 
 // Re-export individual definition sets for selective use
@@ -49,4 +51,5 @@ export {
   playbackToolDefinitions,
   transitionToolDefinitions,
   maskToolDefinitions,
+  statsToolDefinitions,
 };
