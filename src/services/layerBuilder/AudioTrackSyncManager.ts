@@ -295,8 +295,20 @@ export class AudioTrackSyncManager {
       if (!clip?.source?.audioElement) continue;
 
       const prev = this.lastAudioTrackState.get(track.id);
-      if (!prev || prev.clipId === clip.id) continue;
+      if (!prev) continue;
 
+      if (prev.clipId === clip.id) {
+        // Same clip as last frame — persist handoff if we were using one.
+        // Without this, the handoff only lasts 1 frame and then the clip's
+        // cold element takes over (causing an audio click/gap).
+        if (prev.audioElement !== clip.source.audioElement) {
+          this.audioHandoffs.set(clip.id, prev.audioElement);
+          this.audioHandoffElements.add(prev.audioElement);
+        }
+        continue;
+      }
+
+      // Different clip — detect same-source sequential cut for new handoff
       const clipFileId = clip.source.mediaFileId || clip.mediaFileId;
       const sameSource = clipFileId
         ? clipFileId === prev.fileId

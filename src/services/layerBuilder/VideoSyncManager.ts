@@ -110,9 +110,22 @@ export class VideoSyncManager {
       if (!clip.source?.videoElement || !clip.trackId) continue;
 
       const prev = this.lastTrackState.get(clip.trackId);
-      if (!prev || prev.clipId === clip.id) continue;
+      if (!prev) continue;
 
-      // Same source file? Check mediaFileId (string) or File object identity.
+      if (prev.clipId === clip.id) {
+        // Same clip as last frame — persist handoff if we were using one.
+        // Without this, the handoff only lasts 1 frame and then the clip's
+        // cold element takes over (causing a glitch). DaVinci/Premiere keep
+        // one decoder per source, so we persist the handoff for the clip's
+        // entire duration when clips share the same source.
+        if (prev.videoElement !== clip.source.videoElement) {
+          this.activeHandoffs.set(clip.id, prev.videoElement);
+          this.handoffElements.add(prev.videoElement);
+        }
+        continue;
+      }
+
+      // Different clip — detect same-source sequential cut for new handoff.
       // NOTE: blob URLs (video.src) are unique per createObjectURL call,
       // so split clips from the same file have DIFFERENT blob URLs.
       // DaVinci/Premiere use one decoder per source — we approximate this
