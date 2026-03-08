@@ -128,6 +128,9 @@ export function MediaPanel() {
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
   const [labelPickerItemId, setLabelPickerItemId] = useState<string | null>(null);
   const [labelPickerPos, setLabelPickerPos] = useState<{ x: number; y: number } | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>(() => {
+    return (localStorage.getItem('media-panel-view-mode') as 'list' | 'grid') || 'list';
+  });
 
   // Column order state
   const [columnOrder, setColumnOrder] = useState<ColumnId[]>(loadColumnOrder);
@@ -1082,6 +1085,44 @@ export function MediaPanel() {
     );
   };
 
+  // Render a single grid item
+  const renderGridItem = (item: ProjectItem) => {
+    const isFolder = 'isExpanded' in item;
+    const isSelected = selectedIds.includes(item.id);
+    const isMediaFile = !isFolder && 'type' in item && item.type !== 'composition' && item.type !== 'text' && item.type !== 'solid';
+    const mediaFile = isMediaFile ? (item as MediaFile) : null;
+    const isComp = !isFolder && 'type' in item && item.type === 'composition';
+    const thumbUrl = mediaFile?.thumbnailUrl;
+
+    return (
+      <div key={item.id} data-item-id={item.id}>
+        <div
+          className={`media-grid-item ${isSelected ? 'selected' : ''} ${isFolder ? 'folder' : ''}`}
+          draggable
+          onDragStart={(e) => handleDragStart(e, item)}
+          onDragEnd={handleDragEnd}
+          onClick={(e) => handleItemClick(item.id, e)}
+          onDoubleClick={() => handleItemDoubleClick(item)}
+          onContextMenu={(e) => handleContextMenu(e, item.id)}
+        >
+          <div className="media-grid-thumb">
+            {thumbUrl ? (
+              <img src={thumbUrl} alt="" draggable={false} />
+            ) : (
+              <div className="media-grid-thumb-placeholder">
+                <FileTypeIcon type={isFolder ? 'folder' : isComp ? 'composition' : (item as MediaFile).type} />
+              </div>
+            )}
+            {mediaFile?.duration && (
+              <span className="media-grid-duration">{formatDuration(mediaFile.duration)}</span>
+            )}
+          </div>
+          <div className="media-grid-name" title={item.name}>{item.name}</div>
+        </div>
+      </div>
+    );
+  };
+
   // Get root items (with sorting applied)
   const rootItems = sortItems(getItemsByFolder(null));
   const totalItems = files.length + compositions.length;
@@ -1106,6 +1147,20 @@ export function MediaPanel() {
         <span className="media-panel-title">Project</span>
         <span className="media-panel-count">{totalItems} items</span>
         <div className="media-panel-actions">
+          <button
+            className={`btn btn-sm btn-icon media-view-toggle ${viewMode === 'list' ? 'active' : ''}`}
+            onClick={() => { const m = 'list'; setViewMode(m); localStorage.setItem('media-panel-view-mode', m); }}
+            title="List View"
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><rect x="1" y="2" width="14" height="2" rx="0.5"/><rect x="1" y="7" width="14" height="2" rx="0.5"/><rect x="1" y="12" width="14" height="2" rx="0.5"/></svg>
+          </button>
+          <button
+            className={`btn btn-sm btn-icon media-view-toggle ${viewMode === 'grid' ? 'active' : ''}`}
+            onClick={() => { const m = 'grid'; setViewMode(m); localStorage.setItem('media-panel-view-mode', m); }}
+            title="Grid View"
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+          </button>
           {filesNeedReload && (
             <button
               className="btn btn-sm btn-reload-all"
@@ -1180,7 +1235,7 @@ export function MediaPanel() {
             <p>No media imported</p>
             <p className="hint">Drag & drop files here or click Import</p>
           </div>
-        ) : (
+        ) : viewMode === 'list' ? (
           <div className="media-panel-table-wrapper">
             {/* Column headers */}
             <div className="media-column-headers">
@@ -1234,6 +1289,32 @@ export function MediaPanel() {
                 );
               })()}
             </div>
+          </div>
+        ) : (
+          /* Grid View */
+          <div
+            className="media-grid-wrapper"
+            ref={itemListRef}
+            onMouseDown={handleMarqueeMouseDown}
+            style={{ position: 'relative' }}
+          >
+            <div className="media-grid">
+              {rootItems.map(item => renderGridItem(item))}
+            </div>
+            {/* Marquee selection rectangle */}
+            {marquee && (() => {
+              const left = Math.min(marquee.startX, marquee.currentX);
+              const top = Math.min(marquee.startY, marquee.currentY);
+              const width = Math.abs(marquee.currentX - marquee.startX);
+              const height = Math.abs(marquee.currentY - marquee.startY);
+              if (width < 3 && height < 3) return null;
+              return (
+                <div
+                  className="media-marquee"
+                  style={{ left, top, width, height }}
+                />
+              );
+            })()}
           </div>
         )}
       </div>
