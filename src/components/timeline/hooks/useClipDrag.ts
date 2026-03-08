@@ -5,6 +5,7 @@ import { useState, useCallback, useRef } from 'react';
 import type { TimelineClip, TimelineTrack } from '../../../types';
 import type { ClipDragState } from '../types';
 import { Logger } from '../../../services/logger';
+import { SNAP_THRESHOLD_SECONDS } from '../../../stores/timeline/constants';
 
 const log = Logger.create('useClipDrag');
 
@@ -173,11 +174,37 @@ export function useClipDrag({
         const shouldSnap = snappingEnabled !== moveEvent.altKey;
 
         // First check for edge snapping (only if snapping should be active)
-        const snapResult = shouldSnap
-          ? getSnappedPosition(drag.clipId, rawTime, newTrackId)
-          : { startTime: rawTime, snapped: false, snapEdgeTime: 0 };
-        const { startTime: snappedTime, snapped } = snapResult;
-        const snapEdgeTime = 'snapEdgeTime' in snapResult ? snapResult.snapEdgeTime : 0;
+        // Snap hysteresis: once snapped, require 3x the distance to break free
+        const SNAP_BREAKOUT_MULTIPLIER = 3;
+        let snapped = false;
+        let snappedTime = rawTime;
+        let snapEdgeTime = 0;
+
+        if (shouldSnap) {
+          const snapResult = getSnappedPosition(drag.clipId, rawTime, newTrackId) as { startTime: number; snapped: boolean; snapEdgeTime: number };
+          snapped = snapResult.snapped;
+          snappedTime = snapResult.startTime;
+          snapEdgeTime = snapResult.snapEdgeTime;
+
+          // If we were snapping on the previous frame but now we're not,
+          // check if the user has dragged far enough to break free
+          if (!snapped && drag.isSnapping && drag.snapIndicatorTime !== null) {
+            const draggedClipForSnap = clipMap.get(drag.clipId);
+            const dur = draggedClipForSnap?.duration || 0;
+            // Check distance from rawTime's edges to the snap edge
+            const distStart = Math.abs(rawTime - drag.snapIndicatorTime);
+            const distEnd = Math.abs((rawTime + dur) - drag.snapIndicatorTime);
+            const minDist = Math.min(distStart, distEnd);
+            const breakoutThreshold = SNAP_THRESHOLD_SECONDS * SNAP_BREAKOUT_MULTIPLIER;
+
+            if (minDist < breakoutThreshold) {
+              // Still within breakout zone — keep snapping
+              snapped = true;
+              snappedTime = drag.snappedTime!;
+              snapEdgeTime = drag.snapIndicatorTime;
+            }
+          }
+        }
 
         // Then apply resistance for overlap prevention
         const draggedClip = clipMap.get(drag.clipId);
