@@ -11,9 +11,9 @@ type PositioningUtils = Pick<
 
 export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get) => ({
   getSnappedPosition: (clipId: string, desiredStartTime: number, trackId: string) => {
-    const { clips } = get();
+    const { clips, tracks } = get();
     const movingClip = clips.find(c => c.id === clipId);
-    if (!movingClip) return { startTime: desiredStartTime, snapped: false };
+    if (!movingClip) return { startTime: desiredStartTime, snapped: false, snapEdgeTime: 0 };
 
     // Note: Caller decides whether to call this based on snappingEnabled + Alt key
     // This function always attempts to snap when called
@@ -21,16 +21,22 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
     const clipDuration = movingClip.duration;
     const desiredEndTime = desiredStartTime + clipDuration;
 
-    // Get other clips on the same track (excluding the moving clip and its linked clip)
+    // Get the track type for cross-track snapping (snap to clips on same-type tracks)
+    const currentTrack = tracks.find(t => t.id === trackId);
+    const trackType = currentTrack?.type;
+
+    // Get clips from ALL tracks of the same type (cross-track snapping)
+    // Exclude the moving clip and its linked clip
     const otherClips = clips.filter(c =>
-      c.trackId === trackId &&
       c.id !== clipId &&
       c.id !== movingClip.linkedClipId &&
-      c.linkedClipId !== clipId
+      c.linkedClipId !== clipId &&
+      (trackType ? tracks.find(t => t.id === c.trackId)?.type === trackType : c.trackId === trackId)
     );
 
     let snappedStart = desiredStartTime;
     let snapped = false;
+    let snapEdgeTime = 0; // The actual edge time where the snap occurs (for indicator)
     let minSnapDistance = SNAP_THRESHOLD_SECONDS;
 
     // Check snap points
@@ -41,6 +47,7 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
       const distToEnd = Math.abs(desiredStartTime - clipEnd);
       if (distToEnd < minSnapDistance) {
         snappedStart = clipEnd;
+        snapEdgeTime = clipEnd;
         minSnapDistance = distToEnd;
         snapped = true;
       }
@@ -49,6 +56,7 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
       const distToStart = Math.abs(desiredStartTime - clip.startTime);
       if (distToStart < minSnapDistance) {
         snappedStart = clip.startTime;
+        snapEdgeTime = clip.startTime;
         minSnapDistance = distToStart;
         snapped = true;
       }
@@ -57,6 +65,7 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
       const distEndToStart = Math.abs(desiredEndTime - clip.startTime);
       if (distEndToStart < minSnapDistance) {
         snappedStart = clip.startTime - clipDuration;
+        snapEdgeTime = clip.startTime;
         minSnapDistance = distEndToStart;
         snapped = true;
       }
@@ -65,6 +74,7 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
       const distEndToEnd = Math.abs(desiredEndTime - clipEnd);
       if (distEndToEnd < minSnapDistance) {
         snappedStart = clipEnd - clipDuration;
+        snapEdgeTime = clipEnd;
         minSnapDistance = distEndToEnd;
         snapped = true;
       }
@@ -73,10 +83,11 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
     // Also snap to timeline start (0)
     if (Math.abs(desiredStartTime) < SNAP_THRESHOLD_SECONDS) {
       snappedStart = 0;
+      snapEdgeTime = 0;
       snapped = true;
     }
 
-    return { startTime: Math.max(0, snappedStart), snapped };
+    return { startTime: Math.max(0, snappedStart), snapped, snapEdgeTime };
   },
 
   findNonOverlappingPosition: (clipId: string, desiredStartTime: number, trackId: string, duration: number) => {

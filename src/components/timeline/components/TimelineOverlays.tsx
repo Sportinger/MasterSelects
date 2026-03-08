@@ -54,8 +54,8 @@ export function TimelineOverlays({
   return (
     <>
       {/* Snap line */}
-      {clipDrag?.isSnapping && clipDrag.snappedTime !== null && (
-        <div className="snap-line" style={{ left: timeToPixel(clipDrag.snappedTime) }} />
+      {clipDrag?.isSnapping && clipDrag.snapIndicatorTime !== null && (
+        <div className="snap-line" style={{ left: timeToPixel(clipDrag.snapIndicatorTime) }} />
       )}
 
       {/* Work area overlays */}

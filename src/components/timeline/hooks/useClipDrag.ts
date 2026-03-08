@@ -115,6 +115,7 @@ export function useClipDrag({
         currentX: e.clientX,
         currentTrackId: clip.trackId,
         snappedTime: null,
+        snapIndicatorTime: null,
         isSnapping: false,
         altKeyPressed: e.altKey, // Capture Alt state for independent drag
         forcingOverlap: false,
@@ -172,9 +173,11 @@ export function useClipDrag({
         const shouldSnap = snappingEnabled !== moveEvent.altKey;
 
         // First check for edge snapping (only if snapping should be active)
-        const { startTime: snappedTime, snapped } = shouldSnap
+        const snapResult = shouldSnap
           ? getSnappedPosition(drag.clipId, rawTime, newTrackId)
-          : { startTime: rawTime, snapped: false };
+          : { startTime: rawTime, snapped: false, snapEdgeTime: 0 };
+        const { startTime: snappedTime, snapped } = snapResult;
+        const snapEdgeTime = 'snapEdgeTime' in snapResult ? snapResult.snapEdgeTime : 0;
 
         // Then apply resistance for overlap prevention
         const draggedClip = clipMap.get(drag.clipId);
@@ -295,6 +298,7 @@ export function useClipDrag({
           currentX: moveEvent.clientX,
           currentTrackId: newTrackId,
           snappedTime: resistedTime,
+          snapIndicatorTime: snapped && !forcingOverlap ? snapEdgeTime : null,
           isSnapping: snapped && !forcingOverlap,
           altKeyPressed: moveEvent.altKey, // Update Alt state dynamically
           forcingOverlap,

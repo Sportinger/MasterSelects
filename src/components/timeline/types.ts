@@ -11,7 +11,8 @@ export interface ClipDragState {
   grabY: number;            // Mouse Y relative to track lanes at grab start (for track-change resistance)
   currentX: number;         // Current mouse X position
   currentTrackId: string;
-  snappedTime: number | null;  // Snapped position (if snapping)
+  snappedTime: number | null;  // Snapped position (if snapping) - used for clip positioning
+  snapIndicatorTime: number | null; // The actual edge time where snap occurs - used for snap line indicator
   isSnapping: boolean;         // Whether currently snapping
   altKeyPressed: boolean;      // If true, skip linked group movement (independent drag)
   forcingOverlap: boolean;     // If true, user has pushed through resistance and is forcing overlap

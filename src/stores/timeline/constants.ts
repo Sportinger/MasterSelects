@@ -71,7 +71,7 @@ export const DEFAULT_TRACKS: TimelineTrack[] = [
 ];
 
 // Snap threshold in seconds (clips will snap when within this distance)
-export const SNAP_THRESHOLD_SECONDS = 0.1;
+export const SNAP_THRESHOLD_SECONDS = 0.15;
 
 // Resistance threshold - how far past a clip edge the user must drag to "break through"
 // and be allowed to overlap (in PIXELS). Higher = harder to overlap.

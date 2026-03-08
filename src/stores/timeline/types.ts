@@ -447,7 +447,7 @@ export interface TimelineUtils {
   getClipsAtTime: (time: number) => TimelineClip[];
   updateDuration: () => void;
   findAvailableAudioTrack: (startTime: number, duration: number) => string;
-  getSnappedPosition: (clipId: string, desiredStartTime: number, trackId: string) => { startTime: number; snapped: boolean };
+  getSnappedPosition: (clipId: string, desiredStartTime: number, trackId: string) => { startTime: number; snapped: boolean; snapEdgeTime: number };
   findNonOverlappingPosition: (clipId: string, desiredStartTime: number, trackId: string, duration: number) => number;
   // Get position with magnetic resistance at clip edges - returns adjusted position and whether user has "broken through"
   // Uses pixel-based resistance (zoom converts time distance to pixels)
