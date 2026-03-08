@@ -2,7 +2,7 @@
 
 **Professional WebGPU Video Compositor & Timeline Editor**
 
-Version 1.2.4 | February 2026
+Version 1.2.11 | March 2026
 
 ---
 
@@ -19,8 +19,10 @@ MASterSelects is a browser-based professional video editing application built on
 | **Keyframe Animation** | Full property animation with bezier curve editor and 5 easing modes |
 | **AI Integration** | 33 intelligent editing tools via OpenAI function calling (GPT-4/GPT-5) |
 | **AI Video Generation** | PiAPI integration for AI-powered video creation |
+| **SAM2 Segmentation** | Click-to-segment object tracking with WebGPU ONNX inference |
 | **Download Panel** | Download videos from YouTube, TikTok, Instagram, Twitter/X and more |
 | **30+ GPU Effects** | Modular color, blur, distort, stylize, keying effects with quality controls |
+| **37 Blend Modes** | After Effects-style blend modes including stencil and silhouette |
 | **Video Scopes** | GPU-accelerated Histogram, Vectorscope, Waveform monitor (DaVinci-style) |
 | **Text Clips** | Typography with 50 Google Fonts, stroke, shadow effects |
 | **Solid Color Clips** | Solid color layers with color picker and comp dimensions |
@@ -57,6 +59,8 @@ UI Framework      Custom dockable panel system with mobile support
 
 ## Documentation Index
 
+### Feature Documentation
+
 | Document | Description |
 |----------|-------------|
 | [Timeline](./Timeline.md) | Multi-track editing, clips, snapping, compositions, multicam |
@@ -76,8 +80,18 @@ UI Framework      Custom dockable panel system with mobile support
 | [Proxy System](./Proxy-System.md) | GPU-accelerated proxy generation |
 | [Download Panel](./YouTube.md) | YouTube, TikTok, Instagram, Twitter/X downloads |
 | [Native Helper](./Native-Helper.md) | Turbo Mode for ProRes/DNxHD, YouTube downloads |
+| [Multicam AI](./Multicam-AI.md) | Audio-based sync, cross-correlation |
 | [Keyboard Shortcuts](./Keyboard-Shortcuts.md) | Complete shortcut reference |
 | [Debugging](./Debugging.md) | Logger service, module filtering, AI-agent inspection |
+
+### Technical / Architecture Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Effects System](./effects-system.md) | Modular plugin architecture, auto-registration |
+| [Shared Decoder Architecture](./SharedDecoderArchitecture.md) | Export System V2 decoder pool design |
+| [FFmpeg WASM Build Plan](./FFMPEG_WASM_BUILD_PLAN.md) | Custom FFmpeg WASM build with professional codecs |
+| [Feature Handbook (DE)](./FEATURES.md) | German-language feature overview |
 
 ---
 
@@ -141,7 +155,7 @@ UI Framework      Custom dockable panel system with mobile support
 | Spacing | ✅ | Line height and letter spacing controls |
 | Stroke (Outline) | ✅ | Configurable color and width |
 | Drop Shadow | ✅ | Color, offset X/Y, blur radius |
-| GPU Rendering | ✅ | Canvas2D → GPU texture for full compositing |
+| GPU Rendering | ✅ | Canvas2D to GPU texture for full compositing |
 | Animations | ✅ | All transforms and effects work with text |
 | Serialization | ✅ | Text clips saved/restored with projects |
 
@@ -185,13 +199,13 @@ UI Framework      Custom dockable panel system with mobile support
 
 | Category | Modes |
 |----------|-------|
-| **Normal** | Normal, Dissolve |
-| **Darken** | Darken, Multiply, Color Burn, Linear Burn, Darker Color |
-| **Lighten** | Lighten, Screen, Color Dodge, Linear Dodge (Add), Lighter Color |
-| **Contrast** | Overlay, Soft Light, Hard Light, Vivid Light, Linear Light, Pin Light, Hard Mix |
-| **Inversion** | Difference, Exclusion, Subtract, Divide |
+| **Normal** | Normal, Dissolve, Dancing Dissolve |
+| **Darken** | Darken, Multiply, Color Burn, Classic Color Burn, Linear Burn, Darker Color |
+| **Lighten** | Add, Lighten, Screen, Color Dodge, Classic Color Dodge, Linear Dodge, Lighter Color |
+| **Contrast** | Overlay, Soft Light, Hard Light, Linear Light, Vivid Light, Pin Light, Hard Mix |
+| **Inversion** | Difference, Classic Difference, Exclusion, Subtract, Divide |
 | **Component** | Hue, Saturation, Color, Luminosity |
-| **Stencil** | Stencil Alpha, Stencil Luma, Silhouette Alpha, Silhouette Luma |
+| **Stencil** | Stencil Alpha, Stencil Luma, Silhouette Alpha, Silhouette Luma, Alpha Add |
 
 ### Masks
 
@@ -212,7 +226,7 @@ UI Framework      Custom dockable panel system with mobile support
 
 | Feature | Status | Details |
 |---------|--------|---------|
-| GPT-4 Chat | ✅ | Natural language editing commands |
+| GPT-4/GPT-5 Chat | ✅ | Natural language editing commands |
 | 33 AI Tools | ✅ | Clip, track, keyframe, effect operations |
 | Local Whisper | ✅ | Browser-based transcription |
 | OpenAI Whisper API | ✅ | Cloud transcription service |
@@ -221,6 +235,8 @@ UI Framework      Custom dockable panel system with mobile support
 | Multicam EDL | ✅ | AI-generated edit decision lists |
 | Context Awareness | ✅ | AI knows timeline state |
 | SAM2 Segmentation | ✅ | Click-to-segment with WebGPU ONNX inference |
+| AI Video Generation | ✅ | PiAPI integration for AI-powered video creation |
+| Scene Description | ✅ | AI-powered scene analysis panel |
 
 ### Download Panel
 
@@ -268,6 +284,7 @@ UI Framework      Custom dockable panel system with mobile support
 | Auto Frame Caching | ✅ | Cache frames during playback for instant scrubbing |
 | RAM Preview | ✅ | Cached playback with 900 frame limit |
 | Multiple Outputs | ✅ | Open multiple preview windows |
+| Multi-Preview Panel | ✅ | 4-up quad view with independent source routing |
 | Per-Preview Grid | ✅ | Individual transparency grid toggle |
 | Edit Mode | ✅ | Direct manipulation in preview (Tab toggle) with corner/edge transform handles |
 | Transform Handles | ✅ | Corner and edge handles for scaling, Shift for aspect ratio lock |
@@ -332,7 +349,7 @@ UI Framework      Custom dockable panel system with mobile support
 | Frame Cache | ✅ | LRU cache up to 2GB |
 | Background Prefetch | ✅ | Frames loaded ahead of playhead |
 | Native Encoding | ✅ | 10x faster ProRes/DNxHD export |
-| Auto-Detection | ✅ | Toolbar shows "⚡ Turbo" when connected |
+| Auto-Detection | ✅ | Toolbar shows "Turbo" when connected |
 | Download Link | ✅ | Click indicator for helper download |
 
 ### User Interface
@@ -340,7 +357,7 @@ UI Framework      Custom dockable panel system with mobile support
 | Feature | Status | Details |
 |---------|--------|---------|
 | Dockable Panels | ✅ | Drag, resize, tab grouping |
-| 14 Panel Types | ✅ | Preview, Timeline, Media, Properties, Export, Multicam, AI Chat, AI Video, YouTube, Transitions, Histogram, Vectorscope, Waveform, Slots |
+| 16 Panel Types | ✅ | Preview, Multi-Preview, Timeline, Properties, Media, Export, Multicam, AI Chat, AI Video, AI Segment, Scene Description, Download, Transitions, Histogram, Vectorscope, Waveform |
 | Video Scopes | ✅ | GPU-accelerated Histogram, Vectorscope, Waveform monitor with RGB/R/G/B/Luma modes |
 | Transitions Panel | ✅ | Modular panel with drag-drop support for applying transitions |
 | Unified Properties Panel | ✅ | Transform, Effects, Masks, Audio, Transcript, Analysis |
@@ -364,40 +381,40 @@ UI Framework      Custom dockable panel system with mobile support
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                              UI Layer                                    │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────────────┐  │
-│  │  Timeline   │ │   Preview   │ │   Media     │ │  Effects/Props    │  │
-│  │   (React)   │ │  (Canvas)   │ │   Panel     │ │  AI Chat Panel    │  │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └───────────────────┘  │
-├─────────────────────────────────────────────────────────────────────────┤
-│                         State Layer (Zustand)                            │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────────────┐  │
-│  │  Timeline   │ │   Dock      │ │   Media     │ │    Multicam       │  │
-│  │   Store     │ │   Store     │ │   Store     │ │     Store         │  │
-│  │  (7 slices) │ │             │ │             │ │                   │  │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └───────────────────┘  │
-├─────────────────────────────────────────────────────────────────────────┤
-│                        Engine Layer (WebGPU)                             │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────────────┐  │
-│  │ Compositor  │ │  Effects    │ │  Texture    │ │     Frame         │  │
-│  │  Pipeline   │ │  Pipeline   │ │  Manager    │ │    Exporter       │  │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └───────────────────┘  │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐                        │
-│  │   Mask      │ │  Scrubbing  │ │  Optical    │                        │
-│  │  Manager    │ │   Cache     │ │    Flow     │                        │
-│  └─────────────┘ └─────────────┘ └─────────────┘                        │
-├─────────────────────────────────────────────────────────────────────────┤
-│                          Services Layer                                  │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────────────┐  │
-│  │   Audio     │ │  Whisper    │ │  Project    │ │    AI Tools       │  │
-│  │  Manager    │ │  Service    │ │     DB      │ │   (OpenAI)        │  │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └───────────────────┘  │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐                        │
-│  │   Proxy     │ │ FileSystem  │ │   Audio     │                        │
-│  │ Generator   │ │  Service    │ │    Sync     │                        │
-│  └─────────────┘ └─────────────┘ └─────────────┘                        │
-└─────────────────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------------------+
+|                              UI Layer                                    |
+|  +--------------+ +--------------+ +--------------+ +------------------+ |
+|  |  Timeline    | |   Preview    | |   Media      | |  Effects/Props   | |
+|  |   (React)    | |  (Canvas)    | |   Panel      | |  AI Chat Panel   | |
+|  +--------------+ +--------------+ +--------------+ +------------------+ |
+|-------------------------------------------------------------------------|
+|                         State Layer (Zustand)                            |
+|  +--------------+ +--------------+ +--------------+ +------------------+ |
+|  |  Timeline    | |   Dock       | |   Media      | |    Multicam      | |
+|  |   Store      | |   Store      | |   Store      | |     Store        | |
+|  |  (7 slices)  | |              | |              | |                  | |
+|  +--------------+ +--------------+ +--------------+ +------------------+ |
+|-------------------------------------------------------------------------|
+|                        Engine Layer (WebGPU)                             |
+|  +--------------+ +--------------+ +--------------+ +------------------+ |
+|  | Compositor   | |  Effects     | |  Texture     | |     Frame        | |
+|  |  Pipeline    | |  Pipeline    | |  Manager     | |    Exporter      | |
+|  +--------------+ +--------------+ +--------------+ +------------------+ |
+|  +--------------+ +--------------+ +--------------+                      |
+|  |   Mask       | |  Scrubbing   | |  Optical     |                      |
+|  |  Manager     | |   Cache      | |    Flow      |                      |
+|  +--------------+ +--------------+ +--------------+                      |
+|-------------------------------------------------------------------------|
+|                          Services Layer                                  |
+|  +--------------+ +--------------+ +--------------+ +------------------+ |
+|  |   Audio      | |  Whisper     | |  Project     | |    AI Tools      | |
+|  |  Manager     | |  Service     | |     DB       | |   (OpenAI)       | |
+|  +--------------+ +--------------+ +--------------+ +------------------+ |
+|  +--------------+ +--------------+ +--------------+                      |
+|  |   Proxy      | | FileSystem   | |   Audio      |                      |
+|  | Generator    | |  Service     | |    Sync      |                      |
+|  +--------------+ +--------------+ +--------------+                      |
++-------------------------------------------------------------------------+
 ```
 
 ### WGSL Shader Breakdown
@@ -417,13 +434,13 @@ UI Framework      Custom dockable panel system with mobile support
 
 ```
 timelineStore/
-├── trackSlice.ts      # Track CRUD operations
-├── clipSlice.ts       # Clip operations, transforms
-├── playbackSlice.ts   # Play/pause, seeking, time
-├── keyframeSlice.ts   # Keyframe CRUD, interpolation
-├── selectionSlice.ts  # Clip/keyframe selection
-├── maskSlice.ts       # Mask shapes and vertices
-└── compositionSlice.ts # Composition management
+  trackSlice.ts      # Track CRUD operations
+  clipSlice.ts       # Clip operations, transforms
+  playbackSlice.ts   # Play/pause, seeking, time
+  keyframeSlice.ts   # Keyframe CRUD, interpolation
+  selectionSlice.ts  # Clip/keyframe selection
+  maskSlice.ts       # Mask shapes and vertices
+  compositionSlice.ts # Composition management
 ```
 
 ---
@@ -443,8 +460,8 @@ timelineStore/
 ### Enabling WebGPU on Linux
 
 ```
-chrome://flags/#enable-vulkan → Enabled
-chrome://flags/#enable-unsafe-webgpu → Enabled (if needed)
+chrome://flags/#enable-vulkan -> Enabled
+chrome://flags/#enable-unsafe-webgpu -> Enabled (if needed)
 ```
 
 ---
@@ -454,15 +471,15 @@ chrome://flags/#enable-unsafe-webgpu → Enabled (if needed)
 ### 1. Import Media
 
 Open the **Media Panel** and use one of these methods:
-- Click **Add** → **Import Media** and select files
+- Click **Add** then **Import Media** and select files
 - Drag and drop files directly into the panel
 
 Supported formats: MP4, WebM, MOV, WAV, MP3, AAC, PNG, JPG, GIF, WebP
 
 ### 2. Create a Composition
 
-- Click **Add** → **Composition**
-- Configure resolution (up to 7680×4320) and frame rate
+- Click **Add** then **Composition**
+- Configure resolution (up to 7680x4320) and frame rate
 - The composition opens in the Timeline
 
 ### 3. Add Clips to Timeline
@@ -501,7 +518,7 @@ Supported formats: MP4, WebM, MOV, WAV, MP3, AAC, PNG, JPG, GIF, WebP
 |----------|-----|--------|
 | **Playback** | `Space` | Play/Pause |
 | | `J` / `K` / `L` | Reverse / Pause / Forward (JKL shuttle) |
-| | `←` / `→` | Step frame |
+| | Left / Right | Step frame |
 | | `Home` / `End` | Go to start / end |
 | **Editing** | `C` | Split at playhead |
 | | `Delete` | Delete selected |
@@ -527,7 +544,7 @@ See [Keyboard Shortcuts](./Keyboard-Shortcuts.md) for complete reference.
 
 1. **Enable Vulkan on Linux**: `chrome://flags/#enable-vulkan`
 2. **Use dedicated GPU**: Check `chrome://gpu` for WebGPU status
-3. **Generate proxies**: Right-click large videos → Generate Proxy
+3. **Generate proxies**: Right-click large videos then Generate Proxy
 4. **Enable RAM Preview**: Caches 900 frames at 30fps
 5. **Close unused panels**: Reduces React re-renders
 
@@ -562,28 +579,29 @@ See [Keyboard Shortcuts](./Keyboard-Shortcuts.md) for complete reference.
 
 Overview of unit test coverage across feature areas. Run all tests with `npx vitest run`.
 
-| Feature Doc | Test Files | Tests | Notes |
-|-------------|-----------|-------|-------|
-| [Timeline](./Timeline.md) | 5 | 347 | Clips (104), tracks (66), selection (49), playback (88), markers (50) |
-| [Keyframes](./Keyframes.md) | 2 | 214 | Keyframe CRUD (94), easing, bezier interpolation (120) |
-| [Preview](./Preview.md) | — | — | GPU-dependent, not unit testable |
-| [Export](./Export.md) | 1 | 109 | FCP XML, time calculations, codecs, presets |
-| [Audio](./Audio.md) | 2 | 172 | AudioUtils (127), cross-correlation (45) |
-| [Effects](./Effects.md) | 2 | 128 | Registry (94), type helpers (34) |
-| [GPU Engine](./GPU-Engine.md) | 1 | 56 | Transform composition, cycle detection |
-| [Masks](./Masks.md) | 1 | 78 | Mask CRUD, modes, vertices, workflows |
-| [AI Integration](./AI-Integration.md) | 1 | 132 | Tool definitions, schemas, MODIFYING_TOOLS |
-| [Text Clips](./Text-Clips.md) | 1 | 104 | Covered by clipSlice tests |
-| [Media Panel](./Media-Panel.md) | 2 | 205 | Files (106), compositions (99) |
-| [Proxy System](./Proxy-System.md) | — | — | Hardware-dependent |
-| [Download Panel](./YouTube.md) | — | — | Requires network/native helper |
-| [Project Persistence](./Project-Persistence.md) | 2 | 145 | Serialization (86), undo/redo (59) |
-| [Native Helper](./Native-Helper.md) | — | — | Rust binary, tested separately |
-| [Keyboard Shortcuts](./Keyboard-Shortcuts.md) | 1 | 88 | Playback, speed integration (83) |
-| [UI Panels](./UI-Panels.md) | — | — | React component-level UI |
-| [Multicam AI](./Multicam-AI.md) | 1 | 45 | Audio sync cross-correlation |
+| Feature Area | Test Files | Notes |
+|-------------|-----------|-------|
+| [Timeline](./Timeline.md) | clipSlice, trackSlice, selectionSlice, playbackSlice, markerSlice | Clips, tracks, selection, playback, markers |
+| [Keyframes](./Keyframes.md) | keyframeSlice, keyframeInterpolation | Keyframe CRUD, easing, bezier interpolation |
+| [Preview](./Preview.md) | layerCollector, layerBuilderService, webCodecsPlayer, videoSyncManager, videoSyncManagerSyncGate | Layer collection, media runtime, WebCodecs playback |
+| [Export](./Export.md) | exportUtils, webCodecsHelpers | FCP XML, time calculations, codecs, presets |
+| [Audio](./Audio.md) | audioUtils, crossCorrelation, speedIntegration | AudioUtils, cross-correlation, playback speed |
+| [Effects](./Effects.md) | effectsRegistry, typeHelpers | Registry, type helpers |
+| [GPU Engine](./GPU-Engine.md) | transformComposition, compositor | Transform composition, cycle detection |
+| [Masks](./Masks.md) | maskSlice | Mask CRUD, modes, vertices, workflows |
+| [AI Integration](./AI-Integration.md) | aiToolDefinitions | Tool definitions, schemas, MODIFYING_TOOLS |
+| [Text Clips](./Text-Clips.md) | clipSlice | Covered by clipSlice tests |
+| [Media Panel](./Media-Panel.md) | fileManageSlice, compositionSlice | Files, compositions |
+| [Proxy System](./Proxy-System.md) | -- | Hardware-dependent |
+| [Download Panel](./YouTube.md) | -- | Requires network/native helper |
+| [Project Persistence](./Project-Persistence.md) | serialization, historyStore | Serialization, undo/redo |
+| [Native Helper](./Native-Helper.md) | -- | Rust binary, tested separately |
+| [Keyboard Shortcuts](./Keyboard-Shortcuts.md) | playbackSlice, speedIntegration | Playback, speed integration |
+| [UI Panels](./UI-Panels.md) | -- | React component-level UI |
+| [Multicam AI](./Multicam-AI.md) | crossCorrelation | Audio sync cross-correlation |
+| Engine internals | mediaRuntime, framePhaseMonitor, playbackDebugStats, playbackHealthMonitor, playbackSliceGate, externalDragPlacement, externalDragSession, logger | Playback pipeline, drag-drop, logging |
 
-**Total: ~1,679 tests across 20 test files**
+**Total: ~1,659 tests across 35 test files**
 
 ---
 
@@ -603,6 +621,7 @@ The following features are planned but not currently available:
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 1.2.11 | Mar 2026 | Firefox project persistence, media panel improvements, engine upgrades |
 | 1.2.4 | Feb 2026 | Slot Grid (Resolume-style multi-layer composition), Output Manager (source routing, corner pin warping, mask layers, persistence), Download Panel (multi-platform: TikTok, Instagram, Twitter/X), unified native helper, render loop watchdog |
 | 1.2.3 | Feb 2026 | Tutorial system (Clippy mascot, welcome screen, panel intro, timeline deep-dive), SAM2 AI segmentation, composition resolution drives render pipeline, Vitest test suite (182 tests) |
 | 1.2.2 | Feb 2026 | Video Scopes (Histogram, Vectorscope, Waveform), keyframe copy/paste, keyframe tick marks, curve editor auto-scale, mask edge dragging, exponential zoom, cross-track resistance, vertical scroll snapping |
@@ -637,4 +656,4 @@ MIT - see [LICENSE](../../LICENSE)
 
 ---
 
-*Documentation updated February 2026*
+*Documentation updated March 2026*

@@ -2,6 +2,8 @@
 
 Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 
+Version 1.2.11 | Detaillierte Dokumentation: [README.md](./README.md)
+
 ---
 
 ## 1. Timeline
@@ -16,26 +18,30 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 - **Multi-Select**: Shift+Klick für Mehrfachauswahl, gemeinsam verschieben
 - **Linked Clip Selection**: Klick wählt Video+Audio zusammen aus
 - **Solid Color Clips**: Farbige Solid-Layer erstellen
+- **Text Clips**: Typografie-Layer mit 50 Google Fonts, Stroke, Schatten
 - **Playhead**: Klicken zum Springen, Ziehen zum Scrubben
 - **JKL Playback**: Industry-Standard J/K/L Shortcuts
 - **Zoom**: Exponentieller Zoom mit Alt+Scroll (8% pro Schritt)
 - **Fit Button**: Zoom anpassen um ganze Komposition zu sehen
 - **Track-Höhe**: Individuelle Track-Höhen anpassbar
 - **Track Solo/Mute**: Audio-Tracks stumm schalten oder solo hören
+- **Transitions**: Crossfade-Transitions mit GPU-beschleunigtem Rendering
 
 ### Playback-Controls
 - **Play/Pause/Stop**: Standard-Wiedergabe
 - **Loop-Playback**: Schleifenwiedergabe innerhalb In/Out-Punkten
 - **In/Out-Marker**: Arbeitsbereich mit I/O-Punkten setzen
 - **Editierbare Duration**: Klick auf Gesamtdauer zum Ändern der Kompositionslänge
+- **Marker Drag-to-Create**: M-Button ziehen um Marker mit Geister-Vorschau zu erstellen
 
 ### Erweiterte Features
 - **RAM Preview**: Frames cachen für flüssige Wiedergabe
 - **Proxy-System**: Niedrigere Auflösung für bessere Performance
 - **Waveform-Anzeige**: Audio-Wellenformen auf Clips (Rechtsklick zum Generieren)
-- **Thumbnail-Strips**: Filmstreifen-Vorschau auf Video-Clips
-- **Compositions**: Verschachtelte Timelines als Clips
+- **Thumbnail-Strips**: Filmstreifen-Vorschau auf Video-Clips (WYSIWYG mit Effekten)
+- **Compositions**: Verschachtelte Timelines als Clips (orange Umrandung, Boundary-Marker)
 - **Undo/Redo**: Ctrl+Z / Ctrl+Shift+Z (oder Ctrl+Y)
+- **Copy/Paste**: Ctrl+C/V mit Effekten, Keyframes, Masken
 
 ---
 
@@ -58,8 +64,9 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 ### Erweiterte Keyframe-Features
 - **Copy/Paste**: Ctrl+C / Ctrl+V für Keyframes
 - **Keyframe-Ticks**: Visuelle Tick-Markierungen auf Clip-Balken in der Timeline
+- **Curve Editor**: SVG-basiert mit Bezier-Handle-Manipulation
 - **Curve Editor Auto-Scale**: Automatische Skalierung der Kurvenansicht
-- **Custom Bezier Easing**: 5. Easing-Modus mit frei definierbarer Bezier-Kurve
+- **Multi-Select Movement**: Mehrere Keyframes zusammen um gleichen Zeitdelta verschieben
 
 ### Animierbare Properties
 - **Opacity**: 0-1
@@ -124,12 +131,15 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 |--------|-------------|
 | Chroma Key | Greenscreen/Bluescreen-Entfernung |
 
-### Blend-Modes (After Effects-Style)
+### Inline-Effekte
+Brightness, Contrast, Saturation und Invert laufen direkt im Composite-Shader (keine extra Render-Passes).
+
+### Blend-Modes (37 Modi, After Effects-Style)
 **Normal**: normal, dissolve, dancing-dissolve
-**Darken**: darken, multiply, color-burn, linear-burn, darker-color
-**Lighten**: add, lighten, screen, color-dodge, linear-dodge, lighter-color
+**Darken**: darken, multiply, color-burn, classic-color-burn, linear-burn, darker-color
+**Lighten**: add, lighten, screen, color-dodge, classic-color-dodge, linear-dodge, lighter-color
 **Contrast**: overlay, soft-light, hard-light, linear-light, vivid-light, pin-light, hard-mix
-**Inversion**: difference, exclusion, subtract, divide
+**Inversion**: difference, classic-difference, exclusion, subtract, divide
 **Component**: hue, saturation, color, luminosity
 **Stencil**: stencil-alpha, stencil-luma, silhouette-alpha, silhouette-luma, alpha-add
 
@@ -138,7 +148,7 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 - **Scale**: Unabhängige X/Y Skalierung
 - **Rotation**: 3D-Rotation auf X, Y, Z Achsen
 - **Opacity**: 0-100% Transparenz
-- **Präzisions-Slider**: Shift=langsam, Ctrl=ultra-langsam
+- **Edit Mode**: Direkte Manipulation im Preview (Tab-Taste) mit Corner/Edge Handles
 
 ---
 
@@ -149,7 +159,8 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 - **Drag-and-Drop**: Dateien direkt ins Media Panel ziehen
 - **File System Access API**: Native Dateiauswahl
 - **Ordner-Struktur**: Ordner erstellen, umbenennen, löschen
-- **Thumbnails**: Auto-generierte Vorschaubilder
+- **Thumbnails**: Auto-generierte Vorschaubilder (WYSIWYG mit Effekten)
+- **Grid/List View**: Umschaltbare Ansichtsmodi
 
 ### Composition-System
 - **Compositions erstellen**: Neue verschachtelte Kompositionen
@@ -158,27 +169,29 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 - **Tab-Wechsel**: Zwischen mehreren Compositions wechseln
 
 ### Proxy-System
-- **Proxy-Generierung**: Niedrigere Auflösung für Performance
+- **Proxy-Generierung**: GPU-beschleunigte niedrigere Auflösung für Performance
 - **Proxy-Ordner**: Eigener Ausgabeort wählbar
 - **Status-Anzeige**: "P" Badge auf Clips mit Proxy
 - **Progress-Tracking**: Echtzeit-Fortschritt
 - **Proxy-Cache**: Frame-Cache für flüssiges Scrubbing
+- **Cross-Platform**: Windows, Linux, Mac
 
 ---
 
 ## 5. Export
 
 ### WebCodecs Export (Standard)
-- **Frame-by-Frame Rendering**: Präzise Frame-Ausgabe
+- **Fast Mode**: Sequenzielles Decoding mit MP4Box Parsing
+- **Precise Mode**: Frame-genaues Seeking für komplexe Timelines
 - **Format**: MP4 mit H.264/VP9 Codec
-- **Qualitätseinstellungen**: Auflösung und Bitrate
-- **Preset-Auflösungen**: 1080p, 4K, Custom
-- **Framerate**: 24p, 30p, 60p, etc.
+- **Qualitätseinstellungen**: Auflösung und Bitrate (5-35 Mbps)
+- **Preset-Auflösungen**: 480p, 720p, 1080p, 4K
+- **Framerate**: 24, 25, 30, 60 fps
 - **Zeitbereich**: In/Out-Range oder komplette Timeline
-- **Bitrate-Schätzung**: Automatische Empfehlung
-- **Dateigröße-Vorschau**: Geschätzte Ausgabegröße
-- **WebCodecs**: Hardware-beschleunigtes Encoding
-- **Progress**: Echtzeit-Fortschrittsanzeige
+- **Parallel Decoding**: Multi-Clip paralleles Decoding für schnellere Exports
+- **Auto Fallback**: Fällt automatisch auf Precise-Modus zurück
+- **Progress**: Echtzeit-Fortschrittsanzeige mit Abbrechen
+- **Audio**: AAC/Opus mit automatischer Browser-Codec-Erkennung
 
 ### FFmpeg Export (Professionell)
 - **Professional Codecs**: ProRes, DNxHR, HAP
@@ -189,6 +202,10 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 - **NLE Presets**: Premiere, Final Cut, DaVinci, Avid
 - **VJ Presets**: HAP Q für Media Server
 - **On-Demand Loading**: WASM lädt bei Bedarf (~20MB)
+
+### Weitere Export-Optionen
+- **FCP XML Export**: Timeline als Final Cut Pro XML für Premiere/Resolve Interchange
+- **Einzelbild-Export**: PNG Frame Capture
 
 ---
 
@@ -203,11 +220,13 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 ### Masken-Properties
 - **Opacity**: 0-100%
 - **Feather**: Unschärfe-Radius (0-50px)
-- **Feather Quality**: Low (9), Medium (17), High (25 Samples)
+- **Feather Quality**: GPU 3-Tier Blur (17/33/61 Taps)
+- **Expansion**: Maske vergrößern/verkleinern
 - **Invertiert**: Maske umkehren
 - **Mask Modes**: Add, Subtract, Intersect
 - **Mehrere Masken**: Stapeln auf einem Clip
 - **Reihenfolge**: Drag zum Umsortieren
+- **Vertex Editing**: Punkte auswählen, verschieben, löschen
 
 ---
 
@@ -250,13 +269,19 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 
 ---
 
-## 9. Download Panel (ehemals YouTube)
+## 9. Download Panel
 
 ### Features
 - **Multi-Plattform Downloads**: Videos von verschiedenen Plattformen herunterladen
 - **Unterstützte Plattformen**: YouTube, TikTok, Instagram, Twitter/X, Facebook, Reddit, Vimeo, Twitch
+- **YouTube-Suche**: Suche via Invidious oder YouTube Data API
 - **Native Helper Integration**: Downloads via yt-dlp über den Native Helper Service
+- **Cobalt Fallback**: Download via Cobalt API wenn Native Helper nicht verfügbar
 - **Qualitätsauswahl**: Verschiedene Auflösungen und Formate wählbar
+- **H.264 Bevorzugung**: Bevorzugt H.264 gegenüber AV1/VP9 für Kompatibilität
+- **Direkt zur Timeline**: Download und direkt zur Timeline hinzufügen
+- **Projekt-Speicherung**: Downloads in Projekt YT/-Ordner gespeichert
+- **Plattform-Unterordner**: Downloads nach Plattform organisiert
 
 ---
 
@@ -274,17 +299,26 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 
 ---
 
-## 11. AI Chat Panel
+## 11. AI Features
 
-### Integration
+### AI Chat Panel
 - **OpenAI**: Direkte Chat-Verbindung
 - **Modelle**: GPT-5.2, GPT-5.1, o3, o4-mini, GPT-4.1, etc.
+- **33 AI Tools**: Clip, Track, Keyframe, Effekt-Operationen via Function Calling
 - **Message History**: Kontext bleibt erhalten
+- **Context Awareness**: AI kennt den aktuellen Timeline-Zustand
 - **API Key Management**: Sichere Schlüsselspeicherung
+
+### AI Video Generation
+- **PiAPI Integration**: AI-gesteuerte Videoerzeugung
 
 ### SAM2 AI Segmentation
 - **AI-basierte Objektsegmentierung**: Meta SAM2 Modell zur automatischen Maskenerstellung
 - **Interaktive Auswahl**: Objekte im Video per Klick auswählen und verfolgen
+- **WebGPU ONNX Inference**: GPU-beschleunigte Segmentierung
+
+### Scene Description
+- **AI-gesteuerte Szenenanalyse**: Automatische Beschreibung von Szeneninhalten
 
 ---
 
@@ -309,7 +343,25 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 
 ---
 
-## 14. UI Features
+## 14. Audio
+
+### Features
+- **10-Band Parametric EQ**: 31Hz bis 16kHz Frequenzbänder
+- **EQ Gain Range**: -12dB bis +12dB pro Band
+- **Live EQ via Web Audio**: Echtzeit-Equalization, Änderungen sofort hörbar
+- **EQ Keyframes**: EQ-Parameter über Zeit animierbar
+- **Audio Master Clock**: Playhead folgt Audio für perfekte Synchronisation
+- **Varispeed Scrubbing**: Kontinuierliche Wiedergabe mit Geschwindigkeitsanpassung
+- **Speed Property**: Keyframeable Clip-Wiedergabegeschwindigkeit
+- **Waveform-Anzeige**: 50 Samples/Sekunde Auflösung
+- **Lautstärkeregelung**: Pro-Clip Lautstärke
+- **Audio Tab für Video-Clips**: Video-Clips haben eigenen Audio-Tab
+- **Composition Audio**: Verschachtelte Composition Audio-Mixdown
+- **Track Mute/Solo**: Pro-Track stumm schalten oder solo hören
+
+---
+
+## 15. UI Features
 
 ### Dock-System
 - **Anpassbares Layout**: Panels per Drag-and-Drop
@@ -317,11 +369,16 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 - **Panel-Tabs**: Mehrere Panels in einem Container
 - **Split Panes**: Vertikal/Horizontal teilen
 - **Layout-Persistenz**: Layouts speichern/laden
+- **Hold-to-Drag Tabs**: 500ms halten zum Umsortieren
 
 ### Panels (16 Typen)
-- Timeline, Preview, Media Panel, Properties Panel
-- Export, Multicam, AI Chat, AI Video
-- Download, AI Segment, Transitions, Histogram, Vectorscope, Waveform, Slots
+- Preview, Multi-Preview, Timeline, Properties Panel
+- Media Panel, Export, Multicam, AI Chat
+- AI Video, AI Segment, Scene Description
+- Download, Transitions
+- Histogram, Vectorscope, Waveform
+
+> Hinweis: Slot Grid ist in das Timeline-Panel integriert (Ctrl+Shift+Scroll zum Umschalten).
 
 ### Toolbar
 - **Projekt-Management**: New, Save, Load, Delete
@@ -329,22 +386,16 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 - **Output Windows**: Zusätzliche Displays
 - **MIDI Control**: MIDI-Input aktivieren
 
----
-
-## 15. Performance
-
-### Optimierungen
-- **WebGPU**: GPU-beschleunigtes Rendering
-- **Zero-Copy Textures**: Direkt VideoFrame zu GPU
-- **Hardware Decoding**: WebCodecs für effizientes Decoding
-- **Ping-Pong Buffers**: Effizientes Compositing
-- **Lazy Loading**: On-Demand Ressourcen-Laden
-
-### Monitoring
-- **Echtzeit-FPS**: Aktuelle Frames pro Sekunde
-- **Render-Timing**: Import/Render/Submit Aufschlüsselung
-- **Frame-Drop Tracking**: Zählung und Gründe
-- **Bottleneck-Erkennung**: Automatische Problem-Identifikation
+### Weitere UI-Features
+- **AE-Style Settings Dialog**: Sidebar-Navigation mit kategorisierten Einstellungen
+- **Menu Bar**: File, Edit, View, Output, Audio, Info, Window
+- **Kontextmenüs**: Rechtsklick-Operationen (Viewport-begrenzt)
+- **WYSIWYG Thumbnails**: Thumbnails zeigen Effekte auf Clips
+- **What's New Dialog**: Zeitgruppierter Changelog nach Aktualisierung
+- **Tutorial System**: Spotlight-basierte Panel-Einführung mit Clippy Maskottchen
+- **Welcome Screen**: Programmauswahl (Premiere, Resolve, FCP, AE, Beginner)
+- **Mobile Support**: Responsives Layout mit Touch-Gesten
+- **Desktop Mode Toggle**: Option für volle UI auf Mobilgeräten
 
 ---
 
@@ -358,6 +409,8 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 - **Auto-Save**: Konfigurierbares Intervall (1-10 min)
 - **Backup-System**: Letzte 20 Backups automatisch
 - **Save As**: Projekt an neuen Ort exportieren
+- **Smart Media Relink**: Verschobene/umbenannte Dateien automatisch finden
+- **IndexedDB Error Dialog**: Klare Fehlermeldung bei korruptem Browser-Speicher
 
 ---
 
@@ -367,7 +420,7 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 - **RenderTarget-System**: Mehrere unabhängige Ausgabeziele gleichzeitig rendern
 - **Source Routing**: Quellzuweisung pro Output (aktive Komposition, spezifische Compositions, Slots)
 - **Slice-System**: Corner-Pin Warping für Projection Mapping
-- **Mask Layers**: Sichtbarkeitskontrolle pro Output über Masken-Ebenen
+- **Mask Layers**: Sichtbarkeitskontrolle pro Output über Masken-Ebenen mit Invertierung
 - **Auto-Save**: Konfigurationen werden automatisch pro Projekt gespeichert
 - **Window Management**: Fensterposition und -größe werden wiederhergestellt beim Öffnen
 
@@ -394,7 +447,22 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 
 ---
 
-## 20. Technische Spezifikationen
+## 20. Native Helper (Turbo Mode)
+
+### Features
+- **Einheitlicher Cross-Platform Build**: FFmpeg Decode/Encode + yt-dlp Downloads auf allen Plattformen
+- **ProRes Decoding**: Alle Profile mit nativer Geschwindigkeit
+- **DNxHD/DNxHR Decoding**: Alle Profile mit nativer Geschwindigkeit
+- **Hardware-Beschleunigung**: VAAPI (Intel/AMD), NVDEC (NVIDIA)
+- **YouTube Downloads**: yt-dlp Integration mit Qualitätsauswahl
+- **Frame Cache**: LRU Cache bis 2GB
+- **Background Prefetch**: Frames werden vor dem Playhead vorgeladen
+- **Native Encoding**: 10x schnellerer ProRes/DNxHD Export
+- **Auto-Erkennung**: Toolbar zeigt "Turbo" wenn verbunden
+
+---
+
+## 21. Technische Spezifikationen
 
 ### Unterstützte Formate
 - **Video**: H.264, HEVC, VP9, AV1 (via WebCodecs)
@@ -402,8 +470,9 @@ Vollständige Dokumentation aller Features der Video-Editing-Anwendung.
 - **Bilder**: JPG, PNG, WebP, GIF
 
 ### Anforderungen
-- **WebGPU**: Chrome 113+, Safari 18+
-- **WebCodecs**: Chrome 94+, Safari 16.4+
+- **WebGPU**: Chrome 113+, Edge 113+
+- **WebCodecs**: Chrome 94+
+- **File System Access**: Optional, empfohlen
 - **Display**: Empfohlen 1920x1080 minimum
 
 ### Performance-Ziele

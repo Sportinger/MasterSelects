@@ -1,6 +1,6 @@
 # UI & Panels
 
-[← Back to Index](./README.md)
+[<- Back to Index](./README.md)
 
 Dockable panel system with After Effects-style menu bar and unified Properties panel.
 
@@ -24,23 +24,39 @@ Dockable panel system with After Effects-style menu bar and unified Properties p
 ### Structure
 | Menu | Contents |
 |------|----------|
-| **File** | New, Save, Open Recent |
+| **File** | New Project, Open Project, Save, Save As, Project Info, Autosave, Clear All Cache & Reload |
 | **Edit** | Copy, Paste, Settings |
-| **View** | Panels, Resolution, Layout |
-| **Output** | New Output Window, Active Outputs |
+| **View** | Panels (with AI and Scopes sub-menus), New Output Window, Save Layout as Default, Reset Layout |
+| **Output** | New Output Window, Open Output Manager, Active Outputs |
 | **Window** | MIDI Control |
+| **Info** | Tutorials, Quick Tour, Timeline Tour, About |
 
 ### Keyboard Shortcuts
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+N` | New Project |
 | `Ctrl+S` | Save Project |
-| `Ctrl+O` | Open (shows menu) |
+| `Ctrl+Shift+S` | Save As |
+| `Ctrl+O` | Open Project |
 
 ### Project Name
 - Displayed at left of menu bar
 - Click to edit/rename
+- Shows unsaved indicator (bullet) when changes pending
 - Updates on save
+
+### File Menu Details
+- **New Project**: Prompts for name, user picks directory
+- **Open Project**: Opens existing project folder
+- **Save / Save As**: Standard save behavior with folder-based projects
+- **Autosave**: Sub-menu with enable toggle and interval options (1, 2, 5, 10 minutes)
+- **Clear All Cache & Reload**: Clears all localStorage, IndexedDB, caches, and service workers
+
+### Info Menu
+- **Tutorials**: Opens the tutorial campaign selection
+- **Quick Tour**: Starts Part 1 panel introduction tutorial
+- **Timeline Tour**: Starts Part 2 timeline deep-dive tutorial
+- **About**: Shows version and app info dialog
 
 ---
 
@@ -50,8 +66,9 @@ Dockable panel system with After Effects-style menu bar and unified Properties p
 All panels can be:
 - Dragged to rearrange
 - Grouped in tabs
-- Resized
-- Closed/opened
+- Resized via split panes
+- Closed/opened via View menu
+- Floated (detached from dock) as independent windows
 
 ### Tab Controls
 | Action | Method |
@@ -70,39 +87,63 @@ All panels can be:
 
 ### Tab Slot Indicators
 Resolume-style visual feedback:
-- Shows valid drop locations
+- Shows valid drop locations (center, left, right, top, bottom)
 - Highlights target slot
+
+### Floating Panels
+Panels can be detached from the dock layout and floated as independent windows:
+- Movable by dragging
+- Resizable
+- Z-order management (click to bring to front)
+- Can be re-docked by dragging to a dock target
 
 ---
 
 ## Available Panels
 
-MASterSelects has 16 dockable panel types (plus the Slot Grid overlay, see [Slot Grid](#slot-grid-multi-layer-composition)):
+MASterSelects has 17 dockable panel types (plus the Slot Grid overlay, see [Slot Grid](#slot-grid-multi-layer-composition)):
 
-| Panel | Purpose |
-|-------|---------|
-| **Preview** | Composition output canvas |
-| **Timeline** | Multi-track editor |
-| **Media** | Media browser and folders |
-| **Properties** | Unified clip editing (Transform, Effects, Masks, Audio) |
-| **Export** | Render settings and progress |
-| **Multicam** | Camera sync and EDL |
-| **AI Chat** | GPT-powered editing assistant |
-| **AI Video** | AI video generation (PiAPI) |
-| **AI Segment** | AI object segmentation (SAM 2, local in-browser) |
-| **Download** | Search and download videos from YouTube and other platforms |
-| **Transitions** | Drag-drop transition library |
-| **Histogram** | GPU-accelerated histogram scope |
-| **Vectorscope** | Color vector analysis scope |
-| **Waveform** | Luma/RGB waveform monitor |
-| **Slots** | Layer slot management (see also [Slot Grid](#slot-grid-multi-layer-composition)) |
+| Panel | Type ID | Purpose |
+|-------|---------|---------|
+| **Preview** | `preview` | Composition output canvas |
+| **Multi Preview** | `multi-preview` | 4-slot multi-layer preview grid |
+| **Timeline** | `timeline` | Multi-track editor |
+| **Media** | `media` | Media browser, folders, and compositions |
+| **Properties** | `clip-properties` | Unified clip editing (Transform, Effects, Masks, Audio, Transcript, Analysis, Text) |
+| **Export** | `export` | Render settings, codec selection, and progress |
+| **Multi-Cam** | `multicam` | Camera sync and EDL (WIP) |
+| **AI Chat** | `ai-chat` | GPT-powered editing assistant |
+| **AI Video** | `ai-video` | AI video generation (PiAPI) |
+| **AI Segment** | `ai-segment` | AI object segmentation using SAM 2 (WIP) |
+| **AI Scene Description** | `scene-description` | AI-powered video content description with timeline-synced highlighting |
+| **YouTube** | `youtube` | Alias for Downloads panel |
+| **Downloads** | `download` | Search and download videos from YouTube and other platforms |
+| **Transitions** | `transitions` | Drag-drop transition library (WIP) |
+| **Histogram** | `scope-histogram` | GPU-accelerated histogram scope |
+| **Vectorscope** | `scope-vectorscope` | Color vector analysis scope |
+| **Waveform** | `scope-waveform` | Luma/RGB waveform monitor |
+
+### View Menu Grouping
+
+Panels are organized in the View menu as follows:
+- **Panels**: Preview, Multi Preview, Timeline, Properties, Media, Export, YouTube, Downloads
+- **AI** (sub-menu): AI Chat, AI Video, AI Segment, AI Scene Description
+- **WIP** (grayed out with bug icon): Multi-Cam, Transitions, AI Segment
+- **Scopes** (sub-menu): Waveform, Histogram, Vectorscope
 
 ### Preview Panel
 - Canvas for composition output
 - Composition selector dropdown
 - Edit mode toggle for direct manipulation
+- Per-tab transparency grid toggle (checkerboard button)
 - Multiple preview panels supported
 - Statistics overlay option
+
+### Multi Preview Panel
+- 4-slot grid showing different layers or compositions simultaneously
+- Source composition selector (auto-distribute layers or per-slot custom)
+- Per-slot composition assignment
+- Transparency grid toggle
 
 ### Timeline Panel
 - Multi-track video/audio editor
@@ -118,19 +159,27 @@ MASterSelects has 16 dockable panel types (plus the Slot Grid overlay, see [Slot
 - Composition list
 - Add dropdown (Import, Composition, Folder)
 - Drag-to-timeline support
+- **List view** and **Grid view** toggle (persisted in localStorage)
+- Grid view with folder breadcrumb navigation
 
 ### Properties Panel
 See [Properties Panel](#properties-panel) section below for details.
 
 ### Export Panel
-- Codec selection (H.264, VP9)
-- Resolution presets
-- Frame rate options
-- Quality/bitrate settings
-- Progress indicator with ETA
-- Single frame export
+- **Encoder selection**: WebCodecs (fast) or HTML Video (precise)
+- **WebCodecs codecs**: H.264, H.265, VP9, AV1
+- **FFmpeg codecs**: ProRes (multiple profiles), DNxHR (multiple profiles), MJPEG
+- **Container formats**: MP4, WebM
+- **Resolution**: Composition resolution or custom
+- **Frame rate**: Composition FPS or custom
+- **Quality/bitrate settings** with rate control options
+- **Audio export**: Sample rate, bitrate, normalization options
+- **In/Out point export**: Export only the marked region
+- **FCPXML export**: Export timeline as Final Cut Pro XML
+- **Single frame export**
+- **Progress indicator with phase display**
 
-### Multicam Panel
+### Multi-Cam Panel (WIP)
 - Camera clip management
 - Audio-based sync controls
 - EDL generation
@@ -142,7 +191,7 @@ See [Properties Panel](#properties-panel) section below for details.
 - Context-aware editing commands
 - 33 available tools
 
-### Download Panel
+### Downloads Panel
 - Paste URLs from YouTube, TikTok, Instagram, Twitter/X, Facebook, Reddit, Vimeo, Twitch, and more
 - Search YouTube videos via YouTube Data API
 - Video thumbnails, titles, channels, duration display
@@ -150,13 +199,19 @@ See [Properties Panel](#properties-panel) section below for details.
 - Download via Native Helper (yt-dlp)
 - Downloads organized in platform-specific subfolders (Downloads/YT/, Downloads/TikTok/, etc.)
 
-### AI Segment Panel
+### AI Segment Panel (WIP)
 - AI object segmentation using Meta's SAM 2 (Segment Anything Model 2)
 - Runs locally in-browser via ONNX Runtime + WebGPU (no API key required)
 - One-time model download (~184 MB), cached in OPFS
 - Point-based segmentation: left-click to include, right-click to exclude
 - Real-time mask overlay with adjustable opacity, feather, and invert
 - Video propagation: forward propagation up to 150 frames
+
+### AI Scene Description Panel
+- AI-powered scene-by-scene content description for video clips
+- Real-time highlighting of active scene segment during playback
+- Click to seek to any scene segment
+- Search within descriptions
 
 ### AI Video Panel
 - Text-to-video generation
@@ -166,7 +221,7 @@ See [Properties Panel](#properties-panel) section below for details.
 - CFG scale and camera controls
 - Generation queue with status
 
-### Transitions Panel
+### Transitions Panel (WIP)
 - Library of available transitions (crossfade)
 - Drag-drop to apply between clips
 - GPU-accelerated transition rendering
@@ -182,12 +237,7 @@ Three independent scope panels with GPU-accelerated rendering:
 
 - View mode buttons: RGB, R, G, B, Luma
 - IRE legend for broadcast reference
-- Zero readPixels overhead — fully GPU-rendered
-
-### Slots Panel
-- Layer slot grid
-- Visibility toggles
-- Effect status indicators
+- Zero readPixels overhead -- fully GPU-rendered
 
 ---
 
@@ -258,16 +308,18 @@ Each layer (A through D) can have one active composition playing at the same tim
 
 ## Properties Panel
 
-The unified Properties panel consolidates clip editing into a single tabbed interface. It automatically adapts based on the selected clip type.
+The unified Properties panel consolidates clip editing into a single tabbed interface. It automatically adapts its tabs based on the selected clip type (video, audio, text, solid).
 
 ### Video Clip Tabs
 
 | Tab | Contents |
 |-----|----------|
-| **Transform** | Position, Scale, Rotation, Opacity, Blend Mode |
+| **Transform** | Position, Scale, Rotation, Opacity, Blend Mode, Speed |
+| **Audio** | Volume controls and 10-band EQ for linked audio |
 | **Effects** | GPU effects list with parameters |
 | **Masks** | Mask shapes with mode and feather controls |
-| **Audio** | Volume controls and keyframes for linked audio |
+| **Transcript** | Speech-to-text transcript with word-level playback sync |
+| **Analysis** | Focus/motion/face analysis + AI scene descriptions |
 
 ### Audio Clip Tabs
 
@@ -275,13 +327,34 @@ The unified Properties panel consolidates clip editing into a single tabbed inte
 |-----|----------|
 | **Volume** | Volume slider + 10-band parametric EQ |
 | **Effects** | Audio effects (future expansion) |
+| **Transcript** | Speech-to-text transcript |
+
+### Text Clip Tabs
+
+| Tab | Contents |
+|-----|----------|
+| **Text** | Typography controls (font, size, color, alignment, etc.) |
+| **Transform** | Position, Scale, Rotation, Opacity, Blend Mode |
+| **Effects** | GPU effects list with parameters |
+| **Masks** | Mask shapes with mode and feather controls |
+
+### Solid Clip Tabs
+
+| Tab | Contents |
+|-----|----------|
+| **Transform** | Position, Scale, Rotation, Opacity, Blend Mode |
+| **Effects** | GPU effects list with parameters |
+| **Masks** | Mask shapes with mode and feather controls |
+
+Solid clips also show a color picker bar above the tabs for changing the solid color.
 
 ### Transform Tab Features
 - **Position**: X, Y, Z (depth) sliders
 - **Scale**: X, Y with link toggle
 - **Rotation**: X, Y, Z (3D rotation)
 - **Opacity**: 0-100% slider
-- **Blend Mode**: Dropdown with 37 modes grouped by category
+- **Blend Mode**: Dropdown with 37 modes grouped by category (Normal, Darken, Lighten, Contrast, Inversion, Component, Stencil)
+- **Speed**: Playback speed control
 - Keyframe toggles on each property
 
 ### Volume Tab Features
@@ -306,10 +379,31 @@ The unified Properties panel consolidates clip editing into a single tabbed inte
 - **Invert Toggle**: Flip mask selection
 - **Vertex Selection**: Edit mask points
 
+### Transcript Tab Features
+- Word-level transcript display with speaker diarization
+- Real-time word highlighting during playback
+- Click any word to seek to that position
+- Search within transcript
+- Language selection (Auto, Deutsch, English, Espanol, Francais, Italiano, Portugues)
+- Transcription provider selection (Local Whisper, OpenAI, AssemblyAI, Deepgram)
+
+### Analysis Tab Features
+- Focus, motion, and face detection per frame
+- Current values at playhead display
+- AI scene descriptions with time-synced segments
+- Analyze and describe actions to trigger analysis
+
+### Text Tab Features
+- Font family selection with Google Fonts support
+- Font size, color, and alignment controls
+- Text content editing
+- Typography parameter adjustments
+
 ### Tab Title Display
 - Shows selected clip name in tab title
 - Example: "Properties - Interview_01.mp4"
 - Updates automatically on clip selection
+- Badge counts for effects, masks, and transcripts
 
 ---
 
@@ -335,7 +429,7 @@ Before the tutorial steps begin, a centered welcome dialog asks the user about t
 
 The selection is saved to personalize the experience. A "Skip Tutorial" button is available to dismiss the entire tutorial immediately.
 
-### Part 1 — Panel Introduction
+### Part 1 -- Panel Introduction
 
 After the welcome screen, the tutorial highlights each main panel one at a time using an SVG spotlight mask:
 
@@ -353,7 +447,7 @@ Each step:
 - Shows a tooltip with step number, title, description, and progress dots
 - Advances on click anywhere
 
-### Part 2 — Timeline Deep-Dive
+### Part 2 -- Timeline Deep-Dive
 
 Part 2 starts automatically after Part 1 finishes (unless Part 2 was already seen). It zooms into individual Timeline elements with a yellow highlight ring:
 
@@ -395,8 +489,9 @@ Both tutorial parts can be re-launched manually from the menu bar:
 
 | Menu Location | Action |
 |---------------|--------|
-| Info menu → Tutorial | Start Part 1 (panel introduction) |
-| Info menu → Timeline Tutorial | Start Part 2 (timeline deep-dive) |
+| Info menu -> Tutorials | Opens tutorial campaign selection |
+| Info menu -> Quick Tour | Start Part 1 (panel introduction) |
+| Info menu -> Timeline Tour | Start Part 2 (timeline deep-dive) |
 
 ---
 
@@ -404,42 +499,53 @@ Both tutorial parts can be re-launched manually from the menu bar:
 
 ### Default Layout (3-column)
 ```
-┌─────────────────────────────────────────┐
-│              Menu Bar                    │
-├───────────┬─────────────────┬───────────┤
-│  Media    │                 │Properties │
-│  Panel    │    Preview      │  Panel    │
-│           │                 │           │
-│           │                 │           │
-│           │                 │           │
-├───────────┴─────────────────┴───────────┤
-│              Timeline                    │
-└─────────────────────────────────────────┘
++------------------------------------------+
+|              Menu Bar                     |
++----------+------------------+------------+
+| Media    |                  | Export     |
+| AI Chat  |    Preview       | Properties |
+| AI Video |                  | Waveform   |
+| Downloads|                  | Histogram  |
+|          |                  | Vectorscope|
++----------+------------------+------------+
+|              Timeline                     |
++------------------------------------------+
 ```
 
+Left column (15%): Media, AI Chat, AI Video, Downloads (tabbed)
+Center: Preview
+Right column: Export, Properties, Waveform, Histogram, Vectorscope (tabbed, Waveform active by default)
+Bottom: Timeline
+
+Top section is 60%, Timeline is 40% of total height.
+
 ### Layout Persistence
-- Auto-saved to localStorage
+- Auto-saved to localStorage via Zustand persist middleware
 - Survives page refresh
 - Multiple preview panels preserved
-- Auto-cleanup of invalid panel types
+- Auto-cleanup of invalid/removed panel types on load
+- Project-level layout persistence (saved/loaded with project files)
 
 ### Layout Actions
 | Action | Location |
 |--------|----------|
-| Save as Default | View menu |
-| Reset Layout | View menu |
+| Save Layout as Default | View menu |
+| Reset Layout | View menu (restores saved default or built-in default) |
 
 ### Panel Visibility
-View menu → Panels:
+View menu -> Panels:
 - Checkbox for each panel type
 - Toggle panels on/off
+- AI panels grouped in sub-menu
+- Scopes grouped in sub-menu
+- WIP panels shown grayed out with bug icon
 
 ---
 
 ## MIDI Control
 
 ### Enabling MIDI
-Window menu → MIDI Control
+Window menu -> MIDI Control
 
 ### Requirements
 - Browser Web MIDI API support
@@ -448,7 +554,7 @@ Window menu → MIDI Control
 
 ### Status Display
 ```
-✓ MIDI Control (N devices)
+MIDI Control (N devices)
 ```
 
 ### Device Discovery
@@ -460,28 +566,31 @@ Window menu → MIDI Control
 ## Resolution Settings
 
 ### Output Resolution
-View menu → Resolution:
+Configured in Settings -> Output:
+
 | Preset | Dimensions |
 |--------|------------|
-| 1080p | 1920×1080 |
-| 720p | 1280×720 |
-| 4K | 3840×2160 |
-| 16:10 | 1920×1200 |
-| 4:3 | 1024×768 |
+| 1080p | 1920x1080 |
+| 1440p | 2560x1440 |
+| 4K | 3840x2160 |
+| 9:16 | 1080x1920 |
+
+Custom width (up to 7680) and height (up to 4320) can also be set. This applies only to newly created compositions; active composition resolution is set per composition in the Media Panel.
 
 ### Preview Quality
-View menu → Preview Quality:
+Configured in Settings -> Previews:
+
 | Option | Render Size | Performance |
 |--------|-------------|-------------|
-| **Full (100%)** | 1920×1080 | Best quality |
-| **Half (50%)** | 960×540 | 4× faster, 75% less memory |
-| **Quarter (25%)** | 480×270 | 16× faster, 94% less memory |
+| **Full (100%)** | 1920x1080 | Best quality |
+| **Half (50%)** | 960x540 | 4x faster, 75% less memory |
+| **Quarter (25%)** | 480x270 | 16x faster, 94% less memory |
 
-Preview Quality scales the internal render resolution while maintaining the output aspect ratio. Lower quality settings significantly reduce GPU workload and memory usage—ideal for complex compositions or slower hardware.
+Preview Quality scales the internal render resolution while maintaining the output aspect ratio. Lower quality settings significantly reduce GPU workload and memory usage -- ideal for complex compositions or slower hardware.
 
 **Memory Savings at Half Resolution:**
 - Ping-pong buffers: 75% reduction
-- RAM Preview cache: 75% reduction (7.2GB → 1.8GB)
+- RAM Preview cache: 75% reduction (7.2GB -> 1.8GB)
 - Scrubbing cache: 75% reduction
 
 ### Setting Resolution
@@ -495,23 +604,31 @@ setPreviewQuality(quality) // 1, 0.5, or 0.25
 ## Settings Dialog
 
 ### Opening
-Edit menu → Settings
+Edit menu -> Settings
 
 ### Design
 - After Effects-style sidebar navigation
-- Categorized settings sections
+- 8 categorized settings sections
 - Draggable dialog (no dark overlay)
-- Consolidated API key management
+- Save and Cancel buttons
 
-### Contents
-- API key management (all keys in one place)
-- Transcription provider selection
-- Language selection
-- Autosave interval
-- General preferences
+### Categories
+
+| Category | Contents |
+|----------|----------|
+| **Appearance** | Theme selection (Dark, Light, Midnight, System, Crazy You, Custom), custom hue and brightness sliders |
+| **General** | Autosave enable/disable and interval (1/2/5/10 min), mobile/desktop view toggle |
+| **Previews** | Preview resolution quality (Full/Half/Quarter), transparency grid info |
+| **Import** | Copy media to project folder toggle |
+| **Transcription** | Provider selection (Local Whisper, OpenAI, AssemblyAI, Deepgram) with descriptions and pricing |
+| **Output** | Default resolution for new compositions (presets + custom), frame rate display |
+| **Performance** | GPU power preference (discrete/integrated), Native Helper enable/disable, native decode toggle, WebSocket port, connection status |
+| **API Keys** | Consolidated key management: OpenAI, AssemblyAI, Deepgram (Transcription), PiAPI (AI Video), YouTube Data API v3. Keys encrypted in IndexedDB. |
 
 ### Storage
-Settings persisted in localStorage.
+- Non-sensitive settings persisted in localStorage
+- API keys encrypted in IndexedDB via apiKeyManager
+- API keys also backed up to project `.keys.enc` file
 
 ---
 
@@ -520,9 +637,13 @@ Settings persisted in localStorage.
 ### WebGPU Status
 Top-right of toolbar:
 ```
-● WebGPU Ready  (green)
-○ Loading...    (gray)
+WebGPU (Vendor)   (green, when ready)
+Loading...         (gray, during init)
 ```
+
+### Native Helper Status
+Top-right of toolbar (when enabled):
+- Shows connection status to the native helper (Turbo Mode)
 
 ---
 
@@ -555,8 +676,8 @@ Top-right of toolbar:
 
 ## Tests
 
-No dedicated unit tests — this feature covers React component-level UI that requires a browser environment.
+No dedicated unit tests -- this feature covers React component-level UI that requires a browser environment.
 
 ---
 
-*Source: `src/components/panels/PropertiesPanel.tsx`, `src/components/dock/`, `src/stores/dockStore.ts`, `src/types/dock.ts`, `src/components/timeline/SlotGrid.tsx`, `src/services/layerPlaybackManager.ts`, `src/components/common/TutorialOverlay.tsx`*
+*Source: `src/components/panels/PropertiesPanel.tsx`, `src/components/panels/properties/index.tsx`, `src/components/dock/`, `src/stores/dockStore.ts`, `src/stores/settingsStore.ts`, `src/types/dock.ts`, `src/components/timeline/SlotGrid.tsx`, `src/services/layerPlaybackManager.ts`, `src/components/common/TutorialOverlay.tsx`, `src/components/common/Toolbar.tsx`, `src/components/common/SettingsDialog.tsx`*

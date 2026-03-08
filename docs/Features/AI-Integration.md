@@ -2,7 +2,7 @@
 
 [← Back to Index](./README.md)
 
-GPT-powered editing with 33 tools, transcription, multicam EDL generation, and AI object segmentation.
+GPT-powered editing with 76 tools, multi-provider AI video generation, transcription, multicam EDL generation, and AI object segmentation.
 
 ---
 
@@ -34,16 +34,20 @@ GPT-powered editing with 33 tools, transcription, multicam EDL generation, and A
 
 ### Available Models
 ```
-GPT-5.2 series (Dec 2025)
-GPT-5.1, GPT-5
-GPT-4.1, GPT-4o variants
+GPT-5.2, GPT-5.2 Pro
+GPT-5.1, GPT-5.1 Codex, GPT-5.1 Codex Mini
+GPT-5, GPT-5 Mini, GPT-5 Nano
+GPT-4.1, GPT-4.1 Mini, GPT-4.1 Nano
+GPT-4o, GPT-4o Mini
 o3, o4-mini, o3-pro (reasoning)
 ```
+
+Default model: `gpt-5.1`
 
 ### Editor Mode
 When enabled (default):
 - Includes timeline context in prompts
-- 33 editing tools available
+- 76 editing tools available
 - AI can manipulate timeline directly
 
 ---
@@ -59,7 +63,18 @@ When enabled (default):
 - **History**: List of all generated videos
 
 ### Supported Services
-Currently supports **Kling AI** for video generation.
+Uses **PiAPI** as a unified API gateway, supporting multiple AI video providers:
+
+| Provider | Description | Text-to-Video | Image-to-Video |
+|----------|-------------|:---:|:---:|
+| **Kling AI** | High quality, native audio | Yes | Yes |
+| **Luma Dream Machine** | Cinematic quality | Yes | Yes |
+| **Hailuo (MiniMax)** | Fast generation | Yes | Yes |
+| **Hunyuan** | Tencent model | Yes | Yes |
+| **Wanx (Wan)** | Alibaba model | Yes | Yes |
+| **SkyReels** | AI video generation | Yes | Yes |
+
+Provider is selectable via a dropdown in the panel header.
 
 ### Generation Modes
 
@@ -67,32 +82,31 @@ Currently supports **Kling AI** for video generation.
 Generate video from text prompts:
 - Describe the scene, subjects, and actions
 - Select aspect ratio (16:9, 9:16, 1:1)
-- Control camera movement
 
 #### Image-to-Video
 Animate images:
 - Drag & drop or click to upload start/end frames
 - **Use Current Frame** button captures timeline preview
-- Optional end frame for guided animation
+- Interactive image cropper with pan and zoom, locked to selected aspect ratio
+- Optional end frame for guided animation (Kling only)
 - Video morphs between frames
 
 ### Parameters
 
 | Parameter | Options | Description |
 |-----------|---------|-------------|
-| **Model** | v1.0, v1.5, v1.6, v2.0, v2.1 | Newer models have better quality |
-| **Duration** | 5s, 10s | Video length |
+| **Provider** | Kling, Luma, Hailuo, Hunyuan, Wanx, SkyReels | AI video model provider |
+| **Version** | Provider-specific (e.g. Kling: v2.6, v2.5, v2.1, v1.6, v1.5) | Newer versions have better quality |
+| **Duration** | Provider-specific (e.g. 5s, 10s) | Video length |
 | **Aspect Ratio** | 16:9, 9:16, 1:1 | Output dimensions |
-| **Quality** | Standard, Professional | Pro is slower but higher quality |
-| **CFG Scale** | 0.0-1.0 | Prompt adherence strength |
-| **Camera** | None, Down&Back, Forward&Up, etc. | Camera movement presets |
+| **Quality** | Standard, Professional | Pro is slower but higher quality (providers with multiple modes) |
+| **CFG Scale** | 0.0-1.0 | Prompt adherence strength (Kling only) |
 | **Negative Prompt** | Text | What to avoid in generation |
 
 ### Timeline Integration
 - **Add to Timeline** checkbox (enabled by default)
-- Videos auto-import to "KlingAI" folder in Media Panel
+- Videos auto-import to "AI Video" folder in Media Panel
 - Clips placed on empty or new video track at playhead
-- Videos with audio get linked audio clips
 
 ### Generation Queue
 - Jobs appear in queue with status
@@ -101,26 +115,25 @@ Animate images:
 - Remove jobs from queue
 
 ### History Tab
-- Persistent list of all generated videos
+- Persistent list of all generated videos (last 50, localStorage)
 - Video thumbnails with play/pause
 - Draggable to timeline
 - "In Timeline" badge for added clips
 - "+ Timeline" button to add manually
 
 ### API Authentication
-Kling uses Access Key + Secret Key for JWT authentication:
-1. Get credentials from [Kling AI Developer Portal](https://app.klingai.com/global/dev/document-api)
-2. Enter Access Key (AK) in Settings
-3. Enter Secret Key (SK) in Settings
-4. JWT tokens are generated automatically with 30-minute caching
+PiAPI uses a single API key:
+1. Get a key from [PiAPI](https://piapi.ai)
+2. Enter the PiAPI key in Settings → API Keys
+3. Account balance and estimated generation costs shown in the panel
 
 ### Task-Based Workflow
 ```
-1. Submit generation request
+1. Submit generation request via PiAPI
 2. Receive task ID
-3. Poll for status (every 5 seconds)
+3. Poll for status updates
 4. On completion:
-   - Import video to KlingAI folder
+   - Import video to "AI Video" folder
    - Optionally add clip to timeline
    - Add to history for later access
 ```
@@ -140,11 +153,10 @@ AI-powered object segmentation using Meta's **Segment Anything Model 2 (SAM 2)**
 
 ### One-Time Model Download
 On first use, the panel prompts for a one-time model download:
-- **Model:** SAM 2 Hiera Small (ORT-optimized encoder + ONNX decoder)
-- **Total size:** ~184 MB
+- **Model:** SAM 2 Hiera Small (fp16 encoder + ONNX decoder)
+- **Total size:** ~103 MB (encoder ~82 MB + decoder ~21 MB)
 - **Storage:** Cached in the browser's Origin Private File System (OPFS) for persistent local storage
 - **Progress:** Download progress bar shown in the panel
-- **Fallback URLs:** If the primary CDN is unavailable, models are fetched from fallback hosts automatically
 - After download, the model auto-loads into ONNX sessions for immediate use
 - On subsequent visits, cached models are detected and loaded automatically
 
@@ -204,7 +216,7 @@ All heavy computation runs off the main thread to keep the UI responsive:
 ### Workflow
 ```
 1. Open AI Segment panel
-2. Download model (first time only, ~184 MB)
+2. Download model (first time only, ~103 MB)
 3. Select a video clip in the timeline
 4. Click "Activate" to enable segmentation mode
 5. Left-click objects to include, right-click to exclude
@@ -217,30 +229,40 @@ All heavy computation runs off the main thread to keep the UI responsive:
 
 ## AI Editor Tools
 
-### 50+ Tools Implemented
+### 76 Tools across 15 Categories
 
 #### Timeline State (3 tools)
 | Tool | Description |
 |------|-------------|
 | `getTimelineState` | Full timeline state (tracks, clips, playhead) |
-| `getClipDetails` | Detailed clip info + analysis + transcript |
-| `getClipsInTimeRange` | Find clips in time range |
-
-#### Playback (2 tools)
-| Tool | Description |
-|------|-------------|
 | `setPlayhead` | Move playhead to time |
 | `setInOutPoints` | Set in/out markers |
 
-#### Clip Editing (6 tools)
+#### Clip Info (2 tools)
+| Tool | Description |
+|------|-------------|
+| `getClipDetails` | Detailed clip info + analysis + transcript |
+| `getClipsInTimeRange` | Find clips in time range |
+
+#### Clip Editing (10 tools)
 | Tool | Description |
 |------|-------------|
 | `splitClip` | Split at specific time |
+| `splitClipEvenly` | Split into N equal parts |
+| `splitClipAtTimes` | Split at multiple specific times |
 | `deleteClip` | Delete single clip |
 | `deleteClips` | Delete multiple clips |
 | `moveClip` | Move to new position/track |
 | `trimClip` | Adjust in/out points |
 | `cutRangesFromClip` | Remove multiple sections |
+| `reorderClips` | Reorder clips by ID list |
+| `addClipSegment` | Add a segment of a source clip to timeline |
+
+#### Selection (2 tools)
+| Tool | Description |
+|------|-------------|
+| `selectClips` | Select clips by ID |
+| `clearSelection` | Clear selection |
 
 #### Track Tools (4 tools)
 | Tool | Description |
@@ -250,17 +272,12 @@ All heavy computation runs off the main thread to keep the UI responsive:
 | `setTrackVisibility` | Show/hide track |
 | `setTrackMuted` | Mute/unmute track |
 
-#### Visual Capture (2 tools)
+#### Visual Capture (3 tools)
 | Tool | Description |
 |------|-------------|
 | `captureFrame` | Export PNG at time |
+| `getCutPreviewQuad` | 4 frames before + 4 after a cut point |
 | `getFramesAtTimes` | Grid image at multiple times |
-
-#### Selection (2 tools)
-| Tool | Description |
-|------|-------------|
-| `selectClips` | Select clips by ID |
-| `clearSelection` | Clear selection |
 
 #### Analysis & Transcript (6 tools)
 | Tool | Description |
@@ -272,7 +289,7 @@ All heavy computation runs off the main thread to keep the UI responsive:
 | `startClipAnalysis` | Trigger background analysis |
 | `startClipTranscription` | Trigger transcription |
 
-#### Media Panel (7 tools)
+#### Media Panel (10 tools)
 | Tool | Description |
 |------|-------------|
 | `getMediaItems` | Files, compositions, folders |
@@ -281,7 +298,82 @@ All heavy computation runs off the main thread to keep the UI responsive:
 | `deleteMediaItem` | Delete item |
 | `moveMediaItems` | Move to folder |
 | `createComposition` | Create new composition |
+| `openComposition` | Open/switch to composition |
+| `importLocalFiles` | Import files from local filesystem |
+| `listLocalFiles` | List files in a local directory |
 | `selectMediaItems` | Select in panel |
+
+#### Batch Operations (1 tool)
+| Tool | Description |
+|------|-------------|
+| `executeBatch` | Execute multiple tool calls as a single undo-able action |
+
+#### YouTube / Downloads (4 tools)
+| Tool | Description |
+|------|-------------|
+| `searchVideos` | Search YouTube for videos by keyword |
+| `listVideoFormats` | List available formats for a video URL |
+| `downloadAndImportVideo` | Download video and import to timeline |
+| `getYouTubeVideos` | List videos in the Downloads panel |
+
+#### Transform (1 tool)
+| Tool | Description |
+|------|-------------|
+| `setTransform` | Set position, scale, rotation on a clip |
+
+#### Effects (4 tools)
+| Tool | Description |
+|------|-------------|
+| `listEffects` | List available GPU effects |
+| `addEffect` | Add effect to clip |
+| `removeEffect` | Remove effect from clip |
+| `updateEffect` | Update effect parameters |
+
+#### Keyframes (3 tools)
+| Tool | Description |
+|------|-------------|
+| `getKeyframes` | Get keyframes for a clip property |
+| `addKeyframe` | Add keyframe at time |
+| `removeKeyframe` | Remove keyframe by ID |
+
+#### Playback (8 tools)
+| Tool | Description |
+|------|-------------|
+| `play` | Start playback |
+| `pause` | Pause playback |
+| `setClipSpeed` | Set clip playback speed |
+| `undo` | Undo last action |
+| `redo` | Redo last undone action |
+| `addMarker` | Add timeline marker |
+| `getMarkers` | Get all markers |
+| `removeMarker` | Remove marker by ID |
+
+#### Transitions (2 tools)
+| Tool | Description |
+|------|-------------|
+| `addTransition` | Add transition between clips |
+| `removeTransition` | Remove transition |
+
+#### Masks (9 tools)
+| Tool | Description |
+|------|-------------|
+| `getMasks` | Get masks on a clip |
+| `addRectangleMask` | Add rectangle mask |
+| `addEllipseMask` | Add ellipse mask |
+| `addMask` | Add custom polygon mask |
+| `removeMask` | Remove mask |
+| `updateMask` | Update mask properties |
+| `addVertex` | Add vertex to mask path |
+| `removeVertex` | Remove vertex from mask path |
+| `updateVertex` | Update vertex position |
+
+#### Stats / Debug (4 tools)
+| Tool | Description |
+|------|-------------|
+| `getStats` | Current performance stats |
+| `getStatsHistory` | Historical stats data |
+| `getLogs` | Get logger output |
+| `getPlaybackTrace` | Get playback timing trace |
 
 ### Tool Execution Loop
 ```
@@ -290,7 +382,7 @@ All heavy computation runs off the main thread to keep the UI responsive:
 3. OpenAI API call with function calling
 4. If tool_calls returned → execute sequentially
 5. Collect results → send back to OpenAI
-6. Loop until no tool_calls (max 10 iterations)
+6. Loop until no tool_calls (max 50 iterations)
 7. Display final response
 ```
 
@@ -298,9 +390,9 @@ All heavy computation runs off the main thread to keep the UI responsive:
 All AI edits are undoable with `Ctrl+Z`:
 ```typescript
 // History tracking for batch operations
-startHistoryBatch()
+startBatch('AI: toolName')
 // ... execute tools ...
-endHistoryBatch()
+endBatch()
 ```
 
 ---
@@ -310,10 +402,10 @@ endHistoryBatch()
 ### 4 Providers
 
 #### Local Whisper (Browser)
-- Uses `@xenova/transformers`
-- `whisper-tiny` model
+- Uses `@huggingface/transformers`
+- `Xenova/whisper-tiny` model
 - No API key needed
-- Runs in Web Worker
+- Dynamically imported on first use
 
 #### OpenAI Whisper API
 ```
@@ -397,9 +489,19 @@ interface EditDecision {
 ### Input Data
 Claude receives:
 - Camera info (names, roles)
-- Analysis data (motion, sharpness, faces)
+- Analysis data (motion, sharpness per camera at sampled intervals)
 - Transcript with speaker identification
 - Audio levels
+
+### Multicam Panel
+A dedicated `MultiCamPanel` component provides the full workflow UI:
+- Add cameras from the media panel
+- Set master camera for audio reference
+- Audio-based sync between cameras
+- CV analysis (motion, sharpness) per camera
+- Transcript generation via local Whisper
+- EDL generation via Claude API
+- Apply EDL directly to the timeline
 
 ---
 
@@ -407,19 +509,21 @@ Claude receives:
 
 ### API Keys
 Settings dialog → API Keys:
-- OpenAI API key (for chat + transcription)
-- Claude API key (for multicam EDL)
-- AssemblyAI key
-- Deepgram key
+- **OpenAI** API key (for AI chat + transcription)
+- **PiAPI** key (for AI video generation — Kling, Luma, Hailuo, etc.)
+- **AssemblyAI** key (transcription)
+- **Deepgram** key (transcription)
+- **YouTube** Data API v3 key (optional)
 
-Settings dialog → AI Video Generation:
-- Kling AI API key (for text-to-video, image-to-video)
+Multicam panel → Settings:
+- **Claude** API key (for multicam EDL generation, stored separately via encrypted IndexedDB)
 
 ### No API Key Required
 - **SAM 2 AI Segmentation** — runs entirely in the browser, no external service
+- **Local Whisper transcription** — runs in-browser via @huggingface/transformers
 
 ### Storage
-Keys stored in browser localStorage. SAM 2 model files stored in OPFS.
+API keys stored encrypted in IndexedDB via Web Crypto API. SAM 2 model files stored in OPFS.
 
 ---
 
@@ -432,6 +536,8 @@ Keys stored in browser localStorage. SAM 2 model files stored in OPFS.
 "Remove all segments where motion > 0.7"
 "Create a rough cut keeping only focused shots"
 "Split at all the 'um' and 'uh' moments"
+"Add a cross dissolve transition between all clips"
+"Set opacity to 50% on the selected clip"
 ```
 
 ### Iterative Editing
@@ -456,10 +562,10 @@ Keys stored in browser localStorage. SAM 2 model files stored in OPFS.
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
-| [`aiToolDefinitions.test.ts`](../../tests/unit/aiToolDefinitions.test.ts) | 132 | Tool definitions, schemas, MODIFYING_TOOLS, enums |
+| [`aiToolDefinitions.test.ts`](../../tests/unit/aiToolDefinitions.test.ts) | 27 | Tool definitions, schemas, MODIFYING_TOOLS, enums |
 
 Run tests: `npx vitest run`
 
 ---
 
-*Source: `src/components/panels/AIChatPanel.tsx`, `src/components/panels/AIVideoPanel.tsx`, `src/components/panels/SAM2Panel.tsx`, `src/components/preview/SAM2Overlay.tsx`, `src/services/sam2/SAM2Service.ts`, `src/services/sam2/SAM2ModelManager.ts`, `src/services/sam2/sam2Worker.ts`, `src/stores/sam2Store.ts`, `src/services/aiTools.ts`, `src/services/claudeService.ts`, `src/services/klingService.ts`*
+*Source: `src/components/panels/AIChatPanel.tsx`, `src/components/panels/AIVideoPanel.tsx`, `src/components/panels/SAM2Panel.tsx`, `src/components/panels/MultiCamPanel.tsx`, `src/components/preview/SAM2Overlay.tsx`, `src/services/sam2/SAM2Service.ts`, `src/services/sam2/SAM2ModelManager.ts`, `src/services/sam2/sam2Worker.ts`, `src/stores/sam2Store.ts`, `src/services/aiTools/` (directory), `src/services/claudeService.ts`, `src/services/piApiService.ts`, `src/stores/multicamStore.ts`, `src/services/multicamAnalyzer.ts`*

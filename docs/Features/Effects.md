@@ -12,6 +12,7 @@ GPU-accelerated visual effects with 37 blend modes and 30 shader effects.
 - [Blend Modes](#blend-modes)
 - [GPU Effects](#gpu-effects)
 - [Effect Keyframes](#effect-keyframes)
+- [Transitions](#transitions)
 
 ---
 
@@ -129,59 +130,59 @@ Full 3D rotation with configurable perspective:
 
 ## GPU Effects
 
-### 30+ Modular Effects
+### 30 Modular Effects
 
-Effects are organized by category in `src/effects/`:
+Effects are organized by category in `src/effects/`. Each effect is a self-contained module with its own shader and definition file.
 
-#### Color Correction
+#### Color Correction (9 effects)
 | Effect | Parameters |
 |--------|------------|
-| Brightness | amount (-1 to +1) |
-| Contrast | amount (0-3) |
-| Saturation | amount (0-3) |
-| Vibrance | amount (0-2) |
-| Hue Shift | shift (0-1) |
-| Temperature | amount (-1 to +1) |
-| Exposure | amount (-3 to +3) |
-| Levels | inputBlack, inputWhite, gamma, outputBlack, outputWhite |
+| Brightness | amount (-1 to 1) |
+| Contrast | amount (0 to 3) |
+| Saturation | amount (0 to 3) |
+| Vibrance | amount (-1 to 1) |
+| Hue Shift | shift (0 to 1) |
+| Temperature | temperature (-1 to 1), tint (-1 to 1) |
+| Exposure | exposure (-3 to 3 EV), offset (-0.5 to 0.5), gamma (0.2 to 3) |
+| Levels | inputBlack (0-1), inputWhite (0-1), gamma (0.1-3), outputBlack (0-1), outputWhite (0-1) |
 | Invert | (no params) |
 
-#### Blur Effects
+#### Blur Effects (5 effects)
 | Effect | Parameters |
 |--------|------------|
 | Box Blur | radius (0-20) |
-| Gaussian Blur | radius (0-50), **quality** (1-3) |
-| Motion Blur | amount, angle, **quality** (1-3) |
-| Radial Blur | amount, centerX, centerY, **quality** (1-3) |
-| Zoom Blur | amount, centerX, centerY, **quality** (1-3) |
+| Gaussian Blur | radius (0-50), **samples** (1-64, quality) |
+| Motion Blur | amount (0-0.3), angle (0-TAU), **samples** (4-128, quality) |
+| Radial Blur | amount (0-2), centerX (0-1), centerY (0-1), **samples** (4-256, quality) |
+| Zoom Blur | amount (0-1), centerX (0-1), centerY (0-1), **samples** (4-256, quality) |
 
-#### Distort Effects
+#### Distort Effects (7 effects)
 | Effect | Parameters |
 |--------|------------|
 | Pixelate | size (1-64) |
-| Kaleidoscope | segments, rotation |
-| Mirror | horizontal, vertical |
-| RGB Split | amount, angle |
-| Twirl | amount, radius, centerX, centerY |
-| Wave | amplitude, frequency, speed |
-| Bulge | amount, radius, centerX, centerY |
+| Kaleidoscope | segments (2-16), rotation (0-TAU) |
+| Mirror | horizontal (bool), vertical (bool) |
+| RGB Split | amount (0-0.1), angle (0-TAU) |
+| Twirl | amount (-10 to 10), radius (0.1-1), centerX (0-1), centerY (0-1) |
+| Wave | amplitudeX (0-0.1), amplitudeY (0-0.1), frequencyX (1-20), frequencyY (1-20) |
+| Bulge/Pinch | amount (0.1-3), radius (0.1-1), centerX (0-1), centerY (0-1) |
 
-#### Stylize Effects
+#### Stylize Effects (8 effects)
 | Effect | Parameters |
 |--------|------------|
-| Vignette | amount, size, softness, roundness |
-| Grain | amount, size |
-| Glow | amount, threshold, radius, softness, **quality** (1-3) |
-| Posterize | levels |
-| Edge Detect | threshold |
-| Scanlines | count, intensity |
-| Threshold | level |
-| Sharpen | amount, radius |
+| Vignette | amount (0-1), size (0-1.5), softness (0-1), roundness (0.5-2) |
+| Film Grain | amount (0-0.5), size (0.5-5), speed (0-5) |
+| Glow | amount (0-5), threshold (0-1), radius (1-100), softness (0.1-1), **rings** (1-32, quality), **samplesPerRing** (4-64, quality) |
+| Posterize | levels (2-32) |
+| Edge Detect | strength (0-5), invert (bool) |
+| Scanlines | density (1-20), opacity (0-1), speed (0-5) |
+| Threshold | level (0-1) |
+| Sharpen | amount (0-5), radius (0.5-5) |
 
-#### Keying
+#### Keying (1 effect)
 | Effect | Parameters |
 |--------|------------|
-| Chroma Key | keyColor, tolerance, softness |
+| Chroma Key | keyColor (green/blue/custom), tolerance (0-1), softness (0-0.5), spillSuppression (0-1) |
 
 ### Effect Controls
 
@@ -282,10 +283,29 @@ Final Output
 ```
 
 ### Per-Effect Resources
-- Shader module (from `effects.wgsl`)
+- Shader module (individual `.wgsl` file per effect)
 - Bind group layout
 - Render pipeline
-- Uniform buffer (16-32 bytes)
+- Uniform buffer (16-32 bytes, 16-byte aligned)
+
+---
+
+## Transitions
+
+Timeline transitions between clips are handled by a separate system in `src/transitions/`.
+
+### Available Transitions
+| Type | Category | Default Duration |
+|------|----------|-----------------|
+| Crossfade | Dissolve | 0.5s |
+
+### Planned Transition Types
+- Dip to Black (dissolve)
+- Dip to White (dissolve)
+- Wipe Left (wipe)
+- Wipe Right (wipe)
+
+Transitions are defined as `TransitionDefinition` objects with configurable duration (min/max bounds).
 
 ---
 
@@ -309,4 +329,4 @@ Run tests: `npx vitest run`
 
 ---
 
-*Source: `src/shaders/effects.wgsl` (243 lines), `src/shaders/composite.wgsl` (743 lines), `src/components/panels/EffectsPanel.tsx`*
+*Source: `src/effects/` (modular per-effect shaders), `src/shaders/composite.wgsl`, `src/components/panels/EffectsPanel.tsx`, `src/transitions/`*

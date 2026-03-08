@@ -60,8 +60,13 @@ Bei Feature-Änderungen: `docs/Features/` aktualisieren
 ```bash
 npm install && npm run dev   # http://localhost:5173 (ohne Changelog)
 npm run dev:changelog        # Dev-Server MIT Changelog-Dialog
-npm run build                # Production build (Changelog immer aktiv)
+npm run build                # Production build (tsc + vite, Changelog immer aktiv)
+npm run build:deploy         # Production build ohne tsc (nur vite)
 npm run lint                 # ESLint check
+npm run test                 # Vitest einmal ausführen
+npm run test:watch           # Vitest im Watch-Modus
+npm run test:unit            # Nur Unit-Tests (tests/unit/)
+npm run preview              # Built output lokal serven
 ```
 
 ### Dev-Server Regeln
@@ -85,22 +90,56 @@ Ports: WebSocket `9876`, HTTP `9877`
 ```
 src/
 ├── components/          # React UI
-│   ├── timeline/        # Timeline-Editor (hooks/, components/)
-│   ├── panels/          # Properties, Media, AI, YouTube, Export, Scopes, Transitions
-│   ├── preview/         # Canvas + Overlays
-│   └── dock/            # Panel-System
+│   ├── timeline/        # Timeline-Editor (hooks/, components/, utils/)
+│   ├── panels/          # Properties, Media, AI, Scopes, Transitions, SAM2, Transcript, etc.
+│   ├── preview/         # Canvas + Overlays (Mask, SAM2, MultiPreview)
+│   ├── dock/            # Panel-System (DockContainer, Tabs, Split, Float)
+│   ├── common/          # Shared UI: Toolbar, Settings, Dialogs, Overlays
+│   ├── export/          # Export Dialog + Panel
+│   ├── outputManager/   # Output Window / Slice management
+│   └── mobile/          # Mobile-optimized UI
 ├── stores/              # Zustand State
-│   ├── timeline/        # Slices: track, clip, keyframe, mask, playback
-│   └── mediaStore/      # Slices: import, folder, proxy, composition
+│   ├── timeline/        # Slices: track, clip, keyframe, mask, playback, selection, transition, ...
+│   ├── mediaStore/      # Slices: fileImport, fileManage, folder, proxy, composition, slot, ...
+│   ├── historyStore.ts  # Snapshot-based Undo/Redo
+│   ├── engineStore.ts   # Engine ready state, GPU info
+│   ├── settingsStore.ts # User preferences
+│   ├── dockStore.ts     # Panel layout state
+│   ├── sliceStore.ts    # Slice/region management
+│   ├── renderTargetStore.ts # Output targets
+│   ├── sam2Store.ts     # SAM2 segmentation state
+│   ├── multicamStore.ts # Multicam editing state
+│   └── youtubeStore.ts  # YouTube download state
 ├── engine/              # WebGPU Rendering
 │   ├── core/            # WebGPUContext, RenderTargetManager
-│   ├── render/          # Compositor, RenderLoop, LayerCollector
-│   ├── export/          # FrameExporter, VideoEncoder, AudioEncoder
-│   ├── audio/           # AudioMixer, TimeStretch
-│   └── ffmpeg/          # FFmpegBridge
-├── effects/             # 30+ GPU Effects (color/, blur/, distort/, stylize/, keying/)
-├── services/            # Audio, AI, Project, NativeHelper
-└── shaders/             # WGSL (composite, effects, output)
+│   ├── render/          # RenderLoop, RenderDispatcher, LayerCollector, Compositor, NestedCompRenderer
+│   ├── pipeline/        # CompositorPipeline, EffectsPipeline, OutputPipeline, SlicePipeline
+│   ├── texture/         # TextureManager, MaskTextureManager, ScrubbingCache
+│   ├── managers/        # CacheManager, ExportCanvasManager, OutputWindowManager
+│   ├── export/          # FrameExporter, VideoEncoderWrapper, AudioEncoder
+│   ├── audio/           # AudioMixer, TimeStretchProcessor, AudioExportPipeline
+│   ├── video/           # VideoFrameManager
+│   ├── ffmpeg/          # FFmpegBridge
+│   ├── analysis/        # Scopes (Histogram, Waveform, Vectorscope, OpticalFlow)
+│   ├── stats/           # PerformanceStats
+│   └── structuralSharing/ # SnapshotManager for render optimization
+├── effects/             # ~30 GPU Effects (color/, blur/, distort/, stylize/, keying/)
+│   └── EffectsPipeline.ts # Effect orchestration
+├── transitions/         # GPU Transitions (crossfade, etc.)
+├── services/            # Business logic
+│   ├── layerBuilder/    # LayerBuilderService, VideoSyncManager, AudioSyncHandler
+│   ├── mediaRuntime/    # Clip bindings, runtime playback registry
+│   ├── project/         # ProjectCoreService, save/load, file service
+│   ├── nativeHelper/    # Native FFmpeg decoder client
+│   ├── sam2/            # SAM2 segmentation service
+│   ├── aiTools/         # AI tool bridge (Claude integration)
+│   ├── export/          # FCPXML export
+│   └── (standalone)     # logger, audioManager, thumbnailRenderer, whisperService, etc.
+├── hooks/               # React hooks: useEngine, useGlobalHistory, useMIDI, useTheme, ...
+├── utils/               # Helpers: keyframeInterpolation, maskRenderer, fileLoader, etc.
+├── types/               # TypeScript types, mp4box.d.ts
+├── workers/             # Web Workers (transcription)
+└── shaders/             # WGSL: composite, effects, output, slice, opticalflow
 ```
 
 **Detaillierte Struktur:** siehe `README.md` oder `docs/Features/`
@@ -110,14 +149,18 @@ src/
 ## 4. Critical Patterns (MUST READ)
 
 ### HMR Singleton
-Engine muss Hot Reloads überleben:
+Singletons (Engine, FFmpegBridge, SAM2Service) müssen Hot Reloads überleben:
 ```typescript
-const hot = import.meta.hot;
-if (hot?.data?.engine) {
-  engineInstance = hot.data.engine;
-} else {
-  engineInstance = new WebGPUEngine();
-  hot.data.engine = engineInstance;
+let instance: MyService | null = null;
+
+if (import.meta.hot) {
+  import.meta.hot.accept();
+  if (import.meta.hot.data?.myService) {
+    instance = import.meta.hot.data.myService;
+  }
+  import.meta.hot.dispose((data) => {
+    data.myService = instance;
+  });
 }
 ```
 
@@ -188,7 +231,7 @@ Logger.summary()                // Übersicht für AI
 | Problem | Lösung |
 |---------|--------|
 | 15fps auf Linux | `chrome://flags/#enable-vulkan` aktivieren |
-| "Device mismatch" | HMR kaputt → Seite neu laden |
+| "Device mismatch" | HMR kaputt -> Seite neu laden |
 | Schwarzes Canvas | `readyState >= 2` prüfen |
 | WebCodecs Fehler | Fällt automatisch auf HTMLVideoElement zurück |
 
@@ -200,11 +243,17 @@ Logger.summary()                // Übersicht für AI
 |---------|-------|
 | Version/Changelog | `src/version.ts` |
 | Engine Entry | `src/engine/WebGPUEngine.ts` |
+| Render Dispatcher | `src/engine/render/RenderDispatcher.ts` |
 | Timeline Store | `src/stores/timeline/index.ts` |
 | Media Store | `src/stores/mediaStore/index.ts` |
+| History (Undo/Redo) | `src/stores/historyStore.ts` |
 | Effects Registry | `src/effects/index.ts` |
+| Effects Pipeline | `src/effects/EffectsPipeline.ts` |
+| Layer Builder | `src/services/layerBuilder/LayerBuilderService.ts` |
+| Video Sync | `src/services/layerBuilder/VideoSyncManager.ts` |
 | Logger | `src/services/logger.ts` |
 | Project Storage | `src/services/project/core/ProjectCoreService.ts` |
+| Engine Hook | `src/hooks/useEngine.ts` |
 
 ### Neuen Effect hinzufügen
 1. Shader in `src/effects/[category]/[name]/shader.wgsl`
@@ -218,22 +267,27 @@ Logger.summary()                // Übersicht für AI
 
 | Source | GPU Type |
 |--------|----------|
-| Video (HTMLVideoElement) | `texture_external` (zero-copy) |
-| Video (VideoFrame) | `texture_external` (zero-copy) |
-| Image | `texture_2d<f32>` (copied once) |
+| Video (HTMLVideoElement) | `texture_external` via `importExternalTexture` (zero-copy) |
+| Video (VideoFrame) | `texture_external` via `importExternalTexture` (zero-copy) |
+| Image (HTMLImageElement) | `texture_2d<f32>` via `copyExternalImageToTexture` (copied once, cached) |
+| Canvas (Text Clips) | `texture_2d<f32>` via `copyExternalImageToTexture` (cached by reference) |
+| Native Decoder Frames | `texture_2d<f32>` dynamic textures (re-uploaded per frame) |
 
 ---
 
 ## 8. Render Pipeline
 
 ```
-useEngine hook
-  └─► engine.start(callback)
-        └─► requestAnimationFrame loop
-              └─► engine.render(layers)
-                    ├─► Import textures
-                    ├─► Composite layers (ping-pong)
-                    └─► Output to canvas
+useEngine hook (src/hooks/useEngine.ts)
+  └── engine.initialize() -> WebGPUContext + all pipelines
+        └── RenderLoop.start()
+              └── requestAnimationFrame loop (idle detection + fps limiting)
+                    └── RenderDispatcher.render(layers)
+                          ├── LayerCollector: Import textures (external/cached/scrubbing)
+                          ├── Compositor: Ping-pong compositing + effects per layer
+                          ├── NestedCompRenderer: Handle compositions-in-compositions
+                          ├── OutputPipeline: Output to preview canvas
+                          └── SlicePipeline: Output to slice/render target canvases
 ```
 
 ---
@@ -260,12 +314,12 @@ useEngine hook
 
 #### Promise.all() für unabhängige Operations
 ```typescript
-// ❌ FALSCH: 3 sequentielle Round-Trips
+// FALSCH: 3 sequentielle Round-Trips
 const user = await fetchUser()
 const posts = await fetchPosts()
 const comments = await fetchComments()
 
-// ✅ RICHTIG: 1 paralleler Round-Trip
+// RICHTIG: 1 paralleler Round-Trip
 const [user, posts, comments] = await Promise.all([
   fetchUser(),
   fetchPosts(),
@@ -275,14 +329,14 @@ const [user, posts, comments] = await Promise.all([
 
 #### Defer Await Until Needed
 ```typescript
-// ❌ FALSCH: blockiert beide Branches
+// FALSCH: blockiert beide Branches
 async function handleRequest(userId: string, skipProcessing: boolean) {
   const userData = await fetchUserData(userId)
   if (skipProcessing) return { skipped: true }
   return processUserData(userData)
 }
 
-// ✅ RICHTIG: fetch nur wenn nötig
+// RICHTIG: fetch nur wenn nötig
 async function handleRequest(userId: string, skipProcessing: boolean) {
   if (skipProcessing) return { skipped: true }
   const userData = await fetchUserData(userId)
@@ -292,13 +346,13 @@ async function handleRequest(userId: string, skipProcessing: boolean) {
 
 #### Strategic Suspense Boundaries
 ```tsx
-// ❌ FALSCH: Ganzes Layout wartet auf Daten
+// FALSCH: Ganzes Layout wartet auf Daten
 async function Page() {
   const data = await fetchData() // Blockiert alles
   return <div><Sidebar /><DataDisplay data={data} /><Footer /></div>
 }
 
-// ✅ RICHTIG: Layout sofort, Daten streamen
+// RICHTIG: Layout sofort, Daten streamen
 function Page() {
   return (
     <div>
@@ -318,15 +372,15 @@ function Page() {
 
 #### Avoid Barrel File Imports (200-800ms Import-Cost!)
 ```tsx
-// ❌ FALSCH: Lädt 1,583 Module
+// FALSCH: Lädt 1,583 Module
 import { Check, X, Menu } from 'lucide-react'
 
-// ✅ RICHTIG: Lädt nur 3 Module
+// RICHTIG: Lädt nur 3 Module
 import Check from 'lucide-react/dist/esm/icons/check'
 import X from 'lucide-react/dist/esm/icons/x'
 import Menu from 'lucide-react/dist/esm/icons/menu'
 
-// ✅ ALTERNATIVE (Next.js 13.5+):
+// ALTERNATIVE (Next.js 13.5+):
 // next.config.js
 module.exports = {
   experimental: {
@@ -337,10 +391,10 @@ module.exports = {
 
 #### Dynamic Imports für Heavy Components
 ```tsx
-// ❌ FALSCH: Monaco im Main Bundle (~300KB)
+// FALSCH: Monaco im Main Bundle (~300KB)
 import { MonacoEditor } from './monaco-editor'
 
-// ✅ RICHTIG: Monaco on-demand
+// RICHTIG: Monaco on-demand
 import dynamic from 'next/dynamic'
 const MonacoEditor = dynamic(
   () => import('./monaco-editor').then(m => m.MonacoEditor),
@@ -361,15 +415,15 @@ export const getCurrentUser = cache(async () => {
   if (!session?.user?.id) return null
   return await db.user.findUnique({ where: { id: session.user.id } })
 })
-// Mehrere Calls → nur 1 Query pro Request
+// Mehrere Calls -> nur 1 Query pro Request
 ```
 
 #### Minimize Serialization at RSC Boundaries
 ```tsx
-// ❌ FALSCH: Serialisiert alle 50 Felder
+// FALSCH: Serialisiert alle 50 Felder
 <Profile user={user} />
 
-// ✅ RICHTIG: Nur 1 Feld
+// RICHTIG: Nur 1 Feld
 <Profile name={user.name} />
 ```
 
@@ -379,12 +433,12 @@ export const getCurrentUser = cache(async () => {
 
 #### Functional setState (verhindert Stale Closures!)
 ```typescript
-// ❌ FALSCH: Braucht items als Dependency
+// FALSCH: Braucht items als Dependency
 const addItems = useCallback((newItems) => {
   setItems([...items, ...newItems])
 }, [items])  // Wird bei jeder Änderung neu erstellt
 
-// ✅ RICHTIG: Stable Callback, kein Stale Closure
+// RICHTIG: Stable Callback, kein Stale Closure
 const addItems = useCallback((newItems) => {
   setItems(curr => [...curr, ...newItems])
 }, [])  // Keine Dependencies nötig
@@ -392,19 +446,19 @@ const addItems = useCallback((newItems) => {
 
 #### Lazy State Initialization
 ```typescript
-// ❌ FALSCH: Läuft bei JEDEM Render
+// FALSCH: Läuft bei JEDEM Render
 const [index, setIndex] = useState(buildSearchIndex(items))
 
-// ✅ RICHTIG: Läuft nur einmal
+// RICHTIG: Läuft nur einmal
 const [index, setIndex] = useState(() => buildSearchIndex(items))
 ```
 
 #### toSorted() statt sort() (verhindert State-Mutation!)
 ```typescript
-// ❌ FALSCH: Mutiert das Original-Array
+// FALSCH: Mutiert das Original-Array
 const sorted = users.sort((a, b) => a.name.localeCompare(b.name))
 
-// ✅ RICHTIG: Erstellt neues Array
+// RICHTIG: Erstellt neues Array
 const sorted = users.toSorted((a, b) => a.name.localeCompare(b.name))
 ```
 
@@ -413,6 +467,6 @@ const sorted = users.toSorted((a, b) => a.name.localeCompare(b.name))
 ### Projekt-spezifische Ergänzungen
 
 Diese Best Practices ergänzen unsere bestehenden Critical Patterns:
-- **Stale Closure Fix** (§4) → Functional setState nutzen
-- **Zustand Slices** → `get()` in Callbacks statt State-Capture
-- **WebGPU Engine** → Heavy Components mit Dynamic Import laden
+- **Stale Closure Fix** (S4) -> Functional setState nutzen
+- **Zustand Slices** -> `get()` in Callbacks statt State-Capture
+- **WebGPU Engine** -> Heavy Components mit Dynamic Import laden

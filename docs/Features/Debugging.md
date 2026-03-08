@@ -10,11 +10,14 @@ The Logger service (`src/services/logger.ts`) provides:
 |---------|-------------|
 | **Log Levels** | DEBUG, INFO, WARN, ERROR with level filtering |
 | **Module Filtering** | Enable debug logs for specific modules only |
-| **In-Memory Buffer** | 500 entries stored for inspection |
+| **In-Memory Buffer** | 500 entries stored for inspection (WARN/ERROR always buffered; DEBUG/INFO only when displayed) |
 | **Global Access** | `window.Logger` available in browser console |
 | **AI-Agent Support** | Structured data for AI code assistants |
-| **Timestamps** | Optional timestamp prefixes |
+| **Timestamps** | Timestamp prefixes (enabled by default) |
 | **Stack Traces** | Automatic capture for errors |
+| **Log Sync** | Auto-syncs logs to dev server in development mode (`window.LogSync`) |
+
+**Default log level: `WARN`** -- only warnings and errors are shown by default. Use `Logger.setLevel('DEBUG')` or `Logger.setLevel('INFO')` for more verbose output.
 
 ---
 
@@ -26,6 +29,7 @@ All commands are available via `window.Logger` or just `Logger` in the browser c
 
 ```javascript
 // Enable debug logs for specific modules (comma-separated)
+// Uses substring matching (case-insensitive)
 Logger.enable('WebGPU,FFmpeg,Export')
 
 // Enable all debug logs
@@ -44,12 +48,14 @@ Logger.setLevel('DEBUG')
 // Show INFO and above (hide DEBUG)
 Logger.setLevel('INFO')
 
-// Show only warnings and errors
+// Show only warnings and errors (DEFAULT)
 Logger.setLevel('WARN')
 
 // Show only errors
 Logger.setLevel('ERROR')
 ```
+
+**Note:** Errors are always displayed regardless of log level. DEBUG messages additionally require the module to be enabled via `Logger.enable()`.
 
 ### Inspect Logs
 
@@ -63,22 +69,23 @@ Logger.getBuffer('ERROR')
 // Get only warnings and errors
 Logger.getBuffer('WARN')
 
-// Search logs by keyword
+// Search logs by keyword (searches message, module name, and data)
 Logger.search('device')
 Logger.search('export')
 
 // Get recent errors only
 Logger.errors()
 
-// Pretty print last N entries
+// Pretty print last N entries (default 50)
 Logger.dump(50)
 
 // Get summary for AI agents
 Logger.summary()
 // Returns: { totalLogs, errorCount, warnCount, recentErrors, activeModules }
 
-// Export all logs as JSON
+// Export all logs as JSON string
 Logger.export()
+// Returns JSON with: config, modules list, and all buffered logs
 ```
 
 ### Status & Configuration
@@ -90,14 +97,14 @@ Logger.status()
 // [Logger] Current Configuration:
 // ┌─────────────────────┬───────────────────────┐
 // │ Debug Enabled       │ WebGPU, FFmpeg        │
-// │ Min Level           │ INFO                  │
+// │ Min Level           │ WARN                  │
 // │ Timestamps          │ true                  │
 // │ Buffer Size         │ 500                   │
 // │ Buffer Used         │ 127                   │
 // │ Registered Modules  │ 45                    │
 // └─────────────────────┴───────────────────────┘
 
-// List all registered modules
+// List all registered modules (sorted alphabetically)
 Logger.modules()
 // Returns: ['AudioEncoder', 'AudioMixer', 'Compositor', 'Export', ...]
 
@@ -106,6 +113,21 @@ Logger.clear()
 
 // Toggle timestamps
 Logger.setTimestamps(false)
+```
+
+### Log Sync (Dev Mode)
+
+In development mode, logs are automatically synced to the dev server every 2 seconds via `POST /api/logs`. Control this with `window.LogSync`:
+
+```javascript
+// Check sync status
+LogSync.status()   // 'running' or 'stopped'
+
+// Stop syncing
+LogSync.stop()
+
+// Start syncing
+LogSync.start()
 ```
 
 ---
@@ -121,10 +143,10 @@ import { Logger } from '@/services/logger';
 const log = Logger.create('MyModule');
 
 // Log at different levels
-log.debug('Verbose debugging info', { data });  // Only shows if DEBUG enabled
-log.info('Important event');                     // Always shows (unless level > INFO)
-log.warn('Warning message', data);               // Orange in console
-log.error('Error occurred', error);              // Red, always shows, captures stack
+log.debug('Verbose debugging info', { data });  // Only shows if module enabled AND level <= DEBUG
+log.info('Important event');                     // Shows if level <= INFO
+log.warn('Warning message', data);               // Orange in console, always buffered
+log.error('Error occurred', error);              // Red, always shows, always buffered, captures stack
 ```
 
 ### Timing Helper
@@ -152,7 +174,7 @@ log.group('Rendering frame 42', () => {
   log.debug('Applying effects');
   log.debug('Compositing');
 });
-// Output is grouped in console when DEBUG enabled
+// Output is grouped in console when DEBUG enabled for this module
 ```
 
 ---
@@ -168,6 +190,9 @@ Modules are named after their file or class:
 | `AudioEncoder.ts` | `AudioEncoder` |
 | `ProjectCoreService.ts` | `ProjectCore` |
 | `Timeline.tsx` | `Timeline` |
+| `Toolbar.tsx` | `Toolbar` |
+| `PerformanceMonitor.ts` | `PerformanceMonitor` |
+| `useGlobalHistory.ts` | `History` |
 
 ### Common Module Groups
 
@@ -203,7 +228,7 @@ const summary = Logger.summary();
 //   errorCount: 2,
 //   warnCount: 5,
 //   recentErrors: [...last 10 errors...],
-//   activeModules: ['WebGPUEngine', 'Export', 'FFmpegBridge']
+//   activeModules: ['WebGPUEngine', 'Export', 'FFmpegBridge']  // modules from last 100 log entries
 // }
 ```
 
@@ -219,7 +244,7 @@ Logger.search('permission denied')
 ### Export for Analysis
 
 ```javascript
-// Get full log data as JSON
+// Get full log data as JSON string
 const logData = Logger.export();
 // Contains: config, modules, and all buffered logs
 ```
@@ -236,10 +261,20 @@ interface LogEntry {
   level: LogLevel;      // 'DEBUG' | 'INFO' | 'WARN' | 'ERROR'
   module: string;       // Module name
   message: string;      // Log message
-  data?: unknown;       // Optional attached data
+  data?: unknown;       // Optional attached data (Error objects serialized to {name, message})
   stack?: string;       // Stack trace (for errors)
 }
 ```
+
+---
+
+## Buffering Behavior
+
+To avoid excessive memory allocations from high-frequency debug logs (e.g., per-frame render logs), the buffer uses a selective strategy:
+
+- **WARN and ERROR** entries are always buffered (for post-mortem debugging)
+- **DEBUG and INFO** entries are only buffered when they are actually displayed (module enabled + level threshold met)
+- Buffer is a FIFO ring of 500 entries max
 
 ---
 
@@ -247,7 +282,8 @@ interface LogEntry {
 
 Logger configuration is saved to `localStorage`:
 
-- `logger_config` - Stores enabled modules, level, timestamps setting
+- Key: `logger_config`
+- Stores: enabled modules, level, timestamps setting, buffer size
 
 Configuration persists across page refreshes.
 
@@ -260,19 +296,37 @@ In addition to the Logger, MASterSelects includes performance monitoring:
 ### PerformanceStats (`src/engine/stats/PerformanceStats.ts`)
 
 Tracks:
-- Frame rate (FPS)
-- RAF gap (requestAnimationFrame latency)
+- Frame rate (FPS) - updated every 250ms
+- RAF gap (requestAnimationFrame latency) - exponential moving average
 - Texture import time
 - Render pass time
 - Submit time
-- Frame drops and drop reasons
+- Frame drops and drop reasons (`slow_raf`, `slow_import`, `slow_render`)
+- Decoder type and WebCodecs info
+- Audio status
+- Layer count
+
+Frame drops are detected when RAF gap exceeds 2x the target frame time (33.3ms at 60fps). During scrubbing, the baseline is adjusted to 33ms (intentional 30fps limit).
 
 ### PerformanceMonitor (`src/services/performanceMonitor.ts`)
 
-- Auto-starts with the application
-- Detects slow frames (>100ms threshold)
-- Auto-resets quality parameters after 5+ slow frames
-- Provides callback system for performance events
+- Auto-starts when the module is imported
+- Checks every 500ms for slow frames (>100ms threshold)
+- After 5 consecutive slow frames, automatically resets quality parameters to defaults
+- Provides callback system for performance events via `onSlowPerformance(callback)`
+- Quality parameters are identified by the `quality` flag in effect parameter definitions
+
+Available exports:
+```typescript
+import {
+  startPerformanceMonitor,
+  stopPerformanceMonitor,
+  reportRenderTime,
+  resetAllQualityParams,
+  onSlowPerformance,
+  isPerformanceMonitorActive,
+} from '@/services/performanceMonitor';
+```
 
 ---
 
@@ -283,25 +337,36 @@ Tracks:
 **Black preview / No rendering:**
 ```javascript
 Logger.enable('WebGPU,Compositor,RenderLoop')
+Logger.setLevel('DEBUG')
 // Check for device issues, texture errors
 ```
 
 **Export fails:**
 ```javascript
 Logger.enable('Export,FrameExporter,VideoEncoder,FFmpeg')
+Logger.setLevel('DEBUG')
 // Check for encoding errors, codec issues
 ```
 
 **Audio out of sync:**
 ```javascript
 Logger.enable('Audio,AudioMixer,TimeStretch')
+Logger.setLevel('DEBUG')
 // Check for timing issues
 ```
 
 **File import problems:**
 ```javascript
 Logger.enable('Media,Import,Project')
+Logger.setLevel('DEBUG')
 // Check for file access, format issues
+```
+
+**Performance issues:**
+```javascript
+Logger.enable('PerformanceMonitor')
+Logger.setLevel('DEBUG')
+// Check for slow frame warnings and quality resets
 ```
 
 ---
@@ -330,6 +395,8 @@ Logger.enable('Media,Import,Project')
 
 5. **Don't log sensitive data** (API keys, user data)
 
+6. **Remember the default level is WARN** -- add `Logger.setLevel('DEBUG')` when troubleshooting
+
 ---
 
-*Documentation updated January 2026*
+*Updated March 2026 - verified against codebase*

@@ -15,7 +15,7 @@ Text clips allow you to add text overlays directly to your timeline with full ty
 
 Text clips display with a distinctive purple gradient to differentiate them from video/image clips. The clip shows:
 - A "T" icon indicator
-- Preview of the first 30 characters of text content
+- Preview of the first 20 characters of text content
 - Duration display
 
 ## Text Properties Panel
@@ -23,8 +23,8 @@ Text clips display with a distinctive purple gradient to differentiate them from
 When a text clip is selected, the Properties Panel shows a **Text** tab with full typography controls:
 
 ### Content Section
-- **Textarea**: Multi-line text input
-- Live preview updates as you type
+- **Textarea**: Multi-line text input (2 rows)
+- Live preview updates as you type (50ms debounce)
 
 ### Font Section
 
@@ -32,12 +32,11 @@ When a text clip is selected, the Properties Panel shows a **Text** tab with ful
 |---------|-------------|-------|
 | **Family** | Google Font selection | 50 fonts available |
 | **Size** | Font size in pixels | 8-500px |
-| **Weight** | Font weight | 100 (Thin) to 900 (Black) |
+| **Weight** | Font weight (auto-adjusts to nearest available for selected font) | 100 (Thin) to 900 (Black) |
 | **Style** | Normal or Italic | Normal / Italic |
 
 ### Color Section
-- **Fill**: Color picker for text fill color
-- Supports hex color input
+- **Fill**: Color picker + hex text input for text fill color
 
 ### Alignment Section
 
@@ -50,7 +49,7 @@ When a text clip is selected, the Properties Panel shows a **Text** tab with ful
 
 | Control | Description | Range |
 |---------|-------------|-------|
-| **Line Height** | Line spacing multiplier | 0.5 - 3.0 |
+| **Line Height** | Line spacing multiplier | 0.5 - 3.0 (step 0.1) |
 | **Letter Spacing** | Space between characters | -10 to 50px |
 
 ### Stroke (Outline) Section
@@ -60,7 +59,7 @@ Enable with checkbox, then configure:
 | Control | Description | Range |
 |---------|-------------|-------|
 | **Color** | Stroke color | Color picker |
-| **Width** | Stroke width | 1-20px |
+| **Width** | Stroke width | 0.5-20px (step 0.5) |
 
 ### Shadow Section
 
@@ -73,27 +72,24 @@ Enable with checkbox, then configure:
 | **Offset Y** | Vertical offset | -50 to 50px |
 | **Blur** | Shadow blur radius | 0-50px |
 
-### Preview Section
-Live font preview showing current text with all styling applied (scaled down).
-
 ## Available Fonts
 
 The 50 most popular Google Fonts are available, organized by category:
 
-### Sans-Serif
-Roboto, Open Sans, Lato, Montserrat, Poppins, Inter, Nunito, Work Sans, Rubik, Source Sans Pro, Raleway, Oswald, Nunito Sans, Josefin Sans, Quicksand, Mukta, Barlow, Ubuntu, Archivo, Karla
+### Sans-Serif (20)
+Roboto, Open Sans, Lato, Montserrat, Poppins, Inter, Oswald, Raleway, Nunito, Ubuntu, Rubik, Work Sans, Nunito Sans, Quicksand, Mulish, Barlow, Manrope, IBM Plex Sans, Source Sans 3, DM Sans
 
-### Serif
-Playfair Display, Lora, Merriweather, PT Serif, Noto Serif, Libre Baskerville, Crimson Text, Cormorant Garamond, EB Garamond
+### Serif (10)
+Playfair Display, Merriweather, Lora, PT Serif, Libre Baskerville, Bitter, EB Garamond, Crimson Text, Cormorant Garamond, Libre Caslon Text
 
-### Display
-Bebas Neue, Anton, Righteous, Lobster, Permanent Marker, Abril Fatface, Pacifico
+### Display (10)
+Bebas Neue, Anton, Archivo Black, Righteous, Alfa Slab One, Bungee, Abril Fatface, Fredoka One, Titan One, Permanent Marker
 
-### Handwriting
-Dancing Script, Caveat, Satisfy, Great Vibes, Indie Flower, Kaushan Script, Sacramento, Cookie
+### Handwriting (5)
+Dancing Script, Pacifico, Caveat, Great Vibes, Sacramento
 
-### Monospace
-Fira Code, Source Code Pro, JetBrains Mono, Roboto Mono, Inconsolata
+### Monospace (5)
+Roboto Mono, Source Code Pro, Fira Code, JetBrains Mono, Space Mono
 
 ## GPU Rendering
 
@@ -105,7 +101,7 @@ Text clips use a hybrid rendering approach:
 
 This approach means:
 - All 37 blend modes work with text
-- All 9 GPU effects can be applied
+- All 30 GPU effects can be applied (across 8 categories: color, blur, distort, stylize, generate, keying, time, transition)
 - Masks work normally (including feathered masks)
 - Transform animations (position, scale, rotation) work
 - Keyframe animation is fully supported
@@ -139,10 +135,11 @@ Text clips are fully persisted when saving projects:
 
 | File | Purpose |
 |------|---------|
-| `src/services/googleFontsService.ts` | Font loading via CSS injection |
-| `src/services/textRenderer.ts` | Canvas2D text rendering |
+| `src/services/googleFontsService.ts` | Font loading via CSS link injection |
+| `src/services/textRenderer.ts` | Canvas2D text rendering (normal, letter-spacing, text-on-path) |
 | `src/components/panels/TextTab.tsx` | Properties panel UI |
-| `src/stores/timeline/clipSlice.ts` | addTextClip, updateTextProperties |
+| `src/stores/timeline/textClipSlice.ts` | addTextClip, updateTextProperties |
+| `src/types/index.ts` | TextClipProperties interface |
 
 ### TextClipProperties Type
 
@@ -167,7 +164,7 @@ interface TextClipProperties {
   shadowOffsetY: number;
   shadowBlur: number;
   pathEnabled: boolean;
-  pathPoints: PathPoint[];
+  pathPoints: { x: number; y: number; handleIn: { x: number; y: number }; handleOut: { x: number; y: number } }[];
 }
 ```
 
@@ -175,9 +172,7 @@ interface TextClipProperties {
 
 ## Tests
 
-| Test File | Tests | Coverage |
-|-----------|-------|----------|
-| [`clipSlice.test.ts`](../../tests/stores/timeline/clipSlice.test.ts) | 104 | Text clip operations (included in clip tests) |
+No dedicated text clip unit tests. Text clip operations are tested indirectly via integration.
 
 Run tests: `npx vitest run`
 
@@ -186,7 +181,7 @@ Run tests: `npx vitest run`
 ## Future Enhancements
 
 Planned but not yet implemented:
-- Text on bezier path (curved text)
+- Text on bezier path **UI** (rendering engine supports it via `pathEnabled`/`pathPoints`, but no UI controls in TextTab yet)
 - Per-character animation
 - Text presets/styles library
 - Gradient fills

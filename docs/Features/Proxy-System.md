@@ -1,8 +1,8 @@
 # Proxy System
 
-[← Back to Index](./README.md)
+[<- Back to Index](./README.md)
 
-GPU-accelerated proxy generation for smooth editing of large video files.
+WebCodecs-accelerated proxy generation for smooth editing of large video files.
 
 ---
 
@@ -10,7 +10,6 @@ GPU-accelerated proxy generation for smooth editing of large video files.
 
 - [Overview](#overview)
 - [Proxy Generation](#proxy-generation)
-- [Cross-Platform Support](#cross-platform-support)
 - [Proxy Playback](#proxy-playback)
 - [Storage](#storage)
 - [Configuration](#configuration)
@@ -37,41 +36,40 @@ Large video files (4K, high bitrate) can be slow to scrub. Proxies provide:
 ### Starting Generation
 1. Right-click video in Media Panel
 2. Select "Generate Proxy"
-3. Choose storage folder (first time)
-4. Generation starts in background
+3. Generation starts in background (proxies stored in project folder automatically)
 
-### Generation Process (GPU-Accelerated)
-The proxy generator uses a rewritten pipeline for maximum speed:
+### Generation Process (WebCodecs + Parallel Canvas)
+The proxy generator uses a pipeline for maximum speed:
 
-1. **Video Decoding**: WebCodecs VideoDecoder with hardware acceleration
-2. **GPU Batch Resize**: Frames rendered to texture atlas per batch
-3. **Single Buffer Readback**: GPU→CPU transfer per batch
-4. **Parallel JPEG Encoding**: Worker pool encodes frames simultaneously
-
-**Performance**: 4-10x faster than CPU-only processing
+1. **Video Demuxing**: MP4Box parses the video container and extracts samples
+2. **Video Decoding**: WebCodecs VideoDecoder with hardware acceleration
+3. **Parallel Canvas Resize**: Pool of 8 OffscreenCanvases resize frames in parallel
+4. **JPEG Encoding**: Each canvas independently does `drawImage` then `convertToBlob` to JPEG
 
 ### Resume from Disk
 - Proxy generation can be interrupted and **resumed from disk**
 - If generation is interrupted (browser close, crash), it picks up where it left off
-- Already-generated frames on disk are skipped automatically
+- Already-generated frame indices on disk are skipped automatically
 - No need to start over from scratch
 
 ### Technical Details
-- **Max Resolution**: 1280px width (configurable)
-- **Batch Size**: 16 frames per GPU pass
-- **Output Format**: WebP at 92% quality
+- **Max Resolution**: 1280px width (maintains aspect ratio)
+- **Canvas Pool Size**: 8 parallel encoding canvases
+- **Decode Batch Size**: 30 samples fed at a time before yielding
+- **Output Format**: JPEG at 82% quality
 - **Frame Rate**: 30 fps proxy
+- **Fallback**: If decode fails with codec description, retries without description
 
 ### Automatic Project Folder Storage
 Proxies are automatically stored in your project folder:
 ```
 MyProject/
-└── Proxy/
-    └── {mediaHash}/
-        └── frames/
-            ├── 000000.webp
-            ├── 000001.webp
-            └── ...
+  Proxy/
+    {mediaHash}/
+      frames/
+        000000.jpg
+        000001.jpg
+        ...
 ```
 
 No folder picker needed - proxies go directly to project folder.
@@ -81,32 +79,10 @@ No folder picker needed - proxies go directly to project folder.
 - Frames available immediately
 - Falls back to original for missing frames
 
----
-
-## Cross-Platform Support
-
-### Windows (NVIDIA)
-Streaming decode mode for Windows NVIDIA GPUs:
-- Processes frames during decoding (not after)
-- Releases decoder buffer memory as frames complete
-- Active wait loop handles slow hardware decoders
-- Prevents stalling on limited DPB (Decoded Picture Buffer)
-
-### Linux
-Standard high-performance decode:
-- Hardware-accelerated via VA-API/VDPAU
-- Batch processing for maximum throughput
-
-### macOS
-- VideoToolbox hardware decoding
-- Same streaming approach as Windows
-
-### Performance Tips
-| Issue | Solution |
-|-------|----------|
-| Slow on Windows | Uses streaming decode automatically |
-| Stalls at 0% | Check GPU drivers, try different video |
-| Black frames | Verify WebCodecs support |
+### Audio Extraction
+- After video proxy frames complete, audio is extracted in the background (non-blocking)
+- Audio proxy is stored separately via `projectFileService.saveProxyAudio()`
+- Audio extraction failures are non-fatal
 
 ---
 
@@ -144,12 +120,11 @@ Proxies stored in your project folder:
 ```
 ProjectFolder/Proxy/{mediaHash}/frames/
 ```
-- `{mediaHash}` = SHA-256 of file content
+- `{mediaHash}` = content hash of file (first 2MB)
 - Same file imported twice shares proxies
 - Portable with project folder
 
 ### Storage Requirements
-- ~10-20% of original video size
 - Depends on proxy resolution (1280px max)
 - Delete `Proxy/` folder to reclaim space
 
@@ -157,66 +132,66 @@ ProjectFolder/Proxy/{mediaHash}/frames/
 Files are identified by content hash:
 - Same video = same proxies
 - Re-import doesn't regenerate
-- Thumbnails also deduplicated
 
 ---
 
 ## Configuration
 
-### Default Settings
-- Proxy generation disabled by default
-- Enable in settings
-- Or generate manually per-file
+### Proxy Mode Toggle
+- Proxy mode starts disabled (`proxyEnabled: false`)
+- Toggle enables/disables proxy playback
+- When enabled, all video elements are muted and paused (proxy frames replace video playback)
 
-### Toggle Proxy Mode
-When proxies exist:
-- Preview uses proxy
-- Toggle to show original
-- Useful for quality check
-
-### Proxy Resolution
-- Lower resolution than original
-- Typically 1/4 or 1/2 size
-- Configurable in settings
+### Proxy Completion
+- Proxy is considered complete when >= 98% of expected frames are generated
+- Completion check: `frameCount >= Math.ceil(duration * 30) * 0.98`
 
 ---
 
 ## Background Processing
 
 ### Progress Indication
-- Shows in background tasks
+- Shows generation progress as percentage
 - Frame count progress
-- Cancelable
+- Cancelable (preserves partial proxy as "ready" if frames exist)
 
 ### Resource Usage
-- GPU accelerated
+- WebCodecs hardware-accelerated decoding
 - Doesn't block UI
 - Can edit while generating
-
-### Logging
-Background process logging shows:
-- Generation progress
-- Frame timing
-- Completion status
+- Only one proxy generates at a time (`currentlyGeneratingProxyId` gate)
 
 ---
 
 ## Troubleshooting
 
 ### Proxy Not Used
-- Check if proxy exists
-- Verify folder access
+- Check if proxy mode is enabled
+- Verify proxy status is 'ready'
 - Check file permissions
 
 ### Slow Generation
-- GPU acceleration required
+- WebCodecs hardware acceleration required
 - Check chrome://gpu
 - Large files take time
 
 ### Storage Full
-- Delete old proxies
-- Choose different folder
+- Delete old proxies (remove `Proxy/` folder in project)
 - Check disk space
+
+---
+
+## Technical Implementation
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `src/services/proxyGenerator.ts` | `ProxyGeneratorWebCodecs` class - MP4Box demuxing + WebCodecs decode + parallel canvas JPEG encode |
+| `src/stores/mediaStore/slices/proxySlice.ts` | Zustand slice: generateProxy, cancelProxyGeneration, proxy state management |
+| `src/stores/mediaStore/constants.ts` | `PROXY_FPS = 30` |
+| `src/services/projectFileService.ts` | Disk I/O: saveProxyFrame, getProxyFrameCount, getProxyFrameIndices |
+| `src/services/audioExtractor.ts` | Audio proxy extraction (lazy-imported) |
 
 ---
 
@@ -231,8 +206,6 @@ Background process logging shows:
 
 ## Tests
 
-No dedicated unit tests — this feature requires hardware-dependent APIs (WebCodecs, GPU batch resize) that cannot be easily mocked.
+No dedicated unit tests -- this feature requires hardware-dependent APIs (WebCodecs, OffscreenCanvas) that cannot be easily mocked.
 
 ---
-
-*Commits: 82db433 through d63e381*

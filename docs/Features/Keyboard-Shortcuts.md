@@ -14,11 +14,10 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 | `J` | Reverse playback (press multiple times for faster) |
 | `K` | Pause playback |
 | `L` | Forward playback (press multiple times for faster) |
+| `Shift + L` | Toggle loop playback |
 | `I` | Set In point at playhead |
 | `O` | Set Out point at playhead |
 | `X` | Clear In/Out points |
-| `Home` | Go to start of timeline |
-| `End` | Go to end of timeline |
 
 ---
 
@@ -26,11 +25,11 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 
 | Shortcut | Action |
 |----------|--------|
-| `Scroll` | Vertical scroll |
+| `Scroll` | Vertical scroll (snaps to track boundaries) |
 | `Shift + Scroll` | Horizontal scroll |
-| `Alt + Scroll` | Zoom (centered on playhead) |
-| `Alt + Scroll` | Zoom (exponential 8% per step, centered on playhead) |
-| `←` / `→` | Frame-by-frame |
+| `Ctrl + Scroll` or `Alt + Scroll` | Zoom (exponential 8% per step, centered on playhead) |
+| `Ctrl + Shift + Scroll` | Toggle slot grid view (animated transition) |
+| `←` / `→` | Frame-by-frame navigation |
 
 ---
 
@@ -38,13 +37,14 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 
 | Shortcut | Action |
 |----------|--------|
-| `C` | Cut tool - split clips at playhead (with snapping) |
-| `Alt + C` | Cut without snapping |
-| `Ctrl + C` | Copy selected clips or keyframes |
-| `Ctrl + V` | Paste clips or keyframes at playhead |
+| `C` | Toggle cut tool mode (click clips to split them) |
+| `Shift + C` | Split clip at playhead position |
+| `Ctrl + C` | Copy selected keyframes (or clips if no keyframes selected) |
+| `Ctrl + V` | Paste keyframes at playhead (falls back to paste clips if no keyframes in clipboard) |
 | `Delete` / `Backspace` | Delete selected (keyframes first, then clips) |
+| `M` | Add marker at playhead |
 | `Tab` | Toggle edit mode in preview |
-| `Escape` | Deselect all |
+| `Escape` | Exit cut tool mode (return to select tool) |
 
 ---
 
@@ -58,7 +58,7 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 | Linked clip select | Click (selects both video + audio) |
 | Independent select | `Shift + Click` linked clip |
 | Move multi-selection | Drag any selected clip |
-| Deselect | Click empty or `Escape` |
+| Deselect | Click empty area or marquee in empty area |
 
 ---
 
@@ -80,10 +80,10 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 
 | Shortcut | Action |
 |----------|--------|
-| `Shift + +` | Next blend mode |
-| `Shift + -` | Previous blend mode |
-| `Numpad +` | Next blend mode (alternative) |
-| `Numpad -` | Previous blend mode (alternative) |
+| `+` | Next blend mode (any method: Shift+=, Numpad+, direct + key) |
+| `-` | Previous blend mode (any method: -, Numpad-, Shift+_ ) |
+
+Applies to all selected clips. Cycles through all blend modes.
 
 ---
 
@@ -93,9 +93,11 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 |----------|--------|
 | `Ctrl + N` | New Project |
 | `Ctrl + S` | Save Project |
-| `Ctrl + O` | Open (shows file menu) |
+| `Ctrl + Shift + S` | Save As (new project name) |
+| `Ctrl + O` | Open Project |
 | `Ctrl + Z` | Undo |
 | `Ctrl + Shift + Z` | Redo |
+| `Ctrl + Y` | Redo (alternative) |
 
 ---
 
@@ -107,25 +109,31 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 | + Scroll | Horizontal scroll |
 | + Drag playhead | Snap to keyframes |
 | + Drag keyframe | Fine control (10x slower) |
-| + `+`/`-` | Cycle blend modes |
+| + `C` | Split clip at playhead |
+| + `L` | Toggle loop playback |
 | + Marquee | Extend selection |
 | + Drag curve handle | Constrain horizontal |
 
 ### Alt Key
 | Context | Effect |
 |---------|--------|
-| + Scroll | Zoom timeline |
+| + Scroll | Zoom timeline (same as Ctrl+Scroll) |
 | + Drag clip | Skip linked clip movement |
 | + Drag in group | Skip group movement |
 
 ### Ctrl/Cmd Key
 | Context | Effect |
 |---------|--------|
+| + Scroll | Zoom timeline (same as Alt+Scroll) |
+| + Shift + Scroll | Toggle slot grid view |
 | + Click | Add/remove from selection |
 | + `Z` | Undo |
 | + `Shift + Z` | Redo |
+| + `Y` | Redo (alternative) |
 | + `S` | Save |
+| + `Shift + S` | Save As |
 | + `N` | New Project |
+| + `O` | Open Project |
 
 ---
 
@@ -179,13 +187,15 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 │           PLAYBACK                      │
 │  Space = Play    J/K/L = Shuttle       │
 │  I/O = In/Out    X = Clear I/O         │
-│  Home/End = Start/End of timeline      │
+│  Shift+L = Toggle Loop                 │
 ├─────────────────────────────────────────┤
 │           EDITING                       │
-│  C = Cut/Split   Del = Delete          │
+│  C = Cut Tool    Shift+C = Split       │
+│  M = Add Marker  Del = Delete          │
 │  Ctrl+C = Copy   Ctrl+V = Paste        │
 │  Ctrl+Z = Undo   Ctrl+Shift+Z = Redo   │
-│  Tab = Edit Mode                        │
+│  Ctrl+Y = Redo   Tab = Edit Mode       │
+│  Esc = Exit Cut Tool                   │
 ├─────────────────────────────────────────┤
 │           SELECTION                     │
 │  Shift+Click = Multi-select            │
@@ -193,14 +203,17 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 ├─────────────────────────────────────────┤
 │           PROJECT                       │
 │  Ctrl+N = New    Ctrl+S = Save         │
+│  Ctrl+O = Open   Ctrl+Shift+S = SaveAs │
 ├─────────────────────────────────────────┤
 │           NAVIGATION                    │
-│  Alt+Scroll = Zoom (exponential)       │
+│  Ctrl/Alt+Scroll = Zoom (exponential)  │
 │  Shift+Scroll = H-Scroll               │
+│  Ctrl+Shift+Scroll = Slot Grid Toggle  │
+│  ← / → = Frame-by-frame               │
 ├─────────────────────────────────────────┤
 │           BLEND MODES                   │
-│  Shift++ = Next  Shift+- = Previous    │
-│  Numpad+/- = Cycle blend modes         │
+│  + = Next    - = Previous              │
+│  (Numpad, Shift+=, or direct + key)    │
 └─────────────────────────────────────────┘
 ```
 
@@ -225,4 +238,4 @@ Run tests: `npx vitest run`
 
 ---
 
-*Compiled from codebase analysis*
+*Updated March 2026 - verified against codebase*
