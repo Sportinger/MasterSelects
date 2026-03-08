@@ -11,6 +11,7 @@ import { Logger } from '../../services/logger';
 import { ClipWaveform } from './components/ClipWaveform';
 import { ClipAnalysisOverlay } from './components/ClipAnalysisOverlay';
 import { FadeCurve } from './components/FadeCurve';
+import { useThumbnailCache } from '../../hooks/useThumbnailCache';
 
 const log = Logger.create('TimelineClip');
 
@@ -56,7 +57,6 @@ function TimelineClipComponent({
   pixelToTime,
   formatTime,
 }: TimelineClipProps) {
-  const thumbnails = clip.thumbnails || [];
   const thumbnailsEnabled = useTimelineStore(s => s.thumbnailsEnabled);
   const waveformsEnabled = useTimelineStore(s => s.waveformsEnabled);
 
@@ -265,6 +265,20 @@ function TimelineClipComponent({
 
   // Calculate how many thumbnails to show based on clip width
   const visibleThumbs = Math.max(1, Math.ceil(width / THUMB_WIDTH));
+
+  // Source-based thumbnail cache: pull thumbnails from cache by mediaFileId
+  const sourceMediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
+  const isCompositionWithSegments = clip.isComposition && clip.clipSegments && clip.clipSegments.length > 0;
+  const useSourceCache = !!sourceMediaFileId && !isAudioClip && !isCompositionWithSegments;
+  const cachedThumbnails = useThumbnailCache(
+    useSourceCache ? sourceMediaFileId : undefined,
+    displayInPoint,
+    displayOutPoint,
+    visibleThumbs,
+    clip.reversed
+  );
+  // Fallback to clip.thumbnails for compositions/legacy clips without mediaFileId
+  const legacyThumbnails = clip.thumbnails || [];
 
   // Track filtering
   if (isDragging && clipDrag && clipDrag.currentTrackId !== trackId) {
@@ -628,20 +642,12 @@ function TimelineClipComponent({
           })}
         </div>
       )}
-      {/* Regular thumbnail filmstrip - for non-composition clips */}
-      {thumbnailsEnabled && thumbnails.length > 0 && !isAudioClip && !(clip.isComposition && clip.clipSegments && clip.clipSegments.length > 0) && (
+      {/* Regular thumbnail filmstrip - source-based cache or legacy fallback */}
+      {thumbnailsEnabled && !isAudioClip && !isCompositionWithSegments && (useSourceCache ? cachedThumbnails.some(Boolean) : legacyThumbnails.length > 0) && (
         <div className="clip-thumbnails">
-          {Array.from({ length: visibleThumbs }).map((_, i) => {
-            // Calculate thumbnail index based on displayInPoint/displayOutPoint (trim-aware, live during trim)
-            const naturalDuration = clip.source?.naturalDuration || clip.duration;
-            const startRatio = displayInPoint / naturalDuration;
-            const endRatio = displayOutPoint / naturalDuration;
-            // Map visible position to the trimmed range in source media
-            const positionInTrimmed = i / visibleThumbs;
-            const sourceRatio = startRatio + positionInTrimmed * (endRatio - startRatio);
-            const thumbIndex = Math.floor(sourceRatio * thumbnails.length);
-            const thumb = thumbnails[Math.min(Math.max(0, thumbIndex), thumbnails.length - 1)];
-            return (
+          {useSourceCache ? (
+            // Source-based cache: thumbnails already mapped to visible range by hook
+            cachedThumbnails.map((thumb, i) => thumb ? (
               <img
                 key={i}
                 src={thumb}
@@ -649,8 +655,30 @@ function TimelineClipComponent({
                 className="clip-thumb"
                 draggable={false}
               />
-            );
-          })}
+            ) : (
+              <div key={i} className="clip-thumb clip-thumb-placeholder" />
+            ))
+          ) : (
+            // Legacy fallback for clips without mediaFileId (compositions, old projects)
+            Array.from({ length: visibleThumbs }).map((_, i) => {
+              const naturalDuration = clip.source?.naturalDuration || clip.duration;
+              const startRatio = displayInPoint / naturalDuration;
+              const endRatio = displayOutPoint / naturalDuration;
+              const positionInTrimmed = i / visibleThumbs;
+              const sourceRatio = startRatio + positionInTrimmed * (endRatio - startRatio);
+              const thumbIndex = Math.floor(sourceRatio * legacyThumbnails.length);
+              const thumb = legacyThumbnails[Math.min(Math.max(0, thumbIndex), legacyThumbnails.length - 1)];
+              return (
+                <img
+                  key={i}
+                  src={thumb}
+                  alt=""
+                  className="clip-thumb"
+                  draggable={false}
+                />
+              );
+            })
+          )}
         </div>
       )}
       {/* Nested composition clip boundary markers */}

@@ -6,7 +6,7 @@ import { Logger } from './logger';
 const log = Logger.create('ProjectDB');
 
 const DB_NAME = 'MASterSelectsDB';
-const DB_VERSION = 5; // Upgraded for fileHash proxy deduplication
+const DB_VERSION = 6; // Upgraded for source-based thumbnail cache
 
 // Store names
 const STORES = {
@@ -16,7 +16,17 @@ const STORES = {
   FS_HANDLES: 'fsHandles', // Store for FileSystemHandles (directories, files)
   ANALYSIS_CACHE: 'analysisCache', // Cache for clip analysis data
   THUMBNAILS: 'thumbnails', // Deduplicated thumbnails by file hash
+  SOURCE_THUMBNAILS: 'sourceThumbnails', // 1-per-second source thumbnail cache
 } as const;
+
+// Source thumbnail: 1 per second per source media file
+export interface StoredSourceThumbnail {
+  id: string;            // Format: "${mediaFileId}_${secondIndex}" e.g., "abc123_000042"
+  mediaFileId: string;   // Source media file ID
+  fileHash?: string;     // For deduplication across re-imports
+  secondIndex: number;   // Which second (0-based)
+  blob: Blob;            // JPEG blob (~2-5KB each at 160x90)
+}
 
 // Thumbnail stored by file hash for deduplication
 export interface StoredThumbnail {
@@ -193,6 +203,13 @@ class ProjectDatabase {
         // Create thumbnails store for deduplication (new in v5)
         if (!db.objectStoreNames.contains(STORES.THUMBNAILS)) {
           db.createObjectStore(STORES.THUMBNAILS, { keyPath: 'fileHash' });
+        }
+
+        // Create source thumbnails store (new in v6)
+        if (!db.objectStoreNames.contains(STORES.SOURCE_THUMBNAILS)) {
+          const srcThumbStore = db.createObjectStore(STORES.SOURCE_THUMBNAILS, { keyPath: 'id' });
+          srcThumbStore.createIndex('mediaFileId', 'mediaFileId', { unique: false });
+          srcThumbStore.createIndex('fileHash', 'fileHash', { unique: false });
         }
 
         log.info('Database schema created/upgraded');
@@ -770,6 +787,92 @@ class ProjectDatabase {
         log.info('All analysis cache cleared');
         resolve();
       };
+      request.onerror = () => reject(request.error);
+    });
+  }
+  // ============ Source Thumbnails (1-per-second cache) ============
+
+  /** Save a batch of source thumbnails */
+  async saveSourceThumbnailsBatch(frames: StoredSourceThumbnail[]): Promise<void> {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.SOURCE_THUMBNAILS, 'readwrite');
+      const store = transaction.objectStore(STORES.SOURCE_THUMBNAILS);
+
+      for (const frame of frames) {
+        store.put(frame);
+      }
+
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  }
+
+  /** Get all source thumbnails for a media file */
+  async getSourceThumbnails(mediaFileId: string): Promise<StoredSourceThumbnail[]> {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.SOURCE_THUMBNAILS, 'readonly');
+      const store = transaction.objectStore(STORES.SOURCE_THUMBNAILS);
+      try {
+        const index = store.index('mediaFileId');
+        const request = index.getAll(mediaFileId);
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => reject(request.error);
+      } catch {
+        resolve([]);
+      }
+    });
+  }
+
+  /** Get source thumbnails by file hash (for deduplication) */
+  async getSourceThumbnailsByHash(fileHash: string): Promise<StoredSourceThumbnail[]> {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.SOURCE_THUMBNAILS, 'readonly');
+      const store = transaction.objectStore(STORES.SOURCE_THUMBNAILS);
+      try {
+        const index = store.index('fileHash');
+        const request = index.getAll(fileHash);
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => reject(request.error);
+      } catch {
+        resolve([]);
+      }
+    });
+  }
+
+  /** Delete all source thumbnails for a media file */
+  async deleteSourceThumbnails(mediaFileId: string): Promise<void> {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.SOURCE_THUMBNAILS, 'readwrite');
+      const store = transaction.objectStore(STORES.SOURCE_THUMBNAILS);
+      const index = store.index('mediaFileId');
+      const request = index.openCursor(mediaFileId);
+
+      request.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+        if (cursor) {
+          cursor.delete();
+          cursor.continue();
+        }
+      };
+
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  }
+
+  /** Clear all source thumbnails */
+  async clearAllSourceThumbnails(): Promise<void> {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.SOURCE_THUMBNAILS, 'readwrite');
+      const store = transaction.objectStore(STORES.SOURCE_THUMBNAILS);
+      const request = store.clear();
+
+      request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
   }
