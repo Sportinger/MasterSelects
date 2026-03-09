@@ -72,6 +72,10 @@ tools/native-helper/ffmpeg/
 
 # Project folders (user media)
 Wonder/
+_fremd/
+
+# Python virtual environments
+**/venv/
 
 # Windows artifacts
 nul
