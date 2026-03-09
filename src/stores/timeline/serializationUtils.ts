@@ -10,6 +10,7 @@ import { projectFileService } from '../../services/projectFileService';
 import { Logger } from '../../services/logger';
 import { engine } from '../../engine/WebGPUEngine';
 import { layerBuilder } from '../../services/layerBuilder';
+import { sanitizePlayheadPosition } from '../../services/layerBuilder/PlayheadState';
 import type { WebCodecsPlayer } from '../../engine/WebCodecsPlayer';
 
 const log = Logger.create('Timeline');
@@ -50,6 +51,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
   // Get serializable timeline state for saving to composition
   getSerializableState: (): CompositionTimelineData => {
     const { tracks, clips, playheadPosition, duration, durationLocked, zoom, scrollX, inPoint, outPoint, loopPlayback, clipKeyframes, markers } = get();
+    const safePlayheadPosition = sanitizePlayheadPosition(playheadPosition, 0);
 
     // Convert clips to serializable format (without DOM elements)
     const mediaStore = useMediaStore.getState();
@@ -114,7 +116,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
     return {
       tracks,
       clips: serializableClips,
-      playheadPosition,
+      playheadPosition: safePlayheadPosition,
       duration,
       durationLocked: durationLocked || undefined,  // Only save if true
       zoom,
@@ -201,10 +203,11 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
     // Restore tracks and basic state
     // Increment animation key to trigger entrance animations on clips
     const { clipEntranceAnimationKey } = get();
+    const safePlayheadPosition = sanitizePlayheadPosition(data.playheadPosition, 0);
     set({
       tracks: data.tracks.map(t => ({ ...t })),
       clips: [], // We'll restore clips separately
-      playheadPosition: data.playheadPosition,
+      playheadPosition: safePlayheadPosition,
       duration: data.duration,
       durationLocked: data.durationLocked || false,
       zoom: data.zoom,

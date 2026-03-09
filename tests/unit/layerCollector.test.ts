@@ -270,6 +270,85 @@ describe('LayerCollector', () => {
     expect(newProvider.getCurrentFrame).not.toHaveBeenCalled();
   });
 
+  it('does not reuse a pending shared-session frame after the active clip changes on the same layer', () => {
+    const sharedProvider = {
+      currentTime: 2,
+      isPlaying: false,
+      isFullMode: () => true,
+      isSimpleMode: () => false,
+      hasFrame: () => true,
+      getCurrentFrame: vi.fn(() => ({
+        timestamp: 2_000_000,
+        displayWidth: 1920,
+        displayHeight: 1080,
+      })),
+      getPendingSeekTime: vi.fn(() => null),
+      getDebugInfo: vi.fn(() => null),
+      pause: vi.fn(),
+      seek: vi.fn(),
+    };
+
+    hoisted.getRuntimeFrameProvider.mockReturnValue(sharedProvider);
+    hoisted.readRuntimeFrameForSource.mockReturnValue(null);
+
+    const textureManager = {
+      importVideoTexture: vi.fn(() => ({ label: 'video-texture' })),
+    };
+
+    const collector = new LayerCollector();
+    const deps = {
+      textureManager: textureManager as any,
+      scrubbingCache: null,
+      getLastVideoTime: () => undefined,
+      setLastVideoTime: () => {},
+      isExporting: false,
+      isPlaying: true,
+    };
+
+    collector.collect([{
+      id: 'layer-1',
+      sourceClipId: 'clip-a',
+      name: 'Video',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      source: {
+        type: 'video',
+        webCodecsPlayer: sharedProvider,
+        runtimeSourceId: 'media:test',
+        runtimeSessionKey: 'interactive-track:track-1:media:test',
+      },
+    } as any], deps);
+
+    sharedProvider.getPendingSeekTime.mockReturnValue(2.4);
+
+    const result = collector.collect([{
+      id: 'layer-1',
+      sourceClipId: 'clip-b',
+      name: 'Video',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      source: {
+        type: 'video',
+        webCodecsPlayer: sharedProvider,
+        runtimeSourceId: 'media:test',
+        runtimeSessionKey: 'interactive-track:track-1:media:test',
+      },
+    } as any], deps);
+
+    expect(result).toHaveLength(0);
+    expect(sharedProvider.getCurrentFrame).toHaveBeenCalledTimes(1);
+  });
+
   it('promotes a stable runtime frame once the scrub session has one, even if the cached layer still points at the clip player', () => {
     const clipProvider = {
       currentTime: 0.9,

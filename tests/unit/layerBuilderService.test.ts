@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { LayerBuilderService } from '../../src/services/layerBuilder/LayerBuilderService';
+import { flags } from '../../src/engine/featureFlags';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { DEFAULT_TRANSFORM } from '../../src/stores/timeline/constants';
@@ -11,6 +12,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
   beforeEach(() => {
     useTimelineStore.setState(initialTimelineState);
     useMediaStore.setState(initialMediaState);
+    flags.useFullWebCodecsPlayback = true;
   });
 
   it('treats a full WebCodecs source as renderable even before the video element is attached', () => {
@@ -178,7 +180,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
     expect(layers[0]?.source?.webCodecsPlayer).toBe(clipPlayer);
   });
 
-  it('uses HTML video as the visual source while actively dragging the playhead', () => {
+  it('keeps full WebCodecs preview bound to the scrub runtime while actively dragging the playhead', () => {
     const service = new LayerBuilderService();
     const videoElement = { currentTime: 1.25 } as HTMLVideoElement;
     const clipPlayer = {
@@ -229,6 +231,8 @@ describe('LayerBuilderService paused visual provider selection', () => {
             type: 'video',
             naturalDuration: 10,
             videoElement,
+            runtimeSourceId: 'media:clip-1',
+            runtimeSessionKey: 'interactive:clip-1',
             webCodecsPlayer: clipPlayer,
           },
           isLoading: false,
@@ -244,8 +248,8 @@ describe('LayerBuilderService paused visual provider selection', () => {
 
     expect(layers).toHaveLength(1);
     expect(layers[0]?.source?.videoElement).toBe(videoElement);
-    expect(layers[0]?.source?.webCodecsPlayer).toBeUndefined();
-    expect(layers[0]?.source?.runtimeSessionKey).toBeUndefined();
+    expect(layers[0]?.source?.webCodecsPlayer).toBe(clipPlayer);
+    expect(layers[0]?.source?.runtimeSessionKey).toBe('interactive-scrub:track-v1:media:clip-1');
   });
 
   it('keeps paused timeline preview on the playback runtime when not actively dragging', () => {
@@ -315,5 +319,109 @@ describe('LayerBuilderService paused visual provider selection', () => {
     expect(layers).toHaveLength(1);
     expect(layers[0]?.source?.webCodecsPlayer).toBe(clipPlayer);
     expect(layers[0]?.source?.runtimeSessionKey).toBe('interactive-track:track-v1:media:clip-1');
+  });
+
+  it('rebuilds paused layers when the playhead jumps to a different clip without dragging', () => {
+    const service = new LayerBuilderService();
+    const clipPlayerA = {
+      isFullMode: () => true,
+      isSimpleMode: () => false,
+      hasFrame: () => true,
+      getCurrentFrame: () => ({ timestamp: 1_000_000 }),
+      getPendingSeekTime: () => null,
+      getDebugInfo: () => null,
+      currentTime: 1,
+      isPlaying: false,
+      pause: () => {},
+      seek: () => {},
+    };
+    const clipPlayerB = {
+      isFullMode: () => true,
+      isSimpleMode: () => false,
+      hasFrame: () => true,
+      getCurrentFrame: () => ({ timestamp: 12_000_000 }),
+      getPendingSeekTime: () => null,
+      getDebugInfo: () => null,
+      currentTime: 12,
+      isPlaying: false,
+      pause: () => {},
+      seek: () => {},
+    };
+
+    useMediaStore.setState({
+      activeCompositionId: null,
+      activeLayerSlots: {},
+      layerOpacities: {},
+      files: [],
+      compositions: [],
+      proxyEnabled: false,
+    } as any);
+
+    useTimelineStore.setState({
+      tracks: [
+        {
+          id: 'track-v1',
+          name: 'Video 1',
+          type: 'video',
+          visible: true,
+          muted: false,
+          solo: false,
+        },
+      ],
+      clips: [
+        {
+          id: 'clip-a',
+          trackId: 'track-v1',
+          name: 'a.mp4',
+          startTime: 0,
+          duration: 5,
+          inPoint: 0,
+          outPoint: 5,
+          effects: [],
+          transform: { ...DEFAULT_TRANSFORM },
+          source: {
+            type: 'video',
+            naturalDuration: 5,
+            webCodecsPlayer: clipPlayerA,
+          },
+          isLoading: false,
+        },
+        {
+          id: 'clip-b',
+          trackId: 'track-v1',
+          name: 'b.mp4',
+          startTime: 10,
+          duration: 5,
+          inPoint: 0,
+          outPoint: 5,
+          effects: [],
+          transform: { ...DEFAULT_TRANSFORM },
+          source: {
+            type: 'video',
+            naturalDuration: 5,
+            webCodecsPlayer: clipPlayerB,
+          },
+          isLoading: false,
+        },
+      ],
+      playheadPosition: 1,
+      isPlaying: false,
+      isDraggingPlayhead: false,
+      playbackSpeed: 1,
+    } as any);
+
+    const firstLayers = service.buildLayersFromStore();
+    expect(firstLayers).toHaveLength(1);
+    expect(firstLayers[0]?.sourceClipId).toBe('clip-a');
+    expect(firstLayers[0]?.source?.webCodecsPlayer).toBe(clipPlayerA);
+
+    useTimelineStore.setState({
+      playheadPosition: 11,
+    } as any);
+
+    const secondLayers = service.buildLayersFromStore();
+    expect(secondLayers).toHaveLength(1);
+    expect(secondLayers[0]?.sourceClipId).toBe('clip-b');
+    expect(secondLayers[0]?.source?.webCodecsPlayer).toBe(clipPlayerB);
   });
 });

@@ -55,16 +55,13 @@ export class LayerCache {
     const playingChanged = ctx.isPlaying !== this.lastIsPlaying;
     const proxyChanged = ctx.proxyEnabled !== this.lastProxyEnabled;
 
-    // Check if any clip has keyframes (need per-frame updates for animation)
-    const hasKeyframedClips = ctx.clips.some(c => ctx.hasKeyframes(c.id));
-
     const needsRebuild = !this.cacheValid ||
       clipsChanged ||
       tracksChanged ||
       compChanged ||
       playingChanged ||
       proxyChanged ||
-      (frameChanged && (ctx.isPlaying || ctx.isDraggingPlayhead || hasKeyframedClips));
+      frameChanged;
 
     // Log cache stats periodically
     this.logStats(ctx.now);

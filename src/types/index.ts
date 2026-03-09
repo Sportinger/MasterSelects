@@ -3,6 +3,7 @@
 export interface Layer {
   id: string;
   name: string;
+  sourceClipId?: string;
   visible: boolean;
   opacity: number;
   blendMode: BlendMode;

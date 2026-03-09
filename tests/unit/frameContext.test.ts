@@ -133,4 +133,34 @@ describe('FrameContext clipsAtTime', () => {
 
     expect(ctx.clipsAtTime.map(clip => clip.id)).toEqual(['clip-b']);
   });
+
+  it('falls back to the last internal playhead when stored playhead is invalid', () => {
+    const clipA = createMockClip({
+      id: 'clip-a',
+      trackId: 'video-1',
+      startTime: 0,
+      duration: 10,
+      inPoint: 0,
+      outPoint: 10,
+    });
+    const clipB = createMockClip({
+      id: 'clip-b',
+      trackId: 'video-1',
+      startTime: 10,
+      duration: 10,
+      inPoint: 10,
+      outPoint: 20,
+    });
+
+    playheadState.position = 12;
+    hoisted.timelineState = createTimelineState({
+      clips: [clipA, clipB],
+      playheadPosition: null,
+    });
+
+    const ctx = createFrameContext();
+
+    expect(ctx.playheadPosition).toBe(12);
+    expect(ctx.clipsAtTime.map(clip => clip.id)).toEqual(['clip-b']);
+  });
 });

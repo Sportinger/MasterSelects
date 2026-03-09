@@ -2,6 +2,20 @@
   {
     "date": "2026-03-09",
     "type": "new",
+    "title": "Marquee Selection Below Tracks",
+    "description": "You can now start a marquee (rubber-band) selection by clicking and dragging in the empty area below the last audio track, then drag upward to select clips.",
+    "section": "Timeline"
+  },
+  {
+    "date": "2026-03-09",
+    "type": "fix",
+    "title": "Paused Preview and Scrubbing Follow the Active Clip Again",
+    "description": "Fixes multi-clip timeline preview on the HTML video path so pause and scrubbing render the frame from the clip under the playhead instead of reusing a stale frame from the previously visited clip.",
+    "section": "Playback"
+  },
+  {
+    "date": "2026-03-09",
+    "type": "new",
     "title": "Native Helper v0.3.1 Target with AI Bridge",
     "description": "MasterSelects now targets Native Helper v0.3.1, adds a local AI bridge for direct agent control, and removes the old FFmpeg/Turbo-facing baggage from the helper UI. The public GitHub helper release is still v0.2.0 until the new package is published.",
     "section": "Native Helper",

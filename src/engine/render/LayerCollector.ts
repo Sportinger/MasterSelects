@@ -37,7 +37,6 @@ export class LayerCollector {
   private nextVideoId = 1;
   private lastSuccessfulVideoProviderKey = new Map<string, string>();
   private lastCollectorState = new Map<string, 'render' | 'hold' | 'drop'>();
-
   // Grace period: keep HTMLVideo scrub preview path for a few frames after
   // scrub stops, so the settle-seek has time to complete before switching
   // to the WebCodecs path (which may not have the correct frame yet).
@@ -98,6 +97,10 @@ export class LayerCollector {
       return `runtime:${layer.source.runtimeSourceId}:${layer.source.runtimeSessionKey}`;
     }
     return `provider:${this.getProviderObjectId(frameProvider as object)}`;
+  }
+
+  private getLayerReuseKey(layer: Layer): string {
+    return layer.sourceClipId ? `${layer.id}:${layer.sourceClipId}` : layer.id;
   }
 
   private canReuseLastSuccessfulVideoFrame(layerId: string, providerKey: string | null): boolean {
@@ -227,6 +230,13 @@ export class LayerCollector {
       }
 
       const isDragging = useTimelineStore.getState().isDraggingPlayhead;
+      const runtimeProvider = getRuntimeFrameProvider(source);
+      const clipProvider = source.webCodecsPlayer?.isFullMode()
+        ? source.webCodecsPlayer
+        : null;
+      const hasFullWebCodecsPreview =
+        flags.useFullWebCodecsPlayback &&
+        (!!clipProvider || !!runtimeProvider?.isFullMode());
       // Extend grace period while dragging; after drag stops,
       // keep HTML preview path briefly so the settle-seek can complete.
       if (isDragging) {
@@ -234,12 +244,13 @@ export class LayerCollector {
       }
       const inScrubGrace = !isDragging && performance.now() < this.scrubGraceUntil;
       const allowHtmlScrubPreview =
+        !hasFullWebCodecsPreview &&
         !deps.isPlaying &&
         (isDragging || inScrubGrace) &&
         !!source.videoElement;
       const allowHtmlVideoPreview =
         !!source.videoElement &&
-        (!flags.useFullWebCodecsPlayback ||
+        (!hasFullWebCodecsPreview ||
           ENABLE_VISUAL_HTML_VIDEO_FALLBACK ||
           allowHtmlScrubPreview);
 
@@ -248,10 +259,7 @@ export class LayerCollector {
       }
 
       // 3. Try full WebCodecs VideoFrame.
-      const runtimeProvider = getRuntimeFrameProvider(source);
-      const clipProvider = source.webCodecsPlayer?.isFullMode()
-        ? source.webCodecsPlayer
-        : null;
+      const layerReuseKey = this.getLayerReuseKey(layer);
       const runtimeProviderStable = this.isPendingWebCodecsFrameStable(runtimeProvider ?? undefined);
       const runtimeHasFrame =
         (runtimeProvider?.hasFrame?.() ?? false) ||
@@ -271,7 +279,7 @@ export class LayerCollector {
             ? runtimeProvider
             : null);
       const providerKey = this.getVideoProviderKey(layer, frameProvider, runtimeProvider);
-      const canReuseLastFrame = this.canReuseLastSuccessfulVideoFrame(layer.id, providerKey);
+      const canReuseLastFrame = this.canReuseLastSuccessfulVideoFrame(layerReuseKey, providerKey);
       const frameProviderStable = this.isPendingWebCodecsFrameStable(frameProvider ?? undefined);
       const holdingFrame = !frameProviderStable && canReuseLastFrame;
 
@@ -298,9 +306,9 @@ export class LayerCollector {
             frameTs: runtimeFrame.timestamp,
           });
           if (providerKey) {
-            this.lastSuccessfulVideoProviderKey.set(layer.id, providerKey);
+            this.lastSuccessfulVideoProviderKey.set(layerReuseKey, providerKey);
           }
-          this.setCollectorState(layer.id, holdingFrame ? 'hold' : 'render', {
+          this.setCollectorState(layerReuseKey, holdingFrame ? 'hold' : 'render', {
             reason: holdingFrame ? 'same_provider_pending' : 'runtime_frame',
           });
           this.currentDecoder = 'WebCodecs';
@@ -319,7 +327,7 @@ export class LayerCollector {
 
       if (frameProvider && typeof frameProvider.getCurrentFrame === 'function') {
         if (!frameProviderStable && !canReuseLastFrame && !allowPendingScrubFrame) {
-          this.setCollectorState(layer.id, 'drop', {
+          this.setCollectorState(layerReuseKey, 'drop', {
             reason: 'pending_unstable',
           });
           return null;
@@ -332,9 +340,9 @@ export class LayerCollector {
               frameTs: frame.timestamp,
             });
             if (providerKey) {
-              this.lastSuccessfulVideoProviderKey.set(layer.id, providerKey);
+              this.lastSuccessfulVideoProviderKey.set(layerReuseKey, providerKey);
             }
-            this.setCollectorState(layer.id, holdingFrame ? 'hold' : 'render', {
+            this.setCollectorState(layerReuseKey, holdingFrame ? 'hold' : 'render', {
               reason: holdingFrame ? 'same_provider_pending' : 'provider_frame',
             });
             this.currentDecoder = 'WebCodecs';
@@ -349,11 +357,11 @@ export class LayerCollector {
               sourceHeight: frame.displayHeight,
             };
           }
-          this.setCollectorState(layer.id, 'drop', {
+          this.setCollectorState(layerReuseKey, 'drop', {
             reason: 'import_failed',
           });
         } else {
-          this.setCollectorState(layer.id, 'drop', {
+          this.setCollectorState(layerReuseKey, 'drop', {
             reason: 'no_frame',
           });
         }
@@ -375,29 +383,13 @@ export class LayerCollector {
     log.debug(`tryHTMLVideo: readyState=${video.readyState}, seeking=${video.seeking}, videoWidth=${video.videoWidth}, videoHeight=${video.videoHeight}`);
 
     if (video.readyState >= 2) {
-      const lastTime = deps.getLastVideoTime(videoKey);
       const currentTime = video.currentTime;
-      const videoTimeChanged = lastTime === undefined || Math.abs(currentTime - lastTime) > 0.001;
 
-      // Use cache for paused videos (skip during export and during playback).
-      // During playback the cache may contain a stale frame from before play started
-      // (captureVideoFrame is skipped while playing to save GPU bandwidth).
+      // Keep using the live HTML video frame even when currentTime is unchanged.
+      // Re-importing the decoded frame is more reliable than holding onto a
+      // copied fallback texture across seeks and clip switches.
       // Falling through to importExternalTexture with an unchanged currentTime is
       // harmless — it just re-imports the same decoded frame.
-      if (!videoTimeChanged && !deps.isExporting && !deps.isPlaying) {
-        const lastFrame = deps.scrubbingCache?.getLastFrame(video);
-        if (lastFrame) {
-          this.currentDecoder = 'HTMLVideo(paused-cache)';
-          return {
-            layer,
-            isVideo: false,
-            externalTexture: null,
-            textureView: lastFrame.view,
-            sourceWidth: lastFrame.width,
-            sourceHeight: lastFrame.height,
-          };
-        }
-      }
 
       // If video is seeking, try per-time scrubbing cache first (exact frame for this position),
       // then fall back to generic last-frame cache
@@ -480,7 +472,6 @@ export class LayerCollector {
       const extTex = deps.textureManager.importVideoTexture(video);
       if (extTex) {
         deps.setLastVideoTime(videoKey, currentTime);
-
         // Cache frame for pause/seek fallback — skip during playback to save GPU bandwidth.
         // With 4+ videos, the GPU copies (copyExternalImageToTexture per video at 20fps)
         // waste significant bandwidth that's needed for rendering + effects.

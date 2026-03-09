@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { createPlaybackSlice } from '../../src/stores/timeline/playbackSlice';
+import { playheadState } from '../../src/services/layerBuilder/PlayheadState';
 
 const getRuntimeFrameProvider = vi.fn();
 
@@ -19,6 +20,8 @@ vi.mock('../../src/services/mediaRuntime/runtimePlayback', () => ({
 describe('playbackSlice HTML readiness gate', () => {
   beforeEach(() => {
     getRuntimeFrameProvider.mockReset();
+    playheadState.position = 0;
+    playheadState.isUsingInternalPosition = false;
   });
 
   it('skips HTML readiness warmup for full WebCodecs clips', async () => {
@@ -64,5 +67,30 @@ describe('playbackSlice HTML readiness gate', () => {
     expect(state.isPlaying).toBe(true);
     expect(htmlVideo.play).not.toHaveBeenCalled();
     expect(htmlVideo.pause).not.toHaveBeenCalled();
+  });
+
+  it('keeps the internal playhead in sync when moving the playhead while paused', () => {
+    const state: Record<string, any> = {
+      clips: [],
+      playheadPosition: null,
+      duration: 60,
+      isPlaying: false,
+    };
+
+    const set = (partial: any) => {
+      const next = typeof partial === 'function' ? partial(state) : partial;
+      Object.assign(state, next);
+    };
+    const get = () => state as any;
+
+    playheadState.position = 4.1;
+    playheadState.isUsingInternalPosition = true;
+
+    Object.assign(state, createPlaybackSlice(set as any, get as any));
+
+    state.setPlayheadPosition(20);
+
+    expect(state.playheadPosition).toBe(20);
+    expect(playheadState.position).toBe(20);
   });
 });

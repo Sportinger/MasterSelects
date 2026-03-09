@@ -18,6 +18,7 @@ import {
   getScrubRuntimeSource,
 } from '../mediaRuntime/runtimePlayback';
 import { Logger } from '../logger';
+import { flags } from '../../engine/featureFlags';
 import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
@@ -390,6 +391,7 @@ export class LayerBuilderService {
     const layer: Layer = {
       id: `${ctx.activeCompId}_layer_${layerIndex}_${clip.id}`,
       name: clip.name,
+      sourceClipId: clip.id,
       visible: true,
       opacity: finalOpacity,
       blendMode: transform.blendMode as BlendMode,
@@ -423,6 +425,7 @@ export class LayerBuilderService {
     const layer: Layer = {
       id: `${ctx.activeCompId}_layer_${layerIndex}_${clip.id}`,
       name: clip.name,
+      sourceClipId: clip.id,
       visible: true,
       opacity: finalOpacity,
       blendMode: transform.blendMode as BlendMode,
@@ -478,7 +481,10 @@ export class LayerBuilderService {
           allowSharedPreviewSession
         );
     const runtimeProvider = getRuntimeFrameProvider(previewRuntimeSource);
-    const preferHtmlScrubPreview = ctx.isDraggingPlayhead && !!clip.source?.videoElement;
+    const preferHtmlScrubPreview =
+      ctx.isDraggingPlayhead &&
+      !!clip.source?.videoElement &&
+      (!flags.useFullWebCodecsPlayback || !clip.source?.webCodecsPlayer?.isFullMode?.());
     const visualProvider = ctx.isPlaying
       ? previewRuntimeSource?.webCodecsPlayer ?? clip.source?.webCodecsPlayer
       : preferHtmlScrubPreview
@@ -488,6 +494,7 @@ export class LayerBuilderService {
     const layer: Layer = {
       id: `${ctx.activeCompId}_layer_${layerIndex}`,
       name: clip.name,
+      sourceClipId: clip.id,
       visible: true,
       opacity: finalOpacity,
       blendMode: transform.blendMode as BlendMode,
@@ -579,6 +586,7 @@ export class LayerBuilderService {
     const layer: Layer = {
       id: `${ctx.activeCompId}_layer_${layerIndex}`,
       name: clip.name,
+      sourceClipId: clip.id,
       visible: true,
       opacity: finalOpacity,
       blendMode: transform.blendMode as BlendMode,
@@ -618,6 +626,7 @@ export class LayerBuilderService {
     const layer: Layer = {
       id: `${ctx.activeCompId}_layer_${layerIndex}`,
       name: clip.name,
+      sourceClipId: clip.id,
       visible: true,
       opacity: finalOpacity,
       blendMode: transform.blendMode as BlendMode,
@@ -651,6 +660,7 @@ export class LayerBuilderService {
     const layer: Layer = {
       id: `${ctx.activeCompId}_layer_${layerIndex}`,
       name: clip.name,
+      sourceClipId: clip.id,
       visible: true,
       opacity: finalOpacity,
       blendMode: transform.blendMode as BlendMode,
@@ -803,6 +813,7 @@ export class LayerBuilderService {
     const baseLayer = {
       id: `nested-layer-${nestedClip.id}`,
       name: nestedClip.name,
+      sourceClipId: nestedClip.id,
       visible: true,
       opacity: transform.opacity ?? 1,
       blendMode: transform.blendMode || 'normal',
@@ -874,7 +885,10 @@ export class LayerBuilderService {
             true
           );
       const runtimeProvider = getRuntimeFrameProvider(previewRuntimeSource);
-      const preferHtmlScrubPreview = ctx.isDraggingPlayhead && !!nestedClip.source?.videoElement;
+      const preferHtmlScrubPreview =
+        ctx.isDraggingPlayhead &&
+        !!nestedClip.source?.videoElement &&
+        (!flags.useFullWebCodecsPlayback || !nestedClip.source?.webCodecsPlayer?.isFullMode?.());
       const nestedClipTime = nestedClip.reversed
         ? nestedClip.outPoint - nestedClipLocalTime
         : nestedClipLocalTime + nestedClip.inPoint;

@@ -4,13 +4,23 @@ import type { PlaybackActions, SliceCreator } from './types';
 import { MIN_ZOOM, MAX_ZOOM } from './constants';
 import { useMediaStore } from '../mediaStore';
 import { getRuntimeFrameProvider } from '../../services/mediaRuntime/runtimePlayback';
+import { playheadState, sanitizePlayheadPosition } from '../../services/layerBuilder/PlayheadState';
 
 // Playback actions only (RAM preview and proxy cache in separate slices)
 export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => ({
   // Playback actions
   setPlayheadPosition: (position) => {
-    const { duration } = get();
-    set({ playheadPosition: Math.max(0, Math.min(position, duration)) });
+    const safePosition = sanitizePlayheadPosition(position, 0);
+    const safeDuration = Math.max(0, sanitizePlayheadPosition(get().duration, safePosition));
+    const clampedPosition = Math.max(0, Math.min(safePosition, safeDuration));
+
+    set({ playheadPosition: clampedPosition });
+
+    // Keep the render-path playhead in sync while paused. This also repairs
+    // stale internal positions if playback stopped mid-frame.
+    if (!get().isPlaying || !playheadState.isUsingInternalPosition) {
+      playheadState.position = clampedPosition;
+    }
   },
 
   setDraggingPlayhead: (dragging) => {
@@ -18,7 +28,11 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
   },
 
   play: async () => {
-    const { clips, playheadPosition } = get();
+    const { clips } = get();
+    const playheadPosition = sanitizePlayheadPosition(
+      get().playheadPosition,
+      sanitizePlayheadPosition(playheadState.position, 0)
+    );
     const needsHtmlPlaybackReadiness = (
       source: (typeof clips)[number]['source'] | undefined
     ): source is NonNullable<(typeof clips)[number]['source']> & {

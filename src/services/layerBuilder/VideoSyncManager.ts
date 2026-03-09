@@ -236,30 +236,70 @@ export class VideoSyncManager {
 
   private getPausedWebCodecsProvider(
     source: TimelineClip['source'],
-    scrubProvider: ReturnType<typeof getRuntimeFrameProvider>,
+    runtimeProvider: ReturnType<typeof getRuntimeFrameProvider>,
     targetTime: number
   ) {
+    const providerDistance = (
+      provider:
+        | {
+          currentTime: number;
+          getPendingSeekTime?: () => number | null | undefined;
+          hasFrame?: () => boolean;
+          getCurrentFrame?: () => unknown;
+          isFullMode?: () => boolean;
+        }
+        | null
+        | undefined
+    ): number => {
+      if (!provider?.isFullMode?.()) {
+        return Number.POSITIVE_INFINITY;
+      }
+      if (!this.providerHasFrame(provider)) {
+        return Number.POSITIVE_INFINITY;
+      }
+      const effectiveTime = provider.getPendingSeekTime?.() ?? provider.currentTime;
+      return Number.isFinite(effectiveTime)
+        ? Math.abs(effectiveTime - targetTime)
+        : Number.POSITIVE_INFINITY;
+    };
+
     const clipPlayer = source?.webCodecsPlayer?.isFullMode()
       ? source.webCodecsPlayer
       : null;
-    const scrubIsFullMode = !!scrubProvider?.isFullMode();
-    const scrubHasFrame = this.providerHasFrame(scrubProvider);
-    const scrubEffectiveTime = scrubProvider?.getPendingSeekTime?.() ?? scrubProvider?.currentTime;
+    const runtimeIsFullMode = !!runtimeProvider?.isFullMode();
+    const runtimeHasFrame = this.providerHasFrame(runtimeProvider);
+    const runtimeEffectiveTime = runtimeProvider?.getPendingSeekTime?.() ?? runtimeProvider?.currentTime;
 
     if (
-      scrubIsFullMode &&
-      scrubHasFrame &&
-      scrubEffectiveTime !== undefined &&
-      Math.abs(scrubEffectiveTime - targetTime) <= 0.05
+      runtimeIsFullMode &&
+      runtimeHasFrame &&
+      runtimeEffectiveTime !== undefined &&
+      Math.abs(runtimeEffectiveTime - targetTime) <= 0.05
     ) {
-      return scrubProvider;
+      return runtimeProvider;
     }
 
-    if (clipPlayer) {
+    const clipHasFrame = this.providerHasFrame(clipPlayer);
+    const runtimeDistance = providerDistance(runtimeProvider);
+    const clipDistance = providerDistance(clipPlayer);
+
+    if (!clipPlayer) {
+      return runtimeHasFrame && runtimeIsFullMode ? runtimeProvider : null;
+    }
+
+    if (runtimeHasFrame && runtimeDistance < clipDistance) {
+      return runtimeProvider;
+    }
+
+    if (clipHasFrame) {
       return clipPlayer;
     }
 
-    return scrubIsFullMode ? scrubProvider : null;
+    if (runtimeHasFrame && runtimeIsFullMode) {
+      return runtimeProvider;
+    }
+
+    return clipPlayer;
   }
 
   private shouldSeekPausedWebCodecsProvider(
@@ -827,14 +867,13 @@ export class VideoSyncManager {
       return;
     }
 
-    // Full-mode WebCodecs normally owns preview sync, but active drag-scrub can
-    // temporarily use HTML video seeking for better responsiveness.
+    // Full-mode WebCodecs owns preview sync whenever it's enabled.
+    // Drag scrubbing uses the dedicated scrub session inside syncFullWebCodecs.
     const useFullWebCodecsPreview =
       flags.useFullWebCodecsPlayback &&
       clip.source?.webCodecsPlayer?.isFullMode();
 
-    if (useFullWebCodecsPreview &&
-        !(ctx.isDraggingPlayhead && clip.source?.videoElement)) {
+    if (useFullWebCodecsPreview) {
       this.syncFullWebCodecs(clip, ctx);
       return;
     }
@@ -1393,7 +1432,7 @@ export class VideoSyncManager {
           : null;
       const pausedProvider = this.getPausedWebCodecsProvider(
         clip.source,
-        dedicatedScrubProvider,
+        pausedRuntimeProvider,
         timeInfo.clipTime
       );
       const fallbackProvider =

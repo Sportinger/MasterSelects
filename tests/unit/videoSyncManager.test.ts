@@ -58,6 +58,31 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     expect(provider).toBe(scrubProvider);
   });
 
+  it('prefers the shared runtime when its frame is closer to the paused target than the clip player', () => {
+    const manager = new VideoSyncManager() as any;
+    const clipPlayer = {
+      isFullMode: () => true,
+      hasFrame: () => true,
+      getCurrentFrame: () => ({ timestamp: 22_589_233 }),
+      currentTime: 22.589233,
+    };
+    const sharedRuntimeProvider = {
+      isFullMode: () => true,
+      hasFrame: () => true,
+      getCurrentFrame: () => ({ timestamp: 8_700_000 }),
+      currentTime: 8.7,
+      getPendingSeekTime: () => 8.7,
+    };
+
+    const provider = manager.getPausedWebCodecsProvider(
+      { webCodecsPlayer: clipPlayer },
+      sharedRuntimeProvider,
+      8.68
+    );
+
+    expect(provider).toBe(sharedRuntimeProvider);
+  });
+
   it('forces a paused seek when the provider is already at the target time but still has no frame', () => {
     const manager = new VideoSyncManager() as any;
     const provider = {
@@ -226,9 +251,9 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     expect(provider.fastSeek).toHaveBeenCalledWith(1.18);
   });
 
-  it('routes full WebCodecs clips through HTML seek logic while dragging', () => {
+  it('routes full WebCodecs clips through dedicated WebCodecs sync while dragging', () => {
     const manager = new VideoSyncManager() as any;
-    const syncFullWebCodecs = vi.spyOn(manager, 'syncFullWebCodecs');
+    const syncFullWebCodecs = vi.spyOn(manager, 'syncFullWebCodecs').mockImplementation(() => {});
     const throttledSeek = vi.spyOn(manager, 'throttledSeek').mockImplementation(() => {});
 
     const video = {
@@ -265,8 +290,8 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
       getSourceTimeForClip: () => 1.5,
     } as any);
 
-    expect(syncFullWebCodecs).not.toHaveBeenCalled();
-    expect(throttledSeek).toHaveBeenCalled();
+    expect(syncFullWebCodecs).toHaveBeenCalledTimes(1);
+    expect(throttledSeek).not.toHaveBeenCalled();
   });
 
   it('routes full WebCodecs clips through HTML sync logic when preview WebCodecs is disabled', () => {

@@ -49,13 +49,20 @@ export const playheadState: PlayheadStateData = {
   hasMasterAudio: false,
 };
 
+export function sanitizePlayheadPosition(value: unknown, fallback = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
 /**
  * Get current playhead position, preferring internal position during playback
  */
 export function getPlayheadPosition(storePosition: number): number {
+  const safeInternal = sanitizePlayheadPosition(playheadState.position, 0);
+  const safeStore = sanitizePlayheadPosition(storePosition, safeInternal);
+
   return playheadState.isUsingInternalPosition
-    ? playheadState.position
-    : storePosition;
+    ? safeInternal
+    : safeStore;
 }
 
 /**
