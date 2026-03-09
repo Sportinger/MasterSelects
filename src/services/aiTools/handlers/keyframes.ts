@@ -2,6 +2,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import type { ToolResult } from '../types';
 import type { AnimatableProperty, EasingType } from '../../../types';
 import { animateKeyframe } from '../aiFeedback';
+import { normalizeEasingType } from '../../../utils/easing';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -30,7 +31,7 @@ export async function handleGetKeyframes(
         property: kf.property,
         value: kf.value,
         time: kf.time,
-        easing: kf.easing,
+        easing: normalizeEasingType(kf.easing, 'linear'),
       })),
     },
   };
@@ -44,7 +45,7 @@ export async function handleAddKeyframe(
   const property = args.property as AnimatableProperty;
   const value = args.value as number;
   const time = args.time as number | undefined;
-  const easing = (args.easing as EasingType) || 'easeInOut';
+  const easing = normalizeEasingType(args.easing as EasingType | undefined, 'ease-in-out');
 
   const clip = timelineStore.clips.find(c => c.id === clipId);
   if (!clip) return { success: false, error: `Clip not found: ${clipId}` };
@@ -68,7 +69,7 @@ export async function handleAddKeyframe(
       property,
       value,
       time: newKf?.time ?? time,
-      easing,
+      easing: normalizeEasingType(newKf?.easing ?? easing, 'ease-in-out'),
     },
   };
 }

@@ -1,3 +1,5 @@
+import { normalizeEasingType } from '../../../utils/easing';
+
 // FadeCurve - Renders SVG bezier curve showing opacity fade
 // Note: Not using memo() here to ensure re-render on keyframe changes
 
@@ -48,7 +50,9 @@ export function FadeCurve({
     // Determine control points based on easing type
     let cp1x: number, cp1y: number, cp2x: number, cp2y: number;
 
-    if (kf1.easing === 'bezier' && kf1.handleOut && kf2.handleIn) {
+    const easing = normalizeEasingType(kf1.easing, 'linear');
+
+    if (easing === 'bezier' && kf1.handleOut && kf2.handleIn) {
       // Custom bezier handles
       cp1x = timeToX(kf1.time + kf1.handleOut.x);
       cp1y = valueToY(kf1.value + kf1.handleOut.y);
@@ -56,7 +60,7 @@ export function FadeCurve({
       cp2y = valueToY(kf2.value + kf2.handleIn.y);
     } else {
       // Standard easing curves (cubic-bezier approximations)
-      switch (kf1.easing) {
+      switch (easing) {
         case 'ease-in':
           cp1x = x1 + duration * 0.42 * (width / clipDuration);
           cp1y = y1;

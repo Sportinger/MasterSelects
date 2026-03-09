@@ -13,6 +13,7 @@
 
 import { Logger } from '../../services/logger';
 import type { Keyframe, Effect, AnimatableProperty } from '../../types';
+import { normalizeEasingType } from '../../utils/easing';
 
 const log = Logger.create('AudioEffectRenderer');
 
@@ -243,7 +244,7 @@ export class AudioEffectRenderer {
         // Subsequent keyframes - ramp to value
         const prevKf = sorted[i - 1];
 
-        switch (kf.easing) {
+        switch (normalizeEasingType(kf.easing, 'linear')) {
           case 'linear':
             param.linearRampToValueAtTime(value, time);
             break;

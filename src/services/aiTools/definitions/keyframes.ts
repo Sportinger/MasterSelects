@@ -28,7 +28,7 @@ export const keyframeToolDefinitions: ToolDefinition[] = [
           property: { type: 'string', description: 'Property to animate: position.x, position.y, position.z, scale.x, scale.y, rotation.x, rotation.y, rotation.z, opacity, speed' },
           value: { type: 'number', description: 'Value at this keyframe' },
           time: { type: 'number', description: 'Time in seconds relative to clip start. If omitted, uses current playhead position relative to clip.' },
-          easing: { type: 'string', description: 'Easing: linear, easeIn, easeOut, easeInOut, easeInElastic, easeOutElastic (default: easeInOut)' },
+          easing: { type: 'string', description: 'Easing: linear, ease-in, ease-out, ease-in-out, bezier. Legacy aliases like easeOut are also accepted (default: ease-in-out).' },
         },
         required: ['clipId', 'property', 'value'],
       },

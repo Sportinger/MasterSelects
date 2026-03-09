@@ -82,6 +82,12 @@ describe('keyframeSlice', () => {
     expect(kfs[0].easing).toBe('ease-in');
   });
 
+  it('addKeyframe: normalizes legacy AI easing aliases', () => {
+    store.getState().addKeyframe('clip-1', 'opacity', 0.5, 1, 'easeOut' as any);
+    const kfs = store.getState().clipKeyframes.get('clip-1')!;
+    expect(kfs[0].easing).toBe('ease-out');
+  });
+
   it('addKeyframe: defaults easing to linear', () => {
     store.getState().addKeyframe('clip-1', 'opacity', 0.5, 1);
     const kfs = store.getState().clipKeyframes.get('clip-1')!;
@@ -170,6 +176,14 @@ describe('keyframeSlice', () => {
     const kf = store.getState().clipKeyframes.get('clip-1')![0];
     expect(kf.value).toBe(0.9);
     expect(kf.easing).toBe('ease-in');
+  });
+
+  it('updateKeyframe: normalizes legacy easing aliases', () => {
+    store.getState().addKeyframe('clip-1', 'opacity', 0.5, 1);
+    const kfId = store.getState().clipKeyframes.get('clip-1')![0].id;
+    store.getState().updateKeyframe(kfId, { easing: 'easeInOut' as any });
+    const kf = store.getState().clipKeyframes.get('clip-1')![0];
+    expect(kf.easing).toBe('ease-in-out');
   });
 
   it('updateKeyframe: partial update only changes specified fields', () => {

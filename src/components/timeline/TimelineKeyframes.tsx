@@ -4,6 +4,8 @@ import { useMemo, useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { TimelineKeyframesProps } from './types';
 import type { EasingType, AnimatableProperty } from '../../types';
+import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
+import { normalizeEasingType } from '../../utils/easing';
 
 interface KeyframeData {
   id: string;
@@ -82,9 +84,12 @@ function TimelineKeyframesComponent({
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
-    keyframeId: string;
-    currentEasing: string;
+    targetKeyframeId: string;
+    currentEasing: EasingType;
   } | null>(null);
+  const { menuRef: contextMenuRef, adjustedPosition: contextMenuPosition } = useContextMenuPosition(
+    contextMenu ? { x: contextMenu.x, y: contextMenu.y } : null
+  );
 
   // Get all clips on this track
   const trackClips = useMemo(
@@ -229,13 +234,21 @@ function TimelineKeyframesComponent({
     e.preventDefault();
     e.stopPropagation();
 
+    const propKeyframes = (clipKeyframes.get(kf.clipId) || [])
+      .filter(candidate => candidate.property === kf.property)
+      .sort((a, b) => a.time - b.time);
+    const keyframeIndex = propKeyframes.findIndex(candidate => candidate.id === kf.id);
+    const targetKeyframe = keyframeIndex === propKeyframes.length - 1 && keyframeIndex > 0
+      ? propKeyframes[keyframeIndex - 1]
+      : kf;
+
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
-      keyframeId: kf.id,
-      currentEasing: kf.easing,
+      targetKeyframeId: targetKeyframe.id,
+      currentEasing: normalizeEasingType(targetKeyframe.easing, 'linear'),
     });
-  }, []);
+  }, [clipKeyframes]);
 
   // Close context menu on click outside
   useEffect(() => {
@@ -249,7 +262,7 @@ function TimelineKeyframesComponent({
   // Handle easing selection
   const handleEasingSelect = useCallback((easing: EasingType) => {
     if (contextMenu) {
-      onUpdateKeyframe(contextMenu.keyframeId, { easing });
+      onUpdateKeyframe(contextMenu.targetKeyframeId, { easing });
       setContextMenu(null);
     }
   }, [contextMenu, onUpdateKeyframe]);
@@ -263,15 +276,16 @@ function TimelineKeyframesComponent({
         const xPos = timeToPixel(absTime);
         const isSelected = selectedKeyframeIds.has(kf.id);
         const isDragging = dragState?.keyframeId === kf.id;
+        const easing = normalizeEasingType(kf.easing, 'linear');
 
         return (
           <div
             key={kf.id}
-            className={`keyframe-diamond easing-${kf.easing} ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${aiAnimatedKeyframes.has(kf.id) ? 'ai-keyframe-added' : ''}`}
+            className={`keyframe-diamond easing-${easing} ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${aiAnimatedKeyframes.has(kf.id) ? 'ai-keyframe-added' : ''}`}
             style={{ left: `${xPos}px` }}
             onMouseDown={(e) => handleMouseDown(e, kf, clip)}
             onContextMenu={(e) => handleContextMenu(e, kf)}
-            title={`${property}: ${kf.value.toFixed(3)} @ ${absTime.toFixed(2)}s\nEasing: ${kf.easing}\nDrag to move (Shift for fine control)\nRight-click to change easing`}
+            title={`${property}: ${kf.value.toFixed(3)} @ ${absTime.toFixed(2)}s\nEasing: ${easing}\nDrag to move (Shift for fine control)\nRight-click to change easing`}
           />
         );
       })}
@@ -279,20 +293,33 @@ function TimelineKeyframesComponent({
       {/* Context Menu for easing selection - rendered via portal to avoid transform issues */}
       {contextMenu && createPortal(
         <div
+          ref={contextMenuRef}
           className="keyframe-context-menu"
           style={{
             position: 'fixed',
-            left: contextMenu.x,
-            top: contextMenu.y,
+            left: contextMenuPosition?.x ?? contextMenu.x,
+            top: contextMenuPosition?.y ?? contextMenu.y,
             zIndex: 10000,
           }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
           onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
         >
           <div className="context-menu-title">Easing</div>
           {EASING_OPTIONS.map((option) => (
             <div
               key={option.value}
               className={`context-menu-item ${contextMenu.currentEasing === option.value ? 'active' : ''}`}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
               onClick={() => handleEasingSelect(option.value)}
             >
               {option.label}

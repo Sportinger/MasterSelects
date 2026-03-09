@@ -1,4 +1,5 @@
 import type { Keyframe, EasingType, AnimatableProperty, ClipTransform, BezierHandle } from '../types';
+import { normalizeEasingType } from './easing';
 
 // Preset easing functions (for non-bezier easing types)
 export const easingFunctions: Record<Exclude<EasingType, 'bezier'>, (t: number) => number> = {
@@ -173,12 +174,14 @@ export function interpolateKeyframes(
   const t = range > 0 ? localTime / range : 0;
 
   // Use bezier interpolation if easing is 'bezier' or if keyframe has custom handles
-  if (prevKey.easing === 'bezier' || prevKey.handleOut || nextKey.handleIn) {
+  const easing = normalizeEasingType(prevKey.easing, 'linear');
+
+  if (easing === 'bezier' || prevKey.handleOut || nextKey.handleIn) {
     return interpolateBezier(prevKey, nextKey, t);
   }
 
   // Apply preset easing from the previous keyframe
-  const easedT = easingFunctions[prevKey.easing](t);
+  const easedT = easingFunctions[easing](t);
 
   // Linear interpolation between values
   return prevKey.value + (nextKey.value - prevKey.value) * easedT;

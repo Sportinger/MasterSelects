@@ -8,6 +8,7 @@ import {
   hasKeyframesForProperty,
   interpolateKeyframes
 } from '../../utils/keyframeInterpolation';
+import { normalizeEasingType } from '../../utils/easing';
 import { composeTransforms } from '../../utils/transformComposition';
 import { calculateSourceTime, getSpeedAtTime, calculateTimelineDuration } from '../../utils/speedIntegration';
 
@@ -16,6 +17,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     const { clips, playheadPosition, clipKeyframes, invalidateCache } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
+    const normalizedEasing = normalizeEasingType(easing, 'linear');
 
     // Calculate time relative to clip start
     const clipLocalTime = time ?? (playheadPosition - clip.startTime);
@@ -34,7 +36,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     if (existingAtTime) {
       // Update existing keyframe
       newKeyframes = existingKeyframes.map(k =>
-        k.id === existingAtTime.id ? { ...k, value, easing } : k
+        k.id === existingAtTime.id ? { ...k, value, easing: normalizedEasing } : k
       );
     } else {
       // Create new keyframe
@@ -44,7 +46,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
         time: clampedTime,
         property,
         value,
-        easing,
+        easing: normalizedEasing,
       };
       newKeyframes = [...existingKeyframes, newKeyframe].sort((a, b) => a.time - b.time);
     }
@@ -80,10 +82,13 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
   updateKeyframe: (keyframeId, updates) => {
     const { clipKeyframes, invalidateCache } = get();
     const newMap = new Map<string, Keyframe[]>();
+    const normalizedUpdates = updates.easing
+      ? { ...updates, easing: normalizeEasingType(updates.easing, 'linear') }
+      : updates;
 
     clipKeyframes.forEach((keyframes, clipId) => {
       newMap.set(clipId, keyframes.map(k =>
-        k.id === keyframeId ? { ...k, ...updates } : k
+        k.id === keyframeId ? { ...k, ...normalizedUpdates } : k
       ));
     });
 
