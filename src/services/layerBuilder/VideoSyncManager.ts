@@ -958,6 +958,7 @@ export class VideoSyncManager {
     }
     if (ctx.isPlaying) {
       this.preBufferUpcomingVideoAudio(ctx);
+      this.preBufferUpcomingNestedCompVideos(ctx);
     }
 
     // Sync each clip at playhead
@@ -979,6 +980,9 @@ export class VideoSyncManager {
             !this.warmingUpVideos.has(clip.source.videoElement) &&
             !this.handoffElements.has(clip.source.videoElement)) {
           clip.source.videoElement.pause();
+        }
+        if (!ctx.isPlaying && !isAtPlayhead) {
+          this.clipWasPlaying.delete(clip.id);
         }
         // NOTE: Do NOT pause WebCodecsPlayer here. Split clips share the same
         // player instance, so clip1 exiting and clip2 entering use the same decoder.
@@ -1460,7 +1464,9 @@ export class VideoSyncManager {
             ? playheadState.position
             : ctx.playheadPosition;
           const videoAdvanced = Math.abs(newPlayheadPos - currentPlayhead) > 0.01;
-          if (videoAdvanced) {
+          const shouldSnapPlayheadToStopFrame =
+            Math.abs(newPlayheadPos - currentPlayhead) <= VideoSyncManager.PLAYBACK_STOP_SNAP_MAX_DELTA;
+          if (videoAdvanced && shouldSnapPlayheadToStopFrame) {
             playheadState.position = newPlayheadPos;
             useTimelineStore.setState({ playheadPosition: newPlayheadPos });
           }
@@ -1749,6 +1755,7 @@ export class VideoSyncManager {
   private static readonly LOOKAHEAD_TIME = 1.5; // seconds (increased from 0.5 for reliable GPU warmup)
   private static readonly SCRUB_WARMUP_LOOKAHEAD = 0.9;
   private static readonly SCRUB_WARMUP_LOOKBEHIND = 0.25;
+  private static readonly PLAYBACK_STOP_SNAP_MAX_DELTA = 0.5;
   private static readonly SCRUB_SETTLE_TIMEOUT_MS = 220;
   private static readonly SCRUB_SETTLE_RVFC_DEFER_MS = 90;
   private static readonly SCRUB_DRAG_RVFC_FOLLOW_THRESHOLD = 0.16;
@@ -1760,9 +1767,9 @@ export class VideoSyncManager {
    * Without proactive warmup, crossing a cut boundary causes a black frame
    * while the GPU decoder activates (~100-500ms stutter).
    *
-   * Note: useVideoPreload.ts also does lookahead (2s) and calls play()/pause(50ms),
-   * but 50ms doesn't guarantee GPU surface activation. This method uses
-   * requestVideoFrameCallback to confirm actual frame presentation.
+   * This is the single HTML-video warmup path for upcoming clips.
+   * It uses requestVideoFrameCallback to confirm actual frame presentation
+   * instead of relying on blind pre-seeks.
    */
   private warmupUpcomingClips(ctx: FrameContext): void {
     const windowStart = ctx.isDraggingPlayhead
@@ -1844,6 +1851,58 @@ export class VideoSyncManager {
       // Pre-seek the video element to inPoint so audio data is buffered
       if (Math.abs(video.currentTime - targetTime) > 0.5) {
         video.currentTime = this.safeSeekTime(video, targetTime);
+      }
+    }
+  }
+
+  /**
+   * Pre-buffer the nested clip that will be visible when an upcoming composition clip starts.
+   * This preserves the old nested preload behavior, but keeps it in the same module as the
+   * main HTML video warmup/prebuffer logic instead of a separate timeline hook.
+   */
+  private preBufferUpcomingNestedCompVideos(ctx: FrameContext): void {
+    if (!ctx.isPlaying || ctx.isDraggingPlayhead) return;
+
+    const lookaheadEnd = ctx.playheadPosition + VideoSyncManager.LOOKAHEAD_TIME;
+
+    for (const compClip of ctx.clips) {
+      const clipStart = compClip.startTime;
+      if (
+        !compClip.isComposition ||
+        !compClip.nestedClips ||
+        compClip.nestedClips.length === 0 ||
+        clipStart <= ctx.playheadPosition ||
+        clipStart > lookaheadEnd
+      ) {
+        continue;
+      }
+
+      const compStartTime = compClip.inPoint;
+      for (const nestedClip of compClip.nestedClips) {
+        const video = nestedClip.source?.videoElement;
+        if (!video) continue;
+
+        const nestedClipEnd = nestedClip.startTime + nestedClip.duration;
+        if (compStartTime < nestedClip.startTime || compStartTime >= nestedClipEnd) {
+          continue;
+        }
+
+        const nestedLocalTime = compStartTime - nestedClip.startTime;
+        const targetTime = nestedClip.reversed
+          ? nestedClip.outPoint - nestedLocalTime
+          : nestedLocalTime + nestedClip.inPoint;
+
+        if (this.warmingUpVideos.has(video) || this.gpuWarmedUp.has(video) || video.seeking) {
+          continue;
+        }
+
+        if (video.preload !== 'auto') {
+          video.preload = 'auto';
+        }
+
+        if (Math.abs(video.currentTime - targetTime) > 0.1) {
+          video.currentTime = this.safeSeekTime(video, targetTime);
+        }
       }
     }
   }
