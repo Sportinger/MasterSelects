@@ -950,6 +950,7 @@ export function MediaPanel() {
                 type="text"
                 className="media-item-rename"
                 value={renameValue}
+                size={Math.max(1, renameValue.length)}
                 onChange={(e) => setRenameValue(e.target.value)}
                 onBlur={finishRename}
                 onKeyDown={(e) => {

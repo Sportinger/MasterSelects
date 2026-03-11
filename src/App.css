@@ -7063,7 +7063,6 @@ input[type="checkbox"] {
 }
 
 .media-item-rename {
-  flex: 1;
   background: var(--bg-primary);
   border: 1px solid var(--accent);
   border-radius: 2px;
@@ -7071,6 +7070,11 @@ input[type="checkbox"] {
   font-size: 12px;
   color: var(--text-primary);
   outline: none;
+  width: auto;
+  min-width: 30px;
+  max-width: 100%;
+  font-family: inherit;
+  field-sizing: content;
 }
 
 /* Legacy - replaced by media-col system */
