@@ -114,6 +114,7 @@ export function MediaPanel() {
   const itemListRef = useRef<HTMLDivElement>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const renameTimerRef = useRef<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; itemId?: string } | null>(null);
 
   // Marquee selection state
@@ -483,12 +484,16 @@ export function MediaPanel() {
     setRenamingId(null);
   }, [renamingId, renameValue, files, folders, compositions, renameFile, renameFolder, updateComposition]);
 
-  // Handle click on item name to start rename
+  // Handle click on item name to start rename (delayed so drag can cancel it)
   const handleNameClick = useCallback((e: React.MouseEvent, id: string, currentName: string) => {
     // Only start rename if item is already selected (double-click on name effect)
     if (selectedIds.includes(id)) {
       e.stopPropagation();
-      startRename(id, currentName);
+      if (renameTimerRef.current) clearTimeout(renameTimerRef.current);
+      renameTimerRef.current = window.setTimeout(() => {
+        renameTimerRef.current = null;
+        startRename(id, currentName);
+      }, 300);
     }
   }, [selectedIds, startRename]);
 
@@ -585,6 +590,11 @@ export function MediaPanel() {
 
   // Handle drag start for media files and compositions (to drag to Timeline OR to folders)
   const handleDragStart = useCallback((e: React.DragEvent, item: ProjectItem) => {
+    // Cancel pending rename — drag wins over rename
+    if (renameTimerRef.current) {
+      clearTimeout(renameTimerRef.current);
+      renameTimerRef.current = null;
+    }
     const isFolder = 'isExpanded' in item;
     clearExternalDragPayload();
 
