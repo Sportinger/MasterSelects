@@ -6,7 +6,7 @@ import { createVideoElement, createAudioElement, initWebCodecsPlayer } from '../
 import type { TimelineClip } from '../../../types';
 import type { ToolResult } from '../types';
 import { formatClipInfo } from '../utils';
-import { isAIExecutionActive } from '../executionState';
+import { isAIExecutionActive, setStaggerBudget, consumeStaggerDelay } from '../executionState';
 import { activateDockPanel } from '../aiFeedback';
 
 /** Resolve clip background color for ghost overlays */
@@ -576,7 +576,7 @@ export async function handleSplitClipEvenly(
 
   // Staggered split: each cut happens one by one with visual feedback
   if (isAIExecutionActive()) {
-    const staggerMs = splitTimes.length <= 1 ? 0 : Math.min(1000, Math.floor(3000 / (splitTimes.length - 1)));
+    setStaggerBudget(3000); // standalone call gets its own 3s budget
     const trackId = clip.trackId;
     // Do first split immediately
     splitClipBatch(clip, [splitTimes[0]], withLinked);
@@ -586,7 +586,7 @@ export async function handleSplitClipEvenly(
     // Schedule remaining splits
     for (let i = 1; i < splitTimes.length; i++) {
       const t = splitTimes[i];
-      await new Promise(resolve => setTimeout(resolve, staggerMs));
+      await new Promise(resolve => setTimeout(resolve, consumeStaggerDelay(splitTimes.length - i)));
       // Find the clip that contains this split time
       const currentClips = useTimelineStore.getState().clips;
       const target = currentClips.find(c =>
@@ -637,17 +637,18 @@ export async function handleSplitClipAtTimes(
 
   // Staggered split: each cut happens one by one with visual feedback
   if (isAIExecutionActive()) {
-    const staggerMs = validTimes.length <= 1 ? 0 : Math.min(1000, Math.floor(3000 / (validTimes.length - 1)));
+    // Note: when called from executeBatch, budget is already set globally.
+    // When called standalone, set a fresh 3s budget.
     const trackId = clip.trackId;
     // Do first split immediately
     splitClipBatch(clip, [validTimes[0]], withLinked);
     useTimelineStore.getState().addAIOverlay({
       type: 'split-glow', trackId, timePosition: validTimes[0], duration: 1000,
     });
-    // Schedule remaining splits
+    // Schedule remaining splits — consumes from shared stagger budget
     for (let i = 1; i < validTimes.length; i++) {
       const t = validTimes[i];
-      await new Promise(resolve => setTimeout(resolve, staggerMs));
+      await new Promise(resolve => setTimeout(resolve, consumeStaggerDelay(validTimes.length - i)));
       const currentClips = useTimelineStore.getState().clips;
       const target = currentClips.find(c =>
         c.trackId === trackId && c.startTime < t && c.startTime + c.duration > t + 0.001
@@ -729,8 +730,6 @@ export async function handleReorderClips(
       }
     }
 
-    const staggerMs = moves.length <= 1 ? 0 : Math.min(1000, Math.floor(3000 / (moves.length - 1)));
-
     for (let i = 0; i < moves.length; i++) {
       const { clipId, linkedId, newStart, linkedNewStart } = moves[i];
       const store = useTimelineStore.getState();
@@ -757,7 +756,7 @@ export async function handleReorderClips(
       });
 
       if (i < moves.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, staggerMs));
+        await new Promise(resolve => setTimeout(resolve, consumeStaggerDelay(moves.length - 1 - i)));
       }
     }
   } else {

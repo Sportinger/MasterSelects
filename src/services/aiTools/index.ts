@@ -12,7 +12,7 @@ import type { ToolResult } from './types';
 import { MODIFYING_TOOLS } from './types';
 import { executeToolInternal } from './handlers';
 import { handleExecuteBatch } from './handlers/batch';
-import { setAIExecutionActive } from './executionState';
+import { setAIExecutionActive, setStaggerBudget } from './executionState';
 
 // Re-export types
 export type { ToolResult, ToolDefinition } from './types';
@@ -83,6 +83,12 @@ async function _executeAIToolInternal(toolName: string, args: Record<string, unk
   const isModifying = MODIFYING_TOOLS.has(toolName);
   if (isModifying) {
     startBatch(`AI: ${toolName}`);
+  }
+
+  // Set fresh 3s stagger budget for standalone tool calls
+  // (batch handler sets its own budget before calling tools)
+  if (toolName !== 'executeBatch') {
+    setStaggerBudget(3000);
   }
 
   try {

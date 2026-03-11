@@ -4,6 +4,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import type { ToolResult } from '../types';
 import { executeToolInternal } from './index';
+import { setStaggerBudget, consumeStaggerDelay } from '../executionState';
 
 interface BatchAction {
   tool: string;
@@ -23,22 +24,23 @@ interface BatchActionResult {
  * Re-fetches fresh store state between actions so that
  * clip IDs from splits are available to subsequent actions.
  *
- * Supports staggered execution for visual feedback:
- * - staggerDelayMs: delay between actions in ms (default: 100)
+ * All visual stagger delays (batch steps + internal tool steps like splits)
+ * share a single 3s budget so the entire batch always finishes in ≤3s visually.
  */
 export async function handleExecuteBatch(
   args: Record<string, unknown>
 ): Promise<ToolResult> {
   const actions = args.actions as BatchAction[];
-  const MAX_TOTAL_DURATION_MS = 3000;
-  const MAX_PER_STEP_MS = 1000;
-  const actionCount = actions.length;
-  const autoDelay = actionCount <= 1 ? 0 : Math.min(MAX_PER_STEP_MS, Math.floor(MAX_TOTAL_DURATION_MS / (actionCount - 1)));
-  const staggerDelayMs = (args.staggerDelayMs as number) ?? autoDelay;
 
   if (!actions || !Array.isArray(actions) || actions.length === 0) {
     return { success: false, error: 'actions must be a non-empty array' };
   }
+
+  // Set global stagger budget — all delays (batch + internal splits/reorders) share this
+  const budgetMs = (args.staggerDelayMs as number | undefined) !== undefined
+    ? (args.staggerDelayMs as number) * actions.length  // manual override: total = per-step × count
+    : 3000; // default: 3s total
+  setStaggerBudget(budgetMs);
 
   const results: BatchActionResult[] = [];
   let allSucceeded = true;
@@ -87,10 +89,9 @@ export async function handleExecuteBatch(
       });
     }
 
-    // Staggered delay between actions for visual feedback
-    // (also serves as microtask break to prevent call stack overflow)
-    const delay = i < actions.length - 1 ? Math.max(staggerDelayMs, 0) : 0;
-    if (delay > 0) {
+    // Consume from shared budget for between-action delay
+    if (i < actions.length - 1) {
+      const delay = consumeStaggerDelay(actions.length - 1 - i);
       await new Promise(resolve => setTimeout(resolve, delay));
     } else {
       await new Promise(resolve => setTimeout(resolve, 0));
