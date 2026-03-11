@@ -30,7 +30,11 @@ export async function handleExecuteBatch(
   args: Record<string, unknown>
 ): Promise<ToolResult> {
   const actions = args.actions as BatchAction[];
-  const staggerDelayMs = (args.staggerDelayMs as number) ?? 100;
+  const MAX_TOTAL_DURATION_MS = 3000;
+  const MAX_PER_STEP_MS = 1000;
+  const actionCount = actions.length;
+  const autoDelay = actionCount <= 1 ? 0 : Math.min(MAX_PER_STEP_MS, Math.floor(MAX_TOTAL_DURATION_MS / (actionCount - 1)));
+  const staggerDelayMs = (args.staggerDelayMs as number) ?? autoDelay;
 
   if (!actions || !Array.isArray(actions) || actions.length === 0) {
     return { success: false, error: 'actions must be a non-empty array' };
