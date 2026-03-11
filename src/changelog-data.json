@@ -1,5 +1,105 @@
 [
   {
+    "date": "2026-03-11",
+    "type": "new",
+    "title": "Playback Debug Stats & Trace System",
+    "description": "New playback debug stats service with history sampling, WebCodecs/VF pipeline tracing, and enhanced AI tool handlers for real-time engine diagnostics.",
+    "section": "Engine",
+    "commits": [
+      "95304a59"
+    ]
+  },
+  {
+    "date": "2026-03-11",
+    "type": "improve",
+    "title": "Render Pipeline Hardening",
+    "description": "LayerCollector, RenderDispatcher, and NestedCompRenderer received robustness improvements including better error recovery, cache lifecycle management, and output window handling.",
+    "section": "Engine",
+    "commits": [
+      "95304a59"
+    ]
+  },
+  {
+    "date": "2026-03-11",
+    "type": "improve",
+    "title": "Enhanced Video Sync & Audio Track Management",
+    "description": "VideoSyncManager now has robust frame tracking and recovery. AudioTrackSyncManager and AudioSyncHandler improved for better multi-track synchronization.",
+    "section": "Playback",
+    "commits": [
+      "95304a59"
+    ]
+  },
+  {
+    "date": "2026-03-11",
+    "type": "improve",
+    "title": "AI Action Overlay Animations",
+    "description": "Batch split animations are now CSS-staggered for efficiency. All AI visual delays share a unified 3-second global stagger budget.",
+    "section": "AI / Timeline",
+    "commits": [
+      "d02cce9c",
+      "7d7dadb7",
+      "2938c091",
+      "45921604"
+    ]
+  },
+  {
+    "date": "2026-03-11",
+    "type": "new",
+    "title": "Slot Grid View with Animated Transitions",
+    "description": "New Slot Grid toggle in timeline toolbar with animated toolbar and tab slide transitions. Compositions can now be dragged directly into the slot grid.",
+    "section": "UI",
+    "commits": [
+      "475c0139",
+      "912f1892",
+      "f29d85bd"
+    ]
+  },
+  {
+    "date": "2026-03-11",
+    "type": "improve",
+    "title": "Media Panel View Toggle",
+    "description": "Replaced separate list/grid buttons with a single toggle icon that swaps between views. Toggle moved to left side with matching icon style.",
+    "section": "UI",
+    "commits": [
+      "93e08a62",
+      "0accccfd",
+      "7a411ab0",
+      "3a71e42e"
+    ]
+  },
+  {
+    "date": "2026-03-11",
+    "type": "fix",
+    "title": "Rename & Drag-and-Drop Interaction",
+    "description": "Rename mode is now delayed so drag-and-drop works on selected items. Rename input auto-sizes to fit text content.",
+    "section": "UI",
+    "commits": [
+      "57c71afd",
+      "1fa3c8f6"
+    ]
+  },
+  {
+    "date": "2026-03-11",
+    "type": "fix",
+    "title": "Desktop Scrollbar and Mobile View Fix",
+    "description": "Mobile view now only activates on actual mobile devices. Small desktop windows get a proper scrollbar instead of being cut off.",
+    "section": "UI",
+    "commits": [
+      "32186388",
+      "c1251343"
+    ]
+  },
+  {
+    "date": "2026-03-11",
+    "type": "new",
+    "title": "Changelog Startup Toggle",
+    "description": "Added a \"Don't show on startup\" option so the changelog dialog can be dismissed permanently.",
+    "section": "UI",
+    "commits": [
+      "e84784d9"
+    ]
+  },
+  {
     "date": "2026-03-09",
     "type": "new",
     "title": "Marquee Selection Below Tracks",
@@ -301,7 +401,10 @@
     "title": "Staggered AI Action Execution",
     "description": "AI tool actions now execute visually step-by-step instead of all at once. Split operations show blue glow lines appearing one by one (300ms apart). Reorder operations move clips sequentially with FLIP animations (150ms apart). Delete shows a red ghost fade-out, trim shows green edge glow.",
     "section": "AI",
-    "commits": ["4ada510", "a10f766"]
+    "commits": [
+      "4ada510",
+      "a10f766"
+    ]
   },
   {
     "date": "2026-03-04",
@@ -309,7 +412,9 @@
     "title": "Transcript Badge & Persistence",
     "description": "Media panel now shows a transcript badge for files with completed transcriptions. Transcript data is persisted in the project folder.",
     "section": "Media",
-    "commits": ["0b8753b"]
+    "commits": [
+      "0b8753b"
+    ]
   },
   {
     "date": "2026-03-03",
@@ -317,7 +422,9 @@
     "title": "addClipSegment API",
     "description": "New AI tool to import a media segment with specific in/out points directly onto the timeline.",
     "section": "AI",
-    "commits": ["fb8d7f3"]
+    "commits": [
+      "fb8d7f3"
+    ]
   },
   {
     "date": "2026-03-03",
@@ -325,7 +432,9 @@
     "title": "Word-Level Timestamps for All Languages",
     "description": "Local Whisper transcription now enables word-level timestamps for all languages, not just English.",
     "section": "Transcription",
-    "commits": ["6c95d34"]
+    "commits": [
+      "6c95d34"
+    ]
   },
   {
     "date": "2026-03-02",
@@ -333,7 +442,9 @@
     "title": "window.aiTools API for External Agents",
     "description": "Exposed window.aiTools.execute() API on the browser window, enabling external agents (Claude Code, browser console, MCP skills) to control the editor directly.",
     "section": "AI",
-    "commits": ["827288f"]
+    "commits": [
+      "827288f"
+    ]
   },
   {
     "date": "2026-03-02",
@@ -341,7 +452,10 @@
     "title": "Local File Import API & Track Context Menu",
     "description": "New API for importing local files into the timeline. Track headers now have a right-click context menu for adding tracks, replacing the old toolbar buttons.",
     "section": "Timeline",
-    "commits": ["4fed8e4", "d821f9b"]
+    "commits": [
+      "4fed8e4",
+      "d821f9b"
+    ]
   },
   {
     "date": "2026-03-02",
@@ -349,7 +463,10 @@
     "title": "Nested Compositions Level 3+",
     "description": "Compositions nested more than 2 levels deep now render correctly. Sub-nested media elements are loaded directly on clip objects for arbitrary nesting depth.",
     "section": "Compositions",
-    "commits": ["9ae42ca", "21c0a39"]
+    "commits": [
+      "9ae42ca",
+      "21c0a39"
+    ]
   },
   {
     "date": "2026-03-01",
@@ -357,7 +474,9 @@
     "title": "Auto-Split Large Audio for Transcription",
     "description": "Audio files larger than 25MB are now automatically split into chunks before sending to OpenAI for transcription, preventing upload failures.",
     "section": "Transcription",
-    "commits": ["b4554fb"]
+    "commits": [
+      "b4554fb"
+    ]
   },
   {
     "date": "2026-03-01",
@@ -365,7 +484,9 @@
     "title": "Volume Control: dB DraggableNumber",
     "description": "Volume control changed from a percentage slider to a decibel-based DraggableNumber input for more precise audio control.",
     "section": "Audio",
-    "commits": ["5cf7f4d"]
+    "commits": [
+      "5cf7f4d"
+    ]
   },
   {
     "date": "2026-03-01",
@@ -373,7 +494,11 @@
     "title": "Transcript & AI Tool Fixes",
     "description": "Fixed hasTranscript check to also use transcriptStatus field. Fixed moveClip handler to validate NaN values and accept startTime/trackId aliases. Transcription now checks file extension when MIME type is empty.",
     "section": "AI",
-    "commits": ["b0f08b1", "8066554", "f0fcc83"]
+    "commits": [
+      "b0f08b1",
+      "8066554",
+      "f0fcc83"
+    ]
   },
   {
     "date": "2026-02-25",
@@ -381,7 +506,10 @@
     "title": "Reverted WebCodecs-Only Migration",
     "description": "The WebCodecs-only engine migration (Phases 0-6) was reverted due to playback regressions. Staging was reset to match the stable master branch, and selected AI/tool features were cherry-picked back.",
     "section": "Engine",
-    "commits": ["fea6650", "19bec8d"]
+    "commits": [
+      "fea6650",
+      "19bec8d"
+    ]
   },
   {
     "date": "2026-02-12",
@@ -389,7 +517,9 @@
     "title": "Default Layout: Hide WIP panels",
     "description": "AI Segment tab is no longer shown by default in the left sidebar since it's a WIP panel. Downloads tab remains visible by default.",
     "section": "UI",
-    "commits": ["400c246"]
+    "commits": [
+      "400c246"
+    ]
   },
   {
     "date": "2026-02-12",
