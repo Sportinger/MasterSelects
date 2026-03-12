@@ -192,6 +192,8 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
 
     // Clear current timeline
     clearTimeline();
+    const timelineSessionId = get().timelineSessionId;
+    const isCurrentTimelineSession = () => get().timelineSessionId === timelineSessionId;
 
     if (!data) {
       // No data - start with fresh default timeline
@@ -485,6 +487,9 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                     video.crossOrigin = 'anonymous';
                     video.load();
                     video.addEventListener('loadedmetadata', () => {
+                      if (!isCurrentTimelineSession()) {
+                        return;
+                      }
                       nc.source = { type: 'video', videoElement: video, naturalDuration: video.duration };
                       nc.isLoading = false;
                       // Trigger state update
@@ -501,6 +506,9 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                     const img = new Image();
                     img.src = subFileUrl;
                     img.addEventListener('load', () => {
+                      if (!isCurrentTimelineSession()) {
+                        return;
+                      }
                       nc.source = { type: 'image', imageElement: img };
                       nc.isLoading = false;
                       wakePreviewAfterRestore();
@@ -623,6 +631,9 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                 }, { once: true });
 
                 video.addEventListener('loadedmetadata', async () => {
+                  if (!isCurrentTimelineSession()) {
+                    return;
+                  }
                   // Set up basic video source first
                   const videoSource: TimelineClip['source'] = {
                     type: 'video',
@@ -649,6 +660,10 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                     } catch (err) {
                       log.warn('WebCodecsPlayer init failed in nested comp', err);
                     }
+                  }
+
+                  if (!isCurrentTimelineSession()) {
+                    return;
                   }
 
                   log.info('Nested video loaded', {
@@ -681,6 +696,9 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                 const img = new Image();
                 img.src = nestedFileUrl;
                 img.addEventListener('load', () => {
+                  if (!isCurrentTimelineSession()) {
+                    return;
+                  }
                   nestedClip.source = {
                     type: 'image',
                     imageElement: img,
@@ -737,6 +755,9 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
 
             // Merge nested keyframes into store
             if (nestedKeyframesMap.size > 0) {
+              if (!isCurrentTimelineSession()) {
+                return;
+              }
               const currentKeyframes = get().clipKeyframes;
               const mergedKeyframes = new Map(currentKeyframes);
               nestedKeyframesMap.forEach((keyframes, clipId) => {
@@ -746,6 +767,9 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
             }
 
             // Update comp clip with nested data and boundaries
+            if (!isCurrentTimelineSession()) {
+              return;
+            }
             set(state => ({
               clips: state.clips.map(c =>
                 c.id === compClip.id
@@ -758,8 +782,14 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
             if (get().thumbnailsEnabled) {
               // Wait for nested clip sources to load, then build segments
               setTimeout(async () => {
+                if (!isCurrentTimelineSession()) {
+                  return;
+                }
                 // Get fresh nested clips (they may have updated sources now)
                 const freshCompClip = get().clips.find(c => c.id === compClip.id);
+                if (!freshCompClip) {
+                  return;
+                }
                 const freshNestedClips = freshCompClip?.nestedClips || nestedClips;
 
                 const clipSegments = await buildClipSegments(
@@ -768,6 +798,9 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                   freshNestedClips
                 );
 
+                if (!isCurrentTimelineSession()) {
+                  return;
+                }
                 if (clipSegments.length > 0) {
                   set(state => ({
                     clips: state.clips.map(c =>
@@ -783,6 +816,9 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
             }
           } else {
             // No timeline data
+            if (!isCurrentTimelineSession()) {
+              return;
+            }
             set(state => ({
               clips: state.clips.map(c =>
                 c.id === compClip.id ? { ...c, isLoading: false } : c
@@ -1150,6 +1186,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
     // media resources while clips still reference them, the render loop can
     // pass a closed VideoFrame to importExternalTexture → GPU crash.
     const { tracks } = get();
+    const nextTimelineSessionId = get().timelineSessionId + 1;
     set({
       clips: [],
       layers: [],
@@ -1165,6 +1202,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       expandedTrackPropertyGroups: new Map<string, Set<string>>(),
       selectedKeyframeIds: new Set<string>(),
       expandedCurveProperties: new Map<string, Set<import('../../types').AnimatableProperty>>(),
+      timelineSessionId: nextTimelineSessionId,
     });
 
     // Clean up media elements. WebCodecsPlayers are NOT destroyed —

@@ -70,6 +70,7 @@ function getInitialState(): Partial<TimelineStore> {
     // Clip animation / slot grid
     clipAnimationPhase: 'idle' as const,
     slotGridProgress: 0,
+    timelineSessionId: 0,
     // RAM Preview state
     ramPreviewEnabled: false,
     ramPreviewProgress: null,

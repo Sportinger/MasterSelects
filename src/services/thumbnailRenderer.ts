@@ -3,8 +3,9 @@
 
 import { Logger } from './logger';
 import { compositionRenderer } from './compositionRenderer';
-import type { Layer } from '../types';
+import type { Effect, Layer } from '../types';
 import { useMediaStore } from '../stores/mediaStore';
+import { splitLayerEffects } from '../engine/render/layerEffectStack';
 
 const log = Logger.create('ThumbnailRenderer');
 
@@ -44,6 +45,10 @@ class ThumbnailRendererService {
   private pongTexture: GPUTexture | null = null;
   private pingView: GPUTextureView | null = null;
   private pongView: GPUTextureView | null = null;
+  private effectTempTexture: GPUTexture | null = null;
+  private effectTempTexture2: GPUTexture | null = null;
+  private effectTempView: GPUTextureView | null = null;
+  private effectTempView2: GPUTextureView | null = null;
   private currentWidth = 0;
   private currentHeight = 0;
 
@@ -131,13 +136,22 @@ class ThumbnailRendererService {
   private ensurePingPongTextures(width: number, height: number): boolean {
     if (!this.resources) return false;
 
-    if (this.pingTexture && this.currentWidth === width && this.currentHeight === height) {
+    if (
+      this.pingTexture &&
+      this.pongTexture &&
+      this.effectTempTexture &&
+      this.effectTempTexture2 &&
+      this.currentWidth === width &&
+      this.currentHeight === height
+    ) {
       return true;
     }
 
     // Cleanup old textures
     this.pingTexture?.destroy();
     this.pongTexture?.destroy();
+    this.effectTempTexture?.destroy();
+    this.effectTempTexture2?.destroy();
 
     const { device } = this.resources;
 
@@ -153,8 +167,22 @@ class ThumbnailRendererService {
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
     });
 
+    this.effectTempTexture = device.createTexture({
+      size: { width, height },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
+    });
+
+    this.effectTempTexture2 = device.createTexture({
+      size: { width, height },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
+    });
+
     this.pingView = this.pingTexture.createView();
     this.pongView = this.pongTexture.createView();
+    this.effectTempView = this.effectTempTexture.createView();
+    this.effectTempView2 = this.effectTempTexture2.createView();
     this.currentWidth = width;
     this.currentHeight = height;
 
@@ -450,7 +478,15 @@ class ThumbnailRendererService {
     width: number,
     height: number
   ): Promise<string | null> {
-    if (!this.resources || !this.pingView || !this.pongView || !this.canvasContext || !this.canvas) {
+    if (
+      !this.resources ||
+      !this.pingView ||
+      !this.pongView ||
+      !this.effectTempView ||
+      !this.effectTempView2 ||
+      !this.canvasContext ||
+      !this.canvas
+    ) {
       return null;
     }
 
@@ -510,20 +546,112 @@ class ThumbnailRendererService {
       const hasMask = maskInfo.hasMask;
       const maskTextureView = maskInfo.view;
 
-      compositorPipeline.updateLayerUniforms(layer, sourceAspect, outputAspect, hasMask, uniformBuffer);
+      const { inlineEffects, complexEffects } = splitLayerEffects(layer.effects);
+      compositorPipeline.updateLayerUniforms(
+        layer,
+        sourceAspect,
+        outputAspect,
+        hasMask,
+        uniformBuffer,
+        inlineEffects
+      );
+
+      let sourceTextureView = data.textureView;
+      let sourceExternalTexture = data.externalTexture;
+      let useExternalTexture = data.isVideo && !!data.externalTexture;
+
+      if (complexEffects && complexEffects.length > 0) {
+        if (useExternalTexture && sourceExternalTexture) {
+          const copyPipeline = compositorPipeline.getExternalCopyPipeline?.();
+          const copyBindGroup = copyPipeline
+            ? compositorPipeline.createExternalCopyBindGroup?.(
+              sampler,
+              sourceExternalTexture,
+              layer.id
+            )
+            : null;
+
+          if (copyPipeline && copyBindGroup) {
+            const copyPass = commandEncoder.beginRenderPass({
+              colorAttachments: [{ view: this.effectTempView!, loadOp: 'clear', storeOp: 'store' }],
+            });
+            copyPass.setPipeline(copyPipeline);
+            copyPass.setBindGroup(0, copyBindGroup);
+            copyPass.draw(6);
+            copyPass.end();
+
+            const effectResult = effectsPipeline.applyEffects(
+              commandEncoder,
+              complexEffects,
+              sampler,
+              this.effectTempView!,
+              this.effectTempView2!,
+              this.effectTempView!,
+              this.effectTempView2!,
+              width,
+              height
+            );
+
+            sourceTextureView = effectResult.finalView;
+            sourceExternalTexture = null;
+            useExternalTexture = false;
+          }
+        } else if (sourceTextureView) {
+          const copyPipeline = compositorPipeline.getCopyPipeline?.();
+          const copyBindGroup = copyPipeline
+            ? compositorPipeline.createCopyBindGroup?.(
+              sampler,
+              sourceTextureView,
+              layer.id
+            )
+            : null;
+
+          if (copyPipeline && copyBindGroup) {
+            const copyPass = commandEncoder.beginRenderPass({
+              colorAttachments: [{ view: this.effectTempView!, loadOp: 'clear', storeOp: 'store' }],
+            });
+            copyPass.setPipeline(copyPipeline);
+            copyPass.setBindGroup(0, copyBindGroup);
+            copyPass.draw(6);
+            copyPass.end();
+
+            const effectResult = effectsPipeline.applyEffects(
+              commandEncoder,
+              complexEffects,
+              sampler,
+              this.effectTempView!,
+              this.effectTempView2!,
+              this.effectTempView!,
+              this.effectTempView2!,
+              width,
+              height
+            );
+
+            sourceTextureView = effectResult.finalView;
+          }
+        }
+      }
 
       let pipeline: GPURenderPipeline;
       let bindGroup: GPUBindGroup;
 
-      if (data.isVideo && data.externalTexture) {
+      if (useExternalTexture && sourceExternalTexture) {
         pipeline = compositorPipeline.getExternalCompositePipeline()!;
         bindGroup = compositorPipeline.createExternalCompositeBindGroup(
-          sampler, readView, data.externalTexture, uniformBuffer, maskTextureView
+          sampler,
+          readView,
+          sourceExternalTexture,
+          uniformBuffer,
+          maskTextureView
         );
-      } else if (data.textureView) {
+      } else if (sourceTextureView) {
         pipeline = compositorPipeline.getCompositePipeline()!;
         bindGroup = compositorPipeline.createCompositeBindGroup(
-          sampler, readView, data.textureView, uniformBuffer, maskTextureView
+          sampler,
+          readView,
+          sourceTextureView,
+          uniformBuffer,
+          maskTextureView
         );
       } else {
         continue;
@@ -537,18 +665,6 @@ class ThumbnailRendererService {
       pass.draw(6);
       pass.end();
 
-      // Apply effects
-      if (layer.effects?.length && effectsPipeline) {
-        const result = effectsPipeline.applyEffects(
-          commandEncoder, layer.effects, sampler,
-          writeView, readView, this.pingView!, this.pongView!, width, height
-        );
-        if (result.swapped) {
-          [readView, writeView] = [writeView, readView];
-        }
-      }
-
-      // Swap for next layer
       [readView, writeView] = [writeView, readView];
     }
 
@@ -816,7 +932,15 @@ class ThumbnailRendererService {
     width: number,
     height: number
   ): Promise<string | null> {
-    if (!this.resources || !this.pingView || !this.pongView || !this.canvasContext || !this.canvas) {
+    if (
+      !this.resources ||
+      !this.pingView ||
+      !this.pongView ||
+      !this.effectTempView ||
+      !this.effectTempView2 ||
+      !this.canvasContext ||
+      !this.canvas
+    ) {
       return null;
     }
 
@@ -833,7 +957,7 @@ class ThumbnailRendererService {
       opacity: transform.opacity ?? 1,
       blendMode: 'normal',
       source: clip.source as Layer['source'],
-      effects: (clip.effects || []) as any,
+      effects: (clip.effects || []) as Effect[],
       position: { x: transform.position?.x || 0, y: transform.position?.y || 0, z: transform.position?.z || 0 },
       scale: transform.scale || { x: 1, y: 1 },
       rotation: typeof transform.rotation === 'number'
@@ -884,20 +1008,112 @@ class ThumbnailRendererService {
       const hasMask = maskInfo.hasMask;
       const maskTextureView = maskInfo.view;
 
-      compositorPipeline.updateLayerUniforms(data.layer, sourceAspect, outputAspect, hasMask, uniformBuffer);
+      const { inlineEffects, complexEffects } = splitLayerEffects(data.layer.effects);
+      compositorPipeline.updateLayerUniforms(
+        data.layer,
+        sourceAspect,
+        outputAspect,
+        hasMask,
+        uniformBuffer,
+        inlineEffects
+      );
+
+      let sourceTextureView = data.textureView;
+      let sourceExternalTexture = data.externalTexture;
+      let useExternalTexture = data.isVideo && !!data.externalTexture;
+
+      if (complexEffects && complexEffects.length > 0) {
+        if (useExternalTexture && sourceExternalTexture) {
+          const copyPipeline = compositorPipeline.getExternalCopyPipeline?.();
+          const copyBindGroup = copyPipeline
+            ? compositorPipeline.createExternalCopyBindGroup?.(
+              sampler,
+              sourceExternalTexture,
+              data.layer.id
+            )
+            : null;
+
+          if (copyPipeline && copyBindGroup) {
+            const copyPass = commandEncoder.beginRenderPass({
+              colorAttachments: [{ view: this.effectTempView!, loadOp: 'clear', storeOp: 'store' }],
+            });
+            copyPass.setPipeline(copyPipeline);
+            copyPass.setBindGroup(0, copyBindGroup);
+            copyPass.draw(6);
+            copyPass.end();
+
+            const effectResult = effectsPipeline.applyEffects(
+              commandEncoder,
+              complexEffects,
+              sampler,
+              this.effectTempView!,
+              this.effectTempView2!,
+              this.effectTempView!,
+              this.effectTempView2!,
+              width,
+              height
+            );
+
+            sourceTextureView = effectResult.finalView;
+            sourceExternalTexture = null;
+            useExternalTexture = false;
+          }
+        } else if (sourceTextureView) {
+          const copyPipeline = compositorPipeline.getCopyPipeline?.();
+          const copyBindGroup = copyPipeline
+            ? compositorPipeline.createCopyBindGroup?.(
+              sampler,
+              sourceTextureView,
+              data.layer.id
+            )
+            : null;
+
+          if (copyPipeline && copyBindGroup) {
+            const copyPass = commandEncoder.beginRenderPass({
+              colorAttachments: [{ view: this.effectTempView!, loadOp: 'clear', storeOp: 'store' }],
+            });
+            copyPass.setPipeline(copyPipeline);
+            copyPass.setBindGroup(0, copyBindGroup);
+            copyPass.draw(6);
+            copyPass.end();
+
+            const effectResult = effectsPipeline.applyEffects(
+              commandEncoder,
+              complexEffects,
+              sampler,
+              this.effectTempView!,
+              this.effectTempView2!,
+              this.effectTempView!,
+              this.effectTempView2!,
+              width,
+              height
+            );
+
+            sourceTextureView = effectResult.finalView;
+          }
+        }
+      }
 
       let pipeline: GPURenderPipeline;
       let bindGroup: GPUBindGroup;
 
-      if (data.isVideo && data.externalTexture) {
+      if (useExternalTexture && sourceExternalTexture) {
         pipeline = compositorPipeline.getExternalCompositePipeline()!;
         bindGroup = compositorPipeline.createExternalCompositeBindGroup(
-          sampler, readView, data.externalTexture, uniformBuffer, maskTextureView
+          sampler,
+          readView,
+          sourceExternalTexture,
+          uniformBuffer,
+          maskTextureView
         );
-      } else if (data.textureView) {
+      } else if (sourceTextureView) {
         pipeline = compositorPipeline.getCompositePipeline()!;
         bindGroup = compositorPipeline.createCompositeBindGroup(
-          sampler, readView, data.textureView, uniformBuffer, maskTextureView
+          sampler,
+          readView,
+          sourceTextureView,
+          uniformBuffer,
+          maskTextureView
         );
       } else {
         continue;
@@ -911,18 +1127,6 @@ class ThumbnailRendererService {
       pass.draw(6);
       pass.end();
 
-      // Apply effects
-      if (data.layer.effects?.length && effectsPipeline) {
-        const result = effectsPipeline.applyEffects(
-          commandEncoder, data.layer.effects, sampler,
-          writeView, readView, this.pingView!, this.pongView!, width, height
-        );
-        if (result.swapped) {
-          [readView, writeView] = [writeView, readView];
-        }
-      }
-
-      // Swap for next layer
       [readView, writeView] = [writeView, readView];
     }
 
@@ -948,6 +1152,8 @@ class ThumbnailRendererService {
   dispose(): void {
     this.pingTexture?.destroy();
     this.pongTexture?.destroy();
+    this.effectTempTexture?.destroy();
+    this.effectTempTexture2?.destroy();
     this.pingTexture = null;
     this.pongTexture = null;
     this.pingView = null;

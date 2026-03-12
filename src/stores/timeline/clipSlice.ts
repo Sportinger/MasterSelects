@@ -227,6 +227,8 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   // Add a composition as a clip (nested composition)
   addCompClip: async (trackId, composition: Composition, startTime) => {
     const { clips, updateDuration, findNonOverlappingPosition, thumbnailsEnabled, invalidateCache } = get();
+    const timelineSessionId = get().timelineSessionId;
+    const isCurrentTimelineSession = () => get().timelineSessionId === timelineSessionId;
 
     const compClip = createCompClipPlaceholder({ trackId, composition, startTime, findNonOverlappingPosition });
     set({ clips: [...clips, compClip] });
@@ -235,6 +237,9 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     // Load nested clips if timeline data exists
     if (composition.timelineData) {
       const nestedClips = await loadNestedClips({ compClipId: compClip.id, composition, get, set });
+      if (!isCurrentTimelineSession()) {
+        return;
+      }
       const nestedTracks = composition.timelineData.tracks;
       const compDuration = composition.timelineData?.duration ?? composition.duration;
 
@@ -251,8 +256,14 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       if (thumbnailsEnabled) {
         // Wait a bit for nested clip sources to load, then build segments
         setTimeout(async () => {
+          if (!isCurrentTimelineSession()) {
+            return;
+          }
           // Get fresh nested clips (they may have updated sources now)
           const freshCompClip = get().clips.find(c => c.id === compClip.id);
+          if (!freshCompClip) {
+            return;
+          }
           const freshNestedClips = freshCompClip?.nestedClips || nestedClips;
 
           const clipSegments = await buildClipSegments(
@@ -261,6 +272,9 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
             freshNestedClips
           );
 
+          if (!isCurrentTimelineSession()) {
+            return;
+          }
           if (clipSegments.length > 0) {
             set({
               clips: get().clips.map(c =>
@@ -720,6 +734,8 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   // Refresh nested clips when source composition changes
   refreshCompClipNestedData: async (sourceCompositionId: string) => {
     const { clips, invalidateCache } = get();
+    const timelineSessionId = get().timelineSessionId;
+    const isCurrentTimelineSession = () => get().timelineSessionId === timelineSessionId;
 
     log.info('refreshCompClipNestedData called', {
       sourceCompositionId,
@@ -759,6 +775,9 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
     // Reload nested clips for each comp clip
     for (const compClip of compClips) {
+      if (!isCurrentTimelineSession()) {
+        return;
+      }
       // Check if content actually changed (compare hashes)
       const oldContentHash = compClip.nestedContentHash;
       const needsThumbnailUpdate = oldContentHash !== newContentHash;
@@ -770,6 +789,9 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         get,
         set,
       });
+      if (!isCurrentTimelineSession()) {
+        return;
+      }
       const nestedTracks = composition.timelineData.tracks;
       const compDuration = composition.timelineData?.duration ?? composition.duration;
 
@@ -798,8 +820,14 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       if (needsThumbnailUpdate && get().thumbnailsEnabled) {
         // Wait a bit for nested clip sources to load, then build segments
         setTimeout(async () => {
+          if (!isCurrentTimelineSession()) {
+            return;
+          }
           // Get fresh nested clips (they may have updated sources now)
           const freshCompClip = get().clips.find(c => c.id === compClip.id);
+          if (!freshCompClip) {
+            return;
+          }
           const freshNestedClips = freshCompClip?.nestedClips || nestedClips;
 
           const clipSegments = await buildClipSegments(
@@ -808,6 +836,9 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
             freshNestedClips
           );
 
+          if (!isCurrentTimelineSession()) {
+            return;
+          }
           if (clipSegments.length > 0) {
             set({
               clips: get().clips.map(c =>
@@ -827,6 +858,9 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       }
     }
 
+    if (!isCurrentTimelineSession()) {
+      return;
+    }
     invalidateCache();
   },
 });

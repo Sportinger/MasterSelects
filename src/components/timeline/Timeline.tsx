@@ -74,6 +74,7 @@ export function Timeline() {
 
   // Slot grid progress - direct selector for reliable reactivity
   const slotGridProgress = useTimelineStore(state => state.slotGridProgress);
+  const timelineSessionId = useTimelineStore(state => state.timelineSessionId);
 
   // UI settings (rarely changes)
   const { snappingEnabled, inPoint, outPoint, loopPlayback, toolMode, thumbnailsEnabled, waveformsEnabled } =
@@ -699,7 +700,7 @@ export function Timeline() {
 
       return (
         <TimelineClip
-          key={clip.id}
+          key={`${timelineSessionId}:${clip.id}`}
           clip={clip}
           trackId={trackId}
           track={track}
@@ -778,6 +779,7 @@ export function Timeline() {
       pixelToTime,
       formatTime,
       tracks,
+      timelineSessionId,
       handlePickWhipDragStart,
       handlePickWhipDragEnd,
       setClipParent,
