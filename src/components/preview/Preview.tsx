@@ -23,18 +23,23 @@ import { useLayerDrag } from './useLayerDrag';
 import { useSAM2Store } from '../../stores/sam2Store';
 import { renderScheduler } from '../../services/renderScheduler';
 import { engine } from '../../engine/WebGPUEngine';
-import type { RenderSource } from '../../types/renderTarget';
+import type { PreviewPanelSource } from '../../types/dock';
+import {
+  createPreviewPanelDataPatch,
+  getPreviewSourceLabel,
+  resolvePreviewSourceCompositionId,
+} from '../../utils/previewPanelSource';
 
 interface PreviewProps {
   panelId: string;
-  compositionId: string | null; // null = active composition
+  source: PreviewPanelSource;
   showTransparencyGrid: boolean; // per-tab transparency toggle
 }
 
-export function Preview({ panelId, compositionId, showTransparencyGrid }: PreviewProps) {
+export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps) {
   const { isEngineReady } = useEngine();
   const engineStats = useEngineStore(s => s.engineStats);
-  const { clips, selectedClipIds, selectClip, updateClipTransform, maskEditMode, layers, selectedLayerId, selectLayer, updateLayer } = useTimelineStore(useShallow(s => ({
+  const { clips, selectedClipIds, selectClip, updateClipTransform, maskEditMode, layers, selectedLayerId, selectLayer, updateLayer, tracks } = useTimelineStore(useShallow(s => ({
     clips: s.clips,
     selectedClipIds: s.selectedClipIds,
     selectClip: s.selectClip,
@@ -44,6 +49,7 @@ export function Preview({ panelId, compositionId, showTransparencyGrid }: Previe
     selectedLayerId: s.selectedLayerId,
     selectLayer: s.selectLayer,
     updateLayer: s.updateLayer,
+    tracks: s.tracks,
   })));
   const { compositions, activeCompositionId } = useMediaStore(useShallow(s => ({
     compositions: s.compositions,
@@ -75,9 +81,17 @@ export function Preview({ panelId, compositionId, showTransparencyGrid }: Previe
   const sourceMonitorFile = useMediaStore(state =>
     state.sourceMonitorFileId ? state.files.find(f => f.id === state.sourceMonitorFileId) ?? null : null
   );
+  const activeCompositionVideoTracks = useMemo(
+    () => tracks.filter((track) => track.type === 'video'),
+    [tracks],
+  );
+  const sourceLabel = useMemo(
+    () => getPreviewSourceLabel(source, compositions, activeCompositionId, activeCompositionVideoTracks),
+    [source, compositions, activeCompositionId, activeCompositionVideoTracks],
+  );
 
   // Source monitor: show raw media file instead of composition
-  const sourceMonitorActive = compositionId === null && sourceMonitorFile !== null;
+  const sourceMonitorActive = source.type === 'activeComp' && sourceMonitorFile !== null;
 
   const closeSourceMonitor = useCallback(() => {
     useMediaStore.getState().setSourceMonitorFile(null);
@@ -91,30 +105,58 @@ export function Preview({ panelId, compositionId, showTransparencyGrid }: Previe
   }, [activeCompositionId]);
 
   // Determine which composition this preview is showing
-  const slotPreviewActive = compositionId === null && previewCompositionId !== null;
-  const displayedCompId = slotPreviewActive
-    ? previewCompositionId
-    : (compositionId ?? activeCompositionId);
+  const slotPreviewActive = source.type === 'activeComp' && previewCompositionId !== null;
+  const renderSource = useMemo<PreviewPanelSource>(
+    () => (
+      slotPreviewActive && previewCompositionId
+        ? { type: 'composition', compositionId: previewCompositionId }
+        : source
+    ),
+    [source, slotPreviewActive, previewCompositionId],
+  );
+  const renderSourceKey = useMemo(() => {
+    switch (renderSource.type) {
+      case 'activeComp':
+        return 'activeComp';
+      case 'composition':
+        return `composition:${renderSource.compositionId}`;
+      case 'layer-index':
+        return `layer-index:${renderSource.compositionId ?? 'active'}:${renderSource.layerIndex}`;
+    }
+  }, [renderSource.type, renderSource.type === 'composition' ? renderSource.compositionId : null, renderSource.type === 'layer-index' ? renderSource.compositionId : null, renderSource.type === 'layer-index' ? renderSource.layerIndex : null]);
+  const stableRenderSource = useMemo(() => renderSource, [renderSourceKey]);
+  const displayedCompId = resolvePreviewSourceCompositionId(renderSource, activeCompositionId);
   const displayedComp = compositions.find(c => c.id === displayedCompId);
+  const isEditableSource =
+    renderSource.type === 'activeComp' ||
+    (renderSource.type === 'composition' && renderSource.compositionId === activeCompositionId);
 
   // Engine resolution = active composition dimensions (fallback to settingsStore default)
   const effectiveResolution = displayedComp
     ? { width: displayedComp.width, height: displayedComp.height }
     : useSettingsStore.getState().outputResolution;
 
+  const setPanelSource = useCallback(
+    (nextSource: PreviewPanelSource) => {
+      updatePanelData(panelId, createPreviewPanelDataPatch(nextSource, { showTransparencyGrid }));
+    },
+    [panelId, showTransparencyGrid, updatePanelData],
+  );
+
+  const toggleTransparency = useCallback(() => {
+    updatePanelData(
+      panelId,
+      createPreviewPanelDataPatch(source, { showTransparencyGrid: !showTransparencyGrid }),
+    );
+  }, [panelId, showTransparencyGrid, source, updatePanelData]);
+
   // Unified RenderTarget registration
   useEffect(() => {
     if (!isEngineReady || !canvasRef.current) return;
 
-    const source: RenderSource = compositionId
-      ? { type: 'composition', compositionId }
-      : slotPreviewActive && previewCompositionId
-        ? { type: 'composition', compositionId: previewCompositionId }
-        : { type: 'activeComp' };
+    const isIndependent = stableRenderSource.type !== 'activeComp';
 
-    const isIndependent = source.type !== 'activeComp';
-
-    log.debug(`[${panelId}] Registering render target`, { source, isIndependent });
+    log.debug(`[${panelId}] Registering render target`, { source: stableRenderSource, isIndependent });
 
     const gpuContext = engine.registerTargetCanvas(panelId, canvasRef.current);
     if (!gpuContext) return;
@@ -122,7 +164,7 @@ export function Preview({ panelId, compositionId, showTransparencyGrid }: Previe
     useRenderTargetStore.getState().registerTarget({
       id: panelId,
       name: 'Preview',
-      source,
+      source: stableRenderSource,
       destinationType: 'canvas',
       enabled: true,
       showTransparencyGrid,
@@ -145,7 +187,7 @@ export function Preview({ panelId, compositionId, showTransparencyGrid }: Previe
       useRenderTargetStore.getState().unregisterTarget(panelId);
       engine.unregisterTargetCanvas(panelId);
     };
-  }, [isEngineReady, panelId, compositionId, previewCompositionId, slotPreviewActive]);
+  }, [isEngineReady, panelId, stableRenderSource, showTransparencyGrid]);
 
   // Sync per-tab transparency grid flag
   useEffect(() => {
@@ -217,6 +259,12 @@ export function Preview({ panelId, compositionId, showTransparencyGrid }: Previe
   const [viewPan, setViewPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+
+  useEffect(() => {
+    if (!isEditableSource) {
+      setEditMode(false);
+    }
+  }, [isEditableSource]);
 
   // Sync layer selection when clip is selected in timeline (for edit mode)
   useEffect(() => {
@@ -315,7 +363,7 @@ export function Preview({ panelId, compositionId, showTransparencyGrid }: Previe
                             activeElement instanceof HTMLTextAreaElement ||
                             activeElement?.getAttribute('contenteditable') === 'true';
 
-      if (e.key === 'Tab' && !isInputFocused) {
+      if (e.key === 'Tab' && !isInputFocused && isEditableSource) {
         e.preventDefault();
         setEditMode(prev => !prev);
       }
@@ -323,7 +371,7 @@ export function Preview({ panelId, compositionId, showTransparencyGrid }: Previe
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [isEditableSource]);
 
   // Handle panning with middle mouse or Alt+drag
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -413,17 +461,20 @@ export function Preview({ panelId, compositionId, showTransparencyGrid }: Previe
         sourceMonitorFileName={sourceMonitorFile?.name ?? null}
         closeSourceMonitor={closeSourceMonitor}
         editMode={editMode}
+        canEdit={isEditableSource}
         setEditMode={setEditMode}
         viewZoom={viewZoom}
         resetView={resetView}
-        compositionId={compositionId}
-        displayedComp={displayedComp}
+        source={source}
+        sourceLabel={sourceLabel}
+        activeCompositionId={activeCompositionId}
+        activeCompositionVideoTracks={activeCompositionVideoTracks}
         selectorOpen={selectorOpen}
         setSelectorOpen={setSelectorOpen}
         dropdownRef={dropdownRef}
         dropdownStyle={dropdownStyle}
         compositions={compositions}
-        updatePanelData={updatePanelData}
+        setPanelSource={setPanelSource}
         panelId={panelId}
         addPreviewPanel={addPreviewPanel}
         closePanelById={closePanelById}
@@ -461,13 +512,13 @@ export function Preview({ panelId, compositionId, showTransparencyGrid }: Previe
                   height: canvasSize.height,
                 }}
               />
-              {maskEditMode !== 'none' && (
+              {isEditableSource && maskEditMode !== 'none' && (
                 <MaskOverlay
                   canvasWidth={effectiveResolution.width}
                   canvasHeight={effectiveResolution.height}
                 />
               )}
-              {sam2Active && (
+              {isEditableSource && sam2Active && (
                 <SAM2Overlay
                   canvasWidth={effectiveResolution.width}
                   canvasHeight={effectiveResolution.height}
@@ -502,7 +553,7 @@ export function Preview({ panelId, compositionId, showTransparencyGrid }: Previe
           />
         )}
 
-        {editMode && (
+        {editMode && isEditableSource && (
           <div className="preview-edit-hint">
             Drag: Move | Handles: Scale (Shift: Lock Ratio) | Scroll: Zoom | Alt+Drag: Pan
           </div>
@@ -511,9 +562,7 @@ export function Preview({ panelId, compositionId, showTransparencyGrid }: Previe
         {/* Bottom-left controls */}
         <PreviewBottomControls
           showTransparencyGrid={showTransparencyGrid}
-          compositionId={compositionId}
-          panelId={panelId}
-          updatePanelData={updatePanelData}
+          onToggleTransparency={toggleTransparency}
           previewQuality={previewQuality}
           setPreviewQuality={setPreviewQuality}
           qualityOpen={qualityOpen}

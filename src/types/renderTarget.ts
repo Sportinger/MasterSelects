@@ -9,7 +9,7 @@ export type RenderSourceType = 'activeComp' | 'composition' | 'layer' | 'layer-i
 export interface RenderSourceActiveComp { type: 'activeComp' }
 export interface RenderSourceComposition { type: 'composition'; compositionId: string }
 export interface RenderSourceLayer { type: 'layer'; compositionId: string; layerIds: string[] }
-export interface RenderSourceLayerIndex { type: 'layer-index'; compositionId: string; layerIndex: number }
+export interface RenderSourceLayerIndex { type: 'layer-index'; compositionId: string | null; layerIndex: number }
 export interface RenderSourceSlot { type: 'slot'; slotIndex: number }
 export interface RenderSourceProgram { type: 'program' }  // main mix output
 

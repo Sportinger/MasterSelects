@@ -6,6 +6,7 @@ import type { DockPanel, PreviewPanelData, MultiPreviewPanelData } from '../../t
 import { Preview } from '../preview';
 import { PropertiesPanel, MediaPanel } from '../panels';
 import { Timeline } from '../timeline';
+import { normalizePreviewPanelSource } from '../../utils/previewPanelSource';
 
 // Lazy-loaded panels: only loaded when the user opens them
 // This keeps the initial bundle small by deferring export pipeline,
@@ -41,7 +42,13 @@ export function DockPanelContent({ panel }: DockPanelContentProps) {
   switch (panel.type) {
     case 'preview': {
       const previewData = panel.data as PreviewPanelData | undefined;
-      return <Preview panelId={panel.id} compositionId={previewData?.compositionId ?? null} showTransparencyGrid={previewData?.showTransparencyGrid ?? false} />;
+      return (
+        <Preview
+          panelId={panel.id}
+          source={normalizePreviewPanelSource(previewData)}
+          showTransparencyGrid={previewData?.showTransparencyGrid ?? false}
+        />
+      );
     }
     case 'multi-preview': {
       const mpData = (panel.data as MultiPreviewPanelData | undefined) ?? DEFAULT_MULTI_PREVIEW_DATA;

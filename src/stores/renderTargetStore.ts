@@ -216,7 +216,7 @@ export const useRenderTargetStore = create<RenderTargetState & RenderTargetActio
         case 'layer':
           return source.compositionId;
         case 'layer-index':
-          return source.compositionId;
+          return source.compositionId ?? useMediaStore.getState().activeCompositionId;
         case 'slot': {
           // Resolve slot to composition via activeLayerSlots
           // activeLayerSlots: Record<number, string | null> where key=layerIndex, value=compositionId

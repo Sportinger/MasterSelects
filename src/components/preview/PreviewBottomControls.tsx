@@ -5,9 +5,7 @@ import type { PreviewQuality } from '../../stores/settingsStore';
 
 interface PreviewBottomControlsProps {
   showTransparencyGrid: boolean;
-  compositionId: string | null;
-  panelId: string;
-  updatePanelData: (panelId: string, data: Record<string, unknown>) => void;
+  onToggleTransparency: () => void;
   previewQuality: PreviewQuality;
   setPreviewQuality: (q: PreviewQuality) => void;
   qualityOpen: boolean;
@@ -17,9 +15,7 @@ interface PreviewBottomControlsProps {
 
 export function PreviewBottomControls({
   showTransparencyGrid,
-  compositionId,
-  panelId,
-  updatePanelData,
+  onToggleTransparency,
   previewQuality,
   setPreviewQuality,
   qualityOpen,
@@ -30,7 +26,7 @@ export function PreviewBottomControls({
     <div className="preview-controls-bottom">
       <button
         className={`preview-transparency-toggle ${showTransparencyGrid ? 'active' : ''}`}
-        onClick={() => updatePanelData(panelId, { compositionId, showTransparencyGrid: !showTransparencyGrid })}
+        onClick={onToggleTransparency}
         title="Toggle transparency grid (checkerboard)"
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
