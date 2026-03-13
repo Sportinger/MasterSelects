@@ -4,8 +4,10 @@
 
 ### Browser-based Video Compositor
 
-[![Version](https://img.shields.io/badge/version-1.2.12-blue.svg)](https://github.com/Sportinger/MASterSelects/releases)
+[![Version](https://img.shields.io/badge/version-1.3.4-blue.svg)](https://github.com/Sportinger/MASterSelects/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+[![Watch the Demo](https://img.shields.io/badge/Watch_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/5ezX5ra0RTI)
 
 [![WebGPU](https://img.shields.io/badge/WebGPU-Powered-990000?style=flat-square&logo=webgpu&logoColor=white)](#)
 [![React 19](https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=black)](#)

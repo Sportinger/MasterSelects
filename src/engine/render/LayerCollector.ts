@@ -40,11 +40,13 @@ export class LayerCollector {
   private lastSuccessfulVideoProviderKey = new Map<string, string>();
   private lastCollectorState = new Map<string, 'render' | 'hold' | 'drop'>();
   private lastScrubTrace = new Map<string, string>();
+  private htmlHoldUntil = new Map<string, number>();
   // Grace period: keep HTMLVideo scrub preview path for a few frames after
   // scrub stops, so the settle-seek has time to complete before switching
   // to the WebCodecs path (which may not have the correct frame yet).
   private scrubGraceUntil = 0;
   private static readonly SCRUB_GRACE_MS = 150; // ~9 frames at 60fps
+  private static readonly HTML_HOLD_RECOVERY_MS = 120;
   private static readonly MAX_DRAG_FALLBACK_DRIFT_SECONDS = 1.2;
   private static readonly MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS = 0.9;
 
@@ -110,6 +112,45 @@ export class LayerCollector {
 
   private canReuseLastSuccessfulVideoFrame(layerId: string, providerKey: string | null): boolean {
     return !!providerKey && this.lastSuccessfulVideoProviderKey.get(layerId) === providerKey;
+  }
+
+  private armHtmlHold(layerId: string): void {
+    this.htmlHoldUntil.set(
+      layerId,
+      performance.now() + LayerCollector.HTML_HOLD_RECOVERY_MS
+    );
+  }
+
+  private clearHtmlHold(layerId: string): void {
+    this.htmlHoldUntil.delete(layerId);
+  }
+
+  private shouldPreferHtmlHold(
+    layerId: string,
+    options: {
+      hasHoldFrame: boolean;
+      isDragging: boolean;
+      isSettling: boolean;
+      awaitingPausedTargetFrame: boolean;
+      hasFreshPresentedFrame: boolean;
+    }
+  ): boolean {
+    if (!options.hasHoldFrame) {
+      this.clearHtmlHold(layerId);
+      return false;
+    }
+
+    if (
+      !options.isDragging &&
+      !options.isSettling &&
+      !options.awaitingPausedTargetFrame &&
+      options.hasFreshPresentedFrame
+    ) {
+      this.clearHtmlHold(layerId);
+      return false;
+    }
+
+    return (this.htmlHoldUntil.get(layerId) ?? 0) > performance.now();
   }
 
   private setCollectorState(
@@ -452,6 +493,7 @@ export class LayerCollector {
 
   private tryHTMLVideo(layer: Layer, video: HTMLVideoElement, deps: LayerCollectorDeps): LayerRenderData | null {
     const videoKey = `video:${this.getVideoObjectId(video)}`;
+    const layerReuseKey = this.getLayerReuseKey(layer);
 
     log.debug(`tryHTMLVideo: readyState=${video.readyState}, seeking=${video.seeking}, videoWidth=${video.videoWidth}, videoHeight=${video.videoHeight}`);
 
@@ -513,18 +555,29 @@ export class LayerCollector {
         !deps.isPlaying &&
         (isDragging || isSettling || awaitingPausedTargetFrame || video.seeking)
           ? lastSameClipFrame
-          : null;
+        : null;
       const safeFallback = this.getSafeLastFrameFallback(layer, video, deps, targetTime) ?? dragHoldFrame;
+      const shouldPreferStableHold = this.shouldPreferHtmlHold(layerReuseKey, {
+        hasHoldFrame: !!safeFallback || !!emergencyHoldFrame || !!sameClipHoldFrame,
+        isDragging,
+        isSettling,
+        awaitingPausedTargetFrame,
+        hasFreshPresentedFrame,
+      });
       const allowDragLiveVideoImport =
+        !shouldPreferStableHold &&
         !video.seeking &&
         (
           !hasConfirmedPresentedFrame ||
           (presentedDriftSeconds ?? 0) <= LayerCollector.MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS
         );
-      const allowLiveVideoImport = !hasPresentedOwnerMismatch && (isPausedSettle
-        ? hasFreshPresentedFrame
-        : !awaitingPausedTargetFrame &&
-          (((!isDragging && !isSettling) || hasFreshPresentedFrame || (isDragging ? allowDragLiveVideoImport : !safeFallback))));
+      const allowLiveVideoImport =
+        !shouldPreferStableHold &&
+        !hasPresentedOwnerMismatch &&
+        (isPausedSettle
+          ? hasFreshPresentedFrame
+          : !awaitingPausedTargetFrame &&
+            (((!isDragging && !isSettling) || hasFreshPresentedFrame || (isDragging ? allowDragLiveVideoImport : !safeFallback))));
       const allowConfirmedFrameCaching = !hasPresentedOwnerMismatch && (isPausedSettle
         ? hasFreshPresentedFrame
         : !awaitingPausedTargetFrame &&
@@ -545,6 +598,7 @@ export class LayerCollector {
           deps.scrubbingCache?.getCachedFrameEntry(video.src, targetTime) ??
           deps.scrubbingCache?.getNearestCachedFrameEntry(video.src, targetTime, cacheSearchDistanceFrames);
         if (cachedFrame) {
+          this.armHtmlHold(layerReuseKey);
           this.traceScrubPath(layer, 'scrub-cache', video, targetTime, lastPresentedTime);
           this.currentDecoder = 'HTMLVideo(scrub-cache)';
           return {
@@ -563,6 +617,7 @@ export class LayerCollector {
         // same media time. Otherwise we risk flashing a frame from the previous
         // clip/seek position while the new seek is still decoding.
         if (safeFallback) {
+          this.armHtmlHold(layerReuseKey);
           this.traceScrubPath(layer, 'seeking-cache', video, targetTime, lastPresentedTime);
           this.currentDecoder = 'HTMLVideo(seeking-cache)';
           return {
@@ -578,6 +633,7 @@ export class LayerCollector {
           };
         }
         if (emergencyHoldFrame) {
+          this.armHtmlHold(layerReuseKey);
           this.traceScrubPath(layer, 'emergency-hold', video, targetTime, lastPresentedTime);
           this.currentDecoder = 'HTMLVideo(cached)';
           return {
@@ -593,6 +649,7 @@ export class LayerCollector {
           };
         }
         if (sameClipHoldFrame) {
+          this.armHtmlHold(layerReuseKey);
           this.traceScrubPath(layer, 'same-clip-hold', video, targetTime, lastPresentedTime);
           this.currentDecoder = 'HTMLVideo(cached)';
           return {
@@ -620,6 +677,7 @@ export class LayerCollector {
         } else if (!deps.isPlaying) {
           // When paused: use cached frame if available, or skip rendering
           if (safeFallback) {
+            this.armHtmlHold(layerReuseKey);
             this.traceScrubPath(layer, 'gpu-cached', video, targetTime, lastPresentedTime);
             deps.setLastVideoTime(videoKey, currentTime);
             this.currentDecoder = 'HTMLVideo(cached)';
@@ -653,6 +711,7 @@ export class LayerCollector {
           captureOwnerId
         );
         if (copiedFrame) {
+          this.clearHtmlHold(layerReuseKey);
           this.traceScrubPath(layer, 'copied-preview', video, targetTime, lastPresentedTime);
           deps.setLastVideoTime(videoKey, currentTime);
           this.currentDecoder = 'HTMLVideo';
@@ -676,6 +735,7 @@ export class LayerCollector {
         ? deps.textureManager.importVideoTexture(video)
         : null;
       if (extTex) {
+        this.clearHtmlHold(layerReuseKey);
         deps.setLastVideoTime(videoKey, currentTime);
         // Cache frame for pause/seek fallback — skip during playback to save GPU bandwidth.
         // With 4+ videos, the GPU copies (copyExternalImageToTexture per video at 20fps)
@@ -724,6 +784,7 @@ export class LayerCollector {
 
       // Fallback to cache
       if (safeFallback) {
+        this.armHtmlHold(layerReuseKey);
         this.traceScrubPath(layer, 'final-cache', video, targetTime, lastPresentedTime);
         this.currentDecoder = 'HTMLVideo(cached)';
         return {
@@ -739,6 +800,7 @@ export class LayerCollector {
         };
       }
       if (emergencyHoldFrame) {
+        this.armHtmlHold(layerReuseKey);
         this.traceScrubPath(layer, 'emergency-hold', video, targetTime, lastPresentedTime);
         this.currentDecoder = 'HTMLVideo(cached)';
         return {
@@ -754,6 +816,7 @@ export class LayerCollector {
         };
       }
       if (sameClipHoldFrame) {
+        this.armHtmlHold(layerReuseKey);
         this.traceScrubPath(layer, 'same-clip-hold', video, targetTime, lastPresentedTime);
         this.currentDecoder = 'HTMLVideo(cached)';
         return {
@@ -810,6 +873,7 @@ export class LayerCollector {
         deps.scrubbingCache?.getCachedFrameEntry(video.src, targetTime) ??
         deps.scrubbingCache?.getNearestCachedFrameEntry(video.src, targetTime, cacheSearchDistanceFrames);
       if (cachedFrame) {
+        this.armHtmlHold(layerReuseKey);
         this.traceScrubPath(layer, 'not-ready-scrub-cache', video, targetTime, deps.scrubbingCache?.getLastPresentedTime(video));
         return {
           layer,
@@ -824,6 +888,7 @@ export class LayerCollector {
         };
       }
       if (safeFallback) {
+        this.armHtmlHold(layerReuseKey);
         this.traceScrubPath(layer, 'not-ready-cache', video, targetTime, deps.scrubbingCache?.getLastPresentedTime(video));
         return {
           layer,
@@ -838,6 +903,7 @@ export class LayerCollector {
         };
       }
       if (emergencyHoldFrame) {
+        this.armHtmlHold(layerReuseKey);
         this.traceScrubPath(layer, 'emergency-hold', video, targetTime, deps.scrubbingCache?.getLastPresentedTime(video));
         return {
           layer,
@@ -852,6 +918,7 @@ export class LayerCollector {
         };
       }
       if (sameClipHoldFrame) {
+        this.armHtmlHold(layerReuseKey);
         this.traceScrubPath(layer, 'same-clip-hold', video, targetTime, deps.scrubbingCache?.getLastPresentedTime(video));
         return {
           layer,

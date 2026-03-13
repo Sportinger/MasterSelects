@@ -17,6 +17,7 @@ import { scrubSettleState } from '../../services/scrubSettleState';
 import { wcPipelineMonitor } from '../../services/wcPipelineMonitor';
 import { useTimelineStore } from '../../stores/timeline';
 import { getCopiedHtmlVideoPreviewFrame } from './htmlVideoPreviewFallback';
+import { splitLayerEffects } from './layerEffectStack';
 
 const log = Logger.create('NestedCompRenderer');
 const ENABLE_VISUAL_HTML_VIDEO_FALLBACK = false;
@@ -57,6 +58,8 @@ export class NestedCompRenderer {
   private nextProviderId = 1;
   private lastSuccessfulVideoProviderKey = new Map<string, string>();
   private lastCollectorState = new Map<string, 'render' | 'hold' | 'drop'>();
+  private htmlHoldUntil = new Map<string, number>();
+  private static readonly HTML_HOLD_RECOVERY_MS = 120;
 
   private getSafeLastFrameFallback(layer: Layer, video: HTMLVideoElement, targetTime: number) {
     if (!this.scrubbingCache) {
@@ -136,8 +139,51 @@ export class NestedCompRenderer {
     return `provider:${this.getProviderObjectId(frameProvider as object)}`;
   }
 
+  private getLayerReuseKey(layer: Layer): string {
+    return layer.sourceClipId ? `${layer.id}:${layer.sourceClipId}` : layer.id;
+  }
+
   private canReuseLastSuccessfulVideoFrame(layerId: string, providerKey: string | null): boolean {
     return !!providerKey && this.lastSuccessfulVideoProviderKey.get(layerId) === providerKey;
+  }
+
+  private armHtmlHold(layerId: string): void {
+    this.htmlHoldUntil.set(
+      layerId,
+      performance.now() + NestedCompRenderer.HTML_HOLD_RECOVERY_MS
+    );
+  }
+
+  private clearHtmlHold(layerId: string): void {
+    this.htmlHoldUntil.delete(layerId);
+  }
+
+  private shouldPreferHtmlHold(
+    layerId: string,
+    options: {
+      hasHoldFrame: boolean;
+      isDragging: boolean;
+      isSettling: boolean;
+      awaitingPausedTargetFrame: boolean;
+      hasFreshPresentedFrame: boolean;
+    }
+  ): boolean {
+    if (!options.hasHoldFrame) {
+      this.clearHtmlHold(layerId);
+      return false;
+    }
+
+    if (
+      !options.isDragging &&
+      !options.isSettling &&
+      !options.awaitingPausedTargetFrame &&
+      options.hasFreshPresentedFrame
+    ) {
+      this.clearHtmlHold(layerId);
+      return false;
+    }
+
+    return (this.htmlHoldUntil.get(layerId) ?? 0) > performance.now();
   }
 
   private setCollectorState(
@@ -265,116 +311,207 @@ export class NestedCompRenderer {
 
     // Acquire ping-pong textures from pool
     const texturePair = this.acquireTexturePair(width, height);
+    const effectTexturePair = this.acquireTexturePair(width, height);
     const nestedPingView = texturePair.pingView;
     const nestedPongView = texturePair.pongView;
+    const effectTempView = effectTexturePair.pingView;
+    const effectTempView2 = effectTexturePair.pongView;
 
-    // Collect layer data (including sub-nested compositions)
-    const nestedLayerData = this.collectNestedLayerData(nestedLayers, commandEncoder, sampler, depth, skipEffects);
+    try {
+      // Collect layer data (including sub-nested compositions)
+      const nestedLayerData = this.collectNestedLayerData(nestedLayers, commandEncoder, sampler, depth, skipEffects);
 
-    // Handle empty composition
-    if (nestedLayerData.length === 0) {
-      if (nestedLayers.length > 0) {
-        // Input layers exist but none could be collected (transient decode gap)
-        // Retain the existing texture which holds the last good frame
-        this.releaseTexturePair(texturePair);
+      // Handle empty composition
+      if (nestedLayerData.length === 0) {
+        if (nestedLayers.length > 0) {
+          // Input layers exist but none could be collected (transient decode gap)
+          // Retain the existing texture which holds the last good frame
+          return compTexture.view;
+        }
+        // Genuinely empty composition - clear to transparent
+        const clearPass = commandEncoder.beginRenderPass({
+          colorAttachments: [{
+            view: compTexture.view,
+            clearValue: { r: 0, g: 0, b: 0, a: 0 },
+            loadOp: 'clear',
+            storeOp: 'store',
+          }],
+        });
+        clearPass.end();
         return compTexture.view;
       }
-      // Genuinely empty composition - clear to transparent
+
+      // Ping-pong compositing
+      let readView = nestedPingView;
+      let writeView = nestedPongView;
+
+      // Clear first buffer
       const clearPass = commandEncoder.beginRenderPass({
         colorAttachments: [{
-          view: compTexture.view,
+          view: readView,
           clearValue: { r: 0, g: 0, b: 0, a: 0 },
           loadOp: 'clear',
           storeOp: 'store',
         }],
       });
       clearPass.end();
-      this.releaseTexturePair(texturePair);
-      return compTexture.view;
-    }
 
-    // Ping-pong compositing
-    let readView = nestedPingView;
-    let writeView = nestedPongView;
+      // Composite nested layers
+      const outputAspect = width / height;
+      for (const data of nestedLayerData) {
+        const layer = data.layer;
+        const uniformBuffer = this.compositorPipeline.getOrCreateUniformBuffer(`nested-${compositionId}-${layer.id}`);
+        const sourceAspect = data.sourceWidth / data.sourceHeight;
+        const maskLookupId = layer.maskClipId || layer.id;
+        const maskInfo = this.maskTextureManager.getMaskInfo(maskLookupId);
+        const hasMask = maskInfo.hasMask;
+        const maskTextureView = maskInfo.view;
+        const { inlineEffects, complexEffects } = splitLayerEffects(layer.effects, skipEffects);
 
-    // Clear first buffer
-    const clearPass = commandEncoder.beginRenderPass({
-      colorAttachments: [{
-        view: readView,
-        clearValue: { r: 0, g: 0, b: 0, a: 0 },
-        loadOp: 'clear',
-        storeOp: 'store',
-      }],
-    });
-    clearPass.end();
-
-    // Composite nested layers
-    const outputAspect = width / height;
-    for (const data of nestedLayerData) {
-      const layer = data.layer;
-      const uniformBuffer = this.compositorPipeline.getOrCreateUniformBuffer(`nested-${compositionId}-${layer.id}`);
-      const sourceAspect = data.sourceWidth / data.sourceHeight;
-
-      const maskLookupId = layer.maskClipId || layer.id;
-      const maskInfo = this.maskTextureManager.getMaskInfo(maskLookupId);
-      const hasMask = maskInfo.hasMask;
-      const maskTextureView = maskInfo.view;
-
-      this.compositorPipeline.updateLayerUniforms(layer, sourceAspect, outputAspect, hasMask, uniformBuffer);
-
-      let pipeline: GPURenderPipeline;
-      let bindGroup: GPUBindGroup;
-
-      if (data.isVideo && data.externalTexture) {
-        pipeline = this.compositorPipeline.getExternalCompositePipeline()!;
-        bindGroup = this.compositorPipeline.createExternalCompositeBindGroup(
-          sampler, readView, data.externalTexture, uniformBuffer, maskTextureView
+        this.compositorPipeline.updateLayerUniforms(
+          layer,
+          sourceAspect,
+          outputAspect,
+          hasMask,
+          uniformBuffer,
+          inlineEffects
         );
-      } else if (data.textureView) {
-        pipeline = this.compositorPipeline.getCompositePipeline()!;
-        bindGroup = this.compositorPipeline.createCompositeBindGroup(
-          sampler, readView, data.textureView, uniformBuffer, maskTextureView
-        );
-      } else {
-        continue;
-      }
 
-      const pass = commandEncoder.beginRenderPass({
-        colorAttachments: [{ view: writeView, loadOp: 'clear', storeOp: 'store' }],
-      });
-      pass.setPipeline(pipeline);
-      pass.setBindGroup(0, bindGroup);
-      pass.draw(6);
-      pass.end();
+        let sourceTextureView = data.textureView;
+        let sourceExternalTexture = data.externalTexture;
+        let useExternalTexture = data.isVideo && !!data.externalTexture;
 
-      // Apply effects
-      if (!skipEffects && layer.effects?.length && this.effectsPipeline) {
-        const result = this.effectsPipeline.applyEffects(
-          commandEncoder, layer.effects, sampler,
-          writeView, readView, nestedPingView, nestedPongView, width, height
-        );
-        if (result.swapped) {
-          [readView, writeView] = [writeView, readView];
+        if (complexEffects && complexEffects.length > 0) {
+          if (useExternalTexture && sourceExternalTexture) {
+            const copyPipeline = this.compositorPipeline.getExternalCopyPipeline?.();
+            const copyBindGroup = copyPipeline
+              ? this.compositorPipeline.createExternalCopyBindGroup?.(
+                sampler,
+                sourceExternalTexture,
+                layer.id
+              )
+              : null;
+
+            if (copyPipeline && copyBindGroup) {
+              const copyPass = commandEncoder.beginRenderPass({
+                colorAttachments: [{
+                  view: effectTempView,
+                  loadOp: 'clear',
+                  storeOp: 'store',
+                }],
+              });
+              copyPass.setPipeline(copyPipeline);
+              copyPass.setBindGroup(0, copyBindGroup);
+              copyPass.draw(6);
+              copyPass.end();
+
+              const effectResult = this.effectsPipeline.applyEffects(
+                commandEncoder,
+                complexEffects,
+                sampler,
+                effectTempView,
+                effectTempView2,
+                effectTempView,
+                effectTempView2,
+                width,
+                height
+              );
+
+              sourceTextureView = effectResult.finalView;
+              sourceExternalTexture = null;
+              useExternalTexture = false;
+            }
+          } else if (sourceTextureView) {
+            const copyPipeline = this.compositorPipeline.getCopyPipeline?.();
+            const copyBindGroup = copyPipeline
+              ? this.compositorPipeline.createCopyBindGroup?.(
+                sampler,
+                sourceTextureView,
+                layer.id
+              )
+              : null;
+
+            if (copyPipeline && copyBindGroup) {
+              const copyPass = commandEncoder.beginRenderPass({
+                colorAttachments: [{
+                  view: effectTempView,
+                  loadOp: 'clear',
+                  storeOp: 'store',
+                }],
+              });
+              copyPass.setPipeline(copyPipeline);
+              copyPass.setBindGroup(0, copyBindGroup);
+              copyPass.draw(6);
+              copyPass.end();
+
+              const effectResult = this.effectsPipeline.applyEffects(
+                commandEncoder,
+                complexEffects,
+                sampler,
+                effectTempView,
+                effectTempView2,
+                effectTempView,
+                effectTempView2,
+                width,
+                height
+              );
+
+              sourceTextureView = effectResult.finalView;
+            }
+          }
         }
+
+        let pipeline: GPURenderPipeline;
+        let bindGroup: GPUBindGroup;
+
+        if (useExternalTexture && sourceExternalTexture) {
+          pipeline = this.compositorPipeline.getExternalCompositePipeline()!;
+          bindGroup = this.compositorPipeline.createExternalCompositeBindGroup(
+            sampler,
+            readView,
+            sourceExternalTexture,
+            uniformBuffer,
+            maskTextureView
+          );
+        } else if (sourceTextureView) {
+          pipeline = this.compositorPipeline.getCompositePipeline()!;
+          bindGroup = this.compositorPipeline.createCompositeBindGroup(
+            sampler,
+            readView,
+            sourceTextureView,
+            uniformBuffer,
+            maskTextureView
+          );
+        } else {
+          continue;
+        }
+
+        const pass = commandEncoder.beginRenderPass({
+          colorAttachments: [{ view: writeView, loadOp: 'clear', storeOp: 'store' }],
+        });
+        pass.setPipeline(pipeline);
+        pass.setBindGroup(0, bindGroup);
+        pass.draw(6);
+        pass.end();
+
+        // Swap
+        [readView, writeView] = [writeView, readView];
       }
 
-      // Swap
-      [readView, writeView] = [writeView, readView];
+      // Copy result to output texture using efficient GPU copy
+      // Determine which texture readView came from
+      const sourceTexture = readView === nestedPingView ? texturePair.pingTexture : texturePair.pongTexture;
+      commandEncoder.copyTextureToTexture(
+        { texture: sourceTexture },
+        { texture: compTexture.texture },
+        { width, height }
+      );
+
+      return compTexture.view;
+    } finally {
+      this.releaseTexturePair(effectTexturePair);
+      this.releaseTexturePair(texturePair);
     }
-
-    // Copy result to output texture using efficient GPU copy
-    // Determine which texture readView came from
-    const sourceTexture = readView === nestedPingView ? texturePair.pingTexture : texturePair.pongTexture;
-    commandEncoder.copyTextureToTexture(
-      { texture: sourceTexture },
-      { texture: compTexture.texture },
-      { width, height }
-    );
-
-    // Release textures back to pool
-    this.releaseTexturePair(texturePair);
-
-    return compTexture.view;
   }
 
   private collectNestedLayerData(
@@ -457,6 +594,7 @@ export class NestedCompRenderer {
 
       if (allowHtmlVideoPreview) {
         const video = layer.source.videoElement!;
+        const layerReuseKey = this.getLayerReuseKey(layer);
         const targetTime = this.getTargetVideoTime(layer, video);
         const isDragging = useTimelineStore.getState().isDraggingPlayhead;
         const isSettling = scrubSettleState.isPending(layer.sourceClipId);
@@ -511,16 +649,27 @@ export class NestedCompRenderer {
             ? lastSameClipFrame
             : null;
         const safeFallback = this.getSafeLastFrameFallback(layer, video, targetTime) ?? dragHoldFrame;
+        const shouldPreferStableHold = this.shouldPreferHtmlHold(layerReuseKey, {
+          hasHoldFrame: !!safeFallback || !!emergencyHoldFrame || !!sameClipHoldFrame,
+          isDragging,
+          isSettling,
+          awaitingPausedTargetFrame,
+          hasFreshPresentedFrame,
+        });
         const allowDragLiveVideoImport =
+          !shouldPreferStableHold &&
           !video.seeking &&
           (
             !hasConfirmedPresentedFrame ||
             (presentedDriftSeconds ?? 0) <= NestedCompRenderer.MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS
           );
-        const allowLiveVideoImport = !hasPresentedOwnerMismatch && (isPausedSettle
-          ? hasFreshPresentedFrame
-          : !awaitingPausedTargetFrame &&
-            (((!isDragging && !isSettling) || hasFreshPresentedFrame || (isDragging ? allowDragLiveVideoImport : !safeFallback))));
+        const allowLiveVideoImport =
+          !shouldPreferStableHold &&
+          !hasPresentedOwnerMismatch &&
+          (isPausedSettle
+            ? hasFreshPresentedFrame
+            : !awaitingPausedTargetFrame &&
+              (((!isDragging && !isSettling) || hasFreshPresentedFrame || (isDragging ? allowDragLiveVideoImport : !safeFallback))));
         const allowConfirmedFrameCaching = !hasPresentedOwnerMismatch && (isPausedSettle
           ? hasFreshPresentedFrame
           : !awaitingPausedTargetFrame &&
@@ -531,6 +680,7 @@ export class NestedCompRenderer {
             this.scrubbingCache.getCachedFrame(video.src, targetTime) ??
             this.scrubbingCache.getNearestCachedFrame(video.src, targetTime, cacheSearchDistanceFrames);
           if (cachedView) {
+            this.armHtmlHold(layerReuseKey);
             result.push({
               layer, isVideo: false, externalTexture: null, textureView: cachedView,
               sourceWidth: video.videoWidth, sourceHeight: video.videoHeight,
@@ -539,6 +689,7 @@ export class NestedCompRenderer {
           }
           if (!allowLiveVideoImport) {
             if (safeFallback) {
+              this.armHtmlHold(layerReuseKey);
               result.push({
                 layer, isVideo: false, externalTexture: null, textureView: safeFallback.view,
                 sourceWidth: safeFallback.width, sourceHeight: safeFallback.height,
@@ -546,6 +697,7 @@ export class NestedCompRenderer {
               continue;
             }
             if (emergencyHoldFrame) {
+              this.armHtmlHold(layerReuseKey);
               result.push({
                 layer, isVideo: false, externalTexture: null, textureView: emergencyHoldFrame.view,
                 sourceWidth: emergencyHoldFrame.width, sourceHeight: emergencyHoldFrame.height,
@@ -553,6 +705,7 @@ export class NestedCompRenderer {
               continue;
             }
             if (sameClipHoldFrame) {
+              this.armHtmlHold(layerReuseKey);
               result.push({
                 layer, isVideo: false, externalTexture: null, textureView: sameClipHoldFrame.view,
                 sourceWidth: sameClipHoldFrame.width, sourceHeight: sameClipHoldFrame.height,
@@ -572,12 +725,13 @@ export class NestedCompRenderer {
               this.scrubbingCache,
               targetTime,
               layer.sourceClipId,
-              captureOwnerId
-            );
-            if (copiedFrame) {
-              result.push({
-                layer, isVideo: false, externalTexture: null, textureView: copiedFrame.view,
-                sourceWidth: copiedFrame.width, sourceHeight: copiedFrame.height,
+            captureOwnerId
+          );
+          if (copiedFrame) {
+            this.clearHtmlHold(layerReuseKey);
+            result.push({
+              layer, isVideo: false, externalTexture: null, textureView: copiedFrame.view,
+              sourceWidth: copiedFrame.width, sourceHeight: copiedFrame.height,
                 displayedMediaTime: copiedFrame.mediaTime ?? reportedDisplayedTime,
                 targetMediaTime: targetTime,
                 previewPath: 'copied-preview',
@@ -590,6 +744,7 @@ export class NestedCompRenderer {
             ? this.textureManager.importVideoTexture(video)
             : null;
           if (extTex) {
+            this.clearHtmlHold(layerReuseKey);
             if (this.scrubbingCache) {
               const now = performance.now();
               const lastCapture = this.scrubbingCache.getLastCaptureTime(video);
@@ -630,6 +785,7 @@ export class NestedCompRenderer {
           this.scrubbingCache?.getCachedFrameEntry(video.src, targetTime) ??
           this.scrubbingCache?.getNearestCachedFrameEntry(video.src, targetTime, cacheSearchDistanceFrames);
         if (notReadyCachedFrame) {
+          this.armHtmlHold(layerReuseKey);
           result.push({
             layer,
             isVideo: false,
@@ -645,6 +801,7 @@ export class NestedCompRenderer {
         }
 
         if (safeFallback) {
+          this.armHtmlHold(layerReuseKey);
           log.debug('Using cached frame fallback for nested video', { layerId: layer.id });
           result.push({
             layer, isVideo: false, externalTexture: null, textureView: safeFallback.view,
@@ -653,6 +810,7 @@ export class NestedCompRenderer {
           continue;
         }
         if (emergencyHoldFrame) {
+          this.armHtmlHold(layerReuseKey);
           result.push({
             layer, isVideo: false, externalTexture: null, textureView: emergencyHoldFrame.view,
             sourceWidth: emergencyHoldFrame.width, sourceHeight: emergencyHoldFrame.height,
@@ -663,6 +821,7 @@ export class NestedCompRenderer {
           continue;
         }
         if (sameClipHoldFrame) {
+          this.armHtmlHold(layerReuseKey);
           result.push({
             layer, isVideo: false, externalTexture: null, textureView: sameClipHoldFrame.view,
             sourceWidth: sameClipHoldFrame.width, sourceHeight: sameClipHoldFrame.height,
@@ -695,7 +854,8 @@ export class NestedCompRenderer {
             ? runtimeProvider
             : null);
       const providerKey = this.getVideoProviderKey(layer, frameProvider, runtimeProvider);
-      const canReuseLastFrame = this.canReuseLastSuccessfulVideoFrame(layer.id, providerKey);
+      const layerReuseKey = this.getLayerReuseKey(layer);
+      const canReuseLastFrame = this.canReuseLastSuccessfulVideoFrame(layerReuseKey, providerKey);
       const frameProviderStable = this.isPendingWebCodecsFrameStable(frameProvider ?? undefined);
       const holdingFrame = !frameProviderStable && canReuseLastFrame;
       const canReadRuntimeFrame =
@@ -716,9 +876,9 @@ export class NestedCompRenderer {
         const extTex = this.textureManager.importVideoTexture(runtimeFrame);
         if (extTex) {
           if (providerKey) {
-            this.lastSuccessfulVideoProviderKey.set(layer.id, providerKey);
+            this.lastSuccessfulVideoProviderKey.set(layerReuseKey, providerKey);
           }
-          this.setCollectorState(layer.id, holdingFrame ? 'hold' : 'render', {
+          this.setCollectorState(layerReuseKey, holdingFrame ? 'hold' : 'render', {
             reason: holdingFrame ? 'same_provider_pending' : 'runtime_frame',
           });
           result.push({
@@ -732,7 +892,7 @@ export class NestedCompRenderer {
       // WebCodecs
       if (frameProvider?.isFullMode()) {
         if (!frameProviderStable && !canReuseLastFrame && !allowPendingScrubFrame) {
-          this.setCollectorState(layer.id, 'drop', {
+          this.setCollectorState(layerReuseKey, 'drop', {
             reason: 'pending_unstable',
           });
           continue;
@@ -742,9 +902,9 @@ export class NestedCompRenderer {
           const extTex = this.textureManager.importVideoTexture(frame);
           if (extTex) {
             if (providerKey) {
-              this.lastSuccessfulVideoProviderKey.set(layer.id, providerKey);
+              this.lastSuccessfulVideoProviderKey.set(layerReuseKey, providerKey);
             }
-            this.setCollectorState(layer.id, holdingFrame ? 'hold' : 'render', {
+            this.setCollectorState(layerReuseKey, holdingFrame ? 'hold' : 'render', {
               reason: holdingFrame ? 'same_provider_pending' : 'provider_frame',
             });
             result.push({
@@ -753,12 +913,12 @@ export class NestedCompRenderer {
             });
             continue;
           }
-          this.setCollectorState(layer.id, 'drop', {
+          this.setCollectorState(layerReuseKey, 'drop', {
             reason: 'import_failed',
           });
         } else {
           // WebCodecs has no frame yet - normal during decode startup
-          this.setCollectorState(layer.id, 'drop', {
+          this.setCollectorState(layerReuseKey, 'drop', {
             reason: 'no_frame',
           });
         }

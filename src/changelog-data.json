@@ -1,5 +1,66 @@
 [
   {
+    "date": "2026-03-13",
+    "type": "new",
+    "title": "Stacked Alpha Video Export",
+    "description": "Export transparent video with stacked alpha layout. Available as a new option in the Export Panel for workflows that need alpha channel preservation.",
+    "section": "Export",
+    "commits": [
+      "f2a84a50",
+      "625144b7"
+    ]
+  },
+  {
+    "date": "2026-03-13",
+    "type": "new",
+    "title": "Per-Layer Preview Tab Sources",
+    "description": "Preview tabs can now be assigned to individual layers, allowing side-by-side monitoring of different layers in the composition.",
+    "section": "Preview",
+    "commits": [
+      "d0d9afed"
+    ]
+  },
+  {
+    "date": "2026-03-13",
+    "type": "improve",
+    "title": "Randomized Output Window Placement",
+    "description": "New output windows are now placed at randomized positions to prevent them from stacking directly on top of each other.",
+    "section": "Output Manager",
+    "commits": [
+      "1c00b439"
+    ]
+  },
+  {
+    "date": "2026-03-13",
+    "type": "fix",
+    "title": "Stacked Alpha Shader Control Flow",
+    "description": "Fixed a WGSL uniform control flow error in the stacked alpha shader that could cause rendering artifacts.",
+    "section": "Engine",
+    "commits": [
+      "8326ad14"
+    ]
+  },
+  {
+    "date": "2026-03-13",
+    "type": "fix",
+    "title": "Nested Composition Rendering & Timeline Refresh",
+    "description": "Fixed nested composition rendering issues and timeline refresh state that could cause stale frames in complex compositions.",
+    "section": "Engine",
+    "commits": [
+      "47a8f059"
+    ]
+  },
+  {
+    "date": "2026-03-13",
+    "type": "fix",
+    "title": "Split-Cut Preview Handoff",
+    "description": "Fixed preview handoff after split-cut operations so the correct frame is displayed immediately after a cut.",
+    "section": "Timeline",
+    "commits": [
+      "0fe5e149"
+    ]
+  },
+  {
     "date": "2026-03-11",
     "type": "new",
     "title": "Playback Debug Stats & Trace System",

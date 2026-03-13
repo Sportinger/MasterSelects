@@ -1,9 +1,10 @@
 // Ping-pong compositing with effects
 
 import type { LayerRenderData, CompositeResult } from '../core/types';
-import type { CompositorPipeline, InlineEffectParams } from '../pipeline/CompositorPipeline';
+import type { CompositorPipeline } from '../pipeline/CompositorPipeline';
 import type { EffectsPipeline } from '../../effects/EffectsPipeline';
 import type { MaskTextureManager } from '../texture/MaskTextureManager';
+import { splitLayerEffects } from './layerEffectStack';
 
 export interface CompositorState {
   device: GPUDevice;
@@ -76,38 +77,7 @@ export class Compositor {
 
       this.maskTextureManager.logMaskState(maskLookupId, hasMask);
 
-      // Classify effects: inlineable effects (brightness, contrast, saturation, invert)
-      // are handled directly in the composite shader via uniforms - no extra render passes.
-      // Complex effects (blur, pixelate, etc.) still need separate render passes.
-      const inlineEffects: InlineEffectParams = { brightness: 0, contrast: 1, saturation: 1, invert: false };
-      let complexEffects: typeof layer.effects | undefined;
-
-      if (!state.skipEffects && layer.effects && layer.effects.length > 0) {
-        const complex: typeof layer.effects = [];
-        for (const effect of layer.effects) {
-          if (!effect.enabled || effect.type.startsWith('audio-')) continue;
-          switch (effect.type) {
-            case 'brightness':
-              inlineEffects.brightness = (effect.params.amount as number) ?? 0;
-              break;
-            case 'contrast':
-              inlineEffects.contrast = (effect.params.amount as number) ?? 1;
-              break;
-            case 'saturation':
-              inlineEffects.saturation = (effect.params.amount as number) ?? 1;
-              break;
-            case 'invert':
-              inlineEffects.invert = true;
-              break;
-            default:
-              complex.push(effect);
-              break;
-          }
-        }
-        if (complex.length > 0) {
-          complexEffects = complex;
-        }
-      }
+      const { inlineEffects, complexEffects } = splitLayerEffects(layer.effects, state.skipEffects);
 
       // Update uniforms (includes inline effect params)
       this.compositorPipeline.updateLayerUniforms(layer, sourceAspect, outputAspect, hasMask, uniformBuffer, inlineEffects);

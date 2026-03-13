@@ -158,6 +158,10 @@ export interface TimelineState {
   // AI action visual feedback (transient, not serialized)
   aiActionOverlays: AIActionOverlay[];
   aiMovingClips: Map<string, AIMovingClip>;
+
+  // Incremented whenever the live timeline is cleared/reloaded.
+  // Async callbacks must verify this to avoid writing stale nested clip UI.
+  timelineSessionId: number;
 }
 
 // Track actions interface

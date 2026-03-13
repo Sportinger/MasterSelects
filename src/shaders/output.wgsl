@@ -46,6 +46,18 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 
 @fragment
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
+  // Mode 2: Stacked alpha — top half = RGB, bottom half = alpha as grayscale
+  // Both samples must happen unconditionally (textureSample requires uniform control flow)
+  if (uniforms.showTransparencyGrid == 2u) {
+    let topUV = vec2f(input.uv.x, input.uv.y * 2.0);
+    let botUV = vec2f(input.uv.x, (input.uv.y - 0.5) * 2.0);
+    let topColor = textureSample(inputTexture, texSampler, topUV);
+    let botColor = textureSample(inputTexture, texSampler, botUV);
+    let isBottom = input.uv.y >= 0.5;
+    let rgb = select(topColor.rgb, vec3f(botColor.a), isBottom);
+    return vec4f(rgb, 1.0);
+  }
+
   let color = textureSample(inputTexture, texSampler, input.uv);
 
   if (uniforms.showTransparencyGrid == 1u && color.a < 1.0) {

@@ -207,6 +207,9 @@ export const useTimelineStore = create<TimelineStore>()(
       // AI action visual feedback (transient, not serialized)
       aiActionOverlays: [] as import('./types').AIActionOverlay[],
       aiMovingClips: new Map<string, import('./types').AIMovingClip>(),
+
+      // Async session guard for composition switches / reloads
+      timelineSessionId: 0,
     };
 
     // Layer actions (render layers for engine, moved from mixerStore)

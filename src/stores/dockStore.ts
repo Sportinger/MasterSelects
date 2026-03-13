@@ -21,6 +21,7 @@ import {
   collapseSingleChildSplits,
 } from '../utils/dockLayout';
 import { Logger } from '../services/logger';
+import { createPreviewPanelDataPatch, createPreviewPanelSource } from '../utils/previewPanelSource';
 
 const log = Logger.create('DockStore');
 
@@ -529,7 +530,7 @@ export const useDockStore = create<DockState>()(
             id: newPanelId,
             type: 'preview',
             title: 'Preview',
-            data: { compositionId } as PreviewPanelData,
+            data: createPreviewPanelDataPatch(createPreviewPanelSource(compositionId)) as PreviewPanelData,
           };
 
           if (previewGroup) {

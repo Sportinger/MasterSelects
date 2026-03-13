@@ -8097,6 +8097,11 @@ input[type="checkbox"] {
   border-color: var(--gray-300);
 }
 
+.preview-edit-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .preview-edit-btn.active {
   background: var(--accent);
   border-color: var(--accent);
@@ -8190,6 +8195,8 @@ input[type="checkbox"] {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   padding: 4px 0;
   z-index: 100;
+  max-height: min(70vh, 420px);
+  overflow-y: auto;
 }
 
 .preview-comp-option {
@@ -8213,6 +8220,20 @@ input[type="checkbox"] {
 .preview-comp-option.active {
   color: var(--accent);
   background: rgba(45, 140, 235, 0.1);
+}
+
+.preview-comp-option.layer-option {
+  padding-left: 24px;
+  font-size: 10px;
+}
+
+.preview-comp-group-label {
+  padding: 6px 12px 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .preview-comp-separator {

@@ -39,6 +39,14 @@ export class PerformanceStats {
 
   private readonly TARGET_FRAME_TIME = 16.67; // 60fps target
 
+  private getCadenceFps(): number {
+    const gap = this.detailedStats.rafGap;
+    if (!Number.isFinite(gap) || gap <= 0) {
+      return 0;
+    }
+    return Math.round(1000 / gap);
+  }
+
   setDecoder(decoder: DetailedStats['decoder']): void {
     this.detailedStats.decoder = decoder;
   }
@@ -52,7 +60,10 @@ export class PerformanceStats {
   }
 
   recordRafGap(gap: number, isScrubbing = false): void {
-    this.detailedStats.rafGap = this.detailedStats.rafGap * 0.9 + gap * 0.1;
+    this.detailedStats.rafGap = this.detailedStats.rafGap > 0
+      ? this.detailedStats.rafGap * 0.9 + gap * 0.1
+      : gap;
+    this.detailedStats.lastRafTime = performance.now();
 
     // During scrubbing, the render loop intentionally limits to ~30fps (33ms).
     // Use the scrub frame time as baseline so intentional skips aren't counted as drops.
@@ -124,9 +135,11 @@ export class PerformanceStats {
       sum += this.frameTimeBuffer[i];
     }
     const avgFrameTime = this.frameTimeCount > 0 ? sum / this.frameTimeCount : 0;
+    const cadenceFps = this.getCadenceFps();
+    const displayFps = isIdle ? 0 : cadenceFps || this.fps;
 
     return {
-      fps: this.fps,
+      fps: displayFps,
       frameTime: avgFrameTime,
       gpuMemory: 0,
       timing: {

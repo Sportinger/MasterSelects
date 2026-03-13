@@ -1,3 +1,9 @@
+import type {
+  RenderSourceActiveComp,
+  RenderSourceComposition,
+  RenderSourceLayerIndex,
+} from './renderTarget';
+
 // Dock system type definitions
 
 // Panel types that can be docked
@@ -13,9 +19,15 @@ export const WIP_PANEL_TYPES: PanelType[] = ['multicam', 'transitions', 'ai-segm
 // AI panel types for View menu grouping
 export const AI_PANEL_TYPES: PanelType[] = ['ai-chat', 'ai-video', 'ai-segment', 'scene-description'];
 
+export type PreviewPanelSource =
+  | RenderSourceActiveComp
+  | RenderSourceComposition
+  | RenderSourceLayerIndex;
+
 // Panel-specific data for configurable panels
 export interface PreviewPanelData {
-  compositionId: string | null; // null = active composition
+  source?: PreviewPanelSource;
+  compositionId?: string | null; // legacy: null = active composition
   showTransparencyGrid?: boolean; // per-tab transparency grid toggle (default false)
 }
 

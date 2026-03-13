@@ -94,12 +94,19 @@ export class VideoSyncManager {
   }>();
   private activeHandoffs = new Map<string, HTMLVideoElement>();
   private handoffElements = new Set<HTMLVideoElement>();
+  private previewContinuationElements = new Map<string, {
+    videoElement: HTMLVideoElement;
+    expiresAt: number;
+  }>();
   private static readonly PAUSED_PRECISE_SEEK_THRESHOLD = 0.015;
   private static readonly PAUSED_JUMP_PRELOAD_THRESHOLD_SECONDS = 0.35;
   private static readonly PAUSED_JUMP_PRELOAD_LOOKBEHIND = 0.35;
   private static readonly PAUSED_JUMP_PRELOAD_LOOKAHEAD = 1.5;
   private static readonly PAUSED_JUMP_PRELOAD_MAX_CLIPS = 3;
   private static readonly PAUSED_JUMP_PRELOAD_ACTIVE_TARGET_EPSILON = 0.05;
+  private static readonly PREVIEW_CONTINUATION_MS = 180;
+  private static readonly PREVIEW_CONTINUATION_TARGET_EPSILON = 0.22;
+  private static readonly PREVIEW_CONTINUATION_OWN_READY_EPSILON = 0.12;
 
   /**
    * Reset all per-clip state. Called during composition switch to prevent
@@ -109,6 +116,7 @@ export class VideoSyncManager {
     this.lastTrackState.clear();
     this.activeHandoffs.clear();
     this.handoffElements.clear();
+    this.previewContinuationElements.clear();
     this.lastSeekRef = {};
     this.clipWasPlaying.clear();
     this.clipWasDragging.clear();
@@ -153,6 +161,60 @@ export class VideoSyncManager {
     const dur = video.duration;
     if (!isFinite(dur) || dur <= 0) return Math.max(0, time);
     return Math.max(0, Math.min(time, dur - 0.001));
+  }
+
+  private clearExpiredPreviewContinuations(now: number = performance.now()): void {
+    for (const [clipId, entry] of this.previewContinuationElements.entries()) {
+      if (entry.expiresAt <= now) {
+        this.previewContinuationElements.delete(clipId);
+      }
+    }
+  }
+
+  private canUsePreviewContinuationVideo(
+    video: HTMLVideoElement,
+    targetTime: number,
+    tolerance: number = VideoSyncManager.PREVIEW_CONTINUATION_TARGET_EPSILON
+  ): boolean {
+    return (
+      Math.abs(video.currentTime - targetTime) <= tolerance &&
+      !video.seeking
+    );
+  }
+
+  private clipNeedsPreviewContinuation(
+    video: HTMLVideoElement,
+    targetTime: number
+  ): boolean {
+    const ownDrift = Math.abs(video.currentTime - targetTime);
+    const hasPlayed = video.played.length > 0;
+    return (
+      !hasPlayed ||
+      video.readyState < 2 ||
+      video.seeking ||
+      ownDrift > VideoSyncManager.PREVIEW_CONTINUATION_OWN_READY_EPSILON
+    );
+  }
+
+  private isSameSourceSequentialClip(
+    clip: TimelineClip,
+    prev: {
+      clipId: string;
+      fileId: string;
+      file: File;
+      videoElement: HTMLVideoElement;
+      outPoint: number;
+    }
+  ): boolean {
+    const clipFileId = clip.source?.mediaFileId || clip.mediaFileId;
+    const sameSource = clipFileId
+      ? clipFileId === prev.fileId
+      : clip.file === prev.file;
+    if (!sameSource) {
+      return false;
+    }
+
+    return Math.abs(clip.inPoint - prev.outPoint) <= 0.1;
   }
 
   private getFastSeek(video: HTMLVideoElement): ((time: number) => void) | null {
@@ -1222,16 +1284,10 @@ export class VideoSyncManager {
       }
 
       const elemDrift = Math.abs(prev.videoElement.currentTime - clip.inPoint);
-      // Continuous cut: previous element should already be near the new inPoint
-      if (elemDrift > 0.5) {
-        log.debug('Handoff SKIP: element too far from inPoint', {
-          track: clip.trackId,
-          elementTime: prev.videoElement.currentTime.toFixed(3),
-          inPoint: clip.inPoint.toFixed(3),
-          drift: elemDrift.toFixed(3),
-        });
-        continue;
-      }
+      // During real playback, the outgoing element is the exact stream that was
+      // just visible. For a same-source sequential cut, keeping that running
+      // stream is safer than dropping to the next clip's cold element, even if
+      // transport drift briefly pushed currentTime away from the nominal inPoint.
 
       log.info('Handoff START', {
         track: clip.trackId,
@@ -1241,6 +1297,10 @@ export class VideoSyncManager {
         inPoint: clip.inPoint.toFixed(3),
         drift: elemDrift.toFixed(3),
       });
+      engine.markVideoFramePresented(prev.videoElement, prev.videoElement.currentTime, clip.id);
+      if (!engine.captureVideoFrameAtTime(prev.videoElement, prev.videoElement.currentTime, clip.id)) {
+        engine.ensureVideoFrameCached(prev.videoElement, clip.id);
+      }
       this.activeHandoffs.set(clip.id, prev.videoElement);
       this.handoffElements.add(prev.videoElement);
     }
@@ -1252,6 +1312,61 @@ export class VideoSyncManager {
    */
   getHandoffVideoElement(clipId: string): HTMLVideoElement | null {
     return this.activeHandoffs.get(clipId) ?? null;
+  }
+
+  getPreviewContinuationVideoElement(
+    clip: TimelineClip,
+    targetTime: number
+  ): HTMLVideoElement | null {
+    if (!clip.source?.videoElement || !clip.trackId) {
+      return null;
+    }
+
+    const activeHandoff = this.activeHandoffs.get(clip.id);
+    if (activeHandoff) {
+      return activeHandoff;
+    }
+
+    const ownVideo = clip.source.videoElement;
+    const now = performance.now();
+    this.clearExpiredPreviewContinuations(now);
+
+    if (!this.clipNeedsPreviewContinuation(ownVideo, targetTime)) {
+      this.previewContinuationElements.delete(clip.id);
+      return null;
+    }
+
+    const stored = this.previewContinuationElements.get(clip.id);
+    if (
+      stored &&
+      stored.videoElement !== ownVideo &&
+      this.canUsePreviewContinuationVideo(stored.videoElement, targetTime)
+    ) {
+      return stored.videoElement;
+    }
+
+    const prev = this.lastTrackState.get(clip.trackId);
+    if (!prev || prev.videoElement === ownVideo) {
+      this.previewContinuationElements.delete(clip.id);
+      return null;
+    }
+
+    const canReusePrevious =
+      prev.clipId === clip.id ||
+      this.isSameSourceSequentialClip(clip, prev);
+    if (
+      !canReusePrevious ||
+      !this.canUsePreviewContinuationVideo(prev.videoElement, targetTime)
+    ) {
+      this.previewContinuationElements.delete(clip.id);
+      return null;
+    }
+
+    this.previewContinuationElements.set(clip.id, {
+      videoElement: prev.videoElement,
+      expiresAt: now + VideoSyncManager.PREVIEW_CONTINUATION_MS,
+    });
+    return prev.videoElement;
   }
 
   /**
@@ -2426,6 +2541,7 @@ export class VideoSyncManager {
     this.clipWasDragging.delete(clipId);
     this.forceDecodeInProgress.delete(clipId);
     this.seekedFlushArmed.delete(clipId);
+    this.previewContinuationElements.delete(clipId);
     scrubSettleState.resolve(clipId);
 
     delete this.lastSeekRef[clipId];
