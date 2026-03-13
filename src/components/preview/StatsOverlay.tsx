@@ -50,8 +50,15 @@ export function StatsOverlay({ stats, resolution, expanded, onToggle }: StatsOve
         onClick={onToggle}
         title="Click for detailed stats"
       >
-        <span style={{ color: fpsColor, fontWeight: 'bold' }}>{stats.fps}</span>
-        <span style={{ opacity: 0.7 }}> FPS</span>
+        {!stats.isIdle && (
+          <>
+            <span style={{ color: fpsColor, fontWeight: 'bold' }}>{stats.fps}</span>
+            <span style={{ opacity: 0.7 }}> FPS</span>
+          </>
+        )}
+        {stats.isIdle && (
+          <span style={{ color: '#888', fontWeight: 'bold' }}>IDLE</span>
+        )}
         {!stats.isIdle && renderTime > 0 && (
           <span style={{ color: renderTimeColor, marginLeft: 6, fontSize: 10 }}>
             {renderTime.toFixed(1)}ms

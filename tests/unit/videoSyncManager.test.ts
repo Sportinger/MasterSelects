@@ -721,4 +721,136 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
 
     expect(manager.getHandoffVideoElement('clip-next')).toBeNull();
   });
+
+  it('keeps the outgoing HTML video element across a real same-source cut even when playback drift is larger than 0.5s', () => {
+    flags.useFullWebCodecsPlayback = false;
+
+    const manager = new VideoSyncManager() as any;
+    const previousVideo = {
+      currentTime: 5.2,
+    } as HTMLVideoElement;
+    const nextVideo = {
+      currentTime: 0,
+    } as HTMLVideoElement;
+    const file = new File(['video'], 'continuous-cut.mp4', { type: 'video/mp4' });
+
+    manager.lastTrackState.set('track-v1', {
+      clipId: 'clip-prev',
+      fileId: 'media-1',
+      file,
+      videoElement: previousVideo,
+      outPoint: 6.04,
+    });
+
+    manager.computeHandoffs({
+      isPlaying: true,
+      isDraggingPlayhead: false,
+      clipsAtTime: [{
+        id: 'clip-next',
+        trackId: 'track-v1',
+        file,
+        inPoint: 6.04,
+        outPoint: 9.26,
+        source: {
+          mediaFileId: 'media-1',
+          videoElement: nextVideo,
+        },
+      }],
+    } as any);
+
+    expect(manager.getHandoffVideoElement('clip-next')).toBe(previousVideo);
+    expect(engine.markVideoFramePresented).toHaveBeenCalledWith(previousVideo, 5.2, 'clip-next');
+    expect(engine.captureVideoFrameAtTime).toHaveBeenCalledWith(previousVideo, 5.2, 'clip-next');
+  });
+
+  it('reuses the previous same-source video element briefly while the next split clip is still cold', () => {
+    vi.useFakeTimers();
+    flags.useFullWebCodecsPlayback = false;
+
+    const manager = new VideoSyncManager() as any;
+    const previousVideo = {
+      currentTime: 6.08,
+      readyState: 4,
+      seeking: false,
+      played: { length: 1 },
+    } as HTMLVideoElement;
+    const nextVideo = {
+      currentTime: 6.04,
+      readyState: 1,
+      seeking: true,
+      played: { length: 0 },
+    } as HTMLVideoElement;
+    const file = new File(['video'], 'split-cut.mp4', { type: 'video/mp4' });
+
+    manager.lastTrackState.set('track-v1', {
+      clipId: 'clip-prev',
+      fileId: 'media-1',
+      file,
+      videoElement: previousVideo,
+      outPoint: 6.04,
+    });
+
+    const clip = {
+      id: 'clip-next',
+      trackId: 'track-v1',
+      file,
+      inPoint: 6.04,
+      outPoint: 9.26,
+      source: {
+        mediaFileId: 'media-1',
+        videoElement: nextVideo,
+      },
+    };
+
+    expect(manager.getPreviewContinuationVideoElement(clip as any, 6.08)).toBe(previousVideo);
+
+    nextVideo.readyState = 4;
+    nextVideo.seeking = false;
+    nextVideo.played = { length: 1 } as any;
+    nextVideo.currentTime = 6.08;
+
+    expect(manager.getPreviewContinuationVideoElement(clip as any, 6.08)).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('does not reuse the previous element as a paused preview continuation when it is too far from the cut target', () => {
+    flags.useFullWebCodecsPlayback = false;
+
+    const manager = new VideoSyncManager() as any;
+    const previousVideo = {
+      currentTime: 5.1,
+      readyState: 4,
+      seeking: false,
+      played: { length: 1 },
+    } as HTMLVideoElement;
+    const nextVideo = {
+      currentTime: 6.04,
+      readyState: 1,
+      seeking: true,
+      played: { length: 0 },
+    } as HTMLVideoElement;
+    const file = new File(['video'], 'split-cut-far.mp4', { type: 'video/mp4' });
+
+    manager.lastTrackState.set('track-v1', {
+      clipId: 'clip-prev',
+      fileId: 'media-1',
+      file,
+      videoElement: previousVideo,
+      outPoint: 6.04,
+    });
+
+    const clip = {
+      id: 'clip-next',
+      trackId: 'track-v1',
+      file,
+      inPoint: 6.04,
+      outPoint: 9.26,
+      source: {
+        mediaFileId: 'media-1',
+        videoElement: nextVideo,
+      },
+    };
+
+    expect(manager.getPreviewContinuationVideoElement(clip as any, 6.08)).toBeNull();
+  });
 });

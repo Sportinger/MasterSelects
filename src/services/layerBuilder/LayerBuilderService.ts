@@ -18,7 +18,6 @@ import {
   getScrubRuntimeSource,
 } from '../mediaRuntime/runtimePlayback';
 import { Logger } from '../logger';
-import { scrubSettleState } from '../scrubSettleState';
 import { flags } from '../../engine/featureFlags';
 import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
 import { useTimelineStore } from '../../stores/timeline';
@@ -482,12 +481,11 @@ export class LayerBuilderService {
       ? transform.opacity * opacityOverride
       : transform.opacity;
 
-    // Check for seamless cut handoff (same-source sequential clips reuse previous element)
-    const handoffVideo = this.videoSyncManager.getHandoffVideoElement(clip.id);
-    const settle = scrubSettleState.get(clip.id);
-    const useHandoffVideo = !!handoffVideo && (
-      ctx.isPlaying ||
-      (settle?.reason === 'playback-stop' && scrubSettleState.isPending(clip.id))
+    // During split-cut settles, reuse the previous same-source element briefly
+    // until the new segment's own element has decoded the target frame.
+    const continuationVideo = this.videoSyncManager.getPreviewContinuationVideoElement(
+      clip,
+      timeInfo.clipTime
     );
     const allowSharedPreviewSession = canUseSharedPreviewRuntimeSession(clip, ctx.clipsAtTime);
     const useScrubRuntime = !ctx.isPlaying && ctx.isDraggingPlayhead;
@@ -524,7 +522,7 @@ export class LayerBuilderService {
       blendMode: transform.blendMode as BlendMode,
       source: {
         type: 'video',
-        videoElement: useHandoffVideo ? handoffVideo : clip.source!.videoElement,
+        videoElement: continuationVideo ?? clip.source!.videoElement,
         mediaTime: timeInfo.clipTime,
         // Keep the clip's decoder attached even when audio uses a handoff element.
         webCodecsPlayer: visualProvider ?? undefined,

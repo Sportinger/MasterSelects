@@ -58,6 +58,8 @@ export class NestedCompRenderer {
   private nextProviderId = 1;
   private lastSuccessfulVideoProviderKey = new Map<string, string>();
   private lastCollectorState = new Map<string, 'render' | 'hold' | 'drop'>();
+  private htmlHoldUntil = new Map<string, number>();
+  private static readonly HTML_HOLD_RECOVERY_MS = 120;
 
   private getSafeLastFrameFallback(layer: Layer, video: HTMLVideoElement, targetTime: number) {
     if (!this.scrubbingCache) {
@@ -137,8 +139,51 @@ export class NestedCompRenderer {
     return `provider:${this.getProviderObjectId(frameProvider as object)}`;
   }
 
+  private getLayerReuseKey(layer: Layer): string {
+    return layer.sourceClipId ? `${layer.id}:${layer.sourceClipId}` : layer.id;
+  }
+
   private canReuseLastSuccessfulVideoFrame(layerId: string, providerKey: string | null): boolean {
     return !!providerKey && this.lastSuccessfulVideoProviderKey.get(layerId) === providerKey;
+  }
+
+  private armHtmlHold(layerId: string): void {
+    this.htmlHoldUntil.set(
+      layerId,
+      performance.now() + NestedCompRenderer.HTML_HOLD_RECOVERY_MS
+    );
+  }
+
+  private clearHtmlHold(layerId: string): void {
+    this.htmlHoldUntil.delete(layerId);
+  }
+
+  private shouldPreferHtmlHold(
+    layerId: string,
+    options: {
+      hasHoldFrame: boolean;
+      isDragging: boolean;
+      isSettling: boolean;
+      awaitingPausedTargetFrame: boolean;
+      hasFreshPresentedFrame: boolean;
+    }
+  ): boolean {
+    if (!options.hasHoldFrame) {
+      this.clearHtmlHold(layerId);
+      return false;
+    }
+
+    if (
+      !options.isDragging &&
+      !options.isSettling &&
+      !options.awaitingPausedTargetFrame &&
+      options.hasFreshPresentedFrame
+    ) {
+      this.clearHtmlHold(layerId);
+      return false;
+    }
+
+    return (this.htmlHoldUntil.get(layerId) ?? 0) > performance.now();
   }
 
   private setCollectorState(
@@ -549,6 +594,7 @@ export class NestedCompRenderer {
 
       if (allowHtmlVideoPreview) {
         const video = layer.source.videoElement!;
+        const layerReuseKey = this.getLayerReuseKey(layer);
         const targetTime = this.getTargetVideoTime(layer, video);
         const isDragging = useTimelineStore.getState().isDraggingPlayhead;
         const isSettling = scrubSettleState.isPending(layer.sourceClipId);
@@ -603,16 +649,27 @@ export class NestedCompRenderer {
             ? lastSameClipFrame
             : null;
         const safeFallback = this.getSafeLastFrameFallback(layer, video, targetTime) ?? dragHoldFrame;
+        const shouldPreferStableHold = this.shouldPreferHtmlHold(layerReuseKey, {
+          hasHoldFrame: !!safeFallback || !!emergencyHoldFrame || !!sameClipHoldFrame,
+          isDragging,
+          isSettling,
+          awaitingPausedTargetFrame,
+          hasFreshPresentedFrame,
+        });
         const allowDragLiveVideoImport =
+          !shouldPreferStableHold &&
           !video.seeking &&
           (
             !hasConfirmedPresentedFrame ||
             (presentedDriftSeconds ?? 0) <= NestedCompRenderer.MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS
           );
-        const allowLiveVideoImport = !hasPresentedOwnerMismatch && (isPausedSettle
-          ? hasFreshPresentedFrame
-          : !awaitingPausedTargetFrame &&
-            (((!isDragging && !isSettling) || hasFreshPresentedFrame || (isDragging ? allowDragLiveVideoImport : !safeFallback))));
+        const allowLiveVideoImport =
+          !shouldPreferStableHold &&
+          !hasPresentedOwnerMismatch &&
+          (isPausedSettle
+            ? hasFreshPresentedFrame
+            : !awaitingPausedTargetFrame &&
+              (((!isDragging && !isSettling) || hasFreshPresentedFrame || (isDragging ? allowDragLiveVideoImport : !safeFallback))));
         const allowConfirmedFrameCaching = !hasPresentedOwnerMismatch && (isPausedSettle
           ? hasFreshPresentedFrame
           : !awaitingPausedTargetFrame &&
@@ -623,6 +680,7 @@ export class NestedCompRenderer {
             this.scrubbingCache.getCachedFrame(video.src, targetTime) ??
             this.scrubbingCache.getNearestCachedFrame(video.src, targetTime, cacheSearchDistanceFrames);
           if (cachedView) {
+            this.armHtmlHold(layerReuseKey);
             result.push({
               layer, isVideo: false, externalTexture: null, textureView: cachedView,
               sourceWidth: video.videoWidth, sourceHeight: video.videoHeight,
@@ -631,6 +689,7 @@ export class NestedCompRenderer {
           }
           if (!allowLiveVideoImport) {
             if (safeFallback) {
+              this.armHtmlHold(layerReuseKey);
               result.push({
                 layer, isVideo: false, externalTexture: null, textureView: safeFallback.view,
                 sourceWidth: safeFallback.width, sourceHeight: safeFallback.height,
@@ -638,6 +697,7 @@ export class NestedCompRenderer {
               continue;
             }
             if (emergencyHoldFrame) {
+              this.armHtmlHold(layerReuseKey);
               result.push({
                 layer, isVideo: false, externalTexture: null, textureView: emergencyHoldFrame.view,
                 sourceWidth: emergencyHoldFrame.width, sourceHeight: emergencyHoldFrame.height,
@@ -645,6 +705,7 @@ export class NestedCompRenderer {
               continue;
             }
             if (sameClipHoldFrame) {
+              this.armHtmlHold(layerReuseKey);
               result.push({
                 layer, isVideo: false, externalTexture: null, textureView: sameClipHoldFrame.view,
                 sourceWidth: sameClipHoldFrame.width, sourceHeight: sameClipHoldFrame.height,
@@ -664,12 +725,13 @@ export class NestedCompRenderer {
               this.scrubbingCache,
               targetTime,
               layer.sourceClipId,
-              captureOwnerId
-            );
-            if (copiedFrame) {
-              result.push({
-                layer, isVideo: false, externalTexture: null, textureView: copiedFrame.view,
-                sourceWidth: copiedFrame.width, sourceHeight: copiedFrame.height,
+            captureOwnerId
+          );
+          if (copiedFrame) {
+            this.clearHtmlHold(layerReuseKey);
+            result.push({
+              layer, isVideo: false, externalTexture: null, textureView: copiedFrame.view,
+              sourceWidth: copiedFrame.width, sourceHeight: copiedFrame.height,
                 displayedMediaTime: copiedFrame.mediaTime ?? reportedDisplayedTime,
                 targetMediaTime: targetTime,
                 previewPath: 'copied-preview',
@@ -682,6 +744,7 @@ export class NestedCompRenderer {
             ? this.textureManager.importVideoTexture(video)
             : null;
           if (extTex) {
+            this.clearHtmlHold(layerReuseKey);
             if (this.scrubbingCache) {
               const now = performance.now();
               const lastCapture = this.scrubbingCache.getLastCaptureTime(video);
@@ -722,6 +785,7 @@ export class NestedCompRenderer {
           this.scrubbingCache?.getCachedFrameEntry(video.src, targetTime) ??
           this.scrubbingCache?.getNearestCachedFrameEntry(video.src, targetTime, cacheSearchDistanceFrames);
         if (notReadyCachedFrame) {
+          this.armHtmlHold(layerReuseKey);
           result.push({
             layer,
             isVideo: false,
@@ -737,6 +801,7 @@ export class NestedCompRenderer {
         }
 
         if (safeFallback) {
+          this.armHtmlHold(layerReuseKey);
           log.debug('Using cached frame fallback for nested video', { layerId: layer.id });
           result.push({
             layer, isVideo: false, externalTexture: null, textureView: safeFallback.view,
@@ -745,6 +810,7 @@ export class NestedCompRenderer {
           continue;
         }
         if (emergencyHoldFrame) {
+          this.armHtmlHold(layerReuseKey);
           result.push({
             layer, isVideo: false, externalTexture: null, textureView: emergencyHoldFrame.view,
             sourceWidth: emergencyHoldFrame.width, sourceHeight: emergencyHoldFrame.height,
@@ -755,6 +821,7 @@ export class NestedCompRenderer {
           continue;
         }
         if (sameClipHoldFrame) {
+          this.armHtmlHold(layerReuseKey);
           result.push({
             layer, isVideo: false, externalTexture: null, textureView: sameClipHoldFrame.view,
             sourceWidth: sameClipHoldFrame.width, sourceHeight: sameClipHoldFrame.height,
@@ -787,7 +854,8 @@ export class NestedCompRenderer {
             ? runtimeProvider
             : null);
       const providerKey = this.getVideoProviderKey(layer, frameProvider, runtimeProvider);
-      const canReuseLastFrame = this.canReuseLastSuccessfulVideoFrame(layer.id, providerKey);
+      const layerReuseKey = this.getLayerReuseKey(layer);
+      const canReuseLastFrame = this.canReuseLastSuccessfulVideoFrame(layerReuseKey, providerKey);
       const frameProviderStable = this.isPendingWebCodecsFrameStable(frameProvider ?? undefined);
       const holdingFrame = !frameProviderStable && canReuseLastFrame;
       const canReadRuntimeFrame =
@@ -808,9 +876,9 @@ export class NestedCompRenderer {
         const extTex = this.textureManager.importVideoTexture(runtimeFrame);
         if (extTex) {
           if (providerKey) {
-            this.lastSuccessfulVideoProviderKey.set(layer.id, providerKey);
+            this.lastSuccessfulVideoProviderKey.set(layerReuseKey, providerKey);
           }
-          this.setCollectorState(layer.id, holdingFrame ? 'hold' : 'render', {
+          this.setCollectorState(layerReuseKey, holdingFrame ? 'hold' : 'render', {
             reason: holdingFrame ? 'same_provider_pending' : 'runtime_frame',
           });
           result.push({
@@ -824,7 +892,7 @@ export class NestedCompRenderer {
       // WebCodecs
       if (frameProvider?.isFullMode()) {
         if (!frameProviderStable && !canReuseLastFrame && !allowPendingScrubFrame) {
-          this.setCollectorState(layer.id, 'drop', {
+          this.setCollectorState(layerReuseKey, 'drop', {
             reason: 'pending_unstable',
           });
           continue;
@@ -834,9 +902,9 @@ export class NestedCompRenderer {
           const extTex = this.textureManager.importVideoTexture(frame);
           if (extTex) {
             if (providerKey) {
-              this.lastSuccessfulVideoProviderKey.set(layer.id, providerKey);
+              this.lastSuccessfulVideoProviderKey.set(layerReuseKey, providerKey);
             }
-            this.setCollectorState(layer.id, holdingFrame ? 'hold' : 'render', {
+            this.setCollectorState(layerReuseKey, holdingFrame ? 'hold' : 'render', {
               reason: holdingFrame ? 'same_provider_pending' : 'provider_frame',
             });
             result.push({
@@ -845,12 +913,12 @@ export class NestedCompRenderer {
             });
             continue;
           }
-          this.setCollectorState(layer.id, 'drop', {
+          this.setCollectorState(layerReuseKey, 'drop', {
             reason: 'import_failed',
           });
         } else {
           // WebCodecs has no frame yet - normal during decode startup
-          this.setCollectorState(layer.id, 'drop', {
+          this.setCollectorState(layerReuseKey, 'drop', {
             reason: 'no_frame',
           });
         }
