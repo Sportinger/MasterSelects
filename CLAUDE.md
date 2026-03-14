@@ -4,7 +4,18 @@ Anweisungen für AI-Assistenten (Claude, GPT, etc.) bei der Arbeit an diesem Pro
 
 ---
 
-## 0. AI Debug Tools (kein Browser-Plugin nötig!)
+## 0. Projektziel / Vision (Deadline: Juni 2026)
+
+**MasterSelects muss ALLE Media-Dateien unterstützen** — nicht nur Video/Audio/Bild, sondern wirklich ALLES:
+3D (OBJ, FBX, glTF), PDF, SVG, CAD (DXF/STEP), Binärdaten, Point Clouds, JSON, CSV, und mehr.
+
+**Inspiration: TouchDesigner-Prinzip** — Jede Datei wird zu einem visuellen Signal. So wie TouchDesigner in SOPs/TOPs/CHOPs jede Datenquelle sichtbar und manipulierbar macht (Geometrie → Vertices als Farben, Audio → Wellenform-Textur, Daten → Heatmaps), soll MasterSelects jedes Dateiformat in die GPU-Pipeline bringen und auf dem Canvas rendern können.
+
+**Kernidee:** Es gibt keine "nicht unterstützten" Dateien. Alles wird Textur, Geometrie oder Daten — alles kann auf der Timeline platziert, composited und exportiert werden.
+
+---
+
+## 0.1 AI Debug Tools (kein Browser-Plugin nötig!)
 
 Die `/masterselects` Skill stellt 4 Debug-Tools bereit, die über den HTTP Bridge laufen (`POST http://localhost:5173/api/ai-tools`). Voraussetzung: Dev-Server läuft + App in Browser-Tab geöffnet.
 
