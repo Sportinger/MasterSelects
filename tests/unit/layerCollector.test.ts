@@ -842,6 +842,159 @@ describe('LayerCollector', () => {
     });
   });
 
+  it('keeps the last same-clip frame during playback warmup instead of dropping to black', () => {
+    flags.useFullWebCodecsPlayback = false;
+    useTimelineStore.setState({ isDraggingPlayhead: false });
+
+    const video = {
+      src: 'blob:test-video',
+      currentTime: 18,
+      readyState: 1,
+      seeking: true,
+      paused: false,
+      videoWidth: 1920,
+      videoHeight: 1080,
+    } as any;
+
+    const heldFrame = {
+      view: { label: 'held-playback-warmup-frame' },
+      width: 1920,
+      height: 1080,
+      mediaTime: 18,
+    };
+    const textureManager = {
+      importVideoTexture: vi.fn(() => null),
+    };
+    const scrubbingCache = {
+      getLastPresentedTime: vi.fn(() => undefined),
+      getLastPresentedOwner: vi.fn(() => undefined),
+      getLastFrame: vi.fn(() => heldFrame),
+      getLastFrameNearTime: vi.fn(() => null),
+      getCachedFrameEntry: vi.fn(() => null),
+      getNearestCachedFrameEntry: vi.fn(() => null),
+      getLastCaptureTime: vi.fn(() => 0),
+      captureVideoFrame: vi.fn(),
+      setLastCaptureTime: vi.fn(),
+      cacheFrameAtTime: vi.fn(),
+      captureVideoFrameIfCloser: vi.fn(),
+    };
+
+    const collector = new LayerCollector();
+    const result = collector.collect([{
+      id: 'layer-playback-warmup',
+      sourceClipId: 'clip-playback-warmup',
+      name: 'Video',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      source: {
+        type: 'video',
+        mediaTime: 18,
+        videoElement: video,
+      },
+    } as any], {
+      textureManager: textureManager as any,
+      scrubbingCache: scrubbingCache as any,
+      getLastVideoTime: () => undefined,
+      setLastVideoTime: () => {},
+      isExporting: false,
+      isPlaying: true,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      isVideo: false,
+      externalTexture: null,
+      textureView: heldFrame.view,
+      sourceWidth: heldFrame.width,
+      sourceHeight: heldFrame.height,
+      displayedMediaTime: heldFrame.mediaTime,
+      targetMediaTime: 18,
+      previewPath: 'same-clip-hold',
+    });
+  });
+
+  it('uses an ownerless cached frame during playback warmup when initial pre-cache has no clip owner', () => {
+    flags.useFullWebCodecsPlayback = false;
+    useTimelineStore.setState({ isDraggingPlayhead: false });
+
+    const video = {
+      src: 'blob:test-video',
+      currentTime: 0,
+      readyState: 1,
+      seeking: false,
+      paused: false,
+      videoWidth: 1920,
+      videoHeight: 1080,
+    } as any;
+
+    const heldFrame = {
+      view: { label: 'ownerless-precache-frame' },
+      width: 1920,
+      height: 1080,
+      mediaTime: 0,
+    };
+    const textureManager = {
+      importVideoTexture: vi.fn(() => null),
+    };
+    const scrubbingCache = {
+      getLastPresentedTime: vi.fn(() => undefined),
+      getLastPresentedOwner: vi.fn(() => undefined),
+      getLastFrameOwner: vi.fn(() => undefined),
+      getLastFrame: vi.fn((_: HTMLVideoElement, ownerId?: string) => ownerId ? null : heldFrame),
+      getLastFrameNearTime: vi.fn(() => null),
+      getCachedFrameEntry: vi.fn(() => null),
+      getNearestCachedFrameEntry: vi.fn(() => null),
+      getLastCaptureTime: vi.fn(() => 0),
+      captureVideoFrame: vi.fn(),
+      setLastCaptureTime: vi.fn(),
+      cacheFrameAtTime: vi.fn(),
+      captureVideoFrameIfCloser: vi.fn(),
+    };
+
+    const collector = new LayerCollector();
+    const result = collector.collect([{
+      id: 'layer-ownerless-precache',
+      sourceClipId: 'clip-ownerless-precache',
+      name: 'Video',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      source: {
+        type: 'video',
+        mediaTime: 0,
+        videoElement: video,
+      },
+    } as any], {
+      textureManager: textureManager as any,
+      scrubbingCache: scrubbingCache as any,
+      getLastVideoTime: () => undefined,
+      setLastVideoTime: () => {},
+      isExporting: false,
+      isPlaying: true,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      isVideo: false,
+      externalTexture: null,
+      textureView: heldFrame.view,
+      sourceWidth: heldFrame.width,
+      sourceHeight: heldFrame.height,
+      displayedMediaTime: heldFrame.mediaTime,
+      targetMediaTime: 0,
+      previewPath: 'playback-stall-hold',
+    });
+  });
+
   it('uses a same-clip hold as the last fallback when a seeked HTML frame cannot import', () => {
     flags.useFullWebCodecsPlayback = false;
     useTimelineStore.setState({ isDraggingPlayhead: true });

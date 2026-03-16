@@ -432,7 +432,18 @@ export class LayerCollector {
   ) {
     const isDragging = useTimelineStore.getState().isDraggingPlayhead;
     const tolerance = video.seeking || isDragging ? 0.35 : 0.2;
-    return deps.scrubbingCache?.getLastFrameNearTime(video, targetTime, tolerance, layer.sourceClipId) ?? null;
+    const ownerMatched =
+      deps.scrubbingCache?.getLastFrameNearTime(video, targetTime, tolerance, layer.sourceClipId) ?? null;
+    if (ownerMatched) {
+      return ownerMatched;
+    }
+
+    const cachedOwner = deps.scrubbingCache?.getLastFrameOwner?.(video);
+    if (cachedOwner && layer.sourceClipId && cachedOwner !== layer.sourceClipId) {
+      return null;
+    }
+
+    return deps.scrubbingCache?.getLastFrameNearTime(video, targetTime, tolerance) ?? null;
   }
 
   private getDragHoldFrame(layer: Layer, video: HTMLVideoElement, deps: LayerCollectorDeps) {
@@ -440,6 +451,24 @@ export class LayerCollector {
       return null;
     }
     return deps.scrubbingCache?.getLastFrame(video, layer.sourceClipId) ?? null;
+  }
+
+  private getPlaybackStallHoldFrame(
+    layer: Layer,
+    video: HTMLVideoElement,
+    deps: LayerCollectorDeps
+  ) {
+    const ownerMatched = deps.scrubbingCache?.getLastFrame(video, layer.sourceClipId) ?? null;
+    if (ownerMatched) {
+      return ownerMatched;
+    }
+
+    const cachedOwner = deps.scrubbingCache?.getLastFrameOwner?.(video);
+    if (cachedOwner && layer.sourceClipId && cachedOwner !== layer.sourceClipId) {
+      return null;
+    }
+
+    return deps.scrubbingCache?.getLastFrame(video) ?? null;
   }
 
   private isFrameNearTarget(
@@ -552,7 +581,6 @@ export class LayerCollector {
         : null;
       const emergencyHoldFrame = dragHoldFrame;
       const sameClipHoldFrame =
-        !deps.isPlaying &&
         (isDragging || isSettling || awaitingPausedTargetFrame || video.seeking)
           ? lastSameClipFrame
         : null;
@@ -842,7 +870,7 @@ export class LayerCollector {
       // Last resort during playback: use ANY cached frame to avoid black flash.
       // A slightly stale frame is vastly better than black.
       if (deps.isPlaying) {
-        const anyFrame = deps.scrubbingCache?.getLastFrame(video, layer.sourceClipId);
+        const anyFrame = this.getPlaybackStallHoldFrame(layer, video, deps);
         if (anyFrame) {
           this.traceScrubPath(layer, 'playback-stall-hold', video, targetTime, lastPresentedTime);
           this.currentDecoder = 'HTMLVideo(cached)';
@@ -892,7 +920,6 @@ export class LayerCollector {
         })()
         : dragHoldFrame;
       const sameClipHoldFrame =
-        !deps.isPlaying &&
         (isDragging || isSettling || video.seeking || video.readyState < 2)
           ? lastSameClipFrame
           : null;
@@ -962,7 +989,7 @@ export class LayerCollector {
       }
       // Last resort during playback: hold any cached frame to avoid black
       if (deps.isPlaying) {
-        const anyFrame = deps.scrubbingCache?.getLastFrame(video, layer.sourceClipId);
+        const anyFrame = this.getPlaybackStallHoldFrame(layer, video, deps);
         if (anyFrame) {
           this.traceScrubPath(layer, 'playback-stall-hold', video, targetTime, deps.scrubbingCache?.getLastPresentedTime(video));
           this.currentDecoder = 'HTMLVideo(cached)';

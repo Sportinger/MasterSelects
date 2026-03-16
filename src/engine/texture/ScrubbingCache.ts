@@ -439,6 +439,10 @@ export class ScrubbingCache {
     return null;
   }
 
+  getLastFrameOwner(video: HTMLVideoElement): string | undefined {
+    return this.lastFrameOwners.get(video);
+  }
+
   // Only reuse a copied last-frame fallback when it was captured close to the
   // requested media time. This avoids flashing unrelated frames during seeks.
   getLastFrameNearTime(

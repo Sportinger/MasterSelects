@@ -1,6 +1,7 @@
 // Composition CRUD and tab management
 
 import type { Composition, MediaSliceCreator, MediaState } from '../types';
+import type { CompositionTimelineData, SerializableClip, TimelineClip } from '../../../types';
 import { generateId } from '../helpers/importPipeline';
 import { useTimelineStore } from '../../timeline';
 import { useSettingsStore } from '../../settingsStore';
@@ -26,6 +27,211 @@ export interface CompositionActions {
   assignMediaFileToSlot: (mediaFileId: string, slotIndex: number) => void;
   setPreviewComposition: (id: string | null) => void;
   setSourceMonitorFile: (id: string | null) => void;
+}
+
+const DURATION_SYNC_EPSILON = 0.0001;
+const AUTO_TIMELINE_MIN_DURATION = 60;
+const AUTO_TIMELINE_PADDING_SECONDS = 10;
+
+type NestedCompReferenceClip = Pick<SerializableClip, 'isComposition' | 'compositionId' | 'inPoint' | 'outPoint' | 'duration'> &
+  Partial<Pick<SerializableClip, 'sourceType' | 'naturalDuration' | 'waveform'>> &
+  Partial<Pick<TimelineClip, 'source'>>;
+
+function clampTimelineBounds(
+  duration: number,
+  playheadPosition: number,
+  inPoint: number | null,
+  outPoint: number | null
+): Pick<CompositionTimelineData, 'playheadPosition' | 'inPoint' | 'outPoint'> {
+  const clampedPlayhead = Math.max(0, Math.min(playheadPosition, duration));
+  const clampedInPoint = inPoint === null ? null : Math.max(0, Math.min(inPoint, duration));
+  const clampedOutPoint = outPoint === null ? null : Math.max(clampedInPoint ?? 0, Math.min(outPoint, duration));
+
+  return {
+    playheadPosition: clampedPlayhead,
+    inPoint: clampedInPoint,
+    outPoint: clampedOutPoint,
+  };
+}
+
+function calculateUnlockedTimelineDuration(clips: Array<Pick<SerializableClip, 'startTime' | 'duration'>>): number {
+  if (clips.length === 0) {
+    return AUTO_TIMELINE_MIN_DURATION;
+  }
+
+  const maxEnd = Math.max(...clips.map((clip) => clip.startTime + clip.duration));
+  return Math.max(AUTO_TIMELINE_MIN_DURATION, maxEnd + AUTO_TIMELINE_PADDING_SECONDS);
+}
+
+function syncNestedCompReferenceClip<T extends NestedCompReferenceClip>(
+  clip: T,
+  compositionId: string,
+  previousDuration: number,
+  nextDuration: number,
+  options?: { clearWaveform?: boolean }
+): T {
+  if (!clip.isComposition || clip.compositionId !== compositionId) {
+    return clip;
+  }
+
+  const reachesPreviousCompEnd =
+    previousDuration <= DURATION_SYNC_EPSILON ||
+    Math.abs(clip.outPoint - previousDuration) <= DURATION_SYNC_EPSILON;
+  const nextOutPoint = reachesPreviousCompEnd
+    ? nextDuration
+    : Math.min(clip.outPoint, nextDuration);
+  const nextInPoint = Math.min(clip.inPoint, nextOutPoint);
+  const nextClipDuration = Math.max(0, nextOutPoint - nextInPoint);
+
+  const nextNaturalDuration = nextDuration;
+  const currentNaturalDuration = 'source' in clip
+    ? clip.source?.naturalDuration
+    : clip.naturalDuration;
+  const needsUpdate =
+    clip.inPoint !== nextInPoint ||
+    clip.outPoint !== nextOutPoint ||
+    clip.duration !== nextClipDuration ||
+    currentNaturalDuration !== nextNaturalDuration;
+
+  if (!needsUpdate) {
+    return clip;
+  }
+
+  const updatedClip: T = {
+    ...clip,
+    inPoint: nextInPoint,
+    outPoint: nextOutPoint,
+    duration: nextClipDuration,
+  };
+
+  if ('source' in clip) {
+    updatedClip.source = clip.source
+      ? { ...clip.source, naturalDuration: nextNaturalDuration }
+      : clip.source;
+  } else {
+    updatedClip.naturalDuration = nextNaturalDuration;
+    if (options?.clearWaveform && clip.sourceType === 'audio') {
+      updatedClip.waveform = undefined;
+    }
+  }
+
+  return updatedClip;
+}
+
+function lockTimelineDuration(
+  timelineData: CompositionTimelineData | undefined,
+  duration: number
+): CompositionTimelineData | undefined {
+  if (!timelineData) {
+    return timelineData;
+  }
+
+  const clampedBounds = clampTimelineBounds(
+    duration,
+    timelineData.playheadPosition,
+    timelineData.inPoint,
+    timelineData.outPoint
+  );
+
+  return {
+    ...timelineData,
+    duration,
+    durationLocked: true,
+    ...clampedBounds,
+  };
+}
+
+function syncTimelineDataNestedCompReferences(
+  timelineData: CompositionTimelineData | undefined,
+  compositionId: string,
+  previousDuration: number,
+  nextDuration: number
+): CompositionTimelineData | undefined {
+  if (!timelineData) {
+    return timelineData;
+  }
+
+  let changed = false;
+  const updatedClips = timelineData.clips.map((clip) => {
+    const updatedClip = syncNestedCompReferenceClip(
+      clip,
+      compositionId,
+      previousDuration,
+      nextDuration,
+      { clearWaveform: true }
+    );
+    if (updatedClip !== clip) {
+      changed = true;
+    }
+    return updatedClip;
+  });
+
+  if (!changed) {
+    return timelineData;
+  }
+
+  const duration = timelineData.durationLocked
+    ? timelineData.duration
+    : calculateUnlockedTimelineDuration(updatedClips);
+  const clampedBounds = clampTimelineBounds(
+    duration,
+    timelineData.playheadPosition,
+    timelineData.inPoint,
+    timelineData.outPoint
+  );
+
+  return {
+    ...timelineData,
+    clips: updatedClips,
+    duration,
+    ...clampedBounds,
+  };
+}
+
+function syncActiveTimelineNestedCompReferences(
+  activeCompositionId: string | null,
+  compositionId: string,
+  previousDuration: number,
+  nextDuration: number
+): void {
+  if (!activeCompositionId || activeCompositionId === compositionId) {
+    return;
+  }
+
+  const timelineStore = useTimelineStore.getState();
+  const audioClipIds: string[] = [];
+  let changed = false;
+
+  const updatedClips = timelineStore.clips.map((clip) => {
+    const updatedClip = syncNestedCompReferenceClip(
+      clip,
+      compositionId,
+      previousDuration,
+      nextDuration
+    );
+    if (updatedClip !== clip) {
+      changed = true;
+      if (updatedClip.source?.type === 'audio') {
+        audioClipIds.push(updatedClip.id);
+      }
+    }
+    return updatedClip;
+  });
+
+  if (!changed) {
+    return;
+  }
+
+  useTimelineStore.setState({ clips: updatedClips });
+
+  const refreshedTimelineStore = useTimelineStore.getState();
+  refreshedTimelineStore.updateDuration();
+  refreshedTimelineStore.invalidateCache();
+  void refreshedTimelineStore.refreshCompClipNestedData(compositionId);
+
+  for (const clipId of audioClipIds) {
+    void refreshedTimelineStore.generateWaveformForClip(clipId);
+  }
 }
 
 export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (set, get) => ({
@@ -94,18 +300,54 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
 
   updateComposition: (id: string, updates: Partial<Composition>) => {
     const oldComp = get().compositions.find((c) => c.id === id);
+    if (!oldComp) {
+      return;
+    }
+
+    const normalizedUpdates: Partial<Composition> = { ...updates };
+    const previousDuration = oldComp.timelineData?.duration ?? oldComp.duration;
+    const nextDuration = updates.duration !== undefined
+      ? Math.max(1, updates.duration)
+      : previousDuration;
+    const durationChanged = updates.duration !== undefined && nextDuration !== previousDuration;
+
     if (oldComp && (updates.width !== undefined || updates.height !== undefined)) {
       const newW = updates.width ?? oldComp.width;
       const newH = updates.height ?? oldComp.height;
       if (newW !== oldComp.width || newH !== oldComp.height) {
-        adjustClipTransformsOnResize(get, id, oldComp.width, oldComp.height, newW, newH, updates);
+        adjustClipTransformsOnResize(get, id, oldComp.width, oldComp.height, newW, newH, normalizedUpdates);
       }
     }
+
+    if (durationChanged) {
+      normalizedUpdates.duration = nextDuration;
+      normalizedUpdates.timelineData = lockTimelineDuration(
+        normalizedUpdates.timelineData ?? oldComp.timelineData,
+        nextDuration
+      );
+    }
+
     set((state) => ({
       compositions: state.compositions.map((c) =>
-        c.id === id ? { ...c, ...updates } : c
+        c.id === id
+          ? { ...c, ...normalizedUpdates }
+          : !durationChanged
+            ? c
+          : c.id === state.activeCompositionId
+            ? c
+            : {
+                ...c,
+                timelineData: durationChanged
+                  ? syncTimelineDataNestedCompReferences(c.timelineData, id, previousDuration, nextDuration)
+                  : c.timelineData,
+              }
       ),
     }));
+
+    if (durationChanged) {
+      syncActiveTimelineNestedCompReferences(get().activeCompositionId, id, previousDuration, nextDuration);
+      compositionRenderer.invalidateCompositionAndParents(id);
+    }
   },
 
   setActiveComposition: (id: string | null) => {
