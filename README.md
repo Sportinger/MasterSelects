@@ -23,7 +23,7 @@
 </tr>
 </table>
 
-<video src="https://github.com/user-attachments/assets/197f6894-3af3-4279-af46-b893e2aa0a18" poster="https://github.com/user-attachments/assets/975eb780-d4bd-4f24-959a-bf3900dced62" autoplay loop muted playsinline width="100%"></video>
+<video src="https://github.com/user-attachments/assets/24966b2a-064f-49c8-bc7f-88472a5e4cb0" autoplay loop muted playsinline width="100%"></video>
 
 </div>
 
