@@ -1,19 +1,16 @@
-// Video encoder wrapper using WebCodecs and mp4/webm muxers
+// Video encoder wrapper using WebCodecs — muxing via MediaBunny adapter
 
 import { Logger } from '../../services/logger';
-import { Muxer as Mp4Muxer, ArrayBufferTarget as Mp4Target } from 'mp4-muxer';
+import { MediaBunnyMuxerAdapter, type MuxerAdapter } from './MediaBunnyMuxerAdapter';
 
 const log = Logger.create('VideoEncoder');
-import { Muxer as WebmMuxer, ArrayBufferTarget as WebmTarget } from 'webm-muxer';
 import { AudioEncoderWrapper, type AudioCodec, type EncodedAudioResult } from '../audio';
 import type { ExportSettings, VideoCodec, ContainerFormat } from './types';
-import { getCodecString, getMp4MuxerCodec, getWebmMuxerCodec, isCodecSupportedInContainer, getFallbackCodec } from './codecHelpers';
-
-type MuxerType = Mp4Muxer<Mp4Target> | WebmMuxer<WebmTarget>;
+import { getCodecString, isCodecSupportedInContainer, getFallbackCodec } from './codecHelpers';
 
 export class VideoEncoderWrapper {
   private encoder: VideoEncoder | null = null;
-  private muxer: MuxerType | null = null;
+  private muxer: MuxerAdapter | null = null;
   private settings: ExportSettings;
   private encodedFrameCount = 0;
   private isClosed = false;
@@ -64,13 +61,14 @@ export class VideoEncoderWrapper {
       return false;
     }
 
-    // Create muxer
+    // Create muxer (MediaBunny adapter)
     this.createMuxer();
 
     // Create encoder
     this.encoder = new VideoEncoder({
       output: (chunk, meta) => {
         if (this.muxer) {
+          // Synchronous queue — MediaBunnyMuxerAdapter buffers internally
           this.muxer.addVideoChunk(chunk, meta);
         }
         this.encodedFrameCount++;
@@ -125,37 +123,16 @@ export class VideoEncoderWrapper {
   }
 
   private createMuxer(): void {
-    const webmVideoCodec = getWebmMuxerCodec(this.effectiveVideoCodec);
-    const mp4VideoCodec = getMp4MuxerCodec(this.effectiveVideoCodec);
-    const sampleRate = this.settings.audioSampleRate ?? 48000;
+    this.muxer = new MediaBunnyMuxerAdapter({
+      container: this.containerFormat,
+      videoCodec: this.effectiveVideoCodec,
+      fps: this.settings.fps,
+      hasAudio: this.hasAudio,
+      audioCodec: this.audioCodec,
+    });
 
-    if (this.containerFormat === 'webm') {
-      this.muxer = this.hasAudio
-        ? new WebmMuxer({
-            target: new WebmTarget(),
-            video: { codec: webmVideoCodec, width: this.settings.width, height: this.settings.height },
-            audio: { codec: 'A_OPUS', sampleRate, numberOfChannels: 2 },
-          })
-        : new WebmMuxer({
-            target: new WebmTarget(),
-            video: { codec: webmVideoCodec, width: this.settings.width, height: this.settings.height },
-          });
-      log.info(`Using WebM/${this.effectiveVideoCodec.toUpperCase()} with ${this.hasAudio ? 'Opus' : 'no'} audio`);
-    } else {
-      this.muxer = this.hasAudio
-        ? new Mp4Muxer({
-            target: new Mp4Target(),
-            video: { codec: mp4VideoCodec, width: this.settings.width, height: this.settings.height },
-            audio: { codec: this.audioCodec, sampleRate, numberOfChannels: 2 },
-            fastStart: 'in-memory',
-          })
-        : new Mp4Muxer({
-            target: new Mp4Target(),
-            video: { codec: mp4VideoCodec, width: this.settings.width, height: this.settings.height },
-            fastStart: 'in-memory',
-          });
-      log.info(`Using MP4/${this.effectiveVideoCodec.toUpperCase()} with ${this.hasAudio ? this.audioCodec.toUpperCase() : 'no'} audio`);
-    }
+    const audioLabel = this.hasAudio ? this.audioCodec.toUpperCase() : 'no';
+    log.info(`Using MediaBunny ${this.containerFormat.toUpperCase()}/${this.effectiveVideoCodec.toUpperCase()} with ${audioLabel} audio`);
   }
 
   getContainerFormat(): ContainerFormat {
@@ -237,11 +214,15 @@ export class VideoEncoderWrapper {
     }
 
     this.isClosed = true;
+
+    // Flush all pending frames from the WebCodecs encoder
     await this.encoder.flush();
     this.encoder.close();
-    this.muxer.finalize();
 
-    const { buffer } = this.muxer.target;
+    // Finalize the muxer — this flushes the internal queue and writes the file
+    await this.muxer.finalize();
+
+    const buffer = this.muxer.getBuffer();
     const mimeType = this.containerFormat === 'webm' ? 'video/webm' : 'video/mp4';
 
     log.info(`Finished: ${this.encodedFrameCount} frames, ${(buffer.byteLength / 1024 / 1024).toFixed(2)}MB (${this.containerFormat.toUpperCase()})`);
@@ -254,6 +235,10 @@ export class VideoEncoderWrapper {
       try {
         this.encoder.close();
       } catch {}
+      // Cancel any pending muxer flush
+      if (this.muxer && this.muxer instanceof MediaBunnyMuxerAdapter) {
+        this.muxer.cancel();
+      }
     }
   }
 }

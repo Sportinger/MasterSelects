@@ -22,6 +22,7 @@
     "@ffmpeg/util": "^0.12.2",
     "@huggingface/transformers": "^3.8.1",
     "@webgpu/types": "^0.1.66",
+    "mediabunny": "^1.39.2",
     "mp4-muxer": "^5.2.2",
     "mp4box": "^2.3.0",
     "onnxruntime-web": "^1.24.1",

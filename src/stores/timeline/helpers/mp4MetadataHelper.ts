@@ -1,19 +1,19 @@
-// Fast MP4/MOV metadata extraction using MP4Box
-// Reads from both start AND end of file to handle camera MOV files
-// where the moov atom is at the end (not faststart/web-optimized).
+// Fast MP4/MOV metadata extraction using MediaBunny
+// MediaBunny's BlobSource supports random-access reading via Blob.slice(),
+// so it can seek to find the moov atom wherever it is (start or end of file).
+// This handles camera MOV files with moov at end without manual parallel reads.
 
 import { Logger } from '../../../services/logger';
 
 const log = Logger.create('MP4Metadata');
 
-// Lazy-load mp4box
-let _MP4Box: any = null;
-async function getMP4Box() {
-  if (!_MP4Box) {
-    const mod = await import('mp4box');
-    _MP4Box = (mod as any).default || mod;
+// Lazy-load mediabunny only when needed (tree-shaking friendly)
+let _mediabunny: typeof import('mediabunny') | null = null;
+async function getMediaBunny() {
+  if (!_mediabunny) {
+    _mediabunny = await import('mediabunny');
   }
-  return _MP4Box;
+  return _mediabunny;
 }
 
 // MP4-based containers
@@ -29,9 +29,10 @@ export interface MP4Metadata {
 }
 
 /**
- * Extract metadata from MP4/MOV container using MP4Box.
- * Reads from both start and end of file to handle camera files
- * with moov atom at end. Much faster than waiting for HTMLVideoElement.
+ * Extract metadata from MP4/MOV container using MediaBunny.
+ * MediaBunny's BlobSource handles random-access reading from Blob,
+ * so it can locate the moov atom whether it's at the start or end of the file.
+ * This replaces the old MP4Box parallel start+end reading strategy.
  *
  * Returns null if file is not MP4/MOV or parsing fails.
  */
@@ -39,158 +40,83 @@ export async function getMP4MetadataFast(file: File, timeoutMs = 5000): Promise<
   const ext = file.name.split('.').pop()?.toLowerCase() || '';
   if (!MP4_EXTENSIONS.includes(ext)) return null;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cleanup: { input: any } = { input: null };
   try {
-    const MP4Box = await getMP4Box();
+    const mb = await getMediaBunny();
 
-    return new Promise<MP4Metadata | null>((resolve) => {
-      const mp4boxFile = MP4Box.createFile();
-      let resolved = false;
+    const result = await Promise.race([
+      (async () => {
+        const input = new mb.Input({
+          formats: [mb.MP4, mb.QTFF],
+          source: new mb.BlobSource(file),
+        });
+        cleanup.input = input;
 
-      const done = (result: MP4Metadata | null) => {
-        if (resolved) return;
-        resolved = true;
-        clearTimeout(timeout);
-        resolve(result);
-      };
-
-      const timeout = setTimeout(() => {
-        log.debug('MP4Box metadata timeout', { file: file.name });
-        done(null);
-      }, timeoutMs);
-
-      mp4boxFile.onReady = (info: any) => {
-        const videoTrack = info.videoTracks?.[0];
-        const duration = info.duration && info.timescale
-          ? info.duration / info.timescale
-          : videoTrack?.duration && videoTrack?.timescale
-            ? videoTrack.duration / videoTrack.timescale
-            : null;
-
+        const duration = await input.computeDuration();
         if (!duration || !isFinite(duration) || duration <= 0) {
-          log.debug('MP4Box: no valid duration', { file: file.name });
-          done(null);
-          return;
+          log.debug('MediaBunny: no valid duration', { file: file.name });
+          return null;
         }
 
-        const result: MP4Metadata = {
+        const videoTracks = await input.getVideoTracks();
+        const audioTracks = await input.getAudioTracks();
+        const videoTrack = videoTracks[0] ?? null;
+
+        const metadata: MP4Metadata = {
           duration,
-          hasAudio: (info.audioTracks?.length || 0) > 0,
+          hasAudio: audioTracks.length > 0,
         };
 
         if (videoTrack) {
-          // Extract dimensions from track header
-          if (videoTrack.track_width && videoTrack.track_height) {
-            result.width = videoTrack.track_width;
-            result.height = videoTrack.track_height;
-          } else if (videoTrack.video?.width && videoTrack.video?.height) {
-            result.width = videoTrack.video.width;
-            result.height = videoTrack.video.height;
+          // Extract dimensions (display dimensions account for rotation + pixel aspect ratio)
+          metadata.width = videoTrack.displayWidth;
+          metadata.height = videoTrack.displayHeight;
+
+          // Extract FPS from packet stats (scan first ~200 packets for speed)
+          try {
+            const stats = await videoTrack.computePacketStats(200);
+            if (stats.averagePacketRate > 0) {
+              metadata.fps = Math.round(stats.averagePacketRate);
+            }
+          } catch {
+            // FPS computation can fail for very short clips
           }
 
-          // Extract FPS
-          if (videoTrack.nb_samples && duration > 0) {
-            result.fps = Math.round(videoTrack.nb_samples / duration);
-          }
-
-          // Extract codec
-          if (videoTrack.codec) {
-            result.codec = videoTrack.codec;
+          // Extract codec parameter string (e.g. 'avc1.64001f')
+          try {
+            const codecStr = await videoTrack.getCodecParameterString();
+            if (codecStr) {
+              metadata.codec = codecStr;
+            }
+          } catch {
+            // Codec detection can fail for exotic codecs
           }
         }
 
-        log.debug('MP4Box metadata extracted', {
+        log.debug('MediaBunny metadata extracted', {
           file: file.name,
-          duration: result.duration.toFixed(2),
-          width: result.width,
-          height: result.height,
-          fps: result.fps,
-          hasAudio: result.hasAudio,
+          duration: metadata.duration.toFixed(2),
+          width: metadata.width,
+          height: metadata.height,
+          fps: metadata.fps,
+          hasAudio: metadata.hasAudio,
         });
 
-        done(result);
-      };
+        return metadata;
+      })(),
+      new Promise<null>((resolve) => setTimeout(() => {
+        log.debug('MediaBunny metadata timeout', { file: file.name });
+        resolve(null);
+      }, timeoutMs)),
+    ]);
 
-      mp4boxFile.onError = (error: any) => {
-        log.debug('MP4Box parse error', { file: file.name, error });
-        done(null);
-      };
-
-      // Strategy: Read from start AND end of file in parallel
-      // Camera MOV files often have moov atom at the end
-      const chunkSize = 1024 * 1024; // 1MB chunks
-      const maxFromStart = 5 * 1024 * 1024; // Read up to 5MB from start
-      const maxFromEnd = 5 * 1024 * 1024; // Read up to 5MB from end
-
-      let startOffset = 0;
-      let endDone = false;
-      let startDone = false;
-
-      // Read from end of file (where moov usually is for camera files)
-      const readEnd = async () => {
-        try {
-          const endStart = Math.max(0, file.size - maxFromEnd);
-          // Don't overlap with start reading
-          if (endStart <= maxFromStart) {
-            endDone = true;
-            return;
-          }
-
-          let offset = endStart;
-          while (offset < file.size && !resolved) {
-            const end = Math.min(offset + chunkSize, file.size);
-            const blob = file.slice(offset, end);
-            const buffer = await blob.arrayBuffer();
-            if (resolved) return;
-            (buffer as any).fileStart = offset;
-            try {
-              mp4boxFile.appendBuffer(buffer as any);
-            } catch {
-              // MP4Box may throw if it gets confused by non-sequential data
-              break;
-            }
-            offset = end;
-          }
-        } catch (e) {
-          log.debug('Error reading end of file', e);
-        }
-        endDone = true;
-        if (startDone && endDone && !resolved) {
-          try { mp4boxFile.flush(); } catch { /* ignore */ }
-        }
-      };
-
-      // Read from start of file
-      const readStart = async () => {
-        try {
-          while (startOffset < Math.min(file.size, maxFromStart) && !resolved) {
-            const end = Math.min(startOffset + chunkSize, file.size);
-            const blob = file.slice(startOffset, end);
-            const buffer = await blob.arrayBuffer();
-            if (resolved) return;
-            (buffer as any).fileStart = startOffset;
-            try {
-              mp4boxFile.appendBuffer(buffer as any);
-            } catch {
-              break;
-            }
-            startOffset = end;
-          }
-        } catch (e) {
-          log.debug('Error reading start of file', e);
-        }
-        startDone = true;
-        if (startDone && endDone && !resolved) {
-          try { mp4boxFile.flush(); } catch { /* ignore */ }
-        }
-      };
-
-      // Run both in parallel
-      readStart();
-      readEnd();
-    });
+    return result;
   } catch (err) {
-    log.debug('MP4Box metadata extraction failed', err);
+    log.debug('MediaBunny metadata extraction failed', err);
     return null;
+  } finally {
+    try { cleanup.input?.dispose(); } catch { /* ignore */ }
   }
 }
 

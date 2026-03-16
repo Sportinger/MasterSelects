@@ -1106,3 +1106,70 @@ describe('exportToFCPXML', () => {
     expect(xml).toContain('duration="900/30s"');
   });
 });
+
+// ─── MediaBunny Migration Compatibility ─────────────────────────────────
+// These tests verify that the existing codec helper functions return values
+// compatible with MediaBunny's codec naming conventions.
+// If Agent A renames getMp4MuxerCodec/getWebmMuxerCodec, update imports above.
+
+describe('MediaBunny Migration: Codec Compatibility', () => {
+  const MEDIABUNNY_VIDEO_CODECS = ['avc', 'hevc', 'vp9', 'av1', 'vp8'];
+  const MEDIABUNNY_AUDIO_CODECS = ['aac', 'opus', 'mp3', 'vorbis', 'flac'];
+
+  it('getMp4MuxerCodec output matches MediaBunny video codec names', () => {
+    const codecs: Array<'h264' | 'h265' | 'vp9' | 'av1'> = ['h264', 'h265', 'vp9', 'av1'];
+    for (const codec of codecs) {
+      expect(MEDIABUNNY_VIDEO_CODECS).toContain(getMp4MuxerCodec(codec));
+    }
+  });
+
+  it('getMp4MuxerCodec h264->avc mapping matches MediaBunny exactly', () => {
+    // MediaBunny uses 'avc' not 'h264'
+    expect(getMp4MuxerCodec('h264')).toBe('avc');
+  });
+
+  it('getMp4MuxerCodec h265->hevc mapping matches MediaBunny exactly', () => {
+    // MediaBunny uses 'hevc' not 'h265'
+    expect(getMp4MuxerCodec('h265')).toBe('hevc');
+  });
+
+  it('getWebmMuxerCodec values map to MediaBunny webm-compatible codecs', () => {
+    // WebM muxer returns V_VP9/V_AV1; MediaBunny uses vp9/av1
+    // This documents the mapping Agent A needs to apply
+    const webmToMB: Record<string, string> = { 'V_VP9': 'vp9', 'V_AV1': 'av1' };
+    const codecs: Array<'h264' | 'h265' | 'vp9' | 'av1'> = ['h264', 'h265', 'vp9', 'av1'];
+    for (const codec of codecs) {
+      const webmCodec = getWebmMuxerCodec(codec);
+      const mbCodec = webmToMB[webmCodec];
+      expect(mbCodec).toBeDefined();
+      expect(MEDIABUNNY_VIDEO_CODECS).toContain(mbCodec);
+    }
+  });
+
+  it('CONTAINER_FORMATS align with MediaBunny output formats', () => {
+    // MediaBunny supports Mp4OutputFormat (.mp4) and WebMOutputFormat (.webm)
+    const containerIds = CONTAINER_FORMATS.map(f => f.id);
+    expect(containerIds).toContain('mp4');
+    expect(containerIds).toContain('webm');
+  });
+
+  it('all mp4 codecs are in MediaBunny VIDEO_CODECS', () => {
+    const mp4Codecs = getVideoCodecsForContainer('mp4');
+    for (const codecOpt of mp4Codecs) {
+      const mbCodec = getMp4MuxerCodec(codecOpt.id);
+      expect(MEDIABUNNY_VIDEO_CODECS).toContain(mbCodec);
+    }
+  });
+
+  it('getCodecString returns valid WebCodecs strings (unchanged by migration)', () => {
+    // The WebCodecs codec strings are not affected by the muxer migration
+    // They are used for VideoEncoder.isConfigSupported and VideoEncoder.configure
+    const codecs: Array<'h264' | 'h265' | 'vp9' | 'av1'> = ['h264', 'h265', 'vp9', 'av1'];
+    for (const codec of codecs) {
+      const str = getCodecString(codec);
+      expect(str.length).toBeGreaterThan(0);
+      // WebCodecs codec strings should contain a dot separator
+      expect(str).toContain('.');
+    }
+  });
+});
