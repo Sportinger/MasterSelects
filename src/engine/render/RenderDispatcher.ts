@@ -197,6 +197,17 @@ export class RenderDispatcher {
 
     // Handle empty layers
     if (layerData.length === 0) {
+      // During playback, if we just had content, hold the last frame on screen
+      // instead of flashing black. This handles transient decoder stalls on
+      // Windows/Linux where readyState drops briefly.
+      const isPlaying = d.renderLoop?.getIsPlaying() ?? false;
+      if (isPlaying && this.lastRenderHadContent) {
+        // Don't render anything — canvas retains previous frame automatically.
+        // Log once so the stall is visible in telemetry.
+        log.debug('Holding last frame during playback stall (empty layerData)');
+        d.performanceStats.setLayerCount(0);
+        return;
+      }
       this.lastRenderHadContent = false;
       this.renderEmptyFrame(device);
       d.performanceStats.setLayerCount(0);
