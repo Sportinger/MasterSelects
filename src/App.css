@@ -536,6 +536,52 @@
 }
 
 /* ═══════════════════════════════════════════
+   TFE (Trendfix Entertainment) Theme
+   Warm brown base + orange accent. Colors applied via JS inline styles;
+   this block provides fallback values so that the dark base renders
+   correctly before JS runs.
+   ═══════════════════════════════════════════ */
+
+[data-theme="tfe"] {
+  --bg-primary: hsl(37, 20%, 10%);
+  --bg-secondary: hsl(37, 20%, 13%);
+  --bg-tertiary: hsl(37, 20%, 16%);
+  --bg-hover: hsl(37, 20%, 22%);
+  --bg-active: hsl(37, 20%, 26%);
+  --bg-elevated: hsl(37, 20%, 18%);
+  --bg-input: hsl(37, 20%, 12%);
+  --bg-overlay: rgba(26, 22, 16, 0.85);
+  --bg-overlay-light: rgba(26, 22, 16, 0.6);
+
+  --border-color: hsl(37, 20%, 22%);
+  --border-subtle: hsl(37, 20%, 28%);
+  --border-strong: hsl(37, 25%, 35%);
+
+  --text-primary: hsl(37, 8%, 90%);
+  --text-secondary: hsl(37, 8%, 65%);
+  --text-muted: hsl(37, 6%, 48%);
+
+  --accent: hsl(22, 82%, 51%);
+  --accent-hover: hsl(22, 82%, 61%);
+  --accent-dim: hsla(22, 82%, 51%, 0.15);
+  --accent-subtle: hsla(22, 82%, 51%, 0.1);
+
+  --shadow-sm: 0 2px 8px hsla(37, 30%, 5%, 0.4);
+  --shadow-md: 0 4px 16px hsla(37, 30%, 5%, 0.5);
+  --shadow-lg: 0 8px 32px hsla(37, 30%, 5%, 0.5);
+  --shadow-xl: 0 12px 48px hsla(37, 30%, 5%, 0.6);
+  --shadow-dialog: 0 20px 50px hsla(37, 30%, 5%, 0.7);
+
+  --tab-active-bg: hsl(37, 20%, 24%);
+  --scrollbar-track: hsl(37, 20%, 8%);
+  --scrollbar-thumb: hsl(37, 20%, 28%);
+  --scrollbar-thumb-hover: hsl(37, 20%, 36%);
+
+  --timeline-grid-video: hsl(37, 20%, 14%);
+  --timeline-grid-audio: hsl(67, 20%, 14%);
+}
+
+/* ═══════════════════════════════════════════
    THEME TRANSITION
    Brief smooth transition when switching themes
    ═══════════════════════════════════════════ */

@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 import type { ThemeMode } from '../stores/settingsStore';
 
-type ResolvedTheme = 'dark' | 'light' | 'midnight' | 'crazy' | 'custom';
+type ResolvedTheme = 'dark' | 'light' | 'midnight' | 'tfe' | 'crazy' | 'custom';
 
 function resolveTheme(theme: ThemeMode): ResolvedTheme {
   if (theme === 'system') {
@@ -154,6 +154,57 @@ function applyCustomColors(root: HTMLElement, hue: number, brightness: number) {
   root.style.setProperty('--shadow-lg', `0 8px 32px hsla(${hue}, 30%, 5%, ${isLight ? 0.15 : 0.5})`);
 }
 
+/** Apply TFE (Trendfix Entertainment) brand theme — warm brown + orange accent */
+function applyTFEColors(root: HTMLElement) {
+  // TFE brand: #3D3528 (warm dark brown), #E86A1E (orange accent)
+  const hue = 37;       // warm brown base
+  const accentHue = 22; // TFE orange
+  const baseSat = 20;
+
+  // Backgrounds — warm dark brown tones
+  root.style.setProperty('--bg-primary', `hsl(${hue}, ${baseSat}%, 10%)`);
+  root.style.setProperty('--bg-secondary', `hsl(${hue}, ${baseSat}%, 13%)`);
+  root.style.setProperty('--bg-tertiary', `hsl(${hue}, ${baseSat}%, 16%)`);
+  root.style.setProperty('--bg-hover', `hsl(${hue}, ${baseSat}%, 22%)`);
+  root.style.setProperty('--bg-active', `hsl(${hue}, ${baseSat}%, 26%)`);
+  root.style.setProperty('--bg-elevated', `hsl(${hue}, ${baseSat}%, 18%)`);
+  root.style.setProperty('--bg-input', `hsl(${hue}, ${baseSat}%, 12%)`);
+
+  // Borders
+  root.style.setProperty('--border-color', `hsl(${hue}, ${baseSat}%, 22%)`);
+  root.style.setProperty('--border-subtle', `hsl(${hue}, ${baseSat}%, 28%)`);
+  root.style.setProperty('--border-strong', `hsl(${hue}, ${baseSat + 5}%, 35%)`);
+
+  // Text — warm white
+  root.style.setProperty('--text-primary', `hsl(${hue}, 8%, 90%)`);
+  root.style.setProperty('--text-secondary', `hsl(${hue}, 8%, 65%)`);
+  root.style.setProperty('--text-muted', `hsl(${hue}, 6%, 48%)`);
+
+  // Accent — TFE orange (#E86A1E)
+  root.style.setProperty('--accent', `hsl(${accentHue}, 82%, 51%)`);
+  root.style.setProperty('--accent-hover', `hsl(${accentHue}, 82%, 61%)`);
+  root.style.setProperty('--accent-dim', `hsla(${accentHue}, 82%, 51%, 0.15)`);
+  root.style.setProperty('--accent-subtle', `hsla(${accentHue}, 82%, 51%, 0.1)`);
+  root.style.setProperty('--accent-timeline', `hsl(${accentHue}, 82%, 51%)`);
+
+  // Component tokens
+  root.style.setProperty('--tab-active-bg', `hsl(${hue}, ${baseSat}%, 24%)`);
+  root.style.setProperty('--scrollbar-thumb', `hsl(${hue}, ${baseSat}%, 28%)`);
+  root.style.setProperty('--scrollbar-thumb-hover', `hsl(${hue}, ${baseSat}%, 36%)`);
+
+  // Timeline grid
+  root.style.setProperty('--timeline-grid-video', `hsl(${hue}, ${baseSat}%, 14%)`);
+  root.style.setProperty('--timeline-grid-audio', `hsl(${(hue + 30) % 360}, ${baseSat}%, 14%)`);
+
+  // Chat
+  root.style.setProperty('--chat-user-bg', `hsl(${accentHue}, 30%, 18%)`);
+  root.style.setProperty('--chat-user-border', `hsl(${accentHue}, 30%, 26%)`);
+
+  // Shadows
+  root.style.setProperty('--shadow-md', `0 4px 16px hsla(${hue}, 30%, 5%, 0.5)`);
+  root.style.setProperty('--shadow-lg', `0 8px 32px hsla(${hue}, 30%, 5%, 0.5)`);
+}
+
 /** Remove all inline style overrides set by crazy/custom theme */
 function clearInlineColors(root: HTMLElement) {
   const props = [
@@ -189,7 +240,9 @@ export function useTheme() {
     root.classList.add('theme-transitioning');
     root.dataset.theme = resolved;
 
-    if (theme === 'crazy') {
+    if (theme === 'tfe') {
+      applyTFEColors(root);
+    } else if (theme === 'crazy') {
       applyCrazyColors(root);
     } else if (theme === 'custom') {
       applyCustomColors(root, customHue, customBrightness);

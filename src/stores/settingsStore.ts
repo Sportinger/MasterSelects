@@ -10,7 +10,7 @@ import { Logger } from '../services/logger';
 const log = Logger.create('SettingsStore');
 
 // Theme mode options
-export type ThemeMode = 'dark' | 'light' | 'midnight' | 'system' | 'crazy' | 'custom';
+export type ThemeMode = 'dark' | 'light' | 'midnight' | 'tfe' | 'system' | 'crazy' | 'custom';
 
 // Transcription provider options
 export type TranscriptionProvider = 'local' | 'openai' | 'assemblyai' | 'deepgram';
@@ -135,8 +135,8 @@ export const useSettingsStore = create<SettingsState>()(
     persist(
       (set, get) => ({
       // Initial state
-      theme: 'dark' as ThemeMode,
-      customHue: 210,       // Default: blue
+      theme: 'tfe' as ThemeMode,
+      customHue: 22,        // Default: TFE orange
       customBrightness: 15, // Default: dark
       apiKeys: {
         openai: '',
@@ -169,7 +169,7 @@ export const useSettingsStore = create<SettingsState>()(
 
       // Output settings
       outputResolution: { width: 1920, height: 1080 },
-      fps: 60,
+      fps: 30,
 
       // Actions
       setTheme: (theme) => set({ theme }),

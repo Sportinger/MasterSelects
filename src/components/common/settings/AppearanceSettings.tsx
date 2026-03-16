@@ -4,6 +4,7 @@ const themeOptions: { id: ThemeMode; label: string; bg: string; bar: string; acc
   { id: 'dark',     label: 'Dark',     bg: '#1e1e1e', bar: '#0f0f0f', accent: '#2D8CEB' },
   { id: 'light',    label: 'Light',    bg: '#f5f5f5', bar: '#dedede', accent: '#1a73e8' },
   { id: 'midnight', label: 'Midnight', bg: '#000000', bar: '#111111', accent: '#3d9df5' },
+  { id: 'tfe',      label: 'TFE',      bg: 'linear-gradient(135deg, #3D3528 0%, #2a2419 100%)', bar: '#1a1610', accent: '#E86A1E' },
   { id: 'system',   label: 'System',   bg: 'linear-gradient(135deg, #1e1e1e 50%, #f5f5f5 50%)', bar: '#333', accent: '#2D8CEB' },
   { id: 'crazy',    label: 'Crazy You', bg: 'linear-gradient(135deg, #e91e63 0%, #9c27b0 33%, #2196f3 66%, #4caf50 100%)', bar: 'linear-gradient(90deg, #ff9800, #e91e63)', accent: '#ffeb3b' },
   { id: 'custom',   label: 'Custom',   bg: 'linear-gradient(135deg, hsl(210,30%,12%) 0%, hsl(210,30%,22%) 100%)', bar: 'hsl(210,30%,8%)', accent: 'hsl(210,70%,55%)' },
