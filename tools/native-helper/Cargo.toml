@@ -33,6 +33,12 @@ rand = "0.8"
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 
+# HTTP client (model downloads, API calls)
+ureq = "2"
+
+# SHA-256 checksums for model integrity
+sha2 = "0.10"
+
 # HTTP for headers parsing and file serving
 http = "1"
 warp = "0.3"
@@ -51,8 +57,6 @@ windows-sys = { version = "0.59", features = [
 tray-icon = "0.19"
 # Registry for auto-start
 winreg = "0.55"
-# HTTP client for self-update (GitHub Releases API)
-ureq = "2"
 
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"

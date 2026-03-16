@@ -1,6 +1,6 @@
 // WhatsNewDialog - Shows changelog grouped by time periods
 
-import { useState, useEffect, useCallback, useMemo, type CSSProperties } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from 'react';
 import {
   APP_VERSION,
   BUILD_NOTICE,
@@ -16,6 +16,94 @@ import { useSettingsStore } from '../../stores/settingsStore';
 
 interface WhatsNewDialogProps {
   onClose: () => void;
+}
+
+type YouTubePlayerStateValue = -1 | 0 | 1 | 2 | 3 | 5;
+
+interface YouTubePlayerStateChangeEvent {
+  data: YouTubePlayerStateValue;
+}
+
+interface YouTubePlayerInstance {
+  destroy: () => void;
+}
+
+interface YouTubePlayerNamespace {
+  Player: new (
+    element: HTMLIFrameElement,
+    options?: {
+      events?: {
+        onStateChange?: (event: YouTubePlayerStateChangeEvent) => void;
+      };
+    }
+  ) => YouTubePlayerInstance;
+  PlayerState: {
+    ENDED: 0;
+    PLAYING: 1;
+    PAUSED: 2;
+    CUED: 5;
+  };
+  ready?: (callback: () => void) => void;
+}
+
+declare global {
+  interface Window {
+    YT?: YouTubePlayerNamespace;
+    onYouTubeIframeAPIReady?: () => void;
+  }
+}
+
+let youtubeIframeApiPromise: Promise<YouTubePlayerNamespace> | null = null;
+
+function loadYouTubeIframeApi(): Promise<YouTubePlayerNamespace> {
+  if (typeof window === 'undefined') {
+    return Promise.reject(new Error('YouTube iframe API requires a browser environment.'));
+  }
+
+  if (window.YT?.Player) {
+    return Promise.resolve(window.YT);
+  }
+
+  if (youtubeIframeApiPromise) {
+    return youtubeIframeApiPromise;
+  }
+
+  youtubeIframeApiPromise = new Promise((resolve, reject) => {
+    const scriptSrc = 'https://www.youtube.com/iframe_api';
+    const existingScript = document.querySelector<HTMLScriptElement>(`script[src="${scriptSrc}"]`);
+    const previousReadyHandler = window.onYouTubeIframeAPIReady;
+
+    const resolveIfReady = () => {
+      if (window.YT?.Player) {
+        resolve(window.YT);
+        return true;
+      }
+      return false;
+    };
+
+    window.onYouTubeIframeAPIReady = () => {
+      previousReadyHandler?.();
+      resolveIfReady();
+    };
+
+    if (resolveIfReady()) {
+      return;
+    }
+
+    if (!existingScript) {
+      const script = document.createElement('script');
+      script.src = scriptSrc;
+      script.async = true;
+      script.onerror = () => reject(new Error('Failed to load YouTube iframe API.'));
+      document.head.appendChild(script);
+    }
+
+    window.setTimeout(() => {
+      resolveIfReady();
+    }, 0);
+  });
+
+  return youtubeIframeApiPromise;
 }
 
 // Icon components for change types
@@ -239,7 +327,10 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
   const [isClosing, setIsClosing] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'new' | 'fix' | 'improve' | 'refactor'>('all');
   const [dontShowAgain, setDontShowAgain] = useState(false);
+  const [isFeaturedVideoExpanded, setIsFeaturedVideoExpanded] = useState(false);
   const setShowChangelogOnStartup = useSettingsStore((s) => s.setShowChangelogOnStartup);
+  const featuredVideoFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const featuredVideoPlayerRef = useRef<YouTubePlayerInstance | null>(null);
 
   const groupedChangelog = useMemo(() => getGroupedChangelog(), []);
   const changelogCalendar = useMemo(() => getChangelogCalendar(), []);
@@ -253,16 +344,60 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
   const featuredVideoEmbedUrl = useMemo(
     () =>
       FEATURED_VIDEO
-        ? `https://www.youtube.com/embed/${FEATURED_VIDEO.youtubeId}?rel=0&modestbranding=1&playsinline=1`
+        ? `https://www.youtube.com/embed/${FEATURED_VIDEO.youtubeId}?enablejsapi=1&rel=0&modestbranding=1&playsinline=1${typeof window !== 'undefined' ? `&origin=${encodeURIComponent(window.location.origin)}` : ''}`
         : '',
     []
   );
   const attachCredentiallessVideoFrame = useCallback((node: HTMLIFrameElement | null) => {
+    featuredVideoFrameRef.current = node;
     if (!node || !featuredVideoEmbedUrl) return;
     node.setAttribute('credentialless', '');
     if (node.src !== featuredVideoEmbedUrl) {
       node.src = featuredVideoEmbedUrl;
     }
+  }, [featuredVideoEmbedUrl]);
+
+  useEffect(() => {
+    if (!FEATURED_VIDEO || !featuredVideoFrameRef.current || !featuredVideoEmbedUrl) {
+      return;
+    }
+
+    let disposed = false;
+
+    loadYouTubeIframeApi()
+      .then((YT) => {
+        if (disposed || !featuredVideoFrameRef.current) {
+          return;
+        }
+
+        featuredVideoPlayerRef.current?.destroy();
+        featuredVideoPlayerRef.current = new YT.Player(featuredVideoFrameRef.current, {
+          events: {
+            onStateChange: (event) => {
+              if (event.data === YT.PlayerState.PLAYING) {
+                setIsFeaturedVideoExpanded(true);
+                return;
+              }
+              if (
+                event.data === YT.PlayerState.PAUSED ||
+                event.data === YT.PlayerState.ENDED ||
+                event.data === YT.PlayerState.CUED
+              ) {
+                setIsFeaturedVideoExpanded(false);
+              }
+            },
+          },
+        });
+      })
+      .catch(() => {
+        // Keep the embed usable even if the API script fails; only the auto-expand is skipped.
+      });
+
+    return () => {
+      disposed = true;
+      featuredVideoPlayerRef.current?.destroy();
+      featuredVideoPlayerRef.current = null;
+    };
   }, [featuredVideoEmbedUrl]);
 
   const handleClose = useCallback(() => {
@@ -345,7 +480,7 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
         {/* Scrollable content */}
         <div className="changelog-content">
           {(FEATURED_VIDEO || BUILD_NOTICE) && (
-            <div className="changelog-featured">
+            <div className={`changelog-featured ${isFeaturedVideoExpanded ? 'is-video-expanded' : ''}`.trim()}>
               <div className="changelog-featured-notices">
                 {featuredNotices.map((notice, index) => (
                   <NoticeCard

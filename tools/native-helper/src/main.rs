@@ -8,6 +8,7 @@
 //! On Linux/macOS: always runs in console mode.
 
 mod download;
+mod matanyone;
 mod protocol;
 mod server;
 mod session;
