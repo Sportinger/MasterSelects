@@ -217,7 +217,7 @@ class KieAiService {
       duration: String(params.duration),
       aspect_ratio: params.aspectRatio || '16:9',
       mode: params.mode || 'std',
-      sound: false,
+      sound: params.sound ?? false,
       multi_shots: false,
     };
 
@@ -265,7 +265,7 @@ class KieAiService {
       duration: String(params.duration),
       aspect_ratio: params.aspectRatio || '16:9',
       mode: params.mode || 'std',
-      sound: false,
+      sound: params.sound ?? false,
       multi_shots: false,
     };
 

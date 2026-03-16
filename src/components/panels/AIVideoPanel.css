@@ -749,6 +749,90 @@
   text-align: center;
 }
 
+/* Compact queue item (horizontal layout) */
+.job-item-compact {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--sp-1-5) var(--sp-2);
+  cursor: default;
+}
+
+.job-item-compact.completed {
+  border-color: var(--success-dim);
+  cursor: grab;
+}
+
+.job-item-compact.completed:active {
+  cursor: grabbing;
+}
+
+.job-item-compact.failed {
+  border-color: var(--danger-border);
+}
+
+.job-thumb {
+  width: 48px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+}
+
+.job-thumb-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.job-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.job-compact-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.job-compact-top {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1-5);
+}
+
+.job-prompt-compact {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.job-error-compact {
+  font-size: var(--font-xs);
+  color: var(--danger);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Legacy full-size queue item */
 .job-item {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
@@ -769,6 +853,13 @@
   align-items: center;
   gap: var(--sp-2);
   margin-bottom: var(--sp-1-5);
+}
+
+/* Generation options row */
+.generation-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
 }
 
 .job-type {

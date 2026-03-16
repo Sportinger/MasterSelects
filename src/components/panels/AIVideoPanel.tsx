@@ -199,6 +199,7 @@ export function AIVideoPanel() {
   const [aspectRatio, setAspectRatio] = useState<string>('16:9');
   const [mode, setMode] = useState<string>('std');
   const [cfgScale, setCfgScale] = useState<number>(0.5);
+  const [generateAudio, setGenerateAudio] = useState(false);
 
   // Image-to-video specific
   const [startImagePreview, setStartImagePreview] = useState<string | null>(null);
@@ -466,6 +467,7 @@ export function AIVideoPanel() {
           aspectRatio,
           mode,
           cfgScale,
+          sound: generateAudio,
         };
 
         taskId = await service.createTextToVideo(params);
@@ -480,6 +482,7 @@ export function AIVideoPanel() {
           aspectRatio,
           mode,
           cfgScale,
+          sound: generateAudio,
           startImageUrl: startImagePreview ? await getCroppedImageUrl(startImagePreview, startCropData) : undefined,
           endImageUrl: endImagePreview ? await getCroppedImageUrl(endImagePreview, endCropData) : undefined,
         };
@@ -544,7 +547,7 @@ export function AIVideoPanel() {
       setIsGenerating(false);
     }
   }, [
-    prompt, negativePrompt, selectedProvider, selectedVersion, duration, aspectRatio, mode, cfgScale,
+    prompt, negativePrompt, selectedProvider, selectedVersion, duration, aspectRatio, mode, cfgScale, generateAudio,
     generationType, startImagePreview, startCropData, endImagePreview, endCropData, isGenerating,
     importVideoToProject, getCroppedImageUrl, getActiveService,
   ]);
@@ -676,50 +679,59 @@ export function AIVideoPanel() {
           </div>
           <div className="jobs-list-scroll">
             {jobs.map(job => (
-              <div key={job.id} className={`job-item ${job.status}`}>
-                <div className="job-header">
-                  <span className="job-type">
-                    {job.provider.toUpperCase()}
-                  </span>
-                  <span className={`job-status ${job.status}`}>
-                    {job.status === 'pending' && 'Queued'}
-                    {job.status === 'processing' && 'Processing...'}
-                    {job.status === 'completed' && 'Done'}
-                    {job.status === 'failed' && 'Failed'}
-                  </span>
-                  {(job.status === 'pending' || job.status === 'processing') && (
-                    <JobTimer startDate={job.createdAt} />
-                  )}
-                  <button
-                    className="btn-remove"
-                    onClick={() => removeJob(job.id)}
-                    title="Remove"
-                  >
-                    x
-                  </button>
-                </div>
-                <div className="job-prompt">{job.prompt}</div>
-                {job.error && (
-                  <div className="job-error">{job.error}</div>
-                )}
+              <div
+                key={job.id}
+                className={`job-item-compact ${job.status}`}
+                draggable={!!job.videoUrl}
+                onDragStart={(e) => {
+                  if (!job.videoUrl) return;
+                  e.dataTransfer.setData('text/plain', job.videoUrl);
+                  e.dataTransfer.setData('application/x-ai-video', JSON.stringify({
+                    id: job.id,
+                    prompt: job.prompt,
+                    videoUrl: job.videoUrl,
+                  }));
+                  e.dataTransfer.effectAllowed = 'copy';
+                }}
+              >
+                {/* Mini thumbnail for completed videos */}
                 {job.videoUrl && (
-                  <div className="job-result">
-                    <video
-                      src={job.videoUrl}
-                      controls
-                      preload="metadata"
-                    />
-                    <a
-                      href={job.videoUrl}
-                      download
-                      className="btn-download"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Download
-                    </a>
+                  <video
+                    className="job-thumb"
+                    src={job.videoUrl}
+                    preload="metadata"
+                    muted
+                  />
+                )}
+                {/* Spinner for pending/processing */}
+                {!job.videoUrl && job.status !== 'failed' && (
+                  <div className="job-thumb job-thumb-loading">
+                    <span className="job-spinner" />
                   </div>
                 )}
+                <div className="job-compact-info">
+                  <div className="job-compact-top">
+                    <span className="job-type">{job.provider.toUpperCase()}</span>
+                    <span className={`job-status ${job.status}`}>
+                      {job.status === 'pending' && 'Queued'}
+                      {job.status === 'processing' && 'Processing...'}
+                      {job.status === 'completed' && 'Done'}
+                      {job.status === 'failed' && 'Failed'}
+                    </span>
+                    {(job.status === 'pending' || job.status === 'processing') && (
+                      <JobTimer startDate={job.createdAt} />
+                    )}
+                  </div>
+                  <div className="job-prompt-compact">{job.prompt}</div>
+                  {job.error && <div className="job-error-compact">{job.error}</div>}
+                </div>
+                <button
+                  className="btn-remove"
+                  onClick={() => removeJob(job.id)}
+                  title="Remove"
+                >
+                  x
+                </button>
               </div>
             ))}
           </div>
@@ -902,16 +914,29 @@ export function AIVideoPanel() {
             )}
           </div>
 
-          {/* Timeline Integration Option */}
-          <label className="timeline-option">
-            <input
-              type="checkbox"
-              checked={addToTimeline}
-              onChange={(e) => setAddToTimeline(e.target.checked)}
-              disabled={isGenerating}
-            />
-            <span>Add to timeline when complete</span>
-          </label>
+          {/* Audio + Timeline Options */}
+          <div className="generation-options">
+            {(selectedProvider === 'kling' || selectedProvider === 'kling-3.0') && (
+              <label className="timeline-option">
+                <input
+                  type="checkbox"
+                  checked={generateAudio}
+                  onChange={(e) => setGenerateAudio(e.target.checked)}
+                  disabled={isGenerating}
+                />
+                <span>Generate audio</span>
+              </label>
+            )}
+            <label className="timeline-option">
+              <input
+                type="checkbox"
+                checked={addToTimeline}
+                onChange={(e) => setAddToTimeline(e.target.checked)}
+                disabled={isGenerating}
+              />
+              <span>Add to timeline when complete</span>
+            </label>
+          </div>
 
           {/* Credit Info */}
           <div className="credit-info">
