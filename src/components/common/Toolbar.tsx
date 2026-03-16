@@ -31,7 +31,11 @@ import { openOutputManager } from '../outputManager/OutputManagerBoot';
 
 type MenuId = 'file' | 'edit' | 'view' | 'output' | 'window' | 'info' | null;
 
-export function Toolbar() {
+interface ToolbarProps {
+  onOpenChangelog?: () => void;
+}
+
+export function Toolbar({ onOpenChangelog }: ToolbarProps) {
   const { isEngineReady, createOutputWindow } = useEngine();
   const gpuInfo = useEngineStore(s => s.gpuInfo);
   const targets = useRenderTargetStore((s) => s.targets);
@@ -53,7 +57,6 @@ export function Toolbar() {
     isSettingsOpen, openSettings, closeSettings,
     autosaveEnabled, setAutosaveEnabled,
     autosaveInterval, setAutosaveInterval,
-    showChangelogOnStartup, setShowChangelogOnStartup,
   } = useSettingsStore(useShallow(s => ({
     isSettingsOpen: s.isSettingsOpen,
     openSettings: s.openSettings,
@@ -62,8 +65,6 @@ export function Toolbar() {
     setAutosaveEnabled: s.setAutosaveEnabled,
     autosaveInterval: s.autosaveInterval,
     setAutosaveInterval: s.setAutosaveInterval,
-    showChangelogOnStartup: s.showChangelogOnStartup,
-    setShowChangelogOnStartup: s.setShowChangelogOnStartup,
   })));
 
   const [openMenu, setOpenMenu] = useState<MenuId>(null);
@@ -762,12 +763,8 @@ export function Toolbar() {
                 <span>Timeline Tour</span>
               </button>
               <div className="menu-separator" />
-              <button className="menu-option" onClick={() => {
-                setShowChangelogOnStartup(!showChangelogOnStartup);
-                window.dispatchEvent(new CustomEvent('open-changelog'));
-                closeMenu();
-              }}>
-                <span>{showChangelogOnStartup ? '✓ ' : '   '}Changelog on Startup</span>
+              <button className="menu-option" onClick={() => { onOpenChangelog?.(); closeMenu(); }}>
+                <span>Changelog</span>
               </button>
               <div className="menu-separator" />
               <button className="menu-option" onClick={() => { setShowInfoDialog(true); closeMenu(); }}>

@@ -376,6 +376,20 @@ export async function loadProjectToStores(): Promise<void> {
     if (ui.waveformsEnabled !== undefined) ts.setWaveformsEnabled(ui.waveformsEnabled);
     if (ui.showTranscriptMarkers !== undefined) ts.setShowTranscriptMarkers(ui.showTranscriptMarkers);
     if (ui.proxyEnabled !== undefined) useMediaStore.getState().setProxyEnabled(ui.proxyEnabled);
+
+    const changelogSettings: Partial<{
+      showChangelogOnStartup: boolean;
+      lastSeenChangelogVersion: string | null;
+    }> = {};
+    if (ui.showChangelogOnStartup !== undefined) {
+      changelogSettings.showChangelogOnStartup = ui.showChangelogOnStartup;
+    }
+    if ('lastSeenChangelogVersion' in ui) {
+      changelogSettings.lastSeenChangelogVersion = ui.lastSeenChangelogVersion ?? null;
+    }
+    if (Object.keys(changelogSettings).length > 0) {
+      useSettingsStore.setState(changelogSettings);
+    }
   }
 
   // Reload API keys (may have been restored from .keys.enc during loadProject)

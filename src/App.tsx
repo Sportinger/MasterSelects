@@ -26,6 +26,7 @@ import { useIsMobile, useForceMobile } from './hooks/useIsMobile';
 import { useSettingsStore } from './stores/settingsStore';
 import { projectDB } from './services/projectDB';
 import { projectFileService } from './services/projectFileService';
+import { APP_VERSION, shouldAutoShowChangelog } from './version';
 import './App.css';
 
 // Dev test pages - lazy loaded to avoid bloating main bundle
@@ -60,9 +61,10 @@ function App() {
   const [hasStoredProject, setHasStoredProject] = useState(false);
   const [manuallyDismissed, setManuallyDismissed] = useState(false);
 
-  // What's New dialog state - show on every refresh after welcome (if any)
+  // What's New dialog state - show on every refresh or once per update after welcome
   const [showWhatsNew, setShowWhatsNew] = useState(false);
   const showChangelogOnStartup = useSettingsStore((s) => s.showChangelogOnStartup);
+  const lastSeenChangelogVersion = useSettingsStore((s) => s.lastSeenChangelogVersion);
 
   // Tutorial state (legacy part 1/2)
   const [showTutorial, setShowTutorial] = useState(false);
@@ -139,12 +141,13 @@ function App() {
   // Show welcome if no stored project and not manually dismissed this session
   // Don't show while checking to avoid flash
   const showWelcome = !isChecking && !hasStoredProject && !manuallyDismissed;
+  const shouldShowChangelogOnStartup = SHOW_CHANGELOG
+    && shouldAutoShowChangelog(showChangelogOnStartup, lastSeenChangelogVersion, APP_VERSION);
 
   // Show What's New dialog after initial check (when no welcome overlay)
   // This effect intentionally sets state based on derived conditions
   useEffect(() => {
-    if (!SHOW_CHANGELOG) return;
-    if (!showChangelogOnStartup) return;
+    if (!shouldShowChangelogOnStartup) return;
     if (isChecking) return;
 
     // If welcome is showing, don't show What's New yet
@@ -153,26 +156,19 @@ function App() {
     // Show What's New dialog - this is intentional state sync, not a cascading render
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowWhatsNew(true);
-  }, [isChecking, showWelcome, showChangelogOnStartup]);
-
-  // Listen for open-changelog event (dispatched from Info menu toggle)
-  useEffect(() => {
-    const handler = () => setShowWhatsNew(true);
-    window.addEventListener('open-changelog', handler);
-    return () => window.removeEventListener('open-changelog', handler);
-  }, []);
+  }, [isChecking, showWelcome, shouldShowChangelogOnStartup]);
 
   const handleWelcomeComplete = useCallback(() => {
     setManuallyDismissed(true);
     setHasStoredProject(true); // Project was just created
     // After welcome, show What's New with small delay for animation
-    if (!!SHOW_CHANGELOG && showChangelogOnStartup) {
+    if (shouldShowChangelogOnStartup) {
       setTimeout(() => setShowWhatsNew(true), 300);
     } else if (!hasSeenTutorial) {
       // No changelog → start tutorial directly
       setTimeout(() => setShowTutorial(true), 200);
     }
-  }, [hasSeenTutorial]);
+  }, [hasSeenTutorial, shouldShowChangelogOnStartup]);
 
   const handleWhatsNewClose = useCallback(() => {
     setShowWhatsNew(false);
@@ -269,7 +265,7 @@ function App() {
   return (
     <div className="app">
       <LinuxVulkanWarning />
-      <Toolbar />
+      <Toolbar onOpenChangelog={() => setShowWhatsNew(true)} />
       <DockContainer />
       {showWelcome && (
         <WelcomeOverlay onComplete={handleWelcomeComplete} noFadeOnClose />

@@ -390,10 +390,14 @@ function ChangeItem({ change }: { change: ChangeEntry }) {
 export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
   const [isClosing, setIsClosing] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'new' | 'fix' | 'improve' | 'refactor'>('all');
-  const [dontShowAgain, setDontShowAgain] = useState(false);
   const [isFeaturedVideoExpanded, setIsFeaturedVideoExpanded] = useState(false);
   const [publishedHelperRelease, setPublishedHelperRelease] = useState<NativeHelperPublishedRelease | null>(null);
+  const showChangelogOnStartup = useSettingsStore((s) => s.showChangelogOnStartup);
+  const lastSeenChangelogVersion = useSettingsStore((s) => s.lastSeenChangelogVersion);
   const setShowChangelogOnStartup = useSettingsStore((s) => s.setShowChangelogOnStartup);
+  const markChangelogSeen = useSettingsStore((s) => s.markChangelogSeen);
+  const isCurrentVersionSuppressed = !showChangelogOnStartup && lastSeenChangelogVersion === APP_VERSION;
+  const [dontShowAgain, setDontShowAgain] = useState(isCurrentVersionSuppressed);
   const featuredVideoFrameRef = useRef<HTMLIFrameElement | null>(null);
   const featuredVideoPlayerRef = useRef<YouTubePlayerInstance | null>(null);
 
@@ -436,6 +440,10 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    setDontShowAgain(isCurrentVersionSuppressed);
+  }, [isCurrentVersionSuppressed]);
 
   useEffect(() => {
     if (!FEATURED_VIDEO || !featuredVideoFrameRef.current || !featuredVideoEmbedUrl) {
@@ -482,12 +490,13 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
 
   const handleClose = useCallback(() => {
     if (isClosing) return;
-    if (dontShowAgain) setShowChangelogOnStartup(false);
+    setShowChangelogOnStartup(!dontShowAgain);
+    markChangelogSeen(APP_VERSION);
     setIsClosing(true);
     setTimeout(() => {
       onClose();
     }, 200);
-  }, [onClose, isClosing, dontShowAgain, setShowChangelogOnStartup]);
+  }, [onClose, isClosing, dontShowAgain, markChangelogSeen, setShowChangelogOnStartup]);
 
   // Handle Escape key to close
   useEffect(() => {
@@ -674,7 +683,7 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
               checked={dontShowAgain}
               onChange={(e) => setDontShowAgain(e.target.checked)}
             />
-            <span>Don't show this again</span>
+            <span>Don't auto-show this version again</span>
           </label>
         </div>
       </div>

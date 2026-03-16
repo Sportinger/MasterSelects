@@ -9,6 +9,31 @@ import { projectFileService } from '../services/project/ProjectFileService';
 import { Logger } from '../services/logger';
 const log = Logger.create('SettingsStore');
 
+function persistChangelogStateToProject(
+  showChangelogOnStartup: boolean,
+  lastSeenChangelogVersion: string | null,
+): void {
+  if (!projectFileService.isProjectOpen()) {
+    return;
+  }
+
+  const projectData = projectFileService.getProjectData();
+  if (!projectData) {
+    return;
+  }
+
+  projectData.uiState = {
+    ...projectData.uiState,
+    showChangelogOnStartup,
+    lastSeenChangelogVersion,
+  };
+
+  projectFileService.markDirty();
+  void projectFileService.saveProject().catch((err) => {
+    log.error('Failed to persist changelog state to project:', err);
+  });
+}
+
 // Theme mode options
 export type ThemeMode = 'dark' | 'light' | 'midnight' | 'system' | 'crazy' | 'custom';
 
@@ -288,8 +313,14 @@ export const useSettingsStore = create<SettingsState>()(
         }
       },
 
-      setShowChangelogOnStartup: (show) => set({ showChangelogOnStartup: show }),
-      markChangelogSeen: (version) => set({ lastSeenChangelogVersion: version }),
+      setShowChangelogOnStartup: (show) => {
+        set({ showChangelogOnStartup: show });
+        persistChangelogStateToProject(show, get().lastSeenChangelogVersion);
+      },
+      markChangelogSeen: (version) => {
+        set({ lastSeenChangelogVersion: version });
+        persistChangelogStateToProject(get().showChangelogOnStartup, version);
+      },
       openSettings: () => set({ isSettingsOpen: true }),
       closeSettings: () => set({ isSettingsOpen: false }),
       toggleSettings: () => set((state) => ({ isSettingsOpen: !state.isSettingsOpen })),

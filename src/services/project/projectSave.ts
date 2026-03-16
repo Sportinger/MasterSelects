@@ -5,6 +5,7 @@ import { useMediaStore, type MediaFile, type Composition, type MediaFolder } fro
 import { useTimelineStore } from '../../stores/timeline';
 import { useYouTubeStore } from '../../stores/youtubeStore';
 import { useDockStore } from '../../stores/dockStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import {
   projectFileService,
   type ProjectMediaFile,
@@ -252,6 +253,7 @@ export async function syncStoresToProject(): Promise<void> {
     const mediaPanelColumns = localStorage.getItem('media-panel-column-order');
     const mediaPanelNameWidth = localStorage.getItem('media-panel-name-width');
     const transcriptLanguage = localStorage.getItem('transcriptLanguage');
+    const settingsState = useSettingsStore.getState();
 
     projectData.uiState = {
       dockLayout,
@@ -263,6 +265,8 @@ export async function syncStoresToProject(): Promise<void> {
       waveformsEnabled: timelineState.waveformsEnabled,
       proxyEnabled: useMediaStore.getState().proxyEnabled,
       showTranscriptMarkers: timelineState.showTranscriptMarkers,
+      showChangelogOnStartup: settingsState.showChangelogOnStartup,
+      lastSeenChangelogVersion: settingsState.lastSeenChangelogVersion,
     };
 
     // Save text and solid items
