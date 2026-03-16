@@ -134,6 +134,24 @@ function getAspectRatioDimensions(aspectRatio: string): { width: number; height:
   return { width: w || 16, height: h || 9 };
 }
 
+// Format elapsed time as mm:ss
+function formatElapsed(startDate: Date): string {
+  const elapsed = Math.floor((Date.now() - new Date(startDate).getTime()) / 1000);
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+// Live timer component that updates every second
+function JobTimer({ startDate }: { startDate: Date }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, []);
+  return <span className="job-timer">{formatElapsed(startDate)}</span>;
+}
+
 export function AIVideoPanel() {
   const { apiKeys, openSettings } = useSettingsStore();
   const { importFile } = useMediaStore();
@@ -650,6 +668,64 @@ export function AIVideoPanel() {
         </div>
       </div>
 
+      {/* Jobs Queue - shown at top when not empty */}
+      {jobs.length > 0 && (
+        <div className="jobs-section jobs-section-top">
+          <div className="jobs-header">
+            <h3>Queue ({jobs.length})</h3>
+          </div>
+          <div className="jobs-list-scroll">
+            {jobs.map(job => (
+              <div key={job.id} className={`job-item ${job.status}`}>
+                <div className="job-header">
+                  <span className="job-type">
+                    {job.provider.toUpperCase()}
+                  </span>
+                  <span className={`job-status ${job.status}`}>
+                    {job.status === 'pending' && 'Queued'}
+                    {job.status === 'processing' && 'Processing...'}
+                    {job.status === 'completed' && 'Done'}
+                    {job.status === 'failed' && 'Failed'}
+                  </span>
+                  {(job.status === 'pending' || job.status === 'processing') && (
+                    <JobTimer startDate={job.createdAt} />
+                  )}
+                  <button
+                    className="btn-remove"
+                    onClick={() => removeJob(job.id)}
+                    title="Remove"
+                  >
+                    x
+                  </button>
+                </div>
+                <div className="job-prompt">{job.prompt}</div>
+                {job.error && (
+                  <div className="job-error">{job.error}</div>
+                )}
+                {job.videoUrl && (
+                  <div className="job-result">
+                    <video
+                      src={job.videoUrl}
+                      controls
+                      preload="metadata"
+                    />
+                    <a
+                      href={job.videoUrl}
+                      download
+                      className="btn-download"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Download
+                    </a>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Content */}
       {activeTab === 'generate' ? (
         <div className="ai-video-content">
@@ -882,58 +958,6 @@ export function AIVideoPanel() {
             </div>
           )}
 
-          {/* Jobs List */}
-          {jobs.length > 0 && (
-            <div className="jobs-section">
-              <h3>Generation Queue</h3>
-              <div className="jobs-list">
-                {jobs.map(job => (
-                  <div key={job.id} className={`job-item ${job.status}`}>
-                    <div className="job-header">
-                      <span className="job-type">
-                        {job.provider.toUpperCase()}
-                      </span>
-                      <span className={`job-status ${job.status}`}>
-                        {job.status === 'pending' && 'Queued'}
-                        {job.status === 'processing' && 'Processing...'}
-                        {job.status === 'completed' && 'Done'}
-                        {job.status === 'failed' && 'Failed'}
-                      </span>
-                      <button
-                        className="btn-remove"
-                        onClick={() => removeJob(job.id)}
-                        title="Remove"
-                      >
-                        x
-                      </button>
-                    </div>
-                    <div className="job-prompt">{job.prompt}</div>
-                    {job.error && (
-                      <div className="job-error">{job.error}</div>
-                    )}
-                    {job.videoUrl && (
-                      <div className="job-result">
-                        <video
-                          src={job.videoUrl}
-                          controls
-                          preload="metadata"
-                        />
-                        <a
-                          href={job.videoUrl}
-                          download
-                          className="btn-download"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          Download
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       ) : (
         /* History Tab */

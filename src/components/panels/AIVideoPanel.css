@@ -699,19 +699,54 @@
   padding-top: var(--sp-4);
 }
 
+.jobs-section-top {
+  margin-top: 0;
+  border-top: none;
+  border-bottom: 1px solid var(--border-color);
+  padding: var(--sp-2) var(--sp-3) var(--sp-2);
+  flex-shrink: 0;
+}
+
+.jobs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .jobs-section h3 {
   font-size: var(--font-md);
   font-weight: var(--font-semibold);
-  margin: 0 0 var(--sp-3);
+  margin: 0 0 var(--sp-2);
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: var(--tracking-wide);
+}
+
+.jobs-list-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
 
 .jobs-list {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2-5);
+}
+
+.job-timer {
+  font-size: var(--font-xs);
+  font-family: var(--font-mono, monospace);
+  color: var(--accent);
+  background: var(--bg-secondary);
+  padding: var(--sp-0-5) var(--sp-1-5);
+  border-radius: var(--radius-sm);
+  min-width: 40px;
+  text-align: center;
 }
 
 .job-item {
