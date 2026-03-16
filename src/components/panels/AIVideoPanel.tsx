@@ -601,7 +601,7 @@ export function AIVideoPanel() {
 
   // Calculate current cost based on active service
   const currentCost = selectedService === 'kieai'
-    ? calculateKieAiCost(selectedProvider, mode, duration)
+    ? calculateKieAiCost(selectedProvider, mode, duration, generateAudio)
     : calculateCost(selectedProvider, mode, duration);
 
   return (

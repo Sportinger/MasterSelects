@@ -32,10 +32,19 @@ const KIEAI_PROVIDERS: VideoProvider[] = [
   },
 ];
 
-// Pricing estimates for Kie.ai
+// Pricing for Kie.ai (per-second rates from docs)
+// std: $0.10/s (no audio), $0.15/s (audio)
+// pro: $0.135/s (no audio), $0.20/s (audio)
 const KIEAI_PRICING: Record<string, Record<string, Record<number, number>>> = {
   'kling-3.0': {
     'std': { 5: 0.50, 10: 1.00 },
+    'pro': { 5: 0.675, 10: 1.35 },
+  },
+};
+
+const KIEAI_PRICING_AUDIO: Record<string, Record<string, Record<number, number>>> = {
+  'kling-3.0': {
+    'std': { 5: 0.75, 10: 1.50 },
     'pro': { 5: 1.00, 10: 2.00 },
   },
 };
@@ -48,8 +57,9 @@ export function getKieAiProvider(providerId: string): VideoProvider | undefined 
   return KIEAI_PROVIDERS.find(p => p.id === providerId);
 }
 
-export function calculateKieAiCost(provider: string, mode: string, duration: number): number {
-  const providerPricing = KIEAI_PRICING[provider];
+export function calculateKieAiCost(provider: string, mode: string, duration: number, sound = false): number {
+  const table = sound ? KIEAI_PRICING_AUDIO : KIEAI_PRICING;
+  const providerPricing = table[provider];
   if (!providerPricing) return 0.50;
   const modePricing = providerPricing[mode];
   if (!modePricing) return 0.50;
