@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-03-16",
+    "type": "refactor",
+    "title": "Comprehensive Documentation Audit & Update",
+    "description": "Multi-agent documentation audit across 486 source files. Updated 16 docs, deleted 3 redundant files, merged 2 into parent docs, renamed YouTube.md to Download-Panel.md. Fixed stale metrics (LOC 60k→120k, WGSL 2200→2500+, AI tools 33→76, fonts 57→50), removed inapplicable Next.js section from CLAUDE.md, expanded architecture tree, slimmed doc index from 660→250 lines. Found 2 code bugs in AI tool dispatcher.",
+    "section": "Documentation"
+  },
+  {
+    "date": "2026-03-16",
     "type": "fix",
     "title": "Windows/Linux Playback Warmup Holds Frames Instead of Dropping to Black",
     "description": "HTMLVideo fallback now keeps a valid cached frame during playback warmup and seeks instead of dropping straight to black. Ownerless pre-cached frames from first import can now be reused safely when there is no conflicting clip owner, which should also reduce first-import preview flicker.",

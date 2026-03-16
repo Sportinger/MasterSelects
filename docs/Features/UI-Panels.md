@@ -1,6 +1,6 @@
 # UI & Panels
 
-[<- Back to Index](./README.md)
+[← Back to Index](./README.md)
 
 Dockable panel system with After Effects-style menu bar and unified Properties panel.
 
@@ -16,6 +16,10 @@ Dockable panel system with After Effects-style menu bar and unified Properties p
 - [Tutorial System](#tutorial-system)
 - [Dock Layouts](#dock-layouts)
 - [MIDI Control](#midi-control)
+- [What's New Dialog](#whats-new-dialog)
+- [Native Helper Dialog](#native-helper-dialog)
+- [Relink Dialog](#relink-dialog)
+- [Mobile UI](#mobile-ui)
 
 ---
 
@@ -56,6 +60,7 @@ Dockable panel system with After Effects-style menu bar and unified Properties p
 - **Tutorials**: Opens the tutorial campaign selection
 - **Quick Tour**: Starts Part 1 panel introduction tutorial
 - **Timeline Tour**: Starts Part 2 timeline deep-dive tutorial
+- **Changelog on Startup**: Toggle to show/hide the What's New dialog on application startup (connected to `showChangelogOnStartup` setting)
 - **About**: Shows version and app info dialog
 
 ---
@@ -159,8 +164,9 @@ Panels are organized in the View menu as follows:
 - Composition list
 - Add dropdown (Import, Composition, Folder)
 - Drag-to-timeline support
-- **List view** and **Grid view** toggle (persisted in localStorage)
-- Grid view with folder breadcrumb navigation
+- **List view** and **Grid view** toggle via a single button with icon swap (persisted in localStorage)
+- Grid view shows thumbnail previews of media files
+- **Folder breadcrumb navigation** in grid view: click breadcrumb segments to navigate folder hierarchy
 
 ### Properties Panel
 See [Properties Panel](#properties-panel) section below for details.
@@ -176,6 +182,7 @@ See [Properties Panel](#properties-panel) section below for details.
 - **Audio export**: Sample rate, bitrate, normalization options
 - **In/Out point export**: Export only the marked region
 - **FCPXML export**: Export timeline as Final Cut Pro XML
+- **Stacked Alpha**: When enabled, doubles output height with RGB on top and alpha grayscale on bottom. Useful for compositing in external tools like TouchDesigner
 - **Single frame export**
 - **Progress indicator with phase display**
 
@@ -186,10 +193,10 @@ See [Properties Panel](#properties-panel) section below for details.
 - Group linking controls
 
 ### AI Chat Panel
-- Chat interface with GPT-4
+- Chat interface with GPT models
 - Model/provider selector
 - Context-aware editing commands
-- 33 available tools
+- 76 available tools
 
 ### Downloads Panel
 - Paste URLs from YouTube, TikTok, Instagram, Twitter/X, Facebook, Reddit, Vimeo, Twitch, and more
@@ -409,58 +416,69 @@ Solid clips also show a color picker bar above the tabs for changing the solid c
 
 ## Tutorial System
 
-Spotlight-based interactive tutorial that introduces new users to the interface. The tutorial uses a Clippy mascot companion and walks through panels and timeline elements with animated spotlight highlights.
+Spotlight-based interactive tutorial system with **14 campaigns** organized into 4 categories. Each campaign walks through a specific feature area using animated spotlight highlights and a Clippy mascot companion.
+
+### Campaign System
+
+The tutorial uses a campaign-based architecture defined in `tutorialCampaigns.ts`. Users select campaigns from the `TutorialCampaignDialog.tsx` dialog, which groups campaigns by category.
+
+### 4 Categories, 14 Campaigns
+
+#### Basics (3 campaigns)
+
+| Campaign | ID | Steps | Description |
+|----------|----|-------|-------------|
+| **Interface Overview** | `interface-overview` | 4 | Main panels and layout (Timeline, Preview, Media, Properties) |
+| **Timeline Controls** | `timeline-controls` | 6 | Playback, timecode, tools, in/out points, tracks, navigator |
+| **Preview & Playback** | `preview-playback` | 4 | Preview canvas, controls, quality settings, composition selector |
+
+#### Editing (4 campaigns)
+
+| Campaign | ID | Steps | Description |
+|----------|----|-------|-------------|
+| **Media & Import** | `media-import` | 4 | Media panel, add button, columns, drag to timeline |
+| **Editing Clips** | `clip-editing` | 5 | Track management, playhead, cut tool, markers, selection |
+| **Audio Mixing** | `audio-mixing` | 3 | Audio tracks, audio properties, JKL shuttle playback |
+| **Downloads** | `download-panel` | 3 | Download panel, search/quality, add to timeline |
+
+#### Creative Tools (4 campaigns)
+
+| Campaign | ID | Steps | Description |
+|----------|----|-------|-------------|
+| **Keyframes & Animation** | `keyframes-animation` | 4 | Transform properties, keyframe toggles, curve editor, easing modes |
+| **Effects & Color** | `effects-color` | 4 | Effects tab, add effects, blend modes, real-time preview |
+| **Text & Titles** | `text-titles` | 3 | Text tracks, text properties, text styling |
+| **Masks & Compositing** | `masks-compositing` | 4 | Masks tab, shape tools, mask modes, mask editing in preview |
+
+#### Output & Analysis (3 campaigns)
+
+| Campaign | ID | Steps | Description |
+|----------|----|-------|-------------|
+| **Export & Delivery** | `export-delivery` | 4 | Export panel, settings, start export, export range |
+| **Video Scopes** | `video-scopes` | 3 | Histogram, vectorscope, waveform monitor |
+| **Slot Grid (Live)** | `slot-grid` | 3 | Slot grid overview, layers A-D, column activation |
+
+### Completion Tracking
+
+- Campaign completion is tracked via `completedTutorials` in `settingsStore`
+- Per-campaign progress is supported (partial completion tracked)
+- Completed campaigns show a checkmark in the campaign selection dialog
+- The original Part 1 (panel introduction) and Part 2 (timeline deep-dive) tutorials still exist as the `interface-overview` and `timeline-controls` campaigns within the Basics category
 
 ### Automatic Launch
 
-The tutorial starts automatically on first launch (when `hasSeenTutorial` is false). If a What's New changelog dialog is shown, the tutorial starts after it is closed. Once completed or skipped, it does not appear again unless manually triggered.
+The tutorial campaign dialog starts automatically on first launch (when `hasSeenTutorial` is false). If a What's New changelog dialog is shown, the tutorial starts after it is closed. Once completed or skipped, it does not appear again unless manually triggered.
 
-### Welcome Screen (Part 1 Start)
+### Campaign Step Types
 
-Before the tutorial steps begin, a centered welcome dialog asks the user about their editing background:
+Each campaign step can use one or both spotlight mechanisms:
 
-| Option | Description |
-|--------|-------------|
-| **Premiere Pro** | Coming from Adobe Premiere Pro |
-| **DaVinci Resolve** | Coming from DaVinci Resolve |
-| **Final Cut Pro** | Coming from Final Cut Pro |
-| **After Effects** | Coming from Adobe After Effects |
-| **Beginner** | New to video editing |
+| Mechanism | Description |
+|-----------|-------------|
+| **Panel spotlight** | SVG mask cutout that dims the interface and highlights a panel group (`panelGroupId`) |
+| **Element highlight ring** | Yellow ring overlay on a specific UI element within the spotlighted panel (`selector`) |
 
-The selection is saved to personalize the experience. A "Skip Tutorial" button is available to dismiss the entire tutorial immediately.
-
-### Part 1 -- Panel Introduction
-
-After the welcome screen, the tutorial highlights each main panel one at a time using an SVG spotlight mask:
-
-| Step | Panel | Description |
-|------|-------|-------------|
-| 1 | **Timeline** | Arrange and edit clips on tracks. Drag to move, trim edges, add keyframes and transitions. |
-| 2 | **Preview** | Live preview of the composition. Play, pause, and scrub in real-time. |
-| 3 | **Media** | Import and organize media files. Drag clips onto the Timeline to start editing. |
-| 4 | **Properties** | Adjust transforms, effects, and masks for the selected clip. |
-
-Each step:
-- Dims the rest of the interface with a 75% opacity dark overlay
-- Cuts out the highlighted panel with a rounded rectangle mask
-- Activates the corresponding panel tab so it is visible
-- Shows a tooltip with step number, title, description, and progress dots
-- Advances on click anywhere
-
-### Part 2 -- Timeline Deep-Dive
-
-Part 2 starts automatically after Part 1 finishes (unless Part 2 was already seen). It zooms into individual Timeline elements with a yellow highlight ring:
-
-| Step | Element | Description |
-|------|---------|-------------|
-| 1 | **Playback** | Play, Stop, and Loop controls |
-| 2 | **Timecode** | Current position and total duration display (click duration to edit) |
-| 3 | **Tools & Zoom** | Snapping, Cut tool, Zoom, and Fit controls |
-| 4 | **In/Out Points** | Set In (I) and Out (O) points for the export range |
-| 5 | **Tracks** | Add video, audio, or text tracks |
-| 6 | **Navigator** | Scroll and zoom the Timeline; drag edges to zoom in/out |
-
-Part 2 highlights individual UI elements within the Timeline panel using CSS selectors. The Timeline panel itself remains fully visible (spotlight mask), while the target element gets a yellow highlight ring overlay.
+Steps can also auto-activate a panel tab (`panelType`) before displaying.
 
 ### Clippy Mascot
 
@@ -480,18 +498,18 @@ Falls back to a static WebP image if WebM video is not supported by the browser.
 |--------|----------|
 | **Click anywhere** | Advance to the next step |
 | **Escape** | Close the tutorial |
-| **Skip button** | Available on every step and the welcome screen; plays the Clippy outro animation, then dismisses |
+| **Skip button** | Available on every step; plays the Clippy outro animation, then dismisses |
 | **Progress dots** | Visual indicator showing current step and completed steps |
 
 ### Re-triggering Tutorials
 
-Both tutorial parts can be re-launched manually from the menu bar:
+Campaigns can be launched from the menu bar:
 
 | Menu Location | Action |
 |---------------|--------|
-| Info menu -> Tutorials | Opens tutorial campaign selection |
-| Info menu -> Quick Tour | Start Part 1 (panel introduction) |
-| Info menu -> Timeline Tour | Start Part 2 (timeline deep-dive) |
+| Info menu -> Tutorials | Opens the tutorial campaign selection dialog |
+| Info menu -> Quick Tour | Starts the `interface-overview` campaign (Basics) |
+| Info menu -> Timeline Tour | Starts the `timeline-controls` campaign (Basics) |
 
 ---
 
@@ -663,6 +681,100 @@ Top-right of toolbar (when enabled):
 
 ---
 
+## What's New Dialog
+
+The `WhatsNewDialog` shows a changelog of recent updates when the application starts or when triggered manually.
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| **Filter tabs** | All, New, Fixes, Improved, Refactor -- filter changelog entries by change type |
+| **Release calendar heatmap** | Visual calendar showing release frequency, generated from `src/version.ts` calendar functions (`getChangelogCalendar`) |
+| **YouTube video embed** | Featured video embed for major releases (configured via `FEATURED_VIDEO` in version.ts) |
+| **Build/WIP notice cards** | Informational cards for build status and work-in-progress features (`BUILD_NOTICE`, `WIP_NOTICE`) |
+| **Commit links** | GitHub commit links for each changelog entry |
+| **"Don't show on startup" checkbox** | Connected to `showChangelogOnStartup` setting in settingsStore |
+
+### Triggering
+- Automatically shown on startup if `showChangelogOnStartup` is enabled
+- Can be toggled via Info menu -> Changelog on Startup
+- Changelog entries are grouped by time period via `getGroupedChangelog()`
+
+---
+
+## Native Helper Dialog
+
+The Native Helper dialog provides status and installation information for the optional Rust native helper (`NativeHelperStatus.tsx`).
+
+### Toolbar Button
+A status indicator in the toolbar shows connection state when Native Helper is enabled in settings.
+
+### Dialog Contents
+
+| Section | Description |
+|---------|-------------|
+| **Enable/Disable toggle** | Turn the native helper connection on or off |
+| **Connection status** | Real-time connection state (connected, disconnected, error) |
+| **Install guide** | Platform-specific installation instructions (Windows MSI, macOS app, Linux binary) |
+| **Capability pills** | Status indicators for available features: decode, encode, download (yt-dlp), file system commands, AI bridge |
+| **GitHub release checking** | Checks for new releases from the GitHub releases API and shows download links |
+| **Version display** | Current helper version and compatibility info |
+
+---
+
+## Relink Dialog
+
+The `RelinkDialog` handles reconnecting missing media files when opening a project where source files have moved.
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| **Auto-scan** | Automatically scans the project's Raw folder for missing files on open |
+| **Recursive folder scanning** | User can select a folder to recursively search for missing files by name |
+| **Multi-file picker** | Allows manually selecting replacement files for individual missing items |
+| **Per-file status tracking** | Each missing file shows its status: `missing`, `found`, or `searching` |
+| **Batch relink** | Apply all found matches at once to restore file references |
+
+---
+
+## Mobile UI
+
+MasterSelects includes a mobile-optimized interface for touch devices, implemented as a separate component tree.
+
+### Root Component
+`MobileApp.tsx` serves as the root component, replacing the desktop dock layout with a mobile-friendly arrangement.
+
+### Components
+
+| Component | Purpose |
+|-----------|---------|
+| `MobileApp` | Root layout with panel state management and gesture handling |
+| `MobileTimeline` | Touch-optimized timeline with horizontal scrolling |
+| `MobilePreview` | Preview canvas sized for mobile viewports |
+| `MobileToolbar` | Bottom toolbar with essential editing actions (cut, undo/redo, panels) |
+| `MobilePropertiesPanel` | Slide-up properties panel with tap-to-activate sliders |
+| `MobileMediaPanel` | Slide-up media browser |
+| `MobileOptionsMenu` | Settings and options overlay |
+
+### Touch Gestures
+
+| Gesture | Action |
+|---------|--------|
+| **Edge swipe** | Open/close side panels (properties, media) |
+| **Two-finger swipe left** | Undo |
+| **Two-finger swipe right** | Redo |
+| **Tap toolbar buttons** | Cut at playhead, open panels, toggle options |
+
+### Precision Mode
+A precision mode for fine adjustments: when activated, slider movements are scaled down for frame-accurate control of properties like position, scale, and opacity.
+
+### Feature Limitations vs Desktop
+The mobile UI provides core editing functionality but does not include the full dock system, floating panels, MIDI control, output manager, or video scopes. It focuses on essential timeline editing, preview, and media management.
+
+---
+
 ## Related Features
 
 - [Timeline](./Timeline.md) - Timeline panel details
@@ -680,4 +792,4 @@ No dedicated unit tests -- this feature covers React component-level UI that req
 
 ---
 
-*Source: `src/components/panels/PropertiesPanel.tsx`, `src/components/panels/properties/index.tsx`, `src/components/dock/`, `src/stores/dockStore.ts`, `src/stores/settingsStore.ts`, `src/types/dock.ts`, `src/components/timeline/SlotGrid.tsx`, `src/services/layerPlaybackManager.ts`, `src/components/common/TutorialOverlay.tsx`, `src/components/common/Toolbar.tsx`, `src/components/common/SettingsDialog.tsx`*
+*Source: `src/components/panels/PropertiesPanel.tsx`, `src/components/panels/properties/index.tsx`, `src/components/dock/`, `src/stores/dockStore.ts`, `src/stores/settingsStore.ts`, `src/types/dock.ts`, `src/components/timeline/SlotGrid.tsx`, `src/services/layerPlaybackManager.ts`, `src/components/common/TutorialOverlay.tsx`, `src/components/common/TutorialCampaignDialog.tsx`, `src/components/common/tutorialCampaigns.ts`, `src/components/common/WhatsNewDialog.tsx`, `src/components/common/NativeHelperStatus.tsx`, `src/components/common/RelinkDialog.tsx`, `src/components/common/Toolbar.tsx`, `src/components/common/SettingsDialog.tsx`, `src/components/mobile/MobileApp.tsx`, `src/components/mobile/` (directory)*

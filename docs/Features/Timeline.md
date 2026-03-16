@@ -39,7 +39,7 @@ The Timeline is the core editing interface, providing multi-track video and audi
 - Audio-only tracks at bottom of timeline
 - Waveform visualization (50 samples/second)
 - Linked audio follows video clip movement
-- Default: 1 audio track
+- Default: 1 audio track (default name: `'Audio'`, defined in `constants.ts` DEFAULT_TRACKS)
 
 ### Track Management
 ```
@@ -141,7 +141,7 @@ getTrackChildren()   - Get child tracks of a parent
 - Rotation (X, Y, Z) - full 3D with perspective
 - Opacity (0-100%)
 - Blend mode (cycle with `+`/`-` keys)
-- **Speed** (-400% to 400%)
+- **Speed** (no enforced code limits — keyframeSlice passes speed values through without clamping. The range is a UI guideline only.)
 - Pitch preservation toggle (`setClipPreservesPitch`)
 
 ### Speed Control
@@ -489,6 +489,7 @@ Available actions depend on clip type:
 - Yellow indicator shows proxy-cached ranges on timeline
 - Background preloading via `startProxyCachePreload()`
 - Cancellable via `cancelProxyCachePreload()`
+- `invalidateCache()` is the most frequently called side-effect action in the codebase. Called from nearly every mutation to signal that cached proxy frames may be stale.
 - Progress shown in toolbar
 
 ### Export Progress
@@ -517,10 +518,18 @@ Resolume-style grid view for composition triggering:
 
 Transient visual overlays for AI-driven editing actions:
 
-- **Split glow lines** at cut positions
-- **Delete ghost clips** fading out
-- **Trim edge highlights**
+- **Split glow lines** (`split-glow`) at cut positions
+- **Delete ghost clips** (`delete-ghost`) fading out
+- **Trim edge highlights** (`trim-highlight`)
+- **Silent zone overlays** (`silent-zone`) marking detected silent regions
+- **Low quality zone overlays** (`low-quality-zone`) marking degraded segments
 - **Moving clip animations** (smooth position transitions)
+
+**5 overlay types total.**
+
+### Actions
+- `addAIOverlay(overlay)` -- add a single overlay
+- `addAIOverlaysBatch(overlays)` -- bulk overlay creation for batch AI operations
 
 Managed by `aiActionFeedbackSlice` with auto-cleanup after animation duration.
 Components: `AIActionOverlays.tsx`
@@ -551,6 +560,17 @@ The timeline store (`src/stores/timeline/index.ts`) combines 17 slices + 2 utili
 | **clipboardSlice** | `clipboardSlice.ts` | Copy/paste for clips and keyframes |
 | **aiActionFeedbackSlice** | `aiActionFeedbackSlice.ts` | AI visual feedback overlays |
 
+**Additional action groups (spread across slices):**
+
+| Action Group | Actions | Purpose |
+|-------------|---------|---------|
+| **ExportActions** | `setExportProgress(progress)`, `startExport()`, `endExport()` | Export lifecycle management and progress bar updates |
+| **LayerActions** | `setLayers(layers)`, `updateLayer(id, updates)`, `selectLayer(id)` | Layer management for render pipeline |
+
+**State guards:**
+
+- `timelineSessionId: string` -- Incremented UUID that guards async callbacks during composition switches. All async operations (video loading, WebCodecs init) compare their captured session ID against the current one to prevent stale updates.
+
 **Utility modules:**
 
 | Module | File | Purpose |
@@ -562,8 +582,48 @@ The timeline store (`src/stores/timeline/index.ts`) combines 17 slices + 2 utili
 
 | Directory | Contents |
 |-----------|----------|
-| `clip/` | `addVideoClip.ts`, `addAudioClip.ts`, `addImageClip.ts`, `addCompClip.ts`, `completeDownload.ts`, `upgradeToNativeDecoder.ts` |
+| `clip/` | `index.ts` (re-exports addVideoClip, addAudioClip, addImageClip, addCompClip, completeDownload), `addVideoClip.ts`, `addAudioClip.ts`, `addImageClip.ts`, `addCompClip.ts`, `completeDownload.ts`, `upgradeToNativeDecoder.ts` (exists but NOT exported from `clip/index.ts`) |
 | `helpers/` | `audioDetection.ts`, `audioTrackHelpers.ts`, `blobUrlManager.ts`, `clipStateHelpers.ts`, `idGenerator.ts`, `mediaTypeHelpers.ts`, `mp4MetadataHelper.ts`, `thumbnailHelpers.ts`, `waveformHelpers.ts`, `webCodecsHelpers.ts` |
+
+**Top-level helper files:**
+
+| File | Purpose |
+|------|---------|
+| `constants.ts` | Default tracks (DEFAULT_TRACKS), default text properties, snap thresholds, timing constants |
+| `utils.ts` | Shared utility functions used across timeline slices |
+| `selectors.ts` | 50 exported selectors for optimized React subscriptions (see below) |
+| `helpers/clipStateHelpers.ts` | Clip state manipulation helpers (position calculations, overlap detection) |
+| `helpers/idGenerator.ts` | Unique ID generation for clips, tracks, keyframes, masks |
+| `helpers/blobUrlManager.ts` | Blob URL lifecycle management (create, revoke, track) |
+| `helpers/audioDetection.ts` | Audio stream detection in media files |
+| `helpers/mp4MetadataHelper.ts` | MP4 container metadata parsing |
+| `helpers/webCodecsHelpers.ts` | WebCodecs API utilities for hardware-accelerated decode |
+
+---
+
+## Timeline Selectors
+
+The file `src/stores/timeline/selectors.ts` (251 lines) exports **50 selectors** organized into 5 categories for optimized React subscriptions:
+
+### Categories
+
+| Category | Description | Example |
+|----------|-------------|---------|
+| **Individual field selectors** | Select a single field to minimize re-renders | `selectClips`, `selectTracks`, `selectCurrentTime` |
+| **Grouped selectors** (for `useShallow`) | Select multiple related fields as an object | `selectPlaybackState`, `selectZoomState` |
+| **Derived selectors** | Compute values from state | `selectActiveClip`, `selectVisibleTracks` |
+| **Stable action selectors** | Select action functions (never change) | `selectAddClip`, `selectSetCurrentTime` |
+| **Preview/export selectors** | Selectors for render pipeline and export | `selectExportState`, `selectPreviewLayers` |
+
+### Performance Pattern
+```typescript
+// WRONG: subscribes to entire store, re-renders on any change
+const { clips, currentTime } = useTimelineStore();
+
+// RIGHT: individual selectors, re-renders only when that field changes
+const clips = useTimelineStore(selectClips);
+const currentTime = useTimelineStore(selectCurrentTime);
+```
 
 ---
 
@@ -658,7 +718,7 @@ The timeline store (`src/stores/timeline/index.ts`) combines 17 slices + 2 utili
 | [`selectionSlice.test.ts`](../../tests/stores/timeline/selectionSlice.test.ts) | 49 | Clip selection, multi-select, curve editor blocking |
 | [`playbackSlice.test.ts`](../../tests/stores/timeline/playbackSlice.test.ts) | 88 | Playback, in/out points, zoom, JKL shuttle, RAM preview |
 | [`markerSlice.test.ts`](../../tests/stores/timeline/markerSlice.test.ts) | 50 | Markers, boundaries, sort invariants |
-| [`keyframeSlice.test.ts`](../../tests/stores/timeline/keyframeSlice.test.ts) | 94 | Keyframe CRUD, interpolation, bezier handles, recording, effects |
+| [`keyframeSlice.test.ts`](../../tests/stores/timeline/keyframeSlice.test.ts) | 96 | Keyframe CRUD, interpolation, bezier handles, recording, effects |
 | [`maskSlice.test.ts`](../../tests/stores/timeline/maskSlice.test.ts) | 78 | Mask creation, vertex editing, rectangle/ellipse masks |
 
 Run tests: `npx vitest run`

@@ -62,7 +62,7 @@ interface Keyframe {
   time: number;         // Relative to clip start (seconds)
   property: string;     // e.g., 'opacity', 'position.x'
   value: number;        // Interpolated value
-  easing: EasingType;   // Interpolation mode
+  easing: EasingType;   // 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'bezier'
   handleIn?: BezierHandle;   // Custom in-tangent
   handleOut?: BezierHandle;  // Custom out-tangent
 }
@@ -248,6 +248,26 @@ baseHeight
 
 ---
 
+## Speed Integration
+
+Speed is an animatable property that uses keyframes to control playback rate over time. The `speedIntegration.ts` module provides utilities for the complex mapping between timeline time and source time when clip speed is keyframed.
+
+### Utilities
+
+| Function | Purpose |
+|----------|---------|
+| `calculateSourceTime(clip, timelineTime)` | Maps a timeline position to the corresponding source media position, integrating the speed curve |
+| `getSpeedAtTime(clip, timelineTime)` | Returns the instantaneous speed value at a given timeline time (interpolated from keyframes) |
+| `calculateTimelineDuration(clip, sourceDuration)` | Computes how long a clip occupies on the timeline given its source duration and speed keyframes |
+
+### How It Works
+- Source time is computed as the integral of the speed curve over the clip's timeline duration
+- Supports smooth transitions between speeds (e.g., ramping from 100% to 50%)
+- Handles direction changes (forward to reverse) when speed crosses zero
+- Negative speed values play the source media backwards
+
+---
+
 ## Related Features
 
 - [Timeline](./Timeline.md) - Main editing interface
@@ -261,8 +281,8 @@ baseHeight
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
-| [`keyframeSlice.test.ts`](../../tests/stores/timeline/keyframeSlice.test.ts) | 14 | Keyframe CRUD operations |
-| [`keyframeInterpolation.test.ts`](../../tests/unit/keyframeInterpolation.test.ts) | 120 | Easing, bezier, interpolation |
+| [`keyframeSlice.test.ts`](../../tests/stores/timeline/keyframeSlice.test.ts) | 96 | Keyframe CRUD operations |
+| [`keyframeInterpolation.test.ts`](../../tests/unit/keyframeInterpolation.test.ts) | 112 | Easing, bezier, interpolation |
 
 Run tests: `npx vitest run`
 

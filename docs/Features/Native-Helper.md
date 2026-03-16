@@ -1,3 +1,5 @@
+[← Back to Index](./README.md)
+
 # Native Helper
 
 The Native Helper is a local companion application that provides Firefox project persistence, external AI control, and yt-dlp-based downloads.
@@ -234,3 +236,10 @@ cargo build --release
 ## Tests
 
 No dedicated unit tests -- this is a Rust binary tested separately.
+
+---
+
+## Related Documents
+
+- [Download Panel](./Download-Panel.md) -- Download panel UI powered by the Native Helper
+- [Project Persistence](./Project-Persistence.md) -- Firefox project persistence via Native Helper file system ops

@@ -137,23 +137,44 @@ Weighted averaging for smooth edges
 ```typescript
 interface ClipMask {
   id: string;
+  name: string;           // Display name of the mask
   mode: 'add' | 'subtract' | 'intersect';
-  opacity: number;      // 0-1
-  feather: number;      // 0-50 pixels
+  opacity: number;        // 0-1
+  feather: number;        // 0-50 pixels
   featherQuality: number; // 1-100
   inverted: boolean;
+  expanded: boolean;      // Whether mask is expanded in UI
+  visible: boolean;       // Whether mask is visible/applied
   position: { x: number; y: number };
   vertices: MaskVertex[];
   closed: boolean;
 }
 ```
 
-### Mask Operations
+### Mask Operations (17 total)
 ```typescript
+// Core CRUD (4)
 addMask(clipId)
 removeMask(clipId, maskId)
 updateMask(clipId, maskId, updates)
 reorderMasks(clipId, fromIndex, toIndex)
+
+// Edit mode & state (4)
+setMaskEditMode(mode)                    // Switch between select/draw modes
+setMaskDragging(isDragging)              // Drag state for UI feedback
+setMaskDrawStart(point | null)           // Starting point for new mask draw
+setActiveMask(clipId, maskIndex | null)  // Set which mask is being edited
+
+// Vertex selection (2)
+selectVertex(clipId, maskIndex, vertexIndex) // Select individual vertex
+deselectAllVertices()                        // Clear vertex selection
+
+// Getters (1)
+getClipMasks(clipId): ClipMask[]         // Get all masks for a clip
+
+// Preset shapes (2)
+addRectangleMask(clipId)                 // Create rectangle mask preset
+addEllipseMask(clipId)                   // Create ellipse mask preset
 ```
 
 ### Vertex Operations

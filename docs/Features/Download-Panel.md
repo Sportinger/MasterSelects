@@ -1,3 +1,5 @@
+[← Back to Index](./README.md)
+
 # Download Panel (formerly YouTube Panel)
 
 MASterSelects includes a built-in Download panel for searching, downloading, and editing online videos from multiple platforms directly in your project.

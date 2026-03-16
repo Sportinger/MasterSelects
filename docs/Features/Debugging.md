@@ -1,3 +1,5 @@
+[← Back to Index](./README.md)
+
 # Debugging & Logging
 
 MASterSelects includes a professional Logger service designed for both human debugging and AI-assisted development.
@@ -330,6 +332,52 @@ import {
 
 ---
 
+## Pipeline Monitor Globals
+
+MasterSelects exposes two pipeline monitor objects on the `window` for console-based debugging of the playback decode pipeline.
+
+### `window.__WC_PIPELINE__`
+
+WebCodecs pipeline state inspection. Set by `wcPipelineMonitor.ts`, this ring-buffer monitor records all WebCodecs decode pipeline events:
+
+- `decode_feed`, `decode_output` -- sample feed and frame output
+- `frame_read`, `frame_drop` -- frame consumption and drops
+- `decoder_reset` -- decoder reinitialization
+- `pending_seek_start/end`, `seek_start/end/skip/cancel/publish` -- seek lifecycle
+- `collector_hold`, `collector_drop` -- frame collector decisions
+- `drift_correct`, `queue_pressure`, `stall`, `rAF_gap` -- health metrics
+- `play`, `pause`, `advance_seek` -- playback state changes
+
+### `window.__VF_PIPELINE__`
+
+VideoFrame (HTMLVideo + VideoFrame API) pipeline state inspection. Set by `vfPipelineMonitor.ts`, this ring-buffer monitor records VF-mode playback events:
+
+- `vf_capture`, `vf_read`, `vf_drop` -- frame delivery lifecycle
+- `vf_gpu_cold`, `vf_gpu_ready` -- GPU surface warmup
+- `vf_play`, `vf_pause`, `vf_seek_fast`, `vf_seek_precise`, `vf_seek_done` -- playback and seeking
+- `vf_drift`, `vf_stall`, `vf_readystate_drop` -- health and sync
+- `audio_drift`, `audio_drift_correct`, `audio_status`, `audio_master_change`, `audio_rate_change` -- audio sync
+
+Both monitors use a 5000-event ring buffer and are readable from the browser console at any time.
+
+---
+
+## Playback Monitoring Services
+
+MasterSelects includes 7 dedicated monitoring services for playback debugging and health tracking:
+
+| Service | File | Description |
+|---------|------|-------------|
+| **playbackHealthMonitor** | `playbackHealthMonitor.ts` | Detects 8 anomaly types (FRAME_STALL, WARMUP_STUCK, RVFC_ORPHANED, SEEK_STUCK, READYSTATE_DROP, GPU_SURFACE_COLD, RENDER_STALL, HIGH_DROP_RATE). Per-clip escalation: 3+ anomalies within 12s triggers aggressive recovery |
+| **playbackDebugStats** | `playbackDebugStats.ts` | Real-time stats for the `playback` field in EngineStats -- pipeline name, decoder resets, pending seek timing, collector hold/drop counts |
+| **playbackDebugSnapshot** | `playbackDebugStats.ts` | Point-in-time snapshots of video element state, anomaly history, and frame cadence for debugging |
+| **framePhaseMonitor** | `framePhaseMonitor.ts` | Frame lifecycle phase tracking -- measures time spent in stats, build, render, sync-video, sync-audio, and cache phases per frame |
+| **vfPipelineMonitor** | `vfPipelineMonitor.ts` | VideoFrame pipeline event ring buffer (see `window.__VF_PIPELINE__` above) |
+| **wcPipelineMonitor** | `wcPipelineMonitor.ts` | WebCodecs pipeline event ring buffer (see `window.__WC_PIPELINE__` above) |
+| **scrubSettleState** | `scrubSettleState.ts` | Tracks scrub-to-play transition state per clip -- manages settle, retry, and warmup stages after scrubbing stops |
+
+---
+
 ## Troubleshooting
 
 ### Common Debug Scenarios
@@ -396,6 +444,13 @@ Logger.setLevel('DEBUG')
 5. **Don't log sensitive data** (API keys, user data)
 
 6. **Remember the default level is WARN** -- add `Logger.setLevel('DEBUG')` when troubleshooting
+
+---
+
+## Related Documents
+
+- [GPU Engine](./GPU-Engine.md) -- Troubleshooting rendering, texture, and WebGPU issues
+- [AI Integration](./AI-Integration.md) -- AI debug tools and AI-agent inspection
 
 ---
 

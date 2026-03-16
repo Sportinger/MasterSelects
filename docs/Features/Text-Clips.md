@@ -1,3 +1,5 @@
+[← Back to Index](./README.md)
+
 # Text Clips
 
 Text clips allow you to add text overlays directly to your timeline with full typography control. Text is rendered on the GPU, allowing all existing effects, blend modes, masks, and keyframe animations to work seamlessly.
@@ -187,3 +189,10 @@ Planned but not yet implemented:
 - Gradient fills
 - Multiple shadows
 - Background boxes
+
+---
+
+## Related Documents
+
+- [Timeline](./Timeline.md) -- Multi-track editing, clip placement
+- [Keyframes](./Keyframes.md) -- Animation system for text properties

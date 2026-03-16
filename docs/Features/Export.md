@@ -107,8 +107,10 @@ Pipeline: HTMLVideoElement → requestVideoFrameCallback → GPU Compositor → 
 ### Codec Options
 | Codec | Container | ID |
 |-------|-----------|-----|
-| H.264 | MP4 | avc1.640028 |
+| H.264 | MP4 | avc1.4d0028 (Main Profile, Level 4.0) |
+| H.265 | MP4 | hvc1.1.6.L93.B0 |
 | VP9 | WebM | vp09.00.10.08 |
+| AV1 | MP4/WebM | av01.0.04M.08 |
 
 ### Quality Presets
 | Quality | Bitrate |
@@ -157,6 +159,18 @@ When audio is exported:
 
 ---
 
+## Stacked Alpha Export
+
+The `ExportSettings.stackedAlpha` option enables transparent video export:
+- Renders RGB on the top half of the frame and alpha grayscale on the bottom half (double-height canvas)
+- `ExportCanvasManager` creates a double-height OffscreenCanvas to accommodate both halves
+- OutputPipeline mode 2 handles the stacked alpha rendering in `output.wgsl`
+- Compatible with post-production workflows that expect stacked alpha format (e.g., After Effects, Nuke)
+
+See also: [GPU Engine - Stacked Alpha Export](./GPU-Engine.md#stacked-alpha-export)
+
+---
+
 ## Export Process
 
 ### Pipeline
@@ -166,11 +180,10 @@ Video Phase (95% of progress):
 2. Parallel decode multiple clips simultaneously
 3. Build layer composition
 4. Render via GPU engine
-5. Read pixels (staging buffer)
-6. Create VideoFrame
-7. Encode frame
-8. Write to muxer
-9. Repeat for all frames
+5. Create VideoFrame from GPU canvas (zero-copy via `ExportCanvasManager.createVideoFrameFromExport` using OffscreenCanvas). Staging buffer is fallback only.
+6. Encode frame
+7. Write to muxer
+8. Repeat for all frames
 
 Audio Phase (5% of progress):
 1. Extract audio from all clips
@@ -214,7 +227,7 @@ For multi-clip exports, ParallelDecodeManager handles:
 ```
 
 ### Key Frame Insertion
-Every 30 frames (configurable).
+1 keyframe per second, fps-dependent: `Math.round(fps)` (24 for 24fps, 30 for 30fps, 60 for 60fps). Defined in `export/types.ts` via `getKeyframeInterval(fps)`.
 
 ### Audio Codec Detection
 ```typescript
@@ -313,6 +326,20 @@ Example: 60s × 30fps × 15Mbps = ~112MB
 
 ---
 
+## Export Types (src/engine/export/types.ts)
+
+Key types and utilities used throughout the export pipeline:
+
+| Type / Function | Description |
+|----------------|-------------|
+| `FrameContext` | Per-frame context passed through the export pipeline (time, frame number, layers) |
+| `LayerTransformData` | Transform data for a single layer at export time |
+| `BaseLayerProps` | Base properties shared by all layer types during export |
+| `getFrameTolerance(fps)` | Returns half-frame tolerance for time comparisons (e.g., 0.0167s at 30fps) |
+| `getKeyframeInterval(fps)` | Returns keyframe interval in frames (1 per second, fps-dependent) |
+
+---
+
 ## FFmpeg Export
 
 ### Overview
@@ -384,6 +411,8 @@ FFmpeg WASM is loaded on-demand when first used:
 
 ## Export System V2 (Shared Decoder Pool)
 
+> **NOT IMPLEMENTED** -- The V2 export system described below is a design proposal. The source files listed do not exist. See the [Appendix: V2 Shared Decoder Architecture](#appendix-v2-shared-decoder-architecture-not-implemented) at the end of this document for the full design document.
+
 ### Overview
 Export V2 introduces a shared decoder architecture for more efficient multi-clip exports. Instead of creating separate decoders per clip instance, V2 shares decoder instances per unique file.
 
@@ -443,6 +472,65 @@ Run tests: `npx vitest run`
 - [Preview](./Preview.md) - Preview before export
 - [Timeline](./Timeline.md) - Set In/Out points
 - [GPU Engine](./GPU-Engine.md) - Rendering details
+
+---
+
+## Appendix: V2 Shared Decoder Architecture (NOT IMPLEMENTED)
+
+> **This is a design proposal for a future export system. It is NOT currently implemented.** None of the components described below (SharedDecoderPool, FrameCacheManager, ExportPlanner) have been implemented.
+>
+> **Current export system (V1):** Uses `ParallelDecodeManager` (`src/engine/ParallelDecodeManager.ts`) with one VideoDecoder per clip, and `WebCodecsExportMode` (`src/engine/WebCodecsExportMode.ts`) for sequential frame-accurate export decoding.
+
+### Problem Statement
+
+The current parallel decode system has fundamental scalability issues:
+- One VideoDecoder instance per clip instance (not per unique file)
+- Same video file used 2x (regular + nested) creates 2 separate decoders
+- Decoders compete for different positions, causing constant resets/seeks
+- With 10+ nested compositions, 20+ decoders lead to exponential slowdown
+
+### Design Goals
+
+1. **Scale to Complex Projects**: Handle 10+ nested comps, triple-nested, 50+ unique videos
+2. **Predictable Performance**: Linear scaling relative to complexity
+3. **Memory Efficient**: Reuse decoded frames, shared decoder instances
+4. **Smart Pre-fetching**: Decode frames in optimal order based on export timeline
+5. **Resilient**: Graceful degradation, fallback to HTMLVideoElement if needed
+6. **Hybrid Approach**: Use best system for each project complexity level
+
+### Core Components
+
+- **Shared Decoder Pool** - One VideoDecoder per unique video file (not per clip). Decoder reuse via `reset()` + `configure()`. Worker-based for true parallelism.
+- **Frame Cache Manager** - LRU cache for decoded frames with per-file buffers (default: 120 frames per file).
+- **Export Planner** - Analyzes full export range for file usage patterns, groups clips by file, pre-calculates decode positions.
+- **Nested Composition Renderer** - Just-in-time rendering during export (no pre-rendering), recursive resolution from deepest to shallowest.
+
+### Migration Strategy - Hybrid Approach
+
+Smart auto-selection based on project complexity:
+- Simple projects (<=3 unique files, no nested comps): V1
+- Medium complexity (<=8 files, <=5 nested clips): V1
+- Complex projects: V2
+
+Manual override available. NO hidden fallbacks — V2 must work or throw a clear error.
+
+### Performance Targets
+
+| Scenario | V1 (Current) | V2 (Target) |
+|----------|-------------|-------------|
+| Simple (3 clips) | ~2x realtime | ~3x realtime |
+| Medium (10 clips) | Varies | ~2x realtime |
+| Complex (20 clips, 5 nested) | ~0.1x (FAILS) | ~1.5x realtime |
+
+### Implementation Status
+
+All phases are **not yet started**. See the five-phase implementation plan covering core infrastructure, export planner, nested comp rendering, integration, and polish.
+
+### References
+
+- [Chrome WebCodecs Best Practices](https://developer.chrome.com/docs/web-platform/best-practices/webcodecs)
+- [Remotion WebCodecs Guide](https://www.remotion.dev/docs/media-parser/webcodecs)
+- [W3C WebCodecs Explainer](https://github.com/w3c/webcodecs/blob/main/explainer.md)
 
 ---
 

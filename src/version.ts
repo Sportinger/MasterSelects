@@ -8,6 +8,14 @@ export interface ChangelogNotice {
   title: string;
   message: string;
   animated?: boolean;
+  link?: {
+    label: string;
+    href: string;
+    suffix?: string;
+  };
+  annotation?: {
+    text: string;
+  };
 }
 
 // Featured video shown at top of changelog (set to null to hide)
@@ -21,7 +29,11 @@ export const FEATURED_VIDEO: {
   banner: {
     type: 'danger',
     title: 'Playback Fixes',
-    message: 'Fixed the playback bugs on Win/Linux.',
+    message: 'Fixed playback bugs on Win/Linux.',
+    animated: true,
+    annotation: {
+      text: 'some',
+    },
   },
 };
 
@@ -31,6 +43,18 @@ export const BUILD_NOTICE: ChangelogNotice | null = {
   title: 'Native Helper v0.3.1 available',
   message: 'Includes the local AI bridge, Firefox project save/open support, and the refreshed helper workflow.',
   animated: true,
+};
+
+export const WIP_NOTICE: ChangelogNotice | null = {
+  type: 'warning',
+  title: 'Work in progress',
+  message: '',
+  animated: true,
+  link: {
+    label: 'MatAnyone2',
+    href: 'https://github.com/pq-yang/MatAnyone2',
+    suffix: 'integration',
+  },
 };
 
 // Change entry type (used by UI)
@@ -47,6 +71,16 @@ export interface TimeGroupedChanges {
   label: string;
   dateRange: string; // "Jan 20" or "Jan 13-19" etc
   changes: ChangeEntry[];
+}
+
+export interface ChangelogCalendarDay {
+  date: string;
+  tooltip: string;
+  count: number;
+  level: 0 | 1 | 2 | 3 | 4;
+  isFuture: boolean;
+  isToday: boolean;
+  isOutOfRange: boolean;
 }
 
 // Raw changelog entry as stored in changelog-data.json
@@ -87,6 +121,45 @@ function formatDateRange(minDate: Date, maxDate: Date): string {
 
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function startOfWeekMonday(date: Date): Date {
+  const day = date.getDay();
+  const offset = (day + 6) % 7;
+  const normalized = startOfDay(date);
+  normalized.setDate(normalized.getDate() - offset);
+  return normalized;
+}
+
+function endOfWeekMonday(date: Date): Date {
+  const normalized = startOfWeekMonday(date);
+  normalized.setDate(normalized.getDate() + 6);
+  return normalized;
+}
+
+function startOfQuarter(date: Date): Date {
+  const quarterStartMonth = Math.floor(date.getMonth() / 3) * 3;
+  return new Date(date.getFullYear(), quarterStartMonth, 1);
+}
+
+function formatCalendarTooltip(date: Date, count: number): string {
+  const label = date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  if (count === 0) {
+    return label;
+  }
+  return `${label}: ${count} ${count === 1 ? 'change' : 'changes'}`;
+}
+
+function getCalendarLevel(count: number): 0 | 1 | 2 | 3 | 4 {
+  if (count >= 4) return 4;
+  if (count === 3) return 3;
+  if (count === 2) return 2;
+  if (count === 1) return 1;
+  return 0;
 }
 
 function getMonthDiff(now: Date, date: Date): number {
@@ -189,6 +262,71 @@ export function getGroupedChangelog(
       const orderB = groups.get(b.label)?.sortOrder ?? 99;
       return orderA - orderB;
     });
+}
+
+export function getChangelogCalendar(
+  entries: RawChangeEntry[] = RAW_CHANGELOG,
+  now: Date = new Date(),
+  scope: 'quarter' | number = 'quarter'
+): ChangelogCalendarDay[][] {
+  const normalizedNow = startOfDay(now);
+  const countsByDate = new Map<string, number>();
+  for (const entry of entries) {
+    countsByDate.set(entry.date, (countsByDate.get(entry.date) ?? 0) + 1);
+  }
+
+  let firstWeekStart: Date;
+  let weeks: number;
+  let rangeStart: Date | null = null;
+  let rangeEnd: Date | null = null;
+
+  if (scope === 'quarter') {
+    rangeStart = startOfQuarter(normalizedNow);
+    rangeEnd = normalizedNow;
+    firstWeekStart = startOfWeekMonday(rangeStart);
+    const finalWeekEnd = endOfWeekMonday(rangeEnd);
+    weeks = Math.ceil((finalWeekEnd.getTime() - firstWeekStart.getTime() + 1) / (7 * 24 * 60 * 60 * 1000));
+  } else {
+    const currentWeekStart = startOfWeekMonday(normalizedNow);
+    firstWeekStart = new Date(currentWeekStart);
+    firstWeekStart.setDate(firstWeekStart.getDate() - (scope - 1) * 7);
+    weeks = scope;
+  }
+
+  const weeksGrid: ChangelogCalendarDay[][] = [];
+  for (let weekIndex = 0; weekIndex < weeks; weekIndex++) {
+    const weekStart = new Date(firstWeekStart);
+    weekStart.setDate(firstWeekStart.getDate() + weekIndex * 7);
+
+    const days: ChangelogCalendarDay[] = [];
+    for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+      const date = new Date(weekStart);
+      date.setDate(weekStart.getDate() + dayIndex);
+
+      const isoDate = [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, '0'),
+        String(date.getDate()).padStart(2, '0'),
+      ].join('-');
+      const isOutOfRange = !!(rangeStart && rangeEnd && (date < rangeStart || date > rangeEnd));
+      const isFuture = !isOutOfRange && date.getTime() > normalizedNow.getTime();
+      const count = isOutOfRange || isFuture ? 0 : (countsByDate.get(isoDate) ?? 0);
+
+      days.push({
+        date: isoDate,
+        tooltip: isOutOfRange ? '' : formatCalendarTooltip(date, count),
+        count,
+        level: isOutOfRange || isFuture ? 0 : getCalendarLevel(count),
+        isFuture,
+        isToday: !isOutOfRange && date.getTime() === normalizedNow.getTime(),
+        isOutOfRange,
+      });
+    }
+
+    weeksGrid.push(days);
+  }
+
+  return weeksGrid;
 }
 
 // Known issues and bugs - shown in What's New dialog

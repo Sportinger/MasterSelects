@@ -1,11 +1,14 @@
 // WhatsNewDialog - Shows changelog grouped by time periods
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, type CSSProperties } from 'react';
 import {
   APP_VERSION,
   BUILD_NOTICE,
   FEATURED_VIDEO,
+  WIP_NOTICE,
+  getChangelogCalendar,
   getGroupedChangelog,
+  type ChangelogCalendarDay,
   type ChangeEntry,
   type ChangelogNotice as ChangelogNoticeConfig,
 } from '../../version';
@@ -95,19 +98,77 @@ function NoticeIcon({ type }: { type: ChangelogNoticeConfig['type'] }) {
 function NoticeCard({
   notice,
   className = '',
+  staggerIndex = 0,
 }: {
   notice: ChangelogNoticeConfig;
   className?: string;
+  staggerIndex?: number;
 }) {
+  const noticeStyle = notice.animated
+    ? ({ '--changelog-notice-delay': `${staggerIndex * 0.8}s` } as CSSProperties)
+    : undefined;
+
   return (
-    <div className={`changelog-notice changelog-notice-${notice.type} ${notice.animated ? 'changelog-notice-animated' : ''} ${className}`.trim()}>
-      <div className="changelog-notice-icon">
-        <NoticeIcon type={notice.type} />
+    <div
+      className={`changelog-notice ${notice.annotation ? 'changelog-notice-with-annotation' : ''} ${className}`.trim()}
+      style={noticeStyle}
+    >
+      <div className={`changelog-notice-body changelog-notice-${notice.type} ${notice.animated ? 'changelog-notice-animated' : ''}`.trim()}>
+        <div className="changelog-notice-icon">
+          <NoticeIcon type={notice.type} />
+        </div>
+        <div className="changelog-notice-content">
+          <span className="changelog-notice-title">{notice.title}</span>
+          <span className="changelog-notice-message">
+            {notice.message && <>{notice.message}{notice.link ? ' ' : ''}</>}
+            {notice.link && (
+              <>
+                <a
+                  className="changelog-notice-link"
+                  href={notice.link.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {notice.link.label}
+                </a>
+                {notice.link.suffix && <> {notice.link.suffix}</>}
+              </>
+            )}
+          </span>
+        </div>
       </div>
-      <div className="changelog-notice-content">
-        <span className="changelog-notice-title">{notice.title}</span>
-        <span className="changelog-notice-message">{notice.message}</span>
-      </div>
+      {notice.annotation && (
+        <div className="changelog-notice-scribble" aria-hidden="true">
+          <svg className="changelog-notice-scribble-arrow" viewBox="0 0 34 18" fill="none">
+            <path d="M30 15C20 15 14 12 10 5" />
+            <path d="M8 7.5L10 4.5L13.5 5.8" />
+          </svg>
+          <span className="changelog-notice-scribble-text">{notice.annotation.text}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReleaseCalendar({ weeks }: { weeks: ChangelogCalendarDay[][] }) {
+  return (
+    <div className="changelog-calendar" aria-label="Recent changelog activity">
+      {weeks.map((week, weekIndex) => (
+        <div key={`week-${weekIndex}`} className="changelog-calendar-week">
+          {week.map((day) => (
+            <div
+              key={day.date}
+              className={`changelog-calendar-day changelog-calendar-level-${day.level} ${day.isFuture ? 'is-future' : ''} ${day.isToday ? 'is-today' : ''} ${day.isOutOfRange ? 'is-outside-range' : ''}`}
+              aria-label={day.isOutOfRange ? undefined : day.tooltip}
+            >
+              {!day.isOutOfRange && (
+                <span className="changelog-calendar-tooltip">{day.tooltip}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
@@ -181,6 +242,28 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
   const setShowChangelogOnStartup = useSettingsStore((s) => s.setShowChangelogOnStartup);
 
   const groupedChangelog = useMemo(() => getGroupedChangelog(), []);
+  const changelogCalendar = useMemo(() => getChangelogCalendar(), []);
+  const featuredNotices = useMemo(
+    () =>
+      [FEATURED_VIDEO?.banner, BUILD_NOTICE, WIP_NOTICE].filter(
+        (notice): notice is ChangelogNoticeConfig => Boolean(notice)
+      ),
+    []
+  );
+  const featuredVideoEmbedUrl = useMemo(
+    () =>
+      FEATURED_VIDEO
+        ? `https://www.youtube.com/embed/${FEATURED_VIDEO.youtubeId}?rel=0&modestbranding=1&playsinline=1`
+        : '',
+    []
+  );
+  const attachCredentiallessVideoFrame = useCallback((node: HTMLIFrameElement | null) => {
+    if (!node || !featuredVideoEmbedUrl) return;
+    node.setAttribute('credentialless', '');
+    if (node.src !== featuredVideoEmbedUrl) {
+      node.src = featuredVideoEmbedUrl;
+    }
+  }, [featuredVideoEmbedUrl]);
 
   const handleClose = useCallback(() => {
     if (isClosing) return;
@@ -249,7 +332,14 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
               <h2 className="changelog-header-title">Changelog</h2>
             </div>
           </div>
-          <span className="changelog-version">v{APP_VERSION}</span>
+          <div className="changelog-header-center">
+            <button className="changelog-header-button" onClick={handleClose}>
+              Got it!
+            </button>
+          </div>
+          <div className="changelog-header-right">
+            <span className="changelog-version">v{APP_VERSION}</span>
+          </div>
         </div>
 
         {/* Scrollable content */}
@@ -257,41 +347,42 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
           {(FEATURED_VIDEO || BUILD_NOTICE) && (
             <div className="changelog-featured">
               <div className="changelog-featured-notices">
-                {FEATURED_VIDEO?.banner && (
-                  <NoticeCard notice={FEATURED_VIDEO.banner} className="changelog-video-notice" />
-                )}
-                {BUILD_NOTICE && (
-                  <NoticeCard notice={BUILD_NOTICE} />
-                )}
+                {featuredNotices.map((notice, index) => (
+                  <NoticeCard
+                    key={`${notice.type}-${notice.title}`}
+                    notice={notice}
+                    className={index === 0 ? 'changelog-video-notice' : ''}
+                    staggerIndex={index}
+                  />
+                ))}
               </div>
 
               {FEATURED_VIDEO && (
-                <div className="changelog-video">
-                  <a
-                    className="changelog-video-card"
-                    href={`https://www.youtube.com/watch?v=${FEATURED_VIDEO.youtubeId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <div className="changelog-video-container">
-                      <img
-                        className="changelog-video-thumbnail"
-                        src={`https://i.ytimg.com/vi/${FEATURED_VIDEO.youtubeId}/hqdefault.jpg`}
-                        alt={FEATURED_VIDEO.title}
-                      />
-                      <div className="changelog-video-overlay">
-                        <div className="changelog-video-play" aria-hidden="true">
-                          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                            <path d="M6 4.5v9l7-4.5-7-4.5z" fill="currentColor" />
-                          </svg>
-                        </div>
-                        <div className="changelog-video-meta">
-                          <span className="changelog-video-title">{FEATURED_VIDEO.title}</span>
-                          <span className="changelog-video-action">Open on YouTube</span>
-                        </div>
+                <div className="changelog-featured-side">
+                  <div className="changelog-video">
+                    <div className="changelog-video-shell">
+                      <div className="changelog-video-container">
+                        <iframe
+                          className="changelog-video-frame"
+                          title={FEATURED_VIDEO.title}
+                          loading="lazy"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          referrerPolicy="strict-origin-when-cross-origin"
+                          allowFullScreen
+                          ref={attachCredentiallessVideoFrame}
+                        />
                       </div>
+                      <a
+                        className="changelog-video-fallback"
+                        href={`https://www.youtube.com/watch?v=${FEATURED_VIDEO.youtubeId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Open on YouTube if the embed is blocked
+                      </a>
                     </div>
-                  </a>
+                  </div>
+                  <ReleaseCalendar weeks={changelogCalendar} />
                 </div>
               )}
             </div>
@@ -368,12 +459,8 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
               checked={dontShowAgain}
               onChange={(e) => setDontShowAgain(e.target.checked)}
             />
-            <span>Don't show on startup</span>
+            <span>Don't show this again</span>
           </label>
-          <button className="welcome-enter" onClick={handleClose}>
-            <span>Got it</span>
-            <kbd>Esc</kbd>
-          </button>
         </div>
       </div>
     </div>

@@ -47,7 +47,7 @@ Default model: `gpt-5.1`
 ### Editor Mode
 When enabled (default):
 - Includes timeline context in prompts
-- 76 editing tools available
+- 76 editing tools available (74 fully functional; 2 have registration bugs -- see [Code Bugs](#code-bugs) note below)
 - AI can manipulate timeline directly
 
 ---
@@ -96,7 +96,7 @@ Animate images:
 | Parameter | Options | Description |
 |-----------|---------|-------------|
 | **Provider** | Kling, Luma, Hailuo, Hunyuan, Wanx, SkyReels | AI video model provider |
-| **Version** | Provider-specific (e.g. Kling: v2.6, v2.5, v2.1, v1.6, v1.5) | Newer versions have better quality |
+| **Version** | Provider-specific (e.g. Kling: v2.6, v2.5, v2.1, v2.1-master, v1.6, v1.5) | Newer versions have better quality |
 | **Duration** | Provider-specific (e.g. 5s, 10s) | Video length |
 | **Aspect Ratio** | 16:9, 9:16, 1:1 | Output dimensions |
 | **Quality** | Standard, Professional | Pro is slower but higher quality (providers with multiple modes) |
@@ -230,6 +230,8 @@ All heavy computation runs off the main thread to keep the UI responsive:
 ## AI Editor Tools
 
 ### 76 Tools across 15 Categories
+
+> **Note:** Of 76 defined tools, 74 are fully functional. 2 tools have registration bugs: `openComposition` has an unregistered handler, and `searchVideos` has a name mismatch with the registered `searchYouTube` handler. See the codebase for details.
 
 #### Timeline State (3 tools)
 | Tool | Description |
@@ -397,13 +399,102 @@ endBatch()
 
 ---
 
+## AI Visual Feedback System
+
+When the AI executes tools, visual feedback is provided to the user so they can follow along with what the AI is doing.
+
+### Components
+
+| File | Purpose |
+|------|---------|
+| `aiFeedback.ts` | Visual feedback coordination -- panel/tab switching, preview canvas flash (shutter, undo/redo), timeline marker animations via CSS class toggling |
+| `executionState.ts` | Execution state tracking -- tracks whether an AI operation is active, manages stagger budget |
+| `aiActionFeedbackSlice.ts` | Timeline store slice that provides reactive state for AI action feedback in the UI |
+
+### Stagger Budget System
+
+To prevent overwhelming the user with instant bulk operations, AI tool execution uses a **stagger budget** system for smooth animations:
+
+- A total budget (default 3000ms) is allocated per AI operation
+- Visual delays (e.g., sequential split animations, batch step highlights) share this budget
+- `consumeStaggerDelay(remainingSteps)` spreads the remaining budget evenly across remaining steps
+- Once the budget is exhausted, remaining steps execute instantly (no unnecessary delays)
+- Maximum per-step delay is capped at 1000ms
+
+### Feedback Actions
+
+| Action | Visual Effect |
+|--------|--------------|
+| `activateDockPanel()` | Switches to and focuses a specific panel tab in the dock |
+| `openPropertiesTab()` | Opens a specific tab (transform, effects, masks, etc.) in the Properties panel |
+| `selectClipAndOpenTab()` | Selects a clip and opens the relevant properties tab |
+| `flashPreviewCanvas()` | Brief overlay flash on the preview (shutter for capture, undo/redo indicators) |
+| `animateMarker()` | Triggers CSS animation on a timeline marker |
+| `animateKeyframe()` | Triggers CSS animation on a keyframe indicator |
+
+All feedback functions are guarded by `isAIExecutionActive()` -- they only trigger during active AI tool execution, never during normal user interactions.
+
+---
+
+## AI Bridge Architecture
+
+External AI agents (e.g., Claude CLI) can execute AI tools via HTTP. Two bridge modes exist depending on the environment:
+
+### Development (HMR Bridge)
+
+In development, the Vite dev server proxies HTTP requests to the running app via HMR (Hot Module Replacement):
+
+```
+POST /api/ai-tools → Vite server → HMR WebSocket → browser → aiTools.execute() → HMR → HTTP response
+```
+
+- Implemented in `src/services/aiTools/bridge.ts`
+- Uses `import.meta.hot.on('ai-tools:execute', ...)` to receive requests
+- Uses `import.meta.hot.send('ai-tools:result', ...)` to return results
+- Supports `_list` and `_status` meta-commands alongside tool execution
+
+### Production (Native Helper Bridge)
+
+In production builds (no HMR available), the Rust native helper proxies HTTP to the app via WebSocket:
+
+```
+POST http://127.0.0.1:9877/api/ai-tools → Native Helper → WebSocket (port 9876) → browser → aiTools.execute()
+```
+
+- Native helper listens on HTTP port 9877 and WebSocket port 9876
+- Both modes converge at `executeToolInternal()` in `src/services/aiTools/handlers/index.ts`
+
+---
+
+## Scene Description
+
+`sceneDescriber.ts` integrates with **Qwen3-VL** (local AI model) for automated scene analysis. The service communicates with a local Python server running Qwen3-VL for native video understanding with temporal reasoning.
+
+- **Server:** `tools/qwen3vl-server/` -- Python server at `localhost:5555`
+- **Start command:** `cd tools/qwen3vl-server && venv\Scripts\python.exe server.py --preload`
+- **No API key required** -- runs entirely locally
+- **UI:** AI Scene Description panel (`SceneDescriptionPanel.tsx`) and Analysis tab in Properties panel
+- Produces time-coded scene segments with descriptions, synced to timeline playback
+
+### Supporting Services
+
+| Service | Purpose |
+|---------|---------|
+| `clipAnalyzer.ts` | Backend for AI clip analysis tools -- computes motion, focus, and brightness data per frame |
+| `clipTranscriber.ts` | Backend for AI transcription tools -- manages transcription pipeline for clips |
+
+---
+
 ## Transcription
 
 ### 4 Providers
 
 #### Local Whisper (Browser)
 - Uses `@huggingface/transformers`
-- `Xenova/whisper-tiny` model
+- Model selection is language-dependent:
+  - English: `Xenova/whisper-tiny.en`
+  - Other languages: `onnx-community/whisper-tiny`
+  - Legacy `whisperService.ts` still uses `Xenova/whisper-tiny`
 - No API key needed
 - Dynamically imported on first use
 
@@ -511,6 +602,8 @@ A dedicated `MultiCamPanel` component provides the full workflow UI:
 Settings dialog → API Keys:
 - **OpenAI** API key (for AI chat + transcription)
 - **PiAPI** key (for AI video generation — Kling, Luma, Hailuo, etc.)
+- **Kling Access Key** (`klingAccessKey`) -- for direct Kling API access (alternative to PiAPI)
+- **Kling Secret Key** (`klingSecretKey`) -- paired with the access key for Kling API authentication
 - **AssemblyAI** key (transcription)
 - **Deepgram** key (transcription)
 - **YouTube** Data API v3 key (optional)
@@ -568,4 +661,4 @@ Run tests: `npx vitest run`
 
 ---
 
-*Source: `src/components/panels/AIChatPanel.tsx`, `src/components/panels/AIVideoPanel.tsx`, `src/components/panels/SAM2Panel.tsx`, `src/components/panels/MultiCamPanel.tsx`, `src/components/preview/SAM2Overlay.tsx`, `src/services/sam2/SAM2Service.ts`, `src/services/sam2/SAM2ModelManager.ts`, `src/services/sam2/sam2Worker.ts`, `src/stores/sam2Store.ts`, `src/services/aiTools/` (directory), `src/services/claudeService.ts`, `src/services/piApiService.ts`, `src/stores/multicamStore.ts`, `src/services/multicamAnalyzer.ts`*
+*Source: `src/components/panels/AIChatPanel.tsx`, `src/components/panels/AIVideoPanel.tsx`, `src/components/panels/SAM2Panel.tsx`, `src/components/panels/MultiCamPanel.tsx`, `src/components/panels/SceneDescriptionPanel.tsx`, `src/components/preview/SAM2Overlay.tsx`, `src/services/sam2/SAM2Service.ts`, `src/services/sam2/SAM2ModelManager.ts`, `src/services/sam2/sam2Worker.ts`, `src/stores/sam2Store.ts`, `src/services/aiTools/` (directory), `src/services/aiTools/aiFeedback.ts`, `src/services/aiTools/executionState.ts`, `src/services/aiTools/bridge.ts`, `src/services/sceneDescriber.ts`, `src/services/claudeService.ts`, `src/services/piApiService.ts`, `src/stores/multicamStore.ts`, `src/services/multicamAnalyzer.ts`*

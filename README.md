@@ -4,7 +4,7 @@
 
 ### Browser-based Video Compositor
 
-[![Version](https://img.shields.io/badge/version-1.3.4-blue.svg)](https://github.com/Sportinger/MASterSelects/releases)
+[![Version](https://img.shields.io/badge/version-1.3.5-blue.svg)](https://github.com/Sportinger/MASterSelects/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 [![Watch the Demo](https://img.shields.io/badge/Watch_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/5ezX5ra0RTI)
@@ -19,7 +19,7 @@
 <tr>
 <td align="center"><b>30</b><br><sub>GPU Effects</sub></td>
 <td align="center"><b>37</b><br><sub>Blend Modes</sub></td>
-<td align="center"><b>2,200+</b><br><sub>Lines WGSL</sub></td>
+<td align="center"><b>2,500+</b><br><sub>Lines WGSL</sub></td>
 <td align="center"><b>76</b><br><sub>AI Tools</sub></td>
 <td align="center"><b>13</b><br><sub>Dependencies</sub></td>
 </tr>
@@ -55,7 +55,7 @@ No Adobe subscription, no patience for cracks, and every free online editor felt
 
 **The vision:** an editor where AI can directly operate the tool. The built-in chat connects to OpenAI and exposes **76 editing tools**. External agents can steer the running editor over a local HTTP bridge, and in development the Vite bridge still exists too. Live outputs still matter too - I've been doing video art for 16 years, so multi-output routing was never optional.
 
-Built with Claude as my pair-programmer. Every feature gets debugged, refactored, and beaten into shape until it does what I need. ~60k lines of TypeScript, ~2,200 lines of WGSL, and a Rust native helper for the stuff browsers still can't do cleanly.
+Built with Claude as my pair-programmer. Every feature gets debugged, refactored, and beaten into shape until it does what I need. ~120k lines of TypeScript, ~2,500 lines of WGSL, and a Rust native helper for the stuff browsers still can't do cleanly.
 
 ---
 
@@ -95,8 +95,8 @@ This requires the Native Helper to be running and a MasterSelects editor tab to 
 | [**Multicam AI**](docs/Features/Multicam-AI.md) | Sync cameras, transcribe footage, and generate Claude-powered multicam EDLs *(experimental)* |
 | [**Export Pipeline**](docs/Features/Export.md) | WebCodecs Fast, HTMLVideo Precise, FFmpeg WASM *(experimental / WIP)*, FCPXML |
 | [**Live EQ & Audio**](docs/Features/Audio.md) | 10-band parametric EQ with real-time Web Audio preview |
-| [**Download Panel**](docs/Features/YouTube.md) | YouTube, TikTok, Instagram, Twitter/X, Vimeo, and other yt-dlp-supported sites via Native Helper |
-| [**Text & Solids**](docs/Features/Text-Clips.md) | 57 Google Fonts, stroke, shadow, solid color clips |
+| [**Download Panel**](docs/Features/Download-Panel.md) | YouTube, TikTok, Instagram, Twitter/X, Vimeo, and other yt-dlp-supported sites via Native Helper |
+| [**Text & Solids**](docs/Features/Text-Clips.md) | 50 Google Fonts, stroke, shadow, solid color clips |
 | [**Proxy System**](docs/Features/Proxy-System.md) | GPU-accelerated proxies with resume and cache indicator |
 | [**Output Manager**](docs/Features/Preview.md) | Multi-window outputs, source routing, corner pin warping, slice masks |
 | [**Slot Grid**](docs/Features/UI-Panels.md) | Resolume-style 12x4 grid with multi-layer live playback |
@@ -167,7 +167,7 @@ If something breaks, refresh. If it's still broken, [open an issue](https://gith
 ## Tech Stack
 
 - **Frontend:** React 19, TypeScript, Zustand, Vite 7.2
-- **Rendering:** WebGPU + 2,200 lines of WGSL shaders
+- **Rendering:** WebGPU + 2,500+ lines of WGSL shaders
 - **Video:** WebCodecs, mp4box, mp4-muxer, webm-muxer, HTMLVideo fallback, experimental FFmpeg WASM export path
 - **Audio:** Web Audio API with 10-band live EQ, audio master clock, varispeed
 - **AI:** Built-in OpenAI editor chat with 76 tools, Native Helper HTTP bridge for Claude Code / external agents, Claude/Anthropic for experimental multicam EDLs, SAM2 via ONNX Runtime, local Whisper via Hugging Face Transformers, PiAPI video generation
