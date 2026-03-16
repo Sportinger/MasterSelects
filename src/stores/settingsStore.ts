@@ -61,6 +61,10 @@ interface SettingsState {
   nativeHelperPort: number;   // WebSocket port (default 9876)
   nativeHelperConnected: boolean;  // Current connection status
 
+  // TFE Backend
+  tfeBackendUrl: string;  // TFE Pipeline API URL (default: http://127.0.0.1:8786)
+  tfeBackendConnected: boolean;  // Current connection status
+
   // Mobile/Desktop view
   forceDesktopMode: boolean;  // Show desktop UI even on mobile devices
 
@@ -106,6 +110,8 @@ interface SettingsState {
   setNativeDecodeEnabled: (enabled: boolean) => void;
   setNativeHelperPort: (port: number) => void;
   setNativeHelperConnected: (connected: boolean) => void;
+  setTfeBackendUrl: (url: string) => void;
+  setTfeBackendConnected: (connected: boolean) => void;
   setForceDesktopMode: (force: boolean) => void;
   setGpuPowerPreference: (preference: GPUPowerPreference) => void;
   setCopyMediaToProject: (enabled: boolean) => void;
@@ -156,6 +162,8 @@ export const useSettingsStore = create<SettingsState>()(
       nativeDecodeEnabled: false, // Native FFmpeg decode off by default
       nativeHelperPort: 9876, // Default WebSocket port
       nativeHelperConnected: false, // Not connected initially
+      tfeBackendUrl: 'http://127.0.0.1:8786', // Default TFE API server
+      tfeBackendConnected: false, // Not connected initially
       forceDesktopMode: false, // Use responsive detection by default
       gpuPowerPreference: 'high-performance', // Prefer dGPU by default
       copyMediaToProject: true, // Copy imported files to Raw/ folder by default
@@ -230,6 +238,14 @@ export const useSettingsStore = create<SettingsState>()(
 
       setNativeHelperConnected: (connected) => {
         set({ nativeHelperConnected: connected });
+      },
+
+      setTfeBackendUrl: (url) => {
+        set({ tfeBackendUrl: url });
+      },
+
+      setTfeBackendConnected: (connected) => {
+        set({ tfeBackendConnected: connected });
       },
 
       setForceDesktopMode: (force) => {
@@ -329,6 +345,7 @@ export const useSettingsStore = create<SettingsState>()(
         turboModeEnabled: state.turboModeEnabled,
         nativeDecodeEnabled: state.nativeDecodeEnabled,
         nativeHelperPort: state.nativeHelperPort,
+        tfeBackendUrl: state.tfeBackendUrl,
         forceDesktopMode: state.forceDesktopMode,
         gpuPowerPreference: state.gpuPowerPreference,
         copyMediaToProject: state.copyMediaToProject,

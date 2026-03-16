@@ -11,6 +11,7 @@ import { TranscriptionSettings } from './settings/TranscriptionSettings';
 import { OutputSettings } from './settings/OutputSettings';
 import { PerformanceSettings } from './settings/PerformanceSettings';
 import { ApiKeysSettings } from './settings/ApiKeysSettings';
+import { TfeSettings } from './settings/TfeSettings';
 import './settings/SettingsDialog.css';
 
 interface SettingsDialogProps {
@@ -25,7 +26,8 @@ type SettingsCategory =
   | 'transcription'
   | 'output'
   | 'performance'
-  | 'apiKeys';
+  | 'apiKeys'
+  | 'tfe';
 
 interface CategoryConfig {
   id: SettingsCategory;
@@ -42,6 +44,7 @@ const categories: CategoryConfig[] = [
   { id: 'output', label: 'Output', icon: '\uD83D\uDCE4' },
   { id: 'performance', label: 'Performance', icon: '\u26A1' },
   { id: 'apiKeys', label: 'API Keys', icon: '\uD83D\uDD11' },
+  { id: 'tfe', label: 'TFE Pipeline', icon: '\uD83D\uDD27' },
 ];
 
 export function SettingsDialog({ onClose }: SettingsDialogProps) {
@@ -75,6 +78,7 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
       case 'output': return <OutputSettings />;
       case 'performance': return <PerformanceSettings />;
       case 'apiKeys': return <ApiKeysSettings localKeys={localKeys} onKeyChange={handleKeyChange} />;
+      case 'tfe': return <TfeSettings />;
       default: return null;
     }
   };

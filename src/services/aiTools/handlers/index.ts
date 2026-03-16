@@ -119,6 +119,22 @@ import {
   handleGetStatsHistory,
 } from './stats';
 
+import {
+  handleTfeGenerateThumbnail,
+  handleTfeGenerateTitle,
+  handleTfeVeoTextToVideo,
+  handleTfeVeoImageToVideo,
+  handleTfeMosaicRun,
+  handleTfeFfmpegTrim,
+  handleTfeFfmpegConcat,
+  handleTfeFfmpegImageToVideo,
+  handleTfeAnalyzeTasks,
+  handleTfeOptimizePrompt,
+  handleTfeRunPipeline,
+  handleTfeGetJobStatus,
+  handleTfeGetCapabilities,
+} from './tfe';
+
 // Handler registry - maps tool names to handler functions
 const timelineHandlers: Record<string, (args: Record<string, unknown>, store: ReturnType<typeof useTimelineStore.getState>) => Promise<ToolResult>> = {
   getTimelineState: handleGetTimelineState,
@@ -216,6 +232,23 @@ const youtubeHandlers: Record<string, (args: Record<string, unknown>) => Promise
   getYouTubeVideos: handleGetYouTubeVideos,
 };
 
+// TFE Pipeline handlers - self-contained, communicate with Python backend via HTTP
+const tfeHandlers: Record<string, (args: Record<string, unknown>) => Promise<ToolResult>> = {
+  tfeGenerateThumbnail: handleTfeGenerateThumbnail,
+  tfeGenerateTitle: handleTfeGenerateTitle,
+  tfeVeoTextToVideo: handleTfeVeoTextToVideo,
+  tfeVeoImageToVideo: handleTfeVeoImageToVideo,
+  tfeMosaicRun: handleTfeMosaicRun,
+  tfeFfmpegTrim: handleTfeFfmpegTrim,
+  tfeFfmpegConcat: handleTfeFfmpegConcat,
+  tfeFfmpegImageToVideo: handleTfeFfmpegImageToVideo,
+  tfeAnalyzeTasks: handleTfeAnalyzeTasks,
+  tfeOptimizePrompt: handleTfeOptimizePrompt,
+  tfeRunPipeline: handleTfeRunPipeline,
+  tfeGetJobStatus: handleTfeGetJobStatus,
+  tfeGetCapabilities: handleTfeGetCapabilities,
+};
+
 /**
  * Execute a tool by name
  * Dispatches to the appropriate handler based on tool name
@@ -244,6 +277,11 @@ export async function executeToolInternal(
   // Check YouTube handlers
   if (toolName in youtubeHandlers) {
     return youtubeHandlers[toolName](args);
+  }
+
+  // Check TFE Pipeline handlers
+  if (toolName in tfeHandlers) {
+    return tfeHandlers[toolName](args);
   }
 
   // Unknown tool
@@ -341,4 +379,18 @@ export {
   handleGetLogs,
   handleGetPlaybackTrace,
   handleGetStatsHistory,
+  // TFE Pipeline
+  handleTfeGenerateThumbnail,
+  handleTfeGenerateTitle,
+  handleTfeVeoTextToVideo,
+  handleTfeVeoImageToVideo,
+  handleTfeMosaicRun,
+  handleTfeFfmpegTrim,
+  handleTfeFfmpegConcat,
+  handleTfeFfmpegImageToVideo,
+  handleTfeAnalyzeTasks,
+  handleTfeOptimizePrompt,
+  handleTfeRunPipeline,
+  handleTfeGetJobStatus,
+  handleTfeGetCapabilities,
 };
