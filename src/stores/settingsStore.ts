@@ -26,6 +26,7 @@ interface APIKeys {
   assemblyai: string;
   deepgram: string;
   piapi: string;  // PiAPI key for AI video generation (Kling, Luma, etc.)
+  kieai: string;  // Kie.ai key for AI video generation (Kling 3.0, Seedance, etc.)
   youtube: string; // YouTube Data API v3 key (optional, Invidious works without)
   // Legacy Kling keys (deprecated, use piapi instead)
   klingAccessKey: string;
@@ -87,6 +88,7 @@ interface SettingsState {
 
   // Changelog settings
   showChangelogOnStartup: boolean;
+  lastSeenChangelogVersion: string | null;
 
   // UI state
   isSettingsOpen: boolean;
@@ -121,6 +123,7 @@ interface SettingsState {
   setUserBackground: (bg: string) => void;
   completeTutorial: (campaignId: string) => void;
   setShowChangelogOnStartup: (show: boolean) => void;
+  markChangelogSeen: (version: string) => void;
   openSettings: () => void;
   closeSettings: () => void;
   toggleSettings: () => void;
@@ -149,6 +152,7 @@ export const useSettingsStore = create<SettingsState>()(
         assemblyai: '',
         deepgram: '',
         piapi: '',
+        kieai: '',
         youtube: '',
         klingAccessKey: '',
         klingSecretKey: '',
@@ -173,6 +177,7 @@ export const useSettingsStore = create<SettingsState>()(
       userBackground: null, // Which program the user comes from
       completedTutorials: [], // Campaign IDs that have been completed
       showChangelogOnStartup: true, // Show changelog dialog on every startup
+      lastSeenChangelogVersion: null, // Latest app version whose changelog was acknowledged
       isSettingsOpen: false,
 
       // Output settings
@@ -284,6 +289,7 @@ export const useSettingsStore = create<SettingsState>()(
       },
 
       setShowChangelogOnStartup: (show) => set({ showChangelogOnStartup: show }),
+      markChangelogSeen: (version) => set({ lastSeenChangelogVersion: version }),
       openSettings: () => set({ isSettingsOpen: true }),
       closeSettings: () => set({ isSettingsOpen: false }),
       toggleSettings: () => set((state) => ({ isSettingsOpen: !state.isSettingsOpen })),
@@ -356,6 +362,7 @@ export const useSettingsStore = create<SettingsState>()(
         userBackground: state.userBackground,
         completedTutorials: state.completedTutorials,
         showChangelogOnStartup: state.showChangelogOnStartup,
+        lastSeenChangelogVersion: state.lastSeenChangelogVersion,
         outputResolution: state.outputResolution,
         fps: state.fps,
       }),

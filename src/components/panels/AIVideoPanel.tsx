@@ -13,14 +13,22 @@ import {
   getVideoProviders,
   getProvider,
   calculateCost,
-  type VideoProvider,
   type VideoTask,
   type TextToVideoParams,
   type ImageToVideoParams,
   type AccountInfo,
 } from '../../services/piApiService';
+import {
+  kieAiService,
+  getKieAiProviders,
+  getKieAiProvider,
+  calculateKieAiCost,
+} from '../../services/kieAiService';
 import { ImageCropper, exportCroppedImage, type CropData } from './ImageCropper';
 import './AIVideoPanel.css';
+
+// Video generation service backend
+type VideoService = 'piapi' | 'kieai';
 
 type GenerationType = 'text-to-video' | 'image-to-video';
 type PanelTab = 'generate' | 'history';
@@ -134,13 +142,34 @@ export function AIVideoPanel() {
   // Panel tab state
   const [activeTab, setActiveTab] = useState<PanelTab>('generate');
 
+  // Service selection (PiAPI vs Kie.ai)
+  const [selectedService, setSelectedService] = useState<VideoService>(() => {
+    // Default to whichever service has a key configured
+    if (apiKeys.kieai && !apiKeys.piapi) return 'kieai';
+    return 'piapi';
+  });
+
+  // Get providers for selected service
+  const providers = selectedService === 'kieai' ? getKieAiProviders() : getVideoProviders();
+
   // Provider and model selection
-  const [providers] = useState<VideoProvider[]>(() => getVideoProviders());
   const [selectedProvider, setSelectedProvider] = useState<string>(providers[0]?.id || 'kling');
   const [selectedVersion, setSelectedVersion] = useState<string>(providers[0]?.versions[0] || '2.6');
 
   // Get current provider config
-  const currentProvider = getProvider(selectedProvider) || providers[0];
+  const currentProvider = (selectedService === 'kieai'
+    ? getKieAiProvider(selectedProvider)
+    : getProvider(selectedProvider)) || providers[0];
+
+  // Reset provider when service changes
+  useEffect(() => {
+    const serviceProviders = selectedService === 'kieai' ? getKieAiProviders() : getVideoProviders();
+    const firstProvider = serviceProviders[0];
+    if (firstProvider) {
+      setSelectedProvider(firstProvider.id);
+      setSelectedVersion(firstProvider.versions[0]);
+    }
+  }, [selectedService]);
 
   // Generation type (default to image-to-video)
   const [generationType, setGenerationType] = useState<GenerationType>('image-to-video');
@@ -179,11 +208,16 @@ export function AIVideoPanel() {
   const [accountInfo, setAccountInfo] = useState<AccountInfo | null>(null);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
-  // Check if API credentials are available
-  const hasApiKey = !!apiKeys.piapi;
+  // Check if API credentials are available for the selected service
+  const hasApiKey = selectedService === 'kieai' ? !!apiKeys.kieai : !!apiKeys.piapi;
 
   // Fetch account balance
   const fetchAccountBalance = useCallback(async () => {
+    if (selectedService === 'kieai') {
+      // Kie.ai has no public balance endpoint
+      setAccountInfo(null);
+      return;
+    }
     if (!apiKeys.piapi) return;
 
     setIsLoadingBalance(true);
@@ -192,19 +226,21 @@ export function AIVideoPanel() {
       setAccountInfo(info);
     } catch (err) {
       log.error('Failed to fetch account balance', err);
-      // Don't show error to user, just log it
     } finally {
       setIsLoadingBalance(false);
     }
-  }, [apiKeys.piapi]);
+  }, [apiKeys.piapi, selectedService]);
 
   // Set API key when it changes and fetch balance
   useEffect(() => {
     if (apiKeys.piapi) {
       piApiService.setApiKey(apiKeys.piapi);
-      fetchAccountBalance();
     }
-  }, [apiKeys.piapi, fetchAccountBalance]);
+    if (apiKeys.kieai) {
+      kieAiService.setApiKey(apiKeys.kieai);
+    }
+    fetchAccountBalance();
+  }, [apiKeys.piapi, apiKeys.kieai, fetchAccountBalance]);
 
   // Update version when provider changes
   useEffect(() => {
@@ -385,12 +421,19 @@ export function AIVideoPanel() {
     }
   }, [importFile, tracks, addClip, addTrack, addToTimeline]);
 
+  // Get the active service instance
+  const getActiveService = useCallback(() => {
+    return selectedService === 'kieai' ? kieAiService : piApiService;
+  }, [selectedService]);
+
   // Generate video
   const generateVideo = useCallback(async () => {
     if (!prompt.trim() || isGenerating) return;
 
     setIsGenerating(true);
     setError(null);
+
+    const service = getActiveService();
 
     try {
       let taskId: string;
@@ -407,7 +450,7 @@ export function AIVideoPanel() {
           cfgScale,
         };
 
-        taskId = await piApiService.createTextToVideo(params);
+        taskId = await service.createTextToVideo(params);
       } else {
         // Image-to-video - use cropped images
         const params: ImageToVideoParams = {
@@ -423,7 +466,7 @@ export function AIVideoPanel() {
           endImageUrl: endImagePreview ? await getCroppedImageUrl(endImagePreview, endCropData) : undefined,
         };
 
-        taskId = await piApiService.createImageToVideo(params);
+        taskId = await service.createImageToVideo(params);
       }
 
       // Add job to list
@@ -440,7 +483,7 @@ export function AIVideoPanel() {
       setJobs(prev => [job, ...prev]);
 
       // Poll for completion
-      piApiService.pollTaskUntilComplete(taskId, (task) => {
+      service.pollTaskUntilComplete(taskId, (task) => {
         setJobs(prev => prev.map(j =>
           j.id === taskId
             ? {
@@ -485,7 +528,7 @@ export function AIVideoPanel() {
   }, [
     prompt, negativePrompt, selectedProvider, selectedVersion, duration, aspectRatio, mode, cfgScale,
     generationType, startImagePreview, startCropData, endImagePreview, endCropData, isGenerating,
-    importVideoToProject, getCroppedImageUrl,
+    importVideoToProject, getCroppedImageUrl, getActiveService,
   ]);
 
   // Remove job from list
@@ -535,8 +578,10 @@ export function AIVideoPanel() {
     await importVideoToProject({ ...job });
   }, [importVideoToProject]);
 
-  // Calculate current cost
-  const currentCost = calculateCost(selectedProvider, mode, duration);
+  // Calculate current cost based on active service
+  const currentCost = selectedService === 'kieai'
+    ? calculateKieAiCost(selectedProvider, mode, duration)
+    : calculateCost(selectedProvider, mode, duration);
 
   return (
     <div className={`ai-video-panel ${!hasApiKey ? 'no-api-key' : ''}`}>
@@ -545,17 +590,27 @@ export function AIVideoPanel() {
         <div className="ai-video-overlay">
           <div className="ai-video-overlay-content">
             <span className="no-key-icon">🎬</span>
-            <p>PiAPI key required for AI video generation</p>
+            <p>{selectedService === 'kieai' ? 'Kie.ai' : 'PiAPI'} key required for AI video generation</p>
             <span className="no-key-hint">
-              Access Kling, Luma, Hailuo, and more models
+              {selectedService === 'kieai'
+                ? 'Access Kling 3.0 via Kie.ai'
+                : 'Access Kling, Luma, Hailuo, and more models'}
             </span>
-            <button className="btn-settings" onClick={openSettings}>
-              Open Settings
-            </button>
+            <div className="no-key-actions">
+              <button className="btn-settings" onClick={openSettings}>
+                Open Settings
+              </button>
+              <button
+                className="btn-switch-service"
+                onClick={() => setSelectedService(selectedService === 'kieai' ? 'piapi' : 'kieai')}
+              >
+                Switch to {selectedService === 'kieai' ? 'PiAPI' : 'Kie.ai'}
+              </button>
+            </div>
           </div>
         </div>
       )}
-      {/* Sub-tabs with provider dropdown */}
+      {/* Sub-tabs with service + provider dropdowns */}
       <div className="panel-tabs-row">
         <div className="panel-tabs">
           <button
@@ -571,16 +626,28 @@ export function AIVideoPanel() {
             History ({history.length})
           </button>
         </div>
-        <select
-          className="provider-select"
-          value={selectedProvider}
-          onChange={(e) => setSelectedProvider(e.target.value)}
-          disabled={isGenerating}
-        >
-          {providers.map(p => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+        <div className="service-provider-selects">
+          <select
+            className="service-select"
+            value={selectedService}
+            onChange={(e) => setSelectedService(e.target.value as VideoService)}
+            disabled={isGenerating}
+            title="Video generation service"
+          >
+            <option value="piapi">PiAPI</option>
+            <option value="kieai">Kie.ai</option>
+          </select>
+          <select
+            className="provider-select"
+            value={selectedProvider}
+            onChange={(e) => setSelectedProvider(e.target.value)}
+            disabled={isGenerating}
+          >
+            {providers.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Content */}
@@ -637,7 +704,7 @@ export function AIVideoPanel() {
                   onDrop={handleStartDrop}
                   onUseCurrentFrame={useCurrentFrameStart}
                 />
-                {selectedProvider === 'kling' && (
+                {(selectedProvider === 'kling' || selectedProvider === 'kling-3.0') && (
                   <ImageCropper
                     label="End Frame (optional)"
                     imageUrl={endImagePreview}
@@ -743,7 +810,7 @@ export function AIVideoPanel() {
             )}
 
             {/* CFG Scale (Kling only) */}
-            {selectedProvider === 'kling' && (
+            {(selectedProvider === 'kling' || selectedProvider === 'kling-3.0') && (
               <div className="param-group cfg-slider">
                 <label>CFG Scale: {cfgScale.toFixed(2)}</label>
                 <input
@@ -772,25 +839,27 @@ export function AIVideoPanel() {
 
           {/* Credit Info */}
           <div className="credit-info">
-            <div className="credit-balance">
-              {accountInfo ? (
-                <span className="balance-amount">
-                  Balance: ${accountInfo.creditsUsd.toFixed(2)}
-                </span>
-              ) : (
-                <span className="balance-loading">
-                  {isLoadingBalance ? 'Loading...' : 'Balance: --'}
-                </span>
-              )}
-              <button
-                className="btn-refresh-balance"
-                onClick={fetchAccountBalance}
-                disabled={isLoadingBalance}
-                title="Refresh balance"
-              >
-                {isLoadingBalance ? '...' : '↻'}
-              </button>
-            </div>
+            {selectedService === 'piapi' && (
+              <div className="credit-balance">
+                {accountInfo ? (
+                  <span className="balance-amount">
+                    Balance: ${accountInfo.creditsUsd.toFixed(2)}
+                  </span>
+                ) : (
+                  <span className="balance-loading">
+                    {isLoadingBalance ? 'Loading...' : 'Balance: --'}
+                  </span>
+                )}
+                <button
+                  className="btn-refresh-balance"
+                  onClick={fetchAccountBalance}
+                  disabled={isLoadingBalance}
+                  title="Refresh balance"
+                >
+                  {isLoadingBalance ? '...' : '↻'}
+                </button>
+              </div>
+            )}
             <span className="credit-cost">
               Est. cost: ~${currentCost.toFixed(2)}
             </span>

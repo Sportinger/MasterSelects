@@ -47,6 +47,7 @@ export function ApiKeysSettings({ localKeys, onKeyChange }: ApiKeysSettingsProps
     assemblyai: false,
     deepgram: false,
     piapi: false,
+    kieai: false,
     youtube: false,
   });
 
@@ -117,6 +118,18 @@ export function ApiKeysSettings({ localKeys, onKeyChange }: ApiKeysSettingsProps
           show={showKeys.piapi}
           onToggle={() => toggleShowKey('piapi')}
           onChange={(v) => onKeyChange('piapi', v)}
+        />
+
+        <ApiKeyRow
+          label="Kie.ai API Key"
+          provider="kieai"
+          value={getKey('kieai')}
+          placeholder="Enter Kie.ai key..."
+          linkUrl="https://kie.ai"
+          linkText="Get API Key"
+          show={showKeys.kieai}
+          onToggle={() => toggleShowKey('kieai')}
+          onChange={(v) => onKeyChange('kieai', v)}
         />
       </div>
 
