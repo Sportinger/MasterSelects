@@ -218,6 +218,7 @@ class KieAiService {
       aspect_ratio: params.aspectRatio || '16:9',
       mode: params.mode || 'std',
       sound: false,
+      multi_shots: false,
     };
 
     if (params.negativePrompt) {
@@ -265,6 +266,7 @@ class KieAiService {
       aspect_ratio: params.aspectRatio || '16:9',
       mode: params.mode || 'std',
       sound: false,
+      multi_shots: false,
     };
 
     if (imageUrls.length > 0) {
