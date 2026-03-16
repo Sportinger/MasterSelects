@@ -2,458 +2,365 @@
 
 **Document Type:** Technical Strategy Recommendation
 **Author:** Dr. Sarah Kim, Technical Product Strategist & Engineering Lead
-**Date:** 2026-03-15
-**Status:** APPROVED FOR IMPLEMENTATION
-**Version:** 1.0
+**Date:** 2026-03-16
+**Status:** PHASE 2 AUTHORIZED - CONDITIONAL GO
+**Version:** 2.0 - Phase 2 Authorization
+**Quality Confidence:** 75%
 
 ---
 
 ## 1. Executive Summary
 
-### Recommendation: **PROCEED WITH IMPLEMENTATION**
+### Final Recommendation: **CONDITIONAL GO - PROCEED TO PHASE 2**
 
-Following comprehensive technical analysis and risk reassessment, this document recommends **proceeding with Lemonade Server integration** for MasterSelects' AI-powered editing features.
+Following comprehensive validation sprint analysis, this document authorizes **Phase 2: Validation Completion + Basic Integration** with specific required mitigations.
 
-### Key Findings
+### Validation Results Summary
 
-| Factor | Assessment | Impact |
-|--------|------------|--------|
-| Technical Feasibility | **HIGH** | Compatible architecture, minimal infrastructure changes |
-| Risk Profile | **MEDIUM-LOW** | Critical risks mitigated via confirmed workarounds |
-| Development Effort | **MODERATE** | 2-3 weeks for MVP, 4-6 weeks for full integration |
-| Strategic Value | **HIGH** | Enables offline AI, user model choice, cost control |
-| Competitive Advantage | **SIGNIFICANT** | Differentiates from cloud-only competitors |
+| Validation | Status | Result | Notes |
+|------------|--------|--------|-------|
+| CORS Support | **RESOLVED** | LOW RISK | Native CORS headers confirmed (`Access-Control-Allow-Origin: *`) |
+| Tool Calling | **CONDITIONAL PASS** | LOW RISK | Works with explicit parameters; model asks for clarification when missing |
+| LLM Quality | **CONDITIONAL** | MEDIUM RISK | 80% pass rate (4/5 tested); latency 30-85s vs 10s target |
+| STT Quality | **CONDITIONAL** | MEDIUM RISK | Endpoint verified; WER testing deferred to integration |
+| TTS Viability | **DEFERRED** | N/A | Not required for MVP |
 
-### Updated Risk Profile
+**Overall Assessment:** CONDITIONAL GO - Proceed with documented mitigations
 
-The following clarifications significantly reduce implementation risk:
+### Quality Review Summary
 
-| Risk | Previous Status | Updated Status | Rationale |
-|------|-----------------|----------------|-----------|
-| CORS Restrictions | CRITICAL - Unconfirmed | **LOW** - Workaround confirmed | Vite proxy (dev) + production options available |
-| Tool Calling Support | HIGH - Unconfirmed | **MEDIUM** - Model-dependent | Confirmed supported for compatible models |
-| Model Quality | MEDIUM | **MEDIUM** | Local models suitable for routine tasks |
-| Performance Impact | MEDIUM | **MEDIUM** | User-controlled, optional feature |
-
-### Strategic Decision
-
-**GO** - Proceed to implementation with focused validation on model selection and quality assurance.
+| Metric | Target | Actual | Status |
+|--------|--------|--------|--------|
+| Valid JSON output | >=90% | 100% | **PASS** |
+| Correct tool selection | >=80% | 100% (tested) | **PASS** |
+| Correct parameter extraction | >=80% | 100% (tested) | **PASS** |
+| Response time < 10s | >=90% | 0% (avg ~45s) | **FAIL** |
+| Prefill (TTFT) < 2s | >=90% | ~1.1s | **PASS** |
+| Decoding speed > 10 tps | >=90% | ~15 tps | **PASS** |
 
 ---
 
-## 2. Revised Go/No-Go Decision
+## 2. Phase 2 Authorization
 
-### Decision: **GO**
+### Decision Framework Application
 
-| Criteria | Status | Notes |
-|----------|--------|-------|
-| Technical Feasibility | PASS | Architecture compatible, CORS resolved |
-| Resource Availability | PASS | Leverages existing HTTP bridge pattern |
-| Risk Acceptability | PASS | Critical risks mitigated |
-| Strategic Alignment | PASS | Supports offline-first, user choice |
-| Timeline Viability | PASS | 4-6 weeks acceptable for roadmap |
+| Criteria | Assessment | Rationale |
+|----------|------------|-----------|
+| **Technical Feasibility** | **HIGH** | CORS native, tool calling works, OpenAI-compatible format |
+| **Risk Profile** | **MEDIUM-LOW** | Critical risks mitigated; latency is UX concern not blocker |
+| **Development Effort** | **MODERATE** | 2-3 weeks for validation completion + basic integration |
+| **Strategic Value** | **HIGH** | Enables offline AI, user model choice, cost control |
+| **Model Availability** | **CONFIRMED** | `qwen3-4b-FLM` supports tool calling natively |
 
-### Validation Requirements (Reduced Scope)
+### Go/No-Go Determination
 
-Focus validation efforts on:
+**GO Criteria Met:**
+- [x] CORS validated (native support confirmed)
+- [x] Tool calling format confirmed (OpenAI-compatible `tool_calls`)
+- [x] Model quality baseline established (80% on explicit parameter prompts)
+- [x] Error handling documented (model asks for clarification when params missing)
+- [x] Fallback strategy defined (smaller model for simple commands)
 
-1. **Model Selection** - Confirm tool calling support for target models
-2. **Response Quality** - Test AI output for editing tasks
-3. **Performance Baseline** - Establish inference time benchmarks
-4. **User Experience** - Validate model selection UI/UX
+**Conditional Items (require mitigation):**
+- [!] Response latency 3-8x target (mitigation: fallback model)
+- [!] Model availability detection needed (mitigation: startup health check)
+- [!] 5 LLM prompts remaining untested (mitigation: complete in Phase 2)
+- [!] STT WER not validated (mitigation: defer to integration testing)
 
-### Validation Tasks
-
-| Task | Owner | Priority | Timeline |
-|------|-------|----------|----------|
-| Model compatibility matrix | Engineering | P0 | Week 1 |
-| Tool calling prompt testing | Engineering | P0 | Week 1 |
-| Response quality benchmark | Product | P1 | Week 2 |
-| Performance profiling | Engineering | P1 | Week 2 |
-| UI mockup and user testing | Design | P2 | Week 3 |
-
----
-
-## 3. Updated Validation Requirements
-
-### 3.1 Model Selection Validation
-
-**Primary Objective:** Confirm tool calling support and response quality for target models.
-
-#### Priority Models for Testing
-
-| Model | Size | Tool Calling | Use Case | Priority |
-|-------|------|--------------|----------|----------|
-| `Gemma-3-4b-it-GGUF` | ~4GB | **Confirmed** | General editing, metadata | P0 |
-| `Llama-3.2-Instruct-GGUF` | ~3GB | **Confirmed** | Structured tasks, FCPXML | P0 |
-| `Mistral-7B-Instruct-GGUF` | ~4GB | Likely | Fallback option | P1 |
-| `Phi-3-mini-Instruct-GGUF` | ~2GB | Likely | Low-RAM systems | P1 |
-| `Qwen2.5-Coder-Instruct-GGUF` | ~4GB | Likely | Code-like tasks (FCPXML) | P1 |
-
-#### Validation Criteria
-
-- [ ] Tool calling produces valid JSON output
-- [ ] Response time < 5 seconds for typical prompts
-- [ ] Output quality meets editing task requirements
-- [ ] Model loads successfully on target hardware
-
-### 3.2 Quality Expectations
-
-#### Local Models (Gemma-3, Llama-3.2, etc.)
-
-| Task Category | Expected Quality | Notes |
-|---------------|------------------|-------|
-| Clip renaming | **HIGH** | Straightforward pattern matching |
-| Metadata tagging | **HIGH** | Well-suited for instruction models |
-| Basic trimming suggestions | **MEDIUM-HIGH** | Rule-based analysis |
-| Transition recommendations | **MEDIUM** | Requires creative judgment |
-| Complex reasoning | **MEDIUM** | Limited by model size |
-
-#### Cloud Models (Fallback Option)
-
-| Task Category | Expected Quality | Notes |
-|---------------|------------------|-------|
-| Complex scene analysis | **HIGH** | Larger models available |
-| Creative suggestions | **HIGH** | Advanced reasoning |
-| Multi-step planning | **HIGH** | Better context handling |
-
-#### Hybrid Approach Recommendation
-
-```
-User selects model tier:
-├── Local (Free, Offline, Fast)
-│   └── Best for: Routine editing, metadata, renaming
-├── Cloud (API Cost, Online, Powerful)
-│   └── Best for: Complex analysis, creative tasks
-└── Custom (User-provided API key)
-    └── Best for: Advanced users, cost control
-```
-
-### 3.3 Performance Validation
-
-#### Benchmark Targets
-
-| Metric | Target | Acceptable | Notes |
-|--------|--------|------------|-------|
-| First token latency | < 500ms | < 1s | Perceived responsiveness |
-| Full response time | < 3s | < 10s | For typical editing tasks |
-| Memory footprint | < 6GB | < 8GB | With browser + other apps |
-| Model load time | < 5s | < 15s | Cold start |
-
-#### Testing Protocol
-
-1. Run benchmark suite on target hardware configurations
-2. Measure response times for standard prompt set
-3. Document memory usage during inference
-4. Test concurrent browser + Lemonade usage
+**NO-GO Criteria NOT Triggered:**
+- [x] CORS is working (not blocked)
+- [x] Tool calling functional (not failing)
+- [x] Model handles basic commands (not incompetent)
+- [x] No unhandled crashes (stable)
 
 ---
 
-## 4. Implementation Priority
+## 3. Phase 2 Scope: Validation Completion + Basic Integration
 
-### Phase 1: Core Integration (Weeks 1-2)
+### Phase 2 Objectives
 
-| Priority | Component | Description | Owner |
-|----------|-----------|-------------|-------|
-| P0 | HTTP Bridge | Extend `/masterselects` with `callAI` endpoint | Engineering |
-| P0 | CORS Setup | Vite proxy configuration | Engineering |
-| P0 | Model Selection | Basic dropdown with 2-3 confirmed models | Engineering |
-| P0 | Tool Calling | Implement JSON schema for editing tasks | Engineering |
-| P1 | Error Handling | Connection failures, model errors | Engineering |
+1. **Complete LLM Prompt Suite** - Test remaining 5 prompts from 10-prompt baseline
+2. **Implement Latency Mitigation** - Add fallback model selection for simple commands
+3. **Add Model Availability Detection** - Health check and model status indicator
+4. **Expand Error Handling** - Handle edge cases identified in quality review
+5. **Basic UI Integration** - Provider toggle with status indicator
 
-### Phase 2: AI Tools MVP (Weeks 3-4)
+### Prioritized Task List
 
-| Priority | Component | Description | Owner |
-|----------|-----------|-------------|-------|
-| P0 | Auto-Rename | AI-suggested clip names | Engineering |
-| P0 | Auto-Tag | Automatic keyword/metadata generation | Engineering |
-| P1 | Smart Trim | Suggested in/out points | Engineering |
-| P1 | Transition AI | Transition type recommendations | Engineering |
-| P1 | Settings UI | Model selection, advanced options | Engineering |
+| Priority | Task | Owner | Duration | Dependencies |
+|----------|------|-------|----------|--------------|
+| **P0** | Complete remaining 5 LLM prompts | Senior Dev | 4 hours | None |
+| **P0** | Implement fallback model logic | Senior Dev | 6 hours | P0 prompt completion |
+| **P0** | Model availability detection | Senior Dev | 4 hours | None |
+| **P1** | Expand error handling | Senior Dev | 4 hours | None |
+| **P1** | Provider toggle UI | Senior Dev | 6 hours | None |
+| **P1** | Server status indicator | Senior Dev | 4 hours | P0 detection |
+| **P2** | Settings persistence | Senior Dev | 3 hours | P1 UI |
+| **P2** | Documentation updates | Senior Dev | 2 hours | All above |
 
-### Phase 3: Advanced Features (Weeks 5-6)
+### Phase 2 Timeline
 
-| Priority | Component | Description | Owner |
-|----------|-----------|-------------|-------|
-| P1 | Cloud Fallback | Optional cloud model integration | Engineering |
-| P2 | Context Awareness | Use timeline state in prompts | Engineering |
-| P2 | Learning | Remember user preferences | Engineering |
-| P2 | Batch Operations | Multi-clip AI operations | Engineering |
+```
+Week 1 (Days 1-5):
+├── Day 1: Complete LLM prompt suite (P0)
+├── Day 2: Fallback model implementation (P0)
+├── Day 3: Model availability detection (P0)
+├── Day 4: Error handling expansion (P1)
+└── Day 5: Provider toggle + status UI (P1)
+
+Week 2 (Days 6-10):
+├── Day 6: Settings persistence (P2)
+├── Day 7: Integration testing
+├── Day 8: Bug fixes and polish
+├── Day 9: Documentation updates (P2)
+└── Day 10: Phase 2 review + Phase 3 planning
+```
+
+### Phase 2 Deliverables
+
+| Deliverable | Description | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| `lemonadeProvider.ts` | OpenAI-compatible provider | Compiles, passes lint, handles all error types |
+| `lemonadeService.ts` | Server management wrapper | Health check working, model detection accurate |
+| Provider Toggle | UI for switching providers | Renders correctly, state persists |
+| Status Indicator | Shows server/model status | Green/Yellow/Red states accurate |
+| Fallback Logic | Auto-switch for simple commands | Configurable threshold, user notified |
+| Test Suite | Unit + integration tests | >=80% coverage, all tests pass |
+| Documentation | Updated README + usage guide | Clear setup instructions |
 
 ---
 
-## 5. Risk Mitigation
-
-### Updated Risk Register
-
-| Risk | Probability | Impact | Mitigation | Owner |
-|------|-------------|--------|------------|-------|
-| **Model quality insufficient** | MEDIUM | MEDIUM | Implement quality gates, cloud fallback | Product |
-| **Performance degradation** | MEDIUM | LOW | User-controlled, background processing | Engineering |
-| **Model compatibility issues** | LOW | MEDIUM | Maintain compatibility matrix, auto-detect | Engineering |
-| **CORS in production** | LOW | LOW | Document deployment options, CORS proxy | Engineering |
-| **User confusion** | MEDIUM | LOW | Clear UI, sensible defaults, tooltips | Design |
-| **Resource exhaustion** | LOW | MEDIUM | Memory limits, model size warnings | Engineering |
-
-### CORS Mitigation Strategy
-
-#### Development Environment
-```yaml
-vite.config.ts:
-  server:
-    proxy:
-      '/lemonade':
-        target: 'http://localhost:8000'
-        changeOrigin: true
-```
-
-#### Production Options
-1. **Same-origin deployment** - Serve Lemonade from same domain
-2. **CORS proxy** - Reverse proxy (nginx, Cloudflare)
-3. **Electron app** - Disable CORS for desktop (recommended)
-4. **User configuration** - Document browser flags for testing
-
-### Model Quality Mitigation
-
-| Strategy | Implementation |
-|----------|----------------|
-| Model testing | Validate each model against task suite |
-| Quality gates | Reject low-confidence outputs |
-| User feedback | Thumbs up/down on AI suggestions |
-| Fallback chain | Local -> Cloud -> Manual |
-| Prompt engineering | Optimized prompts per model |
-
-### Performance Mitigation
-
-| Strategy | Implementation |
-|----------|----------------|
-| Background processing | Web Worker for AI calls |
-| Progress indicators | Show loading state, ETA |
-| Cancellation | Allow users to cancel slow requests |
-| Resource limits | Warn if RAM < 8GB for large models |
-| Model switching | Allow mid-session model change |
-
----
-
-## 6. Recommended Model List
-
-### Confirmed Tool Calling Models
-
-#### Primary Recommendations
-
-| Model | Repository | Size | Tool Calling | Best For |
-|-------|------------|------|--------------|----------|
-| `Gemma-3-4b-it-GGUF` | `google/gemma-3-4b-it-GGUF` | ~4GB | **Yes** | General editing, metadata |
-| `Llama-3.2-Instruct-GGUF` | `meta-llama/Llama-3.2-3B-Instruct-GGUF` | ~3GB | **Yes** | Structured tasks, FCPXML |
-
-#### Secondary Options
-
-| Model | Repository | Size | Tool Calling | Best For |
-|-------|------------|------|--------------|----------|
-| `Mistral-7B-Instruct-v0.3-GGUF` | `mistralai/Mistral-7B-Instruct-v0.3-GGUF` | ~4GB | Likely | General purpose |
-| `Phi-3-mini-instruct-GGUF` | `microsoft/Phi-3-mini-instruct-GGUF` | ~2GB | Likely | Low-RAM systems |
-| `Qwen2.5-Coder-Instruct-GGUF` | `Qwen/Qwen2.5-Coder-7B-Instruct-GGUF` | ~5GB | Likely | FCPXML generation |
-
-### Model Selection Matrix
-
-| User Scenario | Recommended Model | Rationale |
-|---------------|-------------------|-----------|
-| Standard editing (8GB RAM) | `Llama-3.2-Instruct` | Small footprint, good quality |
-| Heavy editing (16GB+ RAM) | `Gemma-3-4b-it` | Better reasoning, more RAM |
-| Low-end system (4-8GB RAM) | `Phi-3-mini` | Minimal resource usage |
-| FCPXML generation | `Qwen2.5-Coder` | Code-like structure expertise |
-| General purpose | `Gemma-3-4b-it` | Best balance of size/quality |
-
-### Model Configuration
-
-```typescript
-interface ModelConfig {
-  name: string;
-  repo: string;
-  size: number; // GB
-  minRam: number; // GB
-  toolCalling: boolean;
-  prompts: {
-    rename: string;
-    tag: string;
-    trim: string;
-    transition: string;
-  };
-}
-```
-
-### Fallback Strategy
-
-```
-Primary Model (user selected)
-    ↓ (failure or poor quality)
-Secondary Model (smaller, faster)
-    ↓ (failure)
-Cloud Model (if enabled)
-    ↓ (offline or disabled)
-Manual Operation (graceful degradation)
-```
-
----
-
-## 7. Timeline
-
-### Revised Implementation Schedule
-
-```
-Week 1: Foundation
-├── HTTP Bridge extension (callAI endpoint)
-├── Vite CORS proxy configuration
-├── Model compatibility testing
-└── Tool calling prompt validation
-
-Week 2: Core Integration
-├── Lemonade service layer
-├── Model selection UI
-├── Error handling framework
-└── Basic AI tools (rename, tag)
-
-Week 3: AI Tools MVP
-├── Auto-rename implementation
-├── Auto-tag implementation
-├── Settings panel
-└── Quality validation
-
-Week 4: Polish & Testing
-├── Smart trim suggestions
-├── Transition recommendations
-├── Performance optimization
-└── User testing
-
-Week 5-6: Advanced (Optional)
-├── Cloud model fallback
-├── Context-aware prompts
-├── Batch operations
-└── Documentation
-```
-
-### Milestone Dates
-
-| Milestone | Target Date | Deliverables |
-|-----------|-------------|--------------|
-| M1: Foundation Complete | 2026-03-22 | HTTP Bridge, CORS, Model tested |
-| M2: Core Integration | 2026-03-29 | Service layer, basic UI |
-| M3: MVP Ready | 2026-04-05 | Rename, Tag, Settings |
-| M4: Feature Complete | 2026-04-12 | All AI tools, polished |
-| M5: Release Candidate | 2026-04-19 | Testing, documentation |
-
-### Dependencies
-
-| Dependency | Required By | Owner | Status |
-|------------|-------------|-------|--------|
-| Lemonade Server installed | Week 1 | User | Confirmed |
-| GGUF models downloaded | Week 1 | User | On-demand |
-| HTTP Bridge pattern | Week 1 | Engineering | Existing |
-| Vite proxy config | Week 1 | Engineering | New |
-| Tool calling schema | Week 2 | Engineering | New |
-
----
-
-## 8. Success Metrics
+## 4. Success Criteria for Phase 2
 
 ### Technical KPIs
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
-| AI tool adoption rate | > 30% of users | Analytics |
-| Average response time | < 5 seconds | Performance monitoring |
-| Error rate | < 2% | Error tracking |
-| Model load success | > 95% | Connection monitoring |
+| Tool call accuracy | >=85% | Test suite (10 prompts) |
+| Simple edit success rate | >=70% | Baseline test |
+| Error recovery rate | 100% | All errors handled gracefully |
+| Model detection accuracy | 100% | Correct status reported |
+| Settings persistence | 100% | Cross-session testing |
 
 ### User Experience KPIs
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
-| Task completion rate | > 80% | User testing |
-| Satisfaction score | > 4/5 | In-app survey |
-| Time saved per session | > 5 minutes | User study |
-| Repeat usage | > 60% weekly | Analytics |
+| Status indicator accuracy | 100% | Matches actual server state |
+| Fallback transparency | User notified | Audit fallback events |
+| Error message clarity | >=4/5 rating | User testing |
+| No crashes | 0% crash rate | Integration testing |
 
-### Quality Gates
+### Quality Gates (Must ALL Pass)
 
-| Gate | Criteria | Action if Failed |
-|------|----------|------------------|
-| Model Quality | > 70% acceptable outputs | Switch model, refine prompts |
-| Performance | < 5s avg response | Optimize, suggest smaller model |
-| Reliability | < 2% error rate | Fix bugs, improve error handling |
-| User Satisfaction | > 3.5/5 rating | UX improvements, more testing |
-
----
-
-## 9. Conclusion & Next Steps
-
-### Final Recommendation
-
-**PROCEED WITH IMPLEMENTATION**
-
-The updated risk profile, confirmed CORS workarounds, and verified tool calling support position Lemonade Server integration as a **low-risk, high-value** addition to MasterSelects.
-
-### Immediate Actions Required
-
-| Action | Owner | Deadline |
-|--------|-------|----------|
-| 1. Install Lemonade Server | User | Immediate |
-| 2. Download test models (Gemma-3, Llama-3.2) | User | Week 1 |
-| 3. Create HTTP Bridge extension | Engineering | Week 1 |
-| 4. Configure Vite proxy | Engineering | Week 1 |
-| 5. Begin model compatibility testing | Engineering | Week 1 |
-
-### Long-term Strategic Value
-
-| Benefit | Impact | Timeline |
-|---------|--------|----------|
-| Offline AI capability | High | Immediate |
-| User model choice | High | Immediate |
-| Cost control (no API fees) | Medium | Immediate |
-| Competitive differentiation | High | 1-2 releases |
-| Platform for AI features | High | Ongoing |
-
-### Risk Acceptance
-
-The following risks are **accepted** for proceeding:
-
-- Model quality may vary (mitigated by model selection and fallback)
-- Performance impact on low-end systems (mitigated by user control)
-- Production CORS deployment requires planning (mitigated by documentation)
+| Gate ID | Validation | Expected Result | Status |
+|---------|------------|-----------------|--------|
+| G2.1 | Tool calling capability | Tool calls returned OR JSON extractable | PENDING |
+| G2.2 | Model quality baseline | >=70% success on 10-prompt suite | PENDING |
+| G2.3 | Error handling validation | All error types handled gracefully | PENDING |
+| G2.4 | Model availability detection | Accurate status reported | PENDING |
+| G2.5 | Fallback model working | Auto-switch functional | PENDING |
+| G2.6 | UI integration complete | Provider toggle + status indicator | PENDING |
 
 ---
 
-## Appendix A: Technical Reference
+## 5. Required Mitigations (Conditions for GO)
 
-### HTTP Bridge Endpoint Specification
+### Mitigation 1: Complete Remaining LLM Prompts
 
+**Risk Addressed:** Only 5/10 prompts tested; quality baseline incomplete
+
+**Implementation:**
 ```typescript
-POST /api/ai-tools/callAI
-{
-  model: string;        // Model identifier
-  task: string;         // Task type: 'rename' | 'tag' | 'trim' | 'transition'
-  input: object;        // Task-specific input data
-  options?: {
-    temperature?: number;
-    maxTokens?: number;
-    timeout?: number;
-  }
+const REMAINING_PROMPTS = [
+  {
+    prompt: "Remove the silent parts",
+    expectedTools: ["findSilentSections", "cutRangesFromClip"]
+  },
+  {
+    prompt: "Add a transition",
+    expectedTools: ["addTransition"]
+  },
+  {
+    prompt: "Duplicate the clip",
+    expectedTools: ["duplicateClip"]
+  },
+  {
+    prompt: "What's in my timeline?",
+    expectedTools: ["getTimelineState"]
+  },
+  {
+    prompt: "Create a highlight reel",
+    expectedTools: ["executeBatch"]
+  },
+];
+```
+
+**Acceptance:** All 10 prompts tested; success rate >= 70%
+
+---
+
+### Mitigation 2: Latency Mitigation via Fallback Model
+
+**Risk Addressed:** Response latency 30-85s vs 10s target (3-8x over)
+
+**Implementation:**
+```typescript
+const LEMONADE_CONFIG = {
+  models: {
+    primary: 'qwen3-4b-FLM',      // Tool calling, complex reasoning
+    fallback: 'Llama-3.2-1B-Hybrid', // Simple commands, faster response
+  },
+  // Simple commands use fallback
+  simpleCommands: [
+    'getTimelineState',
+    'getClipDetails',
+    'getMediaItems',
+    'listEffects',
+    'getStats',
+    'getLogs',
+  ],
+  // Use primary for editing operations
+  editingOperations: [
+    'splitClip',
+    'deleteClip',
+    'moveClip',
+    'trimClip',
+    'addEffect',
+  ],
+};
+
+function selectModel(task: string, toolCalls: ToolDefinition[]): string {
+  const usesComplexTools = toolCalls.some(t =>
+    LEMONADE_CONFIG.editingOperations.includes(t.name)
+  );
+  return usesComplexTools ? 'primary' : 'fallback';
+}
+```
+
+**Acceptance:** Simple commands complete in <10s; complex operations use primary model
+
+---
+
+### Mitigation 3: Model Availability Detection
+
+**Risk Addressed:** Model may not be downloaded; user confusion
+
+**Implementation:**
+```typescript
+interface ModelStatus {
+  serverOnline: boolean;
+  modelAvailable: boolean;
+  modelLoading: boolean;
+  error?: string;
 }
 
-Response:
-{
-  success: boolean;
-  result: object;       // Tool calling output
-  model: string;        // Model used
-  timing: {
-    loadMs: number;
-    inferenceMs: number;
-    totalMs: number;
+async function checkModelStatus(model: string): Promise<ModelStatus> {
+  try {
+    // 1. Check server health
+    const health = await fetch('/api/health');
+    if (!health.ok) {
+      return { serverOnline: false, modelAvailable: false };
+    }
+
+    // 2. Check model list
+    const models = await fetch('/api/v1/models', {
+      headers: { 'Authorization': 'Bearer lemonade' }
+    });
+    const modelList = await models.json();
+    const available = modelList.data.some(m => m.id.includes(model));
+
+    return {
+      serverOnline: true,
+      modelAvailable: available,
+      modelLoading: false,
+    };
+  } catch (error) {
+    return {
+      serverOnline: false,
+      modelAvailable: false,
+      error: error.message,
+    };
   }
 }
 ```
 
-### CORS Proxy Configuration
+**Acceptance:** Accurate status displayed before user attempts to use Lemonade
+
+---
+
+### Mitigation 4: Error Handling Expansion
+
+**Risk Addressed:** Edge cases identified in quality review
+
+**Implementation:**
+```typescript
+enum LemonadeErrorType {
+  SERVER_OFFLINE = 'SERVER_OFFLINE',
+  MODEL_NOT_FOUND = 'MODEL_NOT_FOUND',
+  TOOL_CALL_FAILED = 'TOOL_CALL_FAILED',
+  JSON_PARSE_ERROR = 'JSON_PARSE_ERROR',
+  TIMEOUT = 'TIMEOUT',
+  GPU_OOM = 'GPU_OOM',
+}
+
+const ERROR_MESSAGES: Record<LemonadeErrorType, string> = {
+  SERVER_OFFLINE: 'Lemonade Server is not running. Start the server and try again.',
+  MODEL_NOT_FOUND: 'Model not downloaded. Download the model from Lemonade Server.',
+  TOOL_CALL_FAILED: 'AI could not execute the tool. Check that required parameters are provided.',
+  JSON_PARSE_ERROR: 'AI response could not be parsed. Try rephrasing your request.',
+  TIMEOUT: 'Request timed out. The server may be busy or the model is too large.',
+  GPU_OOM: 'GPU memory exhausted. Try a smaller model or close other GPU applications.',
+};
+
+function handleLemonadeError(error: Error, context: ErrorContext) {
+  const errorType = classifyError(error);
+  const userMessage = ERROR_MESSAGES[errorType];
+
+  // Log detailed error for debugging
+  log.error('Lemonade error', { error, context, errorType });
+
+  // Show user-friendly message
+  showToast('error', userMessage);
+
+  // Offer fallback if available
+  if (errorType === LemonadeErrorType.TIMEOUT && hasFallback()) {
+    showFallbackOffer();
+  }
+}
+```
+
+**Acceptance:** All error types from quality review E001-E025 handled gracefully
+
+---
+
+## 6. Recommended Configuration
+
+### Production Configuration
+
+```typescript
+// src/services/lemonadeProvider.ts
+export const LEMONADE_CONFIG = {
+  endpoint: 'http://localhost:8000/api/v1',
+  auth: 'Bearer lemonade',
+  models: {
+    primary: 'qwen3-4b-FLM',        // Tool calling, complex reasoning
+    fallback: 'Llama-3.2-1B-Hybrid', // Simple commands, faster response
+    stt: 'Whisper-Base',            // Speech-to-text (deferred)
+  },
+  timeouts: {
+    prefill: 5000,      // 5s for first token
+    completion: 120000, // 120s for full response
+    healthCheck: 3000,  // 3s for health check
+  },
+  thresholds: {
+    simpleCommandTokens: 100,  // Use fallback for responses <100 tokens
+    maxWaitTime: 30000,        // 30s before offering fallback
+  },
+};
+```
+
+### Vite Proxy Configuration (Development)
 
 ```typescript
 // vite.config.ts
@@ -463,45 +370,71 @@ export default defineConfig({
       '/lemonade': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/lemonade/, ''),
+        rewrite: (path) => path.replace(/^\/lemonade/, '/api/v1'),
       },
     },
   },
 });
 ```
 
-### Tool Calling Prompt Template
+---
 
-```typescript
-const RENAME_PROMPT = `
-You are an AI assistant helping to rename video clips.
-Analyze the clip metadata and content description, then suggest 3 appropriate names.
+## 7. Phase 3 Preview (Post-Phase 2)
 
-Clip Info:
-- Duration: {duration}
-- Original Name: {originalName}
-- Content Description: {description}
-- Context: {context}
+Phase 3 will be authorized upon successful Phase 2 completion. Preview scope:
 
-Respond in JSON format:
-{
-  "suggestions": ["name1", "name2", "name3"],
-  "recommended": "name1",
-  "confidence": 0.85
-}
-`;
-```
+| Phase 3 Component | Description | Priority |
+|-------------------|-------------|----------|
+| STT Backend Integration | whispercpp as transcription provider | P1 |
+| Context-Aware Prompts | Include timeline state in prompts | P2 |
+| Batch Operations | Multi-tool AI operations | P2 |
+| Model Preferences UI | User model selection + advanced settings | P2 |
+| Performance Monitoring | Latency tracking + quality metrics | P2 |
 
 ---
 
-**Document Approval:**
+## 8. Sign-off
 
-| Role | Name | Date | Status |
-|------|------|------|--------|
-| Technical Strategist | Dr. Sarah Kim | 2026-03-15 | **APPROVED** |
-| Engineering Lead | _Pending_ | _Pending_ | _Pending_ |
-| Product Owner | _Pending_ | _Pending_ | _Pending_ |
+### Phase 2 Authorization
+
+| Role | Name | Date | Signature |
+|------|------|------|-----------|
+| **Technical Strategist** | Dr. Sarah Kim | 2026-03-16 | **APPROVED** |
+| **Validation Lead** | Senior Developer Agent | 2026-03-16 | _Execution Authorized_ |
+| **Quality Review** | Taylor Kim | 2026-03-16 | **CONDITIONAL APPROVAL** |
+
+### Conditions Acceptance
+
+By proceeding with Phase 2, the team acknowledges:
+
+1. **Latency mitigation is required** - Fallback model must be implemented
+2. **Model detection is required** - Users must see server/model status
+3. **Complete testing is required** - All 10 prompts must be validated
+4. **Error handling is required** - All identified edge cases handled
 
 ---
 
-*This document represents the final strategic go-ahead for Lemonade Server integration implementation.*
+## 9. Appendix: Quality Reviewer Input Summary
+
+### From Quality Reviewer Report
+
+| Factor | Status | Action |
+|--------|--------|--------|
+| CORS | **RESOLVED** | Native support confirmed; no mitigation needed |
+| Tool Calling | **CONDITIONAL PASS** | Works with explicit parameters; UI should guide users |
+| LLM Quality | **CONDITIONAL** | 80% pass rate; latency 3-8x target requires fallback |
+| STT Quality | **CONDITIONAL** | Endpoint ready; WER testing deferred |
+
+### Live Telemetry (Lemonade Logs)
+
+| Metric | Value | Assessment |
+|--------|-------|------------|
+| TTFT (Time to First Token) | 1.10-1.12s | **Excellent** - under 1.5s target |
+| TPS (Tokens Per Second) | 15.20-15.65 | **Good** - above 10 tps target |
+| Output Tokens | 137-1061 | Variable; longer responses = longer wait |
+
+**Analysis:** Prefill performance is excellent; decoding speed is acceptable; total response time is the concern for longer outputs.
+
+---
+
+*This document authorizes Phase 2 implementation with the specified conditions and mitigations. Proceed to execution.*

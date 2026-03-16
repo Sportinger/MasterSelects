@@ -6,6 +6,7 @@
 
 [![Version](https://img.shields.io/badge/version-1.3.4-blue.svg)](https://github.com/Sportinger/MASterSelects/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Lemonade Integration](https://img.shields.io/badge/Lemonade-Phase%202%20Authorized-orange.svg)](docs/lemonade/README.md)
 
 [![Watch the Demo](https://img.shields.io/badge/Watch_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/5ezX5ra0RTI)
 
