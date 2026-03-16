@@ -240,7 +240,7 @@ function aiToolsBridge(): Plugin {
 }
 
 // https://vite.dev/config/
-export default defineConfig(({ command, mode }) => ({
+export default defineConfig(() => ({
   plugins: [
     react(),
     localFileServer(),
