@@ -1,9 +1,14 @@
 // AI Chat Panel - Chat interface with timeline editing tools using OpenAI API
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useSettingsStore, type AIProvider, type LemonadeModel } from '../../stores/settingsStore';
 import { AI_TOOLS, executeAITool, getQuickTimelineSummary } from '../../services/aiTools';
+import { lemonadeProvider, MODEL_PRESETS, type LemonadeMessage } from '../../services/lemonadeProvider';
+import { lemonadeService } from '../../services/lemonadeService';
+import { Logger } from '../../services/logger';
 import './AIChatPanel.css';
+
+const log = Logger.create('AIChatPanel');
 
 // Available OpenAI models
 const OPENAI_MODELS = [
@@ -30,6 +35,12 @@ const OPENAI_MODELS = [
   { id: 'gpt-4o', name: 'GPT-4o' },
   { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
 ];
+
+// Lemonade Server models (from provider)
+const LEMONADE_MODEL_OPTIONS = MODEL_PRESETS.map(p => ({
+  id: p.id,
+  name: `${p.name} (${p.size}) - ${p.description}`,
+}));
 
 // System prompt for editor mode
 const EDITOR_SYSTEM_PROMPT = `You are an AI video editing assistant with direct access to the timeline AND media panel. You can:
@@ -107,14 +118,15 @@ interface APIMessage {
 }
 
 export function AIChatPanel() {
-  const { apiKeys, openSettings } = useSettingsStore();
+  const { apiKeys, openSettings, aiProvider, lemonadeModel, lemonadeUseFallback, setLemonadeModel, setLemonadeUseFallback, setAiProvider } = useSettingsStore();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [model, setModel] = useState('gpt-5.1');
+  const [openaiModel, setOpenaiModel] = useState('gpt-5.1');
   const [error, setError] = useState<string | null>(null);
   const [editorMode, setEditorMode] = useState(true); // Enable tools by default
   const [currentToolAction, setCurrentToolAction] = useState<string | null>(null);
+  const [serverStatus, setServerStatus] = useState<'online' | 'offline' | 'checking'>('checking');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -123,8 +135,26 @@ export function AIChatPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, currentToolAction]);
 
-  // Check if API key is available
-  const hasApiKey = !!apiKeys.openai;
+  // Subscribe to Lemonade Server status updates
+  useEffect(() => {
+    // Initial check
+    lemonadeService.checkHealth().then(health => {
+      setServerStatus(health.status);
+    });
+
+    // Subscribe to status changes
+    const unsubscribe = lemonadeService.subscribe(status => {
+      setServerStatus(status.available ? 'online' : 'offline');
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Check if API key is available (only for OpenAI provider)
+  const hasApiKey = aiProvider === 'openai' ? !!apiKeys.openai : true;
+
+  // Get current model based on provider
+  const currentModel = aiProvider === 'lemonade' ? lemonadeModel : openaiModel;
 
   // Build API messages from chat history
   const buildAPIMessages = useCallback((userContent: string): APIMessage[] => {
@@ -177,10 +207,10 @@ export function AIChatPanel() {
     toolCalls: ToolCall[];
   }> => {
     // Newer models (GPT-5.x, o3, o4) use max_completion_tokens instead of max_tokens
-    const isNewerModel = model.startsWith('gpt-5') || model.startsWith('o3') || model.startsWith('o4');
+    const isNewerModel = openaiModel.startsWith('gpt-5') || openaiModel.startsWith('o3') || openaiModel.startsWith('o4');
 
     const requestBody: Record<string, unknown> = {
-      model,
+      model: openaiModel,
       messages: apiMessages,
       ...(isNewerModel
         ? { max_completion_tokens: 4096 }
@@ -223,11 +253,46 @@ export function AIChatPanel() {
       content: choice?.message?.content || null,
       toolCalls,
     };
-  }, [model, editorMode, apiKeys.openai]);
+  }, [openaiModel, editorMode, apiKeys.openai]);
 
-  // Send message to OpenAI (with tool calling loop)
+  // Call Lemonade Server API
+  const callLemonade = useCallback(async (messages: LemonadeMessage[]): Promise<{
+    content: string | null;
+    toolCalls: ToolCall[];
+  }> => {
+    log.debug('Calling Lemonade Server', { model: lemonadeModel, useFallback: lemonadeUseFallback });
+
+    // Configure provider with current settings
+    lemonadeProvider.configure({
+      model: lemonadeModel,
+      useFallback: lemonadeUseFallback,
+    });
+
+    const response = await lemonadeProvider.chatCompletion(messages, {
+      tools: editorMode ? AI_TOOLS : undefined,
+      maxTokens: 4096,
+    });
+
+    return {
+      content: response.content,
+      toolCalls: response.toolCalls,
+    };
+  }, [lemonadeModel, lemonadeUseFallback, editorMode]);
+
+  // Send message to AI provider (with tool calling loop)
   const sendMessage = useCallback(async () => {
-    if (!input.trim() || !hasApiKey || isLoading) return;
+    if (!input.trim() || isLoading) return;
+
+    // Check provider-specific requirements
+    if (aiProvider === 'openai' && !apiKeys.openai) {
+      setError('OpenAI API key required - please add it in Settings');
+      return;
+    }
+
+    if (aiProvider === 'lemonade' && serverStatus !== 'online') {
+      setError('Lemonade Server offline - Please start the server and try again');
+      return;
+    }
 
     const userContent = input.trim();
     const userMessage: Message = {
@@ -243,22 +308,72 @@ export function AIChatPanel() {
     setIsLoading(true);
 
     try {
-      const apiMessages = buildAPIMessages(userContent);
+      // Build messages based on provider
+      let apiMessages: APIMessage[] | LemonadeMessage[];
+
+      if (aiProvider === 'lemonade') {
+        // Build Lemonade messages
+        const lemonadeMessages: LemonadeMessage[] = [];
+
+        if (editorMode) {
+          lemonadeMessages.push({
+            role: 'system',
+            content: EDITOR_SYSTEM_PROMPT + getQuickTimelineSummary(),
+          });
+        }
+
+        // Add conversation history
+        for (const msg of messages) {
+          if (msg.role === 'user') {
+            lemonadeMessages.push({ role: 'user', content: msg.content });
+          } else if (msg.role === 'assistant') {
+            if (msg.toolCalls && msg.toolCalls.length > 0) {
+              lemonadeMessages.push({
+                role: 'assistant',
+                content: msg.content || null,
+                tool_calls: msg.toolCalls.map(tc => ({
+                  id: tc.id,
+                  type: 'function' as const,
+                  function: { name: tc.name, arguments: tc.arguments },
+                })),
+              });
+            } else {
+              lemonadeMessages.push({ role: 'assistant', content: msg.content });
+            }
+          } else if (msg.role === 'tool' && msg.toolName) {
+            lemonadeMessages.push({
+              role: 'tool',
+              content: msg.content,
+              tool_call_id: msg.id,
+            });
+          }
+        }
+
+        lemonadeMessages.push({ role: 'user', content: userContent });
+        apiMessages = lemonadeMessages;
+      } else {
+        // Build OpenAI messages (existing logic)
+        apiMessages = buildAPIMessages(userContent);
+      }
+
       let iterationCount = 0;
       const maxIterations = 50; // Safety limit for tool iterations
 
       while (iterationCount < maxIterations) {
         iterationCount++;
 
-        const { content, toolCalls } = await callOpenAI(apiMessages);
+        // Route to appropriate provider
+        const result = aiProvider === 'lemonade'
+          ? await callLemonade(apiMessages as LemonadeMessage[])
+          : await callOpenAI(apiMessages as APIMessage[]);
 
-        if (toolCalls.length === 0) {
+        if (result.toolCalls.length === 0) {
           // No tool calls - add final assistant message
-          if (content) {
+          if (result.content) {
             const assistantMessage: Message = {
               id: `assistant-${Date.now()}`,
               role: 'assistant',
-              content,
+              content: result.content,
               timestamp: new Date(),
             };
             setMessages(prev => [...prev, assistantMessage]);
@@ -270,17 +385,17 @@ export function AIChatPanel() {
         const assistantMessage: Message = {
           id: `assistant-${Date.now()}-${iterationCount}`,
           role: 'assistant',
-          content: content || '',
+          content: result.content || '',
           timestamp: new Date(),
-          toolCalls,
+          toolCalls: result.toolCalls,
         };
         setMessages(prev => [...prev, assistantMessage]);
 
         // Add assistant message to API messages
         apiMessages.push({
           role: 'assistant',
-          content: content || null,
-          tool_calls: toolCalls.map(tc => ({
+          content: result.content || null,
+          tool_calls: result.toolCalls.map(tc => ({
             id: tc.id,
             type: 'function' as const,
             function: { name: tc.name, arguments: tc.arguments },
@@ -288,10 +403,7 @@ export function AIChatPanel() {
         });
 
         // Execute each tool call
-        // IMPORTANT: Always add a tool result for every tool_call to keep
-        // the conversation valid for the OpenAI API. If a tool crashes,
-        // we still send an error result back.
-        for (const toolCall of toolCalls) {
+        for (const toolCall of result.toolCalls) {
           setCurrentToolAction(`Executing: ${toolCall.name}`);
 
           let args: Record<string, unknown> = {};
@@ -338,7 +450,7 @@ export function AIChatPanel() {
       setIsLoading(false);
       setCurrentToolAction(null);
     }
-  }, [input, hasApiKey, isLoading, buildAPIMessages, callOpenAI]);
+  }, [input, aiProvider, apiKeys.openai, serverStatus, isLoading, buildAPIMessages, callOpenAI, callLemonade, editorMode, messages]);
 
   // Handle key press
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -355,9 +467,9 @@ export function AIChatPanel() {
   }, []);
 
   return (
-    <div className={`ai-chat-panel ${!hasApiKey ? 'no-api-key' : ''}`}>
-      {/* API Key Required Overlay */}
-      {!hasApiKey && (
+    <div className={`ai-chat-panel ${!hasApiKey && aiProvider === 'openai' ? 'no-api-key' : ''}`}>
+      {/* API Key Required Overlay (OpenAI only) */}
+      {aiProvider === 'openai' && !hasApiKey && (
         <div className="ai-panel-overlay">
           <div className="ai-panel-overlay-content">
             <span className="no-key-icon">🔑</span>
@@ -368,10 +480,42 @@ export function AIChatPanel() {
           </div>
         </div>
       )}
+
+      {/* Lemonade Server Offline Overlay */}
+      {aiProvider === 'lemonade' && serverStatus !== 'online' && (
+        <div className="ai-panel-overlay">
+          <div className="ai-panel-overlay-content">
+            <span className="no-key-icon">📡</span>
+            <p>Lemonade Server offline</p>
+            <p className="overlay-hint">Start Lemonade Server on port 8000</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="ai-chat-header">
         <h2>AI Editor</h2>
         <div className="ai-chat-controls">
+          {/* Provider Selector */}
+          <select
+            className="provider-select"
+            value={aiProvider}
+            onChange={(e) => setAiProvider(e.target.value as AIProvider)}
+            disabled={isLoading}
+            title="Select AI Provider"
+          >
+            <option value="openai">OpenAI</option>
+            <option value="lemonade">Lemonade (Local)</option>
+          </select>
+
+          {/* Server Status Indicator (Lemonade only) */}
+          {aiProvider === 'lemonade' && (
+            <div className={`server-status ${serverStatus}`} title={`Server: ${serverStatus}`}>
+              <span className="status-dot"></span>
+              <span className="status-text">{serverStatus}</span>
+            </div>
+          )}
+
           <label className="editor-mode-toggle" title="Enable timeline editing tools">
             <input
               type="checkbox"
@@ -381,16 +525,44 @@ export function AIChatPanel() {
             />
             <span className="toggle-label">Tools</span>
           </label>
+
+          {/* Model Selector */}
           <select
             className="model-select"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
+            value={currentModel}
+            onChange={(e) => {
+              if (aiProvider === 'lemonade') {
+                setLemonadeModel(e.target.value as LemonadeModel);
+              } else {
+                setOpenaiModel(e.target.value);
+              }
+            }}
             disabled={isLoading}
           >
-            {OPENAI_MODELS.map(m => (
-              <option key={m.id} value={m.id}>{m.name}</option>
-            ))}
+            {aiProvider === 'lemonade' ? (
+              LEMONADE_MODEL_OPTIONS.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))
+            ) : (
+              OPENAI_MODELS.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))
+            )}
           </select>
+
+          {/* Fallback Toggle (Lemonade only) */}
+          {aiProvider === 'lemonade' && (
+            <label className="fallback-toggle" title="Use fast fallback model">
+              <input
+                type="checkbox"
+                checked={lemonadeUseFallback}
+                onChange={(e) => setLemonadeUseFallback(e.target.checked)}
+                disabled={isLoading}
+              />
+              <span className="toggle-label">Fast</span>
+            </label>
+          )}
+
           <button
             className="btn-clear"
             onClick={clearChat}
@@ -410,7 +582,9 @@ export function AIChatPanel() {
             <span className="welcome-hint">
               {editorMode
                 ? 'Ask me to edit your timeline - cut clips, remove silence, etc.'
-                : `Using ${OPENAI_MODELS.find(m => m.id === model)?.name}`}
+                : aiProvider === 'lemonade'
+                  ? `Using ${MODEL_PRESETS.find(m => m.id === currentModel)?.name}`
+                  : `Using ${OPENAI_MODELS.find(m => m.id === currentModel)?.name}`}
             </span>
           </div>
         ) : (

@@ -43,6 +43,12 @@
   color: var(--text-secondary);
 }
 
+.ai-panel-overlay-content .overlay-hint {
+  font-size: var(--font-md);
+  opacity: 0.7;
+  margin-top: var(--sp-1);
+}
+
 .ai-panel-overlay-content .btn-settings {
   padding: var(--sp-2) var(--sp-4);
   background: var(--accent);
@@ -79,6 +85,92 @@
   display: flex;
   gap: var(--sp-2);
   align-items: center;
+}
+
+/* Provider Selector */
+.provider-select {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  padding: var(--sp-1) var(--sp-2);
+  font-size: var(--font-md);
+  cursor: pointer;
+  font-weight: var(--font-medium);
+}
+
+.provider-select:hover {
+  border-color: var(--accent);
+}
+
+/* Server Status Indicator */
+.server-status {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-0-5) var(--sp-2);
+  border-radius: var(--radius-md);
+  font-size: var(--font-xs);
+  font-weight: var(--font-medium);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.server-status.online {
+  background: var(--success-subtle);
+  color: var(--success-text);
+  border: 1px solid var(--success-border);
+}
+
+.server-status.offline {
+  background: var(--danger-subtle);
+  color: var(--danger-text);
+  border: 1px solid var(--danger-border);
+}
+
+.server-status.checking {
+  background: var(--warning-subtle);
+  color: var(--warning-text);
+  border: 1px solid var(--warning-border);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: currentColor;
+  animation: pulse-dot 2s infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.status-text {
+  font-size: var(--font-xs);
+}
+
+/* Fallback Toggle */
+.fallback-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  cursor: pointer;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.fallback-toggle input {
+  cursor: pointer;
+}
+
+.fallback-toggle .toggle-label {
+  user-select: none;
+}
+
+.fallback-toggle input:checked + .toggle-label {
+  color: var(--accent);
 }
 
 .model-select {

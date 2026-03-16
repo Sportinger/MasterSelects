@@ -21,6 +21,12 @@ export type PreviewQuality = 1 | 0.5 | 0.25;
 // GPU power preference options
 export type GPUPowerPreference = 'high-performance' | 'low-power';
 
+// AI Provider options
+export type AIProvider = 'openai' | 'lemonade';
+
+// Lemonade model options
+export type LemonadeModel = 'qwen3-4b-FLM' | 'Gemma-3-4b-it-GGUF' | 'Llama-3.2-3B-Instruct-GGUF' | 'Llama-3.2-1B-Instruct-GGUF' | 'Phi-3-mini-instruct-GGUF';
+
 interface APIKeys {
   openai: string;
   assemblyai: string;
@@ -87,6 +93,13 @@ interface SettingsState {
   // UI state
   isSettingsOpen: boolean;
 
+  // AI Provider settings (Lemonade Server integration)
+  aiProvider: AIProvider;
+  lemonadeEndpoint: string;
+  lemonadeModel: LemonadeModel;
+  lemonadeUseFallback: boolean;
+  lemonadeServerAvailable: boolean; // transient, not persisted
+
   // Output settings
   // Default resolution for new compositions (active composition drives the engine)
   outputResolution: { width: number; height: number };
@@ -121,6 +134,13 @@ interface SettingsState {
 
   // Output actions
   setResolution: (width: number, height: number) => void;
+
+  // AI Provider actions
+  setAiProvider: (provider: AIProvider) => void;
+  setLemonadeEndpoint: (endpoint: string) => void;
+  setLemonadeModel: (model: LemonadeModel) => void;
+  setLemonadeUseFallback: (useFallback: boolean) => void;
+  setLemonadeServerAvailable: (available: boolean) => void;
 
   // Helpers
   getActiveApiKey: () => string | null;
@@ -170,6 +190,13 @@ export const useSettingsStore = create<SettingsState>()(
       // Output settings
       outputResolution: { width: 1920, height: 1080 },
       fps: 60,
+
+      // AI Provider settings
+      aiProvider: 'openai' as AIProvider,
+      lemonadeEndpoint: 'http://localhost:8000/api/v1',
+      lemonadeModel: 'qwen3-4b-FLM' as LemonadeModel,
+      lemonadeUseFallback: false,
+      lemonadeServerAvailable: false,
 
       // Actions
       setTheme: (theme) => set({ theme }),
@@ -277,6 +304,23 @@ export const useSettingsStore = create<SettingsState>()(
         set({ outputResolution: { width, height } });
       },
 
+      // AI Provider actions
+      setAiProvider: (provider) => {
+        set({ aiProvider: provider });
+      },
+      setLemonadeEndpoint: (endpoint) => {
+        set({ lemonadeEndpoint: endpoint });
+      },
+      setLemonadeModel: (model) => {
+        set({ lemonadeModel: model });
+      },
+      setLemonadeUseFallback: (useFallback) => {
+        set({ lemonadeUseFallback: useFallback });
+      },
+      setLemonadeServerAvailable: (available) => {
+        set({ lemonadeServerAvailable: available });
+      },
+
       // Helpers
       getActiveApiKey: () => {
         const { transcriptionProvider, apiKeys } = get();
@@ -340,6 +384,11 @@ export const useSettingsStore = create<SettingsState>()(
         showChangelogOnStartup: state.showChangelogOnStartup,
         outputResolution: state.outputResolution,
         fps: state.fps,
+        aiProvider: state.aiProvider,
+        lemonadeEndpoint: state.lemonadeEndpoint,
+        lemonadeModel: state.lemonadeModel,
+        lemonadeUseFallback: state.lemonadeUseFallback,
+        // Note: lemonadeServerAvailable is NOT persisted (transient UI state)
       }),
     }
   )
