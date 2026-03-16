@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Background: rounded square with TFE dark brown -->
+  <rect x="2" y="2" width="60" height="60" rx="14" ry="14" fill="#3D3528"/>
+  <!-- T letterform - simplified from Trendfix logo -->
+  <rect x="12" y="14" width="40" height="8" rx="2" fill="#FAFAFA"/>
+  <rect x="24" y="14" width="10" height="38" rx="2" fill="#FAFAFA"/>
+  <!-- Orange dot (signature "i" dot from Trendfix) -->
+  <circle cx="48" cy="46" r="5" fill="#E86A1E"/>
+</svg>
