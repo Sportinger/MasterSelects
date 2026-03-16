@@ -716,27 +716,35 @@ impl Session {
     async fn handle_matanyone_status(&self, id: &str) -> Response {
         let env_info = matanyone::get_env_info();
         let model_info = matanyone::get_model_info();
+        let cuda_info = matanyone::env::detect_cuda().await;
         let process_status = {
             let proc = self.state.matanyone_process.lock().await;
             proc.status().clone()
         };
+        let server_running = process_status == matanyone::process::ProcessStatus::Ready;
+        let server_port = self.state.matanyone_process.try_lock()
+            .map(|p| p.port())
+            .unwrap_or(0);
 
+        // Flat response matching what the frontend expects
         Response::ok(
             id,
             serde_json::json!({
-                "env": serde_json::to_value(&env_info).unwrap_or_default(),
-                "model": {
-                    "downloaded": model_info.downloaded,
-                    "model_path": model_info.model_path,
-                    "config_path": model_info.config_path,
-                    "size_bytes": model_info.size_bytes,
-                },
-                "process": {
-                    "status": process_status,
-                    "port": self.state.matanyone_process.try_lock()
-                        .map(|p| p.port())
-                        .unwrap_or(0),
-                },
+                "setup_status": if server_running { "running" }
+                    else if env_info.matanyone_installed && model_info.downloaded { "installed" }
+                    else if env_info.venv_exists { "partially_installed" }
+                    else { "not_installed" },
+                "python_version": env_info.python_version,
+                "cuda_available": cuda_info.available,
+                "cuda_version": cuda_info.version,
+                "gpu_name": cuda_info.gpu_name,
+                "vram_mb": cuda_info.vram_mb,
+                "model_downloaded": model_info.downloaded,
+                "venv_exists": env_info.venv_exists,
+                "deps_installed": env_info.deps_installed,
+                "matanyone_installed": env_info.matanyone_installed,
+                "server_running": server_running,
+                "server_port": server_port,
             }),
         )
     }

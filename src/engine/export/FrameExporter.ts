@@ -41,7 +41,68 @@ export class FrameExporter {
     this.exportMode = settings.exportMode ?? 'fast';
   }
 
+  private shouldRetryInPreciseMode(error: unknown): boolean {
+    const message = error instanceof Error
+      ? `${error.name}: ${error.message}`
+      : String(error);
+
+    return (
+      message.includes('FAST export failed') ||
+      message.includes('Decoder error') ||
+      message.includes('EncodingError') ||
+      message.includes('Decoding error') ||
+      message.includes('closed codec') ||
+      message.includes('FAST export decoder closed') ||
+      message.includes('Failed to execute \'reset\' on \'VideoDecoder\'')
+    );
+  }
+
+  private resetAttemptState(): void {
+    this.encoder = null;
+    this.audioPipeline = null;
+    this.frameTimes = [];
+    this.clipStates.clear();
+    this.parallelDecoder = null;
+    this.useParallelDecode = false;
+  }
+
   async export(onProgress: (progress: ExportProgress) => void): Promise<Blob | null> {
+    const initialMode = this.exportMode;
+    const attemptModes: ExportMode[] = initialMode === 'fast' ? ['fast', 'precise'] : [initialMode];
+    let fallbackAttempted = false;
+
+    for (const attemptMode of attemptModes) {
+      this.exportMode = attemptMode;
+      this.resetAttemptState();
+
+      try {
+        if (fallbackAttempted) {
+          log.warn('Retrying export in PRECISE mode after FAST export failure');
+        }
+
+        return await this.exportAttempt(onProgress);
+      } catch (error) {
+        log.error('Export error:', error);
+
+        if (
+          !this.isCancelled &&
+          !fallbackAttempted &&
+          initialMode === 'fast' &&
+          attemptMode === 'fast' &&
+          this.shouldRetryInPreciseMode(error)
+        ) {
+          fallbackAttempted = true;
+          continue;
+        }
+
+        return null;
+      }
+    }
+
+    return null;
+  }
+
+  private async exportAttempt(onProgress: (progress: ExportProgress) => void): Promise<Blob | null> {
     const { fps, startTime, endTime, width, height, includeAudio } = this.settings;
     const frameDuration = 1 / fps;
     const totalFrames = Math.ceil((endTime - startTime) * fps);
@@ -80,6 +141,7 @@ export class FrameExporter {
       log.info('Falling back to readPixels export path');
     }
 
+    let completed = false;
     try {
       // Prepare clips for export
       const preparation = await prepareClipsForExport(this.settings, this.exportMode);
@@ -221,13 +283,17 @@ export class FrameExporter {
       }
 
       const blob = await this.encoder.finish();
+      completed = true;
       log.info(`Export complete: ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
-      this.cleanup(originalDimensions);
       return blob;
-    } catch (error) {
-      log.error('Export error:', error);
+    } finally {
+      if (!completed) {
+        this.encoder?.cancel();
+        this.audioPipeline?.cancel();
+      }
       this.cleanup(originalDimensions);
-      return null;
+      this.encoder = null;
+      this.audioPipeline = null;
     }
   }
 

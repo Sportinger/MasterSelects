@@ -1,0 +1,10 @@
+Filename: nb2_ms_icon_timeline_v1.png
+Model: gemini-3.1-flash-image-preview
+Date: 2026-03-16T16:13:48.148607
+Aspect Ratio: 1:1
+Resolution: 1K
+Version: v1
+Size: 744215 bytes
+
+Prompt:
+A minimalist square app icon with large rounded corners for a video editing helper application. Dark background (#181818). In the center, an abstract representation of a video timeline - three horizontal bars of different lengths stacked vertically with small gaps. The top bar is white, the middle bar is muted gold/amber (#c4a44a), and the bottom bar is green (#4ade80). The bars have slightly rounded ends. A thin vertical playhead line in bright white crosses all three bars. Ultra minimalist, flat design, geometric, no text, no shadows, no 3D. Professional software icon suitable for Windows taskbar at 16px-256px sizes.

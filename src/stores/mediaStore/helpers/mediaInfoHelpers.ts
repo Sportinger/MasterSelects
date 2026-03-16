@@ -5,14 +5,13 @@ import { Logger } from '../../../services/logger';
 
 const log = Logger.create('MediaInfo');
 
-// Lazy-load mp4box only when needed (saves ~200KB from initial bundle)
-let _MP4Box: any = null;
-async function getMP4Box() {
-  if (!_MP4Box) {
-    const mod = await import('mp4box');
-    _MP4Box = (mod as any).default || mod;
+// Lazy-load mediabunny only when needed (tree-shaking friendly)
+let _mediabunny: typeof import('mediabunny') | null = null;
+async function getMediaBunny() {
+  if (!_mediabunny) {
+    _mediabunny = await import('mediabunny');
   }
-  return _MP4Box;
+  return _mediabunny;
 }
 
 export interface MediaInfo {
@@ -108,86 +107,71 @@ function parseCodecName(codec: string): string {
 }
 
 /**
- * Extract detailed media info using mp4box (for MP4/MOV/M4V files).
+ * Extract detailed media info using MediaBunny (for MP4/MOV/M4V files).
  */
 async function getMP4Info(file: File): Promise<Partial<MediaInfo>> {
-  const MP4Box = await getMP4Box();
-  return new Promise((resolve) => {
-    const mp4boxFile = MP4Box.createFile();
-    let resolved = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cleanup: { input: any } = { input: null };
+  try {
+    const mb = await getMediaBunny();
 
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        log.debug('MP4Box timeout', { file: file.name });
-        resolve({});
-      }
-    }, 5000);
+    const result = await Promise.race([
+      (async () => {
+        const input = new mb.Input({
+          formats: [mb.MP4, mb.QTFF],
+          source: new mb.BlobSource(file),
+        });
+        cleanup.input = input;
 
-    mp4boxFile.onReady = (info: any) => {
-      if (resolved) return;
-      resolved = true;
-      clearTimeout(timeout);
+        const videoTracks = await input.getVideoTracks();
+        const audioTracks = await input.getAudioTracks();
+        const videoTrack = videoTracks[0] ?? null;
+        const audioTrack = audioTracks[0] ?? null;
 
-      const videoTrack = info.videoTracks[0];
-      const audioTrack = info.audioTracks[0];
+        // Get codec parameter strings (e.g. 'avc1.64001f', 'mp4a.40.2')
+        const videoCodecStr = videoTrack ? await videoTrack.getCodecParameterString() : null;
+        const audioCodecStr = audioTrack ? await audioTrack.getCodecParameterString() : null;
 
-      const duration = info.duration / info.timescale;
-      const bitrate = file.size > 0 && duration > 0
-        ? Math.round((file.size * 8) / duration)
-        : undefined;
+        // Compute duration and bitrate
+        const duration = await input.computeDuration();
+        const bitrate = file.size > 0 && duration > 0
+          ? Math.round((file.size * 8) / duration)
+          : undefined;
 
-      resolve({
-        codec: videoTrack ? parseCodecName(videoTrack.codec) : undefined,
-        audioCodec: audioTrack ? parseCodecName(audioTrack.codec) : undefined,
-        hasAudio: info.audioTracks.length > 0,
-        bitrate,
-        fps: videoTrack ? Math.round(videoTrack.nb_samples / (videoTrack.duration / videoTrack.timescale) * 100) / 100 : undefined,
-      });
-    };
-
-    mp4boxFile.onError = (error: any) => {
-      if (resolved) return;
-      resolved = true;
-      clearTimeout(timeout);
-      log.debug('MP4Box error', { file: file.name, error });
-      resolve({});
-    };
-
-    // Read file in chunks
-    const chunkSize = 1024 * 1024; // 1MB chunks
-    let offset = 0;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (resolved) return;
-      const buffer = e.target?.result as ArrayBuffer;
-      if (buffer) {
-        (buffer as any).fileStart = offset;
-        mp4boxFile.appendBuffer(buffer as any);
-        offset += buffer.byteLength;
-
-        // Read more if needed (up to 5MB should be enough for metadata)
-        if (offset < Math.min(file.size, 5 * 1024 * 1024)) {
-          const nextChunk = file.slice(offset, offset + chunkSize);
-          reader.readAsArrayBuffer(nextChunk);
-        } else {
-          mp4boxFile.flush();
+        // Compute FPS from packet stats (only scan first ~200 packets for speed)
+        let fps: number | undefined;
+        if (videoTrack) {
+          try {
+            const stats = await videoTrack.computePacketStats(200);
+            if (stats.averagePacketRate > 0) {
+              fps = Math.round(stats.averagePacketRate * 100) / 100;
+            }
+          } catch {
+            // FPS computation can fail for very short clips
+          }
         }
-      }
-    };
 
-    reader.onerror = () => {
-      if (resolved) return;
-      resolved = true;
-      clearTimeout(timeout);
-      resolve({});
-    };
+        return {
+          codec: videoCodecStr ? parseCodecName(videoCodecStr) : undefined,
+          audioCodec: audioCodecStr ? parseCodecName(audioCodecStr) : undefined,
+          hasAudio: audioTracks.length > 0,
+          bitrate,
+          fps,
+        } as Partial<MediaInfo>;
+      })(),
+      new Promise<Partial<MediaInfo>>((resolve) => setTimeout(() => {
+        log.debug('MediaBunny timeout', { file: file.name });
+        resolve({});
+      }, 5000)),
+    ]);
 
-    // Start reading
-    const firstChunk = file.slice(0, chunkSize);
-    reader.readAsArrayBuffer(firstChunk);
-  });
+    return result;
+  } catch (error) {
+    log.debug('MediaBunny error', { file: file.name, error });
+    return {};
+  } finally {
+    try { cleanup.input?.dispose(); } catch { /* ignore */ }
+  }
 }
 
 /**
@@ -201,7 +185,7 @@ export async function getMediaInfo(
   const fileSize = file.size;
   const ext = file.name.split('.').pop()?.toLowerCase();
 
-  // For MP4/MOV/M4V, use mp4box for accurate codec detection
+  // For MP4/MOV/M4V, use MediaBunny for accurate codec detection
   const useMP4Box = type === 'video' && ['mp4', 'mov', 'm4v', 'mp4v', '3gp'].includes(ext || '');
 
   return new Promise((resolve) => {
@@ -246,7 +230,7 @@ export async function getMediaInfo(
           bitrate: fileSize > 0 && duration > 0 ? Math.round((fileSize * 8) / duration) : undefined,
         };
 
-        // Get detailed info from mp4box
+        // Get detailed info from MediaBunny
         if (useMP4Box) {
           try {
             const mp4Info = await getMP4Info(file);
@@ -257,7 +241,7 @@ export async function getMediaInfo(
               fps: mp4Info.fps || basicInfo.fps,
             });
           } catch (e) {
-            log.debug('MP4Box failed, using fallback', { file: file.name });
+            log.debug('MediaBunny failed, using fallback', { file: file.name });
             basicInfo.codec = getCodecFromExtension(file.name);
           }
         } else {

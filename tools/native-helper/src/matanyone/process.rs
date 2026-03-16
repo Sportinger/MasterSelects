@@ -99,7 +99,8 @@ impl MatAnyoneProcess {
             "Starting MatAnyone2 inference server"
         );
 
-        let child = Command::new(python_path)
+        let mut command = Command::new(python_path);
+        command
             .arg(server_script)
             .arg("--port")
             .arg(port.to_string())
@@ -107,7 +108,10 @@ impl MatAnyoneProcess {
             .arg(models_dir)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
-            .kill_on_drop(true)
+            .kill_on_drop(true);
+        hide_console_window(&mut command);
+
+        let child = command
             .spawn()
             .map_err(|e| {
                 let msg = format!("Failed to spawn Python process: {e}");
@@ -280,6 +284,18 @@ impl MatAnyoneProcess {
             );
         }
     }
+}
+
+#[cfg(windows)]
+fn hide_console_window(command: &mut Command) -> &mut Command {
+    use std::os::windows::process::CommandExt;
+
+    command.creation_flags(0x08000000)
+}
+
+#[cfg(not(windows))]
+fn hide_console_window(command: &mut Command) -> &mut Command {
+    command
 }
 
 impl Drop for MatAnyoneProcess {

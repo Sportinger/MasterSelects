@@ -2,6 +2,31 @@
 
 use std::path::PathBuf;
 
+/// Apply CREATE_NO_WINDOW flag on Windows to prevent terminal popups.
+/// Call this on any `tokio::process::Command` before `.output()` or `.spawn()`.
+#[cfg(windows)]
+pub fn no_window(cmd: &mut tokio::process::Command) -> &mut tokio::process::Command {
+    use std::os::windows::process::CommandExt;
+    cmd.creation_flags(0x08000000)
+}
+
+#[cfg(not(windows))]
+pub fn no_window(cmd: &mut tokio::process::Command) -> &mut tokio::process::Command {
+    cmd
+}
+
+/// Apply CREATE_NO_WINDOW flag on Windows for std::process::Command.
+#[cfg(windows)]
+pub fn no_window_std(cmd: &mut std::process::Command) -> &mut std::process::Command {
+    use std::os::windows::process::CommandExt;
+    cmd.creation_flags(0x08000000)
+}
+
+#[cfg(not(windows))]
+pub fn no_window_std(cmd: &mut std::process::Command) -> &mut std::process::Command {
+    cmd
+}
+
 /// Get the default download directory for videos
 pub fn get_download_dir() -> PathBuf {
     let base = std::env::temp_dir();

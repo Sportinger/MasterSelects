@@ -49,7 +49,8 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
 
   // Detect type using shared helper from clipSlice
   const type = detectMediaType(file) as 'video' | 'audio' | 'image';
-  const url = URL.createObjectURL(file);
+  let canonicalFile = file;
+  let url = URL.createObjectURL(file);
 
   // Get info and thumbnail in parallel
   const [info, rawThumbnail] = await Promise.all([
@@ -69,6 +70,27 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
   // Copy to Raw folder if enabled (unified - was 3x duplicate)
   const copyResult = await copyToRawIfEnabled(file, id);
 
+  if (copyResult) {
+    // The project-local RAW copy is the canonical media source. Promote it to the
+    // primary handle so timeline clips and exports do not depend on the original file.
+    fileSystemService.storeFileHandle(id, copyResult.handle);
+    await projectDB.storeHandle(`media_${id}`, copyResult.handle);
+
+    try {
+      const projectFile = await copyResult.handle.getFile();
+      URL.revokeObjectURL(url);
+      canonicalFile = projectFile;
+      url = URL.createObjectURL(projectFile);
+    } catch (e) {
+      log.warn('Failed to promote RAW copy as canonical media source', {
+        id,
+        name: file.name,
+        projectPath: copyResult.relativePath,
+        error: e,
+      });
+    }
+  }
+
   // Build MediaFile
   const mediaFile: MediaFile = {
     id,
@@ -76,11 +98,11 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
     type,
     parentId: parentId ?? null,
     createdAt: Date.now(),
-    file,
+    file: canonicalFile,
     url,
     thumbnailUrl,
     fileHash,
-    hasFileHandle: !!handle || !!copyResult?.handle,
+    hasFileHandle: !!copyResult?.handle || !!handle,
     filePath: handle?.name || file.name,
     absolutePath,
     projectPath: copyResult?.relativePath,

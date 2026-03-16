@@ -31,6 +31,14 @@ export async function seekAllClipsToTime(
   await seekSequentialMode(ctx, clipStates);
 }
 
+function getExportVideoElement(
+  clipId: string,
+  clipStates: Map<string, ExportClipState>,
+  fallbackVideo: HTMLVideoElement | undefined
+): HTMLVideoElement | null {
+  return clipStates.get(clipId)?.preciseVideoElement ?? fallbackVideo ?? null;
+}
+
 async function seekSequentialMode(
   ctx: FrameContext,
   clipStates: Map<string, ExportClipState>
@@ -49,7 +57,12 @@ async function seekSequentialMode(
 
       for (const nestedClip of clip.nestedClips) {
         if (nestedTime >= nestedClip.startTime && nestedTime < nestedClip.startTime + nestedClip.duration) {
-          if (nestedClip.source?.videoElement) {
+          const nestedVideo = getExportVideoElement(
+            nestedClip.id,
+            clipStates,
+            nestedClip.source?.videoElement
+          );
+          if (nestedVideo) {
             const nestedLocalTime = nestedTime - nestedClip.startTime;
             const nestedSpeed = nestedClip.speed ?? 1;
             const speedAdjusted = nestedLocalTime * Math.abs(nestedSpeed);
@@ -57,7 +70,7 @@ async function seekSequentialMode(
               ? nestedClip.outPoint - speedAdjusted
               : nestedClip.inPoint + speedAdjusted;
             const nestedState = clipStates.get(nestedClip.id);
-            seekPromises.push(seekVideo(nestedClip.source.videoElement, nestedClipTime).then(() => {
+            seekPromises.push(seekVideo(nestedVideo, nestedClipTime).then(() => {
               updateRuntimePlaybackTime(nestedState?.runtimeSource, nestedClipTime, 'export');
             }));
           }
@@ -67,7 +80,10 @@ async function seekSequentialMode(
     }
 
     // Handle regular video clips
-    if (clip.source?.type === 'video' && clip.source.videoElement) {
+    const exportVideo = clip.source?.type === 'video'
+      ? getExportVideoElement(clip.id, clipStates, clip.source.videoElement)
+      : null;
+    if (clip.source?.type === 'video' && exportVideo) {
       const clipLocalTime = time - clip.startTime;
 
       // Calculate clip time (handles speed keyframes and reversed clips)
@@ -93,7 +109,7 @@ async function seekSequentialMode(
         }));
       } else {
         // PRECISE MODE: HTMLVideoElement seeking
-        seekPromises.push(seekVideo(clip.source.videoElement, clipTime).then(() => {
+        seekPromises.push(seekVideo(exportVideo, clipTime).then(() => {
           updateRuntimePlaybackTime(clipState?.runtimeSource, clipTime, 'export');
         }));
       }
@@ -108,61 +124,184 @@ async function seekSequentialMode(
 /**
  * Seek a video element to a specific time with frame-accurate waiting.
  */
-export function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
+function waitForVideoCondition(
+  video: HTMLVideoElement,
+  events: Array<'loadedmetadata' | 'loadeddata' | 'canplay' | 'canplaythrough' | 'seeked' | 'error'>,
+  timeoutMs: number,
+  ready: () => boolean
+): Promise<boolean> {
   return new Promise((resolve) => {
-    const targetTime = Math.max(0, Math.min(time, video.duration || 0));
-
-    const timeout = setTimeout(() => {
-      log.warn(`Seek timeout at ${targetTime}`);
-      resolve();
-    }, 500); // 500ms for AV1 and other slow-decoding codecs
-
-    const waitForFrame = () => {
-      // Check for requestVideoFrameCallback without type narrowing issues
-      const hasRvfc = typeof (video as any).requestVideoFrameCallback === 'function';
-      if (hasRvfc) {
-        (video as any).requestVideoFrameCallback(() => {
-          clearTimeout(timeout);
-          resolve();
-        });
-      } else {
-        // Fallback: wait for readyState using setTimeout for export reliability
-        let retries = 0;
-        const maxRetries = 30;
-
-        const waitForReady = () => {
-          retries++;
-          if (!video.seeking && video.readyState >= 3) {
-            clearTimeout(timeout);
-            // Use setTimeout instead of requestAnimationFrame for export
-            setTimeout(() => {
-              setTimeout(() => resolve(), 16);
-            }, 16);
-          } else if (retries < maxRetries) {
-            setTimeout(waitForReady, 16);
-          } else {
-            clearTimeout(timeout);
-            resolve();
-          }
-        };
-        waitForReady();
-      }
-    };
-
-    // If already at correct time, still wait for frame callback
-    if (Math.abs(video.currentTime - targetTime) < 0.01 && !video.seeking && video.readyState >= 3) {
-      waitForFrame();
+    if (ready()) {
+      resolve(true);
       return;
     }
 
-    const onSeeked = () => {
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      resolve(ready());
+    }, timeoutMs);
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      for (const eventName of events) {
+        video.removeEventListener(eventName, onEvent);
+      }
+    };
+
+    const onEvent = () => {
+      if (!ready()) {
+        return;
+      }
+      cleanup();
+      resolve(true);
+    };
+
+    for (const eventName of events) {
+      video.addEventListener(eventName, onEvent);
+    }
+  });
+}
+
+async function waitForVideoFrame(video: HTMLVideoElement): Promise<void> {
+  if (typeof (video as any).requestVideoFrameCallback === 'function') {
+    await new Promise<void>((resolve) => {
+      let resolved = false;
+      const timeoutId = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        resolve();
+      }, 120);
+
+      (video as any).requestVideoFrameCallback(() => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeoutId);
+        resolve();
+      });
+    });
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    setTimeout(() => {
+      setTimeout(resolve, 16);
+    }, 16);
+  });
+}
+
+async function ensureVideoReadyForExport(video: HTMLVideoElement, targetTime: number): Promise<void> {
+  if (!video.src && !video.currentSrc) {
+    return;
+  }
+
+  if (video.readyState < 1) {
+    try {
+      video.load();
+    } catch {
+      // Ignore load() failures on detached elements.
+    }
+    await waitForVideoCondition(
+      video,
+      ['loadedmetadata', 'error'],
+      4000,
+      () => video.readyState >= 1
+    );
+  }
+
+  if (video.readyState < 2 && !video.seeking) {
+    await waitForVideoCondition(
+      video,
+      ['loadeddata', 'canplay', 'canplaythrough', 'seeked', 'error'],
+      1200,
+      () => !video.seeking && video.readyState >= 2
+    );
+  }
+
+  if (video.readyState < 2 && !video.seeking && video.muted) {
+    try {
+      await Promise.race([
+        video.play().catch(() => undefined),
+        new Promise((resolve) => setTimeout(resolve, 120)),
+      ]);
+      video.pause();
+    } catch {
+      // Ignore autoplay / play-pause warmup failures.
+    }
+
+    if (Math.abs(video.currentTime - targetTime) > 0.01) {
+      try {
+        video.currentTime = targetTime;
+      } catch {
+        // Ignore re-seek failures after warmup attempt.
+      }
+    }
+  }
+
+  if (!video.seeking && video.readyState >= 2) {
+    await waitForVideoFrame(video);
+  }
+}
+
+export async function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
+  const duration = Number.isFinite(video.duration) ? video.duration : 0;
+  const maxSeekTime = duration > 0 ? Math.max(0, duration - 0.001) : 0;
+  const targetTime = duration > 0
+    ? Math.max(0, Math.min(time, maxSeekTime))
+    : Math.max(0, time);
+
+  if (Math.abs(video.currentTime - targetTime) < 0.01 && !video.seeking) {
+    await ensureVideoReadyForExport(video, targetTime);
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    let resolved = false;
+
+    const finish = () => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      resolve();
+    };
+
+    const timeoutId = setTimeout(() => {
+      log.warn(
+        `Seek timeout at ${targetTime} (readyState=${video.readyState}, currentTime=${video.currentTime.toFixed(3)}, seeking=${video.seeking})`
+      );
+      finish();
+    }, 2000);
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
       video.removeEventListener('seeked', onSeeked);
-      waitForFrame();
+      video.removeEventListener('loadeddata', onReady);
+      video.removeEventListener('canplay', onReady);
+      video.removeEventListener('error', onReady);
+    };
+
+    const onReady = () => {
+      if (!video.seeking && video.readyState >= 2) {
+        finish();
+      }
+    };
+
+    const onSeeked = () => {
+      finish();
     };
 
     video.addEventListener('seeked', onSeeked);
-    video.currentTime = targetTime;
+    video.addEventListener('loadeddata', onReady);
+    video.addEventListener('canplay', onReady);
+    video.addEventListener('error', onReady);
+
+    try {
+      video.currentTime = targetTime;
+    } catch {
+      finish();
+    }
   });
+
+  await ensureVideoReadyForExport(video, targetTime);
 }
 
 /**

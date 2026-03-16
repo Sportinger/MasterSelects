@@ -18,6 +18,11 @@ import {
 } from '../projectFileService';
 import { fileSystemService } from '../fileSystemService';
 import { projectDB } from '../projectDB';
+import {
+  cacheProjectFileHandle,
+  getProjectRawPathCandidates,
+  getStoredProjectFileHandle,
+} from './mediaSourceResolver';
 
 const log = Logger.create('ProjectSync');
 
@@ -51,41 +56,83 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
   const files: MediaFile[] = [];
 
   for (const pm of projectMedia) {
-    // Try to get file handle from in-memory storage first
-    let handle = fileSystemService.getFileHandle(pm.id);
+    let resolvedProjectPath = pm.projectPath;
+    let handle: FileSystemFileHandle | undefined;
     let file: File | undefined;
     let url = '';
     let thumbnailUrl: string | undefined;
 
-    // If not in memory, try to get from IndexedDB
-    if (!handle) {
+    // Prefer the project-local RAW copy. This is the canonical source for imported media.
+    const storedProjectHandle = await getStoredProjectFileHandle(pm.id);
+    if (storedProjectHandle) {
       try {
-        const storedHandle = await projectDB.getStoredHandle(`media_${pm.id}`);
-        if (storedHandle && storedHandle.kind === 'file') {
-          handle = storedHandle as FileSystemFileHandle;
-          // Cache in memory for future use
-          fileSystemService.storeFileHandle(pm.id, handle);
-          log.info(`Retrieved handle from IndexedDB for: ${pm.name}`);
-        }
+        file = await storedProjectHandle.getFile();
+        handle = storedProjectHandle;
+        url = URL.createObjectURL(file);
+        resolvedProjectPath = resolvedProjectPath || `Raw/${storedProjectHandle.name}`;
+        await cacheProjectFileHandle(pm.id, storedProjectHandle, true);
+        log.info('Restored file from project RAW handle:', pm.name);
       } catch (e) {
-        log.warn(`Failed to get handle from IndexedDB: ${pm.name}`, e);
+        log.warn(`Could not access project RAW handle: ${pm.name}`, e);
       }
     }
 
-    if (handle) {
-      try {
-        // Check permission first
-        const permission = await handle.queryPermission({ mode: 'read' });
-        if (permission === 'granted') {
-          file = await handle.getFile();
+    if (!file && projectFileService.isProjectOpen()) {
+      for (const candidatePath of getProjectRawPathCandidates({
+        mediaFileId: pm.id,
+        projectPath: pm.projectPath,
+        filePath: pm.sourcePath,
+        name: pm.name,
+      })) {
+        try {
+          const result = await projectFileService.getFileFromRaw(candidatePath);
+          if (!result) {
+            continue;
+          }
+
+          file = result.file;
+          handle = result.handle;
           url = URL.createObjectURL(file);
-          log.info(' Restored file from handle:', pm.name);
-        } else {
-          // Permission needs to be requested - will be done by reloadFile
-          log.info(' File needs permission:', pm.name);
+          resolvedProjectPath = candidatePath;
+          await cacheProjectFileHandle(pm.id, result.handle, true);
+          log.info('Restored file from project RAW path:', pm.name);
+          break;
+        } catch (e) {
+          log.warn(`Could not access project RAW path for ${pm.name}: ${candidatePath}`, e);
         }
-      } catch (e) {
-        log.warn(`Could not access file: ${pm.name}`, e);
+      }
+    }
+
+    // Fall back to the primary file handle for non-project media or legacy data.
+    if (!file) {
+      handle = fileSystemService.getFileHandle(pm.id);
+
+      if (!handle) {
+        try {
+          const storedHandle = await projectDB.getStoredHandle(`media_${pm.id}`);
+          if (storedHandle && storedHandle.kind === 'file') {
+            handle = storedHandle as FileSystemFileHandle;
+            fileSystemService.storeFileHandle(pm.id, handle);
+            log.info(`Retrieved handle from IndexedDB for: ${pm.name}`);
+          }
+        } catch (e) {
+          log.warn(`Failed to get handle from IndexedDB: ${pm.name}`, e);
+        }
+      }
+
+      if (handle) {
+        try {
+          const permission = await handle.queryPermission({ mode: 'read' });
+          if (permission === 'granted') {
+            file = await handle.getFile();
+            url = URL.createObjectURL(file);
+            log.info('Restored file from handle:', pm.name);
+          } else {
+            log.info('File needs permission:', pm.name);
+          }
+        } catch (e) {
+          log.warn(`Could not access file: ${pm.name}`, e);
+        }
       }
     }
 
@@ -156,6 +203,7 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
       proxyStatus: pm.hasProxy ? 'ready' : 'none',
       hasFileHandle: !!handle,
       filePath: pm.sourcePath,
+      projectPath: resolvedProjectPath,
       transcriptStatus,
       transcript,
       transcriptCoverage,
@@ -376,6 +424,20 @@ export async function loadProjectToStores(): Promise<void> {
     if (ui.waveformsEnabled !== undefined) ts.setWaveformsEnabled(ui.waveformsEnabled);
     if (ui.showTranscriptMarkers !== undefined) ts.setShowTranscriptMarkers(ui.showTranscriptMarkers);
     if (ui.proxyEnabled !== undefined) useMediaStore.getState().setProxyEnabled(ui.proxyEnabled);
+
+    const changelogSettings: Partial<{
+      showChangelogOnStartup: boolean;
+      lastSeenChangelogVersion: string | null;
+    }> = {};
+    if (ui.showChangelogOnStartup !== undefined) {
+      changelogSettings.showChangelogOnStartup = ui.showChangelogOnStartup;
+    }
+    if ('lastSeenChangelogVersion' in ui) {
+      changelogSettings.lastSeenChangelogVersion = ui.lastSeenChangelogVersion ?? null;
+    }
+    if (Object.keys(changelogSettings).length > 0) {
+      useSettingsStore.setState(changelogSettings);
+    }
   }
 
   // Reload API keys (may have been restored from .keys.enc during loadProject)

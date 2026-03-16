@@ -58,6 +58,8 @@ interface MatAnyoneActions {
   reset: () => void;
 }
 
+type MatAnyoneStore = MatAnyoneState & MatAnyoneActions;
+
 const initialState: MatAnyoneState = {
   setupStatus: 'not-checked',
   setupProgress: 0,
@@ -81,43 +83,57 @@ const initialState: MatAnyoneState = {
   lastResult: null,
 };
 
-export const useMatAnyoneStore = create<MatAnyoneState & MatAnyoneActions>()(
-  subscribeWithSelector((set, get) => ({
-    ...initialState,
+function createMatAnyoneStore() {
+  return create<MatAnyoneStore>()(
+    subscribeWithSelector((set, get) => ({
+      ...initialState,
 
-    // Setup actions
-    setSetupStatus: (status) => set({
-      setupStatus: status,
-      errorMessage: status === 'error' ? get().errorMessage : null,
-    }),
+      // Setup actions
+      setSetupStatus: (status) => set({
+        setupStatus: status,
+        errorMessage: status === 'error' ? get().errorMessage : null,
+      }),
 
-    setSetupProgress: (progress, step, message) => {
-      const updates: Partial<MatAnyoneState> = { setupProgress: progress };
-      if (step !== undefined) updates.setupStep = step;
-      if (message !== undefined) {
-        updates.setupLog = [...get().setupLog, message];
-      }
-      set(updates);
-    },
+      setSetupProgress: (progress, step, message) => {
+        const updates: Partial<MatAnyoneState> = { setupProgress: progress };
+        if (step !== undefined) updates.setupStep = step;
+        if (message !== undefined) {
+          updates.setupLog = [...get().setupLog, message];
+        }
+        set(updates);
+      },
 
-    appendSetupLog: (line) => set((state) => ({
-      setupLog: [...state.setupLog, line],
-    })),
+      appendSetupLog: (line) => set((state) => ({
+        setupLog: [...state.setupLog, line],
+      })),
 
-    clearSetupLog: () => set({ setupLog: [] }),
+      clearSetupLog: () => set({ setupLog: [] }),
 
-    setError: (message) => set({
-      errorMessage: message,
-      setupStatus: message ? 'error' : get().setupStatus,
-    }),
+      setError: (message) => set({
+        errorMessage: message,
+      }),
 
-    setEnvInfo: (info) => set(info),
+      setEnvInfo: (info) => set(info),
 
-    setJobState: (state) => set(state),
+      setJobState: (state) => set(state),
 
-    setLastResult: (result) => set({ lastResult: result }),
+      setLastResult: (result) => set({ lastResult: result }),
 
-    // Reset
-    reset: () => set({ ...initialState }),
-  }))
-);
+      // Reset
+      reset: () => set({ ...initialState }),
+    }))
+  );
+}
+
+type MatAnyoneStoreApi = ReturnType<typeof createMatAnyoneStore>;
+
+const existingStore = import.meta.hot?.data.matAnyoneStore as MatAnyoneStoreApi | undefined;
+
+export const useMatAnyoneStore = existingStore ?? createMatAnyoneStore();
+
+if (import.meta.hot) {
+  import.meta.hot.accept();
+  import.meta.hot.dispose((data) => {
+    data.matAnyoneStore = useMatAnyoneStore;
+  });
+}

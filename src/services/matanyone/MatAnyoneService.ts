@@ -4,8 +4,8 @@
  * Manages the lifecycle of the MatAnyone2 inference environment:
  * status checks, setup, model downloads, server management, and matting jobs.
  *
- * Communicates with the native helper via WebSocket commands.
- * All state is written to the matanyoneStore for UI reactivity.
+ * Uses NativeHelperClient methods (matanyoneStatus, matanyoneSetup, etc.)
+ * for all communication with the native helper.
  */
 
 import { Logger } from '../logger';
@@ -28,71 +28,152 @@ export interface MatteResult {
   alphaPath: string;
 }
 
-export class MatAnyoneService {
-  /**
-   * Check the current MatAnyone2 environment status via native helper.
-   * Updates the store with environment info and derived setup status.
-   */
-  async checkStatus(): Promise<void> {
-    const store = useMatAnyoneStore.getState();
+type NativeHelperInfoFallback = {
+  matanyone_available?: boolean;
+  matanyone_status?: string;
+};
 
-    if (!NativeHelperClient.isConnected()) {
-      store.setSetupStatus('not-available');
-      return;
+export class MatAnyoneService {
+  private async ensureNativeHelperConnected(): Promise<boolean> {
+    if (NativeHelperClient.isConnected()) {
+      return true;
     }
 
     try {
-      const response = await this.sendCommand('matanyone_status');
-
-      if (!response.ok) {
-        store.setSetupStatus('not-installed');
-        return;
-      }
-
-      // Update environment info from response
-      const data = response as any;
-      store.setEnvInfo({
-        pythonVersion: data.python_version ?? null,
-        cudaAvailable: data.cuda_available ?? false,
-        cudaVersion: data.cuda_version ?? null,
-        gpuName: data.gpu_name ?? null,
-        vramMb: data.vram_mb ?? null,
-        modelDownloaded: data.model_downloaded ?? false,
-      });
-
-      // Derive setup status from environment info
-      if (data.server_running) {
-        store.setSetupStatus('ready');
-      } else if (data.installed && data.model_downloaded) {
-        store.setSetupStatus('installed');
-      } else if (data.installed && !data.model_downloaded) {
-        store.setSetupStatus('model-needed');
-      } else {
-        store.setSetupStatus('not-installed');
-      }
-
-      log.info('Status check complete', {
-        status: useMatAnyoneStore.getState().setupStatus,
-        cuda: data.cuda_available,
-        gpu: data.gpu_name,
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      log.error('Status check failed', e);
-      store.setError(msg);
+      return await NativeHelperClient.connect();
+    } catch {
+      return false;
     }
   }
 
   /**
+   * Check the current MatAnyone2 environment status via native helper.
+   */
+  async checkStatus(): Promise<void> {
+    const connected = await this.ensureNativeHelperConnected();
+    log.warn('checkStatus called, connected=' + connected);
+
+    if (!connected) {
+      useMatAnyoneStore.getState().setSetupStatus('not-available');
+      return;
+    }
+
+    try {
+      log.warn('checkStatus: sending mat_anyone_status...');
+      const data = await NativeHelperClient.matanyoneStatus();
+      this.applyDetailedStatus(data);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      log.warn('checkStatus FAILED, falling back to info: ' + msg);
+
+      try {
+        const info = await NativeHelperClient.getInfo() as NativeHelperInfoFallback;
+        this.applyInfoFallback(info, msg);
+      } catch (infoError) {
+        const infoMsg = infoError instanceof Error ? infoError.message : String(infoError);
+        log.warn('checkStatus info fallback FAILED: ' + infoMsg);
+        // Only set not-installed if we haven't already resolved to a better status
+        const current = useMatAnyoneStore.getState().setupStatus;
+        if (current === 'not-checked' || current === 'not-available') {
+          useMatAnyoneStore.getState().setSetupStatus('not-installed');
+        }
+      }
+    }
+  }
+
+  private applyDetailedStatus(data: {
+    python_version?: string | null;
+    cuda_available?: boolean;
+    cuda_version?: string | null;
+    gpu_name?: string | null;
+    vram_mb?: number | null;
+    model_downloaded?: boolean;
+    venv_exists?: boolean;
+    deps_installed?: boolean;
+    matanyone_installed?: boolean;
+    server_running?: boolean;
+    setup_status?: string;
+  }): void {
+    log.warn(
+      'checkStatus: got response, setup=' + (data.setup_status || 'unknown')
+      + ', installed=' + String(data.matanyone_installed)
+      + ', model=' + String(data.model_downloaded)
+      + ', venv=' + String(data.venv_exists)
+      + ', deps=' + String(data.deps_installed)
+      + ', gpu=' + (data.gpu_name || 'none')
+    );
+
+    useMatAnyoneStore.getState().setEnvInfo({
+      pythonVersion: data.python_version ?? null,
+      cudaAvailable: data.cuda_available ?? false,
+      cudaVersion: data.cuda_version ?? null,
+      gpuName: data.gpu_name ?? null,
+      vramMb: data.vram_mb ?? null,
+      modelDownloaded: data.model_downloaded ?? false,
+    });
+
+    if (data.server_running || data.setup_status === 'running') {
+      useMatAnyoneStore.getState().setSetupStatus('ready');
+    } else if (data.matanyone_installed && data.model_downloaded) {
+      useMatAnyoneStore.getState().setSetupStatus('installed');
+    } else if (data.matanyone_installed && !data.model_downloaded) {
+      useMatAnyoneStore.getState().setSetupStatus('model-needed');
+    } else if (data.venv_exists && data.deps_installed) {
+      useMatAnyoneStore.getState().setSetupStatus('model-needed');
+    } else {
+      useMatAnyoneStore.getState().setSetupStatus('not-installed');
+    }
+
+    log.info('Status check complete', {
+      status: useMatAnyoneStore.getState().setupStatus,
+      cuda: data.cuda_available,
+      gpu: data.gpu_name,
+    });
+  }
+
+  private applyInfoFallback(info: NativeHelperInfoFallback, reason: string): void {
+    const fallbackStatus = info.matanyone_status ?? 'unknown';
+    log.warn(
+      'checkStatus info fallback: status=' + fallbackStatus
+      + ', available=' + String(info.matanyone_available)
+    );
+
+    if (fallbackStatus === 'running') {
+      useMatAnyoneStore.getState().setSetupStatus('ready');
+      useMatAnyoneStore.getState().setError(null);
+      return;
+    }
+
+    if (
+      fallbackStatus === 'installed'
+      || info.matanyone_available
+      || fallbackStatus.startsWith('error:')
+    ) {
+      useMatAnyoneStore.getState().setSetupStatus('installed');
+      useMatAnyoneStore.getState().setError(
+        fallbackStatus.startsWith('error:') ? fallbackStatus.slice('error:'.length).trim() : null
+      );
+      return;
+    }
+
+    if (fallbackStatus === 'not_installed') {
+      useMatAnyoneStore.getState().setSetupStatus('not-installed');
+      useMatAnyoneStore.getState().setError(null);
+      return;
+    }
+
+    useMatAnyoneStore.getState().setSetupStatus('not-installed');
+    useMatAnyoneStore.getState().setError(reason);
+  }
+
+  /**
    * Run the full automated setup: creates venv, installs dependencies.
-   * Receives progress updates from the native helper and writes them to the store.
-   *
-   * @param pythonPath - Optional explicit path to a Python executable
    */
   async setup(pythonPath?: string): Promise<void> {
     const store = useMatAnyoneStore.getState();
 
-    if (!NativeHelperClient.isConnected()) {
+    if (!(await this.ensureNativeHelperConnected())) {
+      store.setSetupStatus('not-available');
       store.setError('Native helper not connected');
       return;
     }
@@ -102,111 +183,99 @@ export class MatAnyoneService {
     store.clearSetupLog();
 
     try {
-      const response = await this.sendCommandWithProgress(
-        'matanyone_setup',
-        { python_path: pythonPath },
-        (progress) => {
-          const current = useMatAnyoneStore.getState();
-          current.setSetupProgress(
-            progress.percent ?? current.setupProgress,
-            progress.step,
-            progress.message,
-          );
+      const result = await NativeHelperClient.matanyoneSetup(
+        (step, percent, message) => {
+          useMatAnyoneStore.getState().setSetupProgress(percent, step, message);
         },
+        pythonPath,
       );
 
-      if (!response.ok) {
-        const errMsg = (response as any).error?.message || 'Setup failed';
-        useMatAnyoneStore.getState().setError(errMsg);
+      if (!result.success) {
+        useMatAnyoneStore.getState().setSetupStatus('error');
+        useMatAnyoneStore.getState().setError(result.error || 'Setup failed');
         return;
       }
 
       log.info('Setup complete');
-
-      // Re-check status to update env info and derived status
       await this.checkStatus();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       log.error('Setup failed', e);
+      useMatAnyoneStore.getState().setSetupStatus('error');
       useMatAnyoneStore.getState().setError(msg);
     }
   }
 
   /**
    * Download the MatAnyone2 model weights.
-   * Receives progress updates and writes them to the store.
    */
   async downloadModel(): Promise<void> {
     const store = useMatAnyoneStore.getState();
 
-    if (!NativeHelperClient.isConnected()) {
+    if (!(await this.ensureNativeHelperConnected())) {
+      store.setSetupStatus('not-available');
       store.setError('Native helper not connected');
       return;
     }
 
     store.setSetupStatus('downloading-model');
-    store.setSetupProgress(0, 'Downloading model weights...');
+    store.setSetupProgress(0, 'download_model', 'Downloading model...');
 
     try {
-      const response = await this.sendCommandWithProgress(
-        'matanyone_download_model',
-        {},
-        (progress) => {
-          const current = useMatAnyoneStore.getState();
-          current.setSetupProgress(
-            progress.percent ?? current.setupProgress,
-            progress.step,
-            progress.message,
-          );
+      const result = await NativeHelperClient.matanyoneDownloadModel(
+        (percent, speed, eta) => {
+          const msg = speed ? `Downloading... ${speed}${eta ? `, ETA: ${eta}` : ''}` : 'Downloading...';
+          useMatAnyoneStore.getState().setSetupProgress(percent, 'download_model', msg);
         },
       );
 
-      if (!response.ok) {
-        const errMsg = (response as any).error?.message || 'Model download failed';
-        useMatAnyoneStore.getState().setError(errMsg);
+      if (!result.success) {
+        useMatAnyoneStore.getState().setSetupStatus('error');
+        useMatAnyoneStore.getState().setError(result.error || 'Model download failed');
         return;
       }
 
-      useMatAnyoneStore.getState().setEnvInfo({ modelDownloaded: true });
       log.info('Model download complete');
-
-      // Re-check status
       await this.checkStatus();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       log.error('Model download failed', e);
+      useMatAnyoneStore.getState().setSetupStatus('error');
       useMatAnyoneStore.getState().setError(msg);
     }
   }
 
   /**
-   * Start the MatAnyone2 inference server via the native helper.
+   * Start the MatAnyone2 inference server.
    */
   async startServer(): Promise<void> {
     const store = useMatAnyoneStore.getState();
 
-    if (!NativeHelperClient.isConnected()) {
+    if (!(await this.ensureNativeHelperConnected())) {
+      log.warn('startServer aborted: native helper not connected');
       store.setError('Native helper not connected');
       return;
     }
 
+    store.setError(null);
     store.setSetupStatus('starting');
 
     try {
-      const response = await this.sendCommand('matanyone_start_server');
+      const result = await NativeHelperClient.matanyoneStart();
 
-      if (!response.ok) {
-        const errMsg = (response as any).error?.message || 'Failed to start server';
-        useMatAnyoneStore.getState().setError(errMsg);
+      if (!result.success) {
+        useMatAnyoneStore.getState().setError('Failed to start server');
+        store.setSetupStatus('installed');
         return;
       }
 
-      useMatAnyoneStore.getState().setSetupStatus('ready');
-      log.info('MatAnyone server started');
+      store.setSetupStatus('ready');
+      log.info('Server started', { port: result.port });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       log.error('Failed to start server', e);
       useMatAnyoneStore.getState().setError(msg);
+      store.setSetupStatus('installed');
     }
   }
 
@@ -214,101 +283,78 @@ export class MatAnyoneService {
    * Stop the MatAnyone2 inference server.
    */
   async stopServer(): Promise<void> {
-    const store = useMatAnyoneStore.getState();
-
-    if (!NativeHelperClient.isConnected()) {
-      store.setError('Native helper not connected');
-      return;
-    }
-
     try {
-      const response = await this.sendCommand('matanyone_stop_server');
-
-      if (!response.ok) {
-        const errMsg = (response as any).error?.message || 'Failed to stop server';
-        log.warn('Stop server returned error', errMsg);
-      }
-
+      await NativeHelperClient.matanyoneStop();
       useMatAnyoneStore.getState().setSetupStatus('installed');
-      log.info('MatAnyone server stopped');
+      log.info('Server stopped');
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
       log.error('Failed to stop server', e);
-      useMatAnyoneStore.getState().setError(msg);
     }
   }
 
   /**
    * Run a video matting job.
-   * Sends frames to the MatAnyone2 server and receives alpha/foreground results.
-   *
-   * @param options - Matting job configuration
-   * @returns Paths to the generated foreground and alpha videos
    */
-  async matte(options: MatteOptions): Promise<MatteResult> {
+  async matte(options: MatteOptions): Promise<MatteResult | null> {
     const store = useMatAnyoneStore.getState();
 
-    if (store.setupStatus !== 'ready') {
-      throw new Error(`MatAnyone server not ready (status: ${store.setupStatus})`);
+    if (!(await this.ensureNativeHelperConnected())) {
+      store.setError('Native helper not connected');
+      return null;
     }
 
-    const jobId = `matanyone_${Date.now()}`;
     store.setJobState({
       isProcessing: true,
-      jobId,
       jobProgress: 0,
       currentFrame: 0,
       totalFrames: 0,
     });
+    store.setError(null);
 
     try {
-      const response = await this.sendCommandWithProgress(
-        'matanyone_matte',
-        {
-          video_path: options.videoPath,
-          mask_path: options.maskPath,
-          output_dir: options.outputDir,
-          start_frame: options.startFrame,
-          end_frame: options.endFrame,
-        },
-        (progress) => {
+      const result = await NativeHelperClient.matanyoneMatte(
+        options.videoPath,
+        options.maskPath,
+        options.outputDir,
+        { startFrame: options.startFrame, endFrame: options.endFrame },
+        (currentFrame, totalFrames, percent) => {
           useMatAnyoneStore.getState().setJobState({
-            jobProgress: progress.percent ?? 0,
-            currentFrame: progress.current_frame ?? 0,
-            totalFrames: progress.total_frames ?? 0,
+            jobProgress: percent,
+            currentFrame,
+            totalFrames,
           });
         },
-        600_000, // 10 minute timeout for long videos
       );
 
-      if (!response.ok) {
-        const errMsg = (response as any).error?.message || 'Matting failed';
-        throw new Error(errMsg);
-      }
-
-      const data = response as any;
-      const result: MatteResult = {
-        foregroundPath: data.foreground_path,
-        alphaPath: data.alpha_path,
+      const matteResult: MatteResult = {
+        foregroundPath: result.foreground_path,
+        alphaPath: result.alpha_path,
       };
 
       useMatAnyoneStore.getState().setLastResult({
-        ...result,
+        foregroundPath: matteResult.foregroundPath,
+        alphaPath: matteResult.alphaPath,
         sourceClipId: options.sourceClipId,
       });
 
-      log.info('Matting complete', result);
-      return result;
+      useMatAnyoneStore.getState().setJobState({
+        isProcessing: false,
+        jobId: null,
+        jobProgress: 100,
+      });
+
+      log.info('Matting complete', matteResult);
+      return matteResult;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       log.error('Matting failed', e);
       useMatAnyoneStore.getState().setError(msg);
-      throw e;
-    } finally {
       useMatAnyoneStore.getState().setJobState({
         isProcessing: false,
         jobId: null,
+        jobProgress: 0,
       });
+      return null;
     }
   }
 
@@ -316,192 +362,51 @@ export class MatAnyoneService {
    * Cancel a running matting job.
    */
   async cancelJob(): Promise<void> {
-    const store = useMatAnyoneStore.getState();
-    const jobId = store.jobId;
-
-    if (!jobId) {
-      log.warn('No active job to cancel');
-      return;
-    }
+    const jobId = useMatAnyoneStore.getState().jobId;
+    if (!jobId) return;
 
     try {
-      await this.sendCommand('matanyone_cancel', { job_id: jobId });
+      await NativeHelperClient.matanyoneCancel(jobId);
       useMatAnyoneStore.getState().setJobState({
         isProcessing: false,
         jobId: null,
         jobProgress: 0,
       });
-      log.info('Job cancelled', { jobId });
+      log.info('Job cancelled');
     } catch (e) {
       log.error('Failed to cancel job', e);
     }
   }
 
   /**
-   * Uninstall MatAnyone2: removes the virtual environment and downloaded models.
+   * Uninstall MatAnyone2: removes venv and model files.
    */
   async uninstall(): Promise<void> {
-    const store = useMatAnyoneStore.getState();
-
-    if (!NativeHelperClient.isConnected()) {
-      store.setError('Native helper not connected');
+    if (!(await this.ensureNativeHelperConnected())) {
+      useMatAnyoneStore.getState().setError('Native helper not connected');
       return;
     }
 
-    // Stop server first if running
-    if (store.setupStatus === 'ready') {
-      await this.stopServer();
-    }
-
     try {
-      const response = await this.sendCommand('matanyone_uninstall');
+      await this.stopServer();
+      const result = await NativeHelperClient.matanyoneUninstall();
 
-      if (!response.ok) {
-        const errMsg = (response as any).error?.message || 'Uninstall failed';
-        useMatAnyoneStore.getState().setError(errMsg);
+      if (!result.success) {
+        useMatAnyoneStore.getState().setError('Uninstall failed');
         return;
       }
 
       useMatAnyoneStore.getState().reset();
-      log.info('MatAnyone uninstalled');
+      log.info('Uninstalled');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       log.error('Uninstall failed', e);
       useMatAnyoneStore.getState().setError(msg);
     }
   }
-
-  /**
-   * Dispose the service and reset store state.
-   */
-  dispose(): void {
-    useMatAnyoneStore.getState().reset();
-  }
-
-  // --- Private helpers ---
-
-  /**
-   * Send a command to the native helper and wait for a response.
-   */
-  private sendCommand(
-    cmd: string,
-    params: Record<string, unknown> = {},
-    timeoutMs = 30_000,
-  ): Promise<any> {
-    const id = `matanyone_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      if (!NativeHelperClient.isConnected()) {
-        reject(new Error('Native helper not connected'));
-        return;
-      }
-
-      const ws = (NativeHelperClient as any).ws as WebSocket | null;
-      if (!ws) {
-        reject(new Error('Native helper WebSocket not available'));
-        return;
-      }
-
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(new Error(`Command ${cmd} timed out`));
-      }, timeoutMs);
-
-      const handler = (event: MessageEvent) => {
-        if (typeof event.data !== 'string') return;
-        try {
-          const data = JSON.parse(event.data);
-          if (data.id === id) {
-            cleanup();
-            resolve(data);
-          }
-        } catch {
-          // Ignore non-JSON messages
-        }
-      };
-
-      const cleanup = () => {
-        clearTimeout(timeout);
-        ws.removeEventListener('message', handler);
-      };
-
-      ws.addEventListener('message', handler);
-      ws.send(JSON.stringify({ cmd, id, ...params }));
-    });
-  }
-
-  /**
-   * Send a command that streams progress updates before the final response.
-   */
-  private sendCommandWithProgress(
-    cmd: string,
-    params: Record<string, unknown> = {},
-    onProgress: (progress: any) => void,
-    timeoutMs = 120_000,
-  ): Promise<any> {
-    const id = `matanyone_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      if (!NativeHelperClient.isConnected()) {
-        reject(new Error('Native helper not connected'));
-        return;
-      }
-
-      const ws = (NativeHelperClient as any).ws as WebSocket | null;
-      if (!ws) {
-        reject(new Error('Native helper WebSocket not available'));
-        return;
-      }
-
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(new Error(`Command ${cmd} timed out`));
-      }, timeoutMs);
-
-      const handler = (event: MessageEvent) => {
-        if (typeof event.data !== 'string') return;
-        try {
-          const data = JSON.parse(event.data);
-          if (data.id !== id) return;
-
-          // Progress update — not the final response
-          if (data.type === 'progress') {
-            onProgress(data);
-            return;
-          }
-
-          // Final response
-          cleanup();
-          resolve(data);
-        } catch {
-          // Ignore non-JSON messages
-        }
-      };
-
-      const cleanup = () => {
-        clearTimeout(timeout);
-        ws.removeEventListener('message', handler);
-      };
-
-      ws.addEventListener('message', handler);
-      ws.send(JSON.stringify({ cmd, id, ...params }));
-    });
-  }
 }
-
-// --- HMR-safe singleton ---
 
 let instance: MatAnyoneService | null = null;
-
-if (import.meta.hot) {
-  import.meta.hot.accept();
-  if (import.meta.hot.data?.matAnyoneService) {
-    instance = import.meta.hot.data.matAnyoneService;
-  }
-  import.meta.hot.dispose((data) => {
-    data.matAnyoneService = instance;
-  });
-}
 
 /** Get the singleton MatAnyoneService instance */
 export function getMatAnyoneService(): MatAnyoneService {

@@ -77,21 +77,16 @@ pub struct DownloadProgress {
 // Directory helpers
 // ---------------------------------------------------------------------------
 
-/// Return the models directory: `{data_dir}/matanyone2/models/`.
+/// Return the models directory, consistent with env.rs data dir.
 ///
-/// On Windows this resolves to `%APPDATA%/matanyone2/models/`,
-/// on macOS `~/Library/Application Support/matanyone2/models/`,
-/// on Linux `~/.local/share/matanyone2/models/`.
+/// On Windows: `%LOCALAPPDATA%/MasterSelects/matanyone2/models/`
+/// on macOS: `~/Library/Application Support/MasterSelects/matanyone2/models/`
+/// on Linux: `~/.local/share/MasterSelects/matanyone2/models/`
 ///
 /// The directory is **not** created by this function.
 pub fn get_models_dir() -> PathBuf {
-    let base = dirs::data_dir().unwrap_or_else(|| {
-        // Fallback: put it next to the executable
-        std::env::current_exe()
-            .map(|p| p.parent().unwrap_or_else(|| std::path::Path::new(".")).to_path_buf())
-            .unwrap_or_else(|_| PathBuf::from("."))
-    });
-    base.join("matanyone2").join("models")
+    // Use the same base as env.rs: data_local_dir + MasterSelects/matanyone2
+    super::env::get_data_dir().join("models")
 }
 
 // ---------------------------------------------------------------------------

@@ -50,6 +50,8 @@ export interface ProjectUIState {
   waveformsEnabled?: boolean;
   proxyEnabled?: boolean;
   showTranscriptMarkers?: boolean;
+  showChangelogOnStartup?: boolean;
+  lastSeenChangelogVersion?: string | null;
 }
 
 export interface ProjectFile {

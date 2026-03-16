@@ -1,0 +1,10 @@
+File: nb2_ms_icon_monogram_v1.png
+Generated: 2026-03-16 16:13:27
+Model: gemini-3.1-flash-image-preview
+Aspect Ratio: 1:1
+Resolution: 1K
+File Size: 852,979 bytes
+Version: v1
+
+Prompt:
+A minimalist square app icon with large rounded corners for a Windows application. Very dark background (#141414). A bold stylized "MS" monogram in the center - the "M" is white and the "S" has a subtle green-to-gold gradient (#4ade80 to #c4a44a). Below the monogram, a thin horizontal line that transitions from green (#4ade80) on the left to transparent on the right, suggesting a video timeline. Clean, modern, flat design. No other elements, no shadows, no 3D effects. Professional software icon aesthetic similar to Adobe or DaVinci Resolve icons.

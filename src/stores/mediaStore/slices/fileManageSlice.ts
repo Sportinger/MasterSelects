@@ -89,6 +89,7 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
     // Store handle if we got one
     if (handle) {
       fileSystemService.storeFileHandle(id, handle);
+      await projectDB.storeHandle(`media_${id}`, handle);
     }
 
     // Revoke old URL
@@ -159,6 +160,7 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
 
       if (handle) {
         fileSystemService.storeFileHandle(mediaFileToReload.id, handle);
+        await projectDB.storeHandle(`media_${mediaFileToReload.id}`, handle);
       }
 
       if (mediaFileToReload.url) URL.revokeObjectURL(mediaFileToReload.url);

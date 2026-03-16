@@ -58,6 +58,9 @@ export interface ExportClipState {
   isSequential: boolean; // true if using sequential decoding
   runtimeSource?: TimelineClip['source'];
   runtimeOwnerId?: string;
+  preciseVideoElement?: HTMLVideoElement | null;
+  preciseVideoObjectUrl?: string | null;
+  hasDedicatedPreciseVideoElement?: boolean;
 }
 
 // ============ PRESETS ============

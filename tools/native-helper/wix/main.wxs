@@ -31,6 +31,20 @@
 
         <Property Id="ARPHELPLINK" Value="https://masterselects.app" />
 
+        <!-- Launch after install checkbox (default: checked) -->
+        <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch MasterSelects Helper" />
+        <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+
+        <CustomAction Id="LaunchApplication"
+            ExeCommand=""
+            FileRef="masterselects_helper_exe"
+            Impersonate="yes"
+            Return="asyncNoWait" />
+
+        <InstallExecuteSequence>
+            <Custom Action="LaunchApplication" After="InstallFinalize" Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1" />
+        </InstallExecuteSequence>
+
     </Package>
 
     <Fragment>

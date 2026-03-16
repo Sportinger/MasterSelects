@@ -654,9 +654,21 @@ async fn handle_websocket(
 
                             let python_path = matanyone::get_venv_python();
                             let models_dir = matanyone::get_models_dir();
-                            let server_script = matanyone::get_data_dir()
-                                .join("matanyone2")
-                                .join("server.py");
+                            let server_script = match matanyone::ensure_server_script().await {
+                                Ok(path) => path,
+                                Err(e) => {
+                                    let response = Response::error(
+                                        &id_clone,
+                                        error_codes::MATANYONE_NOT_INSTALLED,
+                                        e,
+                                    );
+                                    if let Ok(json) = serde_json::to_string(&response) {
+                                        let mut w = ws_sender.lock().await;
+                                        let _ = w.send(Message::Text(json)).await;
+                                    }
+                                    return;
+                                }
+                            };
 
                             let mut proc = state_clone.matanyone_process.lock().await;
                             let result = proc.start(&python_path, &server_script, &models_dir).await;

@@ -29,7 +29,7 @@ pub type WsSender = Arc<tokio::sync::Mutex<
 /// Find yt-dlp executable, checking common install locations
 pub fn find_ytdlp() -> Option<PathBuf> {
     // First check if yt-dlp is in PATH
-    if let Ok(output) = std::process::Command::new("yt-dlp").arg("--version").output() {
+    if let Ok(output) = crate::utils::no_window_std(std::process::Command::new("yt-dlp").arg("--version")).output() {
         if output.status.success() {
             return Some(PathBuf::from("yt-dlp"));
         }
@@ -70,7 +70,7 @@ pub fn find_ytdlp() -> Option<PathBuf> {
 /// Find deno executable for yt-dlp JavaScript runtime
 pub fn find_deno() -> Option<PathBuf> {
     // Check if deno is in PATH
-    if let Ok(output) = std::process::Command::new("deno").arg("--version").output() {
+    if let Ok(output) = crate::utils::no_window_std(std::process::Command::new("deno").arg("--version")).output() {
         if output.status.success() {
             return Some(PathBuf::from("deno"));
         }
@@ -134,6 +134,7 @@ pub async fn handle_list_formats(id: &str, url: &str) -> Response {
     // Try without cookies first, then with cookies if bot-blocked
     for use_cookies in [false, true] {
         let mut cmd = TokioCommand::new(&ytdlp_cmd);
+        crate::utils::no_window(&mut cmd);
         for arg in &deno_args {
             cmd.arg(arg);
         }
@@ -328,6 +329,7 @@ async fn run_download(
     let deno_args = get_deno_args();
 
     let mut cmd = TokioCommand::new(&ytdlp_cmd);
+    crate::utils::no_window(&mut cmd);
     for arg in &deno_args {
         cmd.arg(arg);
     }

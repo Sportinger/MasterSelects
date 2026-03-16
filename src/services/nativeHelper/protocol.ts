@@ -240,33 +240,33 @@ export interface DirEntry {
 // ── MatAnyone2 Commands ──
 
 export interface MatAnyoneStatusCommand {
-  cmd: 'matanyone_status';
+  cmd: 'mat_anyone_status';
   id: string;
 }
 
 export interface MatAnyoneSetupCommand {
-  cmd: 'matanyone_setup';
+  cmd: 'mat_anyone_setup';
   id: string;
   python_path?: string;
 }
 
 export interface MatAnyoneDownloadModelCommand {
-  cmd: 'matanyone_download_model';
+  cmd: 'mat_anyone_download_model';
   id: string;
 }
 
 export interface MatAnyoneStartCommand {
-  cmd: 'matanyone_start';
+  cmd: 'mat_anyone_start';
   id: string;
 }
 
 export interface MatAnyoneStopCommand {
-  cmd: 'matanyone_stop';
+  cmd: 'mat_anyone_stop';
   id: string;
 }
 
 export interface MatAnyoneMatteCommand {
-  cmd: 'matanyone_matte';
+  cmd: 'mat_anyone_matte';
   id: string;
   video_path: string;
   mask_path: string;
@@ -276,13 +276,13 @@ export interface MatAnyoneMatteCommand {
 }
 
 export interface MatAnyoneCancelCommand {
-  cmd: 'matanyone_cancel';
+  cmd: 'mat_anyone_cancel';
   id: string;
   job_id: string;
 }
 
 export interface MatAnyoneUninstallCommand {
-  cmd: 'matanyone_uninstall';
+  cmd: 'mat_anyone_uninstall';
   id: string;
 }
 

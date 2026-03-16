@@ -19,6 +19,33 @@ use serde::Serialize;
 use tokio::process::Command as TokioCommand;
 use tracing::{debug, info, warn};
 
+const BUNDLED_SERVER_SCRIPT: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/python/matanyone2_server.py"
+));
+
+/// Create a TokioCommand that won't show a terminal window on Windows.
+fn silent_cmd(program: impl AsRef<std::ffi::OsStr>) -> TokioCommand {
+    let mut cmd = TokioCommand::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    cmd
+}
+
+/// Create a std::process::Command that won't show a terminal window on Windows.
+fn silent_cmd_std(program: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
+    let mut cmd = std::process::Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    cmd
+}
+
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -95,6 +122,11 @@ pub fn get_data_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
         .join("MasterSelects")
         .join("matanyone2")
+}
+
+/// Return the path where the bundled MatAnyone2 HTTP server script should live.
+pub fn get_server_script_path() -> PathBuf {
+    get_data_dir().join("matanyone2_server.py")
 }
 
 /// Return the path where the `uv` binary should live.
@@ -176,6 +208,30 @@ pub fn get_env_info() -> EnvInfo {
     }
 }
 
+/// Ensure the bundled Python inference server script exists on disk.
+pub async fn ensure_server_script() -> Result<PathBuf, String> {
+    let script_path = get_server_script_path();
+
+    if let Some(parent) = script_path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| format!("Failed to create MatAnyone2 data directory: {e}"))?;
+    }
+
+    let needs_write = match tokio::fs::read_to_string(&script_path).await {
+        Ok(existing) => existing != BUNDLED_SERVER_SCRIPT,
+        Err(_) => true,
+    };
+
+    if needs_write {
+        tokio::fs::write(&script_path, BUNDLED_SERVER_SCRIPT)
+            .await
+            .map_err(|e| format!("Failed to write MatAnyone2 server script: {e}"))?;
+    }
+
+    Ok(script_path)
+}
+
 // ---------------------------------------------------------------------------
 // CUDA detection
 // ---------------------------------------------------------------------------
@@ -183,7 +239,7 @@ pub fn get_env_info() -> EnvInfo {
 /// Detect NVIDIA GPU and CUDA availability via `nvidia-smi`.
 pub async fn detect_cuda() -> CudaInfo {
     // Query GPU name and VRAM
-    let gpu_result = TokioCommand::new("nvidia-smi")
+    let gpu_result = silent_cmd("nvidia-smi")
         .args([
             "--query-gpu=name,memory.total",
             "--format=csv,noheader,nounits",
@@ -250,7 +306,7 @@ fn parse_gpu_csv(line: &str) -> (Option<String>, Option<u64>) {
 
 /// Query the CUDA driver version via `nvidia-smi`.
 async fn query_cuda_version() -> Option<String> {
-    let output = TokioCommand::new("nvidia-smi")
+    let output = silent_cmd("nvidia-smi")
         .output()
         .await
         .ok()?;
@@ -279,7 +335,7 @@ async fn query_cuda_version() -> Option<String> {
 fn detect_system_python_sync() -> (Option<PathBuf>, Option<String>) {
     let candidates = python_candidates();
     for (cmd, args) in &candidates {
-        if let Ok(output) = std::process::Command::new(cmd).args(args).output() {
+        if let Ok(output) = silent_cmd_std(cmd).args(args).output() {
             if output.status.success() {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 if let Some(version) = parse_python_version(stdout.trim()) {
@@ -298,7 +354,7 @@ fn detect_system_python_sync() -> (Option<PathBuf>, Option<String>) {
 async fn detect_system_python_async() -> (Option<PathBuf>, Option<String>) {
     let candidates = python_candidates();
     for (cmd, args) in &candidates {
-        let result = TokioCommand::new(cmd).args(args).output().await;
+        let result = silent_cmd(cmd).args(args).output().await;
         if let Ok(output) = result {
             if output.status.success() {
                 let stdout = String::from_utf8_lossy(&output.stdout);
@@ -461,7 +517,7 @@ fn get_uv_target() -> &'static str {
 /// Download a file from `url` to `dest` using platform-native tools.
 async fn download_file(url: &str, dest: &Path) -> Result<()> {
     // Try curl first (available on Windows 10+, macOS, most Linux)
-    let curl_result = TokioCommand::new("curl")
+    let curl_result = silent_cmd("curl")
         .args(["-fSL", "--retry", "3", "-o"])
         .arg(dest.as_os_str())
         .arg(url)
@@ -482,7 +538,7 @@ async fn download_file(url: &str, dest: &Path) -> Result<()> {
     // Fallback: PowerShell on Windows
     #[cfg(windows)]
     {
-        let ps_result = TokioCommand::new("powershell")
+        let ps_result = silent_cmd("powershell")
             .args([
                 "-NoProfile",
                 "-Command",
@@ -510,7 +566,7 @@ async fn download_file(url: &str, dest: &Path) -> Result<()> {
     // Fallback: wget on Unix
     #[cfg(not(windows))]
     {
-        let wget_result = TokioCommand::new("wget")
+        let wget_result = silent_cmd("wget")
             .args(["-q", "-O"])
             .arg(dest.as_os_str())
             .arg(url)
@@ -544,7 +600,7 @@ async fn download_file(url: &str, dest: &Path) -> Result<()> {
 async fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<()> {
     #[cfg(windows)]
     {
-        let result = TokioCommand::new("powershell")
+        let result = silent_cmd("powershell")
             .args([
                 "-NoProfile",
                 "-Command",
@@ -567,7 +623,7 @@ async fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<()> {
 
     #[cfg(not(windows))]
     {
-        let result = TokioCommand::new("unzip")
+        let result = silent_cmd("unzip")
             .args(["-o", "-q"])
             .arg(zip_path.as_os_str())
             .arg("-d")
@@ -609,8 +665,8 @@ async fn create_venv(
         .await
         .context("Failed to create venv directory")?;
 
-    let output = TokioCommand::new(uv_path)
-        .args(["venv", &venv_dir.to_string_lossy(), "--python", "3.12"])
+    let output = silent_cmd(uv_path)
+        .args(["venv", &venv_dir.to_string_lossy(), "--python", "3.11"])
         .output()
         .await
         .context("Failed to run uv venv")?;
@@ -619,16 +675,16 @@ async fn create_venv(
         let stderr = String::from_utf8_lossy(&output.stderr);
         // If Python 3.12 is not available, try without specifying version
         // and let uv pick what's available
-        warn!("uv venv with Python 3.12 failed: {}", stderr.trim());
+        warn!("uv venv with Python 3.11 failed: {}", stderr.trim());
         info!("Retrying venv creation without specific Python version...");
 
         progress(
             SetupStep::CreateVenv,
             0.3,
-            "Python 3.12 not found, trying available Python...",
+            "Python 3.11 not found, trying available Python...",
         );
 
-        let output2 = TokioCommand::new(uv_path)
+        let output2 = silent_cmd(uv_path)
             .args(["venv", &venv_dir.to_string_lossy()])
             .output()
             .await
@@ -694,7 +750,7 @@ async fn install_pytorch(
     let venv_str = get_venv_dir().to_string_lossy().to_string();
     args.push(&venv_str);
 
-    let output = TokioCommand::new(uv_path)
+    let output = silent_cmd(uv_path)
         .args(&args)
         .output()
         .await
@@ -796,16 +852,32 @@ async fn install_matanyone(
 
     progress(
         SetupStep::InstallMatAnyone,
+        0.4,
+        "Patching dependencies (cchardet → charset-normalizer)...",
+    );
+
+    // cchardet has no pre-built wheels for Python >= 3.10 and fails to compile.
+    // Replace it with charset-normalizer in the project requirements.
+    patch_cchardet_dependency(&target_dir).await;
+
+    progress(
+        SetupStep::InstallMatAnyone,
         0.5,
         "Installing MatAnyone2 package...",
     );
 
     info!("Installing MatAnyone2 from {}", target_dir.display());
 
+    // Pre-install charset-normalizer as cchardet replacement
     let venv_str = get_venv_dir().to_string_lossy().to_string();
+    let _ = silent_cmd(uv_path)
+        .args(["pip", "install", "charset-normalizer", "-p", &venv_str])
+        .output()
+        .await;
+
     let src_str = target_dir.to_string_lossy().to_string();
 
-    let output = TokioCommand::new(uv_path)
+    let output = silent_cmd(uv_path)
         .args(["pip", "install", &src_str, "-p", &venv_str])
         .output()
         .await
@@ -823,6 +895,33 @@ async fn install_matanyone(
     );
     info!("MatAnyone2 installed successfully");
     Ok(())
+}
+
+/// Replace `cchardet` with `charset-normalizer` in MatAnyone2 project files.
+/// cchardet fails to compile on Python >= 3.10 (missing longintrepr.h).
+async fn patch_cchardet_dependency(project_dir: &Path) {
+    let files_to_patch = [
+        "setup.cfg",
+        "setup.py",
+        "pyproject.toml",
+        "requirements.txt",
+    ];
+
+    for filename in &files_to_patch {
+        let filepath = project_dir.join(filename);
+        if let Ok(content) = tokio::fs::read_to_string(&filepath).await {
+            if content.contains("cchardet") {
+                let patched = content
+                    .replace("cchardet", "charset-normalizer")
+                    .replace("charset-normalizer>=2.1", "charset-normalizer>=3.0");
+                if let Err(e) = tokio::fs::write(&filepath, &patched).await {
+                    warn!("Failed to patch {}: {}", filename, e);
+                } else {
+                    info!("Patched {} — replaced cchardet with charset-normalizer", filename);
+                }
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -844,7 +943,7 @@ async fn validate_installation(
         );
     }
 
-    let output = TokioCommand::new(&venv_python)
+    let output = silent_cmd(&venv_python)
         .args([
             "-c",
             "from matanyone2 import MatAnyone2; print('ok')",
@@ -876,7 +975,7 @@ async fn validate_installation(
 
 /// Check whether a Python package can be imported (async).
 async fn check_package_importable(python: &Path, package: &str) -> bool {
-    let result = TokioCommand::new(python)
+    let result = silent_cmd(python)
         .args(["-c", &format!("import {}; print('ok')", package)])
         .output()
         .await;
@@ -898,7 +997,7 @@ fn check_deps_installed_sync() -> bool {
     if !python.exists() {
         return false;
     }
-    match std::process::Command::new(&python)
+    match silent_cmd_std(&python)
         .args(["-c", "import torch; print('ok')"])
         .output()
     {
@@ -918,7 +1017,7 @@ fn check_matanyone_installed_sync() -> bool {
     if !python.exists() {
         return false;
     }
-    match std::process::Command::new(&python)
+    match silent_cmd_std(&python)
         .args(["-c", "import matanyone2; print('ok')"])
         .output()
     {

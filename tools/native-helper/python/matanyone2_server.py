@@ -88,11 +88,17 @@ def load_model(models_directory: str) -> bool:
     try:
         from matanyone2 import MatAnyone2
 
-        log.info("Loading MatAnyone2 model from %s ...", models_directory)
-        model = MatAnyone2.from_pretrained(
-            "PeiqingYang/MatAnyone2",
-            local_dir=models_directory,
-        )
+        model_path = Path(models_directory)
+        log.info("Loading MatAnyone2 model from %s ...", model_path)
+
+        if model_path.exists():
+            model = MatAnyone2.from_pretrained(str(model_path))
+        else:
+            log.warning(
+                "Models directory %s does not exist yet, falling back to HuggingFace repo",
+                model_path,
+            )
+            model = MatAnyone2.from_pretrained("PeiqingYang/MatAnyone2")
         model = model.to(model_device)
         log.info("Model loaded successfully on %s", model_device)
         return True

@@ -1,7 +1,7 @@
 // App version - INCREMENT ON EVERY COMMIT!
 // Format: MAJOR.MINOR.PATCH
 // Increment PATCH (0.0.X) for each commit
-export const APP_VERSION = '1.3.6';
+export const APP_VERSION = '1.3.7';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -40,8 +40,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'Native Helper v0.3.1 available',
-  message: 'Includes the local AI bridge, Firefox project save/open support, and the refreshed helper workflow.',
+  title: 'Native Helper v0.3.9 available',
+  message: 'Includes the updated helper release flow, MatAnyone2 setup work, and the refreshed local helper workflow.',
   animated: true,
 };
 
@@ -99,6 +99,14 @@ export interface RawChangeEntry {
   highlight?: 'community';
   contributorName?: string;
   contributorUrl?: string;
+}
+
+export function shouldAutoShowChangelog(
+  showChangelogOnStartup: boolean,
+  lastSeenChangelogVersion: string | null | undefined,
+  appVersion: string = APP_VERSION,
+): boolean {
+  return showChangelogOnStartup || lastSeenChangelogVersion !== appVersion;
 }
 
 // Import changelog data from JSON

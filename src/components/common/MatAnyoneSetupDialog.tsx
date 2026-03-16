@@ -361,11 +361,9 @@ export function MatAnyoneSetupDialog({ onClose }: MatAnyoneSetupDialogProps) {
     ensureKeyframes();
   }, []);
 
-  // Check status on mount if not checked yet
+  // Always refresh status when dialog opens
   useEffect(() => {
-    if (setupStatus === 'not-checked') {
-      getMatAnyoneService().checkStatus();
-    }
+    getMatAnyoneService().checkStatus();
   }, []);
 
   // Auto-scroll log area to bottom

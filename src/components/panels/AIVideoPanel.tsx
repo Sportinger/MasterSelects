@@ -13,14 +13,22 @@ import {
   getVideoProviders,
   getProvider,
   calculateCost,
-  type VideoProvider,
   type VideoTask,
   type TextToVideoParams,
   type ImageToVideoParams,
   type AccountInfo,
 } from '../../services/piApiService';
+import {
+  kieAiService,
+  getKieAiProviders,
+  getKieAiProvider,
+  calculateKieAiCost,
+} from '../../services/kieAiService';
 import { ImageCropper, exportCroppedImage, type CropData } from './ImageCropper';
 import './AIVideoPanel.css';
+
+// Video generation service backend
+type VideoService = 'piapi' | 'kieai';
 
 type GenerationType = 'text-to-video' | 'image-to-video';
 type PanelTab = 'generate' | 'history';
@@ -126,6 +134,24 @@ function getAspectRatioDimensions(aspectRatio: string): { width: number; height:
   return { width: w || 16, height: h || 9 };
 }
 
+// Format elapsed time as mm:ss
+function formatElapsed(startDate: Date): string {
+  const elapsed = Math.floor((Date.now() - new Date(startDate).getTime()) / 1000);
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+// Live timer component that updates every second
+function JobTimer({ startDate }: { startDate: Date }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, []);
+  return <span className="job-timer">{formatElapsed(startDate)}</span>;
+}
+
 export function AIVideoPanel() {
   const { apiKeys, openSettings } = useSettingsStore();
   const { importFile } = useMediaStore();
@@ -134,13 +160,34 @@ export function AIVideoPanel() {
   // Panel tab state
   const [activeTab, setActiveTab] = useState<PanelTab>('generate');
 
+  // Service selection (PiAPI vs Kie.ai)
+  const [selectedService, setSelectedService] = useState<VideoService>(() => {
+    // Default to whichever service has a key configured
+    if (apiKeys.kieai && !apiKeys.piapi) return 'kieai';
+    return 'piapi';
+  });
+
+  // Get providers for selected service
+  const providers = selectedService === 'kieai' ? getKieAiProviders() : getVideoProviders();
+
   // Provider and model selection
-  const [providers] = useState<VideoProvider[]>(() => getVideoProviders());
   const [selectedProvider, setSelectedProvider] = useState<string>(providers[0]?.id || 'kling');
   const [selectedVersion, setSelectedVersion] = useState<string>(providers[0]?.versions[0] || '2.6');
 
   // Get current provider config
-  const currentProvider = getProvider(selectedProvider) || providers[0];
+  const currentProvider = (selectedService === 'kieai'
+    ? getKieAiProvider(selectedProvider)
+    : getProvider(selectedProvider)) || providers[0];
+
+  // Reset provider when service changes
+  useEffect(() => {
+    const serviceProviders = selectedService === 'kieai' ? getKieAiProviders() : getVideoProviders();
+    const firstProvider = serviceProviders[0];
+    if (firstProvider) {
+      setSelectedProvider(firstProvider.id);
+      setSelectedVersion(firstProvider.versions[0]);
+    }
+  }, [selectedService]);
 
   // Generation type (default to image-to-video)
   const [generationType, setGenerationType] = useState<GenerationType>('image-to-video');
@@ -152,6 +199,7 @@ export function AIVideoPanel() {
   const [aspectRatio, setAspectRatio] = useState<string>('16:9');
   const [mode, setMode] = useState<string>('std');
   const [cfgScale, setCfgScale] = useState<number>(0.5);
+  const [generateAudio, setGenerateAudio] = useState(false);
 
   // Image-to-video specific
   const [startImagePreview, setStartImagePreview] = useState<string | null>(null);
@@ -179,32 +227,36 @@ export function AIVideoPanel() {
   const [accountInfo, setAccountInfo] = useState<AccountInfo | null>(null);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
-  // Check if API credentials are available
-  const hasApiKey = !!apiKeys.piapi;
+  // Check if API credentials are available for the selected service
+  const hasApiKey = selectedService === 'kieai' ? !!apiKeys.kieai : !!apiKeys.piapi;
 
   // Fetch account balance
   const fetchAccountBalance = useCallback(async () => {
-    if (!apiKeys.piapi) return;
+    const activeKey = selectedService === 'kieai' ? apiKeys.kieai : apiKeys.piapi;
+    if (!activeKey) return;
 
     setIsLoadingBalance(true);
     try {
-      const info = await piApiService.getAccountInfo();
+      const service = selectedService === 'kieai' ? kieAiService : piApiService;
+      const info = await service.getAccountInfo();
       setAccountInfo(info);
     } catch (err) {
       log.error('Failed to fetch account balance', err);
-      // Don't show error to user, just log it
     } finally {
       setIsLoadingBalance(false);
     }
-  }, [apiKeys.piapi]);
+  }, [apiKeys.piapi, apiKeys.kieai, selectedService]);
 
   // Set API key when it changes and fetch balance
   useEffect(() => {
     if (apiKeys.piapi) {
       piApiService.setApiKey(apiKeys.piapi);
-      fetchAccountBalance();
     }
-  }, [apiKeys.piapi, fetchAccountBalance]);
+    if (apiKeys.kieai) {
+      kieAiService.setApiKey(apiKeys.kieai);
+    }
+    fetchAccountBalance();
+  }, [apiKeys.piapi, apiKeys.kieai, fetchAccountBalance]);
 
   // Update version when provider changes
   useEffect(() => {
@@ -385,12 +437,19 @@ export function AIVideoPanel() {
     }
   }, [importFile, tracks, addClip, addTrack, addToTimeline]);
 
+  // Get the active service instance
+  const getActiveService = useCallback(() => {
+    return selectedService === 'kieai' ? kieAiService : piApiService;
+  }, [selectedService]);
+
   // Generate video
   const generateVideo = useCallback(async () => {
     if (!prompt.trim() || isGenerating) return;
 
     setIsGenerating(true);
     setError(null);
+
+    const service = getActiveService();
 
     try {
       let taskId: string;
@@ -405,9 +464,10 @@ export function AIVideoPanel() {
           aspectRatio,
           mode,
           cfgScale,
+          sound: generateAudio,
         };
 
-        taskId = await piApiService.createTextToVideo(params);
+        taskId = await service.createTextToVideo(params);
       } else {
         // Image-to-video - use cropped images
         const params: ImageToVideoParams = {
@@ -419,11 +479,12 @@ export function AIVideoPanel() {
           aspectRatio,
           mode,
           cfgScale,
+          sound: generateAudio,
           startImageUrl: startImagePreview ? await getCroppedImageUrl(startImagePreview, startCropData) : undefined,
           endImageUrl: endImagePreview ? await getCroppedImageUrl(endImagePreview, endCropData) : undefined,
         };
 
-        taskId = await piApiService.createImageToVideo(params);
+        taskId = await service.createImageToVideo(params);
       }
 
       // Add job to list
@@ -440,7 +501,7 @@ export function AIVideoPanel() {
       setJobs(prev => [job, ...prev]);
 
       // Poll for completion
-      piApiService.pollTaskUntilComplete(taskId, (task) => {
+      service.pollTaskUntilComplete(taskId, (task) => {
         setJobs(prev => prev.map(j =>
           j.id === taskId
             ? {
@@ -483,9 +544,9 @@ export function AIVideoPanel() {
       setIsGenerating(false);
     }
   }, [
-    prompt, negativePrompt, selectedProvider, selectedVersion, duration, aspectRatio, mode, cfgScale,
+    prompt, negativePrompt, selectedProvider, selectedVersion, duration, aspectRatio, mode, cfgScale, generateAudio,
     generationType, startImagePreview, startCropData, endImagePreview, endCropData, isGenerating,
-    importVideoToProject, getCroppedImageUrl,
+    importVideoToProject, getCroppedImageUrl, getActiveService,
   ]);
 
   // Remove job from list
@@ -535,8 +596,10 @@ export function AIVideoPanel() {
     await importVideoToProject({ ...job });
   }, [importVideoToProject]);
 
-  // Calculate current cost
-  const currentCost = calculateCost(selectedProvider, mode, duration);
+  // Calculate current cost based on active service
+  const currentCost = selectedService === 'kieai'
+    ? calculateKieAiCost(selectedProvider, mode, duration, generateAudio)
+    : calculateCost(selectedProvider, mode, duration);
 
   return (
     <div className={`ai-video-panel ${!hasApiKey ? 'no-api-key' : ''}`}>
@@ -545,17 +608,27 @@ export function AIVideoPanel() {
         <div className="ai-video-overlay">
           <div className="ai-video-overlay-content">
             <span className="no-key-icon">🎬</span>
-            <p>PiAPI key required for AI video generation</p>
+            <p>{selectedService === 'kieai' ? 'Kie.ai' : 'PiAPI'} key required for AI video generation</p>
             <span className="no-key-hint">
-              Access Kling, Luma, Hailuo, and more models
+              {selectedService === 'kieai'
+                ? 'Access Kling 3.0 via Kie.ai'
+                : 'Access Kling, Luma, Hailuo, and more models'}
             </span>
-            <button className="btn-settings" onClick={openSettings}>
-              Open Settings
-            </button>
+            <div className="no-key-actions">
+              <button className="btn-settings" onClick={openSettings}>
+                Open Settings
+              </button>
+              <button
+                className="btn-switch-service"
+                onClick={() => setSelectedService(selectedService === 'kieai' ? 'piapi' : 'kieai')}
+              >
+                Switch to {selectedService === 'kieai' ? 'PiAPI' : 'Kie.ai'}
+              </button>
+            </div>
           </div>
         </div>
       )}
-      {/* Sub-tabs with provider dropdown */}
+      {/* Sub-tabs with service + provider dropdowns */}
       <div className="panel-tabs-row">
         <div className="panel-tabs">
           <button
@@ -571,17 +644,132 @@ export function AIVideoPanel() {
             History ({history.length})
           </button>
         </div>
-        <select
-          className="provider-select"
-          value={selectedProvider}
-          onChange={(e) => setSelectedProvider(e.target.value)}
-          disabled={isGenerating}
-        >
-          {providers.map(p => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+        <div className="service-provider-selects">
+          <select
+            className="service-select"
+            value={selectedService}
+            onChange={(e) => setSelectedService(e.target.value as VideoService)}
+            disabled={isGenerating}
+            title="Video generation service"
+          >
+            <option value="piapi">PiAPI</option>
+            <option value="kieai">Kie.ai</option>
+          </select>
+          <select
+            className="provider-select"
+            value={selectedProvider}
+            onChange={(e) => setSelectedProvider(e.target.value)}
+            disabled={isGenerating}
+          >
+            {providers.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
+
+      {/* Jobs Queue - shown at top when not empty */}
+      {jobs.length > 0 && (
+        <div className="jobs-section jobs-section-top">
+          <div className="jobs-header">
+            <h3>Queue ({jobs.length})</h3>
+          </div>
+          <div className="jobs-list-scroll">
+            {jobs.map(job => (
+              <div
+                key={job.id}
+                className={`job-item-compact ${job.status}`}
+                draggable={!!job.videoUrl}
+                onDragStart={(e) => {
+                  if (!job.videoUrl) return;
+                  e.dataTransfer.setData('text/plain', job.videoUrl);
+                  e.dataTransfer.setData('application/x-ai-video', JSON.stringify({
+                    id: job.id,
+                    prompt: job.prompt,
+                    videoUrl: job.videoUrl,
+                  }));
+                  e.dataTransfer.effectAllowed = 'copy';
+                }}
+              >
+                {/* Mini thumbnail for completed videos */}
+                {job.videoUrl && (
+                  <video
+                    className="job-thumb"
+                    src={job.videoUrl}
+                    preload="metadata"
+                    muted
+                  />
+                )}
+                {/* Spinner for pending/processing */}
+                {!job.videoUrl && job.status !== 'failed' && (
+                  <div className="job-thumb job-thumb-loading">
+                    <span className="job-spinner" />
+                  </div>
+                )}
+                <div className="job-compact-info">
+                  <div className="job-compact-top">
+                    <span className="job-type">{job.provider.toUpperCase()}</span>
+                    <span className={`job-status ${job.status}`}>
+                      {job.status === 'pending' && 'Queued'}
+                      {job.status === 'processing' && 'Processing...'}
+                      {job.status === 'completed' && 'Done'}
+                      {job.status === 'failed' && 'Failed'}
+                    </span>
+                    {(job.status === 'pending' || job.status === 'processing') && (
+                      <JobTimer startDate={job.createdAt} />
+                    )}
+                  </div>
+                  <div className="job-prompt-compact">{job.prompt}</div>
+                  {job.error && <div className="job-error-compact">{job.error}</div>}
+                </div>
+                <button
+                  className="btn-remove"
+                  onClick={() => removeJob(job.id)}
+                  title="Remove"
+                >
+                  x
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Balance bar + Generate button - always visible at top */}
+      {hasApiKey && (
+        <div className="balance-bar">
+          <div className="credit-balance">
+            {accountInfo ? (
+              <span className="balance-amount">
+                {selectedService === 'kieai'
+                  ? `${accountInfo.credits} credits`
+                  : `$${accountInfo.creditsUsd.toFixed(2)}`}
+              </span>
+            ) : (
+              <span className="balance-loading">
+                {isLoadingBalance ? 'Loading...' : '--'}
+              </span>
+            )}
+            <button
+              className="btn-refresh-balance"
+              onClick={fetchAccountBalance}
+              disabled={isLoadingBalance}
+              title="Refresh balance"
+            >
+              {isLoadingBalance ? '...' : '↻'}
+            </button>
+          </div>
+          <button
+            className="btn-generate-top"
+            onClick={generateVideo}
+            disabled={isGenerating || !prompt.trim()}
+          >
+            {isGenerating ? 'Starting...' : `Generate (~${selectedService === 'kieai'
+              ? `${currentCost} cr`
+              : `$${currentCost.toFixed(2)}`})`}
+          </button>
+        </div>
+      )}
 
       {/* Content */}
       {activeTab === 'generate' ? (
@@ -637,7 +825,7 @@ export function AIVideoPanel() {
                   onDrop={handleStartDrop}
                   onUseCurrentFrame={useCurrentFrameStart}
                 />
-                {selectedProvider === 'kling' && (
+                {(selectedProvider === 'kling' || selectedProvider === 'kling-3.0') && (
                   <ImageCropper
                     label="End Frame (optional)"
                     imageUrl={endImagePreview}
@@ -667,18 +855,20 @@ export function AIVideoPanel() {
             />
           </div>
 
-          {/* Negative Prompt */}
-          <div className="input-group">
-            <label>Negative Prompt (optional)</label>
-            <textarea
-              className="prompt-input negative"
-              value={negativePrompt}
-              onChange={(e) => setNegativePrompt(e.target.value)}
-              placeholder="What to avoid in the generation..."
-              disabled={isGenerating}
-              rows={2}
-            />
-          </div>
+          {/* Negative Prompt (PiAPI only - not supported by Kie.ai Kling 3.0) */}
+          {selectedService === 'piapi' && (
+            <div className="input-group">
+              <label>Negative Prompt (optional)</label>
+              <textarea
+                className="prompt-input negative"
+                value={negativePrompt}
+                onChange={(e) => setNegativePrompt(e.target.value)}
+                placeholder="What to avoid in the generation..."
+                disabled={isGenerating}
+                rows={2}
+              />
+            </div>
+          )}
 
           {/* Parameters Grid */}
           <div className="params-grid">
@@ -742,8 +932,8 @@ export function AIVideoPanel() {
               </div>
             )}
 
-            {/* CFG Scale (Kling only) */}
-            {selectedProvider === 'kling' && (
+            {/* CFG Scale (PiAPI Kling only - not supported by Kie.ai) */}
+            {selectedProvider === 'kling' && selectedService === 'piapi' && (
               <div className="param-group cfg-slider">
                 <label>CFG Scale: {cfgScale.toFixed(2)}</label>
                 <input
@@ -759,51 +949,29 @@ export function AIVideoPanel() {
             )}
           </div>
 
-          {/* Timeline Integration Option */}
-          <label className="timeline-option">
-            <input
-              type="checkbox"
-              checked={addToTimeline}
-              onChange={(e) => setAddToTimeline(e.target.checked)}
-              disabled={isGenerating}
-            />
-            <span>Add to timeline when complete</span>
-          </label>
-
-          {/* Credit Info */}
-          <div className="credit-info">
-            <div className="credit-balance">
-              {accountInfo ? (
-                <span className="balance-amount">
-                  Balance: ${accountInfo.creditsUsd.toFixed(2)}
-                </span>
-              ) : (
-                <span className="balance-loading">
-                  {isLoadingBalance ? 'Loading...' : 'Balance: --'}
-                </span>
-              )}
-              <button
-                className="btn-refresh-balance"
-                onClick={fetchAccountBalance}
-                disabled={isLoadingBalance}
-                title="Refresh balance"
-              >
-                {isLoadingBalance ? '...' : '↻'}
-              </button>
-            </div>
-            <span className="credit-cost">
-              Est. cost: ~${currentCost.toFixed(2)}
-            </span>
+          {/* Audio + Timeline Options */}
+          <div className="generation-options">
+            {(selectedProvider === 'kling' || selectedProvider === 'kling-3.0') && (
+              <label className="timeline-option">
+                <input
+                  type="checkbox"
+                  checked={generateAudio}
+                  onChange={(e) => setGenerateAudio(e.target.checked)}
+                  disabled={isGenerating}
+                />
+                <span>Generate audio</span>
+              </label>
+            )}
+            <label className="timeline-option">
+              <input
+                type="checkbox"
+                checked={addToTimeline}
+                onChange={(e) => setAddToTimeline(e.target.checked)}
+                disabled={isGenerating}
+              />
+              <span>Add to timeline when complete</span>
+            </label>
           </div>
-
-          {/* Generate Button */}
-          <button
-            className="btn-generate"
-            onClick={generateVideo}
-            disabled={isGenerating || !prompt.trim()}
-          >
-            {isGenerating ? 'Starting...' : `Generate (~$${currentCost.toFixed(2)})`}
-          </button>
 
           {/* Error */}
           {error && (
@@ -813,58 +981,6 @@ export function AIVideoPanel() {
             </div>
           )}
 
-          {/* Jobs List */}
-          {jobs.length > 0 && (
-            <div className="jobs-section">
-              <h3>Generation Queue</h3>
-              <div className="jobs-list">
-                {jobs.map(job => (
-                  <div key={job.id} className={`job-item ${job.status}`}>
-                    <div className="job-header">
-                      <span className="job-type">
-                        {job.provider.toUpperCase()}
-                      </span>
-                      <span className={`job-status ${job.status}`}>
-                        {job.status === 'pending' && 'Queued'}
-                        {job.status === 'processing' && 'Processing...'}
-                        {job.status === 'completed' && 'Done'}
-                        {job.status === 'failed' && 'Failed'}
-                      </span>
-                      <button
-                        className="btn-remove"
-                        onClick={() => removeJob(job.id)}
-                        title="Remove"
-                      >
-                        x
-                      </button>
-                    </div>
-                    <div className="job-prompt">{job.prompt}</div>
-                    {job.error && (
-                      <div className="job-error">{job.error}</div>
-                    )}
-                    {job.videoUrl && (
-                      <div className="job-result">
-                        <video
-                          src={job.videoUrl}
-                          controls
-                          preload="metadata"
-                        />
-                        <a
-                          href={job.videoUrl}
-                          download
-                          className="btn-download"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          Download
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       ) : (
         /* History Tab */

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { getChangelogCalendar, getGroupedChangelog, type RawChangeEntry } from '../../src/version';
+import {
+  getChangelogCalendar,
+  getGroupedChangelog,
+  shouldAutoShowChangelog,
+  type RawChangeEntry,
+} from '../../src/version';
 
 describe('getGroupedChangelog', () => {
   it('uses granular recent buckets plus month and initial commit buckets', () => {
@@ -124,5 +129,19 @@ describe('getChangelogCalendar', () => {
       isOutOfRange: true,
       count: 0,
     });
+  });
+});
+
+describe('shouldAutoShowChangelog', () => {
+  it('shows on every startup when the always-show setting is enabled', () => {
+    expect(shouldAutoShowChangelog(true, '1.3.6', '1.3.6')).toBe(true);
+  });
+
+  it('forces the changelog once after an update even when always-show is disabled', () => {
+    expect(shouldAutoShowChangelog(false, '1.3.5', '1.3.6')).toBe(true);
+  });
+
+  it('stays hidden after the current version was already acknowledged and always-show is disabled', () => {
+    expect(shouldAutoShowChangelog(false, '1.3.6', '1.3.6')).toBe(false);
   });
 });

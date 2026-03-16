@@ -860,13 +860,29 @@ class NativeHelperClientImpl {
    */
   async matanyoneStatus(): Promise<MatAnyoneStatusResponse> {
     const id = this.nextId();
-    const response = await this.send({ cmd: 'matanyone_status', id });
 
-    if (!response.ok) {
-      throw new Error((response as any).error?.message || 'Failed to get MatAnyone2 status');
-    }
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(new Error('Request timeout'));
+      }, 15000);
 
-    return response as unknown as MatAnyoneStatusResponse;
+      this.pendingRequests.set(id, (response) => {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(id);
+        if (!response.ok) {
+          reject(new Error((response as any).error?.message || 'Failed to get MatAnyone2 status'));
+        } else {
+          resolve(response as unknown as MatAnyoneStatusResponse);
+        }
+      });
+
+      this.sendRaw(JSON.stringify({ cmd: 'mat_anyone_status', id })).catch((err) => {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(id);
+        reject(err);
+      });
+    });
   }
 
   /**
@@ -903,7 +919,7 @@ class NativeHelperClientImpl {
         }
       });
 
-      const cmd: any = { cmd: 'matanyone_setup', id };
+      const cmd: any = { cmd: 'mat_anyone_setup', id };
       if (pythonPath) {
         cmd.python_path = pythonPath;
       }
@@ -949,7 +965,7 @@ class NativeHelperClientImpl {
         }
       });
 
-      this.sendRaw(JSON.stringify({ cmd: 'matanyone_download_model', id })).catch((err) => {
+      this.sendRaw(JSON.stringify({ cmd: 'mat_anyone_download_model', id })).catch((err) => {
         clearTimeout(timeout);
         this.pendingRequests.delete(id);
         reject(err);
@@ -962,7 +978,7 @@ class NativeHelperClientImpl {
    */
   async matanyoneStart(): Promise<{ success: boolean; port?: number }> {
     const id = this.nextId();
-    const response = await this.send({ cmd: 'matanyone_start', id });
+    const response = await this.send({ cmd: 'mat_anyone_start', id });
 
     if (!response.ok) {
       return { success: false };
@@ -976,7 +992,7 @@ class NativeHelperClientImpl {
    */
   async matanyoneStop(): Promise<{ success: boolean }> {
     const id = this.nextId();
-    const response = await this.send({ cmd: 'matanyone_stop', id });
+    const response = await this.send({ cmd: 'mat_anyone_stop', id });
     return { success: response.ok === true };
   }
 
@@ -1019,7 +1035,7 @@ class NativeHelperClientImpl {
       });
 
       const cmd: any = {
-        cmd: 'matanyone_matte',
+        cmd: 'mat_anyone_matte',
         id,
         video_path: videoPath,
         mask_path: maskPath,
@@ -1046,7 +1062,7 @@ class NativeHelperClientImpl {
    */
   async matanyoneCancel(jobId: string): Promise<void> {
     const id = this.nextId();
-    await this.send({ cmd: 'matanyone_cancel', id, job_id: jobId });
+    await this.send({ cmd: 'mat_anyone_cancel', id, job_id: jobId });
   }
 
   /**
@@ -1054,7 +1070,7 @@ class NativeHelperClientImpl {
    */
   async matanyoneUninstall(): Promise<{ success: boolean }> {
     const id = this.nextId();
-    const response = await this.send({ cmd: 'matanyone_uninstall', id });
+    const response = await this.send({ cmd: 'mat_anyone_uninstall', id });
     return { success: response.ok === true };
   }
 
@@ -1227,6 +1243,9 @@ class NativeHelperClientImpl {
 
       // Register callback
       this.pendingRequests.set(id, (response) => {
+        if ((response as any)?.type === 'progress') {
+          return;
+        }
         clearTimeout(timeout);
         resolve(response);
       });

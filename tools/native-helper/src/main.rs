@@ -7,6 +7,12 @@
 //! On Windows (--console): runs in a terminal like on other platforms.
 //! On Linux/macOS: always runs in console mode.
 
+// Hide console window on Windows (no flash at startup)
+#![cfg_attr(
+    all(target_os = "windows", not(debug_assertions)),
+    windows_subsystem = "windows"
+)]
+
 mod download;
 mod matanyone;
 mod protocol;

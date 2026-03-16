@@ -206,6 +206,7 @@ export interface TextToVideoParams {
   aspectRatio: string;
   mode: string;
   cfgScale?: number;
+  sound?: boolean;
 }
 
 export interface ImageToVideoParams {
@@ -219,6 +220,7 @@ export interface ImageToVideoParams {
   aspectRatio?: string;
   mode: string;
   cfgScale?: number;
+  sound?: boolean;
 }
 
 export interface AccountInfo {
