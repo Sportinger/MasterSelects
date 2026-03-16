@@ -586,12 +586,36 @@
 .balance-bar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  padding: var(--sp-1) var(--sp-3);
+  justify-content: space-between;
+  padding: var(--sp-1) var(--sp-2);
   background: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
   font-size: var(--font-sm);
+  gap: var(--sp-2);
+}
+
+.btn-generate-top {
+  padding: var(--sp-1) var(--sp-3);
+  background: var(--accent);
+  color: var(--text-on-accent, #fff);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--font-sm);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background var(--transition-normal);
+}
+
+.btn-generate-top:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn-generate-top:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .credit-info {

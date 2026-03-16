@@ -735,7 +735,7 @@ export function AIVideoPanel() {
         </div>
       )}
 
-      {/* Balance bar - always visible at top */}
+      {/* Balance bar + Generate button - always visible at top */}
       {hasApiKey && (
         <div className="balance-bar">
           <div className="credit-balance">
@@ -759,6 +759,15 @@ export function AIVideoPanel() {
               {isLoadingBalance ? '...' : '↻'}
             </button>
           </div>
+          <button
+            className="btn-generate-top"
+            onClick={generateVideo}
+            disabled={isGenerating || !prompt.trim()}
+          >
+            {isGenerating ? 'Starting...' : `Generate (~${selectedService === 'kieai'
+              ? `${currentCost} cr`
+              : `$${currentCost.toFixed(2)}`})`}
+          </button>
         </div>
       )}
 
@@ -963,26 +972,6 @@ export function AIVideoPanel() {
               <span>Add to timeline when complete</span>
             </label>
           </div>
-
-          {/* Est. cost */}
-          <div className="credit-info">
-            <span className="credit-cost">
-              Est. cost: ~{selectedService === 'kieai'
-                ? `${currentCost} credits`
-                : `$${currentCost.toFixed(2)}`}
-            </span>
-          </div>
-
-          {/* Generate Button */}
-          <button
-            className="btn-generate"
-            onClick={generateVideo}
-            disabled={isGenerating || !prompt.trim()}
-          >
-            {isGenerating ? 'Starting...' : `Generate (~${selectedService === 'kieai'
-              ? `${currentCost} credits`
-              : `$${currentCost.toFixed(2)}`})`}
-          </button>
 
           {/* Error */}
           {error && (
