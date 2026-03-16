@@ -406,7 +406,7 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
     setIsClosing(true);
     setTimeout(() => {
       onClose();
-    }, 120);
+    }, 200);
   }, [onClose, isClosing, dontShowAgain, setShowChangelogOnStartup]);
 
   // Handle Escape key to close

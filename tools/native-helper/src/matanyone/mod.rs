@@ -4,7 +4,9 @@
 //! and Python environment setup for the MatAnyone2 neural network.
 
 pub mod env;
+pub mod inference;
 pub mod model;
+pub mod process;
 
 pub use env::{
     detect_cuda, get_data_dir, get_env_info, get_venv_python, setup_environment, CudaInfo,

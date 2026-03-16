@@ -15,6 +15,8 @@ type ExtendedSystemInfo = SystemInfo & {
   ytdlp_available?: boolean;
   fs_commands?: boolean;
   ai_bridge?: boolean;
+  matanyone_available?: boolean;
+  matanyone_status?: string;
 };
 
 type InstallGuide = {
@@ -31,7 +33,7 @@ type PublishedReleaseInfo = {
   url: string;
 };
 
-const NATIVE_HELPER_VERSION = '0.3.1';
+const NATIVE_HELPER_VERSION = '0.3.2';
 const NATIVE_HELPER_RELEASES = 'https://github.com/Sportinger/MasterSelects/releases';
 const GITHUB_RELEASES_API = 'https://api.github.com/repos/Sportinger/MasterSelects/releases';
 const DOWNLOAD_LINKS = {
@@ -369,11 +371,13 @@ function NativeHelperDialog({
         { label: helperInfo.ytdlp_available ? 'Downloads ready' : 'yt-dlp missing', tone: helperInfo.ytdlp_available ? 'good' : 'warn' },
         { label: helperInfo.fs_commands ? 'Projects ready' : 'Projects unavailable', tone: helperInfo.fs_commands ? 'good' : 'warn' },
         { label: helperInfo.ai_bridge ? 'AI bridge ready' : 'AI bridge unavailable', tone: helperInfo.ai_bridge ? 'good' : 'warn' },
+        { label: helperInfo.matanyone_available ? 'MatAnyone2 ready' : helperInfo.matanyone_status === 'installed' ? 'MatAnyone2 installed' : 'MatAnyone2 not installed', tone: helperInfo.matanyone_available ? 'good' : 'neutral' },
       ]
     : [
         { label: 'Downloads', tone: 'neutral' },
         { label: 'Firefox projects', tone: 'neutral' },
         { label: 'AI bridge', tone: 'neutral' },
+        { label: 'MatAnyone2', tone: 'neutral' },
       ];
 
   return (

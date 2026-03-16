@@ -17,7 +17,8 @@ use warp::Filter;
 use std::sync::atomic::Ordering;
 
 use crate::download;
-use crate::protocol::{Command, Response};
+use crate::matanyone;
+use crate::protocol::{error_codes, Command, Response};
 use crate::session::{AppState, Session};
 use crate::utils;
 
@@ -534,6 +535,289 @@ async fn handle_websocket(
                         let mut w = write.lock().await;
                         w.send(Message::Text(json)).await?;
                     }
+
+                    // ── MatAnyone2 streaming commands ──
+
+                    Command::MatAnyoneSetup { id, python_path: _ } => {
+                        let ws_sender = write.clone();
+                        let id_clone = id.clone();
+                        tokio::spawn(async move {
+                            let ws = ws_sender.clone();
+                            let id_ref = id_clone.clone();
+
+                            let result = matanyone::setup_environment(move |step, percent, message| {
+                                let response = Response::setup_progress(
+                                    &id_ref,
+                                    &step.to_string(),
+                                    percent,
+                                    message,
+                                );
+                                if let Ok(json) = serde_json::to_string(&response) {
+                                    let ws_inner = ws.clone();
+                                    // Fire-and-forget progress message; tokio::spawn to avoid blocking the sync callback
+                                    tokio::spawn(async move {
+                                        let mut w = ws_inner.lock().await;
+                                        let _ = w.send(Message::Text(json)).await;
+                                    });
+                                }
+                            })
+                            .await;
+
+                            let response = match result {
+                                Ok(env_info) => Response::ok(
+                                    &id_clone,
+                                    serde_json::json!({
+                                        "type": "complete",
+                                        "env": serde_json::to_value(&env_info).unwrap_or_default(),
+                                    }),
+                                ),
+                                Err(e) => Response::error(
+                                    &id_clone,
+                                    error_codes::MATANYONE_SETUP_FAILED,
+                                    e,
+                                ),
+                            };
+
+                            if let Ok(json) = serde_json::to_string(&response) {
+                                let mut w = ws_sender.lock().await;
+                                let _ = w.send(Message::Text(json)).await;
+                            }
+                        });
+                    }
+
+                    Command::MatAnyoneDownloadModel { id } => {
+                        let ws_sender = write.clone();
+                        let id_clone = id.clone();
+                        tokio::spawn(async move {
+                            let ws = ws_sender.clone();
+                            let id_ref = id_clone.clone();
+
+                            let result = matanyone::download_model(move |progress| {
+                                let speed_str = format!("{:.1} MB/s", progress.speed_bytes_per_sec / 1_048_576.0);
+                                let eta_str = progress.eta_seconds.map(|s| format!("{:.0}s", s));
+                                let response = Response::download_progress(
+                                    &id_ref,
+                                    progress.percent.min(100.0) as u8,
+                                    Some(&speed_str),
+                                    eta_str.as_deref(),
+                                );
+                                if let Ok(json) = serde_json::to_string(&response) {
+                                    let ws_inner = ws.clone();
+                                    tokio::spawn(async move {
+                                        let mut w = ws_inner.lock().await;
+                                        let _ = w.send(Message::Text(json)).await;
+                                    });
+                                }
+                            })
+                            .await;
+
+                            let response = match result {
+                                Ok(model_info) => Response::ok(
+                                    &id_clone,
+                                    serde_json::json!({
+                                        "type": "complete",
+                                        "downloaded": model_info.downloaded,
+                                        "model_path": model_info.model_path,
+                                        "size_bytes": model_info.size_bytes,
+                                    }),
+                                ),
+                                Err(e) => Response::error(
+                                    &id_clone,
+                                    error_codes::MATANYONE_SETUP_FAILED,
+                                    e,
+                                ),
+                            };
+
+                            if let Ok(json) = serde_json::to_string(&response) {
+                                let mut w = ws_sender.lock().await;
+                                let _ = w.send(Message::Text(json)).await;
+                            }
+                        });
+                    }
+
+                    Command::MatAnyoneStart { id } => {
+                        let ws_sender = write.clone();
+                        let state_clone = state.clone();
+                        let id_clone = id.clone();
+                        tokio::spawn(async move {
+                            // Send starting progress
+                            let starting_response = Response::setup_progress(
+                                &id_clone,
+                                "start_server",
+                                0.0,
+                                "Starting MatAnyone2 inference server...",
+                            );
+                            if let Ok(json) = serde_json::to_string(&starting_response) {
+                                let mut w = ws_sender.lock().await;
+                                let _ = w.send(Message::Text(json)).await;
+                            }
+
+                            let python_path = matanyone::get_venv_python();
+                            let models_dir = matanyone::get_models_dir();
+                            let server_script = matanyone::get_data_dir()
+                                .join("matanyone2")
+                                .join("server.py");
+
+                            let mut proc = state_clone.matanyone_process.lock().await;
+                            let result = proc.start(&python_path, &server_script, &models_dir).await;
+
+                            let response = match result {
+                                Ok(port) => Response::ok(
+                                    &id_clone,
+                                    serde_json::json!({
+                                        "type": "complete",
+                                        "started": true,
+                                        "port": port,
+                                    }),
+                                ),
+                                Err(e) => Response::error(
+                                    &id_clone,
+                                    error_codes::MATANYONE_NOT_INSTALLED,
+                                    e,
+                                ),
+                            };
+
+                            if let Ok(json) = serde_json::to_string(&response) {
+                                let mut w = ws_sender.lock().await;
+                                let _ = w.send(Message::Text(json)).await;
+                            }
+                        });
+                    }
+
+                    Command::MatAnyoneMatte {
+                        id, video_path, mask_path, output_dir, start_frame, end_frame,
+                    } => {
+                        let ws_sender = write.clone();
+                        let state_clone = state.clone();
+                        let id_clone = id.clone();
+                        tokio::spawn(async move {
+                            // Get the port from the running process
+                            let port = {
+                                let proc = state_clone.matanyone_process.lock().await;
+                                let p = proc.port();
+                                if p == 0 {
+                                    let response = Response::error(
+                                        &id_clone,
+                                        error_codes::MATANYONE_NOT_RUNNING,
+                                        "MatAnyone2 server is not running. Start it first.",
+                                    );
+                                    if let Ok(json) = serde_json::to_string(&response) {
+                                        let mut w = ws_sender.lock().await;
+                                        let _ = w.send(Message::Text(json)).await;
+                                    }
+                                    return;
+                                }
+                                p
+                            };
+
+                            let request = crate::matanyone::inference::MatteRequest {
+                                video_path,
+                                mask_path,
+                                output_dir,
+                                start_frame,
+                                end_frame,
+                            };
+
+                            let ws = ws_sender.clone();
+                            let id_ref = id_clone.clone();
+
+                            let result = crate::matanyone::inference::run_matte_job(
+                                port,
+                                request,
+                                move |progress| {
+                                    let response = Response::ok(
+                                        &id_ref,
+                                        serde_json::json!({
+                                            "type": "progress",
+                                            "job_id": progress.job_id,
+                                            "status": progress.status,
+                                            "current_frame": progress.current_frame,
+                                            "total_frames": progress.total_frames,
+                                            "percent": progress.percent,
+                                        }),
+                                    );
+                                    if let Ok(json) = serde_json::to_string(&response) {
+                                        let ws_inner = ws.clone();
+                                        tokio::spawn(async move {
+                                            let mut w = ws_inner.lock().await;
+                                            let _ = w.send(Message::Text(json)).await;
+                                        });
+                                    }
+                                },
+                            )
+                            .await;
+
+                            let response = match result {
+                                Ok(matte_result) => Response::ok(
+                                    &id_clone,
+                                    serde_json::json!({
+                                        "type": "complete",
+                                        "job_id": matte_result.job_id,
+                                        "foreground_path": matte_result.foreground_path,
+                                        "alpha_path": matte_result.alpha_path,
+                                    }),
+                                ),
+                                Err(e) => Response::error(
+                                    &id_clone,
+                                    error_codes::MATANYONE_INFERENCE_FAILED,
+                                    e,
+                                ),
+                            };
+
+                            if let Ok(json) = serde_json::to_string(&response) {
+                                let mut w = ws_sender.lock().await;
+                                let _ = w.send(Message::Text(json)).await;
+                            }
+                        });
+                    }
+
+                    Command::MatAnyoneCancel { id, job_id } => {
+                        let ws_sender = write.clone();
+                        let state_clone = state.clone();
+                        let id_clone = id.clone();
+                        tokio::spawn(async move {
+                            let port = {
+                                let proc = state_clone.matanyone_process.lock().await;
+                                proc.port()
+                            };
+
+                            if port == 0 {
+                                let response = Response::error(
+                                    &id_clone,
+                                    error_codes::MATANYONE_NOT_RUNNING,
+                                    "MatAnyone2 server is not running",
+                                );
+                                if let Ok(json) = serde_json::to_string(&response) {
+                                    let mut w = ws_sender.lock().await;
+                                    let _ = w.send(Message::Text(json)).await;
+                                }
+                                return;
+                            }
+
+                            let result = crate::matanyone::inference::cancel_job(port, &job_id).await;
+
+                            let response = match result {
+                                Ok(()) => Response::ok(
+                                    &id_clone,
+                                    serde_json::json!({
+                                        "cancelled": true,
+                                        "job_id": job_id,
+                                    }),
+                                ),
+                                Err(e) => Response::error(
+                                    &id_clone,
+                                    error_codes::MATANYONE_INFERENCE_FAILED,
+                                    e,
+                                ),
+                            };
+
+                            if let Ok(json) = serde_json::to_string(&response) {
+                                let mut w = ws_sender.lock().await;
+                                let _ = w.send(Message::Text(json)).await;
+                            }
+                        });
+                    }
+
                     other => {
                         if let Some(response) = session.handle_command(other).await {
                             let json = serde_json::to_string(&response)?;

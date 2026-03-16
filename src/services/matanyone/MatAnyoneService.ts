@@ -9,8 +9,8 @@
  */
 
 import { Logger } from '../logger';
-import { NativeHelperClient } from '@/services/nativeHelper/NativeHelperClient';
-import { useMatAnyoneStore } from '@/stores/matanyoneStore';
+import { NativeHelperClient } from '../nativeHelper/NativeHelperClient';
+import { useMatAnyoneStore } from '../../stores/matanyoneStore';
 
 const log = Logger.create('MatAnyone');
 

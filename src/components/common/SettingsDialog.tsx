@@ -11,6 +11,7 @@ import { TranscriptionSettings } from './settings/TranscriptionSettings';
 import { OutputSettings } from './settings/OutputSettings';
 import { PerformanceSettings } from './settings/PerformanceSettings';
 import { ApiKeysSettings } from './settings/ApiKeysSettings';
+import { AIFeaturesSettings } from './settings/AIFeaturesSettings';
 import './settings/SettingsDialog.css';
 
 interface SettingsDialogProps {
@@ -25,6 +26,7 @@ type SettingsCategory =
   | 'transcription'
   | 'output'
   | 'performance'
+  | 'aiFeatures'
   | 'apiKeys';
 
 interface CategoryConfig {
@@ -41,6 +43,7 @@ const categories: CategoryConfig[] = [
   { id: 'transcription', label: 'Transcription', icon: '\uD83C\uDFA4' },
   { id: 'output', label: 'Output', icon: '\uD83D\uDCE4' },
   { id: 'performance', label: 'Performance', icon: '\u26A1' },
+  { id: 'aiFeatures', label: 'AI Features', icon: '\u2726' },
   { id: 'apiKeys', label: 'API Keys', icon: '\uD83D\uDD11' },
 ];
 
@@ -75,6 +78,7 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
       case 'output': return <OutputSettings />;
       case 'performance': return <PerformanceSettings />;
       case 'apiKeys': return <ApiKeysSettings localKeys={localKeys} onKeyChange={handleKeyChange} />;
+      case 'aiFeatures': return <AIFeaturesSettings />;
       default: return null;
     }
   };

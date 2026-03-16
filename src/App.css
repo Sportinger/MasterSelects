@@ -10775,7 +10775,7 @@ input[type="checkbox"] {
   backdrop-filter: blur(10px);
   opacity: 1;
   animation: welcome-backdrop-in 0.14s ease-out both;
-  transition: backdrop-filter 120ms ease-out, opacity 120ms ease-out;
+  transition: backdrop-filter 200ms ease-out, opacity 200ms ease-out;
 }
 
 .whats-new-backdrop.closing {
@@ -10785,7 +10785,7 @@ input[type="checkbox"] {
 
 .whats-new-backdrop .welcome-overlay {
   animation: welcome-overlay-in 0.16s ease-out both;
-  transition: opacity 120ms ease-out, transform 120ms ease-out;
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
 }
 
 .whats-new-backdrop.closing .welcome-overlay {

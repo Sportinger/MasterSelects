@@ -361,12 +361,17 @@ fn http_health_check(port: u16) -> bool {
 
 /// Send SIGTERM to a process by PID (Unix only).
 ///
+/// Shells out to `kill -15 <pid>` to avoid a direct `libc` dependency.
 /// Returns `true` if the signal was sent successfully.
 #[cfg(unix)]
 fn send_sigterm(pid: u32) -> bool {
-    // SAFETY: libc::kill is a standard POSIX call. We pass a valid PID
-    // obtained from the child process and SIGTERM (15).
-    unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) == 0 }
+    std::process::Command::new("kill")
+        .args(["-15", &pid.to_string()])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }
 
 /// Stop a child process, attempting a graceful shutdown first on Unix.

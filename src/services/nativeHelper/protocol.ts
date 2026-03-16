@@ -237,6 +237,55 @@ export interface DirEntry {
   modified: number;
 }
 
+// ── MatAnyone2 Commands ──
+
+export interface MatAnyoneStatusCommand {
+  cmd: 'matanyone_status';
+  id: string;
+}
+
+export interface MatAnyoneSetupCommand {
+  cmd: 'matanyone_setup';
+  id: string;
+  python_path?: string;
+}
+
+export interface MatAnyoneDownloadModelCommand {
+  cmd: 'matanyone_download_model';
+  id: string;
+}
+
+export interface MatAnyoneStartCommand {
+  cmd: 'matanyone_start';
+  id: string;
+}
+
+export interface MatAnyoneStopCommand {
+  cmd: 'matanyone_stop';
+  id: string;
+}
+
+export interface MatAnyoneMatteCommand {
+  cmd: 'matanyone_matte';
+  id: string;
+  video_path: string;
+  mask_path: string;
+  output_dir: string;
+  start_frame?: number;
+  end_frame?: number;
+}
+
+export interface MatAnyoneCancelCommand {
+  cmd: 'matanyone_cancel';
+  id: string;
+  job_id: string;
+}
+
+export interface MatAnyoneUninstallCommand {
+  cmd: 'matanyone_uninstall';
+  id: string;
+}
+
 export type Command =
   | AuthCommand
   | OpenCommand
@@ -262,7 +311,15 @@ export type Command =
   | ListDirCommand
   | DeleteCommand
   | ExistsCommand
-  | RenameCommand;
+  | RenameCommand
+  | MatAnyoneStatusCommand
+  | MatAnyoneSetupCommand
+  | MatAnyoneDownloadModelCommand
+  | MatAnyoneStartCommand
+  | MatAnyoneStopCommand
+  | MatAnyoneMatteCommand
+  | MatAnyoneCancelCommand
+  | MatAnyoneUninstallCommand;
 
 // Encode settings
 export interface EncodeOutput {
@@ -403,6 +460,52 @@ export function isScaled(flags: number): boolean {
  */
 export function isJpeg(flags: number): boolean {
   return (flags & FRAME_FLAGS.JPEG) !== 0;
+}
+
+// ── MatAnyone2 Types ──
+
+export interface MatAnyoneStatusResponse {
+  setup_status: 'not_installed' | 'installed' | 'running' | 'error';
+  python_version: string | null;
+  cuda_available: boolean;
+  cuda_version: string | null;
+  gpu_name: string | null;
+  vram_mb: number | null;
+  model_downloaded: boolean;
+  venv_exists: boolean;
+  deps_installed: boolean;
+  matanyone_installed: boolean;
+  server_running: boolean;
+  server_port: number | null;
+}
+
+export interface MatAnyoneSetupProgress {
+  type: 'progress';
+  step: string;
+  percent: number;
+  message: string;
+}
+
+export interface MatAnyoneDownloadProgress {
+  type: 'progress';
+  step: 'download_model';
+  percent: number;
+  speed?: string;
+  eta?: string;
+}
+
+export interface MatAnyoneMatteProgress {
+  type: 'progress';
+  step: 'matting';
+  current_frame: number;
+  total_frames: number;
+  percent: number;
+}
+
+export interface MatAnyoneMatteResult {
+  foreground_path: string;
+  alpha_path: string;
+  job_id: string;
 }
 
 // Error codes

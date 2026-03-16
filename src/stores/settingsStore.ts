@@ -67,6 +67,10 @@ interface SettingsState {
   // GPU preference
   gpuPowerPreference: GPUPowerPreference;  // 'high-performance' (dGPU) or 'low-power' (iGPU)
 
+  // AI Features
+  matanyoneEnabled: boolean;      // Enable MatAnyone2 video matting
+  matanyonePythonPath: string;    // Python path ('' = auto-detect)
+
   // Media import settings
   copyMediaToProject: boolean;  // Copy imported files to project Raw/ folder
 
@@ -108,6 +112,8 @@ interface SettingsState {
   setNativeHelperConnected: (connected: boolean) => void;
   setForceDesktopMode: (force: boolean) => void;
   setGpuPowerPreference: (preference: GPUPowerPreference) => void;
+  setMatAnyoneEnabled: (enabled: boolean) => void;
+  setMatAnyonePythonPath: (path: string) => void;
   setCopyMediaToProject: (enabled: boolean) => void;
   setHasCompletedSetup: (completed: boolean) => void;
   setHasSeenTutorial: (seen: boolean) => void;
@@ -158,6 +164,8 @@ export const useSettingsStore = create<SettingsState>()(
       nativeHelperConnected: false, // Not connected initially
       forceDesktopMode: false, // Use responsive detection by default
       gpuPowerPreference: 'high-performance', // Prefer dGPU by default
+      matanyoneEnabled: false, // MatAnyone2 disabled by default
+      matanyonePythonPath: '', // Auto-detect Python path
       copyMediaToProject: true, // Copy imported files to Raw/ folder by default
       hasCompletedSetup: false, // Show welcome overlay on first run
       hasSeenTutorial: false, // Show tutorial on first run
@@ -238,6 +246,14 @@ export const useSettingsStore = create<SettingsState>()(
 
       setGpuPowerPreference: (preference) => {
         set({ gpuPowerPreference: preference });
+      },
+
+      setMatAnyoneEnabled: (enabled) => {
+        set({ matanyoneEnabled: enabled });
+      },
+
+      setMatAnyonePythonPath: (path) => {
+        set({ matanyonePythonPath: path });
       },
 
       setCopyMediaToProject: (enabled) => {
@@ -331,6 +347,8 @@ export const useSettingsStore = create<SettingsState>()(
         nativeHelperPort: state.nativeHelperPort,
         forceDesktopMode: state.forceDesktopMode,
         gpuPowerPreference: state.gpuPowerPreference,
+        matanyoneEnabled: state.matanyoneEnabled,
+        matanyonePythonPath: state.matanyonePythonPath,
         copyMediaToProject: state.copyMediaToProject,
         hasCompletedSetup: state.hasCompletedSetup,
         hasSeenTutorial: state.hasSeenTutorial,

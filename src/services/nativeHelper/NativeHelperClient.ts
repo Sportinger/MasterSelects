@@ -15,6 +15,8 @@ import type {
   EncodeOutput,
   VideoInfo,
   DirEntry,
+  MatAnyoneStatusResponse,
+  MatAnyoneMatteResult,
 } from './protocol';
 
 import {
@@ -849,6 +851,211 @@ class NativeHelperClientImpl {
         resolve(null);
       });
     });
+  }
+
+  // ── MatAnyone2 Methods ──
+
+  /**
+   * Check MatAnyone2 environment status
+   */
+  async matanyoneStatus(): Promise<MatAnyoneStatusResponse> {
+    const id = this.nextId();
+    const response = await this.send({ cmd: 'matanyone_status', id });
+
+    if (!response.ok) {
+      throw new Error((response as any).error?.message || 'Failed to get MatAnyone2 status');
+    }
+
+    return response as unknown as MatAnyoneStatusResponse;
+  }
+
+  /**
+   * Run full MatAnyone2 setup with progress
+   */
+  async matanyoneSetup(
+    onProgress?: (step: string, percent: number, message: string) => void,
+    pythonPath?: string,
+  ): Promise<{ success: boolean; error?: string }> {
+    const id = this.nextId();
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(new Error('MatAnyone2 setup timeout'));
+      }, 600000); // 10 minutes
+
+      this.pendingRequests.set(id, (response: any) => {
+        if (response.type === 'progress') {
+          if (onProgress) {
+            onProgress(response.step, response.percent, response.message);
+          }
+          return;
+        }
+
+        clearTimeout(timeout);
+        if (response.ok) {
+          resolve({ success: true });
+        } else {
+          resolve({
+            success: false,
+            error: response.error?.message || 'Setup failed',
+          });
+        }
+      });
+
+      const cmd: any = { cmd: 'matanyone_setup', id };
+      if (pythonPath) {
+        cmd.python_path = pythonPath;
+      }
+
+      this.sendRaw(JSON.stringify(cmd)).catch((err) => {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(id);
+        reject(err);
+      });
+    });
+  }
+
+  /**
+   * Download MatAnyone2 model weights with progress
+   */
+  async matanyoneDownloadModel(
+    onProgress?: (percent: number, speed?: string, eta?: string) => void,
+  ): Promise<{ success: boolean; error?: string }> {
+    const id = this.nextId();
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(new Error('Model download timeout'));
+      }, 600000); // 10 minutes
+
+      this.pendingRequests.set(id, (response: any) => {
+        if (response.type === 'progress') {
+          if (onProgress) {
+            onProgress(response.percent, response.speed, response.eta);
+          }
+          return;
+        }
+
+        clearTimeout(timeout);
+        if (response.ok) {
+          resolve({ success: true });
+        } else {
+          resolve({
+            success: false,
+            error: response.error?.message || 'Model download failed',
+          });
+        }
+      });
+
+      this.sendRaw(JSON.stringify({ cmd: 'matanyone_download_model', id })).catch((err) => {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(id);
+        reject(err);
+      });
+    });
+  }
+
+  /**
+   * Start MatAnyone2 inference server
+   */
+  async matanyoneStart(): Promise<{ success: boolean; port?: number }> {
+    const id = this.nextId();
+    const response = await this.send({ cmd: 'matanyone_start', id });
+
+    if (!response.ok) {
+      return { success: false };
+    }
+
+    return { success: true, port: (response as any).port };
+  }
+
+  /**
+   * Stop MatAnyone2 inference server
+   */
+  async matanyoneStop(): Promise<{ success: boolean }> {
+    const id = this.nextId();
+    const response = await this.send({ cmd: 'matanyone_stop', id });
+    return { success: response.ok === true };
+  }
+
+  /**
+   * Run MatAnyone2 matting job with progress
+   */
+  async matanyoneMatte(
+    videoPath: string,
+    maskPath: string,
+    outputDir: string,
+    options?: { startFrame?: number; endFrame?: number },
+    onProgress?: (currentFrame: number, totalFrames: number, percent: number) => void,
+  ): Promise<MatAnyoneMatteResult> {
+    const id = this.nextId();
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(new Error('Matting timeout'));
+      }, 600000); // 10 minutes
+
+      this.pendingRequests.set(id, (response: any) => {
+        if (response.type === 'progress') {
+          if (onProgress) {
+            onProgress(response.current_frame, response.total_frames, response.percent);
+          }
+          return;
+        }
+
+        clearTimeout(timeout);
+        if (response.ok) {
+          resolve({
+            foreground_path: response.foreground_path,
+            alpha_path: response.alpha_path,
+            job_id: response.job_id,
+          });
+        } else {
+          reject(new Error(response.error?.message || 'Matting failed'));
+        }
+      });
+
+      const cmd: any = {
+        cmd: 'matanyone_matte',
+        id,
+        video_path: videoPath,
+        mask_path: maskPath,
+        output_dir: outputDir,
+      };
+
+      if (options?.startFrame !== undefined) {
+        cmd.start_frame = options.startFrame;
+      }
+      if (options?.endFrame !== undefined) {
+        cmd.end_frame = options.endFrame;
+      }
+
+      this.sendRaw(JSON.stringify(cmd)).catch((err) => {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(id);
+        reject(err);
+      });
+    });
+  }
+
+  /**
+   * Cancel a running MatAnyone2 matting job
+   */
+  async matanyoneCancel(jobId: string): Promise<void> {
+    const id = this.nextId();
+    await this.send({ cmd: 'matanyone_cancel', id, job_id: jobId });
+  }
+
+  /**
+   * Uninstall MatAnyone2 (remove venv, models, etc.)
+   */
+  async matanyoneUninstall(): Promise<{ success: boolean }> {
+    const id = this.nextId();
+    const response = await this.send({ cmd: 'matanyone_uninstall', id });
+    return { success: response.ok === true };
   }
 
   // Private methods
