@@ -1,4 +1,13 @@
-# MasterSelects <sub>Browser-based Video Compositor</sub>
+<div align="center">
+
+# MasterSelects
+
+<h3>Browser-based Video Compositor</h3>
+
+<p>
+  GPU-first editing with <b>30 effects</b>, <b>37 blend modes</b>, <b>76 AI tools</b>, and only <b>13 dependencies</b>.<br>
+  Built from scratch in <b>2,500+ lines of WGSL</b> and <b>120k lines of TypeScript</b>.
+</p>
 
 <p>
   <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-1.3.5-blue.svg" alt="Version"></a>
@@ -6,12 +15,18 @@
   <a href="https://app.fossa.com/projects/custom%2b61097%2fmasterselects"><img src="https://app.fossa.com/api/projects/custom%2b61097%2fmasterselects.svg?type=shield" alt="FOSSA Status"></a>
 </p>
 
-> **30** GPU Effects · **37** Blend Modes · **2,500+** Lines WGSL · **76** AI Tools · **13** Dependencies
->
-> Built on WebGPU · React 19 · TypeScript · Vite · Rust
+<p>
+  <a href="#"><img src="https://img.shields.io/badge/WebGPU-990000?style=flat-square&logo=webgpu&logoColor=white" alt="WebGPU"></a>
+  <a href="#"><img src="https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React 19"></a>
+  <a href="#"><img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite"></a>
+  <a href="#native-helper"><img src="https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white" alt="Rust"></a>
+</p>
 
-<div align="center">
+<br>
+
 <video src="https://github.com/user-attachments/assets/24966b2a-064f-49c8-bc7f-88472a5e4cb0" autoplay loop muted playsinline width="100%"></video>
+
 </div>
 
 ---
