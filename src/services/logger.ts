@@ -28,6 +28,9 @@
  *   Logger.status()                       // Show current config
  */
 
+import { redactSecrets, redactObject } from './security/redact';
+import { fetchWithDevBridgeAuth, hasDevBridgeToken } from './security/devBridgeAuth';
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -180,10 +183,10 @@ class ModuleLogger {
     if (!show) return;
 
     const prefix = this.formatPrefix(entry);
-    const args: unknown[] = [prefix, message];
+    const args: unknown[] = [prefix, entry.message];
 
-    if (data !== undefined) {
-      args.push(data);
+    if (entry.data !== undefined) {
+      args.push(entry.data);
     }
 
     switch (level) {
@@ -198,8 +201,8 @@ class ModuleLogger {
         break;
       case 'ERROR':
         console.error(...args);
-        if (data instanceof Error && data.stack) {
-          console.error(data.stack);
+        if (entry.stack) {
+          console.error(entry.stack);
         }
         break;
     }
@@ -229,15 +232,17 @@ class ModuleLogger {
       timestamp: new Date().toISOString(),
       level,
       module: this.module,
-      message,
+      message: redactSecrets(message),
     };
 
     if (data !== undefined) {
       if (data instanceof Error) {
-        entry.data = { name: data.name, message: data.message };
-        entry.stack = data.stack;
+        entry.data = { name: data.name, message: redactSecrets(data.message) };
+        entry.stack = data.stack ? redactSecrets(data.stack) : undefined;
+      } else if (typeof data === 'string') {
+        entry.data = redactSecrets(data);
       } else {
-        entry.data = data;
+        entry.data = redactObject(data);
       }
     }
 
@@ -441,13 +446,15 @@ if (typeof window !== 'undefined') {
   // ============================================================================
   let syncInterval: number | null = null;
 
+  // Log data is already redacted at entry creation time (in createEntry()),
+  // so no additional redaction is needed before syncing to the server.
   syncLogsToServer = () => {
     try {
       const summary = Logger.summary();
       const recentLogs = logBuffer.slice(-100);
       const payload = JSON.stringify({ ...summary, recentLogs });
 
-      if (navigator.sendBeacon) {
+      if (!hasDevBridgeToken() && navigator.sendBeacon) {
         const sent = navigator.sendBeacon(
           '/api/logs',
           new Blob([payload], { type: 'application/json' })
@@ -455,7 +462,7 @@ if (typeof window !== 'undefined') {
         if (sent) return;
       }
 
-      fetch('/api/logs', {
+      fetchWithDevBridgeAuth('/api/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: payload,

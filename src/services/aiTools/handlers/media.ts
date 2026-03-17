@@ -5,6 +5,8 @@ import { useTimelineStore } from '../../../stores/timeline';
 import type { ToolResult } from '../types';
 import { Logger } from '../../logger';
 import { activateDockPanel, flashPreviewCanvas } from '../aiFeedback';
+import { validateFilePath, getAllowedRoots } from '../../security/fileAccessBroker';
+import { fetchWithDevBridgeAuth } from '../../security/devBridgeAuth';
 
 const log = Logger.create('AITool:Media');
 
@@ -241,13 +243,39 @@ export async function handleImportLocalFiles(
   const results: Array<{ id: string; name: string; type: string; duration?: number; path: string }> = [];
   const errors: Array<{ path: string; error: string }> = [];
 
+  // Validate all paths through file access broker
+  const hasRoots = getAllowedRoots().length > 0;
+  if (hasRoots) {
+    for (const filePath of paths) {
+      const validation = validateFilePath(filePath);
+      if (!validation.allowed) {
+        errors.push({ path: filePath, error: `Access denied: ${validation.reason}` });
+      }
+    }
+    if (errors.length > 0 && errors.length === paths.length) {
+      return {
+        success: false,
+        error: 'All paths were denied by file access policy',
+        data: { errors },
+      };
+    }
+  }
+
   for (const filePath of paths) {
+    // Skip paths that failed validation
+    if (hasRoots) {
+      const validation = validateFilePath(filePath);
+      if (!validation.allowed) {
+        continue; // Already recorded in errors above
+      }
+    }
+
     try {
       const normalizedPath = filePath.replace(/\\/g, '/');
       const encodedPath = encodeURIComponent(normalizedPath);
       log.info(`Fetching: ${normalizedPath}`);
 
-      const response = await fetch(`/api/local-file?path=${encodedPath}`);
+      const response = await fetchWithDevBridgeAuth(`/api/local-file?path=${encodedPath}`);
       if (!response.ok) {
         errors.push({ path: filePath, error: `HTTP ${response.status}: ${response.statusText}` });
         continue;
@@ -364,6 +392,15 @@ export async function handleListLocalFiles(
   const directory = args.directory as string;
   const extensions = args.extensions as string | undefined;
 
+  // Validate directory through file access broker (when roots are configured)
+  const hasRoots = getAllowedRoots().length > 0;
+  if (hasRoots) {
+    const validation = validateFilePath(directory);
+    if (!validation.allowed) {
+      return { success: false, error: `Access denied: ${validation.reason}` };
+    }
+  }
+
   try {
     const normalizedDir = directory.replace(/\\/g, '/');
     let url = `/api/local-files?dir=${encodeURIComponent(normalizedDir)}`;
@@ -371,7 +408,7 @@ export async function handleListLocalFiles(
       url += `&ext=${encodeURIComponent(extensions)}`;
     }
 
-    const response = await fetch(url);
+    const response = await fetchWithDevBridgeAuth(url);
     if (!response.ok) {
       const body = await response.json().catch(() => ({ error: response.statusText }));
       return { success: false, error: body.error || `HTTP ${response.status}` };

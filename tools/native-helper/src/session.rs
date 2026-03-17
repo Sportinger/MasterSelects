@@ -178,6 +178,11 @@ impl Session {
         }
     }
 
+    /// Set the authentication state (called from server.rs after successful auth)
+    pub fn set_authenticated(&mut self, value: bool) {
+        self.authenticated = value;
+    }
+
     /// Handle a command, return response
     /// Note: Download/ListFormats and AI bridge commands are handled directly in server.rs.
     pub async fn handle_command(&mut self, cmd: Command) -> Option<Response> {
@@ -367,29 +372,20 @@ impl Session {
         // Build list of directories to search
         let mut search_dirs: Vec<PathBuf> = Vec::new();
 
-        // Add extra dirs first (highest priority)
+        // Add extra dirs first (highest priority), but only if they are already
+        // within the helper's allowed directory policy.
         for dir in extra_dirs {
             let p = PathBuf::from(dir);
-            if p.is_absolute() && p.is_dir() {
+            if p.is_absolute() && p.is_dir() && utils::is_path_allowed(&p) {
                 search_dirs.push(p);
             }
         }
 
-        // Common user directories
-        if let Some(d) = dirs::desktop_dir() {
-            search_dirs.push(d);
-        }
-        if let Some(d) = dirs::download_dir() {
-            search_dirs.push(d);
-        }
-        if let Some(d) = dirs::video_dir() {
-            search_dirs.push(d);
-        }
-        if let Some(d) = dirs::document_dir() {
-            search_dirs.push(d);
-        }
-        if let Some(d) = dirs::home_dir() {
-            search_dirs.push(d);
+        // Search only within explicitly allowed helper roots.
+        for dir in utils::get_allowed_prefixes() {
+            if dir.is_dir() {
+                search_dirs.push(dir);
+            }
         }
 
         // Search each directory recursively (max depth 4 to avoid long scans)

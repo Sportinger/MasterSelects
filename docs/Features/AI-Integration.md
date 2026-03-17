@@ -618,6 +618,15 @@ Multicam panel → Settings:
 ### Storage
 API keys stored encrypted in IndexedDB via Web Crypto API. SAM 2 model files stored in OPFS.
 
+### Security Considerations
+
+- **Encryption at rest:** Keys are encrypted in IndexedDB using a per-browser AES-256-GCM key generated via Web Crypto API. This protects against casual inspection (e.g., browsing IndexedDB in DevTools) but does **not** protect against same-origin scripts or browser extensions with storage access.
+- **File export disabled:** The `.keys.enc` file export/import feature is disabled pending implementation of user-passphrase-based encryption. The previous implementation used a deterministic hardcoded passphrase, which provided only obfuscation. Keys must be re-entered on new machines.
+- **Log redaction:** Log output is automatically scanned and redacted for common secret patterns (OpenAI keys, Bearer tokens, API key URL params, etc.) before being stored in the log buffer or sent via the AI tool bridge.
+- **Dev bridge authentication:** The AI tool bridge in development mode (`POST /api/ai-tools`) runs only on localhost via the Vite HMR channel. In production, the native helper bridge authenticates via a random startup Bearer token.
+
+See [Security](./Security.md) for the full security model documentation.
+
 ---
 
 ## Usage Examples

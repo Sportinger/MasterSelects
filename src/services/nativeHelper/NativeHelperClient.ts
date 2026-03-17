@@ -61,6 +61,7 @@ class NativeHelperClientImpl {
   private ws: WebSocket | null = null;
   private config: Required<NativeHelperConfig>;
   private status: ConnectionStatus = 'disconnected';
+  private connectPromise: Promise<boolean> | null = null;
   private requestId = 0;
   private pendingRequests = new Map<string, ResponseCallback>();
   private progressCallbacks = new Map<string, (percent: number, speed?: string) => void>();
@@ -109,21 +110,60 @@ class NativeHelperClientImpl {
       return true;
     }
 
+    if (this.connectPromise) {
+      return this.connectPromise;
+    }
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
     this.setStatus('connecting');
 
-    return new Promise((resolve) => {
-      try {
-        this.ws = new WebSocket(`ws://127.0.0.1:${this.config.port}`);
-        this.ws.binaryType = 'arraybuffer'; // Ensure binary data comes as ArrayBuffer, not Blob
+    const connectPromise = new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (result: boolean) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolve(result);
+      };
 
-        this.ws.onopen = async () => {
+      try {
+        const ws = new WebSocket(`ws://127.0.0.1:${this.config.port}`);
+        this.ws = ws;
+        ws.binaryType = 'arraybuffer'; // Ensure binary data comes as ArrayBuffer, not Blob
+
+        ws.onopen = async () => {
           log.info('Connected to native helper');
           this.wasEverConnected = true;
 
-          // Authenticate if token provided
+          // If no token configured, try to discover it from the startup endpoint
+          if (!this.config.token) {
+            try {
+              const httpPort = this.config.port + 1;
+              const resp = await fetch(`http://127.0.0.1:${httpPort}/startup-token`);
+              if (resp.ok) {
+                const data = await resp.json();
+                if (data.token) {
+                  this.config.token = data.token;
+                  log.info('Auth token discovered from startup endpoint');
+                }
+              }
+            } catch {
+              log.debug('Could not discover auth token from startup endpoint');
+            }
+          }
+
+          // Authenticate with token
           if (this.config.token) {
             try {
-              await this.send({ cmd: 'auth', id: this.nextId(), token: this.config.token });
+              const authResp = await this.send({ cmd: 'auth', id: this.nextId(), token: this.config.token });
+              if (!(authResp as any)?.authenticated) {
+                log.warn('Auth response did not confirm authentication');
+              }
             } catch {
               log.warn('Auth failed');
             }
@@ -143,37 +183,43 @@ class NativeHelperClientImpl {
           }
 
           this.setStatus('connected');
-          resolve(true);
+          finish(true);
         };
 
-        this.ws.onclose = () => {
+        ws.onclose = () => {
           if (this.wasEverConnected) {
             log.info('Disconnected');
           }
+          if (this.ws === ws) {
+            this.ws = null;
+          }
           this.setStatus('disconnected');
           this.handleDisconnect();
-          if (this.status === 'connecting') {
-            resolve(false);
-          }
+          finish(false);
         };
 
-        this.ws.onerror = () => {
+        ws.onerror = () => {
           // Don't log errors when helper isn't running - it's optional
           this.setStatus('disconnected');
-          if (this.status === 'connecting') {
-            resolve(false);
-          }
+          finish(false);
         };
 
-        this.ws.onmessage = (event) => {
+        ws.onmessage = (event) => {
           this.handleMessage(event.data);
         };
       } catch {
         // Silent fail - helper is optional
         this.setStatus('disconnected');
-        resolve(false);
+        finish(false);
+      }
+    }).finally(() => {
+      if (this.connectPromise === connectPromise) {
+        this.connectPromise = null;
       }
     });
+
+    this.connectPromise = connectPromise;
+    return connectPromise;
   }
 
   /**
@@ -591,7 +637,7 @@ class NativeHelperClientImpl {
    */
   async getProjectRoot(): Promise<string | null> {
     try {
-      const response = await fetch(`${this.getHttpBaseUrl()}/project-root`);
+      const response = await this.fetchWithAuth(`${this.getHttpBaseUrl()}/project-root`);
       if (response.ok) {
         const data = await response.json();
         return data.path || null;
@@ -643,7 +689,7 @@ class NativeHelperClientImpl {
     try {
       const url = `${this.getHttpBaseUrl()}/upload?path=${encodeURIComponent(path)}`;
       const body = data instanceof Blob ? data : data instanceof ArrayBuffer ? new Blob([data]) : new Blob([data.buffer as ArrayBuffer]);
-      const response = await fetch(url, { method: 'POST', body });
+      const response = await this.fetchWithAuth(url, { method: 'POST', body });
       if (response.ok) {
         return true;
       }
@@ -801,7 +847,7 @@ class NativeHelperClientImpl {
     const httpPort = this.config.port + 1; // HTTP on port+1 (9877)
     try {
       log.debug('Fetching file via HTTP:', path);
-      const response = await fetch(`http://127.0.0.1:${httpPort}/file?path=${encodeURIComponent(path)}`);
+      const response = await this.fetchWithAuth(`http://127.0.0.1:${httpPort}/file?path=${encodeURIComponent(path)}`);
       if (response.ok) {
         const buffer = await response.arrayBuffer();
         log.debug('File received via HTTP:', buffer.byteLength + ' bytes');
@@ -1076,6 +1122,17 @@ class NativeHelperClientImpl {
 
   // Private methods
 
+  /**
+   * Fetch with Authorization header injected
+   */
+  private fetchWithAuth(url: string, init?: RequestInit): Promise<globalThis.Response> {
+    const headers = new Headers(init?.headers);
+    if (this.config.token) {
+      headers.set('Authorization', `Bearer ${this.config.token}`);
+    }
+    return fetch(url, { ...init, headers });
+  }
+
   private nextId(): string {
     return `req_${++this.requestId}`;
   }
@@ -1201,7 +1258,7 @@ class NativeHelperClientImpl {
       } else if (tool === '_status') {
         result = { success: true, data: getQuickTimelineSummary() };
       } else {
-        result = await executeAITool(tool, payload.args ?? {});
+        result = await executeAITool(tool, payload.args ?? {}, 'nativeHelper');
       }
 
       await this.send({

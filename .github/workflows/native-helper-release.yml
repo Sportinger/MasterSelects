@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v0.3.1)'
+        description: 'Version tag (e.g. v0.3.10)'
         required: true
-        default: 'v0.3.1'
+        default: 'v0.3.10'
 
 jobs:
   build:
@@ -39,12 +39,12 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libavcodec-dev libavformat-dev libswscale-dev libavutil-dev clang pkg-config
+          sudo apt-get install -y clang pkg-config
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
         run: |
-          brew install ffmpeg llvm pkg-config
+          brew install llvm pkg-config
           echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> $GITHUB_ENV
 
       - name: Build
@@ -110,6 +110,7 @@ jobs:
             - Keep the helper running while using MasterSelects
             - Install [yt-dlp](https://github.com/yt-dlp/yt-dlp) if it is not already available on your system
             - Windows MSI is the preferred package for in-place upgrades
+            - FFmpeg is not bundled with the helper packages
           files: |
             artifacts/**/*.tar.gz
           draft: false

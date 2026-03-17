@@ -95,7 +95,7 @@ export function InfoDialog({ onClose }: InfoDialogProps) {
             <NativeHelperStatus variant="info" />
 
             <a
-              href="https://github.com/Sportinger/MASterSelects"
+              href="https://github.com/Sportinger/MasterSelects"
               target="_blank"
               rel="noopener noreferrer"
               className="info-github-link"

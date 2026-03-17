@@ -3,7 +3,216 @@ import react from '@vitejs/plugin-react'
 import { APP_VERSION } from './src/version'
 import crypto from 'crypto'
 import fs from 'fs'
+import os from 'os'
 import path from 'path'
+import type { IncomingMessage, ServerResponse } from 'http'
+
+// ── Dev Bridge Session Token ─────────────────────────────────────────────────
+const bridgeToken = crypto.randomUUID();
+const tokenFilePath = path.resolve(__dirname, '.ai-bridge-token');
+const allowedFileRoots = buildAllowedFileRoots();
+
+type AllowedPathKind = 'file' | 'directory';
+
+type AllowedPathResult =
+  | { allowed: true; resolved: string; stat: fs.Stats }
+  | { allowed: false; statusCode: number; error: string };
+
+function normalizeAllowedRoot(root: string): string | null {
+  const trimmed = root.trim();
+  if (!trimmed || !path.isAbsolute(trimmed)) {
+    return null;
+  }
+
+  if (trimmed.startsWith('\\\\') || trimmed.startsWith('//')) {
+    return null;
+  }
+
+  const resolved = path.resolve(trimmed);
+  try {
+    return fs.realpathSync.native(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
+function uniqueRoots(roots: string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+
+  for (const root of roots) {
+    const normalized = normalizeAllowedRoot(root);
+    if (!normalized) {
+      continue;
+    }
+
+    const key = process.platform === 'win32'
+      ? normalized.toLowerCase()
+      : normalized;
+
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(normalized);
+    }
+  }
+
+  return unique;
+}
+
+function parseExtraAllowedRoots(): string[] {
+  const configured = process.env.MASTERSELECTS_ALLOWED_FILE_ROOTS;
+  if (!configured) {
+    return [];
+  }
+
+  return configured
+    .split(path.delimiter)
+    .map(entry => entry.trim())
+    .filter(Boolean);
+}
+
+function buildAllowedFileRoots(): string[] {
+  const home = os.homedir();
+  const defaults = [
+    __dirname,
+    process.env.MASTERSELECTS_PROJECT_ROOT ?? '',
+    os.tmpdir(),
+    home ? path.join(home, 'Desktop') : '',
+    home ? path.join(home, 'Documents') : '',
+    home ? path.join(home, 'Downloads') : '',
+    home ? path.join(home, 'Videos') : '',
+    ...parseExtraAllowedRoots(),
+  ];
+
+  return uniqueRoots(defaults);
+}
+
+function isPathInsideRoot(candidate: string, root: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function validateAllowedPath(rawPath: string, kind: AllowedPathKind): AllowedPathResult {
+  const trimmed = rawPath.trim();
+  if (!trimmed) {
+    return { allowed: false, statusCode: 400, error: `Missing ${kind} path` };
+  }
+
+  if (!path.isAbsolute(trimmed)) {
+    return { allowed: false, statusCode: 400, error: 'Path must be absolute' };
+  }
+
+  if (trimmed.startsWith('\\\\') || trimmed.startsWith('//')) {
+    return { allowed: false, statusCode: 403, error: 'UNC paths are not allowed' };
+  }
+
+  const resolved = path.resolve(trimmed);
+  let realPath: string;
+  let stat: fs.Stats;
+
+  try {
+    realPath = fs.realpathSync.native(resolved);
+    stat = fs.statSync(realPath);
+  } catch {
+    return {
+      allowed: false,
+      statusCode: 404,
+      error: kind === 'file' ? 'File not found' : 'Directory not found',
+    };
+  }
+
+  if (kind === 'file' && stat.isDirectory()) {
+    return { allowed: false, statusCode: 404, error: 'File not found' };
+  }
+
+  if (kind === 'directory' && !stat.isDirectory()) {
+    return { allowed: false, statusCode: 404, error: 'Directory not found' };
+  }
+
+  if (!allowedFileRoots.some(root => isPathInsideRoot(realPath, root))) {
+    return { allowed: false, statusCode: 403, error: 'Path is outside allowed roots' };
+  }
+
+  return { allowed: true, resolved: realPath, stat };
+}
+
+/**
+ * Derive the allowed origin from the request.
+ * Only localhost / 127.0.0.1 origins are accepted.
+ */
+function getLocalhostOrigin(req: IncomingMessage): string | null {
+  const origin = req.headers.origin;
+  if (!origin) return null;
+  try {
+    const url = new URL(origin);
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+      return origin;
+    }
+  } catch { /* invalid origin */ }
+  return null;
+}
+
+/**
+ * Set CORS headers for sensitive routes.
+ * Replaces wildcard with the requesting localhost origin (or omits the header).
+ */
+function setCorsHeaders(req: IncomingMessage, res: ServerResponse): void {
+  const origin = getLocalhostOrigin(req);
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  }
+  // If no valid localhost origin, omit Access-Control-Allow-Origin entirely
+  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
+
+/**
+ * Validate a bridge request: check bearer token and origin.
+ * Returns true if valid, false if the response was already sent with an error.
+ */
+function validateBridgeRequest(req: IncomingMessage, res: ServerResponse): boolean {
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    setCorsHeaders(req, res);
+    res.statusCode = 204;
+    res.end();
+    return false; // response sent, but it's a valid preflight
+  }
+
+  setCorsHeaders(req, res);
+
+  // Check Authorization header
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.statusCode = 401;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: 'Missing or invalid Authorization header' }));
+    return false;
+  }
+
+  const token = authHeader.slice(7);
+  if (token !== bridgeToken) {
+    res.statusCode = 401;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: 'Invalid bridge token' }));
+    return false;
+  }
+
+  // Check Origin header if present — must be localhost
+  const origin = req.headers.origin;
+  if (origin) {
+    const localhostOrigin = getLocalhostOrigin(req);
+    if (!localhostOrigin) {
+      res.statusCode = 403;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Non-localhost origin rejected' }));
+      return false;
+    }
+  }
+
+  return true;
+}
 
 // Local File Server - serves local files for AI-driven import
 function localFileServer(): Plugin {
@@ -12,6 +221,9 @@ function localFileServer(): Plugin {
     configureServer(server) {
       // Serve a local file by absolute path
       server.middlewares.use('/api/local-file', (req, res) => {
+        // Auth gate
+        if (!validateBridgeRequest(req, res)) return;
+
         if (req.method !== 'GET') {
           res.statusCode = 405;
           res.end('Method not allowed');
@@ -25,14 +237,15 @@ function localFileServer(): Plugin {
           return;
         }
 
-        const resolved = path.resolve(filePath);
-        if (!fs.existsSync(resolved) || fs.statSync(resolved).isDirectory()) {
-          res.statusCode = 404;
-          res.end('File not found');
+        const validation = validateAllowedPath(filePath, 'file');
+        if (!validation.allowed) {
+          res.statusCode = validation.statusCode;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: validation.error }));
           return;
         }
 
-        const stat = fs.statSync(resolved);
+        const { resolved, stat } = validation;
         const ext = path.extname(resolved).toLowerCase();
         const mimeTypes: Record<string, string> = {
           '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
@@ -42,7 +255,6 @@ function localFileServer(): Plugin {
           '.gif': 'image/gif', '.webp': 'image/webp',
         };
         res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
-        res.setHeader('Access-Control-Allow-Origin', '*');
 
         // Support range requests for video seeking
         const range = req.headers.range;
@@ -64,6 +276,9 @@ function localFileServer(): Plugin {
 
       // List media files in a directory
       server.middlewares.use('/api/local-files', (req, res) => {
+        // Auth gate
+        if (!validateBridgeRequest(req, res)) return;
+
         if (req.method !== 'GET') {
           res.statusCode = 405;
           res.end('Method not allowed');
@@ -81,24 +296,42 @@ function localFileServer(): Plugin {
           return;
         }
 
-        const resolved = path.resolve(dirPath);
-        if (!fs.existsSync(resolved)) {
-          res.statusCode = 404;
+        const validation = validateAllowedPath(dirPath, 'directory');
+        if (!validation.allowed) {
+          res.statusCode = validation.statusCode;
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ error: 'Directory not found' }));
+          res.end(JSON.stringify({ error: validation.error }));
           return;
         }
 
         try {
+          const resolved = validation.resolved;
           const entries = fs.readdirSync(resolved);
           const files = entries
             .filter(f => extFilter.some(ext => f.toLowerCase().endsWith(ext)))
-            .map(f => {
+            .flatMap(f => {
               const fullPath = path.join(resolved, f);
-              const stat = fs.statSync(fullPath);
+              let realPath: string;
+              let stat: fs.Stats;
+
+              try {
+                realPath = fs.realpathSync.native(fullPath);
+                stat = fs.statSync(realPath);
+              } catch {
+                return [];
+              }
+
+              if (!stat.isFile()) {
+                return [];
+              }
+
+              if (!allowedFileRoots.some(root => isPathInsideRoot(realPath, root))) {
+                return [];
+              }
+
               return {
                 name: f,
-                path: fullPath.replace(/\\/g, '/'),
+                path: realPath.replace(/\\/g, '/'),
                 size: stat.size,
                 modified: stat.mtime.toISOString(),
               };
@@ -124,6 +357,9 @@ function browserLogBridge(): Plugin {
     configureServer(server) {
       // Handle log sync from browser
       server.middlewares.use('/api/logs', (req, res) => {
+        // Auth gate
+        if (!validateBridgeRequest(req, res)) return;
+
         if (req.method === 'POST') {
           let body = '';
           req.on('data', (chunk: Buffer) => body += chunk.toString());
@@ -167,6 +403,19 @@ function aiToolsBridge(): Plugin {
   return {
     name: 'ai-tools-bridge',
     configureServer(server) {
+      // Write token file and print banner on server start
+      try {
+        fs.writeFileSync(tokenFilePath, bridgeToken, 'utf-8');
+      } catch { /* best effort */ }
+
+      console.log('\n┌─────────────────────────────────────────────────────────┐');
+      console.log('│  AI Bridge Token (required for /api/* endpoints):       │');
+      console.log(`│  ${bridgeToken}  │`);
+      console.log('│  Token written to .ai-bridge-token                      │');
+      console.log('│  Use: Authorization: Bearer <token>                     │');
+      console.log('└─────────────────────────────────────────────────────────┘\n');
+      console.log(`[security] Allowed dev file roots: ${allowedFileRoots.join(', ')}`);
+
       // Listen for results coming back from the browser via HMR
       server.hot.on('ai-tools:result', (data: { requestId: string; result: unknown }) => {
         const pending = pendingRequests.get(data.requestId);
@@ -178,21 +427,16 @@ function aiToolsBridge(): Plugin {
       });
 
       server.middlewares.use('/api/ai-tools', (req, res) => {
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-        if (req.method === 'OPTIONS') {
-          res.statusCode = 204;
-          res.end();
-          return;
-        }
-
+        // GET status endpoint is unauthenticated (shows readiness only)
         if (req.method === 'GET') {
+          setCorsHeaders(req, res);
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({ status: 'ready', pending: pendingRequests.size }));
           return;
         }
+
+        // All other methods require auth
+        if (!validateBridgeRequest(req, res)) return;
 
         if (req.method !== 'POST') {
           res.statusCode = 405;
@@ -240,57 +484,63 @@ function aiToolsBridge(): Plugin {
 }
 
 // https://vite.dev/config/
-export default defineConfig(() => ({
-  plugins: [
-    react(),
-    localFileServer(),
-    browserLogBridge(),
-    aiToolsBridge(),
-    // Replace __APP_VERSION__ in index.html during build
-    {
-      name: 'html-version-replace',
-      transformIndexHtml(html) {
-        return html.replace(/__APP_VERSION__/g, APP_VERSION);
+export default defineConfig(({ command }) => {
+  const isDevServer = command === 'serve';
+
+  return {
+    plugins: [
+      react(),
+      localFileServer(),
+      browserLogBridge(),
+      aiToolsBridge(),
+      // Replace __APP_VERSION__ in index.html during build
+      {
+        name: 'html-version-replace',
+        transformIndexHtml(html) {
+          return html.replace(/__APP_VERSION__/g, APP_VERSION);
+        },
+      },
+    ],
+    define: {
+      __APP_VERSION__: JSON.stringify(APP_VERSION),
+      // Show changelog in the app by default; tests override this separately.
+      __SHOW_CHANGELOG__: true,
+      __DEV_BRIDGE_TOKEN__: JSON.stringify(isDevServer ? bridgeToken : ''),
+      __DEV_ALLOWED_FILE_ROOTS__: JSON.stringify(isDevServer ? allowedFileRoots : []),
+    },
+    server: {
+      headers: {
+        // Required for SharedArrayBuffer (FFmpeg multi-threaded, cross-tab sync)
+        // Using 'credentialless' instead of 'require-corp' to allow CDN resources
+        // (FFmpeg WASM from unpkg, transformers.js from HuggingFace)
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'credentialless',
       },
     },
-  ],
-  define: {
-    __APP_VERSION__: JSON.stringify(APP_VERSION),
-    // Show changelog in the app by default; tests override this separately.
-    __SHOW_CHANGELOG__: true,
-  },
-  server: {
-    headers: {
-      // Required for SharedArrayBuffer (FFmpeg multi-threaded, cross-tab sync)
-      // Using 'credentialless' instead of 'require-corp' to allow CDN resources
-      // (FFmpeg WASM from unpkg, transformers.js from HuggingFace)
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'credentialless',
+    preview: {
+      headers: {
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'credentialless',
+      },
     },
-  },
-  preview: {
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'credentialless',
-    },
-  },
-  build: {
-    target: 'esnext',
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          // Force heavy libs into separate chunks (loaded on demand)
-          'mp4box': ['mp4box'],
-          'onnxruntime': ['onnxruntime-web'],
+    build: {
+      target: 'esnext',
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            // Force heavy libs into separate chunks (loaded on demand)
+            'mp4box': ['mp4box'],
+            'onnxruntime': ['onnxruntime-web'],
+          },
         },
       },
     },
-  },
-  optimizeDeps: {
-    esbuildOptions: {
-      target: 'esnext',
+    optimizeDeps: {
+      esbuildOptions: {
+        target: 'esnext',
+      },
+      // Exclude transformers.js and onnxruntime from pre-bundling
+      exclude: ['@huggingface/transformers', 'onnxruntime-web'],
     },
-    // Exclude transformers.js and onnxruntime from pre-bundling
-    exclude: ['@huggingface/transformers', 'onnxruntime-web'],
-  },
-}))
+  };
+})

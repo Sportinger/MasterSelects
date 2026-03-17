@@ -97,6 +97,9 @@ interface SettingsState {
   matanyoneEnabled: boolean;      // Enable MatAnyone2 video matting
   matanyonePythonPath: string;    // Python path ('' = auto-detect)
 
+  // AI approval mode for tool execution
+  aiApprovalMode: 'auto' | 'confirm-destructive' | 'confirm-all-mutating';
+
   // Media import settings
   copyMediaToProject: boolean;  // Copy imported files to project Raw/ folder
 
@@ -141,6 +144,7 @@ interface SettingsState {
   setGpuPowerPreference: (preference: GPUPowerPreference) => void;
   setMatAnyoneEnabled: (enabled: boolean) => void;
   setMatAnyonePythonPath: (path: string) => void;
+  setAiApprovalMode: (mode: 'auto' | 'confirm-destructive' | 'confirm-all-mutating') => void;
   setCopyMediaToProject: (enabled: boolean) => void;
   setHasCompletedSetup: (completed: boolean) => void;
   setHasSeenTutorial: (seen: boolean) => void;
@@ -196,6 +200,7 @@ export const useSettingsStore = create<SettingsState>()(
       gpuPowerPreference: 'high-performance', // Prefer dGPU by default
       matanyoneEnabled: false, // MatAnyone2 disabled by default
       matanyonePythonPath: '', // Auto-detect Python path
+      aiApprovalMode: 'confirm-destructive' as const, // Require confirmation for destructive AI actions
       copyMediaToProject: true, // Copy imported files to Raw/ folder by default
       hasCompletedSetup: false, // Show welcome overlay on first run
       hasSeenTutorial: false, // Show tutorial on first run
@@ -285,6 +290,10 @@ export const useSettingsStore = create<SettingsState>()(
 
       setMatAnyonePythonPath: (path) => {
         set({ matanyonePythonPath: path });
+      },
+
+      setAiApprovalMode: (mode) => {
+        set({ aiApprovalMode: mode });
       },
 
       setCopyMediaToProject: (enabled) => {
@@ -391,6 +400,7 @@ export const useSettingsStore = create<SettingsState>()(
         gpuPowerPreference: state.gpuPowerPreference,
         matanyoneEnabled: state.matanyoneEnabled,
         matanyonePythonPath: state.matanyonePythonPath,
+        aiApprovalMode: state.aiApprovalMode,
         copyMediaToProject: state.copyMediaToProject,
         hasCompletedSetup: state.hasCompletedSetup,
         hasSeenTutorial: state.hasSeenTutorial,

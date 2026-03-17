@@ -1,7 +1,7 @@
 // App version - INCREMENT ON EVERY COMMIT!
 // Format: MAJOR.MINOR.PATCH
 // Increment PATCH (0.0.X) for each commit
-export const APP_VERSION = '1.3.8';
+export const APP_VERSION = '1.3.9';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -40,8 +40,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'Native Helper v0.3.9 available',
-  message: 'Includes the updated helper release flow, MatAnyone2 setup work, and the refreshed local helper workflow.',
+  title: 'Native Helper v0.3.10 available',
+  message: 'Includes the helper auth hardening, safer local bridge defaults, and the refreshed local helper workflow.',
   animated: true,
 };
 

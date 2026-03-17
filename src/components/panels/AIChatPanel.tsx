@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { AI_TOOLS, executeAITool, getQuickTimelineSummary } from '../../services/aiTools';
+import { AI_TOOLS, executeAITool, getQuickTimelineSummary, getToolPolicy } from '../../services/aiTools';
+import type { ToolPolicyEntry } from '../../services/aiTools';
 import './AIChatPanel.css';
 
 // Available OpenAI models
@@ -106,8 +107,28 @@ interface APIMessage {
   tool_call_id?: string;
 }
 
+interface PendingApproval {
+  toolName: string;
+  args: Record<string, unknown>;
+  resolve: (approved: boolean) => void;
+}
+
+function shouldRequireConfirmation(
+  policy: ToolPolicyEntry | undefined,
+  approvalMode: 'auto' | 'confirm-destructive' | 'confirm-all-mutating',
+): boolean {
+  if (!policy) return true; // unknown tools require confirmation
+  if (approvalMode === 'auto') return false;
+  if (approvalMode === 'confirm-destructive') {
+    return policy.requiresConfirmation || policy.riskLevel === 'high' ||
+      policy.localFileAccess || policy.sensitiveDataAccess;
+  }
+  // confirm-all-mutating
+  return !policy.readOnly;
+}
+
 export function AIChatPanel() {
-  const { apiKeys, openSettings } = useSettingsStore();
+  const { apiKeys, openSettings, aiApprovalMode } = useSettingsStore();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -115,6 +136,7 @@ export function AIChatPanel() {
   const [error, setError] = useState<string | null>(null);
   const [editorMode, setEditorMode] = useState(true); // Enable tools by default
   const [currentToolAction, setCurrentToolAction] = useState<string | null>(null);
+  const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -301,11 +323,34 @@ export function AIChatPanel() {
             args = {};
           }
 
+          // Check if this tool requires user confirmation
+          const policy = getToolPolicy(toolCall.name);
+          const needsConfirmation = shouldRequireConfirmation(policy, aiApprovalMode);
+
           let result: { success: boolean; data?: unknown; error?: string };
-          try {
-            result = await executeAITool(toolCall.name, args);
-          } catch (toolErr) {
-            result = { success: false, error: toolErr instanceof Error ? toolErr.message : String(toolErr) };
+
+          if (needsConfirmation) {
+            // Show confirmation UI and wait for user response
+            const approved = await new Promise<boolean>((resolve) => {
+              setPendingApproval({ toolName: toolCall.name, args, resolve });
+            });
+            setPendingApproval(null);
+
+            if (!approved) {
+              result = { success: false, error: 'User denied tool execution' };
+            } else {
+              try {
+                result = await executeAITool(toolCall.name, args, 'chat');
+              } catch (toolErr) {
+                result = { success: false, error: toolErr instanceof Error ? toolErr.message : String(toolErr) };
+              }
+            }
+          } else {
+            try {
+              result = await executeAITool(toolCall.name, args, 'chat');
+            } catch (toolErr) {
+              result = { success: false, error: toolErr instanceof Error ? toolErr.message : String(toolErr) };
+            }
           }
 
           const toolResultMessage: Message = {
@@ -338,7 +383,7 @@ export function AIChatPanel() {
       setIsLoading(false);
       setCurrentToolAction(null);
     }
-  }, [input, hasApiKey, isLoading, buildAPIMessages, callOpenAI]);
+  }, [input, hasApiKey, isLoading, buildAPIMessages, callOpenAI, aiApprovalMode]);
 
   // Handle key press
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -482,6 +527,31 @@ export function AIChatPanel() {
               </div>
             );
           })
+        )}
+        {pendingApproval && (
+          <div className="ai-chat-message tool-approval">
+            <div className="tool-approval-banner">
+              <span className="tool-approval-label">Confirm action:</span>
+              <span className="tool-approval-name">{pendingApproval.toolName}</span>
+              <pre className="tool-approval-args">
+                {JSON.stringify(pendingApproval.args, null, 2).substring(0, 200)}
+              </pre>
+              <div className="tool-approval-buttons">
+                <button
+                  className="btn-approve"
+                  onClick={() => pendingApproval.resolve(true)}
+                >
+                  Allow
+                </button>
+                <button
+                  className="btn-deny"
+                  onClick={() => pendingApproval.resolve(false)}
+                >
+                  Deny
+                </button>
+              </div>
+            </div>
+          </div>
         )}
         {isLoading && (
           <div className="ai-chat-message assistant loading">

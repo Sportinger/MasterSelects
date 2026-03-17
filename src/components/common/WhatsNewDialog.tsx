@@ -368,7 +368,7 @@ function ChangeItem({ change }: { change: ChangeEntry }) {
                 {change.commits!.map((hash) => (
                   <a
                     key={hash}
-                    href={`https://github.com/Sportinger/MASterSelects/commit/${hash}`}
+                    href={`https://github.com/Sportinger/MasterSelects/commit/${hash}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="changelog-commit-link"

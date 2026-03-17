@@ -1,0 +1,41 @@
+name: Security Checks
+on:
+  pull_request:
+    branches: [master, staging]
+  push:
+    branches: [staging]
+
+jobs:
+  security-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm run test
+      - run: npm audit --audit-level=high
+        continue-on-error: true
+
+  native-helper-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --manifest-path tools/native-helper/Cargo.toml --all-targets
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit --manifest-path tools/native-helper/Cargo.toml
+        continue-on-error: true
+
+  secret-scanning:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

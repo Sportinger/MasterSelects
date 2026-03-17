@@ -8,17 +8,8 @@
 
         <MediaTemplate EmbedCab="yes" />
 
-        <Feature Id="MainApp" Title="MasterSelects Helper" Description="Core application and FFmpeg libraries" Level="1" Display="expand" AllowAbsent="no">
+        <Feature Id="MainApp" Title="MasterSelects Helper" Description="Core application" Level="1" Display="expand" AllowAbsent="no">
             <ComponentRef Id="MainExecutable" />
-            <ComponentRef Id="DLL_avcodec" />
-            <ComponentRef Id="DLL_avformat" />
-            <ComponentRef Id="DLL_avutil" />
-            <ComponentRef Id="DLL_swresample" />
-            <ComponentRef Id="DLL_swscale" />
-            <ComponentRef Id="DLL_avdevice" />
-            <ComponentRef Id="DLL_avfilter" />
-            <ComponentRef Id="DLL_postproc" />
-            <ComponentRef Id="FFmpegExe" />
 
             <Feature Id="ShortcutsFeature" Title="Shortcuts" Description="Start Menu and Desktop shortcuts" Level="1">
                 <ComponentRef Id="StartMenuShortcut" />
@@ -62,51 +53,6 @@
             <File Id="masterselects_helper_exe" Name="masterselects-helper.exe" Source="target\release\masterselects-helper.exe" />
             <RegistryValue Root="HKCU" Key="Software\MasterSelects\Helper" Name="ExePath" Type="string" Value="[INSTALLDIR]masterselects-helper.exe" KeyPath="yes" />
             <RemoveFolder Id="CleanInstallDir" Directory="INSTALLDIR" On="uninstall" />
-        </Component>
-
-        <Component Id="DLL_avcodec" Directory="INSTALLDIR" Guid="A1B2C3D4-2222-4000-8000-000000000001">
-            <File Id="avcodec_61.dll" Name="avcodec-61.dll" Source="target\release\avcodec-61.dll" />
-            <RegistryValue Root="HKCU" Key="Software\MasterSelects\Helper\DLLs" Name="avcodec" Type="integer" Value="1" KeyPath="yes" />
-        </Component>
-
-        <Component Id="DLL_avformat" Directory="INSTALLDIR" Guid="A1B2C3D4-2222-4000-8000-000000000002">
-            <File Id="avformat_61.dll" Name="avformat-61.dll" Source="target\release\avformat-61.dll" />
-            <RegistryValue Root="HKCU" Key="Software\MasterSelects\Helper\DLLs" Name="avformat" Type="integer" Value="1" KeyPath="yes" />
-        </Component>
-
-        <Component Id="DLL_avutil" Directory="INSTALLDIR" Guid="A1B2C3D4-2222-4000-8000-000000000003">
-            <File Id="avutil_59.dll" Name="avutil-59.dll" Source="target\release\avutil-59.dll" />
-            <RegistryValue Root="HKCU" Key="Software\MasterSelects\Helper\DLLs" Name="avutil" Type="integer" Value="1" KeyPath="yes" />
-        </Component>
-
-        <Component Id="DLL_swresample" Directory="INSTALLDIR" Guid="A1B2C3D4-2222-4000-8000-000000000004">
-            <File Id="swresample_5.dll" Name="swresample-5.dll" Source="target\release\swresample-5.dll" />
-            <RegistryValue Root="HKCU" Key="Software\MasterSelects\Helper\DLLs" Name="swresample" Type="integer" Value="1" KeyPath="yes" />
-        </Component>
-
-        <Component Id="DLL_swscale" Directory="INSTALLDIR" Guid="A1B2C3D4-2222-4000-8000-000000000005">
-            <File Id="swscale_8.dll" Name="swscale-8.dll" Source="target\release\swscale-8.dll" />
-            <RegistryValue Root="HKCU" Key="Software\MasterSelects\Helper\DLLs" Name="swscale" Type="integer" Value="1" KeyPath="yes" />
-        </Component>
-
-        <Component Id="DLL_avdevice" Directory="INSTALLDIR" Guid="A1B2C3D4-2222-4000-8000-000000000006">
-            <File Id="avdevice_61.dll" Name="avdevice-61.dll" Source="target\release\avdevice-61.dll" />
-            <RegistryValue Root="HKCU" Key="Software\MasterSelects\Helper\DLLs" Name="avdevice" Type="integer" Value="1" KeyPath="yes" />
-        </Component>
-
-        <Component Id="DLL_avfilter" Directory="INSTALLDIR" Guid="A1B2C3D4-2222-4000-8000-000000000007">
-            <File Id="avfilter_10.dll" Name="avfilter-10.dll" Source="target\release\avfilter-10.dll" />
-            <RegistryValue Root="HKCU" Key="Software\MasterSelects\Helper\DLLs" Name="avfilter" Type="integer" Value="1" KeyPath="yes" />
-        </Component>
-
-        <Component Id="DLL_postproc" Directory="INSTALLDIR" Guid="A1B2C3D4-2222-4000-8000-000000000008">
-            <File Id="postproc_58.dll" Name="postproc-58.dll" Source="target\release\postproc-58.dll" />
-            <RegistryValue Root="HKCU" Key="Software\MasterSelects\Helper\DLLs" Name="postproc" Type="integer" Value="1" KeyPath="yes" />
-        </Component>
-
-        <Component Id="FFmpegExe" Directory="INSTALLDIR" Guid="A1B2C3D4-3333-4000-8000-000000000001">
-            <File Id="ffmpeg.exe" Name="ffmpeg.exe" Source="target\release\ffmpeg.exe" />
-            <RegistryValue Root="HKCU" Key="Software\MasterSelects\Helper\DLLs" Name="ffmpeg_exe" Type="integer" Value="1" KeyPath="yes" />
         </Component>
     </Fragment>
 

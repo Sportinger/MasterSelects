@@ -17,36 +17,17 @@ Cross-platform local runtime companion for MasterSelects. It provides Firefox pr
 - [LLVM/Clang](https://releases.llvm.org/) (for bindgen during compilation)
 
 ### Windows
-
-1. **FFmpeg 7.1 shared libraries** (required for compilation and runtime):
-   - Download from [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds/releases)
-   - Look for: `ffmpeg-n7.1*-win64-gpl-shared-7.1.zip`
-   - Extract to: `tools/native-helper/ffmpeg/win64/`
-   - Expected structure: `ffmpeg/win64/{bin,include,lib}/`
-
-2. **LLVM/Clang**: `winget install LLVM.LLVM`
-
-### Linux
-```bash
-sudo apt install libavcodec-dev libavformat-dev libswscale-dev libavutil-dev clang pkg-config
-```
-
-### macOS
-```bash
-brew install ffmpeg llvm pkg-config
+```powershell
+winget install LLVM.LLVM
 ```
 
 ## Building
 
 ### Windows
-```bash
-set FFMPEG_DIR=path\to\tools\native-helper\ffmpeg\win64
+```powershell
 set LIBCLANG_PATH=C:\Program Files\LLVM\lib
 cargo build --release
-
-# Copy DLLs next to binary for runtime
-copy ffmpeg\win64\bin\*.dll target\release\
-copy ffmpeg\win64\bin\ffmpeg.exe target\release\
+cmd /c scripts\build-msi.bat
 ```
 
 ### Linux / macOS
@@ -91,5 +72,6 @@ Example:
 ```bash
 curl -X POST http://127.0.0.1:9877/api/ai-tools \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <startup-token>" \
   -d '{"tool":"_status","args":{}}'
 ```
