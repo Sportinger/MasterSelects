@@ -2,6 +2,44 @@
   {
     "date": "2026-03-17",
     "type": "fix",
+    "title": "Local AI Bridges Now Enforce Tokens, File Allowlists, and Tool Policies",
+    "description": "The Vite dev bridge and Native Helper bridge now require auth tokens, reject non-loopback browser origins, restrict local file access to explicit allowed roots, and route external AI calls through caller policies plus approval gates instead of giving the bridge unrestricted editor control. Secret redaction, dedicated security docs, and new JS/Rust security checks and tests now back those boundaries up.",
+    "section": "Security / AI Control",
+    "commits": [
+      "768e7cb2",
+      "450aa4ff",
+      "cec79b24"
+    ]
+  },
+  {
+    "date": "2026-03-17",
+    "type": "improve",
+    "title": "Native Helper v0.3.10 Ships a Smaller Hardened Windows Installer",
+    "description": "The latest Native Helper release tightens localhost bridge authentication, updates release detection and helper links, and rebuilds the Windows MSI without the old bundled FFmpeg payload so upgrades stay much smaller while matching the new bridge security model.",
+    "section": "AI / Native Helper",
+    "commits": [
+      "fb575f72"
+    ]
+  },
+  {
+    "date": "2026-03-17",
+    "type": "improve",
+    "title": "README Hero, Compliance Links, and Security Overview Were Refreshed",
+    "description": "The GitHub front page now has a cleaner hero/header layout, a top-level security model section, and FOSSA badge/report links so the local trust model and license/compliance status are visible without digging through the repo.",
+    "section": "Documentation",
+    "commits": [
+      "3d233fc9",
+      "5642343c",
+      "c87d0670",
+      "75b2754f",
+      "48ea9a4a",
+      "391041d3",
+      "578bf0d8"
+    ]
+  },
+  {
+    "date": "2026-03-17",
+    "type": "fix",
     "title": "FAST Export Restores Project Media Sources and Advancing Video Frames",
     "description": "Project saves now persist the canonical Raw media path, export and scrub-audio resolution prefer the project copy after reload, large or unstable FAST decode paths retry more safely, and sequential WebCodecs export layers now pass their current VideoFrame directly into rendering. Together these fixes address black exports, stale file-handle failures, and one-frame/still-image exports after the MediaBunny migration.",
     "section": "Export / Media"
@@ -12,6 +50,24 @@
     "title": "Changelog Suppression Tracks the Current Version Explicitly",
     "description": "Closing the changelog now stores the current version only when 'Don't auto-show this version again' is enabled and clears that marker when it is not, so the dialog no longer keeps a stale suppressed state just because startup auto-show was toggled earlier.",
     "section": "Changelog"
+  },
+  {
+    "date": "2026-03-16",
+    "type": "new",
+    "title": "Kie.ai Joins Video Generation With Credits, Queue UX, and Better Request Defaults",
+    "description": "Kie.ai is now available alongside PiAPI for AI video generation. The panel now shows live credit balance and updated pricing, supports 3-15 second durations, moves the primary Generate action into the balance header, and upgrades the queue with thumbnails, drag-drop ordering, and an audio toggle. Request defaults were also aligned with the current Kie.ai docs, including the correct audio surcharge handling and `multi_shots: false` behavior.",
+    "section": "AI / Video Generation",
+    "commits": [
+      "5c78f815",
+      "6e7aab30",
+      "f37e881a",
+      "56012e9d",
+      "e3ecc2da",
+      "3f4bd889",
+      "0a6b4321",
+      "c1179bca",
+      "b83cea88"
+    ]
   },
   {
     "date": "2026-03-16",
