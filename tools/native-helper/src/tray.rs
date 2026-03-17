@@ -41,6 +41,7 @@ pub struct TrayState {
     pub running: AtomicBool,
     pub quit_requested: AtomicBool,
     pub connection_count: AtomicU32,
+    pub server_error: Mutex<Option<String>>,
     pub update_status: Mutex<UpdateStatus>,
 }
 
@@ -50,6 +51,7 @@ impl TrayState {
             running: AtomicBool::new(false),
             quit_requested: AtomicBool::new(false),
             connection_count: AtomicU32::new(0),
+            server_error: Mutex::new(None),
             update_status: Mutex::new(UpdateStatus::Idle),
         }
     }
@@ -134,6 +136,10 @@ pub fn run_tray(state: Arc<TrayState>, port: u16) -> Result<()> {
     let mut last_update_menu_text = String::new();
 
     loop {
+        if state.quit_requested.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+
         // Pump Win32 messages (keeps tray icon responsive)
         unsafe {
             let mut msg: MSG = std::mem::zeroed();

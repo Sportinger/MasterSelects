@@ -40,7 +40,7 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'Native Helper v0.3.11 available',
+  title: 'Native Helper v0.3.12 available',
   message: 'Adds masterselects.com helper detection while keeping the hardened localhost bridge checks and helper update flow in place.',
   animated: true,
 };
