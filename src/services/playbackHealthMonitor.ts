@@ -581,18 +581,17 @@ export class PlaybackHealthMonitor {
   }
 
   private exposeConsoleAPI(): void {
-    const monitor = this;
     (window as any).__PLAYBACK_HEALTH__ = {
-      snapshot: () => monitor.snapshot(),
-      anomalies: (type?: AnomalyType) => monitor.anomalies(type),
-      videos: () => monitor.videos(),
+      snapshot: () => this.snapshot(),
+      anomalies: (type?: AnomalyType) => this.anomalies(type),
+      videos: () => this.videos(),
       recover: {
-        softReset: () => monitor.softReset(),
-        forceDecodeAll: () => monitor.forceDecodeAll(),
-        clearWarmups: () => monitor.clearWarmups(),
-        clearOrphans: () => monitor.clearOrphans(),
+        softReset: () => this.softReset(),
+        forceDecodeAll: () => this.forceDecodeAll(),
+        clearWarmups: () => this.clearWarmups(),
+        clearOrphans: () => this.clearOrphans(),
       },
-      reset: () => monitor.reset(),
+      reset: () => this.reset(),
     };
   }
 }

@@ -142,70 +142,6 @@ export function Toolbar({ onOpenChangelog }: ToolbarProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [openMenu]);
 
-  // Keyboard shortcut handler
-  // Global keyboard shortcuts - must prevent default FIRST
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const key = e.key.toLowerCase();
-
-      // Ctrl+S / Ctrl+Shift+S: Always prevent browser save dialog
-      if ((e.ctrlKey || e.metaKey) && key === 's') {
-        e.preventDefault();
-        e.stopPropagation();
-
-        // Skip if in input field
-        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
-        if (e.shiftKey) {
-          // Save As
-          const name = prompt('Save project as:', projectName || 'New Project');
-          if (name) {
-            createNewProject(name).then(success => {
-              if (success) {
-                setProjectName(name);
-                setIsProjectOpen(true);
-                setShowSavedToast(true);
-              }
-            });
-          }
-        } else {
-          // Save
-          if (!projectFileService.isProjectOpen()) {
-            const name = prompt('Enter project name:', 'New Project');
-            if (name) {
-              createNewProject(name).then(success => {
-                if (success) {
-                  setProjectName(name);
-                  setIsProjectOpen(true);
-                  setShowSavedToast(true);
-                }
-              });
-            }
-          } else {
-            saveCurrentProject().then(() => setShowSavedToast(true));
-          }
-        }
-        return;
-      }
-
-      // Skip other shortcuts if in input field
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
-      // Ctrl+N: New
-      if ((e.ctrlKey || e.metaKey) && key === 'n') {
-        e.preventDefault();
-        handleNew();
-      }
-      // Ctrl+O: Open
-      if ((e.ctrlKey || e.metaKey) && key === 'o') {
-        e.preventDefault();
-        handleOpen();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown, true); // Use capture phase
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [projectName]);
-
   const handleSave = useCallback(async (showToast = true) => {
     if (!projectFileService.isProjectOpen()) {
       // No project open, prompt to create one
@@ -352,6 +288,70 @@ export function Toolbar({ onOpenChangelog }: ToolbarProps) {
     setIsLoading(false);
     setOpenMenu(null);
   }, []);
+
+  // Keyboard shortcut handler
+  // Global keyboard shortcuts - must prevent default FIRST
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+
+      // Ctrl+S / Ctrl+Shift+S: Always prevent browser save dialog
+      if ((e.ctrlKey || e.metaKey) && key === 's') {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Skip if in input field
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+        if (e.shiftKey) {
+          // Save As
+          const name = prompt('Save project as:', projectName || 'New Project');
+          if (name) {
+            createNewProject(name).then(success => {
+              if (success) {
+                setProjectName(name);
+                setIsProjectOpen(true);
+                setShowSavedToast(true);
+              }
+            });
+          }
+        } else {
+          // Save
+          if (!projectFileService.isProjectOpen()) {
+            const name = prompt('Enter project name:', 'New Project');
+            if (name) {
+              createNewProject(name).then(success => {
+                if (success) {
+                  setProjectName(name);
+                  setIsProjectOpen(true);
+                  setShowSavedToast(true);
+                }
+              });
+            }
+          } else {
+            saveCurrentProject().then(() => setShowSavedToast(true));
+          }
+        }
+        return;
+      }
+
+      // Skip other shortcuts if in input field
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if ((e.ctrlKey || e.metaKey) && key === 'n') {
+        e.preventDefault();
+        handleNew();
+      }
+
+      if ((e.ctrlKey || e.metaKey) && key === 'o') {
+        e.preventDefault();
+        handleOpen();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [handleNew, handleOpen, projectName]);
 
   // Handle restoring permission for pending project
   const handleRestorePermission = useCallback(async () => {

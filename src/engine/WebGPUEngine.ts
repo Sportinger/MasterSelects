@@ -29,7 +29,7 @@ import { RenderLoop } from './render/RenderLoop';
 import { LayerCollector } from './render/LayerCollector';
 import { Compositor } from './render/Compositor';
 import { NestedCompRenderer } from './render/NestedCompRenderer';
-import { RenderDispatcher } from './render/RenderDispatcher';
+import { RenderDispatcher, type RenderDeps } from './render/RenderDispatcher';
 
 export class WebGPUEngine {
   // Core context
@@ -167,27 +167,29 @@ export class WebGPUEngine {
     });
 
     // Create render dispatcher with live deps (getters close over engine instance)
-    const eng = this;
-    this.renderDispatcher = new RenderDispatcher({
-      getDevice: () => eng.context.getDevice(),
-      isRecovering: () => eng.isRecoveringFromDeviceLoss || eng.context.recovering,
-      get sampler() { return eng.sampler; },
-      get previewContext() { return eng.previewContext; },
-      get targetCanvases() { return eng.targetCanvases; },
-      get compositorPipeline() { return eng.compositorPipeline; },
-      get outputPipeline() { return eng.outputPipeline; },
-      get slicePipeline() { return eng.slicePipeline; },
-      get textureManager() { return eng.textureManager; },
-      get maskTextureManager() { return eng.maskTextureManager; },
-      get renderTargetManager() { return eng.renderTargetManager; },
-      get layerCollector() { return eng.layerCollector; },
-      get compositor() { return eng.compositor; },
-      get nestedCompRenderer() { return eng.nestedCompRenderer; },
-      get cacheManager() { return eng.cacheManager; },
-      get exportCanvasManager() { return eng.exportCanvasManager; },
-      get performanceStats() { return eng.performanceStats; },
-      get renderLoop() { return eng.renderLoop; },
+    const renderDeps = {
+      getDevice: () => this.context.getDevice(),
+      isRecovering: () => this.isRecoveringFromDeviceLoss || this.context.recovering,
+    } as RenderDeps;
+    Object.defineProperties(renderDeps, {
+      sampler: { get: () => this.sampler },
+      previewContext: { get: () => this.previewContext },
+      targetCanvases: { get: () => this.targetCanvases },
+      compositorPipeline: { get: () => this.compositorPipeline },
+      outputPipeline: { get: () => this.outputPipeline },
+      slicePipeline: { get: () => this.slicePipeline },
+      textureManager: { get: () => this.textureManager },
+      maskTextureManager: { get: () => this.maskTextureManager },
+      renderTargetManager: { get: () => this.renderTargetManager },
+      layerCollector: { get: () => this.layerCollector },
+      compositor: { get: () => this.compositor },
+      nestedCompRenderer: { get: () => this.nestedCompRenderer },
+      cacheManager: { get: () => this.cacheManager },
+      exportCanvasManager: { get: () => this.exportCanvasManager },
+      performanceStats: { get: () => this.performanceStats },
+      renderLoop: { get: () => this.renderLoop },
     });
+    this.renderDispatcher = new RenderDispatcher(renderDeps);
   }
 
   // === DEVICE RECOVERY ===

@@ -18,7 +18,7 @@ import {
   getEffectConfig,
 } from '../../src/effects/index';
 import { CATEGORY_INFO } from '../../src/effects/types';
-import type { EffectDefinition, EffectCategory, EffectParam } from '../../src/effects/types';
+import type { EffectCategory } from '../../src/effects/types';
 
 // ---- Category registration -------------------------------------------------
 
@@ -347,7 +347,7 @@ describe('No duplicate effect IDs', () => {
 describe('Effect parameter validation', () => {
   it('every parameter should have type, label, and default', () => {
     for (const effect of getAllEffects()) {
-      for (const [paramKey, param] of Object.entries(effect.params)) {
+      for (const [, param] of Object.entries(effect.params)) {
         expect(typeof param.type).toBe('string');
         expect(['number', 'boolean', 'select', 'color', 'point']).toContain(param.type);
 
@@ -361,7 +361,7 @@ describe('Effect parameter validation', () => {
 
   it('number parameters should have min, max, step with min <= default <= max', () => {
     for (const effect of getAllEffects()) {
-      for (const [paramKey, param] of Object.entries(effect.params)) {
+      for (const [, param] of Object.entries(effect.params)) {
         if (param.type !== 'number') continue;
 
         expect(typeof param.min).toBe('number');
@@ -378,7 +378,7 @@ describe('Effect parameter validation', () => {
 
   it('number parameters should have numeric default', () => {
     for (const effect of getAllEffects()) {
-      for (const [paramKey, param] of Object.entries(effect.params)) {
+      for (const [, param] of Object.entries(effect.params)) {
         if (param.type !== 'number') continue;
         expect(typeof param.default).toBe('number');
       }
@@ -387,7 +387,7 @@ describe('Effect parameter validation', () => {
 
   it('select parameters should have options array with value and label', () => {
     for (const effect of getAllEffects()) {
-      for (const [paramKey, param] of Object.entries(effect.params)) {
+      for (const [, param] of Object.entries(effect.params)) {
         if (param.type !== 'select') continue;
 
         expect(Array.isArray(param.options)).toBe(true);
@@ -407,7 +407,7 @@ describe('Effect parameter validation', () => {
 
   it('select parameters should have unique option values', () => {
     for (const effect of getAllEffects()) {
-      for (const [paramKey, param] of Object.entries(effect.params)) {
+      for (const [, param] of Object.entries(effect.params)) {
         if (param.type !== 'select') continue;
         const values = param.options!.map(o => o.value);
         expect(new Set(values).size).toBe(values.length);
@@ -417,7 +417,7 @@ describe('Effect parameter validation', () => {
 
   it('boolean parameters should have boolean default', () => {
     for (const effect of getAllEffects()) {
-      for (const [paramKey, param] of Object.entries(effect.params)) {
+      for (const [, param] of Object.entries(effect.params)) {
         if (param.type !== 'boolean') continue;
         expect(typeof param.default).toBe('boolean');
       }
@@ -430,7 +430,7 @@ describe('Effect parameter validation', () => {
 describe('Animatable parameter properties', () => {
   it('every number param should have an animatable property defined', () => {
     for (const effect of getAllEffects()) {
-      for (const [paramKey, param] of Object.entries(effect.params)) {
+      for (const [, param] of Object.entries(effect.params)) {
         if (param.type !== 'number') continue;
         expect(typeof param.animatable).toBe('boolean');
       }
@@ -439,7 +439,7 @@ describe('Animatable parameter properties', () => {
 
   it('quality parameters should not be animatable', () => {
     for (const effect of getAllEffects()) {
-      for (const [paramKey, param] of Object.entries(effect.params)) {
+      for (const [, param] of Object.entries(effect.params)) {
         if (param.quality === true) {
           expect(param.animatable).toBe(false);
         }
@@ -468,7 +468,7 @@ describe('Animatable parameter properties', () => {
 describe('Quality parameter properties', () => {
   it('quality parameters should only exist on number-type params', () => {
     for (const effect of getAllEffects()) {
-      for (const [paramKey, param] of Object.entries(effect.params)) {
+      for (const [, param] of Object.entries(effect.params)) {
         if (param.quality === true) {
           expect(param.type).toBe('number');
         }

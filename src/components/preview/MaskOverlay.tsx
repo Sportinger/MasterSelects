@@ -39,7 +39,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
   const { handleVertexMouseDown } = useMaskVertexDrag(svgRef, canvasWidth, canvasHeight, selectedClip, activeMask);
   const { handleMaskDragStart } = useMaskDrag(svgRef, canvasWidth, canvasHeight, selectedClip, activeMask);
   const { handleEdgeMouseDown } = useMaskEdgeDrag(svgRef, canvasWidth, canvasHeight, selectedClip, activeMask);
-  const { shapeDrawState, justFinishedDrawing, handleShapeMouseDown, handleShapeMouseMove, handleShapeMouseUp } =
+  const { shapeDrawState, justFinishedDrawing: justFinishedDrawingRef, handleShapeMouseDown, handleShapeMouseMove, handleShapeMouseUp } =
     useMaskShapeDraw(svgRef, selectedClip, maskEditMode);
 
   // Convert mask vertices to canvas coordinates for rendering
@@ -120,8 +120,8 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
   const handleSvgClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
     if (!selectedClip) return;
 
-    if (justFinishedDrawing.current) {
-      justFinishedDrawing.current = false;
+    if (justFinishedDrawingRef.current) {
+      justFinishedDrawingRef.current = false;
       return;
     }
 

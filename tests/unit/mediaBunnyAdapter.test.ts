@@ -441,8 +441,7 @@ describe('MediaBunnyMuxerAdapter packet sequencing', () => {
       fps: 30,
       hasAudio: false,
       audioCodec: 'aac',
-    }) as unknown as {
-      addVideoChunk(chunk: EncodedVideoChunk): void;
+    }) as unknown as MuxerAdapter & {
       queue: Array<{ packet: { sequenceNumber: number } }>;
     };
 

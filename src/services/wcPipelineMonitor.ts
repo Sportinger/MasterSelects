@@ -194,10 +194,10 @@ class WcPipelineMonitor {
       queuePressure: 0,
     };
 
-    let decodeLats: number[] = [];
-    let seekDurations: number[] = [];
-    let pendingSeekDurations: number[] = [];
-    let queueDepths: number[] = [];
+    const decodeLats: number[] = [];
+    const seekDurations: number[] = [];
+    const pendingSeekDurations: number[] = [];
+    const queueDepths: number[] = [];
     let stallTotalMs = 0;
 
     for (const e of all) {

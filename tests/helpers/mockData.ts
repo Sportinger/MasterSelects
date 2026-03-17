@@ -1,4 +1,4 @@
-import type { TimelineClip, TimelineTrack, Keyframe, ClipTransform, AnimatableProperty, EasingType, BezierHandle } from '../../src/types';
+import type { TimelineClip, TimelineTrack, Keyframe, ClipTransform, AnimatableProperty, EasingType } from '../../src/types';
 
 let idCounter = 0;
 function uid(prefix = 'test') {

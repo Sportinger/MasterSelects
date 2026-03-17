@@ -120,7 +120,7 @@ describe('crossCorrelate', () => {
   it('inverted signal → negative correlation at offset=0', () => {
     const signal = createSignal(200, (i) => Math.sin(i * 0.1));
     const inverted = createSignal(200, (i) => -Math.sin(i * 0.1));
-    const { offset, correlation } = crossCorrelate(signal, inverted, 10);
+    crossCorrelate(signal, inverted, 10);
     // At offset=0 the product is always negative, so best correlation should be negative or offset chosen to minimize negativity
     // The correlation at offset=0 is the negative of the self-correlation
     const selfCorr = crossCorrelate(signal, signal, 0).correlation;

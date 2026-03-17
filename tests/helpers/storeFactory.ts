@@ -8,7 +8,7 @@
 
 import { createStore } from 'zustand';
 import type { TimelineStore } from '../../src/stores/timeline/types';
-import type { TimelineClip, TimelineTrack, Keyframe, Layer, AnimatableProperty } from '../../src/types';
+import type { TimelineClip, Keyframe, Layer, AnimatableProperty } from '../../src/types';
 import type { TimelineMarker } from '../../src/stores/timeline/types';
 
 import { createSelectionSlice } from '../../src/stores/timeline/selectionSlice';

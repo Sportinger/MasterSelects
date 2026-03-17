@@ -15,7 +15,7 @@ export function useThumbnailCache(
   visibleCount: number,
   reversed?: boolean
 ): (string | null)[] {
-  const [, forceUpdate] = useState(0);
+  const [cacheVersion, setCacheVersion] = useState(0);
   const mediaFileIdRef = useRef(mediaFileId);
   mediaFileIdRef.current = mediaFileId;
 
@@ -25,7 +25,7 @@ export function useThumbnailCache(
 
     const unsubscribe = thumbnailCacheService.subscribe((changedId) => {
       if (changedId === mediaFileIdRef.current) {
-        forceUpdate(n => n + 1);
+        setCacheVersion(n => n + 1);
       }
     });
 
@@ -44,9 +44,5 @@ export function useThumbnailCache(
       visibleCount,
       reversed
     );
-  }, [mediaFileId, inPoint, outPoint, visibleCount, reversed,
-    // Re-compute when cache updates (via forceUpdate counter)
-    thumbnailCacheService.getCount(mediaFileId || ''),
-    thumbnailCacheService.getStatus(mediaFileId || '')
-  ]);
+  }, [cacheVersion, mediaFileId, inPoint, outPoint, visibleCount, reversed]);
 }

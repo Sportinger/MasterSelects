@@ -1,4 +1,4 @@
-// VideoSyncManager - Handles video element synchronization with playhead
+﻿// VideoSyncManager - Handles video element synchronization with playhead
 // Extracted from LayerBuilderService for separation of concerns
 
 import type { TimelineClip } from '../../types';
@@ -40,14 +40,14 @@ export class VideoSyncManager {
   private lastPausedJumpPreloadPosition = Number.NaN;
   private lastPausedJumpPreloadActiveKey = '';
 
-  // Track per-clip playing state to detect playing→paused transitions
+  // Track per-clip playing state to detect playingâ†’paused transitions
   private clipWasPlaying = new Set<string>();
 
   // Track per-clip dragging state to detect scrub-stop transitions
   private clipWasDragging = new Set<string>();
 
   // Videos currently being warmed up (brief play to activate GPU surface)
-  // After page reload, video GPU surfaces are empty — all sync rendering APIs
+  // After page reload, video GPU surfaces are empty â€” all sync rendering APIs
   // (importExternalTexture, canvas.drawImage, copyExternalImageToTexture) return black.
   // The ONLY way to populate the GPU surface is video.play().
   // We do this lazily on first scrub attempt, not during restore, because
@@ -80,15 +80,15 @@ export class VideoSyncManager {
   private lastWcFastSeekAt: Record<string, number> = {};
   private lastWcPreciseSeekAt: Record<string, number> = {};
 
-  // (lastWcFastSeekTarget removed — replaced by wcp.isDecodePending() check)
+  // (lastWcFastSeekTarget removed â€” replaced by wcp.isDecodePending() check)
 
   // Seamless cut transition: track last video element per track.
   // When same-source clips are sequential (split clips), the outgoing clip's
-  // video element keeps playing through the cut — no pause/play gap.
+  // video element keeps playing through the cut â€” no pause/play gap.
   private lastTrackState = new Map<string, {
     clipId: string;
-    fileId: string;       // mediaFileId — same for all split clips from same source
-    file: File;           // File object — same reference for split clips
+    fileId: string;       // mediaFileId â€” same for all split clips from same source
+    file: File;           // File object â€” same reference for split clips
     videoElement: HTMLVideoElement;
     outPoint: number;
   }>();
@@ -1140,7 +1140,7 @@ export class VideoSyncManager {
       return false;
     }
 
-    // Wait for advance seek to resolve — the decoder was just reset and
+    // Wait for advance seek to resolve â€” the decoder was just reset and
     // currentFrame is stale from the previous session, not yet replaced.
     if (provider.isAdvanceSeekPending?.()) {
       return false;
@@ -1246,7 +1246,7 @@ export class VideoSyncManager {
       if (!prev) continue;
 
       if (prev.clipId === clip.id) {
-        // Same clip as last frame — persist handoff if we were using one.
+        // Same clip as last frame â€” persist handoff if we were using one.
         if (prev.videoElement !== clip.source.videoElement) {
           this.activeHandoffs.set(clip.id, prev.videoElement);
           this.handoffElements.add(prev.videoElement);
@@ -1254,7 +1254,7 @@ export class VideoSyncManager {
         continue;
       }
 
-      // Different clip — detect same-source sequential cut for new handoff.
+      // Different clip â€” detect same-source sequential cut for new handoff.
       const clipFileId = clip.source.mediaFileId || clip.mediaFileId;
       const sameSource = clipFileId
         ? clipFileId === prev.fileId
@@ -1429,7 +1429,7 @@ export class VideoSyncManager {
         // NOTE: Do NOT pause WebCodecsPlayer here. Split clips share the same
         // player instance, so clip1 exiting and clip2 entering use the same decoder.
         // Pausing here would reset the decoder right after clip2's advanceToTime()
-        // just set it up — causing a permanent freeze. The player's advanceToTime()
+        // just set it up â€” causing a permanent freeze. The player's advanceToTime()
         // handles all state transitions (seek, restart) automatically.
         // syncFullWebCodecs() pauses the player when ctx.isPlaying is false.
       }
@@ -1787,7 +1787,7 @@ export class VideoSyncManager {
       return;
     }
 
-    // Skip sync during GPU surface warmup — the video is playing briefly
+    // Skip sync during GPU surface warmup â€” the video is playing briefly
     // to activate Chrome's GPU decoder. Don't pause or seek it.
     if (this.warmingUpVideos.has(video)) {
       this.maybeRetargetActiveWarmup(clip.id, video, timeInfo.clipTime, ctx.now, {
@@ -1813,10 +1813,7 @@ export class VideoSyncManager {
         proactive: false,
         requestRender: true,
       });
-      if (false) {
-            // Frame is now presented to GPU — capture it
-        }
-      return; // Skip normal sync — warmup is handling video state
+      return; // Skip normal sync â€” warmup is handling video state
     }
 
     // Normal video sync
@@ -1917,7 +1914,7 @@ export class VideoSyncManager {
         this.clipWasPlaying.add(clip.id);
         if (video.paused) {
           // Only seek before play if video is significantly out of sync.
-          // After a clean pause the video is already at the correct frame —
+          // After a clean pause the video is already at the correct frame â€”
           // an unnecessary seek forces the decoder to re-decode from the last
           // keyframe which causes a visible backward jitter on long-GOP codecs.
           if (timeDiff > 0.05) {
@@ -1939,9 +1936,9 @@ export class VideoSyncManager {
           video.currentTime = this.safeSeekTime(video, timeInfo.clipTime);
         }
       } else {
-        // Playing → Paused transition: snap playhead to where the video actually is
+        // Playing â†’ Paused transition: snap playhead to where the video actually is
         // instead of seeking the video back to the playhead (which causes visible frame jump).
-        // The video was playing freely with up to 0.3s drift — we keep its current frame
+        // The video was playing freely with up to 0.3s drift â€” we keep its current frame
         // and move the playhead to match.
         const justStopped = this.clipWasPlaying.has(clip.id);
         if (justStopped) {
@@ -2023,19 +2020,19 @@ export class VideoSyncManager {
           clearTimeout(this.preciseSeekTimers[clip.id]);
           delete this.preciseSeekTimers[clip.id];
           // Always do a precise seek to the exact playhead position,
-          // bypassing throttle — this is the definitive "settle" seek.
+          // bypassing throttle â€” this is the definitive "settle" seek.
           if (timeDiff > 0.001) {
             this.beginOrQueueSettleSeek(clip.id, video, timeInfo.clipTime, undefined, 'scrub-stop');
           } else {
             scrubSettleState.resolve(clip.id);
           }
-          // Also register a seeked listener as fallback — RVFC may not fire
+          // Also register a seeked listener as fallback â€” RVFC may not fire
           // if the video frame doesn't change (same keyframe).
           video.addEventListener('seeked', () => {
             engine.requestNewFrameRender();
           }, { once: true });
         } else {
-          // 0.04s ≈ slightly more than 1 frame at 30fps.
+          // 0.04s â‰ˆ slightly more than 1 frame at 30fps.
           // Previous 0.1s threshold skipped up to 3 frames during slow scrubbing.
           const seekThreshold = ctx.isDraggingPlayhead
             ? 0.04
@@ -2086,8 +2083,8 @@ export class VideoSyncManager {
    * Hybrid seeking strategy for smooth scrubbing on all codec types:
    *
    * During drag (fast scrubbing):
-   *   Phase 1: fastSeek → instant keyframe feedback (<10ms, shows nearest I-frame)
-   *   Phase 2: deferred precise seek → exact frame when scrubbing pauses (debounced 120ms)
+   *   Phase 1: fastSeek â†’ instant keyframe feedback (<10ms, shows nearest I-frame)
+   *   Phase 2: deferred precise seek â†’ exact frame when scrubbing pauses (debounced 120ms)
    *
    * This solves the long-GOP problem: YouTube/phone videos with 5-7s keyframe distance
    * previously showed a stale cached frame for 100-300ms per seek (currentTime decodes
@@ -2097,7 +2094,7 @@ export class VideoSyncManager {
    * When not dragging (single click / arrow keys): precise seek via currentTime.
    *
    * RVFC (requestVideoFrameCallback) triggers re-render when the decoded frame is
-   * actually presented to the compositor — more accurate than the 'seeked' event.
+   * actually presented to the compositor â€” more accurate than the 'seeked' event.
    */
   private throttledSeek(clipId: string, video: HTMLVideoElement, time: number, ctx: FrameContext): void {
     const fastSeek = this.getFastSeek(video);
@@ -2210,7 +2207,7 @@ export class VideoSyncManager {
       if (ctx.isDraggingPlayhead && supportsFastSeek) {
         // Phase 1: Instant keyframe feedback via fastSeek.
         // For all-intra codecs this IS the exact frame. For long-GOP codecs
-        // this shows the nearest keyframe — better than a stale cached frame.
+        // this shows the nearest keyframe â€” better than a stale cached frame.
         this.pendingSeekTargets[clipId] = time;
         this.pendingSeekStartedAt[clipId] = ctx.now;
         fastSeek(this.safeSeekTime(video, time));
@@ -2283,7 +2280,7 @@ export class VideoSyncManager {
         scrubSettleState.resolve(clipId);
         vfPipelineMonitor.record('vf_seek_done', { clipId });
         this.flushQueuedSeekTarget(clipId, video, 'rvfc');
-        // Bypass the scrub rate limiter — a fresh decoded frame should be displayed immediately
+        // Bypass the scrub rate limiter â€” a fresh decoded frame should be displayed immediately
         engine.requestNewFrameRender();
       });
     }
@@ -2376,7 +2373,7 @@ export class VideoSyncManager {
   /**
    * Pre-buffer video elements (for audio) for upcoming clips.
    * In full WebCodecs mode, the HTMLVideoElement provides audio.
-   * Without pre-buffering, the element is cold at cut points → audio gap.
+   * Without pre-buffering, the element is cold at cut points â†’ audio gap.
    */
   private preBufferUpcomingVideoAudio(ctx: FrameContext): void {
     if (!ctx.isPlaying || ctx.isDraggingPlayhead) return;
@@ -2603,7 +2600,7 @@ export class VideoSyncManager {
     // Use handoff video element for audio continuity at cut points.
     // In full WebCodecs mode, the HTMLVideoElement is only used for audio.
     // At a same-source cut, the previous clip's element is already playing
-    // at the right position — reuse it instead of cold-starting clip B's element.
+    // at the right position â€” reuse it instead of cold-starting clip B's element.
     const handoffVideo = this.activeHandoffs.get(clip.id);
     const audioVideo = handoffVideo ?? video;
 
@@ -2616,10 +2613,10 @@ export class VideoSyncManager {
         return;
       }
 
-      // Playback takes over — no scrub tracking needed
+      // Playback takes over â€” no scrub tracking needed
 
       // Render-loop-driven: advance decoder to clip time each frame.
-      // No internal animation loop — advanceToTime handles decode feeding + frame selection.
+      // No internal animation loop â€” advanceToTime handles decode feeding + frame selection.
       playbackProvider.advanceToTime?.(timeInfo.clipTime);
 
       // Keep video element in sync for audio (if available)
@@ -2722,7 +2719,7 @@ export class VideoSyncManager {
       // Key constraint: fastSeek calls decoder.reset() which cancels any pending decode.
       // At 120fps rAF (~8ms), the hardware decoder needs ~10-20ms to produce a frame.
       // If we call fastSeek every frame, the decoder is constantly reset before it can
-      // output anything → preview freezes. Only issue a new fastSeek when:
+      // output anything â†’ preview freezes. Only issue a new fastSeek when:
       //   1. No decode is currently in progress (decoder finished), AND
       //   2. The actual frame position differs significantly from target
       if (dedicatedScrubProvider) {
@@ -2759,7 +2756,7 @@ export class VideoSyncManager {
         clearTimeout(this.wcPreciseSeekTimers[`${clip.id}:fallback`]);
       }
 
-      // Keep audio element at same position — but NOT during scrubbing.
+      // Keep audio element at same position â€” but NOT during scrubbing.
       // video.currentTime triggers the browser's internal decoder (heavy for long-GOP).
       // During scrubbing, audio feedback is handled by proxyFrameCache.playScrubAudio()
       // via Web Audio API, so the video element seek is wasted work.

@@ -431,6 +431,7 @@ export function ClipPropertiesPanel() {
   // Get first selected clip for properties panel
   const selectedClipId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
   const selectedClip = clips.find(c => c.id === selectedClipId);
+  const activeComp = useMediaStore(s => s.getActiveComposition());
   const [showMaskMenu, setShowMaskMenu] = useState(false);
 
   // Handle starting a shape drawing mode
@@ -453,8 +454,6 @@ export function ClipPropertiesPanel() {
     );
   }
 
-  // Get composition resolution for pixel conversion
-  const activeComp = useMediaStore(s => s.getActiveComposition());
   const compWidth = activeComp?.width ?? 1920;
   const compHeight = activeComp?.height ?? 1080;
 

@@ -1114,8 +1114,6 @@ describe('exportToFCPXML', () => {
 
 describe('MediaBunny Migration: Codec Compatibility', () => {
   const MEDIABUNNY_VIDEO_CODECS = ['avc', 'hevc', 'vp9', 'av1', 'vp8'];
-  const MEDIABUNNY_AUDIO_CODECS = ['aac', 'opus', 'mp3', 'vorbis', 'flac'];
-
   it('getMp4MuxerCodec output matches MediaBunny video codec names', () => {
     const codecs: Array<'h264' | 'h265' | 'vp9' | 'av1'> = ['h264', 'h265', 'vp9', 'av1'];
     for (const codec of codecs) {

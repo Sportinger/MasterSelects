@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createTestTimelineStore } from '../../helpers/storeFactory';
-import { createMockClip, createMockKeyframe } from '../../helpers/mockData';
-import type { Keyframe } from '../../../src/types';
+import { createMockClip } from '../../helpers/mockData';
 
 describe('keyframeSlice', () => {
   let store: ReturnType<typeof createTestTimelineStore>;

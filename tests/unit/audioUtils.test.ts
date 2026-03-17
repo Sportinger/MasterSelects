@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AudioMixer, type AudioTrackData, type MixerSettings } from '../../src/engine/audio/AudioMixer';
+import { AudioMixer, type AudioTrackData } from '../../src/engine/audio/AudioMixer';
 import { AudioExtractionError, AudioExtractor } from '../../src/engine/audio/AudioExtractor';
 import {
   EQ_FREQUENCIES,
   EQ_BAND_PARAMS,
   AudioEffectRenderer,
 } from '../../src/engine/audio/AudioEffectRenderer';
-import { TimeStretchProcessor, type TimeStretchSettings } from '../../src/engine/audio/TimeStretchProcessor';
+import { TimeStretchProcessor } from '../../src/engine/audio/TimeStretchProcessor';
 
 // ─── Helper: create a minimal AudioBuffer-like object for pure logic tests ─
 

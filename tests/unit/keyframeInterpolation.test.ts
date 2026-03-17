@@ -14,7 +14,7 @@ import {
   setValueInTransform,
 } from '../../src/utils/keyframeInterpolation';
 import { createMockKeyframe, createMockTransform } from '../helpers/mockData';
-import type { Keyframe, ClipTransform, AnimatableProperty } from '../../src/types';
+import type { Keyframe, AnimatableProperty } from '../../src/types';
 
 // ─── easingFunctions ───────────────────────────────────────────────────────
 

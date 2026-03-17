@@ -252,7 +252,7 @@ export function useClipDrag({
         }
 
         // Check primary clip with all related clips excluded
-        let { startTime: resistedTime, forcingOverlap, noFreeSpace } = getPositionWithResistance(
+        const resistanceResult = getPositionWithResistance(
           drag.clipId,
           baseTime,
           newTrackId,
@@ -260,6 +260,9 @@ export function useClipDrag({
           undefined, // zoom
           allExcludedIds // exclude all selected clips and their linked clips
         );
+        let resistedTime = resistanceResult.startTime;
+        let forcingOverlap = resistanceResult.forcingOverlap;
+        const { noFreeSpace } = resistanceResult;
 
         // If no free space on target track (cross-track move), try other tracks of same type
         if (noFreeSpace && newTrackId !== drag.originalTrackId) {

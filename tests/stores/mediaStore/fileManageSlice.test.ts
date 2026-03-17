@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { create } from 'zustand';
-import type { MediaState, MediaFile, MediaFolder, TextItem, SolidItem, Composition, LabelColor } from '../../../src/stores/mediaStore/types';
+import type { MediaState, MediaFile, MediaFolder, TextItem, SolidItem, Composition } from '../../../src/stores/mediaStore/types';
 import { createFileManageSlice, type FileManageActions } from '../../../src/stores/mediaStore/slices/fileManageSlice';
 import { createFolderSlice, type FolderActions } from '../../../src/stores/mediaStore/slices/folderSlice';
 import { createSelectionSlice, type SelectionActions } from '../../../src/stores/mediaStore/slices/selectionSlice';

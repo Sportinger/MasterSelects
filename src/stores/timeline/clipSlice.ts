@@ -373,7 +373,10 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     }
 
     const { startTime: snappedTime } = getSnappedPosition(id, newStartTime, targetTrackId);
-    let { startTime: finalStartTime, forcingOverlap, noFreeSpace } = getPositionWithResistance(id, snappedTime, targetTrackId, movingClip.duration, undefined, excludeClipIds);
+    const resistanceResult = getPositionWithResistance(id, snappedTime, targetTrackId, movingClip.duration, undefined, excludeClipIds);
+    let finalStartTime = resistanceResult.startTime;
+    let forcingOverlap = resistanceResult.forcingOverlap;
+    const { noFreeSpace } = resistanceResult;
 
     // If no free space on target track (cross-track move), find alternative track or create new one
     let actualTrackId = targetTrackId;

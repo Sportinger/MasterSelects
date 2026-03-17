@@ -4,6 +4,7 @@
 
 import type { TimelineClip, TimelineTrack } from '../../types';
 import { useMediaStore } from '../../stores/mediaStore';
+import { useTimelineStore } from '../../stores/timeline';
 import { Logger } from '../logger';
 
 const log = Logger.create('FCPXMLExport');
@@ -304,7 +305,6 @@ export function downloadFCPXML(
  */
 export function exportCurrentComposition(options: FCPXMLExportOptions = {}): void {
   const mediaStore = useMediaStore.getState();
-  const { useTimelineStore } = require('../../stores/timeline');
   const timelineStore = useTimelineStore.getState();
 
   const activeComp = mediaStore.getActiveComposition();

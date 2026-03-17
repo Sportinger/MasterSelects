@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v0.3.10)'
+        description: 'Version tag (e.g. v0.3.11)'
         required: true
-        default: 'v0.3.10'
+        default: 'v0.3.11'
 
 jobs:
   build:

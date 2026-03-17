@@ -8,7 +8,6 @@ import {
   getMaxSpeed,
 } from '../../src/utils/speedIntegration';
 import { createMockKeyframe } from '../helpers/mockData';
-import type { Keyframe } from '../../src/types';
 
 // ─── calculateSourceTime ──────────────────────────────────────────────────
 

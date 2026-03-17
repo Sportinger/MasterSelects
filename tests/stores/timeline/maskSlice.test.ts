@@ -429,7 +429,7 @@ describe('maskSlice', () => {
 
   it('updateVertex: only updates the targeted vertex', () => {
     const maskId = store.getState().addMask('clip-1');
-    const v1 = store.getState().addVertex('clip-1', maskId, { x: 0.1, y: 0.1, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } });
+    store.getState().addVertex('clip-1', maskId, { x: 0.1, y: 0.1, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } });
     const v2 = store.getState().addVertex('clip-1', maskId, { x: 0.5, y: 0.5, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } });
     store.getState().updateVertex('clip-1', maskId, v2, { x: 0.9 });
     const vertices = store.getState().clips.find(c => c.id === 'clip-1')!.masks![0].vertices;

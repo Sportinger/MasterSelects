@@ -124,6 +124,8 @@ fn build_config(args: &Args) -> server::ServerConfig {
         .unwrap_or_else(|| {
             vec![
                 "https://masterselects.app".to_string(),
+                "https://masterselects.com".to_string(),
+                "https://www.masterselects.com".to_string(),
                 "https://app.masterselects.com".to_string(),
                 "http://localhost:5173".to_string(),
                 "http://localhost:3000".to_string(),

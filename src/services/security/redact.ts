@@ -22,7 +22,7 @@ const SECRET_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
   // x-api-key header values
   { pattern: /x-api-key[:\s]+[^\s,;]{10,}/gi, replacement: `x-api-key: ${REDACTED}` },
   // API key in URL query params (?key=VALUE or &key=VALUE)
-  { pattern: /([?&]key=)[a-zA-Z0-9_\-]{15,}/gi, replacement: `$1${REDACTED}` },
+  { pattern: /([?&]key=)[a-zA-Z0-9_-]{15,}/gi, replacement: `$1${REDACTED}` },
   // Generic long hex tokens (40+ chars, likely secrets) — but NOT UUIDs (36 chars with dashes)
   // UUIDs match [a-f0-9]{8}-[a-f0-9]{4}-..., so the dash requirement naturally excludes them.
   { pattern: /\b[a-f0-9]{40,}\b/gi, replacement: REDACTED },

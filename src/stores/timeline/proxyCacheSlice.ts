@@ -32,9 +32,6 @@ export const createProxyCacheSlice: SliceCreator<ProxyCacheActions> = (set, get)
       // Get cached ranges for this media file (in media time)
       const mediaCachedRanges = proxyFrameCache.getCachedRanges(mediaFileId, mediaFile.proxyFps);
 
-      if (mediaCachedRanges.length > 0) {
-      }
-
       // Convert media time ranges to timeline time ranges
       const playbackRate = clip.speed || 1;
       for (const range of mediaCachedRanges) {
