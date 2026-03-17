@@ -1,6 +1,7 @@
 import { useEngineStore } from '../../../stores/engineStore';
 import { engine } from '../../../engine/WebGPUEngine';
 import { Logger } from '../../logger';
+import { redactSecrets, redactObject } from '../../security/redact';
 import { getPlaybackDebugStats } from '../../playbackDebugSnapshot';
 import { buildPlaybackDebugStats } from '../../playbackDebugStats';
 import { playbackHealthMonitor } from '../../playbackHealthMonitor';
@@ -209,12 +210,22 @@ export async function handleGetLogs(
 
   const recentLogs = logs.slice(-limit);
 
+  // Defense-in-depth: redact log entries before exposing via AI tool bridge.
+  // The logger already redacts at entry creation time, but this catches any
+  // entries that may have been buffered before redaction was integrated.
+  const redactedLogs = recentLogs.map(entry => ({
+    ...entry,
+    message: redactSecrets(entry.message),
+    data: entry.data !== undefined ? redactObject(entry.data) : undefined,
+    stack: entry.stack ? redactSecrets(entry.stack) : undefined,
+  }));
+
   return {
     success: true,
     data: {
-      count: recentLogs.length,
+      count: redactedLogs.length,
       totalMatched: logs.length,
-      logs: recentLogs,
+      logs: redactedLogs,
     },
   };
 }

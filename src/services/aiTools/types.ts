@@ -1,5 +1,8 @@
 // AI Tools Types
 
+// Re-export policy types for convenience
+export type { RiskLevel, CallerContext, ToolPolicyEntry } from './policy/types';
+
 export interface ToolResult {
   success: boolean;
   data?: unknown;

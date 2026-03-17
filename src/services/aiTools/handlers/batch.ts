@@ -5,6 +5,8 @@ import { useMediaStore } from '../../../stores/mediaStore';
 import type { ToolResult } from '../types';
 import { executeToolInternal } from './index';
 import { setStaggerBudget, consumeStaggerDelay } from '../executionState';
+import { checkToolAccess } from '../policy';
+import type { CallerContext } from '../policy';
 
 interface BatchAction {
   tool: string;
@@ -28,12 +30,28 @@ interface BatchActionResult {
  * share a single 3s budget so the entire batch always finishes in ≤3s visually.
  */
 export async function handleExecuteBatch(
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  callerContext: CallerContext = 'internal',
 ): Promise<ToolResult> {
   const actions = args.actions as BatchAction[];
 
   if (!actions || !Array.isArray(actions) || actions.length === 0) {
     return { success: false, error: 'actions must be a non-empty array' };
+  }
+
+  // Pre-flight: check all sub-actions against policy before executing any
+  const disallowed: string[] = [];
+  for (const action of actions) {
+    const access = checkToolAccess(action.tool, callerContext);
+    if (!access.allowed) {
+      disallowed.push(`${action.tool}: ${access.reason}`);
+    }
+  }
+  if (disallowed.length > 0) {
+    return {
+      success: false,
+      error: `Batch rejected — disallowed tools: ${disallowed.join('; ')}`,
+    };
   }
 
   // Set global stagger budget — all delays (batch + internal splits/reorders) share this

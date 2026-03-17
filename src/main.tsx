@@ -5,11 +5,14 @@ import { useTimelineStore } from './stores/timeline'
 import { executeAITool, AI_TOOLS, getQuickTimelineSummary } from './services/aiTools'
 
 // Expose AI tools API for browser console, Claude skills, and external agents
-(window as any).aiTools = {
-  execute: executeAITool,
-  list: () => AI_TOOLS,
-  status: getQuickTimelineSummary,
-};
+// Only available in development mode to prevent production exposure
+if (import.meta.env.DEV) {
+  (window as any).aiTools = {
+    execute: (tool: string, args: Record<string, unknown>) => executeAITool(tool, args, 'console'),
+    list: () => AI_TOOLS,
+    status: getQuickTimelineSummary,
+  };
+}
 
 // Bridge: allow external agents to call aiTools via HTTP POST /api/ai-tools
 import('./services/aiTools/bridge');
