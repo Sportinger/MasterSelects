@@ -32,8 +32,8 @@ type PublishedReleaseInfo = {
 };
 
 const NATIVE_HELPER_VERSION = '0.3.1';
-const NATIVE_HELPER_RELEASES = 'https://github.com/Sportinger/MasterSelects/releases';
-const GITHUB_RELEASES_API = 'https://api.github.com/repos/Sportinger/MasterSelects/releases';
+const NATIVE_HELPER_RELEASES = 'https://github.com/Sportinger/TFE Editor/releases';
+const GITHUB_RELEASES_API = 'https://api.github.com/repos/Sportinger/TFE Editor/releases';
 const DOWNLOAD_LINKS = {
   windows: NATIVE_HELPER_RELEASES,
   mac: NATIVE_HELPER_RELEASES,
@@ -60,7 +60,7 @@ function getInstallGuide(platform: Platform): InstallGuide {
         steps: [
           'Open the GitHub releases page and download the newest published MSI.',
           'Run the installer and keep the helper running in the system tray.',
-          'Return to MasterSelects and press Check connection.',
+          'Return to TFE Editor and press Check connection.',
         ],
         note: 'The current helper release includes downloads, Firefox project save/open, and the local AI bridge.',
       };
@@ -70,7 +70,7 @@ function getInstallGuide(platform: Platform): InstallGuide {
         steps: [
           'Open the release page and download the current helper build.',
           'Move the app to Applications and launch it once.',
-          'Keep the menu bar app running while using MasterSelects.',
+          'Keep the menu bar app running while using TFE Editor.',
         ],
         command: 'brew install yt-dlp',
       };
@@ -80,7 +80,7 @@ function getInstallGuide(platform: Platform): InstallGuide {
         steps: [
           'Open the release page and download the current helper build.',
           'Extract the archive and launch the helper binary.',
-          'Keep the helper process running while using MasterSelects.',
+          'Keep the helper process running while using TFE Editor.',
         ],
         command: 'sudo apt install yt-dlp || pip install yt-dlp',
       };
@@ -89,7 +89,7 @@ function getInstallGuide(platform: Platform): InstallGuide {
         title: 'How to install',
         steps: [
           'Open the release page for the latest helper build.',
-          'Install and launch the helper on the same machine as MasterSelects.',
+          'Install and launch the helper on the same machine as TFE Editor.',
           'Return here and press Check connection.',
         ],
       };
@@ -452,12 +452,12 @@ function NativeHelperDialog({
               {isConnected
                 ? (
                   publishedVersion && publishedVersion !== NATIVE_HELPER_VERSION
-                    ? `The helper is reachable from MasterSelects. GitHub still only publishes v${publishedVersion}, while this app build already targets v${NATIVE_HELPER_VERSION}.`
-                    : 'The helper is reachable from MasterSelects on this machine.'
+                    ? `The helper is reachable from TFE Editor. GitHub still only publishes v${publishedVersion}, while this app build already targets v${NATIVE_HELPER_VERSION}.`
+                    : 'The helper is reachable from TFE Editor on this machine.'
                 )
                 : (
                   publishedVersion && publishedVersion !== NATIVE_HELPER_VERSION
-                    ? `GitHub currently only has v${publishedVersion} published. MasterSelects already targets helper v${NATIVE_HELPER_VERSION}, but that release is not public yet.`
+                    ? `GitHub currently only has v${publishedVersion} published. TFE Editor already targets helper v${NATIVE_HELPER_VERSION}, but that release is not public yet.`
                     : 'Install the current helper build and keep it running in the background.'
                 )}
             </p>

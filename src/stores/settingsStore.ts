@@ -13,7 +13,7 @@ const log = Logger.create('SettingsStore');
 export type ThemeMode = 'dark' | 'light' | 'midnight' | 'tfe' | 'system' | 'crazy' | 'custom';
 
 // Transcription provider options
-export type TranscriptionProvider = 'local' | 'openai' | 'assemblyai' | 'deepgram';
+export type TranscriptionProvider = 'local';
 
 // Preview quality options (multiplier on base resolution)
 export type PreviewQuality = 1 | 0.5 | 0.25;
@@ -22,14 +22,7 @@ export type PreviewQuality = 1 | 0.5 | 0.25;
 export type GPUPowerPreference = 'high-performance' | 'low-power';
 
 interface APIKeys {
-  openai: string;
-  assemblyai: string;
-  deepgram: string;
-  piapi: string;  // PiAPI key for AI video generation (Kling, Luma, etc.)
-  youtube: string; // YouTube Data API v3 key (optional, Invidious works without)
-  // Legacy Kling keys (deprecated, use piapi instead)
-  klingAccessKey: string;
-  klingSecretKey: string;
+  anthropic: string;
 }
 
 // Autosave interval options (in minutes)
@@ -145,13 +138,7 @@ export const useSettingsStore = create<SettingsState>()(
       customHue: 22,        // Default: TFE orange
       customBrightness: 15, // Default: dark
       apiKeys: {
-        openai: '',
-        assemblyai: '',
-        deepgram: '',
-        piapi: '',
-        youtube: '',
-        klingAccessKey: '',
-        klingSecretKey: '',
+        anthropic: '',
       },
       transcriptionProvider: 'local',
       previewQuality: 1, // Full quality by default
@@ -295,9 +282,7 @@ export const useSettingsStore = create<SettingsState>()(
 
       // Helpers
       getActiveApiKey: () => {
-        const { transcriptionProvider, apiKeys } = get();
-        if (transcriptionProvider === 'local') return null;
-        return apiKeys[transcriptionProvider] || null;
+        return null; // Local transcription only — no API key needed
       },
 
       hasApiKey: (provider) => {

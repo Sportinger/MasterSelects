@@ -49,17 +49,17 @@ interface WelcomeOverlayProps {
 
 // Typewriter sequence with typo correction
 const TYPEWRITER_SEQUENCE = [
-  { action: 'type', text: 'Local', class: 'local' },
+  { action: 'type', text: 'AI', class: 'local' },
   { action: 'pause', duration: 400 },
   { action: 'type', text: '·', class: 'dot' },
-  { action: 'type', text: 'Private', class: 'private' },
+  { action: 'type', text: 'Auto', class: 'private' },
   { action: 'pause', duration: 350 },
   { action: 'type', text: '·', class: 'dot' },
-  { action: 'type', text: 'Tre', class: 'free' },  // Typo!
+  { action: 'type', text: 'Peo', class: 'free' },  // Typo!
   { action: 'pause', duration: 280 },
-  { action: 'delete', count: 3 },                   // Delete "Tre"
+  { action: 'delete', count: 3 },                   // Delete "Peo"
   { action: 'pause', duration: 200 },
-  { action: 'type', text: 'Free', class: 'free' }, // Correct it
+  { action: 'type', text: 'Pro', class: 'free' },  // Correct it
   { action: 'pause', duration: 400 },
   { action: 'hideCursor' },
 ];
@@ -437,11 +437,11 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
 
         {/* Title */}
         <h1 className="welcome-title">
-          <span className="welcome-title-master">Master</span>
-          <span className="welcome-title-selects">Selects</span>
+          <span className="welcome-title-master">TFE</span>
+          <span className="welcome-title-selects">Editor</span>
         </h1>
 
-        <p className="welcome-subtitle">Video editing in your browser</p>
+        <p className="welcome-subtitle">AI Video Production Platform</p>
 
         {/* Browser Warning for non-Chromium browsers */}
         {!browser.isChromium && (
@@ -453,7 +453,7 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
             </svg>
             <span className="welcome-browser-warning-label">Unsupported Browser</span>
             <span className="welcome-browser-warning-name">{browser.name}</span>
-            <span className="welcome-browser-warning-desc">MasterSelects requires WebGPU which is currently only fully supported in Chrome.</span>
+            <span className="welcome-browser-warning-desc">TFE Editor requires WebGPU which is currently only fully supported in Chrome.</span>
             <a className="welcome-browser-warning-btn" href="https://www.google.com/chrome/" target="_blank" rel="noopener noreferrer">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10"/>

@@ -1,19 +1,8 @@
-import { useSettingsStore, type TranscriptionProvider } from '../../../stores/settingsStore';
-
 interface TranscriptionSettingsProps {
   localKeys: { [key: string]: string };
 }
 
-const providers: { id: TranscriptionProvider; label: string; description: string }[] = [
-  { id: 'local', label: 'Local (Whisper)', description: 'Runs in browser, no API key needed. Slower, less accurate.' },
-  { id: 'openai', label: 'OpenAI Whisper API', description: 'High accuracy, $0.006/minute. Requires API key.' },
-  { id: 'assemblyai', label: 'AssemblyAI', description: 'Excellent accuracy, speaker diarization. $0.015/minute.' },
-  { id: 'deepgram', label: 'Deepgram', description: 'Fast, good accuracy. $0.0125/minute.' },
-];
-
-export function TranscriptionSettings({ localKeys }: TranscriptionSettingsProps) {
-  const { transcriptionProvider, setTranscriptionProvider } = useSettingsStore();
-
+export function TranscriptionSettings({}: TranscriptionSettingsProps) {
   return (
     <div className="settings-category-content">
       <h2>Transcription</h2>
@@ -22,30 +11,22 @@ export function TranscriptionSettings({ localKeys }: TranscriptionSettingsProps)
         <div className="settings-group-title">Provider</div>
 
         <div className="provider-list">
-          {providers.map((provider) => (
-            <label
-              key={provider.id}
-              className={`provider-option ${transcriptionProvider === provider.id ? 'active' : ''}`}
-            >
-              <input
-                type="radio"
-                name="transcriptionProvider"
-                value={provider.id}
-                checked={transcriptionProvider === provider.id}
-                onChange={() => setTranscriptionProvider(provider.id)}
-              />
-              <div className="provider-info">
-                <span className="provider-label">{provider.label}</span>
-                <span className="provider-description">{provider.description}</span>
-              </div>
-              {provider.id !== 'local' && localKeys[provider.id] && (
-                <span className="provider-status">{'\u2713'}</span>
-              )}
-            </label>
-          ))}
+          <label className="provider-option active">
+            <input
+              type="radio"
+              name="transcriptionProvider"
+              value="local"
+              checked={true}
+              readOnly
+            />
+            <div className="provider-info">
+              <span className="provider-label">Local (Whisper)</span>
+              <span className="provider-description">Runs in browser using WebGPU. No API key needed.</span>
+            </div>
+          </label>
         </div>
         <p className="settings-hint">
-          API keys for transcription providers can be configured in the API Keys section.
+          Transcription runs locally in your browser using Whisper via WebGPU.
         </p>
       </div>
     </div>

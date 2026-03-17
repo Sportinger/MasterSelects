@@ -495,7 +495,7 @@ export function ExportPanel() {
     const activeComp = getActiveComposition();
 
     downloadFCPXML(clips, tracks, timelineDuration, {
-      projectName: activeComp?.name || filename || 'MasterSelects Export',
+      projectName: activeComp?.name || filename || 'TFE Export',
       frameRate: activeComp?.frameRate || fps,
       width: activeComp?.width || width,
       height: activeComp?.height || height,

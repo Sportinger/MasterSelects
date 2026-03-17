@@ -1,35 +1,26 @@
-// AI Chat Panel - Chat interface with timeline editing tools using OpenAI API
+// AI Chat Panel - Chat interface with timeline editing tools using Anthropic Claude API
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import Anthropic from '@anthropic-ai/sdk';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { AI_TOOLS, executeAITool, getQuickTimelineSummary } from '../../services/aiTools';
+import type { ToolDefinition } from '../../services/aiTools/types';
 import './AIChatPanel.css';
 
-// Available OpenAI models
-const OPENAI_MODELS = [
-  // GPT-5.2 series (newest - Dec 2025)
-  { id: 'gpt-5.2', name: 'GPT-5.2 (Thinking)' },
-  { id: 'gpt-5.2-pro', name: 'GPT-5.2 Pro' },
-  // GPT-5.1 series
-  { id: 'gpt-5.1', name: 'GPT-5.1' },
-  { id: 'gpt-5.1-codex', name: 'GPT-5.1 Codex' },
-  { id: 'gpt-5.1-codex-mini', name: 'GPT-5.1 Codex Mini' },
-  // GPT-5 series
-  { id: 'gpt-5', name: 'GPT-5' },
-  { id: 'gpt-5-mini', name: 'GPT-5 Mini' },
-  { id: 'gpt-5-nano', name: 'GPT-5 Nano' },
-  // Reasoning models
-  { id: 'o3', name: 'o3 (Reasoning)' },
-  { id: 'o4-mini', name: 'o4-mini (Reasoning)' },
-  { id: 'o3-pro', name: 'o3-pro (Deep Reasoning)' },
-  // GPT-4.1 series
-  { id: 'gpt-4.1', name: 'GPT-4.1' },
-  { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' },
-  { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano' },
-  // GPT-4o series (legacy)
-  { id: 'gpt-4o', name: 'GPT-4o' },
-  { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+// Available Claude models
+const CLAUDE_MODELS = [
+  { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4 (Recommended)' },
+  { id: 'claude-opus-4-6', name: 'Claude Opus 4.6 (Most Capable)' },
 ];
+
+// Convert OpenAI function-calling tool definitions to Anthropic format
+function convertToolsForAnthropic(tools: ToolDefinition[]): Anthropic.Tool[] {
+  return tools.map(t => ({
+    name: t.function.name,
+    description: t.function.description,
+    input_schema: t.function.parameters as Anthropic.Tool.InputSchema,
+  }));
+}
 
 // System prompt for editor mode
 const EDITOR_SYSTEM_PROMPT = `You are an AI video editing assistant with direct access to the timeline AND media panel. You can:
@@ -51,13 +42,22 @@ MEDIA PANEL:
 - Create new compositions
 
 YOUTUBE / DOWNLOADS:
-- Search YouTube for videos by keyword (requires YouTube API key)
+- Search for videos by keyword via yt-dlp (no API key needed)
 - List available download formats/qualities for any video URL
 - Download videos and import them directly into the timeline
 - View videos already in the Downloads panel
 - Supported platforms: YouTube, TikTok, Instagram, Twitter/X, Vimeo, and more (via yt-dlp)
 - Downloads require the Native Helper application to be running
 - When the user asks for a video on a TOPIC (e.g. "download a jungle video"), ALWAYS use searchYouTube first to find real videos, then download from the results. NEVER make up or guess URLs.
+
+TFE PIPELINE:
+- Generate thumbnails and titles using AI
+- Generate video clips with Veo (text-to-video, image-to-video)
+- Run Mosaic video analysis pipeline
+- Trim, concatenate, and process videos with FFmpeg
+- Analyze tasks and optimize prompts with Claude
+- Run full TFE pipeline jobs
+- Check job status for long-running operations
 
 CRITICAL RULES - FOLLOW EXACTLY:
 1. ALWAYS assume the user means the CURRENTLY SELECTED CLIP. Never ask "which clip?" - just use the selected one.
@@ -79,6 +79,17 @@ CUT EVALUATION WORKFLOW:
 
 Current timeline summary: `;
 
+// Anthropic message content types
+type AnthropicContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
+  | { type: 'tool_result'; tool_use_id: string; content: string };
+
+interface AnthropicMessage {
+  role: 'user' | 'assistant';
+  content: string | AnthropicContentBlock[];
+}
+
 interface Message {
   id: string;
   role: 'user' | 'assistant' | 'tool';
@@ -92,18 +103,7 @@ interface Message {
 interface ToolCall {
   id: string;
   name: string;
-  arguments: string;
-}
-
-interface APIMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string | null;
-  tool_calls?: Array<{
-    id: string;
-    type: 'function';
-    function: { name: string; arguments: string };
-  }>;
-  tool_call_id?: string;
+  input: Record<string, unknown>;
 }
 
 export function AIChatPanel() {
@@ -111,9 +111,9 @@ export function AIChatPanel() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [model, setModel] = useState('gpt-5.1');
+  const [model, setModel] = useState('claude-sonnet-4-20250514');
   const [error, setError] = useState<string | null>(null);
-  const [editorMode, setEditorMode] = useState(true); // Enable tools by default
+  const [editorMode, setEditorMode] = useState(true);
   const [currentToolAction, setCurrentToolAction] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -124,108 +124,104 @@ export function AIChatPanel() {
   }, [messages, currentToolAction]);
 
   // Check if API key is available
-  const hasApiKey = !!apiKeys.openai;
+  const hasApiKey = !!apiKeys.anthropic;
 
-  // Build API messages from chat history
-  const buildAPIMessages = useCallback((userContent: string): APIMessage[] => {
-    const apiMessages: APIMessage[] = [];
+  // Build Anthropic messages from chat history
+  const buildAnthropicMessages = useCallback((userContent: string): AnthropicMessage[] => {
+    const anthropicMessages: AnthropicMessage[] = [];
 
-    // Add system prompt in editor mode
-    if (editorMode) {
-      apiMessages.push({
-        role: 'system',
-        content: EDITOR_SYSTEM_PROMPT + getQuickTimelineSummary(),
-      });
-    }
-
-    // Add conversation history
+    // Convert conversation history
     for (const msg of messages) {
       if (msg.role === 'user') {
-        apiMessages.push({ role: 'user', content: msg.content });
+        anthropicMessages.push({ role: 'user', content: msg.content });
       } else if (msg.role === 'assistant') {
         if (msg.toolCalls && msg.toolCalls.length > 0) {
-          apiMessages.push({
-            role: 'assistant',
-            content: msg.content || null,
-            tool_calls: msg.toolCalls.map(tc => ({
+          const content: AnthropicContentBlock[] = [];
+          if (msg.content) {
+            content.push({ type: 'text', text: msg.content });
+          }
+          for (const tc of msg.toolCalls) {
+            content.push({
+              type: 'tool_use',
               id: tc.id,
-              type: 'function' as const,
-              function: { name: tc.name, arguments: tc.arguments },
-            })),
-          });
+              name: tc.name,
+              input: tc.input,
+            });
+          }
+          anthropicMessages.push({ role: 'assistant', content });
         } else {
-          apiMessages.push({ role: 'assistant', content: msg.content });
+          anthropicMessages.push({ role: 'assistant', content: msg.content });
         }
       } else if (msg.role === 'tool' && msg.toolName) {
-        apiMessages.push({
-          role: 'tool',
-          content: msg.content,
-          tool_call_id: msg.id,
+        // Anthropic: tool results go in a 'user' message with tool_result blocks
+        anthropicMessages.push({
+          role: 'user',
+          content: [{
+            type: 'tool_result',
+            tool_use_id: msg.id,
+            content: msg.content,
+          }],
         });
       }
     }
 
     // Add new user message
-    apiMessages.push({ role: 'user', content: userContent });
+    anthropicMessages.push({ role: 'user', content: userContent });
 
-    return apiMessages;
-  }, [messages, editorMode]);
+    return anthropicMessages;
+  }, [messages]);
 
-  // Call OpenAI API
-  const callOpenAI = useCallback(async (apiMessages: APIMessage[]): Promise<{
+  // Call Claude API
+  const callClaude = useCallback(async (anthropicMessages: AnthropicMessage[]): Promise<{
     content: string | null;
     toolCalls: ToolCall[];
+    rawContent: AnthropicContentBlock[];
   }> => {
-    // Newer models (GPT-5.x, o3, o4) use max_completion_tokens instead of max_tokens
-    const isNewerModel = model.startsWith('gpt-5') || model.startsWith('o3') || model.startsWith('o4');
-
-    const requestBody: Record<string, unknown> = {
-      model,
-      messages: apiMessages,
-      ...(isNewerModel
-        ? { max_completion_tokens: 4096 }
-        : { max_tokens: 4096 }),
-    };
-
-    // Add tools in editor mode
-    if (editorMode) {
-      requestBody.tools = AI_TOOLS;
-      requestBody.tool_choice = 'auto';
-    }
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKeys.openai}`,
-      },
-      body: JSON.stringify(requestBody),
+    // ローカル使用専用。APIキーがブラウザに露出するため、
+    // 公開する場合はサーバー側プロキシ経由に変更すること
+    const client = new Anthropic({
+      apiKey: apiKeys.anthropic,
+      dangerouslyAllowBrowser: true,
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error?.message || `API error: ${response.status}`);
+    const requestParams: Anthropic.MessageCreateParams = {
+      model,
+      max_tokens: 4096,
+      messages: anthropicMessages as Anthropic.MessageParam[],
+    };
+
+    // Add system prompt and tools in editor mode
+    if (editorMode) {
+      requestParams.system = EDITOR_SYSTEM_PROMPT + getQuickTimelineSummary();
+      requestParams.tools = convertToolsForAnthropic(AI_TOOLS);
     }
 
-    const data = await response.json();
-    const choice = data.choices?.[0];
+    const response = await client.messages.create(requestParams);
 
-    const toolCalls: ToolCall[] = (choice?.message?.tool_calls || []).map((tc: {
-      id: string;
-      function: { name: string; arguments: string };
-    }) => ({
-      id: tc.id,
-      name: tc.function.name,
-      arguments: tc.function.arguments,
-    }));
+    // Parse response content blocks
+    let textContent = '';
+    const toolCalls: ToolCall[] = [];
+
+    for (const block of response.content) {
+      if (block.type === 'text') {
+        textContent += block.text;
+      } else if (block.type === 'tool_use') {
+        toolCalls.push({
+          id: block.id,
+          name: block.name,
+          input: block.input as Record<string, unknown>,
+        });
+      }
+    }
 
     return {
-      content: choice?.message?.content || null,
+      content: textContent || null,
       toolCalls,
+      rawContent: response.content as AnthropicContentBlock[],
     };
-  }, [model, editorMode, apiKeys.openai]);
+  }, [model, editorMode, apiKeys.anthropic]);
 
-  // Send message to OpenAI (with tool calling loop)
+  // Send message to Claude (with tool calling loop)
   const sendMessage = useCallback(async () => {
     if (!input.trim() || !hasApiKey || isLoading) return;
 
@@ -243,14 +239,14 @@ export function AIChatPanel() {
     setIsLoading(true);
 
     try {
-      const apiMessages = buildAPIMessages(userContent);
+      const anthropicMessages = buildAnthropicMessages(userContent);
       let iterationCount = 0;
       const maxIterations = 50; // Safety limit for tool iterations
 
       while (iterationCount < maxIterations) {
         iterationCount++;
 
-        const { content, toolCalls } = await callOpenAI(apiMessages);
+        const { content, toolCalls, rawContent } = await callClaude(anthropicMessages);
 
         if (toolCalls.length === 0) {
           // No tool calls - add final assistant message
@@ -276,34 +272,21 @@ export function AIChatPanel() {
         };
         setMessages(prev => [...prev, assistantMessage]);
 
-        // Add assistant message to API messages
-        apiMessages.push({
+        // Add assistant message to Anthropic messages (preserve raw content blocks)
+        anthropicMessages.push({
           role: 'assistant',
-          content: content || null,
-          tool_calls: toolCalls.map(tc => ({
-            id: tc.id,
-            type: 'function' as const,
-            function: { name: tc.name, arguments: tc.arguments },
-          })),
+          content: rawContent,
         });
 
-        // Execute each tool call
-        // IMPORTANT: Always add a tool result for every tool_call to keep
-        // the conversation valid for the OpenAI API. If a tool crashes,
-        // we still send an error result back.
+        // Execute each tool call and collect results
+        const toolResults: AnthropicContentBlock[] = [];
+
         for (const toolCall of toolCalls) {
           setCurrentToolAction(`Executing: ${toolCall.name}`);
 
-          let args: Record<string, unknown> = {};
-          try {
-            args = JSON.parse(toolCall.arguments);
-          } catch {
-            args = {};
-          }
-
           let result: { success: boolean; data?: unknown; error?: string };
           try {
-            result = await executeAITool(toolCall.name, args);
+            result = await executeAITool(toolCall.name, toolCall.input);
           } catch (toolErr) {
             result = { success: false, error: toolErr instanceof Error ? toolErr.message : String(toolErr) };
           }
@@ -318,13 +301,19 @@ export function AIChatPanel() {
           };
           setMessages(prev => [...prev, toolResultMessage]);
 
-          // Add tool result to API messages
-          apiMessages.push({
-            role: 'tool',
+          // Collect tool results for Anthropic API
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolCall.id,
             content: JSON.stringify(result),
-            tool_call_id: toolCall.id,
           });
         }
+
+        // Add all tool results in a single 'user' message (Anthropic format)
+        anthropicMessages.push({
+          role: 'user',
+          content: toolResults,
+        });
 
         setCurrentToolAction(null);
       }
@@ -338,7 +327,7 @@ export function AIChatPanel() {
       setIsLoading(false);
       setCurrentToolAction(null);
     }
-  }, [input, hasApiKey, isLoading, buildAPIMessages, callOpenAI]);
+  }, [input, hasApiKey, isLoading, buildAnthropicMessages, callClaude]);
 
   // Handle key press
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -361,7 +350,7 @@ export function AIChatPanel() {
         <div className="ai-panel-overlay">
           <div className="ai-panel-overlay-content">
             <span className="no-key-icon">🔑</span>
-            <p>OpenAI API key required</p>
+            <p>Anthropic API key required</p>
             <button className="btn-settings" onClick={openSettings}>
               Open Settings
             </button>
@@ -387,7 +376,7 @@ export function AIChatPanel() {
             onChange={(e) => setModel(e.target.value)}
             disabled={isLoading}
           >
-            {OPENAI_MODELS.map(m => (
+            {CLAUDE_MODELS.map(m => (
               <option key={m.id} value={m.id}>{m.name}</option>
             ))}
           </select>
@@ -410,7 +399,7 @@ export function AIChatPanel() {
             <span className="welcome-hint">
               {editorMode
                 ? 'Ask me to edit your timeline - cut clips, remove silence, etc.'
-                : `Using ${OPENAI_MODELS.find(m => m.id === model)?.name}`}
+                : `Using ${CLAUDE_MODELS.find(m => m.id === model)?.name}`}
             </span>
           </div>
         ) : (
@@ -454,9 +443,10 @@ export function AIChatPanel() {
                       <div key={tc.id} className="tool-call">
                         <span className="tool-call-name">{tc.name}</span>
                         <span className="tool-call-args">
-                          {tc.arguments.length > 100
-                            ? tc.arguments.substring(0, 100) + '...'
-                            : tc.arguments}
+                          {(() => {
+                            const args = JSON.stringify(tc.input);
+                            return args.length > 100 ? args.substring(0, 100) + '...' : args;
+                          })()}
                         </span>
                       </div>
                     ))}

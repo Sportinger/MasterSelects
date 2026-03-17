@@ -2,7 +2,6 @@
 // Supports YouTube Data API (with key) and direct URL paste (no key)
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useSettingsStore } from '../../stores/settingsStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useYouTubeStore, type YouTubeVideo as StoreYouTubeVideo } from '../../stores/youtubeStore';
@@ -200,8 +199,6 @@ export function DownloadPanel() {
   } | null>(null);
   const [fetchingFormats, setFetchingFormats] = useState<string | null>(null);
 
-  const { apiKeys, openSettings } = useSettingsStore();
-  const youtubeApiKey = apiKeys.youtube || '';
 
   // Track Native Helper connection status
   useEffect(() => {
@@ -267,47 +264,6 @@ export function DownloadPanel() {
     return `${count} views`;
   };
 
-  // Search using YouTube Data API
-  const searchYouTubeAPI = async (searchQuery: string): Promise<YouTubeVideo[]> => {
-    const searchResponse = await fetch(
-      `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=20&q=${encodeURIComponent(searchQuery)}&key=${youtubeApiKey}`
-    );
-
-    if (!searchResponse.ok) {
-      const errorData = await searchResponse.json();
-      throw new Error(errorData.error?.message || 'YouTube API error');
-    }
-
-    const searchData = await searchResponse.json();
-    const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
-
-    // Get video details (duration, views)
-    const detailsResponse = await fetch(
-      `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,statistics&id=${videoIds}&key=${youtubeApiKey}`
-    );
-
-    const detailsData = await detailsResponse.json();
-    const detailsMap = new Map(detailsData.items?.map((item: any) => [item.id, item]) || []);
-
-    return searchData.items.map((item: any) => {
-      const details = detailsMap.get(item.id.videoId) as any;
-      const durationSeconds = details?.contentDetails?.duration
-        ? parseISO8601Duration(details.contentDetails.duration)
-        : 0;
-      return {
-        id: item.id.videoId,
-        title: item.snippet.title,
-        thumbnail: item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.default?.url,
-        channel: item.snippet.channelTitle,
-        durationSeconds,
-        duration: formatDuration(durationSeconds),
-        views: details?.statistics?.viewCount
-          ? formatViews(parseInt(details.statistics.viewCount))
-          : undefined,
-      };
-    });
-  };
-
   // Main search/add handler
   const handleSearch = useCallback(async (overrideQuery?: string) => {
     const input = (overrideQuery ?? query).trim();
@@ -363,24 +319,34 @@ export function DownloadPanel() {
             setError('Could not load video info. URL may not be supported.');
           }
         }
-      } else if (youtubeApiKey) {
-        // Search query with API key (YouTube search only)
-        const videos = await searchYouTubeAPI(input);
-        const videosWithPlatform = videos.map(v => ({
-          ...v,
-          platform: 'youtube' as const,
-          sourceUrl: `https://www.youtube.com/watch?v=${v.id}`,
-        }));
-        addVideos(videosWithPlatform.map(panelToStore));
+      } else if (helperConnected) {
+        // Search via yt-dlp (no API key needed)
+        const results = await NativeHelperClient.searchVideos(input, 10);
+        if (results && results.length > 0) {
+          const videos = results.map((item: any) => ({
+            id: item.id,
+            title: item.title || 'Untitled',
+            thumbnail: item.thumbnail || '',
+            channel: item.uploader || item.channel || '',
+            duration: formatDuration(item.duration || 0),
+            durationSeconds: item.duration || 0,
+            views: item.view_count ? formatViews(item.view_count) : undefined,
+            platform: 'youtube' as const,
+            sourceUrl: item.url || item.webpage_url || `https://www.youtube.com/watch?v=${item.id}`,
+          }));
+          addVideos(videos.map(panelToStore));
+        } else {
+          setError('No results found');
+        }
       } else {
-        setError('Paste a video URL, or add YouTube API key in settings for search');
+        setError('Paste a video URL, or start Native Helper for search');
       }
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [query, youtubeApiKey, autoDownload, helperConnected]);
+  }, [query, autoDownload, helperConnected]);
 
   // Handle Enter key
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -636,7 +602,7 @@ export function DownloadPanel() {
           <input
             type="text"
             className="youtube-search-input"
-            placeholder={youtubeApiKey ? "Search or paste video URL..." : "Paste video URL (YouTube, TikTok, Instagram, ...)"}
+            placeholder="Search or paste video URL..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -647,21 +613,11 @@ export function DownloadPanel() {
             onClick={() => handleSearch()}
             disabled={loading || !query.trim()}
           >
-            {loading ? '...' : youtubeApiKey ? 'Search' : 'Add'}
+            {loading ? '...' : 'Search'}
           </button>
         </div>
 
         <div className="youtube-options">
-          {youtubeApiKey ? (
-            <span className="api-status api-active">API Key Active</span>
-          ) : (
-            <>
-              <span className="api-status">No API Key</span>
-              <button className="btn-settings-small" onClick={openSettings}>
-                Add Key
-              </button>
-            </>
-          )}
           {helperConnected ? (
             <span className="api-status api-active">yt-dlp Ready</span>
           ) : (
@@ -681,11 +637,6 @@ export function DownloadPanel() {
         {!helperConnected && (
           <div className="youtube-hint youtube-hint-warning">
             Native Helper required for downloads. Start helper or use yt-dlp manually.
-          </div>
-        )}
-        {!youtubeApiKey && helperConnected && (
-          <div className="youtube-hint">
-            Paste video URLs to add videos. Add YouTube API key for search.
           </div>
         )}
       </div>
@@ -799,17 +750,8 @@ export function DownloadPanel() {
         ) : (
           <div className="youtube-empty">
             <span className="youtube-icon">Downloads</span>
-            {youtubeApiKey ? (
-              <>
-                <p>Search or paste a video URL</p>
-                <span>YouTube, TikTok, Instagram, Twitter/X, Vimeo, ...</span>
-              </>
-            ) : (
-              <>
-                <p>Paste a video URL</p>
-                <span>YouTube, TikTok, Instagram, Twitter/X, Vimeo, ...</span>
-              </>
-            )}
+            <p>Search or paste a video URL</p>
+            <span>YouTube, TikTok, Instagram, Twitter/X, Vimeo, ...</span>
           </div>
         )}
       </div>

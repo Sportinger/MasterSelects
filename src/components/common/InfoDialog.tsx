@@ -1,4 +1,4 @@
-// InfoDialog - About MasterSelects info overlay
+// InfoDialog - About TFE Editor info overlay
 // Same style as WelcomeOverlay
 
 import { useState, useEffect, useCallback } from 'react';
@@ -46,26 +46,26 @@ export function InfoDialog({ onClose }: InfoDialogProps) {
       <div className="welcome-overlay">
         {/* Privacy tagline */}
         <div className="welcome-tagline">
-          <span className="welcome-tag-local">Local</span>
+          <span className="welcome-tag-local">AI</span>
           <span className="welcome-tag-dot">·</span>
-          <span className="welcome-tag-private">Private</span>
+          <span className="welcome-tag-private">Auto</span>
           <span className="welcome-tag-dot">·</span>
-          <span className="welcome-tag-free">Free</span>
+          <span className="welcome-tag-free">Pro</span>
         </div>
 
         {/* Title */}
         <h1 className="welcome-title">
-          <span className="welcome-title-master">Master</span>
-          <span className="welcome-title-selects">Selects</span>
+          <span className="welcome-title-master">TFE</span>
+          <span className="welcome-title-selects">Editor</span>
         </h1>
 
-        <p className="welcome-subtitle">Video editing in your browser</p>
+        <p className="welcome-subtitle">AI Video Production Platform</p>
 
         {/* Info Card */}
         <div className="welcome-folder-card">
           <div className="info-content">
             <p className="info-description">
-              MasterSelects is a browser-based video editor powered by WebGPU.
+              TFE Editor is a browser-based video editor powered by WebGPU.
               All processing happens locally on your device - your files never leave your computer.
             </p>
 

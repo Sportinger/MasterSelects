@@ -6,7 +6,6 @@ import { downloadVideo } from '../../youtubeDownloader';
 import { useYouTubeStore } from '../../../stores/youtubeStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
-import { useSettingsStore } from '../../../stores/settingsStore';
 import type { ToolResult } from '../types';
 
 const log = Logger.create('AITool:YouTube');
@@ -46,58 +45,35 @@ export async function handleSearchYouTube(args: Record<string, unknown>): Promis
     return { success: false, error: 'query is required' };
   }
 
-  const youtubeApiKey = useSettingsStore.getState().apiKeys.youtube;
-  if (!youtubeApiKey) {
-    return { success: false, error: 'YouTube API key not configured. Please set it in Settings > API Keys.' };
+  if (!NativeHelperClient.isConnected()) {
+    return { success: false, error: 'Native Helper not connected. Please start the helper application to use video search.' };
   }
 
   try {
-    // Search YouTube Data API v3
-    const searchResponse = await fetch(
-      `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=${maxResults}&q=${encodeURIComponent(query)}&key=${youtubeApiKey}`
-    );
+    // Search via yt-dlp through Native Helper (no API key needed)
+    const results = await NativeHelperClient.searchVideos(query, maxResults);
 
-    if (!searchResponse.ok) {
-      const errorData = await searchResponse.json();
-      throw new Error(errorData.error?.message || 'YouTube API error');
+    if (!results || results.length === 0) {
+      return { success: true, data: { query, resultCount: 0, videos: [] } };
     }
 
-    const searchData = await searchResponse.json();
-    const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
-
-    // Get video details (duration, views)
-    const detailsResponse = await fetch(
-      `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,statistics&id=${videoIds}&key=${youtubeApiKey}`
-    );
-
-    const detailsData = await detailsResponse.json();
-    const detailsMap = new Map(detailsData.items?.map((item: any) => [item.id, item]) || []);
-
-    const videos = searchData.items.map((item: any) => {
-      const details = detailsMap.get(item.id.videoId) as any;
-      const durationSeconds = details?.contentDetails?.duration
-        ? parseISO8601Duration(details.contentDetails.duration)
-        : 0;
-      return {
-        id: item.id.videoId,
-        title: item.snippet.title,
-        thumbnail: item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.default?.url,
-        channelTitle: item.snippet.channelTitle,
-        publishedAt: item.snippet.publishedAt,
-        durationSeconds,
-        duration: formatDuration(durationSeconds),
-        viewCount: details?.statistics?.viewCount
-          ? formatViews(parseInt(details.statistics.viewCount))
-          : undefined,
-        url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
-      };
-    });
+    const videos = results.map((item: any) => ({
+      id: item.id,
+      title: item.title,
+      thumbnail: item.thumbnail || '',
+      channelTitle: item.uploader || item.channel || '',
+      publishedAt: item.upload_date || '',
+      durationSeconds: item.duration || 0,
+      duration: formatDuration(item.duration || 0),
+      viewCount: item.view_count ? formatViews(item.view_count) : undefined,
+      url: item.url || item.webpage_url || `https://www.youtube.com/watch?v=${item.id}`,
+    }));
 
     // Add results to YouTube store (appears in Downloads panel)
     useYouTubeStore.getState().addVideos(videos);
     useYouTubeStore.getState().setLastQuery(query);
 
-    log.info(`YouTube search: "${query}" returned ${videos.length} results`);
+    log.info(`yt-dlp search: "${query}" returned ${videos.length} results`);
 
     return {
       success: true,
@@ -108,10 +84,10 @@ export async function handleSearchYouTube(args: Record<string, unknown>): Promis
       },
     };
   } catch (error) {
-    log.error('YouTube search failed', error);
+    log.error('Video search failed', error);
     return {
       success: false,
-      error: `YouTube search failed: ${(error as Error).message}`,
+      error: `Video search failed: ${(error as Error).message}`,
     };
   }
 }

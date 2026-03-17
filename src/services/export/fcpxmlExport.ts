@@ -123,7 +123,7 @@ export function exportToFCPXML(
   options: FCPXMLExportOptions = {}
 ): string {
   const {
-    projectName = 'MasterSelects Export',
+    projectName = 'TFE Export',
     frameRate = 30,
     width = 1920,
     height = 1080,
@@ -281,7 +281,7 @@ export function downloadFCPXML(
   timelineDuration: number,
   options: FCPXMLExportOptions = {}
 ): void {
-  const projectName = options.projectName || 'MasterSelects Export';
+  const projectName = options.projectName || 'TFE Export';
   const xml = exportToFCPXML(clips, tracks, timelineDuration, options);
 
   // Create blob and download
@@ -314,7 +314,7 @@ export function exportCurrentComposition(options: FCPXMLExportOptions = {}): voi
     timelineStore.tracks,
     timelineStore.duration,
     {
-      projectName: activeComp?.name || 'MasterSelects Export',
+      projectName: activeComp?.name || 'TFE Export',
       frameRate: activeComp?.frameRate || 30,
       width: activeComp?.width || 1920,
       height: activeComp?.height || 1080,

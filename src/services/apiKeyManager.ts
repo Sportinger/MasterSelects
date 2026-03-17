@@ -10,17 +10,11 @@ const STORE_NAME = 'api-keys';
 const ENCRYPTION_KEY_ID = 'encryption-key';
 
 // Supported API key types
-export type ApiKeyType = 'openai' | 'assemblyai' | 'deepgram' | 'piapi' | 'youtube' | 'klingAccessKey' | 'klingSecretKey';
+export type ApiKeyType = 'anthropic';
 
 // Key IDs for each API key type (stored in IndexedDB)
 const KEY_IDS: Record<ApiKeyType, string> = {
-  openai: 'openai-api-key',
-  assemblyai: 'assemblyai-api-key',
-  deepgram: 'deepgram-api-key',
-  piapi: 'piapi-api-key',
-  youtube: 'youtube-api-key',
-  klingAccessKey: 'kling-access-key',
-  klingSecretKey: 'kling-secret-key',
+  anthropic: 'anthropic-api-key',
 };
 
 // Legacy key ID for backwards compatibility
@@ -280,13 +274,7 @@ class ApiKeyManager {
    */
   async getAllKeys(): Promise<Record<ApiKeyType, string>> {
     const keys: Record<ApiKeyType, string> = {
-      openai: '',
-      assemblyai: '',
-      deepgram: '',
-      piapi: '',
-      youtube: '',
-      klingAccessKey: '',
-      klingSecretKey: '',
+      anthropic: '',
     };
 
     for (const keyType of Object.keys(KEY_IDS) as ApiKeyType[]) {

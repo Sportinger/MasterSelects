@@ -17,6 +17,7 @@
     "test:unit": "vitest run tests/unit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.79.0",
     "@ffmpeg/core": "^0.12.6",
     "@ffmpeg/ffmpeg": "^0.12.6",
     "@ffmpeg/util": "^0.12.2",

@@ -14,7 +14,6 @@ import { normalizePreviewPanelSource } from '../../utils/previewPanelSource';
 const ExportPanel = lazy(() => import('../export/ExportPanel').then(m => ({ default: m.ExportPanel })));
 const MultiCamPanel = lazy(() => import('../panels/MultiCamPanel').then(m => ({ default: m.MultiCamPanel })));
 const AIChatPanel = lazy(() => import('../panels/AIChatPanel').then(m => ({ default: m.AIChatPanel })));
-const AIVideoPanel = lazy(() => import('../panels/AIVideoPanel').then(m => ({ default: m.AIVideoPanel })));
 const DownloadPanel = lazy(() => import('../panels/DownloadPanel').then(m => ({ default: m.DownloadPanel })));
 const TransitionsPanel = lazy(() => import('../panels/TransitionsPanel').then(m => ({ default: m.TransitionsPanel })));
 const SAM2Panel = lazy(() => import('../panels/SAM2Panel').then(m => ({ default: m.SAM2Panel })));
@@ -66,8 +65,6 @@ export function DockPanelContent({ panel }: DockPanelContentProps) {
       return <Suspense fallback={<PanelLoading />}><MultiCamPanel /></Suspense>;
     case 'ai-chat':
       return <Suspense fallback={<PanelLoading />}><AIChatPanel /></Suspense>;
-    case 'ai-video':
-      return <Suspense fallback={<PanelLoading />}><AIVideoPanel /></Suspense>;
     case 'ai-segment':
       return <Suspense fallback={<PanelLoading />}><SAM2Panel /></Suspense>;
     case 'youtube':
