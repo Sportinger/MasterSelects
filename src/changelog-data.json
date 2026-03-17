@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-03-17",
+    "type": "improve",
+    "title": "Website Sessions Can Now Edit the Timeline Through the Native Helper Bridge",
+    "description": "MasterSelects sessions connected through the Native Helper can now run the full editing toolset directly from the web app, including clip splits, trims, reorders, deletes, and batch edits, without being blocked by the old nativeHelper caller restrictions. Sensitive debug/log endpoints and local file import stay excluded from that bridge path.",
+    "section": "AI / Native Helper"
+  },
+  {
+    "date": "2026-03-17",
     "type": "fix",
     "title": "Local AI Bridges Now Enforce Tokens, File Allowlists, and Tool Policies",
     "description": "The Vite dev bridge and Native Helper bridge now require auth tokens, reject non-loopback browser origins, restrict local file access to explicit allowed roots, and route external AI calls through caller policies plus approval gates instead of giving the bridge unrestricted editor control. Secret redaction, dedicated security docs, and new JS/Rust security checks and tests now back those boundaries up.",

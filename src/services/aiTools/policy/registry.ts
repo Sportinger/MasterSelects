@@ -5,6 +5,7 @@ import type { ToolPolicyEntry, CallerContext } from './types';
 
 const allCallers: CallerContext[] = ['chat', 'devBridge', 'nativeHelper', 'console', 'internal'];
 const interactiveCallers: CallerContext[] = ['chat', 'console', 'internal'];
+const helperEditingCallers: CallerContext[] = ['chat', 'nativeHelper', 'console', 'internal'];
 
 // Helper to build policy entries
 function readOnly(riskLevel: 'low' | 'medium' = 'low'): ToolPolicyEntry {
@@ -36,7 +37,7 @@ function mutatingLow(): ToolPolicyEntry {
     requiresConfirmation: false,
     sensitiveDataAccess: false,
     localFileAccess: false,
-    allowedCallers: interactiveCallers,
+    allowedCallers: helperEditingCallers,
   };
 }
 
@@ -47,7 +48,7 @@ function mutatingMedium(): ToolPolicyEntry {
     requiresConfirmation: false,
     sensitiveDataAccess: false,
     localFileAccess: false,
-    allowedCallers: interactiveCallers,
+    allowedCallers: helperEditingCallers,
   };
 }
 
@@ -58,7 +59,7 @@ function mutatingHigh(): ToolPolicyEntry {
     requiresConfirmation: true,
     sensitiveDataAccess: false,
     localFileAccess: false,
-    allowedCallers: interactiveCallers,
+    allowedCallers: helperEditingCallers,
   };
 }
 

@@ -99,14 +99,27 @@ describe('AI Tool Policy Registry', () => {
     }
   });
 
-  it('sensitive and mutating tools exclude nativeHelper from allowedCallers', () => {
-    const helperBlockedTools = [
+  it('mutating editor tools allow nativeHelper', () => {
+    const helperAllowedTools = [
       'deleteClip',
       'executeBatch',
-      'getLogs',
-      'getPlaybackTrace',
-      'importLocalFiles',
+      'splitClipEvenly',
+      'reorderClips',
+      'moveClip',
+      'trimClip',
     ];
+    for (const name of helperAllowedTools) {
+      const policy = getToolPolicy(name);
+      expect(policy, `Missing policy for ${name}`).toBeDefined();
+      expect(
+        policy!.allowedCallers.includes('nativeHelper'),
+        `${name} should allow nativeHelper`
+      ).toBe(true);
+    }
+  });
+
+  it('sensitive and local file tools still exclude nativeHelper', () => {
+    const helperBlockedTools = ['getLogs', 'getPlaybackTrace', 'importLocalFiles'];
     for (const name of helperBlockedTools) {
       const policy = getToolPolicy(name);
       expect(policy, `Missing policy for ${name}`).toBeDefined();
