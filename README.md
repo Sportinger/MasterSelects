@@ -301,7 +301,7 @@ tools/
 
 No source code of any dependency has been modified. No GPL/AGPL dependencies. All copyleft packages (LGPL, MPL) are used strictly as libraries via their published APIs.
 
-[View full FOSSA report](https://app.fossa.com/projects/custom%2B61097%2Fmasterselects?utm_source=share_link)
+[View full FOSSA report](https://app.fossa.com/projects/custom%2B61097%2Fmasterselects?utm_source=share_link) · [Attribution report (HTML)](docs/FOSSA-Attribution.html)
 
 </details>
 
