@@ -93,6 +93,10 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       },
       priceId,
       quantity,
+      subscriptionMetadata: {
+        plan_id: planId,
+        user_id: user.id,
+      },
       successUrl,
     });
 

@@ -16,6 +16,7 @@ export interface StripeCheckoutSessionInput {
   mode?: 'subscription' | 'payment';
   priceId: string;
   quantity?: number;
+  subscriptionMetadata?: Record<string, string | undefined>;
   successUrl: string;
 }
 
@@ -163,7 +164,8 @@ export async function createStripeCheckoutSession(
   input: StripeCheckoutSessionInput,
 ): Promise<{ id: string; url: string | null }> {
   const params = new URLSearchParams();
-  params.set('mode', input.mode ?? 'subscription');
+  const mode = input.mode ?? 'subscription';
+  params.set('mode', mode);
   params.set('line_items[0][price]', input.priceId);
   params.set('line_items[0][quantity]', String(input.quantity ?? 1));
   params.set('success_url', input.successUrl);
@@ -180,6 +182,9 @@ export async function createStripeCheckoutSession(
   }
 
   appendObjectParams(params, 'metadata', input.metadata);
+  if (mode === 'subscription') {
+    appendObjectParams(params, 'subscription_data[metadata]', input.subscriptionMetadata);
+  }
 
   return stripeApiRequest<{ id: string; url: string | null }>(config, 'POST', '/checkout/sessions', params);
 }
