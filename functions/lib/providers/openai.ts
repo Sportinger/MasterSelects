@@ -113,6 +113,10 @@ export function normalizeHostedChatRequest(body: unknown): HostedChatRequest | n
       const toolCalls = normalizeToolCalls(message.tool_calls);
       if (toolCalls) {
         normalized.tool_calls = toolCalls;
+
+        if (typeof normalized.content !== 'string' || normalized.content.trim().length === 0) {
+          normalized.content = 'Calling tools.';
+        }
       }
 
       if (typeof message.tool_call_id === 'string' && message.tool_call_id.trim()) {
