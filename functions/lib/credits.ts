@@ -30,9 +30,8 @@ export interface CreditBalanceSummary {
   recentEntries: CreditLedgerRow[];
 }
 
-export const FREE_PLAN_WELCOME_CREDITS = 25;
-export const FREE_PLAN_WELCOME_SOURCE = 'system:free_plan_bootstrap';
-export const FREE_PLAN_WELCOME_SOURCE_ID = 'free-plan-bootstrap:v1';
+export const FREE_PLAN_MONTHLY_CREDITS = 25;
+export const FREE_PLAN_MONTHLY_SOURCE = 'system:free_plan_monthly_grant';
 
 function toJson(value: Record<string, unknown> | null | undefined): string | null {
   if (!value) {
@@ -252,16 +251,20 @@ export async function ensureFreePlanCredits(
   db: AppD1Database,
   userId: string,
 ): Promise<CreditLedgerRow | null> {
+  const now = new Date();
+  const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+
   return appendCreditLedgerEntry(db, {
-    amount: FREE_PLAN_WELCOME_CREDITS,
-    description: 'Free plan welcome credits',
+    amount: FREE_PLAN_MONTHLY_CREDITS,
+    description: 'Free plan monthly credits',
     entryType: 'grant',
     metadata: {
-      grant_type: 'welcome',
+      grant_type: 'monthly',
+      grant_month: monthKey,
       plan_id: 'free',
     },
-    source: FREE_PLAN_WELCOME_SOURCE,
-    sourceId: FREE_PLAN_WELCOME_SOURCE_ID,
+    source: FREE_PLAN_MONTHLY_SOURCE,
+    sourceId: `free-plan:${monthKey}`,
     userId,
   });
 }
