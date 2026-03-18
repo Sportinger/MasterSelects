@@ -15,18 +15,25 @@ export function AuthDialog({ onClose }: AuthDialogProps) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onClose();
+        handleClose();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, [onClose, isClosing]);
+
+  const handleClose = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+    }, 200);
+  };
 
   const handleBackdropClick = (event: React.MouseEvent) => {
-    if (event.target === event.currentTarget && !isClosing) {
-      setIsClosing(true);
-      onClose();
+    if (event.target === event.currentTarget) {
+      handleClose();
     }
   };
 
@@ -36,56 +43,82 @@ export function AuthDialog({ onClose }: AuthDialogProps) {
   };
 
   return (
-    <div className="auth-billing-backdrop" onClick={handleBackdropClick}>
-      <div className="auth-billing-dialog">
-        <div className="auth-billing-header">
-          <div>
-            <div className="auth-billing-kicker">Hosted AI</div>
-            <h2>Sign in</h2>
-          </div>
-          <button className="auth-billing-close" onClick={onClose} type="button">x</button>
-        </div>
-
-        <form className="auth-billing-body" onSubmit={handleSubmit}>
-          <label className="auth-billing-field">
-            <span>Email {provider === 'google' ? '(optional)' : ''}</span>
-            <input
-              autoComplete="email"
-              autoFocus
-              placeholder="you@example.com"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </label>
-
-          <div className="auth-billing-field">
-            <span>Provider</span>
-            <div className="auth-billing-provider-row">
-              <button className={`auth-billing-provider ${provider === 'magic_link' ? 'active' : ''}`} onClick={() => setProvider('magic_link')} type="button">
-                Email link
-              </button>
-              <button className={`auth-billing-provider ${provider === 'google' ? 'active' : ''}`} onClick={() => setProvider('google')} type="button">
-                Google
-              </button>
+    <div className={`whats-new-backdrop ${isClosing ? 'closing' : ''}`} onClick={handleBackdropClick}>
+      <div className="welcome-overlay auth-dialog">
+        {/* Header — same layout as changelog */}
+        <div className="auth-dialog-header">
+          <div className="auth-dialog-header-left">
+            <div className="changelog-heading">
+              <span className="changelog-brand" aria-label="MasterSelects">
+                <span className="changelog-brand-master">Master</span>
+                <span className="changelog-brand-selects">Selects</span>
+              </span>
+              <h2 className="changelog-header-title">Cloud</h2>
             </div>
           </div>
+          <div className="auth-dialog-header-right">
+            <button className="changelog-header-button" onClick={handleClose} type="button">
+              Close
+            </button>
+          </div>
+        </div>
 
-          <button
-            className="auth-billing-primary"
-            disabled={isLoading || (provider === 'magic_link' && !email.trim())}
-            type="submit"
-          >
-            {isLoading ? 'Signing in...' : provider === 'google' ? 'Continue with Google' : 'Send magic link'}
-          </button>
+        {/* Content */}
+        <div className="auth-dialog-content">
+          <div className="auth-dialog-intro">
+            <h3 className="auth-dialog-subtitle">Sign in</h3>
+            <p className="auth-dialog-description">
+              Access hosted AI features through MasterSelects Cloud.<br />
+              Local editing stays unchanged.
+            </p>
+          </div>
 
-          <p className="auth-billing-note">
-            Hosted AI runs through MasterSelects Cloud. Local editing stays unchanged.
-          </p>
+          <form className="auth-dialog-form" onSubmit={handleSubmit}>
+            <label className="auth-dialog-field">
+              <span className="auth-dialog-label">Email {provider === 'google' ? '(optional)' : ''}</span>
+              <input
+                autoComplete="email"
+                autoFocus
+                className="auth-dialog-input"
+                placeholder="you@example.com"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </label>
 
-          {notice && <div className="auth-billing-success">{notice}</div>}
-          {error && <div className="auth-billing-error">{error}</div>}
-        </form>
+            <div className="auth-dialog-field">
+              <span className="auth-dialog-label">Provider</span>
+              <div className="auth-dialog-provider-row">
+                <button
+                  className={`auth-dialog-provider ${provider === 'magic_link' ? 'active' : ''}`}
+                  onClick={() => setProvider('magic_link')}
+                  type="button"
+                >
+                  Email link
+                </button>
+                <button
+                  className={`auth-dialog-provider ${provider === 'google' ? 'active' : ''}`}
+                  onClick={() => setProvider('google')}
+                  type="button"
+                >
+                  Google
+                </button>
+              </div>
+            </div>
+
+            <button
+              className="auth-dialog-submit"
+              disabled={isLoading || (provider === 'magic_link' && !email.trim())}
+              type="submit"
+            >
+              {isLoading ? 'Signing in...' : provider === 'google' ? 'Continue with Google' : 'Send magic link'}
+            </button>
+          </form>
+
+          {notice && <div className="auth-dialog-notice auth-dialog-notice-success">{notice}</div>}
+          {error && <div className="auth-dialog-notice auth-dialog-notice-error">{error}</div>}
+        </div>
       </div>
     </div>
   );

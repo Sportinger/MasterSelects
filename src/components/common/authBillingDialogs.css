@@ -1,3 +1,5 @@
+/* ─── Legacy classes (used by AccountDialog, PricingDialog) ─── */
+
 .auth-billing-backdrop {
   position: fixed;
   inset: 0;
@@ -169,117 +171,392 @@
   border: 1px solid rgba(52, 211, 153, 0.25);
 }
 
-.pricing-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  padding: 20px;
-}
+/* ─── New Auth Dialog (Changelog-style) ─── */
 
-.pricing-card {
-  padding: 16px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.pricing-card.featured {
-  border-color: rgba(99, 102, 241, 0.6);
-  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.15);
-}
-
-.pricing-card-top {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: start;
-}
-
-.pricing-card h3,
-.pricing-card p {
-  margin: 0;
-}
-
-.pricing-card p {
-  margin-top: 6px;
-  color: rgba(148, 163, 184, 0.92);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.pricing-price {
-  font-weight: 700;
-  color: #c7d2fe;
-}
-
-.pricing-credits {
-  margin: 14px 0;
-  font-size: 14px;
-}
-
-.pricing-cta {
-  width: 100%;
-}
-
-.account-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.account-metric,
-.account-section {
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 14px;
-}
-
-.account-metric span,
-.account-section-title {
-  display: block;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: rgba(148, 163, 184, 0.9);
-  margin-bottom: 8px;
-}
-
-.account-metric strong {
-  font-size: 18px;
-}
-
-.account-usage-list {
+.auth-dialog {
+  width: 480px;
+  max-width: 90vw;
+  max-height: 85vh;
+  padding: 0;
+  text-align: left;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
+  color: var(--text-primary, #f2f5ff);
+}
+
+.auth-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 28px 20px;
+  flex-shrink: 0;
+}
+
+.auth-dialog-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.auth-dialog-header-right {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.auth-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 0 28px 28px;
+}
+
+.auth-dialog-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-dialog-subtitle {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary, #f2f5ff);
+}
+
+.auth-dialog-description {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.auth-dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-dialog-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.04em;
+}
+
+.auth-dialog-input {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 12px 14px;
+  color: var(--text-primary, #f2f5ff);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.auth-dialog-input:focus {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.auth-dialog-input::placeholder {
+  color: rgba(255, 255, 255, 0.22);
+}
+
+.auth-dialog-provider-row {
+  display: flex;
+  gap: 8px;
+}
+
+.auth-dialog-provider {
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.auth-dialog-provider:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.auth-dialog-provider.active {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary, #f2f5ff);
+}
+
+.auth-dialog-submit {
+  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.auth-dialog-submit:hover {
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.auth-dialog-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.auth-dialog-notice {
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.auth-dialog-notice-error {
+  background: rgba(220, 38, 38, 0.1);
+  color: #fecaca;
+  border: 1px solid rgba(248, 113, 113, 0.2);
+}
+
+.auth-dialog-notice-success {
+  background: rgba(16, 185, 129, 0.1);
+  color: #bbf7d0;
+  border: 1px solid rgba(52, 211, 153, 0.18);
+}
+
+/* Wide variant for Account + Pricing */
+.auth-dialog-wide {
+  width: 680px;
+}
+
+/* ─── Secondary / Ghost action buttons ─── */
+
+.auth-dialog-action-secondary,
+.auth-dialog-action-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.auth-dialog-action-secondary {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.auth-dialog-action-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.auth-dialog-action-ghost {
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.auth-dialog-action-ghost:hover {
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.auth-dialog-action-secondary:disabled,
+.auth-dialog-action-ghost:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* ─── Account Dialog (Changelog-style) ─── */
+
+.account-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 10px;
 }
 
-.account-usage-row {
+.account-metric-card {
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.account-metric-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.35);
+  margin-bottom: 8px;
+}
+
+.account-metric-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #f2f5ff);
+}
+
+.account-usage-card {
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.account-usage-entry {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  color: rgba(226, 232, 240, 0.92);
+  padding: 6px 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.account-usage-detail {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.account-usage-empty {
+  color: rgba(255, 255, 255, 0.3);
   font-size: 13px;
 }
 
-.account-actions {
+.account-actions-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
 
+/* ─── Pricing Dialog (Changelog-style) ─── */
+
+.pricing-plans-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.pricing-plan-card {
+  padding: 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pricing-plan-featured {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.pricing-plan-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.pricing-plan-name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-primary, #f2f5ff);
+}
+
+.pricing-plan-description {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.pricing-plan-price {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+  font-style: italic;
+}
+
+.pricing-plan-credits {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.65);
+  margin: 8px 0 4px;
+}
+
+.pricing-plan-cta {
+  width: 100%;
+  margin-top: auto;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.pricing-plan-cta:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.pricing-plan-cta:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.pricing-plan-cta-muted {
+  opacity: 0.5;
+}
+
+/* ─── Responsive ─── */
+
 @media (max-width: 720px) {
-  .pricing-grid,
-  .account-metrics {
+  .auth-dialog-wide {
+    width: 480px;
+  }
+
+  .pricing-plans-grid,
+  .account-metrics-grid {
     grid-template-columns: 1fr;
-  }
-
-  .auth-billing-dialog-wide {
-    width: min(520px, 100%);
-  }
-
-  .auth-billing-provider-row {
-    flex-direction: column;
   }
 }
