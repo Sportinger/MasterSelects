@@ -30,6 +30,13 @@ export interface CreditBalanceSummary {
   recentEntries: CreditLedgerRow[];
 }
 
+export interface SpendCreditsResult {
+  balance: number;
+  charged: boolean;
+  entry: CreditLedgerRow | null;
+  insufficient: boolean;
+}
+
 export const FREE_PLAN_MONTHLY_CREDITS = 25;
 export const FREE_PLAN_MONTHLY_SOURCE = 'system:free_plan_monthly_grant';
 
@@ -99,23 +106,40 @@ export async function getCreditSummary(
   };
 }
 
+export async function getCreditLedgerEntryBySource(
+  db: AppD1Database,
+  userId: string,
+  source: string,
+  sourceId: string | null | undefined,
+): Promise<CreditLedgerRow | null> {
+  const normalizedSourceId = typeof sourceId === 'string' ? sourceId.trim() : '';
+
+  if (!normalizedSourceId) {
+    return null;
+  }
+
+  try {
+    return await db
+      .prepare(
+        `
+          SELECT id, user_id, entry_type, amount, balance_after, source, source_id, description, metadata_json, created_at
+          FROM credit_ledger
+          WHERE user_id = ? AND source = ? AND source_id = ?
+          LIMIT 1
+      `,
+      )
+      .bind(userId, source, normalizedSourceId)
+      .first<CreditLedgerRow>();
+  } catch {
+    return null;
+  }
+}
+
 export async function appendCreditLedgerEntry(
   db: AppD1Database,
   input: CreditLedgerEntryInput,
 ): Promise<CreditLedgerRow | null> {
-  const existing = input.sourceId
-    ? await db
-        .prepare(
-          `
-            SELECT id
-            FROM credit_ledger
-            WHERE user_id = ? AND source = ? AND source_id = ?
-            LIMIT 1
-        `,
-      )
-      .bind(input.userId, input.source, input.sourceId)
-        .first<{ id: string }>()
-    : null;
+  const existing = await getCreditLedgerEntryBySource(db, input.userId, input.source, input.sourceId);
 
   if (existing) {
     return null;
@@ -210,13 +234,24 @@ export async function spendCredits(
   sourceId: string,
   description: string,
   metadata?: Record<string, unknown> | null,
-): Promise<{ balance: number; entry: CreditLedgerRow | null; insufficient: boolean }> {
+): Promise<SpendCreditsResult> {
   const safeAmount = Math.max(0, Math.floor(amount));
   const currentBalance = await getCreditBalance(db, userId);
+
+  const existingEntry = await getCreditLedgerEntryBySource(db, userId, source, sourceId);
+  if (existingEntry) {
+    return {
+      balance: currentBalance,
+      charged: false,
+      entry: existingEntry,
+      insufficient: false,
+    };
+  }
 
   if (safeAmount <= 0) {
     return {
       balance: currentBalance,
+      charged: false,
       entry: null,
       insufficient: false,
     };
@@ -225,6 +260,7 @@ export async function spendCredits(
   if (currentBalance < safeAmount) {
     return {
       balance: currentBalance,
+      charged: false,
       entry: null,
       insufficient: true,
     };
@@ -240,8 +276,24 @@ export async function spendCredits(
     userId,
   });
 
+  if (!entry) {
+    const duplicateEntry = await getCreditLedgerEntryBySource(db, userId, source, sourceId);
+
+    if (duplicateEntry) {
+      return {
+        balance: await getCreditBalance(db, userId),
+        charged: false,
+        entry: duplicateEntry,
+        insufficient: false,
+      };
+    }
+
+    throw new Error('Failed to append credit ledger entry');
+  }
+
   return {
-    balance: entry?.balance_after ?? (currentBalance - safeAmount),
+    balance: entry.balance_after,
+    charged: true,
     entry,
     insufficient: false,
   };

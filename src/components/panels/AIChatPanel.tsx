@@ -226,6 +226,10 @@ function getErrorMessage(error: unknown): string {
   return 'Failed to send message';
 }
 
+function createHostedPromptIdempotencyKey(): string {
+  return `hosted-chat:${Date.now()}:${crypto.randomUUID()}`;
+}
+
 function sanitizeConversationHistory(messages: Message[]): Message[] {
   if (messages.length === 0) {
     return messages;
@@ -369,7 +373,10 @@ export function AIChatPanel() {
   }, [messages, editorMode]);
 
   // Call OpenAI API
-  const callOpenAI = useCallback(async (apiMessages: APIMessage[]): Promise<{
+  const callOpenAI = useCallback(async (
+    apiMessages: APIMessage[],
+    idempotencyKey?: string,
+  ): Promise<{
     content: string | null;
     toolCalls: ToolCall[];
   }> => {
@@ -391,6 +398,10 @@ export function AIChatPanel() {
     }
 
     if (accessMode === 'hosted') {
+      if (idempotencyKey) {
+        requestBody.idempotencyKey = idempotencyKey;
+      }
+
       return parseChatCompletionPayload(await cloudAiService.createChatCompletion(requestBody));
     }
 
@@ -431,13 +442,16 @@ export function AIChatPanel() {
 
     try {
       const apiMessages = buildAPIMessages(userContent);
+      const hostedPromptIdempotencyKey = accessMode === 'hosted'
+        ? createHostedPromptIdempotencyKey()
+        : undefined;
       let iterationCount = 0;
       const maxIterations = 50; // Safety limit for tool iterations
 
       while (iterationCount < maxIterations) {
         iterationCount++;
 
-        const { content, toolCalls } = await callOpenAI(apiMessages);
+        const { content, toolCalls } = await callOpenAI(apiMessages, hostedPromptIdempotencyKey);
 
         if (toolCalls.length === 0) {
           // No tool calls - add final assistant message

@@ -1,5 +1,5 @@
 import { getUserBillingSnapshot } from '../../lib/billing';
-import { spendCredits } from '../../lib/credits';
+import { getCreditLedgerEntryBySource, spendCredits } from '../../lib/credits';
 import { getCurrentUser, json, methodNotAllowed, parseJson } from '../../lib/db';
 import {
   buildHostedChatCapabilities,
@@ -146,6 +146,10 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   const requestId = context.data.requestId ?? crypto.randomUUID();
   const rawBody = (await parseJson<HostedChatRouteBody>(context.request)) ?? null;
   const request = normalizeHostedChatRequest(rawBody);
+  const idempotencyKey =
+    typeof rawBody?.idempotencyKey === 'string' && rawBody.idempotencyKey.trim().length > 0
+      ? rawBody.idempotencyKey.trim()
+      : `${requestId}:ai.chat`;
 
   if (!request) {
     return json(
@@ -212,7 +216,14 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     );
   }
 
-  if ((hostedContext.billing.balance ?? 0) < HOSTED_CHAT_CREDIT_COST) {
+  const existingCharge = await getCreditLedgerEntryBySource(
+    context.env.DB,
+    hostedContext.user.id,
+    'hosted:ai_chat',
+    idempotencyKey,
+  );
+
+  if (!existingCharge && (hostedContext.billing.balance ?? 0) < HOSTED_CHAT_CREDIT_COST) {
     return json(
       buildRouteEnvelope({
         creditBalance: hostedContext.billing.balance,
@@ -232,11 +243,6 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       { status: 402 },
     );
   }
-
-  const idempotencyKey =
-    typeof rawBody?.idempotencyKey === 'string' && rawBody.idempotencyKey.trim().length > 0
-      ? rawBody.idempotencyKey.trim()
-      : `${requestId}:ai.chat`;
   const providerBody: HostedChatRequest = {
     max_completion_tokens: request.max_completion_tokens,
     max_tokens: request.max_tokens,
@@ -311,7 +317,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     return json(
       buildRouteEnvelope({
         creditBalance: charge.balance,
-        creditsCharged: HOSTED_CHAT_CREDIT_COST,
+        creditsCharged: charge.charged ? HOSTED_CHAT_CREDIT_COST : 0,
         data: payload,
         ok: true,
         requestId,

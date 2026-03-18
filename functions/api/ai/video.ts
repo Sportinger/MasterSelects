@@ -1,5 +1,5 @@
 import { getUserBillingSnapshot } from '../../lib/billing';
-import { spendCredits } from '../../lib/credits';
+import { getCreditLedgerEntryBySource, spendCredits } from '../../lib/credits';
 import { getCurrentUser, json, methodNotAllowed, parseJson } from '../../lib/db';
 import {
   buildHostedKlingCapabilities,
@@ -306,8 +306,18 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   }
 
   const creditsRequired = calculateHostedKlingCost(params.mode ?? 'std', params.duration, Boolean(params.sound));
+  const idempotencyKey =
+    typeof rawBody?.idempotencyKey === 'string' && rawBody.idempotencyKey.trim().length > 0
+      ? rawBody.idempotencyKey.trim()
+      : `${requestId}:ai.video`;
+  const existingCharge = await getCreditLedgerEntryBySource(
+    context.env.DB,
+    hostedContext.user.id,
+    'hosted:kling_generation',
+    idempotencyKey,
+  );
 
-  if ((hostedContext.billing.balance ?? 0) < creditsRequired) {
+  if (!existingCharge && (hostedContext.billing.balance ?? 0) < creditsRequired) {
     return json(
       buildRouteEnvelope({
         creditBalance: hostedContext.billing.balance,
@@ -329,11 +339,6 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       { status: 402 },
     );
   }
-
-  const idempotencyKey =
-    typeof rawBody?.idempotencyKey === 'string' && rawBody.idempotencyKey.trim().length > 0
-      ? rawBody.idempotencyKey.trim()
-      : `${requestId}:ai.video`;
 
   await createUsageEvent(context.env.DB, {
     creditCost: creditsRequired,
@@ -405,7 +410,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     return json(
       buildRouteEnvelope({
         creditBalance: charge.balance,
-        creditsCharged: creditsRequired,
+        creditsCharged: charge.charged ? creditsRequired : 0,
         data: {
           provider: 'kling-3.0',
           taskId,
