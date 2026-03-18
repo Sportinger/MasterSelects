@@ -15,6 +15,8 @@ import type {
   EncodeOutput,
   VideoInfo,
   DirEntry,
+  MatAnyoneStatusResponse,
+  MatAnyoneMatteResult,
 } from './protocol';
 
 import {
@@ -59,6 +61,7 @@ class NativeHelperClientImpl {
   private ws: WebSocket | null = null;
   private config: Required<NativeHelperConfig>;
   private status: ConnectionStatus = 'disconnected';
+  private connectPromise: Promise<boolean> | null = null;
   private requestId = 0;
   private pendingRequests = new Map<string, ResponseCallback>();
   private progressCallbacks = new Map<string, (percent: number, speed?: string) => void>();
@@ -107,21 +110,60 @@ class NativeHelperClientImpl {
       return true;
     }
 
+    if (this.connectPromise) {
+      return this.connectPromise;
+    }
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
     this.setStatus('connecting');
 
-    return new Promise((resolve) => {
-      try {
-        this.ws = new WebSocket(`ws://127.0.0.1:${this.config.port}`);
-        this.ws.binaryType = 'arraybuffer'; // Ensure binary data comes as ArrayBuffer, not Blob
+    const connectPromise = new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (result: boolean) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolve(result);
+      };
 
-        this.ws.onopen = async () => {
+      try {
+        const ws = new WebSocket(`ws://127.0.0.1:${this.config.port}`);
+        this.ws = ws;
+        ws.binaryType = 'arraybuffer'; // Ensure binary data comes as ArrayBuffer, not Blob
+
+        ws.onopen = async () => {
           log.info('Connected to native helper');
           this.wasEverConnected = true;
 
-          // Authenticate if token provided
+          // If no token configured, try to discover it from the startup endpoint
+          if (!this.config.token) {
+            try {
+              const httpPort = this.config.port + 1;
+              const resp = await fetch(`http://127.0.0.1:${httpPort}/startup-token`);
+              if (resp.ok) {
+                const data = await resp.json();
+                if (data.token) {
+                  this.config.token = data.token;
+                  log.info('Auth token discovered from startup endpoint');
+                }
+              }
+            } catch {
+              log.debug('Could not discover auth token from startup endpoint');
+            }
+          }
+
+          // Authenticate with token
           if (this.config.token) {
             try {
-              await this.send({ cmd: 'auth', id: this.nextId(), token: this.config.token });
+              const authResp = await this.send({ cmd: 'auth', id: this.nextId(), token: this.config.token });
+              if (!(authResp as any)?.authenticated) {
+                log.warn('Auth response did not confirm authentication');
+              }
             } catch {
               log.warn('Auth failed');
             }
@@ -141,37 +183,43 @@ class NativeHelperClientImpl {
           }
 
           this.setStatus('connected');
-          resolve(true);
+          finish(true);
         };
 
-        this.ws.onclose = () => {
+        ws.onclose = () => {
           if (this.wasEverConnected) {
             log.info('Disconnected');
           }
+          if (this.ws === ws) {
+            this.ws = null;
+          }
           this.setStatus('disconnected');
           this.handleDisconnect();
-          if (this.status === 'connecting') {
-            resolve(false);
-          }
+          finish(false);
         };
 
-        this.ws.onerror = () => {
+        ws.onerror = () => {
           // Don't log errors when helper isn't running - it's optional
           this.setStatus('disconnected');
-          if (this.status === 'connecting') {
-            resolve(false);
-          }
+          finish(false);
         };
 
-        this.ws.onmessage = (event) => {
+        ws.onmessage = (event) => {
           this.handleMessage(event.data);
         };
       } catch {
         // Silent fail - helper is optional
         this.setStatus('disconnected');
-        resolve(false);
+        finish(false);
+      }
+    }).finally(() => {
+      if (this.connectPromise === connectPromise) {
+        this.connectPromise = null;
       }
     });
+
+    this.connectPromise = connectPromise;
+    return connectPromise;
   }
 
   /**
@@ -589,7 +637,7 @@ class NativeHelperClientImpl {
    */
   async getProjectRoot(): Promise<string | null> {
     try {
-      const response = await fetch(`${this.getHttpBaseUrl()}/project-root`);
+      const response = await this.fetchWithAuth(`${this.getHttpBaseUrl()}/project-root`);
       if (response.ok) {
         const data = await response.json();
         return data.path || null;
@@ -641,7 +689,7 @@ class NativeHelperClientImpl {
     try {
       const url = `${this.getHttpBaseUrl()}/upload?path=${encodeURIComponent(path)}`;
       const body = data instanceof Blob ? data : data instanceof ArrayBuffer ? new Blob([data]) : new Blob([data.buffer as ArrayBuffer]);
-      const response = await fetch(url, { method: 'POST', body });
+      const response = await this.fetchWithAuth(url, { method: 'POST', body });
       if (response.ok) {
         return true;
       }
@@ -799,7 +847,7 @@ class NativeHelperClientImpl {
     const httpPort = this.config.port + 1; // HTTP on port+1 (9877)
     try {
       log.debug('Fetching file via HTTP:', path);
-      const response = await fetch(`http://127.0.0.1:${httpPort}/file?path=${encodeURIComponent(path)}`);
+      const response = await this.fetchWithAuth(`http://127.0.0.1:${httpPort}/file?path=${encodeURIComponent(path)}`);
       if (response.ok) {
         const buffer = await response.arrayBuffer();
         log.debug('File received via HTTP:', buffer.byteLength + ' bytes');
@@ -851,7 +899,239 @@ class NativeHelperClientImpl {
     });
   }
 
+  // ── MatAnyone2 Methods ──
+
+  /**
+   * Check MatAnyone2 environment status
+   */
+  async matanyoneStatus(): Promise<MatAnyoneStatusResponse> {
+    const id = this.nextId();
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(new Error('Request timeout'));
+      }, 15000);
+
+      this.pendingRequests.set(id, (response) => {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(id);
+        if (!response.ok) {
+          reject(new Error((response as any).error?.message || 'Failed to get MatAnyone2 status'));
+        } else {
+          resolve(response as unknown as MatAnyoneStatusResponse);
+        }
+      });
+
+      this.sendRaw(JSON.stringify({ cmd: 'mat_anyone_status', id })).catch((err) => {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(id);
+        reject(err);
+      });
+    });
+  }
+
+  /**
+   * Run full MatAnyone2 setup with progress
+   */
+  async matanyoneSetup(
+    onProgress?: (step: string, percent: number, message: string) => void,
+    pythonPath?: string,
+  ): Promise<{ success: boolean; error?: string }> {
+    const id = this.nextId();
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(new Error('MatAnyone2 setup timeout'));
+      }, 600000); // 10 minutes
+
+      this.pendingRequests.set(id, (response: any) => {
+        if (response.type === 'progress') {
+          if (onProgress) {
+            onProgress(response.step, response.percent, response.message);
+          }
+          return;
+        }
+
+        clearTimeout(timeout);
+        if (response.ok) {
+          resolve({ success: true });
+        } else {
+          resolve({
+            success: false,
+            error: response.error?.message || 'Setup failed',
+          });
+        }
+      });
+
+      const cmd: any = { cmd: 'mat_anyone_setup', id };
+      if (pythonPath) {
+        cmd.python_path = pythonPath;
+      }
+
+      this.sendRaw(JSON.stringify(cmd)).catch((err) => {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(id);
+        reject(err);
+      });
+    });
+  }
+
+  /**
+   * Download MatAnyone2 model weights with progress
+   */
+  async matanyoneDownloadModel(
+    onProgress?: (percent: number, speed?: string, eta?: string) => void,
+  ): Promise<{ success: boolean; error?: string }> {
+    const id = this.nextId();
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(new Error('Model download timeout'));
+      }, 600000); // 10 minutes
+
+      this.pendingRequests.set(id, (response: any) => {
+        if (response.type === 'progress') {
+          if (onProgress) {
+            onProgress(response.percent, response.speed, response.eta);
+          }
+          return;
+        }
+
+        clearTimeout(timeout);
+        if (response.ok) {
+          resolve({ success: true });
+        } else {
+          resolve({
+            success: false,
+            error: response.error?.message || 'Model download failed',
+          });
+        }
+      });
+
+      this.sendRaw(JSON.stringify({ cmd: 'mat_anyone_download_model', id })).catch((err) => {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(id);
+        reject(err);
+      });
+    });
+  }
+
+  /**
+   * Start MatAnyone2 inference server
+   */
+  async matanyoneStart(): Promise<{ success: boolean; port?: number }> {
+    const id = this.nextId();
+    const response = await this.send({ cmd: 'mat_anyone_start', id });
+
+    if (!response.ok) {
+      return { success: false };
+    }
+
+    return { success: true, port: (response as any).port };
+  }
+
+  /**
+   * Stop MatAnyone2 inference server
+   */
+  async matanyoneStop(): Promise<{ success: boolean }> {
+    const id = this.nextId();
+    const response = await this.send({ cmd: 'mat_anyone_stop', id });
+    return { success: response.ok === true };
+  }
+
+  /**
+   * Run MatAnyone2 matting job with progress
+   */
+  async matanyoneMatte(
+    videoPath: string,
+    maskPath: string,
+    outputDir: string,
+    options?: { startFrame?: number; endFrame?: number },
+    onProgress?: (currentFrame: number, totalFrames: number, percent: number) => void,
+  ): Promise<MatAnyoneMatteResult> {
+    const id = this.nextId();
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(new Error('Matting timeout'));
+      }, 600000); // 10 minutes
+
+      this.pendingRequests.set(id, (response: any) => {
+        if (response.type === 'progress') {
+          if (onProgress) {
+            onProgress(response.current_frame, response.total_frames, response.percent);
+          }
+          return;
+        }
+
+        clearTimeout(timeout);
+        if (response.ok) {
+          resolve({
+            foreground_path: response.foreground_path,
+            alpha_path: response.alpha_path,
+            job_id: response.job_id,
+          });
+        } else {
+          reject(new Error(response.error?.message || 'Matting failed'));
+        }
+      });
+
+      const cmd: any = {
+        cmd: 'mat_anyone_matte',
+        id,
+        video_path: videoPath,
+        mask_path: maskPath,
+        output_dir: outputDir,
+      };
+
+      if (options?.startFrame !== undefined) {
+        cmd.start_frame = options.startFrame;
+      }
+      if (options?.endFrame !== undefined) {
+        cmd.end_frame = options.endFrame;
+      }
+
+      this.sendRaw(JSON.stringify(cmd)).catch((err) => {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(id);
+        reject(err);
+      });
+    });
+  }
+
+  /**
+   * Cancel a running MatAnyone2 matting job
+   */
+  async matanyoneCancel(jobId: string): Promise<void> {
+    const id = this.nextId();
+    await this.send({ cmd: 'mat_anyone_cancel', id, job_id: jobId });
+  }
+
+  /**
+   * Uninstall MatAnyone2 (remove venv, models, etc.)
+   */
+  async matanyoneUninstall(): Promise<{ success: boolean }> {
+    const id = this.nextId();
+    const response = await this.send({ cmd: 'mat_anyone_uninstall', id });
+    return { success: response.ok === true };
+  }
+
   // Private methods
+
+  /**
+   * Fetch with Authorization header injected
+   */
+  private fetchWithAuth(url: string, init?: RequestInit): Promise<globalThis.Response> {
+    const headers = new Headers(init?.headers);
+    if (this.config.token) {
+      headers.set('Authorization', `Bearer ${this.config.token}`);
+    }
+    return fetch(url, { ...init, headers });
+  }
 
   private nextId(): string {
     return `req_${++this.requestId}`;
@@ -978,7 +1258,7 @@ class NativeHelperClientImpl {
       } else if (tool === '_status') {
         result = { success: true, data: getQuickTimelineSummary() };
       } else {
-        result = await executeAITool(tool, payload.args ?? {});
+        result = await executeAITool(tool, payload.args ?? {}, 'nativeHelper');
       }
 
       await this.send({
@@ -1020,6 +1300,9 @@ class NativeHelperClientImpl {
 
       // Register callback
       this.pendingRequests.set(id, (response) => {
+        if ((response as any)?.type === 'progress') {
+          return;
+        }
         clearTimeout(timeout);
         resolve(response);
       });

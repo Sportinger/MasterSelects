@@ -1,6 +1,6 @@
 # Preview & Playback
 
-[<- Back to Index](./README.md)
+[← Back to Index](./README.md)
 
 WebGPU preview with RAM caching, multiple panels, edit mode, source monitor, overlay system, and multi-output management.
 
@@ -101,7 +101,7 @@ await player.loadFile(file);
 |---------|----------|----------|
 | **Stop** | - | Return to time 0 |
 | **Play/Pause** | `Space` | Toggle playback |
-| **Loop** | `L` | Toggle loop mode |
+| **Loop** | `Shift + L` | Toggle loop playback |
 
 ### In/Out Points
 
@@ -289,7 +289,7 @@ When a composition is selected as source, each slot renders one layer from that 
 - Slot 3 renders layer index 2
 - Slot 4 renders layer index 3
 
-Uses `layer-index` source type in the RenderTarget system.
+Uses `layer-index` source type in the RenderTarget system. The `layer-index` source type allows isolating individual video tracks from a composition in any preview tab. Panels using this source type are added via `addPreviewPanel` and configured via `updatePanelData` in dockStore.
 
 ### Custom Mode
 Each slot has its own composition dropdown:
@@ -601,6 +601,20 @@ The Output Manager is a dedicated interface for managing multiple output targets
 ### Save & Exit
 - **Save & Exit** button saves all configurations and closes the Output Manager
 - Configurations persist per-project in localStorage
+
+### Component Architecture
+
+| Component | Purpose |
+|-----------|---------|
+| `OutputManager.tsx` | Root component -- popup window layout with preview area and sidebar |
+| `OutputManagerBoot.ts` | Popup window management -- handles opening, reconnection on page refresh, and re-injection of React root and styles into reconnected popups |
+| `SliceInputOverlay` | Interactive overlay on the Input tab -- draggable corner points to select a sub-region of the source |
+| `SliceOutputOverlay` | Interactive overlay on the Output tab -- draggable corner points to warp/stretch slices into quadrilaterals |
+| `SliceList` | Slice management UI -- list of slices and masks per target with drag-and-drop reordering, rename, enable/disable, reset, and delete |
+| `SourceSelector` | Render target source routing dropdown -- select Active Comp, specific composition, or slot as the source for each target |
+| `TabBar` | Output window tab navigation -- switches between Input and Output views in the preview area |
+| `TargetList` | Render target management sidebar -- lists all output targets with nested slices, add/remove/enable controls |
+| `TargetPreview` | Live preview canvas for the selected target -- shows slices applied, supports zoom (mouse wheel) and pan (middle mouse) |
 
 ---
 

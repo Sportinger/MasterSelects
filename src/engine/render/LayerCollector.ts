@@ -432,7 +432,18 @@ export class LayerCollector {
   ) {
     const isDragging = useTimelineStore.getState().isDraggingPlayhead;
     const tolerance = video.seeking || isDragging ? 0.35 : 0.2;
-    return deps.scrubbingCache?.getLastFrameNearTime(video, targetTime, tolerance, layer.sourceClipId) ?? null;
+    const ownerMatched =
+      deps.scrubbingCache?.getLastFrameNearTime(video, targetTime, tolerance, layer.sourceClipId) ?? null;
+    if (ownerMatched) {
+      return ownerMatched;
+    }
+
+    const cachedOwner = deps.scrubbingCache?.getLastFrameOwner?.(video);
+    if (cachedOwner && layer.sourceClipId && cachedOwner !== layer.sourceClipId) {
+      return null;
+    }
+
+    return deps.scrubbingCache?.getLastFrameNearTime(video, targetTime, tolerance) ?? null;
   }
 
   private getDragHoldFrame(layer: Layer, video: HTMLVideoElement, deps: LayerCollectorDeps) {
@@ -440,6 +451,24 @@ export class LayerCollector {
       return null;
     }
     return deps.scrubbingCache?.getLastFrame(video, layer.sourceClipId) ?? null;
+  }
+
+  private getPlaybackStallHoldFrame(
+    layer: Layer,
+    video: HTMLVideoElement,
+    deps: LayerCollectorDeps
+  ) {
+    const ownerMatched = deps.scrubbingCache?.getLastFrame(video, layer.sourceClipId) ?? null;
+    if (ownerMatched) {
+      return ownerMatched;
+    }
+
+    const cachedOwner = deps.scrubbingCache?.getLastFrameOwner?.(video);
+    if (cachedOwner && layer.sourceClipId && cachedOwner !== layer.sourceClipId) {
+      return null;
+    }
+
+    return deps.scrubbingCache?.getLastFrame(video) ?? null;
   }
 
   private isFrameNearTarget(
@@ -552,7 +581,6 @@ export class LayerCollector {
         : null;
       const emergencyHoldFrame = dragHoldFrame;
       const sameClipHoldFrame =
-        !deps.isPlaying &&
         (isDragging || isSettling || awaitingPausedTargetFrame || video.seeking)
           ? lastSameClipFrame
         : null;
@@ -737,10 +765,18 @@ export class LayerCollector {
       if (extTex) {
         this.clearHtmlHold(layerReuseKey);
         deps.setLastVideoTime(videoKey, currentTime);
-        // Cache frame for pause/seek fallback — skip during playback to save GPU bandwidth.
-        // With 4+ videos, the GPU copies (copyExternalImageToTexture per video at 20fps)
-        // waste significant bandwidth that's needed for rendering + effects.
-        if (!deps.isPlaying && allowLiveVideoImport) {
+        // Cache frame for pause/seek fallback.
+        // During playback: only cache every ~500ms to avoid GPU bandwidth waste with 4+ videos.
+        // This periodic caching ensures a fallback frame exists for transient decoder stalls
+        // (readyState drops on Windows/Linux) that would otherwise cause black frames.
+        if (deps.isPlaying) {
+          const now = performance.now();
+          const lastCapture = deps.scrubbingCache?.getLastCaptureTime(video) || 0;
+          if (now - lastCapture > 500) {
+            deps.scrubbingCache?.captureVideoFrame(video, layer.sourceClipId);
+            deps.scrubbingCache?.setLastCaptureTime(video, now);
+          }
+        } else if (allowLiveVideoImport) {
           const now = performance.now();
           const lastCapture = deps.scrubbingCache?.getLastCaptureTime(video) || 0;
           if (allowConfirmedFrameCaching && now - lastCapture > 50) {
@@ -831,6 +867,26 @@ export class LayerCollector {
           previewPath: 'same-clip-hold',
         };
       }
+      // Last resort during playback: use ANY cached frame to avoid black flash.
+      // A slightly stale frame is vastly better than black.
+      if (deps.isPlaying) {
+        const anyFrame = this.getPlaybackStallHoldFrame(layer, video, deps);
+        if (anyFrame) {
+          this.traceScrubPath(layer, 'playback-stall-hold', video, targetTime, lastPresentedTime);
+          this.currentDecoder = 'HTMLVideo(cached)';
+          return {
+            layer,
+            isVideo: false,
+            externalTexture: null,
+            textureView: anyFrame.view,
+            sourceWidth: anyFrame.width,
+            sourceHeight: anyFrame.height,
+            displayedMediaTime: anyFrame.mediaTime,
+            targetMediaTime: targetTime,
+            previewPath: 'playback-stall-hold',
+          };
+        }
+      }
       this.traceScrubPath(layer, 'final-drop', video, targetTime, lastPresentedTime);
     } else {
       // Video not ready - try cache
@@ -864,7 +920,6 @@ export class LayerCollector {
         })()
         : dragHoldFrame;
       const sameClipHoldFrame =
-        !deps.isPlaying &&
         (isDragging || isSettling || video.seeking || video.readyState < 2)
           ? lastSameClipFrame
           : null;
@@ -931,6 +986,25 @@ export class LayerCollector {
           targetMediaTime: targetTime,
           previewPath: 'same-clip-hold',
         };
+      }
+      // Last resort during playback: hold any cached frame to avoid black
+      if (deps.isPlaying) {
+        const anyFrame = this.getPlaybackStallHoldFrame(layer, video, deps);
+        if (anyFrame) {
+          this.traceScrubPath(layer, 'playback-stall-hold', video, targetTime, deps.scrubbingCache?.getLastPresentedTime(video));
+          this.currentDecoder = 'HTMLVideo(cached)';
+          return {
+            layer,
+            isVideo: false,
+            externalTexture: null,
+            textureView: anyFrame.view,
+            sourceWidth: anyFrame.width,
+            sourceHeight: anyFrame.height,
+            displayedMediaTime: anyFrame.mediaTime,
+            targetMediaTime: targetTime,
+            previewPath: 'playback-stall-hold',
+          };
+        }
       }
       this.traceScrubPath(layer, 'not-ready-drop', video, targetTime, deps.scrubbingCache?.getLastPresentedTime(video));
     }

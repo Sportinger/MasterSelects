@@ -55,24 +55,29 @@ export class WebGPUContext {
 
   private async doInitialize(): Promise<boolean> {
     try {
+      // Always request high-performance to ensure discrete GPU is used
+      // This is critical on systems with both iGPU and dGPU (AMD iGPU + NVIDIA dGPU)
+      // Without this, Chrome may select the iGPU which can have Vulkan memory issues on Linux
+      log.info(`Requesting adapter with powerPreference: ${this.currentPowerPreference}`);
       this.adapter = await navigator.gpu.requestAdapter({
         powerPreference: this.currentPowerPreference,
       });
-      log.info(`Requested adapter with powerPreference: ${this.currentPowerPreference}`);
+      log.info('Adapter obtained');
 
       if (!this.adapter) {
         log.error('Failed to get GPU adapter');
         return false;
       }
 
-      // Request device with minimal requirements to avoid Vulkan memory issues
-      // The default limits are usually sufficient for our needs
+      // Request device with explicit texture limit
       log.info('Requesting GPU device...');
-      this.device = await this.adapter.requestDevice();
+      this.device = await this.adapter.requestDevice({
+        requiredFeatures: [],
+        requiredLimits: {
+          maxTextureDimension2D: 4096,
+        },
+      });
       log.info('GPU device created successfully');
-
-      // Small delay to let Vulkan driver fully initialize the device
-      await new Promise(resolve => setTimeout(resolve, 50));
 
       this.device.lost.then((info) => {
         log.error('Device lost', info.message);

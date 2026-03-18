@@ -94,6 +94,7 @@ When supported (Chrome/Edge):
 - Default duration: 5 seconds
 - Placed in auto-created "Text" folder
 - Drag to timeline to create text clips
+- **Note:** These are defaults for Media Panel text items (Arial, 48px). Timeline text clips use different defaults: Roboto, 72px (from `DEFAULT_TEXT_PROPERTIES` in `stores/timeline/constants.ts`).
 - See [Text Clips](./Text-Clips.md) for full details
 
 ---
@@ -365,6 +366,7 @@ interface MediaFile {
   // Proxy
   proxyStatus?: ProxyStatus;
   proxyProgress?: number;
+  proxyVideoUrl?: string;        // URL to proxy video
   proxyFrameCount?: number;
   proxyFps?: number;
   hasProxyAudio?: boolean;
@@ -372,6 +374,7 @@ interface MediaFile {
   transcriptStatus?: TranscriptStatus;
   transcript?: TranscriptWord[];
   transcriptCoverage?: number;
+  transcribedRanges?: [number, number][]; // Time ranges that have been transcribed
   // Analysis
   analysisStatus?: AnalysisStatus;
   analysisCoverage?: number;
@@ -486,11 +489,16 @@ The media store is split into modular slices:
 | **proxySlice** | `slices/proxySlice.ts` | Proxy generation, cancellation, progress |
 | **projectSlice** | `slices/projectSlice.ts` | Save, load, init from DB |
 
+**Boot Sequence:** `init.ts` (288 lines) handles IndexedDB initialization, timeline restore from saved state, status synchronization, auto-save interval setup, beforeunload handler, and audio cleanup via `disposeAllAudio()`.
+
 Helper modules in `helpers/`:
-- `importPipeline.ts` - Unified import processing
-- `mediaInfoHelpers.ts` - Codec detection, metadata extraction (uses mp4box)
-- `thumbnailHelpers.ts` - Thumbnail generation and deduplication
-- `fileHashHelpers.ts` - File hash calculation
+
+| Module | Purpose |
+|--------|---------|
+| `importPipeline.ts` | Unified import processing -- orchestrates the two-phase import (placeholder then background processing) |
+| `mediaInfoHelpers.ts` | Codec detection, metadata extraction (uses mp4box for MP4 container parsing) |
+| `thumbnailHelpers.ts` | Thumbnail generation, deduplication by file hash, skip logic for large files |
+| `fileHashHelpers.ts` | File hash calculation for deduplication and proxy matching |
 
 ---
 
@@ -499,7 +507,7 @@ Helper modules in `helpers/`:
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
 | [`fileManageSlice.test.ts`](../../tests/stores/mediaStore/fileManageSlice.test.ts) | 106 | Files, folders, solids, text items, selection, labels |
-| [`compositionSlice.test.ts`](../../tests/stores/mediaStore/compositionSlice.test.ts) | 99 | Compositions |
+| [`compositionSlice.test.ts`](../../tests/stores/mediaStore/compositionSlice.test.ts) | 101 | Compositions |
 
 Run tests: `npx vitest run`
 

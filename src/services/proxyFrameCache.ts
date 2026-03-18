@@ -2,6 +2,10 @@
 
 import { Logger } from './logger';
 import { projectFileService } from './projectFileService';
+import {
+  getProjectRawPathCandidates,
+  getStoredProjectFileHandle,
+} from './project/mediaSourceResolver';
 
 const log = Logger.create('ProxyFrameCache');
 import { fileSystemService } from './fileSystemService';
@@ -536,7 +540,41 @@ class ProxyFrameCache {
         arrayBuffer = await audioFile.arrayBuffer();
       }
 
-      // Try 2: Original video file URL (extract audio from video)
+      // Try 2: Project-local RAW media file
+      if (!arrayBuffer) {
+        const projectHandle = await getStoredProjectFileHandle(mediaFileId);
+        if (projectHandle) {
+          log.debug(`Loading from project RAW handle: ${mediaFileId}`);
+          try {
+            const file = await projectHandle.getFile();
+            arrayBuffer = await file.arrayBuffer();
+          } catch (e) {
+            log.warn('Failed to read project RAW handle', e);
+          }
+        }
+      }
+
+      if (!arrayBuffer && projectFileService.isProjectOpen()) {
+        for (const candidatePath of getProjectRawPathCandidates({
+          mediaFileId,
+          projectPath: mediaFile?.projectPath,
+          filePath: mediaFile?.filePath,
+          name: mediaFile?.name,
+        })) {
+          log.debug(`Loading from project RAW path: ${mediaFileId} (${candidatePath})`);
+          try {
+            const result = await projectFileService.getFileFromRaw(candidatePath);
+            if (result) {
+              arrayBuffer = await result.file.arrayBuffer();
+              break;
+            }
+          } catch (e) {
+            log.warn('Failed to read project RAW path', e);
+          }
+        }
+      }
+
+      // Try 3: Original video file URL (extract audio from video)
       if (!arrayBuffer && mediaFile?.url) {
         log.debug(`Loading from video URL: ${mediaFileId}`);
         try {
@@ -547,7 +585,7 @@ class ProxyFrameCache {
         }
       }
 
-      // Try 3: File handle (if available)
+      // Try 4: File handle (if available)
       if (!arrayBuffer) {
         const fileHandle = fileSystemService.getFileHandle(mediaFileId);
         if (fileHandle) {
@@ -561,7 +599,7 @@ class ProxyFrameCache {
         }
       }
 
-      // Try 4: Direct File object from media store (e.g. YouTube downloads)
+      // Try 5: Direct File object from media store (e.g. YouTube downloads)
       if (!arrayBuffer && mediaFile?.file) {
         log.debug(`Loading from File object: ${mediaFileId}`);
         try {
@@ -571,7 +609,7 @@ class ProxyFrameCache {
         }
       }
 
-      // Try 5: Video element's current source URL (guaranteed valid if video is playing)
+      // Try 6: Video element's current source URL (guaranteed valid if video is playing)
       if (!arrayBuffer && videoElementSrc) {
         log.debug(`Loading from video element src: ${mediaFileId}`);
         try {

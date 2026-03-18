@@ -6,12 +6,19 @@ import type { ExportSettings, ExportClipState, ExportMode } from './types';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { fileSystemService } from '../../services/fileSystemService';
+import { projectFileService } from '../../services/projectFileService';
+import {
+  getProjectRawPathCandidates,
+  getStoredProjectFileHandle,
+} from '../../services/project/mediaSourceResolver';
 import { bindSourceRuntimeForOwner } from '../../services/mediaRuntime/clipBindings';
 import { mediaRuntimeRegistry } from '../../services/mediaRuntime/registry';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 import type { WebCodecsPlayer } from '../WebCodecsPlayer';
 
 const log = Logger.create('ClipPreparation');
+const FAST_EXPORT_SINGLE_FILE_LIMIT_BYTES = 1536 * 1024 * 1024; // 1.5 GB
+const FAST_EXPORT_TOTAL_FILE_LIMIT_BYTES = 2048 * 1024 * 1024; // 2 GB
 
 export interface ClipPreparationResult {
   clipStates: Map<string, ExportClipState>;
@@ -22,6 +29,226 @@ export interface ClipPreparationResult {
 
 function getExportRuntimeOwnerId(clipId: string): string {
   return `export:${clipId}`;
+}
+
+function getFastModeFileSizeStats(
+  videoClips: TimelineClip[],
+  mediaFiles: Array<{ id: string; fileSize?: number }>
+): { totalBytes: number; largestBytes: number; largestClipName: string | null } {
+  let totalBytes = 0;
+  let largestBytes = 0;
+  let largestClipName: string | null = null;
+
+  for (const clip of videoClips) {
+    if (clip.source?.type !== 'video') {
+      continue;
+    }
+
+    const mediaFileId = clip.mediaFileId || clip.source?.mediaFileId;
+    const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
+    const fileSize = mediaFile?.fileSize ?? clip.file?.size ?? 0;
+
+    totalBytes += fileSize;
+
+    if (fileSize > largestBytes) {
+      largestBytes = fileSize;
+      largestClipName = clip.name;
+    }
+  }
+
+  return { totalBytes, largestBytes, largestClipName };
+}
+
+function shouldAutoFallbackToPrecise(error: unknown): boolean {
+  const message = error instanceof Error
+    ? `${error.name}: ${error.message}`
+    : String(error);
+
+  return (
+    message.includes('FAST export failed') ||
+    message.includes('NotReadableError') ||
+    message.includes('The requested file could not be read') ||
+    message.includes('Array buffer allocation failed') ||
+    message.includes('out of memory')
+  );
+}
+
+function createDetachedExportVideoElement(src: string): HTMLVideoElement {
+  const video = document.createElement('video');
+  video.src = src;
+  video.preload = 'auto';
+  video.muted = true;
+  video.playsInline = true;
+  video.crossOrigin = 'anonymous';
+  video.load();
+  return video;
+}
+
+function waitForVideoCondition(
+  video: HTMLVideoElement,
+  events: Array<'loadedmetadata' | 'loadeddata' | 'canplay' | 'canplaythrough' | 'seeked' | 'error'>,
+  timeoutMs: number,
+  ready: () => boolean
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (ready()) {
+      resolve(true);
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      resolve(ready());
+    }, timeoutMs);
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      for (const eventName of events) {
+        video.removeEventListener(eventName, onEvent);
+      }
+    };
+
+    const onEvent = () => {
+      if (!ready()) {
+        return;
+      }
+      cleanup();
+      resolve(true);
+    };
+
+    for (const eventName of events) {
+      video.addEventListener(eventName, onEvent);
+    }
+  });
+}
+
+async function primePreciseExportVideoElement(video: HTMLVideoElement): Promise<void> {
+  const metadataReady = await waitForVideoCondition(
+    video,
+    ['loadedmetadata', 'error'],
+    10000,
+    () => video.readyState >= 1
+  );
+
+  if (!metadataReady || video.readyState >= 2) {
+    return;
+  }
+
+  const duration = Number.isFinite(video.duration) ? video.duration : 0;
+  const warmupTarget = duration > 0 ? Math.min(0.001, Math.max(0, duration - 0.001)) : 0;
+
+  try {
+    video.currentTime = warmupTarget;
+  } catch {
+    // Ignore warmup seek failures - export seeking has its own recovery path.
+  }
+
+  await waitForVideoCondition(
+    video,
+    ['loadeddata', 'canplay', 'canplaythrough', 'seeked', 'error'],
+    2500,
+    () => !video.seeking && video.readyState >= 2
+  );
+
+  if (warmupTarget > 0 && Math.abs(video.currentTime) > 0.0005) {
+    try {
+      video.currentTime = 0;
+    } catch {
+      // Ignore rewind failures here.
+    }
+  }
+}
+
+async function resolveClipExportFile(clip: TimelineClip, mediaFile: any): Promise<File | null> {
+  const mediaFileId = clip.mediaFileId || clip.source?.mediaFileId || '';
+  const projectHandle = await getStoredProjectFileHandle(mediaFileId);
+  if (projectHandle) {
+    try {
+      return await projectHandle.getFile();
+    } catch (e) {
+      log.warn(`Project RAW handle failed for ${clip.name}:`, e);
+    }
+  }
+
+  if (projectFileService.isProjectOpen()) {
+    for (const candidatePath of getProjectRawPathCandidates({
+      mediaFileId,
+      projectPath: mediaFile?.projectPath,
+      filePath: mediaFile?.filePath,
+      name: clip.name,
+    })) {
+      try {
+        const result = await projectFileService.getFileFromRaw(candidatePath);
+        if (result) {
+          return result.file;
+        }
+      } catch (e) {
+        log.warn(`Project RAW file load failed for ${clip.name} at ${candidatePath}:`, e);
+      }
+    }
+  }
+
+  const storedHandle = mediaFile?.hasFileHandle && mediaFileId
+    ? fileSystemService.getFileHandle(mediaFileId)
+    : null;
+  if (storedHandle) {
+    try {
+      return await storedHandle.getFile();
+    } catch (e) {
+      log.warn(`Media file handle failed for ${clip.name}:`, e);
+    }
+  }
+
+  if (mediaFile?.file) {
+    return mediaFile.file;
+  }
+
+  if (clip.file) {
+    return clip.file;
+  }
+
+  return null;
+}
+
+async function createPreciseExportVideoElement(
+  clip: TimelineClip,
+  mediaFile: any
+): Promise<{ videoElement: HTMLVideoElement; objectUrl?: string } | null> {
+  const resolvedFile = await resolveClipExportFile(clip, mediaFile);
+  const fallbackSrc =
+    clip.source?.videoElement?.currentSrc ||
+    clip.source?.videoElement?.src ||
+    mediaFile?.url ||
+    '';
+
+  const objectUrl = resolvedFile ? URL.createObjectURL(resolvedFile) : undefined;
+  const src = objectUrl ?? fallbackSrc;
+  if (!src) {
+    return null;
+  }
+
+  const videoElement = createDetachedExportVideoElement(src);
+
+  try {
+    await primePreciseExportVideoElement(videoElement);
+    if (videoElement.readyState < 1) {
+      throw new Error('Export video metadata did not become available');
+    }
+    return { videoElement, objectUrl };
+  } catch (e) {
+    videoElement.pause();
+    videoElement.removeAttribute('src');
+    try {
+      videoElement.load();
+    } catch {
+      // Ignore teardown failures for detached export video elements.
+    }
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+    }
+    log.warn(`Failed to create dedicated PRECISE export video for ${clip.name}:`, e);
+    return null;
+  }
 }
 
 function createExportRuntimeSource(
@@ -77,22 +304,50 @@ export async function prepareClipsForExport(
   log.info(`Preparing ${videoClips.length} video clips for ${exportMode.toUpperCase()} export...`);
 
   if (exportMode === 'precise') {
+    const result = await initializePreciseMode(videoClips, clipStates, mediaFiles);
     endPrepare();
-    return initializePreciseMode(videoClips, clipStates);
+    return result;
+  }
+
+  const { totalBytes, largestBytes, largestClipName } = getFastModeFileSizeStats(videoClips, mediaFiles);
+  if (largestBytes >= FAST_EXPORT_SINGLE_FILE_LIMIT_BYTES || totalBytes >= FAST_EXPORT_TOTAL_FILE_LIMIT_BYTES) {
+    log.warn(
+      `FAST export bypassed for large source media (largest=${(largestBytes / 1024 / 1024).toFixed(0)}MB, total=${(totalBytes / 1024 / 1024).toFixed(0)}MB). Using PRECISE mode instead.`,
+      { largestClipName }
+    );
+    const result = await initializePreciseMode(videoClips, clipStates, mediaFiles);
+    endPrepare();
+    return result;
   }
 
   // FAST MODE: WebCodecs with MP4Box parsing
-  // NOTE: Auto-fallback to PRECISE mode is DISABLED for debugging
-  // All errors will be thrown to surface issues with FAST mode
-  return await initializeFastMode(videoClips, mediaFiles, startTime, clipStates, settings.fps, endPrepare);
+  try {
+    return await initializeFastMode(videoClips, mediaFiles, startTime, clipStates, settings.fps, endPrepare);
+  } catch (e) {
+    if (shouldAutoFallbackToPrecise(e)) {
+      log.warn('FAST export failed, auto-falling back to PRECISE mode', e);
+      clipStates.clear();
+      const result = await initializePreciseMode(videoClips, clipStates, mediaFiles);
+      endPrepare();
+      return result;
+    }
+    throw e;
+  }
 }
 
-function initializePreciseMode(
+async function initializePreciseMode(
   videoClips: TimelineClip[],
-  clipStates: Map<string, ExportClipState>
-): ClipPreparationResult {
-  const registerPreciseClip = (clip: TimelineClip) => {
+  clipStates: Map<string, ExportClipState>,
+  mediaFiles: any[]
+): Promise<ClipPreparationResult> {
+  const registerPreciseClip = async (clip: TimelineClip) => {
     const runtimeOwnerId = getExportRuntimeOwnerId(clip.id);
+    const mediaFileId = clip.mediaFileId || clip.source?.mediaFileId;
+    const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
+    const preparedVideo = clip.source?.type === 'video'
+      ? await createPreciseExportVideoElement(clip, mediaFile)
+      : null;
+
     clipStates.set(clip.id, {
       clipId: clip.id,
       webCodecsPlayer: null,
@@ -100,29 +355,42 @@ function initializePreciseMode(
       isSequential: false,
       runtimeOwnerId,
       runtimeSource: createExportRuntimeSource(clip, runtimeOwnerId),
+      preciseVideoElement: preparedVideo?.videoElement ?? clip.source?.videoElement ?? null,
+      preciseVideoObjectUrl: preparedVideo?.objectUrl ?? null,
+      hasDedicatedPreciseVideoElement: !!preparedVideo,
     });
+
+    return !!preparedVideo;
   };
 
   let preciseClipCount = 0;
   let preciseNestedClipCount = 0;
+  let dedicatedPreciseVideoCount = 0;
 
   for (const clip of videoClips) {
     if (clip.isComposition && clip.nestedClips) {
       for (const nestedClip of clip.nestedClips) {
         if (nestedClip.source?.type !== 'video') continue;
-        registerPreciseClip(nestedClip);
+        if (await registerPreciseClip(nestedClip)) {
+          dedicatedPreciseVideoCount += 1;
+        }
         preciseNestedClipCount += 1;
       }
     }
 
     if (clip.source?.type !== 'video') continue;
-    registerPreciseClip(clip);
+    if (await registerPreciseClip(clip)) {
+      dedicatedPreciseVideoCount += 1;
+    }
     preciseClipCount += 1;
     log.debug(`Clip ${clip.name}: PRECISE mode (HTMLVideoElement seeking)`);
   }
   log.info(`All ${preciseClipCount} clips using PRECISE HTMLVideoElement seeking`);
   if (preciseNestedClipCount > 0) {
     log.info(`Registered ${preciseNestedClipCount} nested PRECISE export clips`);
+  }
+  if (dedicatedPreciseVideoCount > 0) {
+    log.info(`Prepared ${dedicatedPreciseVideoCount} dedicated PRECISE export video elements`);
   }
 
   return {
@@ -458,27 +726,16 @@ async function initializeParallelDecoding(
 export async function loadClipFileData(clip: TimelineClip, mediaFile: any): Promise<ArrayBuffer | null> {
   let fileData: ArrayBuffer | null = null;
 
-  // 1. Try media file's file handle via fileSystemService
-  const storedHandle = mediaFile?.hasFileHandle ? fileSystemService.getFileHandle(clip.mediaFileId || '') : null;
-  if (!fileData && storedHandle) {
+  const resolvedFile = await resolveClipExportFile(clip, mediaFile);
+  if (!fileData && resolvedFile) {
     try {
-      const file = await storedHandle.getFile();
-      fileData = await file.arrayBuffer();
+      fileData = await resolvedFile.arrayBuffer();
     } catch (e) {
-      log.warn(`Media file handle failed for ${clip.name}:`, e);
+      log.warn(`Resolved export file access failed for ${clip.name}:`, e);
     }
   }
 
-  // 2. Try clip's file property directly
-  if (!fileData && clip.file) {
-    try {
-      fileData = await clip.file.arrayBuffer();
-    } catch (e) {
-      log.warn(`Clip file access failed for ${clip.name}:`, e);
-    }
-  }
-
-  // 3. Try media file's blob URL
+  // 2. Try media file's blob URL
   if (!fileData && mediaFile?.url) {
     try {
       const response = await fetch(mediaFile.url);
@@ -488,7 +745,7 @@ export async function loadClipFileData(clip: TimelineClip, mediaFile: any): Prom
     }
   }
 
-  // 4. Try video element's src (blob URL)
+  // 3. Try video element's src (blob URL)
   if (!fileData && clip.source?.videoElement?.src) {
     try {
       const response = await fetch(clip.source.videoElement.src);
@@ -533,6 +790,22 @@ export function cleanupExportMode(
         state.webCodecsPlayer.destroy();
       } catch (e) {
         // Ignore cleanup errors
+      }
+    }
+    if (state.hasDedicatedPreciseVideoElement && state.preciseVideoElement) {
+      try {
+        state.preciseVideoElement.pause();
+        state.preciseVideoElement.removeAttribute('src');
+        state.preciseVideoElement.load();
+      } catch {
+        // Ignore cleanup failures for detached export video elements.
+      }
+    }
+    if (state.preciseVideoObjectUrl) {
+      try {
+        URL.revokeObjectURL(state.preciseVideoObjectUrl);
+      } catch {
+        // Ignore URL cleanup failures.
       }
     }
   }

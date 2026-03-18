@@ -119,6 +119,17 @@ export class WebGPUEngine {
     // Create sampler
     this.sampler = this.context.createSampler();
 
+    // Initialize render targets
+    this.renderTargetManager = new RenderTargetManager(device);
+
+    // Create black texture
+    this.renderTargetManager.createBlackTexture((r, g, b, a) =>
+      this.context.createSolidColorTexture(r, g, b, a)
+    );
+
+    // Create ping-pong textures
+    this.renderTargetManager.createPingPongTextures();
+
     // Create pipelines
     this.compositorPipeline = new CompositorPipeline(device);
     this.effectsPipeline = new EffectsPipeline(device);
@@ -128,24 +139,6 @@ export class WebGPUEngine {
     await this.effectsPipeline.createPipelines();
     await this.outputPipeline.createPipeline();
     await this.slicePipeline.createPipeline();
-
-    // Small delay to let Vulkan memory manager settle after pipeline creation
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    // Initialize extracted modules
-    this.renderTargetManager = new RenderTargetManager(device);
-
-    // Create black texture first (tiny - 1x1 pixel)
-    this.renderTargetManager.createBlackTexture((r, g, b, a) =>
-      this.context.createSolidColorTexture(r, g, b, a)
-    );
-
-    // Another small delay before large texture allocation
-    // Critical for Vulkan on Linux - memory manager needs time to settle
-    await new Promise(resolve => setTimeout(resolve, 50));
-
-    // Create ping-pong textures last (largest memory allocation)
-    this.renderTargetManager.createPingPongTextures();
 
     const { width, height } = this.renderTargetManager.getResolution();
     this.outputWindowManager = new OutputWindowManager(width, height);

@@ -1,12 +1,114 @@
 // WhatsNewDialog - Shows changelog grouped by time periods
-// Displays changes categorized as "Today", "Last Week", "This Month", "Earlier"
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { APP_VERSION, BUILD_NOTICE, getGroupedChangelog, type ChangeEntry } from '../../version';
+import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from 'react';
+import {
+  APP_VERSION,
+  BUILD_NOTICE,
+  FEATURED_VIDEO,
+  WIP_NOTICE,
+  getChangelogCalendar,
+  getGroupedChangelog,
+  type ChangelogCalendarDay,
+  type ChangeEntry,
+  type ChangelogNotice as ChangelogNoticeConfig,
+} from '../../version';
+import {
+  fetchLatestPublishedNativeHelperRelease,
+  NATIVE_HELPER_RELEASES_URL,
+  type NativeHelperPublishedRelease,
+} from '../../services/nativeHelper/releases';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 interface WhatsNewDialogProps {
   onClose: () => void;
+}
+
+type YouTubePlayerStateValue = -1 | 0 | 1 | 2 | 3 | 5;
+
+interface YouTubePlayerStateChangeEvent {
+  data: YouTubePlayerStateValue;
+}
+
+interface YouTubePlayerInstance {
+  destroy: () => void;
+}
+
+interface YouTubePlayerNamespace {
+  Player: new (
+    element: HTMLIFrameElement,
+    options?: {
+      events?: {
+        onStateChange?: (event: YouTubePlayerStateChangeEvent) => void;
+      };
+    }
+  ) => YouTubePlayerInstance;
+  PlayerState: {
+    ENDED: 0;
+    PLAYING: 1;
+    PAUSED: 2;
+    CUED: 5;
+  };
+  ready?: (callback: () => void) => void;
+}
+
+declare global {
+  interface Window {
+    YT?: YouTubePlayerNamespace;
+    onYouTubeIframeAPIReady?: () => void;
+  }
+}
+
+let youtubeIframeApiPromise: Promise<YouTubePlayerNamespace> | null = null;
+
+function loadYouTubeIframeApi(): Promise<YouTubePlayerNamespace> {
+  if (typeof window === 'undefined') {
+    return Promise.reject(new Error('YouTube iframe API requires a browser environment.'));
+  }
+
+  if (window.YT?.Player) {
+    return Promise.resolve(window.YT);
+  }
+
+  if (youtubeIframeApiPromise) {
+    return youtubeIframeApiPromise;
+  }
+
+  youtubeIframeApiPromise = new Promise((resolve, reject) => {
+    const scriptSrc = 'https://www.youtube.com/iframe_api';
+    const existingScript = document.querySelector<HTMLScriptElement>(`script[src="${scriptSrc}"]`);
+    const previousReadyHandler = window.onYouTubeIframeAPIReady;
+
+    const resolveIfReady = () => {
+      if (window.YT?.Player) {
+        resolve(window.YT);
+        return true;
+      }
+      return false;
+    };
+
+    window.onYouTubeIframeAPIReady = () => {
+      previousReadyHandler?.();
+      resolveIfReady();
+    };
+
+    if (resolveIfReady()) {
+      return;
+    }
+
+    if (!existingScript) {
+      const script = document.createElement('script');
+      script.src = scriptSrc;
+      script.async = true;
+      script.onerror = () => reject(new Error('Failed to load YouTube iframe API.'));
+      document.head.appendChild(script);
+    }
+
+    window.setTimeout(() => {
+      resolveIfReady();
+    }, 0);
+  });
+
+  return youtubeIframeApiPromise;
 }
 
 // Icon components for change types
@@ -50,11 +152,164 @@ function GitHubIcon() {
   );
 }
 
+function NoticeIcon({ type }: { type: ChangelogNoticeConfig['type'] }) {
+  if (type === 'warning') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M8 2L1 14h14L8 2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+        <path d="M8 6v4M8 12v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    );
+  }
+
+  if (type === 'success') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/>
+        <path d="M4.5 8.2l2.1 2.1L11.5 5.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    );
+  }
+
+  if (type === 'danger') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/>
+        <path d="M8 4.5v4.5M8 11.5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    );
+  }
+
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M8 7v4M8 5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function NoticeCard({
+  notice,
+  className = '',
+  staggerIndex = 0,
+}: {
+  notice: ChangelogNoticeConfig;
+  className?: string;
+  staggerIndex?: number;
+}) {
+  const noticeStyle = notice.animated
+    ? ({ '--changelog-notice-delay': `${staggerIndex * 0.8}s` } as CSSProperties)
+    : undefined;
+
+  return (
+    <div
+      className={`changelog-notice ${notice.annotation ? 'changelog-notice-with-annotation' : ''} ${className}`.trim()}
+      style={noticeStyle}
+    >
+      <div className={`changelog-notice-body changelog-notice-${notice.type} ${notice.animated ? 'changelog-notice-animated' : ''}`.trim()}>
+        <div className="changelog-notice-icon">
+          <NoticeIcon type={notice.type} />
+        </div>
+        <div className="changelog-notice-content">
+          <span className="changelog-notice-title">{notice.title}</span>
+          <span className="changelog-notice-message">
+            {notice.message && <>{notice.message}{notice.link ? ' ' : ''}</>}
+            {notice.link && (
+              <>
+                <a
+                  className="changelog-notice-link"
+                  href={notice.link.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {notice.link.label}
+                </a>
+                {notice.link.suffix && <> {notice.link.suffix}</>}
+              </>
+            )}
+          </span>
+        </div>
+      </div>
+      {notice.annotation && (
+        <div className="changelog-notice-scribble" aria-hidden="true">
+          <svg className="changelog-notice-scribble-arrow" viewBox="0 0 34 18" fill="none">
+            <path d="M30 15C20 15 14 12 10 5" />
+            <path d="M8 7.5L10 4.5L13.5 5.8" />
+          </svg>
+          <span className="changelog-notice-scribble-text">{notice.annotation.text}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function getHelperBuildNotice(
+  publishedRelease: NativeHelperPublishedRelease | null,
+): ChangelogNoticeConfig | null {
+  if (!BUILD_NOTICE) {
+    return null;
+  }
+
+  const fallbackNotice: ChangelogNoticeConfig = {
+    ...BUILD_NOTICE,
+    title: 'Native Helper release available',
+    link: BUILD_NOTICE.link ?? {
+      label: 'GitHub Releases',
+      href: NATIVE_HELPER_RELEASES_URL,
+    },
+  };
+
+  if (!publishedRelease) {
+    return fallbackNotice;
+  }
+
+  return {
+    ...fallbackNotice,
+    title: `Native Helper v${publishedRelease.version} available`,
+    link: {
+      label: 'Download release',
+      href: publishedRelease.url,
+    },
+  };
+}
+
+function ReleaseCalendar({ weeks }: { weeks: ChangelogCalendarDay[][] }) {
+  return (
+    <div className="changelog-calendar" aria-label="Recent changelog activity">
+      {weeks.map((week, weekIndex) => (
+        <div key={`week-${weekIndex}`} className="changelog-calendar-week">
+          {week.map((day) => (
+            <div
+              key={day.date}
+              className={`changelog-calendar-day changelog-calendar-level-${day.level} changelog-calendar-community-level-${day.communityLevel} ${day.communityCount > 0 ? 'has-community' : ''} ${day.isFuture ? 'is-future' : ''} ${day.isToday ? 'is-today' : ''} ${day.isOutOfRange ? 'is-outside-range' : ''}`}
+              aria-label={day.isOutOfRange ? undefined : day.tooltip}
+            >
+              {!day.isOutOfRange && (
+                <>
+                  <span className="changelog-calendar-fill changelog-calendar-fill-main" />
+                  {day.communityCount > 0 && (
+                    <span className="changelog-calendar-fill changelog-calendar-fill-community" />
+                  )}
+                </>
+              )}
+              {!day.isOutOfRange && (
+                <span className="changelog-calendar-tooltip">{day.tooltip}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ChangeItem({ change }: { change: ChangeEntry }) {
   const [expanded, setExpanded] = useState(false);
   const hasDescription = !!change.description;
   const hasCommits = change.commits && change.commits.length > 0;
   const hasExpandableContent = hasDescription || hasCommits;
+  const isCommunityHighlight = change.highlight === 'community';
 
   const handleCommitClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // Don't toggle expand when clicking link
@@ -62,7 +317,7 @@ function ChangeItem({ change }: { change: ChangeEntry }) {
 
   return (
     <div
-      className={`changelog-item changelog-item-${change.type} ${hasExpandableContent ? 'has-description' : ''} ${expanded ? 'expanded' : ''}`}
+      className={`changelog-item changelog-item-${change.type} ${hasExpandableContent ? 'has-description' : ''} ${expanded ? 'expanded' : ''} ${isCommunityHighlight ? 'changelog-item-community' : ''}`.trim()}
       onClick={() => hasExpandableContent && setExpanded(!expanded)}
     >
       <div className="changelog-item-header">
@@ -73,6 +328,9 @@ function ChangeItem({ change }: { change: ChangeEntry }) {
           {change.type === 'refactor' && <RefactorIcon />}
         </span>
         <span className="changelog-title">{change.title}</span>
+        {isCommunityHighlight && (
+          <span className="changelog-badge changelog-badge-community">Community</span>
+        )}
         {hasCommits && (
           <span className="changelog-commit-count">{change.commits!.length}</span>
         )}
@@ -88,12 +346,29 @@ function ChangeItem({ change }: { change: ChangeEntry }) {
         <div className="changelog-description-wrapper">
           <div className="changelog-description">
             {change.description && <span>{change.description}</span>}
+            {change.contributorName && (
+              change.contributorUrl ? (
+                <a
+                  href={change.contributorUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="changelog-contributor-link"
+                  onClick={handleCommitClick}
+                >
+                  Community contribution by {change.contributorName}
+                </a>
+              ) : (
+                <span className="changelog-contributor-label">
+                  Community contribution by {change.contributorName}
+                </span>
+              )
+            )}
             {hasCommits && (
               <div className="changelog-commits">
                 {change.commits!.map((hash) => (
                   <a
                     key={hash}
-                    href={`https://github.com/Sportinger/MASterSelects/commit/${hash}`}
+                    href={`https://github.com/Sportinger/MasterSelects/commit/${hash}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="changelog-commit-link"
@@ -115,19 +390,117 @@ function ChangeItem({ change }: { change: ChangeEntry }) {
 export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
   const [isClosing, setIsClosing] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'new' | 'fix' | 'improve' | 'refactor'>('all');
-  const [dontShowAgain, setDontShowAgain] = useState(false);
+  const [isFeaturedVideoExpanded, setIsFeaturedVideoExpanded] = useState(false);
+  const [publishedHelperRelease, setPublishedHelperRelease] = useState<NativeHelperPublishedRelease | null>(null);
+  const lastSeenChangelogVersion = useSettingsStore((s) => s.lastSeenChangelogVersion);
   const setShowChangelogOnStartup = useSettingsStore((s) => s.setShowChangelogOnStartup);
+  const setLastSeenChangelogVersion = useSettingsStore((s) => s.setLastSeenChangelogVersion);
+  const isCurrentVersionSuppressed = lastSeenChangelogVersion === APP_VERSION;
+  const [dontShowAgain, setDontShowAgain] = useState(isCurrentVersionSuppressed);
+  const featuredVideoFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const featuredVideoPlayerRef = useRef<YouTubePlayerInstance | null>(null);
 
   const groupedChangelog = useMemo(() => getGroupedChangelog(), []);
+  const changelogCalendar = useMemo(() => getChangelogCalendar(), []);
+  const buildNotice = useMemo(() => getHelperBuildNotice(publishedHelperRelease), [publishedHelperRelease]);
+  const featuredNotices = useMemo(
+    () =>
+      [FEATURED_VIDEO?.banner, buildNotice, WIP_NOTICE].filter(
+        (notice): notice is ChangelogNoticeConfig => Boolean(notice)
+      ),
+    [buildNotice]
+  );
+  const featuredVideoEmbedUrl = useMemo(
+    () =>
+      FEATURED_VIDEO
+        ? `https://www.youtube.com/embed/${FEATURED_VIDEO.youtubeId}?enablejsapi=1&rel=0&modestbranding=1&playsinline=1${typeof window !== 'undefined' ? `&origin=${encodeURIComponent(window.location.origin)}` : ''}`
+        : '',
+    []
+  );
+  const attachCredentiallessVideoFrame = useCallback((node: HTMLIFrameElement | null) => {
+    featuredVideoFrameRef.current = node;
+    if (!node || !featuredVideoEmbedUrl) return;
+    node.setAttribute('credentialless', '');
+    if (node.src !== featuredVideoEmbedUrl) {
+      node.src = featuredVideoEmbedUrl;
+    }
+  }, [featuredVideoEmbedUrl]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void fetchLatestPublishedNativeHelperRelease().then((release) => {
+      if (!cancelled) {
+        setPublishedHelperRelease(release);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    setDontShowAgain(isCurrentVersionSuppressed);
+  }, [isCurrentVersionSuppressed]);
+
+  useEffect(() => {
+    if (!FEATURED_VIDEO || !featuredVideoFrameRef.current || !featuredVideoEmbedUrl) {
+      return;
+    }
+
+    let disposed = false;
+
+    loadYouTubeIframeApi()
+      .then((YT) => {
+        if (disposed || !featuredVideoFrameRef.current) {
+          return;
+        }
+
+        featuredVideoPlayerRef.current?.destroy();
+        featuredVideoPlayerRef.current = new YT.Player(featuredVideoFrameRef.current, {
+          events: {
+            onStateChange: (event) => {
+              if (event.data === YT.PlayerState.PLAYING) {
+                setIsFeaturedVideoExpanded(true);
+                return;
+              }
+              if (
+                event.data === YT.PlayerState.PAUSED ||
+                event.data === YT.PlayerState.ENDED ||
+                event.data === YT.PlayerState.CUED
+              ) {
+                setIsFeaturedVideoExpanded(false);
+              }
+            },
+          },
+        });
+      })
+      .catch(() => {
+        // Keep the embed usable even if the API script fails; only the auto-expand is skipped.
+      });
+
+    return () => {
+      disposed = true;
+      featuredVideoPlayerRef.current?.destroy();
+      featuredVideoPlayerRef.current = null;
+    };
+  }, [featuredVideoEmbedUrl]);
 
   const handleClose = useCallback(() => {
     if (isClosing) return;
-    if (dontShowAgain) setShowChangelogOnStartup(false);
+    if (dontShowAgain) {
+      setShowChangelogOnStartup(false);
+      setLastSeenChangelogVersion(APP_VERSION);
+    } else {
+      setShowChangelogOnStartup(true);
+      setLastSeenChangelogVersion(null);
+    }
     setIsClosing(true);
     setTimeout(() => {
       onClose();
-    }, 120);
-  }, [onClose, isClosing, dontShowAgain, setShowChangelogOnStartup]);
+    }, 200);
+  }, [onClose, isClosing, dontShowAgain, setLastSeenChangelogVersion, setShowChangelogOnStartup]);
 
   // Handle Escape key to close
   useEffect(() => {
@@ -178,75 +551,104 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
       <div className="welcome-overlay whats-new-dialog changelog-dialog">
         {/* Header */}
         <div className="changelog-header">
-          <h2 className="changelog-title">Changelog</h2>
-          <span className="changelog-version">v{APP_VERSION}</span>
-        </div>
-
-        {/* Filter tabs */}
-        <div className="changelog-tabs">
-          <button
-            className={`changelog-tab ${activeTab === 'all' ? 'active' : ''}`}
-            onClick={() => setActiveTab('all')}
-          >
-            All <span className="changelog-tab-count">{counts.all}</span>
-          </button>
-          <button
-            className={`changelog-tab changelog-tab-new ${activeTab === 'new' ? 'active' : ''}`}
-            onClick={() => setActiveTab('new')}
-          >
-            New <span className="changelog-tab-count">{counts.new}</span>
-          </button>
-          <button
-            className={`changelog-tab changelog-tab-fix ${activeTab === 'fix' ? 'active' : ''}`}
-            onClick={() => setActiveTab('fix')}
-          >
-            Fixes <span className="changelog-tab-count">{counts.fix}</span>
-          </button>
-          <button
-            className={`changelog-tab changelog-tab-improve ${activeTab === 'improve' ? 'active' : ''}`}
-            onClick={() => setActiveTab('improve')}
-          >
-            Improved <span className="changelog-tab-count">{counts.improve}</span>
-          </button>
-          <button
-            className={`changelog-tab changelog-tab-refactor ${activeTab === 'refactor' ? 'active' : ''}`}
-            onClick={() => setActiveTab('refactor')}
-          >
-            Refactor <span className="changelog-tab-count">{counts.refactor}</span>
-          </button>
+          <div className="changelog-header-left">
+            <div className="changelog-heading">
+              <span className="changelog-brand" aria-label="MasterSelects">
+                <span className="changelog-brand-master">Master</span>
+                <span className="changelog-brand-selects">Selects</span>
+              </span>
+              <h2 className="changelog-header-title">Changelog</h2>
+            </div>
+          </div>
+          <div className="changelog-header-center">
+            <button className="changelog-header-button" onClick={handleClose}>
+              Got it!
+            </button>
+          </div>
+          <div className="changelog-header-right">
+            <span className="changelog-version">v{APP_VERSION}</span>
+          </div>
         </div>
 
         {/* Scrollable content */}
         <div className="changelog-content">
-          {/* Platform notice */}
-          {BUILD_NOTICE && (
-            <div className={`changelog-notice changelog-notice-${BUILD_NOTICE.type} ${BUILD_NOTICE.animated ? 'changelog-notice-animated' : ''}`}>
-              <div className="changelog-notice-icon">
-                {BUILD_NOTICE.type === 'info' && (
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/>
-                    <path d="M8 7v4M8 5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                )}
-                {BUILD_NOTICE.type === 'warning' && (
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M8 2L1 14h14L8 2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
-                    <path d="M8 6v4M8 12v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                )}
-                {BUILD_NOTICE.type === 'success' && (
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/>
-                    <path d="M4.5 8.2l2.1 2.1L11.5 5.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                )}
+          {(FEATURED_VIDEO || BUILD_NOTICE) && (
+            <div className={`changelog-featured ${isFeaturedVideoExpanded ? 'is-video-expanded' : ''}`.trim()}>
+              <div className="changelog-featured-notices">
+                {featuredNotices.map((notice, index) => (
+                  <NoticeCard
+                    key={`${notice.type}-${notice.title}`}
+                    notice={notice}
+                    className={index === 0 ? 'changelog-video-notice' : ''}
+                    staggerIndex={index}
+                  />
+                ))}
               </div>
-              <div className="changelog-notice-content">
-                <span className="changelog-notice-title">{BUILD_NOTICE.title}</span>
-                <span className="changelog-notice-message">{BUILD_NOTICE.message}</span>
-              </div>
+
+              {FEATURED_VIDEO && (
+                <div className="changelog-featured-side">
+                  <div className="changelog-video">
+                    <div className="changelog-video-shell">
+                      <div className="changelog-video-container">
+                        <iframe
+                          className="changelog-video-frame"
+                          title={FEATURED_VIDEO.title}
+                          loading="lazy"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          referrerPolicy="strict-origin-when-cross-origin"
+                          allowFullScreen
+                          ref={attachCredentiallessVideoFrame}
+                        />
+                      </div>
+                      <a
+                        className="changelog-video-fallback"
+                        href={`https://www.youtube.com/watch?v=${FEATURED_VIDEO.youtubeId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Open on YouTube if the embed is blocked
+                      </a>
+                    </div>
+                  </div>
+                  <ReleaseCalendar weeks={changelogCalendar} />
+                </div>
+              )}
             </div>
           )}
+
+          {/* Filter tabs */}
+          <div className="changelog-tabs">
+            <button
+              className={`changelog-tab ${activeTab === 'all' ? 'active' : ''}`}
+              onClick={() => setActiveTab('all')}
+            >
+              All <span className="changelog-tab-count">{counts.all}</span>
+            </button>
+            <button
+              className={`changelog-tab changelog-tab-new ${activeTab === 'new' ? 'active' : ''}`}
+              onClick={() => setActiveTab('new')}
+            >
+              New <span className="changelog-tab-count">{counts.new}</span>
+            </button>
+            <button
+              className={`changelog-tab changelog-tab-fix ${activeTab === 'fix' ? 'active' : ''}`}
+              onClick={() => setActiveTab('fix')}
+            >
+              Fixes <span className="changelog-tab-count">{counts.fix}</span>
+            </button>
+            <button
+              className={`changelog-tab changelog-tab-improve ${activeTab === 'improve' ? 'active' : ''}`}
+              onClick={() => setActiveTab('improve')}
+            >
+              Improved <span className="changelog-tab-count">{counts.improve}</span>
+            </button>
+            <button
+              className={`changelog-tab changelog-tab-refactor ${activeTab === 'refactor' ? 'active' : ''}`}
+              onClick={() => setActiveTab('refactor')}
+            >
+              Refactor <span className="changelog-tab-count">{counts.refactor}</span>
+            </button>
+          </div>
 
           {filteredGroups.map((group, groupIndex) => {
             // Split changes into left and right columns (alternating)
@@ -285,12 +687,8 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
               checked={dontShowAgain}
               onChange={(e) => setDontShowAgain(e.target.checked)}
             />
-            <span>Don't show on startup</span>
+            <span>Don't auto-show this version again</span>
           </label>
-          <button className="welcome-enter" onClick={handleClose}>
-            <span>Got it</span>
-            <kbd>Esc</kbd>
-          </button>
         </div>
       </div>
     </div>

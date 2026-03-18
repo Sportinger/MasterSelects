@@ -14,7 +14,7 @@ export type PanelType = 'preview' | 'multi-preview' | 'timeline' | 'clip-propert
 export const SCOPE_PANEL_TYPES: PanelType[] = ['scope-waveform', 'scope-histogram', 'scope-vectorscope'];
 
 // WIP panel types — shown grayed out with bug icon in View menu
-export const WIP_PANEL_TYPES: PanelType[] = ['multicam', 'transitions', 'ai-segment'];
+export const WIP_PANEL_TYPES: PanelType[] = ['multicam', 'transitions'];
 
 // AI panel types for View menu grouping
 export const AI_PANEL_TYPES: PanelType[] = ['ai-chat', 'ai-video', 'ai-segment', 'scene-description'];

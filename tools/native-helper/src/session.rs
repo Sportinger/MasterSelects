@@ -7,6 +7,7 @@ use tokio::sync::{oneshot, Mutex};
 use tracing::{debug, info, warn};
 
 use crate::download::{self, WsSender};
+use crate::matanyone;
 use crate::protocol::{error_codes, Command, Response, SystemInfo};
 use crate::utils;
 
@@ -97,6 +98,7 @@ pub struct AppState {
     pub auth_token: Option<String>,
     editor_client: Mutex<Option<EditorClient>>,
     pending_ai_requests: Mutex<HashMap<String, oneshot::Sender<serde_json::Value>>>,
+    pub matanyone_process: Mutex<matanyone::process::MatAnyoneProcess>,
 }
 
 impl AppState {
@@ -105,6 +107,7 @@ impl AppState {
             auth_token,
             editor_client: Mutex::new(None),
             pending_ai_requests: Mutex::new(HashMap::new()),
+            matanyone_process: Mutex::new(matanyone::process::MatAnyoneProcess::new()),
         }
     }
 
@@ -173,6 +176,11 @@ impl Session {
             state,
             authenticated,
         }
+    }
+
+    /// Set the authentication state (called from server.rs after successful auth)
+    pub fn set_authenticated(&mut self, value: bool) {
+        self.authenticated = value;
     }
 
     /// Handle a command, return response
@@ -256,12 +264,31 @@ impl Session {
                 }
             }
 
-            // Download commands are handled in server.rs with WsSender
+            // ── MatAnyone2 commands handled here ──
+
+            Command::MatAnyoneStatus { id } => {
+                Some(self.handle_matanyone_status(&id).await)
+            }
+
+            Command::MatAnyoneStop { id } => {
+                Some(self.handle_matanyone_stop(&id).await)
+            }
+
+            Command::MatAnyoneUninstall { id } => {
+                Some(self.handle_matanyone_uninstall(&id).await)
+            }
+
+            // Download and streaming MatAnyone2 commands are handled in server.rs with WsSender
             Command::DownloadYoutube { id, .. }
             | Command::Download { id, .. }
             | Command::ListFormats { id, .. }
             | Command::RegisterClient { id, .. }
-            | Command::AiToolResult { id, .. } => Some(Response::error(
+            | Command::AiToolResult { id, .. }
+            | Command::MatAnyoneSetup { id, .. }
+            | Command::MatAnyoneDownloadModel { id, .. }
+            | Command::MatAnyoneStart { id, .. }
+            | Command::MatAnyoneMatte { id, .. }
+            | Command::MatAnyoneCancel { id, .. } => Some(Response::error(
                 &id,
                 error_codes::INTERNAL_ERROR,
                 "This command should be handled by server",
@@ -296,6 +323,27 @@ impl Session {
             .map(|guard| guard.is_some())
             .unwrap_or(false);
 
+        // Check MatAnyone2 status
+        let env_info = matanyone::get_env_info();
+        let model_info = matanyone::get_model_info();
+        let matanyone_process_status = self
+            .state
+            .matanyone_process
+            .try_lock()
+            .map(|guard| guard.status().clone())
+            .unwrap_or(matanyone::process::ProcessStatus::Stopped);
+
+        let matanyone_available = env_info.matanyone_installed && model_info.downloaded;
+        let matanyone_status = if !env_info.venv_exists || !env_info.matanyone_installed {
+            "not_installed".to_string()
+        } else if let matanyone::process::ProcessStatus::Error(ref msg) = matanyone_process_status {
+            format!("error: {}", msg)
+        } else if matanyone_process_status == matanyone::process::ProcessStatus::Ready {
+            "running".to_string()
+        } else {
+            "installed".to_string()
+        };
+
         let info = SystemInfo {
             version: env!("CARGO_PKG_VERSION").to_string(),
             ytdlp_available,
@@ -304,6 +352,8 @@ impl Session {
             fs_commands: true,
             ai_bridge: true,
             editor_connected,
+            matanyone_available,
+            matanyone_status,
         };
 
         Response::ok(id, serde_json::to_value(info).unwrap())
@@ -322,29 +372,20 @@ impl Session {
         // Build list of directories to search
         let mut search_dirs: Vec<PathBuf> = Vec::new();
 
-        // Add extra dirs first (highest priority)
+        // Add extra dirs first (highest priority), but only if they are already
+        // within the helper's allowed directory policy.
         for dir in extra_dirs {
             let p = PathBuf::from(dir);
-            if p.is_absolute() && p.is_dir() {
+            if p.is_absolute() && p.is_dir() && utils::is_path_allowed(&p) {
                 search_dirs.push(p);
             }
         }
 
-        // Common user directories
-        if let Some(d) = dirs::desktop_dir() {
-            search_dirs.push(d);
-        }
-        if let Some(d) = dirs::download_dir() {
-            search_dirs.push(d);
-        }
-        if let Some(d) = dirs::video_dir() {
-            search_dirs.push(d);
-        }
-        if let Some(d) = dirs::document_dir() {
-            search_dirs.push(d);
-        }
-        if let Some(d) = dirs::home_dir() {
-            search_dirs.push(d);
+        // Search only within explicitly allowed helper roots.
+        for dir in utils::get_allowed_prefixes() {
+            if dir.is_dir() {
+                search_dirs.push(dir);
+            }
         }
 
         // Search each directory recursively (max depth 4 to avoid long scans)
@@ -664,6 +705,89 @@ impl Session {
         };
 
         Response::ok(id, serde_json::json!({ "exists": path.exists(), "kind": kind }))
+    }
+
+    // ── MatAnyone2 handlers ──
+
+    async fn handle_matanyone_status(&self, id: &str) -> Response {
+        let env_info = matanyone::get_env_info();
+        let model_info = matanyone::get_model_info();
+        let cuda_info = matanyone::env::detect_cuda().await;
+        let process_status = {
+            let proc = self.state.matanyone_process.lock().await;
+            proc.status().clone()
+        };
+        let server_running = process_status == matanyone::process::ProcessStatus::Ready;
+        let server_port = self.state.matanyone_process.try_lock()
+            .map(|p| p.port())
+            .unwrap_or(0);
+
+        // Flat response matching what the frontend expects
+        Response::ok(
+            id,
+            serde_json::json!({
+                "setup_status": if server_running { "running" }
+                    else if env_info.matanyone_installed && model_info.downloaded { "installed" }
+                    else if env_info.venv_exists { "partially_installed" }
+                    else { "not_installed" },
+                "python_version": env_info.python_version,
+                "cuda_available": cuda_info.available,
+                "cuda_version": cuda_info.version,
+                "gpu_name": cuda_info.gpu_name,
+                "vram_mb": cuda_info.vram_mb,
+                "model_downloaded": model_info.downloaded,
+                "venv_exists": env_info.venv_exists,
+                "deps_installed": env_info.deps_installed,
+                "matanyone_installed": env_info.matanyone_installed,
+                "server_running": server_running,
+                "server_port": server_port,
+            }),
+        )
+    }
+
+    async fn handle_matanyone_stop(&self, id: &str) -> Response {
+        let mut proc = self.state.matanyone_process.lock().await;
+        match proc.stop().await {
+            Ok(()) => {
+                info!("MatAnyone2 server stopped");
+                Response::ok(id, serde_json::json!({ "stopped": true }))
+            }
+            Err(e) => {
+                warn!("Failed to stop MatAnyone2 server: {}", e);
+                Response::error(id, error_codes::INTERNAL_ERROR, e)
+            }
+        }
+    }
+
+    async fn handle_matanyone_uninstall(&self, id: &str) -> Response {
+        // Stop the server first if running
+        {
+            let mut proc = self.state.matanyone_process.lock().await;
+            let _ = proc.stop().await;
+        }
+
+        // Delete model files
+        if let Err(e) = matanyone::delete_model().await {
+            warn!("Failed to delete MatAnyone2 models: {}", e);
+            return Response::error(id, error_codes::INTERNAL_ERROR, format!("Failed to delete models: {}", e));
+        }
+
+        // Delete the data directory (venv, uv, source)
+        let data_dir = matanyone::get_data_dir();
+        if data_dir.exists() {
+            if let Err(e) = tokio::fs::remove_dir_all(&data_dir).await {
+                warn!("Failed to remove MatAnyone2 data dir: {}", e);
+                return Response::error(
+                    id,
+                    error_codes::INTERNAL_ERROR,
+                    format!("Failed to remove data directory: {}", e),
+                );
+            }
+            info!("Removed MatAnyone2 data directory: {}", data_dir.display());
+        }
+
+        info!("MatAnyone2 uninstalled successfully");
+        Response::ok(id, serde_json::json!({ "uninstalled": true }))
     }
 
     fn handle_rename(&self, id: &str, old_path: &str, new_path: &str) -> Response {

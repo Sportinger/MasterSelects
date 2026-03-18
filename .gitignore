@@ -70,6 +70,14 @@ tools/native-helper/ffmpeg/
 # Browser automation logs
 .browser-logs.json
 
+# AI Bridge session token (generated per dev session)
+.ai-bridge-token
+
+# Native helper release/package artifacts
+tools/native-helper/MasterSelects-NativeHelper-v*-windows-x64.msi
+tools/native-helper/MasterSelects-NativeHelper-v*-windows-x64.wixpdb
+tools/native-helper/icon.ico
+
 # Project folders (user media)
 Wonder/
 _fremd/

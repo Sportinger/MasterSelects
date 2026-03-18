@@ -1,6 +1,6 @@
 # GPU Engine
 
-[<- Back to Index](./README.md)
+[← Back to Index](./README.md)
 
 WebGPU-powered rendering with zero-copy textures, multi-target output, and GPU-accelerated scopes.
 
@@ -48,6 +48,7 @@ src/engine/
     Compositor.ts            # Ping-pong compositing with inline + complex effects
     LayerCollector.ts        # Imports textures from video/image/text/nested sources
     NestedCompRenderer.ts    # Pre-renders nested compositions to offscreen textures
+    layerEffectStack.ts      # Splits effects into inline vs. complex categories via splitLayerEffects()
   pipeline/
     CompositorPipeline.ts    # GPU pipelines for standard + external composite + copy shaders
     EffectsPipeline.ts       # (in src/effects/) Modular per-effect GPU pipelines
@@ -136,11 +137,11 @@ WebGPUEngine (Facade)
 ```typescript
 // WebGPUContext.ts
 - GPU adapter: powerPreference configurable ('high-performance' | 'low-power')
-- Device: default limits (no custom maxTextureDimension2D)
+- Device: `requiredLimits: { maxTextureDimension2D: 4096 }`
 - Canvas: preferred format via navigator.gpu.getPreferredCanvasFormat()
 - Alpha mode: 'opaque' for preview canvases, 'premultiplied' for export
 - Sampler: linear filtering, clamp-to-edge
-- Vulkan delay: 50ms after device creation, 100ms after pipelines, 50ms before textures
+- Device loss recovery: 100ms delay before re-initialization (only setTimeout in WebGPUContext)
 ```
 
 ### Device Loss Recovery
@@ -262,11 +263,13 @@ Final → Output Pipeline → Canvas(es)
 
 ### Render Targets (RenderTargetManager.ts)
 
-8 textures total, all `rgba8unorm`:
+7 textures total, all `rgba8unorm`:
 - **Ping/Pong** - Main compositing buffers
 - **Independent Ping/Pong** - Separate buffers for multi-composition preview
 - **Effect Temp 1/2** - For pre-processing complex effects on source layers
 - **Black texture** - 1x1 pixel for empty frame output
+
+`createPingPongTextures()` nulls references for GC instead of calling `.destroy()` to avoid 'Destroyed texture used in a submit' warnings (VRAM leak fix, commit 0242668d).
 
 ### Nested Composition Rendering (NestedCompRenderer.ts)
 
@@ -302,14 +305,25 @@ Orchestrates each frame:
 7. `device.queue.submit()` - Single batched GPU submit
 8. `performanceStats.recordRenderTiming()` - Update stats
 
+**Additional methods:**
+- `renderToPreviewCanvas()` - Performs independent ping-pong compositing for multi-composition preview
+- `renderCachedFrame()` - Re-renders the last composited frame without re-collecting textures
+
+**Black frame flash prevention:** `lastRenderHadContent` flag holds the last rendered frame during transient playback stalls instead of flashing black (Windows/Linux fix, commit ee7e2329).
+
 ### LayerCollector.ts
 
-Imports textures from layer sources in priority order:
+Imports textures from layer sources in priority order (when `useFullWebCodecsPlayback` is `false`, i.e., the default):
 1. **NativeHelper** (ImageBitmap from native decoder)
-2. **VideoFrame** (direct from parallel decoder)
-3. **WebCodecs** (runtime frame provider or clip WebCodecsPlayer)
-4. **HTMLVideoElement** (visual fallback - intentionally disabled, only during drag-scrub)
-5. **Image** / **Text Canvas** / **Nested Composition**
+2. **Direct VideoFrame** (from parallel decode)
+3. **HTML Video** (when `allowHtmlVideoPreview` is true — active when not in full WebCodecs mode, during scrub/pause)
+4. **WebCodecs** (full mode only, or export)
+5. **Cache fallbacks** (scrubbing cache, stall hold frame)
+6. **Image** / **Text Canvas** / **Nested Composition**
+
+`getPlaybackStallHoldFrame()` provides last-resort cached frames during decoder stalls, preventing blank output.
+
+`scrubGraceUntil` (~150ms) keeps the HTML preview path active after scrub stops, allowing settle-seek completion before switching back to normal decoding.
 
 GPU warmup tracking: after page reload, `importExternalTexture` returns black until the video plays. A `videoGpuReady` WeakSet tracks which videos have been warmed up.
 
@@ -348,6 +362,13 @@ Parallel video decoding for multi-clip exports:
 - Pre-decodes frames ahead of render position
 - MP4Box demux per clip with sample extraction
 
+### Firefox HTML Video Preview Fallback
+
+`htmlVideoPreviewFallback.ts` implements a Firefox-specific workaround:
+- Copies video frames to persistent `texture_2d<f32>` textures
+- Avoids intermittent black frames from `importExternalTexture` on Firefox
+- Means Firefox does NOT use zero-copy external textures for HTMLVideoElement
+
 ### Fallback Chain
 ```
 NativeHelper → WebCodecs (runtime) → WebCodecs (clip) → HTMLVideoElement (disabled)
@@ -359,7 +380,7 @@ NativeHelper → WebCodecs (runtime) → WebCodecs (clip) → HTMLVideoElement (
 flags = {
   useRenderGraph: false,           // Render Graph executor (stubs)
   useDecoderPool: false,           // Shared decoder pool (not wired)
-  useFullWebCodecsPlayback: true,  // Full WebCodecs via advanceToTime()
+  useFullWebCodecsPlayback: false, // Preview uses HTML video by default; WebCodecs is used for export and full-mode playback only
 }
 // Runtime toggle: window.__ENGINE_FLAGS__
 ```
@@ -368,17 +389,19 @@ flags = {
 
 ## Shader Capabilities
 
-### Total WGSL Code: ~2,400 lines
+### Total WGSL Code: ~2,565 lines (files only) or ~3,000 lines (including inline)
 
 | File | Lines | Purpose |
 |------|-------|---------|
 | `composite.wgsl` | 618 | Blending + 37 modes + inline effects + mask feathering |
 | `effects.wgsl` | 243 | Legacy inline GPU effects |
 | `opticalflow.wgsl` | 326 | Motion analysis (compute) |
-| `output.wgsl` | 71 | Passthrough with optional transparency grid |
+| `output.wgsl` | 83 | Passthrough with optional transparency grid + stacked alpha |
 | `slice.wgsl` | 33 | Corner-pin warped slice rendering |
-| `common.wgsl` | 154 | Shared effect utilities |
-| 30 effect shaders | ~954 | Individual effect shaders |
+| `common.wgsl` | 154 | Shared effect utilities (located at `src/effects/_shared/common.wgsl`) |
+| 30 effect shaders | ~1,108 | Individual effect shaders |
+
+**Inline WGSL:** ~435 lines of WGSL are inlined in `CompositorPipeline.ts` (copyShader ~30 lines, externalCopyShader ~30 lines, externalCompositeShader ~375 lines with all 37 blend modes). These are NOT in separate `.wgsl` files.
 
 Additionally, `HistogramScope.ts`, `WaveformScope.ts`, and `VectorscopeScope.ts` contain inline WGSL compute + render shaders for GPU-accelerated scopes.
 
@@ -494,8 +517,15 @@ The engine supports rendering to multiple canvases simultaneously:
 ### OutputPipeline (pipeline/OutputPipeline.ts)
 
 Renders final composited output to canvases with:
-- Dual uniform buffers (grid-on / grid-off) so different targets in the same command encoder can have different transparency grid states
+- Three uniform buffers: `uniformBufferGridOn` (mode 0), `uniformBufferGridOff` (mode 1), `uniformBufferStackedAlpha` (mode 2, for transparent video export) — so different targets in the same command encoder can have different transparency grid / alpha states
 - Bind group caching per grid state per texture view
+
+#### Stacked Alpha Export
+
+`ExportSettings.stackedAlpha` enables transparent video export:
+- OutputPipeline mode 2 renders RGB on the top half and alpha grayscale on the bottom half (double-height canvas)
+- `ExportCanvasManager` creates a double-height OffscreenCanvas for the stacked layout
+- The `output.wgsl` shader includes stacked alpha logic to split the output vertically
 
 ### SlicePipeline (pipeline/SlicePipeline.ts)
 
@@ -509,6 +539,7 @@ Corner-pin warped output slices:
 - Creates popup windows with canvas elements
 - Tracks open window IDs in sessionStorage for page refresh reconnection
 - Supports fullscreen, saved geometry restore, multi-display
+- `outputWindowPlacement.ts`: Randomized popup placement with center-exclusion zone logic
 
 ---
 
@@ -582,7 +613,7 @@ Efficient undo/redo snapshots:
 flags = {
   useRenderGraph: false,           // Render Graph executor (stubs - not ready)
   useDecoderPool: false,           // Shared decoder pool (not wired yet)
-  useFullWebCodecsPlayback: true,  // Full WebCodecs playback via advanceToTime()
+  useFullWebCodecsPlayback: false, // Preview uses HTML video by default; WebCodecs is used for export and full-mode playback only
 }
 ```
 
@@ -629,8 +660,10 @@ interface EngineStats {
            'HTMLVideo(paused-cache)' | 'HTMLVideo(seeking-cache)' |
            'HTMLVideo(scrub-cache)' | 'NativeHelper' | 'ParallelDecode' | 'none';
   webCodecsInfo?: { codec, hwAccel, decodeQueueSize, samplesLoaded, sampleIndex };
-  audio: AudioStatus;
+  audio: { playing: number; drift: number; status: 'sync' | 'drift' | 'silent' | 'error' };
+  gpuMemory: number;
   isIdle: boolean;
+  playback?: { ... };       // 30+ field diagnostic object for pipeline debugging
 }
 ```
 
@@ -638,6 +671,18 @@ interface EngineStats {
 - **slow_import** - Texture upload took >50% of frame budget
 - **slow_render** - Compositing took more than 16.67ms
 - **slow_raf** - RAF gap exceeded 2x target (missed frames)
+
+### Telemetry Monitors
+
+Three pipeline monitors collect diagnostics used by LayerCollector and RenderDispatcher:
+- `vfPipelineMonitor` - VideoFrame pipeline health (frame arrival rate, stalls, drops)
+- `wcPipelineMonitor` - WebCodecs pipeline health (decoder queue depth, decode latency)
+- `performanceMonitor` - `reportRenderTime()` feeds frame timing into bottleneck detection
+
+### WebCodecs Types and VideoFrameManager
+
+- `webCodecsTypes.ts` - Shared MP4Box / sample types used across WebCodecsPlayer, ExportMode, and ParallelDecodeManager
+- `VideoFrameManager.ts` - Tracks per-video `requestVideoFrameCallback` (RVFC) state to determine when a fresh video frame is available for texture import, avoiding redundant re-imports of stale frames
 
 ---
 

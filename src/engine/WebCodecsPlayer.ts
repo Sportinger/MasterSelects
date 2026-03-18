@@ -94,6 +94,7 @@ export class WebCodecsPlayer implements ExportModePlayer {
   private pendingSeekStartedAtMs: number | null = null;
   private pendingSeekKind: 'seek' | 'advance' | null = null;
   private pendingSeekTargetDebugUs: number | null = null;
+  private pendingSimpleSeekHandler: (() => void) | null = null;
 
   // ExportModePlayer interface implementation
   getDecoder(): VideoDecoder | null { return this.decoder; }
@@ -1628,6 +1629,11 @@ export class WebCodecsPlayer implements ExportModePlayer {
   seek(timeSeconds: number): void {
     // Simple mode: direct seek on video element
     if (this.useSimpleMode && this.videoElement) {
+      // Remove previous pending seek listener to avoid accumulation during rapid scrubbing
+      if (this.pendingSimpleSeekHandler && this.videoElement) {
+        this.videoElement.removeEventListener('seeked', this.pendingSimpleSeekHandler);
+      }
+
       this.videoElement.currentTime = timeSeconds;
       // Capture frame immediately and after seek completes
       this.captureCurrentFrame();
@@ -1636,7 +1642,9 @@ export class WebCodecsPlayer implements ExportModePlayer {
       const onSeeked = () => {
         this.captureCurrentFrame();
         this.videoElement?.removeEventListener('seeked', onSeeked);
+        this.pendingSimpleSeekHandler = null;
       };
+      this.pendingSimpleSeekHandler = onSeeked;
       this.videoElement.addEventListener('seeked', onSeeked);
       return;
     }
@@ -1978,6 +1986,11 @@ export class WebCodecsPlayer implements ExportModePlayer {
 
     // Simple mode cleanup
     if (this.videoElement) {
+      // Clean up pending seek listener
+      if (this.pendingSimpleSeekHandler) {
+        this.videoElement.removeEventListener('seeked', this.pendingSimpleSeekHandler);
+        this.pendingSimpleSeekHandler = null;
+      }
       // Remove event listeners if attached to external video
       if (this.isAttachedToExternal) {
         if (this.boundOnPlay) this.videoElement.removeEventListener('play', this.boundOnPlay);

@@ -271,9 +271,16 @@ export class TextureManager {
 
   // Clear all caches
   clearCaches(): void {
-    // Don't destroy textures - let GC handle to avoid GPU conflicts
-    // WebGPU will automatically release GPU resources when JS objects are GC'd
-    // AND the GPU is done using them
+    // Destroy all cached textures to free VRAM immediately
+    for (const texture of this.imageTextures.values()) {
+      texture.destroy();
+    }
+    for (const texture of this.canvasTextures.values()) {
+      texture.destroy();
+    }
+    for (const texture of this.videoFrameTextures.values()) {
+      texture.destroy();
+    }
     this.imageTextures.clear();
     this.canvasTextures.clear();
     this.cachedImageViews.clear();
@@ -290,7 +297,7 @@ export class TextureManager {
   removeImageTexture(image: HTMLImageElement): void {
     const texture = this.imageTextures.get(image);
     if (texture) {
-      // Don't destroy - let GC handle to avoid GPU conflicts
+      texture.destroy();
       this.imageTextures.delete(image);
       this.cachedImageViews.delete(texture);
     }
@@ -300,7 +307,7 @@ export class TextureManager {
   removeCanvasTexture(canvas: HTMLCanvasElement): void {
     const texture = this.canvasTextures.get(canvas);
     if (texture) {
-      // Don't destroy - let GC handle to avoid GPU conflicts
+      texture.destroy();
       this.canvasTextures.delete(canvas);
       this.cachedImageViews.delete(texture);
     }

@@ -1,21 +1,20 @@
 // Audio detection helpers for various video container formats
-// Supports: MP4, MOV, M4V, 3GP (via MP4Box), WebM, MKV, AVI, etc.
+// Supports: MP4, MOV, M4V, 3GP (via MediaBunny), WebM, MKV, AVI, etc.
 
 import { Logger } from '../../../services/logger';
 
 const log = Logger.create('AudioDetection');
 
-// Lazy-load mp4box only when needed (saves ~200KB from initial bundle)
-let _MP4Box: any = null;
-async function getMP4Box() {
-  if (!_MP4Box) {
-    const mod = await import('mp4box');
-    _MP4Box = (mod as any).default || mod;
+// Lazy-load mediabunny only when needed (tree-shaking friendly)
+let _mediabunny: typeof import('mediabunny') | null = null;
+async function getMediaBunny() {
+  if (!_mediabunny) {
+    _mediabunny = await import('mediabunny');
   }
-  return _MP4Box;
+  return _mediabunny;
 }
 
-// MP4-based containers that MP4Box can parse
+// MP4-based containers that MediaBunny can parse
 const MP4_CONTAINERS = ['mp4', 'm4v', 'mov', '3gp', 'mp4v'];
 
 // WebM/Matroska containers
@@ -30,17 +29,17 @@ export async function detectVideoAudio(file: File): Promise<boolean> {
 
   log.debug('Detecting audio', { file: file.name, ext });
 
-  // Method 1: MP4Box for MP4-based containers (most reliable for positive detection)
+  // Method 1: MediaBunny for MP4-based containers (most reliable for positive detection)
   if (MP4_CONTAINERS.includes(ext)) {
     const result = await detectAudioMP4Box(file);
     if (result === true) {
-      log.debug('MP4Box detection result', { file: file.name, hasAudio: true });
+      log.debug('MediaBunny detection result', { file: file.name, hasAudio: true });
       return true;
     }
-    // Don't trust false from MP4Box - camera MOV files often have moov atom at
-    // end of file (past read limit) or use PCM audio codecs MP4Box may not classify
-    // as audioTracks. Fall through to VideoElement detection.
-    log.debug('MP4Box returned non-positive, trying fallback', { file: file.name, result });
+    // Don't trust false from container parsing - camera MOV files may use
+    // PCM audio codecs that aren't always classified as audioTracks.
+    // Fall through to VideoElement detection.
+    log.debug('MediaBunny returned non-positive, trying fallback', { file: file.name, result });
   }
 
   // Method 2: HTMLVideoElement for WebM and other formats
@@ -65,78 +64,48 @@ export async function detectVideoAudio(file: File): Promise<boolean> {
 }
 
 /**
- * Detect audio using MP4Box (for MP4/MOV/M4V/3GP containers).
+ * Detect audio using MediaBunny (for MP4/MOV/M4V/3GP containers).
  * Returns null if detection fails.
  */
 async function detectAudioMP4Box(file: File): Promise<boolean | null> {
-  const MP4Box = await getMP4Box();
-  return new Promise((resolve) => {
-    const mp4boxFile = MP4Box.createFile();
-    let resolved = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cleanup: { input: any } = { input: null };
+  try {
+    const mb = await getMediaBunny();
 
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        log.debug('MP4Box timeout', { file: file.name });
+    const result = await Promise.race([
+      (async () => {
+        const input = new mb.Input({
+          formats: [mb.MP4, mb.QTFF],
+          source: new mb.BlobSource(file),
+        });
+        cleanup.input = input;
+
+        const audioTracks = await input.getAudioTracks();
+        const videoTracks = await input.getVideoTracks();
+        const hasAudio = audioTracks.length > 0;
+
+        log.debug('MediaBunny parsed', {
+          file: file.name,
+          audioTracks: audioTracks.length,
+          videoTracks: videoTracks.length,
+        });
+
+        return hasAudio;
+      })(),
+      new Promise<null>((resolve) => setTimeout(() => {
+        log.debug('MediaBunny timeout', { file: file.name });
         resolve(null);
-      }
-    }, 5000);
+      }, 5000)),
+    ]);
 
-    mp4boxFile.onReady = (info: any) => {
-      if (resolved) return;
-      resolved = true;
-      clearTimeout(timeout);
-
-      const hasAudio = info.audioTracks && info.audioTracks.length > 0;
-      log.debug('MP4Box parsed', {
-        file: file.name,
-        audioTracks: info.audioTracks?.length || 0,
-        videoTracks: info.videoTracks?.length || 0
-      });
-      resolve(hasAudio);
-    };
-
-    mp4boxFile.onError = (error: any) => {
-      if (resolved) return;
-      resolved = true;
-      clearTimeout(timeout);
-      log.debug('MP4Box error', { file: file.name, error });
-      resolve(null);
-    };
-
-    // Read file in chunks
-    const chunkSize = 1024 * 1024; // 1MB
-    let offset = 0;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (resolved) return;
-      const buffer = e.target?.result as ArrayBuffer;
-      if (buffer) {
-        (buffer as any).fileStart = offset;
-        mp4boxFile.appendBuffer(buffer as any);
-        offset += buffer.byteLength;
-
-        // Read up to 5MB for metadata
-        if (offset < Math.min(file.size, 5 * 1024 * 1024)) {
-          const nextChunk = file.slice(offset, offset + chunkSize);
-          reader.readAsArrayBuffer(nextChunk);
-        } else {
-          mp4boxFile.flush();
-        }
-      }
-    };
-
-    reader.onerror = () => {
-      if (resolved) return;
-      resolved = true;
-      clearTimeout(timeout);
-      resolve(null);
-    };
-
-    const firstChunk = file.slice(0, chunkSize);
-    reader.readAsArrayBuffer(firstChunk);
-  });
+    return result;
+  } catch (error) {
+    log.debug('MediaBunny error', { file: file.name, error });
+    return null;
+  } finally {
+    try { cleanup.input?.dispose(); } catch { /* ignore */ }
+  }
 }
 
 /**

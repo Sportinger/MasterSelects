@@ -12,6 +12,7 @@ import { useMediaStore } from '../stores/mediaStore';
 import { useRenderTargetStore } from '../stores/renderTargetStore';
 import { compositionRenderer } from './compositionRenderer';
 import { engine } from '../engine/WebGPUEngine';
+import { getPlayheadPosition } from './layerBuilder/PlayheadState';
 import { isRenderTargetRenderable } from '../utils/renderTargetVisibility';
 
 interface NestedCompInfo {
@@ -39,6 +40,15 @@ class RenderSchedulerService {
   // Reuse the main loop's pre-built layers for the active composition
   // Avoids re-seeking video elements and bypasses compositionRenderer entirely
   private activeCompLayers: Layer[] | null = null;
+
+  /**
+   * Match the main preview timing path: during playback the render loop advances
+   * an internal playhead at RAF frequency, while the Zustand store is only
+   * updated at ~30fps for UI subscribers.
+   */
+  private getMainPlayheadTime(): number {
+    return getPlayheadPosition(useTimelineStore.getState().playheadPosition);
+  }
 
   /**
    * Register a render target for independent rendering
@@ -130,7 +140,7 @@ class RenderSchedulerService {
    * Otherwise, use the composition's own stored playhead
    */
   private calculatePlayheadTime(compositionId: string): { time: number; syncSource: 'nested' | 'reverse-nested' | 'stored' | 'default' } {
-    const mainPlayhead = useTimelineStore.getState().playheadPosition;
+    const mainPlayhead = this.getMainPlayheadTime();
     const activeCompId = useMediaStore.getState().activeCompositionId;
 
     // Case 1: This composition is nested in active timeline (child preview while parent is active)
@@ -279,7 +289,7 @@ class RenderSchedulerService {
       // Optimization: copy pre-rendered nested comp texture instead of re-rendering
       const nestedInfo = this.getNestedCompInfo(compId);
       if (nestedInfo) {
-        const mainPlayhead = useTimelineStore.getState().playheadPosition;
+        const mainPlayhead = this.getMainPlayheadTime();
         const clipStart = nestedInfo.clipStartTime;
         const clipEnd = clipStart + nestedInfo.clipDuration;
 

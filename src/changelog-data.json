@@ -1,5 +1,215 @@
 [
   {
+    "date": "2026-03-17",
+    "type": "fix",
+    "title": "Local AI Bridges Now Enforce Tokens, File Allowlists, and Tool Policies",
+    "description": "The Vite dev bridge and Native Helper bridge now require auth tokens, reject non-loopback browser origins, restrict local file access to explicit allowed roots, and route external AI calls through caller policies plus approval gates instead of giving the bridge unrestricted editor control. Secret redaction, dedicated security docs, and new JS/Rust security checks and tests now back those boundaries up.",
+    "section": "Security / AI Control",
+    "commits": [
+      "768e7cb2",
+      "450aa4ff",
+      "cec79b24"
+    ]
+  },
+  {
+    "date": "2026-03-17",
+    "type": "improve",
+    "title": "Native Helper v0.3.10 Ships a Smaller Hardened Windows Installer",
+    "description": "The latest Native Helper release tightens localhost bridge authentication, updates release detection and helper links, and rebuilds the Windows MSI without the old bundled FFmpeg payload so upgrades stay much smaller while matching the new bridge security model.",
+    "section": "AI / Native Helper",
+    "commits": [
+      "fb575f72"
+    ]
+  },
+  {
+    "date": "2026-03-17",
+    "type": "improve",
+    "title": "README Hero, Compliance Links, and Security Overview Were Refreshed",
+    "description": "The GitHub front page now has a cleaner hero/header layout, a top-level security model section, and FOSSA badge/report links so the local trust model and license/compliance status are visible without digging through the repo.",
+    "section": "Documentation",
+    "commits": [
+      "3d233fc9",
+      "5642343c",
+      "c87d0670",
+      "75b2754f",
+      "48ea9a4a",
+      "391041d3",
+      "578bf0d8"
+    ]
+  },
+  {
+    "date": "2026-03-17",
+    "type": "fix",
+    "title": "FAST Export Restores Project Media Sources and Advancing Video Frames",
+    "description": "Project saves now persist the canonical Raw media path, export and scrub-audio resolution prefer the project copy after reload, large or unstable FAST decode paths retry more safely, and sequential WebCodecs export layers now pass their current VideoFrame directly into rendering. Together these fixes address black exports, stale file-handle failures, and one-frame/still-image exports after the MediaBunny migration.",
+    "section": "Export / Media"
+  },
+  {
+    "date": "2026-03-17",
+    "type": "fix",
+    "title": "Changelog Suppression Tracks the Current Version Explicitly",
+    "description": "Closing the changelog now stores the current version only when 'Don't auto-show this version again' is enabled and clears that marker when it is not, so the dialog no longer keeps a stale suppressed state just because startup auto-show was toggled earlier.",
+    "section": "Changelog"
+  },
+  {
+    "date": "2026-03-16",
+    "type": "new",
+    "title": "Kie.ai Joins Video Generation With Credits, Queue UX, and Better Request Defaults",
+    "description": "Kie.ai is now available alongside PiAPI for AI video generation. The panel now shows live credit balance and updated pricing, supports 3-15 second durations, moves the primary Generate action into the balance header, and upgrades the queue with thumbnails, drag-drop ordering, and an audio toggle. Request defaults were also aligned with the current Kie.ai docs, including the correct audio surcharge handling and `multi_shots: false` behavior.",
+    "section": "AI / Video Generation",
+    "commits": [
+      "5c78f815",
+      "6e7aab30",
+      "f37e881a",
+      "56012e9d",
+      "e3ecc2da",
+      "3f4bd889",
+      "0a6b4321",
+      "c1179bca",
+      "b83cea88"
+    ]
+  },
+  {
+    "date": "2026-03-16",
+    "type": "improve",
+    "title": "Changelog Menu Entry Opens Directly and Persists Per-Project Hide State",
+    "description": "The Info menu now exposes a dedicated Changelog entry instead of toggling startup behavior when opened. The 'Don't auto-show this version again' state is restored when reopening the dialog and is now saved into the project file, so each project remembers whether the current release changelog was already acknowledged.",
+    "section": "Changelog"
+  },
+  {
+    "date": "2026-03-16",
+    "type": "refactor",
+    "title": "MediaBunny Takes Over WebCodecs Export Muxing and MP4/MOV Metadata Helpers",
+    "description": "The browser export path now writes through a MediaBunny adapter instead of the deprecated mp4-muxer/webm-muxer pair. MP4/MOV metadata and audio-track detection helpers also moved off mp4box, which improves format handling for camera files with moov-at-end metadata while keeping deferred demux-heavy paths documented separately.",
+    "section": "Export / Media",
+    "commits": [
+      "17ab6de0",
+      "0e4755b2"
+    ]
+  },
+  {
+    "date": "2026-03-16",
+    "type": "improve",
+    "title": "README Now Embeds an Inline Demo Video",
+    "description": "The GitHub README now shows an inline demo video with a poster frame and improved placement below the badge and stats area, replacing the old plain YouTube link.",
+    "section": "Documentation",
+    "commits": [
+      "730ca483",
+      "70b8b479",
+      "fa7fd188",
+      "a9d5b54a",
+      "5241b7d0",
+      "5645e485"
+    ]
+  },
+  {
+    "date": "2026-03-16",
+    "type": "new",
+    "title": "MatAnyone2 Setup Wizard and Native Helper v0.3.9 Prep",
+    "description": "Added a dedicated MatAnyone2 setup flow, new AI feature settings, richer helper-side status/setup plumbing, and release-aware Native Helper update checks around the v0.3.9 helper rollout.",
+    "section": "AI / Native Helper",
+    "commits": [
+      "b989dee8",
+      "d82cbc0f",
+      "537bfb7a"
+    ]
+  },
+  {
+    "date": "2026-03-16",
+    "type": "improve",
+    "title": "Changelog Dialog Polish and Community-Aware Release Calendar",
+    "description": "The changelog dialog got a stronger header, richer notice cards, cleaner release-note presentation, and community-highlight styling. The activity calendar can now visualize core and community changes separately, backed by new grouping and calendar tests.",
+    "section": "Changelog",
+    "commits": [
+      "d5258cd8",
+      "55bbc5a9"
+    ]
+  },
+  {
+    "date": "2026-03-16",
+    "type": "fix",
+    "title": "FFmpeg WASM Docs Now Match Reality",
+    "description": "README and export docs now clearly separate production WebCodecs paths from the experimental FFmpeg WASM path, remove false Native Helper decode claims, and call out current codec and threading limitations more accurately.",
+    "section": "Documentation / Export",
+    "commits": [
+      "497bf879"
+    ]
+  },
+  {
+    "date": "2026-03-16",
+    "type": "refactor",
+    "title": "Comprehensive Documentation Audit & Update",
+    "description": "Multi-agent documentation audit across 486 source files. Updated 16 docs, deleted 3 redundant files, merged 2 into parent docs, renamed YouTube.md to Download-Panel.md. Fixed stale metrics (LOC 60k→120k, WGSL 2200→2500+, AI tools 33→76, fonts 57→50), removed inapplicable Next.js section from CLAUDE.md, expanded architecture tree, slimmed doc index from 660→250 lines. Found 2 code bugs in AI tool dispatcher.",
+    "section": "Documentation",
+    "commits": [
+      "651afbc0"
+    ]
+  },
+  {
+    "date": "2026-03-16",
+    "type": "fix",
+    "title": "Windows/Linux Playback Warmup Holds Frames Instead of Dropping to Black",
+    "description": "HTMLVideo fallback now keeps a valid cached frame during playback warmup and seeks instead of dropping straight to black. Ownerless pre-cached frames from first import can now be reused safely when there is no conflicting clip owner, which should also reduce first-import preview flicker.",
+    "section": "Playback",
+    "commits": [
+      "ee7e2329",
+      "8e6e4f71"
+    ]
+  },
+  {
+    "date": "2026-03-16",
+    "type": "fix",
+    "title": "Explicit GPU Texture Cleanup for Windows/Linux Playback",
+    "description": "Scrubbing, mask, nested composition, and texture caches now destroy replaced GPU textures explicitly to reduce VRAM buildup and progressive playback degradation on Windows and Linux.",
+    "section": "Engine",
+    "commits": [
+      "0242668d"
+    ]
+  },
+  {
+    "date": "2026-03-16",
+    "type": "improve",
+    "title": "Nested Composition Duration Sync and Preview Timing",
+    "description": "Changing a composition duration now updates nested composition reference clips in stored parents and in the active timeline, refreshes dependent audio waveforms, and keeps independent previews synced to the render loop's internal playhead timing.",
+    "section": "Composition / Preview",
+    "commits": [
+      "8e6e4f71"
+    ]
+  },
+  {
+    "date": "2026-03-14",
+    "type": "fix",
+    "title": "macOS Folder Picker Main-Thread Fix",
+    "description": "Uses osascript for the macOS folder picker so save/open flows avoid the main-thread constraint in the native dialog path.",
+    "section": "macOS / Community",
+    "commits": [
+      "e7629258"
+    ],
+    "highlight": "community",
+    "contributorName": "Florian Thonig",
+    "contributorUrl": "https://github.com/florianthonig"
+  },
+  {
+    "date": "2026-03-14",
+    "type": "refactor",
+    "title": "Project Vision and Platform Direction Note",
+    "description": "Added a project vision note that outlines the roadmap toward broader format support and the June 2026 universal media goal.",
+    "section": "Docs",
+    "commits": [
+      "11663a78"
+    ]
+  },
+  {
+    "date": "2026-03-13",
+    "type": "new",
+    "title": "Embedded Demo Video in the Changelog",
+    "description": "The changelog dialog can now show an embedded demo video at the top of the release notes.",
+    "section": "Changelog",
+    "commits": [
+      "2bb3f1e1"
+    ]
+  },
+  {
     "date": "2026-03-13",
     "type": "new",
     "title": "Stacked Alpha Video Export",

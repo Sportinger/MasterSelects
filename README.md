@@ -2,33 +2,54 @@
 
 # MasterSelects
 
-### Browser-based Video Compositor
+<h3>Browser-based Video Compositor</h3>
 
-[![Version](https://img.shields.io/badge/version-1.3.4-blue.svg)](https://github.com/Sportinger/MASterSelects/releases)
+[![Version](https://img.shields.io/badge/version-1.3.9-blue.svg)](https://github.com/Sportinger/MasterSelects/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Lemonade Integration](https://img.shields.io/badge/Lemonade-Phase%202%20Authorized-orange.svg)](docs/lemonade/README.md)
 
-[![Watch the Demo](https://img.shields.io/badge/Watch_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/5ezX5ra0RTI)
+<p>
+  GPU-first editing with <b>30 effects</b>, <b>37 blend modes</b>, <b>76 AI tools</b>, and only <b>13 dependencies</b>.<br>
+  Built from scratch in <b>2,500+ lines of WGSL</b> and <b>120k lines of TypeScript</b>.
+</p>
 
-[![WebGPU](https://img.shields.io/badge/WebGPU-Powered-990000?style=flat-square&logo=webgpu&logoColor=white)](#)
-[![React 19](https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=black)](#)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](#)
-[![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white)](#)
-[![Rust](https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white)](#native-helper)
+<p>
+  <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-1.3.9-blue.svg" alt="Version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
+  <a href="https://app.fossa.com/projects/custom%2b61097%2fmasterselects"><img src="https://app.fossa.com/api/projects/custom%2b61097%2fmasterselects.svg?type=shield" alt="FOSSA Status"></a>
+</p>
 
-<table>
-<tr>
-<td align="center"><b>30</b><br><sub>GPU Effects</sub></td>
-<td align="center"><b>37</b><br><sub>Blend Modes</sub></td>
-<td align="center"><b>2,200+</b><br><sub>Lines WGSL</sub></td>
-<td align="center"><b>76</b><br><sub>AI Tools</sub></td>
-<td align="center"><b>13</b><br><sub>Dependencies</sub></td>
-</tr>
-</table>
+<p>
+  <a href="#"><img src="https://img.shields.io/badge/WebGPU-990000?style=flat-square&logo=webgpu&logoColor=white" alt="WebGPU"></a>
+  <a href="#"><img src="https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React 19"></a>
+  <a href="#"><img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite"></a>
+  <a href="#native-helper"><img src="https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white" alt="Rust"></a>
+</p>
 
-![MASterSelects Screenshot](docs/images/screenshot-main.png)
+<br>
+
+<video src="https://github.com/user-attachments/assets/24966b2a-064f-49c8-bc7f-88472a5e4cb0" autoplay loop muted playsinline width="100%"></video>
 
 </div>
+
+---
+
+## Security Model
+
+MasterSelects is a **local-first editor**. Your timeline, media processing, rendering, and most AI-adjacent operations stay on your machine unless you explicitly call an external API. The project now has explicit trust boundaries instead of relying on "it's just localhost".
+
+**Current protections:**
+- **Native Helper bridge:** Binds to `127.0.0.1` only and requires a random startup Bearer token for HTTP and WebSocket bridge operations
+- **Dev bridge hardening:** Vite `/api/ai-tools` and local file routes require a per-session token and reject non-loopback browser origins
+- **Path restrictions:** Local file reads, listings, uploads, and locate/search operations are restricted to explicit allowed roots instead of arbitrary disk access
+- **AI tool policy:** External bridge calls run through caller restrictions and approval/confirmation gates instead of getting unrestricted editor control
+- **Secret handling:** API keys are stored in encrypted IndexedDB, `.keys.enc` import/export is disabled, and logs redact common secret/token patterns
+- **Security verification:** CI includes secret scanning plus JS and Rust security checks, and the repo has dedicated tests for bridge auth, file access, and tool policy behavior
+
+**Known boundary:** this is still not "perfect sandboxing". Same-user local processes, malicious browser extensions, and compromised same-origin code can still be dangerous. The goal here is **clear, test-covered local trust boundaries**, not pretending a browser app is magically zero-risk.
+
+See [Security.md](docs/Features/Security.md) for the full trust model, secret handling, bridge details, and current limitations.
 
 ---
 
@@ -56,7 +77,7 @@ No Adobe subscription, no patience for cracks, and every free online editor felt
 
 **The vision:** an editor where AI can directly operate the tool. The built-in chat connects to OpenAI and exposes **76 editing tools**. External agents can steer the running editor over a local HTTP bridge, and in development the Vite bridge still exists too. Live outputs still matter too - I've been doing video art for 16 years, so multi-output routing was never optional.
 
-Built with Claude as my pair-programmer. Every feature gets debugged, refactored, and beaten into shape until it does what I need. ~60k lines of TypeScript, ~2,200 lines of WGSL, and a Rust native helper for the stuff browsers still can't do cleanly.
+Built with Claude as my pair-programmer. Every feature gets debugged, refactored, and beaten into shape until it does what I need. ~120k lines of TypeScript, ~2,500 lines of WGSL, and a Rust native helper for the stuff browsers still can't do cleanly.
 
 ---
 
@@ -74,10 +95,11 @@ Example Native Helper bridge call:
 ```bash
 curl -X POST http://127.0.0.1:9877/api/ai-tools \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <startup-token>" \
   -d '{"tool":"_list","args":{}}'
 ```
 
-This requires the Native Helper to be running and a MasterSelects editor tab to be connected. The Vite `/api/ai-tools` bridge still exists in development.
+This requires the Native Helper to be running, a MasterSelects editor tab to be connected, and the helper startup token. The Vite `/api/ai-tools` bridge still exists in development, but it is now gated by a per-session token as well.
 
 ---
 
@@ -96,8 +118,8 @@ This requires the Native Helper to be running and a MasterSelects editor tab to 
 | [**Multicam AI**](docs/Features/Multicam-AI.md) | Sync cameras, transcribe footage, and generate Claude-powered multicam EDLs *(experimental)* |
 | [**Export Pipeline**](docs/Features/Export.md) | WebCodecs Fast, HTMLVideo Precise, FFmpeg WASM *(experimental / WIP)*, FCPXML |
 | [**Live EQ & Audio**](docs/Features/Audio.md) | 10-band parametric EQ with real-time Web Audio preview |
-| [**Download Panel**](docs/Features/YouTube.md) | YouTube, TikTok, Instagram, Twitter/X, Vimeo, and other yt-dlp-supported sites via Native Helper |
-| [**Text & Solids**](docs/Features/Text-Clips.md) | 57 Google Fonts, stroke, shadow, solid color clips |
+| [**Download Panel**](docs/Features/Download-Panel.md) | YouTube, TikTok, Instagram, Twitter/X, Vimeo, and other yt-dlp-supported sites via Native Helper |
+| [**Text & Solids**](docs/Features/Text-Clips.md) | 50 Google Fonts, stroke, shadow, solid color clips |
 | [**Proxy System**](docs/Features/Proxy-System.md) | GPU-accelerated proxies with resume and cache indicator |
 | [**Output Manager**](docs/Features/Preview.md) | Multi-window outputs, source routing, corner pin warping, slice masks |
 | [**Slot Grid**](docs/Features/UI-Panels.md) | Resolume-style 12x4 grid with multi-layer live playback |
@@ -139,13 +161,27 @@ cargo run --release    # WebSocket :9876, HTTP :9877
 
 | Capability | Details |
 |---|---|
-| **Decode** | H.264, ProRes, DNxHD + LRU frame cache |
-| **Encode** | ProRes, DNxHR, H.264, H.265, VP9, FFV1, UTVideo, MJPEG |
 | **Storage** | Native project persistence backend for Firefox |
 | **AI Control** | Local HTTP bridge for external agents to steer the running editor |
 | **Download** | yt-dlp integration for YouTube, TikTok, Instagram, Twitter/X, Vimeo, and other supported sites |
 
-**Platforms:** Windows, Linux, macOS. Requires Rust + FFmpeg. Downloads also require `yt-dlp`. See [Native Helper docs](tools/native-helper/README.md) for platform-specific setup.
+**Export codecs:** H.264, H.265, VP9, AV1 via WebCodecs (production). ProRes, DNxHR, FFV1, UTVideo, MJPEG via experimental FFmpeg WASM path (single-threaded, requires custom build).
+
+**Platforms:** Windows, Linux, macOS. Building the Native Helper requires Rust. Downloads also require `yt-dlp`. See [Native Helper docs](tools/native-helper/README.md) for platform-specific setup.
+
+---
+
+## Security Model
+
+MasterSelects is local-first: editing, rendering, caching, and most analysis stay in the browser unless you explicitly invoke an external provider or the Native Helper.
+
+- **API keys:** stored in IndexedDB with per-browser Web Crypto encryption. This protects against casual inspection, not against same-origin script execution.
+- **Dev bridge:** sensitive Vite routes require a per-session Bearer token and only accept localhost browser origins.
+- **Native Helper:** binds to `127.0.0.1` and requires a random startup token for HTTP and WebSocket bridge operations.
+- **Local file access:** limited to explicit roots such as the project root, temp, Desktop, Documents, Downloads, and Videos, plus optional `MASTERSELECTS_ALLOWED_FILE_ROOTS`.
+- **Key export:** `.keys.enc` export/import is disabled until passphrase-based encryption is implemented.
+
+See [Security docs](docs/Features/Security.md) for the trust model and known limitations, and [Native Helper docs](tools/native-helper/README.md) for auth examples.
 
 ---
 
@@ -161,14 +197,14 @@ This is alpha software. Features get added fast, things break.
 - Audio waveforms may not display for some video formats
 - Very long videos (>2 hours) may cause performance issues
 
-If something breaks, refresh. If it's still broken, [open an issue](https://github.com/Sportinger/MASterSelects/issues).
+If something breaks, refresh. If it's still broken, [open an issue](https://github.com/Sportinger/MasterSelects/issues).
 
 ---
 
 ## Tech Stack
 
 - **Frontend:** React 19, TypeScript, Zustand, Vite 7.2
-- **Rendering:** WebGPU + 2,200 lines of WGSL shaders
+- **Rendering:** WebGPU + 2,500+ lines of WGSL shaders
 - **Video:** WebCodecs, mp4box, mp4-muxer, webm-muxer, HTMLVideo fallback, experimental FFmpeg WASM export path
 - **Audio:** Web Audio API with 10-band live EQ, audio master clock, varispeed
 - **AI:** Built-in OpenAI editor chat with 76 tools, Native Helper HTTP bridge for Claude Code / external agents, Claude/Anthropic for experimental multicam EDLs, SAM2 via ONNX Runtime, local Whisper via Hugging Face Transformers, PiAPI video generation
@@ -211,6 +247,7 @@ npm run build:deploy     # Production build (vite only, skip tsc)
 npm run lint             # ESLint
 npm run preview          # Preview production build
 npm run test             # Run tests (vitest)
+npm run test:security    # Security-focused test suite
 npm run test:watch       # Run tests in watch mode
 npm run test:ui          # Run tests with UI
 npm run test:coverage    # Run tests with coverage
@@ -273,6 +310,37 @@ tools/
 ├── ffmpeg-wasm-build/   # FFmpeg WASM build configuration
 └── qwen3vl-server/      # Qwen3 VL server for scene description
 ```
+
+</details>
+
+---
+
+<details>
+<summary><b>License Scan (FOSSA)</b></summary>
+
+[![FOSSA Status](https://app.fossa.com/api/projects/custom%2b61097%2fmasterselects.svg?type=large)](https://app.fossa.com/projects/custom%2b61097%2fmasterselects)
+
+**477 total dependencies** (12 direct, rest transitive) scanned across npm, Cargo, and pip.
+
+| Category | Count | Status |
+|----------|-------|--------|
+| License Issues | 35 flagged | All reviewed — no violations |
+| Vulnerabilities | 6 | All in dev-dependencies, fixable via `npm audit fix` |
+| Outdated Deps | 4 | Non-critical |
+
+**Flagged licenses (all compliant):**
+
+| Package | License | Why it's OK |
+|---------|---------|-------------|
+| `soundtouch-ts` | LGPL-2.1 | Used as unmodified npm dependency |
+| `sharp` / `libvips` (15 platform binaries) | LGPL-3.0 | Used as unmodified prebuilt binary |
+| `mediabunny` | MPL-2.0 | Used as unmodified npm dependency |
+| `torch`, `pillow` | BSD/PIL | Python tooling only (`tools/qwen3vl-server`), not shipped |
+| Cargo crates (`r-efi`, `ring`, `rustix`, `wit-bindgen`, ...) | Apache-2.0 / MIT | Standard Rust ecosystem, no copyleft issues |
+
+No source code of any dependency has been modified. No GPL/AGPL dependencies. All copyleft packages (LGPL, MPL) are used strictly as libraries via their published APIs.
+
+[View full FOSSA report](https://app.fossa.com/projects/custom%2B61097%2Fmasterselects?utm_source=share_link) · [Attribution report (HTML)](docs/FOSSA-Attribution.html)
 
 </details>
 

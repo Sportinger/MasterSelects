@@ -13,10 +13,16 @@ import { MODIFYING_TOOLS } from './types';
 import { executeToolInternal } from './handlers';
 import { handleExecuteBatch } from './handlers/batch';
 import { setAIExecutionActive, setStaggerBudget } from './executionState';
+import { checkToolAccess } from './policy';
+import type { CallerContext } from './policy';
 
 // Re-export types
 export type { ToolResult, ToolDefinition } from './types';
 export { MODIFYING_TOOLS } from './types';
+
+// Re-export policy
+export { checkToolAccess, getToolPolicy } from './policy';
+export type { CallerContext, RiskLevel, ToolPolicyEntry } from './policy';
 
 // Re-export tool definitions
 export { AI_TOOLS } from './definitions';
@@ -46,24 +52,40 @@ export { executeToolInternal } from './handlers';
 export { isAIExecutionActive } from './executionState';
 
 /**
- * Execute an AI tool with history tracking
- * Main entry point for AI chat integration
+ * Execute an AI tool with history tracking and policy enforcement.
+ * Main entry point for AI chat integration.
+ * @param callerContext identifies who is calling (chat, devBridge, etc.)
  */
-export async function executeAITool(toolName: string, args: Record<string, unknown>): Promise<ToolResult> {
+export async function executeAITool(
+  toolName: string,
+  args: Record<string, unknown>,
+  callerContext: CallerContext = 'internal',
+): Promise<ToolResult> {
+  // Policy gate: check if caller is allowed to execute this tool
+  const access = checkToolAccess(toolName, callerContext);
+  if (!access.allowed) {
+    log.warn(`Policy denied: ${toolName} from ${callerContext} — ${access.reason}`);
+    return { success: false, error: access.reason };
+  }
+
   setAIExecutionActive(true);
   try {
-    return await _executeAIToolInternal(toolName, args);
+    return await _executeAIToolInternal(toolName, args, callerContext);
   } finally {
     setAIExecutionActive(false);
   }
 }
 
-async function _executeAIToolInternal(toolName: string, args: Record<string, unknown>): Promise<ToolResult> {
+async function _executeAIToolInternal(
+  toolName: string,
+  args: Record<string, unknown>,
+  callerContext: CallerContext = 'internal',
+): Promise<ToolResult> {
   // Special-case: executeBatch wraps all sub-actions in a single undo group
   if (toolName === 'executeBatch') {
     startBatch('AI: batch');
     try {
-      const result = await handleExecuteBatch(args);
+      const result = await handleExecuteBatch(args, callerContext);
       endBatch();
       return result;
     } catch (error) {

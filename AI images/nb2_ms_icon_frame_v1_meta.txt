@@ -1,0 +1,7 @@
+Filename: nb2_ms_icon_frame_v1.png
+Date: 2026-03-16 16:12:48
+Model: gemini-3.1-flash-image-preview
+Aspect Ratio: 1:1
+Resolution: 1K
+Version: v1
+Prompt: A minimalist square app icon with large rounded corners for a professional video editing application. Very dark charcoal background (#1a1a1a). In the center, an abstract geometric symbol representing video selection - a rounded rectangle frame outline in muted gold (#c4a44a) with a small green checkmark or selection indicator (#4ade80) in the bottom-right corner of the frame. The frame suggests a video frame being selected. Ultra clean, flat design, no gradients except subtle ones, no text, no 3D. Icon should feel premium and professional like Final Cut Pro or DaVinci Resolve app icons.

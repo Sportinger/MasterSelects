@@ -141,6 +141,45 @@ pub enum Command {
         #[serde(default)]
         default_path: Option<String>,
     },
+
+    // ── MatAnyone2 AI Video Matting Commands ──
+
+    /// Check MatAnyone2 environment and setup status
+    MatAnyoneStatus { id: String },
+
+    /// Set up MatAnyone2 environment (download uv, install Python, create venv, install deps)
+    MatAnyoneSetup {
+        id: String,
+        #[serde(default)]
+        python_path: Option<String>,
+    },
+
+    /// Download MatAnyone2 model weights from HuggingFace
+    MatAnyoneDownloadModel { id: String },
+
+    /// Start the MatAnyone2 inference server
+    MatAnyoneStart { id: String },
+
+    /// Stop the MatAnyone2 inference server
+    MatAnyoneStop { id: String },
+
+    /// Submit a video matting job
+    MatAnyoneMatte {
+        id: String,
+        video_path: String,
+        mask_path: String,
+        output_dir: String,
+        #[serde(default)]
+        start_frame: Option<u32>,
+        #[serde(default)]
+        end_frame: Option<u32>,
+    },
+
+    /// Cancel a running matting job
+    MatAnyoneCancel { id: String, job_id: String },
+
+    /// Uninstall MatAnyone2 (remove venv, models, uv)
+    MatAnyoneUninstall { id: String },
 }
 
 /// Response types
@@ -182,6 +221,8 @@ pub struct SystemInfo {
     pub fs_commands: bool,
     pub ai_bridge: bool,
     pub editor_connected: bool,
+    pub matanyone_available: bool,
+    pub matanyone_status: String,
 }
 
 // Helper functions for creating responses
@@ -206,6 +247,20 @@ impl Response {
                 code: code.into(),
                 message: message.into(),
             },
+        })
+    }
+
+    /// Progress response for setup/process steps with step name, percent, and message
+    pub fn setup_progress(id: impl Into<String>, step: &str, percent: f32, message: &str) -> Self {
+        Response::Ok(OkResponse {
+            id: id.into(),
+            ok: true,
+            data: serde_json::json!({
+                "type": "progress",
+                "step": step,
+                "percent": percent,
+                "message": message
+            }),
         })
     }
 
@@ -240,4 +295,9 @@ pub mod error_codes {
     pub const WRITE_FAILED: &str = "WRITE_FAILED";
     pub const DIR_NOT_EMPTY: &str = "DIR_NOT_EMPTY";
     pub const ALREADY_EXISTS: &str = "ALREADY_EXISTS";
+    pub const MATANYONE_NOT_INSTALLED: &str = "MATANYONE_NOT_INSTALLED";
+    pub const MATANYONE_SETUP_FAILED: &str = "MATANYONE_SETUP_FAILED";
+    pub const MATANYONE_NOT_RUNNING: &str = "MATANYONE_NOT_RUNNING";
+    pub const MATANYONE_INFERENCE_FAILED: &str = "MATANYONE_INFERENCE_FAILED";
+    pub const PYTHON_NOT_FOUND: &str = "PYTHON_NOT_FOUND";
 }

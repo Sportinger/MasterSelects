@@ -17,7 +17,8 @@ use warp::Filter;
 use std::sync::atomic::Ordering;
 
 use crate::download;
-use crate::protocol::{Command, Response};
+use crate::matanyone;
+use crate::protocol::{error_codes, Command, Response};
 use crate::session::{AppState, Session};
 use crate::utils;
 
@@ -25,6 +26,7 @@ use crate::utils;
 pub struct ServerConfig {
     pub port: u16,
     pub allowed_origins: Vec<String>,
+    pub auth_token: Option<String>,
 }
 
 /// Run the WebSocket server and HTTP file server
@@ -35,12 +37,13 @@ pub async fn run(config: ServerConfig) -> Result<()> {
     let listener = TcpListener::bind(&ws_addr).await?;
     info!("WebSocket server listening on ws://{}", ws_addr);
 
-    let state = Arc::new(AppState::new(None));
-    let allowed_origins = Arc::new(config.allowed_origins);
+    let state = Arc::new(AppState::new(config.auth_token.clone()));
+    let allowed_origins = Arc::new(config.allowed_origins.clone());
 
     let http_state = state.clone();
+    let http_origins = allowed_origins.clone();
     tokio::spawn(async move {
-        run_http_server(http_port, http_state).await;
+        run_http_server(http_port, http_state, http_origins).await;
     });
 
     while let Ok((stream, addr)) = listener.accept().await {
@@ -69,14 +72,15 @@ pub async fn run_with_shutdown(
     let listener = TcpListener::bind(&ws_addr).await?;
     info!("WebSocket server listening on ws://{}", ws_addr);
 
-    let state = Arc::new(AppState::new(None));
-    let allowed_origins = Arc::new(config.allowed_origins);
+    let state = Arc::new(AppState::new(config.auth_token.clone()));
+    let allowed_origins = Arc::new(config.allowed_origins.clone());
 
     tray_state.running.store(true, Ordering::Relaxed);
 
     let http_state = state.clone();
+    let http_origins = allowed_origins.clone();
     tokio::spawn(async move {
-        run_http_server(http_port, http_state).await;
+        run_http_server(http_port, http_state, http_origins).await;
     });
 
     loop {
@@ -135,26 +139,65 @@ fn with_state(
     warp::any().map(move || state.clone())
 }
 
-async fn run_http_server(port: u16, state: Arc<AppState>) {
-    let cors = warp::cors()
-        .allow_any_origin()
-        .allow_methods(vec!["GET", "POST", "OPTIONS"])
-        .allow_headers(vec!["Content-Type"]);
+/// Extract Bearer token from Authorization header
+fn extract_bearer_token(header_value: &str) -> Option<&str> {
+    header_value.strip_prefix("Bearer ")
+}
 
-    // GET /file?path=... — serve a file
+/// Check if the provided auth header matches the expected token
+fn check_http_auth(auth_header: Option<String>, expected_token: &Option<String>) -> bool {
+    match expected_token {
+        None => true, // No auth required
+        Some(expected) => match auth_header {
+            Some(header) => extract_bearer_token(&header)
+                .map(|t| t == expected)
+                .unwrap_or(false),
+            None => false,
+        },
+    }
+}
+
+async fn run_http_server(port: u16, state: Arc<AppState>, allowed_origins: Arc<Vec<String>>) {
+    // Build CORS with explicit allowed origins
+    let cors_origins: Vec<String> = allowed_origins.iter().cloned().collect();
+    let cors_headers: Vec<String> = cors_origins.iter().map(|o| o.to_string()).collect();
+
+    let cors = warp::cors()
+        .allow_origins(cors_headers.iter().map(|s| s.as_str()).collect::<Vec<&str>>())
+        .allow_methods(vec!["GET", "POST", "OPTIONS"])
+        .allow_headers(vec!["Content-Type", "Authorization"]);
+
+    // Auth filter: extracts Authorization header and validates against state token
+    let state_for_auth = state.clone();
+    let require_auth = warp::header::optional::<String>("authorization")
+        .and(with_state(state_for_auth))
+        .and_then(|auth_header: Option<String>, state: Arc<AppState>| async move {
+            if check_http_auth(auth_header, &state.auth_token) {
+                Ok(())
+            } else {
+                Err(warp::reject::custom(AuthRequired))
+            }
+        })
+        .untuple_one();
+
+    // GET /file?path=... — serve a file (AUTH REQUIRED)
+    let require_auth_file = require_auth.clone();
     let file_route = warp::path("file")
         .and(warp::get())
+        .and(require_auth_file)
         .and(warp::query::<std::collections::HashMap<String, String>>())
         .and_then(serve_file);
 
-    // POST /upload?path=... — write binary body to file
+    // POST /upload?path=... — write binary body to file (AUTH REQUIRED)
+    let require_auth_upload = require_auth.clone();
     let upload_route = warp::path("upload")
         .and(warp::post())
+        .and(require_auth_upload)
         .and(warp::query::<std::collections::HashMap<String, String>>())
         .and(warp::body::bytes())
         .and_then(handle_upload);
 
-    // GET /project-root — return the default project root path
+    // GET /project-root — return the default project root path (NO AUTH - safe metadata)
     let project_root_route = warp::path("project-root")
         .and(warp::get())
         .and_then(get_project_root);
@@ -163,8 +206,9 @@ async fn run_http_server(port: u16, state: Arc<AppState>) {
     let state_for_api_status = state.clone();
     let state_for_post = state.clone();
     let state_for_api_post = state.clone();
+    let state_for_startup_token = state.clone();
 
-    // GET /ai-tools and /api/ai-tools — status for external AI bridge
+    // GET /ai-tools and /api/ai-tools — status for external AI bridge (NO AUTH - safe metadata)
     let ai_tools_status_route = warp::path("ai-tools")
         .and(warp::get())
         .and(with_state(state_for_status))
@@ -174,17 +218,27 @@ async fn run_http_server(port: u16, state: Arc<AppState>) {
         .and(with_state(state_for_api_status))
         .and_then(get_ai_tools_status);
 
-    // POST /ai-tools and /api/ai-tools — forward a tool call to the active editor session
+    // POST /ai-tools and /api/ai-tools — forward a tool call (AUTH REQUIRED)
+    let require_auth_ai = require_auth.clone();
     let ai_tools_route = warp::path("ai-tools")
         .and(warp::post())
+        .and(require_auth_ai)
         .and(warp::body::json::<AiToolHttpRequest>())
         .and(with_state(state_for_post))
         .and_then(handle_ai_tools_request);
+    let require_auth_api_ai = require_auth.clone();
     let api_ai_tools_route = warp::path!("api" / "ai-tools")
         .and(warp::post())
+        .and(require_auth_api_ai)
         .and(warp::body::json::<AiToolHttpRequest>())
         .and(with_state(state_for_api_post))
         .and_then(handle_ai_tools_request);
+
+    // GET /startup-token — returns the auth token for local discovery (localhost only, no auth)
+    let startup_token_route = warp::path("startup-token")
+        .and(warp::get())
+        .and(with_state(state_for_startup_token))
+        .and_then(get_startup_token);
 
     let routes = file_route
         .or(upload_route)
@@ -193,10 +247,55 @@ async fn run_http_server(port: u16, state: Arc<AppState>) {
         .or(api_ai_tools_status_route)
         .or(ai_tools_route)
         .or(api_ai_tools_route)
+        .or(startup_token_route)
+        .recover(handle_rejection)
         .with(cors);
 
     info!("HTTP file server listening on http://127.0.0.1:{}", port);
     warp::serve(routes).run(([127, 0, 0, 1], port)).await;
+}
+
+/// Custom rejection for auth failures
+#[derive(Debug)]
+struct AuthRequired;
+impl warp::reject::Reject for AuthRequired {}
+
+/// Handle rejections to return proper JSON error responses
+async fn handle_rejection(
+    err: warp::Rejection,
+) -> Result<impl warp::Reply, std::convert::Infallible> {
+    if err.find::<AuthRequired>().is_some() {
+        Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({
+                "ok": false,
+                "error": "Authentication required"
+            })),
+            warp::http::StatusCode::UNAUTHORIZED,
+        ))
+    } else {
+        Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({
+                "ok": false,
+                "error": "Not found"
+            })),
+            warp::http::StatusCode::NOT_FOUND,
+        ))
+    }
+}
+
+/// GET /startup-token — returns the auth token for localhost clients to discover
+async fn get_startup_token(state: Arc<AppState>) -> Result<impl warp::Reply, warp::Rejection> {
+    match &state.auth_token {
+        Some(token) => Ok(warp::reply::json(&serde_json::json!({
+            "ok": true,
+            "token": token,
+        }))),
+        None => Ok(warp::reply::json(&serde_json::json!({
+            "ok": true,
+            "token": null,
+            "auth_disabled": true,
+        }))),
+    }
 }
 
 async fn get_ai_tools_status(state: Arc<AppState>) -> Result<impl warp::Reply, warp::Rejection> {
@@ -423,14 +522,51 @@ async fn handle_connection(
                     || origin_str.starts_with("https://127.0.0.1")
                     || allowed_origins.iter().any(|o| o == origin_str);
                 if !allowed {
-                    warn!("Rejected connection from origin: {}", origin_str);
+                    warn!("Rejected WebSocket connection from disallowed origin: {}", origin_str);
+                    return Err(http::Response::builder()
+                        .status(http::StatusCode::FORBIDDEN)
+                        .body(None)
+                        .unwrap());
                 }
             }
+            // When origin is absent (CLI tools, non-browser clients), allow connection.
+            // They will need to authenticate via token.
             Ok(response)
         })
         .await?;
 
     handle_websocket(ws, addr, state).await
+}
+
+/// Extract the `id` field from any Command variant for error responses
+fn get_command_id(cmd: &Command) -> &str {
+    match cmd {
+        Command::Auth { id, .. }
+        | Command::Info { id }
+        | Command::Ping { id }
+        | Command::RegisterClient { id, .. }
+        | Command::AiToolResult { id, .. }
+        | Command::DownloadYoutube { id, .. }
+        | Command::Download { id, .. }
+        | Command::ListFormats { id, .. }
+        | Command::GetFile { id, .. }
+        | Command::Locate { id, .. }
+        | Command::WriteFile { id, .. }
+        | Command::CreateDir { id, .. }
+        | Command::ListDir { id, .. }
+        | Command::Delete { id, .. }
+        | Command::Exists { id, .. }
+        | Command::Rename { id, .. }
+        | Command::PickFolder { id, .. }
+        | Command::MatAnyoneStatus { id }
+        | Command::MatAnyoneSetup { id, .. }
+        | Command::MatAnyoneDownloadModel { id }
+        | Command::MatAnyoneStart { id }
+        | Command::MatAnyoneStop { id }
+        | Command::MatAnyoneMatte { id, .. }
+        | Command::MatAnyoneCancel { id, .. }
+        | Command::MatAnyoneUninstall { id } => id,
+    }
 }
 
 async fn handle_websocket(
@@ -442,6 +578,10 @@ async fn handle_websocket(
     let write = Arc::new(tokio::sync::Mutex::new(write));
     let session_id = uuid::Uuid::new_v4().to_string();
     let mut session = Session::new(state.clone());
+
+    // Track authentication state for this connection.
+    // If no auth token is configured, all connections are pre-authenticated.
+    let mut authenticated = state.auth_token.is_none();
 
     while let Some(msg) = read.next().await {
         let msg = match msg {
@@ -467,7 +607,56 @@ async fn handle_websocket(
 
                 debug!("Received command: {:?}", cmd);
 
+                // ── Auth gate ──
+                // Auth and Ping are always allowed. All other commands require authentication.
+                match &cmd {
+                    Command::Auth { id, token } => {
+                        let response = match &state.auth_token {
+                            Some(expected) if expected == token => {
+                                authenticated = true;
+                                session.set_authenticated(true);
+                                info!("Client {} authenticated via WebSocket", addr);
+                                Response::ok(id, serde_json::json!({"authenticated": true}))
+                            }
+                            Some(_) => {
+                                warn!("Invalid auth token from {}", addr);
+                                Response::error(id, error_codes::INVALID_TOKEN, "Invalid token")
+                            }
+                            None => {
+                                authenticated = true;
+                                session.set_authenticated(true);
+                                Response::ok(id, serde_json::json!({"authenticated": true}))
+                            }
+                        };
+                        let json = serde_json::to_string(&response)?;
+                        let mut w = write.lock().await;
+                        w.send(Message::Text(json)).await?;
+                        continue;
+                    }
+                    Command::Ping { .. } => {
+                        // Ping is always allowed (for connectivity checks)
+                    }
+                    _ => {
+                        if !authenticated {
+                            // Extract id from the command for the error response
+                            let cmd_id = get_command_id(&cmd);
+                            let response = Response::error(
+                                cmd_id,
+                                error_codes::AUTH_REQUIRED,
+                                "Authentication required. Send an 'auth' command with a valid token first.",
+                            );
+                            let json = serde_json::to_string(&response)?;
+                            let mut w = write.lock().await;
+                            w.send(Message::Text(json)).await?;
+                            continue;
+                        }
+                    }
+                }
+
                 match cmd {
+                    // Auth is handled above in the auth gate
+                    Command::Auth { .. } => unreachable!(),
+
                     Command::RegisterClient {
                         id,
                         role,
@@ -534,6 +723,301 @@ async fn handle_websocket(
                         let mut w = write.lock().await;
                         w.send(Message::Text(json)).await?;
                     }
+
+                    // ── MatAnyone2 streaming commands ──
+
+                    Command::MatAnyoneSetup { id, python_path: _ } => {
+                        let ws_sender = write.clone();
+                        let id_clone = id.clone();
+                        tokio::spawn(async move {
+                            let ws = ws_sender.clone();
+                            let id_ref = id_clone.clone();
+
+                            let result = matanyone::setup_environment(move |step, percent, message| {
+                                let response = Response::setup_progress(
+                                    &id_ref,
+                                    &step.to_string(),
+                                    percent,
+                                    message,
+                                );
+                                if let Ok(json) = serde_json::to_string(&response) {
+                                    let ws_inner = ws.clone();
+                                    // Fire-and-forget progress message; tokio::spawn to avoid blocking the sync callback
+                                    tokio::spawn(async move {
+                                        let mut w = ws_inner.lock().await;
+                                        let _ = w.send(Message::Text(json)).await;
+                                    });
+                                }
+                            })
+                            .await;
+
+                            let response = match result {
+                                Ok(env_info) => Response::ok(
+                                    &id_clone,
+                                    serde_json::json!({
+                                        "type": "complete",
+                                        "env": serde_json::to_value(&env_info).unwrap_or_default(),
+                                    }),
+                                ),
+                                Err(e) => Response::error(
+                                    &id_clone,
+                                    error_codes::MATANYONE_SETUP_FAILED,
+                                    e,
+                                ),
+                            };
+
+                            if let Ok(json) = serde_json::to_string(&response) {
+                                let mut w = ws_sender.lock().await;
+                                let _ = w.send(Message::Text(json)).await;
+                            }
+                        });
+                    }
+
+                    Command::MatAnyoneDownloadModel { id } => {
+                        let ws_sender = write.clone();
+                        let id_clone = id.clone();
+                        tokio::spawn(async move {
+                            let ws = ws_sender.clone();
+                            let id_ref = id_clone.clone();
+
+                            let result = matanyone::download_model(move |progress| {
+                                let speed_str = format!("{:.1} MB/s", progress.speed_bytes_per_sec / 1_048_576.0);
+                                let eta_str = progress.eta_seconds.map(|s| format!("{:.0}s", s));
+                                let response = Response::download_progress(
+                                    &id_ref,
+                                    progress.percent.min(100.0) as u8,
+                                    Some(&speed_str),
+                                    eta_str.as_deref(),
+                                );
+                                if let Ok(json) = serde_json::to_string(&response) {
+                                    let ws_inner = ws.clone();
+                                    tokio::spawn(async move {
+                                        let mut w = ws_inner.lock().await;
+                                        let _ = w.send(Message::Text(json)).await;
+                                    });
+                                }
+                            })
+                            .await;
+
+                            let response = match result {
+                                Ok(model_info) => Response::ok(
+                                    &id_clone,
+                                    serde_json::json!({
+                                        "type": "complete",
+                                        "downloaded": model_info.downloaded,
+                                        "model_path": model_info.model_path,
+                                        "size_bytes": model_info.size_bytes,
+                                    }),
+                                ),
+                                Err(e) => Response::error(
+                                    &id_clone,
+                                    error_codes::MATANYONE_SETUP_FAILED,
+                                    e,
+                                ),
+                            };
+
+                            if let Ok(json) = serde_json::to_string(&response) {
+                                let mut w = ws_sender.lock().await;
+                                let _ = w.send(Message::Text(json)).await;
+                            }
+                        });
+                    }
+
+                    Command::MatAnyoneStart { id } => {
+                        let ws_sender = write.clone();
+                        let state_clone = state.clone();
+                        let id_clone = id.clone();
+                        tokio::spawn(async move {
+                            // Send starting progress
+                            let starting_response = Response::setup_progress(
+                                &id_clone,
+                                "start_server",
+                                0.0,
+                                "Starting MatAnyone2 inference server...",
+                            );
+                            if let Ok(json) = serde_json::to_string(&starting_response) {
+                                let mut w = ws_sender.lock().await;
+                                let _ = w.send(Message::Text(json)).await;
+                            }
+
+                            let python_path = matanyone::get_venv_python();
+                            let models_dir = matanyone::get_models_dir();
+                            let server_script = match matanyone::ensure_server_script().await {
+                                Ok(path) => path,
+                                Err(e) => {
+                                    let response = Response::error(
+                                        &id_clone,
+                                        error_codes::MATANYONE_NOT_INSTALLED,
+                                        e,
+                                    );
+                                    if let Ok(json) = serde_json::to_string(&response) {
+                                        let mut w = ws_sender.lock().await;
+                                        let _ = w.send(Message::Text(json)).await;
+                                    }
+                                    return;
+                                }
+                            };
+
+                            let mut proc = state_clone.matanyone_process.lock().await;
+                            let result = proc.start(&python_path, &server_script, &models_dir).await;
+
+                            let response = match result {
+                                Ok(port) => Response::ok(
+                                    &id_clone,
+                                    serde_json::json!({
+                                        "type": "complete",
+                                        "started": true,
+                                        "port": port,
+                                    }),
+                                ),
+                                Err(e) => Response::error(
+                                    &id_clone,
+                                    error_codes::MATANYONE_NOT_INSTALLED,
+                                    e,
+                                ),
+                            };
+
+                            if let Ok(json) = serde_json::to_string(&response) {
+                                let mut w = ws_sender.lock().await;
+                                let _ = w.send(Message::Text(json)).await;
+                            }
+                        });
+                    }
+
+                    Command::MatAnyoneMatte {
+                        id, video_path, mask_path, output_dir, start_frame, end_frame,
+                    } => {
+                        let ws_sender = write.clone();
+                        let state_clone = state.clone();
+                        let id_clone = id.clone();
+                        tokio::spawn(async move {
+                            // Get the port from the running process
+                            let port = {
+                                let proc = state_clone.matanyone_process.lock().await;
+                                let p = proc.port();
+                                if p == 0 {
+                                    let response = Response::error(
+                                        &id_clone,
+                                        error_codes::MATANYONE_NOT_RUNNING,
+                                        "MatAnyone2 server is not running. Start it first.",
+                                    );
+                                    if let Ok(json) = serde_json::to_string(&response) {
+                                        let mut w = ws_sender.lock().await;
+                                        let _ = w.send(Message::Text(json)).await;
+                                    }
+                                    return;
+                                }
+                                p
+                            };
+
+                            let request = crate::matanyone::inference::MatteRequest {
+                                video_path,
+                                mask_path,
+                                output_dir,
+                                start_frame,
+                                end_frame,
+                            };
+
+                            let ws = ws_sender.clone();
+                            let id_ref = id_clone.clone();
+
+                            let result = crate::matanyone::inference::run_matte_job(
+                                port,
+                                request,
+                                move |progress| {
+                                    let response = Response::ok(
+                                        &id_ref,
+                                        serde_json::json!({
+                                            "type": "progress",
+                                            "job_id": progress.job_id,
+                                            "status": progress.status,
+                                            "current_frame": progress.current_frame,
+                                            "total_frames": progress.total_frames,
+                                            "percent": progress.percent,
+                                        }),
+                                    );
+                                    if let Ok(json) = serde_json::to_string(&response) {
+                                        let ws_inner = ws.clone();
+                                        tokio::spawn(async move {
+                                            let mut w = ws_inner.lock().await;
+                                            let _ = w.send(Message::Text(json)).await;
+                                        });
+                                    }
+                                },
+                            )
+                            .await;
+
+                            let response = match result {
+                                Ok(matte_result) => Response::ok(
+                                    &id_clone,
+                                    serde_json::json!({
+                                        "type": "complete",
+                                        "job_id": matte_result.job_id,
+                                        "foreground_path": matte_result.foreground_path,
+                                        "alpha_path": matte_result.alpha_path,
+                                    }),
+                                ),
+                                Err(e) => Response::error(
+                                    &id_clone,
+                                    error_codes::MATANYONE_INFERENCE_FAILED,
+                                    e,
+                                ),
+                            };
+
+                            if let Ok(json) = serde_json::to_string(&response) {
+                                let mut w = ws_sender.lock().await;
+                                let _ = w.send(Message::Text(json)).await;
+                            }
+                        });
+                    }
+
+                    Command::MatAnyoneCancel { id, job_id } => {
+                        let ws_sender = write.clone();
+                        let state_clone = state.clone();
+                        let id_clone = id.clone();
+                        tokio::spawn(async move {
+                            let port = {
+                                let proc = state_clone.matanyone_process.lock().await;
+                                proc.port()
+                            };
+
+                            if port == 0 {
+                                let response = Response::error(
+                                    &id_clone,
+                                    error_codes::MATANYONE_NOT_RUNNING,
+                                    "MatAnyone2 server is not running",
+                                );
+                                if let Ok(json) = serde_json::to_string(&response) {
+                                    let mut w = ws_sender.lock().await;
+                                    let _ = w.send(Message::Text(json)).await;
+                                }
+                                return;
+                            }
+
+                            let result = crate::matanyone::inference::cancel_job(port, &job_id).await;
+
+                            let response = match result {
+                                Ok(()) => Response::ok(
+                                    &id_clone,
+                                    serde_json::json!({
+                                        "cancelled": true,
+                                        "job_id": job_id,
+                                    }),
+                                ),
+                                Err(e) => Response::error(
+                                    &id_clone,
+                                    error_codes::MATANYONE_INFERENCE_FAILED,
+                                    e,
+                                ),
+                            };
+
+                            if let Ok(json) = serde_json::to_string(&response) {
+                                let mut w = ws_sender.lock().await;
+                                let _ = w.send(Message::Text(json)).await;
+                            }
+                        });
+                    }
+
                     other => {
                         if let Some(response) = session.handle_command(other).await {
                             let json = serde_json::to_string(&response)?;

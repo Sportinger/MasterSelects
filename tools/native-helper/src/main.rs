@@ -7,7 +7,14 @@
 //! On Windows (--console): runs in a terminal like on other platforms.
 //! On Linux/macOS: always runs in console mode.
 
+// Hide console window on Windows (no flash at startup)
+#![cfg_attr(
+    all(target_os = "windows", not(debug_assertions)),
+    windows_subsystem = "windows"
+)]
+
 mod download;
+mod matanyone;
 mod protocol;
 mod server;
 mod session;
@@ -18,7 +25,7 @@ mod updater;
 mod utils;
 
 use clap::Parser;
-use tracing::{error, Level};
+use tracing::{error, info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 
 /// MasterSelects Native Helper - Download acceleration for masterselects.app
@@ -51,6 +58,10 @@ struct Args {
     /// On Linux/macOS this is always the default.
     #[arg(long)]
     console: bool,
+
+    /// Disable authentication (NOT recommended for production use)
+    #[arg(long)]
+    no_auth: bool,
 }
 
 fn main() {
@@ -121,9 +132,38 @@ fn build_config(args: &Args) -> server::ServerConfig {
             ]
         });
 
+    let auth_token = if args.no_auth {
+        warn!("Authentication disabled via --no-auth flag. This is NOT recommended for production.");
+        None
+    } else {
+        let token = session::generate_auth_token();
+        write_token_file(&token);
+        Some(token)
+    };
+
     server::ServerConfig {
         port: args.port,
         allowed_origins,
+        auth_token,
+    }
+}
+
+/// Write the auth token to a temp file with restrictive permissions
+fn write_token_file(token: &str) {
+    let token_path = std::env::temp_dir().join("masterselects-helper.token");
+    match std::fs::write(&token_path, token) {
+        Ok(()) => {
+            // Set restrictive permissions
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&token_path, std::fs::Permissions::from_mode(0o600));
+            }
+            info!("Auth token written to: {}", token_path.display());
+        }
+        Err(e) => {
+            warn!("Failed to write token file: {}", e);
+        }
     }
 }
 
@@ -167,6 +207,17 @@ fn print_banner(config: &server::ServerConfig) {
     );
     println!("  Downloads: {}", utils::get_download_dir().display());
     println!("  Projects:  {}", utils::get_project_root().display());
+    match &config.auth_token {
+        Some(token) => {
+            println!("  Auth:      ENABLED");
+            println!("  Token:     {}", token);
+            println!("  WARNING:   Do not share this token. It grants full access.");
+        }
+        None => {
+            println!("  Auth:      DISABLED (--no-auth)");
+            println!("  WARNING:   Authentication is disabled. Any local process can access this helper.");
+        }
+    }
     println!("========================================================");
     println!();
 }

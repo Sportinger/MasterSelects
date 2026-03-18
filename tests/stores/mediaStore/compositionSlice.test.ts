@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createStore } from 'zustand';
 import type { MediaState, MediaFile, Composition } from '../../../src/stores/mediaStore/types';
+import type { SerializableClip } from '../../../src/types';
 import { createCompositionSlice, type CompositionActions } from '../../../src/stores/mediaStore/slices/compositionSlice';
 import { createSlotSlice, type SlotActions } from '../../../src/stores/mediaStore/slices/slotSlice';
 import { createMultiLayerSlice, type MultiLayerActions } from '../../../src/stores/mediaStore/slices/multiLayerSlice';
+import { useTimelineStore } from '../../../src/stores/timeline';
 
 // The compositionSlice calls useTimelineStore and useSettingsStore internally,
 // but these are mocked in tests/setup.ts. We rely on those mocks here.
@@ -14,6 +16,9 @@ vi.mock('../../../src/services/layerBuilder', () => ({
     invalidateCache: vi.fn(),
     buildLayers: vi.fn().mockReturnValue([]),
     buildLayersFromStore: vi.fn().mockReturnValue([]),
+    getVideoSyncManager: vi.fn().mockReturnValue({
+      reset: vi.fn(),
+    }),
   },
   playheadState: {
     position: 0,
@@ -35,6 +40,54 @@ vi.mock('../../../src/services/compositionRenderer', () => ({
 }));
 
 type TestMediaStore = MediaState & CompositionActions & SlotActions & MultiLayerActions;
+
+const initialTimelineState = useTimelineStore.getState();
+const defaultTransform = {
+  opacity: 1,
+  blendMode: 'normal' as const,
+  position: { x: 0, y: 0, z: 0 },
+  scale: { x: 1, y: 1 },
+  rotation: { x: 0, y: 0, z: 0 },
+};
+const defaultTimelineTracks = [
+  { id: 'video-1', name: 'Video 1', type: 'video' as const, height: 60, muted: false, visible: true, solo: false },
+  { id: 'audio-1', name: 'Audio 1', type: 'audio' as const, height: 40, muted: false, visible: true, solo: false },
+];
+
+function makeTimelineData(clips: SerializableClip[], overrides?: Partial<Composition['timelineData']>): NonNullable<Composition['timelineData']> {
+  return {
+    tracks: defaultTimelineTracks,
+    clips,
+    playheadPosition: 0,
+    duration: 60,
+    zoom: 50,
+    scrollX: 0,
+    inPoint: null,
+    outPoint: null,
+    loopPlayback: false,
+    ...overrides,
+  };
+}
+
+function makeNestedCompReferenceClip(overrides?: Partial<SerializableClip>): SerializableClip {
+  return {
+    id: 'nested-comp-clip',
+    trackId: 'video-1',
+    name: 'Nested Comp',
+    mediaFileId: '',
+    startTime: 5,
+    duration: 60,
+    inPoint: 0,
+    outPoint: 60,
+    sourceType: 'video',
+    naturalDuration: 60,
+    transform: defaultTransform,
+    effects: [],
+    isComposition: true,
+    compositionId: 'comp-1',
+    ...overrides,
+  };
+}
 
 function createTestMediaStore(overrides?: Partial<MediaState>) {
   const defaultComp: Composition = {
@@ -91,6 +144,7 @@ describe('compositionSlice', () => {
 
   beforeEach(() => {
     store = createTestMediaStore();
+    useTimelineStore.setState(initialTimelineState);
   });
 
   // ─── createComposition ────────────────────────────────────────────
@@ -217,6 +271,175 @@ describe('compositionSlice', () => {
     const updated = store.getState().compositions.find(c => c.id === comp.id)!;
     expect(updated.width).toBe(3840);
     expect(updated.height).toBe(2160);
+  });
+
+  it('updateComposition: propagates duration changes into stored parent comp clips', () => {
+    store = createTestMediaStore({
+      activeCompositionId: null,
+      compositions: [
+        {
+          id: 'comp-1',
+          name: 'Child',
+          type: 'composition',
+          parentId: null,
+          createdAt: 1000,
+          width: 1920,
+          height: 1080,
+          frameRate: 30,
+          duration: 60,
+          backgroundColor: '#000000',
+          timelineData: makeTimelineData([], { duration: 60 }),
+        },
+        {
+          id: 'comp-parent',
+          name: 'Parent',
+          type: 'composition',
+          parentId: null,
+          createdAt: 2000,
+          width: 1920,
+          height: 1080,
+          frameRate: 30,
+          duration: 90,
+          backgroundColor: '#000000',
+          timelineData: makeTimelineData([
+            makeNestedCompReferenceClip({ id: 'parent-video' }),
+            makeNestedCompReferenceClip({
+              id: 'parent-audio',
+              trackId: 'audio-1',
+              name: 'Nested Comp (Audio)',
+              sourceType: 'audio',
+              waveform: [0.1, 0.2, 0.3],
+            }),
+            makeNestedCompReferenceClip({
+              id: 'parent-trimmed',
+              startTime: 80,
+              inPoint: 10,
+              outPoint: 30,
+              duration: 20,
+            }),
+          ], { duration: 90 }),
+        },
+      ],
+    });
+
+    store.getState().updateComposition('comp-1', { duration: 90 });
+
+    const child = store.getState().compositions.find(c => c.id === 'comp-1')!;
+    const parent = store.getState().compositions.find(c => c.id === 'comp-parent')!;
+    const parentVideo = parent.timelineData!.clips.find(c => c.id === 'parent-video')!;
+    const parentAudio = parent.timelineData!.clips.find(c => c.id === 'parent-audio')!;
+    const parentTrimmed = parent.timelineData!.clips.find(c => c.id === 'parent-trimmed')!;
+
+    expect(child.duration).toBe(90);
+    expect(child.timelineData?.duration).toBe(90);
+    expect(child.timelineData?.durationLocked).toBe(true);
+
+    expect(parentVideo.outPoint).toBe(90);
+    expect(parentVideo.duration).toBe(90);
+    expect(parentVideo.naturalDuration).toBe(90);
+
+    expect(parentAudio.outPoint).toBe(90);
+    expect(parentAudio.duration).toBe(90);
+    expect(parentAudio.naturalDuration).toBe(90);
+    expect(parentAudio.waveform).toBeUndefined();
+
+    expect(parentTrimmed.outPoint).toBe(30);
+    expect(parentTrimmed.duration).toBe(20);
+
+    expect(parent.timelineData?.duration).toBe(110);
+  });
+
+  it('updateComposition: syncs nested comp clip durations in the active parent timeline', () => {
+    store = createTestMediaStore({
+      activeCompositionId: 'comp-parent',
+      compositions: [
+        {
+          id: 'comp-1',
+          name: 'Child',
+          type: 'composition',
+          parentId: null,
+          createdAt: 1000,
+          width: 1920,
+          height: 1080,
+          frameRate: 30,
+          duration: 60,
+          backgroundColor: '#000000',
+        },
+        {
+          id: 'comp-parent',
+          name: 'Parent',
+          type: 'composition',
+          parentId: null,
+          createdAt: 2000,
+          width: 1920,
+          height: 1080,
+          frameRate: 30,
+          duration: 90,
+          backgroundColor: '#000000',
+        },
+      ],
+    });
+
+    const refreshCompClipNestedData = vi.fn().mockResolvedValue(undefined);
+    const generateWaveformForClip = vi.fn().mockResolvedValue(undefined);
+
+    useTimelineStore.setState({
+      clips: [
+        {
+          id: 'live-video',
+          trackId: 'video-1',
+          name: 'Nested Comp',
+          file: new File([], 'nested-comp'),
+          startTime: 5,
+          duration: 60,
+          inPoint: 0,
+          outPoint: 60,
+          source: { type: 'video', naturalDuration: 60 },
+          transform: defaultTransform,
+          effects: [],
+          isComposition: true,
+          compositionId: 'comp-1',
+        },
+        {
+          id: 'live-audio',
+          trackId: 'audio-1',
+          name: 'Nested Comp (Audio)',
+          file: new File([], 'nested-comp-audio'),
+          startTime: 5,
+          duration: 60,
+          inPoint: 0,
+          outPoint: 60,
+          source: { type: 'audio', audioElement: document.createElement('audio'), naturalDuration: 60 },
+          waveform: [0.2, 0.4],
+          transform: defaultTransform,
+          effects: [],
+          isComposition: true,
+          compositionId: 'comp-1',
+        },
+      ],
+      duration: 60,
+      durationLocked: false,
+      refreshCompClipNestedData: refreshCompClipNestedData as any,
+      generateWaveformForClip: generateWaveformForClip as any,
+    } as any);
+
+    store.getState().updateComposition('comp-1', { duration: 80 });
+
+    const updatedClips = useTimelineStore.getState().clips;
+    const liveVideo = updatedClips.find(c => c.id === 'live-video')!;
+    const liveAudio = updatedClips.find(c => c.id === 'live-audio')!;
+
+    expect(liveVideo.outPoint).toBe(80);
+    expect(liveVideo.duration).toBe(80);
+    expect(liveVideo.source?.naturalDuration).toBe(80);
+
+    expect(liveAudio.outPoint).toBe(80);
+    expect(liveAudio.duration).toBe(80);
+    expect(liveAudio.source?.naturalDuration).toBe(80);
+
+    expect(useTimelineStore.getState().duration).toBe(95);
+    expect(refreshCompClipNestedData).toHaveBeenCalledWith('comp-1');
+    expect(generateWaveformForClip).toHaveBeenCalledWith('live-audio');
   });
 
   // ─── getActiveComposition ─────────────────────────────────────────

@@ -7,6 +7,12 @@
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import { NativeHelperClient, isNativeHelperAvailable } from '../../services/nativeHelper';
 import type { SystemInfo, ConnectionStatus } from '../../services/nativeHelper';
+import {
+  fetchLatestPublishedNativeHelperRelease,
+  NATIVE_HELPER_RELEASES_URL,
+  NATIVE_HELPER_TARGET_VERSION,
+  type NativeHelperPublishedRelease,
+} from '../../services/nativeHelper/releases';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 type Platform = 'mac' | 'windows' | 'linux' | 'unknown';
@@ -15,6 +21,8 @@ type ExtendedSystemInfo = SystemInfo & {
   ytdlp_available?: boolean;
   fs_commands?: boolean;
   ai_bridge?: boolean;
+  matanyone_available?: boolean;
+  matanyone_status?: string;
 };
 
 type InstallGuide = {
@@ -26,14 +34,8 @@ type InstallGuide = {
 
 type PillTone = 'neutral' | 'good' | 'warn';
 
-type PublishedReleaseInfo = {
-  version: string;
-  url: string;
-};
-
-const NATIVE_HELPER_VERSION = '0.3.1';
-const NATIVE_HELPER_RELEASES = 'https://github.com/Sportinger/MasterSelects/releases';
-const GITHUB_RELEASES_API = 'https://api.github.com/repos/Sportinger/MasterSelects/releases';
+const NATIVE_HELPER_VERSION = NATIVE_HELPER_TARGET_VERSION;
+const NATIVE_HELPER_RELEASES = NATIVE_HELPER_RELEASES_URL;
 const DOWNLOAD_LINKS = {
   windows: NATIVE_HELPER_RELEASES,
   mac: NATIVE_HELPER_RELEASES,
@@ -111,36 +113,6 @@ function LightningIcon({ active }: { active: boolean }) {
       <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
     </svg>
   );
-}
-
-async function fetchLatestPublishedNativeHelperRelease(): Promise<PublishedReleaseInfo | null> {
-  try {
-    const response = await fetch(GITHUB_RELEASES_API, {
-      headers: {
-        Accept: 'application/vnd.github+json',
-      },
-    });
-    if (!response.ok) return null;
-
-    const releases = await response.json() as Array<{ tag_name?: string; html_url?: string; published_at?: string }>;
-    const nativeHelperReleases = releases
-      .filter((release) => typeof release.tag_name === 'string' && release.tag_name.startsWith('native-helper-v'))
-      .sort((a, b) => {
-        const aTime = a.published_at ? Date.parse(a.published_at) : 0;
-        const bTime = b.published_at ? Date.parse(b.published_at) : 0;
-        return bTime - aTime;
-      });
-
-    const latest = nativeHelperReleases[0];
-    if (!latest?.tag_name || !latest.html_url) return null;
-
-    return {
-      version: latest.tag_name.replace('native-helper-v', ''),
-      url: latest.html_url,
-    };
-  } catch {
-    return null;
-  }
 }
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -284,7 +256,7 @@ function NativeHelperDialog({
   const [checking, setChecking] = useState(false);
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
-  const [publishedRelease, setPublishedRelease] = useState<PublishedReleaseInfo | null>(null);
+  const [publishedRelease, setPublishedRelease] = useState<NativeHelperPublishedRelease | null>(null);
 
   const {
     turboModeEnabled,
@@ -369,11 +341,13 @@ function NativeHelperDialog({
         { label: helperInfo.ytdlp_available ? 'Downloads ready' : 'yt-dlp missing', tone: helperInfo.ytdlp_available ? 'good' : 'warn' },
         { label: helperInfo.fs_commands ? 'Projects ready' : 'Projects unavailable', tone: helperInfo.fs_commands ? 'good' : 'warn' },
         { label: helperInfo.ai_bridge ? 'AI bridge ready' : 'AI bridge unavailable', tone: helperInfo.ai_bridge ? 'good' : 'warn' },
+        { label: helperInfo.matanyone_available ? 'MatAnyone2 ready' : helperInfo.matanyone_status === 'installed' ? 'MatAnyone2 installed' : 'MatAnyone2 not installed', tone: helperInfo.matanyone_available ? 'good' : 'neutral' },
       ]
     : [
         { label: 'Downloads', tone: 'neutral' },
         { label: 'Firefox projects', tone: 'neutral' },
         { label: 'AI bridge', tone: 'neutral' },
+        { label: 'MatAnyone2', tone: 'neutral' },
       ];
 
   return (

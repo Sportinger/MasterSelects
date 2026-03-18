@@ -57,27 +57,45 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
           let url = mediaFile.url;
           let thumbnailUrl = mediaFile.thumbnailUrl;
 
-          // Try to get file handle from IndexedDB
-          const handle = await projectDB.getStoredHandle(`media_${mediaFile.id}`);
-          if (handle && 'getFile' in handle) {
+          // Prefer the project-local RAW copy. It is the canonical media source once imported.
+          if (mediaFile.projectPath && projectFileService.isProjectOpen()) {
             try {
-              const permission = await (handle as FileSystemFileHandle).queryPermission({ mode: 'read' });
-              if (permission === 'granted') {
-                file = await (handle as FileSystemFileHandle).getFile();
+              const result = await projectFileService.getFileFromRaw(mediaFile.projectPath);
+              if (result) {
+                file = result.file;
                 url = URL.createObjectURL(file);
-                fileSystemService.storeFileHandle(mediaFile.id, handle as FileSystemFileHandle);
-                log.debug('Restored file from handle:', stored.name);
-              } else {
-                const newPermission = await (handle as FileSystemFileHandle).requestPermission({ mode: 'read' });
-                if (newPermission === 'granted') {
+                fileSystemService.storeFileHandle(mediaFile.id, result.handle);
+                await projectDB.storeHandle(`media_${mediaFile.id}`, result.handle);
+                log.debug('Restored file from project RAW copy:', stored.name);
+              }
+            } catch (e) {
+              log.warn(`Failed to restore file from project RAW copy: ${stored.name}`, e);
+            }
+          }
+
+          // Fall back to the stored handle when the RAW copy is unavailable.
+          if (!file) {
+            const handle = await projectDB.getStoredHandle(`media_${mediaFile.id}`);
+            if (handle && 'getFile' in handle) {
+              try {
+                const permission = await (handle as FileSystemFileHandle).queryPermission({ mode: 'read' });
+                if (permission === 'granted') {
                   file = await (handle as FileSystemFileHandle).getFile();
                   url = URL.createObjectURL(file);
                   fileSystemService.storeFileHandle(mediaFile.id, handle as FileSystemFileHandle);
-                  log.debug(`Restored file from handle (after permission): ${stored.name}`);
+                  log.debug('Restored file from handle:', stored.name);
+                } else {
+                  const newPermission = await (handle as FileSystemFileHandle).requestPermission({ mode: 'read' });
+                  if (newPermission === 'granted') {
+                    file = await (handle as FileSystemFileHandle).getFile();
+                    url = URL.createObjectURL(file);
+                    fileSystemService.storeFileHandle(mediaFile.id, handle as FileSystemFileHandle);
+                    log.debug(`Restored file from handle (after permission): ${stored.name}`);
+                  }
                 }
+              } catch (e) {
+                log.warn(`Failed to restore file from handle: ${stored.name}`, e);
               }
-            } catch (e) {
-              log.warn(`Failed to restore file from handle: ${stored.name}`, e);
             }
           }
 

@@ -1,6 +1,6 @@
 # Proxy System
 
-[<- Back to Index](./README.md)
+[← Back to Index](./README.md)
 
 WebCodecs-accelerated proxy generation for smooth editing of large video files.
 

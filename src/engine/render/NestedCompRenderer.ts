@@ -283,7 +283,8 @@ export class NestedCompRenderer {
     // Get or create output texture
     let compTexture = this.nestedCompTextures.get(compositionId);
     if (!compTexture || compTexture.texture.width !== width || compTexture.texture.height !== height) {
-      // Don't destroy immediately - let GC handle to avoid GPU conflicts
+      // Destroy old texture to free VRAM (safe - not in current command encoder yet)
+      if (compTexture) compTexture.texture.destroy();
 
       const texture = this.device.createTexture({
         size: { width, height },
@@ -969,7 +970,8 @@ export class NestedCompRenderer {
   }
 
   cleanupTexture(compositionId: string): void {
-    // Just remove from map - don't destroy, let GC handle to avoid GPU conflicts
+    const entry = this.nestedCompTextures.get(compositionId);
+    if (entry) entry.texture.destroy();
     this.nestedCompTextures.delete(compositionId);
   }
 
@@ -979,7 +981,7 @@ export class NestedCompRenderer {
   cacheActiveCompOutput(compositionId: string, sourceTexture: GPUTexture, width: number, height: number): void {
     let compTexture = this.nestedCompTextures.get(compositionId);
     if (!compTexture || compTexture.texture.width !== width || compTexture.texture.height !== height) {
-      // Don't destroy immediately - let GC handle to avoid GPU conflicts
+      if (compTexture) compTexture.texture.destroy();
 
       const texture = this.device.createTexture({
         size: { width, height },

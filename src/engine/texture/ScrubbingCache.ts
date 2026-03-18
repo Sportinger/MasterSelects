@@ -118,7 +118,9 @@ export class ScrubbingCache {
       this.scrubbingCacheBytes += bytes;
 
       // LRU eviction - evict oldest (first) entries
-      // Don't destroy textures - let GC handle to avoid GPU conflicts
+      // Explicitly destroy evicted GPU textures to free VRAM immediately.
+      // On Windows/Linux with discrete GPUs, relying on GC causes VRAM
+      // accumulation and progressive playback degradation.
       while (this.scrubbingCache.size > this.maxScrubbingCacheFrames) {
         const oldestKey = this.scrubbingCache.keys().next().value;
         if (oldestKey) {
@@ -126,6 +128,7 @@ export class ScrubbingCache {
           if (oldest) {
             this.scrubbingCacheBytes -= oldest.bytes;
             this.scrubbingCacheEvictions++;
+            oldest.texture.destroy();
           }
           this.scrubbingCache.delete(oldestKey);
         }
@@ -223,7 +226,6 @@ export class ScrubbingCache {
 
   // Clear scrubbing cache for a specific video
   clearScrubbingCache(videoSrc?: string): void {
-    // Don't destroy textures - let GC handle to avoid GPU conflicts
     if (videoSrc) {
       // Clear only frames from this video
       for (const key of [...this.scrubbingCache.keys()]) {
@@ -231,12 +233,16 @@ export class ScrubbingCache {
           const entry = this.scrubbingCache.get(key);
           if (entry) {
             this.scrubbingCacheBytes -= entry.bytes;
+            entry.texture.destroy();
           }
           this.scrubbingCache.delete(key);
         }
       }
     } else {
-      // Clear all
+      // Clear all - destroy every texture
+      for (const entry of this.scrubbingCache.values()) {
+        entry.texture.destroy();
+      }
       this.scrubbingCache.clear();
       this.scrubbingCacheBytes = 0;
     }
@@ -433,6 +439,10 @@ export class ScrubbingCache {
     return null;
   }
 
+  getLastFrameOwner(video: HTMLVideoElement): string | undefined {
+    return this.lastFrameOwners.get(video);
+  }
+
   // Only reuse a copied last-frame fallback when it was captured close to the
   // requested media time. This avoids flashing unrelated frames during seeks.
   getLastFrameNearTime(
@@ -488,7 +498,8 @@ export class ScrubbingCache {
 
   // Cleanup resources for a video that's no longer used
   cleanupVideo(video: HTMLVideoElement): void {
-    // Don't destroy textures - let GC handle to avoid GPU conflicts
+    const texture = this.lastFrameTextures.get(video);
+    if (texture) texture.destroy();
     this.lastFrameTextures.delete(video);
     this.lastFrameViews.delete(video);
     this.lastFrameSizes.delete(video);
@@ -578,10 +589,11 @@ export class ScrubbingCache {
     this.gpuFrameCache.set(key, entry);
 
     // Evict oldest GPU cached frames if over limit
-    // Don't destroy textures - let GC handle to avoid GPU conflicts
     while (this.gpuFrameCache.size > this.maxGpuCacheFrames) {
       const oldestKey = this.gpuFrameCache.keys().next().value;
       if (oldestKey !== undefined) {
+        const evicted = this.gpuFrameCache.get(oldestKey);
+        if (evicted) evicted.texture.destroy();
         this.gpuFrameCache.delete(oldestKey);
       }
     }
@@ -592,7 +604,10 @@ export class ScrubbingCache {
     this.compositeCache.clear();
     this.compositeCacheBytes = 0;
 
-    // Clear GPU frame cache (don't destroy - let GC handle to avoid GPU conflicts)
+    // Clear GPU frame cache - destroy textures to free VRAM
+    for (const entry of this.gpuFrameCache.values()) {
+      entry.texture.destroy();
+    }
     this.gpuFrameCache.clear();
 
     log.debug('Composite cache cleared');
@@ -603,7 +618,10 @@ export class ScrubbingCache {
     this.clearScrubbingCache();
     this.clearCompositeCache();
 
-    // Clear last frame caches (don't destroy - let GC handle to avoid GPU conflicts)
+    // Clear last frame caches - destroy textures to free VRAM
+    for (const texture of this.lastFrameTextures.values()) {
+      texture.destroy();
+    }
     this.lastFrameTextures.clear();
     this.lastFrameViews.clear();
     this.lastFrameSizes.clear();

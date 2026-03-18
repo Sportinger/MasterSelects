@@ -135,54 +135,54 @@ Full 3D rotation with configurable perspective:
 Effects are organized by category in `src/effects/`. Each effect is a self-contained module with its own shader and definition file.
 
 #### Color Correction (9 effects)
-| Effect | Parameters |
-|--------|------------|
-| Brightness | amount (-1 to 1) |
-| Contrast | amount (0 to 3) |
-| Saturation | amount (0 to 3) |
-| Vibrance | amount (-1 to 1) |
-| Hue Shift | shift (0 to 1) |
-| Temperature | temperature (-1 to 1), tint (-1 to 1) |
-| Exposure | exposure (-3 to 3 EV), offset (-0.5 to 0.5), gamma (0.2 to 3) |
-| Levels | inputBlack (0-1), inputWhite (0-1), gamma (0.1-3), outputBlack (0-1), outputWhite (0-1) |
-| Invert | (no params) |
+| Effect | Parameters | Default |
+|--------|------------|---------|
+| Brightness | amount (-1 to 1) | 0 |
+| Contrast | amount (0 to 3) | 0 |
+| Saturation | amount (0 to 3) | 0 |
+| Vibrance | amount (-1 to 1) | 0 |
+| Hue Shift | shift (0 to 1) | 0 |
+| Temperature | temperature (-1 to 1), tint (-1 to 1) | 0, 0 |
+| Exposure | exposure (-3 to 3 EV), offset (-0.5 to 0.5), gamma (0.2 to 3) | 0, 0, 1 |
+| Levels | inputBlack (0-1), inputWhite (0-1), gamma (0.1-3), outputBlack (0-1), outputWhite (0-1) | 0, 1, 1, 0, 1 |
+| Invert | (no params) | — |
 
 #### Blur Effects (5 effects)
-| Effect | Parameters |
-|--------|------------|
-| Box Blur | radius (0-20) |
-| Gaussian Blur | radius (0-50), **samples** (1-64, quality) |
-| Motion Blur | amount (0-0.3), angle (0-TAU), **samples** (4-128, quality) |
-| Radial Blur | amount (0-2), centerX (0-1), centerY (0-1), **samples** (4-256, quality) |
-| Zoom Blur | amount (0-1), centerX (0-1), centerY (0-1), **samples** (4-256, quality) |
+| Effect | Parameters | Default |
+|--------|------------|---------|
+| Box Blur | radius (0-20) | 0.02 |
+| Gaussian Blur | radius (0-50), **samples** (1-64, quality) | 0.02, 5 |
+| Motion Blur | amount (0-0.3), angle (0-TAU), **samples** (4-128, quality) | 0.02, 0, 24 |
+| Radial Blur | amount (0-2), centerX (0-1), centerY (0-1), **samples** (4-256, quality) | 0.5, 0.5, 0.5, 32 |
+| Zoom Blur | amount (0-1), centerX (0-1), centerY (0-1), **samples** (4-256, quality) | 0.1, 0.5, 0.5, 16 |
 
 #### Distort Effects (7 effects)
-| Effect | Parameters |
-|--------|------------|
-| Pixelate | size (1-64) |
-| Kaleidoscope | segments (2-16), rotation (0-TAU) |
-| Mirror | horizontal (bool), vertical (bool) |
-| RGB Split | amount (0-0.1), angle (0-TAU) |
-| Twirl | amount (-10 to 10), radius (0.1-1), centerX (0-1), centerY (0-1) |
-| Wave | amplitudeX (0-0.1), amplitudeY (0-0.1), frequencyX (1-20), frequencyY (1-20) |
-| Bulge/Pinch | amount (0.1-3), radius (0.1-1), centerX (0-1), centerY (0-1) |
+| Effect | Parameters | Default |
+|--------|------------|---------|
+| Pixelate | size (1-64) | 0.05 |
+| Kaleidoscope | segments (2-16), rotation (0-TAU) | 6, 0 |
+| Mirror | horizontal (bool), vertical (bool) | true, false |
+| RGB Split | amount (0-0.1), angle (0-TAU) | 0.01, 0 |
+| Twirl | amount (-10 to 10), radius (0.1-1), centerX (0-1), centerY (0-1) | 3, 0.5, 0.5, 0.5 |
+| Wave | amplitudeX (0-0.1), amplitudeY (0-0.1), frequencyX (1-20), frequencyY (1-20) | 0.02, 0.02, 5, 5 |
+| Bulge/Pinch | amount (0.1-3), radius (0.1-1), centerX (0-1), centerY (0-1) | 1.5, 0.5, 0.5, 0.5 |
 
 #### Stylize Effects (8 effects)
-| Effect | Parameters |
-|--------|------------|
-| Vignette | amount (0-1), size (0-1.5), softness (0-1), roundness (0.5-2) |
-| Film Grain | amount (0-0.5), size (0.5-5), speed (0-5) |
-| Glow | amount (0-5), threshold (0-1), radius (1-100), softness (0.1-1), **rings** (1-32, quality), **samplesPerRing** (4-64, quality) |
-| Posterize | levels (2-32) |
-| Edge Detect | strength (0-5), invert (bool) |
-| Scanlines | density (1-20), opacity (0-1), speed (0-5) |
-| Threshold | level (0-1) |
-| Sharpen | amount (0-5), radius (0.5-5) |
+| Effect | Parameters | Default |
+|--------|------------|---------|
+| Vignette | amount (0-1), size (0-1.5), softness (0-1), roundness (0.5-2) | 0.3, 0.8, 0.5, 1 |
+| Film Grain | amount (0-0.5), size (0.5-5), speed (0-5) | 0.15, 1.5, 1 |
+| Glow | amount (0-5), threshold (0-1), radius (1-100), softness (0.1-1), **rings** (1-32, quality), **samplesPerRing** (4-64, quality) | 0.3, 0.5, 20, 0.5, 4, 16 |
+| Posterize | levels (2-32) | 8 |
+| Edge Detect | strength (0-5), invert (bool) | 1, false |
+| Scanlines | density (1-20), opacity (0-1), speed (0-5) | 5, 0.5, 1 |
+| Threshold | level (0-1) | 0.5 |
+| Sharpen | amount (0-5), radius (0.5-5) | 1, 1 |
 
 #### Keying (1 effect)
-| Effect | Parameters |
-|--------|------------|
-| Chroma Key | keyColor (green/blue/custom), tolerance (0-1), softness (0-0.5), spillSuppression (0-1) |
+| Effect | Parameters | Default |
+|--------|------------|---------|
+| Chroma Key | keyColor (green/blue/custom), tolerance (0-1), softness (0-0.5), spillSuppression (0-1) | green, 0.4, 0.1, 0.5 |
 
 ### Effect Controls
 
@@ -286,7 +286,11 @@ Final Output
 - Shader module (individual `.wgsl` file per effect)
 - Bind group layout
 - Render pipeline
-- Uniform buffer (16-32 bytes, 16-byte aligned)
+- Uniform buffer (0, 16, or 32 bytes, 16-byte aligned) — Invert uses 0, most use 16, levels/glow/chroma-key use 32
+
+### Audio Effect Filtering
+
+`EffectsPipeline.applyEffects()` silently filters out effects with type prefix `audio-` (line 178). Audio effects are processed by the Web Audio API, not the GPU pipeline.
 
 ---
 
@@ -295,9 +299,25 @@ Final Output
 Timeline transitions between clips are handled by a separate system in `src/transitions/`.
 
 ### Available Transitions
-| Type | Category | Default Duration |
-|------|----------|-----------------|
-| Crossfade | Dissolve | 0.5s |
+| Type | Category | Default Duration | Min | Max |
+|------|----------|-----------------|-----|-----|
+| Crossfade | Dissolve | 0.5s | 0.1s | 5.0s |
+
+### Transition Categories
+
+`TransitionCategory` type includes: `'dissolve' | 'wipe' | 'slide' | 'zoom'`. Currently only `dissolve` has implementations; `slide` and `zoom` are reserved but have no transition implementations yet.
+
+### ClipTransition Interface
+
+Defined in `src/transitions/types.ts` (lines 37-46):
+```typescript
+interface ClipTransition {
+  id: string;
+  type: string;           // e.g., 'crossfade'
+  duration: number;       // seconds
+  linkedClipId: string;   // the other clip in the transition
+}
+```
 
 ### Planned Transition Types
 - Dip to Black (dissolve)
@@ -329,4 +349,178 @@ Run tests: `npx vitest run`
 
 ---
 
-*Source: `src/effects/` (modular per-effect shaders), `src/shaders/composite.wgsl`, `src/components/panels/EffectsPanel.tsx`, `src/transitions/`*
+## Developer Internals: Effect Plugin System
+
+The effects system uses a modular plugin architecture. Each effect is a self-contained module with its own WGSL shader and TypeScript definition, automatically registered at import time.
+
+### Directory Structure
+
+```
+src/effects/
+├── index.ts                    # Registry & auto-discovery
+├── types.ts                    # EffectDefinition, EffectParam, EffectCategory
+├── EffectsPipeline.ts          # GPU pipeline orchestrator
+├── EffectControls.tsx          # Generic/simplified UI renderer (fallback)
+├── _shared/
+│   └── common.wgsl             # Shared vertex shader, color helpers
+│
+├── color/                      # 9 effects
+├── blur/                       # 5 effects
+├── distort/                    # 7 effects
+├── stylize/                    # 8 effects
+├── keying/                     # 1 effect
+├── generate/                   # (empty — reserved)
+├── time/                       # (empty — reserved)
+└── transition/                 # (empty — reserved)
+```
+
+**UI note:** `EffectsTab.tsx` (`src/components/panels/properties/EffectsTab.tsx`) is the production UI (primary). `EffectControls.tsx` is a simplified/generic fallback renderer.
+
+### How to Add a New Effect
+
+Each effect is a self-contained module with:
+1. **shader.wgsl** - WGSL shader code
+2. **index.ts** - Effect definition with metadata
+
+**Step 1: Create the effect module**
+
+```typescript
+// src/effects/stylize/my-effect/index.ts
+import shader from './shader.wgsl?raw';
+import type { EffectDefinition } from '../../types';
+
+export const myEffect: EffectDefinition = {
+  id: 'my-effect',
+  name: 'My Effect',
+  category: 'stylize',
+
+  shader,
+  entryPoint: 'myEffectFragment',
+  uniformSize: 16,
+
+  params: {
+    amount: {
+      type: 'number',
+      label: 'Amount',
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+  },
+
+  packUniforms: (params, width, height) => {
+    return new Float32Array([
+      params.amount as number || 0.5,
+      width,
+      height,
+      0, // padding
+    ]);
+  },
+};
+```
+
+**Step 2: Create the shader**
+
+```wgsl
+// src/effects/stylize/my-effect/shader.wgsl
+struct MyEffectParams {
+  amount: f32,
+  width: f32,
+  height: f32,
+  _pad: f32,
+};
+
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: MyEffectParams;
+
+@fragment
+fn myEffectFragment(input: VertexOutput) -> @location(0) vec4f {
+  let color = textureSample(inputTex, texSampler, input.uv);
+  // Your effect logic here
+  return color;
+}
+```
+
+**Step 3: Register**
+
+Add export to category index:
+```typescript
+// src/effects/stylize/index.ts
+export { myEffect } from './my-effect';
+```
+
+The effect is automatically registered via `src/effects/index.ts` and appears in the UI.
+
+### EffectDefinition Interface
+
+```typescript
+interface EffectDefinition {
+  id: string;                    // Unique identifier (kebab-case)
+  name: string;                  // Display name
+  category: EffectCategory;      // Category for grouping
+  shader: string;                // WGSL code (imported via ?raw)
+  entryPoint: string;            // Fragment shader function name
+  uniformSize: number;           // Bytes (must be 16-byte aligned)
+  params: Record<string, EffectParam>;
+  packUniforms: (params, width, height) => Float32Array | null;
+  passes?: number;               // Multi-pass effects
+  customControls?: React.ComponentType<EffectControlProps>;
+}
+```
+
+### EffectInstance Interface
+
+Runtime representation on clips:
+```typescript
+interface EffectInstance {
+  id: string;       // Unique instance ID
+  type: string;     // Effect definition ID (e.g., 'gaussian-blur')
+  name: string;     // Display name
+  enabled: boolean; // Bypass toggle
+  params: Record<string, number | boolean | string>;
+}
+```
+
+### INLINE_EFFECT_IDS Optimization
+
+Brightness, contrast, saturation, and invert are listed in `INLINE_EFFECT_IDS`. These effects are applied as uniforms in the composite shader rather than as separate render passes, resulting in zero additional GPU overhead.
+
+### Parameter Types
+
+| Type | Description | UI Control | Notes |
+|------|-------------|------------|-------|
+| `number` | Numeric value | Slider / DraggableNumber | Supports `min`, `max`, `step`, `animatable`, `quality` |
+| `boolean` | On/off toggle | Checkbox | |
+| `select` | Option list | Dropdown | Requires `options` array |
+| `color` | Color picker | Color input | Defined but currently unused |
+| `point` | 2D position | XY controls | Defined but currently unused |
+
+### Non-Animatable Parameters
+
+Quality parameters and `speed` (used in grain, scanlines) have `animatable: false`. These are shown in collapsible "Quality" sections and are not keyframeable.
+
+### Shared Shader Utilities
+
+The `_shared/common.wgsl` file is prepended to every effect shader and provides:
+- **Vertex shader** (`vertexMain`) - Fullscreen quad with UV output
+- **Color conversions** - `rgb2hsv()`, `hsv2rgb()`, `rgb2hsl()`, `hsl2rgb()`, `hue2rgb()`
+- **Luminance** - `luminance()` (Rec. 709), `luminance601()` (Rec. 601)
+- **Math utilities** - `gaussian()`, `smootherstep()`, `hash()`, `noise2d()`
+- **Constants** - `PI`, `TAU`, `E`
+
+### Effect Categories
+
+```typescript
+type EffectCategory =
+  | 'color' | 'blur' | 'distort' | 'stylize'
+  | 'generate' | 'keying' | 'time' | 'transition';
+```
+
+Categories with no registered effects are hidden from the UI automatically via `getCategoriesWithEffects()`.
+
+---
+
+*Source: `src/effects/` (modular per-effect shaders), `src/shaders/composite.wgsl`, `src/components/panels/properties/EffectsTab.tsx`, `src/transitions/`*

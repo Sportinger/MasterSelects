@@ -1,3 +1,5 @@
+[← Back to Index](./README.md)
+
 # Native Helper
 
 The Native Helper is a local companion application that provides Firefox project persistence, external AI control, and yt-dlp-based downloads.
@@ -46,7 +48,7 @@ Local file system
 
 ### Linux
 
-1. Download the helper from the toolbar (click the Turbo indicator) or from [GitHub Releases](https://github.com/Sportinger/MASterSelects/releases/latest)
+1. Download the helper from the toolbar (click the Turbo indicator) or from [GitHub Releases](https://github.com/Sportinger/MasterSelects/releases/latest)
 2. Make it executable: `chmod +x masterselects-helper`
 3. Run it: `./masterselects-helper`
 
@@ -54,13 +56,13 @@ The helper will automatically be detected by the app.
 
 ### Windows
 
-1. Download from the toolbar or [GitHub Releases](https://github.com/Sportinger/MASterSelects/releases/latest)
-2. Run `masterselects-helper.exe` (runs as system tray app by default)
+1. Download the latest Windows MSI from the toolbar or [GitHub Releases](https://github.com/Sportinger/MasterSelects/releases/latest)
+2. Run the MSI installer, then launch `masterselects-helper.exe` if it does not auto-start
 3. Use `--console` flag to run in terminal mode instead of tray mode
 
 ### macOS
 
-1. Download from the toolbar or [GitHub Releases](https://github.com/Sportinger/MASterSelects/releases/latest)
+1. Download from the toolbar or [GitHub Releases](https://github.com/Sportinger/MasterSelects/releases/latest)
 2. Make executable and run: `chmod +x masterselects-helper && ./masterselects-helper`
 
 ### Options
@@ -148,7 +150,7 @@ curl -X POST http://127.0.0.1:9877/api/ai-tools \
 
 - **Localhost only** -- Binds to 127.0.0.1
 - **Origin validation** -- Only accepts connections from allowed origins
-- **Auth token** -- Optional token-based authentication
+- **Auth token** -- Token-based authentication for HTTP and WebSocket bridge operations
 - **No external network access** -- Only local file system and yt-dlp subprocess
 
 ## Technical Details
@@ -234,3 +236,10 @@ cargo build --release
 ## Tests
 
 No dedicated unit tests -- this is a Rust binary tested separately.
+
+---
+
+## Related Documents
+
+- [Download Panel](./Download-Panel.md) -- Download panel UI powered by the Native Helper
+- [Project Persistence](./Project-Persistence.md) -- Firefox project persistence via Native Helper file system ops

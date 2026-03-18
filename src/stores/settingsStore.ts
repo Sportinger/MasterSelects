@@ -9,6 +9,31 @@ import { projectFileService } from '../services/project/ProjectFileService';
 import { Logger } from '../services/logger';
 const log = Logger.create('SettingsStore');
 
+function persistChangelogStateToProject(
+  showChangelogOnStartup: boolean,
+  lastSeenChangelogVersion: string | null,
+): void {
+  if (!projectFileService.isProjectOpen()) {
+    return;
+  }
+
+  const projectData = projectFileService.getProjectData();
+  if (!projectData) {
+    return;
+  }
+
+  projectData.uiState = {
+    ...projectData.uiState,
+    showChangelogOnStartup,
+    lastSeenChangelogVersion,
+  };
+
+  projectFileService.markDirty();
+  void projectFileService.saveProject().catch((err) => {
+    log.error('Failed to persist changelog state to project:', err);
+  });
+}
+
 // Theme mode options
 export type ThemeMode = 'dark' | 'light' | 'midnight' | 'system' | 'crazy' | 'custom';
 
@@ -32,6 +57,7 @@ interface APIKeys {
   assemblyai: string;
   deepgram: string;
   piapi: string;  // PiAPI key for AI video generation (Kling, Luma, etc.)
+  kieai: string;  // Kie.ai key for AI video generation (Kling 3.0, Seedance, etc.)
   youtube: string; // YouTube Data API v3 key (optional, Invidious works without)
   // Legacy Kling keys (deprecated, use piapi instead)
   klingAccessKey: string;
@@ -73,6 +99,13 @@ interface SettingsState {
   // GPU preference
   gpuPowerPreference: GPUPowerPreference;  // 'high-performance' (dGPU) or 'low-power' (iGPU)
 
+  // AI Features
+  matanyoneEnabled: boolean;      // Enable MatAnyone2 video matting
+  matanyonePythonPath: string;    // Python path ('' = auto-detect)
+
+  // AI approval mode for tool execution
+  aiApprovalMode: 'auto' | 'confirm-destructive' | 'confirm-all-mutating';
+
   // Media import settings
   copyMediaToProject: boolean;  // Copy imported files to project Raw/ folder
 
@@ -89,6 +122,7 @@ interface SettingsState {
 
   // Changelog settings
   showChangelogOnStartup: boolean;
+  lastSeenChangelogVersion: string | null;
 
   // UI state
   isSettingsOpen: boolean;
@@ -121,6 +155,9 @@ interface SettingsState {
   setNativeHelperConnected: (connected: boolean) => void;
   setForceDesktopMode: (force: boolean) => void;
   setGpuPowerPreference: (preference: GPUPowerPreference) => void;
+  setMatAnyoneEnabled: (enabled: boolean) => void;
+  setMatAnyonePythonPath: (path: string) => void;
+  setAiApprovalMode: (mode: 'auto' | 'confirm-destructive' | 'confirm-all-mutating') => void;
   setCopyMediaToProject: (enabled: boolean) => void;
   setHasCompletedSetup: (completed: boolean) => void;
   setHasSeenTutorial: (seen: boolean) => void;
@@ -128,6 +165,8 @@ interface SettingsState {
   setUserBackground: (bg: string) => void;
   completeTutorial: (campaignId: string) => void;
   setShowChangelogOnStartup: (show: boolean) => void;
+  setLastSeenChangelogVersion: (version: string | null) => void;
+  markChangelogSeen: (version: string) => void;
   openSettings: () => void;
   closeSettings: () => void;
   toggleSettings: () => void;
@@ -163,6 +202,7 @@ export const useSettingsStore = create<SettingsState>()(
         assemblyai: '',
         deepgram: '',
         piapi: '',
+        kieai: '',
         youtube: '',
         klingAccessKey: '',
         klingSecretKey: '',
@@ -178,6 +218,9 @@ export const useSettingsStore = create<SettingsState>()(
       nativeHelperConnected: false, // Not connected initially
       forceDesktopMode: false, // Use responsive detection by default
       gpuPowerPreference: 'high-performance', // Prefer dGPU by default
+      matanyoneEnabled: false, // MatAnyone2 disabled by default
+      matanyonePythonPath: '', // Auto-detect Python path
+      aiApprovalMode: 'confirm-destructive' as const, // Require confirmation for destructive AI actions
       copyMediaToProject: true, // Copy imported files to Raw/ folder by default
       hasCompletedSetup: false, // Show welcome overlay on first run
       hasSeenTutorial: false, // Show tutorial on first run
@@ -185,6 +228,7 @@ export const useSettingsStore = create<SettingsState>()(
       userBackground: null, // Which program the user comes from
       completedTutorials: [], // Campaign IDs that have been completed
       showChangelogOnStartup: true, // Show changelog dialog on every startup
+      lastSeenChangelogVersion: null, // Latest app version whose changelog was acknowledged
       isSettingsOpen: false,
 
       // Output settings
@@ -267,6 +311,18 @@ export const useSettingsStore = create<SettingsState>()(
         set({ gpuPowerPreference: preference });
       },
 
+      setMatAnyoneEnabled: (enabled) => {
+        set({ matanyoneEnabled: enabled });
+      },
+
+      setMatAnyonePythonPath: (path) => {
+        set({ matanyonePythonPath: path });
+      },
+
+      setAiApprovalMode: (mode) => {
+        set({ aiApprovalMode: mode });
+      },
+
       setCopyMediaToProject: (enabled) => {
         set({ copyMediaToProject: enabled });
       },
@@ -294,7 +350,18 @@ export const useSettingsStore = create<SettingsState>()(
         }
       },
 
-      setShowChangelogOnStartup: (show) => set({ showChangelogOnStartup: show }),
+      setShowChangelogOnStartup: (show) => {
+        set({ showChangelogOnStartup: show });
+        persistChangelogStateToProject(show, get().lastSeenChangelogVersion);
+      },
+      setLastSeenChangelogVersion: (version) => {
+        set({ lastSeenChangelogVersion: version });
+        persistChangelogStateToProject(get().showChangelogOnStartup, version);
+      },
+      markChangelogSeen: (version) => {
+        set({ lastSeenChangelogVersion: version });
+        persistChangelogStateToProject(get().showChangelogOnStartup, version);
+      },
       openSettings: () => set({ isSettingsOpen: true }),
       closeSettings: () => set({ isSettingsOpen: false }),
       toggleSettings: () => set((state) => ({ isSettingsOpen: !state.isSettingsOpen })),
@@ -375,6 +442,9 @@ export const useSettingsStore = create<SettingsState>()(
         nativeHelperPort: state.nativeHelperPort,
         forceDesktopMode: state.forceDesktopMode,
         gpuPowerPreference: state.gpuPowerPreference,
+        matanyoneEnabled: state.matanyoneEnabled,
+        matanyonePythonPath: state.matanyonePythonPath,
+        aiApprovalMode: state.aiApprovalMode,
         copyMediaToProject: state.copyMediaToProject,
         hasCompletedSetup: state.hasCompletedSetup,
         hasSeenTutorial: state.hasSeenTutorial,
@@ -382,6 +452,7 @@ export const useSettingsStore = create<SettingsState>()(
         userBackground: state.userBackground,
         completedTutorials: state.completedTutorials,
         showChangelogOnStartup: state.showChangelogOnStartup,
+        lastSeenChangelogVersion: state.lastSeenChangelogVersion,
         outputResolution: state.outputResolution,
         fps: state.fps,
         aiProvider: state.aiProvider,

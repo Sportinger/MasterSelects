@@ -17,6 +17,7 @@ vi.mock('../src/engine/WebGPUEngine', () => ({
     ensureVideoFrameCached: vi.fn(),
     cleanupVideo: vi.fn(),
     clearVideoCache: vi.fn(),
+    clearCaches: vi.fn(),
     getTextureManager: vi.fn().mockReturnValue({
       updateCanvasTexture: vi.fn().mockReturnValue(true),
     }),
@@ -61,6 +62,9 @@ vi.mock('../src/services/layerBuilder', () => ({
     invalidateCache: vi.fn(),
     buildLayers: vi.fn().mockReturnValue([]),
     buildLayersFromStore: vi.fn().mockReturnValue([]),
+    getVideoSyncManager: vi.fn().mockReturnValue({
+      reset: vi.fn(),
+    }),
   },
 }))
 

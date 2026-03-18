@@ -40,7 +40,9 @@ export class MaskTextureManager {
 
   // Update mask texture for a layer
   updateMaskTexture(layerId: string, imageData: ImageData | null): void {
-    // Remove existing mask texture reference (don't destroy - let GC handle to avoid GPU conflicts)
+    // Destroy the old mask texture to free VRAM
+    const oldTexture = this.maskTextures.get(layerId);
+    if (oldTexture) oldTexture.destroy();
     this.maskTextures.delete(layerId);
     this.maskTextureViews.delete(layerId);
 
@@ -77,7 +79,8 @@ export class MaskTextureManager {
 
   // Remove mask texture for a layer
   removeMaskTexture(layerId: string): void {
-    // Just remove references - don't destroy, let GC handle to avoid GPU conflicts
+    const texture = this.maskTextures.get(layerId);
+    if (texture) texture.destroy();
     this.maskTextures.delete(layerId);
     this.maskTextureViews.delete(layerId);
   }
@@ -115,7 +118,9 @@ export class MaskTextureManager {
 
   // Clear all mask textures
   clearAll(): void {
-    // Just clear maps - don't destroy, let GC handle to avoid GPU conflicts
+    for (const texture of this.maskTextures.values()) {
+      texture.destroy();
+    }
     this.maskTextures.clear();
     this.maskTextureViews.clear();
   }

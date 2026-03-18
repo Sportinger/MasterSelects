@@ -5,11 +5,11 @@ import type { TimelineClip, TimelineTrack } from '../../../types';
 import { DEFAULT_TRANSFORM, calculateNativeScale } from '../constants';
 import { useMediaStore } from '../../mediaStore';
 import { useSettingsStore } from '../../settingsStore';
+import { engine } from '../../../engine/WebGPUEngine';
 import { NativeDecoder } from '../../../services/nativeHelper';
 import { NativeHelperClient } from '../../../services/nativeHelper/NativeHelperClient';
 import {
   initWebCodecsPlayer,
-  warmUpVideoDecoder,
   createVideoElement,
   createAudioElement,
   waitForVideoMetadata,
@@ -98,6 +98,25 @@ export interface LoadVideoMediaParams {
   waveformsEnabled: boolean;
   updateClip: (id: string, updates: Partial<TimelineClip>) => void;
   setClips: (updater: (clips: TimelineClip[]) => TimelineClip[]) => void;
+}
+
+export function primeImportedVideoFrame(video: HTMLVideoElement, clipId: string): void {
+  // Imported timeline clips should expose a stable first frame immediately,
+  // but the active HTML video warmup must still be owned by VideoSyncManager.
+  if (video.preload !== 'auto') {
+    video.preload = 'auto';
+  }
+
+  const preCacheFrame = () => {
+    void engine.preCacheVideoFrame(video, clipId);
+  };
+
+  if (video.readyState >= 2) {
+    preCacheFrame();
+    return;
+  }
+
+  video.addEventListener('loadeddata', preCacheFrame, { once: true });
 }
 
 /**
@@ -276,10 +295,9 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
       }, { once: true });
     }
 
-    // Warm up video decoder in background (non-blocking)
-    warmUpVideoDecoder(video).then(() => {
-      log.debug('Decoder warmed up', { file: file.name });
-    });
+    // Cache the first decoded frame for stable paused preview.
+    // Active GPU warmup is handled centrally by VideoSyncManager.
+    primeImportedVideoFrame(video, clipId);
 
     // Initialize WebCodecsPlayer for hardware-accelerated decoding (non-blocking)
     initWebCodecsPlayer(video, file.name, file).then(webCodecsPlayer => {

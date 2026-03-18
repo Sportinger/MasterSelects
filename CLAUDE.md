@@ -4,7 +4,18 @@ Anweisungen für AI-Assistenten (Claude, GPT, etc.) bei der Arbeit an diesem Pro
 
 ---
 
-## 0. AI Debug Tools (kein Browser-Plugin nötig!)
+## 0. Projektziel / Vision (Deadline: Juni 2026)
+
+**MasterSelects muss ALLE Media-Dateien unterstützen** — nicht nur Video/Audio/Bild, sondern wirklich ALLES:
+3D (OBJ, FBX, glTF), PDF, SVG, CAD (DXF/STEP), Binärdaten, Point Clouds, JSON, CSV, und mehr.
+
+**Inspiration: TouchDesigner-Prinzip** — Jede Datei wird zu einem visuellen Signal. So wie TouchDesigner in SOPs/TOPs/CHOPs jede Datenquelle sichtbar und manipulierbar macht (Geometrie → Vertices als Farben, Audio → Wellenform-Textur, Daten → Heatmaps), soll MasterSelects jedes Dateiformat in die GPU-Pipeline bringen und auf dem Canvas rendern können.
+
+**Kernidee:** Es gibt keine "nicht unterstützten" Dateien. Alles wird Textur, Geometrie oder Daten — alles kann auf der Timeline platziert, composited und exportiert werden.
+
+---
+
+## 0.1 AI Debug Tools (kein Browser-Plugin nötig!)
 
 Die `/masterselects` Skill stellt 4 Debug-Tools bereit, die über den HTTP Bridge laufen (`POST http://localhost:5173/api/ai-tools`). Voraussetzung: Dev-Server läuft + App in Browser-Tab geöffnet.
 
@@ -81,6 +92,8 @@ npm run lint                 # ESLint check
 npm run test                 # Vitest einmal ausführen
 npm run test:watch           # Vitest im Watch-Modus
 npm run test:unit            # Nur Unit-Tests (tests/unit/)
+npm run test:ui              # Vitest mit Browser-UI
+npm run test:coverage        # Vitest mit Coverage-Report
 npm run preview              # Built output lokal serven
 ```
 
@@ -114,8 +127,15 @@ src/
 │   ├── outputManager/   # Output Window / Slice management
 │   └── mobile/          # Mobile-optimized UI
 ├── stores/              # Zustand State
-│   ├── timeline/        # Slices: track, clip, keyframe, mask, playback, selection, transition, ...
-│   ├── mediaStore/      # Slices: fileImport, fileManage, folder, proxy, composition, slot, ...
+│   ├── timeline/        # 17 Slices: track, clip, keyframe, mask, playback, selection, transition,
+│   │   │                #   ramPreview, proxyCache, clipEffect, linkedGroup, downloadClip,
+│   │   │                #   solidClip, textClip, clipboard, aiActionFeedback, marker
+│   │   ├── clip/        # Clip sub-modules (addVideoClip, addAudioClip, addImageClip, etc.)
+│   │   ├── helpers/     # clipStateHelpers, idGenerator, blobUrlManager, audioDetection, etc.
+│   │   └── selectors.ts # 50 optimized selectors (individual, grouped, derived, stable action)
+│   ├── mediaStore/      # 9 Slices: fileImport, fileManage, folder, proxy, composition,
+│   │   │                #   slot, multiLayer, project, selection
+│   │   └── init.ts      # IndexedDB init, auto-save, beforeunload, audio cleanup
 │   ├── historyStore.ts  # Snapshot-based Undo/Redo
 │   ├── engineStore.ts   # Engine ready state, GPU info
 │   ├── settingsStore.ts # User preferences
@@ -127,34 +147,52 @@ src/
 │   └── youtubeStore.ts  # YouTube download state
 ├── engine/              # WebGPU Rendering
 │   ├── core/            # WebGPUContext, RenderTargetManager
-│   ├── render/          # RenderLoop, RenderDispatcher, LayerCollector, Compositor, NestedCompRenderer
+│   ├── render/          # RenderLoop, RenderDispatcher, LayerCollector, Compositor, NestedCompRenderer, layerEffectStack
 │   ├── pipeline/        # CompositorPipeline, EffectsPipeline, OutputPipeline, SlicePipeline
 │   ├── texture/         # TextureManager, MaskTextureManager, ScrubbingCache
-│   ├── managers/        # CacheManager, ExportCanvasManager, OutputWindowManager
-│   ├── export/          # FrameExporter, VideoEncoderWrapper, AudioEncoder
+│   ├── managers/        # CacheManager, ExportCanvasManager, OutputWindowManager, outputWindowPlacement
+│   ├── export/          # FrameExporter, VideoEncoderWrapper, AudioEncoder, types
 │   ├── audio/           # AudioMixer, TimeStretchProcessor, AudioExportPipeline
 │   ├── video/           # VideoFrameManager
 │   ├── ffmpeg/          # FFmpegBridge
 │   ├── analysis/        # Scopes (Histogram, Waveform, Vectorscope, OpticalFlow)
 │   ├── stats/           # PerformanceStats
-│   └── structuralSharing/ # SnapshotManager for render optimization
-├── effects/             # ~30 GPU Effects (color/, blur/, distort/, stylize/, keying/)
+│   ├── structuralSharing/ # SnapshotManager for render optimization
+│   ├── ParallelDecodeManager.ts  # Multi-clip parallel decode
+│   ├── WebCodecsPlayer.ts        # WebCodecs playback engine
+│   ├── WebCodecsExportMode.ts    # Export-specific WebCodecs path
+│   └── featureFlags.ts           # Runtime feature toggles
+├── effects/             # 30 GPU Effects (color/, blur/, distort/, stylize/, keying/, generate/, time/, transition/)
+│   ├── _shared/         # common.wgsl (154 lines shared utility)
 │   └── EffectsPipeline.ts # Effect orchestration
 ├── transitions/         # GPU Transitions (crossfade, etc.)
 ├── services/            # Business logic
-│   ├── layerBuilder/    # LayerBuilderService, VideoSyncManager, AudioSyncHandler
-│   ├── mediaRuntime/    # Clip bindings, runtime playback registry
-│   ├── project/         # ProjectCoreService, save/load, file service
+│   ├── layerBuilder/    # LayerBuilderService, VideoSyncManager, AudioSyncHandler,
+│   │                    #   AudioTrackSyncManager, LayerCache, FrameContext, TransformCache, types, index
+│   ├── mediaRuntime/    # Clip bindings, runtime playback registry, session policies
+│   ├── monitoring/      # playbackHealthMonitor, playbackDebugStats, framePhaseMonitor,
+│   │                    #   vfPipelineMonitor, wcPipelineMonitor, scrubSettleState
+│   ├── project/         # ProjectCoreService, NativeProjectCoreService, save/load, file service
+│   │   └── domains/     # AnalysisService, CacheService, ProxyStorageService, RawMediaService, TranscriptService
 │   ├── nativeHelper/    # Native FFmpeg decoder client
 │   ├── sam2/            # SAM2 segmentation service
-│   ├── aiTools/         # AI tool bridge (Claude integration)
+│   ├── aiTools/         # AI tool bridge (76 tools across 15 definition files)
+│   │   ├── definitions/ # 15 tool definition files
+│   │   └── handlers/    # Tool handler dispatch + visual feedback
 │   ├── export/          # FCPXML export
-│   └── (standalone)     # logger, audioManager, thumbnailRenderer, whisperService, etc.
-├── hooks/               # React hooks: useEngine, useGlobalHistory, useMIDI, useTheme, ...
-├── utils/               # Helpers: keyframeInterpolation, maskRenderer, fileLoader, etc.
+│   └── (standalone)     # logger, audioManager, thumbnailRenderer, whisperService,
+│                        #   renderScheduler, ramPreviewEngine, compositionRenderer,
+│                        #   clipAnalyzer, clipTranscriber, sceneDescriber, apiKeyManager, etc.
+├── hooks/               # React hooks: useEngine, useGlobalHistory, useMIDI, useTheme,
+│                        #   useClipPanelSync, useContextMenuPosition, useThumbnailCache, ...
+├── utils/               # Helpers: keyframeInterpolation, maskRenderer, fileLoader,
+│                        #   speedIntegration, externalDragPlacement, externalDragSession, ...
 ├── types/               # TypeScript types, mp4box.d.ts
 ├── workers/             # Web Workers (transcription)
-└── shaders/             # WGSL: composite, effects, output, slice, opticalflow
+├── shaders/             # WGSL: composite, effects, output, slice, opticalflow
+├── assets/              # Static assets
+├── test/                # In-browser test components
+└── changelog-data.json  # 5,000+ line changelog data (imported by version.ts)
 ```
 
 **Detaillierte Struktur:** siehe `README.md` oder `docs/Features/`
@@ -210,6 +248,41 @@ export const createSlice: SliceCreator<Actions> = (set, get) => ({
   },
 });
 ```
+
+### Functional setState (prevents stale closures)
+```typescript
+// WRONG: needs items as dependency, recreated on every change
+const addItems = useCallback((newItems) => {
+  setItems([...items, ...newItems])
+}, [items])
+
+// RIGHT: stable callback, no stale closure
+const addItems = useCallback((newItems) => {
+  setItems(curr => [...curr, ...newItems])
+}, [])
+```
+
+### Lazy State Initialization
+```typescript
+// WRONG: runs on EVERY render
+const [index, setIndex] = useState(buildSearchIndex(items))
+
+// RIGHT: runs only once
+const [index, setIndex] = useState(() => buildSearchIndex(items))
+```
+
+### toSorted() instead of sort() (prevents state mutation)
+```typescript
+// WRONG: mutates original array
+const sorted = users.sort((a, b) => a.name.localeCompare(b.name))
+
+// RIGHT: creates new array
+const sorted = users.toSorted((a, b) => a.name.localeCompare(b.name))
+```
+
+### Zustand Middleware
+All stores use `subscribeWithSelector` middleware. `settingsStore` and `dockStore` also use `persist` middleware.
+MediaStore uses `MediaSliceCreator` variant (slightly different signature than timeline's `SliceCreator`).
 
 ---
 
@@ -269,12 +342,13 @@ Logger.summary()                // Übersicht für AI
 | Logger | `src/services/logger.ts` |
 | Project Storage | `src/services/project/core/ProjectCoreService.ts` |
 | Engine Hook | `src/hooks/useEngine.ts` |
+| Monitoring Services | `src/services/monitoring/playbackHealthMonitor.ts` |
+| Media Runtime | `src/services/mediaRuntime/index.ts` |
+| Native Project Storage | `src/services/project/core/NativeProjectCoreService.ts` |
+| Feature Flags | `src/engine/featureFlags.ts` |
 
 ### Neuen Effect hinzufügen
-1. Shader in `src/effects/[category]/[name]/shader.wgsl`
-2. Index in `src/effects/[category]/[name]/index.ts`
-3. Export in `src/effects/[category]/index.ts`
-4. UI in `src/components/panels/PropertiesPanel.tsx`
+Detailed guide: `docs/Features/Effects.md` (Developer Internals section)
 
 ---
 
@@ -283,6 +357,7 @@ Logger.summary()                // Übersicht für AI
 | Source | GPU Type |
 |--------|----------|
 | Video (HTMLVideoElement) | `texture_external` via `importExternalTexture` (zero-copy) |
+| Video (HTMLVideoElement, Firefox) | `texture_2d<f32>` via `htmlVideoPreviewFallback.ts` (copies to persistent texture to avoid black frames) |
 | Video (VideoFrame) | `texture_external` via `importExternalTexture` (zero-copy) |
 | Image (HTMLImageElement) | `texture_2d<f32>` via `copyExternalImageToTexture` (copied once, cached) |
 | Canvas (Text Clips) | `texture_2d<f32>` via `copyExternalImageToTexture` (cached by reference) |
@@ -308,180 +383,3 @@ useEngine hook (src/hooks/useEngine.ts)
 ---
 
 *Ausführliche Dokumentation: `docs/Features/README.md`*
-
----
-
-## 9. React/Next.js Best Practices (Vercel Engineering)
-
-> Vollständige Dokumentation: [REACT-BEST-PRACTICES.md](./docs/REACT-BEST-PRACTICES.md) | [GitHub Source](https://github.com/vercel-labs/agent-skills/tree/main/skills/react-best-practices)
-
-### Prioritäten nach Impact
-1. **CRITICAL:** Eliminating Waterfalls, Bundle Size
-2. **HIGH:** Server-Side Performance
-3. **MEDIUM:** Client-Side Data, Re-renders, Rendering
-4. **LOW:** JavaScript Micro-Optimizations, Advanced Patterns
-
----
-
-### CRITICAL: Eliminating Waterfalls
-
-**Waterfalls sind der #1 Performance-Killer!**
-
-#### Promise.all() für unabhängige Operations
-```typescript
-// FALSCH: 3 sequentielle Round-Trips
-const user = await fetchUser()
-const posts = await fetchPosts()
-const comments = await fetchComments()
-
-// RICHTIG: 1 paralleler Round-Trip
-const [user, posts, comments] = await Promise.all([
-  fetchUser(),
-  fetchPosts(),
-  fetchComments()
-])
-```
-
-#### Defer Await Until Needed
-```typescript
-// FALSCH: blockiert beide Branches
-async function handleRequest(userId: string, skipProcessing: boolean) {
-  const userData = await fetchUserData(userId)
-  if (skipProcessing) return { skipped: true }
-  return processUserData(userData)
-}
-
-// RICHTIG: fetch nur wenn nötig
-async function handleRequest(userId: string, skipProcessing: boolean) {
-  if (skipProcessing) return { skipped: true }
-  const userData = await fetchUserData(userId)
-  return processUserData(userData)
-}
-```
-
-#### Strategic Suspense Boundaries
-```tsx
-// FALSCH: Ganzes Layout wartet auf Daten
-async function Page() {
-  const data = await fetchData() // Blockiert alles
-  return <div><Sidebar /><DataDisplay data={data} /><Footer /></div>
-}
-
-// RICHTIG: Layout sofort, Daten streamen
-function Page() {
-  return (
-    <div>
-      <Sidebar />
-      <Suspense fallback={<Skeleton />}>
-        <DataDisplay />
-      </Suspense>
-      <Footer />
-    </div>
-  )
-}
-```
-
----
-
-### CRITICAL: Bundle Size Optimization
-
-#### Avoid Barrel File Imports (200-800ms Import-Cost!)
-```tsx
-// FALSCH: Lädt 1,583 Module
-import { Check, X, Menu } from 'lucide-react'
-
-// RICHTIG: Lädt nur 3 Module
-import Check from 'lucide-react/dist/esm/icons/check'
-import X from 'lucide-react/dist/esm/icons/x'
-import Menu from 'lucide-react/dist/esm/icons/menu'
-
-// ALTERNATIVE (Next.js 13.5+):
-// next.config.js
-module.exports = {
-  experimental: {
-    optimizePackageImports: ['lucide-react', '@mui/material']
-  }
-}
-```
-
-#### Dynamic Imports für Heavy Components
-```tsx
-// FALSCH: Monaco im Main Bundle (~300KB)
-import { MonacoEditor } from './monaco-editor'
-
-// RICHTIG: Monaco on-demand
-import dynamic from 'next/dynamic'
-const MonacoEditor = dynamic(
-  () => import('./monaco-editor').then(m => m.MonacoEditor),
-  { ssr: false }
-)
-```
-
----
-
-### HIGH: Server-Side Performance
-
-#### React.cache() für Request-Deduplication
-```typescript
-import { cache } from 'react'
-
-export const getCurrentUser = cache(async () => {
-  const session = await auth()
-  if (!session?.user?.id) return null
-  return await db.user.findUnique({ where: { id: session.user.id } })
-})
-// Mehrere Calls -> nur 1 Query pro Request
-```
-
-#### Minimize Serialization at RSC Boundaries
-```tsx
-// FALSCH: Serialisiert alle 50 Felder
-<Profile user={user} />
-
-// RICHTIG: Nur 1 Feld
-<Profile name={user.name} />
-```
-
----
-
-### MEDIUM: Re-render Optimization
-
-#### Functional setState (verhindert Stale Closures!)
-```typescript
-// FALSCH: Braucht items als Dependency
-const addItems = useCallback((newItems) => {
-  setItems([...items, ...newItems])
-}, [items])  // Wird bei jeder Änderung neu erstellt
-
-// RICHTIG: Stable Callback, kein Stale Closure
-const addItems = useCallback((newItems) => {
-  setItems(curr => [...curr, ...newItems])
-}, [])  // Keine Dependencies nötig
-```
-
-#### Lazy State Initialization
-```typescript
-// FALSCH: Läuft bei JEDEM Render
-const [index, setIndex] = useState(buildSearchIndex(items))
-
-// RICHTIG: Läuft nur einmal
-const [index, setIndex] = useState(() => buildSearchIndex(items))
-```
-
-#### toSorted() statt sort() (verhindert State-Mutation!)
-```typescript
-// FALSCH: Mutiert das Original-Array
-const sorted = users.sort((a, b) => a.name.localeCompare(b.name))
-
-// RICHTIG: Erstellt neues Array
-const sorted = users.toSorted((a, b) => a.name.localeCompare(b.name))
-```
-
----
-
-### Projekt-spezifische Ergänzungen
-
-Diese Best Practices ergänzen unsere bestehenden Critical Patterns:
-- **Stale Closure Fix** (S4) -> Functional setState nutzen
-- **Zustand Slices** -> `get()` in Callbacks statt State-Capture
-- **WebGPU Engine** -> Heavy Components mit Dynamic Import laden

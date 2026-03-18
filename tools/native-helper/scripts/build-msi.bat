@@ -5,7 +5,6 @@ REM
 REM  Prerequisites:
 REM    - WiX Toolset v3: winget install WiXToolset.WiXToolset
 REM    - cargo-wix:      cargo install cargo-wix
-REM    - FFMPEG_DIR set or ffmpeg/win64/ populated
 REM ============================================================
 
 setlocal enabledelayedexpansion
@@ -28,57 +27,18 @@ if errorlevel 1 (
 )
 echo       OK
 
-REM --- Step 2: Copy FFmpeg DLLs to target\release ---
-echo [2/3] Copying FFmpeg DLLs...
-
-REM Determine FFmpeg bin directory
-set "FFMPEG_BIN="
-
-if defined FFMPEG_DIR (
-    set "FFMPEG_BIN=%FFMPEG_DIR%\bin"
-)
-
-if not defined FFMPEG_BIN (
-    if exist "ffmpeg\win64\bin\avcodec-61.dll" (
-        set "FFMPEG_BIN=%PROJECT_DIR%\ffmpeg\win64\bin"
-    )
-)
-
-if not defined FFMPEG_BIN (
-    echo ERROR: Cannot find FFmpeg DLLs. Set FFMPEG_DIR or place them in ffmpeg\win64\
-    exit /b 1
-)
-
-echo       Source: %FFMPEG_BIN%
-
+REM --- Step 2: Verify release payload ---
+echo [2/2] Verifying release payload...
 set "RELEASE_DIR=target\release"
 
-copy /y "%FFMPEG_BIN%\avcodec-61.dll"    "%RELEASE_DIR%\" >nul 2>&1
-copy /y "%FFMPEG_BIN%\avformat-61.dll"   "%RELEASE_DIR%\" >nul 2>&1
-copy /y "%FFMPEG_BIN%\avutil-59.dll"     "%RELEASE_DIR%\" >nul 2>&1
-copy /y "%FFMPEG_BIN%\swresample-5.dll"  "%RELEASE_DIR%\" >nul 2>&1
-copy /y "%FFMPEG_BIN%\swscale-8.dll"     "%RELEASE_DIR%\" >nul 2>&1
-copy /y "%FFMPEG_BIN%\avdevice-61.dll"   "%RELEASE_DIR%\" >nul 2>&1
-copy /y "%FFMPEG_BIN%\avfilter-10.dll"   "%RELEASE_DIR%\" >nul 2>&1
-copy /y "%FFMPEG_BIN%\postproc-58.dll"   "%RELEASE_DIR%\" >nul 2>&1
-copy /y "%FFMPEG_BIN%\ffmpeg.exe"        "%RELEASE_DIR%\" >nul 2>&1
-
-REM Verify all files exist
-set "MISSING=0"
-for %%F in (masterselects-helper.exe avcodec-61.dll avformat-61.dll avutil-59.dll swresample-5.dll swscale-8.dll avdevice-61.dll avfilter-10.dll postproc-58.dll ffmpeg.exe) do (
-    if not exist "%RELEASE_DIR%\%%F" (
-        echo       MISSING: %%F
-        set "MISSING=1"
-    )
-)
-if "%MISSING%"=="1" (
-    echo ERROR: Some required files are missing!
+if not exist "%RELEASE_DIR%\masterselects-helper.exe" (
+    echo ERROR: Missing release binary: %RELEASE_DIR%\masterselects-helper.exe
     exit /b 1
 )
-echo       OK (10 files)
+echo       OK
 
-REM --- Step 3: Build MSI ---
-echo [3/3] Building MSI installer...
+REM --- Build MSI ---
+echo Building MSI installer...
 cargo wix --no-build --nocapture
 if errorlevel 1 (
     echo ERROR: cargo wix failed!

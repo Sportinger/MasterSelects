@@ -1,3 +1,5 @@
+[← Back to Index](./README.md)
+
 # AI Multicam Editor
 
 Automatischer Multicam-Schnitt via LLM + Computer Vision Analyse.
@@ -356,6 +358,13 @@ No TensorFlow.js dependencies currently required (face detection not implemented
 | [`crossCorrelation.test.ts`](../../tests/unit/crossCorrelation.test.ts) | 45 | Audio sync cross-correlation |
 
 Run tests: `npx vitest run`
+
+---
+
+## Related Documents
+
+- [AI Integration](./AI-Integration.md) -- AI tools and OpenAI function calling
+- [Audio](./Audio.md) -- Audio processing, cross-correlation sync
 
 ---
 

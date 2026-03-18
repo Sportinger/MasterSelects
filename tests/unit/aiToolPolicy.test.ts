@@ -1,0 +1,126 @@
+import { describe, it, expect } from 'vitest';
+import { getToolPolicy, checkToolAccess } from '../../src/services/aiTools/policy';
+import { AI_TOOLS } from '../../src/services/aiTools/definitions/index';
+import { MODIFYING_TOOLS } from '../../src/services/aiTools/types';
+
+describe('AI Tool Policy Registry', () => {
+  // Get all tool names from the definitions
+  const definedToolNames = AI_TOOLS.map(t => t.function.name);
+
+  it('every tool in AI_TOOLS has a policy entry', () => {
+    for (const name of definedToolNames) {
+      const policy = getToolPolicy(name);
+      expect(policy, `Missing policy for tool: ${name}`).toBeDefined();
+    }
+  });
+
+  it('MODIFYING_TOOLS entries are all readOnly=false in policy', () => {
+    for (const toolName of MODIFYING_TOOLS) {
+      const policy = getToolPolicy(toolName);
+      if (policy) {
+        expect(policy.readOnly, `${toolName} should not be readOnly`).toBe(false);
+      }
+    }
+  });
+
+  it('checkToolAccess returns allowed=false for deleteClip from devBridge', () => {
+    const result = checkToolAccess('deleteClip', 'devBridge');
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toBeDefined();
+  });
+
+  it('checkToolAccess returns allowed=true for getTimelineState from devBridge', () => {
+    const result = checkToolAccess('getTimelineState', 'devBridge');
+    expect(result.allowed).toBe(true);
+  });
+
+  it('unknown tool returns allowed=false', () => {
+    const result = checkToolAccess('nonExistentTool', 'chat');
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain('Unknown tool');
+  });
+
+  it('executeBatch is riskLevel high', () => {
+    const policy = getToolPolicy('executeBatch');
+    expect(policy).toBeDefined();
+    expect(policy!.riskLevel).toBe('high');
+  });
+
+  it('executeBatch requires confirmation', () => {
+    const policy = getToolPolicy('executeBatch');
+    expect(policy).toBeDefined();
+    expect(policy!.requiresConfirmation).toBe(true);
+  });
+
+  it('read-only tools are marked readOnly=true', () => {
+    const readOnlyTools = [
+      'getTimelineState', 'getClipDetails', 'getClipsInTimeRange',
+      'getMediaItems', 'play', 'pause', 'undo', 'redo',
+      'captureFrame', 'getKeyframes', 'getMarkers', 'getMasks',
+    ];
+    for (const name of readOnlyTools) {
+      const policy = getToolPolicy(name);
+      expect(policy, `Missing policy for ${name}`).toBeDefined();
+      expect(policy!.readOnly, `${name} should be readOnly`).toBe(true);
+    }
+  });
+
+  it('sensitive tools have sensitiveDataAccess=true', () => {
+    const sensitiveTools = ['getStats', 'getStatsHistory', 'getLogs', 'getPlaybackTrace'];
+    for (const name of sensitiveTools) {
+      const policy = getToolPolicy(name);
+      expect(policy, `Missing policy for ${name}`).toBeDefined();
+      expect(policy!.sensitiveDataAccess, `${name} should have sensitiveDataAccess`).toBe(true);
+    }
+  });
+
+  it('local file tools have localFileAccess=true', () => {
+    const fileTools = ['listLocalFiles', 'importLocalFiles'];
+    for (const name of fileTools) {
+      const policy = getToolPolicy(name);
+      expect(policy, `Missing policy for ${name}`).toBeDefined();
+      expect(policy!.localFileAccess, `${name} should have localFileAccess`).toBe(true);
+    }
+  });
+
+  it('high-risk mutating tools exclude devBridge from allowedCallers', () => {
+    const highRiskTools = [
+      'deleteClip', 'deleteClips', 'deleteTrack', 'deleteMediaItem',
+      'cutRangesFromClip', 'executeBatch', 'downloadAndImportVideo',
+      'importLocalFiles',
+    ];
+    for (const name of highRiskTools) {
+      const policy = getToolPolicy(name);
+      expect(policy, `Missing policy for ${name}`).toBeDefined();
+      expect(
+        policy!.allowedCallers.includes('devBridge'),
+        `${name} should not allow devBridge`
+      ).toBe(false);
+    }
+  });
+
+  it('sensitive and mutating tools exclude nativeHelper from allowedCallers', () => {
+    const helperBlockedTools = [
+      'deleteClip',
+      'executeBatch',
+      'getLogs',
+      'getPlaybackTrace',
+      'importLocalFiles',
+    ];
+    for (const name of helperBlockedTools) {
+      const policy = getToolPolicy(name);
+      expect(policy, `Missing policy for ${name}`).toBeDefined();
+      expect(
+        policy!.allowedCallers.includes('nativeHelper'),
+        `${name} should not allow nativeHelper`
+      ).toBe(false);
+    }
+  });
+
+  it('chat caller can access all tools that have a policy', () => {
+    for (const name of definedToolNames) {
+      const result = checkToolAccess(name, 'chat');
+      expect(result.allowed, `chat should be able to access ${name}`).toBe(true);
+    }
+  });
+});
