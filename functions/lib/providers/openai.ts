@@ -7,6 +7,14 @@ export interface HostedChatMessage {
   content: unknown;
   name?: string;
   role: HostedChatRole;
+  tool_calls?: Array<{
+    id: string;
+    type: 'function';
+    function: {
+      arguments: string;
+      name: string;
+    };
+  }>;
   tool_call_id?: string;
 }
 
@@ -42,6 +50,38 @@ function normalizeNumericValue(value: unknown): number | undefined {
   return value;
 }
 
+function normalizeToolCalls(value: unknown): HostedChatMessage['tool_calls'] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const toolCalls = value
+    .filter(isRecord)
+    .map((toolCall) => {
+      const id = typeof toolCall.id === 'string' ? toolCall.id.trim() : '';
+      const type = typeof toolCall.type === 'string' ? toolCall.type.trim().toLowerCase() : '';
+      const fn = isRecord(toolCall.function) ? toolCall.function : null;
+      const name = typeof fn?.name === 'string' ? fn.name.trim() : '';
+      const argumentsText = typeof fn?.arguments === 'string' ? fn.arguments : '';
+
+      if (!id || type !== 'function' || !name) {
+        return null;
+      }
+
+      return {
+        function: {
+          arguments: argumentsText,
+          name,
+        },
+        id,
+        type: 'function' as const,
+      };
+    })
+    .filter((toolCall): toolCall is NonNullable<HostedChatMessage['tool_calls']>[number] => toolCall !== null);
+
+  return toolCalls.length > 0 ? toolCalls : undefined;
+}
+
 export function normalizeHostedChatRequest(body: unknown): HostedChatRequest | null {
   if (!isRecord(body) || !Array.isArray(body.messages)) {
     return null;
@@ -68,6 +108,11 @@ export function normalizeHostedChatRequest(body: unknown): HostedChatRequest | n
 
       if (typeof message.name === 'string' && message.name.trim()) {
         normalized.name = message.name.trim();
+      }
+
+      const toolCalls = normalizeToolCalls(message.tool_calls);
+      if (toolCalls) {
+        normalized.tool_calls = toolCalls;
       }
 
       if (typeof message.tool_call_id === 'string' && message.tool_call_id.trim()) {
