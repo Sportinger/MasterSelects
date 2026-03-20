@@ -55,6 +55,7 @@ export const useMediaStore = create<MediaStoreState>()(
     activeCompositionId: 'comp-1',
     openCompositionIds: ['comp-1'],
     slotAssignments: {},
+    slotDeckStates: {},
     previewCompositionId: null,
     sourceMonitorFileId: null,
     activeLayerSlots: {},

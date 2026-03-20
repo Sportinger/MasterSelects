@@ -7,6 +7,7 @@ import { buildPlaybackDebugStats } from '../../playbackDebugStats';
 import { playbackHealthMonitor } from '../../playbackHealthMonitor';
 import { vfPipelineMonitor } from '../../vfPipelineMonitor';
 import { wcPipelineMonitor } from '../../wcPipelineMonitor';
+import { slotDeckManager } from '../../slotDeckManager';
 import type { ToolResult } from '../types';
 
 const DEFAULT_PLAYBACK_WINDOW_MS = 5000;
@@ -113,6 +114,7 @@ function collectSnapshot(playbackWindowMs = DEFAULT_PLAYBACK_WINDOW_MS) {
     audio: s.audio,
     health: playbackHealthMonitor.snapshot(),
     cache: collectCacheSnapshot(),
+    slotDecks: slotDeckManager.getSnapshot(),
     pipelineStats: {
       wc: wcPipelineMonitor.stats(),
       vf: vfPipelineMonitor.stats(),
@@ -268,6 +270,7 @@ export async function handleGetPlaybackTrace(
       playback: serializePlayback(playback),
       health: playbackHealthMonitor.snapshot(),
       cache: collectCacheSnapshot(),
+      slotDecks: slotDeckManager.getSnapshot(),
       gpu: gpuInfo,
       wcStats: wcPipelineMonitor.stats(),
       vfStats: vfPipelineMonitor.stats(),

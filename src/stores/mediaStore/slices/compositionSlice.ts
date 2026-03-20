@@ -7,6 +7,8 @@ import { useTimelineStore } from '../../timeline';
 import { useSettingsStore } from '../../settingsStore';
 import { compositionRenderer } from '../../../services/compositionRenderer';
 import { playheadState } from '../../../services/layerBuilder';
+import { flags } from '../../../engine/featureFlags';
+import type { SlotDeckState } from '../types';
 
 export interface CompositionSwitchOptions {
   skipAnimation?: boolean;
@@ -27,6 +29,32 @@ export interface CompositionActions {
   assignMediaFileToSlot: (mediaFileId: string, slotIndex: number) => void;
   setPreviewComposition: (id: string | null) => void;
   setSourceMonitorFile: (id: string | null) => void;
+}
+
+interface SlotDeckManagerLike {
+  prepareSlot: (slotIndex: number, compositionId: string) => void;
+  disposeSlot: (slotIndex: number) => void;
+}
+
+function resolveSlotDeckManager(): SlotDeckManagerLike | null {
+  const globalScope = globalThis as typeof globalThis & { __slotDeckManager?: SlotDeckManagerLike };
+  return globalScope.__slotDeckManager ?? null;
+}
+
+function createWarmingSlotDeckState(slotIndex: number, compositionId: string | null): SlotDeckState {
+  return {
+    slotIndex,
+    compositionId,
+    status: compositionId ? 'warming' : 'disposed',
+    preparedClipCount: 0,
+    readyClipCount: 0,
+    firstFrameReady: false,
+    decoderMode: 'unknown',
+    lastPreparedAt: compositionId ? Date.now() : null,
+    lastActivatedAt: null,
+    lastError: null,
+    pinnedLayerIndex: null,
+  };
 }
 
 const DURATION_SYNC_EPSILON = 0.0001;
@@ -450,14 +478,25 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
     // Assign to slot (inline moveSlot logic)
     const { slotAssignments } = get();
     const newAssignments = { ...slotAssignments };
+    let displacedCompId: string | null = null;
     for (const [id, idx] of Object.entries(newAssignments)) {
       if (idx === slotIndex && id !== comp.id) {
+        displacedCompId = id;
         delete newAssignments[id];
         break;
       }
     }
     newAssignments[comp.id] = slotIndex;
     set({ slotAssignments: newAssignments });
+
+    if (flags.useWarmSlotDecks) {
+      const setSlotDeckState = get().setSlotDeckState as ((slotIndex: number, next: SlotDeckState) => void) | undefined;
+      if (displacedCompId) {
+        resolveSlotDeckManager()?.disposeSlot(slotIndex);
+      }
+      setSlotDeckState?.(slotIndex, createWarmingSlotDeckState(slotIndex, comp.id));
+      resolveSlotDeckManager()?.prepareSlot(slotIndex, comp.id);
+    }
 
     // Open the composition tab (loads empty timeline)
     const { activeCompositionId, compositions } = get();

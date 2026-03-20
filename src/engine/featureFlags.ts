@@ -6,6 +6,8 @@ export const flags = {
   useRenderGraph: false,  // Render Graph executor (stubs - not ready)
   useDecoderPool: false,  // Shared decoder pool (not wired yet)
   useFullWebCodecsPlayback: false,  // Preview runs HTML-only for now; export WebCodecs stays separate
+  useLiveSlotTrigger: false,  // Slot Grid click triggers live layers without forcing editor switching
+  useWarmSlotDecks: false,  // Prepare reusable slot-owned live decks for low-latency triggering
 };
 
 // Expose for runtime toggling from devtools

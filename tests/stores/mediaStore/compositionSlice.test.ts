@@ -6,6 +6,7 @@ import { createCompositionSlice, type CompositionActions } from '../../../src/st
 import { createSlotSlice, type SlotActions } from '../../../src/stores/mediaStore/slices/slotSlice';
 import { createMultiLayerSlice, type MultiLayerActions } from '../../../src/stores/mediaStore/slices/multiLayerSlice';
 import { useTimelineStore } from '../../../src/stores/timeline';
+import { flags } from '../../../src/engine/featureFlags';
 
 // The compositionSlice calls useTimelineStore and useSettingsStore internally,
 // but these are mocked in tests/setup.ts. We rely on those mocks here.
@@ -145,6 +146,7 @@ describe('compositionSlice', () => {
   beforeEach(() => {
     store = createTestMediaStore();
     useTimelineStore.setState(initialTimelineState);
+    flags.useWarmSlotDecks = false;
   });
 
   // ─── createComposition ────────────────────────────────────────────
@@ -515,6 +517,67 @@ describe('compositionSlice', () => {
     store.setState({ slotAssignments: { 'comp-1': 2 } });
     store.getState().unassignSlot('comp-1');
     expect(store.getState().slotAssignments['comp-1']).toBeUndefined();
+  });
+
+  it('setSlotDeckState and clearSlotDeckState manage transient deck metadata', () => {
+    const deckState = {
+      slotIndex: 2,
+      compositionId: 'comp-1',
+      status: 'warm' as const,
+      preparedClipCount: 4,
+      readyClipCount: 3,
+      firstFrameReady: true,
+      decoderMode: 'webcodecs' as const,
+      lastPreparedAt: 123,
+      lastActivatedAt: 456,
+      lastError: null,
+      pinnedLayerIndex: 1,
+    };
+
+    store.getState().setSlotDeckState(2, deckState);
+    expect(store.getState().slotDeckStates?.[2]).toEqual(deckState);
+
+    store.getState().clearSlotDeckState(2);
+    expect(store.getState().slotDeckStates?.[2]).toBeUndefined();
+  });
+
+  it('moveSlot: updates transient deck state and calls the slot deck manager when available', () => {
+    flags.useWarmSlotDecks = true;
+    const prepareSlot = vi.fn();
+    const disposeSlot = vi.fn();
+    (globalThis as any).__slotDeckManager = {
+      prepareSlot,
+      disposeSlot,
+      disposeAll: vi.fn(),
+      adoptDeckToLayer: vi.fn(),
+      getSlotState: vi.fn(),
+    };
+
+    try {
+      const comp2 = store.getState().createComposition('B');
+      store.setState({ slotAssignments: { 'comp-1': 0, [comp2.id]: 3 } });
+      store.getState().moveSlot('comp-1', 3);
+
+      expect(disposeSlot).toHaveBeenCalledWith(0);
+      expect(prepareSlot).toHaveBeenCalledWith(0, comp2.id);
+      expect(prepareSlot).toHaveBeenCalledWith(3, 'comp-1');
+      expect(store.getState().slotDeckStates?.[0]?.compositionId).toBe(comp2.id);
+      expect(store.getState().slotDeckStates?.[3]?.compositionId).toBe('comp-1');
+      expect(store.getState().slotDeckStates?.[0]?.status).toBe('warming');
+      expect(store.getState().slotDeckStates?.[3]?.status).toBe('warming');
+    } finally {
+      delete (globalThis as any).__slotDeckManager;
+    }
+  });
+
+  it('unassignSlot: marks the slot deck as disposed when no manager is registered', () => {
+    flags.useWarmSlotDecks = true;
+    store.setState({ slotAssignments: { 'comp-1': 2 } });
+    store.getState().unassignSlot('comp-1');
+
+    expect(store.getState().slotAssignments['comp-1']).toBeUndefined();
+    expect(store.getState().slotDeckStates?.[2]?.status).toBe('disposed');
+    expect(store.getState().slotDeckStates?.[2]?.compositionId).toBeNull();
   });
 
   it('getSlotMap: returns correctly sized array with assigned compositions', () => {
@@ -1050,6 +1113,28 @@ describe('compositionSlice', () => {
     expect(store.getState().activeLayerSlots[2]).toBe('comp-1');
   });
 
+  it('triggerLiveSlot: updates live layer routing without changing editor state', () => {
+    const comp2 = store.getState().createComposition('Live');
+    store.setState({
+      activeCompositionId: 'comp-1',
+      openCompositionIds: ['comp-1'],
+    });
+
+    store.getState().triggerLiveSlot(comp2.id, 1);
+
+    expect(store.getState().activeLayerSlots[1]).toBe(comp2.id);
+    expect(store.getState().activeCompositionId).toBe('comp-1');
+    expect(store.getState().openCompositionIds).toEqual(['comp-1']);
+  });
+
+  it('triggerLiveSlot: moves the same composition to the new live layer', () => {
+    store.getState().triggerLiveSlot('comp-1', 0);
+    store.getState().triggerLiveSlot('comp-1', 2);
+
+    expect(store.getState().activeLayerSlots[0]).toBeUndefined();
+    expect(store.getState().activeLayerSlots[2]).toBe('comp-1');
+  });
+
   it('deactivateLayer: no-op for unoccupied layer', () => {
     store.getState().deactivateLayer(5);
     expect(store.getState().activeLayerSlots[5]).toBeUndefined();
@@ -1099,6 +1184,28 @@ describe('compositionSlice', () => {
     store.getState().activateColumn(5); // col 5 has nothing
     const slots = store.getState().activeLayerSlots;
     expect(Object.keys(slots).length).toBe(0);
+  });
+
+  it('triggerLiveColumn: replaces live layer routing without changing editor ownership', () => {
+    const comp2 = store.getState().createComposition('B');
+    store.setState({
+      activeCompositionId: 'comp-1',
+      openCompositionIds: ['comp-1', comp2.id],
+      slotAssignments: {
+        'comp-1': 1,
+        [comp2.id]: 13,
+      },
+      activeLayerSlots: { 0: 'old-comp' },
+    });
+
+    store.getState().triggerLiveColumn(1);
+
+    expect(store.getState().activeLayerSlots).toEqual({
+      0: 'comp-1',
+      1: comp2.id,
+    });
+    expect(store.getState().activeCompositionId).toBe('comp-1');
+    expect(store.getState().openCompositionIds).toEqual(['comp-1', comp2.id]);
   });
 
   // ─── setLayerOpacity ────────────────────────────────────────────

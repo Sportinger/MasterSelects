@@ -8,6 +8,28 @@ export type MediaType = 'video' | 'audio' | 'image' | 'composition' | 'text' | '
 // Proxy status for video files
 export type ProxyStatus = 'none' | 'generating' | 'ready' | 'error';
 
+export type SlotDeckStatus =
+  | 'cold'
+  | 'warming'
+  | 'warm'
+  | 'hot'
+  | 'failed'
+  | 'disposed';
+
+export interface SlotDeckState {
+  slotIndex: number;
+  compositionId: string | null;
+  status: SlotDeckStatus;
+  preparedClipCount: number;
+  readyClipCount: number;
+  firstFrameReady: boolean;
+  decoderMode: 'html' | 'webcodecs' | 'native' | 'mixed' | 'unknown';
+  lastPreparedAt: number | null;
+  lastActivatedAt: number | null;
+  lastError: string | null;
+  pinnedLayerIndex: number | null;
+}
+
 // Label colors (AE-style)
 export type LabelColor = 'none' | 'red' | 'yellow' | 'blue' | 'green' | 'purple' | 'orange' | 'pink' | 'cyan' | 'brown' | 'lavender' | 'peach' | 'seafoam' | 'fuchsia' | 'tan' | 'aqua';
 
@@ -126,6 +148,7 @@ export interface MediaState {
 
   // Slot grid
   slotAssignments: Record<string, number>;  // compId → slotIndex
+  slotDeckStates?: Record<number, SlotDeckState>;
   previewCompositionId: string | null;
   sourceMonitorFileId: string | null;
 

@@ -226,6 +226,7 @@ if (typeof globalThis.AudioContext === 'undefined') {
 // Mock HTMLMediaElement play/pause
 HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined)
 HTMLMediaElement.prototype.pause = vi.fn()
+HTMLMediaElement.prototype.load = vi.fn()
 
 // Clean up mocks after each test
 afterEach(() => {

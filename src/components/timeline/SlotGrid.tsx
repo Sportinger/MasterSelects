@@ -1,16 +1,19 @@
 // SlotGrid - Resolume-style grid with row labels (layers) on left, column numbers on top
 // Multi-layer playback: each row (A-D) can have an active composition playing simultaneously
-// Click = activate on layer + play from start, Drag = reorder/move to any slot
-// Column header click = activate all compositions in that column
+// Default click behavior is editor-first; the live-trigger flag swaps primary click to live launch.
+// Drag = reorder/move to any slot. Column header click activates all compositions in that column.
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { playheadState } from '../../services/layerBuilder';
 import { layerPlaybackManager } from '../../services/layerPlaybackManager';
+import { slotDeckManager } from '../../services/slotDeckManager';
+import { flags } from '../../engine/featureFlags';
 import { animateSlotGrid } from './slotGridAnimation';
 import { MiniTimeline } from './MiniTimeline';
 import type { Composition } from '../../stores/mediaStore';
+import type { SlotDeckState } from '../../stores/mediaStore/types';
 
 interface SlotGridProps {
   opacity: number;
@@ -21,6 +24,45 @@ const GRID_COLS = 12;
 const GRID_ROWS = 4;
 const TOTAL_SLOTS = GRID_COLS * GRID_ROWS;
 const LABEL_WIDTH = 40;
+const EMPTY_SLOT_DECK_STATES: Record<number, SlotDeckState> = {};
+
+function getSlotDeckBadgeLabel(status: SlotDeckState['status']): string {
+  switch (status) {
+    case 'cold':
+      return 'C';
+    case 'warming':
+      return 'Wi';
+    case 'warm':
+      return 'Wa';
+    case 'hot':
+      return 'H';
+    case 'failed':
+      return 'F';
+    case 'disposed':
+      return 'D';
+    default:
+      return '?';
+  }
+}
+
+function getSlotDeckBadgeColor(status: SlotDeckState['status']): string {
+  switch (status) {
+    case 'cold':
+      return 'rgba(120, 128, 144, 0.92)';
+    case 'warming':
+      return 'rgba(194, 119, 24, 0.92)';
+    case 'warm':
+      return 'rgba(49, 140, 231, 0.92)';
+    case 'hot':
+      return 'rgba(30, 170, 94, 0.92)';
+    case 'failed':
+      return 'rgba(185, 42, 42, 0.92)';
+    case 'disposed':
+      return 'rgba(88, 96, 115, 0.92)';
+    default:
+      return 'rgba(88, 96, 115, 0.92)';
+  }
+}
 
 export function SlotGrid({ opacity }: SlotGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -28,9 +70,12 @@ export function SlotGrid({ opacity }: SlotGridProps) {
   const activeCompositionId = useMediaStore(state => state.activeCompositionId);
   const slotAssignments = useMediaStore(state => state.slotAssignments);
   const activeLayerSlots = useMediaStore(state => state.activeLayerSlots);
+  const slotDeckStates = useMediaStore(state => state.slotDeckStates);
   const openCompositionTab = useMediaStore(state => state.openCompositionTab);
   const deactivateLayer = useMediaStore(state => state.deactivateLayer);
   const activateColumn = useMediaStore(state => state.activateColumn);
+  const triggerLiveSlot = useMediaStore(state => state.triggerLiveSlot) as (compositionId: string, layerIndex: number) => void;
+  const triggerLiveColumn = useMediaStore(state => state.triggerLiveColumn) as (colIndex: number) => void;
   const moveSlot = useMediaStore(state => state.moveSlot);
   const unassignSlot = useMediaStore(state => state.unassignSlot);
   const assignMediaFileToSlot = useMediaStore(state => state.assignMediaFileToSlot);
@@ -57,6 +102,29 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     }
     return ids;
   }, [activeLayerSlots]);
+  const resolvedSlotDeckStates = slotDeckStates ?? EMPTY_SLOT_DECK_STATES;
+  const prevAssignedSlotsRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (!flags.useWarmSlotDecks) {
+      prevAssignedSlotsRef.current = new Set();
+      return;
+    }
+
+    const assignedSlots = new Set<number>();
+    for (const [compId, slotIndex] of Object.entries(slotAssignments)) {
+      assignedSlots.add(slotIndex);
+      slotDeckManager.prepareSlot(slotIndex, compId);
+    }
+
+    for (const slotIndex of prevAssignedSlotsRef.current) {
+      if (!assignedSlots.has(slotIndex)) {
+        slotDeckManager.disposeSlot(slotIndex);
+      }
+    }
+
+    prevAssignedSlotsRef.current = assignedSlots;
+  }, [slotAssignments]);
 
   // Drag state
   const [dragCompId, setDragCompId] = useState<string | null>(null);
@@ -106,12 +174,13 @@ export function SlotGrid({ opacity }: SlotGridProps) {
       if (newCompId) {
         const comp = compositions.find(c => c.id === newCompId);
         const savedPosition = comp?.timelineData?.playheadPosition ?? 0;
-        layerPlaybackManager.activateLayer(layerIndex, newCompId, savedPosition);
+        const slotIndex = slotAssignments[newCompId] ?? null;
+        layerPlaybackManager.activateLayer(layerIndex, newCompId, savedPosition, { slotIndex });
       }
     }
 
     prevDesiredRef.current = desired;
-  }, [activeLayerSlots, activeCompositionId]);
+  }, [activeLayerSlots, activeCompositionId, slotAssignments]);
 
   // Dismiss context menu on click-outside
   useEffect(() => {
@@ -154,15 +223,27 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     return () => container.removeEventListener('wheel', handleWheel);
   }, []);
 
-  // Click = activate on layer + open in editor + play from start
-  // Order matters: set editor comp FIRST so sync effect sees correct activeCompositionId
+  const openSlotInEditor = useCallback((compId: string) => {
+    openCompositionTab(compId, { skipAnimation: true, playFromStart: true });
+  }, [openCompositionTab]);
+
+  // Click = live trigger when flagged on, otherwise keep the existing editor-first path.
   const handleSlotClick = useCallback((comp: Composition, slotIndex: number) => {
     const layerIndex = Math.floor(slotIndex / GRID_COLS);
-    // Set editor comp first so sync effect sees correct activeCompositionId
-    openCompositionTab(comp.id, { skipAnimation: true, playFromStart: true });
-    // Then update layer assignment
+    if (flags.useLiveSlotTrigger) {
+      triggerLiveSlot(comp.id, layerIndex);
+      return;
+    }
+
+    // Set editor comp first so sync effect sees correct activeCompositionId.
+    openSlotInEditor(comp.id);
+    // Then update layer assignment.
     useMediaStore.getState().activateOnLayer(comp.id, layerIndex);
-  }, [openCompositionTab]);
+  }, [openSlotInEditor, triggerLiveSlot]);
+
+  const handleSlotDoubleClick = useCallback((comp: Composition) => {
+    openSlotInEditor(comp.id);
+  }, [openSlotInEditor]);
 
   // Click empty slot = fully deactivate that layer
   const handleEmptySlotClick = useCallback((slotIndex: number) => {
@@ -224,16 +305,21 @@ export function SlotGrid({ opacity }: SlotGridProps) {
   // Click column header = activate all compositions in that column
   const handleColumnClick = useCallback((colIndex: number) => {
     const slotMap = getSlotMap(TOTAL_SLOTS);
+    if (flags.useLiveSlotTrigger) {
+      triggerLiveColumn(colIndex);
+      return;
+    }
+
     activateColumn(colIndex);
     // Open topmost (row A first) filled slot in that column in editor
     for (let row = 0; row < GRID_ROWS; row++) {
       const comp = slotMap[row * GRID_COLS + colIndex];
       if (comp) {
-        openCompositionTab(comp.id, { skipAnimation: true, playFromStart: true });
+        openSlotInEditor(comp.id);
         break;
       }
     }
-  }, [activateColumn, getSlotMap, openCompositionTab]);
+  }, [activateColumn, getSlotMap, openSlotInEditor, triggerLiveColumn]);
 
   // Right-click context menu on filled slots
   const handleContextMenu = useCallback((e: React.MouseEvent, comp: Composition) => {
@@ -248,6 +334,13 @@ export function SlotGrid({ opacity }: SlotGridProps) {
       setContextMenu(null);
     }
   }, [contextMenu, unassignSlot]);
+
+  const handleOpenInEditor = useCallback(() => {
+    if (contextMenu) {
+      openSlotInEditor(contextMenu.compId);
+      setContextMenu(null);
+    }
+  }, [contextMenu, openSlotInEditor]);
 
   // Drag handlers — track comp ID, not slot index
   const handleDragStart = useCallback((e: React.DragEvent, comp: Composition) => {
@@ -364,6 +457,10 @@ export function SlotGrid({ opacity }: SlotGridProps) {
               const slotIndex = rowIndex * GRID_COLS + colIndex;
               const comp = slotMap[slotIndex];
               const isDragOver = slotIndex === dragOverIndex && (dragCompId !== null || isExternalDrag);
+              const deckState = flags.useWarmSlotDecks ? resolvedSlotDeckStates[slotIndex] : undefined;
+              const slotDeckTitle = deckState
+                ? `${deckState.status}${deckState.decoderMode !== 'unknown' ? ` / ${deckState.decoderMode}` : ''}`
+                : null;
 
               if (comp) {
                 const isEditorActive = comp.id === activeCompositionId;
@@ -384,10 +481,21 @@ export function SlotGrid({ opacity }: SlotGridProps) {
                       `${isDragOver && !isSelf ? ' drag-over' : ''}`
                     }
                     data-comp-id={comp.id}
-                    style={thumbUrl ? { backgroundImage: `url(${thumbUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+                    style={{
+                      position: 'relative',
+                      ...(thumbUrl
+                        ? { backgroundImage: `url(${thumbUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                        : {}),
+                    }}
                     onClick={() => handleSlotClick(comp, slotIndex)}
+                    onDoubleClick={() => handleSlotDoubleClick(comp)}
                     onContextMenu={(e) => handleContextMenu(e, comp)}
-                    title={comp.name}
+                    title={
+                      `${flags.useLiveSlotTrigger
+                        ? `${comp.name} - Click to trigger live, double-click to open in editor`
+                        : comp.name}` +
+                      (slotDeckTitle ? ` | Deck: ${slotDeckTitle}` : '')
+                    }
                     draggable
                     onDragStart={(e) => handleDragStart(e, comp)}
                     onDragEnter={handleDragEnter}
@@ -413,6 +521,37 @@ export function SlotGrid({ opacity }: SlotGridProps) {
                       slotSize={SLOT_SIZE - 4}
                       initialPosition={comp.timelineData?.playheadPosition ?? 0}
                     />
+                    {deckState && (
+                      <div
+                        className={`slot-grid-deck-badge slot-grid-deck-badge-${deckState.status}`}
+                        aria-label={`Slot ${slotIndex + 1} deck ${deckState.status}`}
+                        title={`Deck ${deckState.status}${slotDeckTitle ? ` (${slotDeckTitle})` : ''}`}
+                        data-slot-deck-status={deckState.status}
+                        style={{
+                          position: 'absolute',
+                          top: 4,
+                          left: 4,
+                          minWidth: 18,
+                          height: 18,
+                          padding: '0 5px',
+                          borderRadius: 999,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 10,
+                          fontWeight: 700,
+                          letterSpacing: 0.2,
+                          lineHeight: 1,
+                          color: '#fff',
+                          background: getSlotDeckBadgeColor(deckState.status),
+                          boxShadow: '0 1px 4px rgba(0, 0, 0, 0.35)',
+                          pointerEvents: 'none',
+                          zIndex: 3,
+                        }}
+                      >
+                        {getSlotDeckBadgeLabel(deckState.status)}
+                      </div>
+                    )}
                   </div>
                 );
               }
@@ -421,12 +560,46 @@ export function SlotGrid({ opacity }: SlotGridProps) {
                 <div
                   key={slotIndex}
                   className={`slot-grid-item empty${isDragOver ? ' drag-over' : ''}`}
+                  style={{ position: 'relative' }}
                   onClick={() => handleEmptySlotClick(slotIndex)}
                   onDragEnter={handleDragEnter}
                   onDragOver={(e) => handleDragOver(e, slotIndex)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, slotIndex)}
-                />
+                  title={slotDeckTitle ? `Deck: ${slotDeckTitle}` : undefined}
+                >
+                  {deckState && (
+                    <div
+                      className={`slot-grid-deck-badge slot-grid-deck-badge-${deckState.status}`}
+                      aria-label={`Slot ${slotIndex + 1} deck ${deckState.status}`}
+                      title={`Deck ${deckState.status}${slotDeckTitle ? ` (${slotDeckTitle})` : ''}`}
+                      data-slot-deck-status={deckState.status}
+                      style={{
+                        position: 'absolute',
+                        top: 4,
+                        left: 4,
+                        minWidth: 18,
+                        height: 18,
+                        padding: '0 5px',
+                        borderRadius: 999,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        letterSpacing: 0.2,
+                        lineHeight: 1,
+                        color: '#fff',
+                        background: getSlotDeckBadgeColor(deckState.status),
+                        boxShadow: '0 1px 4px rgba(0, 0, 0, 0.35)',
+                        pointerEvents: 'none',
+                        zIndex: 3,
+                      }}
+                    >
+                      {getSlotDeckBadgeLabel(deckState.status)}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </Fragment>
@@ -440,6 +613,7 @@ export function SlotGrid({ opacity }: SlotGridProps) {
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onMouseDown={(e) => e.stopPropagation()}
         >
+          <button onClick={handleOpenInEditor}>Open in Editor</button>
           <button onClick={handleRemoveFromSlot}>Remove from Slot</button>
         </div>
       )}

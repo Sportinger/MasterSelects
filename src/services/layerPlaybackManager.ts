@@ -13,7 +13,9 @@ import {
   getRuntimeFrameProvider,
   updateRuntimePlaybackTime,
 } from './mediaRuntime/runtimePlayback';
+import { flags } from '../engine/featureFlags';
 import { Logger } from './logger';
+import { slotDeckManager } from './slotDeckManager';
 
 const log = Logger.create('LayerPlayback');
 
@@ -26,6 +28,8 @@ interface LayerCompState {
   // Independent time tracking (wall-clock based, not tied to global playhead)
   activatedAt: number;   // performance.now() when this layer was activated
   pausedAt: number | null; // if paused, the elapsed time at pause; null = running
+  resourceOwnership: 'layer' | 'slot-deck';
+  slotIndex: number | null;
 }
 
 class LayerPlaybackManager {
@@ -39,9 +43,38 @@ class LayerPlaybackManager {
   /**
    * Activate a composition on a layer — loads its timelineData and creates media elements
    */
-  activateLayer(layerIndex: number, compositionId: string, initialElapsed?: number): void {
+  activateLayer(
+    layerIndex: number,
+    compositionId: string,
+    initialElapsed?: number,
+    options?: { slotIndex?: number | null }
+  ): void {
     // Deactivate current layer first
     this.deactivateLayer(layerIndex);
+
+    const preparedDeck =
+      flags.useWarmSlotDecks && options?.slotIndex !== undefined && options.slotIndex !== null
+        ? slotDeckManager.getPreparedDeck(options.slotIndex, compositionId)
+        : null;
+
+    if (preparedDeck && options?.slotIndex !== undefined && options.slotIndex !== null) {
+      const adopted = slotDeckManager.adoptDeckToLayer(options.slotIndex, layerIndex, initialElapsed);
+      if (adopted) {
+        this.layerStates.set(layerIndex, {
+          compositionId,
+          composition: preparedDeck.composition,
+          clips: preparedDeck.clips,
+          tracks: preparedDeck.tracks,
+          duration: preparedDeck.duration,
+          activatedAt: performance.now() - (initialElapsed ?? 0) * 1000,
+          pausedAt: null,
+          resourceOwnership: 'slot-deck',
+          slotIndex: options.slotIndex,
+        });
+        log.info(`Adopted warm slot deck ${options.slotIndex} onto layer ${layerIndex}`);
+        return;
+      }
+    }
 
     const { compositions, files } = useMediaStore.getState();
     const comp = compositions.find(c => c.id === compositionId);
@@ -61,6 +94,8 @@ class LayerPlaybackManager {
         duration: comp.duration,
         activatedAt: performance.now() - (initialElapsed ?? 0) * 1000,
         pausedAt: null,
+        resourceOwnership: 'layer',
+        slotIndex: null,
       });
       return;
     }
@@ -124,6 +159,8 @@ class LayerPlaybackManager {
       duration: comp.duration,
       activatedAt: performance.now() - (initialElapsed ?? 0) * 1000,
       pausedAt: null,
+      resourceOwnership: 'layer',
+      slotIndex: null,
     });
 
     log.info(`Activated layer ${layerIndex} with composition "${comp.name}" (${hydratedClips.length} clips, initialElapsed=${initialElapsed ?? 0}s)`);
@@ -135,6 +172,17 @@ class LayerPlaybackManager {
   deactivateLayer(layerIndex: number): void {
     const state = this.layerStates.get(layerIndex);
     if (!state) return;
+
+    if (state.resourceOwnership === 'slot-deck' && state.slotIndex !== null) {
+      for (const clip of state.clips) {
+        clip.source?.videoElement?.pause();
+        clip.source?.audioElement?.pause();
+      }
+      slotDeckManager.releaseLayerPin(state.slotIndex, layerIndex);
+      this.layerStates.delete(layerIndex);
+      log.info(`Deactivated slot-deck-backed layer ${layerIndex}`);
+      return;
+    }
 
     for (const clip of state.clips) {
       if (clip.source?.videoElement) {
