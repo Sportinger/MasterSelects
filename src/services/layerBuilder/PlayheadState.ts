@@ -145,6 +145,18 @@ export function stopInternalPosition(): void {
 }
 
 /**
+ * Align the render-path playhead to a paused store position.
+ * Used by restore/reset paths that bypass the normal setPlayhead action.
+ */
+export function syncPausedPlayheadPosition(position: number): void {
+  playheadState.position = sanitizePlayheadPosition(position, playheadState.position);
+  playheadState.isUsingInternalPosition = false;
+  playheadState.playbackJustStarted = false;
+  clearInternalPlaybackHold();
+  clearMasterAudio();
+}
+
+/**
  * Update internal position during playback
  */
 export function updateInternalPosition(position: number): void {

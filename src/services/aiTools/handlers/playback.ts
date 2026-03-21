@@ -68,6 +68,46 @@ export async function handlePause(
   return { success: true, data: { playing: false } };
 }
 
+export async function handleReloadApp(
+  args: Record<string, unknown>,
+  _timelineStore: TimelineStore
+): Promise<ToolResult> {
+  if (typeof window === 'undefined') {
+    return {
+      success: false,
+      error: 'Browser reload is only available in the app runtime.',
+    };
+  }
+
+  const requestedDelayMs =
+    typeof args.delayMs === 'number' && Number.isFinite(args.delayMs)
+      ? Math.round(args.delayMs)
+      : 250;
+  const delayMs = Math.max(100, Math.min(2_000, requestedDelayMs));
+  const mode = args.mode === 'soft' ? 'soft' : 'hard';
+  const currentUrl = new URL(window.location.href);
+
+  window.setTimeout(() => {
+    if (mode === 'soft') {
+      window.location.reload();
+      return;
+    }
+
+    currentUrl.searchParams.set('__ai_reload', String(Date.now()));
+    window.location.replace(currentUrl.toString());
+  }, delayMs);
+
+  return {
+    success: true,
+    data: {
+      scheduled: true,
+      delayMs,
+      mode,
+      url: currentUrl.toString(),
+    },
+  };
+}
+
 function waitForAnimationFrame(): Promise<number> {
   return new Promise((resolve) => {
     if (typeof requestAnimationFrame === 'function') {

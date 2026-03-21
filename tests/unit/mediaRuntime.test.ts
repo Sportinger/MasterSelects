@@ -787,6 +787,70 @@ describe('media runtime bindings', () => {
     ).toBeNull();
   });
 
+  it('hydrates a shared preview runtime session on demand', async () => {
+    const file = new File(['video'], 'preview-separate.mp4', {
+      type: 'video/mp4',
+      lastModified: 82,
+    });
+    setMediaFiles([
+      {
+        id: 'media-preview-separate',
+        file,
+        name: 'preview-separate.mp4',
+        duration: 9,
+      },
+    ]);
+
+    const previewRuntimePlayer = {
+      currentTime: 0,
+      isPlaying: false,
+      isFullMode: () => true,
+      isSimpleMode: () => false,
+      getCurrentFrame: () => null,
+      seek: vi.fn(),
+      pause: vi.fn(),
+      destroy: vi.fn(),
+      loadFile: vi.fn().mockResolvedValue(undefined),
+      getDebugInfo: vi.fn().mockReturnValue(null),
+    };
+
+    vi.mocked(WebCodecsPlayer).mockImplementation(function MockWebCodecsPlayer() {
+      return previewRuntimePlayer as any;
+    } as any);
+
+    const source = bindSourceRuntimeToClip({
+      clipId: 'clip-preview-separate',
+      source: {
+        type: 'video',
+        naturalDuration: 9,
+        mediaFileId: 'media-preview-separate',
+      },
+      file,
+      mediaFileId: 'media-preview-separate',
+    });
+    const previewSource = {
+      ...source,
+      runtimeSessionKey: 'interactive-track:track-1:media:media-preview-separate',
+    };
+
+    const provider = await ensureRuntimeFrameProvider(previewSource, 'interactive', 1.5);
+
+    expect(provider).toBe(previewRuntimePlayer);
+    expect(getRuntimeFrameProvider(previewSource)).toBe(previewRuntimePlayer);
+    expect(previewRuntimePlayer.loadFile).toHaveBeenCalledWith(file);
+    expect(previewRuntimePlayer.seek).toHaveBeenCalledWith(1.5);
+
+    releaseRuntimePlaybackSession(previewSource);
+
+    expect(previewRuntimePlayer.destroy).toHaveBeenCalledTimes(1);
+    expect(
+      mediaRuntimeRegistry.getSession(
+        'media:media-preview-separate',
+        'interactive-track:track-1:media:media-preview-separate'
+      )
+    ).toBeNull();
+  });
+
   it('reuses a shared cached frame across simultaneous same-source sessions at the same source time', () => {
     const file = new File(['video'], 'simul.mp4', { type: 'video/mp4', lastModified: 9 });
     setMediaFiles([

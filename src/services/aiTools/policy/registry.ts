@@ -98,6 +98,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['selectMediaItems', readOnly()],
   ['play', readOnly()],
   ['pause', readOnly()],
+  ['reloadApp', readOnly()],
   ['simulateScrub', readOnly()],
   ['simulatePlayback', readOnly()],
   ['simulatePlaybackPath', readOnly()],

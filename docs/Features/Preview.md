@@ -4,6 +4,8 @@
 
 WebGPU preview with RAM caching, multiple panels, edit mode, source monitor, overlay system, and multi-output management.
 
+For live playback debugging workflows, AI bridge stress tests, and detailed WebCodecs/VF metric interpretation, see [Playback Debugging & Stress Testing](./Playback-Debugging.md).
+
 ---
 
 ## Table of Contents

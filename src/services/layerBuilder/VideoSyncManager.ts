@@ -801,6 +801,10 @@ export class VideoSyncManager {
       return runtimeProvider;
     }
 
+    if (runtimeIsFullMode && runtimeHasFrame && !preferFreshRuntime) {
+      return runtimeProvider;
+    }
+
     const clipHasFrame = this.providerHasFrame(clipPlayer);
     const runtimeDistance = providerDistance(runtimeProvider);
     const clipDistance = providerDistance(clipPlayer);
@@ -1972,7 +1976,10 @@ export class VideoSyncManager {
     // Drag scrubbing uses the dedicated scrub session inside syncFullWebCodecs.
     const useFullWebCodecsPreview =
       flags.useFullWebCodecsPlayback &&
-      clip.source?.webCodecsPlayer?.isFullMode();
+      (
+        clip.source?.webCodecsPlayer?.isFullMode() ||
+        (!!clip.source?.runtimeSourceId && !!clip.source?.runtimeSessionKey)
+      );
 
     if (useFullWebCodecsPreview) {
       this.syncFullWebCodecs(clip, ctx);
@@ -2927,6 +2934,9 @@ export class VideoSyncManager {
       if (playheadState.heldPlaybackPosition !== null) {
         clearInternalPlaybackHold(clip.id);
       }
+      const settle = scrubSettleState.get(clip.id);
+      const keepScrubRuntimeForSettle =
+        settle?.reason === 'scrub-stop' && scrubSettleState.isPending(clip.id);
       // Detect scrub-stop transition for WebCodecs path
       const justStoppedDraggingWc = this.clipWasDragging.has(clip.id) && !ctx.isDraggingPlayhead;
       if (ctx.isDraggingPlayhead) {
@@ -2940,15 +2950,14 @@ export class VideoSyncManager {
         delete this.wcPreciseSeekTimers[`${clip.id}:fallback`];
       }
 
-      const useDedicatedScrubProvider = ctx.isDraggingPlayhead;
+      const useDedicatedScrubProvider =
+        ctx.isDraggingPlayhead || keepScrubRuntimeForSettle;
       const pausedRuntimeSource = useDedicatedScrubProvider
         ? scrubRuntimeSource
         : playbackRuntimeSource;
 
       updateRuntimePlaybackTime(pausedRuntimeSource, timeInfo.clipTime);
-      if (useDedicatedScrubProvider) {
-        void ensureRuntimeFrameProvider(scrubRuntimeSource, 'interactive', timeInfo.clipTime);
-      }
+      void ensureRuntimeFrameProvider(pausedRuntimeSource, 'interactive', timeInfo.clipTime);
 
       const pausedRuntimeProvider = getRuntimeFrameProvider(pausedRuntimeSource);
       const dedicatedScrubProvider =

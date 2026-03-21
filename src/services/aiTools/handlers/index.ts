@@ -87,6 +87,7 @@ import {
 import {
   handlePlay,
   handlePause,
+  handleReloadApp,
   handleSimulateScrub,
   handleSimulatePlayback,
   handleSimulatePlaybackPath,
@@ -165,6 +166,7 @@ const timelineHandlers: Record<string, (args: Record<string, unknown>, store: Re
   // Playback & Control
   play: handlePlay,
   pause: handlePause,
+  reloadApp: handleReloadApp,
   simulateScrub: handleSimulateScrub,
   simulatePlayback: handleSimulatePlayback,
   simulatePlaybackPath: handleSimulatePlaybackPath,

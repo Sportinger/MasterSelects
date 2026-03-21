@@ -15,6 +15,7 @@ export interface ChangelogNotice {
   };
   annotation?: {
     text: string;
+    secondaryText?: string;
   };
 }
 
@@ -27,12 +28,13 @@ export const FEATURED_VIDEO: {
   youtubeId: '5ezX5ra0RTI',
   title: 'MasterSelects Demo',
   banner: {
-    type: 'danger',
-    title: 'Playback Fixes',
-    message: 'Fixed playback bugs on Win/Linux.',
+    type: 'success',
+    title: 'WebCodecs Playback',
+    message: 'FINALLY! WebCodecs is integrated as playback engine.',
     animated: true,
     annotation: {
-      text: 'some',
+      text: 'FINALLY!',
+      secondaryText: '...and there are completely\nnew bugs now :)',
     },
   },
 };

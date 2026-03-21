@@ -1,5 +1,73 @@
 [
   {
+    "date": "2026-03-21",
+    "type": "new",
+    "title": "WebCodecs Playback Engine Is Live",
+    "description": "After weeks of work, MasterSelects now uses WebCodecs as its primary playback engine. This brings hardware-accelerated decode, lower latency, and more accurate frame timing compared to the old HTMLVideoElement path. The engine falls back to HTMLVideoElement automatically when WebCodecs is not available.",
+    "section": "Playback / Engine",
+    "commits": [
+      "6292ae3b"
+    ]
+  },
+  {
+    "date": "2026-03-21",
+    "type": "improve",
+    "title": "Splash Screen and Changelog Are Now Separate Dialogs",
+    "description": "The startup dialog is now a dedicated splash screen with a prominent full-width video and notices. The full changelog with activity calendar, filter tabs, and all grouped changes is accessible via a 'Full Changelog' button or directly from the Info menu. Info > About now opens the splash screen.",
+    "section": "UI / Changelog",
+    "commits": [
+      "6292ae3b"
+    ]
+  },
+  {
+    "date": "2026-03-20",
+    "type": "new",
+    "title": "Slot Grid Supports Warm Deck Live Triggering",
+    "description": "The slot grid now supports warm deck live triggering, allowing instant switching between pre-loaded media slots during live performance and preview workflows.",
+    "section": "UI / Slot Grid",
+    "commits": [
+      "631ffaa7"
+    ]
+  },
+  {
+    "date": "2026-03-18",
+    "type": "new",
+    "title": "Cloudflare-Hosted Auth, Billing, and Free Plan Credits",
+    "description": "MasterSelects now supports hosted authentication and billing through Cloudflare, including Stripe subscription management and a free plan with monthly chat credits. The toolbar shows a live credit balance, and auth/account/pricing dialogs have been restyled to match the changelog design system.",
+    "section": "Account / Billing",
+    "commits": [
+      "5fb07a51",
+      "320a0be7",
+      "c82b121d",
+      "5e3315de",
+      "488ff1eb"
+    ]
+  },
+  {
+    "date": "2026-03-18",
+    "type": "fix",
+    "title": "Hosted AI Chat Charges Correctly and Preserves Tool Calls",
+    "description": "Fixed multiple issues with hosted AI chat: credits are now charged once per prompt instead of duplicating, empty tool call content is normalized to avoid API errors, tool calls are preserved in request payloads, and error handling is hardened against network and parse failures.",
+    "section": "AI / Chat",
+    "commits": [
+      "81e29115",
+      "487f4b08",
+      "51cec03b",
+      "37cb0afb"
+    ]
+  },
+  {
+    "date": "2026-03-18",
+    "type": "fix",
+    "title": "Free Credits Renew Monthly and Stripe Metadata Propagates Correctly",
+    "description": "Monthly free credit grants now reset properly, and Stripe subscription metadata is propagated correctly through the billing flow.",
+    "section": "Account / Billing",
+    "commits": [
+      "52749147",
+      "b4a01e98"
+    ]
+  },
+  {
     "date": "2026-03-17",
     "type": "improve",
     "title": "Website Sessions Can Now Edit the Timeline Through the Native Helper Bridge",

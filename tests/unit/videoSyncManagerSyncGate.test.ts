@@ -44,11 +44,29 @@ vi.mock('../../src/services/logger', () => ({
 }));
 
 import { VideoSyncManager } from '../../src/services/layerBuilder/VideoSyncManager';
+import { flags } from '../../src/engine/featureFlags';
+import { getClipTimeInfo } from '../../src/services/layerBuilder/FrameContext';
+import {
+  ensureRuntimeFrameProvider,
+  getPreviewRuntimeSource,
+  getRuntimeFrameProvider,
+  getScrubRuntimeSource,
+  updateRuntimePlaybackTime,
+} from '../../src/services/mediaRuntime/runtimePlayback';
+import { scrubSettleState } from '../../src/services/scrubSettleState';
 
 describe('VideoSyncManager same-frame sync gate', () => {
   beforeEach(() => {
+    flags.useFullWebCodecsPlayback = true;
+    scrubSettleState.clear();
     hoisted.createFrameContext.mockReset();
     hoisted.syncBackground.mockReset();
+    vi.mocked(getClipTimeInfo).mockReset();
+    vi.mocked(ensureRuntimeFrameProvider).mockReset();
+    vi.mocked(getPreviewRuntimeSource).mockReset();
+    vi.mocked(getRuntimeFrameProvider).mockReset();
+    vi.mocked(getScrubRuntimeSource).mockReset();
+    vi.mocked(updateRuntimePlaybackTime).mockReset();
   });
 
   it('does not skip a same-frame playback sync when clip references changed asynchronously', () => {
@@ -109,5 +127,135 @@ describe('VideoSyncManager same-frame sync gate', () => {
     manager.syncVideoElements();
 
     expect(syncClipVideo).toHaveBeenCalledTimes(2);
+  });
+
+  it('hydrates the paused playback runtime provider even when not dragging', () => {
+    const manager = new VideoSyncManager() as any;
+    const playbackRuntimeSource = {
+      runtimeSourceId: 'media:test',
+      runtimeSessionKey: 'interactive-track:track-v1:media:test',
+      webCodecsPlayer: {
+        currentTime: 2,
+        isFullMode: () => true,
+        hasFrame: () => false,
+        getCurrentFrame: () => null,
+        getPendingSeekTime: () => null,
+        isDecodePending: () => false,
+        seek: vi.fn(),
+      },
+    };
+    const scrubRuntimeSource = {
+      ...playbackRuntimeSource,
+      runtimeSessionKey: 'interactive-scrub:track-v1:media:test',
+    };
+    const playbackProvider = {
+      currentTime: 2,
+      isFullMode: () => true,
+      hasFrame: () => false,
+      getCurrentFrame: () => null,
+      getPendingSeekTime: () => null,
+      isDecodePending: () => false,
+      pause: vi.fn(),
+      seek: vi.fn(),
+    };
+
+    vi.mocked(getClipTimeInfo).mockReturnValue({
+      clipTime: 2,
+      localTime: 2,
+      speed: 1,
+      absSpeed: 1,
+      isReversed: false,
+    } as any);
+    vi.mocked(getPreviewRuntimeSource).mockReturnValue(playbackRuntimeSource as any);
+    vi.mocked(getScrubRuntimeSource).mockReturnValue(scrubRuntimeSource as any);
+    vi.mocked(getRuntimeFrameProvider).mockImplementation((source: unknown) =>
+      source === playbackRuntimeSource ? (playbackProvider as any) : null
+    );
+
+    (manager as any).syncFullWebCodecs(
+      {
+        id: 'clip-1',
+        trackId: 'track-v1',
+        source: playbackRuntimeSource,
+      },
+      {
+        isPlaying: false,
+        isDraggingPlayhead: false,
+        playbackSpeed: 1,
+      }
+    );
+
+    expect(updateRuntimePlaybackTime).toHaveBeenCalledWith(playbackRuntimeSource, 2);
+    expect(ensureRuntimeFrameProvider).toHaveBeenCalledWith(
+      playbackRuntimeSource,
+      'interactive',
+      2
+    );
+  });
+
+  it('keeps hydrating the scrub runtime while scrub-stop settle is pending', () => {
+    const manager = new VideoSyncManager() as any;
+    const playbackRuntimeSource = {
+      runtimeSourceId: 'media:test',
+      runtimeSessionKey: 'interactive-track:track-v1:media:test',
+      webCodecsPlayer: {
+        currentTime: 3,
+        isFullMode: () => true,
+        hasFrame: () => false,
+        getCurrentFrame: () => null,
+        getPendingSeekTime: () => null,
+        isDecodePending: () => false,
+        seek: vi.fn(),
+      },
+    };
+    const scrubRuntimeSource = {
+      ...playbackRuntimeSource,
+      runtimeSessionKey: 'interactive-scrub:track-v1:media:test',
+    };
+    const scrubProvider = {
+      currentTime: 3,
+      isFullMode: () => true,
+      hasFrame: () => false,
+      getCurrentFrame: () => null,
+      getPendingSeekTime: () => null,
+      isDecodePending: () => false,
+      pause: vi.fn(),
+      seek: vi.fn(),
+    };
+
+    vi.mocked(getClipTimeInfo).mockReturnValue({
+      clipTime: 3,
+      localTime: 3,
+      speed: 1,
+      absSpeed: 1,
+      isReversed: false,
+    } as any);
+    vi.mocked(getPreviewRuntimeSource).mockReturnValue(playbackRuntimeSource as any);
+    vi.mocked(getScrubRuntimeSource).mockReturnValue(scrubRuntimeSource as any);
+    vi.mocked(getRuntimeFrameProvider).mockImplementation((source: unknown) =>
+      source === scrubRuntimeSource ? (scrubProvider as any) : null
+    );
+
+    scrubSettleState.begin('clip-1', 3, 250, 'scrub-stop');
+
+    (manager as any).syncFullWebCodecs(
+      {
+        id: 'clip-1',
+        trackId: 'track-v1',
+        source: playbackRuntimeSource,
+      },
+      {
+        isPlaying: false,
+        isDraggingPlayhead: false,
+        playbackSpeed: 1,
+      }
+    );
+
+    expect(updateRuntimePlaybackTime).toHaveBeenCalledWith(scrubRuntimeSource, 3);
+    expect(ensureRuntimeFrameProvider).toHaveBeenCalledWith(
+      scrubRuntimeSource,
+      'interactive',
+      3
+    );
   });
 });

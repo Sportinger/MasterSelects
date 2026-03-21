@@ -9,8 +9,12 @@ import { calculateNestedClipBoundaries, buildClipSegments } from './clip/addComp
 import { projectFileService } from '../../services/projectFileService';
 import { Logger } from '../../services/logger';
 import { engine } from '../../engine/WebGPUEngine';
+import { bindSourceRuntimeToClip } from '../../services/mediaRuntime/clipBindings';
 import { layerBuilder } from '../../services/layerBuilder';
-import { sanitizePlayheadPosition } from '../../services/layerBuilder/PlayheadState';
+import {
+  sanitizePlayheadPosition,
+  syncPausedPlayheadPosition,
+} from '../../services/layerBuilder/PlayheadState';
 import { thumbnailCacheService } from '../../services/thumbnailCacheService';
 import type { WebCodecsPlayer } from '../../engine/WebCodecsPlayer';
 
@@ -185,6 +189,14 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       }
 
       webCodecsPlayer.seek(targetTime);
+      engine.requestNewFrameRender();
+
+      if (attempt < 20) {
+        setTimeout(() => {
+          wakePreviewAfterRestore();
+          primeRestoredWebCodecsPlayer(clip, webCodecsPlayer, attempt + 1);
+        }, 48);
+      }
     };
 
     // Stop playback
@@ -213,6 +225,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         primarySelectedClipId: null,
         markers: [],
       });
+      syncPausedPlayheadPosition(0);
       return;
     }
 
@@ -245,6 +258,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       // Increment animation key for clip entrance animations
       clipEntranceAnimationKey: clipEntranceAnimationKey + 1,
     });
+    syncPausedPlayheadPosition(safePlayheadPosition);
 
     // Restore keyframes from serialized clips
     const keyframeMap = new Map<string, Keyframe[]>();
@@ -937,6 +951,16 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
 
       // Create placeholder file if missing
       const file = mediaFile.file || new File([], mediaFile.name || 'pending', { type: 'video/mp4' });
+      const initialSource = bindSourceRuntimeToClip({
+        clipId: serializedClip.id,
+        source: {
+          type: serializedClip.sourceType,
+          mediaFileId: serializedClip.mediaFileId,
+          naturalDuration: serializedClip.naturalDuration,
+        },
+        file,
+        mediaFileId: serializedClip.mediaFileId,
+      });
 
       // Create the clip with loading state
       const clip: TimelineClip = {
@@ -948,11 +972,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         duration: serializedClip.duration,
         inPoint: serializedClip.inPoint,
         outPoint: serializedClip.outPoint,
-        source: {
-          type: serializedClip.sourceType,
-          mediaFileId: serializedClip.mediaFileId, // Preserve mediaFileId for cache lookups
-          naturalDuration: serializedClip.naturalDuration,
-        },
+        source: initialSource,
         mediaFileId: serializedClip.mediaFileId, // Restore top-level mediaFileId for audio/proxy lookup
         needsReload: needsReload, // Flag for UI to show reload indicator
         thumbnails: serializedClip.thumbnails,
@@ -1042,12 +1062,18 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
               c.id === clip.id
                 ? {
                     ...c,
-                    source: {
-                      type: 'video' as const,
-                      naturalDuration: serializedClip.naturalDuration || 0,
+                    source: bindSourceRuntimeToClip({
+                      clipId: c.id,
+                      source: {
+                        ...c.source,
+                        type: 'video' as const,
+                        naturalDuration: serializedClip.naturalDuration || 0,
+                        mediaFileId: mediaId,
+                        webCodecsPlayer: cachedWcp,
+                      },
+                      file: mediaFile.file || undefined,
                       mediaFileId: mediaId,
-                      webCodecsPlayer: cachedWcp,
-                    },
+                    }),
                     isLoading: false,
                   }
                 : c
@@ -1060,47 +1086,82 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           video.addEventListener('canplaythrough', () => {
             set(state => ({
               clips: state.clips.map(c =>
-                c.id === clip.id && c.source?.type === 'video'
+              c.id === clip.id && c.source?.type === 'video'
                   ? {
                       ...c,
-                      source: {
+                      source: bindSourceRuntimeToClip({
+                        clipId: c.id,
+                        source: {
                         ...c.source,
                         videoElement: video,
                         naturalDuration: video.duration,
-                      },
+                        },
+                        file: mediaFile.file || undefined,
+                        mediaFileId: mediaId,
+                      }),
                     }
                 : c
-              ),
+            ),
             }));
             wakePreviewAfterRestore();
             engine.preCacheVideoFrame(video);
             restoreSourceThumbnails(mediaId, video, video.duration || serializedClip.naturalDuration || clip.duration);
           }, { once: true });
         } else {
-          // Slow path: no cached WCP — wait for canplaythrough then init
-          video.addEventListener('canplaythrough', async () => {
-            set(state => ({
-              clips: state.clips.map(c =>
-                c.id === clip.id
-                  ? {
-                      ...c,
+          // Slow path: attach the video element immediately so restore-time
+          // preview can wake up before the browser decides to fire canplaythrough.
+          set(state => ({
+            clips: state.clips.map(c =>
+              c.id === clip.id
+                ? {
+                    ...c,
+                    source: bindSourceRuntimeToClip({
+                      clipId: c.id,
                       source: {
+                        ...c.source,
                         type: 'video',
                         videoElement: video,
-                        naturalDuration: video.duration,
+                        naturalDuration: serializedClip.naturalDuration || 0,
                         mediaFileId: serializedClip.mediaFileId,
                       },
-                      isLoading: false,
+                      file: mediaFile.file || undefined,
+                      mediaFileId: serializedClip.mediaFileId,
+                    }),
+                    isLoading: false,
                   }
                 : c
+            ),
+          }));
+          wakePreviewAfterRestore();
+
+          video.addEventListener('canplaythrough', () => {
+            set(state => ({
+              clips: state.clips.map(c =>
+                c.id === clip.id && c.source?.type === 'video'
+                  ? {
+                      ...c,
+                      source: bindSourceRuntimeToClip({
+                        clipId: c.id,
+                        source: {
+                        ...c.source,
+                        videoElement: video,
+                        naturalDuration: video.duration || c.source.naturalDuration,
+                        },
+                        file: mediaFile.file || undefined,
+                        mediaFileId: serializedClip.mediaFileId,
+                      }),
+                    }
+                  : c
               ),
             }));
             wakePreviewAfterRestore();
 
             engine.preCacheVideoFrame(video);
             restoreSourceThumbnails(mediaId, video, video.duration || serializedClip.naturalDuration || clip.duration);
+          }, { once: true });
 
-            if (hasWebCodecs && mediaId) {
+          if (hasWebCodecs && mediaId) {
+            void (async () => {
               try {
                 const webCodecsPlayer = await getOrCreateWcp(
                   mediaId, video, clip.name, mediaFile.file || undefined
@@ -1111,10 +1172,15 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                       c.id === clip.id && c.source?.type === 'video'
                         ? {
                             ...c,
-                            source: {
+                            source: bindSourceRuntimeToClip({
+                              clipId: c.id,
+                              source: {
                               ...c.source,
                               webCodecsPlayer,
-                            },
+                              },
+                              file: mediaFile.file || undefined,
+                              mediaFileId: serializedClip.mediaFileId,
+                            }),
                           }
                         : c
                     ),
@@ -1125,8 +1191,8 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
               } catch (err) {
                 log.warn('WebCodecsPlayer init failed for restored clip, using HTMLVideoElement', err);
               }
-            }
-          }, { once: true });
+            })();
+          }
         }
       } else if (type === 'audio') {
         // Audio clips - create audio element (works for both pure audio files and linked audio from video)
@@ -1177,9 +1243,11 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
   // Clear all timeline data
   clearTimeline: () => {
     const { clips, pause } = get();
+    const safePlayheadPosition = sanitizePlayheadPosition(get().playheadPosition, 0);
 
     // Stop playback
     pause();
+    syncPausedPlayheadPosition(safePlayheadPosition);
 
     // CRITICAL: Clear store state FIRST — synchronously.
     // The rAF render loop reads clips/layers from the store. If we destroy

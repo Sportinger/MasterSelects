@@ -222,7 +222,7 @@ describe('WebCodecsPlayer advance playback', () => {
     expect(decoder.decode).toHaveBeenCalledTimes(24);
     expect(player.sampleIndex).toBe(60);
     expect(player.feedIndex).toBe(24);
-    expect(player.pendingSeekFeedEndIndex).toBe(60);
+    expect(player.pendingSeekFeedEndIndex).toBe(71);
   });
 
   it('reuses the paused seek pipeline for nearby forward scrubs', async () => {
@@ -238,9 +238,9 @@ describe('WebCodecsPlayer advance playback', () => {
     player.seek(2.2);
 
     expect(decoder.reset).not.toHaveBeenCalled();
-    expect(decoder.decode).toHaveBeenCalledTimes(6);
+    expect(decoder.decode).toHaveBeenCalledTimes(17);
     expect(player.sampleIndex).toBe(66);
-    expect(player.feedIndex).toBe(67);
+    expect(player.feedIndex).toBe(78);
     expect(player.pendingSeekFeedEndIndex).toBeNull();
   });
 
@@ -279,10 +279,52 @@ describe('WebCodecsPlayer advance playback', () => {
     player.seek(3.2);
 
     expect(decoder.reset).not.toHaveBeenCalled();
-    expect(decoder.decode).toHaveBeenCalledTimes(13);
+    expect(decoder.decode).toHaveBeenCalledTimes(24);
     expect(player.sampleIndex).toBe(96);
-    expect(player.feedIndex).toBe(97);
+    expect(player.feedIndex).toBe(108);
     expect(player.pendingSeekFeedEndIndex).toBeNull();
+  });
+
+  it('does not reuse a dead paused seek when no pending feed or decode backlog remains', async () => {
+    const { player, decoder } = await makePlayerHarness();
+
+    player.sampleIndex = 60;
+    player.feedIndex = 75;
+    player.currentFrame = { timestamp: 2_000_000, close: vi.fn() };
+    player.currentFrameTimestampUs = 2_000_000;
+    player.seekTargetUs = 2_466_667;
+    player.pendingSeekKind = 'seek';
+    player.pendingSeekFeedEndIndex = null;
+    player.trackedDecodeQueueSize = 0;
+    decoder.decodeQueueSize = 0;
+
+    player.seek(74 / 30);
+
+    expect(decoder.reset).toHaveBeenCalledTimes(1);
+    expect(decoder.decode).toHaveBeenCalledTimes(24);
+    expect(player.sampleIndex).toBe(74);
+    expect(player.feedIndex).toBe(24);
+  });
+
+  it('does not extend a stale strict paused seek after the reuse timeout', async () => {
+    const { player, decoder } = await makePlayerHarness();
+
+    player.sampleIndex = 90;
+    player.feedIndex = 96;
+    player.currentFrame = { timestamp: 3_000_000, close: vi.fn() };
+    player.currentFrameTimestampUs = 3_000_000;
+    player.seekTargetUs = 3_000_000;
+    player.pendingSeekKind = 'seek';
+    player.pendingSeekFeedEndIndex = 96;
+    player.pendingSeekStartedAtMs = performance.now() - 500;
+    player.trackedDecodeQueueSize = 0;
+    decoder.decodeQueueSize = 0;
+
+    player.seek(3.2);
+
+    expect(decoder.reset).toHaveBeenCalledTimes(1);
+    expect(decoder.decode).toHaveBeenCalledTimes(24);
+    expect(player.sampleIndex).toBe(96);
   });
 
   it('extends an in-flight interactive scrub seek further forward without resetting the decoder', async () => {
@@ -645,6 +687,71 @@ describe('WebCodecsPlayer advance playback', () => {
     expect(previousFrame.close).not.toHaveBeenCalled();
     expect(traversalFrame.close).not.toHaveBeenCalled();
     expect(player.pendingSeekFallbackFrame).toBe(traversalFrame);
+  });
+
+  it('keeps feeding a strict paused seek after storing a closer fallback frame', async () => {
+    const { player, decoder } = await makePlayerHarness();
+    const previousFrame = { timestamp: 2_000_000, close: vi.fn() };
+    const traversalFrame = { timestamp: 2_200_000, close: vi.fn() };
+
+    player.currentFrame = previousFrame;
+    player.currentFrameTimestampUs = 2_000_000;
+    player.seekTargetUs = 3_000_000;
+    player.pendingSeekKind = 'seek';
+    player.pendingSeekPreviewMode = 'strict';
+    player.pendingSeekFeedEndIndex = 61;
+    player.feedIndex = 61;
+    player.trackedDecodeQueueSize = 0;
+    decoder.decodeQueueSize = 0;
+
+    player.handleDecodedFrame(traversalFrame);
+
+    expect(player.pendingSeekFallbackFrame).toBe(traversalFrame);
+    expect(decoder.decode).toHaveBeenCalledTimes(1);
+    expect(player.feedIndex).toBe(62);
+  });
+
+  it('does not consume pending seek samples when decoder feed throws during strict seek refill', async () => {
+    const { player, decoder } = await makePlayerHarness();
+
+    player.seekTargetUs = 3_000_000;
+    player.pendingSeekKind = 'seek';
+    player.pendingSeekPreviewMode = 'strict';
+    player.pendingSeekFeedEndIndex = 61;
+    player.feedIndex = 61;
+    player.trackedDecodeQueueSize = 0;
+    decoder.decodeQueueSize = 0;
+    decoder.decode.mockImplementationOnce(() => {
+      throw new Error('flush pending');
+    });
+
+    player.feedPendingSeekSamples('seek');
+
+    expect(player.feedIndex).toBe(61);
+    expect(player.pendingSeekFeedEndIndex).toBe(61);
+  });
+
+  it('retries pending strict seek feed after flush finishes with no queued work left', async () => {
+    const { player, decoder } = await makePlayerHarness();
+
+    player.seekTargetUs = 3_000_000;
+    player.pendingSeekKind = 'seek';
+    player.pendingSeekStartedAtMs = performance.now();
+    player.pendingSeekTargetDebugUs = 3_000_000;
+    player.pendingSeekPreviewMode = 'strict';
+    player.pendingSeekFeedEndIndex = 62;
+    player.feedIndex = 61;
+    player.trackedDecodeQueueSize = 0;
+    decoder.decodeQueueSize = 0;
+
+    player.flushStrictPausedSeek();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(decoder.flush).toHaveBeenCalledTimes(2);
+    expect(decoder.decode).toHaveBeenCalledTimes(2);
+    expect(player.feedIndex).toBe(63);
+    expect(player.pendingSeekFeedEndIndex).toBeNull();
   });
 
   it('flushes strict paused seeks so stalled decoders can publish the requested frame', async () => {

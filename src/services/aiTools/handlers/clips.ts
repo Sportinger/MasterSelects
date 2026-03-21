@@ -266,6 +266,23 @@ export async function handleGetClipDetails(
       masks: clip.masks || [],
       transcript: clip.transcript,
       analysisStatus: clip.analysisStatus,
+      debugSource: clip.source
+        ? {
+            type: clip.source.type,
+            hasVideoElement: !!clip.source.videoElement,
+            videoReadyState: clip.source.videoElement?.readyState ?? null,
+            hasAudioElement: !!clip.source.audioElement,
+            hasWebCodecsPlayer: !!clip.source.webCodecsPlayer,
+            webCodecsReady: clip.source.webCodecsPlayer?.ready ?? null,
+            webCodecsFullMode: clip.source.webCodecsPlayer?.isFullMode?.() ?? false,
+            webCodecsHasFrame: clip.source.webCodecsPlayer?.hasFrame?.() ?? false,
+            webCodecsPendingSeekTime: clip.source.webCodecsPlayer?.getPendingSeekTime?.() ?? null,
+            runtimeSourceId: clip.source.runtimeSourceId ?? null,
+            runtimeSessionKey: clip.source.runtimeSessionKey ?? null,
+          }
+        : null,
+      isLoading: clip.isLoading ?? false,
+      needsReload: clip.needsReload ?? false,
     },
   };
 }

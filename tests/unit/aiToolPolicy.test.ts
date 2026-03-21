@@ -55,7 +55,7 @@ describe('AI Tool Policy Registry', () => {
     const readOnlyTools = [
       'getTimelineState', 'getClipDetails', 'getClipsInTimeRange',
       'getMediaItems', 'play', 'pause', 'undo', 'redo',
-      'simulateScrub', 'simulatePlayback', 'simulatePlaybackPath', 'captureFrame', 'getKeyframes', 'getMarkers', 'getMasks',
+      'reloadApp', 'simulateScrub', 'simulatePlayback', 'simulatePlaybackPath', 'captureFrame', 'getKeyframes', 'getMarkers', 'getMasks',
     ];
     for (const name of readOnlyTools) {
       const policy = getToolPolicy(name);
@@ -133,7 +133,7 @@ describe('AI Tool Policy Registry', () => {
   });
 
   it('devBridge can access playback simulation tools', () => {
-    for (const tool of ['simulateScrub', 'simulatePlayback', 'simulatePlaybackPath']) {
+    for (const tool of ['reloadApp', 'simulateScrub', 'simulatePlayback', 'simulatePlaybackPath']) {
       const result = checkToolAccess(tool, 'devBridge');
       expect(result.allowed, `${tool} should be allowed for devBridge`).toBe(true);
     }

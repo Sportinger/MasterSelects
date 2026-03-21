@@ -59,6 +59,17 @@ function isInteractiveScrubSessionKey(sessionKey: string | undefined): boolean {
   return !!sessionKey && sessionKey.startsWith(INTERACTIVE_SCRUB_SESSION_PREFIX);
 }
 
+function isInteractivePlaybackSessionKey(sessionKey: string | undefined): boolean {
+  return !!sessionKey && sessionKey.startsWith(INTERACTIVE_PLAYBACK_SESSION_PREFIX);
+}
+
+function isInteractiveRuntimeSessionKey(sessionKey: string | undefined): boolean {
+  return (
+    isInteractivePlaybackSessionKey(sessionKey) ||
+    isInteractiveScrubSessionKey(sessionKey)
+  );
+}
+
 function getPendingProviderLoadKey(sourceId: string, sessionKey: string): string {
   return `${sourceId}:${sessionKey}`;
 }
@@ -383,8 +394,7 @@ export async function ensureRuntimeFrameProvider(
 
   if (
     policy !== 'interactive' ||
-    !isInteractiveScrubSessionKey(binding.sessionKey) ||
-    !source?.webCodecsPlayer?.isFullMode()
+    !isInteractiveRuntimeSessionKey(binding.sessionKey)
   ) {
     return null;
   }

@@ -96,6 +96,10 @@ export class LayerBuilderService {
       return runtimeProvider;
     }
 
+    if (runtimeProvider?.isFullMode() && runtimeHasFrame && !preferFreshRuntime) {
+      return runtimeProvider;
+    }
+
     const clipPlayer = source?.webCodecsPlayer;
     const clipHasFrame =
       (clipPlayer?.hasFrame?.() ?? false) ||

@@ -19,6 +19,127 @@ import {
   type YouTubePlayerInstance,
 } from './WhatsNewDialog';
 
+const POLL_STORAGE_KEY = 'masterselects-splash-poll-v1';
+const POLL_API = '/api/poll';
+const IS_DEV = import.meta.env.DEV;
+
+interface PollResults {
+  great: number;
+  'no-sub': number;
+  total: number;
+  voted?: string;
+}
+
+function SplashPoll() {
+  // In dev mode: never restore from localStorage so poll always shows fresh
+  const [voted, setVoted] = useState<string | null>(() => {
+    if (IS_DEV) return null;
+    try { return localStorage.getItem(POLL_STORAGE_KEY); } catch { return null; }
+  });
+  const [results, setResults] = useState<PollResults | null>(null);
+
+  // Fetch current results on mount
+  useEffect(() => {
+    fetch(POLL_API)
+      .then((r) => r.json() as Promise<PollResults>)
+      .then((data) => {
+        setResults(data);
+        // If server says this IP already voted, sync local state (skip in dev)
+        if (!IS_DEV && data.voted && !voted) {
+          setVoted(data.voted);
+          try { localStorage.setItem(POLL_STORAGE_KEY, data.voted); } catch { /* ignore */ }
+        }
+      })
+      .catch(() => { /* offline or local dev — poll works locally only */ });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleVote = (choice: string) => {
+    setVoted(choice);
+    if (!IS_DEV) {
+      try { localStorage.setItem(POLL_STORAGE_KEY, choice); } catch { /* ignore */ }
+    }
+
+    fetch(POLL_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ choice }),
+    })
+      .then((r) => r.json() as Promise<PollResults>)
+      .then((data) => setResults(data))
+      .catch(() => {
+        // Offline fallback — show optimistic local result
+        setResults((prev) => {
+          const base = prev ?? { great: 0, 'no-sub': 0, total: 0 };
+          const updated = { ...base, total: base.total + 1 };
+          if (choice === 'great') updated.great++;
+          else updated['no-sub']++;
+          return updated;
+        });
+      });
+  };
+
+  // Already voted (production) — don't render poll at all
+  if (voted && !IS_DEV) {
+    return null;
+  }
+
+  const greatPct = results && results.total > 0
+    ? Math.round((results.great / results.total) * 100) : 0;
+  const noSubPct = results && results.total > 0
+    ? Math.round((results['no-sub'] / results.total) * 100) : 0;
+
+  return (
+    <div className="splash-poll">
+      <p className="splash-poll-question">
+        Would you like to have the ability to buy AI credits for AI chat and video generation without your own API key?
+      </p>
+      {voted ? (
+        <div className="splash-poll-result">
+          <span className="splash-poll-thanks">
+            {voted === 'great' ? 'Noted, thanks!' : 'Fair point! No subscriptions, promise.'}
+          </span>
+          {results && results.total > 0 && (
+            <div className="splash-poll-bars">
+              <div className="splash-poll-bar-row">
+                <span className="splash-poll-bar-label">Great Idea</span>
+                <div className="splash-poll-bar-track">
+                  <div
+                    className="splash-poll-bar-fill splash-poll-bar-fill-yes"
+                    style={{ width: `${greatPct}%` }}
+                  />
+                </div>
+                <span className="splash-poll-bar-pct">{greatPct}%</span>
+              </div>
+              <div className="splash-poll-bar-row">
+                <span className="splash-poll-bar-label">No Subs!</span>
+                <div className="splash-poll-bar-track">
+                  <div
+                    className="splash-poll-bar-fill splash-poll-bar-fill-no"
+                    style={{ width: `${noSubPct}%` }}
+                  />
+                </div>
+                <span className="splash-poll-bar-pct">{noSubPct}%</span>
+              </div>
+              <span className="splash-poll-total">{results.total} {results.total === 1 ? 'vote' : 'votes'}</span>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="splash-poll-options">
+          <button className="splash-poll-btn splash-poll-btn-yes" onClick={() => handleVote('great')}>
+            <span className="splash-poll-btn-emoji">👍</span>
+            <span>Great Idea</span>
+          </button>
+          <button className="splash-poll-btn splash-poll-btn-no" onClick={() => handleVote('no-sub')}>
+            <span className="splash-poll-btn-emoji">🙅</span>
+            <span>No Subscriptions!</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface SplashScreenProps {
   onClose: () => void;
   onOpenChangelog: () => void;
@@ -179,6 +300,9 @@ export function SplashScreen({ onClose, onOpenChangelog }: SplashScreenProps) {
 
         {/* Content */}
         <div className="splash-content">
+          {/* Poll */}
+          <SplashPoll />
+
           {/* Featured Video - full width */}
           {FEATURED_VIDEO && (
             <div className="splash-video">
@@ -218,6 +342,11 @@ export function SplashScreen({ onClose, onOpenChangelog }: SplashScreenProps) {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Scribble note */}
+        <div className="splash-scribble-note" aria-hidden="true">
+          <span className="splash-scribble-text">do you have a job for me :) ?</span>
         </div>
 
         {/* Footer */}

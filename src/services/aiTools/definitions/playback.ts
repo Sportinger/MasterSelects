@@ -28,6 +28,28 @@ export const playbackToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'reloadApp',
+      description: 'Reload the active browser tab after a short delay. Useful for reproducing post-refresh preview issues before the first play.',
+      parameters: {
+        type: 'object',
+        properties: {
+          delayMs: {
+            type: 'number',
+            description: 'Delay before reloading in milliseconds. Defaults to 250.',
+          },
+          mode: {
+            type: 'string',
+            enum: ['hard', 'soft'],
+            description: 'Use "hard" to navigate with a cache-busting query param, or "soft" for window.location.reload(). Defaults to "hard".',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'simulateScrub',
       description: 'Simulate a real drag scrub in the browser by holding playhead-drag mode and moving the playhead continuously with requestAnimationFrame. Useful for testing short, long, custom, or wild random scrubbing at different speeds.',
       parameters: {

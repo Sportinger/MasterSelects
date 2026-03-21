@@ -4,6 +4,8 @@
 
 MASterSelects includes a professional Logger service designed for both human debugging and AI-assisted development.
 
+For playback-specific tooling, scripted scrub/playback runs, and WebCodecs/VF trace interpretation, see [Playback Debugging & Stress Testing](./Playback-Debugging.md).
+
 ## Overview
 
 The Logger service (`src/services/logger.ts`) provides:

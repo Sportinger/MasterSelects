@@ -68,6 +68,7 @@ UI Framework      Custom dockable panel system with mobile support
 | [Timeline](./Timeline.md) | Multi-track editing, clips, snapping, compositions, multicam |
 | [Keyframes](./Keyframes.md) | Animation system, curve editor, bezier interpolation |
 | [Preview & Playback](./Preview.md) | RAM Preview, scrubbing, multiple outputs, edit mode |
+| [Playback Debugging](./Playback-Debugging.md) | Live playback telemetry, AI bridge stress paths, WebCodecs/VF debugging |
 | [Output Manager](./Preview.md#output-manager) | Source routing, slices, corner pin warping, mask layers |
 | [Effects](./Effects.md) | 30 modular GPU effects, 37 blend modes, transforms |
 | [Masks](./Masks.md) | Shape masks, pen tool, GPU feathering |

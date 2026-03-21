@@ -125,6 +125,31 @@ describe('LayerBuilderService paused visual provider selection', () => {
     expect(provider).toBe(runtimeProvider);
   });
 
+  it('sticks with the shared runtime once it already has a paused preview frame', () => {
+    const service = new LayerBuilderService() as any;
+    const clipPlayer = {
+      isFullMode: () => true,
+      hasFrame: () => true,
+      getCurrentFrame: () => ({ timestamp: 8_681_000 }),
+      currentTime: 8.681,
+    };
+    const runtimeProvider = {
+      isFullMode: () => true,
+      hasFrame: () => true,
+      getCurrentFrame: () => ({ timestamp: 8_720_000 }),
+      currentTime: 8.72,
+      getPendingSeekTime: () => 8.72,
+    };
+
+    const provider = service.getPausedVisualProvider(
+      { webCodecsPlayer: clipPlayer } as any,
+      runtimeProvider as any,
+      8.68
+    );
+
+    expect(provider).toBe(runtimeProvider);
+  });
+
   it('builds primary layers from timeline clips even when no active composition is selected', () => {
     const service = new LayerBuilderService();
     const clipPlayer = {

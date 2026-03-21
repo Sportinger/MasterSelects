@@ -94,6 +94,31 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     expect(provider).toBe(sharedRuntimeProvider);
   });
 
+  it('sticks with the shared runtime once it already has a paused preview frame', () => {
+    const manager = new VideoSyncManager() as any;
+    const clipPlayer = {
+      isFullMode: () => true,
+      hasFrame: () => true,
+      getCurrentFrame: () => ({ timestamp: 8_681_000 }),
+      currentTime: 8.681,
+    };
+    const sharedRuntimeProvider = {
+      isFullMode: () => true,
+      hasFrame: () => true,
+      getCurrentFrame: () => ({ timestamp: 8_720_000 }),
+      currentTime: 8.72,
+      getPendingSeekTime: () => 8.72,
+    };
+
+    const provider = manager.getPausedWebCodecsProvider(
+      { webCodecsPlayer: clipPlayer },
+      sharedRuntimeProvider,
+      8.68
+    );
+
+    expect(provider).toBe(sharedRuntimeProvider);
+  });
+
   it('forces a paused seek when the provider is already at the target time but still has no frame', () => {
     const manager = new VideoSyncManager() as any;
     const provider = {
@@ -514,6 +539,48 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     }, {
       isPlaying: false,
       isDraggingPlayhead: true,
+      playbackSpeed: 1,
+      now: 1000,
+      playheadPosition: 1.5,
+      hasKeyframes: () => false,
+      getInterpolatedSpeed: () => 1,
+      getSourceTimeForClip: () => 1.5,
+    } as any);
+
+    expect(syncFullWebCodecs).toHaveBeenCalledTimes(1);
+    expect(throttledSeek).not.toHaveBeenCalled();
+  });
+
+  it('routes runtime-bound clips through dedicated WebCodecs sync before the clip player attaches', () => {
+    const manager = new VideoSyncManager() as any;
+    const syncFullWebCodecs = vi.spyOn(manager, 'syncFullWebCodecs').mockImplementation(() => {});
+    const throttledSeek = vi.spyOn(manager, 'throttledSeek').mockImplementation(() => {});
+
+    const video = {
+      currentTime: 0,
+      paused: true,
+      seeking: false,
+      readyState: 4,
+      played: { length: 0 },
+      pause: vi.fn(),
+    } as any;
+
+    manager.syncClipVideo({
+      id: 'clip-runtime',
+      trackId: 'track-v1',
+      startTime: 0,
+      inPoint: 0,
+      outPoint: 10,
+      duration: 10,
+      reversed: false,
+      source: {
+        videoElement: video,
+        runtimeSourceId: 'runtime-source-1',
+        runtimeSessionKey: 'interactive:clip-runtime',
+      },
+    }, {
+      isPlaying: false,
+      isDraggingPlayhead: false,
       playbackSpeed: 1,
       now: 1000,
       playheadPosition: 1.5,

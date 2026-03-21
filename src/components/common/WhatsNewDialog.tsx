@@ -230,13 +230,29 @@ export function NoticeCard({
         </div>
       </div>
       {notice.annotation && (
-        <div className="changelog-notice-scribble" aria-hidden="true">
-          <svg className="changelog-notice-scribble-arrow" viewBox="0 0 34 18" fill="none">
-            <path d="M30 15C20 15 14 12 10 5" />
-            <path d="M8 7.5L10 4.5L13.5 5.8" />
-          </svg>
-          <span className="changelog-notice-scribble-text">{notice.annotation.text}</span>
-        </div>
+        <>
+          <div className="changelog-notice-scribble" aria-hidden="true">
+            <svg className="changelog-notice-scribble-arrow" viewBox="0 0 34 18" fill="none">
+              <path d="M30 15C20 15 14 12 10 5" />
+              <path d="M8 7.5L10 4.5L13.5 5.8" />
+            </svg>
+            <span className="changelog-notice-scribble-text">{notice.annotation.text}</span>
+          </div>
+          {notice.annotation.secondaryText && (
+            <span className="changelog-notice-scribble-secondary" aria-hidden="true">
+              {notice.annotation.secondaryText.split('\n').map((line, i) => (
+                <span key={i}>
+                  {line.split(/(\*\*[^*]+\*\*)/).map((part, j) =>
+                    part.startsWith('**') && part.endsWith('**')
+                      ? <strong key={j} className="changelog-notice-scribble-bold">{part.slice(2, -2)}</strong>
+                      : part
+                  )}
+                  {i === 0 && <br />}
+                </span>
+              ))}
+            </span>
+          )}
+        </>
       )}
     </div>
   );

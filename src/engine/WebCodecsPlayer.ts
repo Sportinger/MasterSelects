@@ -54,6 +54,7 @@ export class WebCodecsPlayer implements ExportModePlayer {
   private static readonly ADVANCE_SEEK_FORWARD_TOLERANCE = 18;
   private static readonly ADVANCE_SEEK_BACKWARD_TOLERANCE = 2;
   private static readonly ADVANCE_SEEK_MAX_PENDING_MS = 2500;
+  private static readonly STRICT_PAUSED_SEEK_MAX_REUSE_MS = 180;
   private static readonly PAUSED_SEEK_REUSE_SECONDS = 0.35;
   private static readonly INTERACTIVE_PREVIEW_NEAR_TARGET_FRAMES = 5;
   private static readonly INTERACTIVE_PREVIEW_FAR_FRAME_PUBLISH_MS = 90;
@@ -827,15 +828,15 @@ export class WebCodecsPlayer implements ExportModePlayer {
 
         this.onFrame?.(frame);
       } else {
-        if (this.rememberPendingSeekFallback(frame, diff)) {
-          return;
+        const rememberedFallback = this.rememberPendingSeekFallback(frame, diff);
+        if (!rememberedFallback) {
+          wcPipelineMonitor.record('frame_drop', {
+            reason: 'seek_intermediate',
+            frameUs: Math.round(frame.timestamp),
+            targetUs: Math.round(this.seekTargetUs),
+          });
+          frame.close();
         }
-        wcPipelineMonitor.record('frame_drop', {
-          reason: 'seek_intermediate',
-          frameUs: Math.round(frame.timestamp),
-          targetUs: Math.round(this.seekTargetUs),
-        });
-        frame.close();
       }
     } else if (this.pausedPrerollEndIndex !== null) {
       if (
@@ -1321,6 +1322,25 @@ export class WebCodecsPlayer implements ExportModePlayer {
         !this._isPlaying &&
         this.pendingSeekKind === 'seek' &&
         this.seekTargetUs !== null &&
+        this.pendingSeekFeedEndIndex !== null &&
+        this.getEffectiveDecodeQueueSize() === 0
+      ) {
+        const feedIndexBeforeRetry = this.feedIndex;
+        this.feedPendingSeekSamples('seek');
+        if (this.getEffectiveDecodeQueueSize() > 0) {
+          this.flushStrictPausedSeek();
+          return;
+        }
+        if (this.pendingSeekFeedEndIndex !== null && this.feedIndex > feedIndexBeforeRetry) {
+          this.flushStrictPausedSeek();
+          return;
+        }
+      }
+
+      if (
+        !this._isPlaying &&
+        this.pendingSeekKind === 'seek' &&
+        this.seekTargetUs !== null &&
         this.pendingSeekFeedEndIndex === null &&
         this.getEffectiveDecodeQueueSize() === 0
       ) {
@@ -1369,11 +1389,12 @@ export class WebCodecsPlayer implements ExportModePlayer {
           queueSize,
           mode,
         });
+        this.feedIndex++;
       } catch {
-        // Skip decode errors
+        // Decoder rejects feed while flush/reset is in progress.
+        // Keep the same sample pending so a later retry can continue the seek.
+        break;
       }
-
-      this.feedIndex++;
     }
 
     if (this.pendingSeekFeedEndIndex !== null && this.feedIndex > this.pendingSeekFeedEndIndex) {
@@ -1465,6 +1486,16 @@ export class WebCodecsPlayer implements ExportModePlayer {
       return false;
     }
 
+    if (
+      previewMode === 'strict' &&
+      this.pendingSeekKind === 'seek' &&
+      this.pendingSeekStartedAtMs !== null &&
+      performance.now() - this.pendingSeekStartedAtMs >
+        WebCodecsPlayer.STRICT_PAUSED_SEEK_MAX_REUSE_MS
+    ) {
+      return false;
+    }
+
     const maxForwardFrames = previewMode === 'interactive'
       ? Math.max(90, Math.ceil(this.frameRate * 3))
       : Math.max(
@@ -1501,6 +1532,25 @@ export class WebCodecsPlayer implements ExportModePlayer {
     const currentFrameIdx = this.getCurrentFrameSampleIndex();
     if (currentFrameIdx === null || targetIndex <= currentFrameIdx) {
       return false;
+    }
+
+    if (
+      previewMode === 'strict' &&
+      this.pendingSeekStartedAtMs !== null &&
+      performance.now() - this.pendingSeekStartedAtMs >
+        WebCodecsPlayer.STRICT_PAUSED_SEEK_MAX_REUSE_MS
+    ) {
+      return false;
+    }
+
+    if (previewMode === 'strict') {
+      const hasActivePendingFeed =
+        this.pendingSeekFeedEndIndex !== null &&
+        this.feedIndex <= this.pendingSeekFeedEndIndex;
+      const hasDecodeBacklog = this.getEffectiveDecodeQueueSize() > 0;
+      if (!hasActivePendingFeed && !hasDecodeBacklog) {
+        return false;
+      }
     }
 
     const currentPendingEnd = Math.max(
