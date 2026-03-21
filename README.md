@@ -4,6 +4,10 @@
 
 <h3>Browser-based Video Compositor</h3>
 
+[![Version](https://img.shields.io/badge/version-1.3.9-blue.svg)](https://github.com/Sportinger/MasterSelects/releases)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Lemonade Integration](https://img.shields.io/badge/Lemonade-Phase%202%20Authorized-orange.svg)](docs/lemonade/README.md)
+
 <p>
   GPU-first editing with <b>30 effects</b>, <b>37 blend modes</b>, <b>76 AI tools</b>, and only <b>13 dependencies</b>.<br>
   Built from scratch in <b>2,500+ lines of WGSL</b> and <b>120k lines of TypeScript</b>.
