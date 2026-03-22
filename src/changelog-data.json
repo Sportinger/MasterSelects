@@ -1,5 +1,42 @@
 [
   {
+    "date": "2026-03-23",
+    "type": "new",
+    "title": "Model-Weighted Credit Costs",
+    "description": "AI chat credits now scale with model cost. Cheap models (GPT-4.1 Mini/Nano) cost 1 credit, mid-tier reasoning (o4-mini) costs 3, flagship models (GPT-4.1, GPT-5, o3) cost 5, and premium models (GPT-5.2 Pro, o3-pro) cost 8-50 credits per request. Credit costs are shown in the model dropdown.",
+    "section": "AI & Billing",
+    "commits": ["6c852a9b"]
+  },
+  {
+    "date": "2026-03-23",
+    "type": "improve",
+    "title": "Updated Pricing Plans",
+    "description": "Stripe prices updated to 4.90 €/mo (Starter), 14.90 €/mo (Pro), 29.90 €/mo (Studio). Monthly credits adjusted to break-even amounts: 4,500 / 13,500 / 27,000 credits. Prices now displayed in the pricing dialog.",
+    "section": "AI & Billing",
+    "commits": ["33ccf3e6"]
+  },
+  {
+    "date": "2026-03-23",
+    "type": "improve",
+    "title": "Legal Dialog: Name Updated to Roman Kuskowski",
+    "description": "Updated Impressum/Legal notice name across all 8 languages.",
+    "section": "UI"
+  },
+  {
+    "date": "2026-03-23",
+    "type": "new",
+    "title": "Dev Quick Login in Auth Dialog",
+    "description": "Local development auth dialog now includes quick login buttons for each plan tier (Free/Starter/Pro/Studio), with frontend-only mock fallback when the backend is not running.",
+    "section": "Developer Tools"
+  },
+  {
+    "date": "2026-03-23",
+    "type": "improve",
+    "title": "Toolbar & AI Panel Polish",
+    "description": "Removed WIP notice and version from toolbar center. Improved AI panel overlay with better button styling and 'or' separator for API key option.",
+    "section": "UI"
+  },
+  {
     "date": "2026-03-22",
     "type": "fix",
     "title": "Fix Black Preview After Page Reload (WebCodecs Cold Start)",
