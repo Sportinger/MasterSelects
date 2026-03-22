@@ -1442,7 +1442,7 @@ export class WebCodecsPlayer implements ExportModePlayer {
     }
 
     this.feedIndex = Math.max(this.feedIndex, currentFrameIdx + 1);
-    this.pausedPrerollEndIndex = Math.min(currentFrameIdx + 2, this.samples.length - 1);
+    this.pausedPrerollEndIndex = Math.min(currentFrameIdx + 6, this.samples.length - 1);
     this.feedPausedPrerollSamples();
   }
 
@@ -1723,7 +1723,7 @@ export class WebCodecsPlayer implements ExportModePlayer {
       // In that case the decoder is already producing the right frames.
       const feedDistFromKeyframe = this.feedIndex - keyframeForTarget;
       const isFeedPositionedCorrectly =
-        feedDistFromKeyframe >= 0 && feedDistFromKeyframe <= 8;
+        feedDistFromKeyframe >= 0 && feedDistFromKeyframe <= 16;
       const canResumeFromHotPausedFrame =
         isDecoderReady &&
         hasHotCurrentFrame &&
