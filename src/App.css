@@ -8507,6 +8507,40 @@ input[type="checkbox"] {
   color: var(--accent);
 }
 
+.preview-webcodecs-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0 6px;
+  background: var(--preview-overlay-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  backdrop-filter: blur(4px);
+  letter-spacing: 0.3px;
+}
+
+.preview-webcodecs-toggle:hover {
+  background: var(--preview-overlay-bg-hover);
+  color: var(--text-primary);
+  border-color: var(--gray-300);
+}
+
+.preview-webcodecs-toggle.active {
+  background: rgba(45, 140, 235, 0.2);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.preview-webcodecs-label {
+  white-space: nowrap;
+}
+
 .preview-quality-dropdown-wrapper {
   position: relative;
 }

@@ -1,7 +1,10 @@
-// Preview bottom-left controls: transparency grid toggle + quality selector
+// Preview bottom-left controls: transparency grid toggle + quality selector + WebCodecs toggle
 
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import type { PreviewQuality } from '../../stores/settingsStore';
+import { flags } from '../../engine/featureFlags';
+import { engine } from '../../engine/WebGPUEngine';
+import { layerBuilder } from '../../services/layerBuilder';
 
 interface PreviewBottomControlsProps {
   showTransparencyGrid: boolean;
@@ -22,6 +25,17 @@ export function PreviewBottomControls({
   setQualityOpen,
   qualityDropdownRef,
 }: PreviewBottomControlsProps) {
+  const [webCodecsEnabled, setWebCodecsEnabled] = useState(() => flags.useFullWebCodecsPlayback);
+
+  const toggleWebCodecs = useCallback(() => {
+    const newValue = !flags.useFullWebCodecsPlayback;
+    flags.useFullWebCodecsPlayback = newValue;
+    flags.disableHtmlPreviewFallback = newValue;
+    setWebCodecsEnabled(newValue);
+    layerBuilder.invalidateCache();
+    engine.requestRender();
+  }, []);
+
   return (
     <div className="preview-controls-bottom">
       <button
@@ -39,6 +53,14 @@ export function PreviewBottomControls({
           <rect x="4" y="12" width="4" height="4" opacity="0.6" />
           <rect x="12" y="12" width="4" height="4" opacity="0.6" />
         </svg>
+      </button>
+
+      <button
+        className={`preview-webcodecs-toggle ${webCodecsEnabled ? 'active' : ''}`}
+        onClick={toggleWebCodecs}
+        title={webCodecsEnabled ? 'WebCodecs mode (click for HTML Video)' : 'HTML Video mode (click for WebCodecs)'}
+      >
+        <span className="preview-webcodecs-label">{webCodecsEnabled ? 'WC' : 'HTML'}</span>
       </button>
 
       <div className="preview-quality-dropdown-wrapper" ref={qualityDropdownRef}>

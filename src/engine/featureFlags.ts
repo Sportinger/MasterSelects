@@ -5,8 +5,8 @@
 export const flags = {
   useRenderGraph: false,  // Render Graph executor (stubs - not ready)
   useDecoderPool: false,  // Shared decoder pool (not wired yet)
-  useFullWebCodecsPlayback: true,  // Default to full WebCodecs preview/playback; HTMLVideo stays audio/fallback only
-  disableHtmlPreviewFallback: true,  // Debug WebCodecs without HTML preview recovery paths; HTMLVideo still stays available for audio
+  useFullWebCodecsPlayback: false,  // Default to HTMLVideo; user can toggle to WebCodecs via preview UI
+  disableHtmlPreviewFallback: false,  // Allow HTML preview fallback by default
   useLiveSlotTrigger: false,  // Slot Grid click triggers live layers without forcing editor switching
   useWarmSlotDecks: false,  // Prepare reusable slot-owned live decks for low-latency triggering
 };
