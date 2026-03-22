@@ -215,7 +215,7 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>) => P
       if (mode === 'hard') {
         window.location.reload();
       } else {
-        window.location.href = window.location.href;
+        window.location.replace(window.location.href);
       }
     }, delayMs);
     return { success: true, data: { mode, delayMs, reloading: true } };

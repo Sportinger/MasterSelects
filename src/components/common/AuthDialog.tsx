@@ -12,6 +12,14 @@ export function AuthDialog({ onClose }: AuthDialogProps) {
   const [isClosing, setIsClosing] = useState(false);
   const { error, isLoading, login, notice } = useAccountStore();
 
+  const handleClose = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+    }, 200);
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -22,14 +30,6 @@ export function AuthDialog({ onClose }: AuthDialogProps) {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose, isClosing]);
-
-  const handleClose = () => {
-    if (isClosing) return;
-    setIsClosing(true);
-    setTimeout(() => {
-      onClose();
-    }, 200);
-  };
 
   const handleBackdropClick = (event: React.MouseEvent) => {
     if (event.target === event.currentTarget) {
