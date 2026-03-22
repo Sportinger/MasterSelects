@@ -630,6 +630,36 @@
   background: rgba(15, 23, 42, 0.5);
 }
 
+.legal-lang-select {
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(15, 23, 42, 0.8);
+  color: rgba(226, 232, 240, 0.9);
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='rgba(148,163,184,0.6)'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 22px;
+}
+
+.legal-lang-select:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.legal-lang-select:focus {
+  border-color: rgba(99, 102, 241, 0.6);
+}
+
+.legal-lang-select option {
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
 .legal-tab {
   padding: 10px 20px;
   border: none;

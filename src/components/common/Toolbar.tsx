@@ -758,14 +758,14 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
                 <span>About</span>
               </button>
               <div className="menu-separator" />
-              <button className="menu-option" onClick={() => { setShowLegalDialog('impressum'); closeMenu(); }}>
-                <span>Impressum</span>
+              <button className="menu-option" onClick={() => { setShowLegalDialog('imprint'); closeMenu(); }}>
+                <span>Imprint</span>
               </button>
-              <button className="menu-option" onClick={() => { setShowLegalDialog('datenschutz'); closeMenu(); }}>
-                <span>Datenschutz</span>
+              <button className="menu-option" onClick={() => { setShowLegalDialog('privacy'); closeMenu(); }}>
+                <span>Privacy Policy</span>
               </button>
-              <button className="menu-option" onClick={() => { setShowLegalDialog('kontakt'); closeMenu(); }}>
-                <span>Kontakt</span>
+              <button className="menu-option" onClick={() => { setShowLegalDialog('contact'); closeMenu(); }}>
+                <span>Contact</span>
               </button>
             </div>
           )}
