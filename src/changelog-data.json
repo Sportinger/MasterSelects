@@ -1,5 +1,37 @@
 [
   {
+    "date": "2026-03-22",
+    "type": "fix",
+    "title": "Faster Play Resume After Pause With Larger Preroll Buffer",
+    "description": "Increased the paused preroll buffer from 2 to 6 frames and widened the decoder feed position tolerance so advanceToTime can skip heavyweight decoder resets when the pipeline is already near the target. Reduces play-after-pause startup from ~300ms to ~60ms in warm sessions.",
+    "section": "WebCodecs Playback",
+    "commits": ["6ec1ca15"]
+  },
+  {
+    "date": "2026-03-22",
+    "type": "fix",
+    "title": "Bridge Scrub Frame Into Playback to Reduce Black Gap",
+    "description": "When the main provider has no frame during scrub-to-play settle, the LayerCollector now falls back to the clip's own WebCodecs player frame as a visual placeholder. Also warms up the playback decoder in the background during settle. Reduces max preview update gap by ~47%.",
+    "section": "WebCodecs Playback",
+    "commits": ["884acaba"]
+  },
+  {
+    "date": "2026-03-22",
+    "type": "fix",
+    "title": "Hold Scrub Frame During Scrub-to-Play Transition",
+    "description": "After scrubbing stops, the scrub provider's frame was immediately discarded while the playback decoder worked through the GOP (up to 2s for long-GOP H.264 4K). Now checks the actual playback provider readiness before releasing the hold, and begins a scrub settle state in the WebCodecs path so the playing path can keep the scrub frame visible.",
+    "section": "WebCodecs Playback",
+    "commits": ["0d26b7ff"]
+  },
+  {
+    "date": "2026-03-22",
+    "type": "new",
+    "title": "reloadApp AI Tool for Scripted Hard/Soft Reloads",
+    "description": "Added reloadApp tool to the AI bridge, enabling scripted hard and soft page reloads during automated playback testing without manual browser interaction.",
+    "section": "AI / Debug Tools",
+    "commits": ["884acaba"]
+  },
+  {
     "date": "2026-03-17",
     "type": "improve",
     "title": "Website Sessions Can Now Edit the Timeline Through the Native Helper Bridge",
