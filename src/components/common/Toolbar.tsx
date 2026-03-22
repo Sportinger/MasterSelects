@@ -6,7 +6,6 @@ import { Logger } from '../../services/logger';
 
 const log = Logger.create('Toolbar');
 import { useEngine } from '../../hooks/useEngine';
-import { useEngineStore } from '../../stores/engineStore';
 import { useDockStore } from '../../stores/dockStore';
 import { PANEL_CONFIGS, AI_PANEL_TYPES, SCOPE_PANEL_TYPES, WIP_PANEL_TYPES, type PanelType } from '../../types/dock';
 import { useSettingsStore, type AutosaveInterval } from '../../stores/settingsStore';
@@ -40,7 +39,6 @@ interface ToolbarProps {
 
 export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   const { isEngineReady, createOutputWindow } = useEngine();
-  const gpuInfo = useEngineStore(s => s.gpuInfo);
   const targets = useRenderTargetStore((s) => s.targets);
   const outputTargets = useMemo(() => {
     const result: { id: string; name: string }[] = [];
@@ -808,9 +806,9 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
         </button>
         <NativeHelperStatus />
 
-        <span className={`status ${isEngineReady ? 'ready' : 'loading'}`} title={gpuInfo?.description || ''}>
-          {isEngineReady ? `● WebGPU ${gpuInfo ? `(${gpuInfo.vendor})` : ''}` : '○ Loading...'}
-        </span>
+        {!isEngineReady && (
+          <span className="status loading">○ Loading...</span>
+        )}
       </div>
 
       {/* Settings Dialog */}

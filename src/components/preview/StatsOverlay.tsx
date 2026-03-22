@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import type { EngineStats } from '../../types';
+import { useEngineStore } from '../../stores/engineStore';
 
 interface StatsOverlayProps {
   stats: EngineStats;
@@ -11,6 +12,7 @@ interface StatsOverlayProps {
 }
 
 export function StatsOverlay({ stats, resolution, expanded, onToggle }: StatsOverlayProps) {
+  const gpuInfo = useEngineStore(s => s.gpuInfo);
   const fpsColor = stats.fps >= 55 ? '#4f4' : stats.fps >= 30 ? '#ff4' : '#f44';
   const dropColor = stats.drops.lastSecond > 0 ? '#f44' : '#4f4';
   const decoderColor = stats.decoder === 'NativeHelper' ? '#4af' : stats.decoder === 'WebCodecs' ? '#4f4' : stats.decoder === 'ParallelDecode' ? '#a4f' : stats.decoder.startsWith('HTMLVideo') ? '#fa4' : '#888';
@@ -145,6 +147,12 @@ export function StatsOverlay({ stats, resolution, expanded, onToggle }: StatsOve
       </div>
 
       <div className="stats-section">
+        {gpuInfo && (
+          <div className="stats-row">
+            <span>GPU</span>
+            <span style={{ color: '#4af' }} title={gpuInfo.description}>WebGPU ({gpuInfo.vendor})</span>
+          </div>
+        )}
         <div className="stats-row">
           <span>Engine</span>
           <span style={{ color: stats.isIdle ? '#888' : '#4f4' }}>
