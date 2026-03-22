@@ -73,13 +73,14 @@ export function PricingDialog({ onClose }: PricingDialogProps) {
             {plans.map((plan) => (
               <article key={plan.id} className={`pricing-plan-card ${plan.featured ? 'pricing-plan-featured' : ''}`}>
                 <div className="pricing-plan-top">
-                  <div>
-                    <h3 className="pricing-plan-name">{plan.id.charAt(0).toUpperCase() + plan.id.slice(1)}</h3>
-                    <p className="pricing-plan-description">{plan.description}</p>
-                  </div>
-                  <div className="pricing-plan-price">{plan.price}</div>
+                  <h3 className="pricing-plan-name">{plan.id.charAt(0).toUpperCase() + plan.id.slice(1)}</h3>
+                  <span className="pricing-plan-price">{plan.price}</span>
                 </div>
-                <div className="pricing-plan-credits">{plan.credits} monthly credits</div>
+                <div className="pricing-plan-credits">
+                  <span className="pricing-plan-description">{plan.description}</span>
+                  {' · '}
+                  {plan.credits} credits/mo
+                </div>
                 <button
                   className={`pricing-plan-cta ${plan.id === 'free' ? 'pricing-plan-cta-muted' : ''}`}
                   disabled={isLoading || plan.id === 'free'}
