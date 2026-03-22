@@ -781,6 +781,12 @@ export class WebCodecsPlayer implements ExportModePlayer {
     this.seekTargetToleranceUs = 0;
     this.clearPendingSeekFeed();
     this.endPendingSeek('fallback');
+
+    if (!this._isPlaying) {
+      this.holdCurrentFrameDuringPause();
+      this.startPausedPreroll();
+    }
+
     this.onFrame?.(frame);
     return true;
   }
@@ -823,19 +829,31 @@ export class WebCodecsPlayer implements ExportModePlayer {
           this.seekTargetToleranceUs = 0;
           this.clearPendingSeekFeed();
           this.endPendingSeek('resolved');
+
+          // After a paused seek resolves, protect the just-seeked frame from
+          // being overwritten by post-seek lookahead frames still in the
+          // decoder queue.  holdCurrentFrameDuringPause + startPausedPreroll
+          // route those late arrivals into the preroll buffer instead.
+          // This is critical for cold-start after page reload where no
+          // pause() has been called on the player yet.
+          if (!this._isPlaying) {
+            this.holdCurrentFrameDuringPause();
+            this.startPausedPreroll();
+          }
         }
 
         this.onFrame?.(frame);
       } else {
-        if (this.rememberPendingSeekFallback(frame, diff)) {
-          return;
+        if (!this.rememberPendingSeekFallback(frame, diff)) {
+          wcPipelineMonitor.record('frame_drop', {
+            reason: 'seek_intermediate',
+            frameUs: Math.round(frame.timestamp),
+            targetUs: Math.round(this.seekTargetUs),
+          });
+          frame.close();
         }
-        wcPipelineMonitor.record('frame_drop', {
-          reason: 'seek_intermediate',
-          frameUs: Math.round(frame.timestamp),
-          targetUs: Math.round(this.seekTargetUs),
-        });
-        frame.close();
+        // Don't return early — fall through so feedPendingSeekSamples
+        // continues feeding the decoder towards the seek target.
       }
     } else if (this.pausedPrerollEndIndex !== null) {
       if (
@@ -1378,6 +1396,12 @@ export class WebCodecsPlayer implements ExportModePlayer {
 
     if (this.pendingSeekFeedEndIndex !== null && this.feedIndex > this.pendingSeekFeedEndIndex) {
       this.pendingSeekFeedEndIndex = null;
+
+      // All seek samples have been fed — now it's safe to flush the
+      // decoder so the strict fallback can fire once all outputs arrive.
+      if (this.pendingSeekPreviewMode === 'strict') {
+        this.flushStrictPausedSeek();
+      }
     }
   }
 
@@ -2108,9 +2132,11 @@ export class WebCodecsPlayer implements ExportModePlayer {
       this.feedPendingSeekSamples('seek');
     }
 
-    if (previewMode === 'strict') {
-      this.flushStrictPausedSeek();
-    }
+    // Don't flush here — the initial feed may only queue a subset of
+    // the required samples (limited by ADVANCE_SEEK_QUEUE_TARGET).
+    // Flushing now would block decoder.decode() for continuation feeds,
+    // preventing the seek from ever reaching its target.  The flush is
+    // triggered later by feedPendingSeekSamples once all samples are fed.
 
     wcPipelineMonitor.record('seek_end', {
       target: timeSeconds,

@@ -2,6 +2,14 @@
   {
     "date": "2026-03-22",
     "type": "fix",
+    "title": "Fix Black Preview After Page Reload (WebCodecs Cold Start)",
+    "description": "After page reload, the preview stayed black until the user pressed play or moved the playhead. Three root causes: (1) feedPendingSeekSamples early-return in rememberPendingSeekFallback skipped the continuation feed, so the decoder never got all samples needed to reach the target; (2) flushStrictPausedSeek was called immediately after the first feed batch, blocking decoder.decode() for continuation feeds; (3) post-seek lookahead frames could overwrite the correctly-seeked target frame. Fixes: removed the early return, deferred the flush to after all samples are fed, and added holdCurrentFrameDuringPause + startPausedPreroll after seek resolution.",
+    "section": "WebCodecs Playback",
+    "commits": []
+  },
+  {
+    "date": "2026-03-22",
+    "type": "fix",
     "title": "Faster Play Resume After Pause With Larger Preroll Buffer",
     "description": "Increased the paused preroll buffer from 2 to 6 frames and widened the decoder feed position tolerance so advanceToTime can skip heavyweight decoder resets when the pipeline is already near the target. Reduces play-after-pause startup from ~300ms to ~60ms in warm sessions.",
     "section": "WebCodecs Playback",

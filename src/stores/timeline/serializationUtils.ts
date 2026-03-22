@@ -181,10 +181,26 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       const effectiveTime = webCodecsPlayer.getPendingSeekTime?.() ?? webCodecsPlayer.currentTime;
 
       if ((webCodecsPlayer.hasFrame?.() ?? false) && Math.abs(effectiveTime - targetTime) <= 0.05) {
+        wakePreviewAfterRestore();
         return;
       }
 
       webCodecsPlayer.seek(targetTime);
+
+      // Poll for the seek to produce a frame, then wake the preview.
+      // Without this, the LayerCollector drops the layer during the pending
+      // seek (pending_unstable), and after the seek resolves the onFrame
+      // callback alone may not be enough to break out of idle / cache state.
+      const pollForFrame = (pollAttempt: number) => {
+        if (pollAttempt > 120) return; // 120 * 16ms ≈ 2s max
+        if (!isCurrentTimelineSession()) return;
+        if (webCodecsPlayer.hasFrame?.()) {
+          wakePreviewAfterRestore();
+          return;
+        }
+        setTimeout(() => pollForFrame(pollAttempt + 1), 16);
+      };
+      pollForFrame(0);
     };
 
     // Stop playback
