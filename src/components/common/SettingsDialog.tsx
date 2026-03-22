@@ -12,6 +12,8 @@ import { OutputSettings } from './settings/OutputSettings';
 import { PerformanceSettings } from './settings/PerformanceSettings';
 import { ApiKeysSettings } from './settings/ApiKeysSettings';
 import { AIFeaturesSettings } from './settings/AIFeaturesSettings';
+import { MidiSettings } from './settings/MidiSettings';
+import { NativeHelperSettings } from './settings/NativeHelperSettings';
 import './settings/SettingsDialog.css';
 
 interface SettingsDialogProps {
@@ -26,6 +28,8 @@ type SettingsCategory =
   | 'transcription'
   | 'output'
   | 'performance'
+  | 'nativeHelper'
+  | 'midi'
   | 'aiFeatures'
   | 'apiKeys';
 
@@ -43,6 +47,8 @@ const categories: CategoryConfig[] = [
   { id: 'transcription', label: 'Transcription', icon: '\uD83C\uDFA4' },
   { id: 'output', label: 'Output', icon: '\uD83D\uDCE4' },
   { id: 'performance', label: 'Performance', icon: '\u26A1' },
+  { id: 'nativeHelper', label: 'Native Helper', icon: '\u26A1' },
+  { id: 'midi', label: 'MIDI Control', icon: '\uD83C\uDFB9' },
   { id: 'aiFeatures', label: 'AI Features', icon: '\u2726' },
   { id: 'apiKeys', label: 'API Keys', icon: '\uD83D\uDD11' },
 ];
@@ -77,6 +83,8 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
       case 'transcription': return <TranscriptionSettings localKeys={localKeys} />;
       case 'output': return <OutputSettings />;
       case 'performance': return <PerformanceSettings />;
+      case 'nativeHelper': return <NativeHelperSettings />;
+      case 'midi': return <MidiSettings />;
       case 'apiKeys': return <ApiKeysSettings localKeys={localKeys} onKeyChange={handleKeyChange} />;
       case 'aiFeatures': return <AIFeaturesSettings />;
       default: return null;

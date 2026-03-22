@@ -11,7 +11,6 @@ import { useDockStore } from '../../stores/dockStore';
 import { PANEL_CONFIGS, AI_PANEL_TYPES, SCOPE_PANEL_TYPES, WIP_PANEL_TYPES, type PanelType } from '../../types/dock';
 import { useSettingsStore, type AutosaveInterval } from '../../stores/settingsStore';
 import { useRenderTargetStore } from '../../stores/renderTargetStore';
-import { useMIDI } from '../../hooks/useMIDI';
 import { useAccountStore } from '../../stores/accountStore';
 import { SettingsDialog } from './SettingsDialog';
 import { SavedToast } from './SavedToast';
@@ -30,7 +29,7 @@ import {
 import { APP_VERSION } from '../../version';
 import { openOutputManager } from '../outputManager/OutputManagerBoot';
 
-type MenuId = 'file' | 'edit' | 'view' | 'output' | 'window' | 'info' | null;
+type MenuId = 'file' | 'edit' | 'view' | 'output' | 'info' | null;
 
 interface ToolbarProps {
   onOpenChangelog?: () => void;
@@ -54,7 +53,6 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
     togglePanelType: s.togglePanelType,
     saveLayoutAsDefault: s.saveLayoutAsDefault,
   })));
-  const { isSupported: midiSupported, isEnabled: midiEnabled, enableMIDI, disableMIDI, devices } = useMIDI();
   const accountCredits = useAccountStore((s) => s.creditBalance);
   const accountSession = useAccountStore((s) => s.session);
   const accountUser = useAccountStore((s) => s.user);
@@ -722,31 +720,6 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
                     ))}
                   </div>
                 </>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Window Menu */}
-        <div className="menu-item">
-          <button
-            className={`menu-trigger ${openMenu === 'window' ? 'active' : ''}`}
-            onClick={() => handleMenuClick('window')}
-            onMouseEnter={() => handleMenuHover('window')}
-          >
-            Window
-          </button>
-          {openMenu === 'window' && (
-            <div className="menu-dropdown">
-              {midiSupported ? (
-                <button
-                  className={`menu-option ${midiEnabled ? 'checked' : ''}`}
-                  onClick={() => { if (midiEnabled) { disableMIDI(); } else { enableMIDI(); } closeMenu(); }}
-                >
-                  <span>{midiEnabled ? '✓ ' : '   '}MIDI Control {midiEnabled && devices.length > 0 ? `(${devices.length} devices)` : ''}</span>
-                </button>
-              ) : (
-                <span className="menu-option disabled">MIDI not supported</span>
               )}
             </div>
           )}
