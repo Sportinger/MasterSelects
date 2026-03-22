@@ -102,8 +102,11 @@ export function AccountDialog({ onClose }: AccountDialogProps) {
             <button className="auth-dialog-action-secondary" disabled={isLoading} onClick={() => openPricingDialog()} type="button">
               Upgrade plan
             </button>
+          </div>
+
+          <div className="account-signout-row">
             <button className="auth-dialog-action-ghost" disabled={isLoading} onClick={() => logout()} type="button">
-              Sign out
+              ✕ Sign out
             </button>
           </div>
 

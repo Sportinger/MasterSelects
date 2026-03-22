@@ -174,7 +174,7 @@
 /* ─── Auth Dialog (Changelog-style floating) ─── */
 
 .auth-dialog {
-  width: 480px;
+  width: 640px;
   max-width: 90vw;
   max-height: 85vh;
   padding: 0;
@@ -408,7 +408,7 @@
 
 /* Wide variant for Account + Pricing */
 .auth-dialog-wide {
-  width: 520px;
+  width: 680px;
 }
 
 /* ─── Secondary / Ghost action buttons ─── */
@@ -522,6 +522,18 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  align-items: center;
+}
+
+.account-actions-row .auth-dialog-submit {
+  margin-top: 0;
+}
+
+.account-signout-row {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 /* ─── Pricing Dialog (Changelog-style) ─── */
@@ -613,6 +625,139 @@
 
 .pricing-plan-cta-muted {
   opacity: 0.5;
+}
+
+/* ─── Legal Dialog ─── */
+
+.legal-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.legal-tab {
+  padding: 10px 20px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: rgba(148, 163, 184, 0.8);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.legal-tab:hover {
+  color: rgba(226, 232, 240, 0.95);
+}
+
+.legal-tab.active {
+  color: rgba(255, 255, 255, 0.95);
+  border-bottom-color: rgba(99, 102, 241, 0.8);
+}
+
+.legal-content {
+  padding: 24px;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: rgba(22, 22, 22, 0.95);
+  border-radius: 0 0 18px 18px;
+}
+
+.legal-text h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  margin: 24px 0 8px;
+}
+
+.legal-text h3:first-child {
+  margin-top: 0;
+}
+
+.legal-text h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.85);
+  margin: 16px 0 6px;
+}
+
+.legal-text p {
+  font-size: 13px;
+  line-height: 1.65;
+  color: rgba(148, 163, 184, 0.9);
+  margin: 0 0 12px;
+}
+
+.legal-text a {
+  color: rgba(129, 140, 248, 0.9);
+  text-decoration: none;
+}
+
+.legal-text a:hover {
+  color: rgba(165, 180, 252, 1);
+  text-decoration: underline;
+}
+
+.legal-text ul {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+
+.legal-text li {
+  font-size: 13px;
+  line-height: 1.65;
+  color: rgba(148, 163, 184, 0.9);
+  margin-bottom: 6px;
+}
+
+.legal-text strong {
+  color: rgba(226, 232, 240, 0.95);
+}
+
+.legal-meta {
+  font-size: 11px;
+  color: rgba(100, 116, 139, 0.7);
+  margin-top: 24px;
+}
+
+.legal-contact-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  margin: 12px 0 20px;
+}
+
+.legal-contact-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.legal-contact-label {
+  min-width: 70px;
+  font-weight: 600;
+  color: rgba(148, 163, 184, 0.7);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.legal-contact-row a {
+  color: rgba(129, 140, 248, 0.9);
+  text-decoration: none;
+}
+
+.legal-contact-row a:hover {
+  color: rgba(165, 180, 252, 1);
+  text-decoration: underline;
 }
 
 /* ─── Responsive ─── */
