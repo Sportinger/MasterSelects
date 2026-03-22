@@ -7,10 +7,10 @@ interface PricingDialogProps {
 }
 
 const plans = [
-  { id: 'free', credits: 25, description: 'Hosted AI chat trial', featured: false, price: '$0' },
-  { id: 'starter', credits: 250, description: 'Hosted AI chat for light usage', featured: false, price: 'Launch price' },
-  { id: 'pro', credits: 1000, description: 'Hosted chat plus Kling generation', featured: true, price: 'Main plan' },
-  { id: 'studio', credits: 5000, description: 'High-volume credits and priority access', featured: false, price: 'Team plan' },
+  { id: 'free', credits: 25, description: 'Hosted AI chat trial', featured: false, price: '0 €' },
+  { id: 'starter', credits: 250, description: 'Hosted AI chat for light usage', featured: false, price: '4,90 €/mo' },
+  { id: 'pro', credits: 1000, description: 'Hosted chat plus Kling generation', featured: true, price: '14,90 €/mo' },
+  { id: 'studio', credits: 5000, description: 'High-volume credits and priority access', featured: false, price: '29,90 €/mo' },
 ] as const;
 
 export function PricingDialog({ onClose }: PricingDialogProps) {

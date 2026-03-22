@@ -14,10 +14,9 @@ import {
   createSseResponse,
   type HostedGatewayEnvelope,
 } from '../../lib/providers/shared';
+import { getModelCreditCost } from '../../lib/modelPricing';
 import { completeUsageEvent, createUsageEvent } from '../../lib/usage';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
-
-const HOSTED_CHAT_CREDIT_COST = 1;
 
 interface HostedChatRouteBody {
   idempotencyKey?: string;
@@ -172,6 +171,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     return buildSsePayload(requestId, 'Hosted AI chat streaming is not enabled in phase 1.');
   }
 
+  const creditCost = getModelCreditCost(request.model);
   const hostedContext = await loadHostedContext(context);
 
   if (!hostedContext.user) {
@@ -224,7 +224,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     idempotencyKey,
   );
 
-  if (!existingCharge && (hostedContext.billing.balance ?? 0) < HOSTED_CHAT_CREDIT_COST) {
+  if (!existingCharge && (hostedContext.billing.balance ?? 0) < creditCost) {
     return json(
       buildRouteEnvelope({
         creditBalance: hostedContext.billing.balance,
@@ -258,7 +258,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   };
 
   await createUsageEvent(context.env.DB, {
-    creditCost: HOSTED_CHAT_CREDIT_COST,
+    creditCost: creditCost,
     feature: 'hosted_ai_chat',
     idempotencyKey,
     metadata: {
@@ -281,7 +281,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     const charge = await spendCredits(
       context.env.DB,
       hostedContext.user.id,
-      HOSTED_CHAT_CREDIT_COST,
+      creditCost,
       'hosted:ai_chat',
       idempotencyKey,
       'Hosted AI chat request',
@@ -327,7 +327,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         model: request.model,
         messages: request.messages,
         response: payload,
-        creditCost: charge.charged ? HOSTED_CHAT_CREDIT_COST : 0,
+        creditCost: charge.charged ? creditCost : 0,
         durationMs,
         status: 'completed',
       }).catch(() => {
@@ -338,7 +338,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     return json(
       buildRouteEnvelope({
         creditBalance: charge.balance,
-        creditsCharged: charge.charged ? HOSTED_CHAT_CREDIT_COST : 0,
+        creditsCharged: charge.charged ? creditCost : 0,
         data: payload,
         ok: true,
         requestId,

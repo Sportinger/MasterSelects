@@ -8,30 +8,30 @@ import { cloudAiService } from '../../services/cloudAiService';
 import type { ToolPolicyEntry } from '../../services/aiTools';
 import './AIChatPanel.css';
 
-// Available OpenAI models
+// Available OpenAI models with credit cost per request
 const OPENAI_MODELS = [
   // GPT-5.2 series (newest - Dec 2025)
-  { id: 'gpt-5.2', name: 'GPT-5.2 (Thinking)' },
-  { id: 'gpt-5.2-pro', name: 'GPT-5.2 Pro' },
+  { id: 'gpt-5.2', name: 'GPT-5.2 (Thinking)', credits: 8 },
+  { id: 'gpt-5.2-pro', name: 'GPT-5.2 Pro', credits: 10 },
   // GPT-5.1 series
-  { id: 'gpt-5.1', name: 'GPT-5.1' },
-  { id: 'gpt-5.1-codex', name: 'GPT-5.1 Codex' },
-  { id: 'gpt-5.1-codex-mini', name: 'GPT-5.1 Codex Mini' },
+  { id: 'gpt-5.1', name: 'GPT-5.1', credits: 5 },
+  { id: 'gpt-5.1-codex', name: 'GPT-5.1 Codex', credits: 5 },
+  { id: 'gpt-5.1-codex-mini', name: 'GPT-5.1 Codex Mini', credits: 1 },
   // GPT-5 series
-  { id: 'gpt-5', name: 'GPT-5' },
-  { id: 'gpt-5-mini', name: 'GPT-5 Mini' },
-  { id: 'gpt-5-nano', name: 'GPT-5 Nano' },
+  { id: 'gpt-5', name: 'GPT-5', credits: 5 },
+  { id: 'gpt-5-mini', name: 'GPT-5 Mini', credits: 1 },
+  { id: 'gpt-5-nano', name: 'GPT-5 Nano', credits: 1 },
   // Reasoning models
-  { id: 'o3', name: 'o3 (Reasoning)' },
-  { id: 'o4-mini', name: 'o4-mini (Reasoning)' },
-  { id: 'o3-pro', name: 'o3-pro (Deep Reasoning)' },
+  { id: 'o3', name: 'o3 (Reasoning)', credits: 5 },
+  { id: 'o4-mini', name: 'o4-mini (Reasoning)', credits: 3 },
+  { id: 'o3-pro', name: 'o3-pro (Deep Reasoning)', credits: 50 },
   // GPT-4.1 series
-  { id: 'gpt-4.1', name: 'GPT-4.1' },
-  { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' },
-  { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano' },
+  { id: 'gpt-4.1', name: 'GPT-4.1', credits: 5 },
+  { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', credits: 1 },
+  { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', credits: 1 },
   // GPT-4o series (legacy)
-  { id: 'gpt-4o', name: 'GPT-4o' },
-  { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+  { id: 'gpt-4o', name: 'GPT-4o', credits: 5 },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', credits: 1 },
 ];
 
 // System prompt for editor mode
@@ -644,7 +644,7 @@ export function AIChatPanel() {
             disabled={isLoading}
           >
             {OPENAI_MODELS.map(m => (
-              <option key={m.id} value={m.id}>{m.name}</option>
+              <option key={m.id} value={m.id}>{m.name} ({m.credits === 1 ? '1 credit' : `${m.credits} credits`})</option>
             ))}
           </select>
           <button
