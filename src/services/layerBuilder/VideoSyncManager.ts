@@ -2850,11 +2850,17 @@ export class VideoSyncManager {
       let playbackProvider =
         getRuntimeFrameProvider(preferredRuntimeSource) ??
         clip.source!.webCodecsPlayer!;
+      // When holding scrub frame, check the ACTUAL playback provider (not the scrub
+      // provider) to decide when to release. The scrub provider already has its frame
+      // at target — we need to know when the playback provider is ready to take over.
+      const actualPlaybackProvider = useScrubRuntimeForHold
+        ? (getRuntimeFrameProvider(playbackRuntimeSource) ?? clip.source!.webCodecsPlayer!)
+        : playbackProvider;
       const holdScrubRelease =
         holdPlaybackTarget !== null &&
         this.shouldHoldScrubReleaseIntoPlayback(
           clip.id,
-          playbackProvider,
+          actualPlaybackProvider,
           holdPlaybackTarget
         );
       const playbackTargetTime = holdScrubRelease
@@ -2863,6 +2869,12 @@ export class VideoSyncManager {
 
       if (holdScrubRelease) {
         holdInternalPlaybackPosition(playbackTargetTime, clip.id);
+        // Start warming up the playback provider in the background while
+        // the scrub provider's frame is still being displayed. This way the
+        // playback decoder can work through the GOP so it's ready faster.
+        if (useScrubRuntimeForHold) {
+          updateRuntimePlaybackTime(playbackRuntimeSource, timeInfo.clipTime);
+        }
       } else if (playheadState.heldPlaybackPosition !== null) {
         clearInternalPlaybackHold(clip.id);
       }
