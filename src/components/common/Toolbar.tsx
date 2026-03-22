@@ -15,6 +15,8 @@ import { useAccountStore } from '../../stores/accountStore';
 import { SettingsDialog } from './SettingsDialog';
 import { SavedToast } from './SavedToast';
 import { InfoDialog } from './InfoDialog';
+import { LegalDialog } from './LegalDialog';
+import type { LegalPage } from './LegalDialog';
 import { NativeHelperStatus } from './NativeHelperStatus';
 import { projectFileService } from '../../services/projectFileService';
 import { useMediaStore } from '../../stores/mediaStore';
@@ -82,6 +84,7 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   const [pendingProjectName, setPendingProjectName] = useState<string | null>(null);
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [showInfoDialog, setShowInfoDialog] = useState(false);
+  const [showLegalDialog, setShowLegalDialog] = useState<LegalPage | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
   const menuBarRef = useRef<HTMLDivElement>(null);
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -754,6 +757,16 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
               <button className="menu-option" onClick={() => { onOpenSplash?.(); closeMenu(); }}>
                 <span>About</span>
               </button>
+              <div className="menu-separator" />
+              <button className="menu-option" onClick={() => { setShowLegalDialog('impressum'); closeMenu(); }}>
+                <span>Impressum</span>
+              </button>
+              <button className="menu-option" onClick={() => { setShowLegalDialog('datenschutz'); closeMenu(); }}>
+                <span>Datenschutz</span>
+              </button>
+              <button className="menu-option" onClick={() => { setShowLegalDialog('kontakt'); closeMenu(); }}>
+                <span>Kontakt</span>
+              </button>
             </div>
           )}
         </div>
@@ -827,6 +840,9 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
 
       {/* Info Dialog */}
       {showInfoDialog && <InfoDialog onClose={() => setShowInfoDialog(false)} />}
+
+      {/* Legal Dialog */}
+      {showLegalDialog && <LegalDialog initialPage={showLegalDialog} onClose={() => setShowLegalDialog(null)} />}
     </div>
   );
 }
