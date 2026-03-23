@@ -198,6 +198,8 @@ export interface CloudAiCapabilitiesResponse {
   status: CloudAiGatewayStatus;
 }
 
+import { APP_VERSION } from '../version';
+
 const HOSTED_CLOUD_API_ROUTES = [
   '/api/me',
   '/api/auth',
@@ -271,6 +273,10 @@ async function requestResponse(path: string, init: RequestInit = {}): Promise<Re
     response = await fetch(path, {
       credentials: 'include',
       ...init,
+      headers: {
+        'X-App-Version': APP_VERSION,
+        ...(init.headers ?? {}),
+      },
     });
   } catch (error) {
     if (isLocalViteOrigin() && isHostedCloudApiRoute(path)) {
@@ -342,12 +348,13 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
   try {
     response = await fetch(path, {
       credentials: 'include',
+      ...init,
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
+        'X-App-Version': APP_VERSION,
         ...(init.headers ?? {}),
       },
-      ...init,
     });
   } catch (error) {
     if (isLocalViteOrigin() && isHostedCloudApiRoute(path)) {

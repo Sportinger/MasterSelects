@@ -2,6 +2,14 @@
   {
     "date": "2026-03-23",
     "type": "new",
+    "title": "User Activity Tracking",
+    "description": "Track app version, AI model, and last login time per user. The frontend now sends X-App-Version on all API requests. User records are updated on login and each AI chat interaction.",
+    "section": "Backend",
+    "commits": ["2224bb4d"]
+  },
+  {
+    "date": "2026-03-23",
+    "type": "new",
     "title": "Model-Weighted Credit Costs",
     "description": "AI chat credits now scale with model cost. Cheap models (GPT-4.1 Mini/Nano) cost 1 credit, mid-tier reasoning (o4-mini) costs 3, flagship models (GPT-4.1, GPT-5, o3) cost 5, and premium models (GPT-5.2 Pro, o3-pro) cost 8-50 credits per request. Credit costs are shown in the model dropdown.",
     "section": "AI & Billing",

@@ -51,7 +51,9 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   const plan: BillingPlanId = isBillingPlanId(body.plan) ? body.plan : 'studio';
 
   // Create or reuse the dev user in D1
+  const appVersion = context.request.headers.get('X-App-Version') ?? null;
   const user = await ensureUserRecord(context.env, {
+    appVersion,
     displayName: 'Dev User',
     email,
     provider: 'magic_link',

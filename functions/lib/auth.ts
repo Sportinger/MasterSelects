@@ -453,6 +453,7 @@ export async function loadLoginStateFromRequest(request: Request, env: Env): Pro
 export async function ensureUserRecord(
   env: Env,
   input: {
+    appVersion?: string | null;
     avatarUrl?: string | null;
     displayName?: string | null;
     email: string;
@@ -463,6 +464,7 @@ export async function ensureUserRecord(
   const email = normalizeEmail(input.email);
   const displayName = fallbackDisplayName(email, input.displayName);
   const avatarUrl = input.avatarUrl ?? null;
+  const appVersion = input.appVersion ?? null;
   const userId = crypto.randomUUID();
   const now = new Date().toISOString();
 
@@ -482,10 +484,12 @@ export async function ensureUserRecord(
          ELSE display_name
        END,
        avatar_url = COALESCE(?, avatar_url),
+       last_app_version = COALESCE(?, last_app_version),
+       last_login_at = ?,
        updated_at = ?
        WHERE id = ?`,
     )
-      .bind(displayName, displayName, avatarUrl, now, existingUserId)
+      .bind(displayName, displayName, avatarUrl, appVersion, now, now, existingUserId)
       .run();
 
     await env.DB.prepare(
@@ -507,10 +511,10 @@ export async function ensureUserRecord(
   }
 
   await env.DB.prepare(
-    `INSERT INTO users (id, email, display_name, avatar_url)
-     VALUES (?, ?, ?, ?)`,
+    `INSERT INTO users (id, email, display_name, avatar_url, last_app_version, last_login_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
   )
-    .bind(userId, email, displayName, avatarUrl)
+    .bind(userId, email, displayName, avatarUrl, appVersion, now)
     .run();
 
   await env.DB.prepare(
