@@ -64,6 +64,9 @@ interface APIKeys {
 // Autosave interval options (in minutes)
 export type AutosaveInterval = 1 | 2 | 5 | 10;
 
+// Save mode: continuous saves on every change (debounced), interval saves on a timer
+export type SaveMode = 'continuous' | 'interval';
+
 interface SettingsState {
   // Theme
   theme: ThemeMode;
@@ -80,9 +83,10 @@ interface SettingsState {
   previewQuality: PreviewQuality;
   showTransparencyGrid: boolean;  // Show checkerboard pattern for transparent areas
 
-  // Autosave settings
-  autosaveEnabled: boolean;
-  autosaveInterval: AutosaveInterval;  // in minutes
+  // Save settings
+  saveMode: SaveMode;  // 'continuous' = save on every change, 'interval' = save on timer
+  autosaveEnabled: boolean;  // legacy — derived from saveMode for compat
+  autosaveInterval: AutosaveInterval;  // in minutes (only used in interval mode)
 
   // Native Helper (Turbo Mode)
   turboModeEnabled: boolean;  // Connect to native helper (downloads, yt-dlp)
@@ -146,6 +150,7 @@ interface SettingsState {
   setTranscriptionProvider: (provider: TranscriptionProvider) => void;
   setPreviewQuality: (quality: PreviewQuality) => void;
   setShowTransparencyGrid: (show: boolean) => void;
+  setSaveMode: (mode: SaveMode) => void;
   setAutosaveEnabled: (enabled: boolean) => void;
   setAutosaveInterval: (interval: AutosaveInterval) => void;
   setTurboModeEnabled: (enabled: boolean) => void;
@@ -212,8 +217,9 @@ export const useSettingsStore = create<SettingsState>()(
       transcriptionProvider: 'local',
       previewQuality: 1, // Full quality by default
       showTransparencyGrid: false, // Don't show checkerboard by default
-      autosaveEnabled: true, // Autosave enabled by default
-      autosaveInterval: 5, // 5 minutes default interval
+      saveMode: 'continuous' as SaveMode, // Continuous save by default — every change saved automatically
+      autosaveEnabled: true, // Legacy compat (interval mode uses this)
+      autosaveInterval: 5, // 5 minutes default interval (only used in interval mode)
       turboModeEnabled: true, // Connect to native helper by default (downloads)
       nativeDecodeEnabled: false, // Native FFmpeg decode off by default
       nativeHelperPort: 9876, // Default WebSocket port
@@ -277,6 +283,10 @@ export const useSettingsStore = create<SettingsState>()(
 
       setShowTransparencyGrid: (show) => {
         set({ showTransparencyGrid: show });
+      },
+
+      setSaveMode: (mode) => {
+        set({ saveMode: mode });
       },
 
       setAutosaveEnabled: (enabled) => {
@@ -475,6 +485,7 @@ export const useSettingsStore = create<SettingsState>()(
         transcriptionProvider: state.transcriptionProvider,
         previewQuality: state.previewQuality,
         showTransparencyGrid: state.showTransparencyGrid,
+        saveMode: state.saveMode,
         autosaveEnabled: state.autosaveEnabled,
         autosaveInterval: state.autosaveInterval,
         turboModeEnabled: state.turboModeEnabled,

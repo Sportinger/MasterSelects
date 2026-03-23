@@ -5,11 +5,44 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useYouTubeStore } from '../../stores/youtubeStore';
 import { useDockStore } from '../../stores/dockStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { projectFileService } from '../projectFileService';
-import { syncStoresToProject } from './projectSave';
+import { syncStoresToProject, saveCurrentProject } from './projectSave';
 import { loadProjectToStores } from './projectLoad';
 
 const log = Logger.create('ProjectSync');
+
+// Debounced continuous save — saves 2s after the last change
+let continuousSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let isContinuousSaving = false;
+
+function scheduleContinuousSave(): void {
+  if (continuousSaveTimer) {
+    clearTimeout(continuousSaveTimer);
+  }
+  continuousSaveTimer = setTimeout(async () => {
+    continuousSaveTimer = null;
+    if (isContinuousSaving) return; // Prevent overlapping saves
+    if (!projectFileService.isProjectOpen() || !projectFileService.hasUnsavedChanges()) return;
+
+    isContinuousSaving = true;
+    try {
+      await saveCurrentProject();
+      log.debug('Continuous save completed');
+    } catch (err) {
+      log.error('Continuous save failed:', err);
+    } finally {
+      isContinuousSaving = false;
+    }
+  }, 2000);
+}
+
+function triggerContinuousSaveIfEnabled(): void {
+  const { saveMode } = useSettingsStore.getState();
+  if (saveMode === 'continuous') {
+    scheduleContinuousSave();
+  }
+}
 
 /**
  * Create a new project
@@ -49,7 +82,8 @@ export function closeCurrentProject(): void {
 }
 
 /**
- * Mark project as dirty when stores change
+ * Mark project as dirty when stores change.
+ * In continuous save mode, also triggers a debounced save to disk.
  */
 export function setupAutoSync(): void {
   // Subscribe to store changes and mark project dirty
@@ -58,6 +92,7 @@ export function setupAutoSync(): void {
     () => {
       if (projectFileService.isProjectOpen()) {
         projectFileService.markDirty();
+        triggerContinuousSaveIfEnabled();
       }
     }
   );
@@ -67,6 +102,7 @@ export function setupAutoSync(): void {
     () => {
       if (projectFileService.isProjectOpen()) {
         projectFileService.markDirty();
+        triggerContinuousSaveIfEnabled();
       }
     }
   );
@@ -78,6 +114,7 @@ export function setupAutoSync(): void {
       prevYouTubeVideos = state.videos;
       if (projectFileService.isProjectOpen()) {
         projectFileService.markDirty();
+        triggerContinuousSaveIfEnabled();
       }
     }
   });
@@ -89,6 +126,7 @@ export function setupAutoSync(): void {
       prevDockLayout = state.layout;
       if (projectFileService.isProjectOpen()) {
         projectFileService.markDirty();
+        triggerContinuousSaveIfEnabled();
       }
     }
   });

@@ -60,12 +60,14 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   const openAuthDialog = useAccountStore((s) => s.openAuthDialog);
   const {
     isSettingsOpen, openSettings, closeSettings,
+    saveMode,
     autosaveEnabled, setAutosaveEnabled,
     autosaveInterval, setAutosaveInterval,
   } = useSettingsStore(useShallow(s => ({
     isSettingsOpen: s.isSettingsOpen,
     openSettings: s.openSettings,
     closeSettings: s.closeSettings,
+    saveMode: s.saveMode,
     autosaveEnabled: s.autosaveEnabled,
     setAutosaveEnabled: s.setAutosaveEnabled,
     autosaveInterval: s.autosaveInterval,
@@ -169,7 +171,8 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
     setOpenMenu(null);
   }, []);
 
-  // Autosave effect
+  // Autosave effect — only runs in interval mode
+  // In continuous mode, saves are handled by setupAutoSync in projectLifecycle.ts
   useEffect(() => {
     // Clear existing timer
     if (autosaveTimerRef.current) {
@@ -177,14 +180,14 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
       autosaveTimerRef.current = null;
     }
 
-    // Set up new timer if autosave is enabled and project is open
-    if (autosaveEnabled && isProjectOpen) {
+    // Set up interval timer only when in interval save mode
+    if (saveMode === 'interval' && autosaveEnabled && isProjectOpen) {
       const intervalMs = autosaveInterval * 60 * 1000; // Convert minutes to milliseconds
-      log.info(`Autosave enabled with ${autosaveInterval} minute interval`);
+      log.info(`Interval save enabled with ${autosaveInterval} minute interval`);
 
       autosaveTimerRef.current = setInterval(async () => {
         if (projectFileService.isProjectOpen() && projectFileService.hasUnsavedChanges()) {
-          log.info('Autosave: Creating backup and saving project...');
+          log.info('Interval save: Creating backup and saving project...');
           // Create backup before saving
           await projectFileService.createBackup();
           // Then save the project
@@ -192,6 +195,8 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
           setShowSavedToast(true);
         }
       }, intervalMs);
+    } else if (saveMode === 'continuous' && isProjectOpen) {
+      log.info('Continuous save active — project saves automatically on every change');
     }
 
     return () => {
@@ -199,7 +204,7 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
         clearInterval(autosaveTimerRef.current);
       }
     };
-  }, [autosaveEnabled, autosaveInterval, isProjectOpen]);
+  }, [saveMode, autosaveEnabled, autosaveInterval, isProjectOpen]);
 
   const handleSaveAs = useCallback(async () => {
     const name = prompt('Save project as:', projectName || 'New Project');

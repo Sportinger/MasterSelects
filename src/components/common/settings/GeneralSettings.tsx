@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
-import { useSettingsStore, type AutosaveInterval, type PreviewQuality, type GPUPowerPreference } from '../../../stores/settingsStore';
+import { useSettingsStore, type AutosaveInterval, type SaveMode, type PreviewQuality, type GPUPowerPreference } from '../../../stores/settingsStore';
+// AutosaveInterval used in interval select onChange cast
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import { useMIDI } from '../../../hooks/useMIDI';
 import { OutputSettings } from './OutputSettings';
@@ -7,13 +8,13 @@ import { AIFeaturesSettings } from './AIFeaturesSettings';
 
 export function GeneralSettings() {
   const {
-    autosaveEnabled,
+    saveMode,
     autosaveInterval,
     copyMediaToProject,
     forceDesktopMode,
     previewQuality,
     gpuPowerPreference,
-    setAutosaveEnabled,
+    setSaveMode,
     setAutosaveInterval,
     setCopyMediaToProject,
     setForceDesktopMode,
@@ -51,34 +52,44 @@ export function GeneralSettings() {
         </p>
       </div>
 
-      {/* Autosave */}
+      {/* Save Mode */}
       <div className="settings-group">
-        <div className="settings-group-title">Autosave</div>
+        <div className="settings-group-title">Save</div>
 
         <label className="settings-row">
-          <span className="settings-label">Enable Autosave</span>
-          <input
-            type="checkbox"
-            checked={autosaveEnabled}
-            onChange={(e) => setAutosaveEnabled(e.target.checked)}
-            className="settings-checkbox"
-          />
-        </label>
-
-        <label className="settings-row">
-          <span className="settings-label">Autosave Interval</span>
+          <span className="settings-label">Save Mode</span>
           <select
-            value={autosaveInterval}
-            onChange={(e) => setAutosaveInterval(Number(e.target.value) as AutosaveInterval)}
-            disabled={!autosaveEnabled}
+            value={saveMode}
+            onChange={(e) => setSaveMode(e.target.value as SaveMode)}
             className="settings-select"
           >
-            <option value={1}>1 minute</option>
-            <option value={2}>2 minutes</option>
-            <option value={5}>5 minutes</option>
-            <option value={10}>10 minutes</option>
+            <option value="continuous">Continuous (every change)</option>
+            <option value="interval">Interval (timed)</option>
           </select>
         </label>
+        <p className="settings-hint">
+          {saveMode === 'continuous'
+            ? 'Project is saved automatically after every change. You never have to think about saving.'
+            : 'Project is saved on a timer interval. You can also save manually with Ctrl+S.'}
+        </p>
+
+        {saveMode === 'interval' && (
+          <>
+            <label className="settings-row">
+              <span className="settings-label">Save Interval</span>
+              <select
+                value={autosaveInterval}
+                onChange={(e) => setAutosaveInterval(Number(e.target.value) as AutosaveInterval)}
+                className="settings-select"
+              >
+                <option value={1}>1 minute</option>
+                <option value={2}>2 minutes</option>
+                <option value={5}>5 minutes</option>
+                <option value={10}>10 minutes</option>
+              </select>
+            </label>
+          </>
+        )}
       </div>
 
       {isMobileDevice && forceDesktopMode && (
