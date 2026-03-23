@@ -1314,7 +1314,7 @@ export function MediaPanel() {
       {/* Item list with column headers */}
       <div className="media-panel-content">
         {rootItems.length === 0 ? (
-          <div className="media-panel-empty">
+          <div className="media-panel-empty" onContextMenu={(e) => handleContextMenu(e)}>
             <div className="drop-icon">
               <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -1361,6 +1361,10 @@ export function MediaPanel() {
               className="media-item-list"
               ref={itemListRef}
               onMouseDown={handleMarqueeMouseDown}
+              onContextMenu={(e) => {
+                const target = e.target as HTMLElement;
+                if (!target.closest('.media-item')) handleContextMenu(e);
+              }}
               style={{ position: 'relative' }}
             >
               {rootItems.map(item => renderItem(item))}
@@ -1386,6 +1390,10 @@ export function MediaPanel() {
             className="media-grid-wrapper"
             ref={itemListRef}
             onMouseDown={handleMarqueeMouseDown}
+            onContextMenu={(e) => {
+              const target = e.target as HTMLElement;
+              if (!target.closest('.media-grid-item')) handleContextMenu(e);
+            }}
             style={{ position: 'relative' }}
           >
             {/* Breadcrumb for folder navigation */}
@@ -1474,11 +1482,28 @@ export function MediaPanel() {
             <div className="context-menu-item" onClick={handleImport}>
               Import Media...
             </div>
-            <div className="context-menu-item" onClick={handleNewComposition}>
-              New Composition
+            <div className="context-menu-separator" />
+            <div className="context-menu-item" onClick={() => { handleNewComposition(); closeContextMenu(); }}>
+              <span className="context-menu-icon"><FileTypeIcon type="composition" /></span>
+              Composition
             </div>
-            <div className="context-menu-item" onClick={handleNewFolder}>
-              New Folder
+            <div className="context-menu-item" onClick={() => { handleNewFolder(); closeContextMenu(); }}>
+              <span className="context-menu-icon"><span className="media-folder-icon">&#128193;</span></span>
+              Folder
+            </div>
+            <div className="context-menu-separator" />
+            <div className="context-menu-item" onClick={() => { handleNewText(); closeContextMenu(); }}>
+              <span className="context-menu-icon"><FileTypeIcon type="text" /></span>
+              Text
+            </div>
+            <div className="context-menu-item" onClick={() => { handleNewSolid(); closeContextMenu(); }}>
+              <span className="context-menu-icon"><FileTypeIcon type="solid" /></span>
+              Solid
+            </div>
+            <div className="context-menu-item disabled" onClick={closeContextMenu}>
+              <span className="context-menu-icon"><FileTypeIcon type="solid" /></span>
+              Adjustment Layer
+              <span className="context-menu-hint">Coming soon</span>
             </div>
             {(contextMenu.itemId || multiSelect) && (
               <>
