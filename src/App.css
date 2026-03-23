@@ -2822,6 +2822,13 @@ input, textarea {
   color: #fff;
 }
 
+.effect-mode-label {
+  flex: 1;
+  font-size: var(--font-md);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
 .properties-tab-content.masks-tab .section-header-with-button {
   margin-bottom: var(--sp-2);
 }
