@@ -1,10 +1,11 @@
 // useTimelineKeyboard - Global keyboard shortcuts for timeline
-// Extracted from Timeline.tsx for better maintainability
+// Uses central ShortcutRegistry for configurable key bindings
 
 import { useEffect } from 'react';
 import type { TimelineClip, ClipTransform } from '../../../types';
 import type { Composition } from '../../../stores/mediaStore';
 import { ALL_BLEND_MODES } from '../constants';
+import { getShortcutRegistry } from '../../../services/shortcutRegistry';
 
 interface UseTimelineKeyboardProps {
   // Playback
@@ -83,6 +84,8 @@ export function useTimelineKeyboard({
   addMarker,
 }: UseTimelineKeyboardProps): void {
   useEffect(() => {
+    const registry = getShortcutRegistry();
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // Only handle if not typing in a text input
       const isTextInput =
@@ -96,8 +99,8 @@ export function useTimelineKeyboard({
         return;
       }
 
-      // Space: toggle play/pause (also blur any focused slider/checkbox)
-      if (e.code === 'Space' || e.key === ' ') {
+      // Play/Pause (also blur any focused slider/checkbox)
+      if (registry.matches('playback.playPause', e)) {
         if (e.target instanceof HTMLInputElement) {
           e.target.blur();
         }
@@ -110,56 +113,55 @@ export function useTimelineKeyboard({
         return;
       }
 
-      // I: set In point at playhead
-      if (e.key === 'i' || e.key === 'I') {
+      // Set In point
+      if (registry.matches('edit.setIn', e)) {
         e.preventDefault();
         setInPointAtPlayhead();
         return;
       }
 
-      // O: set Out point at playhead
-      if (e.key === 'o' || e.key === 'O') {
+      // Set Out point
+      if (registry.matches('edit.setOut', e)) {
         e.preventDefault();
         setOutPointAtPlayhead();
         return;
       }
 
-      // X: clear In/Out points
-      if (e.key === 'x' || e.key === 'X') {
+      // Clear In/Out
+      if (registry.matches('edit.clearInOut', e)) {
         e.preventDefault();
         clearInOut();
         return;
       }
 
-      // JKL playback control (industry standard)
-      // J: Play reverse (press multiple times to increase speed)
-      if ((e.key === 'j' || e.key === 'J') && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      // Play reverse
+      if (registry.matches('playback.playReverse', e)) {
         e.preventDefault();
         playReverse();
         return;
       }
 
-      // K: Pause playback
-      if ((e.key === 'k' || e.key === 'K') && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      // Pause
+      if (registry.matches('playback.pause', e)) {
         e.preventDefault();
         pause();
         return;
       }
 
-      // L: Play forward (press multiple times to increase speed)
-      // Shift+L: Toggle loop playback
-      if (e.key === 'l' || e.key === 'L') {
+      // Toggle loop / Play forward
+      if (registry.matches('playback.toggleLoop', e)) {
         e.preventDefault();
-        if (e.shiftKey) {
-          toggleLoopPlayback();
-        } else {
-          playForward();
-        }
+        toggleLoopPlayback();
+        return;
+      }
+      if (registry.matches('playback.playForward', e)) {
+        e.preventDefault();
+        playForward();
         return;
       }
 
-      // M: add marker at playhead
-      if (e.key === 'm' || e.key === 'M') {
+      // Add marker
+      if (registry.matches('edit.addMarker', e)) {
         e.preventDefault();
         if (addMarker) {
           addMarker(playheadPosition);
@@ -167,24 +169,21 @@ export function useTimelineKeyboard({
         return;
       }
 
-      // Delete/Backspace: remove selected keyframes first, then clips
-      if (e.key === 'Delete' || e.key === 'Backspace') {
+      // Delete: remove selected keyframes first, then clips
+      if (registry.matches('edit.delete', e)) {
         e.preventDefault();
-        // First check if any keyframes are selected
         if (selectedKeyframeIds.size > 0) {
-          // Remove all selected keyframes
           [...selectedKeyframeIds].forEach(keyframeId => removeKeyframe(keyframeId));
           return;
         }
-        // Otherwise remove selected clips
         if (selectedClipIds.size > 0) {
           [...selectedClipIds].forEach(clipId => removeClip(clipId));
         }
         return;
       }
 
-      // Ctrl+C / Cmd+C: Copy selected keyframes or clips
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C') && !e.shiftKey) {
+      // Copy
+      if (registry.matches('edit.copy', e)) {
         e.preventDefault();
         if (selectedKeyframeIds.size > 0) {
           copyKeyframes();
@@ -194,46 +193,36 @@ export function useTimelineKeyboard({
         return;
       }
 
-      // Ctrl+V / Cmd+V: Paste keyframes or clips at playhead
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+      // Paste
+      if (registry.matches('edit.paste', e)) {
         e.preventDefault();
         pasteKeyframes();
         return;
       }
 
-      // C: Toggle cut tool mode / Shift+C: Split clip at playhead position
-      if (e.key === 'c' || e.key === 'C') {
-        // Skip if Ctrl/Cmd is pressed (handled above)
-        if (e.ctrlKey || e.metaKey) return;
-
+      // Split at playhead
+      if (registry.matches('edit.splitAtPlayhead', e)) {
         e.preventDefault();
-        if (e.shiftKey) {
-          // Shift+C: Split clip at playhead position (legacy behavior)
-          splitClipAtPlayhead();
-        } else {
-          // C: Toggle cut tool mode
-          toggleCutTool();
-        }
+        splitClipAtPlayhead();
         return;
       }
 
-      // Escape: Exit cut tool mode (return to select)
+      // Cut/Razor tool toggle
+      if (registry.matches('tool.cutToggle', e)) {
+        e.preventDefault();
+        toggleCutTool();
+        return;
+      }
+
+      // Escape: Exit cut tool mode (not configurable, always Escape)
       if (e.key === 'Escape' && toolMode === 'cut') {
         e.preventDefault();
         toggleCutTool();
         return;
       }
 
-      // +/-: Cycle through blend modes (forward/backward)
-      // Supports: numpad +/-, direct + key (e.g. German layout), Shift+=/- on US keyboard
-      const isNumpadPlus = e.code === 'NumpadAdd';
-      const isNumpadMinus = e.code === 'NumpadSubtract';
-      const isMainPlus = e.key === '+' || (e.shiftKey && e.key === '=');
-      const isMainMinus = e.key === '-' || (e.shiftKey && (e.key === '_' || e.code === 'Minus'));
-      const isPlus = isNumpadPlus || isMainPlus;
-      const isMinus = isNumpadMinus || isMainMinus;
-
-      if (isPlus || isMinus) {
+      // Blend mode cycling
+      if (registry.matches('edit.blendModeNext', e) || registry.matches('edit.blendModePrev', e)) {
         e.preventDefault();
         const firstSelectedId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
         if (!firstSelectedId) return;
@@ -243,21 +232,20 @@ export function useTimelineKeyboard({
 
         const currentMode = clip.transform?.blendMode || 'normal';
         const currentIndex = ALL_BLEND_MODES.indexOf(currentMode);
-        const direction = isPlus ? 1 : -1;
+        const direction = registry.matches('edit.blendModeNext', e) ? 1 : -1;
         const nextIndex =
           (currentIndex + direction + ALL_BLEND_MODES.length) %
           ALL_BLEND_MODES.length;
         const nextMode = ALL_BLEND_MODES[nextIndex];
 
-        // Apply to all selected clips
         [...selectedClipIds].forEach(clipId => {
           updateClipTransform(clipId, { blendMode: nextMode });
         });
         return;
       }
 
-      // Arrow Left: Move playhead one frame backward
-      if (e.key === 'ArrowLeft') {
+      // Frame backward
+      if (registry.matches('nav.frameBackward', e)) {
         e.preventDefault();
         if (activeComposition) {
           const frameRate = Math.max(1, activeComposition.frameRate || 30);
@@ -268,8 +256,8 @@ export function useTimelineKeyboard({
         return;
       }
 
-      // Arrow Right: Move playhead one frame forward
-      if (e.key === 'ArrowRight') {
+      // Frame forward
+      if (registry.matches('nav.frameForward', e)) {
         e.preventDefault();
         if (activeComposition) {
           const frameRate = Math.max(1, activeComposition.frameRate || 30);

@@ -18,6 +18,7 @@ import { LegalDialog } from './LegalDialog';
 import type { LegalPage } from './LegalDialog';
 import { NativeHelperStatus } from './NativeHelperStatus';
 import { projectFileService } from '../../services/projectFileService';
+import { getShortcutRegistry } from '../../services/shortcutRegistry';
 import { useMediaStore } from '../../stores/mediaStore';
 import {
   createNewProject,
@@ -294,25 +295,20 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
     setOpenMenu(null);
   }, []);
 
-  // Keyboard shortcut handler
-  // Global keyboard shortcuts - must prevent default FIRST
+  // Keyboard shortcut handler (capture phase — intercepts before other handlers)
   useEffect(() => {
+    const registry = getShortcutRegistry();
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      const key = typeof e.key === 'string' ? e.key.toLowerCase() : '';
-
-      if (!key) {
-        return;
-      }
-
-      // Ctrl+S / Ctrl+Shift+S: Always prevent browser save dialog
-      if ((e.ctrlKey || e.metaKey) && key === 's') {
+      // Save/SaveAs: Always prevent browser save dialog, even in input fields
+      if (registry.matches('project.save', e) || registry.matches('project.saveAs', e)) {
         e.preventDefault();
         e.stopPropagation();
 
         // Skip if in input field
         if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-        if (e.shiftKey) {
+        if (registry.matches('project.saveAs', e)) {
           // Save As
           const name = prompt('Save project as:', projectName || 'New Project');
           if (name) {
@@ -347,12 +343,12 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
       // Skip other shortcuts if in input field
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-      if ((e.ctrlKey || e.metaKey) && key === 'n') {
+      if (registry.matches('project.new', e)) {
         e.preventDefault();
         handleNew();
       }
 
-      if ((e.ctrlKey || e.metaKey) && key === 'o') {
+      if (registry.matches('project.open', e)) {
         e.preventDefault();
         handleOpen();
       }
@@ -398,6 +394,19 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   };
 
   const closeMenu = () => setOpenMenu(null);
+
+  // Dynamic shortcut labels from registry
+  const shortcutLabels = useMemo(() => {
+    const r = getShortcutRegistry();
+    return {
+      new: r.getLabel('project.new'),
+      open: r.getLabel('project.open'),
+      save: r.getLabel('project.save'),
+      saveAs: r.getLabel('project.saveAs'),
+      copy: r.getLabel('edit.copy'),
+      paste: r.getLabel('edit.paste'),
+    };
+  }, []);
 
   return (
     <div className="toolbar">
@@ -457,20 +466,20 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
             <div className="menu-dropdown">
               <button className="menu-option" onClick={handleNew} disabled={isLoading}>
                 <span>New Project...</span>
-                <span className="shortcut">Ctrl+N</span>
+                <span className="shortcut">{shortcutLabels.new}</span>
               </button>
               <button className="menu-option" onClick={handleOpen} disabled={isLoading}>
                 <span>Open Project...</span>
-                <span className="shortcut">Ctrl+O</span>
+                <span className="shortcut">{shortcutLabels.open}</span>
               </button>
               <div className="menu-separator" />
               <button className="menu-option" onClick={() => handleSave()} disabled={isLoading || !isProjectOpen}>
                 <span>Save</span>
-                <span className="shortcut">Ctrl+S</span>
+                <span className="shortcut">{shortcutLabels.save}</span>
               </button>
               <button className="menu-option" onClick={handleSaveAs} disabled={isLoading}>
                 <span>Save As...</span>
-                <span className="shortcut">Ctrl+Shift+S</span>
+                <span className="shortcut">{shortcutLabels.saveAs}</span>
               </button>
               {isProjectOpen && (
                 <>
@@ -577,11 +586,11 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
             <div className="menu-dropdown">
               <button className="menu-option" onClick={() => { document.execCommand('copy'); closeMenu(); }}>
                 <span>Copy</span>
-                <span className="shortcut">Ctrl+C</span>
+                <span className="shortcut">{shortcutLabels.copy}</span>
               </button>
               <button className="menu-option" onClick={() => { document.execCommand('paste'); closeMenu(); }}>
                 <span>Paste</span>
-                <span className="shortcut">Ctrl+V</span>
+                <span className="shortcut">{shortcutLabels.paste}</span>
               </button>
               <div className="menu-separator" />
               <button className="menu-option" onClick={() => { openSettings(); closeMenu(); }}>
