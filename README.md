@@ -6,27 +6,20 @@
 
 <br>
 
-<table>
-<tr>
-<td align="center"><h1>660 KB</h1><sub>gzip initial load</sub></td>
-<td align="center"><h1>138k</h1><sub>lines of TypeScript</sub></td>
-<td align="center"><h1>14</h1><sub>dependencies</sub></td>
-<td align="center"><h1>2,400+</h1><sub>lines of WGSL shaders</sub></td>
-</tr>
-</table>
+<a href="#"><img src="https://img.shields.io/badge/initial_load-660_kB_gzip-ff6b6b?style=for-the-badge&labelColor=1a1a2e&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCI+PHBhdGggZD0iTTEzIDJMMyAxNGgxMGwtMS04IDExIDEySDEzbDEtOHoiLz48L3N2Zz4=" alt="660 kB gzip"></a>
 
-<br>
+<br><br>
 
 <p>
   GPU-first editing with <b>30 effects</b>, <b>37 blend modes</b>, <b>76 AI tools</b>, <b>real 3D via Three.js</b>, and only <b>14 dependencies</b>.<br>
-  Import <b>OBJ, glTF, GLB, FBX</b> models directly into the timeline. Full keyframe animation. Nested composition support.
+  Built from scratch in <b>2,400+ lines of WGSL</b> and <b>138k lines of TypeScript</b>.<br>
+  Import <b>OBJ, glTF, GLB, FBX</b> models directly into the timeline.
 </p>
 
 <p>
   <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-1.4.2-blue.svg" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
   <a href="https://app.fossa.com/projects/custom%2b61097%2fmasterselects"><img src="https://app.fossa.com/api/projects/custom%2b61097%2fmasterselects.svg?type=shield" alt="FOSSA Status"></a>
-  <a href="#"><img src="https://img.shields.io/badge/initial_load-660_kB_gzip-ff6b6b?style=flat-square&labelColor=1a1a2e" alt="660 kB gzip"></a>
 </p>
 
 <p>
