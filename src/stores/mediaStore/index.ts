@@ -19,7 +19,7 @@ import { createProxySlice, type ProxyActions } from './slices/proxySlice';
 import { createProjectSlice, type ProjectActions } from './slices/projectSlice';
 
 // Re-export types
-export type { MediaType, ProxyStatus, MediaItem, MediaFile, Composition, MediaFolder, TextItem, SolidItem, ProjectItem } from './types';
+export type { MediaType, ProxyStatus, MediaItem, MediaFile, Composition, MediaFolder, TextItem, SolidItem, MeshItem, MeshPrimitiveType, ProjectItem } from './types';
 
 // Combined store type with all actions
 type MediaStoreState = MediaState &
@@ -42,6 +42,9 @@ type MediaStoreState = MediaState &
     createSolidItem: (name?: string, color?: string, parentId?: string | null) => string;
     removeSolidItem: (id: string) => void;
     updateSolidItem: (id: string, updates: Partial<{ color: string; width: number; height: number }>) => void;
+    getOrCreateMeshFolder: () => string;
+    createMeshItem: (meshType: import('./types').MeshPrimitiveType, name?: string, parentId?: string | null) => string;
+    removeMeshItem: (id: string) => void;
   };
 
 export const useMediaStore = create<MediaStoreState>()(
@@ -52,6 +55,7 @@ export const useMediaStore = create<MediaStoreState>()(
     folders: [],
     textItems: [],
     solidItems: [],
+    meshItems: [],
     activeCompositionId: 'comp-1',
     openCompositionIds: ['comp-1'],
     slotAssignments: {},
@@ -73,24 +77,26 @@ export const useMediaStore = create<MediaStoreState>()(
 
     // Getters
     getItemsByFolder: (folderId: string | null) => {
-      const { files, compositions, folders, textItems, solidItems } = get();
+      const { files, compositions, folders, textItems, solidItems, meshItems } = get();
       return [
         ...folders.filter((f) => f.parentId === folderId),
         ...compositions.filter((c) => c.parentId === folderId),
         ...textItems.filter((t) => t.parentId === folderId),
         ...solidItems.filter((s) => s.parentId === folderId),
+        ...meshItems.filter((m) => m.parentId === folderId),
         ...files.filter((f) => f.parentId === folderId),
       ];
     },
 
     getItemById: (id: string) => {
-      const { files, compositions, folders, textItems, solidItems } = get();
+      const { files, compositions, folders, textItems, solidItems, meshItems } = get();
       return (
         files.find((f) => f.id === id) ||
         compositions.find((c) => c.id === id) ||
         folders.find((f) => f.id === id) ||
         textItems.find((t) => t.id === id) ||
-        solidItems.find((s) => s.id === id)
+        solidItems.find((s) => s.id === id) ||
+        meshItems.find((m) => m.id === id)
       );
     },
 
@@ -184,6 +190,40 @@ export const useMediaStore = create<MediaStoreState>()(
             : s
         ),
       });
+    },
+
+    // Get or create "Meshes" folder for organizing mesh items
+    getOrCreateMeshFolder: () => {
+      const { folders, createFolder } = get();
+      const existingFolder = folders.find((f) => f.name === 'Meshes' && f.parentId === null);
+      if (existingFolder) {
+        return existingFolder.id;
+      }
+      const newFolder = createFolder('Meshes', null);
+      return newFolder.id;
+    },
+
+    // Create mesh primitive item in Media Panel
+    createMeshItem: (meshType: import('./types').MeshPrimitiveType, name?: string, parentId?: string | null) => {
+      const { meshItems } = get();
+      const id = `mesh-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const label = meshType.charAt(0).toUpperCase() + meshType.slice(1);
+      const newMesh: import('./types').MeshItem = {
+        id,
+        name: name || `${label} ${meshItems.filter(m => m.meshType === meshType).length + 1}`,
+        type: 'model' as const,
+        parentId: parentId !== undefined ? parentId : null,
+        createdAt: Date.now(),
+        meshType,
+        color: '#aaaaaa',
+        duration: 10, // 10 seconds default for 3D
+      };
+      set({ meshItems: [...meshItems, newMesh] });
+      return id;
+    },
+
+    removeMeshItem: (id: string) => {
+      set({ meshItems: get().meshItems.filter(m => m.id !== id) });
     },
 
     // Merge all slices

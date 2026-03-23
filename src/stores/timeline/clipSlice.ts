@@ -28,6 +28,7 @@ import { detectMediaType } from './helpers/mediaTypeHelpers';
 import { loadVideoMedia } from './clip/addVideoClip';
 import { createAudioClipPlaceholder, loadAudioMedia } from './clip/addAudioClip';
 import { createImageClipPlaceholder, loadImageMedia } from './clip/addImageClip';
+import { createModelClipPlaceholder, loadModelMedia } from './clip/addModelClip';
 import { createVideoElement, createAudioElement } from './helpers/webCodecsHelpers';
 import {
   createCompClipPlaceholder,
@@ -58,8 +59,8 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       return;
     }
 
-    if ((mediaType === 'video' || mediaType === 'image') && targetTrack.type !== 'video') {
-      log.warn('Cannot add video/image to audio track');
+    if ((mediaType === 'video' || mediaType === 'image' || mediaType === 'model') && targetTrack.type !== 'video') {
+      log.warn('Cannot add video/image/model to audio track');
       return;
     }
     if (mediaType === 'audio' && targetTrack.type !== 'audio') {
@@ -220,6 +221,16 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       updateDuration();
 
       await loadImageMedia({ clip: imageClip, updateClip });
+      invalidateCache();
+    }
+
+    // Handle 3D model files
+    if (mediaType === 'model') {
+      const modelClip = createModelClipPlaceholder({ trackId, file, startTime, estimatedDuration: providedDuration ?? 10 });
+      modelClip.mediaFileId = mediaFileId;  // Link to MediaFile for nested comp lookup
+      set({ clips: [...clips, modelClip] });
+      updateDuration();
+      loadModelMedia({ clip: modelClip, updateClip });
       invalidateCache();
     }
   },
@@ -864,6 +875,36 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     if (!isCurrentTimelineSession()) {
       return;
     }
+    invalidateCache();
+  },
+
+  toggle3D: (clipId: string) => {
+    const { clips, invalidateCache } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip) return;
+
+    const nowIs3D = !clip.is3D;
+    set({
+      clips: clips.map(c => {
+        if (c.id !== clipId) return c;
+        if (nowIs3D) {
+          // Turning on 3D — keep existing values
+          return { ...c, is3D: true };
+        }
+        // Turning off 3D — reset 3D-specific values to 0
+        const t = c.transform || DEFAULT_TRANSFORM;
+        return {
+          ...c,
+          is3D: false,
+          transform: {
+            ...t,
+            position: { ...(t.position || { x: 0, y: 0, z: 0 }), z: 0 },
+            rotation: { ...(t.rotation || { x: 0, y: 0, z: 0 }), x: 0, y: 0 },
+            scale: { x: t.scale?.x ?? 1, y: t.scale?.y ?? 1 },
+          },
+        };
+      }),
+    });
     invalidateCache();
   },
 });

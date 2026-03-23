@@ -43,6 +43,9 @@ Click the **+ Add** button for creating new items:
 - **Folder** - New folder for organization
 - **Text** - New text item (placed in auto-created "Text" folder)
 - **Solid** - New solid color item (placed in auto-created "Solids" folder)
+- **Mesh** ▶ - Submenu with 3D primitive meshes (placed in auto-created "Meshes" folder):
+  - Cube, Sphere, Plane, Cylinder, Torus, Cone
+  - Creates a `MeshItem` which can be dragged to the timeline as a 3D clip
 - **Adjustment Layer** - Coming soon
 
 #### Drag and Drop
@@ -271,6 +274,9 @@ Right-click on items or empty space for context options.
 - Import Media...
 - New Composition
 - New Folder
+- New Text
+- New Solid
+- **Mesh** ▶ submenu: Cube, Sphere, Plane, Cylinder, Torus, Cone
 
 ### Single/Multi Selection
 - **Rename** (single selection only)
@@ -396,14 +402,15 @@ interface MediaFile {
 3. Drop on appropriate track
 
 ### Drag Types
-| Item Type | Drag Payload Kind |
-|-----------|-------------------|
-| Media file (video/image) | `media-file` |
-| Media file (audio) | `media-file` (marked as audio) |
-| Composition | `composition` |
-| Text item | `text` |
-| Solid item | `solid` |
-| Folder | Internal move only (no timeline drop) |
+| Item Type | Drag Payload Kind | Data Transfer Key |
+|-----------|-------------------|-------------------|
+| Media file (video/image) | `media-file` | `application/x-media-file-id` |
+| Media file (audio) | `media-file` (marked as audio) | `application/x-media-file-id` |
+| Composition | `composition` | `application/x-composition-id` |
+| Text item | `text` | `application/x-text-item-id` |
+| Solid item | `solid` | `application/x-solid-item-id` |
+| Mesh item | `mesh` | `application/x-mesh-item-id` |
+| Folder | Internal move only (no timeline drop) | — |
 
 ### Drop Behavior
 - Creates clip from media source
@@ -411,11 +418,12 @@ interface MediaFile {
 - Audio-only files restricted to audio tracks
 - Files still importing or missing cannot be dragged to timeline
 - Compositions cannot be dragged into themselves (active comp check)
+- Mesh items create 3D clips with `is3D: true` and `meshType` (rendered via Three.js)
 
 ### Track Type Enforcement
 | Media Type | Allowed Tracks |
 |------------|----------------|
-| Video/Image/Composition/Text/Solid | Video tracks only |
+| Video/Image/Composition/Text/Solid/Mesh | Video tracks only |
 | Audio | Audio tracks only |
 
 ---
@@ -489,7 +497,9 @@ The media store is split into modular slices:
 | **proxySlice** | `slices/proxySlice.ts` | Proxy generation, cancellation, progress |
 | **projectSlice** | `slices/projectSlice.ts` | Save, load, init from DB |
 
-**Boot Sequence:** `init.ts` (288 lines) handles IndexedDB initialization, timeline restore from saved state, status synchronization, auto-save interval setup, beforeunload handler, and audio cleanup via `disposeAllAudio()`.
+**Inline actions (in `index.ts`):** `createTextItem`, `removeTextItem`, `getOrCreateTextFolder`, `createSolidItem`, `removeSolidItem`, `updateSolidItem`, `getOrCreateSolidFolder`, `createMeshItem`, `removeMeshItem`, `getOrCreateMeshFolder`, `getItemsByFolder`, `getItemById`, `getFileByName`.
+
+**Boot Sequence:** `init.ts` handles IndexedDB initialization, timeline restore from saved state, status synchronization, auto-save interval setup, beforeunload handler, and audio cleanup via `disposeAllAudio()`.
 
 Helper modules in `helpers/`:
 

@@ -8,6 +8,8 @@ import { apiKeyManager, type ApiKeyType } from '../services/apiKeyManager';
 import { projectFileService } from '../services/project/ProjectFileService';
 import { flags } from '../engine/featureFlags';
 import { Logger } from '../services/logger';
+import type { ShortcutPresetId, ShortcutMap, KeyCombo, ShortcutActionId, CustomShortcutPreset } from '../services/shortcutTypes';
+import { PRESETS, DEFAULT_PRESET_ID } from '../services/shortcutPresets';
 const log = Logger.create('SettingsStore');
 
 function persistChangelogStateToProject(
@@ -62,6 +64,9 @@ interface APIKeys {
 // Autosave interval options (in minutes)
 export type AutosaveInterval = 1 | 2 | 5 | 10;
 
+// Save mode: continuous saves on every change (debounced), interval saves on a timer
+export type SaveMode = 'continuous' | 'interval';
+
 interface SettingsState {
   // Theme
   theme: ThemeMode;
@@ -78,9 +83,10 @@ interface SettingsState {
   previewQuality: PreviewQuality;
   showTransparencyGrid: boolean;  // Show checkerboard pattern for transparent areas
 
-  // Autosave settings
-  autosaveEnabled: boolean;
-  autosaveInterval: AutosaveInterval;  // in minutes
+  // Save settings
+  saveMode: SaveMode;  // 'continuous' = save on every change, 'interval' = save on timer
+  autosaveEnabled: boolean;  // legacy — derived from saveMode for compat
+  autosaveInterval: AutosaveInterval;  // in minutes (only used in interval mode)
 
   // Native Helper (Turbo Mode)
   turboModeEnabled: boolean;  // Connect to native helper (downloads, yt-dlp)
@@ -108,9 +114,15 @@ interface SettingsState {
   hasCompletedSetup: boolean;
   hasSeenTutorial: boolean;
   hasSeenTutorialPart2: boolean;
+  hasSeenAIChatOnboarding: boolean;
 
   // User background (which program they come from)
   userBackground: string | null;
+
+  // Keyboard shortcuts
+  activeShortcutPreset: ShortcutPresetId;
+  shortcutOverrides: Partial<ShortcutMap> | null;
+  customPresets: CustomShortcutPreset[];
 
   // Tutorial campaign completion tracking
   completedTutorials: string[];
@@ -138,6 +150,7 @@ interface SettingsState {
   setTranscriptionProvider: (provider: TranscriptionProvider) => void;
   setPreviewQuality: (quality: PreviewQuality) => void;
   setShowTransparencyGrid: (show: boolean) => void;
+  setSaveMode: (mode: SaveMode) => void;
   setAutosaveEnabled: (enabled: boolean) => void;
   setAutosaveInterval: (interval: AutosaveInterval) => void;
   setTurboModeEnabled: (enabled: boolean) => void;
@@ -153,7 +166,16 @@ interface SettingsState {
   setHasCompletedSetup: (completed: boolean) => void;
   setHasSeenTutorial: (seen: boolean) => void;
   setHasSeenTutorialPart2: (seen: boolean) => void;
+  setHasSeenAIChatOnboarding: (seen: boolean) => void;
   setUserBackground: (bg: string) => void;
+  // Shortcut actions
+  setActiveShortcutPreset: (preset: ShortcutPresetId) => void;
+  setShortcutOverride: (action: ShortcutActionId, combos: KeyCombo[]) => void;
+  clearShortcutOverride: (action: ShortcutActionId) => void;
+  resetShortcutsToPreset: () => void;
+  saveCustomPreset: (name: string) => void;
+  loadCustomPreset: (name: string) => void;
+  deleteCustomPreset: (name: string) => void;
   completeTutorial: (campaignId: string) => void;
   setShowChangelogOnStartup: (show: boolean) => void;
   setLastSeenChangelogVersion: (version: string | null) => void;
@@ -195,8 +217,9 @@ export const useSettingsStore = create<SettingsState>()(
       transcriptionProvider: 'local',
       previewQuality: 1, // Full quality by default
       showTransparencyGrid: false, // Don't show checkerboard by default
-      autosaveEnabled: true, // Autosave enabled by default
-      autosaveInterval: 5, // 5 minutes default interval
+      saveMode: 'continuous' as SaveMode, // Continuous save by default — every change saved automatically
+      autosaveEnabled: true, // Legacy compat (interval mode uses this)
+      autosaveInterval: 5, // 5 minutes default interval (only used in interval mode)
       turboModeEnabled: true, // Connect to native helper by default (downloads)
       nativeDecodeEnabled: false, // Native FFmpeg decode off by default
       nativeHelperPort: 9876, // Default WebSocket port
@@ -210,7 +233,11 @@ export const useSettingsStore = create<SettingsState>()(
       hasCompletedSetup: false, // Show welcome overlay on first run
       hasSeenTutorial: false, // Show tutorial on first run
       hasSeenTutorialPart2: false, // Show timeline tutorial after part 1
+      hasSeenAIChatOnboarding: false, // Show AI chat onboarding hint on first open
       userBackground: null, // Which program the user comes from
+      activeShortcutPreset: DEFAULT_PRESET_ID as ShortcutPresetId,
+      shortcutOverrides: null,
+      customPresets: [] as CustomShortcutPreset[],
       completedTutorials: [], // Campaign IDs that have been completed
       showChangelogOnStartup: true, // Show changelog dialog on every startup
       lastSeenChangelogVersion: null, // Latest app version whose changelog was acknowledged
@@ -256,6 +283,10 @@ export const useSettingsStore = create<SettingsState>()(
 
       setShowTransparencyGrid: (show) => {
         set({ showTransparencyGrid: show });
+      },
+
+      setSaveMode: (mode) => {
+        set({ saveMode: mode });
       },
 
       setAutosaveEnabled: (enabled) => {
@@ -318,8 +349,60 @@ export const useSettingsStore = create<SettingsState>()(
         set({ hasSeenTutorialPart2: seen });
       },
 
+      setHasSeenAIChatOnboarding: (seen) => {
+        set({ hasSeenAIChatOnboarding: seen });
+      },
+
       setUserBackground: (bg) => {
         set({ userBackground: bg });
+      },
+
+      setActiveShortcutPreset: (preset) => {
+        set({ activeShortcutPreset: preset, shortcutOverrides: null });
+      },
+
+      setShortcutOverride: (action, combos) => {
+        const current = get().shortcutOverrides || {};
+        set({ shortcutOverrides: { ...current, [action]: combos } });
+      },
+
+      clearShortcutOverride: (action) => {
+        const current = get().shortcutOverrides;
+        if (!current) return;
+        const next = { ...current };
+        delete next[action as keyof typeof next];
+        set({ shortcutOverrides: Object.keys(next).length > 0 ? next : null });
+      },
+
+      resetShortcutsToPreset: () => {
+        set({ shortcutOverrides: null });
+      },
+
+      saveCustomPreset: (name) => {
+        const state = get();
+        const presetId = state.activeShortcutPreset || DEFAULT_PRESET_ID;
+        const preset = PRESETS[presetId] || PRESETS[DEFAULT_PRESET_ID];
+        const effectiveMap = state.shortcutOverrides
+          ? { ...preset.map, ...state.shortcutOverrides } as ShortcutMap
+          : { ...preset.map };
+        const existing = state.customPresets.filter((p) => p.name !== name);
+        set({
+          customPresets: [
+            ...existing,
+            { name, map: effectiveMap, createdAt: Date.now() },
+          ],
+        });
+      },
+
+      loadCustomPreset: (name) => {
+        const custom = get().customPresets.find((p) => p.name === name);
+        if (!custom) return;
+        // Store the full map as overrides on top of current preset
+        set({ shortcutOverrides: custom.map });
+      },
+
+      deleteCustomPreset: (name) => {
+        set({ customPresets: get().customPresets.filter((p) => p.name !== name) });
       },
 
       completeTutorial: (campaignId) => {
@@ -402,6 +485,7 @@ export const useSettingsStore = create<SettingsState>()(
         transcriptionProvider: state.transcriptionProvider,
         previewQuality: state.previewQuality,
         showTransparencyGrid: state.showTransparencyGrid,
+        saveMode: state.saveMode,
         autosaveEnabled: state.autosaveEnabled,
         autosaveInterval: state.autosaveInterval,
         turboModeEnabled: state.turboModeEnabled,
@@ -416,7 +500,11 @@ export const useSettingsStore = create<SettingsState>()(
         hasCompletedSetup: state.hasCompletedSetup,
         hasSeenTutorial: state.hasSeenTutorial,
         hasSeenTutorialPart2: state.hasSeenTutorialPart2,
+        hasSeenAIChatOnboarding: state.hasSeenAIChatOnboarding,
         userBackground: state.userBackground,
+        activeShortcutPreset: state.activeShortcutPreset,
+        shortcutOverrides: state.shortcutOverrides,
+        customPresets: state.customPresets,
         completedTutorials: state.completedTutorials,
         showChangelogOnStartup: state.showChangelogOnStartup,
         lastSeenChangelogVersion: state.lastSeenChangelogVersion,

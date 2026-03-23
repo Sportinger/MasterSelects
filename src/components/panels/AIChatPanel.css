@@ -506,3 +506,132 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
+
+/* ── AI Chat Onboarding Hint ── */
+
+.ai-chat-onboarding {
+  display: flex;
+  justify-content: center;
+  padding: var(--sp-2) 0;
+  animation: onboardSlideIn 0.35s ease-out both;
+}
+
+.ai-chat-onboarding.closing {
+  animation: onboardFadeOut 0.3s ease-in forwards;
+  pointer-events: none;
+}
+
+@keyframes onboardSlideIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes onboardFadeOut {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-8px); }
+}
+
+.ai-chat-onboarding-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  padding: var(--sp-4) var(--sp-5);
+  max-width: 420px;
+  width: 100%;
+}
+
+.ai-chat-onboarding-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.ai-chat-onboarding-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--accent);
+  color: var(--bg-primary);
+  border-radius: var(--radius-md);
+  font-size: var(--font-xs);
+  font-weight: var(--font-bold);
+  flex-shrink: 0;
+}
+
+.ai-chat-onboarding-header h3 {
+  margin: 0;
+  font-size: var(--font-lg);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.ai-chat-onboarding-body {
+  margin-bottom: var(--sp-3);
+}
+
+.ai-chat-onboarding-intro {
+  margin: 0 0 var(--sp-2-5);
+  font-size: var(--font-md);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.ai-chat-onboarding-tips {
+  margin: 0 0 var(--sp-2-5);
+  padding-left: var(--sp-4);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1-5);
+}
+
+.ai-chat-onboarding-tips li {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  line-height: 1.45;
+  position: relative;
+}
+
+.ai-chat-onboarding-tips li::before {
+  content: '→';
+  position: absolute;
+  left: calc(-1 * var(--sp-3));
+  color: var(--accent);
+  font-weight: var(--font-semibold);
+}
+
+.ai-chat-onboarding-tips li strong {
+  color: var(--text-primary);
+}
+
+.ai-chat-onboarding-note {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.ai-chat-onboarding-note strong {
+  color: var(--text-secondary);
+}
+
+.ai-chat-onboarding-dismiss {
+  display: block;
+  width: 100%;
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-lg);
+  color: var(--bg-primary);
+  font-size: var(--font-md);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: background var(--transition-normal);
+}
+
+.ai-chat-onboarding-dismiss:hover {
+  background: var(--accent-hover);
+}

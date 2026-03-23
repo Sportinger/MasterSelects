@@ -2,6 +2,7 @@
 // Always uses HTML video backend for simplicity and reliability
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { getShortcutRegistry } from '../../services/shortcutRegistry';
 import type { MediaFile } from '../../stores/mediaStore';
 
 interface SourceMonitorProps {
@@ -112,7 +113,7 @@ export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
         e.preventDefault();
         e.stopImmediatePropagation();
         onClose();
-      } else if (e.key === ' ' && isVideo) {
+      } else if (getShortcutRegistry().matches('playback.playPause', e) && isVideo) {
         e.preventDefault();
         e.stopImmediatePropagation();
         togglePlayback();

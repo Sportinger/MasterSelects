@@ -48,4 +48,20 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
     });
     invalidateCache();
   },
+
+  reorderClipEffect: (clipId, effectId, newIndex) => {
+    const { clips, invalidateCache } = get();
+    set({
+      clips: clips.map(c => {
+        if (c.id !== clipId) return c;
+        const effects = [...c.effects];
+        const oldIndex = effects.findIndex(e => e.id === effectId);
+        if (oldIndex === -1 || oldIndex === newIndex) return c;
+        const [moved] = effects.splice(oldIndex, 1);
+        effects.splice(newIndex, 0, moved);
+        return { ...c, effects };
+      }),
+    });
+    invalidateCache();
+  },
 });

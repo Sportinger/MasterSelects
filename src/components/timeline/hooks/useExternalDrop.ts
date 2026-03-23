@@ -31,6 +31,7 @@ interface UseExternalDropProps {
   addCompClip: (trackId: string, comp: Composition, startTime: number) => void;
   addTextClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => Promise<string | null>;
   addSolidClip: (trackId: string, startTime: number, color?: string, duration?: number, skipMediaItem?: boolean) => string | null;
+  addMeshClip: (trackId: string, startTime: number, meshType: import('../../../stores/mediaStore/types').MeshPrimitiveType, duration?: number, skipMediaItem?: boolean) => string | null;
 }
 
 interface UseExternalDropReturn {
@@ -87,6 +88,7 @@ export function useExternalDrop({
   addCompClip,
   addTextClip,
   addSolidClip,
+  addMeshClip,
 }: UseExternalDropProps): UseExternalDropReturn {
   const [externalDrag, setExternalDrag] = useState<ExternalDragState | null>(null);
   const dragCounterRef = useRef(0);
@@ -267,6 +269,26 @@ export function useExternalDrop({
       const solidItem = mediaStore.solidItems.find((s) => s.id === solidItemId);
       return {
         duration: solidItem?.duration ?? 5,
+        hasAudio: false,
+        isAudio: false,
+        isVideo: true,
+      };
+    }
+
+    if (e.dataTransfer.types.includes('application/x-mesh-item-id')) {
+      if (dragPayload?.kind === 'mesh') {
+        return {
+          duration: dragPayload.duration ?? 10,
+          hasAudio: false,
+          isAudio: false,
+          isVideo: true,
+        };
+      }
+
+      const meshItemId = e.dataTransfer.getData('application/x-mesh-item-id');
+      const meshItem = mediaStore.meshItems.find((m) => m.id === meshItemId);
+      return {
+        duration: meshItem?.duration ?? 10,
         hasAudio: false,
         isAudio: false,
         isVideo: true,
@@ -526,6 +548,43 @@ export function useExternalDrop({
         const duration = dragPayload?.kind === 'solid'
           ? dragPayload.duration ?? 5
           : solidItem?.duration ?? 5;
+
+        if (isAudioTrack) {
+          setExternalDrag({
+            trackId: '',
+            startTime,
+            x: e.clientX,
+            y: e.clientY,
+            duration,
+            hasAudio: false,
+            isVideo: true,
+            isAudio: false,
+          });
+          return;
+        }
+        setExternalDrag(buildTrackPreviewState({
+          trackId,
+          desiredStartTime: startTime,
+          x: e.clientX,
+          y: e.clientY,
+          duration,
+          hasAudio: false,
+          isVideo: true,
+          isAudio: false,
+        }));
+        return;
+      }
+
+      if (e.dataTransfer.types.includes('application/x-mesh-item-id')) {
+        const meshItemId = dragPayload?.kind === 'mesh'
+          ? dragPayload.id
+          : e.dataTransfer.getData('application/x-mesh-item-id');
+        const meshItem = meshItemId
+          ? mediaStore.meshItems.find((m) => m.id === meshItemId)
+          : null;
+        const duration = dragPayload?.kind === 'mesh'
+          ? dragPayload.duration ?? 10
+          : meshItem?.duration ?? 10;
 
         if (isAudioTrack) {
           setExternalDrag({
@@ -882,6 +941,17 @@ export function useExternalDrop({
         }
       }
 
+      // Handle mesh item drag (skipMediaItem=true since it already exists in media panel)
+      const meshItemId = e.dataTransfer.getData('application/x-mesh-item-id');
+      if (meshItemId) {
+        const mediaStore = useMediaStore.getState();
+        const meshItem = mediaStore.meshItems.find((m) => m.id === meshItemId);
+        if (meshItem) {
+          addMeshClip(newTrackId, startTime, meshItem.meshType, meshItem.duration, true);
+          return;
+        }
+      }
+
       // Handle media panel drag
       if (mediaFileId) {
         const mediaStore = useMediaStore.getState();
@@ -932,7 +1002,7 @@ export function useExternalDrop({
         }
       }
     },
-    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, addSolidClip, externalDrag, timelineRef]
+    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, addSolidClip, addMeshClip, externalDrag, timelineRef]
   );
 
   // Handle external file drop on track
@@ -983,6 +1053,17 @@ export function useExternalDrop({
         const solidItem = mediaStore.solidItems.find((s) => s.id === solidItemId);
         if (solidItem && isVideoTrack) {
           addSolidClip(trackId, resolveDropStartTime(solidItem.duration), solidItem.color, solidItem.duration, true);
+          return;
+        }
+      }
+
+      // Handle mesh item drag from media panel (skipMediaItem=true since it already exists)
+      const meshItemId = e.dataTransfer.getData('application/x-mesh-item-id');
+      if (meshItemId) {
+        const mediaStore = useMediaStore.getState();
+        const meshItem = mediaStore.meshItems.find((m) => m.id === meshItemId);
+        if (meshItem && isVideoTrack) {
+          addMeshClip(trackId, resolveDropStartTime(meshItem.duration), meshItem.meshType, meshItem.duration, true);
           return;
         }
       }
@@ -1072,7 +1153,7 @@ export function useExternalDrop({
         }
       }
     },
-    [addCompClip, addClip, addTextClip, addSolidClip, externalDrag, tracks, getDesiredStartTime, resolveTrackStartTime]
+    [addCompClip, addClip, addTextClip, addSolidClip, addMeshClip, externalDrag, tracks, getDesiredStartTime, resolveTrackStartTime]
   );
 
   // Container-level drag leave: fully clear externalDrag when cursor leaves the timeline area

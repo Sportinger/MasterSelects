@@ -13,7 +13,6 @@ import {
   type ChangelogNotice as ChangelogNoticeConfig,
 } from '../../version';
 import {
-  NATIVE_HELPER_RELEASES_URL,
   type NativeHelperPublishedRelease,
 } from '../../services/nativeHelper/releases';
 
@@ -249,27 +248,20 @@ export function getHelperBuildNotice(
     return null;
   }
 
-  const fallbackNotice: ChangelogNoticeConfig = {
+  // Use BUILD_NOTICE as-is (title + message from version.ts)
+  const notice: ChangelogNoticeConfig = {
     ...BUILD_NOTICE,
-    title: 'Native Helper release available',
-    link: BUILD_NOTICE.link ?? {
-      label: 'GitHub Releases',
-      href: NATIVE_HELPER_RELEASES_URL,
-    },
   };
 
-  if (!publishedRelease) {
-    return fallbackNotice;
+  // Append Native Helper download link if a release is available
+  if (publishedRelease) {
+    notice.link = {
+      label: `Native Helper v${publishedRelease.version}`,
+      href: publishedRelease.url,
+    };
   }
 
-  return {
-    ...fallbackNotice,
-    title: `Native Helper v${publishedRelease.version} available`,
-    link: {
-      label: 'Download release',
-      href: publishedRelease.url,
-    },
-  };
+  return notice;
 }
 
 export function ReleaseCalendar({ weeks }: { weeks: ChangelogCalendarDay[][] }) {

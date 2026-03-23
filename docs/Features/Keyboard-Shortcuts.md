@@ -2,11 +2,61 @@
 
 [← Back to Index](./README.md)
 
-Complete reference of all keyboard shortcuts (verified from codebase).
+Complete reference of all keyboard shortcuts and NLE presets (verified from codebase + official documentation).
 
 ---
 
-## Playback
+## Presets
+
+MasterSelects ships with 6 shortcut presets. Switch in **Preferences → Shortcuts → Active Preset**.
+
+| Preset | Based on | Key Differences from MasterSelects |
+|--------|----------|-----------------------------------|
+| **MasterSelects** | Custom | Default — balanced NLE layout |
+| **Premiere Pro** | Adobe PPro | `Ctrl+K` split, `Ctrl+L` loop, `Ctrl+Shift+X` clear I/O, `Ctrl+Alt+N` new project |
+| **DaVinci Resolve** | BMD Resolve | `B` blade tool, `Ctrl+B` split, `Ctrl+/` loop, `Alt+X` clear I/O, no New/Open Project |
+| **Final Cut Pro** | Apple FCP | `B` blade tool, `Ctrl+B` split, `Ctrl+L` loop, `Alt+X` clear I/O, no Save/Save As |
+| **After Effects** | Adobe AE | `B`/`N` in/out, `Ctrl+Shift+D` split, `PageUp/Down` frame step, `Shift+=/-` blend modes, no JKL shuttle, no razor tool |
+| **Beginner** | MasterSelects | Same as MasterSelects — simplest layout |
+
+### Preset Detail: Differences Per Action
+
+| Action | MasterSelects | Premiere Pro | DaVinci Resolve | Final Cut Pro | After Effects |
+|--------|--------------|--------------|-----------------|---------------|---------------|
+| Play/Pause | `Space` | `Space` | `Space` | `Space` | `Space` |
+| Pause | `K` | `K` | `K` | `K` | — |
+| Play Forward | `L` | `L` | `L` | `L` | — |
+| Play Reverse | `J` | `J` | `J` | `J` | — |
+| Toggle Loop | `Shift+L` | `Ctrl+L` | `Ctrl+/` | `Ctrl+L` | — |
+| Frame Forward | `→` | `→` | `→` | `→` | `PageDown` / `Ctrl+→` |
+| Frame Backward | `←` | `←` | `←` | `←` | `PageUp` / `Ctrl+←` |
+| Set In Point | `I` | `I` | `I` | `I` | `B` |
+| Set Out Point | `O` | `O` | `O` | `O` | `N` |
+| Clear In/Out | `X` | `Ctrl+Shift+X` | `Alt+X` | `Alt+X` | — |
+| Add Marker | `M` | `M` | `M` | `M` | `Numpad *` / `Shift+8` |
+| Split at Playhead | `Shift+C` | `Ctrl+K` | `Ctrl+B` | `Ctrl+B` | `Ctrl+Shift+D` |
+| Delete | `Del` / `Backspace` | `Del` / `Backspace` | `Backspace` / `Del` | `Del` / `Backspace` | `Del` |
+| Copy | `Ctrl+C` | `Ctrl+C` | `Ctrl+C` | `Ctrl+C` | `Ctrl+C` |
+| Paste | `Ctrl+V` | `Ctrl+V` | `Ctrl+V` | `Ctrl+V` | `Ctrl+V` |
+| Next Blend Mode | `+` / `Numpad+` | `+` / `Numpad+` | `+` / `Numpad+` | `+` / `Numpad+` | `Shift+=` |
+| Prev Blend Mode | `-` / `Numpad-` | `-` / `Numpad-` | `-` / `Numpad-` | `-` / `Numpad-` | `Shift+-` |
+| Cut/Razor Tool | `C` | `C` | `B` | `B` | — |
+| New Project | `Ctrl+N` | `Ctrl+Alt+N` | — | `Ctrl+N` | `Ctrl+Alt+N` |
+| Open Project | `Ctrl+O` | `Ctrl+O` | — | `Ctrl+O` | `Ctrl+O` |
+| Save | `Ctrl+S` | `Ctrl+S` | `Ctrl+S` | — | `Ctrl+S` |
+| Save As | `Ctrl+Shift+S` | `Ctrl+Shift+S` | `Ctrl+Shift+S` | — | `Ctrl+Shift+S` |
+| Undo | `Ctrl+Z` | `Ctrl+Z` | `Ctrl+Z` | `Ctrl+Z` | `Ctrl+Z` |
+| Redo | `Ctrl+Shift+Z` / `Ctrl+Y` | `Ctrl+Shift+Z` | `Ctrl+Shift+Z` | `Ctrl+Shift+Z` | `Ctrl+Shift+Z` |
+
+**—** = No binding (action not available or not mapped in that NLE).
+
+> **Note:** On Mac, `Ctrl` maps to `Cmd` and `Alt` maps to `Option`. All presets handle this automatically.
+
+---
+
+## MasterSelects Default Shortcuts
+
+### Playback
 
 | Shortcut | Action |
 |----------|--------|
@@ -19,9 +69,7 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 | `O` | Set Out point at playhead |
 | `X` | Clear In/Out points |
 
----
-
-## Timeline Navigation
+### Timeline Navigation
 
 | Shortcut | Action |
 |----------|--------|
@@ -31,9 +79,7 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 | `Ctrl + Shift + Scroll` | Toggle slot grid view (animated transition) |
 | `←` / `→` | Frame-by-frame navigation |
 
----
-
-## Editing
+### Editing
 
 | Shortcut | Action |
 |----------|--------|
@@ -46,9 +92,7 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 | `Tab` | Toggle edit mode in preview |
 | `Escape` | Exit cut tool mode (return to select tool) |
 
----
-
-## Selection
+### Selection
 
 | Action | Method |
 |--------|--------|
@@ -60,9 +104,7 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 | Move multi-selection | Drag any selected clip |
 | Deselect | Click empty area or marquee in empty area |
 
----
-
-## Keyframes
+### Keyframes
 
 | Action | Method |
 |--------|--------|
@@ -74,9 +116,7 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 | Move multi-select | Drag any selected keyframe |
 | Easing menu | Right-click keyframe |
 
----
-
-## Blend Modes
+### Blend Modes
 
 | Shortcut | Action |
 |----------|--------|
@@ -85,9 +125,7 @@ Complete reference of all keyboard shortcuts (verified from codebase).
 
 Applies to all selected clips. Cycles through all blend modes.
 
----
-
-## Project
+### Project
 
 | Shortcut | Action |
 |----------|--------|
@@ -219,6 +257,20 @@ Applies to all selected clips. Cycles through all blend modes.
 
 ---
 
+## Customization
+
+Shortcuts are fully customizable in **Preferences → Shortcuts**:
+
+- **Preset selection:** Choose from MasterSelects, Premiere Pro, DaVinci Resolve, Final Cut Pro, After Effects, or Beginner
+- **Per-key override:** Click any shortcut keycap in the list to record a new binding
+- **Custom presets:** Save your current configuration as a named preset for later
+- **Conflict detection:** The UI warns when two actions share the same key combination
+- **Reset:** "Reset All to Preset" clears all overrides back to the active preset's defaults
+
+Shortcut preferences are persisted in localStorage and survive page reloads.
+
+---
+
 ## Related Features
 
 - [Timeline](./Timeline.md) - Main editing
@@ -238,4 +290,4 @@ Run tests: `npx vitest run`
 
 ---
 
-*Updated March 2026 - verified against codebase*
+*Updated March 2026 - verified against codebase + official NLE documentation*

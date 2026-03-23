@@ -55,6 +55,19 @@ export function useEngine() {
         }
 
         // Output window reconnection handled by OutputManager if available
+      } else {
+        // Determine specific failure reason
+        const hasGPU = typeof navigator.gpu !== 'undefined';
+        let error: string;
+        if (!hasGPU) {
+          error = 'WebGPU is not available in this browser. Please use Chrome 113+ or Edge 113+.';
+        } else {
+          error = 'No compatible GPU adapter found. Your GPU may not support WebGPU. '
+            + 'Try enabling hardware acceleration in browser settings, '
+            + 'or switch to a GPU with Vulkan/D3D12 support.';
+        }
+        useEngineStore.getState().setEngineInitFailed(true, error);
+        log.error('Engine initialization failed', { hasGPU, error });
       }
     }
 

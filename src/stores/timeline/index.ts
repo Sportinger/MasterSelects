@@ -10,6 +10,7 @@ import { createTrackSlice } from './trackSlice';
 import { createClipSlice } from './clipSlice';
 import { createTextClipSlice } from './textClipSlice';
 import { createSolidClipSlice } from './solidClipSlice';
+import { createMeshClipSlice } from './meshClipSlice';
 import { createClipEffectSlice } from './clipEffectSlice';
 import { createLinkedGroupSlice } from './linkedGroupSlice';
 import { createDownloadClipSlice } from './downloadClipSlice';
@@ -44,6 +45,7 @@ export const useTimelineStore = create<TimelineStore>()(
     const clipActions = createClipSlice(set, get);
     const textClipActions = createTextClipSlice(set, get);
     const solidClipActions = createSolidClipSlice(set, get);
+    const meshClipActions = createMeshClipSlice(set, get);
     const clipEffectActions = createClipEffectSlice(set, get);
     const linkedGroupActions = createLinkedGroupSlice(set, get);
     const downloadClipActions = createDownloadClipSlice(set, get);
@@ -247,6 +249,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...clipActions,
       ...textClipActions,
       ...solidClipActions,
+      ...meshClipActions,
       ...clipEffectActions,
       ...linkedGroupActions,
       ...downloadClipActions,

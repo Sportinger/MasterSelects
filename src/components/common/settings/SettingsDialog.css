@@ -13,7 +13,7 @@
   border-radius: 6px;
   width: 640px;
   max-width: 95vw;
-  height: 480px;
+  height: 720px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -608,4 +608,189 @@
   color: var(--text-secondary);
   text-align: right;
   flex-shrink: 0;
+}
+
+/* ─── Shortcuts Settings ──────────────────────────────────────────── */
+
+.shortcut-search-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.shortcut-list {
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-secondary, #222);
+}
+
+.shortcut-category-group {
+  padding: 0;
+}
+
+.shortcut-category-title {
+  padding: 6px 10px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary, #888);
+  background: var(--bg-tertiary, #1a1a1a);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.05));
+  gap: 8px;
+}
+
+.shortcut-row:last-child {
+  border-bottom: none;
+}
+
+.shortcut-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.shortcut-row--overridden .shortcut-action-label {
+  color: var(--accent-color, #4d9fff);
+}
+
+.shortcut-action-label {
+  font-size: 11px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 120px;
+}
+
+/* Recorder */
+.shortcut-recorder {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.shortcut-keycaps {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  min-width: 50px;
+  min-height: 22px;
+  justify-content: flex-end;
+}
+
+.shortcut-keycaps:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.shortcut-keycaps.recording {
+  outline: 1.5px solid var(--accent-color, #4d9fff);
+  animation: shortcut-pulse 1s ease-in-out infinite;
+}
+
+@keyframes shortcut-pulse {
+  0%, 100% { outline-color: var(--accent-color, #4d9fff); }
+  50% { outline-color: transparent; }
+}
+
+.shortcut-keycap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 5px;
+  background: var(--bg-tertiary, #333);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--text-primary);
+  min-width: 18px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.shortcut-recording-text {
+  font-size: 10px;
+  color: var(--accent-color, #4d9fff);
+  font-style: italic;
+}
+
+.shortcut-unbound {
+  font-size: 10px;
+  color: var(--text-tertiary, #666);
+  font-style: italic;
+}
+
+.shortcut-reset-btn {
+  background: none;
+  border: none;
+  color: var(--text-tertiary, #888);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.shortcut-reset-btn:hover {
+  color: var(--accent-color, #4d9fff);
+}
+
+.shortcut-conflict {
+  font-size: 9px;
+  color: #ff6b6b;
+  white-space: nowrap;
+}
+
+.shortcut-reset-all-btn {
+  font-size: 10px;
+  padding: 3px 8px;
+}
+
+/* Custom presets */
+.shortcut-custom-save {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.shortcut-preset-name-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.shortcut-custom-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.shortcut-custom-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+}
+
+.shortcut-custom-name {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-primary);
+}
+
+.shortcut-custom-load-btn,
+.shortcut-custom-delete-btn {
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
+.shortcut-custom-delete-btn {
+  color: #ff6b6b;
 }

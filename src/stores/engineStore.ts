@@ -8,12 +8,15 @@ import type { EngineStats } from '../types';
 interface EngineState {
   // Engine status
   isEngineReady: boolean;
+  engineInitFailed: boolean;
+  engineInitError: string | null;
   engineStats: EngineStats;
   gpuInfo: { vendor: string; device: string; description: string } | null;
   linuxVulkanWarning: boolean;
 
   // Actions
   setEngineReady: (ready: boolean) => void;
+  setEngineInitFailed: (failed: boolean, error?: string) => void;
   setEngineStats: (stats: EngineStats) => void;
   setGpuInfo: (info: { vendor: string; device: string; description: string } | null) => void;
   setLinuxVulkanWarning: (show: boolean) => void;
@@ -27,6 +30,8 @@ export const useEngineStore = create<EngineState>()(
   subscribeWithSelector((set) => ({
     // Initial state
     isEngineReady: false,
+    engineInitFailed: false,
+    engineInitError: null,
     gpuInfo: null,
     linuxVulkanWarning: false,
     engineStats: {
@@ -45,6 +50,10 @@ export const useEngineStore = create<EngineState>()(
     // Actions
     setEngineReady: (ready: boolean) => {
       set({ isEngineReady: ready });
+    },
+
+    setEngineInitFailed: (failed: boolean, error?: string) => {
+      set({ engineInitFailed: failed, engineInitError: error ?? null });
     },
 
     setGpuInfo: (info: { vendor: string; device: string; description: string } | null) => {

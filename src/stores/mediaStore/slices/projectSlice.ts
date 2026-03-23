@@ -157,9 +157,10 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
         })
       );
 
-      // Restore textItems and solidItems from localStorage
+      // Restore textItems, solidItems, and meshItems from localStorage
       let restoredTextItems: TextItem[] = [];
       let restoredSolidItems: SolidItem[] = [];
+      let restoredMeshItems: import('../types').MeshItem[] = [];
       try {
         const storedText = localStorage.getItem('ms-textItems');
         if (storedText) restoredTextItems = JSON.parse(storedText);
@@ -168,12 +169,17 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
         const storedSolid = localStorage.getItem('ms-solidItems');
         if (storedSolid) restoredSolidItems = JSON.parse(storedSolid);
       } catch { /* ignore parse errors */ }
+      try {
+        const storedMesh = localStorage.getItem('ms-meshItems');
+        if (storedMesh) restoredMeshItems = JSON.parse(storedMesh);
+      } catch { /* ignore parse errors */ }
 
       set({
         files: updatedFiles,
         isLoading: false,
         ...(restoredTextItems.length > 0 && { textItems: restoredTextItems }),
         ...(restoredSolidItems.length > 0 && { solidItems: restoredSolidItems }),
+        ...(restoredMeshItems.length > 0 && { meshItems: restoredMeshItems }),
       });
       log.info(`Restored ${storedFiles.length} files from IndexedDB`);
     } catch (e) {
@@ -212,6 +218,7 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
         mediaFileIds: state.files.map((f) => f.id),
         textItems: state.textItems,
         solidItems: state.solidItems,
+        meshItems: state.meshItems,
       },
     };
 
@@ -277,6 +284,7 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
         folders: project.data.folders as MediaFolder[],
         textItems: (project.data.textItems as TextItem[]) || [],
         solidItems: (project.data.solidItems as SolidItem[]) || [],
+        meshItems: (project.data.meshItems as import('../types').MeshItem[]) || [],
         activeCompositionId: null,
         openCompositionIds: (project.data.openCompositionIds as string[]) || [],
         expandedFolderIds: project.data.expandedFolderIds,
@@ -332,6 +340,7 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
       folders: [],
       textItems: [],
       solidItems: [],
+      meshItems: [],
       activeCompositionId: newCompId,
       openCompositionIds: [newCompId],
       selectedIds: [],
@@ -350,6 +359,7 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
     // Clear persisted items
     localStorage.removeItem('ms-textItems');
     localStorage.removeItem('ms-solidItems');
+    localStorage.removeItem('ms-meshItems');
 
     // Load empty timeline
     timelineStore.loadState(undefined);

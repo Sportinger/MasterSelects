@@ -6,6 +6,7 @@ import { Logger } from '../../services/logger';
 
 const log = Logger.create('Preview');
 import { useEngine } from '../../hooks/useEngine';
+import { useShortcut } from '../../hooks/useShortcut';
 import { useEngineStore } from '../../stores/engineStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
@@ -38,6 +39,8 @@ interface PreviewProps {
 
 export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps) {
   const { isEngineReady } = useEngine();
+  const engineInitFailed = useEngineStore((s) => s.engineInitFailed);
+  const engineInitError = useEngineStore((s) => s.engineInitError);
   const engineStats = useEngineStore(s => s.engineStats);
   const { clips, selectedClipIds, selectClip, updateClipTransform, maskEditMode, layers, selectedLayerId, selectLayer, updateLayer, tracks } = useTimelineStore(useShallow(s => ({
     clips: s.clips,
@@ -355,23 +358,10 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     }
   }, [editMode, viewZoom, viewPan, containerSize]);
 
-  // Tab key to toggle edit mode
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const activeElement = document.activeElement;
-      const isInputFocused = activeElement instanceof HTMLInputElement ||
-                            activeElement instanceof HTMLTextAreaElement ||
-                            activeElement?.getAttribute('contenteditable') === 'true';
-
-      if (e.key === 'Tab' && !isInputFocused && isEditableSource) {
-        e.preventDefault();
-        setEditMode(prev => !prev);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isEditableSource]);
+  // Tab key to toggle edit mode (via shortcut registry)
+  useShortcut('preview.editMode', () => {
+    setEditMode(prev => !prev);
+  }, { enabled: isEditableSource });
 
   // Handle panning with middle mouse or Alt+drag
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -495,7 +485,17 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         />
 
         <div className={`preview-canvas-wrapper ${showTransparencyGrid ? 'show-transparency-grid' : ''}`} style={viewTransform}>
-          {!isEngineReady ? (
+          {engineInitFailed ? (
+            <div className="loading">
+              <p style={{ color: '#ff6b6b', fontWeight: 'bold', marginBottom: 8 }}>WebGPU Initialization Failed</p>
+              <p style={{ fontSize: '0.85em', opacity: 0.8, maxWidth: 400, textAlign: 'center', lineHeight: 1.5 }}>
+                {engineInitError || 'Unknown error'}
+              </p>
+              <p style={{ fontSize: '0.75em', opacity: 0.5, marginTop: 12 }}>
+                Try: chrome://flags → #enable-unsafe-webgpu → Enabled
+              </p>
+            </div>
+          ) : !isEngineReady ? (
             <div className="loading">
               <div className="loading-spinner" />
               <p>Initializing WebGPU...</p>

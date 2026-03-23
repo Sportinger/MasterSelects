@@ -57,6 +57,13 @@ export function generateSolidClipId(): string {
 }
 
 /**
+ * Generate a unique ID for mesh clips.
+ */
+export function generateMeshClipId(): string {
+  return generateClipId('clip-mesh');
+}
+
+/**
  * Generate a unique ID for composition clips.
  */
 export function generateCompClipId(): string {

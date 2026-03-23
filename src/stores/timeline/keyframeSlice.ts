@@ -138,6 +138,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
       scale: {
         x: clip.transform?.scale?.x ?? DEFAULT_TRANSFORM.scale.x,
         y: clip.transform?.scale?.y ?? DEFAULT_TRANSFORM.scale.y,
+        ...(clip.transform?.scale?.z !== undefined ? { z: clip.transform.scale.z } : {}),
       },
       rotation: {
         x: clip.transform?.rotation?.x ?? DEFAULT_TRANSFORM.rotation.x,
@@ -336,7 +337,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
         const axis = property.split('.')[1] as 'x' | 'y' | 'z';
         transformUpdate.position = { ...clip.transform.position, [axis]: value };
       } else if (property.startsWith('scale.')) {
-        const axis = property.split('.')[1] as 'x' | 'y';
+        const axis = property.split('.')[1] as 'x' | 'y' | 'z';
         transformUpdate.scale = { ...clip.transform.scale, [axis]: value };
       } else if (property.startsWith('rotation.')) {
         const axis = property.split('.')[1] as 'x' | 'y' | 'z';
@@ -415,6 +416,13 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
 
     // Flattened display: count unique properties with keyframes
     const uniqueProperties = new Set(keyframes.map(k => k.property));
+    // Hide 3D-only properties when clip is not 3D
+    if (!selectedTrackClip.is3D) {
+      uniqueProperties.delete('rotation.x');
+      uniqueProperties.delete('rotation.y');
+      uniqueProperties.delete('position.z');
+      uniqueProperties.delete('scale.z');
+    }
     let extraHeight = uniqueProperties.size * PROPERTY_ROW_HEIGHT;
 
     // Add curve editor height for expanded properties

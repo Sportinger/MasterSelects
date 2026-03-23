@@ -48,14 +48,16 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
   }
 
   // Detect type using shared helper from clipSlice
-  const type = detectMediaType(file) as 'video' | 'audio' | 'image';
+  const detectedType = detectMediaType(file);
+  const type = (detectedType === 'model' ? 'model' : detectedType) as MediaFile['type'];
   let canonicalFile = file;
   let url = URL.createObjectURL(file);
 
-  // Get info and thumbnail in parallel
+  // Get info and thumbnail in parallel (skip for 3D models — no video/audio metadata)
+  const isMediaType = type === 'video' || type === 'audio' || type === 'image';
   const [info, rawThumbnail] = await Promise.all([
-    getMediaInfo(file, type),
-    type !== 'audio' ? createThumbnail(file, type as 'video' | 'image') : Promise.resolve(undefined),
+    isMediaType ? getMediaInfo(file, type as 'video' | 'audio' | 'image') : Promise.resolve({ duration: 10, fileSize: file.size }),
+    type === 'video' || type === 'image' ? createThumbnail(file, type as 'video' | 'image') : Promise.resolve(undefined),
   ]);
 
   // Calculate hash for deduplication
@@ -122,7 +124,7 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
  */
 async function checkExistingProxy(
   fileHash: string | undefined,
-  type: 'video' | 'audio' | 'image'
+  type: string
 ): Promise<{
   proxyStatus: ProxyStatus;
   proxyFrameCount?: number;

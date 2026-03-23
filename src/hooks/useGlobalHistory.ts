@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { useTimelineStore } from '../stores/timeline';
 import { useMediaStore } from '../stores/mediaStore';
 import { useDockStore } from '../stores/dockStore';
+import { getShortcutRegistry } from '../services/shortcutRegistry';
 import {
   useHistoryStore,
   initHistoryStoreRefs,
@@ -190,6 +191,8 @@ export function useGlobalHistory() {
 
   // Global keyboard shortcuts for undo/redo
   useEffect(() => {
+    const registry = getShortcutRegistry();
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if typing in an input
       if (
@@ -200,22 +203,13 @@ export function useGlobalHistory() {
         return;
       }
 
-      // Ctrl+Z or Cmd+Z for undo
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      if (registry.matches('history.undo', e)) {
         e.preventDefault();
         undo();
         return;
       }
 
-      // Ctrl+Shift+Z or Cmd+Shift+Z for redo
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
-        e.preventDefault();
-        redo();
-        return;
-      }
-
-      // Ctrl+Y or Cmd+Y for redo (alternative)
-      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+      if (registry.matches('history.redo', e)) {
         e.preventDefault();
         redo();
         return;

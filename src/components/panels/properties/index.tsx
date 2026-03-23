@@ -4,11 +4,10 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { TextTab } from '../TextTab';
 
 // Tab type
-type PropertiesTab = 'transform' | 'effects' | 'masks' | 'volume' | 'transcript' | 'analysis' | 'text';
+type PropertiesTab = 'transform' | 'effects' | 'masks' | 'transcript' | 'analysis' | 'text';
 
 // Lazy load tab components for code splitting
 const TransformTab = lazy(() => import('./TransformTab').then(m => ({ default: m.TransformTab })));
-const VolumeTab = lazy(() => import('./VolumeTab').then(m => ({ default: m.VolumeTab })));
 const EffectsTab = lazy(() => import('./EffectsTab').then(m => ({ default: m.EffectsTab })));
 const MasksTab = lazy(() => import('./MasksTab').then(m => ({ default: m.MasksTab })));
 const TranscriptTab = lazy(() => import('./TranscriptTab').then(m => ({ default: m.TranscriptTab })));
@@ -26,6 +25,7 @@ export function PropertiesPanel() {
   const selectedClipIds = useTimelineStore(state => state.selectedClipIds);
   const primarySelectedClipId = useTimelineStore(state => state.primarySelectedClipId);
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
+  const clipKeyframes = useTimelineStore(state => state.clipKeyframes);
   // Actions from getState() - stable, no subscription needed
   const { getInterpolatedTransform, getInterpolatedSpeed } = useTimelineStore.getState();
   const [activeTab, setActiveTab] = useState<PropertiesTab>('transform');
@@ -66,8 +66,8 @@ export function PropertiesPanel() {
       } else if (isTextClip) {
         setActiveTab('text');
       } else if (isAudioClip && (activeTab === 'transform' || activeTab === 'masks' || activeTab === 'text')) {
-        setActiveTab('volume');
-      } else if (!isAudioClip && !isTextClip && (activeTab === 'volume' || activeTab === 'text')) {
+        setActiveTab('effects');
+      } else if (!isAudioClip && !isTextClip && activeTab === 'text') {
         setActiveTab('transform');
       }
     }
@@ -101,6 +101,9 @@ export function PropertiesPanel() {
   }
 
   const clipLocalTime = playheadPosition - selectedClip.startTime;
+  // clipKeyframes subscription triggers re-render when keyframes change,
+  // ensuring getInterpolatedTransform returns fresh values
+  const hasKeyframes = clipKeyframes.has(selectedClip.id);
   const transform = getInterpolatedTransform(selectedClip.id, clipLocalTime);
   const interpolatedSpeed = getInterpolatedSpeed(selectedClip.id, clipLocalTime);
 
@@ -129,7 +132,6 @@ export function PropertiesPanel() {
       <div className="properties-tabs">
         {isAudioClip ? (
           <>
-            <button className={`tab-btn ${activeTab === 'volume' ? 'active' : ''}`} onClick={() => setActiveTab('volume')}>Volume</button>
             <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => setActiveTab('effects')}>
               Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
             </button>
@@ -151,9 +153,6 @@ export function PropertiesPanel() {
         ) : (
           <>
             <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>Transform</button>
-            {!isSolidClip && (
-              <button className={`tab-btn ${activeTab === 'volume' ? 'active' : ''}`} onClick={() => setActiveTab('volume')}>Audio</button>
-            )}
             <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => setActiveTab('effects')}>
               Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
             </button>
@@ -179,9 +178,8 @@ export function PropertiesPanel() {
           {activeTab === 'text' && isTextClip && selectedClip.textProperties && (
             <TextTab clipId={selectedClip.id} textProperties={selectedClip.textProperties} />
           )}
-          {activeTab === 'transform' && !isAudioClip && <TransformTab clipId={selectedClip.id} transform={transform} speed={interpolatedSpeed} />}
-          {activeTab === 'volume' && <VolumeTab clipId={selectedClip.id} effects={selectedClip.effects || []} />}
-          {activeTab === 'effects' && <EffectsTab clipId={selectedClip.id} effects={selectedClip.effects || []} />}
+          {activeTab === 'transform' && !isAudioClip && <TransformTab clipId={selectedClip.id} transform={transform} speed={interpolatedSpeed} is3D={selectedClip.is3D} hasKeyframes={hasKeyframes} />}
+          {activeTab === 'effects' && <EffectsTab clipId={selectedClip.id} effects={selectedClip.effects || []} isAudioClip={isAudioClip} />}
           {activeTab === 'masks' && !isAudioClip && <MasksTab clipId={selectedClip.id} masks={selectedClip.masks} />}
           {activeTab === 'transcript' && (
             <TranscriptTab

@@ -4,8 +4,9 @@
 export const AUDIO_EXTENSIONS = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'] as const;
 export const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'wmv', 'm4v', 'flv'] as const;
 export const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'] as const;
+export const MODEL_EXTENSIONS = ['obj', 'gltf', 'glb', 'fbx'] as const;
 
-export type MediaType = 'video' | 'audio' | 'image' | 'unknown';
+export type MediaType = 'video' | 'audio' | 'image' | 'model' | 'unknown';
 
 /**
  * Detect the media type of a file using MIME type with fallback to extension.
@@ -21,6 +22,9 @@ export function detectMediaType(file: File): MediaType {
   }
   if (file.type.startsWith('image/') || IMAGE_EXTENSIONS.includes(ext as typeof IMAGE_EXTENSIONS[number])) {
     return 'image';
+  }
+  if (MODEL_EXTENSIONS.includes(ext as typeof MODEL_EXTENSIONS[number])) {
+    return 'model';
   }
   return 'unknown';
 }
@@ -50,6 +54,15 @@ export function isImageFile(file: File | string): boolean {
   const name = typeof file === 'string' ? file : file.name;
   const ext = name.split('.').pop()?.toLowerCase() || '';
   return IMAGE_EXTENSIONS.includes(ext as typeof IMAGE_EXTENSIONS[number]);
+}
+
+/**
+ * Check if a file or filename is a 3D model file.
+ */
+export function isModelFile(file: File | string): boolean {
+  const name = typeof file === 'string' ? file : file.name;
+  const ext = name.split('.').pop()?.toLowerCase() || '';
+  return MODEL_EXTENSIONS.includes(ext as typeof MODEL_EXTENSIONS[number]);
 }
 
 /**

@@ -18,6 +18,9 @@ import { wcPipelineMonitor } from '../../services/wcPipelineMonitor';
 import { useTimelineStore } from '../../stores/timeline';
 import { getCopiedHtmlVideoPreviewFrame } from './htmlVideoPreviewFallback';
 import { splitLayerEffects } from './layerEffectStack';
+import { getThreeSceneRenderer } from '../three/ThreeSceneRenderer';
+import { DEFAULT_CAMERA_CONFIG } from '../three/types';
+import type { Layer3DData } from '../three/types';
 
 const log = Logger.create('NestedCompRenderer');
 const ENABLE_VISUAL_HTML_VIDEO_FALLBACK = false;
@@ -328,6 +331,11 @@ export class NestedCompRenderer {
       // Collect layer data (including sub-nested compositions)
       const nestedLayerData = this.collectNestedLayerData(nestedLayers, commandEncoder, sampler, depth, skipEffects);
 
+      // Process 3D layers via Three.js (same logic as RenderDispatcher.process3DLayers)
+      if (flags.use3DLayers) {
+        this.process3DLayersForNested(nestedLayerData, width, height);
+      }
+
       // Handle empty composition
       if (nestedLayerData.length === 0) {
         if (nestedLayers.length > 0) {
@@ -521,6 +529,121 @@ export class NestedCompRenderer {
     }
   }
 
+  /**
+   * Process 3D layers inside nested compositions via Three.js.
+   * Same approach as RenderDispatcher.process3DLayers but operates on the nested layerData.
+   */
+  private process3DLayersForNested(layerData: LayerRenderData[], width: number, height: number): void {
+    const indices3D: number[] = [];
+    for (let i = 0; i < layerData.length; i++) {
+      if (layerData[i].layer.is3D) indices3D.push(i);
+    }
+    if (indices3D.length === 0) {
+      // Debug: log what layers we have and why none are 3D
+      if (layerData.length > 0) {
+        log.debug('No 3D layers in nested comp', {
+          totalLayers: layerData.length,
+          sourceTypes: layerData.map(d => d.layer.source?.type),
+          is3Ds: layerData.map(d => d.layer.is3D),
+        });
+      }
+      return;
+    }
+    log.debug('Processing 3D layers in nested comp', { count: indices3D.length });
+
+    const renderer = getThreeSceneRenderer();
+    if (!renderer.isInitialized) {
+      // Trigger lazy initialization (same as RenderDispatcher)
+      renderer.initialize(width, height).then((ok) => {
+        if (ok) log.info('Three.js initialized from nested comp');
+      });
+      // Remove 3D layers for this frame — next frame will render them
+      for (let i = indices3D.length - 1; i >= 0; i--) layerData.splice(indices3D[i], 1);
+      return;
+    }
+
+    // Build Layer3DData
+    const layers3D: Layer3DData[] = [];
+    for (const idx of indices3D) {
+      const data = layerData[idx];
+      const layer = data.layer;
+      const src = layer.source;
+      const rot = typeof layer.rotation === 'number' ? { x: 0, y: 0, z: layer.rotation } : layer.rotation;
+      layers3D.push({
+        layerId: layer.id,
+        clipId: layer.sourceClipId || layer.id,
+        position: layer.position,
+        rotation: { x: rot.x, y: rot.y, z: rot.z },
+        scale: { x: layer.scale.x, y: layer.scale.y, z: layer.scale.z ?? 1 },
+        opacity: layer.opacity,
+        blendMode: layer.blendMode,
+        sourceWidth: data.sourceWidth || width,
+        sourceHeight: data.sourceHeight || height,
+        videoElement: src?.videoElement ?? undefined,
+        imageElement: src?.imageElement ?? undefined,
+        canvas: src?.textCanvas ?? undefined,
+        modelUrl: src?.modelUrl ?? undefined,
+        modelFileName: layer.name,
+        meshType: src?.meshType ?? undefined,
+        wireframe: layer.wireframe,
+      });
+    }
+
+    const canvas = renderer.renderScene(layers3D, DEFAULT_CAMERA_CONFIG, width, height);
+    if (!canvas) {
+      for (let i = indices3D.length - 1; i >= 0; i--) layerData.splice(indices3D[i], 1);
+      return;
+    }
+
+    // Import canvas to GPU texture
+    if (!this.threeNestedTexture || this.threeNestedTexture.width !== width || this.threeNestedTexture.height !== height) {
+      this.threeNestedTexture?.destroy();
+      this.threeNestedTexture = this.device.createTexture({
+        size: { width, height },
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+      this.threeNestedView = this.threeNestedTexture.createView();
+    }
+
+    this.device.queue.copyExternalImageToTexture(
+      { source: canvas },
+      { texture: this.threeNestedTexture },
+      { width, height },
+    );
+
+    // Create synthetic layer and replace 3D layers
+    const insertIdx = indices3D[0];
+    const firstLayer = layerData[indices3D[0]].layer;
+    const isSingle = indices3D.length === 1;
+    const syntheticLayer: Layer = {
+      id: '__three_nested__',
+      name: '3D Scene (Nested)',
+      visible: true,
+      opacity: isSingle ? firstLayer.opacity : 1,
+      blendMode: isSingle ? firstLayer.blendMode : 'normal',
+      source: { type: 'image' },
+      effects: isSingle ? firstLayer.effects : [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: { x: 0, y: 0, z: 0 },
+    };
+
+    for (let i = indices3D.length - 1; i >= 0; i--) layerData.splice(indices3D[i], 1);
+    layerData.splice(insertIdx, 0, {
+      layer: syntheticLayer,
+      isVideo: false,
+      externalTexture: null,
+      textureView: this.threeNestedView,
+      sourceWidth: width,
+      sourceHeight: height,
+    });
+  }
+
+  // Texture for nested 3D scene rendering
+  private threeNestedTexture: GPUTexture | null = null;
+  private threeNestedView: GPUTextureView | null = null;
+
   private collectNestedLayerData(
     layers: Layer[],
     commandEncoder?: GPUCommandEncoder,
@@ -558,6 +681,19 @@ export class NestedCompRenderer {
             sourceHeight: nc.height,
           });
         }
+        continue;
+      }
+
+      // 3D Model layers — no GPU texture needed, handled by ThreeSceneRenderer
+      if (layer.source.type === 'model') {
+        result.push({
+          layer,
+          isVideo: false,
+          externalTexture: null,
+          textureView: null,
+          sourceWidth: 0,
+          sourceHeight: 0,
+        });
         continue;
       }
 

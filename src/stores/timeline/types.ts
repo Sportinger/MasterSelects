@@ -192,12 +192,18 @@ export interface SolidClipActions {
   updateSolidColor: (clipId: string, color: string) => void;
 }
 
+// Mesh clip actions (extracted to meshClipSlice)
+export interface MeshClipActions {
+  addMeshClip: (trackId: string, startTime: number, meshType: import('../mediaStore/types').MeshPrimitiveType, duration?: number, skipMediaItem?: boolean) => string | null;
+}
+
 // Clip effect actions (extracted to clipEffectSlice)
 export interface ClipEffectActions {
   addClipEffect: (clipId: string, effectType: string) => void;
   removeClipEffect: (clipId: string, effectId: string) => void;
   updateClipEffect: (clipId: string, effectId: string, params: Partial<Effect['params']>) => void;
   setClipEffectEnabled: (clipId: string, effectId: string, enabled: boolean) => void;
+  reorderClipEffect: (clipId: string, effectId: string, newIndex: number) => void;
 }
 
 // Multicam linked group actions (extracted to linkedGroupSlice)
@@ -231,10 +237,11 @@ export interface CoreClipActions {
   getClipChildren: (clipId: string) => TimelineClip[];
   setClipPreservesPitch: (clipId: string, preservesPitch: boolean) => void;
   refreshCompClipNestedData: (sourceCompositionId: string) => Promise<void>;
+  toggle3D: (clipId: string) => void;
 }
 
 // Combined ClipActions = all sub-interfaces
-export type ClipActions = CoreClipActions & TextClipActions & SolidClipActions & ClipEffectActions & LinkedGroupActions & DownloadClipActions;
+export type ClipActions = CoreClipActions & TextClipActions & SolidClipActions & MeshClipActions & ClipEffectActions & LinkedGroupActions & DownloadClipActions;
 
 // Playback actions interface
 export interface PlaybackActions {
@@ -380,7 +387,7 @@ export interface ClipboardClipData {
   duration: number;
   inPoint: number;
   outPoint: number;
-  sourceType: 'video' | 'audio' | 'image' | 'text' | 'solid';
+  sourceType: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model';
   naturalDuration?: number;
   transform: ClipTransform;
   effects: Effect[];

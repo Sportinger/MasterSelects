@@ -124,6 +124,8 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         textProperties: clip.textProperties,
         // Solid clip support
         solidColor: clip.source?.type === 'solid' ? (clip.solidColor || clip.name.replace('Solid ', '')) : undefined,
+        // 3D layer support
+        is3D: clip.is3D || undefined,
       };
     });
 
@@ -529,6 +531,10 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                       nc.isLoading = false;
                       wakePreviewAfterRestore();
                     }, { once: true });
+                  } else if (subType === 'model') {
+                    nc.source = { type: 'model', modelUrl: subFileUrl, naturalDuration: 3600, mediaFileId: nsc.mediaFileId };
+                    nc.is3D = true;
+                    nc.isLoading = false;
                   }
                 }
               }
@@ -743,6 +749,27 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                   }));
                   wakePreviewAfterRestore();
                 }, { once: true });
+              } else if (nestedType === 'model') {
+                // 3D model — synchronous, just set blob URL
+                nestedClip.source = { type: 'model', modelUrl: nestedFileUrl, naturalDuration: 3600, mediaFileId: nestedSerializedClip.mediaFileId };
+                nestedClip.is3D = true;
+                nestedClip.isLoading = false;
+
+                // Update store so render loop picks it up
+                set(state => ({
+                  clips: state.clips.map(c => {
+                    if (c.id !== compClip.id || !c.nestedClips) return c;
+                    return {
+                      ...c,
+                      nestedClips: c.nestedClips.map(nc =>
+                        nc.id === nestedClip.id
+                          ? { ...nc, source: nestedClip.source, is3D: true, isLoading: false }
+                          : nc
+                      ),
+                    };
+                  }),
+                }));
+                wakePreviewAfterRestore();
               }
             }
 
@@ -989,6 +1016,8 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         reversed: serializedClip.reversed,
         speed: serializedClip.speed,
         preservesPitch: serializedClip.preservesPitch,
+        // 3D layer support
+        is3D: serializedClip.is3D,
       };
 
       // Add clip to state
@@ -1186,6 +1215,26 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           }));
           wakePreviewAfterRestore();
         }, { once: true });
+      } else if (type === 'model') {
+        // 3D Model clips — just need a blob URL, Three.js handles loading
+        set(state => ({
+          clips: state.clips.map(c =>
+            c.id === clip.id
+              ? {
+                  ...c,
+                  source: {
+                    type: 'model' as const,
+                    modelUrl: fileUrl,
+                    naturalDuration: serializedClip.naturalDuration || 3600,
+                    mediaFileId: serializedClip.mediaFileId,
+                  },
+                  is3D: true,
+                  isLoading: false,
+                }
+              : c
+          ),
+        }));
+        wakePreviewAfterRestore();
       }
     }
   },

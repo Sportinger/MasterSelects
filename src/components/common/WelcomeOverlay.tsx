@@ -15,9 +15,11 @@ import { syncStoresToProject } from '../../services/project/projectSave';
 
 type NativeStatus = 'checking' | 'available' | 'outdated' | 'unavailable';
 
-// Detect browser name and if it's Chromium-based
+// Detect browser name and if it supports WebGPU
+// isChromium kept for legacy compat but now means "has WebGPU support"
 function detectBrowser(): { name: string; isChromium: boolean } {
   const ua = navigator.userAgent;
+  const hasWebGPU = typeof navigator.gpu !== 'undefined';
 
   // Check specific browsers (order matters - more specific first)
   if (/Edg\//.test(ua)) {
@@ -33,13 +35,15 @@ function detectBrowser(): { name: string; isChromium: boolean } {
     return { name: 'Chromium', isChromium: true };
   }
   if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) {
-    return { name: 'Safari', isChromium: false };
+    // Safari 17+ supports WebGPU
+    return { name: 'Safari', isChromium: hasWebGPU };
   }
   if (/Firefox\//.test(ua)) {
-    return { name: 'Firefox', isChromium: true }; // Firefox supports WebGPU
+    return { name: 'Firefox', isChromium: hasWebGPU };
   }
 
-  return { name: 'Unknown Browser', isChromium: false };
+  // Unknown browser — trust WebGPU detection
+  return { name: 'Unknown Browser', isChromium: hasWebGPU };
 }
 
 interface WelcomeOverlayProps {
@@ -453,7 +457,7 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
             </svg>
             <span className="welcome-browser-warning-label">Unsupported Browser</span>
             <span className="welcome-browser-warning-name">{browser.name}</span>
-            <span className="welcome-browser-warning-desc">MasterSelects requires WebGPU which is currently only fully supported in Chrome.</span>
+            <span className="welcome-browser-warning-desc">MasterSelects requires WebGPU. Supported browsers: Chrome 113+, Edge 113+, Safari 17+, Firefox 141+.</span>
             <a className="welcome-browser-warning-btn" href="https://www.google.com/chrome/" target="_blank" rel="noopener noreferrer">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10"/>

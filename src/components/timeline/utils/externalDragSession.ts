@@ -1,11 +1,12 @@
 export interface ExternalDragPayload {
-  kind: 'media-file' | 'composition' | 'text' | 'solid';
+  kind: 'media-file' | 'composition' | 'text' | 'solid' | 'mesh';
   id: string;
   duration?: number;
   hasAudio?: boolean;
   isAudio: boolean;
   isVideo: boolean;
   file?: File;
+  meshType?: import('../../../stores/mediaStore/types').MeshPrimitiveType;
 }
 
 let currentExternalDragPayload: ExternalDragPayload | null = null;

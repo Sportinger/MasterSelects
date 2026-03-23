@@ -285,13 +285,19 @@ function App() {
     const handleOpenCampaignDialog = () => {
       setShowCampaignDialog(true);
     };
+    const handleOpenWelcomeScreen = () => {
+      setTutorialPart(1);
+      setShowTutorial(true);
+    };
     window.addEventListener('start-tutorial', handleStartTutorial);
     window.addEventListener('start-timeline-tutorial', handleStartTimelineTutorial);
     window.addEventListener('open-tutorial-campaigns', handleOpenCampaignDialog);
+    window.addEventListener('open-welcome-screen', handleOpenWelcomeScreen);
     return () => {
       window.removeEventListener('start-tutorial', handleStartTutorial);
       window.removeEventListener('start-timeline-tutorial', handleStartTimelineTutorial);
       window.removeEventListener('open-tutorial-campaigns', handleOpenCampaignDialog);
+      window.removeEventListener('open-welcome-screen', handleOpenWelcomeScreen);
     };
   }, []);
 

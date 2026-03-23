@@ -1,7 +1,7 @@
 // App version - INCREMENT ON EVERY COMMIT!
 // Format: MAJOR.MINOR.PATCH
 // Increment PATCH (0.0.X) for each commit
-export const APP_VERSION = '1.4.1';
+export const APP_VERSION = '1.4.2';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -37,8 +37,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'Native Helper v0.3.12 available',
-  message: 'Adds masterselects.com helper detection while keeping the hardened localhost bridge checks and helper update flow in place.',
+  title: 'FINALLY REAL 3D',
+  message: 'Three.js integrated! Import OBJ, glTF, GLB, FBX models directly into the timeline. Per-layer 3D toggle, perspective camera, AE-style rotation, full keyframe animation, and nested composition support.',
   animated: true,
 };
 

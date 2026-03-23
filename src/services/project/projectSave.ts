@@ -270,9 +270,10 @@ export async function syncStoresToProject(): Promise<void> {
       lastSeenChangelogVersion: settingsState.lastSeenChangelogVersion,
     };
 
-    // Save text and solid items
+    // Save text, solid, and mesh items
     (projectData as any).textItems = freshState.textItems;
     (projectData as any).solidItems = freshState.solidItems;
+    (projectData as any).meshItems = freshState.meshItems;
   }
 
   log.info(' Synced stores to project');

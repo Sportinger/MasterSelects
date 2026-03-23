@@ -115,6 +115,14 @@ export function buildLayersAtTime(
         source: { type: 'image', imageElement: clip.source.imageElement },
       });
     }
+    // Handle 3D model clips
+    else if (clip.source?.type === 'model') {
+      layers.push({
+        ...baseLayerProps,
+        source: { type: 'model', modelUrl: clip.source.modelUrl },
+        is3D: true,
+      });
+    }
     // Handle text and solid clips
     else if ((clip.source?.type === 'text' || clip.source?.type === 'solid') && clip.source.textCanvas) {
       layers.push({
@@ -177,12 +185,14 @@ function buildBaseLayerProps(
     scale: {
       x: transform.scale?.x ?? 1,
       y: transform.scale?.y ?? 1,
+      ...(transform.scale?.z !== undefined ? { z: transform.scale.z } : {}),
     },
     rotation: {
       x: ((transform.rotation?.x ?? 0) * Math.PI) / 180,
       y: ((transform.rotation?.y ?? 0) * Math.PI) / 180,
       z: ((transform.rotation?.z ?? 0) * Math.PI) / 180,
     },
+    ...(clip.is3D ? { is3D: true } : {}),
   };
 }
 

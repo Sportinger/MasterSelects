@@ -347,7 +347,7 @@ async function loadSubNestedClips(
 
     // Load media directly on the clip object (no store update needed)
     const type = sc.sourceType;
-    const fileUrl = blobUrlManager.create(clipId, mediaFile.file, (type === 'video' ? 'video' : type === 'audio' ? 'audio' : 'image') as 'video' | 'audio' | 'image');
+    const fileUrl = blobUrlManager.create(clipId, mediaFile.file, (type === 'video' ? 'video' : type === 'audio' ? 'audio' : type === 'model' ? 'model' : 'image') as 'video' | 'audio' | 'image' | 'model');
 
     if (type === 'video') {
       const video = document.createElement('video');
@@ -389,6 +389,10 @@ async function loadSubNestedClips(
         clip.source = { type: 'audio', audioElement: audio, naturalDuration: audio.duration };
         clip.isLoading = false;
       }, { once: true });
+    } else if (type === 'model') {
+      clip.source = { type: 'model', modelUrl: fileUrl, naturalDuration: 3600 };
+      clip.is3D = true;
+      clip.isLoading = false;
     }
   }
 
@@ -513,6 +517,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
       effects: serializedClip.effects || [],
       masks: serializedClip.masks || [],
       isLoading: true,
+      is3D: serializedClip.is3D,
     };
 
     nestedClips.push(nestedClip);
@@ -534,8 +539,8 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
 
     // Load media element async - track URL for cleanup
     const type = serializedClip.sourceType;
-    const urlType = type === 'video' ? 'video' : type === 'audio' ? 'audio' : 'image';
-    const fileUrl = blobUrlManager.create(nestedClip.id, mediaFile.file, urlType as 'video' | 'audio' | 'image');
+    const urlType = type === 'video' ? 'video' : type === 'audio' ? 'audio' : type === 'model' ? 'model' : 'image';
+    const fileUrl = blobUrlManager.create(nestedClip.id, mediaFile.file, urlType as 'video' | 'audio' | 'image' | 'model');
 
     if (type === 'video') {
       loadVideoNestedClip(compClipId, nestedClip.id, fileUrl, mediaFile.file, get, set);
@@ -543,6 +548,12 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
       loadAudioNestedClip(compClipId, nestedClip.id, fileUrl, get, set);
     } else if (type === 'image') {
       loadImageNestedClip(compClipId, nestedClip.id, fileUrl, get, set);
+    } else if (type === 'model') {
+      // 3D model — set directly on clip object (synchronous, no async load needed)
+      // Must mutate the local object because the array is returned before store updates apply
+      nestedClip.source = { type: 'model', modelUrl: fileUrl, naturalDuration: 3600 };
+      nestedClip.is3D = true;
+      nestedClip.isLoading = false;
     }
   }
 

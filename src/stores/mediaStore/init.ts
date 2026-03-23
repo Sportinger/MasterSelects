@@ -234,6 +234,16 @@ function setupItemPersistence(): void {
     }
   );
 
+  // Subscribe to meshItems changes
+  useMediaStore.subscribe(
+    (state: MediaState) => state.meshItems,
+    (meshItems: MediaState['meshItems']) => {
+      try {
+        localStorage.setItem('ms-meshItems', JSON.stringify(meshItems));
+      } catch { /* quota exceeded or unavailable */ }
+    }
+  );
+
   log.info('Item persistence setup complete');
 }
 

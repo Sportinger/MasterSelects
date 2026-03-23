@@ -83,6 +83,15 @@ getTrackChildren()   - Get child tracks of a parent
 - Color fill clips with configurable color
 - Useful for backgrounds and color mattes
 
+### Mesh Clips
+- Created via `addMeshClip()` in meshClipSlice
+- 3D primitive meshes: Cube, Sphere, Plane, Cylinder, Torus, Cone
+- Automatically set to `is3D: true`, rendered via Three.js
+- Source type: `model` with `meshType` property
+- Default duration: 10 seconds
+- Default material: MeshStandardMaterial (gray, metalness 0.3, roughness 0.6)
+- Supports wireframe toggle, all 3D transform properties, and keyframe animation
+
 ### Composition Clips
 - Nested compositions dragged from Media Panel
 - Orange outline for identification
@@ -546,6 +555,7 @@ The timeline store (`src/stores/timeline/index.ts`) combines 17 slices + 2 utili
 | **clipSlice** | `clipSlice.ts` | Core clip operations: add, move, trim, split, reverse |
 | **textClipSlice** | `textClipSlice.ts` | Text clip creation and property updates |
 | **solidClipSlice** | `solidClipSlice.ts` | Solid color clip creation and color updates |
+| **meshClipSlice** | `meshClipSlice.ts` | 3D primitive mesh clip creation |
 | **clipEffectSlice** | `clipEffectSlice.ts` | Add/remove/update effects on clips |
 | **linkedGroupSlice** | `linkedGroupSlice.ts` | Multicam linked group creation/removal |
 | **downloadClipSlice** | `downloadClipSlice.ts` | YouTube pending download clips |

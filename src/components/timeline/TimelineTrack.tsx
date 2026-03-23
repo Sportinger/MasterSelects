@@ -20,7 +20,7 @@ function TrackPropertyTracks({
   pixelToTime,
 }: {
   trackId: string;
-  selectedClip: { id: string; startTime: number; duration: number; effects?: Array<{ id: string; name: string; params: Record<string, unknown> }> } | null;
+  selectedClip: { id: string; startTime: number; duration: number; is3D?: boolean; effects?: Array<{ id: string; name: string; params: Record<string, unknown> }> } | null;
   clipKeyframes: Map<string, Array<{ id: string; clipId: string; time: number; property: AnimatableProperty; value: number; easing: string }>>;
   renderKeyframeDiamonds: (trackId: string, property: AnimatableProperty) => React.ReactNode;
   expandedCurveProperties: Map<string, Set<AnimatableProperty>>;
@@ -39,8 +39,15 @@ function TrackPropertyTracks({
     const props = new Set<string>();
     const keyframes = clipKeyframes.get(clipId) || [];
     keyframes.forEach((kf) => props.add(kf.property));
+    // Hide 3D-only properties (rotation X/Y, position Z, scale Z) when clip is not 3D
+    if (!selectedClip?.is3D) {
+      props.delete('rotation.x');
+      props.delete('rotation.y');
+      props.delete('position.z');
+      props.delete('scale.z');
+    }
     return props;
-  }, [clipId, clipKeyframes]);
+  }, [clipId, clipKeyframes, selectedClip?.is3D]);
 
   // Track container ref for getting width
   const containerRef = useRef<HTMLDivElement>(null);

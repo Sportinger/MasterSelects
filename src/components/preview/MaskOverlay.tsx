@@ -2,6 +2,7 @@
 
 import { useRef, useCallback, useEffect, useMemo } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
+import { getShortcutRegistry } from '../../services/shortcutRegistry';
 import { generatePathData, normalizedToCanvas } from './maskUtils';
 import { useMaskVertexDrag } from './useMaskVertexDrag';
 import { useMaskDrag } from './useMaskDrag';
@@ -187,7 +188,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
           setMaskEditMode('none');
         }
       }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && maskEditMode === 'editing') {
+      if (getShortcutRegistry().matches('edit.delete', e) && maskEditMode === 'editing') {
         if (selectedVertexIds.size > 0 && selectedClip && activeMask) {
           const { removeVertex } = useTimelineStore.getState();
           selectedVertexIds.forEach(vertexId => {

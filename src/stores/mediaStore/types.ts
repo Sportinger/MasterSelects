@@ -3,7 +3,7 @@
 import type { CompositionTimelineData, TranscriptWord, TranscriptStatus, AnalysisStatus } from '../../types';
 
 // Media item types
-export type MediaType = 'video' | 'audio' | 'image' | 'composition' | 'text' | 'solid';
+export type MediaType = 'video' | 'audio' | 'image' | 'composition' | 'text' | 'solid' | 'model';
 
 // Proxy status for video files
 export type ProxyStatus = 'none' | 'generating' | 'ready' | 'error';
@@ -45,7 +45,7 @@ export interface MediaItem {
 
 // Imported file
 export interface MediaFile extends MediaItem {
-  type: 'video' | 'audio' | 'image';
+  type: 'video' | 'audio' | 'image' | 'model';
   file?: File;
   url: string;
   duration?: number;
@@ -103,6 +103,36 @@ export interface SolidItem extends MediaItem {
   duration: number; // Default duration when added to timeline
 }
 
+// 3D mesh primitive types
+export type MeshPrimitiveType = 'cube' | 'sphere' | 'plane' | 'cylinder' | 'torus' | 'cone';
+
+// 3D mesh item (for Media Panel - can be dragged to timeline)
+export interface MeshItem extends MediaItem {
+  type: 'model';
+  meshType: MeshPrimitiveType;
+  color: string;      // Mesh material color
+  duration: number;   // Default duration when added to timeline
+}
+
+// 3D camera configuration for compositions
+export interface CompositionCamera {
+  enabled: boolean;
+  position: { x: number; y: number; z: number };
+  target: { x: number; y: number; z: number };
+  fov: number;    // degrees
+  near: number;
+  far: number;
+}
+
+export const DEFAULT_CAMERA: CompositionCamera = {
+  enabled: false,
+  position: { x: 0, y: 0, z: 0 },
+  target: { x: 0, y: 0, z: 0 },
+  fov: 50,
+  near: 0.1,
+  far: 1000,
+};
+
 // Composition
 export interface Composition extends MediaItem {
   type: 'composition';
@@ -112,6 +142,7 @@ export interface Composition extends MediaItem {
   duration: number;
   backgroundColor: string;
   timelineData?: CompositionTimelineData;
+  camera?: CompositionCamera;
 }
 
 // Folder for organization
@@ -125,7 +156,7 @@ export interface MediaFolder {
 }
 
 // Union type for all items
-export type ProjectItem = MediaFile | Composition | MediaFolder | TextItem | SolidItem;
+export type ProjectItem = MediaFile | Composition | MediaFolder | TextItem | SolidItem | MeshItem;
 
 // Slice creator type for mediaStore
 export type MediaSliceCreator<T> = (
@@ -141,6 +172,7 @@ export interface MediaState {
   folders: MediaFolder[];
   textItems: TextItem[];
   solidItems: SolidItem[];
+  meshItems: MeshItem[];
 
   // Active composition
   activeCompositionId: string | null;

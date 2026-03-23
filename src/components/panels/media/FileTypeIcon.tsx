@@ -66,6 +66,14 @@ export const FileTypeIcon = memo(({ type, large }: FileTypeIconProps) => {
           <rect x="4" y="5" width="8" height="6" rx="0.5" fill="#bbb"/>
         </svg>
       );
+    case 'mesh':
+      return (
+        <svg style={style} viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#4a6a6a" stroke="#6a9a9a" strokeWidth="0.7"/>
+          <path d="M8 4L12 6.5V11L8 13.5L4 11V6.5L8 4Z" stroke="#8ad8d8" strokeWidth="0.8" fill="#3a5a5a"/>
+          <path d="M8 4V13.5M4 6.5L12 11M12 6.5L4 11" stroke="#6ab8b8" strokeWidth="0.5" opacity="0.6"/>
+        </svg>
+      );
     default:
       return (
         <svg style={style} viewBox="0 0 16 16" fill="none">
@@ -169,6 +177,22 @@ const LargeIcon = memo(({ type, style }: { type?: string; style: React.CSSProper
           <rect x="4" y="8" width="40" height="32" rx="3" fill="#666"/>
           <rect x="4" y="8" width="40" height="32" rx="3" stroke="#888" strokeWidth="1"/>
           <rect x="12" y="16" width="24" height="16" rx="1" fill="#aaa"/>
+        </svg>
+      );
+    case 'mesh':
+      return (
+        <svg style={style} viewBox="0 0 48 48" fill="none">
+          <rect x="4" y="8" width="40" height="32" rx="3" fill="#3a5a5a"/>
+          <rect x="4" y="8" width="40" height="32" rx="3" stroke="#5a9a9a" strokeWidth="1"/>
+          {/* 3D cube wireframe */}
+          <path d="M24 12L36 19V33L24 40L12 33V19L24 12Z" stroke="#8ad8d8" strokeWidth="1.2" fill="#2a4a4a" opacity="0.8"/>
+          <path d="M24 12V40" stroke="#6ab8b8" strokeWidth="0.8" opacity="0.5"/>
+          <path d="M12 19L36 33" stroke="#6ab8b8" strokeWidth="0.8" opacity="0.5"/>
+          <path d="M36 19L12 33" stroke="#6ab8b8" strokeWidth="0.8" opacity="0.5"/>
+          <circle cx="24" cy="12" r="1.5" fill="#aaeaea"/>
+          <circle cx="36" cy="19" r="1.5" fill="#aaeaea"/>
+          <circle cx="12" cy="19" r="1.5" fill="#aaeaea"/>
+          <circle cx="24" cy="40" r="1.5" fill="#aaeaea"/>
         </svg>
       );
     default:

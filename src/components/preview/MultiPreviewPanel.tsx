@@ -3,6 +3,7 @@
 // Source modes: "Custom" (per-slot composition) or a composition (auto-distributes first 4 video layers)
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { getShortcutRegistry } from '../../services/shortcutRegistry';
 import { useEngineStore } from '../../stores/engineStore';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useSettingsStore, type PreviewQuality } from '../../stores/settingsStore';
@@ -36,17 +37,31 @@ export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
     [compositions, data.sourceCompositionId]
   );
 
-  // Highlight slots on 1/2/3/4 key press
+  // Highlight slots on 1/2/3/4 key press (via shortcut registry)
   useEffect(() => {
+    const registry = getShortcutRegistry();
+    const slotActions = [
+      'preview.slot1' as const,
+      'preview.slot2' as const,
+      'preview.slot3' as const,
+      'preview.slot4' as const,
+    ];
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing in an input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      const idx = parseInt(e.key) - 1;
-      if (idx >= 0 && idx <= 3) setHighlightedSlot(idx);
+      for (let i = 0; i < slotActions.length; i++) {
+        if (registry.matches(slotActions[i], e)) {
+          setHighlightedSlot(i);
+          return;
+        }
+      }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
-      const idx = parseInt(e.key) - 1;
-      if (idx >= 0 && idx <= 3) setHighlightedSlot((prev) => (prev === idx ? null : prev));
+      for (let i = 0; i < slotActions.length; i++) {
+        if (registry.matches(slotActions[i], e)) {
+          setHighlightedSlot((prev) => (prev === i ? null : prev));
+          return;
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);

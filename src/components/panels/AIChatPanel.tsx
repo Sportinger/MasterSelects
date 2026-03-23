@@ -299,6 +299,8 @@ function parseChatCompletionPayload(data: unknown): {
 
 export function AIChatPanel() {
   const { apiKeys, openSettings, aiApprovalMode } = useSettingsStore();
+  const hasSeenAIChatOnboarding = useSettingsStore((s) => s.hasSeenAIChatOnboarding);
+  const setHasSeenAIChatOnboarding = useSettingsStore((s) => s.setHasSeenAIChatOnboarding);
   const hostedAIEnabled = useAccountStore((s) => s.hostedAIEnabled);
   const accountSession = useAccountStore((s) => s.session);
   const loadAccountState = useAccountStore((s) => s.loadAccountState);
@@ -313,6 +315,7 @@ export function AIChatPanel() {
   const [editorMode, setEditorMode] = useState(true); // Enable tools by default
   const [currentToolAction, setCurrentToolAction] = useState<string | null>(null);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
+  const [onboardingClosing, setOnboardingClosing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -586,6 +589,14 @@ export function AIChatPanel() {
     setError(null);
   }, []);
 
+  // Dismiss AI chat onboarding
+  const dismissOnboarding = useCallback(() => {
+    setOnboardingClosing(true);
+    setTimeout(() => {
+      setHasSeenAIChatOnboarding(true);
+    }, 300);
+  }, [setHasSeenAIChatOnboarding]);
+
   return (
     <div className={`ai-chat-panel ${!hasAccess ? 'no-api-key' : ''}`}>
       {/* API Key Required Overlay */}
@@ -662,14 +673,46 @@ export function AIChatPanel() {
       {/* Messages */}
       <div className="ai-chat-messages">
         {messages.length === 0 ? (
-          <div className="ai-chat-welcome">
-            <p>{editorMode ? 'AI Editor Ready' : 'Start a conversation'}</p>
-            <span className="welcome-hint">
-              {editorMode
-                ? 'Ask me to edit your timeline - cut clips, remove silence, etc.'
-                : `Using ${OPENAI_MODELS.find(m => m.id === model)?.name}`}
-            </span>
-          </div>
+          <>
+            {/* Onboarding hint — shown once after first login */}
+            {hasAccess && !hasSeenAIChatOnboarding && (
+              <div className={`ai-chat-onboarding ${onboardingClosing ? 'closing' : ''}`}>
+                <div className="ai-chat-onboarding-card">
+                  <div className="ai-chat-onboarding-header">
+                    <span className="ai-chat-onboarding-icon">AI</span>
+                    <h3>Welcome to the AI Editor</h3>
+                  </div>
+                  <div className="ai-chat-onboarding-body">
+                    <p className="ai-chat-onboarding-intro">
+                      This AI assistant can directly edit your timeline. Just describe what you want in plain language.
+                    </p>
+                    <ul className="ai-chat-onboarding-tips">
+                      <li><strong>Cut &amp; trim:</strong> "Remove the first 3 seconds" or "Split at 10s"</li>
+                      <li><strong>Remove silence:</strong> "Find and remove all silent parts"</li>
+                      <li><strong>Analyze:</strong> "What clips are on the timeline?" or "Transcribe this clip"</li>
+                      <li><strong>Batch edits:</strong> "Delete all clips shorter than 1 second"</li>
+                      <li><strong>Downloads:</strong> "Search YouTube for nature footage and download it"</li>
+                    </ul>
+                    <p className="ai-chat-onboarding-note">
+                      The <strong>Tools</strong> toggle enables timeline editing. Turn it off for a normal chat.
+                      Use the approval mode in Settings to control which actions need your confirmation.
+                    </p>
+                  </div>
+                  <button className="ai-chat-onboarding-dismiss" onClick={dismissOnboarding}>
+                    Got it
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="ai-chat-welcome">
+              <p>{editorMode ? 'AI Editor Ready' : 'Start a conversation'}</p>
+              <span className="welcome-hint">
+                {editorMode
+                  ? 'Ask me to edit your timeline - cut clips, remove silence, etc.'
+                  : `Using ${OPENAI_MODELS.find(m => m.id === model)?.name}`}
+              </span>
+            </div>
+          </>
         ) : (
           messages.map(msg => {
             // Tool result messages - show compact

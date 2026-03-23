@@ -10,8 +10,10 @@ export interface Layer {
   source: LayerSource | null;
   effects: Effect[];
   position: { x: number; y: number; z: number };
-  scale: { x: number; y: number };
+  scale: { x: number; y: number; z?: number };
   rotation: number | { x: number; y: number; z: number };  // Single value (z only) or full 3D rotation
+  is3D?: boolean;  // When true, layer is rendered as a 3D plane via Three.js
+  wireframe?: boolean;  // Debug: show as wireframe
   // Mask properties (passed from timeline clip masks for GPU processing)
   maskFeather?: number;  // Blur radius in pixels (0-50), handled in GPU shader
   maskFeatherQuality?: number;  // Blur quality: 0=low (9 samples), 1=medium (17), 2=high (25)
@@ -66,7 +68,9 @@ export type BlendMode =
   | 'alpha-add';
 
 export interface LayerSource {
-  type: 'video' | 'image' | 'camera' | 'color' | 'text' | 'solid';
+  type: 'video' | 'image' | 'camera' | 'color' | 'text' | 'solid' | 'model';
+  modelUrl?: string;  // Blob URL to 3D model file (OBJ/glTF/GLB)
+  meshType?: import('../stores/mediaStore/types').MeshPrimitiveType;  // Primitive mesh type (cube, sphere, etc.)
   file?: File;
   videoElement?: HTMLVideoElement;
   mediaTime?: number;
@@ -321,7 +325,7 @@ export interface ClipTransform {
   opacity: number;          // 0-1
   blendMode: BlendMode;
   position: { x: number; y: number; z: number };
-  scale: { x: number; y: number };
+  scale: { x: number; y: number; z?: number };
   rotation: { x: number; y: number; z: number };  // degrees
 }
 
@@ -386,7 +390,9 @@ export interface TimelineClip {
   inPoint: number;        // Trim in point within source (seconds)
   outPoint: number;       // Trim out point within source (seconds)
   source: {
-    type: 'video' | 'audio' | 'image' | 'text' | 'solid';
+    type: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model';
+    modelUrl?: string;  // Blob URL to 3D model file
+    meshType?: import('../stores/mediaStore/types').MeshPrimitiveType;  // Primitive mesh type
     videoElement?: HTMLVideoElement;
     audioElement?: HTMLAudioElement;
     imageElement?: HTMLImageElement;
@@ -458,6 +464,10 @@ export interface TimelineClip {
   // Transition support
   transitionIn?: TimelineTransition;   // Transition from previous clip
   transitionOut?: TimelineTransition;  // Transition to next clip
+  // 3D layer support (AE-style per-layer toggle)
+  is3D?: boolean;
+  wireframe?: boolean;  // Debug: show 3D model as wireframe
+  meshType?: import('../stores/mediaStore/types').MeshPrimitiveType;  // Primitive mesh geometry type
 }
 
 export interface TimelineTrack {
@@ -492,7 +502,7 @@ export interface SerializableClip {
   duration: number;
   inPoint: number;
   outPoint: number;
-  sourceType: 'video' | 'audio' | 'image' | 'text' | 'solid';
+  sourceType: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model';
   naturalDuration?: number;
   thumbnails?: string[];
   linkedClipId?: string;
@@ -526,6 +536,9 @@ export interface SerializableClip {
   // Transition support
   transitionIn?: TimelineTransition;
   transitionOut?: TimelineTransition;
+  // 3D layer support
+  is3D?: boolean;
+  meshType?: import('../stores/mediaStore/types').MeshPrimitiveType;
 }
 
 // Serializable timeline marker (for project save/load)
@@ -565,7 +578,7 @@ export type TransformProperty =
   | 'opacity'
   | 'speed'
   | 'position.x' | 'position.y' | 'position.z'
-  | 'scale.x' | 'scale.y'
+  | 'scale.x' | 'scale.y' | 'scale.z'
   | 'rotation.x' | 'rotation.y' | 'rotation.z';
 
 // Effect property format: effect.{effectId}.{paramName}
