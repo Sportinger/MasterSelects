@@ -553,7 +553,11 @@ export class NestedCompRenderer {
 
     const renderer = getThreeSceneRenderer();
     if (!renderer.isInitialized) {
-      // Not ready yet — remove 3D layers so they don't break the 2D compositor
+      // Trigger lazy initialization (same as RenderDispatcher)
+      renderer.initialize(width, height).then((ok) => {
+        if (ok) log.info('Three.js initialized from nested comp');
+      });
+      // Remove 3D layers for this frame — next frame will render them
       for (let i = indices3D.length - 1; i >= 0; i--) layerData.splice(indices3D[i], 1);
       return;
     }

@@ -531,6 +531,10 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                       nc.isLoading = false;
                       wakePreviewAfterRestore();
                     }, { once: true });
+                  } else if (subType === 'model') {
+                    nc.source = { type: 'model', modelUrl: subFileUrl, naturalDuration: 3600, mediaFileId: nsc.mediaFileId };
+                    nc.is3D = true;
+                    nc.isLoading = false;
                   }
                 }
               }
@@ -745,6 +749,27 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                   }));
                   wakePreviewAfterRestore();
                 }, { once: true });
+              } else if (nestedType === 'model') {
+                // 3D model — synchronous, just set blob URL
+                nestedClip.source = { type: 'model', modelUrl: nestedFileUrl, naturalDuration: 3600, mediaFileId: nestedSerializedClip.mediaFileId };
+                nestedClip.is3D = true;
+                nestedClip.isLoading = false;
+
+                // Update store so render loop picks it up
+                set(state => ({
+                  clips: state.clips.map(c => {
+                    if (c.id !== compClip.id || !c.nestedClips) return c;
+                    return {
+                      ...c,
+                      nestedClips: c.nestedClips.map(nc =>
+                        nc.id === nestedClip.id
+                          ? { ...nc, source: nestedClip.source, is3D: true, isLoading: false }
+                          : nc
+                      ),
+                    };
+                  }),
+                }));
+                wakePreviewAfterRestore();
               }
             }
 
