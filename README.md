@@ -10,9 +10,10 @@
 </p>
 
 <p>
-  <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-1.4.0-blue.svg" alt="Version"></a>
+  <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-1.4.1-blue.svg" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
   <a href="https://app.fossa.com/projects/custom%2b61097%2fmasterselects"><img src="https://app.fossa.com/api/projects/custom%2b61097%2fmasterselects.svg?type=shield" alt="FOSSA Status"></a>
+  <a href="#"><img src="https://img.shields.io/badge/initial_load-~700_kB_gzip-ff6b6b?style=flat-square&labelColor=1a1a2e" alt="~700 kB gzip"></a>
 </p>
 
 <p>
@@ -31,21 +32,35 @@
 
 ---
 
-## Security Model
+## Supported Formats
 
-MasterSelects is a **local-first editor**. Your timeline, media processing, rendering, and most AI-adjacent operations stay on your machine unless you explicitly call an external API. The project now has explicit trust boundaries instead of relying on "it's just localhost".
+<table>
+<tr><th>Import</th><th>Export</th></tr>
+<tr>
+<td>
 
-**Current protections:**
-- **Native Helper bridge:** Binds to `127.0.0.1` only and requires a random startup Bearer token for HTTP and WebSocket bridge operations
-- **Dev bridge hardening:** Vite `/api/ai-tools` and local file routes require a per-session token and reject non-loopback browser origins
-- **Path restrictions:** Local file reads, listings, uploads, and locate/search operations are restricted to explicit allowed roots instead of arbitrary disk access
-- **AI tool policy:** External bridge calls run through caller restrictions and approval/confirmation gates instead of getting unrestricted editor control
-- **Secret handling:** API keys are stored in encrypted IndexedDB, `.keys.enc` import/export is disabled, and logs redact common secret/token patterns
-- **Security verification:** CI includes secret scanning plus JS and Rust security checks, and the repo has dedicated tests for bridge auth, file access, and tool policy behavior
+| Type | Formats |
+|------|---------|
+| **Video** | MP4 (H.264, H.265, AV1), WebM (VP8, VP9, AV1), MOV, MKV |
+| **Audio** | MP3, WAV, AAC, OGG, FLAC, M4A |
+| **Image** | PNG, JPG, WebP, GIF, BMP, AVIF, SVG |
+| **Project** | MasterSelects JSON, FCPXML (import planned) |
+| **Download** | YouTube, TikTok, Instagram, Twitter/X, Vimeo + [all yt-dlp sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) via Native Helper |
 
-**Known boundary:** this is still not "perfect sandboxing". Same-user local processes, malicious browser extensions, and compromised same-origin code can still be dangerous. The goal here is **clear, test-covered local trust boundaries**, not pretending a browser app is magically zero-risk.
+</td>
+<td>
 
-See [Security.md](docs/Features/Security.md) for the full trust model, secret handling, bridge details, and current limitations.
+| Type | Formats |
+|------|---------|
+| **WebCodecs** | MP4 (H.264, H.265, VP9, AV1) — GPU-accelerated |
+| **FFmpeg WASM** | ProRes, DNxHR, FFV1, UTVideo, MJPEG *(experimental)* |
+| **Audio** | AAC (in MP4 container) |
+| **Interchange** | FCPXML (Final Cut Pro / DaVinci Resolve) |
+| **Frames** | PNG sequence |
+
+</td>
+</tr>
+</table>
 
 ---
 
@@ -161,23 +176,25 @@ cargo run --release    # WebSocket :9876, HTTP :9877
 | **AI Control** | Local HTTP bridge for external agents to steer the running editor |
 | **Download** | yt-dlp integration for YouTube, TikTok, Instagram, Twitter/X, Vimeo, and other supported sites |
 
-**Export codecs:** H.264, H.265, VP9, AV1 via WebCodecs (production). ProRes, DNxHR, FFV1, UTVideo, MJPEG via experimental FFmpeg WASM path (single-threaded, requires custom build).
-
 **Platforms:** Windows, Linux, macOS. Building the Native Helper requires Rust. Downloads also require `yt-dlp`. See [Native Helper docs](tools/native-helper/README.md) for platform-specific setup.
 
 ---
 
-## Security Model
+## Security
 
-MasterSelects is local-first: editing, rendering, caching, and most analysis stay in the browser unless you explicitly invoke an external provider or the Native Helper.
+MasterSelects is a **local-first editor**. Editing, rendering, caching, and most analysis stay in the browser unless you explicitly invoke an external provider or the Native Helper.
 
-- **API keys:** stored in IndexedDB with per-browser Web Crypto encryption. This protects against casual inspection, not against same-origin script execution.
-- **Dev bridge:** sensitive Vite routes require a per-session Bearer token and only accept localhost browser origins.
-- **Native Helper:** binds to `127.0.0.1` and requires a random startup token for HTTP and WebSocket bridge operations.
-- **Local file access:** limited to explicit roots such as the project root, temp, Desktop, Documents, Downloads, and Videos, plus optional `MASTERSELECTS_ALLOWED_FILE_ROOTS`.
-- **Key export:** `.keys.enc` export/import is disabled until passphrase-based encryption is implemented.
+- **API keys:** stored in IndexedDB with per-browser Web Crypto encryption
+- **Native Helper:** binds to `127.0.0.1` only, requires a random startup Bearer token for HTTP and WebSocket
+- **Dev bridge:** Vite `/api/ai-tools` and local file routes require a per-session token and reject non-loopback origins
+- **Local file access:** restricted to explicit allowed roots (project root, temp, Desktop, Documents, Downloads, Videos)
+- **AI tool policy:** external bridge calls run through caller restrictions and approval gates
+- **Secret handling:** logs redact common secret/token patterns; `.keys.enc` export disabled
+- **CI checks:** secret scanning, JS and Rust security audits, dedicated tests for bridge auth and file access policy
 
-See [Security docs](docs/Features/Security.md) for the trust model and known limitations, and [Native Helper docs](tools/native-helper/README.md) for auth examples.
+**Known boundary:** this is not perfect sandboxing. Same-user local processes, malicious browser extensions, and compromised same-origin code can still be dangerous. The goal is **clear, test-covered local trust boundaries**.
+
+See [Security.md](docs/Features/Security.md) for the full trust model and limitations.
 
 ---
 
