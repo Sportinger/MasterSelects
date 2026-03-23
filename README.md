@@ -2,22 +2,36 @@
 
 # MasterSelects
 
-<h3>Browser-based Video Compositor</h3>
+<h3>Browser-based Video Compositor & 3D Engine</h3>
+
+<br>
+
+<table>
+<tr>
+<td align="center"><h1>660 KB</h1><sub>gzip initial load</sub></td>
+<td align="center"><h1>138k</h1><sub>lines of TypeScript</sub></td>
+<td align="center"><h1>14</h1><sub>dependencies</sub></td>
+<td align="center"><h1>2,400+</h1><sub>lines of WGSL shaders</sub></td>
+</tr>
+</table>
+
+<br>
 
 <p>
-  GPU-first editing with <b>30 effects</b>, <b>37 blend modes</b>, <b>76 AI tools</b>, and only <b>13 dependencies</b>.<br>
-  Built from scratch in <b>2,500+ lines of WGSL</b> and <b>120k lines of TypeScript</b>.
+  GPU-first editing with <b>30 effects</b>, <b>37 blend modes</b>, <b>76 AI tools</b>, <b>real 3D via Three.js</b>, and only <b>14 dependencies</b>.<br>
+  Import <b>OBJ, glTF, GLB, FBX</b> models directly into the timeline. Full keyframe animation. Nested composition support.
 </p>
 
 <p>
   <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-1.4.2-blue.svg" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
   <a href="https://app.fossa.com/projects/custom%2b61097%2fmasterselects"><img src="https://app.fossa.com/api/projects/custom%2b61097%2fmasterselects.svg?type=shield" alt="FOSSA Status"></a>
-  <a href="#"><img src="https://img.shields.io/badge/initial_load-~700_kB_gzip-ff6b6b?style=flat-square&labelColor=1a1a2e" alt="~700 kB gzip"></a>
+  <a href="#"><img src="https://img.shields.io/badge/initial_load-660_kB_gzip-ff6b6b?style=flat-square&labelColor=1a1a2e" alt="660 kB gzip"></a>
 </p>
 
 <p>
   <a href="#"><img src="https://img.shields.io/badge/WebGPU-990000?style=flat-square&logo=webgpu&logoColor=white" alt="WebGPU"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Three.js-000000?style=flat-square&logo=threedotjs&logoColor=white" alt="Three.js"></a>
   <a href="#"><img src="https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React 19"></a>
   <a href="#"><img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript"></a>
   <a href="#"><img src="https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite"></a>
