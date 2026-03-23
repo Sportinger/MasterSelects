@@ -24,6 +24,10 @@ import { scrubSettleState } from '../../services/scrubSettleState';
 import { vfPipelineMonitor } from '../../services/vfPipelineMonitor';
 import { getCopiedHtmlVideoPreviewFrame } from './htmlVideoPreviewFallback';
 import { flags } from '../featureFlags';
+import type { ThreeSceneRenderer } from '../three/ThreeSceneRenderer';
+import type { Layer3DData, CameraConfig } from '../three/types';
+import { DEFAULT_CAMERA_CONFIG } from '../three/types';
+import { useMediaStore } from '../../stores/mediaStore';
 
 const log = Logger.create('RenderDispatcher');
 
@@ -50,6 +54,7 @@ export interface RenderDeps {
   exportCanvasManager: ExportCanvasManager;
   performanceStats: PerformanceStats;
   renderLoop: RenderLoop | null;
+  threeSceneRenderer?: ThreeSceneRenderer | null;
 }
 
 export class RenderDispatcher {
@@ -60,6 +65,10 @@ export class RenderDispatcher {
   private lastPreviewTargetTimeMs?: number;
   private static readonly MAX_DRAG_FALLBACK_DRIFT_SECONDS = 1.2;
   private static readonly MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS = 0.9;
+  // 3D scene rendering state
+  private threeSceneTexture: GPUTexture | null = null;
+  private threeSceneView: GPUTextureView | null = null;
+  private threeSceneInitializing = false;
 
   constructor(deps: RenderDeps) {
     this.deps = deps;
@@ -206,7 +215,7 @@ export class RenderDispatcher {
 
     const t0 = performance.now();
     const { width, height } = d.renderTargetManager.getResolution();
-    const skipEffects = useTimelineStore.getState().isDraggingPlayhead;
+    const skipEffects = false;
 
     // Collect layer data
     const t1 = performance.now();
@@ -246,6 +255,14 @@ export class RenderDispatcher {
       return;
     }
     this.lastRenderHadContent = true;
+
+    // === 3D Layer Pass (Three.js) ===
+    // If any layers have is3D=true and the feature flag is on,
+    // render them via Three.js to an OffscreenCanvas, import as texture,
+    // and replace individual 3D layers with a single synthetic layer.
+    if (flags.use3DLayers) {
+      this.process3DLayers(layerData, device, width, height);
+    }
 
     // Pre-render nested compositions (batched with main composite)
     const commandBuffers: GPUCommandBuffer[] = [];
@@ -363,6 +380,134 @@ export class RenderDispatcher {
     d.performanceStats.setLayerCount(result.layerCount);
     d.performanceStats.updateStats();
     reportRenderTime(totalTime);
+  }
+
+  /**
+   * Process 3D layers: render them via Three.js to a texture,
+   * then replace individual 3D LayerRenderData entries with a single synthetic entry.
+   */
+  private process3DLayers(layerData: LayerRenderData[], device: GPUDevice, width: number, height: number): void {
+    // Find 3D layers
+    const indices3D: number[] = [];
+    for (let i = 0; i < layerData.length; i++) {
+      if (layerData[i].layer.is3D) {
+        indices3D.push(i);
+      }
+    }
+    if (indices3D.length === 0) return;
+
+    const d = this.deps;
+    const renderer = d.threeSceneRenderer;
+    if (!renderer || !renderer.isInitialized) {
+      // Lazy init happens async — on the first frame with 3D layers,
+      // we trigger init and skip the 3D pass. Next frames will render.
+      if (!this.threeSceneInitializing && !renderer?.isInitialized) {
+        this.threeSceneInitializing = true;
+        import('../three/ThreeSceneRenderer').then(({ getThreeSceneRenderer }) => {
+          const r = getThreeSceneRenderer();
+          r.initialize(width, height).then((ok) => {
+            if (ok) {
+              d.threeSceneRenderer = r;
+              log.info('Three.js 3D renderer initialized lazily');
+            }
+            this.threeSceneInitializing = false;
+          });
+        });
+      }
+      // Remove 3D layers from layerData so the old 2D shader doesn't render them
+      // with its fake perspective distortion while Three.js is loading
+      for (let i = indices3D.length - 1; i >= 0; i--) {
+        layerData.splice(indices3D[i], 1);
+      }
+      return;
+    }
+
+    // Build Layer3DData from the 3D layers
+    const layers3D: Layer3DData[] = [];
+    for (const idx of indices3D) {
+      const data = layerData[idx];
+      const layer = data.layer;
+      const src = layer.source;
+      const rot = typeof layer.rotation === 'number'
+        ? { x: 0, y: 0, z: layer.rotation }
+        : layer.rotation;
+
+      layers3D.push({
+        layerId: layer.id,
+        clipId: layer.sourceClipId || layer.id,
+        position: layer.position,
+        rotation: { x: rot.x, y: rot.y, z: rot.z },
+        scale: { x: layer.scale.x, y: layer.scale.y, z: layer.scale.z ?? 1 },
+        opacity: layer.opacity,
+        blendMode: layer.blendMode,
+        sourceWidth: data.sourceWidth || width,
+        sourceHeight: data.sourceHeight || height,
+        videoElement: src?.videoElement ?? undefined,
+        imageElement: src?.imageElement ?? undefined,
+        canvas: src?.textCanvas ?? undefined,
+        modelUrl: src?.modelUrl ?? undefined,
+      });
+    }
+
+    // Get camera config from active composition
+    const activeComp = useMediaStore.getState().getActiveComposition();
+    const cameraConfig: CameraConfig = activeComp?.camera
+      ? { ...DEFAULT_CAMERA_CONFIG, ...activeComp.camera }
+      : DEFAULT_CAMERA_CONFIG;
+
+    // Render the 3D scene
+    const canvas = renderer.renderScene(layers3D, cameraConfig, width, height);
+    if (!canvas) return;
+
+    // Import the OffscreenCanvas as a GPU texture
+    // Ensure we have a texture of the right size
+    if (!this.threeSceneTexture || this.threeSceneTexture.width !== width || this.threeSceneTexture.height !== height) {
+      this.threeSceneTexture?.destroy();
+      this.threeSceneTexture = device.createTexture({
+        size: { width, height },
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+      this.threeSceneView = this.threeSceneTexture.createView();
+    }
+
+    // Copy OffscreenCanvas content to GPU texture
+    // No flipY needed: WebGL canvas output is already top-left origin
+    device.queue.copyExternalImageToTexture(
+      { source: canvas },
+      { texture: this.threeSceneTexture },
+      { width, height },
+    );
+
+    // Create a synthetic layer for the 3D scene
+    const insertIdx = indices3D[0]; // Insert at position of first 3D layer
+    const syntheticLayer: Layer = {
+      id: '__three_scene__',
+      name: '3D Scene',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      source: { type: 'image' },
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: { x: 0, y: 0, z: 0 },
+    };
+
+    const syntheticData: LayerRenderData = {
+      layer: syntheticLayer,
+      isVideo: false,
+      externalTexture: null,
+      textureView: this.threeSceneView,
+      sourceWidth: width,
+      sourceHeight: height,
+    };
+
+    // Remove 3D layers (in reverse to keep indices valid) and insert synthetic
+    for (let i = indices3D.length - 1; i >= 0; i--) {
+      layerData.splice(indices3D[i], 1);
+    }
+    layerData.splice(insertIdx, 0, syntheticData);
   }
 
   renderEmptyFrame(device: GPUDevice): void {
