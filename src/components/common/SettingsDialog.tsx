@@ -5,14 +5,8 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useDraggableDialog } from './settings/useDraggableDialog';
 import { AppearanceSettings } from './settings/AppearanceSettings';
 import { GeneralSettings } from './settings/GeneralSettings';
-import { PreviewsSettings } from './settings/PreviewsSettings';
-import { ImportSettings } from './settings/ImportSettings';
 import { TranscriptionSettings } from './settings/TranscriptionSettings';
-import { OutputSettings } from './settings/OutputSettings';
-import { PerformanceSettings } from './settings/PerformanceSettings';
 import { ApiKeysSettings } from './settings/ApiKeysSettings';
-import { AIFeaturesSettings } from './settings/AIFeaturesSettings';
-import { MidiSettings } from './settings/MidiSettings';
 import { NativeHelperSettings } from './settings/NativeHelperSettings';
 import { ShortcutsSettings } from './settings/ShortcutsSettings';
 import './settings/SettingsDialog.css';
@@ -22,17 +16,11 @@ interface SettingsDialogProps {
 }
 
 type SettingsCategory =
-  | 'appearance'
   | 'general'
   | 'shortcuts'
-  | 'previews'
-  | 'import'
+  | 'appearance'
   | 'transcription'
-  | 'output'
-  | 'performance'
   | 'nativeHelper'
-  | 'midi'
-  | 'aiFeatures'
   | 'apiKeys';
 
 interface CategoryConfig {
@@ -42,22 +30,16 @@ interface CategoryConfig {
 }
 
 const categories: CategoryConfig[] = [
-  { id: 'appearance', label: 'Appearance', icon: '\uD83C\uDFA8' },
   { id: 'general', label: 'General', icon: '\u2699' },
   { id: 'shortcuts', label: 'Shortcuts', icon: '\u2328' },
-  { id: 'previews', label: 'Previews', icon: '\u25B6' },
-  { id: 'import', label: 'Import', icon: '\uD83D\uDCE5' },
+  { id: 'appearance', label: 'Appearance', icon: '\uD83C\uDFA8' },
   { id: 'transcription', label: 'Transcription', icon: '\uD83C\uDFA4' },
-  { id: 'output', label: 'Output', icon: '\uD83D\uDCE4' },
-  { id: 'performance', label: 'Performance', icon: '\u26A1' },
   { id: 'nativeHelper', label: 'Native Helper', icon: '\u26A1' },
-  { id: 'midi', label: 'MIDI Control', icon: '\uD83C\uDFB9' },
-  { id: 'aiFeatures', label: 'AI Features', icon: '\u2726' },
   { id: 'apiKeys', label: 'API Keys', icon: '\uD83D\uDD11' },
 ];
 
 export function SettingsDialog({ onClose }: SettingsDialogProps) {
-  const [activeCategory, setActiveCategory] = useState<SettingsCategory>('appearance');
+  const [activeCategory, setActiveCategory] = useState<SettingsCategory>('general');
   const dialogRef = useRef<HTMLDivElement>(null);
   const { position, isDragging, handleMouseDown } = useDraggableDialog(dialogRef);
 
@@ -79,18 +61,12 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
 
   const renderCategoryContent = () => {
     switch (activeCategory) {
-      case 'appearance': return <AppearanceSettings />;
       case 'general': return <GeneralSettings />;
       case 'shortcuts': return <ShortcutsSettings />;
-      case 'previews': return <PreviewsSettings />;
-      case 'import': return <ImportSettings />;
+      case 'appearance': return <AppearanceSettings />;
       case 'transcription': return <TranscriptionSettings localKeys={localKeys} />;
-      case 'output': return <OutputSettings />;
-      case 'performance': return <PerformanceSettings />;
       case 'nativeHelper': return <NativeHelperSettings />;
-      case 'midi': return <MidiSettings />;
       case 'apiKeys': return <ApiKeysSettings localKeys={localKeys} onKeyChange={handleKeyChange} />;
-      case 'aiFeatures': return <AIFeaturesSettings />;
       default: return null;
     }
   };

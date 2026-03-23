@@ -3,9 +3,9 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useSettingsStore } from '../../../stores/settingsStore';
-import { ACTION_META, PRESET_LIST } from '../../../services/shortcutPresets';
+import { ACTION_META, PRESET_LIST, PRESETS } from '../../../services/shortcutPresets';
 import { getShortcutRegistry } from '../../../services/shortcutRegistry';
-import type { ShortcutPresetId, ShortcutCategory, KeyCombo, ShortcutActionId } from '../../../services/shortcutTypes';
+import type { ShortcutPresetId, ShortcutCategory, ShortcutMap, KeyCombo, ShortcutActionId } from '../../../services/shortcutTypes';
 import { ShortcutRecorder } from './ShortcutRecorder';
 
 const CATEGORIES_ORDER: ShortcutCategory[] = [
@@ -34,7 +34,16 @@ export function ShortcutsSettings() {
   const [search, setSearch] = useState('');
   const [customPresetName, setCustomPresetName] = useState('');
 
-  const registry = useMemo(() => getShortcutRegistry(), []);
+  const registry = getShortcutRegistry();
+
+  // Compute effective map reactively from store state so combos update when preset changes
+  const effectiveMap = useMemo((): ShortcutMap => {
+    const preset = PRESETS[activeShortcutPreset] || PRESETS.masterselects;
+    if (shortcutOverrides) {
+      return { ...preset.map, ...shortcutOverrides } as ShortcutMap;
+    }
+    return { ...preset.map };
+  }, [activeShortcutPreset, shortcutOverrides]);
 
   // Group actions by category, filtered by search
   const groupedActions = useMemo(() => {
@@ -86,7 +95,7 @@ export function ShortcutsSettings() {
   }, [deleteCustomPreset]);
 
   const getConflictLabel = useCallback((actionId: ShortcutActionId): string | null => {
-    const combos = registry.getCombos(actionId);
+    const combos = effectiveMap[actionId] || [];
     if (combos.length === 0) return null;
 
     for (const combo of combos) {
@@ -97,7 +106,7 @@ export function ShortcutsSettings() {
       }
     }
     return null;
-  }, [registry]);
+  }, [effectiveMap, registry]);
 
   return (
     <div className="settings-category-content">
@@ -200,7 +209,7 @@ export function ShortcutsSettings() {
             <div key={cat} className="shortcut-category-group">
               <div className="shortcut-category-title">{cat}</div>
               {actions.map((meta) => {
-                const combos = registry.getCombos(meta.id);
+                const combos = effectiveMap[meta.id] || [];
                 const isOverridden = !!(shortcutOverrides && meta.id in shortcutOverrides);
                 const conflict = getConflictLabel(meta.id);
 

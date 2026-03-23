@@ -48,7 +48,11 @@ function getStatusColor(status: MatAnyoneSetupStatus): string {
   }
 }
 
-export function AIFeaturesSettings() {
+interface AIFeaturesSettingsProps {
+  embedded?: boolean;
+}
+
+export function AIFeaturesSettings({ embedded }: AIFeaturesSettingsProps = {}) {
   const {
     matanyoneEnabled,
     matanyonePythonPath,
@@ -92,13 +96,11 @@ export function AIFeaturesSettings() {
     }
   }, [setMatAnyonePythonPath]);
 
-  return (
-    <div className="settings-category-content">
-      <h2>AI Features</h2>
-
+  const matAnyoneContent = (
+    <>
       {/* MatAnyone2 Section */}
       <div className="settings-group">
-        <div className="settings-group-title">MatAnyone2 - AI Video Matting</div>
+        <div className="settings-group-title">{embedded ? 'AI Features — MatAnyone2' : 'MatAnyone2 - AI Video Matting'}</div>
 
         <label className="settings-row">
           <span className="settings-label">Enable MatAnyone2</span>
@@ -286,6 +288,15 @@ export function AIFeaturesSettings() {
           </div>
         </>
       )}
+    </>
+  );
+
+  if (embedded) return matAnyoneContent;
+
+  return (
+    <div className="settings-category-content">
+      <h2>AI Features</h2>
+      {matAnyoneContent}
     </div>
   );
 }

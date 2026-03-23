@@ -13,7 +13,7 @@
   border-radius: 6px;
   width: 640px;
   max-width: 95vw;
-  height: 480px;
+  height: 720px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -618,8 +618,6 @@
 }
 
 .shortcut-list {
-  max-height: 240px;
-  overflow-y: auto;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   background: var(--bg-secondary, #222);
@@ -638,9 +636,6 @@
   color: var(--text-tertiary, #888);
   background: var(--bg-tertiary, #1a1a1a);
   border-bottom: 1px solid var(--border-color);
-  position: sticky;
-  top: 0;
-  z-index: 1;
 }
 
 .shortcut-row {

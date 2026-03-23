@@ -1,14 +1,16 @@
 import { useSettingsStore } from '../../../stores/settingsStore';
 
-export function OutputSettings() {
+interface OutputSettingsProps {
+  embedded?: boolean;
+}
+
+export function OutputSettings({ embedded }: OutputSettingsProps) {
   const { outputResolution, fps, setResolution } = useSettingsStore();
 
-  return (
-    <div className="settings-category-content">
-      <h2>Output</h2>
-
+  const content = (
+    <>
       <div className="settings-group">
-        <div className="settings-group-title">Default Resolution (New Compositions)</div>
+        <div className="settings-group-title">{embedded ? 'Output — Default Resolution' : 'Default Resolution (New Compositions)'}</div>
         <p className="settings-hint">
           Applies only to newly created compositions. Active composition resolution is set per composition in the Media Panel.
         </p>
@@ -51,6 +53,15 @@ export function OutputSettings() {
           Current: {fps} FPS (configured per composition)
         </p>
       </div>
+    </>
+  );
+
+  if (embedded) return content;
+
+  return (
+    <div className="settings-category-content">
+      <h2>Output</h2>
+      {content}
     </div>
   );
 }
