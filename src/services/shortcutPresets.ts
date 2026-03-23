@@ -107,31 +107,91 @@ const masterselects = createPreset('masterselects', 'MasterSelects', {
 });
 
 const premiere = createPreset('premiere', 'Premiere Pro', {
-  // C = Razor tool (same as default)
+  // Ctrl+L = Loop (Premiere default)
+  'playback.toggleLoop': [{ key: 'l', ctrl: true }],
+  // Ctrl+Shift+X = Clear In/Out
+  'edit.clearInOut': [{ key: 'x', ctrl: true, shift: true }],
+  // C = Razor tool
   'tool.cutToggle': [{ key: 'c' }],
-  // Ctrl+K = Split (Add to playhead)
+  // Ctrl+K = Add Edit (split at playhead)
   'edit.splitAtPlayhead': [{ key: 'k', ctrl: true }],
+  // Ctrl+Alt+N = New Project (Ctrl+N is New Sequence in Premiere)
+  'project.new': [{ key: 'n', ctrl: true, alt: true }],
+  // Redo: Ctrl+Shift+Z only (no Ctrl+Y in Premiere default)
+  'history.redo': [{ key: 'z', ctrl: true, shift: true }],
+  // Blend modes: N/A in Premiere — keep MasterSelects default
 });
 
 const davinci = createPreset('davinci', 'DaVinci Resolve', {
+  // Ctrl+/ = Loop
+  'playback.toggleLoop': [{ key: '/', ctrl: true }],
+  // Alt+X = Clear In/Out
+  'edit.clearInOut': [{ key: 'x', alt: true }],
   // B = Blade tool
   'tool.cutToggle': [{ key: 'b' }],
   // Ctrl+B = Split at playhead
   'edit.splitAtPlayhead': [{ key: 'b', ctrl: true }],
+  // Backspace = lift, Delete = ripple delete (both remove clips)
+  'edit.delete': [{ key: 'backspace' }, { key: 'delete' }],
+  // No default New/Open Project shortcuts in DaVinci
+  'project.new': [],
+  'project.open': [],
+  // Redo: Ctrl+Shift+Z only
+  'history.redo': [{ key: 'z', ctrl: true, shift: true }],
+  // Blend modes: N/A in DaVinci — keep MasterSelects default
 });
 
 const finalcut = createPreset('finalcut', 'Final Cut Pro', {
+  // Cmd+L = Loop (ctrl maps to Cmd on Mac)
+  'playback.toggleLoop': [{ key: 'l', ctrl: true }],
+  // Option+X = Clear In/Out (alt maps to Option on Mac)
+  'edit.clearInOut': [{ key: 'x', alt: true }],
   // B = Blade tool
   'tool.cutToggle': [{ key: 'b' }],
-  // Ctrl+B = Split at playhead (Cmd+B on Mac, ctrl maps to both)
+  // Cmd+B = Blade at playhead
   'edit.splitAtPlayhead': [{ key: 'b', ctrl: true }],
+  // Delete = ripple delete (FCP default)
+  'edit.delete': [{ key: 'delete' }, { key: 'backspace' }],
+  // Cmd+N = New Project
+  'project.new': [{ key: 'n', ctrl: true }],
+  // FCP auto-saves — no Save/Save As shortcuts
+  'project.save': [],
+  'project.saveAs': [],
+  // Redo: Cmd+Shift+Z only
+  'history.redo': [{ key: 'z', ctrl: true, shift: true }],
+  // Blend modes: N/A in FCP
 });
 
 const aftereffects = createPreset('aftereffects', 'After Effects', {
-  // C = Razor (same as default)
-  'tool.cutToggle': [{ key: 'c' }],
+  // AE has no JKL shuttle — Space is play/pause, no separate pause/forward/reverse
+  'playback.pause': [],
+  'playback.playForward': [],
+  'playback.playReverse': [],
+  // No loop toggle shortcut in AE (Preview panel setting)
+  'playback.toggleLoop': [],
+  // Page Down / Ctrl+Right = frame forward, Page Up / Ctrl+Left = frame backward
+  'nav.frameForward': [{ key: 'pagedown' }, { key: 'arrowright', ctrl: true }],
+  'nav.frameBackward': [{ key: 'pageup' }, { key: 'arrowleft', ctrl: true }],
+  // B = Set work area begin (In), N = Set work area end (Out)
+  'edit.setIn': [{ key: 'b' }],
+  'edit.setOut': [{ key: 'n' }],
+  // No default Clear In/Out in AE
+  'edit.clearInOut': [],
+  // Numpad * = Add marker (use Shift+8 as alternative since not everyone has numpad)
+  'edit.addMarker': [{ code: 'NumpadMultiply' }, { key: '8', shift: true }],
   // Ctrl+Shift+D = Split layer
   'edit.splitAtPlayhead': [{ key: 'd', ctrl: true, shift: true }],
+  // Delete only (no Backspace default)
+  'edit.delete': [{ key: 'delete' }],
+  // Shift+= / Shift+- = cycle blend modes (AE actually has this!)
+  'edit.blendModeNext': [{ key: '=', shift: true }],
+  'edit.blendModePrev': [{ key: '-', shift: true }],
+  // No Razor tool in AE
+  'tool.cutToggle': [],
+  // Ctrl+Alt+N = New Project (Ctrl+N is New Comp in AE)
+  'project.new': [{ key: 'n', ctrl: true, alt: true }],
+  // Redo: Ctrl+Shift+Z only
+  'history.redo': [{ key: 'z', ctrl: true, shift: true }],
 });
 
 const beginner = createPreset('beginner', 'Beginner', {
