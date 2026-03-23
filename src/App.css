@@ -2102,6 +2102,26 @@ input, textarea {
   pointer-events: none;
 }
 
+.effect-item.dragging {
+  opacity: 0.4;
+}
+
+.effect-item.drop-target {
+  border-top: 2px solid var(--accent-color, #4fc3f7);
+}
+
+.effect-drag-handle {
+  cursor: grab;
+  opacity: 0.4;
+  font-size: 12px;
+  user-select: none;
+  line-height: 1;
+}
+
+.effect-drag-handle:hover {
+  opacity: 0.8;
+}
+
 .effect-header {
   display: flex;
   align-items: center;
@@ -2614,6 +2634,26 @@ input, textarea {
   background: transparent;
 }
 
+/* AE-style rotation: "2x +30.0°" */
+.rotation-value-ae {
+  gap: 2px;
+}
+
+.rotation-value-ae .draggable-number:first-of-type {
+  opacity: 0.6;
+  font-size: var(--font-2xs);
+  min-width: 20px;
+  flex-shrink: 0;
+}
+
+.rotation-value-ae .draggable-number:first-of-type:hover {
+  opacity: 1;
+}
+
+.rotation-row {
+  flex-wrap: wrap;
+}
+
 .properties-section .control-row input[type="range"] {
   flex: 1;
 }
@@ -2731,17 +2771,55 @@ input, textarea {
 }
 
 .properties-tab-content.effects-tab .effect-add-row {
+  display: flex;
+  gap: var(--sp-1-5);
+  align-items: center;
   margin-bottom: var(--sp-2);
 }
 
 .properties-tab-content.effects-tab .effect-add-row select {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: var(--sp-1-5) var(--sp-2-5);
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: var(--font-md);
+}
+
+.effect-mode-toggle {
+  display: flex;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.effect-mode-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-1-5) var(--sp-2);
+  background: var(--bg-tertiary);
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.effect-mode-btn:not(:last-child) {
+  border-right: 1px solid var(--border-color);
+}
+
+.effect-mode-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.effect-mode-btn.active {
+  background: var(--accent-color);
+  color: #fff;
 }
 
 .properties-tab-content.masks-tab .section-header-with-button {

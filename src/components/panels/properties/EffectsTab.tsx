@@ -184,7 +184,12 @@ export function EffectsTab({ clipId, effects }: EffectsTabProps) {
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
   const clips = useTimelineStore(state => state.clips);
   // Actions from getState() - stable, no subscription needed
-  const { addClipEffect, removeClipEffect, updateClipEffect, setClipEffectEnabled, setPropertyValue, getInterpolatedEffects } = useTimelineStore.getState();
+  const { addClipEffect, removeClipEffect, updateClipEffect, setClipEffectEnabled, reorderClipEffect, setPropertyValue, getInterpolatedEffects } = useTimelineStore.getState();
+
+  // Drag-and-drop reorder state
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dropIdx, setDropIdx] = useState<number | null>(null);
+  const [effectMode, setEffectMode] = useState<'video' | 'audio'>('video');
 
   const handleBatchStart = useCallback(() => startBatch('Adjust effect'), []);
   const handleBatchEnd = useCallback(() => endBatch(), []);
@@ -198,7 +203,7 @@ export function EffectsTab({ clipId, effects }: EffectsTabProps) {
   return (
     <div className="properties-tab-content effects-tab">
       <div className="effect-add-row">
-        <select onChange={(e) => { if (e.target.value) { addClipEffect(clipId, e.target.value); e.target.value = ''; } }} defaultValue="">
+        <select onChange={(e) => { if (e.target.value) { addClipEffect(clipId, e.target.value); e.target.value = ''; } }} defaultValue="" disabled={effectMode === 'audio'}>
           <option value="" disabled>+ Add Effect</option>
           {effectCategories.map(({ category, effects: catEffects }) => (
             <optgroup key={category} label={category.charAt(0).toUpperCase() + category.slice(1)}>
@@ -208,18 +213,73 @@ export function EffectsTab({ clipId, effects }: EffectsTabProps) {
             </optgroup>
           ))}
         </select>
+        <div className="effect-mode-toggle">
+          <button
+            className={`effect-mode-btn ${effectMode === 'video' ? 'active' : ''}`}
+            onClick={() => setEffectMode('video')}
+            title="Video Effects"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <polyline points="8 21 12 17 16 21" />
+            </svg>
+          </button>
+          <button
+            className={`effect-mode-btn ${effectMode === 'audio' ? 'active' : ''}`}
+            onClick={() => setEffectMode('audio')}
+            title="Audio Effects"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 18V5l12-2v13" />
+              <circle cx="6" cy="18" r="3" />
+              <circle cx="18" cy="16" r="3" />
+            </svg>
+          </button>
+        </div>
       </div>
 
-      {effects.length === 0 ? (
+      {effectMode === 'audio' ? (
+        <div className="panel-empty"><p>Audio effects coming soon</p></div>
+      ) : effects.length === 0 ? (
         <div className="panel-empty"><p>No effects applied</p></div>
       ) : (
         <div className="effects-list">
-          {effects.map((effect) => {
+          {effects.map((effect, idx) => {
             const interpolated = interpolatedEffects.find(e => e.id === effect.id) || effect;
             const isEnabled = effect.enabled !== false; // default to true if undefined
+            const isDragging = dragIdx === idx;
+            const isDropTarget = dropIdx === idx;
             return (
-              <div key={effect.id} className={`effect-item ${!isEnabled ? 'bypassed' : ''}`}>
+              <div
+                key={effect.id}
+                className={`effect-item ${!isEnabled ? 'bypassed' : ''} ${isDragging ? 'dragging' : ''} ${isDropTarget ? 'drop-target' : ''}`}
+                draggable
+                onDragStart={(e) => {
+                  setDragIdx(idx);
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('text/plain', String(idx));
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  setDropIdx(idx);
+                }}
+                onDragLeave={() => { if (dropIdx === idx) setDropIdx(null); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const fromIdx = dragIdx ?? parseInt(e.dataTransfer.getData('text/plain'), 10);
+                  if (!isNaN(fromIdx) && fromIdx !== idx) {
+                    startBatch('Reorder effect');
+                    reorderClipEffect(clipId, effects[fromIdx].id, idx);
+                    endBatch();
+                  }
+                  setDragIdx(null);
+                  setDropIdx(null);
+                }}
+                onDragEnd={() => { setDragIdx(null); setDropIdx(null); }}
+              >
                 <div className="effect-header">
+                  <span className="effect-drag-handle" title="Drag to reorder">&#x2630;</span>
                   <button
                     className={`effect-bypass-btn ${!isEnabled ? 'bypassed' : ''}`}
                     onClick={() => setClipEffectEnabled(clipId, effect.id, !isEnabled)}
