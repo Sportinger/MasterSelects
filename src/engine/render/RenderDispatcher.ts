@@ -446,6 +446,8 @@ export class RenderDispatcher {
         imageElement: src?.imageElement ?? undefined,
         canvas: src?.textCanvas ?? undefined,
         modelUrl: src?.modelUrl ?? undefined,
+        modelFileName: layer.name,  // Original filename for format detection
+        wireframe: layer.wireframe,
       });
     }
 

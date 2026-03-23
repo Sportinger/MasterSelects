@@ -345,32 +345,39 @@ export class LayerBuilderService {
    * @param opacityOverride - Optional opacity override for transitions (0-1)
    */
   private buildLayerForClip(clip: TimelineClip, layerIndex: number, ctx: FrameContext, opacityOverride?: number): Layer | null {
+    let layer: Layer | null = null;
+
     // Nested composition
     if (clip.isComposition && clip.nestedClips && clip.nestedClips.length > 0) {
-      return this.buildNestedCompLayer(clip, layerIndex, ctx, opacityOverride);
+      layer = this.buildNestedCompLayer(clip, layerIndex, ctx, opacityOverride);
     }
-
     // Native decoder (ProRes/DNxHD turbo mode)
-    if (clip.source?.nativeDecoder) {
-      return this.buildNativeDecoderLayer(clip, layerIndex, ctx, opacityOverride);
+    else if (clip.source?.nativeDecoder) {
+      layer = this.buildNativeDecoderLayer(clip, layerIndex, ctx, opacityOverride);
     }
-
     // Video clip
-    if (this.hasRenderableVideoSource(clip.source)) {
-      return this.buildVideoLayer(clip, layerIndex, ctx, opacityOverride);
+    else if (this.hasRenderableVideoSource(clip.source)) {
+      layer = this.buildVideoLayer(clip, layerIndex, ctx, opacityOverride);
     }
-
     // Image clip
-    if (clip.source?.imageElement) {
-      return this.buildImageLayer(clip, layerIndex, ctx, opacityOverride);
+    else if (clip.source?.imageElement) {
+      layer = this.buildImageLayer(clip, layerIndex, ctx, opacityOverride);
     }
-
     // Text clip
-    if (clip.source?.textCanvas) {
-      return this.buildTextLayer(clip, layerIndex, ctx, opacityOverride);
+    else if (clip.source?.textCanvas) {
+      layer = this.buildTextLayer(clip, layerIndex, ctx, opacityOverride);
+    }
+    // 3D Model clip
+    else if (clip.source?.type === 'model') {
+      layer = this.buildModelLayer(clip, layerIndex, ctx, opacityOverride);
     }
 
-    return null;
+    // Pass through 3D flag from clip to layer
+    if (layer && clip.is3D) {
+      layer.is3D = true;
+    }
+
+    return layer;
   }
 
   /**
@@ -701,6 +708,41 @@ export class LayerBuilderService {
       position: transform.position,
       scale: transform.scale,
       rotation: transform.rotation,
+    };
+
+    this.addMaskProperties(layer, clip);
+    return layer;
+  }
+
+  /**
+   * Build 3D model layer — rendered by Three.js
+   */
+  private buildModelLayer(clip: TimelineClip, layerIndex: number, ctx: FrameContext, opacityOverride?: number): Layer {
+    const timeInfo = getClipTimeInfo(ctx, clip);
+    const transform = this.transformCache.getTransform(
+      `${ctx.activeCompId}_${layerIndex}`,
+      ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime)
+    );
+    const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
+
+    const finalOpacity = opacityOverride !== undefined
+      ? transform.opacity * opacityOverride
+      : transform.opacity;
+
+    const layer: Layer = {
+      id: `${ctx.activeCompId}_layer_${layerIndex}`,
+      name: clip.name,
+      sourceClipId: clip.id,
+      visible: true,
+      opacity: finalOpacity,
+      blendMode: transform.blendMode as BlendMode,
+      source: { type: 'model', modelUrl: clip.source?.modelUrl },
+      effects,
+      position: transform.position,
+      scale: transform.scale,
+      rotation: transform.rotation,
+      is3D: true,
+      wireframe: clip.wireframe,
     };
 
     this.addMaskProperties(layer, clip);

@@ -487,9 +487,11 @@ async function refreshMediaMetadata(): Promise<void> {
 
     await Promise.all(batch.map(async (mediaFile) => {
       if (!mediaFile.file) return;
+      // Skip 3D models — they have no video/audio metadata
+      if (mediaFile.type === 'model') return;
 
       try {
-        const info = await getMediaInfo(mediaFile.file, mediaFile.type);
+        const info = await getMediaInfo(mediaFile.file, mediaFile.type as 'video' | 'audio' | 'image');
 
         // Update the file in the store
         useMediaStore.setState((state) => ({

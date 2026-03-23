@@ -130,7 +130,7 @@ function PropertyRow({
   const clipLocalTime = playheadPosition - clip.startTime;
   const isWithinClip = clipLocalTime >= 0 && clipLocalTime <= clip.duration;
 
-  // Get current interpolated value
+  // Get current interpolated value (keyframes in deps triggers recalc when values change)
   const currentValue = useMemo(() => {
     if (!isWithinClip) return 0;
     // Effect properties use getInterpolatedEffects
@@ -141,7 +141,7 @@ function PropertyRow({
     // Transform properties use getInterpolatedTransform
     const transform = getInterpolatedTransform(clipId, clipLocalTime);
     return getValueFromTransform(transform, prop);
-  }, [clipId, clipLocalTime, isWithinClip, getInterpolatedTransform, getInterpolatedEffects, prop]);
+  }, [clipId, clipLocalTime, isWithinClip, getInterpolatedTransform, getInterpolatedEffects, prop, keyframes]);
 
   // Find prev/next keyframes relative to playhead
   const prevKeyframe = useMemo(() => {
@@ -312,7 +312,7 @@ function TrackPropertyLabels({
   onToggleCurveExpanded,
 }: {
   trackId: string;
-  selectedClip: { id: string; startTime: number; duration: number; effects?: Array<{ id: string; name: string; params: Record<string, unknown> }> } | null;
+  selectedClip: { id: string; startTime: number; duration: number; is3D?: boolean; effects?: Array<{ id: string; name: string; params: Record<string, unknown> }> } | null;
   clipKeyframes: Map<string, Array<{ id: string; clipId: string; time: number; property: AnimatableProperty; value: number; easing: string }>>;
   playheadPosition: number;
   getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
@@ -330,8 +330,15 @@ function TrackPropertyLabels({
   const keyframeProperties = useMemo(() => {
     const props = new Set<string>();
     keyframes.forEach((kf) => props.add(kf.property));
+    // Hide 3D-only properties when clip is not 3D
+    if (!selectedClip?.is3D) {
+      props.delete('rotation.x');
+      props.delete('rotation.y');
+      props.delete('position.z');
+      props.delete('scale.z');
+    }
     return props;
-  }, [keyframes]);
+  }, [keyframes, selectedClip?.is3D]);
 
   // If no clip is selected in this track, show nothing
   if (!selectedClip || keyframeProperties.size === 0) {

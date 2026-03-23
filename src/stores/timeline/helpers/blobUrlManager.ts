@@ -5,7 +5,7 @@ import { Logger } from '../../../services/logger';
 
 const log = Logger.create('BlobUrlManager');
 
-type UrlType = 'video' | 'audio' | 'image' | 'file';
+type UrlType = 'video' | 'audio' | 'image' | 'model' | 'file';
 
 interface ManagedUrl {
   url: string;

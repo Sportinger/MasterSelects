@@ -227,6 +227,18 @@ export class LayerCollector {
       return null;
     }
 
+    // 3D Model sources — no GPU texture needed, handled by ThreeSceneRenderer
+    if (sourceType === 'model') {
+      return {
+        layer,
+        isVideo: false,
+        externalTexture: null,
+        textureView: null,
+        sourceWidth: 0,
+        sourceHeight: 0,
+      };
+    }
+
     // Text/Solid sources - skip video/image checks
     if (sourceType === 'text' || sourceType === 'solid') {
       if (source.textCanvas) {

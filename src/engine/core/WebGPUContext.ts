@@ -53,30 +53,78 @@ export class WebGPUContext {
     return this.initPromise;
   }
 
+  /** Race a promise against a timeout */
+  private withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T | null> {
+    return Promise.race([
+      promise,
+      new Promise<null>((resolve) => {
+        setTimeout(() => {
+          log.warn(`${label} timed out after ${ms}ms`);
+          resolve(null);
+        }, ms);
+      }),
+    ]);
+  }
+
   private async doInitialize(): Promise<boolean> {
     try {
-      // Always request high-performance to ensure discrete GPU is used
-      // This is critical on systems with both iGPU and dGPU (AMD iGPU + NVIDIA dGPU)
-      // Without this, Chrome may select the iGPU which can have Vulkan memory issues on Linux
+      // Try with power preference first, then fallback without it
+      // Safari on single-GPU Macs can fail with 'high-performance'
       log.info(`Requesting adapter with powerPreference: ${this.currentPowerPreference}`);
-      this.adapter = await navigator.gpu.requestAdapter({
-        powerPreference: this.currentPowerPreference,
-      });
-      log.info('Adapter obtained');
+      this.adapter = await this.withTimeout(
+        navigator.gpu.requestAdapter({ powerPreference: this.currentPowerPreference }),
+        5000,
+        'requestAdapter (with powerPreference)',
+      );
 
+      // Fallback: try without powerPreference
       if (!this.adapter) {
-        log.error('Failed to get GPU adapter');
-        return false;
+        log.warn('First adapter request failed, retrying without powerPreference...');
+        this.adapter = await this.withTimeout(
+          navigator.gpu.requestAdapter(),
+          5000,
+          'requestAdapter (no preference)',
+        );
       }
 
-      // Request device with explicit texture limit
+      if (!this.adapter) {
+        log.error('Failed to get GPU adapter (all attempts)');
+        return false;
+      }
+      log.info('Adapter obtained');
+
+      // Request device — try with limits, fallback without
       log.info('Requesting GPU device...');
-      this.device = await this.adapter.requestDevice({
-        requiredFeatures: [],
-        requiredLimits: {
-          maxTextureDimension2D: 4096,
-        },
-      });
+      try {
+        this.device = await this.withTimeout(
+          this.adapter.requestDevice({
+            requiredFeatures: [],
+            requiredLimits: {
+              maxTextureDimension2D: 4096,
+            },
+          }),
+          5000,
+          'requestDevice (with limits)',
+        );
+      } catch (e) {
+        log.warn('Device request with limits failed, retrying without limits...', e);
+        this.device = null;
+      }
+
+      // Fallback: no required limits
+      if (!this.device) {
+        log.warn('Retrying device request without requiredLimits...');
+        this.device = await this.withTimeout(
+          this.adapter.requestDevice(),
+          5000,
+          'requestDevice (no limits)',
+        );
+      }
+
+      if (!this.device) {
+        log.error('Failed to create GPU device');
+        return false;
+      }
       log.info('GPU device created successfully');
 
       this.device.lost.then((info) => {

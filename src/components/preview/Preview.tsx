@@ -38,6 +38,8 @@ interface PreviewProps {
 
 export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps) {
   const { isEngineReady } = useEngine();
+  const engineInitFailed = useEngineStore((s) => s.engineInitFailed);
+  const engineInitError = useEngineStore((s) => s.engineInitError);
   const engineStats = useEngineStore(s => s.engineStats);
   const { clips, selectedClipIds, selectClip, updateClipTransform, maskEditMode, layers, selectedLayerId, selectLayer, updateLayer, tracks } = useTimelineStore(useShallow(s => ({
     clips: s.clips,
@@ -495,7 +497,17 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         />
 
         <div className={`preview-canvas-wrapper ${showTransparencyGrid ? 'show-transparency-grid' : ''}`} style={viewTransform}>
-          {!isEngineReady ? (
+          {engineInitFailed ? (
+            <div className="loading">
+              <p style={{ color: '#ff6b6b', fontWeight: 'bold', marginBottom: 8 }}>WebGPU Initialization Failed</p>
+              <p style={{ fontSize: '0.85em', opacity: 0.8, maxWidth: 400, textAlign: 'center', lineHeight: 1.5 }}>
+                {engineInitError || 'Unknown error'}
+              </p>
+              <p style={{ fontSize: '0.75em', opacity: 0.5, marginTop: 12 }}>
+                Try: chrome://flags → #enable-unsafe-webgpu → Enabled
+              </p>
+            </div>
+          ) : !isEngineReady ? (
             <div className="loading">
               <div className="loading-spinner" />
               <p>Initializing WebGPU...</p>

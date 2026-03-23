@@ -198,6 +198,7 @@ export interface ClipEffectActions {
   removeClipEffect: (clipId: string, effectId: string) => void;
   updateClipEffect: (clipId: string, effectId: string, params: Partial<Effect['params']>) => void;
   setClipEffectEnabled: (clipId: string, effectId: string, enabled: boolean) => void;
+  reorderClipEffect: (clipId: string, effectId: string, newIndex: number) => void;
 }
 
 // Multicam linked group actions (extracted to linkedGroupSlice)
@@ -231,6 +232,7 @@ export interface CoreClipActions {
   getClipChildren: (clipId: string) => TimelineClip[];
   setClipPreservesPitch: (clipId: string, preservesPitch: boolean) => void;
   refreshCompClipNestedData: (sourceCompositionId: string) => Promise<void>;
+  toggle3D: (clipId: string) => void;
 }
 
 // Combined ClipActions = all sub-interfaces
@@ -380,7 +382,7 @@ export interface ClipboardClipData {
   duration: number;
   inPoint: number;
   outPoint: number;
-  sourceType: 'video' | 'audio' | 'image' | 'text' | 'solid';
+  sourceType: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model';
   naturalDuration?: number;
   transform: ClipTransform;
   effects: Effect[];

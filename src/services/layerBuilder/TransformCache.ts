@@ -9,7 +9,7 @@ import { LAYER_BUILDER_CONSTANTS } from './types';
  */
 export interface LayerTransform {
   position: { x: number; y: number; z: number };
-  scale: { x: number; y: number };
+  scale: { x: number; y: number; z?: number };
   rotation: { x: number; y: number; z: number };
   opacity: number;
   blendMode: string;
@@ -48,10 +48,13 @@ export class TransformCache {
       z: transform.position.z,
     };
 
-    const scale = {
+    const scale: { x: number; y: number; z?: number } = {
       x: transform.scale.x,
       y: transform.scale.y,
     };
+    if (transform.scale.z !== undefined) {
+      scale.z = transform.scale.z;
+    }
 
     // Convert rotation from degrees to radians
     const rotation = {

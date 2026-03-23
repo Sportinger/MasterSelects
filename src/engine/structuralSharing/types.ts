@@ -15,7 +15,7 @@ export interface SerializedClipState {
   duration: number;
   inPoint: number;
   outPoint: number;
-  sourceType: 'video' | 'audio' | 'image' | 'text' | 'solid';
+  sourceType: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model';
   mediaFileId?: string;
   transform: TimelineClip['transform'];
   effects: TimelineClip['effects'];

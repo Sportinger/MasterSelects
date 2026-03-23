@@ -298,23 +298,55 @@ export function DraggableNumber({ value, onChange, defaultValue, sensitivity = 2
   const inputRef = useRef<HTMLSpanElement>(null);
   const accumulatedDelta = useRef(0);
   const startValue = useRef(0);
+  const lastClientX = useRef(0);
+  const hasPointerLock = useRef(false);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
     accumulatedDelta.current = 0;
     startValue.current = value;
+    lastClientX.current = e.clientX;
+    hasPointerLock.current = false;
     onDragStart?.();
 
+    // Try pointer lock (hides cursor, infinite drag range) — but don't rely on it
     const element = inputRef.current;
-    if (element) element.requestPointerLock();
+    if (element) {
+      try {
+        const result = element.requestPointerLock();
+        // Modern browsers return a Promise
+        if (result && typeof (result as Promise<void>).then === 'function') {
+          (result as Promise<void>).then(
+            () => { hasPointerLock.current = true; },
+            () => { hasPointerLock.current = false; },
+          );
+        } else {
+          // Older browsers: check synchronously after a tick
+          requestAnimationFrame(() => {
+            hasPointerLock.current = document.pointerLockElement === element;
+          });
+        }
+      } catch {
+        hasPointerLock.current = false;
+      }
+    }
 
     const handleMouseMove = (e: MouseEvent) => {
       let speedMultiplier = 1;
       if (e.ctrlKey) speedMultiplier = 0.01;
       else if (e.shiftKey) speedMultiplier = 0.1;
 
-      accumulatedDelta.current += e.movementX * speedMultiplier;
+      // Use movementX when pointer lock is active, clientX delta as fallback
+      let dx: number;
+      if (hasPointerLock.current && document.pointerLockElement) {
+        dx = e.movementX;
+      } else {
+        dx = e.clientX - lastClientX.current;
+        lastClientX.current = e.clientX;
+      }
+
+      accumulatedDelta.current += dx * speedMultiplier;
       const deltaValue = accumulatedDelta.current / sensitivity;
       let newValue = startValue.current + deltaValue;
       // Clamp to min/max if specified
@@ -325,7 +357,10 @@ export function DraggableNumber({ value, onChange, defaultValue, sensitivity = 2
     };
 
     const handleMouseUp = () => {
-      document.exitPointerLock();
+      if (hasPointerLock.current || document.pointerLockElement) {
+        document.exitPointerLock();
+      }
+      hasPointerLock.current = false;
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       onDragEnd?.();

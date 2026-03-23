@@ -124,6 +124,8 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         textProperties: clip.textProperties,
         // Solid clip support
         solidColor: clip.source?.type === 'solid' ? (clip.solidColor || clip.name.replace('Solid ', '')) : undefined,
+        // 3D layer support
+        is3D: clip.is3D || undefined,
       };
     });
 
@@ -989,6 +991,8 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         reversed: serializedClip.reversed,
         speed: serializedClip.speed,
         preservesPitch: serializedClip.preservesPitch,
+        // 3D layer support
+        is3D: serializedClip.is3D,
       };
 
       // Add clip to state
@@ -1186,6 +1190,26 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           }));
           wakePreviewAfterRestore();
         }, { once: true });
+      } else if (type === 'model') {
+        // 3D Model clips — just need a blob URL, Three.js handles loading
+        set(state => ({
+          clips: state.clips.map(c =>
+            c.id === clip.id
+              ? {
+                  ...c,
+                  source: {
+                    type: 'model' as const,
+                    modelUrl: fileUrl,
+                    naturalDuration: serializedClip.naturalDuration || 3600,
+                    mediaFileId: serializedClip.mediaFileId,
+                  },
+                  is3D: true,
+                  isLoading: false,
+                }
+              : c
+          ),
+        }));
+        wakePreviewAfterRestore();
       }
     }
   },
