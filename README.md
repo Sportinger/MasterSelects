@@ -6,7 +6,10 @@
 
 <br>
 
-<a href="#"><img src="https://img.shields.io/badge/initial_load-660_kB_gzip-ff6b6b?style=for-the-badge&labelColor=1a1a2e&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCI+PHBhdGggZD0iTTEzIDJMMyAxNGgxMGwtMS04IDExIDEySDEzbDEtOHoiLz48L3N2Zz4=" alt="660 kB gzip"></a>
+<table><tr><td align="center" style="border:none;background:#0d1117;">
+<h1>&#9889; 660 KB <sub>gzip</sub></h1>
+<sup><b>initial load &mdash; entire app, zero lazy chunks needed</b></sup>
+</td></tr></table>
 
 <br><br>
 
