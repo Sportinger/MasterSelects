@@ -194,6 +194,7 @@ export function TutorialOverlay({ onClose, onSkip, part = 1, campaignSteps, camp
   const [isClosing, setIsClosing] = useState(false);
   const activatePanelType = useDockStore((s) => s.activatePanelType);
   const setUserBackground = useSettingsStore((s) => s.setUserBackground);
+  const setActiveShortcutPreset = useSettingsStore((s) => s.setActiveShortcutPreset);
   const closingRef = useRef(false);
 
   const isWelcome = stepIndex === -1;
@@ -353,8 +354,19 @@ export function TutorialOverlay({ onClose, onSkip, part = 1, campaignSteps, camp
 
   const handleWelcomeSelect = useCallback((id: string) => {
     setUserBackground(id);
+    // Apply matching keyboard shortcut preset
+    const presetMap: Record<string, string> = {
+      premiere: 'premiere',
+      davinci: 'davinci',
+      finalcut: 'finalcut',
+      aftereffects: 'aftereffects',
+      beginner: 'beginner',
+    };
+    if (presetMap[id]) {
+      setActiveShortcutPreset(presetMap[id] as 'premiere' | 'davinci' | 'finalcut' | 'aftereffects' | 'beginner');
+    }
     setStepIndex(0);
-  }, [setUserBackground]);
+  }, [setUserBackground, setActiveShortcutPreset]);
 
   const tooltipStyle = getTooltipStyle();
 

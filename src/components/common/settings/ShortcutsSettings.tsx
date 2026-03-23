@@ -135,51 +135,49 @@ export function ShortcutsSettings() {
       </div>
 
       {/* Custom Presets */}
-      {(customPresets.length > 0 || true) && (
-        <div className="settings-group">
-          <div className="settings-group-title">Custom Presets</div>
+      <div className="settings-group">
+        <div className="settings-group-title">Custom Presets</div>
 
-          <div className="settings-row shortcut-custom-save">
-            <input
-              type="text"
-              className="settings-input shortcut-preset-name-input"
-              placeholder="Preset name..."
-              value={customPresetName}
-              onChange={(e) => setCustomPresetName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleSaveCustom(); }}
-            />
-            <button
-              className="settings-button"
-              onClick={handleSaveCustom}
-              disabled={!customPresetName.trim()}
-            >
-              Save Current
-            </button>
-          </div>
-
-          {customPresets.length > 0 && (
-            <div className="shortcut-custom-list">
-              {customPresets.map((preset) => (
-                <div key={preset.name} className="shortcut-custom-item">
-                  <span className="shortcut-custom-name">{preset.name}</span>
-                  <button
-                    className="settings-button shortcut-custom-load-btn"
-                    onClick={() => handleLoadCustom(preset.name)}
-                  >
-                    Load
-                  </button>
-                  <button
-                    className="settings-button shortcut-custom-delete-btn"
-                    onClick={() => handleDeleteCustom(preset.name)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+        <div className="settings-row shortcut-custom-save">
+          <input
+            type="text"
+            className="settings-input shortcut-preset-name-input"
+            placeholder="Preset name..."
+            value={customPresetName}
+            onChange={(e) => setCustomPresetName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSaveCustom(); }}
+          />
+          <button
+            className="settings-button"
+            onClick={handleSaveCustom}
+            disabled={!customPresetName.trim()}
+          >
+            Save Current
+          </button>
         </div>
-      )}
+
+        {customPresets.length > 0 && (
+          <div className="shortcut-custom-list">
+            {customPresets.map((preset) => (
+              <div key={preset.name} className="shortcut-custom-item">
+                <span className="shortcut-custom-name">{preset.name}</span>
+                <button
+                  className="settings-button shortcut-custom-load-btn"
+                  onClick={() => handleLoadCustom(preset.name)}
+                >
+                  Load
+                </button>
+                <button
+                  className="settings-button shortcut-custom-delete-btn"
+                  onClick={() => handleDeleteCustom(preset.name)}
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Search */}
       <div className="settings-group">
