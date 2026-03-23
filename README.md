@@ -10,7 +10,7 @@
 </p>
 
 <p>
-  <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-1.4.1-blue.svg" alt="Version"></a>
+  <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-1.4.2-blue.svg" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
   <a href="https://app.fossa.com/projects/custom%2b61097%2fmasterselects"><img src="https://app.fossa.com/api/projects/custom%2b61097%2fmasterselects.svg?type=shield" alt="FOSSA Status"></a>
   <a href="#"><img src="https://img.shields.io/badge/initial_load-~700_kB_gzip-ff6b6b?style=flat-square&labelColor=1a1a2e" alt="~700 kB gzip"></a>
