@@ -42,6 +42,7 @@ Decoding depends on what the **browser** supports — the container is just the 
 <tr><td><b>Video codecs</b></td><td>H.264 (AVC), H.265 (HEVC)¹, VP8, VP9, AV1</td></tr>
 <tr><td><b>Audio codecs</b></td><td>AAC, MP3, Opus, Vorbis, FLAC, WAV/PCM</td></tr>
 <tr><td><b>Image</b></td><td>PNG, JPG, WebP, GIF, BMP, AVIF, SVG</td></tr>
+<tr><td><b>3D Models</b></td><td>OBJ, glTF, GLB, FBX — rendered via Three.js with lighting</td></tr>
 <tr><td><b>Download</b></td><td>YouTube, TikTok, Instagram, Twitter/X, Vimeo + <a href="https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md">all yt-dlp sites</a> via Native Helper</td></tr>
 <tr><th colspan="2">Export (Encode)</th></tr>
 <tr><td><b>Containers</b></td><td>MP4, WebM</td></tr>
@@ -60,7 +61,7 @@ Decoding depends on what the **browser** supports — the container is just the 
 
 Most browser-based video editors share a pattern: Canvas 2D compositing, heavyweight dependency trees, and CPU-bound rendering that falls apart at scale. This project takes a fundamentally different approach.
 
-**GPU-first architecture.** Preview, scrubbing, and export all run through the same **WebGPU ping-pong compositor**. Video textures are imported as `texture_external` (**zero-copy**, no CPU roundtrip). **37 blend modes**, 3D rotation, and inline color effects all execute in a **single WGSL composite shader** per layer. No Three.js, no GSAP, no Canvas 2D fallback in the hot path.
+**GPU-first architecture.** Preview, scrubbing, and export all run through the same **WebGPU ping-pong compositor**. Video textures are imported as `texture_external` (**zero-copy**, no CPU roundtrip). **37 blend modes**, 3D rotation, and inline color effects all execute in a **single WGSL composite shader** per layer. **Three.js** is lazily loaded only for 3D model rendering — no GSAP, no Canvas 2D fallback in the hot path.
 
 **Zero-copy export pipeline.** Frames are captured as `new VideoFrame(offscreenCanvas)` directly from the GPU canvas. **No `readPixels()`**, no `getImageData()`, no staging buffers in the default path. The GPU renders, **WebCodecs encodes**. That's it.
 

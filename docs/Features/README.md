@@ -23,6 +23,7 @@ MASterSelects is a browser-based professional video editing application built on
 | **AI Video Generation** | PiAPI integration for AI-powered video creation |
 | **SAM2 Segmentation** | Click-to-segment object tracking with WebGPU ONNX inference |
 | **Download Panel** | Download videos from YouTube, TikTok, Instagram, Twitter/X and more |
+| **3D Layer System** | Three.js integration: per-layer 3D toggle, OBJ/glTF/GLB model import, perspective camera |
 | **30 GPU Effects** | Modular color, blur, distort, stylize, keying effects with quality controls |
 | **37 Blend Modes** | After Effects-style blend modes including stencil and silhouette |
 | **Video Scopes** | GPU-accelerated Histogram, Vectorscope, Waveform monitor (DaVinci-style) |
@@ -47,6 +48,7 @@ MASterSelects is a browser-based professional video editing application built on
 Frontend          React 19 + TypeScript + Vite 7.2
 State Management  Zustand with modular slice architecture
 GPU Rendering     WebGPU + WGSL shaders (2,500+ lines)
+3D Engine         Three.js (lazy-loaded, isolated scene renderer)
 GPU Effects       30 modular effects with individual WGSL shaders
 Video Decoding    WebCodecs API with hardware acceleration + parallel decode
 Video Encoding    WebCodecs (Fast/Precise) + FFmpeg WASM (ProRes, DNxHR, HAP)
@@ -69,6 +71,7 @@ UI Framework      Custom dockable panel system with mobile support
 | [Keyframes](./Keyframes.md) | Animation system, curve editor, bezier interpolation |
 | [Preview & Playback](./Preview.md) | RAM Preview, scrubbing, multiple outputs, edit mode |
 | [Output Manager](./Preview.md#output-manager) | Source routing, slices, corner pin warping, mask layers |
+| [3D Layers](./3D-Layers.md) | Three.js 3D layers, OBJ/glTF model import, perspective camera |
 | [Effects](./Effects.md) | 30 modular GPU effects, 37 blend modes, transforms |
 | [Masks](./Masks.md) | Shape masks, pen tool, GPU feathering |
 | [AI Integration](./AI-Integration.md) | 76 AI tools, transcription, AI video generation |
