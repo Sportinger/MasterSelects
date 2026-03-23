@@ -318,6 +318,17 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       status: 'completed',
     });
 
+    // Update last AI model + app version on user record (non-blocking)
+    const clientAppVersion = context.request.headers.get('X-App-Version') ?? null;
+    context.waitUntil(
+      context.env.DB.prepare(
+        `UPDATE users SET last_ai_model = ?, last_app_version = COALESCE(?, last_app_version), updated_at = ? WHERE id = ?`,
+      )
+        .bind(request.model, clientAppVersion, new Date().toISOString(), hostedContext.user.id)
+        .run()
+        .catch(() => {}),
+    );
+
     // Log chat conversation (non-blocking)
     context.waitUntil(
       insertChatLog(context.env.DB, {

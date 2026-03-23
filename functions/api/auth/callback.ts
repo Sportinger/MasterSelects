@@ -113,7 +113,10 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     authEmail = verifiedToken.email;
   }
 
+  const appVersion = context.request.headers.get('X-App-Version') ?? null;
+
   const user = await ensureUserRecord(context.env, {
+    appVersion,
     avatarUrl,
     displayName,
     email: authEmail,

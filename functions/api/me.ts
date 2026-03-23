@@ -8,6 +8,9 @@ interface UserProfileRow {
   display_name: string | null;
   email: string;
   id: string;
+  last_ai_model: string | null;
+  last_app_version: string | null;
+  last_login_at: string | null;
 }
 
 export const onRequest: AppRouteHandler = async (context: AppContext): Promise<Response> => {
@@ -52,7 +55,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     context.env.DB
       .prepare(
         `
-          SELECT id, email, display_name, avatar_url
+          SELECT id, email, display_name, avatar_url, last_app_version, last_ai_model, last_login_at
           FROM users
           WHERE id = ?
           LIMIT 1
@@ -84,6 +87,9 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         displayName: userRow?.display_name?.trim() || session.email,
         email: userRow?.email ?? session.email,
         id: userRow?.id ?? session.userId,
+        lastAiModel: userRow?.last_ai_model ?? null,
+        lastAppVersion: userRow?.last_app_version ?? null,
+        lastLoginAt: userRow?.last_login_at ?? null,
       },
     },
     responseInit,
