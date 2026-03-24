@@ -122,6 +122,12 @@ import {
   handleGetStatsHistory,
 } from './stats';
 
+import {
+  handleStartExport,
+  handleCancelExport,
+  handleGetExportStatus,
+} from './export';
+
 // Handler registry - maps tool names to handler functions
 const timelineHandlers: Record<string, (args: Record<string, unknown>, store: ReturnType<typeof useTimelineStore.getState>) => Promise<ToolResult>> = {
   getTimelineState: handleGetTimelineState,
@@ -225,6 +231,10 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>) => P
   getStatsHistory: handleGetStatsHistory,
   getLogs: handleGetLogs,
   getPlaybackTrace: handleGetPlaybackTrace,
+  // Export
+  startExport: handleStartExport,
+  cancelExport: async () => handleCancelExport(),
+  getExportStatus: async () => handleGetExportStatus(),
 };
 
 // YouTube handlers - self-contained, fetch their own stores
@@ -363,4 +373,8 @@ export {
   handleGetLogs,
   handleGetPlaybackTrace,
   handleGetStatsHistory,
+  // Export
+  handleStartExport,
+  handleCancelExport,
+  handleGetExportStatus,
 };
