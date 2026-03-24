@@ -405,6 +405,7 @@ export interface ClipboardClipData {
   // Composition clips
   isComposition?: boolean;
   compositionId?: string;
+  is3D?: boolean;
 }
 
 // Clipboard data for keyframe copy/paste

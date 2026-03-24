@@ -454,7 +454,7 @@ export async function handleTestGaussianImportPipeline(): Promise<ToolResult> {
     }
 
     try {
-      timelineStore.addClip(
+      await timelineStore.addClip(
         videoTrack.id,
         avatarFile,
         0, // startTime

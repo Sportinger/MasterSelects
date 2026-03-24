@@ -29,6 +29,7 @@ export interface SerializedClipState {
   solidColor?: string;
   transitionIn?: TimelineClip['transitionIn'];
   transitionOut?: TimelineClip['transitionOut'];
+  is3D?: boolean;
 }
 
 /**

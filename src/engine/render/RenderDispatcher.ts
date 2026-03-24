@@ -25,6 +25,7 @@ import { vfPipelineMonitor } from '../../services/vfPipelineMonitor';
 import { getCopiedHtmlVideoPreviewFrame } from './htmlVideoPreviewFallback';
 import { flags } from '../featureFlags';
 import type { ThreeSceneRenderer } from '../three/ThreeSceneRenderer';
+import type { GaussianSplatSceneRenderer } from '../gaussian/GaussianSplatSceneRenderer';
 import type { Layer3DData, CameraConfig } from '../three/types';
 import { DEFAULT_CAMERA_CONFIG } from '../three/types';
 import { useMediaStore } from '../../stores/mediaStore';
@@ -55,6 +56,7 @@ export interface RenderDeps {
   performanceStats: PerformanceStats;
   renderLoop: RenderLoop | null;
   threeSceneRenderer?: ThreeSceneRenderer | null;
+  gaussianSplatRenderer?: GaussianSplatSceneRenderer | null;
 }
 
 export class RenderDispatcher {
@@ -69,6 +71,11 @@ export class RenderDispatcher {
   private threeSceneTexture: GPUTexture | null = null;
   private threeSceneView: GPUTextureView | null = null;
   private threeSceneInitializing = false;
+  // Gaussian Splat rendering state
+  private gaussianTexture: GPUTexture | null = null;
+  private gaussianTextureView: GPUTextureView | null = null;
+  private gaussianInitializing = false;
+  private gaussianErrorLogged = false;
 
   constructor(deps: RenderDeps) {
     this.deps = deps;
@@ -264,6 +271,11 @@ export class RenderDispatcher {
       this.process3DLayers(layerData, device, width, height);
     }
 
+    // === Gaussian Splat Avatar Pass ===
+    if (flags.useGaussianSplat) {
+      this.processGaussianLayers(layerData, device, width, height);
+    }
+
     // Pre-render nested compositions (batched with main composite)
     const commandBuffers: GPUCommandBuffer[] = [];
     let hasNestedComps = false;
@@ -390,7 +402,7 @@ export class RenderDispatcher {
     // Find 3D layers
     const indices3D: number[] = [];
     for (let i = 0; i < layerData.length; i++) {
-      if (layerData[i].layer.is3D) {
+      if (layerData[i].layer.is3D && layerData[i].layer.source?.type !== 'gaussian-avatar') {
         indices3D.push(i);
       }
     }
@@ -513,6 +525,158 @@ export class RenderDispatcher {
     // Remove 3D layers (in reverse to keep indices valid) and insert synthetic
     for (let i = indices3D.length - 1; i >= 0; i--) {
       layerData.splice(indices3D[i], 1);
+    }
+    layerData.splice(insertIdx, 0, syntheticData);
+  }
+
+  /**
+   * Process Gaussian Splat avatar layers: grab the renderer's canvas,
+   * import as GPU texture, replace with synthetic layer.
+   * Unlike Three.js (frame-on-demand), the Gaussian renderer runs its own rAF loop —
+   * we simply capture the latest frame each compositor cycle.
+   */
+  private processGaussianLayers(layerData: LayerRenderData[], device: GPUDevice, width: number, height: number): void {
+    // Find gaussian-avatar layers
+    const indices: number[] = [];
+    for (let i = 0; i < layerData.length; i++) {
+      if (layerData[i].layer.source?.type === 'gaussian-avatar') {
+        indices.push(i);
+      }
+    }
+    if (indices.length === 0) return;
+
+    const d = this.deps;
+    const renderer = d.gaussianSplatRenderer;
+
+    // Capture avatar URL before any async work (layerData may be mutated)
+    const firstLayerData = layerData[indices[0]];
+    const avatarUrl = firstLayerData.layer.source?.gaussianAvatarUrl;
+
+    if (!renderer || !renderer.isInitialized) {
+      // Lazy init — trigger on first frame with gaussian layers
+      if (!this.gaussianInitializing) {
+        this.gaussianInitializing = true;
+        // Capture URL now — layerData will be stale by the time the promise resolves
+        const capturedAvatarUrl = avatarUrl;
+        import('../gaussian/GaussianSplatSceneRenderer').then(({ getGaussianSplatSceneRenderer }) => {
+          const r = getGaussianSplatSceneRenderer();
+          r.initialize().then((ok) => {
+            if (ok) {
+              d.gaussianSplatRenderer = r;
+              if (capturedAvatarUrl) {
+                r.loadAvatar(capturedAvatarUrl);
+              }
+              log.info('Gaussian Splat renderer initialized lazily');
+            }
+            this.gaussianInitializing = false;
+          });
+        });
+      }
+      // Remove gaussian layers while loading
+      for (let i = indices.length - 1; i >= 0; i--) {
+        layerData.splice(indices[i], 1);
+      }
+      return;
+    }
+
+    // Ensure avatar is loaded for the current layer (guard against concurrent loads)
+    if (avatarUrl && !renderer.isAvatarLoaded && !renderer.isLoading) {
+      renderer.loadAvatar(avatarUrl);
+      // Remove layers while loading
+      for (let i = indices.length - 1; i >= 0; i--) {
+        layerData.splice(indices[i], 1);
+      }
+      return;
+    }
+
+    // Still loading — skip rendering but don't call loadAvatar again
+    if (renderer.isLoading || !renderer.isAvatarLoaded) {
+      for (let i = indices.length - 1; i >= 0; i--) {
+        layerData.splice(indices[i], 1);
+      }
+      return;
+    }
+
+    // Update blendshapes from layer source
+    const blendshapes = firstLayerData.layer.source?.gaussianBlendshapes;
+    if (blendshapes) {
+      renderer.setBlendshapes(blendshapes);
+    }
+
+    // Resize renderer to match compositor resolution
+    renderer.resize(width, height);
+
+    // Get the renderer's canvas (already rendered by its own rAF loop)
+    const canvas = renderer.getCanvas();
+    if (!canvas || canvas.width === 0 || canvas.height === 0) {
+      // Canvas not ready yet — remove layers
+      for (let i = indices.length - 1; i >= 0; i--) {
+        layerData.splice(indices[i], 1);
+      }
+      return;
+    }
+
+    // Create/resize GPU texture
+    if (!this.gaussianTexture || this.gaussianTexture.width !== width || this.gaussianTexture.height !== height) {
+      this.gaussianTexture?.destroy();
+      this.gaussianTexture = device.createTexture({
+        size: { width, height },
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+      this.gaussianTextureView = this.gaussianTexture.createView();
+    }
+
+    // Copy canvas to GPU texture — guard against canvas without rendering context
+    try {
+      device.queue.copyExternalImageToTexture(
+        { source: canvas },
+        { texture: this.gaussianTexture },
+        { width, height },
+      );
+      this.gaussianErrorLogged = false; // reset on success
+    } catch (err) {
+      if (!this.gaussianErrorLogged) {
+        log.error('Gaussian canvas copy failed (logging once)', err);
+        this.gaussianErrorLogged = true;
+      }
+      // Remove gaussian layers — canvas is not usable
+      for (let i = indices.length - 1; i >= 0; i--) {
+        layerData.splice(indices[i], 1);
+      }
+      return;
+    }
+
+    // Create synthetic layer (same pattern as __three_scene__)
+    const insertIdx = indices[0];
+    const firstLayer = layerData[indices[0]].layer;
+    const isSingle = indices.length === 1;
+
+    const syntheticLayer: Layer = {
+      id: '__gaussian_splat__',
+      name: 'Gaussian Avatar',
+      visible: true,
+      opacity: isSingle ? firstLayer.opacity : 1,
+      blendMode: isSingle ? firstLayer.blendMode : 'normal',
+      source: { type: 'image' },
+      effects: isSingle ? firstLayer.effects : [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: { x: 0, y: 0, z: 0 },
+    };
+
+    const syntheticData: LayerRenderData = {
+      layer: syntheticLayer,
+      isVideo: false,
+      externalTexture: null,
+      textureView: this.gaussianTextureView,
+      sourceWidth: width,
+      sourceHeight: height,
+    };
+
+    // Remove gaussian layers (reverse order) and insert synthetic
+    for (let i = indices.length - 1; i >= 0; i--) {
+      layerData.splice(indices[i], 1);
     }
     layerData.splice(insertIdx, 0, syntheticData);
   }
