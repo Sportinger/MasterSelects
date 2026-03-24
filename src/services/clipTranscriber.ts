@@ -118,7 +118,9 @@ export async function transcribeClip(clipId: string, language: string = 'auto', 
 
   // Get transcription provider settings
   const { transcriptionProvider, apiKeys } = useSettingsStore.getState();
-  const apiKey = transcriptionProvider !== 'local' ? apiKeys[transcriptionProvider] : null;
+  const apiKey = transcriptionProvider !== 'local' && transcriptionProvider !== 'lemonade'
+    ? apiKeys[transcriptionProvider]
+    : null;
 
   // Validate API key if using cloud provider
   if (transcriptionProvider !== 'local' && !apiKey) {

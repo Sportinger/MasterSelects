@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(git checkout:*)",
+      "Bash(dir:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(git -C \"C:/Users/antmi/MasterSelects\" status)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(curl:*)",
+      "Bash(git add:*)",
+      "Bash(git fetch:*)",
+      "Bash(git log:*)",
+      "Bash(comm:*)",
+      "Bash(git merge:*)",
+      "Bash(git branch:*)",
+      "Bash(npm run build)",
+      "Bash(npm install)",
+      "Bash(git pull:*)",
+      "Bash(done)",
+      "Bash(git rev-list:*)",
+      "Bash(cd /d C:UsersantmiMasterSelects)",
+      "Bash(findstr /C:lemonade srcstoressettingsStore.ts)",
+      "Bash(findstr /C:\"endpoint\\\\|Endpoint\\\\|ENDPOINT\")"
+    ]
+  }
+}

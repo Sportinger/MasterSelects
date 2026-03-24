@@ -1,8 +1,11 @@
 // Whisper Service
 // Browser-based speech-to-text using Transformers.js
+// Can optionally use Lemonade Server's whisper.cpp for faster server-side transcription
 
 import { Logger } from './logger';
 import type { TranscriptEntry } from '../stores/multicamStore';
+import { useSettingsStore } from '../stores/settingsStore';
+import { lemonadeWhisperService } from './lemonadeWhisperService';
 
 const log = Logger.create('WhisperService');
 import { useMediaStore } from '../stores/mediaStore';
@@ -117,8 +120,95 @@ class WhisperService {
 
   /**
    * Transcribe audio from a media file
+   * Routes to Lemonade Server if enabled and available, otherwise uses browser-based transcription
    */
   async transcribe(
+    mediaFileId: string,
+    onProgress?: (progress: number) => void
+  ): Promise<TranscriptEntry[]> {
+    // Check if Lemonade transcription is enabled
+    const { lemonadeTranscriptionEnabled, lemonadeTranscriptionFallback } = useSettingsStore.getState();
+
+    if (lemonadeTranscriptionEnabled) {
+      // Check if Lemonade Server is available
+      const serverAvailable = lemonadeWhisperService.isAvailable();
+
+      if (serverAvailable) {
+        log.info('Using Lemonade Server for transcription');
+        return this.transcribeWithLemonade(mediaFileId, onProgress);
+      } else if (lemonadeTranscriptionFallback) {
+        log.info('Lemonade Server offline, falling back to browser transcription');
+      } else {
+        throw new Error('Lemonade Server is offline and fallback is disabled');
+      }
+    }
+
+    // Use browser-based transcription
+    return this.transcribeWithBrowser(mediaFileId, onProgress);
+  }
+
+  /**
+   * Transcribe using Lemonade Server's whisper.cpp
+   */
+  private async transcribeWithLemonade(
+    mediaFileId: string,
+    onProgress?: (progress: number) => void
+  ): Promise<TranscriptEntry[]> {
+    const mediaStore = useMediaStore.getState();
+    const mediaFile = mediaStore.files.find(f => f.id === mediaFileId);
+
+    if (!mediaFile || !mediaFile.file) {
+      throw new Error('Media file not found');
+    }
+
+    try {
+      // Send file blob directly to Lemonade Server
+      const result = await lemonadeWhisperService.transcribeWithProgress(
+        mediaFile.file,
+        onProgress,
+        { language: 'auto', responseFormat: 'verbose_json' }
+      );
+
+      // Convert to transcript entries
+      const entries: TranscriptEntry[] = [];
+
+      if (result.segments && result.segments.length > 0) {
+        for (let i = 0; i < result.segments.length; i++) {
+          const segment = result.segments[i];
+          const text = segment.text.trim();
+
+          if (!text) continue;
+
+          entries.push({
+            id: `transcript-${i}`,
+            start: segment.start * 1000,
+            end: segment.end * 1000,
+            speaker: 'Speaker 1',
+            text,
+          });
+        }
+      } else {
+        // No segments, create single entry
+        entries.push({
+          id: 'transcript-0',
+          start: 0,
+          end: (result.duration || 0) * 1000,
+          speaker: 'Speaker 1',
+          text: result.text,
+        });
+      }
+
+      return entries;
+    } catch (error) {
+      log.error('Lemonade transcription failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Transcribe using browser-based Transformers.js
+   */
+  private async transcribeWithBrowser(
     mediaFileId: string,
     onProgress?: (progress: number) => void
   ): Promise<TranscriptEntry[]> {

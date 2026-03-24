@@ -38,7 +38,7 @@ function persistChangelogStateToProject(
 export type ThemeMode = 'dark' | 'light' | 'midnight' | 'system' | 'crazy' | 'custom';
 
 // Transcription provider options
-export type TranscriptionProvider = 'local' | 'openai' | 'assemblyai' | 'deepgram';
+export type TranscriptionProvider = 'local' | 'openai' | 'assemblyai' | 'deepgram' | 'lemonade';
 
 // Preview quality options (multiplier on base resolution)
 export type PreviewQuality = 1 | 0.5 | 0.25;
@@ -134,6 +134,10 @@ interface SettingsState {
   lemonadeUseFallback: boolean;
   lemonadeServerAvailable: boolean; // transient, not persisted
 
+  // Lemonade Transcription settings (server-side whisper.cpp)
+  lemonadeTranscriptionEnabled: boolean;
+  lemonadeTranscriptionFallback: boolean; // fallback to local if server offline
+
   // Output settings
   // Default resolution for new compositions (active composition drives the engine)
   outputResolution: { width: number; height: number };
@@ -180,6 +184,10 @@ interface SettingsState {
   setLemonadeModel: (model: LemonadeModel) => void;
   setLemonadeUseFallback: (useFallback: boolean) => void;
   setLemonadeServerAvailable: (available: boolean) => void;
+
+  // Lemonade Transcription actions
+  setLemonadeTranscriptionEnabled: (enabled: boolean) => void;
+  setLemonadeTranscriptionFallback: (fallback: boolean) => void;
 
   // Helpers
   getActiveApiKey: () => string | null;
@@ -241,6 +249,10 @@ export const useSettingsStore = create<SettingsState>()(
       lemonadeModel: 'qwen3-4b-FLM' as LemonadeModel,
       lemonadeUseFallback: false,
       lemonadeServerAvailable: false,
+
+      // Lemonade Transcription settings
+      lemonadeTranscriptionEnabled: true,
+      lemonadeTranscriptionFallback: true,
 
       // Actions
       setTheme: (theme) => set({ theme }),
@@ -387,11 +399,17 @@ export const useSettingsStore = create<SettingsState>()(
       setLemonadeServerAvailable: (available) => {
         set({ lemonadeServerAvailable: available });
       },
+      setLemonadeTranscriptionEnabled: (enabled) => {
+        set({ lemonadeTranscriptionEnabled: enabled });
+      },
+      setLemonadeTranscriptionFallback: (fallback) => {
+        set({ lemonadeTranscriptionFallback: fallback });
+      },
 
       // Helpers
       getActiveApiKey: () => {
         const { transcriptionProvider, apiKeys } = get();
-        if (transcriptionProvider === 'local') return null;
+        if (transcriptionProvider === 'local' || transcriptionProvider === 'lemonade') return null;
         return apiKeys[transcriptionProvider] || null;
       },
 
