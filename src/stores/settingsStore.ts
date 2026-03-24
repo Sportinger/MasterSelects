@@ -52,7 +52,7 @@ export type AIProvider = 'openai' | 'lemonade';
 // Lemonade model options
 export type LemonadeModel = 'qwen3-4b-FLM' | 'Gemma-3-4b-it-GGUF' | 'Llama-3.2-3B-Instruct-GGUF' | 'Llama-3.2-1B-Instruct-GGUF' | 'Phi-3-mini-instruct-GGUF';
 
-interface APIKeys {
+export interface APIKeys {
   openai: string;
   assemblyai: string;
   deepgram: string;

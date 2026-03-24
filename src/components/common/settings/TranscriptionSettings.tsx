@@ -1,9 +1,5 @@
 import { useSettingsStore, type TranscriptionProvider } from '../../../stores/settingsStore';
 
-interface TranscriptionSettingsProps {
-  localKeys: { [key: string]: string };
-}
-
 const providers: { id: TranscriptionProvider; label: string; description: string }[] = [
   { id: 'local', label: 'Local (Whisper)', description: 'Runs in browser, no API key needed. Slower, less accurate.' },
   { id: 'openai', label: 'OpenAI Whisper API', description: 'High accuracy, $0.006/minute. Requires API key.' },
@@ -11,8 +7,8 @@ const providers: { id: TranscriptionProvider; label: string; description: string
   { id: 'deepgram', label: 'Deepgram', description: 'Fast, good accuracy. $0.0125/minute.' },
 ];
 
-export function TranscriptionSettings({ localKeys }: TranscriptionSettingsProps) {
-  const { transcriptionProvider, setTranscriptionProvider } = useSettingsStore();
+export function TranscriptionSettings() {
+  const { transcriptionProvider, setTranscriptionProvider, apiKeys } = useSettingsStore();
 
   return (
     <div className="settings-category-content">
@@ -38,7 +34,7 @@ export function TranscriptionSettings({ localKeys }: TranscriptionSettingsProps)
                 <span className="provider-label">{provider.label}</span>
                 <span className="provider-description">{provider.description}</span>
               </div>
-              {provider.id !== 'local' && localKeys[provider.id] && (
+              {provider.id !== 'local' && apiKeys[provider.id as keyof typeof apiKeys] && (
                 <span className="provider-status">{'\u2713'}</span>
               )}
             </label>

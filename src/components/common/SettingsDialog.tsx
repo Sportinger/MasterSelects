@@ -1,7 +1,6 @@
 // Settings Dialog - After Effects style preferences with sidebar navigation
 
-import { useState, useCallback, useRef } from 'react';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useState, useRef } from 'react';
 import { useDraggableDialog } from './settings/useDraggableDialog';
 import { AppearanceSettings } from './settings/AppearanceSettings';
 import { GeneralSettings } from './settings/GeneralSettings';
@@ -52,35 +51,23 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const { position, isDragging, handleMouseDown } = useDraggableDialog(dialogRef);
 
-  const { apiKeys, setApiKey } = useSettingsStore();
-
-  // Local state for API keys (to avoid saving on every keystroke)
-  const [localKeys, setLocalKeys] = useState<{ [key: string]: string }>({ ...apiKeys });
-
-  const handleSave = useCallback(() => {
-    Object.entries(localKeys).forEach(([provider, key]) => {
-      setApiKey(provider as keyof typeof apiKeys, key);
-    });
-    onClose();
-  }, [localKeys, setApiKey, onClose]);
-
-  const handleKeyChange = (provider: string, value: string) => {
-    setLocalKeys((prev) => ({ ...prev, [provider]: value }));
-  };
-
   const renderCategoryContent = () => {
     switch (activeCategory) {
       case 'appearance': return <AppearanceSettings />;
       case 'general': return <GeneralSettings />;
       case 'previews': return <PreviewsSettings />;
       case 'import': return <ImportSettings />;
-      case 'transcription': return <TranscriptionSettings localKeys={localKeys} />;
+      case 'transcription': return <TranscriptionSettings />;
       case 'output': return <OutputSettings />;
       case 'performance': return <PerformanceSettings />;
-      case 'apiKeys': return <ApiKeysSettings localKeys={localKeys} onKeyChange={handleKeyChange} />;
+      case 'apiKeys': return <ApiKeysSettings />;
       case 'aiFeatures': return <AIFeaturesSettings />;
       default: return null;
     }
+  };
+
+  const handleSave = () => {
+    onClose();
   };
 
   return (

@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { useSettingsStore } from '../../../stores/settingsStore';
+import { useState, useCallback } from 'react';
+import { useSettingsStore, type APIKeys } from '../../../stores/settingsStore';
+import { lemonadeProvider } from '../../../services/lemonadeProvider';
 
 interface ApiKeyRowProps {
   label: string;
@@ -35,13 +36,11 @@ function ApiKeyRow({ label, value, placeholder, linkUrl, linkText, show, onToggl
   );
 }
 
-interface ApiKeysSettingsProps {
-  localKeys: { [key: string]: string };
-  onKeyChange: (provider: string, value: string) => void;
-}
-
-export function ApiKeysSettings({ localKeys, onKeyChange }: ApiKeysSettingsProps) {
+export function ApiKeysSettings() {
   const apiKeys = useSettingsStore((s) => s.apiKeys);
+  const setApiKey = useSettingsStore((s) => s.setApiKey);
+  const lemonadeEndpoint = useSettingsStore((s) => s.lemonadeEndpoint);
+  const setLemonadeEndpoint = useSettingsStore((s) => s.setLemonadeEndpoint);
   const [showKeys, setShowKeys] = useState({
     openai: false,
     assemblyai: false,
@@ -51,12 +50,18 @@ export function ApiKeysSettings({ localKeys, onKeyChange }: ApiKeysSettingsProps
     youtube: false,
   });
 
-  const toggleShowKey = (provider: keyof typeof showKeys) => {
+  const toggleShowKey = useCallback((provider: keyof typeof showKeys) => {
     setShowKeys((prev) => ({ ...prev, [provider]: !prev[provider] }));
-  };
+  }, []);
 
-  // Use localKeys if provided, otherwise fall back to store
-  const getKey = (provider: string) => localKeys[provider] ?? (apiKeys as unknown as Record<string, string>)[provider] ?? '';
+  // Use store directly - no props needed
+  const getKey = useCallback((provider: string) => {
+    return (apiKeys as unknown as Record<string, string>)[provider] ?? '';
+  }, [apiKeys]);
+
+  const handleKeyChange = useCallback((provider: keyof APIKeys, value: string) => {
+    setApiKey(provider, value);
+  }, [setApiKey]);
 
   return (
     <div className="settings-category-content">
@@ -77,7 +82,7 @@ export function ApiKeysSettings({ localKeys, onKeyChange }: ApiKeysSettingsProps
           linkText="Get API Key"
           show={showKeys.openai}
           onToggle={() => toggleShowKey('openai')}
-          onChange={(v) => onKeyChange('openai', v)}
+          onChange={(v) => handleKeyChange('openai', v)}
         />
 
         <ApiKeyRow
@@ -89,7 +94,7 @@ export function ApiKeysSettings({ localKeys, onKeyChange }: ApiKeysSettingsProps
           linkText="Get API Key"
           show={showKeys.assemblyai}
           onToggle={() => toggleShowKey('assemblyai')}
-          onChange={(v) => onKeyChange('assemblyai', v)}
+          onChange={(v) => handleKeyChange('assemblyai', v)}
         />
 
         <ApiKeyRow
@@ -101,7 +106,7 @@ export function ApiKeysSettings({ localKeys, onKeyChange }: ApiKeysSettingsProps
           linkText="Get API Key"
           show={showKeys.deepgram}
           onToggle={() => toggleShowKey('deepgram')}
-          onChange={(v) => onKeyChange('deepgram', v)}
+          onChange={(v) => handleKeyChange('deepgram', v)}
         />
       </div>
 
@@ -117,7 +122,7 @@ export function ApiKeysSettings({ localKeys, onKeyChange }: ApiKeysSettingsProps
           linkText="Get API Key"
           show={showKeys.piapi}
           onToggle={() => toggleShowKey('piapi')}
-          onChange={(v) => onKeyChange('piapi', v)}
+          onChange={(v) => handleKeyChange('piapi', v)}
         />
 
         <ApiKeyRow
@@ -129,7 +134,7 @@ export function ApiKeysSettings({ localKeys, onKeyChange }: ApiKeysSettingsProps
           linkText="Get API Key"
           show={showKeys.kieai}
           onToggle={() => toggleShowKey('kieai')}
-          onChange={(v) => onKeyChange('kieai', v)}
+          onChange={(v) => handleKeyChange('kieai', v)}
         />
       </div>
 
@@ -145,8 +150,56 @@ export function ApiKeysSettings({ localKeys, onKeyChange }: ApiKeysSettingsProps
           linkText="Get API Key"
           show={showKeys.youtube}
           onToggle={() => toggleShowKey('youtube')}
-          onChange={(v) => onKeyChange('youtube', v)}
+          onChange={(v) => handleKeyChange('youtube', v)}
         />
+      </div>
+
+      <div className="settings-group" style={{ marginTop: '24px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+        <div className="settings-group-title">Lemonade Server (Local AI)</div>
+
+        <div className="settings-row">
+          <span className="settings-label">Server Endpoint</span>
+          <input
+            type="text"
+            value={lemonadeEndpoint}
+            onChange={(e) => {
+              setLemonadeEndpoint(e.target.value);
+              lemonadeProvider.configure({ endpoint: e.target.value });
+            }}
+            placeholder="http://localhost:8000/api/v1"
+            className="settings-input"
+            style={{ width: '280px' }}
+          />
+        </div>
+
+        <p className="settings-hint">
+          Lemonade Server provides local AI inference - no API key required.
+          Configure the server endpoint URL above.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+          <a
+            className="api-key-link"
+            href="https://github.com/lemonade-server/lemonade"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Download Lemonade Server
+          </a>
+          <a
+            className="api-key-link"
+            href="https://github.com/lemonade-server/lemonade?tab=readme-ov-file#quick-start"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Quick Start Guide
+          </a>
+        </div>
+
+        <p className="settings-hint" style={{ marginTop: '8px' }}>
+          Once installed, start Lemonade Server and configure AI Chat to use the Lemonade provider.
+          Server status and model selection are available in Settings {'>'} AI Features.
+        </p>
       </div>
     </div>
   );
