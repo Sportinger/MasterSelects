@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSettingsStore, type AIProvider, type LemonadeModel } from '../../stores/settingsStore';
 import { AI_TOOLS, executeAITool, getQuickTimelineSummary, getToolPolicy } from '../../services/aiTools';
 import type { ToolPolicyEntry } from '../../services/aiTools';
-import { lemonadeProvider, MODEL_PRESETS, type LemonadeMessage } from '../../services/lemonadeProvider';
+import { lemonadeProvider, MODEL_PRESETS, getModelCapabilities, getModelPresetWithCapabilities, type LemonadeMessage } from '../../services/lemonadeProvider';
 import { lemonadeService } from '../../services/lemonadeService';
 import { Logger } from '../../services/logger';
 import './AIChatPanel.css';
@@ -36,12 +36,6 @@ const OPENAI_MODELS = [
   { id: 'gpt-4o', name: 'GPT-4o' },
   { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
 ];
-
-// Lemonade Server models (from provider)
-const LEMONADE_MODEL_OPTIONS = MODEL_PRESETS.map(p => ({
-  id: p.id,
-  name: `${p.name} (${p.size}) - ${p.description}`,
-}));
 
 // System prompt for editor mode
 const EDITOR_SYSTEM_PROMPT = `You are an AI video editing assistant with direct access to the timeline AND media panel. You can:
@@ -177,6 +171,11 @@ export function AIChatPanel() {
 
   // Get current model based on provider
   const currentModel = aiProvider === 'lemonade' ? lemonadeModel : openaiModel;
+
+  // Check if current Lemonade model supports tool calling
+  const currentModelSupportsTools = aiProvider === 'lemonade'
+    ? getModelCapabilities(currentModel)?.supportsToolCalling
+    : true; // OpenAI models all support tools
 
   // Build API messages from chat history
   const buildAPIMessages = useCallback((userContent: string): APIMessage[] => {
@@ -583,10 +582,17 @@ export function AIChatPanel() {
               }
             }}
             disabled={isLoading}
+            title={aiProvider === 'lemonade' ? getModelCapabilities(currentModel)?.reason : undefined}
           >
             {aiProvider === 'lemonade' ? (
-              LEMONADE_MODEL_OPTIONS.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
+              getModelPresetWithCapabilities().map(m => (
+                <option
+                  key={m.id}
+                  value={m.id}
+                  title={m.capabilityReason}
+                >
+                  {m.name} {m.supportsToolCalling ? '✓' : '✗'}
+                </option>
               ))
             ) : (
               OPENAI_MODELS.map(m => (
@@ -747,6 +753,20 @@ export function AIChatPanel() {
           <div className="ai-chat-error">
             <span className="error-icon">⚠️</span>
             {error}
+          </div>
+        )}
+        {/* Model capability warning */}
+        {editorMode && aiProvider === 'lemonade' && !currentModelSupportsTools && (
+          <div className="ai-chat-warning model-warning">
+            <span className="warning-icon">⚡</span>
+            <div className="warning-content">
+              <strong>Model does not support tool calling</strong>
+              <p>
+                The current model '<strong>{currentModel}</strong>' does not support tool calling.
+                Switch to a model that supports tools (e.g., qwen3-4b-FLM or Gemma-3-4b-it-GGUF)
+                or disable Tools mode.
+              </p>
+            </div>
           </div>
         )}
         <div ref={messagesEndRef} />

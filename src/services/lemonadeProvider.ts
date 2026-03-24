@@ -105,6 +105,15 @@ export interface LemonadeResponse {
   };
 }
 
+// Model capabilities cache
+interface ModelCapabilities {
+  supportsToolCalling: boolean;
+  lastChecked: number;
+}
+
+const modelCapabilitiesCache: Map<string, ModelCapabilities> = new Map();
+const CAPABILITIES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 export interface LemonadeConfig {
   endpoint: string;
   model: string;
@@ -210,6 +219,61 @@ class LemonadeProviderClass {
   }
 
   /**
+   * Get model capabilities including tool calling support
+   */
+  getModelCapabilities(modelId: string): { supportsToolCalling: boolean; reason?: string } {
+    const supportsToolCalling = this.modelSupportsToolCalling(modelId);
+
+    // Provide helpful reason for UI
+    let reason: string | undefined;
+    if (supportsToolCalling) {
+      if (modelId.toLowerCase().includes('qwen')) {
+        reason = 'Qwen models have strong tool calling capabilities';
+      } else if (modelId.toLowerCase().includes('gemma')) {
+        reason = 'Gemma models support tool calling';
+      } else {
+        reason = 'This model supports tool calling';
+      }
+    } else {
+      if (modelId.toLowerCase().includes('1b')) {
+        reason = 'Model too small - limited tool calling support';
+      } else if (modelId.toLowerCase().includes('phi')) {
+        reason = 'Phi models have limited tool calling support';
+      }
+    }
+
+    return { supportsToolCalling, reason };
+  }
+
+  /**
+   * Check if a model supports tool calling
+   * Uses heuristic based on model name and caches result
+   */
+  private modelSupportsToolCalling(modelId: string): boolean {
+    // Check cache first
+    const cached = modelCapabilitiesCache.get(modelId);
+    if (cached && Date.now() - cached.lastChecked < CAPABILITIES_CACHE_TTL) {
+      return cached.supportsToolCalling;
+    }
+
+    // Heuristic: Qwen3 and Gemma-3 models support tool calling
+    // Llama-3.2-1B is too small for reliable tool calling
+    const supportsTools =
+      modelId.toLowerCase().includes('qwen') ||
+      modelId.toLowerCase().includes('gemma') ||
+      modelId.toLowerCase().includes('llama-3.2-3b') ||
+      modelId.toLowerCase().includes('llama-3.1');
+
+    // Cache the result
+    modelCapabilitiesCache.set(modelId, {
+      supportsToolCalling: supportsTools,
+      lastChecked: Date.now(),
+    });
+
+    return supportsTools;
+  }
+
+  /**
    * Send chat completion request to Lemonade Server
    */
   async chatCompletion(
@@ -223,6 +287,14 @@ class LemonadeProviderClass {
   ): Promise<LemonadeResponse> {
     const model = this.config.useFallback ? this.config.fallbackModel : this.config.model;
 
+    // Check if model supports tool calling
+    const supportsToolCalling = this.modelSupportsToolCalling(model);
+    const hasTools = options?.tools && options.tools.length > 0;
+
+    if (hasTools && !supportsToolCalling) {
+      log.warn('Model may not support tool calling', { model });
+    }
+
     log.info('Sending chat completion request', { model, messageCount: messages.length, tools: options?.tools?.length });
 
     const requestBody: Record<string, unknown> = {
@@ -231,10 +303,13 @@ class LemonadeProviderClass {
       max_tokens: options?.maxTokens ?? 4096,
     };
 
-    // Add tools if provided
-    if (options?.tools && options.tools.length > 0) {
+    // Add tools if provided and model supports it
+    if (hasTools && supportsToolCalling) {
       requestBody.tools = options.tools;
       requestBody.tool_choice = 'auto';
+    } else if (hasTools && !supportsToolCalling) {
+      // Model doesn't support tools - strip them and warn
+      log.warn('Skipping tools - model does not support tool calling', { model });
     }
 
     // Add temperature if provided
@@ -266,10 +341,44 @@ class LemonadeProviderClass {
       }
 
       const data = await response.json();
-      const choice = data.choices?.[0];
 
-      if (!choice) {
-        throw new Error('No choices in response');
+      // Debug: log full response structure
+      log.debug('Raw Lemonade response', data);
+
+      // Check for empty choices - this is the main error case
+      if (!data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
+        log.error('Lemonade returned empty choices', {
+          model,
+          hasChoices: !!data.choices,
+          choicesType: Array.isArray(data.choices) ? 'array' : typeof data.choices,
+          choicesLength: Array.isArray(data.choices) ? data.choices.length : 'N/A',
+          fullResponse: JSON.stringify(data, null, 2).substring(0, 2000),
+        });
+
+        // Check if this looks like a completion without tool support
+        if (data.model && typeof data.model === 'string') {
+          log.warn('This model may not support tool calling', { model });
+        }
+
+        throw new Error(
+          `Lemonade Server returned no choices. This usually means the model '${model}' does not support tool calling. ` +
+          `Try switching to a model that supports tools (e.g., qwen3-4b-FLM or Gemma-3-4b-it-GGUF).`
+        );
+      }
+
+      const choice = data.choices[0];
+
+      // Additional check: choice exists but has no message
+      if (!choice || !choice.message) {
+        log.error('Lemonade choice has no message', {
+          choice,
+          finish_reason: choice?.finish_reason,
+        });
+        throw new Error(
+          `Lemonade Server returned an invalid response format. ` +
+          `Finish reason: ${choice?.finish_reason || 'unknown'}. ` +
+          `Try a different model or check the server logs.`
+        );
       }
 
       // Parse tool calls if present
@@ -516,3 +625,31 @@ if (import.meta.hot && !instance) {
 
 // Export class for testing
 export { LemonadeProviderClass };
+
+/**
+ * Get capabilities for a specific model
+ */
+export function getModelCapabilities(modelId: string): { supportsToolCalling: boolean; reason?: string } {
+  return lemonadeProvider.getModelCapabilities(modelId);
+}
+
+/**
+ * Get all model presets with tool calling support info
+ */
+export function getModelPresetWithCapabilities(): Array<{
+  id: string;
+  name: string;
+  size: string;
+  description: string;
+  supportsToolCalling: boolean;
+  capabilityReason?: string;
+}> {
+  return MODEL_PRESETS.map(preset => {
+    const capabilities = lemonadeProvider.getModelCapabilities(preset.id);
+    return {
+      ...preset,
+      supportsToolCalling: capabilities.supportsToolCalling,
+      capabilityReason: capabilities.reason,
+    };
+  });
+}
