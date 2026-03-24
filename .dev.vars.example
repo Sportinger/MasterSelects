@@ -13,3 +13,4 @@ OPENAI_API_KEY=replace-me
 ANTHROPIC_API_KEY=replace-me
 PIAPI_API_KEY=replace-me
 KIEAI_API_KEY=replace-me
+VISITOR_NOTIFY_SECRET=replace-me-with-a-random-string

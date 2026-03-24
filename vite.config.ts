@@ -494,6 +494,7 @@ export default defineConfig(({ command }) => {
     '/api/stripe',
     '/api/ai/chat',
     '/api/ai/video',
+    '/api/visits',
   ];
   const hostedApiProxy = Object.fromEntries(
     hostedApiProxyRoutes.map((route) => [
