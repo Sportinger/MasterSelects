@@ -394,6 +394,52 @@ function browserLogBridge(): Plugin {
   };
 }
 
+// In-memory blob store — serves uploaded binary data via HTTP URL
+// Used by GaussianSplatSceneRenderer to serve avatar ZIPs (the renderer module can't fetch blob: URLs)
+function blobStoreServer(): Plugin {
+  const blobs = new Map<string, Buffer>();
+  return {
+    name: 'blob-store-server',
+    configureServer(server) {
+      // POST /api/blob-store → store blob, return ID
+      server.middlewares.use('/api/blob-store', (req, res) => {
+        setCorsHeaders(req, res);
+        if (req.method === 'OPTIONS') { res.statusCode = 204; res.end(); return; }
+
+        if (req.method === 'POST') {
+          // No auth required — CORS restricts to localhost, and data is only served back via GET
+          const chunks: Buffer[] = [];
+          req.on('data', (chunk: Buffer) => chunks.push(chunk));
+          req.on('end', () => {
+            const id = crypto.randomUUID();
+            blobs.set(id, Buffer.concat(chunks));
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ id, url: `/api/blob-store/${id}/avatar.zip` }));
+            // Auto-cleanup after 10 minutes
+            setTimeout(() => blobs.delete(id), 10 * 60 * 1000);
+          });
+          return;
+        }
+
+        // GET /api/blob-store/:id/avatar.zip → serve blob
+        if (req.method === 'GET') {
+          const urlPath = req.url?.replace(/^\//, '').split('?')[0] || '';
+          const id = urlPath.split('/')[0]; // Extract UUID from path
+          const data = id ? blobs.get(id) : undefined;
+          if (!data) { res.statusCode = 404; res.end('Not found'); return; }
+          res.setHeader('Content-Type', 'application/zip');
+          res.setHeader('Content-Length', data.length);
+          res.end(data);
+          return;
+        }
+
+        res.statusCode = 405;
+        res.end('Method not allowed');
+      });
+    },
+  };
+}
+
 // AI Tools Bridge - lets external agents (Claude CLI) execute aiTools via HTTP
 // Flow: POST /api/ai-tools → Vite server → HMR → browser → aiTools.execute() → HMR → HTTP response
 function aiToolsBridge(): Plugin {
@@ -494,6 +540,7 @@ export default defineConfig(({ command }) => {
     '/api/stripe',
     '/api/ai/chat',
     '/api/ai/video',
+    '/api/visits',
   ];
   const hostedApiProxy = Object.fromEntries(
     hostedApiProxyRoutes.map((route) => [
@@ -509,6 +556,7 @@ export default defineConfig(({ command }) => {
     plugins: [
       react(),
       localFileServer(),
+      blobStoreServer(),
       browserLogBridge(),
       aiToolsBridge(),
       // Replace __APP_VERSION__ in index.html during build

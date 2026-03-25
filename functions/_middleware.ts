@@ -2,6 +2,8 @@ import { loadUserFromSession } from './lib/auth';
 import { buildRequestId } from './lib/db';
 import type { AppContext, AppRouteHandler } from './lib/env';
 
+const ASSET_EXTENSIONS = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff2?|ttf|eot|map|wasm|webp|avif|mp4|webm)$/i;
+
 function withHeaders(response: Response, request: Request): Response {
   const headers = new Headers(response.headers);
   const { pathname } = new URL(request.url);
@@ -17,6 +19,57 @@ function withHeaders(response: Response, request: Request): Response {
     status: response.status,
     statusText: response.statusText,
   });
+}
+
+function shouldTrackVisit(request: Request): boolean {
+  const url = new URL(request.url);
+  if (request.method !== 'GET') return false;
+  if (url.pathname.startsWith('/api/')) return false;
+  if (ASSET_EXTENSIONS.test(url.pathname)) return false;
+  // Skip known bots
+  const ua = request.headers.get('user-agent') ?? '';
+  if (/bot|crawl|spider|slurp|facebookexternalhit|preview/i.test(ua)) return false;
+  return true;
+}
+
+interface VisitEntry {
+  ts: number;
+  path: string;
+  country?: string;
+  city?: string;
+  ua?: string;
+  referer?: string;
+}
+
+function buildVisitKey(ts: number): string {
+  const newestFirst = String(9_999_999_999_999 - ts).padStart(13, '0');
+  return `visit2:${newestFirst}:${ts}:${crypto.randomUUID().slice(0, 8)}`;
+}
+
+async function trackVisit(context: AppContext): Promise<void> {
+  try {
+    const request = context.request;
+    const url = new URL(request.url);
+    const cfData = (request as unknown as { cf?: Record<string, string> }).cf;
+
+    const entry: VisitEntry = {
+      ts: Date.now(),
+      path: url.pathname,
+      country: cfData?.country,
+      city: cfData?.city,
+      ua: (request.headers.get('user-agent') ?? '').slice(0, 200),
+      referer: request.headers.get('referer') ?? undefined,
+    };
+
+    // Store newest-first keys so polling clients can read the latest visits efficiently.
+    const key = buildVisitKey(entry.ts);
+    await context.env.KV.put(key, '', {
+      expirationTtl: 3600,
+      metadata: entry,
+    });
+  } catch {
+    // Never let tracking break the request
+  }
 }
 
 export const onRequest: AppRouteHandler = async (context: AppContext): Promise<Response> => {
@@ -37,6 +90,11 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       },
       status: 204,
     });
+  }
+
+  // Track page visits in background (non-blocking)
+  if (shouldTrackVisit(context.request)) {
+    context.waitUntil(trackVisit(context));
   }
 
   const response = await context.next();

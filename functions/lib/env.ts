@@ -15,6 +15,11 @@ export interface AppD1Database {
 export interface AppKVNamespace {
   delete(key: string): Promise<void>;
   get<T = string>(key: string, options?: { type?: 'text' | 'json' | 'arrayBuffer' | 'stream' }): Promise<T | null>;
+  list(options?: {
+    prefix?: string;
+    limit?: number;
+    cursor?: string;
+  }): Promise<{ keys: { name: string; expiration?: number; metadata?: unknown }[]; list_complete: boolean; cursor?: string }>;
   put(
     key: string,
     value: string | ArrayBuffer | ArrayBufferView | ReadableStream,
@@ -52,6 +57,7 @@ export interface Env {
   STRIPE_PRICE_STUDIO?: string;
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
+  VISITOR_NOTIFY_SECRET?: string;
 }
 
 export interface AppUser {
