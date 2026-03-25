@@ -212,11 +212,26 @@ function Get-TrimmedText {
   return $Value.Substring(0, $MaxLength - 3) + '...'
 }
 
+function Get-VisitPropertyValue {
+  param(
+    $Visit,
+    [Parameter(Mandatory = $true)]
+    [string]$Name
+  )
+
+  if ($Visit -and $Visit.PSObject.Properties.Name -contains $Name) {
+    return $Visit.$Name
+  }
+
+  return $null
+}
+
 function Get-VisitCountryCode {
   param($Visit)
 
-  if ($Visit -and $Visit.PSObject.Properties.Name -contains 'country' -and -not [string]::IsNullOrWhiteSpace([string]$Visit.country)) {
-    return ([string]$Visit.country).Trim().ToUpperInvariant()
+  $country = [string](Get-VisitPropertyValue -Visit $Visit -Name 'country')
+  if (-not [string]::IsNullOrWhiteSpace($country)) {
+    return $country.Trim().ToUpperInvariant()
   }
 
   return ''
@@ -242,11 +257,13 @@ function Get-VisitLocation {
   param($Visit)
 
   $parts = @()
-  if ($Visit.PSObject.Properties.Name -contains 'city' -and -not [string]::IsNullOrWhiteSpace([string]$Visit.city)) {
-    $parts += [string]$Visit.city
+  $city = [string](Get-VisitPropertyValue -Visit $Visit -Name 'city')
+  if (-not [string]::IsNullOrWhiteSpace($city)) {
+    $parts += $city
   }
-  if ($Visit.PSObject.Properties.Name -contains 'country' -and -not [string]::IsNullOrWhiteSpace([string]$Visit.country)) {
-    $parts += [string]$Visit.country
+  $country = [string](Get-VisitPropertyValue -Visit $Visit -Name 'country')
+  if (-not [string]::IsNullOrWhiteSpace($country)) {
+    $parts += $country
   }
 
   if ($parts.Count -gt 0) {
@@ -260,8 +277,9 @@ function Get-VisitPath {
   param($Visit)
 
   $path = '/'
-  if ($Visit -and $Visit.PSObject.Properties.Name -contains 'path' -and -not [string]::IsNullOrWhiteSpace([string]$Visit.path)) {
-    $path = [string]$Visit.path
+  $rawPath = [string](Get-VisitPropertyValue -Visit $Visit -Name 'path')
+  if (-not [string]::IsNullOrWhiteSpace($rawPath)) {
+    $path = $rawPath
   }
 
   if (-not $path.StartsWith('/')) {
@@ -280,21 +298,18 @@ function Get-VisitUrl {
 function Get-VisitTimeText {
   param($Visit)
 
-  if (-not $Visit -or -not ($Visit.PSObject.Properties.Name -contains 'ts')) {
+  $ts = Get-VisitPropertyValue -Visit $Visit -Name 'ts'
+  if ($null -eq $ts) {
     return '--:--:--'
   }
 
-  return [DateTimeOffset]::FromUnixTimeMilliseconds([long]$Visit.ts).ToLocalTime().ToString('HH:mm:ss')
+  return [DateTimeOffset]::FromUnixTimeMilliseconds([long]$ts).ToLocalTime().ToString('HH:mm:ss')
 }
 
 function Get-VisitRefererHost {
   param($Visit)
 
-  if (-not $Visit -or -not ($Visit.PSObject.Properties.Name -contains 'referer')) {
-    return ''
-  }
-
-  $referer = [string]$Visit.referer
+  $referer = [string](Get-VisitPropertyValue -Visit $Visit -Name 'referer')
   if ([string]::IsNullOrWhiteSpace($referer)) {
     return ''
   }
@@ -309,20 +324,22 @@ function Get-VisitRefererHost {
 function Get-VisitGroupKey {
   param($Visit)
 
-  if ($Visit -and $Visit.PSObject.Properties.Name -contains 'visitorId' -and -not [string]::IsNullOrWhiteSpace([string]$Visit.visitorId)) {
-    return 'visitor:' + ([string]$Visit.visitorId)
+  $visitorId = [string](Get-VisitPropertyValue -Visit $Visit -Name 'visitorId')
+  if (-not [string]::IsNullOrWhiteSpace($visitorId)) {
+    return 'visitor:' + $visitorId
   }
 
   $bucket = 0
-  if ($Visit -and $Visit.PSObject.Properties.Name -contains 'ts') {
-    $bucket = [math]::Floor(([double][long]$Visit.ts) / 300000)
+  $ts = Get-VisitPropertyValue -Visit $Visit -Name 'ts'
+  if ($null -ne $ts) {
+    $bucket = [math]::Floor(([double][long]$ts) / 300000)
   }
 
   return 'fallback:{0}|{1}|{2}|{3}|{4}' -f (
     (Get-VisitCountryCode -Visit $Visit),
-    [string]$Visit.city,
+    [string](Get-VisitPropertyValue -Visit $Visit -Name 'city'),
     (Get-VisitRefererHost -Visit $Visit),
-    [string]$Visit.ua,
+    [string](Get-VisitPropertyValue -Visit $Visit -Name 'ua'),
     $bucket
   )
 }
@@ -331,13 +348,13 @@ function New-VisitFingerprint {
   param($Visit)
 
   return '{0}|{1}|{2}|{3}|{4}|{5}|{6}' -f (
-    [long]$Visit.ts,
+    [long](Get-VisitPropertyValue -Visit $Visit -Name 'ts'),
     (Get-VisitPath -Visit $Visit),
-    [string]$Visit.visitorId,
-    [string]$Visit.country,
-    [string]$Visit.city,
-    [string]$Visit.ua,
-    [string]$Visit.referer
+    [string](Get-VisitPropertyValue -Visit $Visit -Name 'visitorId'),
+    [string](Get-VisitPropertyValue -Visit $Visit -Name 'country'),
+    [string](Get-VisitPropertyValue -Visit $Visit -Name 'city'),
+    [string](Get-VisitPropertyValue -Visit $Visit -Name 'ua'),
+    [string](Get-VisitPropertyValue -Visit $Visit -Name 'referer')
   )
 }
 
@@ -390,8 +407,9 @@ function Get-VisitTooltip {
     $lines += ('Referer: {0}' -f $refererHost)
   }
 
-  if ($Visit.PSObject.Properties.Name -contains 'ua' -and -not [string]::IsNullOrWhiteSpace([string]$Visit.ua)) {
-    $lines += ('UA: {0}' -f (Get-TrimmedText -Value ([string]$Visit.ua) -MaxLength 180))
+  $ua = [string](Get-VisitPropertyValue -Visit $Visit -Name 'ua')
+  if (-not [string]::IsNullOrWhiteSpace($ua)) {
+    $lines += ('UA: {0}' -f (Get-TrimmedText -Value $ua -MaxLength 180))
   }
 
   return ($lines -join [Environment]::NewLine)
