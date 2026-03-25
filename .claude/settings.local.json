@@ -24,7 +24,8 @@
       "Bash(git rev-list:*)",
       "Bash(cd /d C:UsersantmiMasterSelects)",
       "Bash(findstr /C:lemonade srcstoressettingsStore.ts)",
-      "Bash(findstr /C:\"endpoint\\\\|Endpoint\\\\|ENDPOINT\")"
+      "Bash(findstr /C:\"endpoint\\\\|Endpoint\\\\|ENDPOINT\")",
+      "Bash(ls -la *.md)"
     ]
   }
 }
