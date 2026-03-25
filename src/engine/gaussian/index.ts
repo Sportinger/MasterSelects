@@ -27,6 +27,10 @@ export type { UploadableSplatData, SplatCameraParams, SplatRenderOptions } from 
 export { SplatRenderTargetPool } from './core/SplatRenderTargetPool';
 export { buildSplatCamera } from './core/SplatCameraUtils';
 
+// Wave 4: GPU sort + cull for large scenes
+export { SplatVisibilityPass } from './core/SplatVisibilityPass';
+export { SplatSortPass } from './core/SplatSortPass';
+
 // Wave 5: Temporal 4D playback
 export { sampleTemporalFrame } from './temporal/TemporalSampler';
 export type { TemporalSampleResult } from './temporal/TemporalSampler';

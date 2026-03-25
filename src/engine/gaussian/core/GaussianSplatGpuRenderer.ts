@@ -86,9 +86,6 @@ export class GaussianSplatGpuRenderer {
   private particleCompute: ParticleCompute = new ParticleCompute();
   /** Per-clip particle output buffers (keyed by clipId) */
   private particleOutputBuffers: Map<string, { buffer: GPUBuffer; splatCount: number }> = new Map();
-  /** Per-clip bind groups for rendering from particle output buffers */
-  private particleBindGroups: Map<string, GPUBindGroup> = new Map();
-
   // Wave 4: GPU sort + cull passes
   private visibilityPass = new SplatVisibilityPass();
   private sortPass = new SplatSortPass();
@@ -216,13 +213,16 @@ export class GaussianSplatGpuRenderer {
   /**
    * Render one splat layer into a GPU texture. Returns textureView or null.
    *
-   * Pipeline order (Wave 5):
+   * Pipeline order:
    *   1. Temporal sampling — frame switching handled externally via uploadScene()
-   *   2. Particle offsets (compute pass, if enabled)
-   *   3. [Wave 4: cull + sort — future]
-   *   4. Rasterize (instanced quad rendering)
+   *   2. Particle offsets (compute pass, if enabled) [Wave 5]
+   *   3. Frustum culling (compute, if splatCount > CULL_THRESHOLD) [Wave 4]
+   *   4. Depth sort (compute, if splatCount > SORT_THRESHOLD) [Wave 4]
+   *   5. Rasterize (instanced quad rendering with sorted index indirection)
    *
    * @param options - Optional temporal/particle settings from layer source
+   * @param sortFrequency - Sort every N frames (1 = every frame, 0 = never)
+   * @param maxSplats - Max splat budget (0 = unlimited)
    */
   renderToTexture(
     clipId: string,
@@ -230,6 +230,8 @@ export class GaussianSplatGpuRenderer {
     viewport: { width: number; height: number },
     commandEncoder: GPUCommandEncoder,
     options?: SplatRenderOptions,
+    sortFrequency = 1,
+    maxSplats = 0,
   ): GPUTextureView | null {
     if (!this._initialized || !this.device || !this.pipeline) {
       return null;
@@ -246,12 +248,14 @@ export class GaussianSplatGpuRenderer {
     }
 
     try {
-      // Determine which buffer + bind group to use for rendering.
-      // Default: scene.bindGroup (direct uploaded data).
-      let activeBindGroup = scene.bindGroup;
+      // Update camera uniforms
+      this.writeCameraUniforms(camera);
+
+      // Determine which splat data buffer to use (may be overridden by particle pass)
+      let activeSplatBuffer = scene.splatBuffer;
       let activeSplatCount = scene.splatCount;
 
-      // ── Step 2: Particle offsets (compute pass) ──
+      // ── Step 2: Particle offsets (compute pass) [Wave 5] ──
       const particleSettings = options?.particleSettings;
       const clipLocalTime = options?.clipLocalTime ?? 0;
 
@@ -260,10 +264,8 @@ export class GaussianSplatGpuRenderer {
         particleSettings.effectType !== 'none' &&
         this.particleCompute.isInitialized
       ) {
-        // Get or create particle output buffer for this clip
         const particleOutput = this.getOrCreateParticleBuffer(clipId, scene.splatCount);
         if (particleOutput) {
-          // Run particle compute: reads scene.splatBuffer, writes particleOutput.buffer
           this.particleCompute.execute(
             this.device,
             commandEncoder,
@@ -273,19 +275,90 @@ export class GaussianSplatGpuRenderer {
             clipLocalTime,
             particleSettings,
           );
-
-          // Use particle output bind group for rendering
-          activeBindGroup = this.getOrCreateParticleBindGroup(clipId, particleOutput.buffer);
+          activeSplatBuffer = particleOutput.buffer;
           activeSplatCount = scene.splatCount;
         }
       }
 
-      // ── Step 4: Rasterize ──
-      // Update camera uniforms
-      this.writeCameraUniforms(camera);
+      // Determine effective splat count (respect maxSplats budget)
+      const effectiveSplatCount = maxSplats > 0
+        ? Math.min(activeSplatCount, maxSplats)
+        : activeSplatCount;
 
-      // Acquire render target from pool
+      // ── Step 3: Frustum Culling [Wave 4] ──────────────────────────────────
+      let cullIndexBuffer: GPUBuffer | null = null;
+      let drawCount = effectiveSplatCount;
+
+      if (
+        this.visibilityPass.isInitialized &&
+        effectiveSplatCount > CULL_THRESHOLD
+      ) {
+        const cullResult = this.visibilityPass.execute(
+          this.device, commandEncoder,
+          activeSplatBuffer, effectiveSplatCount,
+          camera.viewMatrix, camera.projectionMatrix,
+        );
+
+        if (cullResult) {
+          cullIndexBuffer = cullResult.visibleIndexBuffer;
+          // Use last known visible count as draw estimate.
+          // On the very first frame we use full splatCount (conservative).
+          drawCount = this.lastVisibleCount.get(clipId) ?? effectiveSplatCount;
+
+          // Kick off async readback for next frame's draw count
+          this.readbackVisibleCount(clipId);
+        }
+      }
+
+      // ── Step 4: Depth Sort (back-to-front) [Wave 4] ──────────────────────
+      let sortedIndexBuffer: GPUBuffer | null = null;
+      const shouldSort = effectiveSplatCount > SORT_THRESHOLD;
+      const sortThisFrame = shouldSort && (
+        sortFrequency <= 1 || scene.framesSinceSort >= sortFrequency
+      );
+
+      if (sortThisFrame && this.sortPass.isInitialized) {
+        const sourceIndexBuffer = cullIndexBuffer ?? scene.identityIndexBuffer;
+        const sortCount = cullIndexBuffer ? drawCount : effectiveSplatCount;
+
+        const sorted = this.sortPass.execute(
+          this.device, commandEncoder,
+          activeSplatBuffer, sourceIndexBuffer, sortCount,
+          camera.viewMatrix,
+        );
+
+        if (sorted) {
+          sortedIndexBuffer = sorted;
+          scene.framesSinceSort = 0;
+        }
+      } else if (shouldSort) {
+        scene.framesSinceSort++;
+      }
+
+      // ── Step 5: Rasterize ────────────────────────────────────────────────
       const { view: targetView } = this.renderTargetPool.acquire(viewport.width, viewport.height);
+
+      // Determine which bind group to use
+      let renderBindGroup = scene.bindGroup; // default: identity indices + original data
+
+      // Build the appropriate bind group based on which passes ran
+      if (sortedIndexBuffer || cullIndexBuffer || activeSplatBuffer !== scene.splatBuffer) {
+        const indexBuf = sortedIndexBuffer ?? cullIndexBuffer ?? scene.identityIndexBuffer;
+        renderBindGroup = this.device.createBindGroup({
+          layout: this.splatDataBindGroupLayout!,
+          entries: [
+            { binding: 0, resource: { buffer: activeSplatBuffer } },
+            { binding: 1, resource: { buffer: indexBuf } },
+          ],
+          label: `splat-active-bind-group-${clipId}`,
+        });
+        if (sortedIndexBuffer) {
+          scene.sortedBindGroup = renderBindGroup;
+        }
+      } else if (scene.sortedBindGroup && shouldSort && !sortThisFrame) {
+        // Reuse last sorted bind group on skip frames
+        renderBindGroup = scene.sortedBindGroup;
+      }
 
       // Create render pass
       const passEncoder = commandEncoder.beginRenderPass({
@@ -301,11 +374,11 @@ export class GaussianSplatGpuRenderer {
       });
 
       passEncoder.setPipeline(this.pipeline);
-      passEncoder.setBindGroup(0, activeBindGroup);
+      passEncoder.setBindGroup(0, renderBindGroup);
       passEncoder.setBindGroup(1, this.cameraBindGroup!);
 
       // Instanced draw: 4 vertices per quad, one instance per splat
-      passEncoder.draw(4, activeSplatCount, 0, 0);
+      passEncoder.draw(4, drawCount, 0, 0);
       passEncoder.end();
 
       return targetView;
@@ -350,7 +423,6 @@ export class GaussianSplatGpuRenderer {
     // Release old buffer if splat count changed
     if (existing) {
       existing.buffer.destroy();
-      this.particleBindGroups.delete(clipId);
     }
 
     const byteSize = splatCount * FLOATS_PER_SPLAT * 4;
@@ -365,23 +437,6 @@ export class GaussianSplatGpuRenderer {
     return entry;
   }
 
-  /** Get or create a bind group for rendering from a particle output buffer */
-  private getOrCreateParticleBindGroup(clipId: string, buffer: GPUBuffer): GPUBindGroup {
-    const existing = this.particleBindGroups.get(clipId);
-    if (existing) return existing;
-
-    const bindGroup = this.device!.createBindGroup({
-      layout: this.splatDataBindGroupLayout!,
-      entries: [
-        { binding: 0, resource: { buffer } },
-      ],
-      label: `particle-bind-group-${clipId}`,
-    });
-
-    this.particleBindGroups.set(clipId, bindGroup);
-    return bindGroup;
-  }
-
   /** Release particle buffer for a specific clip */
   private releaseParticleBuffer(clipId: string): void {
     const entry = this.particleOutputBuffers.get(clipId);
@@ -389,23 +444,23 @@ export class GaussianSplatGpuRenderer {
       entry.buffer.destroy();
       this.particleOutputBuffers.delete(clipId);
     }
-    this.particleBindGroups.delete(clipId);
   }
 
   private disposeGpuResources(): void {
     // Release all scenes
     for (const [clipId, scene] of this.sceneCache) {
       scene.splatBuffer.destroy();
+      scene.identityIndexBuffer.destroy();
       log.debug('Disposed scene buffer', { clipId });
     }
     this.sceneCache.clear();
+    this.lastVisibleCount.clear();
 
     // Wave 5: Dispose particle output buffers
     for (const [, entry] of this.particleOutputBuffers) {
       entry.buffer.destroy();
     }
     this.particleOutputBuffers.clear();
-    this.particleBindGroups.clear();
 
     // Wave 5: Dispose particle compute subsystem
     this.particleCompute.dispose();
@@ -420,6 +475,10 @@ export class GaussianSplatGpuRenderer {
     if (this.renderTargetPool) {
       this.renderTargetPool.dispose();
     }
+
+    // Wave 4: Dispose sort + cull passes
+    this.visibilityPass.dispose();
+    this.sortPass.dispose();
 
     // Nullify pipeline and layouts (they don't need explicit destruction)
     this.pipeline = null;
@@ -436,11 +495,16 @@ export class GaussianSplatGpuRenderer {
       label: 'gaussian-splat-shader',
     });
 
-    // Group 0: splat data storage buffer
+    // Group 0: splat data storage buffer + sorted index buffer
     this.splatDataBindGroupLayout = this.device.createBindGroupLayout({
       entries: [
         {
           binding: 0,
+          visibility: GPUShaderStage.VERTEX,
+          buffer: { type: 'read-only-storage' },
+        },
+        {
+          binding: 1,
           visibility: GPUShaderStage.VERTEX,
           buffer: { type: 'read-only-storage' },
         },
@@ -539,6 +603,43 @@ export class GaussianSplatGpuRenderer {
     // Padding (2 floats at offset 34) — zero-initialized by Float32Array
 
     this.device.queue.writeBuffer(this.cameraUniformBuffer, 0, data);
+  }
+
+  /**
+   * Create an identity index buffer: [0, 1, 2, ..., count-1]
+   * Used as the default (unsorted) index indirection.
+   */
+  private createIdentityIndexBuffer(device: GPUDevice, count: number, clipId: string): GPUBuffer {
+    const identityData = new Uint32Array(count);
+    for (let i = 0; i < count; i++) {
+      identityData[i] = i;
+    }
+
+    const buffer = device.createBuffer({
+      size: count * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+      mappedAtCreation: true,
+      label: `splat-identity-indices-${clipId}`,
+    });
+
+    new Uint32Array(buffer.getMappedRange()).set(identityData);
+    buffer.unmap();
+
+    return buffer;
+  }
+
+  /**
+   * Asynchronously read back the visible splat count from the cull pass.
+   * Updates lastVisibleCount for the next frame's draw call.
+   */
+  private readbackVisibleCount(clipId: string): void {
+    this.visibilityPass.getVisibleCount().then((count) => {
+      if (count > 0) {
+        this.lastVisibleCount.set(clipId, count);
+      }
+    }).catch((err) => {
+      log.debug('Visible count readback failed (expected during rapid frame changes)', { clipId, error: err });
+    });
   }
 }
 

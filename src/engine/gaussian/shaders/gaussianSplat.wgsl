@@ -15,6 +15,9 @@ struct CameraUniforms {
 // ── Splat storage buffer (14 floats per splat) ───────────────────────────────
 @group(0) @binding(0) var<storage, read> splatData: array<f32>;
 
+// ── Sorted index buffer (optional — identity if unsorted) ───────────────────
+@group(0) @binding(1) var<storage, read> sortedIndices: array<u32>;
+
 // ── Vertex output / Fragment input ───────────────────────────────────────────
 struct VertexOutput {
   @builtin(position) position: vec4f,
@@ -124,8 +127,11 @@ fn vs_main(
 ) -> VertexOutput {
   var out: VertexOutput;
 
+  // Look up actual splat index via sorted indirection buffer
+  let splatIdx = sortedIndices[instanceIndex];
+
   // 14 floats per splat
-  let base = instanceIndex * 14u;
+  let base = splatIdx * 14u;
 
   // Read splat data
   let pos   = vec3f(splatData[base + 0u], splatData[base + 1u], splatData[base + 2u]);
