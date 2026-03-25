@@ -6,6 +6,7 @@ import {
   isVideoFile,
   isAudioFile,
   isMediaFile,
+  isGaussianSplatFile,
   getVideoMetadataQuick,
 } from '../utils/fileTypeHelpers';
 import {
@@ -363,6 +364,14 @@ export function useExternalDrop({
             break;
           }
 
+          if (isGaussianSplatFile(file)) {
+            duration = duration ?? 10;
+            hasAudio = false;
+            isVideo = true;
+            isAudio = false;
+            break;
+          }
+
           if (isMediaFile(file)) {
             hasAudio = false;
             break;
@@ -624,6 +633,11 @@ export function useExternalDrop({
               const file = item.getAsFile();
               if (file && isAudioFile(file)) {
                 fileIsAudio = true;
+                break;
+              }
+              if (file && isGaussianSplatFile(file)) {
+                dur = 10;
+                hasAudio = false;
                 break;
               }
               if (file && isVideoFile(file)) {

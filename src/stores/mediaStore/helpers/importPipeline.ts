@@ -20,6 +20,8 @@ export interface ImportParams {
   handle?: FileSystemFileHandle;
   absolutePath?: string;
   parentId?: string | null;
+  /** Force a specific media type instead of auto-detecting (e.g. 'gaussian-avatar' for .zip files) */
+  typeOverride?: MediaFile['type'];
 }
 
 export interface ImportResult {
@@ -39,7 +41,7 @@ export function generateId(): string {
  * Replaces duplicate logic in importFile, importFilesWithPicker, importFilesWithHandles.
  */
 export async function processImport(params: ImportParams): Promise<ImportResult> {
-  const { file, id, handle, absolutePath, parentId } = params;
+  const { file, id, handle, absolutePath, parentId, typeOverride } = params;
 
   // Store handle if provided (for original file location)
   if (handle) {
@@ -47,9 +49,8 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
     await projectDB.storeHandle(`media_${id}`, handle);
   }
 
-  // Detect type using shared helper from clipSlice
-  const detectedType = detectMediaType(file);
-  const type = (detectedType === 'model' ? 'model' : detectedType) as MediaFile['type'];
+  // Detect type using shared helper from clipSlice, or use override if provided
+  const type: MediaFile['type'] = typeOverride ?? ((detectMediaType(file) === 'model' ? 'model' : detectMediaType(file)) as MediaFile['type']);
   let canonicalFile = file;
   let url = URL.createObjectURL(file);
 

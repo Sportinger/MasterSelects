@@ -1350,7 +1350,7 @@ export function MediaPanel() {
         ref={fileInputRef}
         type="file"
         multiple
-        accept="video/*,audio/*,image/*"
+        accept="video/*,audio/*,image/*,.obj,.gltf,.glb,.fbx,.ply,.splat"
         style={{ display: 'none' }}
         onChange={handleFileChange}
       />
