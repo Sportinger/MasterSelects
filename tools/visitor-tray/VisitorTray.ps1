@@ -15,6 +15,7 @@ $script:RepoRoot = (Resolve-Path (Join-Path $script:ToolRoot '..\..')).Path
 $script:LogUi = $null
 $script:ToastUi = $null
 $script:FlagImageCache = @{}
+$script:AlertSoundPlayer = $null
 
 function Read-KeyValueFile {
   param(
@@ -75,6 +76,7 @@ function Get-ConfigMap {
       'POLL_INTERVAL_MS',
       'MAX_VISITS_PER_POLL',
       'ALERT_SECONDS',
+      'ALERT_SOUND_PATH',
       'ENABLE_SOUND',
       'ENABLE_BALLOON',
       'OPEN_SITE_ON_BALLOON_CLICK',
@@ -179,6 +181,46 @@ function Get-BaseIcon {
   }
 
   return [System.Drawing.SystemIcons]::Application
+}
+
+function Get-ResolvedAlertSoundPath {
+  param(
+    [Parameter(Mandatory = $true)]
+    [hashtable]$Config
+  )
+
+  $configured = [string]$Config['ALERT_SOUND_PATH']
+  if (-not [string]::IsNullOrWhiteSpace($configured)) {
+    try {
+      $candidate = [Environment]::ExpandEnvironmentVariables($configured.Trim())
+      if (-not [System.IO.Path]::IsPathRooted($candidate)) {
+        $candidate = Join-Path $script:ToolRoot $candidate
+      }
+      if (Test-Path -LiteralPath $candidate) {
+        return (Resolve-Path $candidate).Path
+      }
+    } catch {
+    }
+  }
+
+  $bundledSound = Join-Path $script:ToolRoot 'assets\masterselects-alert.wav'
+  if (Test-Path -LiteralPath $bundledSound) {
+    return (Resolve-Path $bundledSound).Path
+  }
+
+  foreach ($candidate in @(
+      'C:\Windows\Media\Windows Notify Messaging.wav',
+      'C:\Windows\Media\Windows Notify Email.wav',
+      'C:\Windows\Media\Windows Notify System Generic.wav',
+      'C:\Windows\Media\notify.wav',
+      'C:\Windows\Media\chimes.wav'
+    )) {
+    if (Test-Path -LiteralPath $candidate) {
+      return $candidate
+    }
+  }
+
+  return $null
 }
 
 function Get-UiFont {
@@ -1044,7 +1086,24 @@ function Play-AlertSound {
     return
   }
 
-  [System.Media.SystemSounds]::Exclamation.Play()
+  if ($script:Config.AlertSoundPath -and (Test-Path -LiteralPath $script:Config.AlertSoundPath)) {
+    try {
+      if (-not $script:AlertSoundPlayer -or $script:AlertSoundPlayer.SoundLocation -ne $script:Config.AlertSoundPath) {
+        if ($script:AlertSoundPlayer) {
+          $script:AlertSoundPlayer.Dispose()
+        }
+
+        $script:AlertSoundPlayer = New-Object System.Media.SoundPlayer($script:Config.AlertSoundPath)
+        $script:AlertSoundPlayer.Load()
+      }
+
+      $script:AlertSoundPlayer.Play()
+      return
+    } catch {
+    }
+  }
+
+  [System.Media.SystemSounds]::Asterisk.Play()
 }
 
 function Prime-VisitHistory {
@@ -1457,6 +1516,12 @@ function Exit-VisitorTray {
     $script:ToastUi.Form.Dispose()
   }
 
+  if ($script:AlertSoundPlayer) {
+    $script:AlertSoundPlayer.Stop()
+    $script:AlertSoundPlayer.Dispose()
+    $script:AlertSoundPlayer = $null
+  }
+
   $script:NotifyIcon.Visible = $false
   $script:NotifyIcon.Dispose()
   $script:ApplicationContext.ExitThread()
@@ -1474,6 +1539,7 @@ $script:Config = @{
   EnableBalloon          = Get-ConfigBool -Config $configMap -Name 'ENABLE_BALLOON' -Default $true
   OpenSiteOnBalloonClick = Get-ConfigBool -Config $configMap -Name 'OPEN_SITE_ON_BALLOON_CLICK' -Default $true
   HistoryLimit           = Get-ConfigInt -Config $configMap -Name 'HISTORY_LIMIT' -Default 200 -Min 20 -Max 500
+  AlertSoundPath         = Get-ResolvedAlertSoundPath -Config $configMap
 }
 
 $script:Theme = @{
