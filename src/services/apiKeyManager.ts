@@ -4,6 +4,8 @@
 import { Logger } from './logger';
 
 const log = Logger.create('ApiKeyManager');
+let hasWarnedKeyFileExportDisabled = false;
+let hasWarnedKeyFileImportDisabled = false;
 
 const DB_NAME = 'multicam-settings';
 const STORE_NAME = 'api-keys';
@@ -285,7 +287,10 @@ class ApiKeyManager {
    * Keys must be re-entered on new machines until user-passphrase support is added.
    */
   async exportKeysForFile(): Promise<string | null> {
-    log.warn('Key file export is disabled. Keys must be re-entered on new machines.');
+    if (!hasWarnedKeyFileExportDisabled) {
+      hasWarnedKeyFileExportDisabled = true;
+      log.warn('Key file export is disabled. Keys must be re-entered on new machines.');
+    }
     return null;
   }
 
@@ -297,7 +302,10 @@ class ApiKeyManager {
    * Keys must be re-entered manually until user-passphrase support is added.
    */
   async importKeysFromFile(_fileContent: string): Promise<boolean> {
-    log.warn('Key file import is disabled (deterministic passphrase deprecated).');
+    if (!hasWarnedKeyFileImportDisabled) {
+      hasWarnedKeyFileImportDisabled = true;
+      log.warn('Key file import is disabled (deterministic passphrase deprecated).');
+    }
     return false;
   }
 

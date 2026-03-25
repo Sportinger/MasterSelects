@@ -70,7 +70,7 @@ export function PropertiesPanel() {
       if (isGaussianAvatar) {
         setActiveTab('blendshapes');
       } else if (isGaussianSplat) {
-        setActiveTab('gaussian-splat');
+        setActiveTab('transform');
       } else if (isSolidClip) {
         setActiveTab('transform');
       } else if (isTextClip) {

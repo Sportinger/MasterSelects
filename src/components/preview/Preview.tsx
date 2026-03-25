@@ -40,13 +40,16 @@ interface PreviewProps {
 
 export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps) {
   const { isEngineReady } = useEngine();
+  const { getInterpolatedTransform } = useTimelineStore.getState();
   const engineInitFailed = useEngineStore((s) => s.engineInitFailed);
   const engineInitError = useEngineStore((s) => s.engineInitError);
   const engineStats = useEngineStore(s => s.engineStats);
   const gaussianSplatNavClipId = useEngineStore((s) => s.gaussianSplatNavClipId);
-  const { clips, selectedClipIds, selectClip, updateClipTransform, maskEditMode, layers, selectedLayerId, selectLayer, updateLayer, tracks } = useTimelineStore(useShallow(s => ({
+  const { clips, selectedClipIds, primarySelectedClipId, playheadPosition, selectClip, updateClipTransform, maskEditMode, layers, selectedLayerId, selectLayer, updateLayer, tracks } = useTimelineStore(useShallow(s => ({
     clips: s.clips,
     selectedClipIds: s.selectedClipIds,
+    primarySelectedClipId: s.primarySelectedClipId,
+    playheadPosition: s.playheadPosition,
     selectClip: s.selectClip,
     updateClipTransform: s.updateClipTransform,
     maskEditMode: s.maskEditMode,
@@ -71,8 +74,9 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   })));
   const sam2Active = useSAM2Store((s) => s.isActive);
 
-  // Get first selected clip for preview
-  const selectedClipId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
+  const selectedClipId = primarySelectedClipId && selectedClipIds.has(primarySelectedClipId)
+    ? primarySelectedClipId
+    : selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
@@ -302,6 +306,12 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     [selectedClip],
   );
 
+  const selectedGaussianSplatTransform = useMemo(() => {
+    if (!selectedGaussianSplatClip) return null;
+    const clipLocalTime = playheadPosition - selectedGaussianSplatClip.startTime;
+    return getInterpolatedTransform(selectedGaussianSplatClip.id, clipLocalTime);
+  }, [getInterpolatedTransform, playheadPosition, selectedGaussianSplatClip]);
+
   const gaussianNavEnabled = Boolean(
     isEditableSource &&
     !editMode &&
@@ -495,11 +505,11 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
   // Handle zoom with scroll wheel in edit mode
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (gaussianNavEnabled && selectedGaussianSplatClip && isCanvasInteractionTarget(e.target)) {
+    if (gaussianNavEnabled && selectedGaussianSplatClip && selectedGaussianSplatTransform && isCanvasInteractionTarget(e.target)) {
       e.preventDefault();
       scheduleGaussianWheelBatchEnd();
 
-      const currentZoom = Math.max(0.05, selectedGaussianSplatClip.transform.scale.x || 1);
+      const currentZoom = Math.max(0.05, selectedGaussianSplatTransform.scale.x || 1);
       const zoomFactor = Math.exp(-e.deltaY * 0.0025);
       const nextZoom = Math.max(0.05, Math.min(40, currentZoom * zoomFactor));
 
@@ -546,6 +556,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     isCanvasInteractionTarget,
     scheduleGaussianWheelBatchEnd,
     selectedGaussianSplatClip,
+    selectedGaussianSplatTransform,
     updateClipTransform,
     viewPan,
     viewZoom,
@@ -558,7 +569,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
   // Handle gaussian nav and edit-mode panning
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (gaussianNavEnabled && selectedGaussianSplatClip && isCanvasInteractionTarget(e.target)) {
+    if (gaussianNavEnabled && selectedGaussianSplatClip && selectedGaussianSplatTransform && isCanvasInteractionTarget(e.target)) {
       if (e.button === 0) {
         if (e.shiftKey) {
           e.preventDefault();
@@ -568,10 +579,10 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
             clipId: selectedGaussianSplatClip.id,
             x: e.clientX,
             y: e.clientY,
-            panX: selectedGaussianSplatClip.transform.position.x,
-            panY: selectedGaussianSplatClip.transform.position.y,
-            panZ: selectedGaussianSplatClip.transform.position.z,
-            zoom: selectedGaussianSplatClip.transform.scale.x || 1,
+            panX: selectedGaussianSplatTransform.position.x,
+            panY: selectedGaussianSplatTransform.position.y,
+            panZ: selectedGaussianSplatTransform.position.z,
+            zoom: selectedGaussianSplatTransform.scale.x || 1,
           };
           setIsGaussianPanning(true);
           return;
@@ -583,9 +594,9 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
           clipId: selectedGaussianSplatClip.id,
           x: e.clientX,
           y: e.clientY,
-          pitch: selectedGaussianSplatClip.transform.rotation.x,
-          yaw: selectedGaussianSplatClip.transform.rotation.y,
-          roll: selectedGaussianSplatClip.transform.rotation.z,
+          pitch: selectedGaussianSplatTransform.rotation.x,
+          yaw: selectedGaussianSplatTransform.rotation.y,
+          roll: selectedGaussianSplatTransform.rotation.z,
         };
         setIsGaussianOrbiting(true);
         return;
@@ -599,10 +610,10 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
           clipId: selectedGaussianSplatClip.id,
           x: e.clientX,
           y: e.clientY,
-          panX: selectedGaussianSplatClip.transform.position.x,
-          panY: selectedGaussianSplatClip.transform.position.y,
-          panZ: selectedGaussianSplatClip.transform.position.z,
-          zoom: selectedGaussianSplatClip.transform.scale.x || 1,
+          panX: selectedGaussianSplatTransform.position.x,
+          panY: selectedGaussianSplatTransform.position.y,
+          panZ: selectedGaussianSplatTransform.position.z,
+          zoom: selectedGaussianSplatTransform.scale.x || 1,
         };
         setIsGaussianPanning(true);
         return;
@@ -627,6 +638,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     gaussianNavEnabled,
     isCanvasInteractionTarget,
     selectedGaussianSplatClip,
+    selectedGaussianSplatTransform,
     viewPan,
   ]);
 

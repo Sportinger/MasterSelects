@@ -801,10 +801,31 @@ export class LayerBuilderService {
    */
   private buildGaussianSplatLayer(clip: TimelineClip, layerIndex: number, ctx: FrameContext, opacityOverride?: number): Layer {
     const timeInfo = getClipTimeInfo(ctx, clip);
-    const transform = this.transformCache.getTransform(
-      `${ctx.activeCompId}_${layerIndex}`,
-      ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime)
-    );
+    const interpolatedTransform = ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime);
+    // Gaussian splat camera controls use rotation in degrees. The generic
+    // transform cache converts rotation to radians for compositor layers,
+    // which breaks orbit math when reused here.
+    const transform = {
+      position: {
+        x: interpolatedTransform.position.x,
+        y: interpolatedTransform.position.y,
+        z: interpolatedTransform.position.z,
+      },
+      scale: {
+        x: interpolatedTransform.scale.x,
+        y: interpolatedTransform.scale.y,
+        ...(interpolatedTransform.scale.z !== undefined
+          ? { z: interpolatedTransform.scale.z }
+          : {}),
+      },
+      rotation: {
+        x: interpolatedTransform.rotation.x,
+        y: interpolatedTransform.rotation.y,
+        z: interpolatedTransform.rotation.z,
+      },
+      opacity: interpolatedTransform.opacity,
+      blendMode: interpolatedTransform.blendMode,
+    };
     const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
 
     const finalOpacity = opacityOverride !== undefined

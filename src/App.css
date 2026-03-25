@@ -8676,6 +8676,7 @@ input[type="checkbox"] {
   border-radius: 4px;
   white-space: nowrap;
   z-index: 20;
+  pointer-events: none;
 }
 
 .preview-canvas-wrapper {

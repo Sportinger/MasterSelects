@@ -9,7 +9,7 @@ import type { SplatCameraParams } from './GaussianSplatGpuRenderer';
  * Mapping:
  *  - position.z  -> camera distance from origin (default 5)
  *  - position.x/y -> pan in camera screen space (-1..1 roughly equals full viewport)
- *  - rotation    -> orbit angles in radians (x = pitch, y = yaw). Accepts number (yaw only) or {x,y,z}.
+ *  - rotation    -> orbit angles in degrees (x = pitch, y = yaw). Accepts number (yaw only) or {x,y,z}.
  *  - scale.x     -> zoom multiplier (dollies camera distance)
  *  - settings.nearPlane / farPlane  -> clipping planes
  */
@@ -26,16 +26,18 @@ export function buildSplatCamera(
     max: [number, number, number];
   },
 ): SplatCameraParams {
+  const DEG_TO_RAD = Math.PI / 180;
+
   // Extract orbit angles
   let pitch = 0;
   let yaw = 0;
   let roll = 0;
   if (typeof layer.rotation === 'number') {
-    yaw = layer.rotation;
+    yaw = layer.rotation * DEG_TO_RAD;
   } else {
-    pitch = layer.rotation.x;
-    yaw = layer.rotation.y;
-    roll = layer.rotation.z;
+    pitch = layer.rotation.x * DEG_TO_RAD;
+    yaw = layer.rotation.y * DEG_TO_RAD;
+    roll = layer.rotation.z * DEG_TO_RAD;
   }
 
   const centerX = sceneBounds ? (sceneBounds.min[0] + sceneBounds.max[0]) * 0.5 : 0;
