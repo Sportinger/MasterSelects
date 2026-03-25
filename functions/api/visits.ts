@@ -8,6 +8,7 @@ interface VisitEntry {
   city?: string;
   ua?: string;
   referer?: string;
+  visitorId?: string;
 }
 
 interface ListedVisitKey {
@@ -42,6 +43,7 @@ async function loadVisitEntry(context: AppContext, key: ListedVisitKey): Promise
         referer: metadata.referer,
         ts: metadata.ts,
         ua: metadata.ua,
+        visitorId: metadata.visitorId,
       };
     }
   }

@@ -12,6 +12,7 @@ Add-Type -AssemblyName System.Drawing
 
 $script:ToolRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:RepoRoot = (Resolve-Path (Join-Path $script:ToolRoot '..\..')).Path
+$script:LogUi = $null
 
 function Read-KeyValueFile {
   param(
@@ -74,7 +75,8 @@ function Get-ConfigMap {
       'ALERT_SECONDS',
       'ENABLE_SOUND',
       'ENABLE_BALLOON',
-      'OPEN_SITE_ON_BALLOON_CLICK'
+      'OPEN_SITE_ON_BALLOON_CLICK',
+      'HISTORY_LIMIT'
     )) {
     $envPath = "Env:$name"
     if (Test-Path $envPath) {
@@ -177,6 +179,18 @@ function Get-BaseIcon {
   return [System.Drawing.SystemIcons]::Application
 }
 
+function Get-UiFont {
+  param(
+    [float]$Size = 9
+  )
+
+  try {
+    return New-Object System.Drawing.Font('Segoe UI Emoji', $Size)
+  } catch {
+    return New-Object System.Drawing.Font('Segoe UI', $Size)
+  }
+}
+
 function Get-TrimmedText {
   param(
     [string]$Value,
@@ -196,6 +210,32 @@ function Get-TrimmedText {
   }
 
   return $Value.Substring(0, $MaxLength - 3) + '...'
+}
+
+function Get-VisitCountryCode {
+  param($Visit)
+
+  if ($Visit -and $Visit.PSObject.Properties.Name -contains 'country' -and -not [string]::IsNullOrWhiteSpace([string]$Visit.country)) {
+    return ([string]$Visit.country).Trim().ToUpperInvariant()
+  }
+
+  return ''
+}
+
+function Get-CountryFlag {
+  param(
+    [string]$CountryCode
+  )
+
+  $code = ([string]$CountryCode).Trim().ToUpperInvariant()
+  if ($code -notmatch '^[A-Z]{2}$') {
+    return ''
+  }
+
+  $firstCodePoint = 0x1F1E6 + ([int][char]$code[0] - [int][char]'A')
+  $secondCodePoint = 0x1F1E6 + ([int][char]$code[1] - [int][char]'A')
+
+  return [System.Char]::ConvertFromUtf32($firstCodePoint) + [System.Char]::ConvertFromUtf32($secondCodePoint)
 }
 
 function Get-VisitLocation {
@@ -237,6 +277,126 @@ function Get-VisitUrl {
   return '{0}{1}' -f $script:Config.SiteUrl, (Get-VisitPath -Visit $Visit)
 }
 
+function Get-VisitTimeText {
+  param($Visit)
+
+  if (-not $Visit -or -not ($Visit.PSObject.Properties.Name -contains 'ts')) {
+    return '--:--:--'
+  }
+
+  return [DateTimeOffset]::FromUnixTimeMilliseconds([long]$Visit.ts).ToLocalTime().ToString('HH:mm:ss')
+}
+
+function Get-VisitRefererHost {
+  param($Visit)
+
+  if (-not $Visit -or -not ($Visit.PSObject.Properties.Name -contains 'referer')) {
+    return ''
+  }
+
+  $referer = [string]$Visit.referer
+  if ([string]::IsNullOrWhiteSpace($referer)) {
+    return ''
+  }
+
+  try {
+    return ([Uri]$referer).Host
+  } catch {
+    return $referer
+  }
+}
+
+function Get-VisitGroupKey {
+  param($Visit)
+
+  if ($Visit -and $Visit.PSObject.Properties.Name -contains 'visitorId' -and -not [string]::IsNullOrWhiteSpace([string]$Visit.visitorId)) {
+    return 'visitor:' + ([string]$Visit.visitorId)
+  }
+
+  $bucket = 0
+  if ($Visit -and $Visit.PSObject.Properties.Name -contains 'ts') {
+    $bucket = [math]::Floor(([double][long]$Visit.ts) / 300000)
+  }
+
+  return 'fallback:{0}|{1}|{2}|{3}|{4}' -f (
+    (Get-VisitCountryCode -Visit $Visit),
+    [string]$Visit.city,
+    (Get-VisitRefererHost -Visit $Visit),
+    [string]$Visit.ua,
+    $bucket
+  )
+}
+
+function New-VisitFingerprint {
+  param($Visit)
+
+  return '{0}|{1}|{2}|{3}|{4}|{5}|{6}' -f (
+    [long]$Visit.ts,
+    (Get-VisitPath -Visit $Visit),
+    [string]$Visit.visitorId,
+    [string]$Visit.country,
+    [string]$Visit.city,
+    [string]$Visit.ua,
+    [string]$Visit.referer
+  )
+}
+
+function Get-VisitSummaryText {
+  param(
+    $Visit,
+    [switch]$IncludeTime,
+    [switch]$IncludeLocation,
+    [switch]$IncludeFlag
+  )
+
+  $parts = @()
+
+  if ($IncludeTime) {
+    $parts += (Get-VisitTimeText -Visit $Visit)
+  }
+
+  if ($IncludeFlag) {
+    $flag = Get-CountryFlag -CountryCode (Get-VisitCountryCode -Visit $Visit)
+    if ($flag) {
+      $parts += $flag
+    }
+  }
+
+  $parts += (Get-VisitPath -Visit $Visit)
+
+  if ($IncludeLocation) {
+    $parts += (Get-VisitLocation -Visit $Visit)
+  }
+
+  $refererHost = Get-VisitRefererHost -Visit $Visit
+  if ($refererHost) {
+    $parts += "via $refererHost"
+  }
+
+  return ($parts -join ' | ')
+}
+
+function Get-VisitTooltip {
+  param($Visit)
+
+  $lines = @(
+    ('Time: {0}' -f (Get-VisitTimeText -Visit $Visit)),
+    ('Path: {0}' -f (Get-VisitPath -Visit $Visit)),
+    ('Location: {0}' -f (Get-VisitLocation -Visit $Visit))
+  )
+
+  $refererHost = Get-VisitRefererHost -Visit $Visit
+  if ($refererHost) {
+    $lines += ('Referer: {0}' -f $refererHost)
+  }
+
+  if ($Visit.PSObject.Properties.Name -contains 'ua' -and -not [string]::IsNullOrWhiteSpace([string]$Visit.ua)) {
+    $lines += ('UA: {0}' -f (Get-TrimmedText -Value ([string]$Visit.ua) -MaxLength 180))
+  }
+
+  return ($lines -join [Environment]::NewLine)
+}
+
 function Open-Url {
   param(
     [Parameter(Mandatory = $true)]
@@ -244,6 +404,218 @@ function Open-Url {
   )
 
   Start-Process $Url | Out-Null
+}
+
+function Add-VisitsToHistory {
+  param(
+    [Parameter(Mandatory = $true)]
+    [object[]]$Visits
+  )
+
+  if ($Visits.Count -eq 0) {
+    return
+  }
+
+  $seen = @{}
+  $merged = New-Object System.Collections.ArrayList
+
+  foreach ($visit in @($script:State.VisitHistory)) {
+    $fingerprint = New-VisitFingerprint -Visit $visit
+    if (-not $seen.ContainsKey($fingerprint)) {
+      $seen[$fingerprint] = $true
+      [void]$merged.Add($visit)
+    }
+  }
+
+  foreach ($visit in @($Visits)) {
+    if ($null -eq $visit) {
+      continue
+    }
+
+    $fingerprint = New-VisitFingerprint -Visit $visit
+    if (-not $seen.ContainsKey($fingerprint)) {
+      $seen[$fingerprint] = $true
+      [void]$merged.Add($visit)
+    }
+  }
+
+  $script:State.VisitHistory = @(
+    $merged |
+      Sort-Object { [long]$_.ts } -Descending |
+      Select-Object -First $script:Config.HistoryLimit
+  )
+
+  if ($script:State.VisitHistory.Count -gt 0) {
+    $script:State.LastVisit = $script:State.VisitHistory[0]
+  }
+}
+
+function Build-VisitsUri {
+  param(
+    [long]$Since,
+    [int]$Limit
+  )
+
+  return '{0}/api/visits?since={1}&limit={2}' -f $script:Config.SiteUrl, $Since, $Limit
+}
+
+function Invoke-VisitApi {
+  param(
+    [long]$Since,
+    [int]$Limit
+  )
+
+  $headers = @{
+    'x-visitor-secret' = $script:Config.Secret
+    'User-Agent'       = 'MasterSelects-VisitorTray/2.0'
+  }
+
+  return Invoke-RestMethod -Method Get -Uri (Build-VisitsUri -Since $Since -Limit $Limit) -Headers $headers -TimeoutSec 15
+}
+
+function Convert-VisitApiResponse {
+  param(
+    [Parameter(Mandatory = $true)]
+    $Response
+  )
+
+  if ($Response -is [string]) {
+    $trimmed = $Response.TrimStart()
+
+    if ($trimmed.StartsWith('<!doctype html', [System.StringComparison]::OrdinalIgnoreCase) -or
+        $trimmed.StartsWith('<html', [System.StringComparison]::OrdinalIgnoreCase)) {
+      throw '/api/visits is not deployed on the target site yet. Production is serving the app HTML instead.'
+    }
+
+    try {
+      $Response = $Response | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+      throw 'Unexpected non-JSON response from /api/visits.'
+    }
+  }
+
+  if (-not ($Response.PSObject.Properties.Name -contains 'visits')) {
+    throw 'Unexpected /api/visits payload. Expected a JSON object with a visits field.'
+  }
+
+  return $Response
+}
+
+function Get-GroupedVisits {
+  $buckets = @{}
+
+  foreach ($visit in @($script:State.VisitHistory)) {
+    $key = Get-VisitGroupKey -Visit $visit
+    if (-not $buckets.ContainsKey($key)) {
+      $buckets[$key] = New-Object System.Collections.ArrayList
+    }
+
+    [void]$buckets[$key].Add($visit)
+  }
+
+  $groups = New-Object System.Collections.ArrayList
+  foreach ($entry in $buckets.GetEnumerator()) {
+    $visits = @($entry.Value | Sort-Object { [long]$_.ts } -Descending)
+    [void]$groups.Add([pscustomobject]@{
+        Key    = $entry.Key
+        Visits = $visits
+        Count  = $visits.Count
+        Latest = $visits[0]
+      })
+  }
+
+  return @($groups | Sort-Object { [long]$_.Latest.ts } -Descending)
+}
+
+function Get-SelectedVisit {
+  if ($script:LogUi -and $script:LogUi.Tree.SelectedNode -and $script:LogUi.Tree.SelectedNode.Tag -and $script:LogUi.Tree.SelectedNode.Tag.Visit) {
+    return $script:LogUi.Tree.SelectedNode.Tag.Visit
+  }
+
+  return $script:State.LastVisit
+}
+
+function Update-SelectionState {
+  if (-not $script:LogUi) {
+    return
+  }
+
+  $script:LogUi.OpenSelectedButton.Enabled = ($null -ne (Get-SelectedVisit))
+}
+
+function Populate-VisitTree {
+  if (-not $script:LogUi -or $script:LogUi.Tree.IsDisposed) {
+    return
+  }
+
+  $tree = $script:LogUi.Tree
+  $tree.BeginUpdate()
+
+  try {
+    $tree.Nodes.Clear()
+    $groups = @(Get-GroupedVisits)
+
+    if ($groups.Count -eq 0) {
+      [void]$tree.Nodes.Add((New-Object System.Windows.Forms.TreeNode('No visits in the current log window.')))
+      return
+    }
+
+    $groupIndex = 0
+    foreach ($group in $groups) {
+      $latest = $group.Latest
+
+      if ($group.Count -le 1) {
+        $singleNode = New-Object System.Windows.Forms.TreeNode((Get-VisitSummaryText -Visit $latest -IncludeTime -IncludeFlag -IncludeLocation))
+        $singleNode.Tag = [pscustomobject]@{
+          Kind  = 'visit'
+          Visit = $latest
+        }
+        $singleNode.ToolTipText = Get-VisitTooltip -Visit $latest
+        [void]$tree.Nodes.Add($singleNode)
+        continue
+      }
+
+      $flag = Get-CountryFlag -CountryCode (Get-VisitCountryCode -Visit $latest)
+      $prefix = if ($flag) { "$flag " } else { '' }
+      $parentText = '{0}{1} | {2} hits | latest {3} | {4}' -f $prefix, (Get-VisitLocation -Visit $latest), $group.Count, (Get-VisitTimeText -Visit $latest), (Get-VisitPath -Visit $latest)
+
+      $parentNode = New-Object System.Windows.Forms.TreeNode($parentText)
+      $parentNode.Tag = [pscustomobject]@{
+        Kind  = 'group'
+        Visit = $latest
+      }
+      $parentNode.ToolTipText = Get-VisitTooltip -Visit $latest
+
+      foreach ($visit in @($group.Visits)) {
+        $childNode = New-Object System.Windows.Forms.TreeNode((Get-VisitSummaryText -Visit $visit -IncludeTime -IncludeFlag))
+        $childNode.Tag = [pscustomobject]@{
+          Kind  = 'visit'
+          Visit = $visit
+        }
+        $childNode.ToolTipText = Get-VisitTooltip -Visit $visit
+        [void]$parentNode.Nodes.Add($childNode)
+      }
+
+      if ($groupIndex -lt 3) {
+        $parentNode.Expand()
+      }
+
+      [void]$tree.Nodes.Add($parentNode)
+      $groupIndex++
+    }
+  } finally {
+    $tree.EndUpdate()
+  }
+
+  Update-SelectionState
+}
+
+function Refresh-VisitLogUi {
+  if (-not $script:LogUi) {
+    return
+  }
+
+  Populate-VisitTree
 }
 
 function Update-UiState {
@@ -256,33 +628,37 @@ function Update-UiState {
   }
 
   $tooltip = "MasterSelects visitors: $status"
-  if ($script:State.TotalVisits -gt 0) {
-    $tooltip = "MasterSelects visitors: $($script:State.TotalVisits) seen"
+  if ($script:State.VisitHistory.Count -gt 0) {
+    $tooltip = "MasterSelects visitors: $($script:State.VisitHistory.Count) in log"
   }
   $script:NotifyIcon.Text = Get-TrimmedText -Value $tooltip -MaxLength 63
 
-  $script:Menu.Status.Text = "Status: $status"
-  $script:Menu.Pause.Text = if ($script:State.Paused) { 'Resume polling' } else { 'Pause polling' }
+  if (-not $script:LogUi) {
+    return
+  }
+
+  $summaryParts = @(
+    ('Status: {0}' -f $status),
+    ('Watching: {0}' -f $script:Config.SiteUrl),
+    ('In log: {0}' -f $script:State.VisitHistory.Count)
+  )
 
   if ($script:State.LastVisit) {
-    $location = Get-VisitLocation -Visit $script:State.LastVisit
-    $path = Get-VisitPath -Visit $script:State.LastVisit
-    $script:Menu.LastVisit.Text = Get-TrimmedText -Value ("Latest: {0} ({1})" -f $path, $location) -MaxLength 90
-    $script:Menu.LastVisit.Enabled = $true
-    $script:Menu.OpenLast.Enabled = $true
-  } else {
-    $script:Menu.LastVisit.Text = 'Latest: none yet'
-    $script:Menu.LastVisit.Enabled = $false
-    $script:Menu.OpenLast.Enabled = $false
+    $summaryParts += ('Latest: {0}' -f (Get-VisitSummaryText -Visit $script:State.LastVisit -IncludeTime -IncludeFlag -IncludeLocation))
   }
 
+  $script:LogUi.SummaryLabel.Text = $summaryParts -join '    '
+  $script:LogUi.PauseButton.Text = if ($script:State.Paused) { 'Resume' } else { 'Pause' }
+
   if ($script:State.LastError) {
-    $script:Menu.Error.Text = Get-TrimmedText -Value ("Last error: {0}" -f $script:State.LastError) -MaxLength 90
-    $script:Menu.Error.Visible = $true
+    $script:LogUi.ErrorLabel.Text = 'Last error: ' + $script:State.LastError
+    $script:LogUi.ErrorLabel.Visible = $true
   } else {
-    $script:Menu.Error.Text = 'Last error: none'
-    $script:Menu.Error.Visible = $false
+    $script:LogUi.ErrorLabel.Text = ''
+    $script:LogUi.ErrorLabel.Visible = $false
   }
+
+  Update-SelectionState
 }
 
 function Show-Balloon {
@@ -320,73 +696,205 @@ function Play-AlertSound {
   [System.Media.SystemSounds]::Exclamation.Play()
 }
 
-function Build-VisitsUri {
-  param(
-    [long]$Since,
-    [int]$Limit
-  )
-
-  return '{0}/api/visits?since={1}&limit={2}' -f $script:Config.SiteUrl, $Since, $Limit
-}
-
-function Invoke-VisitApi {
-  param(
-    [long]$Since,
-    [int]$Limit
-  )
-
-  $headers = @{
-    'x-visitor-secret' = $script:Config.Secret
-    'User-Agent'       = 'MasterSelects-VisitorTray/1.0'
-  }
-
-  return Invoke-RestMethod -Method Get -Uri (Build-VisitsUri -Since $Since -Limit $Limit) -Headers $headers -TimeoutSec 15
-}
-
-function Convert-VisitApiResponse {
-  param(
-    [Parameter(Mandatory = $true)]
-    $Response
-  )
-
-  if ($Response -is [string]) {
-    $trimmed = $Response.TrimStart()
-
-    if ($trimmed.StartsWith('<!doctype html', [System.StringComparison]::OrdinalIgnoreCase) -or
-        $trimmed.StartsWith('<html', [System.StringComparison]::OrdinalIgnoreCase)) {
-      throw '/api/visits is not deployed on the target site yet. Production is serving the app HTML instead.'
-    }
-
-    try {
-      $Response = $Response | ConvertFrom-Json -ErrorAction Stop
-    } catch {
-      throw 'Unexpected non-JSON response from /api/visits.'
-    }
-  }
-
-  if (-not ($Response.PSObject.Properties.Name -contains 'visits')) {
-    throw 'Unexpected /api/visits payload. Expected a JSON object with a visits field.'
-  }
-
-  return $Response
-}
-
-function Prime-LastSeenTimestamp {
+function Prime-VisitHistory {
   try {
-    $response = Convert-VisitApiResponse -Response (Invoke-VisitApi -Since 0 -Limit 1)
-    $visits = @($response.visits)
-    if ($visits.Count -gt 0) {
-      $script:State.LastSeenTs = [long]$visits[0].ts
-      $script:State.LastVisit = $visits[0]
+    $response = Convert-VisitApiResponse -Response (Invoke-VisitApi -Since 0 -Limit $script:Config.HistoryLimit)
+    $visits = @($response.visits | Sort-Object { [long]$_.ts } -Descending)
+    $script:State.VisitHistory = @()
+    Add-VisitsToHistory -Visits $visits
+
+    if ($script:State.VisitHistory.Count -gt 0) {
+      $script:State.LastSeenTs = [long]$script:State.VisitHistory[0].ts
     } else {
       $script:State.LastSeenTs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
     }
+
     $script:State.LastError = $null
+    Refresh-VisitLogUi
   } catch {
     $script:State.LastSeenTs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
     $script:State.LastError = $_.Exception.Message
     Show-Balloon -Title 'MasterSelects visitor tray' -Text 'Startup poll failed. Check VISITOR_NOTIFY_SECRET or SITE_URL.' -Icon Warning
   }
+}
+
+function Open-SelectedVisit {
+  $visit = Get-SelectedVisit
+  if ($visit) {
+    Open-Url -Url (Get-VisitUrl -Visit $visit)
+  }
+}
+
+function Ensure-LogForm {
+  if ($script:LogUi -and -not $script:LogUi.Form.IsDisposed) {
+    return
+  }
+
+  $form = New-Object System.Windows.Forms.Form
+  $form.Text = 'MasterSelects live log'
+  $form.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
+  $form.Size = New-Object System.Drawing.Size(640, 520)
+  $form.MinimumSize = New-Object System.Drawing.Size(480, 320)
+  $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::SizableToolWindow
+  $form.ShowInTaskbar = $false
+  $form.TopMost = $true
+  $form.KeyPreview = $true
+
+  $buttonPanel = New-Object System.Windows.Forms.FlowLayoutPanel
+  $buttonPanel.Dock = [System.Windows.Forms.DockStyle]::Top
+  $buttonPanel.AutoSize = $true
+  $buttonPanel.WrapContents = $false
+  $buttonPanel.Padding = New-Object System.Windows.Forms.Padding(8, 8, 8, 4)
+
+  $openSiteButton = New-Object System.Windows.Forms.Button
+  $openSiteButton.Text = 'Open site'
+  $openSiteButton.AutoSize = $true
+
+  $openSelectedButton = New-Object System.Windows.Forms.Button
+  $openSelectedButton.Text = 'Open selected'
+  $openSelectedButton.AutoSize = $true
+
+  $pollButton = New-Object System.Windows.Forms.Button
+  $pollButton.Text = 'Poll now'
+  $pollButton.AutoSize = $true
+
+  $pauseButton = New-Object System.Windows.Forms.Button
+  $pauseButton.Text = 'Pause'
+  $pauseButton.AutoSize = $true
+
+  $hideButton = New-Object System.Windows.Forms.Button
+  $hideButton.Text = 'Hide'
+  $hideButton.AutoSize = $true
+
+  $exitButton = New-Object System.Windows.Forms.Button
+  $exitButton.Text = 'Exit'
+  $exitButton.AutoSize = $true
+
+  foreach ($button in @($openSiteButton, $openSelectedButton, $pollButton, $pauseButton, $hideButton, $exitButton)) {
+    [void]$buttonPanel.Controls.Add($button)
+  }
+
+  $summaryLabel = New-Object System.Windows.Forms.Label
+  $summaryLabel.Dock = [System.Windows.Forms.DockStyle]::Top
+  $summaryLabel.Height = 40
+  $summaryLabel.Padding = New-Object System.Windows.Forms.Padding(8, 4, 8, 2)
+  $summaryLabel.AutoEllipsis = $true
+  $summaryLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
+
+  $errorLabel = New-Object System.Windows.Forms.Label
+  $errorLabel.Dock = [System.Windows.Forms.DockStyle]::Top
+  $errorLabel.Height = 22
+  $errorLabel.Padding = New-Object System.Windows.Forms.Padding(8, 0, 8, 4)
+  $errorLabel.ForeColor = [System.Drawing.Color]::DarkRed
+  $errorLabel.Visible = $false
+  $errorLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
+
+  $tree = New-Object System.Windows.Forms.TreeView
+  $tree.Dock = [System.Windows.Forms.DockStyle]::Fill
+  $tree.HideSelection = $false
+  $tree.FullRowSelect = $true
+  $tree.ShowNodeToolTips = $true
+  $tree.Font = Get-UiFont -Size 9
+
+  $form.Controls.Add($tree)
+  $form.Controls.Add($errorLabel)
+  $form.Controls.Add($summaryLabel)
+  $form.Controls.Add($buttonPanel)
+
+  $script:LogUi = @{
+    Form               = $form
+    Tree               = $tree
+    SummaryLabel       = $summaryLabel
+    ErrorLabel         = $errorLabel
+    OpenSiteButton     = $openSiteButton
+    OpenSelectedButton = $openSelectedButton
+    PollButton         = $pollButton
+    PauseButton        = $pauseButton
+    HideButton         = $hideButton
+    ExitButton         = $exitButton
+  }
+
+  $form.add_FormClosing({
+      param($sender, $eventArgs)
+      if (-not $script:State.IsExiting) {
+        $eventArgs.Cancel = $true
+        $sender.Hide()
+      }
+    })
+
+  $form.add_KeyDown({
+      param($sender, $eventArgs)
+      if ($eventArgs.KeyCode -eq [System.Windows.Forms.Keys]::Escape) {
+        $sender.Hide()
+      }
+    })
+
+  $tree.add_AfterSelect({
+      Update-SelectionState
+    })
+
+  $tree.add_NodeMouseDoubleClick({
+      Open-SelectedVisit
+    })
+
+  $openSiteButton.add_Click({
+      Open-Url -Url $script:Config.SiteUrl
+    })
+
+  $openSelectedButton.add_Click({
+      Open-SelectedVisit
+    })
+
+  $pollButton.add_Click({
+      Poll-Visits
+    })
+
+  $pauseButton.add_Click({
+      $script:State.Paused = -not $script:State.Paused
+      Update-UiState
+    })
+
+  $hideButton.add_Click({
+      $script:LogUi.Form.Hide()
+    })
+
+  $exitButton.add_Click({
+      Exit-VisitorTray
+    })
+
+  Refresh-VisitLogUi
+  Update-UiState
+}
+
+function Position-LogFormNearCursor {
+  Ensure-LogForm
+
+  $form = $script:LogUi.Form
+  $cursor = [System.Windows.Forms.Cursor]::Position
+  $screen = [System.Windows.Forms.Screen]::FromPoint($cursor)
+  $workingArea = $screen.WorkingArea
+
+  $x = [Math]::Min($cursor.X - $form.Width + 20, $workingArea.Right - $form.Width)
+  $x = [Math]::Max($workingArea.Left, $x)
+
+  $y = [Math]::Min($cursor.Y - 8, $workingArea.Bottom - $form.Height)
+  $y = [Math]::Max($workingArea.Top, $y)
+
+  $form.Location = New-Object System.Drawing.Point($x, $y)
+}
+
+function Show-LogForm {
+  Ensure-LogForm
+  Refresh-VisitLogUi
+  Update-UiState
+  Position-LogFormNearCursor
+
+  if (-not $script:LogUi.Form.Visible) {
+    $script:LogUi.Form.Show()
+  }
+
+  $script:LogUi.Form.Activate()
+  $script:LogUi.Tree.Focus()
 }
 
 function Handle-NewVisits {
@@ -400,21 +908,22 @@ function Handle-NewVisits {
   }
 
   $orderedVisits = @($Visits | Sort-Object { [long]$_.ts })
-  $script:State.TotalVisits += $orderedVisits.Count
+  Add-VisitsToHistory -Visits $orderedVisits
   $script:State.LastVisit = $orderedVisits[-1]
   $script:State.LastSeenTs = [long]$script:State.LastVisit.ts
   $script:State.LastError = $null
 
+  Refresh-VisitLogUi
   Start-AlertVisual
   Play-AlertSound
 
   if ($orderedVisits.Count -eq 1) {
     $visit = $orderedVisits[0]
-    $message = '{0} from {1}' -f (Get-VisitPath -Visit $visit), (Get-VisitLocation -Visit $visit)
+    $message = Get-VisitSummaryText -Visit $visit -IncludeFlag -IncludeLocation
     Show-Balloon -Title 'New MasterSelects visitor' -Text $message -Icon Info
   } else {
     $latest = $orderedVisits[-1]
-    $message = '{0} new visits. Latest: {1}' -f $orderedVisits.Count, (Get-VisitPath -Visit $latest)
+    $message = '{0} new visits | latest {1}' -f $orderedVisits.Count, (Get-VisitSummaryText -Visit $latest -IncludeFlag -IncludeLocation)
     Show-Balloon -Title 'New MasterSelects visitors' -Text $message -Icon Info
   }
 }
@@ -455,10 +964,17 @@ function Poll-Visits {
 }
 
 function Exit-VisitorTray {
+  $script:State.IsExiting = $true
   $script:PollTimer.Stop()
   $script:PollTimer.Dispose()
   $script:AlertTimer.Stop()
   $script:AlertTimer.Dispose()
+
+  if ($script:LogUi -and $script:LogUi.Form -and -not $script:LogUi.Form.IsDisposed) {
+    $script:LogUi.Form.Close()
+    $script:LogUi.Form.Dispose()
+  }
+
   $script:NotifyIcon.Visible = $false
   $script:NotifyIcon.Dispose()
   $script:ApplicationContext.ExitThread()
@@ -475,17 +991,19 @@ $script:Config = @{
   EnableSound            = Get-ConfigBool -Config $configMap -Name 'ENABLE_SOUND' -Default $true
   EnableBalloon          = Get-ConfigBool -Config $configMap -Name 'ENABLE_BALLOON' -Default $true
   OpenSiteOnBalloonClick = Get-ConfigBool -Config $configMap -Name 'OPEN_SITE_ON_BALLOON_CLICK' -Default $true
+  HistoryLimit           = Get-ConfigInt -Config $configMap -Name 'HISTORY_LIMIT' -Default 200 -Min 20 -Max 500
 }
 
 $script:State = @{
   AlertUntil           = $null
   HasShownErrorBalloon = $false
+  IsExiting            = $false
   LastError            = $null
   LastSeenTs           = [long]0
   LastVisit            = $null
   Paused               = $false
   PollInFlight         = $false
-  TotalVisits          = 0
+  VisitHistory         = @()
 }
 
 $script:Icons = @{
@@ -498,91 +1016,45 @@ $script:NotifyIcon.Icon = $script:Icons.Normal
 $script:NotifyIcon.Text = 'MasterSelects visitors'
 $script:NotifyIcon.Visible = $true
 
-$contextMenu = New-Object System.Windows.Forms.ContextMenuStrip
-$script:Menu = @{
-  Status   = New-Object System.Windows.Forms.ToolStripMenuItem 'Status: starting'
-  LastVisit = New-Object System.Windows.Forms.ToolStripMenuItem 'Latest: none yet'
-  Error    = New-Object System.Windows.Forms.ToolStripMenuItem 'Last error: none'
-  Open     = New-Object System.Windows.Forms.ToolStripMenuItem 'Open MasterSelects'
-  OpenLast = New-Object System.Windows.Forms.ToolStripMenuItem 'Open latest visited path'
-  Poll     = New-Object System.Windows.Forms.ToolStripMenuItem 'Poll now'
-  Pause    = New-Object System.Windows.Forms.ToolStripMenuItem 'Pause polling'
-  Exit     = New-Object System.Windows.Forms.ToolStripMenuItem 'Exit'
-}
-
-$script:Menu.Status.Enabled = $false
-$script:Menu.LastVisit.Enabled = $false
-$script:Menu.Error.Enabled = $false
-$script:Menu.Error.Visible = $false
-$script:Menu.OpenLast.Enabled = $false
-
-[void]$contextMenu.Items.Add($script:Menu.Status)
-[void]$contextMenu.Items.Add($script:Menu.LastVisit)
-[void]$contextMenu.Items.Add($script:Menu.Error)
-[void]$contextMenu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
-[void]$contextMenu.Items.Add($script:Menu.Open)
-[void]$contextMenu.Items.Add($script:Menu.OpenLast)
-[void]$contextMenu.Items.Add($script:Menu.Poll)
-[void]$contextMenu.Items.Add($script:Menu.Pause)
-[void]$contextMenu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
-[void]$contextMenu.Items.Add($script:Menu.Exit)
-
-$script:NotifyIcon.ContextMenuStrip = $contextMenu
-
 $script:NotifyIcon.add_DoubleClick({
-  Open-Url -Url $script:Config.SiteUrl
-})
+    Open-Url -Url $script:Config.SiteUrl
+  })
+
+$script:NotifyIcon.add_MouseClick({
+    param($sender, $eventArgs)
+    if ($eventArgs.Button -eq [System.Windows.Forms.MouseButtons]::Right) {
+      Show-LogForm
+    }
+  })
 
 $script:NotifyIcon.add_BalloonTipClicked({
-  if ($script:Config.OpenSiteOnBalloonClick -and $script:State.LastVisit) {
-    Open-Url -Url (Get-VisitUrl -Visit $script:State.LastVisit)
-  }
-})
-
-$script:Menu.Open.add_Click({
-  Open-Url -Url $script:Config.SiteUrl
-})
-
-$script:Menu.OpenLast.add_Click({
-  if ($script:State.LastVisit) {
-    Open-Url -Url (Get-VisitUrl -Visit $script:State.LastVisit)
-  }
-})
-
-$script:Menu.Poll.add_Click({
-  Poll-Visits
-})
-
-$script:Menu.Pause.add_Click({
-  $script:State.Paused = -not $script:State.Paused
-  Update-UiState
-})
-
-$script:Menu.Exit.add_Click({
-  Exit-VisitorTray
-})
+    if ($script:Config.OpenSiteOnBalloonClick -and $script:State.LastVisit) {
+      Open-Url -Url (Get-VisitUrl -Visit $script:State.LastVisit)
+    }
+  })
 
 $script:AlertTimer = New-Object System.Windows.Forms.Timer
 $script:AlertTimer.Interval = 500
 $script:AlertTimer.add_Tick({
-  if ($script:State.AlertUntil -and (Get-Date) -ge $script:State.AlertUntil) {
-    $script:State.AlertUntil = $null
-    $script:NotifyIcon.Icon = $script:Icons.Normal
-    $script:AlertTimer.Stop()
-  }
-})
+    if ($script:State.AlertUntil -and (Get-Date) -ge $script:State.AlertUntil) {
+      $script:State.AlertUntil = $null
+      $script:NotifyIcon.Icon = $script:Icons.Normal
+      $script:AlertTimer.Stop()
+    }
+  })
 
 $script:PollTimer = New-Object System.Windows.Forms.Timer
 $script:PollTimer.Interval = $script:Config.PollIntervalMs
 $script:PollTimer.add_Tick({
-  Poll-Visits
-})
+    Poll-Visits
+  })
 
 $script:ApplicationContext = New-Object System.Windows.Forms.ApplicationContext
 
-Prime-LastSeenTimestamp
+Ensure-LogForm
+Prime-VisitHistory
 Update-UiState
-Show-Balloon -Title 'MasterSelects visitor tray' -Text ("Watching {0}" -f $script:Config.SiteUrl) -Icon Info
+Show-Balloon -Title 'MasterSelects visitor tray' -Text ("Watching {0}. Right-click the tray icon for the live log." -f $script:Config.SiteUrl) -Icon Info
 $script:PollTimer.Start()
 
 [System.Windows.Forms.Application]::Run($script:ApplicationContext)

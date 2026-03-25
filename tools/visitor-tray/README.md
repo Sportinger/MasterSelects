@@ -28,6 +28,10 @@ The script loads config in this order:
 
 Later sources override earlier ones.
 
+Optional config:
+
+- `HISTORY_LIMIT`: how many recent visits should be kept in the live log window. Default: `200`
+
 ## Required Cloudflare Secret
 
 The tray app reads from `/api/visits`, which requires `VISITOR_NOTIFY_SECRET`.
@@ -64,18 +68,18 @@ Remove autostart:
 powershell -ExecutionPolicy Bypass -File tools\visitor-tray\Uninstall-Startup.ps1
 ```
 
-## Tray Menu
+## Tray UI
 
-- Open MasterSelects
-- Poll now
-- Pause / Resume polling
-- Exit
+- Right-click the tray icon to open the live log window.
+- The live log shows recent visits in a scrollable list.
+- Repeated hits from the same tracked visitor are grouped into expandable rows when a stable visitor id is available.
+- Double-click the tray icon still opens MasterSelects in the browser.
 
 On a new visit the app:
 
 - plays a Windows notification sound
 - switches the tray icon to a warning icon for a few seconds
-- shows a balloon notification
+- shows a balloon notification with the country flag when available
 
 Clicking the balloon opens the latest visited path on the site.
 

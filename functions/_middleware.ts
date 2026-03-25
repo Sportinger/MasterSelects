@@ -39,6 +39,7 @@ interface VisitEntry {
   city?: string;
   ua?: string;
   referer?: string;
+  visitorId?: string;
 }
 
 function buildVisitKey(ts: number): string {
@@ -46,11 +47,24 @@ function buildVisitKey(ts: number): string {
   return `visit2:${newestFirst}:${ts}:${crypto.randomUUID().slice(0, 8)}`;
 }
 
+async function buildVisitorId(request: Request, secret?: string): Promise<string | undefined> {
+  const ip = request.headers.get('cf-connecting-ip')?.trim();
+  if (!ip || !secret) {
+    return undefined;
+  }
+
+  const payload = new TextEncoder().encode(`${secret}:${ip}`);
+  const digest = await crypto.subtle.digest('SHA-256', payload);
+  const bytes = Array.from(new Uint8Array(digest));
+  return bytes.map((byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, 16);
+}
+
 async function trackVisit(context: AppContext): Promise<void> {
   try {
     const request = context.request;
     const url = new URL(request.url);
     const cfData = (request as unknown as { cf?: Record<string, string> }).cf;
+    const visitorId = await buildVisitorId(request, context.env.VISITOR_NOTIFY_SECRET);
 
     const entry: VisitEntry = {
       ts: Date.now(),
@@ -59,6 +73,7 @@ async function trackVisit(context: AppContext): Promise<void> {
       city: cfData?.city,
       ua: (request.headers.get('user-agent') ?? '').slice(0, 200),
       referer: request.headers.get('referer') ?? undefined,
+      visitorId,
     };
 
     // Store newest-first keys so polling clients can read the latest visits efficiently.
