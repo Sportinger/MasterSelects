@@ -112,6 +112,7 @@ export function MediaPanel() {
     getOrCreateMeshFolder,
     removeMeshItem,
     setLabelColor,
+    importGaussianAvatar,
   } = useMediaStore.getState();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -572,6 +573,21 @@ export function MediaPanel() {
     createMeshItem(meshType, undefined, meshFolderId);
     closeContextMenu();
   }, [createMeshItem, getOrCreateMeshFolder, closeContextMenu]);
+
+  // Import Gaussian Avatar (.zip) — opens file picker, imports with forced gaussian-avatar type
+  const handleImportGaussianAvatar = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.zip';
+    input.onchange = async (e) => {
+      const fileList = (e.target as HTMLInputElement).files;
+      if (fileList && fileList.length > 0) {
+        await importGaussianAvatar(fileList[0]);
+      }
+    };
+    input.click();
+    closeContextMenu();
+  }, [importGaussianAvatar, closeContextMenu]);
 
   // Composition settings
   const openCompositionSettings = useCallback((comp: Composition) => {
@@ -1334,6 +1350,11 @@ export function MediaPanel() {
                     ))}
                   </div>
                 </div>
+                <div className="add-dropdown-item" onClick={() => { handleImportGaussianAvatar(); setAddDropdownOpen(false); }}>
+                  <span className="add-dropdown-icon"><FileTypeIcon type="gaussian-avatar" /></span>
+                  <span>Gaussian Avatar</span>
+                </div>
+                <div className="add-dropdown-separator" />
                 <div className="add-dropdown-item" onClick={() => { /* TODO: Add adjustment layer */ setAddDropdownOpen(false); }}>
                   <span className="add-dropdown-icon"><FileTypeIcon type="solid" /></span>
                   <span>Adjustment Layer</span>
@@ -1557,6 +1578,11 @@ export function MediaPanel() {
                 ))}
               </div>
             </div>
+            <div className="context-menu-item" onClick={() => { handleImportGaussianAvatar(); closeContextMenu(); }}>
+              <span className="context-menu-icon"><FileTypeIcon type="gaussian-avatar" /></span>
+              Gaussian Avatar
+            </div>
+            <div className="context-menu-separator" />
             <div className="context-menu-item disabled" onClick={closeContextMenu}>
               <span className="context-menu-icon"><FileTypeIcon type="solid" /></span>
               Adjustment Layer

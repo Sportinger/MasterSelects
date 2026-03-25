@@ -239,6 +239,18 @@ export class LayerCollector {
       };
     }
 
+    // Gaussian Avatar sources — handled by GaussianSplatSceneRenderer
+    if (sourceType === 'gaussian-avatar') {
+      return {
+        layer,
+        isVideo: false,
+        externalTexture: null,
+        textureView: null,
+        sourceWidth: 0,
+        sourceHeight: 0,
+      };
+    }
+
     // Text/Solid sources - skip video/image checks
     if (sourceType === 'text' || sourceType === 'solid') {
       if (source.textCanvas) {

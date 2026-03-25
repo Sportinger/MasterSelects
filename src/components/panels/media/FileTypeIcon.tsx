@@ -74,17 +74,19 @@ export const FileTypeIcon = memo(({ type, large }: FileTypeIconProps) => {
           <path d="M8 4V13.5M4 6.5L12 11M12 6.5L4 11" stroke="#6ab8b8" strokeWidth="0.5" opacity="0.6"/>
         </svg>
       );
-    case 'gaussian-splat':
+    case 'gaussian-avatar':
       return (
         <svg style={style} viewBox="0 0 16 16" fill="none">
-          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#2a5a4a" stroke="#4a9a7a" strokeWidth="0.7"/>
-          <circle cx="5" cy="6" r="1" fill="#6aeaba" opacity="0.9"/>
-          <circle cx="8" cy="5" r="0.8" fill="#6aeaba" opacity="0.7"/>
-          <circle cx="11" cy="7" r="1.1" fill="#6aeaba" opacity="0.8"/>
-          <circle cx="6" cy="9" r="0.7" fill="#4adaaa" opacity="0.6"/>
-          <circle cx="9" cy="10" r="0.9" fill="#4adaaa" opacity="0.7"/>
-          <circle cx="12" cy="9" r="0.6" fill="#6aeaba" opacity="0.5"/>
-          <circle cx="4" cy="11" r="0.8" fill="#4adaaa" opacity="0.5"/>
+          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#5a4a6a" stroke="#8a6aaa" strokeWidth="0.7"/>
+          {/* Head silhouette made of splat dots */}
+          <circle cx="8" cy="5.5" r="2.5" fill="#9a7abb" opacity="0.7"/>
+          <ellipse cx="8" cy="11" rx="3.5" ry="2.5" fill="#9a7abb" opacity="0.5"/>
+          {/* Splat particles */}
+          <circle cx="6" cy="5" r="0.7" fill="#cc99ee" opacity="0.8"/>
+          <circle cx="9.5" cy="4.5" r="0.5" fill="#cc99ee" opacity="0.7"/>
+          <circle cx="8" cy="6.5" r="0.6" fill="#bb88dd" opacity="0.6"/>
+          <circle cx="5.5" cy="10" r="0.5" fill="#cc99ee" opacity="0.5"/>
+          <circle cx="10" cy="10.5" r="0.5" fill="#cc99ee" opacity="0.5"/>
         </svg>
       );
     default:
@@ -208,24 +210,23 @@ const LargeIcon = memo(({ type, style }: { type?: string; style: React.CSSProper
           <circle cx="24" cy="40" r="1.5" fill="#aaeaea"/>
         </svg>
       );
-    case 'gaussian-splat':
+    case 'gaussian-avatar':
       return (
         <svg style={style} viewBox="0 0 48 48" fill="none">
-          <rect x="4" y="8" width="40" height="32" rx="3" fill="#1e4a3a"/>
-          <rect x="4" y="8" width="40" height="32" rx="3" stroke="#3a8a6a" strokeWidth="1"/>
-          {/* Scattered point cloud particles */}
-          <circle cx="14" cy="16" r="2.5" fill="#6aeaba" opacity="0.9"/>
-          <circle cx="24" cy="14" r="2" fill="#6aeaba" opacity="0.7"/>
-          <circle cx="34" cy="18" r="2.8" fill="#6aeaba" opacity="0.8"/>
-          <circle cx="18" cy="24" r="1.8" fill="#4adaaa" opacity="0.6"/>
-          <circle cx="28" cy="22" r="2.2" fill="#4adaaa" opacity="0.75"/>
-          <circle cx="38" cy="26" r="1.5" fill="#6aeaba" opacity="0.5"/>
-          <circle cx="10" cy="28" r="2" fill="#4adaaa" opacity="0.55"/>
-          <circle cx="20" cy="30" r="2.4" fill="#6aeaba" opacity="0.7"/>
-          <circle cx="32" cy="32" r="1.6" fill="#4adaaa" opacity="0.6"/>
-          <circle cx="40" cy="34" r="1.2" fill="#6aeaba" opacity="0.45"/>
-          <circle cx="12" cy="36" r="1.8" fill="#4adaaa" opacity="0.5"/>
-          <circle cx="26" cy="38" r="1.4" fill="#6aeaba" opacity="0.4"/>
+          <rect x="4" y="8" width="40" height="32" rx="3" fill="#4a3a5a"/>
+          <rect x="4" y="8" width="40" height="32" rx="3" stroke="#7a5a9a" strokeWidth="1"/>
+          {/* Head silhouette made of gaussian splat particles */}
+          <circle cx="24" cy="20" r="7" fill="#7a5a9a" opacity="0.6"/>
+          <ellipse cx="24" cy="34" rx="10" ry="6" fill="#7a5a9a" opacity="0.4"/>
+          {/* Splat dots */}
+          <circle cx="20" cy="18" r="2" fill="#cc99ee" opacity="0.8"/>
+          <circle cx="28" cy="17" r="1.5" fill="#cc99ee" opacity="0.7"/>
+          <circle cx="24" cy="22" r="1.8" fill="#bb88dd" opacity="0.6"/>
+          <circle cx="22" cy="15" r="1" fill="#ddaaff" opacity="0.5"/>
+          <circle cx="26" cy="20" r="1.2" fill="#ddaaff" opacity="0.6"/>
+          <circle cx="18" cy="32" r="1.5" fill="#cc99ee" opacity="0.5"/>
+          <circle cx="30" cy="33" r="1.3" fill="#cc99ee" opacity="0.5"/>
+          <circle cx="24" cy="30" r="1.5" fill="#bb88dd" opacity="0.4"/>
         </svg>
       );
     default:

@@ -123,6 +123,18 @@ export function buildLayersAtTime(
         is3D: true,
       });
     }
+    // Handle Gaussian Avatar clips
+    else if (clip.source?.type === 'gaussian-avatar') {
+      layers.push({
+        ...baseLayerProps,
+        source: {
+          type: 'gaussian-avatar',
+          gaussianAvatarUrl: clip.source.gaussianAvatarUrl,
+          gaussianBlendshapes: clip.source.gaussianBlendshapes,
+        },
+        is3D: true,
+      });
+    }
     // Handle text and solid clips
     else if ((clip.source?.type === 'text' || clip.source?.type === 'solid') && clip.source.textCanvas) {
       layers.push({

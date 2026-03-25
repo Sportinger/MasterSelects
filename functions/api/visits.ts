@@ -1,6 +1,54 @@
 import { json, methodNotAllowed } from '../lib/db';
 import type { AppContext, AppRouteHandler } from '../lib/env';
 
+interface VisitEntry {
+  ts: number;
+  path: string;
+  country?: string;
+  city?: string;
+  ua?: string;
+  referer?: string;
+}
+
+interface ListedVisitKey {
+  metadata?: unknown;
+  name: string;
+}
+
+function parseVisitTimestamp(name: string): number | null {
+  const parts = name.split(':');
+
+  if (parts[0] === 'visit2' && parts.length >= 4) {
+    const ts = parseInt(parts[2], 10);
+    return Number.isFinite(ts) ? ts : null;
+  }
+
+  if (parts[0] === 'visit' && parts.length >= 3) {
+    const ts = parseInt(parts[1], 10);
+    return Number.isFinite(ts) ? ts : null;
+  }
+
+  return null;
+}
+
+async function loadVisitEntry(context: AppContext, key: ListedVisitKey): Promise<VisitEntry | null> {
+  if (key.metadata && typeof key.metadata === 'object') {
+    const metadata = key.metadata as Partial<VisitEntry>;
+    if (typeof metadata.ts === 'number' && typeof metadata.path === 'string') {
+      return {
+        city: metadata.city,
+        country: metadata.country,
+        path: metadata.path,
+        referer: metadata.referer,
+        ts: metadata.ts,
+        ua: metadata.ua,
+      };
+    }
+  }
+
+  return context.env.KV.get<VisitEntry>(key.name, { type: 'json' });
+}
+
 export const onRequest: AppRouteHandler = async (context: AppContext): Promise<Response> => {
   if (context.request.method !== 'GET') {
     return methodNotAllowed(['GET']);
@@ -17,42 +65,30 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
 
   // Optional: only return visits after this timestamp
   const sinceParam = url.searchParams.get('since');
-  const since = sinceParam ? parseInt(sinceParam, 10) : 0;
-  const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '50', 10), 200);
+  const parsedSince = sinceParam ? parseInt(sinceParam, 10) : 0;
+  const parsedLimit = parseInt(url.searchParams.get('limit') ?? '50', 10);
+  const since = Number.isFinite(parsedSince) ? Math.max(parsedSince, 0) : 0;
+  const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 200) : 50;
 
   try {
-    // List recent visit keys from KV
-    const listed = await context.env.KV.list({ prefix: 'visit:', limit: 200 });
-    const visits: unknown[] = [];
+    const batchLimit = Math.max(limit * 2, 50);
+    const [listedNewestFirst, listedLegacy] = await Promise.all([
+      context.env.KV.list({ prefix: 'visit2:', limit: batchLimit }),
+      context.env.KV.list({ prefix: 'visit:', limit: batchLimit }),
+    ]);
 
-    // Fetch visit data in parallel (limited batch)
-    const keys = listed.keys
-      .map((k) => k.name)
-      .filter((name) => {
-        // Extract timestamp from key: visit:{ts}:{random}
-        const parts = name.split(':');
-        const ts = parseInt(parts[1], 10);
-        return !since || ts > since;
-      })
+    const keys = [...listedNewestFirst.keys, ...listedLegacy.keys]
+      .map((key) => ({
+        key,
+        ts: parseVisitTimestamp(key.name),
+      }))
+      .filter((entry): entry is { key: ListedVisitKey; ts: number } => Number.isFinite(entry.ts))
+      .filter((entry) => !since || entry.ts > since)
+      .sort((a, b) => b.ts - a.ts)
       .slice(0, limit);
 
-    const results = await Promise.all(
-      keys.map(async (key) => {
-        const data = await context.env.KV.get(key, { type: 'json' });
-        return data;
-      }),
-    );
-
-    for (const entry of results) {
-      if (entry) visits.push(entry);
-    }
-
-    // Sort newest first
-    visits.sort((a: unknown, b: unknown) => {
-      const aTs = (a as { ts: number }).ts;
-      const bTs = (b as { ts: number }).ts;
-      return bTs - aTs;
-    });
+    const results = await Promise.all(keys.map(({ key }) => loadVisitEntry(context, key)));
+    const visits = results.filter((entry): entry is VisitEntry => Boolean(entry));
 
     return json({
       count: visits.length,

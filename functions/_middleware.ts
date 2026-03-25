@@ -41,6 +41,11 @@ interface VisitEntry {
   referer?: string;
 }
 
+function buildVisitKey(ts: number): string {
+  const newestFirst = String(9_999_999_999_999 - ts).padStart(13, '0');
+  return `visit2:${newestFirst}:${ts}:${crypto.randomUUID().slice(0, 8)}`;
+}
+
 async function trackVisit(context: AppContext): Promise<void> {
   try {
     const request = context.request;
@@ -56,9 +61,12 @@ async function trackVisit(context: AppContext): Promise<void> {
       referer: request.headers.get('referer') ?? undefined,
     };
 
-    // Store as individual KV key with 1h TTL for easy listing
-    const key = `visit:${entry.ts}:${crypto.randomUUID().slice(0, 8)}`;
-    await context.env.KV.put(key, JSON.stringify(entry), { expirationTtl: 3600 });
+    // Store newest-first keys so polling clients can read the latest visits efficiently.
+    const key = buildVisitKey(entry.ts);
+    await context.env.KV.put(key, '', {
+      expirationTtl: 3600,
+      metadata: entry,
+    });
   } catch {
     // Never let tracking break the request
   }

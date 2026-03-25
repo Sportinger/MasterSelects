@@ -371,6 +371,10 @@ export class LayerBuilderService {
     else if (clip.source?.type === 'model') {
       layer = this.buildModelLayer(clip, layerIndex, ctx, opacityOverride);
     }
+    // Gaussian Avatar clip
+    else if (clip.source?.type === 'gaussian-avatar') {
+      layer = this.buildGaussianAvatarLayer(clip, layerIndex, ctx, opacityOverride);
+    }
 
     // Pass through 3D flag from clip to layer
     if (layer && clip.is3D) {
@@ -750,6 +754,44 @@ export class LayerBuilderService {
   }
 
   /**
+   * Build Gaussian Avatar layer — rendered by GaussianSplatSceneRenderer
+   */
+  private buildGaussianAvatarLayer(clip: TimelineClip, layerIndex: number, ctx: FrameContext, opacityOverride?: number): Layer {
+    const timeInfo = getClipTimeInfo(ctx, clip);
+    const transform = this.transformCache.getTransform(
+      `${ctx.activeCompId}_${layerIndex}`,
+      ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime)
+    );
+    const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
+
+    const finalOpacity = opacityOverride !== undefined
+      ? transform.opacity * opacityOverride
+      : transform.opacity;
+
+    const layer: Layer = {
+      id: `${ctx.activeCompId}_layer_${layerIndex}`,
+      name: clip.name,
+      sourceClipId: clip.id,
+      visible: true,
+      opacity: finalOpacity,
+      blendMode: transform.blendMode as BlendMode,
+      source: {
+        type: 'gaussian-avatar',
+        gaussianAvatarUrl: clip.source?.gaussianAvatarUrl,
+        gaussianBlendshapes: clip.source?.gaussianBlendshapes,
+      },
+      effects,
+      position: transform.position,
+      scale: transform.scale,
+      rotation: transform.rotation,
+      is3D: true,
+    };
+
+    this.addMaskProperties(layer, clip);
+    return layer;
+  }
+
+  /**
    * Add mask properties to layer if clip has masks
    */
   private addMaskProperties(layer: Layer, clip: TimelineClip): void {
@@ -1000,6 +1042,16 @@ export class LayerBuilderService {
       return {
         ...baseLayer,
         source: { type: 'model', modelUrl: nestedClip.source.modelUrl },
+        is3D: true,
+      } as Layer;
+    } else if (nestedClip.source?.type === 'gaussian-avatar') {
+      return {
+        ...baseLayer,
+        source: {
+          type: 'gaussian-avatar',
+          gaussianAvatarUrl: nestedClip.source.gaussianAvatarUrl,
+          gaussianBlendshapes: nestedClip.source.gaussianBlendshapes,
+        },
         is3D: true,
       } as Layer;
     }

@@ -3493,6 +3493,107 @@ input, textarea {
   padding: 0 4px;
 }
 
+/* Blendshapes Tab */
+.blendshapes-tab .section-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.blendshapes-tab .section-header-row h4 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.blendshape-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.blendshape-presets .btn {
+  font-size: 10px;
+  padding: 2px 8px;
+}
+
+.blendshape-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.blendshape-group-header h4 {
+  flex: 1;
+}
+
+.blendshape-collapse-arrow {
+  font-size: 8px;
+  color: var(--text-secondary);
+  width: 10px;
+  text-align: center;
+}
+
+.blendshape-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.blendshape-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 0;
+}
+
+.blendshape-label {
+  font-size: 10px;
+  min-width: 90px !important;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blendshape-slider {
+  flex: 1;
+  height: 3px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.blendshape-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+.blendshape-slider::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: none;
+}
+
+.blendshape-row .draggable-number {
+  min-width: 36px;
+  text-align: right;
+  font-size: 10px;
+}
+
 /* Buttons */
 .btn {
   padding: 4px 10px;

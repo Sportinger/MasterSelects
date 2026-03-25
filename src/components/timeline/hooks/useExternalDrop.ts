@@ -28,7 +28,7 @@ interface UseExternalDropProps {
   clips: TimelineClip[];
   pixelToTime: (pixel: number) => number;
   addTrack: (type: 'video' | 'audio') => string | undefined;
-  addClip: (trackId: string, file: File, startTime: number, duration?: number, mediaFileId?: string) => void;
+  addClip: (trackId: string, file: File, startTime: number, duration?: number, mediaFileId?: string, mediaTypeOverride?: string) => void;
   addCompClip: (trackId: string, comp: Composition, startTime: number) => void;
   addTextClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => Promise<string | null>;
   addSolidClip: (trackId: string, startTime: number, color?: string, duration?: number, skipMediaItem?: boolean) => string | null;
@@ -971,7 +971,9 @@ export function useExternalDrop({
         const mediaStore = useMediaStore.getState();
         const mediaFile = mediaStore.files.find((f) => f.id === mediaFileId);
         if (mediaFile?.file) {
-          addClip(newTrackId, mediaFile.file, startTime, mediaFile.duration, mediaFileId);
+          // Pass mediaType override for types that can't be auto-detected (e.g. gaussian-avatar .zip files)
+          const typeOverride = mediaFile.type === 'gaussian-avatar' ? 'gaussian-avatar' : undefined;
+          addClip(newTrackId, mediaFile.file, startTime, mediaFile.duration, mediaFileId, typeOverride);
           return;
         }
       }
@@ -1095,7 +1097,9 @@ export function useExternalDrop({
           }
           // Video+audio files are allowed on both track types
 
-          addClip(trackId, mediaFile.file, resolveDropStartTime(mediaFile.duration), mediaFile.duration, mediaFileId);
+          // Pass mediaType override for types that can't be auto-detected (e.g. gaussian-avatar .zip files)
+          const typeOverride = mediaFile.type === 'gaussian-avatar' ? 'gaussian-avatar' : undefined;
+          addClip(trackId, mediaFile.file, resolveDropStartTime(mediaFile.duration), mediaFile.duration, mediaFileId, typeOverride);
           return;
         }
       }
