@@ -35,6 +35,7 @@ export interface TutorialCampaign {
   icon: string;
   category: CampaignCategory;
   steps: CampaignStep[];
+  interactive?: boolean;
 }
 
 // ============================================================
@@ -575,8 +576,22 @@ const downloadPanel: TutorialCampaign = {
 // ALL CAMPAIGNS
 // ============================================================
 
+// Import interactive campaigns and adapt them to the common TutorialCampaign interface
+import { INTERACTIVE_CAMPAIGNS } from './tutorial/interactiveCampaigns';
+
+const interactiveCampaignsCompat: TutorialCampaign[] = INTERACTIVE_CAMPAIGNS.map(c => ({
+  id: c.id,
+  title: c.title,
+  description: c.description,
+  icon: c.icon,
+  category: c.category,
+  interactive: true,
+  steps: [], // Steps are handled by the interactive runner, not the passive overlay
+}));
+
 export const TUTORIAL_CAMPAIGNS: TutorialCampaign[] = [
-  // Basics
+  // Basics (interactive first)
+  ...interactiveCampaignsCompat,
   interfaceOverview,
   timelineControls,
   previewPlayback,

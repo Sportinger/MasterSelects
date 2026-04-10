@@ -645,6 +645,14 @@ export class WebGPUEngine {
     this.renderDispatcher?.render(layers);
   }
 
+  async ensureGaussianSplatSceneLoaded(
+    clipId: string,
+    url: string | undefined,
+    fileName: string,
+  ): Promise<boolean> {
+    return this.renderDispatcher?.ensureGaussianSplatSceneLoaded(clipId, url, fileName) ?? false;
+  }
+
   renderToPreviewCanvas(canvasId: string, layers: Layer[]): void {
     this.renderDispatcher?.renderToPreviewCanvas(canvasId, layers);
   }

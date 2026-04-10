@@ -14,6 +14,7 @@ import { VideoEncoderWrapper } from './VideoEncoderWrapper';
 import { prepareClipsForExport, cleanupExportMode } from './ClipPreparation';
 import { seekAllClipsToTime, waitForAllVideosReady } from './VideoSeeker';
 import { buildLayersAtTime, initializeLayerBuilder, cleanupLayerBuilder } from './ExportLayerBuilder';
+import { preloadGaussianSplatsForExport } from './preloadGaussianSplats';
 import {
   RESOLUTION_PRESETS,
   FRAME_RATE_PRESETS,
@@ -106,6 +107,14 @@ export class FrameExporter {
     const { fps, startTime, endTime, width, height, includeAudio } = this.settings;
     const frameDuration = 1 / fps;
     const totalFrames = Math.ceil((endTime - startTime) * fps);
+    const state = useTimelineStore.getState();
+    const tracks = Array.isArray(state.tracks) ? state.tracks : [];
+    const clips = Array.isArray(state.clips) ? state.clips : [];
+    const hasGaussianSplatsInRange = clips.some((clip) =>
+      clip.source?.type === 'gaussian-splat' &&
+      clip.startTime < endTime &&
+      clip.startTime + clip.duration > startTime,
+    );
 
     // For stacked alpha, the encoded video is double height (RGB top + alpha bottom)
     const encodedHeight = this.settings.stackedAlpha ? height * 2 : height;
@@ -134,7 +143,12 @@ export class FrameExporter {
     engine.setExporting(true);
 
     // Initialize export canvas for zero-copy VideoFrame creation
-    const useZeroCopy = engine.initExportCanvas(width, height, this.settings.stackedAlpha);
+    let useZeroCopy = false;
+    if (hasGaussianSplatsInRange) {
+      log.info('Gaussian splat export detected, forcing readPixels capture for correctness');
+    } else {
+      useZeroCopy = engine.initExportCanvas(width, height, this.settings.stackedAlpha);
+    }
     if (useZeroCopy) {
       log.info('Using zero-copy export path (OffscreenCanvas -> VideoFrame)');
     } else {
@@ -151,8 +165,11 @@ export class FrameExporter {
       this.exportMode = preparation.exportMode;
 
       // Initialize layer builder cache (tracks don't change during export)
-      const { tracks } = useTimelineStore.getState();
       initializeLayerBuilder(tracks);
+      await preloadGaussianSplatsForExport({
+        startTime: this.settings.startTime,
+        endTime: this.settings.endTime,
+      });
 
       // Pre-calculate frame tolerance
       const frameTolerance = getFrameTolerance(fps);

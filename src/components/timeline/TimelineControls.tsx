@@ -117,6 +117,7 @@ function TimelineControlsComponent({
         <button
           className={`btn btn-sm ${isPlaying ? 'btn-active' : ''}`}
           onClick={isPlaying ? onPause : onPlay}
+          data-tutorial-id="play-btn"
         >
           {isPlaying ? '\u23F8' : '\u25B6'}
         </button>

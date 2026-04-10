@@ -103,7 +103,7 @@ fn bitonicStep(@builtin(global_invocation_id) gid: vec3u) {
   let keyB = keys[partner];
 
   // Compare and swap
-  let shouldSwap = select(keyA < keyB, keyA > keyB, ascending);
+  let shouldSwap = select((keyA < keyB), (keyA > keyB), ascending);
 
   if (shouldSwap) {
     // Swap keys

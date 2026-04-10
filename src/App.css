@@ -13300,3 +13300,48 @@ input[type="checkbox"] {
   background: var(--gray-450);
   color: var(--gray-0);
 }
+
+/* ============================
+   Interactive Tutorial — Fake Cursor
+   ============================ */
+
+.tutorial-fake-cursor {
+  position: fixed;
+  z-index: 10004;
+  pointer-events: none;
+  transition-property: left, top;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  /* transitionDuration set via inline style */
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+}
+
+.tutorial-fake-cursor svg {
+  display: block;
+}
+
+.tutorial-fake-cursor--clicking {
+  animation: tutorial-cursor-click 250ms ease;
+}
+
+@keyframes tutorial-cursor-click {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(0.82); }
+  100% { transform: scale(1); }
+}
+
+.tutorial-click-ripple {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 215, 0, 0.5);
+  animation: tutorial-click-ripple-expand 500ms ease forwards;
+  pointer-events: none;
+}
+
+@keyframes tutorial-click-ripple-expand {
+  0%   { transform: scale(0.5); opacity: 1; }
+  100% { transform: scale(3); opacity: 0; }
+}

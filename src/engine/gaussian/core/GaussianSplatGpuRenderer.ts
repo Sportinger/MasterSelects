@@ -79,6 +79,8 @@ export interface SplatRenderOptions {
   sortFrequency?: number;
   /** Temporal playback settings (informational — frame switching handled externally via uploadScene) */
   temporalSettings?: GaussianSplatTemporalSettings;
+  /** Prefer correctness over throughput (used for offline export). */
+  precise?: boolean;
 }
 
 // Camera uniform buffer size: 2 mat4x4f (128 bytes) + vec2f (8 bytes) + vec2f pad (8 bytes) = 144 bytes
@@ -280,6 +282,7 @@ export class GaussianSplatGpuRenderer {
       const maxSplats = options?.maxSplats ?? 0;
       const sortFrequency = options?.sortFrequency ?? 1;
       const clearColor = parseClearColor(options?.backgroundColor);
+      const precise = options?.precise === true;
 
       // Determine which splat data buffer to use (may be overridden by particle pass)
       let activeSplatBuffer = scene.splatBuffer;
@@ -321,6 +324,7 @@ export class GaussianSplatGpuRenderer {
       let hasValidatedCullResult = false;
 
       if (
+        !precise &&
         this.visibilityPass.isInitialized &&
         effectiveSplatCount > CULL_THRESHOLD
       ) {
@@ -356,7 +360,7 @@ export class GaussianSplatGpuRenderer {
 
       // ── Step 4: Depth Sort (back-to-front) [Wave 4] ──────────────────────
       let sortedIndexBuffer: GPUBuffer | null = null;
-      const shouldSort = effectiveSplatCount > SORT_THRESHOLD && hasValidatedCullResult;
+      const shouldSort = effectiveSplatCount > SORT_THRESHOLD && (precise || hasValidatedCullResult);
       const sortThisFrame = shouldSort && (
         sortFrequency !== 0 && (
           !scene.sortedBindGroup ||
@@ -366,8 +370,12 @@ export class GaussianSplatGpuRenderer {
       );
 
       if (sortThisFrame && this.sortPass.isInitialized) {
-        const sourceIndexBuffer = cullIndexBuffer ?? scene.identityIndexBuffer;
-        const sortCount = hasValidatedCullResult ? drawCount : effectiveSplatCount;
+        const sourceIndexBuffer = precise
+          ? scene.identityIndexBuffer
+          : (cullIndexBuffer ?? scene.identityIndexBuffer);
+        const sortCount = precise
+          ? effectiveSplatCount
+          : (hasValidatedCullResult ? drawCount : effectiveSplatCount);
 
         const sorted = this.sortPass.execute(
           this.device, commandEncoder,

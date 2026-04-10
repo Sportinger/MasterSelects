@@ -67,7 +67,13 @@ export function buildLayersAtTime(
     if (!clip) continue;
 
     const clipLocalTime = time - clip.startTime;
-    const baseLayerProps = buildBaseLayerProps(clip, clipLocalTime, trackIndex, ctx);
+    const baseLayerProps = buildBaseLayerProps(
+      clip,
+      clipLocalTime,
+      trackIndex,
+      ctx,
+      clip.source?.type === 'gaussian-splat',
+    );
 
     // Handle nested compositions
     if (clip.isComposition && clip.nestedClips && clip.nestedClips.length > 0) {
@@ -157,7 +163,8 @@ function buildBaseLayerProps(
   clip: TimelineClip,
   clipLocalTime: number,
   trackIndex: number,
-  ctx: FrameContext
+  ctx: FrameContext,
+  preserveRotationDegrees = false,
 ): BaseLayerProps {
   const { getInterpolatedTransform, getInterpolatedEffects } = ctx;
 
@@ -187,6 +194,7 @@ function buildBaseLayerProps(
   return {
     id: `export_layer_${trackIndex}`,
     name: clip.name,
+    sourceClipId: clip.id,
     visible: true,
     opacity: transform.opacity ?? 1,
     blendMode: (transform.blendMode || 'normal') as BlendMode,
@@ -202,9 +210,9 @@ function buildBaseLayerProps(
       ...(transform.scale?.z !== undefined ? { z: transform.scale.z } : {}),
     },
     rotation: {
-      x: ((transform.rotation?.x ?? 0) * Math.PI) / 180,
-      y: ((transform.rotation?.y ?? 0) * Math.PI) / 180,
-      z: ((transform.rotation?.z ?? 0) * Math.PI) / 180,
+      x: preserveRotationDegrees ? (transform.rotation?.x ?? 0) : ((transform.rotation?.x ?? 0) * Math.PI) / 180,
+      y: preserveRotationDegrees ? (transform.rotation?.y ?? 0) : ((transform.rotation?.y ?? 0) * Math.PI) / 180,
+      z: preserveRotationDegrees ? (transform.rotation?.z ?? 0) : ((transform.rotation?.z ?? 0) * Math.PI) / 180,
     },
     ...(clip.is3D ? { is3D: true } : {}),
   };
@@ -454,6 +462,7 @@ function buildNestedBaseLayer(nestedClip: TimelineClip, nestedClipLocalTime: num
   return {
     id: `nested-export-${nestedClip.id}`,
     name: nestedClip.name,
+    sourceClipId: nestedClip.id,
     visible: true,
     opacity: transform.opacity ?? 1,
     blendMode: (transform.blendMode || 'normal') as BlendMode,

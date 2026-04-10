@@ -40,7 +40,7 @@ interface PreviewProps {
 
 export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps) {
   const { isEngineReady } = useEngine();
-  const { getInterpolatedTransform } = useTimelineStore.getState();
+  const { getInterpolatedTransform, setPropertyValue, hasKeyframes, isRecording } = useTimelineStore.getState();
   const engineInitFailed = useEngineStore((s) => s.engineInitFailed);
   const engineInitError = useEngineStore((s) => s.engineInitError);
   const engineStats = useEngineStore(s => s.engineStats);
@@ -334,6 +334,70 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     endBatch();
   }, []);
 
+  const applyGaussianCameraValues = useCallback((clipId: string, values: {
+    positionX?: number;
+    positionY?: number;
+    scale?: number;
+    rotationX?: number;
+    rotationY?: number;
+  }) => {
+    const propertyUpdates: Array<readonly [property: 'position.x' | 'position.y' | 'scale.x' | 'scale.y' | 'rotation.x' | 'rotation.y', value: number]> = [];
+
+    if (values.positionX !== undefined) {
+      propertyUpdates.push(['position.x', values.positionX]);
+    }
+    if (values.positionY !== undefined) {
+      propertyUpdates.push(['position.y', values.positionY]);
+    }
+    if (values.scale !== undefined) {
+      propertyUpdates.push(['scale.x', values.scale], ['scale.y', values.scale]);
+    }
+    if (values.rotationX !== undefined) {
+      propertyUpdates.push(['rotation.x', values.rotationX]);
+    }
+    if (values.rotationY !== undefined) {
+      propertyUpdates.push(['rotation.y', values.rotationY]);
+    }
+
+    const needsKeyframePath = propertyUpdates.some(([property]) =>
+      hasKeyframes(clipId, property) || isRecording(clipId, property),
+    );
+
+    if (needsKeyframePath) {
+      for (const [property, value] of propertyUpdates) {
+        setPropertyValue(clipId, property, value);
+      }
+    } else {
+      const currentClip = useTimelineStore.getState().clips.find((clip) => clip.id === clipId);
+      const currentTransform = currentClip?.transform;
+      updateClipTransform(clipId, {
+        ...(values.positionX !== undefined || values.positionY !== undefined
+          ? {
+              position: {
+                x: values.positionX ?? currentTransform?.position.x ?? 0,
+                y: values.positionY ?? currentTransform?.position.y ?? 0,
+                z: currentTransform?.position.z ?? 0,
+              },
+            }
+          : {}),
+        ...(values.scale !== undefined
+          ? { scale: { x: values.scale, y: values.scale } }
+          : {}),
+        ...(values.rotationX !== undefined || values.rotationY !== undefined
+          ? {
+              rotation: {
+                x: values.rotationX ?? currentTransform?.rotation.x ?? 0,
+                y: values.rotationY ?? currentTransform?.rotation.y ?? 0,
+                z: currentTransform?.rotation.z ?? 0,
+              },
+            }
+          : {}),
+      });
+    }
+
+    engine.requestRender();
+  }, [hasKeyframes, isRecording, setPropertyValue, updateClipTransform]);
+
   const scheduleGaussianWheelBatchEnd = useCallback(() => {
     if (gaussianWheelBatchTimerRef.current === null) {
       startBatch('Gaussian zoom');
@@ -382,7 +446,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     if (!isGaussianOrbiting) return;
 
     const handleWindowMouseMove = (e: MouseEvent) => {
-      const { clipId, x, y, pitch, yaw, roll } = gaussianOrbitStart.current;
+      const { clipId, x, y, pitch, yaw } = gaussianOrbitStart.current;
       if (!clipId) return;
 
       const dx = e.clientX - x;
@@ -390,10 +454,10 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       const nextPitch = pitch + dy * 0.25;
       const nextYaw = yaw + dx * 0.25;
 
-      updateClipTransform(clipId, {
-        rotation: { x: nextPitch, y: nextYaw, z: roll },
+      applyGaussianCameraValues(clipId, {
+        rotationX: nextPitch,
+        rotationY: nextYaw,
       });
-      engine.requestRender();
     };
 
     const finishGaussianOrbit = () => {
@@ -409,13 +473,13 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', finishGaussianOrbit);
     };
-  }, [isGaussianOrbiting, updateClipTransform]);
+  }, [applyGaussianCameraValues, isGaussianOrbiting]);
 
   useEffect(() => {
     if (!isGaussianPanning) return;
 
     const handleWindowMouseMove = (e: MouseEvent) => {
-      const { clipId, x, y, panX, panY, panZ, zoom } = gaussianPanStart.current;
+      const { clipId, x, y, panX, panY, zoom } = gaussianPanStart.current;
       if (!clipId) return;
 
       const dx = e.clientX - x;
@@ -426,10 +490,10 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       const nextPanX = panX - dx * panScaleX;
       const nextPanY = panY + dy * panScaleY;
 
-      updateClipTransform(clipId, {
-        position: { x: nextPanX, y: nextPanY, z: panZ },
+      applyGaussianCameraValues(clipId, {
+        positionX: nextPanX,
+        positionY: nextPanY,
       });
-      engine.requestRender();
     };
 
     const finishGaussianPan = () => {
@@ -445,7 +509,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', finishGaussianPan);
     };
-  }, [effectiveResolution.height, effectiveResolution.width, isGaussianPanning, updateClipTransform]);
+  }, [applyGaussianCameraValues, effectiveResolution.height, effectiveResolution.width, isGaussianPanning]);
 
   // Sync layer selection when clip is selected in timeline (for edit mode)
   useEffect(() => {
@@ -513,10 +577,9 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       const zoomFactor = Math.exp(-e.deltaY * 0.0025);
       const nextZoom = Math.max(0.05, Math.min(40, currentZoom * zoomFactor));
 
-      updateClipTransform(selectedGaussianSplatClip.id, {
-        scale: { x: nextZoom, y: nextZoom },
+      applyGaussianCameraValues(selectedGaussianSplatClip.id, {
+        scale: nextZoom,
       });
-      engine.requestRender();
       return;
     }
 
@@ -555,9 +618,9 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     gaussianNavEnabled,
     isCanvasInteractionTarget,
     scheduleGaussianWheelBatchEnd,
+    applyGaussianCameraValues,
     selectedGaussianSplatClip,
     selectedGaussianSplatTransform,
-    updateClipTransform,
     viewPan,
     viewZoom,
   ]);

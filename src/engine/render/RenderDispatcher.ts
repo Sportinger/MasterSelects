@@ -34,6 +34,7 @@ import { loadGaussianSplatAssetCached } from '../gaussian/loaders';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../gaussian/types';
 
 const log = Logger.create('RenderDispatcher');
+const GAUSSIAN_PLAYBACK_SORT_FREQUENCY = 6;
 
 /**
  * Mutable deps bag — the engine updates these references as they change
@@ -94,6 +95,53 @@ export class RenderDispatcher {
     this.deps = deps;
     // Legacy gaussian-avatar code stays on disk for migration/reference only.
     void this.processGaussianLayers;
+  }
+
+  async ensureGaussianSplatSceneLoaded(
+    clipId: string,
+    url: string | undefined,
+    fileName: string,
+  ): Promise<boolean> {
+    if (!url) return false;
+
+    const device = this.deps.getDevice();
+    if (!device) return false;
+
+    const renderer = getGaussianSplatGpuRenderer();
+    if (!renderer.isInitialized) {
+      renderer.initialize(device);
+    }
+
+    if (renderer.hasScene(clipId)) {
+      return true;
+    }
+
+    if (this.splatLoadingClips.has(clipId)) {
+      return this.waitForGaussianSplatScene(clipId, renderer);
+    }
+
+    await this.loadAndUploadSplatScene(clipId, url, fileName, renderer);
+    return renderer.hasScene(clipId);
+  }
+
+  private async waitForGaussianSplatScene(
+    clipId: string,
+    renderer: ReturnType<typeof getGaussianSplatGpuRenderer>,
+    timeoutMs = 15000,
+  ): Promise<boolean> {
+    const startedAt = performance.now();
+
+    while (this.splatLoadingClips.has(clipId)) {
+      if (renderer.hasScene(clipId)) {
+        return true;
+      }
+      if (performance.now() - startedAt >= timeoutMs) {
+        break;
+      }
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 16));
+    }
+
+    return renderer.hasScene(clipId);
   }
 
   private getTargetVideoTime(layer: Layer, video: HTMLVideoElement): number {
@@ -299,6 +347,8 @@ export class RenderDispatcher {
     }
     debugSnapshot.after3DLayerData = layerData.length;
 
+    const commandBuffers: GPUCommandBuffer[] = [];
+
     // === Native Gaussian Splat Pass (WebGPU) ===
     const gaussianSummary = this.processGaussianSplatLayers(layerData, device, width, height);
     debugSnapshot.gaussianCandidates = gaussianSummary.gaussianCandidates;
@@ -309,7 +359,6 @@ export class RenderDispatcher {
     debugSnapshot.finalLayerData = layerData.length;
 
     // Pre-render nested compositions (batched with main composite)
-    const commandBuffers: GPUCommandBuffer[] = [];
     let hasNestedComps = false;
 
     const preRenderEncoder = device.createCommandEncoder();
@@ -329,7 +378,6 @@ export class RenderDispatcher {
 
     // Composite
     const t2 = performance.now();
-    const commandEncoder = device.createCommandEncoder();
 
     // Get effect temp textures for pre-processing effects on source layers
     const effectTempTexture = d.renderTargetManager.getEffectTempTexture() ?? undefined;
@@ -337,6 +385,7 @@ export class RenderDispatcher {
     const effectTempTexture2 = d.renderTargetManager.getEffectTempTexture2() ?? undefined;
     const effectTempView2 = d.renderTargetManager.getEffectTempView2() ?? undefined;
 
+    const commandEncoder = device.createCommandEncoder();
     const result = d.compositor.composite(layerData, commandEncoder, {
       device, sampler: d.sampler, pingView, pongView, outputWidth: width, outputHeight: height,
       skipEffects,
@@ -762,6 +811,8 @@ export class RenderDispatcher {
       renderer.initialize(device);
     }
     renderer.beginFrame();
+    const isRealtimePlayback = (this.deps.renderLoop?.getIsPlaying() ?? false)
+      && !this.deps.exportCanvasManager.getIsExporting();
 
     // Process each gaussian-splat layer individually (reverse iteration for safe splice)
     for (let i = layerData.length - 1; i >= 0; i--) {
@@ -772,6 +823,11 @@ export class RenderDispatcher {
       const splatUrl = data.layer.source.gaussianSplatUrl;
       const settings = data.layer.source.gaussianSplatSettings;
       const renderSettings = settings?.render ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render;
+      const liveSortFrequency = isRealtimePlayback
+        ? (renderSettings.sortFrequency === 0
+          ? 0
+          : Math.max(renderSettings.sortFrequency, GAUSSIAN_PLAYBACK_SORT_FREQUENCY))
+        : renderSettings.sortFrequency;
 
       // No URL — remove layer
       if (!splatUrl) {
@@ -803,19 +859,20 @@ export class RenderDispatcher {
 
       // Render this single splat into its own texture
       // Wave 5: pass clip-local time and particle/temporal settings from layer source
-      const commandEncoder = device.createCommandEncoder();
+      const gaussianCommandEncoder = device.createCommandEncoder();
       const textureView = renderer.renderToTexture(
-        clipId, camera, { width, height }, commandEncoder,
+        clipId, camera, { width, height }, gaussianCommandEncoder,
         {
           clipLocalTime: data.layer.source.mediaTime,
           backgroundColor: renderSettings.backgroundColor,
           maxSplats: renderSettings.maxSplats,
           particleSettings: settings?.particle,
-          sortFrequency: renderSettings.sortFrequency,
+          precise: this.deps.exportCanvasManager.getIsExporting(),
+          sortFrequency: liveSortFrequency,
           temporalSettings: settings?.temporal,
         },
       );
-      device.queue.submit([commandEncoder.finish()]);
+      device.queue.submit([gaussianCommandEncoder.finish()]);
 
       if (textureView) {
         summary.rendered++;
