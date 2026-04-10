@@ -88,9 +88,11 @@ export class RenderDispatcher {
   private threeSceneTexture: GPUTexture | null = null;
   private threeSceneView: GPUTextureView | null = null;
   private threeSceneInitializing = false;
+  private threeSceneImportCanvas: HTMLCanvasElement | null = null;
   // Native Gaussian Splat rendering state (new WebGPU path)
   private splatLoadingClips = new Set<string>();
   private splatSceneBounds = new Map<string, { min: [number, number, number]; max: [number, number, number] }>();
+  private lastThreeSceneDebugKey = '';
 
   constructor(deps: RenderDeps) {
     this.deps = deps;
@@ -150,7 +152,9 @@ export class RenderDispatcher {
       const scaleZ = Math.abs(layer.scale.z ?? 1);
 
       if (layer.gaussianSplatUrl) {
-        const splatBounds = this.splatSceneBounds.get(layer.clipId);
+        const splatBounds =
+          this.splatSceneBounds.get(layer.clipId) ??
+          this.deps.threeSceneRenderer?.getSplatBounds(layer.layerId);
         if (splatBounds) {
           const localCenterX = (splatBounds.min[0] + splatBounds.max[0]) * 0.5;
           const localCenterY = (splatBounds.min[1] + splatBounds.max[1]) * 0.5;
@@ -517,6 +521,30 @@ export class RenderDispatcher {
       finalLayerData: layerData.length,
     };
     this.lastRenderDebugSnapshot = debugSnapshot;
+    const threeSceneDebugPayload = {
+      input: layers.map((layer) => layer ? {
+        id: layer.id,
+        sourceClipId: layer.sourceClipId,
+        sourceType: layer.source?.type,
+        hasGaussianSplatUrl: !!layer.source?.gaussianSplatUrl,
+        is3D: layer.is3D === true,
+        visible: layer.visible !== false,
+        opacity: layer.opacity,
+      } : null),
+      collected: layerData.map((data) => ({
+        id: data.layer.id,
+        sourceClipId: data.layer.sourceClipId,
+        sourceType: data.layer.source?.type,
+        hasGaussianSplatUrl: !!data.layer.source?.gaussianSplatUrl,
+        is3D: data.layer.is3D === true,
+        hasTextureView: !!data.textureView,
+      })),
+    };
+    const threeSceneDebugKey = JSON.stringify(threeSceneDebugPayload);
+    if (threeSceneDebugKey !== this.lastThreeSceneDebugKey) {
+      this.lastThreeSceneDebugKey = threeSceneDebugKey;
+      log.warn('Three.js render input changed', threeSceneDebugPayload);
+    }
 
     // Update stats
     d.performanceStats.setDecoder(d.layerCollector.getDecoder());
@@ -781,10 +809,29 @@ export class RenderDispatcher {
       this.threeSceneView = this.threeSceneTexture.createView();
     }
 
-    // Copy OffscreenCanvas content to GPU texture
-    // No flipY needed: WebGL canvas output is already top-left origin
+    let importSource: HTMLCanvasElement | OffscreenCanvas = canvas;
+    if (canvas instanceof HTMLCanvasElement) {
+      if (!this.threeSceneImportCanvas) {
+        this.threeSceneImportCanvas = document.createElement('canvas');
+      }
+      if (
+        this.threeSceneImportCanvas.width !== width ||
+        this.threeSceneImportCanvas.height !== height
+      ) {
+        this.threeSceneImportCanvas.width = width;
+        this.threeSceneImportCanvas.height = height;
+      }
+      const importCtx = this.threeSceneImportCanvas.getContext('2d');
+      if (importCtx) {
+        importCtx.clearRect(0, 0, width, height);
+        importCtx.drawImage(canvas, 0, 0, width, height);
+        importSource = this.threeSceneImportCanvas;
+      }
+    }
+
+    // Copy Three.js canvas content to GPU texture
     device.queue.copyExternalImageToTexture(
-      { source: canvas },
+      { source: importSource },
       { texture: this.threeSceneTexture },
       { width, height },
     );

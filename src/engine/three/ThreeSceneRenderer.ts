@@ -31,8 +31,8 @@ interface ManagedMesh {
 
 interface ManagedSplat {
   layerId: string;
-  mesh: import('three').Mesh;
-  geometry: import('three').InstancedBufferGeometry;
+  mesh: import('three').Points;
+  geometry: import('three').BufferGeometry;
   material: SplatShaderMaterial;
   splatUrl?: string;
   loadPromise: Promise<void> | null;
@@ -40,6 +40,7 @@ interface ManagedSplat {
   centers: Float32Array;
   colors: Float32Array;
   opacities: Float32Array;
+  sizes: Float32Array;
   axisX: Float32Array;
   axisY: Float32Array;
   axisZ: Float32Array;
@@ -48,25 +49,59 @@ interface ManagedSplat {
   lastSortCameraPosition: [number, number, number] | null;
   lastSortCameraDirection: [number, number, number] | null;
   sortFrame: number;
+  bounds: { min: [number, number, number]; max: [number, number, number] } | null;
+  normalizationScale: number;
+  rendererRevision: number;
+  didLogVisibilityProbe: boolean;
 }
 
 const modelCache = new Map<string, import('three').Group>();
 const modelLoading = new Set<string>();
 const splatAssetCache = new Map<string, Promise<GaussianSplatAsset>>();
 const DEFAULT_THREE_SPLAT_BUDGET = 60000;
+const THREE_SPLAT_RENDERER_REVISION = 4;
 
 export class ThreeSceneRenderer {
   private THREE: THREE | null = null;
   private renderer: import('three').WebGLRenderer | null = null;
   private scene: import('three').Scene | null = null;
   private camera: import('three').PerspectiveCamera | null = null;
-  private canvas: OffscreenCanvas | null = null;
+  private canvas: HTMLCanvasElement | OffscreenCanvas | null = null;
   private meshes = new Map<string, ManagedMesh>();
   private splatObjects = new Map<string, ManagedSplat>();
   private width = 0;
   private height = 0;
   private initialized = false;
   private modelFileNames = new Map<string, string>();
+
+  private getFiniteNumber(value: number | undefined, fallback: number): number {
+    return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  }
+
+  private getLayerPosition(layer: Layer3DData): { x: number; y: number; z: number } {
+    return {
+      x: this.getFiniteNumber(layer.position.x, 0),
+      y: this.getFiniteNumber(layer.position.y, 0),
+      z: this.getFiniteNumber(layer.position.z, 0),
+    };
+  }
+
+  private getLayerScale(layer: Layer3DData): { x: number; y: number; z: number } {
+    return {
+      x: this.getFiniteNumber(layer.scale.x, 1),
+      y: this.getFiniteNumber(layer.scale.y, 1),
+      z: this.getFiniteNumber(layer.scale.z, 1),
+    };
+  }
+
+  private getLayerRotationRadians(layer: Layer3DData): { x: number; y: number; z: number } {
+    const degToRad = Math.PI / 180;
+    return {
+      x: this.getFiniteNumber(layer.rotation.x, 0) * degToRad,
+      y: this.getFiniteNumber(layer.rotation.y, 0) * degToRad,
+      z: this.getFiniteNumber(layer.rotation.z, 0) * degToRad,
+    };
+  }
 
   async initialize(width: number, height: number): Promise<boolean> {
     if (this.initialized && this.width === width && this.height === height) {
@@ -85,15 +120,14 @@ export class ThreeSceneRenderer {
       this.height = height;
 
       if (!this.canvas) {
-        this.canvas = new OffscreenCanvas(width, height);
-      } else {
-        this.canvas.width = width;
-        this.canvas.height = height;
+        this.canvas = document.createElement('canvas');
       }
+      this.canvas.width = width;
+      this.canvas.height = height;
 
       if (!this.renderer) {
         this.renderer = new T.WebGLRenderer({
-          canvas: this.canvas as unknown as HTMLCanvasElement,
+          canvas: this.canvas as HTMLCanvasElement,
           alpha: true,
           antialias: true,
           premultipliedAlpha: false,
@@ -161,6 +195,7 @@ export class ThreeSceneRenderer {
     return new T.ShaderMaterial({
       transparent: true,
       premultipliedAlpha: true,
+      depthTest: true,
       depthWrite: false,
       uniforms: {
         uOpacity: { value: 1 },
@@ -168,92 +203,37 @@ export class ThreeSceneRenderer {
         uViewportSize: { value: new T.Vector2(Math.max(this.width, 1), Math.max(this.height, 1)) },
       },
       vertexShader: `
-        attribute vec3 instanceCenter;
-        attribute vec3 instanceColor;
-        attribute float instanceOpacity;
-        attribute vec3 instanceAxisX;
-        attribute vec3 instanceAxisY;
-        attribute vec3 instanceAxisZ;
+        attribute vec3 splatColor;
+        attribute float splatOpacity;
+        attribute float splatSize;
 
         varying vec3 vColor;
         varying float vOpacity;
-        varying vec2 vLocalCoord;
         uniform float uSplatScale;
-        uniform vec2 uViewportSize;
-
-        vec2 projectAxisFromCamera(vec3 centerCam, vec3 axisCam, vec2 ndcCenter) {
-          vec4 clipAxis = projectionMatrix * vec4(centerCam + axisCam, 1.0);
-          float safeW = max(abs(clipAxis.w), 1e-6);
-          return clipAxis.xy / safeW - ndcCenter;
-        }
 
         void main() {
-          vColor = instanceColor;
-          vOpacity = instanceOpacity;
-          vLocalCoord = position.xy;
+          vColor = max(splatColor, vec3(0.08));
+          vOpacity = max(splatOpacity, 0.35);
 
-          vec4 centerCam4 = modelViewMatrix * vec4(instanceCenter, 1.0);
-          vec3 centerCam = centerCam4.xyz;
-          vec3 axisCamX = mat3(modelViewMatrix) * (instanceAxisX * uSplatScale);
-          vec3 axisCamY = mat3(modelViewMatrix) * (instanceAxisY * uSplatScale);
-          vec3 axisCamZ = mat3(modelViewMatrix) * (instanceAxisZ * uSplatScale);
-          float supportRadius = max(length(axisCamX), max(length(axisCamY), length(axisCamZ)));
-          float viewDepth = -centerCam.z;
-          if (viewDepth <= max(0.01, supportRadius * 1.5)) {
-            gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-            vOpacity = 0.0;
-            return;
-          }
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_Position = projectionMatrix * mvPosition;
 
-          vec4 clipCenter = projectionMatrix * centerCam4;
-          float safeW = max(abs(clipCenter.w), 1e-6);
-          vec2 ndcCenter = clipCenter.xy / safeW;
-
-          vec2 dx = projectAxisFromCamera(centerCam, axisCamX, ndcCenter);
-          vec2 dy = projectAxisFromCamera(centerCam, axisCamY, ndcCenter);
-          vec2 dz = projectAxisFromCamera(centerCam, axisCamZ, ndcCenter);
-
-          float c00 = dx.x * dx.x + dy.x * dy.x + dz.x * dz.x;
-          float c01 = dx.x * dx.y + dy.x * dy.y + dz.x * dz.y;
-          float c11 = dx.y * dx.y + dy.y * dy.y + dz.y * dz.y;
-
-          float trace = c00 + c11;
-          float determinant = c00 * c11 - c01 * c01;
-          float discriminant = sqrt(max(trace * trace * 0.25 - determinant, 0.0));
-          float lambda1 = max(trace * 0.5 + discriminant, 1e-8);
-          float lambda2 = max(trace * 0.5 - discriminant, 1e-8);
-
-          vec2 eigenVector1 = abs(c01) > 1e-6
-            ? normalize(vec2(c01, lambda1 - c00))
-            : vec2(1.0, 0.0);
-          vec2 eigenVector2 = vec2(-eigenVector1.y, eigenVector1.x);
-
-          float sigmaExtent = 1.6;
-          vec2 ndcAxis1 = eigenVector1 * sqrt(lambda1) * sigmaExtent;
-          vec2 ndcAxis2 = eigenVector2 * sqrt(lambda2) * sigmaExtent;
-          float minAxisLen = 1.75 / max(min(uViewportSize.x, uViewportSize.y), 1.0);
-          float maxAxisLen = 0.12;
-          float axis1Len = clamp(length(ndcAxis1), minAxisLen, maxAxisLen);
-          float axis2Len = clamp(length(ndcAxis2), minAxisLen, maxAxisLen);
-          ndcAxis1 = (length(ndcAxis1) > 1e-6 ? normalize(ndcAxis1) : vec2(1.0, 0.0)) * axis1Len;
-          ndcAxis2 = (length(ndcAxis2) > 1e-6 ? normalize(ndcAxis2) : vec2(0.0, 1.0)) * axis2Len;
-          vec2 ndcOffset = position.x * ndcAxis1 + position.y * ndcAxis2;
-
-          gl_Position = clipCenter;
-          gl_Position.xy += ndcOffset * safeW;
+          float distanceToCamera = max(-mvPosition.z, 0.0001);
+          gl_PointSize = clamp((splatSize * uSplatScale * 2200.0) / distanceToCamera, 2.0, 96.0);
         }
       `,
       fragmentShader: `
         varying vec3 vColor;
         varying float vOpacity;
-        varying vec2 vLocalCoord;
         uniform float uOpacity;
 
         void main() {
-          vec2 sigmaCoord = vLocalCoord * 2.25;
-          float radius2 = dot(sigmaCoord, sigmaCoord);
-          float alpha = exp(-0.5 * radius2) * vOpacity * uOpacity;
-          if (alpha <= 0.002) discard;
+          vec2 localCoord = gl_PointCoord * 2.0 - 1.0;
+          float radius2 = dot(localCoord, localCoord);
+          if (radius2 > 1.0) discard;
+
+          float alpha = exp(-2.5 * radius2) * vOpacity * uOpacity;
+          if (alpha <= 0.01) discard;
 
           gl_FragColor = vec4(vColor * alpha, alpha);
         }
@@ -262,27 +242,14 @@ export class ThreeSceneRenderer {
   }
 
   private createManagedSplat(T: THREE, layerId: string): ManagedSplat {
-    const geometry = new T.InstancedBufferGeometry();
-    geometry.setAttribute(
-      'position',
-      new T.Float32BufferAttribute([
-        -1, -1, 0,
-         1, -1, 0,
-         1,  1, 0,
-        -1,  1, 0,
-      ], 3),
-    );
-    geometry.setIndex([0, 1, 2, 0, 2, 3]);
-    geometry.setAttribute('instanceCenter', new T.InstancedBufferAttribute(new Float32Array(), 3));
-    geometry.setAttribute('instanceColor', new T.InstancedBufferAttribute(new Float32Array(), 3));
-    geometry.setAttribute('instanceOpacity', new T.InstancedBufferAttribute(new Float32Array(), 1));
-    geometry.setAttribute('instanceAxisX', new T.InstancedBufferAttribute(new Float32Array(), 3));
-    geometry.setAttribute('instanceAxisY', new T.InstancedBufferAttribute(new Float32Array(), 3));
-    geometry.setAttribute('instanceAxisZ', new T.InstancedBufferAttribute(new Float32Array(), 3));
-    geometry.instanceCount = 0;
+    const geometry = new T.BufferGeometry();
+    geometry.setAttribute('position', new T.BufferAttribute(new Float32Array(), 3));
+    geometry.setAttribute('splatColor', new T.BufferAttribute(new Float32Array(), 3));
+    geometry.setAttribute('splatOpacity', new T.BufferAttribute(new Float32Array(), 1));
+    geometry.setAttribute('splatSize', new T.BufferAttribute(new Float32Array(), 1));
 
     const material = this.createSplatMaterial(T);
-    const mesh = new T.Mesh(geometry, material);
+    const mesh = new T.Points(geometry, material);
     mesh.frustumCulled = false;
     mesh.renderOrder = 10;
 
@@ -296,6 +263,7 @@ export class ThreeSceneRenderer {
       centers: new Float32Array(),
       colors: new Float32Array(),
       opacities: new Float32Array(),
+      sizes: new Float32Array(),
       axisX: new Float32Array(),
       axisY: new Float32Array(),
       axisZ: new Float32Array(),
@@ -304,6 +272,10 @@ export class ThreeSceneRenderer {
       lastSortCameraPosition: null,
       lastSortCameraDirection: null,
       sortFrame: 0,
+      bounds: null,
+      normalizationScale: 1,
+      rendererRevision: THREE_SPLAT_RENDERER_REVISION,
+      didLogVisibilityProbe: false,
     };
   }
 
@@ -348,6 +320,27 @@ export class ThreeSceneRenderer {
 
     const canonical = frame.buffer.data;
     const totalSplats = frame.buffer.splatCount;
+    const rawBounds = asset.metadata.boundingBox;
+    const rawCenterX = (rawBounds.min[0] + rawBounds.max[0]) * 0.5;
+    const rawCenterY = (rawBounds.min[1] + rawBounds.max[1]) * 0.5;
+    const rawCenterZ = (rawBounds.min[2] + rawBounds.max[2]) * 0.5;
+    const extentX = rawBounds.max[0] - rawBounds.min[0];
+    const extentY = rawBounds.max[1] - rawBounds.min[1];
+    const extentZ = rawBounds.max[2] - rawBounds.min[2];
+    const maxExtent = Math.max(extentX, extentY, extentZ, 1e-5);
+    const normalizationScale = 1 / maxExtent;
+    const normalizedBounds = {
+      min: [
+        (rawBounds.min[0] - rawCenterX) * normalizationScale,
+        (rawBounds.min[1] - rawCenterY) * normalizationScale,
+        (rawBounds.min[2] - rawCenterZ) * normalizationScale,
+      ] as [number, number, number],
+      max: [
+        (rawBounds.max[0] - rawCenterX) * normalizationScale,
+        (rawBounds.max[1] - rawCenterY) * normalizationScale,
+        (rawBounds.max[2] - rawCenterZ) * normalizationScale,
+      ] as [number, number, number],
+    };
     const requestedMaxSplats = layer.gaussianSplatSettings?.render.maxSplats ?? 0;
     const targetMaxSplats = requestedMaxSplats > 0 ? requestedMaxSplats : DEFAULT_THREE_SPLAT_BUDGET;
     const stride = totalSplats > targetMaxSplats
@@ -358,6 +351,7 @@ export class ThreeSceneRenderer {
     const centers = new Float32Array(splatCount * 3);
     const colors = new Float32Array(splatCount * 3);
     const opacities = new Float32Array(splatCount);
+    const sizes = new Float32Array(splatCount);
     const axisX = new Float32Array(splatCount * 3);
     const axisY = new Float32Array(splatCount * 3);
     const axisZ = new Float32Array(splatCount * 3);
@@ -387,24 +381,30 @@ export class ThreeSceneRenderer {
       const zy = 2 * (qy * qz + qx * qw);
       const zz = 1 - 2 * (qx * qx + qy * qy);
 
-      centers[target + 0] = px;
-      centers[target + 1] = py;
-      centers[target + 2] = pz;
+      centers[target + 0] = (px - rawCenterX) * normalizationScale;
+      centers[target + 1] = (py - rawCenterY) * normalizationScale;
+      centers[target + 2] = (pz - rawCenterZ) * normalizationScale;
 
       colors[target + 0] = Math.max(0, Math.min(1, canonical[base + 10]));
       colors[target + 1] = Math.max(0, Math.min(1, canonical[base + 11]));
       colors[target + 2] = Math.max(0, Math.min(1, canonical[base + 12]));
       opacities[outIndex] = Math.max(0, Math.min(1, canonical[base + 13]));
 
-      axisX[target + 0] = xx * sx;
-      axisX[target + 1] = yx * sx;
-      axisX[target + 2] = zx * sx;
-      axisY[target + 0] = xy * sy;
-      axisY[target + 1] = yy * sy;
-      axisY[target + 2] = zy * sy;
-      axisZ[target + 0] = xz * sz;
-      axisZ[target + 1] = yz * sz;
-      axisZ[target + 2] = zz * sz;
+      axisX[target + 0] = xx * sx * normalizationScale;
+      axisX[target + 1] = yx * sx * normalizationScale;
+      axisX[target + 2] = zx * sx * normalizationScale;
+      axisY[target + 0] = xy * sy * normalizationScale;
+      axisY[target + 1] = yy * sy * normalizationScale;
+      axisY[target + 2] = zy * sy * normalizationScale;
+      axisZ[target + 0] = xz * sz * normalizationScale;
+      axisZ[target + 1] = yz * sz * normalizationScale;
+      axisZ[target + 2] = zz * sz * normalizationScale;
+      sizes[outIndex] = Math.max(
+        Math.hypot(axisX[target + 0], axisX[target + 1], axisX[target + 2]),
+        Math.hypot(axisY[target + 0], axisY[target + 1], axisY[target + 2]),
+        Math.hypot(axisZ[target + 0], axisZ[target + 1], axisZ[target + 2]),
+        0.002,
+      );
 
       outIndex += 1;
     }
@@ -412,6 +412,7 @@ export class ThreeSceneRenderer {
     managed.centers = centers;
     managed.colors = colors;
     managed.opacities = opacities;
+    managed.sizes = sizes;
     managed.axisX = axisX;
     managed.axisY = axisY;
     managed.axisZ = axisZ;
@@ -421,22 +422,29 @@ export class ThreeSceneRenderer {
     managed.lastSortCameraPosition = null;
     managed.lastSortCameraDirection = null;
     managed.sortFrame = 0;
+    managed.bounds = normalizedBounds;
+    managed.normalizationScale = normalizationScale;
 
-    const instanceCenters = new Float32Array(centers.length);
-    const instanceColors = new Float32Array(colors.length);
-    const instanceOpacities = new Float32Array(opacities.length);
-    const instanceAxisX = new Float32Array(axisX.length);
-    const instanceAxisY = new Float32Array(axisY.length);
-    const instanceAxisZ = new Float32Array(axisZ.length);
+    const pointPositions = new Float32Array(centers.length);
+    const pointColors = new Float32Array(colors.length);
+    const pointOpacities = new Float32Array(opacities.length);
+    const pointSizes = new Float32Array(sizes.length);
 
-    managed.geometry.setAttribute('instanceCenter', new T.InstancedBufferAttribute(instanceCenters, 3));
-    managed.geometry.setAttribute('instanceColor', new T.InstancedBufferAttribute(instanceColors, 3));
-    managed.geometry.setAttribute('instanceOpacity', new T.InstancedBufferAttribute(instanceOpacities, 1));
-    managed.geometry.setAttribute('instanceAxisX', new T.InstancedBufferAttribute(instanceAxisX, 3));
-    managed.geometry.setAttribute('instanceAxisY', new T.InstancedBufferAttribute(instanceAxisY, 3));
-    managed.geometry.setAttribute('instanceAxisZ', new T.InstancedBufferAttribute(instanceAxisZ, 3));
-    managed.geometry.instanceCount = splatCount;
-    managed.geometry.boundingSphere = new T.Sphere(new T.Vector3(0, 0, 0), 1e9);
+    managed.geometry.setAttribute('position', new T.BufferAttribute(pointPositions, 3));
+    managed.geometry.setAttribute('splatColor', new T.BufferAttribute(pointColors, 3));
+    managed.geometry.setAttribute('splatOpacity', new T.BufferAttribute(pointOpacities, 1));
+    managed.geometry.setAttribute('splatSize', new T.BufferAttribute(pointSizes, 1));
+    managed.geometry.boundingSphere = new T.Sphere(
+      new T.Vector3(0, 0, 0),
+      Math.max(
+        0.5,
+        Math.hypot(
+          normalizedBounds.max[0] - normalizedBounds.min[0],
+          normalizedBounds.max[1] - normalizedBounds.min[1],
+          normalizedBounds.max[2] - normalizedBounds.min[2],
+        ) * 0.75,
+      ),
+    );
 
     this.updateSplatSort(managed, true);
 
@@ -446,6 +454,20 @@ export class ThreeSceneRenderer {
       totalSplats,
       renderedSplats: splatCount,
       stride,
+      rawBounds,
+      normalizedBounds,
+      normalizationScale,
+    });
+    log.warn('Three.js splat geometry prepared', {
+      layerId: layer.layerId,
+      clipId: layer.clipId,
+      fileName: layer.gaussianSplatFileName,
+      totalSplats,
+      renderedSplats: splatCount,
+      stride,
+      rawBounds,
+      normalizedBounds,
+      normalizationScale,
     });
   }
 
@@ -467,6 +489,9 @@ export class ThreeSceneRenderer {
     const cameraDirection = new this.THREE!.Vector3();
     const worldPosition = new this.THREE!.Vector3();
     const toCamera = new this.THREE!.Vector3();
+    let minDepth = Number.POSITIVE_INFINITY;
+    let maxDepth = Number.NEGATIVE_INFINITY;
+    let inFrontCount = 0;
 
     this.camera.getWorldPosition(cameraPosition);
     this.camera.getWorldDirection(cameraDirection);
@@ -498,61 +523,64 @@ export class ThreeSceneRenderer {
       ).applyMatrix4(managed.mesh.matrixWorld);
       toCamera.copy(worldPosition).sub(cameraPosition);
       managed.sortDepths[i] = toCamera.dot(cameraDirection);
+      minDepth = Math.min(minDepth, managed.sortDepths[i]);
+      maxDepth = Math.max(maxDepth, managed.sortDepths[i]);
+      if (managed.sortDepths[i] > 0) {
+        inFrontCount += 1;
+      }
       managed.sortIndices[i] = i;
     }
 
     managed.sortIndices.sort((a, b) => managed.sortDepths[b] - managed.sortDepths[a]);
     managed.lastSortCameraPosition = posTuple;
     managed.lastSortCameraDirection = dirTuple;
+    if (!managed.didLogVisibilityProbe) {
+      const centerProbe = new this.THREE!.Vector3(0, 0, 0)
+        .applyMatrix4(managed.mesh.matrixWorld)
+        .project(this.camera);
+      log.warn('Three.js splat visibility probe', {
+        layerId: managed.layerId,
+        splatCount: managed.splatCount,
+        inFrontCount,
+        minDepth,
+        maxDepth,
+        ndcCenter: [centerProbe.x, centerProbe.y, centerProbe.z],
+        cameraPosition: posTuple,
+        cameraDirection: dirTuple,
+      });
+      managed.didLogVisibilityProbe = true;
+    }
 
-    const centerAttr = managed.geometry.getAttribute('instanceCenter') as import('three').InstancedBufferAttribute;
-    const colorAttr = managed.geometry.getAttribute('instanceColor') as import('three').InstancedBufferAttribute;
-    const opacityAttr = managed.geometry.getAttribute('instanceOpacity') as import('three').InstancedBufferAttribute;
-    const axisXAttr = managed.geometry.getAttribute('instanceAxisX') as import('three').InstancedBufferAttribute;
-    const axisYAttr = managed.geometry.getAttribute('instanceAxisY') as import('three').InstancedBufferAttribute;
-    const axisZAttr = managed.geometry.getAttribute('instanceAxisZ') as import('three').InstancedBufferAttribute;
+    const positionAttr = managed.geometry.getAttribute('position') as import('three').BufferAttribute;
+    const colorAttr = managed.geometry.getAttribute('splatColor') as import('three').BufferAttribute;
+    const opacityAttr = managed.geometry.getAttribute('splatOpacity') as import('three').BufferAttribute;
+    const sizeAttr = managed.geometry.getAttribute('splatSize') as import('three').BufferAttribute;
 
-    const centerArray = centerAttr.array as Float32Array;
+    const positionArray = positionAttr.array as Float32Array;
     const colorArray = colorAttr.array as Float32Array;
     const opacityArray = opacityAttr.array as Float32Array;
-    const axisXArray = axisXAttr.array as Float32Array;
-    const axisYArray = axisYAttr.array as Float32Array;
-    const axisZArray = axisZAttr.array as Float32Array;
+    const sizeArray = sizeAttr.array as Float32Array;
 
     for (let outIndex = 0; outIndex < managed.splatCount; outIndex += 1) {
       const sourceIndex = managed.sortIndices[outIndex];
       const sourceBase = sourceIndex * 3;
       const targetBase = outIndex * 3;
 
-      centerArray[targetBase + 0] = managed.centers[sourceBase + 0];
-      centerArray[targetBase + 1] = managed.centers[sourceBase + 1];
-      centerArray[targetBase + 2] = managed.centers[sourceBase + 2];
+      positionArray[targetBase + 0] = managed.centers[sourceBase + 0];
+      positionArray[targetBase + 1] = managed.centers[sourceBase + 1];
+      positionArray[targetBase + 2] = managed.centers[sourceBase + 2];
 
       colorArray[targetBase + 0] = managed.colors[sourceBase + 0];
       colorArray[targetBase + 1] = managed.colors[sourceBase + 1];
       colorArray[targetBase + 2] = managed.colors[sourceBase + 2];
-
-      axisXArray[targetBase + 0] = managed.axisX[sourceBase + 0];
-      axisXArray[targetBase + 1] = managed.axisX[sourceBase + 1];
-      axisXArray[targetBase + 2] = managed.axisX[sourceBase + 2];
-
-      axisYArray[targetBase + 0] = managed.axisY[sourceBase + 0];
-      axisYArray[targetBase + 1] = managed.axisY[sourceBase + 1];
-      axisYArray[targetBase + 2] = managed.axisY[sourceBase + 2];
-
-      axisZArray[targetBase + 0] = managed.axisZ[sourceBase + 0];
-      axisZArray[targetBase + 1] = managed.axisZ[sourceBase + 1];
-      axisZArray[targetBase + 2] = managed.axisZ[sourceBase + 2];
-
       opacityArray[outIndex] = managed.opacities[sourceIndex];
+      sizeArray[outIndex] = managed.sizes[sourceIndex];
     }
 
-    centerAttr.needsUpdate = true;
+    positionAttr.needsUpdate = true;
     colorAttr.needsUpdate = true;
     opacityAttr.needsUpdate = true;
-    axisXAttr.needsUpdate = true;
-    axisYAttr.needsUpdate = true;
-    axisZAttr.needsUpdate = true;
+    sizeAttr.needsUpdate = true;
   }
 
   renderScene(
@@ -560,7 +588,7 @@ export class ThreeSceneRenderer {
     cameraConfig: CameraConfig,
     width: number,
     height: number,
-  ): OffscreenCanvas | null {
+  ): HTMLCanvasElement | OffscreenCanvas | null {
     if (!this.initialized || !this.THREE || !this.renderer || !this.scene || !this.camera) {
       return null;
     }
@@ -582,6 +610,16 @@ export class ThreeSceneRenderer {
     const fov = cameraConfig.fov;
     const defaultCameraZ = this.getCameraZForFill(fov, worldHeight);
     const applyDefaultDistance = cameraConfig.applyDefaultDistance !== false;
+    const cameraPosition = {
+      x: this.getFiniteNumber(cameraConfig.position.x, DEFAULT_CAMERA_CONFIG.position.x),
+      y: this.getFiniteNumber(cameraConfig.position.y, DEFAULT_CAMERA_CONFIG.position.y),
+      z: this.getFiniteNumber(cameraConfig.position.z, DEFAULT_CAMERA_CONFIG.position.z),
+    };
+    const cameraTarget = {
+      x: this.getFiniteNumber(cameraConfig.target.x, DEFAULT_CAMERA_CONFIG.target.x),
+      y: this.getFiniteNumber(cameraConfig.target.y, DEFAULT_CAMERA_CONFIG.target.y),
+      z: this.getFiniteNumber(cameraConfig.target.z, DEFAULT_CAMERA_CONFIG.target.z),
+    };
 
     this.camera.fov = fov;
     this.camera.aspect = outputAspect;
@@ -593,14 +631,14 @@ export class ThreeSceneRenderer {
       cameraConfig.up?.z ?? DEFAULT_CAMERA_CONFIG.up?.z ?? 0,
     );
     this.camera.position.set(
-      cameraConfig.position.x,
-      cameraConfig.position.y,
-      cameraConfig.position.z + (applyDefaultDistance ? defaultCameraZ : 0),
+      cameraPosition.x,
+      cameraPosition.y,
+      cameraPosition.z + (applyDefaultDistance ? defaultCameraZ : 0),
     );
     this.camera.lookAt(
-      cameraConfig.target.x,
-      cameraConfig.target.y,
-      cameraConfig.target.z,
+      cameraTarget.x,
+      cameraTarget.y,
+      cameraTarget.z,
     );
     this.camera.updateProjectionMatrix();
 
@@ -726,23 +764,26 @@ export class ThreeSceneRenderer {
 
       const halfWorldW = (worldHeight * outputAspect) / 2;
       const halfWorldH = worldHeight / 2;
+      const position = this.getLayerPosition(layer);
+      const scale = this.getLayerScale(layer);
+      const rotation = this.getLayerRotationRadians(layer);
       managed.mesh.position.set(
-        layer.position.x * halfWorldW,
-        -layer.position.y * halfWorldH,
-        layer.position.z,
+        position.x * halfWorldW,
+        -position.y * halfWorldH,
+        position.z,
       );
 
       managed.mesh.rotation.order = 'ZYX';
       managed.mesh.rotation.set(
-        -layer.rotation.x,
-        layer.rotation.y,
-        layer.rotation.z,
+        -rotation.x,
+        rotation.y,
+        rotation.z,
       );
 
       managed.mesh.scale.set(
-        layer.scale.x,
-        layer.scale.y,
-        layer.scale.z,
+        scale.x,
+        scale.y,
+        scale.z,
       );
 
       if (managed.isModel) {
@@ -781,11 +822,19 @@ export class ThreeSceneRenderer {
     return this.canvas;
   }
 
+  getSplatBounds(layerId: string): { min: [number, number, number]; max: [number, number, number] } | undefined {
+    return this.splatObjects.get(layerId)?.bounds ?? undefined;
+  }
+
   private syncSplatLayer(layer: Layer3DData, outputAspect: number, worldHeight: number): void {
     if (!this.scene || !this.THREE) return;
 
     let managed = this.splatObjects.get(layer.layerId);
-    if (!managed || managed.splatUrl !== layer.gaussianSplatUrl) {
+    const needsManagedRebuild =
+      !managed ||
+      managed.splatUrl !== layer.gaussianSplatUrl ||
+      managed.rendererRevision !== THREE_SPLAT_RENDERER_REVISION;
+    if (needsManagedRebuild) {
       if (managed) {
         this.disposeManagedSplat(managed);
       }
@@ -796,33 +845,61 @@ export class ThreeSceneRenderer {
       this.scene.add(managed.mesh);
 
       if (layer.gaussianSplatUrl) {
-        managed.loadPromise = this.populateSplatGeometry(this.THREE, managed, layer).catch((error) => {
-          log.error('Failed to build Three.js gaussian splat mesh', {
+        managed.loadPromise = this.populateSplatGeometry(this.THREE, managed, layer)
+          .catch((error) => {
+            log.error('Failed to build Three.js gaussian splat mesh', {
+              layerId: layer.layerId,
+              fileName: layer.gaussianSplatFileName,
+              error,
+            });
+          })
+          .finally(() => {
+            if (managed) {
+              managed.loadPromise = null;
+            }
+          });
+      }
+    } else if (layer.gaussianSplatUrl && managed.splatCount === 0 && !managed.loadPromise) {
+      log.warn('Retrying empty Three.js splat mesh build', {
+        layerId: layer.layerId,
+        clipId: layer.clipId,
+        fileName: layer.gaussianSplatFileName,
+      });
+      managed.loadPromise = this.populateSplatGeometry(this.THREE, managed, layer)
+        .catch((error) => {
+          log.error('Failed to rebuild Three.js gaussian splat mesh', {
             layerId: layer.layerId,
             fileName: layer.gaussianSplatFileName,
             error,
           });
+        })
+        .finally(() => {
+          if (managed) {
+            managed.loadPromise = null;
+          }
         });
-      }
     }
 
     const halfWorldW = (worldHeight * outputAspect) / 2;
     const halfWorldH = worldHeight / 2;
+    const position = this.getLayerPosition(layer);
+    const scale = this.getLayerScale(layer);
+    const rotation = this.getLayerRotationRadians(layer);
     managed.mesh.position.set(
-      layer.position.x * halfWorldW,
-      -layer.position.y * halfWorldH,
-      layer.position.z,
+      position.x * halfWorldW,
+      -position.y * halfWorldH,
+      position.z,
     );
     managed.mesh.rotation.order = 'ZYX';
     managed.mesh.rotation.set(
-      -layer.rotation.x,
-      layer.rotation.y,
-      layer.rotation.z,
+      -rotation.x,
+      rotation.y,
+      rotation.z,
     );
     managed.mesh.scale.set(
-      layer.scale.x,
-      layer.scale.y,
-      layer.scale.z,
+      scale.x,
+      scale.y,
+      scale.z,
     );
     managed.mesh.visible = layer.opacity > 0;
     managed.material.uniforms.uOpacity.value = layer.opacity;
