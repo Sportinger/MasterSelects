@@ -204,6 +204,7 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
       hasFileHandle: !!handle,
       filePath: pm.sourcePath,
       projectPath: resolvedProjectPath,
+      labelColor: pm.labelColor as import('../../stores/mediaStore/types').LabelColor | undefined,
       transcriptStatus,
       transcript,
       transcriptCoverage,
@@ -308,6 +309,7 @@ function convertProjectCompositionToStore(
       name: pc.name,
       type: 'composition',
       parentId: pc.folderId,
+      labelColor: pc.labelColor as import('../../stores/mediaStore/types').LabelColor | undefined,
       createdAt: Date.now(),
       width: pc.width,
       height: pc.height,
@@ -328,6 +330,7 @@ function convertProjectFolderToStore(projectFolders: ProjectFolder[]): MediaFold
     id: pf.id,
     name: pf.name,
     parentId: pf.parentId,
+    labelColor: pf.labelColor as import('../../stores/mediaStore/types').LabelColor | undefined,
     isExpanded: true,
     createdAt: Date.now(),
   }));

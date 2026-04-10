@@ -98,6 +98,7 @@ export interface ProjectComposition {
   duration: number;
   backgroundColor: string;
   folderId: string | null;
+  labelColor?: string;
 
   // Tracks and clips
   tracks: ProjectTrack[];

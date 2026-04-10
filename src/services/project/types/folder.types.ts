@@ -5,4 +5,5 @@ export interface ProjectFolder {
   name: string;
   parentId: string | null;
   color?: string;
+  labelColor?: string;
 }

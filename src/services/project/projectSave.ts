@@ -44,6 +44,7 @@ function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
     hasAudio: file.hasAudio,
     hasProxy: file.proxyStatus === 'ready',
     folderId: file.parentId,
+    labelColor: file.labelColor && file.labelColor !== 'none' ? file.labelColor : undefined,
     importedAt: new Date(file.createdAt).toISOString(),
   }));
 }
@@ -56,6 +57,7 @@ function convertFolders(folders: MediaFolder[]): ProjectFolder[] {
     id: folder.id,
     name: folder.name,
     parentId: folder.parentId,
+    labelColor: folder.labelColor && folder.labelColor !== 'none' ? folder.labelColor : undefined,
   }));
 }
 
@@ -170,6 +172,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       duration: comp.duration,
       backgroundColor: comp.backgroundColor,
       folderId: comp.parentId,
+      labelColor: comp.labelColor && comp.labelColor !== 'none' ? comp.labelColor : undefined,
       tracks,
       clips,
       markers,

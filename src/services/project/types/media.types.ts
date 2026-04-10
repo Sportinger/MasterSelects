@@ -29,6 +29,9 @@ export interface ProjectMediaFile {
   // Folder organization
   folderId: string | null;
 
+  // Label color
+  labelColor?: string;
+
   // Timestamps
   importedAt: string;
 }
