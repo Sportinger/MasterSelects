@@ -1161,7 +1161,8 @@ export function MediaPanel() {
     const isSelected = selectedIds.includes(item.id);
     const isRenaming = renamingId === item.id;
     const isExpanded = isFolder && expandedFolderIds.includes(item.id);
-    const isMediaFile = !isFolder && 'type' in item && item.type !== 'composition' && item.type !== 'text' && item.type !== 'solid';
+    const itemType = 'type' in item ? item.type : undefined;
+    const isMediaFile = !isFolder && !!itemType && itemType !== 'composition' && itemType !== 'text' && itemType !== 'solid' && itemType !== 'model' && itemType !== 'camera';
     const hasFile = isMediaFile && 'file' in item && !!(item as MediaFile).file;
     const isImporting = isMediaFile && !!(item as MediaFile).isImporting;
     const isDragTarget = isFolder && dragOverFolderId === item.id;
