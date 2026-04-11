@@ -91,6 +91,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
   const isGaussianSplat = sourceType === 'gaussian-splat';
   const renderSettings = clip?.source?.gaussianSplatSettings?.render ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render;
   const isNativeGaussianSplat = isGaussianSplat && renderSettings.useNativeRenderer === true;
+  const supportsScaleZ = isModel || (isGaussianSplat && !isNativeGaussianSplat);
   const usesCameraControls = isCameraClip || isNativeGaussianSplat;
   const isLocked3D = isModel || isGaussianSplat;
   const isEffectively3D = usesCameraControls || isLocked3D || is3D;
@@ -117,7 +118,11 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
   const scaleXPct = transform.scale.x * 100;
   const scaleYPct = transform.scale.y * 100;
   const scaleZPct = (transform.scale.z ?? 1) * 100;
-  const uniformScalePct = ((transform.scale.x + transform.scale.y) / 2) * 100;
+  const uniformScalePct = (
+    supportsScaleZ
+      ? (transform.scale.x + transform.scale.y + (transform.scale.z ?? 1)) / 3
+      : (transform.scale.x + transform.scale.y) / 2
+  ) * 100;
   const handleScaleXChange = (pct: number) => handlePropertyChange('scale.x', pct / 100);
   const handleScaleYChange = (pct: number) => handlePropertyChange('scale.y', pct / 100);
   const handleScaleZChange = (pct: number) => handlePropertyChange('scale.z', pct / 100);
@@ -134,7 +139,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
     }
     handlePropertyChange('scale.x', value);
     handlePropertyChange('scale.y', value);
-    if (isModel) handlePropertyChange('scale.z', value);
+    if (supportsScaleZ) handlePropertyChange('scale.z', value);
   };
 
   const opacityPct = transform.opacity * 100;
@@ -291,7 +296,12 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
 
       <div className="properties-section">
         <div className="control-row">
-          <ScaleKeyframeToggle clipId={clipId} scaleX={transform.scale.x} scaleY={transform.scale.y} />
+          <ScaleKeyframeToggle
+            clipId={clipId}
+            scaleX={transform.scale.x}
+            scaleY={transform.scale.y}
+            {...(supportsScaleZ ? { scaleZ: transform.scale.z ?? 1 } : {})}
+          />
           <label className="prop-label">{usesCameraControls ? 'Zoom' : 'Scale'}</label>
           <div className="multi-value-row">
             <LabeledValue
@@ -334,7 +344,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
                 onDragEnd={handleBatchEnd}
               />
             )}
-            {isModel && (
+            {supportsScaleZ && (
               <LabeledValue
                 label="Z"
                 value={scaleZPct}
@@ -405,7 +415,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
               opacity: 1,
               blendMode: 'normal',
               position: { x: 0, y: 0, z: 0 },
-              scale: { x: 1, y: 1 },
+              scale: supportsScaleZ ? { x: 1, y: 1, z: 1 } : { x: 1, y: 1 },
               rotation: { x: 0, y: 0, z: 0 },
             });
           }}

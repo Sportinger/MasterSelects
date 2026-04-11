@@ -63,18 +63,30 @@ export function KeyframeToggle({ clipId, property, value }: KeyframeToggleProps)
   );
 }
 
-// Master keyframe toggle for Scale X and Y together
-export function ScaleKeyframeToggle({ clipId, scaleX, scaleY }: { clipId: string; scaleX: number; scaleY: number }) {
+// Master keyframe toggle for Scale X/Y and optional Z together
+export function ScaleKeyframeToggle({
+  clipId,
+  scaleX,
+  scaleY,
+  scaleZ,
+}: {
+  clipId: string;
+  scaleX: number;
+  scaleY: number;
+  scaleZ?: number;
+}) {
   // Use getState() for actions - they're stable and don't need subscriptions
   const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe, disablePropertyKeyframes } = useTimelineStore.getState();
 
   const xRecording = isRecording(clipId, 'scale.x');
   const yRecording = isRecording(clipId, 'scale.y');
+  const zRecording = scaleZ !== undefined ? isRecording(clipId, 'scale.z') : false;
   const xHasKfs = hasKeyframes(clipId, 'scale.x');
   const yHasKfs = hasKeyframes(clipId, 'scale.y');
+  const zHasKfs = scaleZ !== undefined ? hasKeyframes(clipId, 'scale.z') : false;
 
-  const anyRecording = xRecording || yRecording;
-  const anyHasKfs = xHasKfs || yHasKfs;
+  const anyRecording = xRecording || yRecording || zRecording;
+  const anyHasKfs = xHasKfs || yHasKfs || zHasKfs;
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -82,12 +94,19 @@ export function ScaleKeyframeToggle({ clipId, scaleX, scaleY }: { clipId: string
       // Turning OFF: save current values as static, remove all keyframes
       disablePropertyKeyframes(clipId, 'scale.x', scaleX);
       disablePropertyKeyframes(clipId, 'scale.y', scaleY);
+      if (scaleZ !== undefined) {
+        disablePropertyKeyframes(clipId, 'scale.z', scaleZ);
+      }
     } else {
       // Turning ON: add initial keyframes and enable recording
       addKeyframe(clipId, 'scale.x', scaleX);
       addKeyframe(clipId, 'scale.y', scaleY);
       toggleKeyframeRecording(clipId, 'scale.x');
       toggleKeyframeRecording(clipId, 'scale.y');
+      if (scaleZ !== undefined) {
+        addKeyframe(clipId, 'scale.z', scaleZ);
+        toggleKeyframeRecording(clipId, 'scale.z');
+      }
     }
   };
 

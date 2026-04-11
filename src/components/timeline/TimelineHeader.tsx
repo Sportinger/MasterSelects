@@ -348,7 +348,7 @@ function TrackPropertyLabels({
   // Convert Set to sorted array for consistent ordering
   const sortedProperties = Array.from(keyframeProperties).sort((a, b) => {
     // Transform properties order
-    const transformOrder = ['opacity', 'position.x', 'position.y', 'position.z', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z'];
+    const transformOrder = ['opacity', 'position.x', 'position.y', 'position.z', 'scale.x', 'scale.y', 'scale.z', 'rotation.x', 'rotation.y', 'rotation.z'];
     // Audio effect properties order (volume first, then bands by frequency)
     const audioParamOrder = ['volume', 'band31', 'band62', 'band125', 'band250', 'band500', 'band1k', 'band2k', 'band4k', 'band8k', 'band16k'];
 

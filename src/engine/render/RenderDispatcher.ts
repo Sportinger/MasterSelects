@@ -695,12 +695,19 @@ export class RenderDispatcher {
       const rot = typeof layer.rotation === 'number'
         ? { x: 0, y: 0, z: layer.rotation }
         : layer.rotation;
+      const radToDeg = 180 / Math.PI;
 
       layers3D.push({
         layerId: layer.id,
         clipId: layer.sourceClipId || layer.id,
         position: layer.position,
-        rotation: { x: rot.x, y: rot.y, z: rot.z },
+        // Render-layer rotations are stored in radians for the 2D compositor pipeline.
+        // ThreeSceneRenderer expects degrees and converts to radians internally.
+        rotation: {
+          x: rot.x * radToDeg,
+          y: rot.y * radToDeg,
+          z: rot.z * radToDeg,
+        },
         scale: { x: layer.scale.x, y: layer.scale.y, z: layer.scale.z ?? 1 },
         opacity: layer.opacity,
         blendMode: layer.blendMode,

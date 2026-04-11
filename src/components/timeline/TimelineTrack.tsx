@@ -72,7 +72,7 @@ function TrackPropertyTracks({
 
   // Convert Set to sorted array for consistent ordering (matching the labels)
   const sortedProperties = Array.from(keyframeProperties).sort((a, b) => {
-    const order = ['opacity', 'position.x', 'position.y', 'position.z', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z'];
+    const order = ['opacity', 'position.x', 'position.y', 'position.z', 'scale.x', 'scale.y', 'scale.z', 'rotation.x', 'rotation.y', 'rotation.z'];
     const aIdx = order.indexOf(a);
     const bIdx = order.indexOf(b);
     if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
