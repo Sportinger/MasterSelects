@@ -8,6 +8,7 @@ import { CompositionSettingsDialog } from './media/CompositionSettingsDialog';
 import { SolidSettingsDialog } from './media/SolidSettingsDialog';
 import { LabelColorPicker } from './media/LabelColorPicker';
 import { handleSubmenuHover, handleSubmenuLeave } from './media/submenuPosition';
+import { collectDroppedMediaFiles, planDroppedMediaImports } from './media/dropImport';
 
 const log = Logger.create('MediaPanel');
 import { useMediaStore } from '../../stores/mediaStore';
@@ -335,6 +336,32 @@ export function MediaPanel() {
     const y = e.clientY;
     if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
       setIsExternalDragOver(false);
+    }
+  }, []);
+
+  const handleExternalDropImport = useCallback(async (dataTransfer: DataTransfer, targetParentId: string | null) => {
+    const mediaStore = useMediaStore.getState();
+    const droppedFiles = await collectDroppedMediaFiles(dataTransfer);
+
+    if (droppedFiles.length === 0) {
+      return;
+    }
+
+    const importBatches = planDroppedMediaImports(
+      droppedFiles,
+      mediaStore.folders,
+      targetParentId,
+      (name, parentId) => mediaStore.createFolder(name, parentId),
+    );
+
+    for (const batch of importBatches) {
+      if (batch.filesWithHandles.length > 0) {
+        await mediaStore.importFilesWithHandles(batch.filesWithHandles, batch.parentId);
+      }
+
+      if (batch.files.length > 0) {
+        await mediaStore.importFiles(batch.files, batch.parentId);
+      }
     }
   }, []);
 
@@ -843,15 +870,18 @@ export function MediaPanel() {
     clearExternalDragPayload();
   }, []);
 
-  // Handle drag over folder (for internal moves)
+  // Handle drag over folder (for internal moves and external imports)
   const handleFolderDragOver = useCallback((e: React.DragEvent, folderId: string) => {
-    // Only accept internal drags
-    if (!e.dataTransfer.types.includes('application/x-media-panel-item')) {
+    const isInternalDrag = e.dataTransfer.types.includes('application/x-media-panel-item');
+    const hasFiles = e.dataTransfer.types.includes('Files');
+
+    if (!isInternalDrag && !hasFiles) {
       return;
     }
+
     e.preventDefault();
     e.stopPropagation();
-    e.dataTransfer.dropEffect = 'move';
+    e.dataTransfer.dropEffect = isInternalDrag ? 'move' : 'copy';
     setDragOverFolderId(folderId);
   }, []);
 
@@ -863,9 +893,17 @@ export function MediaPanel() {
   }, []);
 
   // Handle drop on folder
-  const handleFolderDrop = useCallback((e: React.DragEvent, folderId: string) => {
+  const handleFolderDrop = useCallback(async (e: React.DragEvent, folderId: string) => {
     e.preventDefault();
     e.stopPropagation();
+
+    if (!e.dataTransfer.types.includes('application/x-media-panel-item')) {
+      setIsExternalDragOver(false);
+      await handleExternalDropImport(e.dataTransfer, folderId);
+      setDragOverFolderId(null);
+      setInternalDragId(null);
+      return;
+    }
 
     const itemId = e.dataTransfer.getData('application/x-media-panel-item');
     if (itemId && itemId !== folderId) {
@@ -892,7 +930,7 @@ export function MediaPanel() {
 
     setDragOverFolderId(null);
     setInternalDragId(null);
-  }, [folders, selectedIds, moveToFolder]);
+  }, [folders, selectedIds, moveToFolder, handleExternalDropImport]);
 
   // Handle drop on root (move out of folder or external file import)
   const handleRootDrop = useCallback(async (e: React.DragEvent) => {
@@ -904,55 +942,7 @@ export function MediaPanel() {
 
     // Check if this is an external file drop
     if (!e.dataTransfer.types.includes('application/x-media-panel-item')) {
-      // External file drop - try to get file handles for persistence
-      const items = e.dataTransfer.items;
-      if (items && items.length > 0) {
-        const filesWithHandles: Array<{ file: File; handle: FileSystemFileHandle }> = [];
-        const filesWithoutHandles: File[] = [];
-
-        for (let i = 0; i < items.length; i++) {
-          const item = items[i];
-          if (item.kind === 'file') {
-            // Try to get file handle (File System Access API)
-            if ('getAsFileSystemHandle' in item) {
-              try {
-                const handle = await (item as any).getAsFileSystemHandle();
-                if (handle && handle.kind === 'file') {
-                  const file = await handle.getFile();
-                  filesWithHandles.push({ file, handle });
-                  log.debug('Got file handle from drop', { name: file.name });
-                }
-              } catch {
-                // Fallback to regular file
-                const file = item.getAsFile();
-                if (file) filesWithoutHandles.push(file);
-              }
-            } else {
-              // Browser doesn't support getAsFileSystemHandle
-              const file = item.getAsFile();
-              if (file) filesWithoutHandles.push(file);
-            }
-          }
-        }
-
-        // Import files with handles using the store's method that saves handles
-        if (filesWithHandles.length > 0) {
-          log.info('Importing files WITH handles from drop', { count: filesWithHandles.length });
-          const { importFilesWithHandles } = useMediaStore.getState();
-          if (importFilesWithHandles) {
-            await importFilesWithHandles(filesWithHandles);
-          } else {
-            // Fallback if method doesn't exist
-            importFiles(filesWithHandles.map(f => f.file));
-          }
-        }
-
-        // Import files without handles (old way)
-        if (filesWithoutHandles.length > 0) {
-          log.info('Importing files WITHOUT handles from drop', { count: filesWithoutHandles.length });
-          importFiles(filesWithoutHandles);
-        }
-      }
+      await handleExternalDropImport(e.dataTransfer, null);
       return;
     }
 
@@ -965,7 +955,7 @@ export function MediaPanel() {
 
     setDragOverFolderId(null);
     setInternalDragId(null);
-  }, [selectedIds, moveToFolder, importFiles]);
+  }, [selectedIds, moveToFolder, handleExternalDropImport]);
 
   // Format file size
   const formatFileSize = (bytes?: number): string => {
@@ -1488,7 +1478,7 @@ export function MediaPanel() {
               </svg>
             </div>
             <p>No media imported</p>
-            <p className="hint">Drag & drop files here or click Import</p>
+            <p className="hint">Drag & drop files or folders here or click Import</p>
           </div>
         ) : viewMode === 'list' ? (
           <div className="media-panel-table-wrapper">
@@ -1607,7 +1597,7 @@ export function MediaPanel() {
               <polyline points="17 8 12 3 7 8" />
               <line x1="12" y1="3" x2="12" y2="15" />
             </svg>
-            <span>Drop files to import</span>
+            <span>Drop files or folders to import</span>
           </div>
         </div>
       )}
