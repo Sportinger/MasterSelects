@@ -17,6 +17,7 @@ export interface Layer3DData {
   sourceHeight: number;
   // Texture source — one of these will be set
   videoElement?: HTMLVideoElement;
+  preciseVideoSampling?: boolean;
   imageElement?: HTMLImageElement;
   canvas?: HTMLCanvasElement;
   // 3D model source
@@ -29,6 +30,7 @@ export interface Layer3DData {
   gaussianSplatUrl?: string;
   gaussianSplatFileName?: string;
   gaussianSplatFileHash?: string;
+  gaussianSplatMediaFileId?: string;
   gaussianSplatSettings?: GaussianSplatSettings;
 }
 

@@ -83,7 +83,19 @@ function createDispatcher(isPlaying = true) {
 
 describe('RenderDispatcher empty playback hold', () => {
   beforeEach(() => {
-    useTimelineStore.setState({ isDraggingPlayhead: false });
+    useTimelineStore.setState({
+      isDraggingPlayhead: false,
+      playheadPosition: 0,
+      tracks: [],
+      clips: [],
+      getInterpolatedTransform: () => ({
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+        opacity: 1,
+        blendMode: 'normal',
+      }),
+    } as any);
   });
 
   it('keeps the last frame on small playback stalls with an empty layer set', () => {
@@ -133,5 +145,73 @@ describe('RenderDispatcher empty playback hold', () => {
     });
     expect(deps.performanceStats.setLayerCount).toHaveBeenCalledWith(0);
     expect(dispatcher.lastRenderHadContent).toBe(false);
+  });
+
+  it('uses the export render-time override for active splat effectors', () => {
+    const { dispatcher } = createDispatcher(false);
+
+    useTimelineStore.setState({
+      playheadPosition: 0,
+      tracks: [{
+        id: 'track-1',
+        type: 'video',
+        visible: true,
+      }],
+      clips: [{
+        id: 'effector-1',
+        trackId: 'track-1',
+        startTime: 5,
+        duration: 2,
+        source: {
+          type: 'splat-effector',
+          splatEffectorSettings: {
+            mode: 'swirl',
+            strength: 55,
+            falloff: 1.2,
+            speed: 2,
+            seed: 7,
+          },
+        },
+      }],
+      getInterpolatedTransform: () => ({
+        position: { x: 0.25, y: -0.5, z: 3 },
+        scale: { x: 0.4, y: 0.6, z: 0.8 },
+        rotation: { x: 10, y: 20, z: 30 },
+        opacity: 1,
+        blendMode: 'normal',
+      }),
+    } as any);
+
+    expect((dispatcher as any).collectActiveSplatEffectors(1920, 1080)).toHaveLength(0);
+
+    dispatcher.setRenderTimeOverride(5.5);
+    const effectors = (dispatcher as any).collectActiveSplatEffectors(1920, 1080);
+
+    expect(effectors).toHaveLength(1);
+    expect(effectors[0]).toMatchObject({
+      clipId: 'effector-1',
+      mode: 'swirl',
+      strength: 55,
+      falloff: 1.2,
+      speed: 2,
+      seed: 7,
+      time: 0.5,
+      position: {
+        x: 0.4444444444444444,
+        y: 0.5,
+        z: 3,
+      },
+      rotation: {
+        x: 10,
+        y: 20,
+        z: 30,
+      },
+      scale: {
+        x: 0.4,
+        y: 0.6,
+        z: 0.8,
+      },
+      radius: 0.8,
+    });
   });
 });

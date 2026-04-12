@@ -16,6 +16,7 @@ import { DEFAULT_CAMERA_CONFIG } from './types';
 import { resolveSplatSortPolicy } from './splatSortPolicy';
 import {
   DEFAULT_SPLAT_BASE_LOD_MAX_SPLATS,
+  getPreparedSplatRuntimeSync,
   prewarmGaussianSplatRuntime,
   resolvePreparedSplatRuntime,
   waitForTargetPreparedSplatRuntime,
@@ -52,10 +53,11 @@ interface ManagedMesh {
   kind: 'plane' | 'primitive' | 'text3d' | 'model';
   texture?: import('three').Texture | import('three').VideoTexture;
   layerId: string;
-  lastSourceType?: 'video' | 'image' | 'canvas' | 'model' | null;
+  lastSourceType?: 'video' | 'video-canvas' | 'image' | 'canvas' | 'model' | null;
   planeW: number;
   planeH: number;
   resourceKey?: string;
+  videoCanvas?: HTMLCanvasElement | null;
 }
 
 interface ManagedSplat {
@@ -601,6 +603,7 @@ export class ThreeSceneRenderer {
     const requestedMaxSplats = layer.gaussianSplatSettings?.render.maxSplats ?? 0;
     const cacheKey =
       layer.gaussianSplatFileHash ??
+      layer.gaussianSplatMediaFileId ??
       `${layer.gaussianSplatFileName || layer.gaussianSplatUrl || layer.clipId}|${layer.gaussianSplatUrl || layer.clipId}`;
 
     return {
@@ -859,7 +862,7 @@ export class ThreeSceneRenderer {
       return;
     }
 
-    const chunkSplats = realtimePlayback ? 12288 : 65536;
+    const chunkSplats = realtimePlayback ? 12288 : targetRuntime.splatCount;
     const nextCount = Math.min(targetRuntime.splatCount, managed.splatCount + chunkSplats);
     if (nextCount <= managed.splatCount) {
       return;
@@ -951,6 +954,7 @@ export class ThreeSceneRenderer {
   ): Promise<void> {
     const sourceOptions = this.getSplatRuntimeSourceOptions(layer);
     prewarmGaussianSplatRuntime(sourceOptions);
+
     const { runtime, usingBase } = await resolvePreparedSplatRuntime(sourceOptions);
     this.applyPreparedSplatRuntime(T, managed, layer, runtime);
 
@@ -1529,6 +1533,10 @@ export class ThreeSceneRenderer {
 
     let managed = this.splatObjects.get(layer.layerId);
     const requestedMaxSplats = layer.gaussianSplatSettings?.render.maxSplats ?? 0;
+    const sourceOptions = this.getSplatRuntimeSourceOptions(layer);
+    const cachedTargetRuntime = !realtimePlayback
+      ? getPreparedSplatRuntimeSync({ ...sourceOptions, variant: 'target' })
+      : null;
     const needsManagedRebuild =
       !managed ||
       managed.splatUrl !== layer.gaussianSplatUrl ||
@@ -1546,17 +1554,21 @@ export class ThreeSceneRenderer {
       this.scene.add(managed.mesh);
 
       if (layer.gaussianSplatUrl) {
-        managed.loadPromise = this.populateSplatGeometry(this.THREE, managedRef, layer)
-          .catch((error) => {
-            log.error('Failed to build Three.js gaussian splat mesh', {
-              layerId: layer.layerId,
-              fileName: layer.gaussianSplatFileName,
-              error,
+        if (cachedTargetRuntime) {
+          this.applyPreparedSplatRuntime(this.THREE, managedRef, layer, cachedTargetRuntime);
+        } else {
+          managed.loadPromise = this.populateSplatGeometry(this.THREE, managedRef, layer)
+            .catch((error) => {
+              log.error('Failed to build Three.js gaussian splat mesh', {
+                layerId: layer.layerId,
+                fileName: layer.gaussianSplatFileName,
+                error,
+              });
+            })
+            .finally(() => {
+              managedRef.loadPromise = null;
             });
-          })
-          .finally(() => {
-            managedRef.loadPromise = null;
-          });
+        }
       }
     }
 
@@ -1567,17 +1579,21 @@ export class ThreeSceneRenderer {
         clipId: layer.clipId,
         fileName: layer.gaussianSplatFileName,
       });
-      managed.loadPromise = this.populateSplatGeometry(this.THREE, managedRef, layer)
-        .catch((error) => {
-          log.error('Failed to rebuild Three.js gaussian splat mesh', {
-            layerId: layer.layerId,
-            fileName: layer.gaussianSplatFileName,
-            error,
+      if (cachedTargetRuntime) {
+        this.applyPreparedSplatRuntime(this.THREE, managedRef, layer, cachedTargetRuntime);
+      } else {
+        managed.loadPromise = this.populateSplatGeometry(this.THREE, managedRef, layer)
+          .catch((error) => {
+            log.error('Failed to rebuild Three.js gaussian splat mesh', {
+              layerId: layer.layerId,
+              fileName: layer.gaussianSplatFileName,
+              error,
+            });
+          })
+          .finally(() => {
+            managedRef.loadPromise = null;
           });
-        })
-        .finally(() => {
-          managedRef.loadPromise = null;
-        });
+      }
     }
 
     if (!managed) {
@@ -1777,6 +1793,23 @@ export class ThreeSceneRenderer {
     this.modelFileNames.set(url, fileName);
   }
 
+  async preloadModel(url: string, fileName?: string): Promise<boolean> {
+    if (!url) return false;
+    if (fileName) {
+      this.setModelFileName(url, fileName);
+    }
+
+    if (!this.THREE) {
+      const initialized = await this.initialize(Math.max(this.width, 1), Math.max(this.height, 1));
+      if (!initialized || !this.THREE) {
+        return false;
+      }
+    }
+
+    await this.loadModel(this.THREE, '__preload__', url);
+    return modelCache.has(url);
+  }
+
   private async loadModel(T: THREE, _layerId: string, url: string): Promise<void> {
     if (modelCache.has(url) || modelLoading.has(url)) return;
     modelLoading.add(url);
@@ -1871,15 +1904,66 @@ export class ThreeSceneRenderer {
     }
 
     if (layer.videoElement) {
-      if (managed.lastSourceType !== 'video' || (managed.texture as { image?: unknown }).image !== layer.videoElement) {
-        managed.texture.dispose();
-        managed.texture = new T.VideoTexture(layer.videoElement);
-        managed.texture.colorSpace = T.SRGBColorSpace;
-        material.map = managed.texture;
-        material.needsUpdate = true;
-        managed.lastSourceType = 'video';
+      const useCanvasSampling = layer.preciseVideoSampling === true;
+      if (useCanvasSampling) {
+        const targetWidth = Math.max(
+          1,
+          Math.floor(layer.videoElement.videoWidth || layer.sourceWidth || 1),
+        );
+        const targetHeight = Math.max(
+          1,
+          Math.floor(layer.videoElement.videoHeight || layer.sourceHeight || 1),
+        );
+
+        if (
+          !managed.videoCanvas ||
+          managed.videoCanvas.width !== targetWidth ||
+          managed.videoCanvas.height !== targetHeight
+        ) {
+          managed.videoCanvas = document.createElement('canvas');
+          managed.videoCanvas.width = targetWidth;
+          managed.videoCanvas.height = targetHeight;
+        }
+
+        if (
+          managed.lastSourceType !== 'video-canvas' ||
+          (managed.texture as { image?: unknown }).image !== managed.videoCanvas
+        ) {
+          managed.texture.dispose();
+          managed.texture = new T.CanvasTexture(managed.videoCanvas);
+          managed.texture.colorSpace = T.SRGBColorSpace;
+          material.map = managed.texture;
+          material.needsUpdate = true;
+          managed.lastSourceType = 'video-canvas';
+        }
+
+        const ctx = managed.videoCanvas.getContext('2d', {
+          alpha: true,
+          willReadFrequently: false,
+        });
+        if (ctx && layer.videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          try {
+            ctx.clearRect(0, 0, managed.videoCanvas.width, managed.videoCanvas.height);
+            ctx.drawImage(layer.videoElement, 0, 0, managed.videoCanvas.width, managed.videoCanvas.height);
+            managed.texture.needsUpdate = true;
+          } catch (error) {
+            log.warn('Failed to draw precise video frame for 3D layer', {
+              layerId: layer.layerId,
+              error,
+            });
+          }
+        }
+      } else {
+        if (managed.lastSourceType !== 'video' || (managed.texture as { image?: unknown }).image !== layer.videoElement) {
+          managed.texture.dispose();
+          managed.texture = new T.VideoTexture(layer.videoElement);
+          managed.texture.colorSpace = T.SRGBColorSpace;
+          material.map = managed.texture;
+          material.needsUpdate = true;
+          managed.lastSourceType = 'video';
+        }
+        managed.texture.needsUpdate = true;
       }
-      managed.texture.needsUpdate = true;
     } else if (layer.imageElement) {
       if (managed.lastSourceType !== 'image' || (managed.texture as { image?: unknown }).image !== layer.imageElement) {
         managed.texture.dispose();

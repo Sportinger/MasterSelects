@@ -430,6 +430,7 @@ export interface TimelineClip {
     gaussianBlendshapes?: Record<string, number>;  // ARKit blendshape weights
     gaussianSplatUrl?: string;  // URL to gaussian splat scene file
     gaussianSplatFileName?: string;  // Original filename for format detection after blob URL conversion
+    gaussianSplatFileHash?: string;  // Stable content hash for cached/exported splat runtimes
     gaussianSplatSettings?: import('../engine/gaussian/types').GaussianSplatSettings;  // Gaussian splat render settings
     videoElement?: HTMLVideoElement;
     audioElement?: HTMLAudioElement;

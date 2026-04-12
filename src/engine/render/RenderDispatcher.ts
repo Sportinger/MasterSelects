@@ -81,6 +81,7 @@ export class RenderDispatcher {
   lastRenderHadContent = false;
   lastRenderDebugSnapshot: RenderDispatcherDebugSnapshot | null = null;
   private deps: RenderDeps;
+  private renderTimeOverride: number | null = null;
   private lastPreviewSignature = '';
   private lastPreviewTargetTimeMs?: number;
   private static readonly MAX_DRAG_FALLBACK_DRIFT_SECONDS = 1.2;
@@ -99,6 +100,17 @@ export class RenderDispatcher {
     this.deps = deps;
     // Legacy gaussian-avatar code stays on disk for migration/reference only.
     void this.processGaussianLayers;
+  }
+
+  setRenderTimeOverride(time: number | null): void {
+    this.renderTimeOverride = typeof time === 'number' && Number.isFinite(time) ? time : null;
+  }
+
+  private getEffectiveTimelineTime(): number {
+    if (this.renderTimeOverride !== null) {
+      return this.renderTimeOverride;
+    }
+    return useTimelineStore.getState().playheadPosition;
   }
 
   private resolveStable3DSourceDimensions(
@@ -150,6 +162,7 @@ export class RenderDispatcher {
     height: number,
   ): CameraConfig {
     const timelineStore = useTimelineStore.getState();
+    const timelineTime = this.getEffectiveTimelineTime();
     const buildCameraConfigFromClip = (
       cameraClip: (typeof timelineStore.clips)[number],
     ): CameraConfig | null => {
@@ -157,7 +170,7 @@ export class RenderDispatcher {
         return null;
       }
 
-      const clipLocalTime = timelineStore.playheadPosition - cameraClip.startTime;
+      const clipLocalTime = timelineTime - cameraClip.startTime;
       const transform = timelineStore.getInterpolatedTransform(cameraClip.id, clipLocalTime);
       const cameraSettings = cameraClip.source.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS;
       const defaultDistance = this.getSharedSceneDefaultCameraDistance(cameraSettings.fov);
@@ -203,8 +216,8 @@ export class RenderDispatcher {
       timelineStore.clips.some((clip) =>
         clip.trackId === track.id &&
         clip.source?.type === 'camera' &&
-        timelineStore.playheadPosition >= clip.startTime &&
-        timelineStore.playheadPosition < clip.startTime + clip.duration,
+        timelineTime >= clip.startTime &&
+        timelineTime < clip.startTime + clip.duration,
       ),
     );
 
@@ -212,8 +225,8 @@ export class RenderDispatcher {
       const activeCameraClip = timelineStore.clips.find((clip) =>
         clip.trackId === activeCameraTrack.id &&
         clip.source?.type === 'camera' &&
-        timelineStore.playheadPosition >= clip.startTime &&
-        timelineStore.playheadPosition < clip.startTime + clip.duration,
+        timelineTime >= clip.startTime &&
+        timelineTime < clip.startTime + clip.duration,
       );
 
       if (activeCameraClip?.source?.type === 'camera') {
@@ -238,7 +251,7 @@ export class RenderDispatcher {
 
   private collectActiveSplatEffectors(width: number, height: number): SplatEffectorRuntimeData[] {
     const timelineStore = useTimelineStore.getState();
-    const playhead = timelineStore.playheadPosition;
+    const playhead = this.getEffectiveTimelineTime();
     const worldHeight = 2.0;
     const halfWorldW = (worldHeight * (width / Math.max(height, 1))) / 2;
     const halfWorldH = worldHeight / 2;
@@ -316,6 +329,37 @@ export class RenderDispatcher {
 
     await this.loadAndUploadSplatScene(clipId, url, fileName, renderer);
     return renderer.hasScene(clipId);
+  }
+
+  async ensureThreeSceneRendererInitialized(width: number, height: number): Promise<boolean> {
+    const { getThreeSceneRenderer } = await import('../three/ThreeSceneRenderer');
+    const renderer = this.deps.threeSceneRenderer ?? getThreeSceneRenderer();
+    const initialized = await renderer.initialize(width, height);
+    if (initialized) {
+      this.deps.threeSceneRenderer = renderer;
+    }
+    return initialized;
+  }
+
+  async preloadThreeModelAsset(url: string, fileName: string): Promise<boolean> {
+    if (!url) return false;
+
+    const existingRenderer = this.deps.threeSceneRenderer;
+    let renderer = existingRenderer;
+    if (!renderer?.isInitialized) {
+      const resolution = this.deps.renderTargetManager?.getResolution() ?? { width: 1, height: 1 };
+      const initialized = await this.ensureThreeSceneRendererInitialized(resolution.width, resolution.height);
+      if (!initialized) {
+        return false;
+      }
+      renderer = this.deps.threeSceneRenderer ?? null;
+    }
+
+    if (!renderer) {
+      return false;
+    }
+
+    return renderer.preloadModel(url, fileName);
   }
 
   private async waitForGaussianSplatScene(
@@ -741,6 +785,9 @@ export class RenderDispatcher {
       return;
     }
 
+    const isRealtimePlayback = (this.deps.renderLoop?.getIsPlaying() ?? false)
+      && !this.deps.exportCanvasManager.getIsExporting();
+
     // Build Layer3DData from the 3D layers
     const layers3D: Layer3DData[] = [];
     for (const idx of indices3D) {
@@ -770,6 +817,7 @@ export class RenderDispatcher {
         sourceWidth: stableSourceSize.sourceWidth,
         sourceHeight: stableSourceSize.sourceHeight,
         videoElement: src?.videoElement ?? undefined,
+        preciseVideoSampling: !isRealtimePlayback,
         imageElement: src?.imageElement ?? undefined,
         canvas: src?.textCanvas ?? undefined,
         modelUrl: src?.modelUrl ?? undefined,
@@ -780,6 +828,7 @@ export class RenderDispatcher {
         gaussianSplatUrl: src?.gaussianSplatUrl ?? undefined,
         gaussianSplatFileName: src?.gaussianSplatFileName ?? undefined,
         gaussianSplatFileHash: src?.gaussianSplatFileHash ?? undefined,
+        gaussianSplatMediaFileId: src?.mediaFileId ?? undefined,
         gaussianSplatSettings: src?.gaussianSplatSettings ?? undefined,
       });
     }
@@ -788,8 +837,6 @@ export class RenderDispatcher {
     const activeSplatEffectors = this.collectActiveSplatEffectors(width, height);
 
     // Render the 3D scene
-    const isRealtimePlayback = (this.deps.renderLoop?.getIsPlaying() ?? false)
-      && !this.deps.exportCanvasManager.getIsExporting();
     const canvas = renderer.renderScene(
       layers3D,
       cameraConfig,

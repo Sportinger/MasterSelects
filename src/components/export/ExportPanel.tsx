@@ -242,6 +242,7 @@ export function ExportPanel() {
           log.warn(`No layers at time ${time.toFixed(3)}`);
         }
 
+        engine.setRenderTimeOverride(time);
         engine.render(layers);
 
         if (i === 0) log.debug('Frame 0: Render complete, reading pixels...');
@@ -408,6 +409,7 @@ export function ExportPanel() {
       ffmpegAudioPipelineRef.current = null;
       ffmpegFrameRenderer.cleanup();
       ffmpegFrameRendererRef.current = null;
+      engine.setRenderTimeOverride(null);
       // Always reset export mode
       engine.setExporting(false);
       engine.setResolution(originalDimensions.width, originalDimensions.height);

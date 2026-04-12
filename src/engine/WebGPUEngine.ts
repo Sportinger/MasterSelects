@@ -645,12 +645,24 @@ export class WebGPUEngine {
     this.renderDispatcher?.render(layers);
   }
 
+  setRenderTimeOverride(time: number | null): void {
+    this.renderDispatcher?.setRenderTimeOverride(time);
+  }
+
   async ensureGaussianSplatSceneLoaded(
     clipId: string,
     url: string | undefined,
     fileName: string,
   ): Promise<boolean> {
     return this.renderDispatcher?.ensureGaussianSplatSceneLoaded(clipId, url, fileName) ?? false;
+  }
+
+  async ensureThreeSceneRendererInitialized(width: number, height: number): Promise<boolean> {
+    return this.renderDispatcher?.ensureThreeSceneRendererInitialized(width, height) ?? false;
+  }
+
+  async preloadThreeModelAsset(url: string, fileName: string): Promise<boolean> {
+    return this.renderDispatcher?.preloadThreeModelAsset(url, fileName) ?? false;
   }
 
   renderToPreviewCanvas(canvasId: string, layers: Layer[]): void {
