@@ -243,6 +243,7 @@ export function ExportPanel() {
         }
 
         engine.setRenderTimeOverride(time);
+        await engine.ensureExportLayersReady(layers);
         engine.render(layers);
 
         if (i === 0) log.debug('Frame 0: Render complete, reading pixels...');

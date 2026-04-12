@@ -665,6 +665,10 @@ export class WebGPUEngine {
     return this.renderDispatcher?.preloadThreeModelAsset(url, fileName) ?? false;
   }
 
+  async ensureExportLayersReady(layers: Layer[]): Promise<void> {
+    await this.renderDispatcher?.ensureExportLayersReady(layers);
+  }
+
   renderToPreviewCanvas(canvasId: string, layers: Layer[]): void {
     this.renderDispatcher?.renderToPreviewCanvas(canvasId, layers);
   }

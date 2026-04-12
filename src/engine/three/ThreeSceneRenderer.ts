@@ -1032,13 +1032,18 @@ export class ThreeSceneRenderer {
     }
   }
 
-  private updateSplatSort(managed: ManagedSplat, force = false, realtimePlayback = false): void {
+  private updateSplatSort(
+    managed: ManagedSplat,
+    force = false,
+    realtimePlayback = false,
+    preciseSorting = false,
+  ): void {
     if (!this.camera || managed.splatCount === 0) {
       return;
     }
 
     managed.sortFrame += 1;
-    const canExactCpuSort = managed.splatCount <= MAX_EXACT_CPU_SORT_SPLATS;
+    const canExactCpuSort = preciseSorting || managed.splatCount <= MAX_EXACT_CPU_SORT_SPLATS;
     const useApproximateSort = !canExactCpuSort;
     const policy = resolveSplatSortPolicy(
       managed.splatCount,
@@ -1088,7 +1093,6 @@ export class ThreeSceneRenderer {
     }
 
     managed.mesh.updateMatrixWorld(true);
-
     const matrixElements = managed.mesh.matrixWorld.elements;
     const depthCoeffX =
       matrixElements[0] * dirTuple[0] +
@@ -1626,10 +1630,13 @@ export class ThreeSceneRenderer {
     managed.material.uniforms.uViewportSize.value.set(Math.max(this.width, 1), Math.max(this.height, 1));
     managed.material.uniforms.uSplatScale.value = layer.gaussianSplatSettings?.render?.splatScale ?? 1;
     this.applySplatEffectors(managed, effectors);
-    managed.sortFrequency = Math.max(0, layer.gaussianSplatSettings?.render?.sortFrequency ?? 1);
+    const preciseSorting = layer.preciseSplatSorting === true;
+    managed.sortFrequency = preciseSorting
+      ? 1
+      : Math.max(0, layer.gaussianSplatSettings?.render?.sortFrequency ?? 1);
     if (managed.splatCount > 0) {
       this.advanceStagedSplatUpgrade(managed, realtimePlayback);
-      this.updateSplatSort(managed, false, realtimePlayback);
+      this.updateSplatSort(managed, preciseSorting, realtimePlayback, preciseSorting);
     }
   }
 

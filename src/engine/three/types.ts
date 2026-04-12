@@ -32,6 +32,7 @@ export interface Layer3DData {
   gaussianSplatFileHash?: string;
   gaussianSplatMediaFileId?: string;
   gaussianSplatSettings?: GaussianSplatSettings;
+  preciseSplatSorting?: boolean;
 }
 
 export interface SplatEffectorRuntimeData {

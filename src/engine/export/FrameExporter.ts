@@ -244,6 +244,7 @@ export class FrameExporter {
         }
 
         engine.setRenderTimeOverride(time);
+        await engine.ensureExportLayersReady(layers);
         engine.render(layers);
 
         // Calculate timestamp and duration in microseconds

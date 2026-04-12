@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RenderDispatcher } from '../../src/engine/render/RenderDispatcher';
+import { waitForTargetPreparedSplatRuntime } from '../../src/engine/three/splatRuntimeCache';
+import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 
 vi.mock('../../src/services/logger', () => ({
@@ -15,6 +17,10 @@ vi.mock('../../src/services/logger', () => ({
 
 vi.mock('../../src/services/performanceMonitor', () => ({
   reportRenderTime: vi.fn(),
+}));
+
+vi.mock('../../src/engine/three/splatRuntimeCache', () => ({
+  waitForTargetPreparedSplatRuntime: vi.fn(async () => ({})),
 }));
 
 function createDispatcher(isPlaying = true) {
@@ -83,6 +89,10 @@ function createDispatcher(isPlaying = true) {
 
 describe('RenderDispatcher empty playback hold', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    useMediaStore.setState({
+      files: [],
+    } as any);
     useTimelineStore.setState({
       isDraggingPlayhead: false,
       playheadPosition: 0,
@@ -213,5 +223,119 @@ describe('RenderDispatcher empty playback hold', () => {
       },
       radius: 0.8,
     });
+  });
+
+  it('waits for nested 3D and splat assets before precise export rendering', async () => {
+    const { dispatcher, deps } = createDispatcher(false);
+
+    vi.spyOn(dispatcher, 'ensureThreeSceneRendererInitialized').mockResolvedValue(true);
+    vi.spyOn(dispatcher, 'preloadThreeModelAsset').mockResolvedValue(true);
+    vi.spyOn(dispatcher, 'ensureGaussianSplatSceneLoaded').mockResolvedValue(true);
+
+    await dispatcher.ensureExportLayersReady([
+      {
+        id: 'native-splat',
+        name: 'Native Splat',
+        sourceClipId: 'native-splat',
+        visible: true,
+        opacity: 1,
+        is3D: true,
+        source: {
+          type: 'gaussian-splat',
+          gaussianSplatUrl: 'blob:native-splat',
+          gaussianSplatFileName: 'native.splat',
+          gaussianSplatSettings: {
+            render: {
+              useNativeRenderer: true,
+            },
+          },
+        },
+      },
+      {
+        id: 'nested-comp',
+        name: 'Nested Comp',
+        visible: true,
+        opacity: 1,
+        source: {
+          type: 'image',
+          nestedComposition: {
+            compositionId: 'comp-1',
+            width: 1920,
+            height: 1080,
+            layers: [
+              {
+                id: 'nested-model',
+                name: 'Hero Model',
+                visible: true,
+                opacity: 1,
+                is3D: true,
+                source: {
+                  type: 'model',
+                  modelUrl: 'blob:model-1',
+                },
+              },
+              {
+                id: 'nested-splat',
+                name: 'Nested Splat',
+                visible: true,
+                opacity: 1,
+                is3D: true,
+                source: {
+                  type: 'gaussian-splat',
+                  gaussianSplatUrl: 'blob:media-splat',
+                  gaussianSplatFileName: 'media-backed.splat',
+                  gaussianSplatFileHash: 'media-hash-1',
+                  gaussianSplatSettings: {
+                    render: {
+                      useNativeRenderer: false,
+                      maxSplats: 0,
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
+    ] as any);
+
+    expect(dispatcher.ensureThreeSceneRendererInitialized).toHaveBeenCalledWith(1920, 1080);
+    expect(dispatcher.preloadThreeModelAsset).toHaveBeenCalledWith('blob:model-1', 'Hero Model');
+    expect(dispatcher.ensureGaussianSplatSceneLoaded).toHaveBeenCalledWith(
+      'native-splat',
+      'blob:native-splat',
+      'native.splat',
+    );
+    expect(waitForTargetPreparedSplatRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cacheKey: 'media-hash-1',
+        fileHash: 'media-hash-1',
+        fileName: 'media-backed.splat',
+        url: 'blob:media-splat',
+        requestedMaxSplats: 0,
+      }),
+    );
+    expect(deps.renderTargetManager.getResolution).toHaveBeenCalled();
+  });
+
+  it('fails precise export when a required asset does not become ready', async () => {
+    const { dispatcher } = createDispatcher(false);
+
+    vi.spyOn(dispatcher, 'ensureThreeSceneRendererInitialized').mockResolvedValue(true);
+    vi.spyOn(dispatcher, 'preloadThreeModelAsset').mockResolvedValue(false);
+
+    await expect(dispatcher.ensureExportLayersReady([
+      {
+        id: 'model-layer',
+        name: 'Broken Model',
+        visible: true,
+        opacity: 1,
+        is3D: true,
+        source: {
+          type: 'model',
+          modelUrl: 'blob:broken-model',
+        },
+      },
+    ] as any)).rejects.toThrow('Precise export asset wait failed: 3D model "Broken Model" was not ready in time');
   });
 });

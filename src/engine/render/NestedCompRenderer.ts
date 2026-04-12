@@ -594,6 +594,7 @@ export class NestedCompRenderer {
     }
 
     // Build Layer3DData
+    const preciseSplatSorting = useTimelineStore.getState().isExporting === true;
     const layers3D: Layer3DData[] = [];
     for (const idx of indices3D) {
       const data = layerData[idx];
@@ -629,6 +630,7 @@ export class NestedCompRenderer {
         gaussianSplatFileHash: src?.gaussianSplatFileHash ?? undefined,
         gaussianSplatMediaFileId: src?.mediaFileId ?? undefined,
         gaussianSplatSettings: src?.gaussianSplatSettings ?? undefined,
+        preciseSplatSorting,
       });
     }
 
