@@ -5,6 +5,38 @@ import type { TimelineTrackProps } from './types';
 import type { AnimatableProperty, BezierHandle, Keyframe } from '../../types';
 import { CurveEditor } from './CurveEditor';
 
+type KeyframeTrackClip = {
+  id: string;
+  startTime: number;
+  duration: number;
+  is3D?: boolean;
+  effects?: Array<{ id: string; name: string; params: Record<string, unknown> }>;
+  source?: {
+    type?: string;
+    gaussianSplatSettings?: {
+      render?: {
+        useNativeRenderer?: boolean;
+      };
+    };
+  } | null;
+};
+
+const usesCameraPropertyModel = (clip: KeyframeTrackClip | null | undefined): boolean => {
+  if (!clip?.source) return false;
+  if (clip.source.type === 'camera') return true;
+  return clip.source.type === 'gaussian-splat' && clip.source.gaussianSplatSettings?.render?.useNativeRenderer === true;
+};
+
+const shouldHide3DOnlyProperties = (clip: KeyframeTrackClip | null | undefined): boolean => {
+  return !clip?.is3D && !usesCameraPropertyModel(clip);
+};
+
+const getTransformPropertyOrder = (clip: KeyframeTrackClip | null | undefined): string[] => (
+  usesCameraPropertyModel(clip)
+    ? ['opacity', 'position.x', 'position.y', 'scale.z', 'position.z', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z']
+    : ['opacity', 'position.x', 'position.y', 'position.z', 'scale.x', 'scale.y', 'scale.z', 'rotation.x', 'rotation.y', 'rotation.z']
+);
+
 // Render keyframe tracks for timeline area (right column) - flat list without folder structure
 function TrackPropertyTracks({
   trackId,
@@ -20,7 +52,7 @@ function TrackPropertyTracks({
   pixelToTime,
 }: {
   trackId: string;
-  selectedClip: { id: string; startTime: number; duration: number; is3D?: boolean; effects?: Array<{ id: string; name: string; params: Record<string, unknown> }> } | null;
+  selectedClip: KeyframeTrackClip | null;
   clipKeyframes: Map<string, Array<{ id: string; clipId: string; time: number; property: AnimatableProperty; value: number; easing: string }>>;
   renderKeyframeDiamonds: (trackId: string, property: AnimatableProperty) => React.ReactNode;
   expandedCurveProperties: Map<string, Set<AnimatableProperty>>;
@@ -40,7 +72,7 @@ function TrackPropertyTracks({
     const keyframes = clipKeyframes.get(clipId) || [];
     keyframes.forEach((kf) => props.add(kf.property));
     // Hide 3D-only properties (rotation X/Y, position Z, scale Z) when clip is not 3D
-    if (!selectedClip?.is3D) {
+    if (shouldHide3DOnlyProperties(selectedClip)) {
       props.delete('rotation.x');
       props.delete('rotation.y');
       props.delete('position.z');
@@ -72,7 +104,7 @@ function TrackPropertyTracks({
 
   // Convert Set to sorted array for consistent ordering (matching the labels)
   const sortedProperties = Array.from(keyframeProperties).sort((a, b) => {
-    const order = ['opacity', 'position.x', 'position.y', 'position.z', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z'];
+    const order = getTransformPropertyOrder(selectedClip);
     const aIdx = order.indexOf(a);
     const bIdx = order.indexOf(b);
     if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;

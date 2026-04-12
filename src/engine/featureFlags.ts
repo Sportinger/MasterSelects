@@ -10,6 +10,7 @@ export const flags = {
   useLiveSlotTrigger: false,  // Slot Grid click triggers live layers without forcing editor switching
   useWarmSlotDecks: false,  // Prepare reusable slot-owned live decks for low-latency triggering
   use3DLayers: true,  // Three.js 3D layer support
+  useGaussianSplat: true,  // Gaussian Splat avatar rendering (old WebGL path)
 };
 
 // Expose for runtime toggling from devtools

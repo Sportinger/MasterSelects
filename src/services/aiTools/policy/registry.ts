@@ -4,7 +4,7 @@
 import type { ToolPolicyEntry, CallerContext } from './types';
 
 const allCallers: CallerContext[] = ['chat', 'devBridge', 'nativeHelper', 'console', 'internal'];
-const interactiveCallers: CallerContext[] = ['chat', 'console', 'internal'];
+const localFileCallers: CallerContext[] = ['chat', 'devBridge', 'nativeHelper', 'console', 'internal'];
 const bridgeTelemetryCallers: CallerContext[] = ['chat', 'devBridge', 'console', 'internal'];
 const helperEditingCallers: CallerContext[] = ['chat', 'devBridge', 'nativeHelper', 'console', 'internal'];
 
@@ -71,7 +71,7 @@ function localFileAccess(): ToolPolicyEntry {
     requiresConfirmation: true,
     sensitiveDataAccess: false,
     localFileAccess: true,
-    allowedCallers: interactiveCallers,
+    allowedCallers: localFileCallers,
   };
 }
 
@@ -169,6 +169,8 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   // searchVideos is the definition name for the same handler as searchYouTube
   ['searchVideos', mutatingLow()],
   ['listVideoFormats', mutatingLow()],
+
+  // ── GAUSSIAN SPLAT DEBUG ────────────────────────────────────────────
 ]);
 
 /**

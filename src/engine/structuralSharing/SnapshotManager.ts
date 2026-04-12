@@ -198,6 +198,7 @@ export class SnapshotManager {
       solidColor: clip.solidColor,
       transitionIn: clip.transitionIn ? { ...clip.transitionIn } : undefined,
       transitionOut: clip.transitionOut ? { ...clip.transitionOut } : undefined,
+      is3D: clip.is3D,
     };
   }
 }

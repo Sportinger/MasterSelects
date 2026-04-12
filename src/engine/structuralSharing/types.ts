@@ -15,7 +15,7 @@ export interface SerializedClipState {
   duration: number;
   inPoint: number;
   outPoint: number;
-  sourceType: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model';
+  sourceType: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector';
   mediaFileId?: string;
   transform: TimelineClip['transform'];
   effects: TimelineClip['effects'];
@@ -29,6 +29,7 @@ export interface SerializedClipState {
   solidColor?: string;
   transitionIn?: TimelineClip['transitionIn'];
   transitionOut?: TimelineClip['transitionOut'];
+  is3D?: boolean;
 }
 
 /**

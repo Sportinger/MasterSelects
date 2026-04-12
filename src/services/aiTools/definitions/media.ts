@@ -159,15 +159,15 @@ export const mediaToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'importLocalFiles',
-      description: 'Import local files from disk into the media panel. Provide absolute file paths. Files are fetched through the dev server and imported. Works with video, audio, and image files. Can optionally place them on the timeline with full control over track and position.',
+      description: 'Import supported local files from disk into the media panel. Provide absolute file paths. Uses the dev bridge in development or the Native Helper in production. Supports video, audio, image, 3D model, and gaussian-splat files that the editor already knows how to import. Can optionally place them on the timeline with full control over track and position.',
       parameters: {
         type: 'object',
         properties: {
-          paths: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Array of absolute file paths to import (e.g. ["C:/Users/admin/Downloads/video.mp4"]). Use forward slashes.',
-          },
+            paths: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Array of absolute file paths to import (e.g. ["C:/Users/admin/Downloads/video.mp4", "C:/Users/admin/Downloads/cloud.ply"]). Use forward slashes.',
+            },
           addToTimeline: {
             type: 'boolean',
             description: 'If true, also add imported files as clips to the timeline (default: false)',
@@ -202,7 +202,7 @@ export const mediaToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'listLocalFiles',
-      description: 'List media files in a local directory. Returns file names, paths, sizes and modification dates. Useful for discovering files before importing.',
+      description: 'List supported import files in a local directory. Returns file names, paths, sizes and modification dates. Uses the dev bridge in development or the Native Helper in production.',
       parameters: {
         type: 'object',
         properties: {
@@ -212,7 +212,7 @@ export const mediaToolDefinitions: ToolDefinition[] = [
           },
           extensions: {
             type: 'string',
-            description: 'Comma-separated file extensions to filter (e.g. ".mp4,.webm,.mov"). Default: common media extensions.',
+            description: 'Comma-separated file extensions to filter (e.g. ".mp4,.webm,.mov,.obj,.ply,.splat"). Default: all currently supported import extensions.',
           },
         },
         required: ['directory'],

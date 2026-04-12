@@ -265,6 +265,15 @@ function PrivacyEN() {
         When visiting the website, the hosting provider automatically collects server log data
         (IP address, browser type, OS, referrer URL, timestamp). Legal basis: Art. 6(1)(f) GDPR (legitimate interest).
       </p>
+      <p>
+        In addition, we temporarily process server-side visit events for operational monitoring and internal live
+        notifications when pages of this website are opened. These events may include the requested path, timestamp,
+        country and city derived from Cloudflare geo data, referrer, a shortened user agent string, and a pseudonymous
+        visitor identifier generated from the IP address and a secret salt. We do not store the plain IP address in
+        this live log ourselves. Retention for these visit events is generally about one hour. Legal basis:
+        Art. 6(1)(f) GDPR (legitimate interest in secure operation, abuse detection, and awareness of current website
+        activity).
+      </p>
 
       <h3>4. User Accounts and Payment Processing</h3>
       <p>When you create an account or use paid services (e.g., API credits), we process:</p>
@@ -298,7 +307,9 @@ function PrivacyEN() {
       <h3>7. Cookies</h3>
       <p>
         MasterSelects uses only technically necessary cookies for authentication and session management.
-        No tracking or marketing cookies are used. A cookie banner is therefore not required.
+        No tracking or marketing cookies are used. The server-side visit monitoring described above does not store
+        information on your device for this purpose and does not use marketing cookies. A cookie banner is therefore
+        not required for this specific functionality.
       </p>
 
       <h3>8. Changes</h3>
@@ -410,6 +421,17 @@ function PrivacyDE() {
         Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an der sicheren Bereitstellung).
       </p>
 
+      <p>
+        Zus&auml;tzlich verarbeiten wir vor&uuml;bergehend serverseitige Besuchsereignisse f&uuml;r die technische
+        Betriebs&uuml;berwachung und interne Live-Benachrichtigungen, wenn Seiten dieser Website aufgerufen werden.
+        Dabei k&ouml;nnen insbesondere der aufgerufene Pfad, der Zeitpunkt, Land und Stadt aus den Cloudflare-Geo-Daten,
+        Referrer, ein gek&uuml;rzter User-Agent sowie eine pseudonyme Besucherkennung verarbeitet werden, die aus der
+        IP-Adresse und einem geheimen Salt gebildet wird. Die Klar-IP speichern wir in diesem Live-Log selbst nicht.
+        Die Speicherdauer dieser Besuchsereignisse betr&auml;gt in der Regel etwa eine Stunde. Rechtsgrundlage ist
+        Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an sicherem Betrieb, Missbrauchserkennung und Kenntnis
+        aktueller Website-Aktivit&auml;ten).
+      </p>
+
       <h3>4. Benutzerkonten und Zahlungsabwicklung</h3>
       <p>Wenn Sie ein Benutzerkonto erstellen oder kostenpflichtige Dienste (z.B. API-Credits) nutzen, verarbeiten wir:</p>
       <ul>
@@ -440,7 +462,8 @@ function PrivacyDE() {
       <h3>7. Cookies</h3>
       <p>
         MasterSelects verwendet ausschließlich technisch notwendige Cookies für Authentifizierung und
-        Session-Management. Keine Tracking- oder Marketing-Cookies.
+        Session-Management. Keine Tracking- oder Marketing-Cookies. Die oben beschriebene serverseitige
+        Besuchsüberwachung speichert für diesen Zweck keine Informationen auf Ihrem Endgerät.
       </p>
 
       <h3>8. Änderungen</h3>
@@ -519,6 +542,17 @@ function PrivacyFR() {
         Ce site est hébergé par <strong>Cloudflare, Inc.</strong> (USA), certifié EU-US Data Privacy Framework.
         Des clauses contractuelles types (CCT) sont également en place.
       </p>
+      <p>
+        En outre, nous traitons temporairement des &eacute;v&eacute;nements de visite c&ocirc;t&eacute; serveur pour la
+        surveillance technique de l&apos;exploitation et pour des notifications internes en direct lorsqu&apos;une page
+        de ce site est ouverte. Ces donn&eacute;es peuvent inclure le chemin demand&eacute;, l&apos;horodatage, le pays
+        et la ville d&eacute;duits des donn&eacute;es g&eacute;ographiques de Cloudflare, le referer, un agent utilisateur
+        raccourci ainsi qu&apos;un identifiant visiteur pseudonymis&eacute; g&eacute;n&eacute;r&eacute; &agrave; partir de
+        l&apos;adresse IP et d&apos;un sel secret. Nous ne conservons pas l&apos;adresse IP en clair dans ce journal
+        interne. La dur&eacute;e de conservation est g&eacute;n&eacute;ralement d&apos;environ une heure. Base juridique :
+        art. 6(1)(f) RGPD (int&eacute;r&ecirc;t l&eacute;gitime &agrave; la s&eacute;curit&eacute; du service, &agrave; la
+        d&eacute;tection des abus et &agrave; la connaissance de l&apos;activit&eacute; actuelle du site).
+      </p>
       <h3>4. Comptes utilisateurs et paiements</h3>
       <p>Les paiements sont traités par <strong>Stripe, Inc.</strong> (certifié EU-US DPF). Nous ne stockons aucune donnée de carte bancaire.</p>
       <h3>5. Vos droits (RGPD)</h3>
@@ -528,7 +562,10 @@ function PrivacyFR() {
       </ul>
       <p>Contact : <strong>admin@masterselects.com</strong></p>
       <h3>6. Cookies</h3>
-      <p>Uniquement des cookies techniques nécessaires. Pas de cookies de suivi ou marketing.</p>
+      <p>
+        Uniquement des cookies techniques nécessaires. Pas de cookies de suivi ou marketing. La surveillance de visite
+        décrite ci-dessus ne stocke pas d&apos;information sur votre terminal à cette fin.
+      </p>
       <p className="legal-meta">Dernière mise à jour : mars 2026</p>
     </div>
   );
@@ -594,6 +631,16 @@ function PrivacyES() {
       <p>Roman Kuskowski<br />Email: admin@masterselects.com</p>
       <h3>3. Alojamiento</h3>
       <p>Alojado por <strong>Cloudflare, Inc.</strong> (EE.UU.), certificado EU-US Data Privacy Framework. Se aplican cláusulas contractuales tipo (CCT).</p>
+      <p>
+        Adem&aacute;s, procesamos temporalmente eventos de visita en el servidor para la supervisi&oacute;n t&eacute;cnica
+        del servicio y para notificaciones internas en tiempo real cuando se abre una p&aacute;gina de este sitio web.
+        Estos eventos pueden incluir la ruta solicitada, la marca temporal, el pa&iacute;s y la ciudad derivados de los
+        datos geogr&aacute;ficos de Cloudflare, el referer, una cadena abreviada del agente de usuario y un identificador
+        seudonimizado del visitante generado a partir de la direcci&oacute;n IP y un valor secreto. No almacenamos la IP
+        en texto claro en este registro interno. El plazo de conservaci&oacute;n suele ser de aproximadamente una hora.
+        Base jur&iacute;dica: art. 6(1)(f) RGPD (inter&eacute;s leg&iacute;timo en el funcionamiento seguro, la detecci&oacute;n
+        de abusos y el conocimiento de la actividad actual del sitio).
+      </p>
       <h3>4. Cuentas y pagos</h3>
       <p>Los pagos son procesados por <strong>Stripe, Inc.</strong> (certificado EU-US DPF). No almacenamos datos de tarjetas.</p>
       <h3>5. Sus derechos (RGPD)</h3>
@@ -603,7 +650,10 @@ function PrivacyES() {
       </ul>
       <p>Contacto: <strong>admin@masterselects.com</strong></p>
       <h3>6. Cookies</h3>
-      <p>Solo cookies técnicamente necesarias. Sin cookies de seguimiento o marketing.</p>
+      <p>
+        Solo cookies técnicamente necesarias. Sin cookies de seguimiento o marketing. La supervisión de visitas
+        descrita arriba no almacena información en su dispositivo con esta finalidad.
+      </p>
       <p className="legal-meta">Última actualización: marzo 2026</p>
     </div>
   );
@@ -662,6 +712,16 @@ function PrivacyPT() {
       <p>Roman Kuskowski<br />Email: admin@masterselects.com</p>
       <h3>3. Hospedagem</h3>
       <p>Hospedado pela <strong>Cloudflare, Inc.</strong> (EUA), certificada pelo EU-US Data Privacy Framework.</p>
+      <p>
+        Al&eacute;m disso, processamos temporariamente eventos de visita no servidor para monitoramento t&eacute;cnico
+        da opera&ccedil;&atilde;o e para notifica&ccedil;&otilde;es internas em tempo real quando uma p&aacute;gina deste
+        site &eacute; aberta. Esses eventos podem incluir o caminho solicitado, o hor&aacute;rio, pa&iacute;s e cidade
+        derivados dos dados geogr&aacute;ficos da Cloudflare, referer, um user agent abreviado e um identificador
+        pseudonimizado do visitante gerado a partir do endere&ccedil;o IP e de um valor secreto. N&atilde;o armazenamos o
+        IP em texto puro nesse log interno. O prazo de reten&ccedil;&atilde;o normalmente &eacute; de cerca de uma hora.
+        Base legal: art. 6(1)(f) do RGPD (interesse leg&iacute;timo na opera&ccedil;&atilde;o segura, detec&ccedil;&atilde;o
+        de abuso e conhecimento da atividade atual do site).
+      </p>
       <h3>4. Pagamentos</h3>
       <p>Processados pelo <strong>Stripe, Inc.</strong> (certificado EU-US DPF). Não armazenamos dados de cartão.</p>
       <h3>5. Seus direitos (RGPD)</h3>
@@ -670,6 +730,11 @@ function PrivacyPT() {
         <li>Limitação (Art. 18), Portabilidade (Art. 20), Oposição (Art. 21)</li>
       </ul>
       <p>Contato: <strong>admin@masterselects.com</strong></p>
+      <h3>6. Cookies</h3>
+      <p>
+        Apenas cookies tecnicamente necessários. Nenhum cookie de rastreamento ou marketing. O monitoramento de
+        visitas descrito acima não armazena informações no seu dispositivo para essa finalidade.
+      </p>
       <p className="legal-meta">Última atualização: março 2026</p>
     </div>
   );
@@ -724,6 +789,11 @@ function PrivacyJA() {
       <p>Roman Kuskowski<br />メール: admin@masterselects.com</p>
       <h3>3. ホスティング</h3>
       <p><strong>Cloudflare, Inc.</strong>（米国）でホスティング。EU-US データプライバシーフレームワーク認定済み。</p>
+      <p>
+        さらに、本サイトのページが開かれた際、技術的な運用監視と内部向けライブ通知のために、サーバー側で訪問イベントを一時的に処理します。これには、リクエストされたパス、時刻、Cloudflare の地理データから得られる国と都市、リファラー、短縮された
+        User-Agent、ならびに IP アドレスと秘密のソルトから生成される仮名化された訪問者 ID が含まれる場合があります。この内部ログに IP アドレスそのものは保存しません。保存期間は通常およそ 1 時間です。法的根拠は GDPR 第 6 条第 1 項
+        f 号（安全な運用、不正利用の検知、現在のサイト活動の把握に関する正当な利益）です。
+      </p>
       <h3>4. 決済</h3>
       <p><strong>Stripe, Inc.</strong> が決済を処理します。クレジットカード情報は保存しません。</p>
       <h3>5. あなたの権利（GDPR）</h3>
@@ -732,6 +802,10 @@ function PrivacyJA() {
         <li>制限権（第18条）、データポータビリティ（第20条）、異議申立権（第21条）</li>
       </ul>
       <p>連絡先: <strong>admin@masterselects.com</strong></p>
+      <h3>6. Cookie</h3>
+      <p>
+        認証とセッション管理のための技術的に必要な Cookie のみを使用します。トラッキング Cookie やマーケティング Cookie は使用しません。上記の訪問監視は、この目的でお使いの端末に情報を保存しません。
+      </p>
       <p className="legal-meta">最終更新: 2026年3月</p>
     </div>
   );
@@ -786,6 +860,11 @@ function PrivacyKO() {
       <p>Roman Kuskowski<br />이메일: admin@masterselects.com</p>
       <h3>3. 호스팅</h3>
       <p><strong>Cloudflare, Inc.</strong>(미국)에서 호스팅. EU-US 데이터 프라이버시 프레임워크 인증.</p>
+      <p>
+        또한 이 사이트의 페이지가 열릴 때 기술 운영 모니터링과 내부 실시간 알림을 위해 서버 측 방문 이벤트를 일시적으로 처리합니다. 여기에는 요청된 경로, 시각, Cloudflare 지리 데이터에서 도출된 국가 및 도시, referer, 축약된 user agent, 그리고 IP 주소와 비밀
+        salt 값을 기반으로 생성된 가명화된 방문자 ID가 포함될 수 있습니다. 이 내부 로그에 원본 IP 주소 자체를 저장하지는 않습니다. 보관 기간은 일반적으로 약 1시간입니다. 법적 근거는 GDPR 제6조 제1항 (f)호, 즉 안전한 운영, 남용 탐지 및 현재 사이트 활동 파악에
+        대한 정당한 이익입니다.
+      </p>
       <h3>4. 결제</h3>
       <p><strong>Stripe, Inc.</strong>가 결제를 처리합니다. 신용카드 정보는 저장하지 않습니다.</p>
       <h3>5. 귀하의 권리 (GDPR)</h3>
@@ -794,6 +873,10 @@ function PrivacyKO() {
         <li>처리제한권 (제18조), 이동권 (제20조), 반대권 (제21조)</li>
       </ul>
       <p>연락처: <strong>admin@masterselects.com</strong></p>
+      <h3>6. 쿠키</h3>
+      <p>
+        인증과 세션 관리를 위한 기술적으로 필요한 쿠키만 사용합니다. 추적 또는 마케팅 쿠키는 사용하지 않습니다. 위에서 설명한 방문 모니터링은 이 목적을 위해 사용자 단말기에 정보를 저장하지 않습니다.
+      </p>
       <p className="legal-meta">최종 업데이트: 2026년 3월</p>
     </div>
   );
@@ -848,6 +931,10 @@ function PrivacyZH() {
       <p>Roman Kuskowski<br />电子邮件: admin@masterselects.com</p>
       <h3>3. 托管</h3>
       <p>由 <strong>Cloudflare, Inc.</strong>（美国）托管，已获 EU-US 数据隐私框架认证。</p>
+      <p>
+        此外，当您打开本网站页面时，我们会临时在服务器端处理访问事件，用于技术运行监控和内部实时提醒。这些事件可能包括访问路径、时间戳、基于 Cloudflare 地理数据得出的国家和城市、referer、缩短后的 user agent，以及基于 IP 地址和秘密盐值
+        生成的匿名化访客标识。我们不会在该内部日志中保存明文 IP 地址。此类访问事件通常仅保存约一小时。法律依据为 GDPR 第 6 条第 1 款 (f) 项，即我们对安全运行、滥用检测以及了解当前网站活动所具有的正当利益。
+      </p>
       <h3>4. 支付</h3>
       <p>由 <strong>Stripe, Inc.</strong> 处理支付。我们不存储信用卡信息。</p>
       <h3>5. 您的权利（GDPR）</h3>
@@ -856,6 +943,10 @@ function PrivacyZH() {
         <li>限制处理权（第18条）、数据可携权（第20条）、反对权（第21条）</li>
       </ul>
       <p>联系方式: <strong>admin@masterselects.com</strong></p>
+      <h3>6. Cookie</h3>
+      <p>
+        我们仅使用身份验证和会话管理所必需的技术性 Cookie，不使用跟踪或营销 Cookie。上述访问监控不会为此目的在您的设备上存储信息。
+      </p>
       <p className="legal-meta">最后更新: 2026年3月</p>
     </div>
   );

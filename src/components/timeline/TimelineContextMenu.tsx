@@ -2,6 +2,7 @@
 // Extracted from Timeline.tsx for better maintainability
 
 import React, { useEffect, useCallback } from 'react';
+import { handleSubmenuHover, handleSubmenuLeave } from '../panels/media/submenuPosition';
 import type { TimelineClip } from '../../types';
 import type { MediaFile } from '../../stores/mediaStore';
 import type { ContextMenuState } from './types';
@@ -9,6 +10,8 @@ import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { useMediaStore } from '../../stores/mediaStore';
 import { projectFileService } from '../../services/projectFileService';
 import { Logger } from '../../services/logger';
+import { LABEL_COLORS, getLabelHex } from '../panels/media/labelColors';
+import type { LabelColor } from '../../stores/mediaStore/types';
 
 const log = Logger.create('TimelineContextMenu');
 
@@ -158,6 +161,60 @@ export function TimelineContextMenu({
   const isGenerating = mediaFile?.proxyStatus === 'generating';
   const hasProxy = mediaFile?.proxyStatus === 'ready';
 
+  // Resolve the media item ID and current label color for the clip
+  const resolveMediaItemColor = (): { mediaItemId: string | null; currentColor: LabelColor } => {
+    if (!clip) return { mediaItemId: null, currentColor: 'none' };
+    const mediaFileId = clip.mediaFileId || clip.source?.mediaFileId;
+    const ms = useMediaStore.getState();
+
+    // Composition clips
+    if (clip.compositionId) {
+      const comp = ms.compositions.find(c => c.id === clip.compositionId);
+      if (comp) return { mediaItemId: comp.id, currentColor: comp.labelColor || 'none' };
+    }
+    // Regular media files
+    if (mediaFileId) {
+      const file = ms.files.find(f => f.id === mediaFileId);
+      if (file) return { mediaItemId: file.id, currentColor: file.labelColor || 'none' };
+    }
+    // Solid items
+    if (clip.source?.type === 'solid') {
+      const solid = mediaFileId
+        ? ms.solidItems.find(si => si.id === mediaFileId)
+        : ms.solidItems.find(si => si.name === clip.name);
+      if (solid) return { mediaItemId: solid.id, currentColor: solid.labelColor || 'none' };
+    }
+    // Text items
+    if (clip.source?.type === 'text') {
+      const text = mediaFileId
+        ? ms.textItems.find(ti => ti.id === mediaFileId)
+        : ms.textItems.find(ti => ti.name === clip.name);
+      if (text) return { mediaItemId: text.id, currentColor: text.labelColor || 'none' };
+    }
+    // Mesh items
+    if (clip.source?.type === 'model') {
+      const mesh = mediaFileId
+        ? (ms.meshItems || []).find(m => m.id === mediaFileId)
+        : (ms.meshItems || []).find(m => m.name === clip.name || m.meshType === clip.meshType);
+      if (mesh) return { mediaItemId: mesh.id, currentColor: mesh.labelColor || 'none' };
+    }
+    // Camera items
+    if (clip.source?.type === 'camera') {
+      const cam = mediaFileId
+        ? (ms.cameraItems || []).find(c => c.id === mediaFileId)
+        : (ms.cameraItems || [])[0]; // Usually only one camera item
+      if (cam) return { mediaItemId: cam.id, currentColor: cam.labelColor || 'none' };
+    }
+    if (clip.source?.type === 'splat-effector') {
+      const effector = mediaFileId
+        ? (ms.splatEffectorItems || []).find(e => e.id === mediaFileId)
+        : (ms.splatEffectorItems || []).find(e => e.name === clip.name);
+      if (effector) return { mediaItemId: effector.id, currentColor: effector.labelColor || 'none' };
+    }
+    return { mediaItemId: null, currentColor: 'none' };
+  };
+  const { mediaItemId, currentColor } = resolveMediaItemColor();
+
   return (
     <div
       ref={contextMenuRef}
@@ -171,7 +228,7 @@ export function TimelineContextMenu({
       onClick={(e) => e.stopPropagation()}
     >
       {isVideo && (
-        <div className="context-menu-item has-submenu">
+        <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
           <span>Show in Explorer</span>
           <span className="submenu-arrow">{'\u25B6'}</span>
           <div className="context-submenu">
@@ -313,6 +370,46 @@ export function TimelineContextMenu({
           </div>
         </>
       )}
+
+      {/* Clip color picker — sets the media item's label color (synced between timeline and media panel) */}
+      <div className="context-menu-separator" />
+      <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span
+            className="clip-color-indicator"
+            style={{
+              background: currentColor !== 'none' ? getLabelHex(currentColor) : 'var(--bg-tertiary)',
+              width: 10,
+              height: 10,
+              borderRadius: 2,
+              border: '1px solid rgba(255,255,255,0.2)',
+              flexShrink: 0,
+            }}
+          />
+          Label Color
+        </span>
+        <span className="submenu-arrow">{'\u25B6'}</span>
+        <div className="context-submenu clip-color-submenu">
+          <div className="clip-color-grid">
+            {LABEL_COLORS.map(c => (
+              <span
+                key={c.key}
+                className={`label-picker-swatch ${c.key === 'none' ? 'none' : ''} ${currentColor === c.key ? 'active' : ''}`}
+                title={c.name}
+                style={{ background: c.key === 'none' ? 'var(--bg-tertiary)' : c.hex }}
+                onClick={() => {
+                  if (mediaItemId) {
+                    useMediaStore.getState().setLabelColor([mediaItemId], c.key as LabelColor);
+                  }
+                  setContextMenu(null);
+                }}
+              >
+                {c.key === 'none' && <span className="label-picker-x">&times;</span>}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
 
       <div className="context-menu-separator" />
       <div

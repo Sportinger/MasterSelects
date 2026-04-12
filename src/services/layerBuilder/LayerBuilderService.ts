@@ -11,6 +11,7 @@ import { VideoSyncManager } from './VideoSyncManager';
 import { AudioTrackSyncManager } from './AudioTrackSyncManager';
 import { proxyFrameCache } from '../proxyFrameCache';
 import { layerPlaybackManager } from '../layerPlaybackManager';
+import { DEFAULT_TEXT_3D_PROPERTIES } from '../../stores/timeline/constants';
 import {
   canUseSharedPreviewRuntimeSession,
   getPreviewRuntimeSource,
@@ -24,6 +25,7 @@ import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation'
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { DEFAULT_TRANSFORM, MAX_NESTING_DEPTH } from '../../stores/timeline/constants';
+import { prewarmGaussianSplatRuntime } from '../../engine/three/splatRuntimeCache';
 
 const log = Logger.create('LayerBuilder');
 
@@ -43,9 +45,33 @@ export class LayerBuilderService {
 
   // Lookahead preloading
   private lastLookaheadTime = 0;
+  private lastSplatLookaheadTime = 0;
+
+  constructor() {
+    // Legacy gaussian-avatar path stays on disk for migration/reference only.
+    void this.buildGaussianAvatarLayer;
+  }
 
   private hasRenderableVideoSource(source: TimelineClip['source'] | undefined): boolean {
     return !!source?.videoElement || !!source?.webCodecsPlayer?.isFullMode();
+  }
+
+  private getPositiveDimension(value: number | undefined): number | undefined {
+    return typeof value === 'number' && Number.isFinite(value) && value > 0
+      ? value
+      : undefined;
+  }
+
+  private getLayerSourceMetadata(
+    clip: TimelineClip,
+    mediaFile?: { id?: string; width?: number; height?: number },
+    fallback?: { width?: number; height?: number },
+  ): { mediaFileId?: string; intrinsicWidth?: number; intrinsicHeight?: number } {
+    return {
+      mediaFileId: mediaFile?.id ?? clip.mediaFileId ?? clip.source?.mediaFileId,
+      intrinsicWidth: this.getPositiveDimension(mediaFile?.width) ?? this.getPositiveDimension(fallback?.width),
+      intrinsicHeight: this.getPositiveDimension(mediaFile?.height) ?? this.getPositiveDimension(fallback?.height),
+    };
   }
 
   private getPausedVisualProvider(
@@ -158,6 +184,8 @@ export class LayerBuilderService {
       this.layerCache.invalidate();
       return this.mergeBackgroundLayers([], ctx.playheadPosition);
     }
+
+    this.prewarmGaussianSplatClips(ctx);
 
     // Check cache (only for primary layers — background layers are cheap to rebuild)
     const cacheResult = this.layerCache.checkCache(ctx);
@@ -367,9 +395,21 @@ export class LayerBuilderService {
     else if (clip.source?.textCanvas) {
       layer = this.buildTextLayer(clip, layerIndex, ctx, opacityOverride);
     }
+    // Camera clip (non-rendering scene controller)
+    else if (clip.source?.type === 'camera') {
+      layer = null;
+    }
+    // Splat effector clip (non-rendering scene controller for Three.js splats)
+    else if (clip.source?.type === 'splat-effector') {
+      layer = null;
+    }
     // 3D Model clip
     else if (clip.source?.type === 'model') {
       layer = this.buildModelLayer(clip, layerIndex, ctx, opacityOverride);
+    }
+    // Gaussian Splat clip (native WebGPU path)
+    else if (clip.source?.type === 'gaussian-splat') {
+      layer = this.buildGaussianSplatLayer(clip, layerIndex, ctx, opacityOverride);
     }
 
     // Pass through 3D flag from clip to layer
@@ -435,6 +475,11 @@ export class LayerBuilderService {
    */
   private buildNativeDecoderLayer(clip: TimelineClip, layerIndex: number, ctx: FrameContext, opacityOverride?: number): Layer {
     const timeInfo = getClipTimeInfo(ctx, clip);
+    const mediaFile = getMediaFileForClip(ctx, clip);
+    const sourceMetadata = this.getLayerSourceMetadata(clip, mediaFile, {
+      width: clip.source?.videoElement?.videoWidth,
+      height: clip.source?.videoElement?.videoHeight,
+    });
     const transform = this.transformCache.getTransform(
       `${ctx.activeCompId}_${layerIndex}`,
       ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime)
@@ -453,7 +498,11 @@ export class LayerBuilderService {
       visible: true,
       opacity: finalOpacity,
       blendMode: transform.blendMode as BlendMode,
-      source: { type: 'video', nativeDecoder: clip.source!.nativeDecoder },
+      source: {
+        type: 'video',
+        nativeDecoder: clip.source!.nativeDecoder,
+        ...sourceMetadata,
+      },
       effects,
       position: transform.position,
       scale: transform.scale,
@@ -470,6 +519,10 @@ export class LayerBuilderService {
   private buildVideoLayer(clip: TimelineClip, layerIndex: number, ctx: FrameContext, opacityOverride?: number): Layer | null {
     const timeInfo = getClipTimeInfo(ctx, clip);
     const mediaFile = getMediaFileForClip(ctx, clip);
+    const sourceMetadata = this.getLayerSourceMetadata(clip, mediaFile, {
+      width: clip.source?.videoElement?.videoWidth,
+      height: clip.source?.videoElement?.videoHeight,
+    });
 
     // Check for proxy usage
     if (ctx.proxyEnabled && mediaFile?.proxyFps) {
@@ -544,6 +597,7 @@ export class LayerBuilderService {
         webCodecsPlayer: visualProvider ?? undefined,
         runtimeSourceId: preferHtmlScrubPreview ? undefined : previewRuntimeSource?.runtimeSourceId,
         runtimeSessionKey: preferHtmlScrubPreview ? undefined : previewRuntimeSource?.runtimeSessionKey,
+        ...sourceMetadata,
       },
       effects,
       position: transform.position,
@@ -651,6 +705,11 @@ export class LayerBuilderService {
     ctx: FrameContext,
     opacityOverride?: number
   ): Layer {
+    const mediaFile = getMediaFileForClip(ctx, clip);
+    const sourceMetadata = this.getLayerSourceMetadata(clip, mediaFile, {
+      width: imageElement.naturalWidth || imageElement.width,
+      height: imageElement.naturalHeight || imageElement.height,
+    });
     const transform = this.transformCache.getTransform(
       `${ctx.activeCompId}_${layerIndex}`,
       ctx.getInterpolatedTransform(clip.id, localTime)
@@ -669,7 +728,7 @@ export class LayerBuilderService {
       visible: true,
       opacity: finalOpacity,
       blendMode: transform.blendMode as BlendMode,
-      source: { type: 'image', imageElement },
+      source: { type: 'image', imageElement, ...sourceMetadata },
       effects,
       position: transform.position,
       scale: transform.scale,
@@ -724,6 +783,10 @@ export class LayerBuilderService {
       ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime)
     );
     const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
+    const meshType = clip.meshType ?? clip.source?.meshType;
+    const text3DProperties = meshType === 'text3d'
+      ? (clip.text3DProperties ?? clip.source?.text3DProperties ?? DEFAULT_TEXT_3D_PROPERTIES)
+      : (clip.text3DProperties ?? clip.source?.text3DProperties);
 
     const finalOpacity = opacityOverride !== undefined
       ? transform.opacity * opacityOverride
@@ -736,7 +799,12 @@ export class LayerBuilderService {
       visible: true,
       opacity: finalOpacity,
       blendMode: transform.blendMode as BlendMode,
-      source: { type: 'model', modelUrl: clip.source?.modelUrl, meshType: clip.meshType },
+      source: {
+        type: 'model',
+        modelUrl: clip.source?.modelUrl,
+        meshType,
+        text3DProperties,
+      },
       effects,
       position: transform.position,
       scale: transform.scale,
@@ -747,6 +815,151 @@ export class LayerBuilderService {
 
     this.addMaskProperties(layer, clip);
     return layer;
+  }
+
+  /**
+   * Build Gaussian Avatar layer — rendered by GaussianSplatSceneRenderer
+   */
+  private buildGaussianAvatarLayer(clip: TimelineClip, layerIndex: number, ctx: FrameContext, opacityOverride?: number): Layer {
+    const timeInfo = getClipTimeInfo(ctx, clip);
+    const transform = this.transformCache.getTransform(
+      `${ctx.activeCompId}_${layerIndex}`,
+      ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime)
+    );
+    const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
+
+    const finalOpacity = opacityOverride !== undefined
+      ? transform.opacity * opacityOverride
+      : transform.opacity;
+
+    const layer: Layer = {
+      id: `${ctx.activeCompId}_layer_${layerIndex}`,
+      name: clip.name,
+      sourceClipId: clip.id,
+      visible: true,
+      opacity: finalOpacity,
+      blendMode: transform.blendMode as BlendMode,
+      source: {
+        type: 'gaussian-avatar',
+        gaussianAvatarUrl: clip.source?.gaussianAvatarUrl,
+        gaussianBlendshapes: clip.source?.gaussianBlendshapes,
+      },
+      effects,
+      position: transform.position,
+      scale: transform.scale,
+      rotation: transform.rotation,
+      is3D: true,
+    };
+
+    this.addMaskProperties(layer, clip);
+    return layer;
+  }
+
+  /**
+   * Build Gaussian Splat layer — rendered natively via WebGPU
+   */
+  private buildGaussianSplatLayer(clip: TimelineClip, layerIndex: number, ctx: FrameContext, opacityOverride?: number): Layer {
+    const timeInfo = getClipTimeInfo(ctx, clip);
+    const mediaFile = getMediaFileForClip(ctx, clip);
+    const renderSettings = clip.source?.gaussianSplatSettings?.render;
+    const useNativeRenderer = renderSettings?.useNativeRenderer === true;
+    const transform = useNativeRenderer
+      ? (() => {
+          const interpolatedTransform = ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime);
+          // Native gaussian splat camera controls use rotation in degrees.
+          return {
+            position: {
+              x: interpolatedTransform.position.x,
+              y: interpolatedTransform.position.y,
+              z: interpolatedTransform.position.z,
+            },
+            scale: {
+              x: interpolatedTransform.scale.x,
+              y: interpolatedTransform.scale.y,
+              ...(interpolatedTransform.scale.z !== undefined
+                ? { z: interpolatedTransform.scale.z }
+                : {}),
+            },
+            rotation: {
+              x: interpolatedTransform.rotation.x,
+              y: interpolatedTransform.rotation.y,
+              z: interpolatedTransform.rotation.z,
+            },
+            opacity: interpolatedTransform.opacity,
+            blendMode: interpolatedTransform.blendMode,
+          };
+        })()
+      : this.transformCache.getTransform(
+          `${ctx.activeCompId}_${layerIndex}`,
+          ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime)
+        );
+    const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
+
+    const finalOpacity = opacityOverride !== undefined
+      ? transform.opacity * opacityOverride
+      : transform.opacity;
+
+    const layer: Layer = {
+      id: `${ctx.activeCompId}_layer_${layerIndex}`,
+      name: clip.name,
+      sourceClipId: clip.id,
+      visible: true,
+      opacity: finalOpacity,
+      blendMode: transform.blendMode as BlendMode,
+      source: {
+        type: 'gaussian-splat',
+        mediaFileId: mediaFile?.id ?? clip.mediaFileId ?? clip.source?.mediaFileId,
+        gaussianSplatUrl: clip.source?.gaussianSplatUrl,
+        gaussianSplatFileName: clip.file?.name ?? clip.name,
+        gaussianSplatFileHash: mediaFile?.fileHash,
+        gaussianSplatSettings: clip.source?.gaussianSplatSettings,
+        mediaTime: timeInfo.clipLocalTime,
+      },
+      effects,
+      position: transform.position,
+      scale: transform.scale,
+      rotation: transform.rotation,
+      is3D: true,
+    };
+
+    this.addMaskProperties(layer, clip);
+    return layer;
+  }
+
+  private prewarmGaussianSplatClips(ctx: FrameContext): void {
+    if (ctx.now - this.lastSplatLookaheadTime < LAYER_BUILDER_CONSTANTS.LOOKAHEAD_INTERVAL) {
+      return;
+    }
+    this.lastSplatLookaheadTime = ctx.now;
+
+    const lookBehind = ctx.isDraggingPlayhead ? 1.25 : 0.1;
+    const lookAhead = ctx.isPlaying ? LAYER_BUILDER_CONSTANTS.LOOKAHEAD_SECONDS : 1.25;
+    const rangeStart = Math.max(0, ctx.playheadPosition - lookBehind);
+    const rangeEnd = ctx.playheadPosition + lookAhead;
+
+    for (const clip of ctx.clips) {
+      if (clip.source?.type !== 'gaussian-splat') continue;
+      if (!isVideoTrackVisible(ctx, clip.trackId)) continue;
+      if ((clip.source.gaussianSplatSettings?.render.useNativeRenderer ?? false) === true) continue;
+      if (clip.startTime > rangeEnd || clip.startTime + clip.duration < rangeStart) continue;
+
+      const mediaFile = getMediaFileForClip(ctx, clip);
+      const file = mediaFile?.file ?? clip.file;
+      if (!file) continue;
+
+      prewarmGaussianSplatRuntime({
+        cacheKey:
+          mediaFile?.fileHash ??
+          mediaFile?.id ??
+          clip.source?.mediaFileId ??
+          clip.id,
+        fileHash: mediaFile?.fileHash,
+        file,
+        url: clip.source?.gaussianSplatUrl,
+        fileName: file.name || clip.name,
+        requestedMaxSplats: clip.source?.gaussianSplatSettings?.render.maxSplats ?? 0,
+      });
+    }
   }
 
   /**
@@ -999,7 +1212,14 @@ export class LayerBuilderService {
     } else if (nestedClip.source?.type === 'model') {
       return {
         ...baseLayer,
-        source: { type: 'model', modelUrl: nestedClip.source.modelUrl },
+        source: {
+          type: 'model',
+          modelUrl: nestedClip.source.modelUrl,
+          meshType: nestedClip.meshType ?? nestedClip.source?.meshType,
+          text3DProperties: (nestedClip.meshType ?? nestedClip.source?.meshType) === 'text3d'
+            ? (nestedClip.text3DProperties ?? nestedClip.source?.text3DProperties ?? DEFAULT_TEXT_3D_PROPERTIES)
+            : (nestedClip.text3DProperties ?? nestedClip.source?.text3DProperties),
+        },
         is3D: true,
       } as Layer;
     }

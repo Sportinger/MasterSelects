@@ -3,6 +3,7 @@
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import type { ToolResult } from '../types';
+import type { CallerContext } from '../policy';
 
 // Import handlers by category
 import {
@@ -123,7 +124,7 @@ import {
 } from './stats';
 
 // Handler registry - maps tool names to handler functions
-const timelineHandlers: Record<string, (args: Record<string, unknown>, store: ReturnType<typeof useTimelineStore.getState>) => Promise<ToolResult>> = {
+const timelineHandlers: Record<string, (args: Record<string, unknown>, store: ReturnType<typeof useTimelineStore.getState>, callerContext?: CallerContext) => Promise<ToolResult>> = {
   getTimelineState: handleGetTimelineState,
   setPlayhead: handleSetPlayhead,
   setInOutPoints: handleSetInOutPoints,
@@ -188,7 +189,7 @@ const timelineHandlers: Record<string, (args: Record<string, unknown>, store: Re
   updateVertex: handleUpdateVertex,
 };
 
-const mediaHandlers: Record<string, (args: Record<string, unknown>, store: ReturnType<typeof useMediaStore.getState>) => Promise<ToolResult>> = {
+const mediaHandlers: Record<string, (args: Record<string, unknown>, store: ReturnType<typeof useMediaStore.getState>, callerContext?: CallerContext) => Promise<ToolResult>> = {
   getMediaItems: handleGetMediaItems,
   createMediaFolder: handleCreateMediaFolder,
   renameMediaItem: handleRenameMediaItem,
@@ -200,7 +201,7 @@ const mediaHandlers: Record<string, (args: Record<string, unknown>, store: Retur
 };
 
 // Self-contained handlers (no store dependency, or fetch own stores)
-const selfContainedHandlers: Record<string, (args: Record<string, unknown>) => Promise<ToolResult>> = {
+const selfContainedHandlers: Record<string, (args: Record<string, unknown>, callerContext?: CallerContext) => Promise<ToolResult>> = {
   listLocalFiles: handleListLocalFiles,
   addClipSegment: handleAddClipSegment,
   listEffects: handleListEffects,
@@ -228,7 +229,7 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>) => P
 };
 
 // YouTube handlers - self-contained, fetch their own stores
-const youtubeHandlers: Record<string, (args: Record<string, unknown>) => Promise<ToolResult>> = {
+const youtubeHandlers: Record<string, (args: Record<string, unknown>, callerContext?: CallerContext) => Promise<ToolResult>> = {
   searchYouTube: handleSearchYouTube,
   listVideoFormats: handleListVideoFormats,
   downloadAndImportVideo: handleDownloadAndImportVideo,
@@ -243,26 +244,27 @@ export async function executeToolInternal(
   toolName: string,
   args: Record<string, unknown>,
   timelineStore: ReturnType<typeof useTimelineStore.getState>,
-  mediaStore: ReturnType<typeof useMediaStore.getState>
+  mediaStore: ReturnType<typeof useMediaStore.getState>,
+  callerContext: CallerContext = 'internal',
 ): Promise<ToolResult> {
   // Check timeline handlers first
   if (toolName in timelineHandlers) {
-    return timelineHandlers[toolName](args, timelineStore);
+    return timelineHandlers[toolName](args, timelineStore, callerContext);
   }
 
   // Check media handlers
   if (toolName in mediaHandlers) {
-    return mediaHandlers[toolName](args, mediaStore);
+    return mediaHandlers[toolName](args, mediaStore, callerContext);
   }
 
   // Check self-contained handlers (no store dependency)
   if (toolName in selfContainedHandlers) {
-    return selfContainedHandlers[toolName](args);
+    return selfContainedHandlers[toolName](args, callerContext);
   }
 
   // Check YouTube handlers
   if (toolName in youtubeHandlers) {
-    return youtubeHandlers[toolName](args);
+    return youtubeHandlers[toolName](args, callerContext);
   }
 
   // Unknown tool

@@ -50,15 +50,17 @@ export const createSolidClipSlice: SliceCreator<SolidClipActions> = (set, get) =
       isLoading: false,
     };
 
-    set({ clips: [...clips, solidClip] });
-    updateDuration();
-    invalidateCache();
-
     if (!skipMediaItem) {
       const mediaStore = useMediaStore.getState();
       const solidFolderId = mediaStore.getOrCreateSolidFolder();
-      mediaStore.createSolidItem(`Solid ${color}`, color, solidFolderId);
+      const mediaItemId = mediaStore.createSolidItem(`Solid ${color}`, color, solidFolderId);
+      solidClip.mediaFileId = mediaItemId;
+      solidClip.source = { ...solidClip.source!, mediaFileId: mediaItemId };
     }
+
+    set({ clips: [...clips, solidClip] });
+    updateDuration();
+    invalidateCache();
 
     log.debug('Created solid clip', { clipId, color });
     return clipId;

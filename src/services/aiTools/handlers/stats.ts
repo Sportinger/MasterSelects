@@ -94,10 +94,23 @@ function collectSnapshot(playbackWindowMs = DEFAULT_PLAYBACK_WINDOW_MS) {
   const { engineStats, gpuInfo, isEngineReady } = useEngineStore.getState();
   const s = engineStats;
   const playback = getPlaybackDebugStats(s.decoder, playbackWindowMs);
+  const renderLoop = engine.getRenderLoop() as (Record<string, unknown> & {
+    getLastSuccessfulRenderTime?: () => number;
+    getRenderCount?: () => number;
+    getIsIdle?: () => boolean;
+    getIsPlaying?: () => boolean;
+  }) | null;
 
   const snapshot: Record<string, unknown> = {
     timestamp: Date.now(),
     engineReady: isEngineReady,
+    document: {
+      visibilityState: typeof document !== 'undefined' ? document.visibilityState : 'unknown',
+      hidden: typeof document !== 'undefined' ? document.hidden : undefined,
+      hasFocus: typeof document !== 'undefined' && typeof document.hasFocus === 'function'
+        ? document.hasFocus()
+        : undefined,
+    },
     fps: s.fps,
     targetFps: s.targetFps,
     isIdle: s.isIdle,
@@ -119,6 +132,22 @@ function collectSnapshot(playbackWindowMs = DEFAULT_PLAYBACK_WINDOW_MS) {
       wc: wcPipelineMonitor.stats(),
       vf: vfPipelineMonitor.stats(),
     },
+    engineInfra: engine.getDebugInfrastructureState(),
+    renderLoop: renderLoop ? {
+      isRunning: renderLoop.isRunning,
+      animationIdNull: renderLoop.animationId == null,
+      idleSuppressed: renderLoop.idleSuppressed,
+      renderRequested: renderLoop.renderRequested,
+      hasActiveVideo: renderLoop.hasActiveVideo,
+      isScrubbing: renderLoop.isScrubbing,
+      isIdle: renderLoop.getIsIdle?.(),
+      isPlaying: renderLoop.getIsPlaying?.(),
+      renderCount: renderLoop.getRenderCount?.(),
+      lastSuccessfulRenderTime: renderLoop.getLastSuccessfulRenderTime?.(),
+      lastRenderTime: renderLoop.lastRenderTime,
+      watchdogActive: renderLoop.watchdogTimer != null,
+    } : null,
+    renderDispatcher: engine.getRenderDispatcherDebugSnapshot(),
   };
 
   snapshot.playback = serializePlayback(playback);

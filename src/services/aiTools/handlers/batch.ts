@@ -85,7 +85,8 @@ export async function handleExecuteBatch(
         action.tool,
         toolArgs,
         timelineStore,
-        mediaStore
+        mediaStore,
+        callerContext,
       );
 
       results.push({

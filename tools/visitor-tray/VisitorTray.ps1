@@ -13,6 +13,9 @@ Add-Type -AssemblyName System.Drawing
 $script:ToolRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:RepoRoot = (Resolve-Path (Join-Path $script:ToolRoot '..\..')).Path
 $script:LogUi = $null
+$script:ToastUi = $null
+$script:FlagImageCache = @{}
+$script:AlertSoundPlayer = $null
 
 function Read-KeyValueFile {
   param(
@@ -73,6 +76,7 @@ function Get-ConfigMap {
       'POLL_INTERVAL_MS',
       'MAX_VISITS_PER_POLL',
       'ALERT_SECONDS',
+      'ALERT_SOUND_PATH',
       'ENABLE_SOUND',
       'ENABLE_BALLOON',
       'OPEN_SITE_ON_BALLOON_CLICK',
@@ -179,6 +183,46 @@ function Get-BaseIcon {
   return [System.Drawing.SystemIcons]::Application
 }
 
+function Get-ResolvedAlertSoundPath {
+  param(
+    [Parameter(Mandatory = $true)]
+    [hashtable]$Config
+  )
+
+  $configured = [string]$Config['ALERT_SOUND_PATH']
+  if (-not [string]::IsNullOrWhiteSpace($configured)) {
+    try {
+      $candidate = [Environment]::ExpandEnvironmentVariables($configured.Trim())
+      if (-not [System.IO.Path]::IsPathRooted($candidate)) {
+        $candidate = Join-Path $script:ToolRoot $candidate
+      }
+      if (Test-Path -LiteralPath $candidate) {
+        return (Resolve-Path $candidate).Path
+      }
+    } catch {
+    }
+  }
+
+  $bundledSound = Join-Path $script:ToolRoot 'assets\masterselects-alert.wav'
+  if (Test-Path -LiteralPath $bundledSound) {
+    return (Resolve-Path $bundledSound).Path
+  }
+
+  foreach ($candidate in @(
+      'C:\Windows\Media\Windows Notify Messaging.wav',
+      'C:\Windows\Media\Windows Notify Email.wav',
+      'C:\Windows\Media\Windows Notify System Generic.wav',
+      'C:\Windows\Media\notify.wav',
+      'C:\Windows\Media\chimes.wav'
+    )) {
+    if (Test-Path -LiteralPath $candidate) {
+      return $candidate
+    }
+  }
+
+  return $null
+}
+
 function Get-UiFont {
   param(
     [float]$Size = 9
@@ -189,6 +233,55 @@ function Get-UiFont {
   } catch {
     return New-Object System.Drawing.Font('Segoe UI', $Size)
   }
+}
+
+function New-ThemeColor {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Hex
+  )
+
+  return [System.Drawing.ColorTranslator]::FromHtml($Hex)
+}
+
+function Set-ButtonStyle {
+  param(
+    [Parameter(Mandatory = $true)]
+    [System.Windows.Forms.Button]$Button,
+    [switch]$Primary,
+    [switch]$Danger,
+    [switch]$Compact
+  )
+
+  $Button.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+  $Button.FlatAppearance.BorderSize = 1
+  $Button.FlatAppearance.MouseDownBackColor = $script:Theme.SurfaceHover
+  $Button.FlatAppearance.MouseOverBackColor = $script:Theme.SurfaceHover
+  $Button.ForeColor = $script:Theme.Text
+  $Button.BackColor = if ($Primary) { $script:Theme.Accent } elseif ($Danger) { $script:Theme.Danger } else { $script:Theme.SurfaceAlt }
+  $Button.FlatAppearance.BorderColor = if ($Primary) { $script:Theme.AccentSoft } elseif ($Danger) { $script:Theme.DangerSoft } else { $script:Theme.Border }
+  $Button.Font = if ($Compact) { Get-UiFont -Size 8.5 } else { Get-UiFont -Size 9 }
+  $Button.Padding = if ($Compact) { New-Object System.Windows.Forms.Padding(8, 4, 8, 4) } else { New-Object System.Windows.Forms.Padding(12, 7, 12, 7) }
+  $Button.Margin = if ($Compact) { New-Object System.Windows.Forms.Padding(0, 0, 8, 0) } else { New-Object System.Windows.Forms.Padding(0, 0, 10, 0) }
+  $Button.Cursor = [System.Windows.Forms.Cursors]::Hand
+  $Button.UseVisualStyleBackColor = $false
+}
+
+function Set-HeaderButtonStyle {
+  param(
+    [Parameter(Mandatory = $true)]
+    [System.Windows.Forms.Button]$Button
+  )
+
+  $Button.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+  $Button.FlatAppearance.BorderSize = 0
+  $Button.FlatAppearance.MouseDownBackColor = $script:Theme.SurfaceHover
+  $Button.FlatAppearance.MouseOverBackColor = $script:Theme.SurfaceHover
+  $Button.BackColor = $script:Theme.Back
+  $Button.ForeColor = $script:Theme.Text
+  $Button.Font = Get-UiFont -Size 10
+  $Button.Cursor = [System.Windows.Forms.Cursors]::Hand
+  $Button.UseVisualStyleBackColor = $false
 }
 
 function Get-TrimmedText {
@@ -251,6 +344,81 @@ function Get-CountryFlag {
   $secondCodePoint = 0x1F1E6 + ([int][char]$code[1] - [int][char]'A')
 
   return [System.Char]::ConvertFromUtf32($firstCodePoint) + [System.Char]::ConvertFromUtf32($secondCodePoint)
+}
+
+function Get-FlagCacheDirectory {
+  $path = Join-Path $env:LOCALAPPDATA 'MasterSelectsVisitorTray\flags'
+  if (-not (Test-Path -LiteralPath $path)) {
+    New-Item -ItemType Directory -Path $path -Force | Out-Null
+  }
+
+  return $path
+}
+
+function Get-FlagImage {
+  param(
+    [string]$CountryCode,
+    [int]$PixelWidth = 40
+  )
+
+  $code = ([string]$CountryCode).Trim().ToLowerInvariant()
+  if ($code -notmatch '^[a-z]{2}$') {
+    return $null
+  }
+
+  $cacheKey = '{0}-{1}' -f $code, $PixelWidth
+  if ($script:FlagImageCache.ContainsKey($cacheKey)) {
+    return $script:FlagImageCache[$cacheKey]
+  }
+
+  $cachePath = Join-Path (Get-FlagCacheDirectory) "$cacheKey.png"
+  if (-not (Test-Path -LiteralPath $cachePath)) {
+    try {
+      $client = New-Object System.Net.WebClient
+      $client.DownloadFile("https://flagcdn.com/w$PixelWidth/$code.png", $cachePath)
+      $client.Dispose()
+    } catch {
+      return $null
+    }
+  }
+
+  try {
+    $bytes = [System.IO.File]::ReadAllBytes($cachePath)
+    $stream = New-Object System.IO.MemoryStream(,$bytes)
+    $image = [System.Drawing.Image]::FromStream($stream)
+    $bitmap = New-Object System.Drawing.Bitmap($image)
+    $image.Dispose()
+    $stream.Dispose()
+    $script:FlagImageCache[$cacheKey] = $bitmap
+    return $bitmap
+  } catch {
+    return $null
+  }
+}
+
+function Set-FlagVisual {
+  param(
+    [Parameter(Mandatory = $true)]
+    [System.Windows.Forms.PictureBox]$PictureBox,
+    [Parameter(Mandatory = $true)]
+    [System.Windows.Forms.Label]$FallbackLabel,
+    [string]$CountryCode,
+    [int]$PixelWidth = 40,
+    [string]$FallbackText = ''
+  )
+
+  $image = Get-FlagImage -CountryCode $CountryCode -PixelWidth $PixelWidth
+  if ($image) {
+    $PictureBox.Image = $image
+    $PictureBox.Visible = $true
+    $FallbackLabel.Visible = $false
+    return
+  }
+
+  $PictureBox.Image = $null
+  $PictureBox.Visible = $false
+  $FallbackLabel.Text = if ($FallbackText) { $FallbackText } elseif ($CountryCode) { $CountryCode.ToUpperInvariant() } else { '--' }
+  $FallbackLabel.Visible = $true
 }
 
 function Get-VisitLocation {
@@ -553,6 +721,22 @@ function Get-SelectedVisit {
   return $script:State.LastVisit
 }
 
+function Toggle-VisitNode {
+  param(
+    [System.Windows.Forms.TreeNode]$Node
+  )
+
+  if (-not $Node -or $Node.Nodes.Count -eq 0) {
+    return
+  }
+
+  if ($Node.IsExpanded) {
+    $Node.Collapse()
+  } else {
+    $Node.Expand()
+  }
+}
+
 function Update-SelectionState {
   if (-not $script:LogUi) {
     return
@@ -567,6 +751,7 @@ function Populate-VisitTree {
   }
 
   $tree = $script:LogUi.Tree
+  $images = $script:LogUi.FlagImages
   $tree.BeginUpdate()
 
   try {
@@ -583,19 +768,30 @@ function Populate-VisitTree {
       $latest = $group.Latest
 
       if ($group.Count -le 1) {
-        $singleNode = New-Object System.Windows.Forms.TreeNode((Get-VisitSummaryText -Visit $latest -IncludeTime -IncludeFlag -IncludeLocation))
+        $singleNode = New-Object System.Windows.Forms.TreeNode(('{0}  {1}  {2}' -f (Get-VisitTimeText -Visit $latest), (Get-VisitPath -Visit $latest), (Get-VisitLocation -Visit $latest)))
         $singleNode.Tag = [pscustomobject]@{
           Kind  = 'visit'
           Visit = $latest
         }
         $singleNode.ToolTipText = Get-VisitTooltip -Visit $latest
+        $imageKey = [string](Get-VisitCountryCode -Visit $latest)
+        if ($imageKey) {
+          if (-not $images.Images.ContainsKey($imageKey)) {
+            $image = Get-FlagImage -CountryCode $imageKey -PixelWidth 20
+            if ($image) {
+              $images.Images.Add($imageKey, $image)
+            }
+          }
+          if ($images.Images.ContainsKey($imageKey)) {
+            $singleNode.ImageKey = $imageKey
+            $singleNode.SelectedImageKey = $imageKey
+          }
+        }
         [void]$tree.Nodes.Add($singleNode)
         continue
       }
 
-      $flag = Get-CountryFlag -CountryCode (Get-VisitCountryCode -Visit $latest)
-      $prefix = if ($flag) { "$flag " } else { '' }
-      $parentText = '{0}{1} | {2} hits | latest {3} | {4}' -f $prefix, (Get-VisitLocation -Visit $latest), $group.Count, (Get-VisitTimeText -Visit $latest), (Get-VisitPath -Visit $latest)
+      $parentText = '{0}  {1} hits  latest {2}  {3}' -f (Get-VisitLocation -Visit $latest), $group.Count, (Get-VisitTimeText -Visit $latest), (Get-VisitPath -Visit $latest)
 
       $parentNode = New-Object System.Windows.Forms.TreeNode($parentText)
       $parentNode.Tag = [pscustomobject]@{
@@ -603,14 +799,46 @@ function Populate-VisitTree {
         Visit = $latest
       }
       $parentNode.ToolTipText = Get-VisitTooltip -Visit $latest
+      $parentImageKey = [string](Get-VisitCountryCode -Visit $latest)
+      if ($parentImageKey) {
+        if (-not $images.Images.ContainsKey($parentImageKey)) {
+          $image = Get-FlagImage -CountryCode $parentImageKey -PixelWidth 20
+          if ($image) {
+            $images.Images.Add($parentImageKey, $image)
+          }
+        }
+        if ($images.Images.ContainsKey($parentImageKey)) {
+          $parentNode.ImageKey = $parentImageKey
+          $parentNode.SelectedImageKey = $parentImageKey
+        }
+      }
 
       foreach ($visit in @($group.Visits)) {
-        $childNode = New-Object System.Windows.Forms.TreeNode((Get-VisitSummaryText -Visit $visit -IncludeTime -IncludeFlag))
+        $childText = '{0}  {1}' -f (Get-VisitTimeText -Visit $visit), (Get-VisitPath -Visit $visit)
+        $refererHost = Get-VisitRefererHost -Visit $visit
+        if ($refererHost) {
+          $childText = '{0}  via {1}' -f $childText, $refererHost
+        }
+
+        $childNode = New-Object System.Windows.Forms.TreeNode($childText)
         $childNode.Tag = [pscustomobject]@{
           Kind  = 'visit'
           Visit = $visit
         }
         $childNode.ToolTipText = Get-VisitTooltip -Visit $visit
+        $childImageKey = [string](Get-VisitCountryCode -Visit $visit)
+        if ($childImageKey) {
+          if (-not $images.Images.ContainsKey($childImageKey)) {
+            $image = Get-FlagImage -CountryCode $childImageKey -PixelWidth 20
+            if ($image) {
+              $images.Images.Add($childImageKey, $image)
+            }
+          }
+          if ($images.Images.ContainsKey($childImageKey)) {
+            $childNode.ImageKey = $childImageKey
+            $childNode.SelectedImageKey = $childImageKey
+          }
+        }
         [void]$parentNode.Nodes.Add($childNode)
       }
 
@@ -679,23 +907,170 @@ function Update-UiState {
   Update-SelectionState
 }
 
+function Ensure-ToastForm {
+  if ($script:ToastUi -and -not $script:ToastUi.Form.IsDisposed) {
+    return
+  }
+
+  $form = New-Object System.Windows.Forms.Form
+  $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
+  $form.ShowInTaskbar = $false
+  $form.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
+  $form.TopMost = $true
+  $form.BackColor = $script:Theme.Surface
+  $form.ForeColor = $script:Theme.Text
+  $form.Size = New-Object System.Drawing.Size(380, 112)
+
+  $accentPanel = New-Object System.Windows.Forms.Panel
+  $accentPanel.Dock = [System.Windows.Forms.DockStyle]::Left
+  $accentPanel.Width = 4
+  $accentPanel.BackColor = $script:Theme.Accent
+
+  $contentPanel = New-Object System.Windows.Forms.Panel
+  $contentPanel.Dock = [System.Windows.Forms.DockStyle]::Fill
+  $contentPanel.Padding = New-Object System.Windows.Forms.Padding(14, 12, 14, 12)
+  $contentPanel.BackColor = $script:Theme.Surface
+
+  $iconPanel = New-Object System.Windows.Forms.Panel
+  $iconPanel.Location = New-Object System.Drawing.Point(0, 6)
+  $iconPanel.Size = New-Object System.Drawing.Size(56, 56)
+  $iconPanel.BackColor = $script:Theme.AccentSoft
+
+  $flagPicture = New-Object System.Windows.Forms.PictureBox
+  $flagPicture.Location = New-Object System.Drawing.Point(6, 12)
+  $flagPicture.Size = New-Object System.Drawing.Size(44, 32)
+  $flagPicture.SizeMode = [System.Windows.Forms.PictureBoxSizeMode]::StretchImage
+  $flagPicture.Visible = $false
+
+  $flagFallback = New-Object System.Windows.Forms.Label
+  $flagFallback.Location = New-Object System.Drawing.Point(0, 0)
+  $flagFallback.Size = New-Object System.Drawing.Size(56, 56)
+  $flagFallback.Font = Get-UiFont -Size 15
+  $flagFallback.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+  $flagFallback.ForeColor = $script:Theme.Text
+
+  [void]$iconPanel.Controls.Add($flagPicture)
+  [void]$iconPanel.Controls.Add($flagFallback)
+
+  $titleLabel = New-Object System.Windows.Forms.Label
+  $titleLabel.Location = New-Object System.Drawing.Point(64, 4)
+  $titleLabel.Size = New-Object System.Drawing.Size(286, 24)
+  $titleLabel.Font = Get-UiFont -Size 10.5
+  $titleLabel.ForeColor = $script:Theme.Text
+
+  $bodyLabel = New-Object System.Windows.Forms.Label
+  $bodyLabel.Location = New-Object System.Drawing.Point(64, 32)
+  $bodyLabel.Size = New-Object System.Drawing.Size(286, 42)
+  $bodyLabel.Font = Get-UiFont -Size 9
+  $bodyLabel.ForeColor = $script:Theme.Muted
+
+  $footerLabel = New-Object System.Windows.Forms.Label
+  $footerLabel.Location = New-Object System.Drawing.Point(64, 76)
+  $footerLabel.Size = New-Object System.Drawing.Size(286, 18)
+  $footerLabel.Font = Get-UiFont -Size 8
+  $footerLabel.ForeColor = $script:Theme.Subtle
+
+  foreach ($control in @($iconPanel, $titleLabel, $bodyLabel, $footerLabel)) {
+    [void]$contentPanel.Controls.Add($control)
+  }
+
+  $form.Controls.Add($contentPanel)
+  $form.Controls.Add($accentPanel)
+
+  $timer = New-Object System.Windows.Forms.Timer
+  $timer.Interval = 5000
+  $timer.add_Tick({
+      if ($script:ToastUi -and $script:ToastUi.Form -and -not $script:ToastUi.Form.IsDisposed) {
+        $script:ToastUi.Form.Hide()
+      }
+      $script:ToastUi.Timer.Stop()
+    })
+
+  $script:ToastUi = @{
+    Form        = $form
+    AccentPanel = $accentPanel
+    IconPanel   = $iconPanel
+    FlagPicture = $flagPicture
+    FlagFallback = $flagFallback
+    TitleLabel  = $titleLabel
+    BodyLabel   = $bodyLabel
+    FooterLabel = $footerLabel
+    Timer       = $timer
+    OpenUrl     = $null
+  }
+
+  $clickHandler = {
+    if ($script:ToastUi.OpenUrl) {
+      Open-Url -Url $script:ToastUi.OpenUrl
+    }
+    $script:ToastUi.Form.Hide()
+  }
+
+  foreach ($control in @($form, $contentPanel, $iconPanel, $flagPicture, $flagFallback, $titleLabel, $bodyLabel, $footerLabel)) {
+    $control.add_Click($clickHandler)
+  }
+}
+
+function Position-ToastForm {
+  Ensure-ToastForm
+
+  $form = $script:ToastUi.Form
+  $workingArea = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+  $x = $workingArea.Right - $form.Width - 18
+  $y = $workingArea.Bottom - $form.Height - 18
+  $form.Location = New-Object System.Drawing.Point($x, $y)
+}
+
 function Show-Balloon {
   param(
     [Parameter(Mandatory = $true)]
     [string]$Title,
     [Parameter(Mandatory = $true)]
     [string]$Text,
-    [System.Windows.Forms.ToolTipIcon]$Icon = [System.Windows.Forms.ToolTipIcon]::Info
+    [System.Windows.Forms.ToolTipIcon]$Icon = [System.Windows.Forms.ToolTipIcon]::Info,
+    $Visit = $null
   )
 
   if (-not $script:Config.EnableBalloon) {
     return
   }
 
-  $script:NotifyIcon.BalloonTipTitle = Get-TrimmedText -Value $Title -MaxLength 63
-  $script:NotifyIcon.BalloonTipText = Get-TrimmedText -Value $Text -MaxLength 255
-  $script:NotifyIcon.BalloonTipIcon = $Icon
-  $script:NotifyIcon.ShowBalloonTip(4000)
+  Ensure-ToastForm
+  Position-ToastForm
+
+  $accent = switch ($Icon) {
+    ([System.Windows.Forms.ToolTipIcon]::Warning) { $script:Theme.Danger }
+    ([System.Windows.Forms.ToolTipIcon]::Error) { $script:Theme.Danger }
+    default { $script:Theme.Accent }
+  }
+
+  $accentSoft = switch ($Icon) {
+    ([System.Windows.Forms.ToolTipIcon]::Warning) { $script:Theme.DangerSoft }
+    ([System.Windows.Forms.ToolTipIcon]::Error) { $script:Theme.DangerSoft }
+    default { $script:Theme.AccentSoft }
+  }
+
+  $countryCode = if ($Visit) { Get-VisitCountryCode -Visit $Visit } else { '' }
+  $iconText = if ($Icon -eq [System.Windows.Forms.ToolTipIcon]::Warning -or $Icon -eq [System.Windows.Forms.ToolTipIcon]::Error) { '!' } elseif ($countryCode) { $countryCode } else { 'i' }
+  $footer = if ($Visit) { '{0}  {1}' -f (Get-VisitTimeText -Visit $Visit), (Get-VisitLocation -Visit $Visit) } else { $script:Config.SiteUrl }
+  $openUrl = if ($Visit -and $script:Config.OpenSiteOnBalloonClick) { Get-VisitUrl -Visit $Visit } elseif ($script:Config.OpenSiteOnBalloonClick) { $script:Config.SiteUrl } else { $null }
+
+  $script:ToastUi.AccentPanel.BackColor = $accent
+  $script:ToastUi.Form.BackColor = $script:Theme.Surface
+  $script:ToastUi.IconPanel.BackColor = $accentSoft
+  Set-FlagVisual -PictureBox $script:ToastUi.FlagPicture -FallbackLabel $script:ToastUi.FlagFallback -CountryCode $countryCode -PixelWidth 40 -FallbackText $iconText
+  $script:ToastUi.TitleLabel.Text = Get-TrimmedText -Value $Title -MaxLength 80
+  $script:ToastUi.BodyLabel.Text = Get-TrimmedText -Value $Text -MaxLength 150
+  $script:ToastUi.FooterLabel.Text = Get-TrimmedText -Value $footer -MaxLength 80
+  $script:ToastUi.OpenUrl = $openUrl
+
+  if (-not $script:ToastUi.Form.Visible) {
+    $script:ToastUi.Form.Show()
+  }
+
+  $script:ToastUi.Form.BringToFront()
+  $script:ToastUi.Timer.Stop()
+  $script:ToastUi.Timer.Start()
 }
 
 function Start-AlertVisual {
@@ -711,7 +1086,24 @@ function Play-AlertSound {
     return
   }
 
-  [System.Media.SystemSounds]::Exclamation.Play()
+  if ($script:Config.AlertSoundPath -and (Test-Path -LiteralPath $script:Config.AlertSoundPath)) {
+    try {
+      if (-not $script:AlertSoundPlayer -or $script:AlertSoundPlayer.SoundLocation -ne $script:Config.AlertSoundPath) {
+        if ($script:AlertSoundPlayer) {
+          $script:AlertSoundPlayer.Dispose()
+        }
+
+        $script:AlertSoundPlayer = New-Object System.Media.SoundPlayer($script:Config.AlertSoundPath)
+        $script:AlertSoundPlayer.Load()
+      }
+
+      $script:AlertSoundPlayer.Play()
+      return
+    } catch {
+    }
+  }
+
+  [System.Media.SystemSounds]::Asterisk.Play()
 }
 
 function Prime-VisitHistory {
@@ -749,20 +1141,60 @@ function Ensure-LogForm {
   }
 
   $form = New-Object System.Windows.Forms.Form
-  $form.Text = 'MasterSelects live log'
+  $form.Text = 'MasterSelects'
   $form.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
-  $form.Size = New-Object System.Drawing.Size(640, 520)
-  $form.MinimumSize = New-Object System.Drawing.Size(480, 320)
-  $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::SizableToolWindow
+  $form.Size = New-Object System.Drawing.Size(430, 620)
+  $form.MinimumSize = New-Object System.Drawing.Size(430, 620)
+  $form.MaximumSize = New-Object System.Drawing.Size(430, 900)
+  $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
+  $form.ControlBox = $false
   $form.ShowInTaskbar = $false
   $form.TopMost = $true
   $form.KeyPreview = $true
+  $form.BackColor = $script:Theme.Back
+  $form.ForeColor = $script:Theme.Text
+  $form.MaximizeBox = $false
+  $form.MinimizeBox = $false
+
+  $shellPanel = New-Object System.Windows.Forms.Panel
+  $shellPanel.Dock = [System.Windows.Forms.DockStyle]::Fill
+  $shellPanel.Padding = New-Object System.Windows.Forms.Padding(1)
+  $shellPanel.BackColor = $script:Theme.Border
+
+  $innerPanel = New-Object System.Windows.Forms.Panel
+  $innerPanel.Dock = [System.Windows.Forms.DockStyle]::Fill
+  $innerPanel.BackColor = $script:Theme.Back
+
+  $titleBar = New-Object System.Windows.Forms.Panel
+  $titleBar.Dock = [System.Windows.Forms.DockStyle]::Top
+  $titleBar.Height = 34
+  $titleBar.BackColor = $script:Theme.Back
+  $titleBar.Padding = New-Object System.Windows.Forms.Padding(10, 6, 8, 6)
+
+  $titleLabel = New-Object System.Windows.Forms.Label
+  $titleLabel.Dock = [System.Windows.Forms.DockStyle]::Left
+  $titleLabel.Width = 220
+  $titleLabel.Text = 'MasterSelects'
+  $titleLabel.Font = Get-UiFont -Size 10
+  $titleLabel.ForeColor = $script:Theme.Text
+  $titleLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
+
+  $closeButton = New-Object System.Windows.Forms.Button
+  $closeButton.Dock = [System.Windows.Forms.DockStyle]::Right
+  $closeButton.Width = 28
+  $closeButton.Text = 'X'
+  Set-HeaderButtonStyle -Button $closeButton
+
+  [void]$titleBar.Controls.Add($closeButton)
+  [void]$titleBar.Controls.Add($titleLabel)
 
   $buttonPanel = New-Object System.Windows.Forms.FlowLayoutPanel
   $buttonPanel.Dock = [System.Windows.Forms.DockStyle]::Top
   $buttonPanel.AutoSize = $true
-  $buttonPanel.WrapContents = $false
-  $buttonPanel.Padding = New-Object System.Windows.Forms.Padding(8, 8, 8, 4)
+  $buttonPanel.WrapContents = $true
+  $buttonPanel.Padding = New-Object System.Windows.Forms.Padding(12, 12, 12, 10)
+  $buttonPanel.BackColor = $script:Theme.Back
+  $buttonPanel.FlowDirection = [System.Windows.Forms.FlowDirection]::LeftToRight
 
   $openSiteButton = New-Object System.Windows.Forms.Button
   $openSiteButton.Text = 'Open site'
@@ -794,18 +1226,23 @@ function Ensure-LogForm {
 
   $summaryLabel = New-Object System.Windows.Forms.Label
   $summaryLabel.Dock = [System.Windows.Forms.DockStyle]::Top
-  $summaryLabel.Height = 40
-  $summaryLabel.Padding = New-Object System.Windows.Forms.Padding(8, 4, 8, 2)
+  $summaryLabel.Height = 48
+  $summaryLabel.Padding = New-Object System.Windows.Forms.Padding(12, 8, 12, 4)
   $summaryLabel.AutoEllipsis = $true
   $summaryLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
+  $summaryLabel.BackColor = $script:Theme.Back
+  $summaryLabel.ForeColor = $script:Theme.Text
+  $summaryLabel.Font = Get-UiFont -Size 9.5
 
   $errorLabel = New-Object System.Windows.Forms.Label
   $errorLabel.Dock = [System.Windows.Forms.DockStyle]::Top
-  $errorLabel.Height = 22
-  $errorLabel.Padding = New-Object System.Windows.Forms.Padding(8, 0, 8, 4)
-  $errorLabel.ForeColor = [System.Drawing.Color]::DarkRed
+  $errorLabel.Height = 28
+  $errorLabel.Padding = New-Object System.Windows.Forms.Padding(12, 0, 12, 8)
+  $errorLabel.ForeColor = $script:Theme.Danger
   $errorLabel.Visible = $false
   $errorLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
+  $errorLabel.BackColor = $script:Theme.Back
+  $errorLabel.Font = Get-UiFont -Size 8.5
 
   $tree = New-Object System.Windows.Forms.TreeView
   $tree.Dock = [System.Windows.Forms.DockStyle]::Fill
@@ -813,14 +1250,44 @@ function Ensure-LogForm {
   $tree.FullRowSelect = $true
   $tree.ShowNodeToolTips = $true
   $tree.Font = Get-UiFont -Size 9
+  $tree.BackColor = $script:Theme.Surface
+  $tree.ForeColor = $script:Theme.Text
+  $tree.BorderStyle = [System.Windows.Forms.BorderStyle]::None
+  $tree.ItemHeight = 24
+  $tree.Indent = 20
+  $tree.ShowLines = $false
+  $tree.ShowRootLines = $false
+  $tree.ShowPlusMinus = $true
 
-  $form.Controls.Add($tree)
-  $form.Controls.Add($errorLabel)
-  $form.Controls.Add($summaryLabel)
-  $form.Controls.Add($buttonPanel)
+  $flagImages = New-Object System.Windows.Forms.ImageList
+  $flagImages.ColorDepth = [System.Windows.Forms.ColorDepth]::Depth32Bit
+  $flagImages.ImageSize = New-Object System.Drawing.Size(20, 14)
+  $tree.ImageList = $flagImages
+
+  foreach ($button in @($openSiteButton, $openSelectedButton, $pollButton, $pauseButton, $hideButton, $exitButton)) {
+    $button.Size = New-Object System.Drawing.Size(120, 44)
+  }
+
+  foreach ($button in @($openSiteButton, $openSelectedButton, $pollButton, $pauseButton, $hideButton)) {
+    Set-ButtonStyle -Button $button
+  }
+  Set-ButtonStyle -Button $exitButton -Danger
+
+  $innerPanel.Controls.Add($tree)
+  $innerPanel.Controls.Add($errorLabel)
+  $innerPanel.Controls.Add($summaryLabel)
+  $innerPanel.Controls.Add($buttonPanel)
+  $innerPanel.Controls.Add($titleBar)
+  $shellPanel.Controls.Add($innerPanel)
+  $form.Controls.Add($shellPanel)
 
   $script:LogUi = @{
     Form               = $form
+    ShellPanel         = $shellPanel
+    InnerPanel         = $innerPanel
+    TitleBar           = $titleBar
+    TitleLabel         = $titleLabel
+    CloseButton        = $closeButton
     Tree               = $tree
     SummaryLabel       = $summaryLabel
     ErrorLabel         = $errorLabel
@@ -830,6 +1297,8 @@ function Ensure-LogForm {
     PauseButton        = $pauseButton
     HideButton         = $hideButton
     ExitButton         = $exitButton
+    FlagImages         = $flagImages
+    DragOrigin         = $null
   }
 
   $form.add_FormClosing({
@@ -851,9 +1320,58 @@ function Ensure-LogForm {
       Update-SelectionState
     })
 
-  $tree.add_NodeMouseDoubleClick({
-      Open-SelectedVisit
+  $tree.add_NodeMouseClick({
+      param($sender, $eventArgs)
+      if (-not $eventArgs.Node) {
+        return
+      }
+
+      $sender.SelectedNode = $eventArgs.Node
+
+      if ($eventArgs.Button -eq [System.Windows.Forms.MouseButtons]::Left -and
+          $eventArgs.Node -and
+          $eventArgs.Node.Nodes.Count -gt 0) {
+        $textRegionStart = [Math]::Max(0, $eventArgs.Node.Bounds.Left - 18)
+        if ($eventArgs.Location.X -ge $textRegionStart) {
+          Toggle-VisitNode -Node $eventArgs.Node
+        }
+      }
     })
+
+  $tree.add_NodeMouseDoubleClick({
+      param($sender, $eventArgs)
+      if ($eventArgs.Node -and $eventArgs.Node.Nodes.Count -eq 0) {
+        Open-SelectedVisit
+      }
+    })
+
+  $titleDragStart = {
+    param($sender, $eventArgs)
+    if ($eventArgs.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
+      $script:LogUi.DragOrigin = New-Object System.Drawing.Point($eventArgs.X, $eventArgs.Y)
+    }
+  }
+
+  $titleDragMove = {
+    param($sender, $eventArgs)
+    if ($eventArgs.Button -eq [System.Windows.Forms.MouseButtons]::Left -and $script:LogUi.DragOrigin) {
+      $screenPoint = $sender.PointToScreen((New-Object System.Drawing.Point($eventArgs.X, $eventArgs.Y)))
+      $script:LogUi.Form.Location = New-Object System.Drawing.Point(
+        ($screenPoint.X - $script:LogUi.DragOrigin.X),
+        ($screenPoint.Y - $script:LogUi.DragOrigin.Y)
+      )
+    }
+  }
+
+  $titleDragEnd = {
+    $script:LogUi.DragOrigin = $null
+  }
+
+  foreach ($control in @($titleBar, $titleLabel)) {
+    $control.add_MouseDown($titleDragStart)
+    $control.add_MouseMove($titleDragMove)
+    $control.add_MouseUp($titleDragEnd)
+  }
 
   $openSiteButton.add_Click({
       Open-Url -Url $script:Config.SiteUrl
@@ -880,23 +1398,21 @@ function Ensure-LogForm {
       Exit-VisitorTray
     })
 
+  $closeButton.add_Click({
+      $script:LogUi.Form.Hide()
+    })
+
   Refresh-VisitLogUi
   Update-UiState
 }
 
-function Position-LogFormNearCursor {
+function Position-LogFormNearTray {
   Ensure-LogForm
 
   $form = $script:LogUi.Form
-  $cursor = [System.Windows.Forms.Cursor]::Position
-  $screen = [System.Windows.Forms.Screen]::FromPoint($cursor)
-  $workingArea = $screen.WorkingArea
-
-  $x = [Math]::Min($cursor.X - $form.Width + 20, $workingArea.Right - $form.Width)
-  $x = [Math]::Max($workingArea.Left, $x)
-
-  $y = [Math]::Min($cursor.Y - 8, $workingArea.Bottom - $form.Height)
-  $y = [Math]::Max($workingArea.Top, $y)
+  $workingArea = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+  $x = $workingArea.Right - $form.Width - 14
+  $y = $workingArea.Bottom - $form.Height - 14
 
   $form.Location = New-Object System.Drawing.Point($x, $y)
 }
@@ -905,7 +1421,7 @@ function Show-LogForm {
   Ensure-LogForm
   Refresh-VisitLogUi
   Update-UiState
-  Position-LogFormNearCursor
+  Position-LogFormNearTray
 
   if (-not $script:LogUi.Form.Visible) {
     $script:LogUi.Form.Show()
@@ -938,11 +1454,11 @@ function Handle-NewVisits {
   if ($orderedVisits.Count -eq 1) {
     $visit = $orderedVisits[0]
     $message = Get-VisitSummaryText -Visit $visit -IncludeFlag -IncludeLocation
-    Show-Balloon -Title 'New MasterSelects visitor' -Text $message -Icon Info
+    Show-Balloon -Title 'New MasterSelects visitor' -Text $message -Icon Info -Visit $visit
   } else {
     $latest = $orderedVisits[-1]
     $message = '{0} new visits | latest {1}' -f $orderedVisits.Count, (Get-VisitSummaryText -Visit $latest -IncludeFlag -IncludeLocation)
-    Show-Balloon -Title 'New MasterSelects visitors' -Text $message -Icon Info
+    Show-Balloon -Title 'New MasterSelects visitors' -Text $message -Icon Info -Visit $latest
   }
 }
 
@@ -993,6 +1509,19 @@ function Exit-VisitorTray {
     $script:LogUi.Form.Dispose()
   }
 
+  if ($script:ToastUi -and $script:ToastUi.Form -and -not $script:ToastUi.Form.IsDisposed) {
+    $script:ToastUi.Timer.Stop()
+    $script:ToastUi.Timer.Dispose()
+    $script:ToastUi.Form.Close()
+    $script:ToastUi.Form.Dispose()
+  }
+
+  if ($script:AlertSoundPlayer) {
+    $script:AlertSoundPlayer.Stop()
+    $script:AlertSoundPlayer.Dispose()
+    $script:AlertSoundPlayer = $null
+  }
+
   $script:NotifyIcon.Visible = $false
   $script:NotifyIcon.Dispose()
   $script:ApplicationContext.ExitThread()
@@ -1010,6 +1539,22 @@ $script:Config = @{
   EnableBalloon          = Get-ConfigBool -Config $configMap -Name 'ENABLE_BALLOON' -Default $true
   OpenSiteOnBalloonClick = Get-ConfigBool -Config $configMap -Name 'OPEN_SITE_ON_BALLOON_CLICK' -Default $true
   HistoryLimit           = Get-ConfigInt -Config $configMap -Name 'HISTORY_LIMIT' -Default 200 -Min 20 -Max 500
+  AlertSoundPath         = Get-ResolvedAlertSoundPath -Config $configMap
+}
+
+$script:Theme = @{
+  Back         = New-ThemeColor -Hex '#0f1216'
+  Surface      = New-ThemeColor -Hex '#171b21'
+  SurfaceAlt   = New-ThemeColor -Hex '#1f252d'
+  SurfaceHover = New-ThemeColor -Hex '#26303b'
+  Border       = New-ThemeColor -Hex '#2d3742'
+  Accent       = New-ThemeColor -Hex '#2f9cf4'
+  AccentSoft   = New-ThemeColor -Hex '#173a56'
+  Danger       = New-ThemeColor -Hex '#e05d5d'
+  DangerSoft   = New-ThemeColor -Hex '#4d2426'
+  Text         = New-ThemeColor -Hex '#f2f5f7'
+  Muted        = New-ThemeColor -Hex '#a9b4bf'
+  Subtle       = New-ThemeColor -Hex '#7c8894'
 }
 
 $script:State = @{

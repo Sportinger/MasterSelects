@@ -8,9 +8,13 @@ It uses the existing Cloudflare Pages endpoint at `/api/visits` and stays isolat
 
 - `VisitorTray.ps1`: tray app
 - `start.cmd`: launch hidden in the system tray
+- `start.vbs`: hidden launcher without a visible console window
 - `start-debug.cmd`: launch with visible PowerShell window
 - `Install-Startup.ps1`: add a Startup shortcut for Windows logon
 - `Uninstall-Startup.ps1`: remove the Startup shortcut
+- `Install-DesktopShortcut.ps1`: create a Desktop shortcut
+- `Uninstall-DesktopShortcut.ps1`: remove the Desktop shortcut
+- `assets/masterselects-alert.wav`: bundled alert sound
 - `.env.example`: local config template
 
 ## Setup
@@ -31,6 +35,7 @@ Later sources override earlier ones.
 Optional config:
 
 - `HISTORY_LIMIT`: how many recent visits should be kept in the live log window. Default: `200`
+- `ALERT_SOUND_PATH`: optional absolute or tool-relative path to a `.wav` file for visit alerts. If omitted, the tray uses the bundled MasterSelects alert sound and falls back to a Windows notification sound.
 
 ## Required Cloudflare Secret
 
@@ -44,13 +49,13 @@ npx wrangler pages secret put VISITOR_NOTIFY_SECRET --project-name masterselects
 
 ## Run
 
-Hidden tray:
+Hidden tray without a visible console:
 
 ```powershell
 tools\visitor-tray\start.cmd
 ```
 
-Debug mode:
+Debug mode with a visible PowerShell window:
 
 ```powershell
 tools\visitor-tray\start-debug.cmd
@@ -68,6 +73,18 @@ Remove autostart:
 powershell -ExecutionPolicy Bypass -File tools\visitor-tray\Uninstall-Startup.ps1
 ```
 
+Create a Desktop shortcut:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\visitor-tray\Install-DesktopShortcut.ps1
+```
+
+Remove the Desktop shortcut:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\visitor-tray\Uninstall-DesktopShortcut.ps1
+```
+
 ## Tray UI
 
 - Right-click the tray icon to open the live log window.
@@ -77,7 +94,7 @@ powershell -ExecutionPolicy Bypass -File tools\visitor-tray\Uninstall-Startup.ps
 
 On a new visit the app:
 
-- plays a Windows notification sound
+- plays a notification sound from `ALERT_SOUND_PATH`, otherwise the bundled MasterSelects alert sound, otherwise a Windows notification sound fallback
 - switches the tray icon to a warning icon for a few seconds
 - shows a balloon notification with the country flag when available
 

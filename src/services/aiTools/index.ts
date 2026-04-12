@@ -114,7 +114,8 @@ async function _executeAIToolInternal(
   }
 
   try {
-    const result = await executeToolInternal(toolName, args, timelineStore, mediaStore);
+    const result = await executeToolInternal(toolName, args, timelineStore, mediaStore, callerContext);
+
 
     if (isModifying) {
       endBatch();

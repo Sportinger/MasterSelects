@@ -5,6 +5,8 @@ import type { TimelineClip, EasingType } from '../../types';
 import { flags } from '../../engine/featureFlags';
 import { Logger } from '../../services/logger';
 import { captureSnapshot } from '../historyStore';
+import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../mediaStore';
+import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
 
 const log = Logger.create('Clipboard');
 
@@ -46,13 +48,20 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         trackId: clip.trackId,
         trackType,
         name: clip.name,
-        mediaFileId: clip.source?.mediaFileId,
+        mediaFileId: clip.source?.mediaFileId || clip.mediaFileId,
         startTime: clip.startTime,
         duration: clip.duration,
         inPoint: clip.inPoint,
         outPoint: clip.outPoint,
         sourceType: clip.source?.type || 'video',
         naturalDuration: clip.source?.naturalDuration,
+        cameraSettings: clip.source?.type === 'camera' && clip.source.cameraSettings
+          ? { ...clip.source.cameraSettings }
+          : undefined,
+        meshType: clip.meshType || clip.source?.meshType,
+        splatEffectorSettings: clip.source?.type === 'splat-effector' && clip.source.splatEffectorSettings
+          ? { ...clip.source.splatEffectorSettings }
+          : undefined,
         transform: { ...clip.transform },
         effects: clip.effects.map(e => ({ ...e, params: { ...e.params } })),
         masks: clip.masks?.map(m => ({
@@ -65,12 +74,19 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         speed: clip.speed,
         preservesPitch: clip.preservesPitch,
         textProperties: clip.textProperties ? { ...clip.textProperties } : undefined,
+        text3DProperties: clip.text3DProperties
+          ? { ...clip.text3DProperties }
+          : clip.source?.text3DProperties
+            ? { ...clip.source.text3DProperties }
+            : undefined,
         solidColor: clip.source?.type === 'solid' ? (clip.solidColor || clip.name.replace('Solid ', '')) : undefined,
         // Visual data - reuse existing thumbnails and waveforms
         thumbnails: clip.thumbnails ? [...clip.thumbnails] : undefined,
         waveform: clip.waveform ? [...clip.waveform] : undefined,
         isComposition: clip.isComposition,
         compositionId: clip.compositionId,
+        is3D: clip.is3D,
+        wireframe: clip.wireframe,
       };
     });
 
@@ -108,6 +124,17 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
     for (const clipData of clipboardData) {
       const newId = idMapping.get(clipData.id)!;
       const newStartTime = clipData.startTime + timeOffset;
+      const text3DProperties = clipData.text3DProperties ? { ...clipData.text3DProperties } : undefined;
+      const isPrimitiveMeshClip = clipData.sourceType === 'model' && !!clipData.meshType;
+      const isCameraClip = clipData.sourceType === 'camera';
+      const isSplatEffectorClip = clipData.sourceType === 'splat-effector';
+      const requiresAsyncMediaLoad =
+        !clipData.isComposition &&
+        clipData.sourceType !== 'text' &&
+        clipData.sourceType !== 'solid' &&
+        !isPrimitiveMeshClip &&
+        !isCameraClip &&
+        !isSplatEffectorClip;
 
       // Find a track of the same type as the original
       let targetTrackId = clipData.trackId;
@@ -131,24 +158,46 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
       }
 
       // Create the new clip
-      // Note: source will be null initially - the clip needs to reload media
-      // For now we create a placeholder that references the mediaFileId
       const newClip: TimelineClip = {
         id: newId,
         trackId: targetTrackId,
         name: clipData.name,
         file: new File([], clipData.name), // Placeholder file
+        mediaFileId: clipData.mediaFileId,
         startTime: Math.max(0, newStartTime),
         duration: clipData.duration,
         inPoint: clipData.inPoint,
         outPoint: clipData.outPoint,
-        source: clipData.mediaFileId ? {
+        source: isPrimitiveMeshClip ? {
+          type: 'model' as const,
+          meshType: clipData.meshType,
+          mediaFileId: clipData.mediaFileId,
+          naturalDuration: clipData.naturalDuration ?? Number.MAX_SAFE_INTEGER,
+          ...(text3DProperties ? { text3DProperties } : {}),
+        } : isCameraClip ? {
+          type: 'camera' as const,
+          mediaFileId: clipData.mediaFileId,
+          naturalDuration: clipData.naturalDuration ?? Number.MAX_SAFE_INTEGER,
+          cameraSettings: clipData.cameraSettings ? { ...clipData.cameraSettings } : { ...DEFAULT_SCENE_CAMERA_SETTINGS },
+        } : isSplatEffectorClip ? {
+          type: 'splat-effector' as const,
+          mediaFileId: clipData.mediaFileId,
+          naturalDuration: clipData.naturalDuration ?? Number.MAX_SAFE_INTEGER,
+          splatEffectorSettings: clipData.splatEffectorSettings
+            ? { ...clipData.splatEffectorSettings }
+            : { ...DEFAULT_SPLAT_EFFECTOR_SETTINGS },
+        } : clipData.sourceType === 'solid' ? {
+          type: 'solid' as const,
+          mediaFileId: clipData.mediaFileId,
+          naturalDuration: clipData.duration,
+        } : clipData.sourceType === 'text' ? {
+          type: 'text' as const,
+          mediaFileId: clipData.mediaFileId,
+          naturalDuration: clipData.naturalDuration ?? clipData.duration,
+        } : clipData.mediaFileId ? {
           type: clipData.sourceType,
           mediaFileId: clipData.mediaFileId,
           naturalDuration: clipData.naturalDuration,
-        } : clipData.solidColor ? {
-          type: 'solid' as const,
-          naturalDuration: clipData.duration,
         } : null,
         transform: {
           ...clipData.transform,
@@ -174,14 +223,18 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         speed: clipData.speed,
         preservesPitch: clipData.preservesPitch,
         textProperties: clipData.textProperties ? { ...clipData.textProperties } : undefined,
+        text3DProperties,
         solidColor: clipData.solidColor,
         // Reuse existing thumbnails and waveforms from copied clip
         thumbnails: clipData.thumbnails ? [...clipData.thumbnails] : undefined,
         waveform: clipData.waveform ? [...clipData.waveform] : undefined,
         isComposition: clipData.isComposition,
         compositionId: clipData.compositionId,
-        isLoading: true, // Will need to reload media
-        needsReload: !clipData.textProperties && !clipData.solidColor, // Text/solid clips don't need reload
+        is3D: clipData.is3D,
+        wireframe: clipData.wireframe,
+        meshType: clipData.meshType,
+        isLoading: clipData.isComposition || clipData.sourceType === 'text' || clipData.sourceType === 'solid' || requiresAsyncMediaLoad,
+        needsReload: requiresAsyncMediaLoad,
       };
 
       newClips.push(newClip);
@@ -249,6 +302,18 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
               ),
             }));
           });
+          continue;
+        }
+
+        if (newClip.source?.type === 'camera') {
+          continue;
+        }
+
+        if (newClip.source?.type === 'model' && newClip.meshType) {
+          continue;
+        }
+
+        if (newClip.source?.type === 'splat-effector') {
           continue;
         }
 
@@ -413,6 +478,26 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
               ),
             }));
           }, { once: true });
+        } else if (sourceType === 'model') {
+          set(state => ({
+            clips: state.clips.map(c =>
+              c.id === newClip.id
+                ? {
+                    ...c,
+                    file: mediaFile.file!,
+                    source: {
+                      type: 'model' as const,
+                      modelUrl: fileUrl,
+                      naturalDuration: c.source?.naturalDuration || 3600,
+                      mediaFileId,
+                    },
+                    is3D: true,
+                    isLoading: false,
+                    needsReload: false,
+                  }
+                : c
+            ),
+          }));
         }
       }
     });

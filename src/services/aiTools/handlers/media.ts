@@ -3,14 +3,200 @@
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { ToolResult } from '../types';
+import type { CallerContext } from '../policy';
 import { Logger } from '../../logger';
 import { activateDockPanel, flashPreviewCanvas } from '../aiFeedback';
 import { validateFilePath, getAllowedRoots } from '../../security/fileAccessBroker';
-import { fetchWithDevBridgeAuth } from '../../security/devBridgeAuth';
+import { fetchWithDevBridgeAuth, hasDevBridgeToken } from '../../security/devBridgeAuth';
+import { NativeHelperClient } from '../../nativeHelper';
 
 const log = Logger.create('AITool:Media');
 
 type MediaStore = ReturnType<typeof useMediaStore.getState>;
+type LocalFileBackend = 'devBridge' | 'nativeHelper';
+
+const DEFAULT_LOCAL_FILE_EXTENSIONS = [
+  '.mp4', '.webm', '.mov', '.mkv', '.avi',
+  '.mp3', '.wav', '.aac', '.ogg', '.m4a',
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg',
+  '.obj', '.gltf', '.glb', '.fbx',
+  '.ply', '.splat',
+] as const;
+
+const LOCAL_FILE_MIME_TYPES: Record<string, string> = {
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.mkv': 'video/x-matroska',
+  '.avi': 'video/x-msvideo',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.aac': 'audio/aac',
+  '.ogg': 'audio/ogg',
+  '.m4a': 'audio/mp4',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.svg': 'image/svg+xml',
+  '.obj': 'model/obj',
+  '.gltf': 'model/gltf+json',
+  '.glb': 'model/gltf-binary',
+  '.fbx': 'application/octet-stream',
+  '.ply': 'application/octet-stream',
+  '.splat': 'application/octet-stream',
+};
+
+function normalizeLocalPath(filePath: string): string {
+  return filePath.replace(/\\/g, '/');
+}
+
+function parseExtensionFilter(extensions?: string): string[] {
+  if (!extensions) {
+    return [...DEFAULT_LOCAL_FILE_EXTENSIONS];
+  }
+
+  return extensions
+    .split(',')
+    .map(ext => ext.trim().toLowerCase())
+    .filter(Boolean)
+    .map(ext => ext.startsWith('.') ? ext : `.${ext}`);
+}
+
+function guessMimeTypeFromPath(filePath: string): string {
+  const normalizedPath = normalizeLocalPath(filePath).toLowerCase();
+  const dotIndex = normalizedPath.lastIndexOf('.');
+  if (dotIndex === -1) {
+    return 'application/octet-stream';
+  }
+
+  return LOCAL_FILE_MIME_TYPES[normalizedPath.slice(dotIndex)] || 'application/octet-stream';
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForCompositionReady(compositionId: string, timeoutMs: number = 2500): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const mediaState = useMediaStore.getState();
+    const timelineState = useTimelineStore.getState();
+    const composition = mediaState.compositions.find((comp) => comp.id === compositionId);
+
+    const isActive = mediaState.activeCompositionId === compositionId;
+    const expectedTracks = composition?.timelineData?.tracks ?? [];
+    const timelineTracksMatch = expectedTracks.length === 0 || (
+      timelineState.tracks.length === expectedTracks.length &&
+      expectedTracks.every((track, index) => timelineState.tracks[index]?.id === track.id)
+    );
+
+    if (isActive && timelineTracksMatch) {
+      return true;
+    }
+
+    await delay(25);
+  }
+
+  return false;
+}
+
+function getLocalFileBackend(callerContext: CallerContext): LocalFileBackend | null {
+  const devBridgeAvailable = hasDevBridgeToken();
+  const nativeHelperAvailable = NativeHelperClient.isConnected();
+
+  if (callerContext === 'nativeHelper' && nativeHelperAvailable) {
+    return 'nativeHelper';
+  }
+
+  if (callerContext === 'devBridge' && devBridgeAvailable) {
+    return 'devBridge';
+  }
+
+  if (devBridgeAvailable) {
+    return 'devBridge';
+  }
+
+  if (nativeHelperAvailable) {
+    return 'nativeHelper';
+  }
+
+  return null;
+}
+
+async function fetchLocalFileBlob(filePath: string, callerContext: CallerContext): Promise<Blob> {
+  const normalizedPath = normalizeLocalPath(filePath);
+  const backend = getLocalFileBackend(callerContext);
+
+  if (backend === 'devBridge') {
+    const encodedPath = encodeURIComponent(normalizedPath);
+    const response = await fetchWithDevBridgeAuth(`/api/local-file?path=${encodedPath}`);
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({ error: response.statusText }));
+      throw new Error(body.error || `HTTP ${response.status}`);
+    }
+    return response.blob();
+  }
+
+  if (backend === 'nativeHelper') {
+    const buffer = await NativeHelperClient.getDownloadedFile(normalizedPath);
+    if (!buffer) {
+      throw new Error('Native Helper could not read the requested file');
+    }
+
+    return new Blob([buffer], { type: guessMimeTypeFromPath(normalizedPath) });
+  }
+
+  throw new Error('No local file backend available. Start the dev bridge or connect the Native Helper.');
+}
+
+async function listLocalDirectory(directory: string, extensions: string | undefined, callerContext: CallerContext): Promise<Array<{
+  name: string;
+  path: string;
+  size: number;
+  modified: string;
+}>> {
+  const normalizedDir = normalizeLocalPath(directory);
+  const extFilter = parseExtensionFilter(extensions);
+  const backend = getLocalFileBackend(callerContext);
+
+  if (backend === 'devBridge') {
+    let url = `/api/local-files?dir=${encodeURIComponent(normalizedDir)}`;
+    if (extFilter.length > 0) {
+      url += `&ext=${encodeURIComponent(extFilter.join(','))}`;
+    }
+
+    const response = await fetchWithDevBridgeAuth(url);
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({ error: response.statusText }));
+      throw new Error(body.error || `HTTP ${response.status}`);
+    }
+
+    const data = await response.json() as { files?: Array<{ name: string; path: string; size: number; modified: string }> };
+    return data.files || [];
+  }
+
+  if (backend === 'nativeHelper') {
+    const entries = await NativeHelperClient.listDir(normalizedDir);
+    return entries
+      .filter(entry => entry.kind === 'file')
+      .filter(entry => {
+        const ext = entry.name.includes('.') ? `.${entry.name.split('.').pop()!.toLowerCase()}` : '';
+        return extFilter.length === 0 || extFilter.includes(ext);
+      })
+      .map(entry => ({
+        name: entry.name,
+        path: `${normalizedDir}/${entry.name}`,
+        size: entry.size,
+        modified: new Date(entry.modified * 1000).toISOString(),
+      }));
+  }
+
+  throw new Error('No local file backend available. Start the dev bridge or connect the Native Helper.');
+}
 
 export async function handleGetMediaItems(
   args: Record<string, unknown>,
@@ -158,7 +344,8 @@ export async function handleCreateComposition(
   args: Record<string, unknown>,
   mediaStore: MediaStore
 ): Promise<ToolResult> {
-  const name = args.name as string;
+  const requestedName = typeof args.name === 'string' ? args.name.trim() : '';
+  const name = requestedName || `Composition ${mediaStore.compositions.length + 1}`;
   const width = (args.width as number) || 1920;
   const height = (args.height as number) || 1080;
   const frameRate = (args.frameRate as number) || 30;
@@ -175,6 +362,10 @@ export async function handleCreateComposition(
   // Auto-open so subsequent operations target this composition
   if (openAfterCreate) {
     mediaStore.openCompositionTab(comp.id);
+    const ready = await waitForCompositionReady(comp.id);
+    if (!ready) {
+      log.warn(`Timed out waiting for composition ${comp.id} to become active after creation`);
+    }
   }
 
   return {
@@ -203,6 +394,10 @@ export async function handleOpenComposition(
   }
 
   mediaStore.openCompositionTab(compositionId);
+  const ready = await waitForCompositionReady(compositionId);
+  if (!ready) {
+    log.warn(`Timed out waiting for composition ${compositionId} to become active after open`);
+  }
 
   return {
     success: true,
@@ -231,7 +426,8 @@ export async function handleSelectMediaItems(
 
 export async function handleImportLocalFiles(
   args: Record<string, unknown>,
-  mediaStore: MediaStore
+  mediaStore: MediaStore,
+  callerContext: CallerContext = 'internal',
 ): Promise<ToolResult> {
   const paths = args.paths as string[];
   const addToTimeline = (args.addToTimeline as boolean) || false;
@@ -271,17 +467,10 @@ export async function handleImportLocalFiles(
     }
 
     try {
-      const normalizedPath = filePath.replace(/\\/g, '/');
-      const encodedPath = encodeURIComponent(normalizedPath);
+      const normalizedPath = normalizeLocalPath(filePath);
       log.info(`Fetching: ${normalizedPath}`);
 
-      const response = await fetchWithDevBridgeAuth(`/api/local-file?path=${encodedPath}`);
-      if (!response.ok) {
-        errors.push({ path: filePath, error: `HTTP ${response.status}: ${response.statusText}` });
-        continue;
-      }
-
-      const blob = await response.blob();
+      const blob = await fetchLocalFileBlob(normalizedPath, callerContext);
       const fileName = normalizedPath.split('/').pop() || 'unknown';
       const file = new File([blob], fileName, { type: blob.type });
 
@@ -303,6 +492,14 @@ export async function handleImportLocalFiles(
 
   // Optionally add to timeline
   if (addToTimeline && results.length > 0) {
+    const activeCompositionId = useMediaStore.getState().activeCompositionId;
+    if (activeCompositionId) {
+      const ready = await waitForCompositionReady(activeCompositionId);
+      if (!ready) {
+        log.warn(`Timed out waiting for active composition ${activeCompositionId} before addToTimeline`);
+      }
+    }
+
     const timelineStore = useTimelineStore.getState();
     const requestedTrackId = args.trackId as string | undefined;
     const createTrack = (args.createTrack as boolean) || false;
@@ -388,6 +585,7 @@ export async function handleImportLocalFiles(
 
 export async function handleListLocalFiles(
   args: Record<string, unknown>,
+  callerContext: CallerContext = 'internal',
 ): Promise<ToolResult> {
   const directory = args.directory as string;
   const extensions = args.extensions as string | undefined;
@@ -402,25 +600,14 @@ export async function handleListLocalFiles(
   }
 
   try {
-    const normalizedDir = directory.replace(/\\/g, '/');
-    let url = `/api/local-files?dir=${encodeURIComponent(normalizedDir)}`;
-    if (extensions) {
-      url += `&ext=${encodeURIComponent(extensions)}`;
-    }
-
-    const response = await fetchWithDevBridgeAuth(url);
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({ error: response.statusText }));
-      return { success: false, error: body.error || `HTTP ${response.status}` };
-    }
-
-    const data = await response.json();
+    const normalizedDir = normalizeLocalPath(directory);
+    const files = await listLocalDirectory(normalizedDir, extensions, callerContext);
     return {
       success: true,
       data: {
         directory: normalizedDir,
-        files: data.files,
-        totalFiles: data.files.length,
+        files,
+        totalFiles: files.length,
       },
     };
   } catch (err) {

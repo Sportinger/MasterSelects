@@ -77,6 +77,35 @@ export class NestedCompRenderer {
     return layer.source?.mediaTime ?? video.currentTime;
   }
 
+  private resolveStable3DSourceDimensions(
+    data: LayerRenderData,
+    width: number,
+    height: number,
+  ): { sourceWidth: number; sourceHeight: number } {
+    const fallbackWidth =
+      typeof data.sourceWidth === 'number' && Number.isFinite(data.sourceWidth) && data.sourceWidth > 0
+        ? data.sourceWidth
+        : width;
+    const fallbackHeight =
+      typeof data.sourceHeight === 'number' && Number.isFinite(data.sourceHeight) && data.sourceHeight > 0
+        ? data.sourceHeight
+        : height;
+
+    const intrinsicWidth = data.layer.source?.intrinsicWidth;
+    const intrinsicHeight = data.layer.source?.intrinsicHeight;
+
+    return {
+      sourceWidth:
+        typeof intrinsicWidth === 'number' && Number.isFinite(intrinsicWidth) && intrinsicWidth > 0
+          ? intrinsicWidth
+          : fallbackWidth,
+      sourceHeight:
+        typeof intrinsicHeight === 'number' && Number.isFinite(intrinsicHeight) && intrinsicHeight > 0
+          ? intrinsicHeight
+          : fallbackHeight,
+    };
+  }
+
   private getFrameTimestampSeconds(timestamp: unknown, fallback?: number): number | undefined {
     return typeof timestamp === 'number' && Number.isFinite(timestamp)
       ? timestamp / 1_000_000
@@ -568,28 +597,35 @@ export class NestedCompRenderer {
       const data = layerData[idx];
       const layer = data.layer;
       const src = layer.source;
+      const stableSourceSize = this.resolveStable3DSourceDimensions(data, width, height);
       const rot = typeof layer.rotation === 'number' ? { x: 0, y: 0, z: layer.rotation } : layer.rotation;
+      const radToDeg = 180 / Math.PI;
       layers3D.push({
         layerId: layer.id,
         clipId: layer.sourceClipId || layer.id,
         position: layer.position,
-        rotation: { x: rot.x, y: rot.y, z: rot.z },
+        rotation: {
+          x: rot.x * radToDeg,
+          y: rot.y * radToDeg,
+          z: rot.z * radToDeg,
+        },
         scale: { x: layer.scale.x, y: layer.scale.y, z: layer.scale.z ?? 1 },
         opacity: layer.opacity,
         blendMode: layer.blendMode,
-        sourceWidth: data.sourceWidth || width,
-        sourceHeight: data.sourceHeight || height,
+        sourceWidth: stableSourceSize.sourceWidth,
+        sourceHeight: stableSourceSize.sourceHeight,
         videoElement: src?.videoElement ?? undefined,
         imageElement: src?.imageElement ?? undefined,
         canvas: src?.textCanvas ?? undefined,
         modelUrl: src?.modelUrl ?? undefined,
         modelFileName: layer.name,
         meshType: src?.meshType ?? undefined,
+        text3DProperties: src?.text3DProperties ?? undefined,
         wireframe: layer.wireframe,
       });
     }
 
-    const canvas = renderer.renderScene(layers3D, DEFAULT_CAMERA_CONFIG, width, height);
+    const canvas = renderer.renderScene(layers3D, DEFAULT_CAMERA_CONFIG, width, height, []);
     if (!canvas) {
       for (let i = indices3D.length - 1; i >= 0; i--) layerData.splice(indices3D[i], 1);
       return;

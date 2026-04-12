@@ -45,15 +45,17 @@ export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => 
       isLoading: false,
     };
 
-    set({ clips: [...clips, textClip] });
-    updateDuration();
-    invalidateCache();
-
     if (!skipMediaItem) {
       const mediaStore = useMediaStore.getState();
       const textFolderId = mediaStore.getOrCreateTextFolder();
-      mediaStore.createTextItem('Text', textFolderId);
+      const mediaItemId = mediaStore.createTextItem('Text', textFolderId);
+      textClip.mediaFileId = mediaItemId;
+      textClip.source = { ...textClip.source!, mediaFileId: mediaItemId };
     }
+
+    set({ clips: [...clips, textClip] });
+    updateDuration();
+    invalidateCache();
 
     log.debug('Created text clip', { clipId });
     return clipId;

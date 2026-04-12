@@ -23,6 +23,7 @@ import {
   getProjectRawPathCandidates,
   getStoredProjectFileHandle,
 } from './mediaSourceResolver';
+import { fromProjectTransform } from './transformSerialization';
 
 const log = Logger.create('ProjectSync');
 
@@ -204,6 +205,7 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
       hasFileHandle: !!handle,
       filePath: pm.sourcePath,
       projectPath: resolvedProjectPath,
+      labelColor: pm.labelColor as import('../../stores/mediaStore/types').LabelColor | undefined,
       transcriptStatus,
       transcript,
       transcriptCoverage,
@@ -256,11 +258,16 @@ function convertProjectCompositionToStore(
         linkedClipId: c.linkedClipId,
         linkedGroupId: c.linkedGroupId,
         waveform: c.waveform,
+        meshType: c.meshType,
+        cameraSettings: c.cameraSettings,
+        splatEffectorSettings: c.splatEffectorSettings,
+        gaussianBlendshapes: c.gaussianBlendshapes,
+        gaussianSplatSettings: c.gaussianSplatSettings,
         startTime: c.startTime,
         duration: c.duration,
         inPoint: c.inPoint,
         outPoint: c.outPoint,
-        transform: c.transform,
+        transform: fromProjectTransform(c.transform),
         effects: c.effects,
         masks: c.masks,
         keyframes: c.keyframes || [],
@@ -275,8 +282,11 @@ function convertProjectCompositionToStore(
         compositionId: c.compositionId,
         // Text clip support
         textProperties: c.textProperties,
+        text3DProperties: c.text3DProperties,
         // Solid clip support
         solidColor: c.solidColor,
+        // 3D layer support
+        is3D: c.is3D,
         // Transcript data
         transcript: c.transcript,
         transcriptStatus: c.transcriptStatus,
@@ -302,6 +312,7 @@ function convertProjectCompositionToStore(
       name: pc.name,
       type: 'composition',
       parentId: pc.folderId,
+      labelColor: pc.labelColor as import('../../stores/mediaStore/types').LabelColor | undefined,
       createdAt: Date.now(),
       width: pc.width,
       height: pc.height,
@@ -322,6 +333,7 @@ function convertProjectFolderToStore(projectFolders: ProjectFolder[]): MediaFold
     id: pf.id,
     name: pf.name,
     parentId: pf.parentId,
+    labelColor: pf.labelColor as import('../../stores/mediaStore/types').LabelColor | undefined,
     isExpanded: true,
     createdAt: Date.now(),
   }));
@@ -353,10 +365,12 @@ export async function loadProjectToStores(): Promise<void> {
   const timelineStore = useTimelineStore.getState();
   timelineStore.clearTimeline();
 
-  // Restore text, solid, and mesh items
+  // Restore generated media items
   const textItems = (projectData as any).textItems || [];
   const solidItems = (projectData as any).solidItems || [];
   const meshItems = (projectData as any).meshItems || [];
+  const cameraItems = (projectData as any).cameraItems || [];
+  const splatEffectorItems = (projectData as any).splatEffectorItems || [];
 
   // Update media store
   useMediaStore.setState({
@@ -377,6 +391,8 @@ export async function loadProjectToStores(): Promise<void> {
     textItems,
     solidItems,
     meshItems,
+    cameraItems,
+    splatEffectorItems,
     activeCompositionId: projectData.activeCompositionId,
     openCompositionIds: projectData.openCompositionIds || [],
     expandedFolderIds: projectData.expandedFolderIds || [],

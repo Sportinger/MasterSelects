@@ -18,6 +18,8 @@ export interface FileImportActions {
     handle: FileSystemFileHandle;
     absolutePath?: string;
   }>) => Promise<MediaFile[]>;
+  importGaussianAvatar: (file: File, parentId?: string | null) => Promise<MediaFile>;
+  importGaussianSplat: (file: File, parentId?: string | null) => Promise<MediaFile>;
 }
 
 /**
@@ -25,7 +27,7 @@ export interface FileImportActions {
  * Shows as grey/loading while the full import runs in the background.
  */
 function createPlaceholder(file: File, id: string, parentId?: string | null): MediaFile {
-  const type = detectMediaType(file) as 'video' | 'audio' | 'image';
+  const type = detectMediaType(file) as 'video' | 'audio' | 'image' | 'model' | 'gaussian-splat';
   return {
     id,
     name: file.name,
@@ -217,5 +219,101 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
     }
 
     return imported;
+  },
+
+  importGaussianAvatar: async (file: File, parentId?: string | null) => {
+    void parentId;
+    log.warn(`Blocked legacy gaussian-avatar import: ${file.name}`);
+    throw new Error('Legacy gaussian-avatar import is disabled. Import .ply or .splat instead.');
+    /*
+
+    // Deduplication: check if file with same name + size already exists
+    const existing = get().files.find(f =>
+      f.name === file.name && f.fileSize === file.size && !f.isImporting
+    );
+    if (existing) {
+      log.info(`Skipping duplicate gaussian avatar: ${file.name} (${file.size} bytes) — already exists as ${existing.id}`);
+      return existing;
+    }
+
+    const id = generateId();
+    log.info(`Starting gaussian avatar import: ${file.name} type: ${file.type} size: ${file.size}`);
+
+    // Phase 1: Add placeholder instantly with forced gaussian-avatar type
+    const placeholder: MediaFile = {
+      id,
+      name: file.name,
+      type: 'gaussian-avatar',
+      parentId: parentId ?? null,
+      createdAt: Date.now(),
+      file,
+      url: '',
+      fileSize: file.size,
+      isImporting: true,
+    };
+    set((state) => ({
+      files: [...state.files, placeholder],
+    }));
+
+    // Phase 2: Full import in background with type override
+    try {
+      const result = await processImport({ file, id, parentId, typeOverride: 'gaussian-avatar' });
+      set((state) => finalizePlaceholder(state, id, result.mediaFile));
+      log.info('Gaussian avatar import complete:', result.mediaFile.name);
+      return result.mediaFile;
+    } catch (err) {
+      log.error(`Gaussian avatar import failed: ${file.name}`, err);
+      // Remove placeholder on failure
+      set((state) => ({
+        files: state.files.filter(f => f.id !== id),
+      }));
+      throw err;
+    }
+    */
+  },
+
+  importGaussianSplat: async (file: File, parentId?: string | null) => {
+    // Deduplication: check if file with same name + size already exists
+    const existing = get().files.find(f =>
+      f.name === file.name && f.fileSize === file.size && !f.isImporting
+    );
+    if (existing) {
+      log.info(`Skipping duplicate gaussian splat: ${file.name} (${file.size} bytes) — already exists as ${existing.id}`);
+      return existing;
+    }
+
+    const id = generateId();
+    log.info(`Starting gaussian splat import: ${file.name} type: ${file.type} size: ${file.size}`);
+
+    // Phase 1: Add placeholder instantly with forced gaussian-splat type
+    const placeholder: MediaFile = {
+      id,
+      name: file.name,
+      type: 'gaussian-splat',
+      parentId: parentId ?? null,
+      createdAt: Date.now(),
+      file,
+      url: '',
+      fileSize: file.size,
+      isImporting: true,
+    };
+    set((state) => ({
+      files: [...state.files, placeholder],
+    }));
+
+    // Phase 2: Full import in background with type override
+    try {
+      const result = await processImport({ file, id, parentId, typeOverride: 'gaussian-splat' });
+      set((state) => finalizePlaceholder(state, id, result.mediaFile));
+      log.info('Gaussian splat import complete:', result.mediaFile.name);
+      return result.mediaFile;
+    } catch (err) {
+      log.error(`Gaussian splat import failed: ${file.name}`, err);
+      // Remove placeholder on failure
+      set((state) => ({
+        files: state.files.filter(f => f.id !== id),
+      }));
+      throw err;
+    }
   },
 });

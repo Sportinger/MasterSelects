@@ -4,7 +4,7 @@
 
 **Professional WebGPU Video Compositor & Timeline Editor**
 
-Version 1.4.2 | March 2026
+Version 1.4.3 | April 2026
 
 ---
 
@@ -236,7 +236,7 @@ The following features are planned but not currently available:
 ## Version History
 
 See `src/version.ts` and `src/changelog-data.json` for the authoritative changelog.
-Current version: 1.4.2.
+Current version: 1.4.3.
 
 ---
 

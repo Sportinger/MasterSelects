@@ -45,6 +45,32 @@ export class CacheService {
     return thumb !== null && thumb.size > 0;
   }
 
+  async saveGaussianSplatRuntime(
+    projectHandle: FileSystemDirectoryHandle,
+    fileHash: string,
+    variant: string,
+    blob: Blob,
+  ): Promise<boolean> {
+    return this.fileStorage.writeFile(projectHandle, 'CACHE_SPLATS', `${fileHash}.${variant}.rtgs`, blob);
+  }
+
+  async getGaussianSplatRuntime(
+    projectHandle: FileSystemDirectoryHandle,
+    fileHash: string,
+    variant: string,
+  ): Promise<File | null> {
+    return this.fileStorage.readFile(projectHandle, 'CACHE_SPLATS', `${fileHash}.${variant}.rtgs`);
+  }
+
+  async hasGaussianSplatRuntime(
+    projectHandle: FileSystemDirectoryHandle,
+    fileHash: string,
+    variant: string,
+  ): Promise<boolean> {
+    const file = await this.getGaussianSplatRuntime(projectHandle, fileHash, variant);
+    return file !== null && file.size > 0;
+  }
+
   // ============================================
   // WAVEFORM OPERATIONS
   // ============================================

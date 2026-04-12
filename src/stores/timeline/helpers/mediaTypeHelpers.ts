@@ -6,7 +6,7 @@ export const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'wmv', 'm4v
 export const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'] as const;
 export const MODEL_EXTENSIONS = ['obj', 'gltf', 'glb', 'fbx'] as const;
 
-export type MediaType = 'video' | 'audio' | 'image' | 'model' | 'unknown';
+export type MediaType = 'video' | 'audio' | 'image' | 'model' | 'gaussian-splat' | 'unknown';
 
 /**
  * Detect the media type of a file using MIME type with fallback to extension.
@@ -25,6 +25,9 @@ export function detectMediaType(file: File): MediaType {
   }
   if (MODEL_EXTENSIONS.includes(ext as typeof MODEL_EXTENSIONS[number])) {
     return 'model';
+  }
+  if (GAUSSIAN_SPLAT_EXTENSIONS.includes(ext as typeof GAUSSIAN_SPLAT_EXTENSIONS[number])) {
+    return 'gaussian-splat';
   }
   return 'unknown';
 }
@@ -80,4 +83,15 @@ export function isProfessionalCodecFile(file: File): boolean {
 export function getFileExtension(file: File | string): string {
   const name = typeof file === 'string' ? file : file.name;
   return name.split('.').pop()?.toLowerCase() || '';
+}
+
+export const GAUSSIAN_SPLAT_EXTENSIONS = ['ply', 'splat'] as const;
+
+/**
+ * Check if a file or filename is a gaussian splat file.
+ */
+export function isGaussianSplatFile(file: File | string): boolean {
+  const name = typeof file === 'string' ? file : file.name;
+  const ext = name.split('.').pop()?.toLowerCase() || '';
+  return GAUSSIAN_SPLAT_EXTENSIONS.includes(ext as typeof GAUSSIAN_SPLAT_EXTENSIONS[number]);
 }

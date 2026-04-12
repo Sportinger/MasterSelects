@@ -13,6 +13,7 @@ import type {
   MaskVertex,
   Effect,
   TextClipProperties,
+  Text3DProperties,
   Layer,
 } from '../../types';
 import type { Composition } from '../mediaStore';
@@ -32,6 +33,7 @@ export type {
   Effect,
   Composition,
   TextClipProperties,
+  Text3DProperties,
   Layer,
 };
 
@@ -195,6 +197,16 @@ export interface SolidClipActions {
 // Mesh clip actions (extracted to meshClipSlice)
 export interface MeshClipActions {
   addMeshClip: (trackId: string, startTime: number, meshType: import('../mediaStore/types').MeshPrimitiveType, duration?: number, skipMediaItem?: boolean) => string | null;
+  updateText3DProperties: (clipId: string, props: Partial<Text3DProperties>) => void;
+}
+
+// Camera clip actions (shared Three.js scene camera)
+export interface CameraClipActions {
+  addCameraClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
+}
+
+export interface SplatEffectorClipActions {
+  addSplatEffectorClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
 }
 
 // Clip effect actions (extracted to clipEffectSlice)
@@ -222,7 +234,7 @@ export interface DownloadClipActions {
 
 // Core clip actions (remain in clipSlice)
 export interface CoreClipActions {
-  addClip: (trackId: string, file: File, startTime: number, estimatedDuration?: number, mediaFileId?: string) => Promise<void>;
+  addClip: (trackId: string, file: File, startTime: number, estimatedDuration?: number, mediaFileId?: string, mediaTypeOverride?: string) => Promise<void>;
   addCompClip: (trackId: string, composition: Composition, startTime: number) => void;
   updateClip: (id: string, updates: Partial<TimelineClip>) => void;
   removeClip: (id: string) => void;
@@ -241,7 +253,7 @@ export interface CoreClipActions {
 }
 
 // Combined ClipActions = all sub-interfaces
-export type ClipActions = CoreClipActions & TextClipActions & SolidClipActions & MeshClipActions & ClipEffectActions & LinkedGroupActions & DownloadClipActions;
+export type ClipActions = CoreClipActions & TextClipActions & SolidClipActions & MeshClipActions & CameraClipActions & SplatEffectorClipActions & ClipEffectActions & LinkedGroupActions & DownloadClipActions;
 
 // Playback actions interface
 export interface PlaybackActions {
@@ -387,7 +399,7 @@ export interface ClipboardClipData {
   duration: number;
   inPoint: number;
   outPoint: number;
-  sourceType: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model';
+  sourceType: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector';
   naturalDuration?: number;
   transform: ClipTransform;
   effects: Effect[];
@@ -398,13 +410,19 @@ export interface ClipboardClipData {
   speed?: number;
   preservesPitch?: boolean;
   textProperties?: import('../../types').TextClipProperties;
+  text3DProperties?: import('../../types').Text3DProperties;
   solidColor?: string;
+  cameraSettings?: import('../mediaStore/types').SceneCameraSettings;
+  meshType?: import('../mediaStore/types').MeshPrimitiveType;
+  splatEffectorSettings?: import('../../types/splatEffector').SplatEffectorSettings;
   // Visual data (thumbnails, waveforms)
   thumbnails?: string[];
   waveform?: number[];
   // Composition clips
   isComposition?: boolean;
   compositionId?: string;
+  is3D?: boolean;
+  wireframe?: boolean;
 }
 
 // Clipboard data for keyframe copy/paste

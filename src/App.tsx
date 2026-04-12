@@ -20,6 +20,8 @@ import { LinuxVulkanWarning } from './components/common/LinuxVulkanWarning';
 import { PricingDialog } from './components/common/PricingDialog';
 import { TutorialOverlay } from './components/common/TutorialOverlay';
 import { TutorialCampaignDialog } from './components/common/TutorialCampaignDialog';
+import { InteractiveTutorialOverlay } from './components/common/tutorial/InteractiveTutorialOverlay';
+import { INTERACTIVE_CAMPAIGNS } from './components/common/tutorial/interactiveCampaigns';
 import { getCampaignById } from './components/common/tutorialCampaigns';
 import type { CampaignStep } from './components/common/tutorialCampaigns';
 import { MobileApp } from './components/mobile';
@@ -83,7 +85,7 @@ function App() {
 
   // Campaign tutorial state
   const [showCampaignDialog, setShowCampaignDialog] = useState(false);
-  const [activeCampaign, setActiveCampaign] = useState<{ id: string; title: string; steps: CampaignStep[] } | null>(null);
+  const [activeCampaign, setActiveCampaign] = useState<{ id: string; title: string; steps: CampaignStep[]; interactive?: boolean } | null>(null);
   const completeTutorial = useSettingsStore((s) => s.completeTutorial);
 
   // IndexedDB error dialog state
@@ -258,7 +260,7 @@ function App() {
     const campaign = getCampaignById(campaignId);
     if (!campaign) return;
     setShowCampaignDialog(false);
-    setActiveCampaign({ id: campaign.id, title: campaign.title, steps: campaign.steps });
+    setActiveCampaign({ id: campaign.id, title: campaign.title, steps: campaign.steps, interactive: campaign.interactive });
   }, []);
 
   const handleCampaignClose = useCallback(() => {
@@ -348,7 +350,14 @@ function App() {
           onStartCampaign={handleStartCampaign}
         />
       )}
-      {activeCampaign && (
+      {activeCampaign && activeCampaign.interactive ? (
+        <InteractiveTutorialOverlay
+          key={`interactive-${activeCampaign.id}`}
+          campaign={INTERACTIVE_CAMPAIGNS.find(c => c.id === activeCampaign.id)!}
+          onClose={handleCampaignClose}
+          onSkip={handleCampaignSkip}
+        />
+      ) : activeCampaign ? (
         <TutorialOverlay
           key={`campaign-${activeCampaign.id}`}
           onClose={handleCampaignClose}
@@ -356,7 +365,7 @@ function App() {
           campaignSteps={activeCampaign.steps}
           campaignTitle={activeCampaign.title}
         />
-      )}
+      ) : null}
       {accountDialog === 'auth' && <AuthDialog onClose={closeAccountDialog} />}
       {accountDialog === 'pricing' && <PricingDialog onClose={closeAccountDialog} />}
       {accountDialog === 'account' && <AccountDialog onClose={closeAccountDialog} />}

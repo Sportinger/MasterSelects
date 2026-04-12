@@ -395,6 +395,24 @@ class ProjectFileService {
     return this.cacheService.hasThumbnail(handle, fileHash);
   }
 
+  async saveGaussianSplatRuntime(fileHash: string, variant: string, blob: Blob): Promise<boolean> {
+    const handle = this.coreService.getProjectHandle();
+    if (!handle) return false;
+    return this.cacheService.saveGaussianSplatRuntime(handle, fileHash, variant, blob);
+  }
+
+  async getGaussianSplatRuntime(fileHash: string, variant: string): Promise<File | null> {
+    const handle = this.coreService.getProjectHandle();
+    if (!handle) return null;
+    return this.cacheService.getGaussianSplatRuntime(handle, fileHash, variant);
+  }
+
+  async hasGaussianSplatRuntime(fileHash: string, variant: string): Promise<boolean> {
+    const handle = this.coreService.getProjectHandle();
+    if (!handle) return false;
+    return this.cacheService.hasGaussianSplatRuntime(handle, fileHash, variant);
+  }
+
   async saveWaveform(mediaId: string, waveformData: Float32Array): Promise<boolean> {
     const handle = this.coreService.getProjectHandle();
     if (!handle) return false;

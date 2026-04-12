@@ -4,8 +4,10 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 
 import type { MediaState, MediaFile, ProjectItem } from './types';
+import { DEFAULT_SCENE_CAMERA_SETTINGS } from './types';
 import { DEFAULT_COMPOSITION } from './constants';
 import { fileSystemService } from '../../services/fileSystemService';
+import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
 
 // Import slices
 import { createFileImportSlice, type FileImportActions } from './slices/fileImportSlice';
@@ -19,7 +21,33 @@ import { createProxySlice, type ProxyActions } from './slices/proxySlice';
 import { createProjectSlice, type ProjectActions } from './slices/projectSlice';
 
 // Re-export types
-export type { MediaType, ProxyStatus, MediaItem, MediaFile, Composition, MediaFolder, TextItem, SolidItem, MeshItem, MeshPrimitiveType, ProjectItem } from './types';
+export type {
+  MediaType,
+  ProxyStatus,
+  MediaItem,
+  MediaFile,
+  Composition,
+  MediaFolder,
+  TextItem,
+  SolidItem,
+  MeshItem,
+  CameraItem,
+  SplatEffectorItem,
+  MeshPrimitiveType,
+  SceneCameraSettings,
+  ProjectItem,
+} from './types';
+export { DEFAULT_SCENE_CAMERA_SETTINGS } from './types';
+
+const MESH_ITEM_LABELS: Record<import('./types').MeshPrimitiveType, string> = {
+  cube: 'Cube',
+  sphere: 'Sphere',
+  plane: 'Plane',
+  cylinder: 'Cylinder',
+  torus: 'Torus',
+  cone: 'Cone',
+  text3d: '3D Text',
+};
 
 // Combined store type with all actions
 type MediaStoreState = MediaState &
@@ -45,6 +73,12 @@ type MediaStoreState = MediaState &
     getOrCreateMeshFolder: () => string;
     createMeshItem: (meshType: import('./types').MeshPrimitiveType, name?: string, parentId?: string | null) => string;
     removeMeshItem: (id: string) => void;
+    getOrCreateCameraFolder: () => string;
+    createCameraItem: (name?: string, parentId?: string | null) => string;
+    removeCameraItem: (id: string) => void;
+    getOrCreateSplatEffectorFolder: () => string;
+    createSplatEffectorItem: (name?: string, parentId?: string | null) => string;
+    removeSplatEffectorItem: (id: string) => void;
   };
 
 export const useMediaStore = create<MediaStoreState>()(
@@ -56,6 +90,8 @@ export const useMediaStore = create<MediaStoreState>()(
     textItems: [],
     solidItems: [],
     meshItems: [],
+    cameraItems: [],
+    splatEffectorItems: [],
     activeCompositionId: 'comp-1',
     openCompositionIds: ['comp-1'],
     slotAssignments: {},
@@ -77,26 +113,30 @@ export const useMediaStore = create<MediaStoreState>()(
 
     // Getters
     getItemsByFolder: (folderId: string | null) => {
-      const { files, compositions, folders, textItems, solidItems, meshItems } = get();
+      const { files, compositions, folders, textItems, solidItems, meshItems, cameraItems, splatEffectorItems } = get();
       return [
         ...folders.filter((f) => f.parentId === folderId),
         ...compositions.filter((c) => c.parentId === folderId),
         ...textItems.filter((t) => t.parentId === folderId),
         ...solidItems.filter((s) => s.parentId === folderId),
         ...meshItems.filter((m) => m.parentId === folderId),
+        ...cameraItems.filter((c) => c.parentId === folderId),
+        ...splatEffectorItems.filter((e) => e.parentId === folderId),
         ...files.filter((f) => f.parentId === folderId),
       ];
     },
 
     getItemById: (id: string) => {
-      const { files, compositions, folders, textItems, solidItems, meshItems } = get();
+      const { files, compositions, folders, textItems, solidItems, meshItems, cameraItems, splatEffectorItems } = get();
       return (
         files.find((f) => f.id === id) ||
         compositions.find((c) => c.id === id) ||
         folders.find((f) => f.id === id) ||
         textItems.find((t) => t.id === id) ||
         solidItems.find((s) => s.id === id) ||
-        meshItems.find((m) => m.id === id)
+        meshItems.find((m) => m.id === id) ||
+        cameraItems.find((c) => c.id === id) ||
+        splatEffectorItems.find((e) => e.id === id)
       );
     },
 
@@ -207,7 +247,7 @@ export const useMediaStore = create<MediaStoreState>()(
     createMeshItem: (meshType: import('./types').MeshPrimitiveType, name?: string, parentId?: string | null) => {
       const { meshItems } = get();
       const id = `mesh-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const label = meshType.charAt(0).toUpperCase() + meshType.slice(1);
+      const label = MESH_ITEM_LABELS[meshType] || meshType;
       const newMesh: import('./types').MeshItem = {
         id,
         name: name || `${label} ${meshItems.filter(m => m.meshType === meshType).length + 1}`,
@@ -224,6 +264,66 @@ export const useMediaStore = create<MediaStoreState>()(
 
     removeMeshItem: (id: string) => {
       set({ meshItems: get().meshItems.filter(m => m.id !== id) });
+    },
+
+    getOrCreateCameraFolder: () => {
+      const { folders, createFolder } = get();
+      const existingFolder = folders.find((f) => f.name === 'Cameras' && f.parentId === null);
+      if (existingFolder) {
+        return existingFolder.id;
+      }
+      const newFolder = createFolder('Cameras', null);
+      return newFolder.id;
+    },
+
+    createCameraItem: (name?: string, parentId?: string | null) => {
+      const { cameraItems } = get();
+      const id = `camera-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const newCamera: import('./types').CameraItem = {
+        id,
+        name: name || `Camera ${cameraItems.length + 1}`,
+        type: 'camera',
+        parentId: parentId !== undefined ? parentId : null,
+        createdAt: Date.now(),
+        duration: 10,
+        cameraSettings: { ...DEFAULT_SCENE_CAMERA_SETTINGS },
+      };
+      set({ cameraItems: [...cameraItems, newCamera] });
+      return id;
+    },
+
+    removeCameraItem: (id: string) => {
+      set({ cameraItems: get().cameraItems.filter(c => c.id !== id) });
+    },
+
+    getOrCreateSplatEffectorFolder: () => {
+      const { folders, createFolder } = get();
+      const existingFolder = folders.find((f) => f.name === 'Effectors' && f.parentId === null);
+      if (existingFolder) {
+        return existingFolder.id;
+      }
+      const newFolder = createFolder('Effectors', null);
+      return newFolder.id;
+    },
+
+    createSplatEffectorItem: (name?: string, parentId?: string | null) => {
+      const { splatEffectorItems } = get();
+      const id = `splat-effector-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const newEffector: import('./types').SplatEffectorItem = {
+        id,
+        name: name || `Splat Effector ${splatEffectorItems.length + 1}`,
+        type: 'splat-effector',
+        parentId: parentId !== undefined ? parentId : null,
+        createdAt: Date.now(),
+        duration: 10,
+        splatEffectorSettings: { ...DEFAULT_SPLAT_EFFECTOR_SETTINGS },
+      };
+      set({ splatEffectorItems: [...splatEffectorItems, newEffector] });
+      return id;
+    },
+
+    removeSplatEffectorItem: (id: string) => {
+      set({ splatEffectorItems: get().splatEffectorItems.filter(e => e.id !== id) });
     },
 
     // Merge all slices

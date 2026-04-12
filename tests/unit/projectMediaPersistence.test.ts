@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => ({
     clearTimeline: vi.fn(),
     loadState: vi.fn(async () => undefined),
     getSerializableState: vi.fn(() => ({ tracks: [], clips: [] })),
+    clips: [] as any[],
     playheadPosition: 0,
     zoom: 1,
     scrollX: 0,
@@ -155,6 +156,7 @@ describe('project media persistence', () => {
     mocks.mediaState.expandedFolderIds = [];
     mocks.mediaState.slotAssignments = {};
     mocks.mediaState.proxyEnabled = false;
+    mocks.timelineState.clips = [];
     mocks.getProjectData.mockReturnValue({
       media: [],
       compositions: [],
@@ -166,8 +168,11 @@ describe('project media persistence', () => {
       slotAssignments: {},
       uiState: {},
     });
-    mocks.mediaSetState.mockImplementation((partial: Record<string, unknown>) => {
-      Object.assign(mocks.mediaState, partial);
+    mocks.mediaSetState.mockImplementation((partial: Record<string, unknown> | ((state: any) => Record<string, unknown>)) => {
+      const nextPartial = typeof partial === 'function'
+        ? partial(mocks.mediaState)
+        : partial;
+      Object.assign(mocks.mediaState, nextPartial);
     });
     vi.spyOn(URL, 'createObjectURL').mockImplementation(mocks.createObjectURL);
     Object.defineProperty(globalThis, 'localStorage', {
@@ -209,6 +214,111 @@ describe('project media persistence', () => {
         id: 'media-1',
         sourcePath: 'C:/capture/clip.mp4',
         projectPath: 'Raw/clip.mp4',
+      }),
+    ]);
+  });
+
+  it('persists gaussian splat transform scale and splat settings into project compositions', async () => {
+    mocks.mediaState.activeCompositionId = 'comp-1';
+    mocks.mediaState.compositions = [{
+      id: 'comp-1',
+      name: 'Comp 1',
+      type: 'composition',
+      parentId: null,
+      createdAt: 1,
+      width: 1920,
+      height: 1080,
+      frameRate: 30,
+      duration: 60,
+      backgroundColor: '#000000',
+      timelineData: { tracks: [], clips: [] },
+    }];
+    mocks.timelineState.getSerializableState.mockReturnValue({
+      tracks: [{ id: 'track-v1', name: 'Video 1', type: 'video', height: 60, muted: false, visible: true, solo: false }],
+      clips: [{
+        id: 'clip-gs-1',
+        trackId: 'track-v1',
+        name: 'Splat',
+        mediaFileId: 'media-splat-1',
+        startTime: 0,
+        duration: 10,
+        inPoint: 0,
+        outPoint: 10,
+        sourceType: 'gaussian-splat',
+        transform: {
+          opacity: 0.8,
+          blendMode: 'screen',
+          position: { x: 12, y: -8, z: 4 },
+          scale: { x: 1.75, y: 0.5, z: 2.25 },
+          rotation: { x: 11, y: 22, z: 33 },
+        },
+        effects: [],
+        gaussianSplatSettings: {
+          render: {
+            useNativeRenderer: true,
+            maxSplats: 123456,
+            splatScale: 2.5,
+            nearPlane: 0.25,
+            farPlane: 2500,
+            backgroundColor: 'transparent',
+            sortFrequency: 3,
+          },
+          temporal: {
+            enabled: false,
+            playbackMode: 'loop',
+            sequenceFps: 30,
+            frameBlend: 0,
+          },
+          particle: {
+            enabled: false,
+            effectType: 'none',
+            intensity: 0.5,
+            speed: 1,
+            seed: 42,
+          },
+        },
+        is3D: true,
+      }],
+      playheadPosition: 0,
+      duration: 60,
+      zoom: 1,
+      scrollX: 0,
+      inPoint: null,
+      outPoint: null,
+      loopPlayback: false,
+    });
+
+    const { syncStoresToProject } = await import('../../src/services/project/projectSave');
+    await syncStoresToProject();
+
+    expect(mocks.updateCompositions).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 'comp-1',
+        clips: [
+          expect.objectContaining({
+            id: 'clip-gs-1',
+            sourceType: 'gaussian-splat',
+            transform: expect.objectContaining({
+              x: 12,
+              y: -8,
+              z: 4,
+              scaleX: 1.75,
+              scaleY: 0.5,
+              scaleZ: 2.25,
+              rotation: 33,
+              rotationX: 11,
+              rotationY: 22,
+              opacity: 0.8,
+              blendMode: 'screen',
+            }),
+            gaussianSplatSettings: expect.objectContaining({
+              render: expect.objectContaining({
+                splatScale: 2.5,
+                useNativeRenderer: true,
+              }),
+            }),
+          }),
+        ],
       }),
     ]);
   });
@@ -260,6 +370,111 @@ describe('project media persistence', () => {
           id: 'media-1',
           projectPath: 'Raw/clip.mp4',
           file: rawFile,
+        }),
+      ],
+    }));
+  });
+
+  it('restores project transforms as nested clip transforms for gaussian splats', async () => {
+    mocks.getProjectData.mockReturnValue({
+      media: [],
+      compositions: [{
+        id: 'comp-1',
+        name: 'Comp 1',
+        width: 1920,
+        height: 1080,
+        frameRate: 30,
+        duration: 60,
+        backgroundColor: '#000000',
+        folderId: null,
+        tracks: [{ id: 'track-v1', name: 'Video 1', type: 'video', height: 60, locked: false, visible: true, muted: false, solo: false }],
+        clips: [{
+          id: 'clip-gs-1',
+          trackId: 'track-v1',
+          name: 'Splat',
+          mediaId: 'media-splat-1',
+          sourceType: 'gaussian-splat',
+          naturalDuration: 3600,
+          startTime: 0,
+          duration: 10,
+          inPoint: 0,
+          outPoint: 10,
+          transform: {
+            x: 12,
+            y: -8,
+            z: 4,
+            scaleX: 1.75,
+            scaleY: 0.5,
+            scaleZ: 2.25,
+            rotation: 33,
+            rotationX: 11,
+            rotationY: 22,
+            anchorX: 0.5,
+            anchorY: 0.5,
+            opacity: 0.8,
+            blendMode: 'screen',
+          },
+          effects: [],
+          masks: [],
+          keyframes: [],
+          volume: 1,
+          audioEnabled: true,
+          reversed: false,
+          disabled: false,
+          gaussianSplatSettings: {
+            render: {
+              useNativeRenderer: true,
+              maxSplats: 123456,
+              splatScale: 2.5,
+              nearPlane: 0.25,
+              farPlane: 2500,
+              backgroundColor: 'transparent',
+              sortFrequency: 3,
+            },
+            temporal: {
+              enabled: false,
+              playbackMode: 'loop',
+              sequenceFps: 30,
+              frameBlend: 0,
+            },
+            particle: {
+              enabled: false,
+              effectType: 'none',
+              intensity: 0.5,
+              speed: 1,
+              seed: 42,
+            },
+          },
+          is3D: true,
+        }],
+        markers: [],
+      }],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: 'comp-1',
+      openCompositionIds: ['comp-1'],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    expect(mocks.timelineState.loadState).toHaveBeenCalledWith(expect.objectContaining({
+      clips: [
+        expect.objectContaining({
+          id: 'clip-gs-1',
+          gaussianSplatSettings: expect.objectContaining({
+            render: expect.objectContaining({ splatScale: 2.5 }),
+          }),
+          transform: {
+            opacity: 0.8,
+            blendMode: 'screen',
+            position: { x: 12, y: -8, z: 4 },
+            scale: { x: 1.75, y: 0.5, z: 2.25 },
+            rotation: { x: 11, y: 22, z: 33 },
+          },
         }),
       ],
     }));

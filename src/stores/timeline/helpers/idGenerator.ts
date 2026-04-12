@@ -64,6 +64,20 @@ export function generateMeshClipId(): string {
 }
 
 /**
+ * Generate a unique ID for camera clips.
+ */
+export function generateCameraClipId(): string {
+  return generateClipId('clip-camera');
+}
+
+/**
+ * Generate a unique ID for splat effector clips.
+ */
+export function generateSplatEffectorClipId(): string {
+  return generateClipId('clip-splat-effector');
+}
+
+/**
  * Generate a unique ID for composition clips.
  */
 export function generateCompClipId(): string {

@@ -6,6 +6,7 @@ export interface ProjectTransform {
   z: number;
   scaleX: number;
   scaleY: number;
+  scaleZ?: number;
   rotation: number;
   rotationX: number;
   rotationY: number;

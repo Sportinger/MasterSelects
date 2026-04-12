@@ -416,8 +416,14 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
 
     // Flattened display: count unique properties with keyframes
     const uniqueProperties = new Set(keyframes.map(k => k.property));
+    const showsCamera3DProps =
+      selectedTrackClip.source?.type === 'camera' ||
+      (
+        selectedTrackClip.source?.type === 'gaussian-splat' &&
+        selectedTrackClip.source.gaussianSplatSettings?.render.useNativeRenderer === true
+      );
     // Hide 3D-only properties when clip is not 3D
-    if (!selectedTrackClip.is3D) {
+    if (!selectedTrackClip.is3D && !showsCamera3DProps) {
       uniqueProperties.delete('rotation.x');
       uniqueProperties.delete('rotation.y');
       uniqueProperties.delete('position.z');

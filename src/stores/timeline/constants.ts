@@ -1,6 +1,6 @@
 // Timeline store constants and default values
 
-import type { ClipTransform, TimelineTrack, TextClipProperties } from '../../types';
+import type { ClipTransform, TimelineTrack, TextClipProperties, Text3DProperties } from '../../types';
 import { useMediaStore } from '../mediaStore';
 import { useSettingsStore } from '../settingsStore';
 
@@ -132,4 +132,21 @@ export const DEFAULT_TEXT_PROPERTIES: TextClipProperties = {
   shadowBlur: 8,
   pathEnabled: false,
   pathPoints: [],
+};
+
+export const DEFAULT_TEXT_3D_PROPERTIES: Text3DProperties = {
+  text: '3D Text',
+  fontFamily: 'helvetiker',
+  fontWeight: 'bold',
+  size: 0.42,
+  depth: 0.14,
+  color: '#ffffff',
+  letterSpacing: 0.02,
+  lineHeight: 1.15,
+  textAlign: 'center',
+  curveSegments: 10,
+  bevelEnabled: false,
+  bevelThickness: 0.02,
+  bevelSize: 0.01,
+  bevelSegments: 4,
 };

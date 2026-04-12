@@ -29,7 +29,7 @@ import { RenderLoop } from './render/RenderLoop';
 import { LayerCollector } from './render/LayerCollector';
 import { Compositor } from './render/Compositor';
 import { NestedCompRenderer } from './render/NestedCompRenderer';
-import { RenderDispatcher, type RenderDeps } from './render/RenderDispatcher';
+import { RenderDispatcher, type RenderDeps, type RenderDispatcherDebugSnapshot } from './render/RenderDispatcher';
 
 export class WebGPUEngine {
   // Core context
@@ -645,12 +645,24 @@ export class WebGPUEngine {
     this.renderDispatcher?.render(layers);
   }
 
+  async ensureGaussianSplatSceneLoaded(
+    clipId: string,
+    url: string | undefined,
+    fileName: string,
+  ): Promise<boolean> {
+    return this.renderDispatcher?.ensureGaussianSplatSceneLoaded(clipId, url, fileName) ?? false;
+  }
+
   renderToPreviewCanvas(canvasId: string, layers: Layer[]): void {
     this.renderDispatcher?.renderToPreviewCanvas(canvasId, layers);
   }
 
   renderCachedFrame(time: number): boolean {
     return this.renderDispatcher?.renderCachedFrame(time) ?? false;
+  }
+
+  getGaussianSplatSceneBounds(clipId: string): { min: [number, number, number]; max: [number, number, number] } | undefined {
+    return this.renderDispatcher?.getGaussianSplatSceneBounds(clipId);
   }
 
   // === NESTED COMPOSITION HELPERS ===
@@ -813,6 +825,40 @@ export class WebGPUEngine {
 
   getRenderLoop(): RenderLoop | null {
     return this.renderLoop;
+  }
+
+  getRenderDispatcherDebugSnapshot(): RenderDispatcherDebugSnapshot | null {
+    return this.renderDispatcher?.lastRenderDebugSnapshot ?? null;
+  }
+
+  getDebugInfrastructureState(): {
+    hasDevice: boolean;
+    hasRenderDispatcher: boolean;
+    hasRenderTargetManager: boolean;
+    hasPreviewContext: boolean;
+    targetCanvasCount: number;
+    hasLayerCollector: boolean;
+    hasCompositor: boolean;
+    hasSampler: boolean;
+    hasCompositorPipeline: boolean;
+    hasOutputPipeline: boolean;
+    hasPingView: boolean;
+    hasPongView: boolean;
+  } {
+    return {
+      hasDevice: this.context.getDevice() !== null,
+      hasRenderDispatcher: this.renderDispatcher !== null,
+      hasRenderTargetManager: this.renderTargetManager !== null,
+      hasPreviewContext: this.previewContext !== null,
+      targetCanvasCount: this.targetCanvases.size,
+      hasLayerCollector: this.layerCollector !== null,
+      hasCompositor: this.compositor !== null,
+      hasSampler: this.sampler !== null,
+      hasCompositorPipeline: this.compositorPipeline !== null,
+      hasOutputPipeline: this.outputPipeline !== null,
+      hasPingView: this.renderTargetManager?.getPingView() != null,
+      hasPongView: this.renderTargetManager?.getPongView() != null,
+    };
   }
 
   getTextureManager(): TextureManager | null {

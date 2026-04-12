@@ -2,11 +2,9 @@
 // Much faster than FFmpeg WASM since we just copy without re-encoding
 
 import { Logger } from './logger';
-import * as MP4BoxModule from 'mp4box';
+import { createFile } from 'mp4box';
 
 const log = Logger.create('AudioExtractor');
-
-const MP4Box = (MP4BoxModule as unknown as { default: typeof MP4BoxModule }).default || MP4BoxModule;
 
 // MP4Box types
 interface MP4ArrayBuffer extends ArrayBuffer {
@@ -74,7 +72,7 @@ export async function extractAudioFromVideo(
   onProgress?: (percent: number) => void
 ): Promise<ExtractedAudio | null> {
   return new Promise((resolve) => {
-    const mp4boxFile = MP4Box.createFile() as unknown as MP4FileType;
+    const mp4boxFile = createFile() as unknown as MP4FileType;
     let audioTrack: AudioTrackInfo | null = null;
     const audioSamples: Uint8Array[] = [];
     let totalSamples = 0;

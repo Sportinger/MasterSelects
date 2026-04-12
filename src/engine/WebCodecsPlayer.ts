@@ -8,7 +8,17 @@ import { vfPipelineMonitor } from '../services/vfPipelineMonitor';
 const log = Logger.create('WebCodecsPlayer');
 
 import * as MP4BoxModule from 'mp4box';
-const MP4Box = (MP4BoxModule as any).default || MP4BoxModule;
+
+const MP4Box = MP4BoxModule as unknown as {
+  createFile: typeof MP4BoxModule.createFile;
+  DataStream: {
+    new (buffer?: unknown, byteOffset?: number, endianness?: number): {
+      buffer: ArrayBuffer;
+      position?: number;
+    };
+    BIG_ENDIAN: number;
+  };
+};
 
 import type { Sample, MP4VideoTrack, MP4ArrayBuffer, MP4File } from './webCodecsTypes';
 import { WebCodecsExportMode } from './WebCodecsExportMode';
@@ -401,7 +411,7 @@ export class WebCodecsPlayer implements ExportModePlayer {
         reject(new Error('MP4 parsing timeout - file may have unsupported metadata'));
       }, 5000);
 
-      this.mp4File = MP4Box.createFile();
+      this.mp4File = MP4Box.createFile() as unknown as MP4File;
       const mp4File = this.mp4File!;
       let resolved = false;
 

@@ -15,6 +15,77 @@ import { useThumbnailCache } from '../../hooks/useThumbnailCache';
 
 const log = Logger.create('TimelineClip');
 
+type StaticClipIconKind = 'camera' | 'gaussian-splat' | 'model';
+
+function StaticClipIcon({
+  kind,
+  className,
+}: {
+  kind: StaticClipIconKind;
+  className?: string;
+}) {
+  if (kind === 'camera') {
+    return (
+      <svg
+        viewBox="0 0 48 48"
+        className={className}
+        aria-hidden="true"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M15 12h18l3 5h4a4 4 0 0 1 4 4v11a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V21a4 4 0 0 1 4-4h4l3-5Z" />
+        <circle cx="24" cy="26" r="7" />
+        <path d="M37 21h3" />
+      </svg>
+    );
+  }
+
+  if (kind === 'gaussian-splat') {
+    return (
+      <svg
+        viewBox="0 0 48 48"
+        className={className}
+        aria-hidden="true"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M24 11v26M11 24h26M15 15l18 18M33 15 15 33" opacity="0.5" />
+        <circle cx="24" cy="24" r="6" fill="currentColor" stroke="none" />
+        <circle cx="24" cy="10" r="3.5" fill="currentColor" stroke="none" />
+        <circle cx="38" cy="24" r="3.5" fill="currentColor" stroke="none" />
+        <circle cx="24" cy="38" r="3.5" fill="currentColor" stroke="none" />
+        <circle cx="10" cy="24" r="3.5" fill="currentColor" stroke="none" />
+        <circle cx="14.5" cy="14.5" r="2.5" fill="currentColor" stroke="none" />
+        <circle cx="33.5" cy="14.5" r="2.5" fill="currentColor" stroke="none" />
+        <circle cx="33.5" cy="33.5" r="2.5" fill="currentColor" stroke="none" />
+        <circle cx="14.5" cy="33.5" r="2.5" fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg
+      viewBox="0 0 48 48"
+      className={className}
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M24 6 38 14v20L24 42 10 34V14z" />
+      <path d="M24 6v16m14-8-14 8-14-8m14 8v20" />
+    </svg>
+  );
+}
+
 function TimelineClipComponent({
   clip,
   trackId,
@@ -76,14 +147,36 @@ function TimelineClipComponent({
       const file = s.files.find(f => f.id === mediaFileId);
       if (file?.labelColor && file.labelColor !== 'none') return getLabelHex(file.labelColor);
     }
-    // Check solid items and text items by matching clip name as fallback
+    // Check special item types — by mediaFileId first, then fallback by name/type
     if (clip.source?.type === 'solid') {
-      const solid = s.solidItems.find(si => si.id === mediaFileId);
+      const solid = mediaFileId
+        ? s.solidItems.find(si => si.id === mediaFileId)
+        : s.solidItems.find(si => si.name === clip.name);
       if (solid?.labelColor && solid.labelColor !== 'none') return getLabelHex(solid.labelColor);
     }
     if (clip.source?.type === 'text') {
-      const text = s.textItems.find(ti => ti.id === mediaFileId);
+      const text = mediaFileId
+        ? s.textItems.find(ti => ti.id === mediaFileId)
+        : s.textItems.find(ti => ti.name === clip.name);
       if (text?.labelColor && text.labelColor !== 'none') return getLabelHex(text.labelColor);
+    }
+    if (clip.source?.type === 'model') {
+      const mesh = mediaFileId
+        ? (s.meshItems || []).find(m => m.id === mediaFileId)
+        : (s.meshItems || []).find(m => m.name === clip.name || m.meshType === clip.meshType);
+      if (mesh?.labelColor && mesh.labelColor !== 'none') return getLabelHex(mesh.labelColor);
+    }
+    if (clip.source?.type === 'camera') {
+      const cam = mediaFileId
+        ? (s.cameraItems || []).find(c => c.id === mediaFileId)
+        : (s.cameraItems || [])[0];
+      if (cam?.labelColor && cam.labelColor !== 'none') return getLabelHex(cam.labelColor);
+    }
+    if (clip.source?.type === 'splat-effector') {
+      const effector = mediaFileId
+        ? (s.splatEffectorItems || []).find(e => e.id === mediaFileId)
+        : (s.splatEffectorItems || []).find(e => e.name === clip.name);
+      if (effector?.labelColor && effector.labelColor !== 'none') return getLabelHex(effector.labelColor);
     }
     return null;
   });
@@ -165,9 +258,24 @@ function TimelineClipComponent({
 
   // Determine if this is a text clip
   const isTextClip = clip.source?.type === 'text';
+  const meshType = clip.meshType ?? clip.source?.meshType;
+  const isText3DClip = clip.source?.type === 'model' && meshType === 'text3d';
+  const isModelClip = clip.source?.type === 'model' && !isText3DClip;
+  const text3DProperties = clip.text3DProperties ?? clip.source?.text3DProperties;
 
   // Determine if this is a solid clip
   const isSolidClip = clip.source?.type === 'solid';
+  const isCameraClip = clip.source?.type === 'camera';
+  const isGaussianSplatClip = clip.source?.type === 'gaussian-splat';
+  const isSplatEffectorClip = clip.source?.type === 'splat-effector';
+  const staticClipIconKind: StaticClipIconKind | null = isCameraClip
+    ? 'camera'
+    : isGaussianSplatClip
+      ? 'gaussian-splat'
+      : isModelClip
+        ? 'model'
+        : null;
+  const showsStaticClipArtwork = staticClipIconKind !== null;
 
   const isGeneratingProxy = proxyStatus === 'generating';
   const hasProxy = proxyStatus === 'ready';
@@ -190,7 +298,7 @@ function TimelineClipComponent({
     const deltaX = clipTrim.currentX - clipTrim.startX;
     const deltaTime = pixelToTime(deltaX);
     const sourceType = clip.source?.type;
-    const isInfiniteClip = sourceType === 'text' || sourceType === 'image' || sourceType === 'solid';
+    const isInfiniteClip = sourceType === 'text' || sourceType === 'image' || sourceType === 'solid' || sourceType === 'camera' || sourceType === 'splat-effector';
     const maxDuration = isInfiniteClip
       ? Number.MAX_SAFE_INTEGER
       : (clip.source?.naturalDuration || clip.duration);
@@ -265,6 +373,12 @@ function TimelineClipComponent({
     // This clip is part of multi-select drag (but not the primary dragged clip)
     left = timeToPixel(Math.max(0, clip.startTime + clipDrag.multiSelectTimeDelta));
   }
+  const clipMetaOffset = clip.isLoading
+    ? 0
+    : Math.min(
+        Math.max(0, scrollX - left),
+        Math.max(0, width - 48)
+      );
 
   // Calculate how many thumbnails to show based on clip width
   const visibleThumbs = Math.max(1, Math.ceil(width / THUMB_WIDTH));
@@ -282,6 +396,17 @@ function TimelineClipComponent({
   );
   // Fallback to clip.thumbnails for compositions/legacy clips without mediaFileId
   const legacyThumbnails = clip.thumbnails || [];
+  const compositionSegments = clip.clipSegments ?? [];
+  const showSegmentThumbnails = thumbnailsEnabled &&
+    clip.isComposition &&
+    compositionSegments.length > 0 &&
+    !isAudioClip &&
+    !showsStaticClipArtwork;
+  const showRegularThumbnails = thumbnailsEnabled &&
+    !isAudioClip &&
+    !showsStaticClipArtwork &&
+    !isCompositionWithSegments &&
+    (useSourceCache ? cachedThumbnails.some(Boolean) : legacyThumbnails.length > 0);
 
   // Track filtering
   if (isDragging && clipDrag && clipDrag.currentTrackId !== trackId) {
@@ -295,7 +420,7 @@ function TimelineClipComponent({
   }
 
   // Determine clip type class (audio, video, text, or image)
-  const clipTypeClass = isSolidClip ? 'solid' : isTextClip ? 'text' : isAudioClip ? 'audio' : (clip.source?.type || 'video');
+  const clipTypeClass = isSolidClip ? 'solid' : (isTextClip || isText3DClip) ? 'text' : isCameraClip ? 'camera' : isSplatEffectorClip ? 'splat-effector' : isAudioClip ? 'audio' : (clip.source?.type || 'video');
 
   // Check if this clip is part of a multi-select drag
   const isInMultiSelectDrag = clipDrag?.multiSelectClipIds?.includes(clip.id) && clipDrag.multiSelectTimeDelta !== undefined;
@@ -600,10 +725,15 @@ function TimelineClipComponent({
           <span>Generating audio...</span>
         </div>
       )}
+      {staticClipIconKind && (
+        <div className="clip-static-artwork" aria-hidden="true">
+          <StaticClipIcon kind={staticClipIconKind} className="clip-static-artwork-icon" />
+        </div>
+      )}
       {/* Segment-based thumbnails for nested compositions */}
-      {thumbnailsEnabled && clip.isComposition && clip.clipSegments && clip.clipSegments.length > 0 && !isAudioClip && (
+      {showSegmentThumbnails && (
         <div className="clip-thumbnails clip-thumbnails-segments">
-          {clip.clipSegments.map((segment, segIdx) => {
+          {compositionSegments.map((segment, segIdx) => {
             const segmentWidth = (segment.endNorm - segment.startNorm) * 100;
             const segmentLeft = segment.startNorm * 100;
             // Calculate how many thumbnails fit in this segment
@@ -646,7 +776,7 @@ function TimelineClipComponent({
         </div>
       )}
       {/* Regular thumbnail filmstrip - source-based cache or legacy fallback */}
-      {thumbnailsEnabled && !isAudioClip && !isCompositionWithSegments && (useSourceCache ? cachedThumbnails.some(Boolean) : legacyThumbnails.length > 0) && (
+      {showRegularThumbnails && (
         <div className="clip-thumbnails">
           {useSourceCache ? (
             // Source-based cache: thumbnails already mapped to visible range by hook
@@ -703,18 +833,40 @@ function TimelineClipComponent({
         </div>
       )}
       <div className="clip-content">
-        {clip.isLoading && <div className="clip-loading-spinner" />}
-        <div className="clip-name-row">
-          {isSolidClip && (
-            <span className="clip-solid-swatch" title="Solid Clip" style={{ background: clip.solidColor || '#fff' }} />
-          )}
-          {isTextClip && (
-            <span className="clip-text-icon" title="Text Clip">T</span>
-          )}
-          <span className="clip-name">{isTextClip && clip.textProperties ? clip.textProperties.text.slice(0, 30) || 'Text' : clip.name}</span>
-          {/* PickWhip disabled */}
+        <div
+          className="clip-meta"
+          style={clipMetaOffset > 0 ? { transform: `translateX(${clipMetaOffset}px)` } : undefined}
+        >
+          {clip.isLoading && <div className="clip-loading-spinner" />}
+          <div className="clip-name-row">
+            {isSolidClip && (
+              <span className="clip-solid-swatch" title="Solid Clip" style={{ background: clip.solidColor || '#fff' }} />
+            )}
+            {(isTextClip || isText3DClip) && (
+              <span className="clip-text-icon" title={isText3DClip ? '3D Text Clip' : 'Text Clip'}>
+                {isText3DClip ? '3T' : 'T'}
+              </span>
+            )}
+            {staticClipIconKind && (
+              <StaticClipIcon
+                kind={staticClipIconKind}
+                className="clip-type-icon"
+              />
+            )}
+            {isSplatEffectorClip && (
+              <span className="clip-text-icon" title="Splat Effector Clip">E</span>
+            )}
+            <span className="clip-name">
+              {isTextClip && clip.textProperties
+                ? clip.textProperties.text.slice(0, 30) || 'Text'
+                : isText3DClip && text3DProperties
+                  ? text3DProperties.text.slice(0, 30) || '3D Text'
+                  : clip.name}
+            </span>
+            {/* PickWhip disabled */}
+          </div>
+          <span className="clip-duration">{formatTime(displayDuration)}</span>
         </div>
-        <span className="clip-duration">{formatTime(displayDuration)}</span>
       </div>
       {/* Transcript word markers */}
       {showTranscriptMarkers && clip.transcript && clip.transcript.length > 0 && (

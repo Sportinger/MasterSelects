@@ -5,8 +5,47 @@ import type { TimelineHeaderProps } from './types';
 import type { AnimatableProperty, ClipTransform, Keyframe } from '../../types';
 import { CurveEditorHeader } from './CurveEditorHeader';
 
+type KeyframeTrackClip = {
+  id: string;
+  startTime: number;
+  duration: number;
+  is3D?: boolean;
+  effects?: Array<{ id: string; name: string; params: Record<string, unknown> }>;
+  source?: {
+    type?: string;
+    gaussianSplatSettings?: {
+      render?: {
+        useNativeRenderer?: boolean;
+      };
+    };
+  } | null;
+};
+
+const usesCameraPropertyModel = (clip: KeyframeTrackClip | null | undefined): boolean => {
+  if (!clip?.source) return false;
+  if (clip.source.type === 'camera') return true;
+  return clip.source.type === 'gaussian-splat' && clip.source.gaussianSplatSettings?.render?.useNativeRenderer === true;
+};
+
+const shouldHide3DOnlyProperties = (clip: KeyframeTrackClip | null | undefined): boolean => {
+  return !clip?.is3D && !usesCameraPropertyModel(clip);
+};
+
+const getTransformPropertyOrder = (clip: KeyframeTrackClip | null | undefined): string[] => (
+  usesCameraPropertyModel(clip)
+    ? ['opacity', 'position.x', 'position.y', 'scale.z', 'position.z', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z']
+    : ['opacity', 'position.x', 'position.y', 'position.z', 'scale.x', 'scale.y', 'scale.z', 'rotation.x', 'rotation.y', 'rotation.z']
+);
+
 // Get friendly names for properties
-const getPropertyLabel = (prop: string): string => {
+const getPropertyLabel = (prop: string, clip?: KeyframeTrackClip | null): string => {
+  if (usesCameraPropertyModel(clip)) {
+    if (prop === 'position.z') return 'Dist';
+    if (prop === 'rotation.x') return 'Pitch';
+    if (prop === 'rotation.y') return 'Yaw';
+    if (prop === 'scale.z') return 'Move Z';
+  }
+
   const labels: Record<string, string> = {
     'opacity': 'Opacity',
     'position.x': 'Pos X',
@@ -14,6 +53,7 @@ const getPropertyLabel = (prop: string): string => {
     'position.z': 'Pos Z',
     'scale.x': 'Scale X',
     'scale.y': 'Scale Y',
+    'scale.z': 'Scale Z',
     'rotation.x': 'Rot X',
     'rotation.y': 'Rot Y',
     'rotation.z': 'Rot Z',
@@ -50,6 +90,7 @@ const getValueFromTransform = (transform: ClipTransform, prop: string): number =
     case 'position.z': return transform.position.z;
     case 'scale.x': return transform.scale.x;
     case 'scale.y': return transform.scale.y;
+    case 'scale.z': return transform.scale.z ?? 0;
     case 'rotation.x': return transform.rotation.x;
     case 'rotation.y': return transform.rotation.y;
     case 'rotation.z': return transform.rotation.z;
@@ -106,7 +147,7 @@ function PropertyRow({
   prop: string;
   clipId: string;
   trackId: string;
-  clip: { startTime: number; duration: number };
+  clip: KeyframeTrackClip;
   keyframes: Array<{ id: string; time: number; property: string; value: number; easing: string }>;
   playheadPosition: number;
   getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
@@ -164,6 +205,9 @@ function PropertyRow({
   // Get base sensitivity based on property type
   const getBaseSensitivity = () => {
     if (prop === 'opacity') return 0.005; // 0-1 range
+    if (usesCameraPropertyModel(clip) && (prop === 'position.x' || prop === 'position.y')) return 0.01;
+    if (usesCameraPropertyModel(clip) && prop === 'position.z') return 0.05;
+    if (usesCameraPropertyModel(clip) && prop === 'scale.z') return 0.1;
     if (prop.startsWith('scale')) return 0.005; // typically 0-2 range
     if (prop.startsWith('rotation')) return 0.5; // degrees
     if (prop.startsWith('position')) return 1; // pixels
@@ -176,6 +220,7 @@ function PropertyRow({
   // Get default value for property
   const getDefaultValue = () => {
     if (prop === 'opacity') return 1;
+    if (usesCameraPropertyModel(clip) && prop === 'scale.z') return 0;
     if (prop.startsWith('scale')) return 1;
     if (prop.startsWith('rotation')) return 0;
     if (prop.startsWith('position')) return 0;
@@ -253,7 +298,7 @@ function PropertyRow({
         onDoubleClick={handleDoubleClick}
         title="Double-click to toggle curve editor"
       >
-        <span className="property-label">{getPropertyLabel(prop)}</span>
+        <span className="property-label">{getPropertyLabel(prop, clip)}</span>
         <div className="property-keyframe-controls">
           <button
             className={`kf-nav-btn ${prevKeyframe ? '' : 'disabled'}`}
@@ -283,7 +328,13 @@ function PropertyRow({
           onContextMenu={handleRightClick}
           title="Drag to scrub, Right-click to reset"
         >
-          {isWithinClip ? formatValue(currentValue, prop) : '—'}
+          {isWithinClip
+            ? (
+                usesCameraPropertyModel(clip) && (prop === 'position.x' || prop === 'position.y' || prop === 'position.z' || prop === 'scale.z')
+                  ? currentValue.toFixed(3)
+                  : formatValue(currentValue, prop)
+              )
+            : '—'}
         </span>
       </div>
       {isCurveExpanded && (
@@ -312,7 +363,7 @@ function TrackPropertyLabels({
   onToggleCurveExpanded,
 }: {
   trackId: string;
-  selectedClip: { id: string; startTime: number; duration: number; is3D?: boolean; effects?: Array<{ id: string; name: string; params: Record<string, unknown> }> } | null;
+  selectedClip: KeyframeTrackClip | null;
   clipKeyframes: Map<string, Array<{ id: string; clipId: string; time: number; property: AnimatableProperty; value: number; easing: string }>>;
   playheadPosition: number;
   getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
@@ -331,7 +382,7 @@ function TrackPropertyLabels({
     const props = new Set<string>();
     keyframes.forEach((kf) => props.add(kf.property));
     // Hide 3D-only properties when clip is not 3D
-    if (!selectedClip?.is3D) {
+    if (shouldHide3DOnlyProperties(selectedClip)) {
       props.delete('rotation.x');
       props.delete('rotation.y');
       props.delete('position.z');
@@ -348,7 +399,7 @@ function TrackPropertyLabels({
   // Convert Set to sorted array for consistent ordering
   const sortedProperties = Array.from(keyframeProperties).sort((a, b) => {
     // Transform properties order
-    const transformOrder = ['opacity', 'position.x', 'position.y', 'position.z', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z'];
+    const transformOrder = getTransformPropertyOrder(selectedClip);
     // Audio effect properties order (volume first, then bands by frequency)
     const audioParamOrder = ['volume', 'band31', 'band62', 'band125', 'band250', 'band500', 'band1k', 'band2k', 'band4k', 'band8k', 'band16k'];
 

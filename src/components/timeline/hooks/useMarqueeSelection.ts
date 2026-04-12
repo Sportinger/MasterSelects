@@ -116,9 +116,6 @@ export function useMarqueeSelection({
       const startTime = pixelToTime(left);
       const endTime = pixelToTime(right);
 
-      // Property order for calculating Y position within expanded track
-      const propertyOrder = ['opacity', 'position.x', 'position.y', 'position.z', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z'];
-
       // Calculate track positions
       let currentY = 0;
 
@@ -147,8 +144,21 @@ export function useMarqueeSelection({
           continue;
         }
 
+        const showsCamera3DProps =
+          selectedTrackClip.source?.type === 'camera' ||
+          (
+            selectedTrackClip.source?.type === 'gaussian-splat' &&
+            selectedTrackClip.source.gaussianSplatSettings?.render.useNativeRenderer === true
+          );
+        const propertyOrder = showsCamera3DProps
+          ? ['opacity', 'position.x', 'position.y', 'scale.z', 'position.z', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z']
+          : ['opacity', 'position.x', 'position.y', 'position.z', 'scale.x', 'scale.y', 'scale.z', 'rotation.x', 'rotation.y', 'rotation.z'];
+
         // Get unique properties with keyframes in sorted order
-        const uniqueProps = [...new Set(keyframes.map(k => k.property))];
+        const uniqueProps = [...new Set(keyframes.map(k => k.property))].filter((prop) => {
+          if (selectedTrackClip.is3D || showsCamera3DProps) return true;
+          return prop !== 'rotation.x' && prop !== 'rotation.y' && prop !== 'position.z' && prop !== 'scale.z';
+        });
         const sortedProps = uniqueProps.sort((a, b) => {
           const aIdx = propertyOrder.indexOf(a);
           const bIdx = propertyOrder.indexOf(b);

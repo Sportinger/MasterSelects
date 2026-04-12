@@ -29,6 +29,7 @@ import { loadVideoMedia } from './clip/addVideoClip';
 import { createAudioClipPlaceholder, loadAudioMedia } from './clip/addAudioClip';
 import { createImageClipPlaceholder, loadImageMedia } from './clip/addImageClip';
 import { createModelClipPlaceholder, loadModelMedia } from './clip/addModelClip';
+import { createGaussianSplatClipPlaceholder, loadGaussianSplatMedia } from './clip/addGaussianSplatClip';
 import { createVideoElement, createAudioElement } from './helpers/webCodecsHelpers';
 import {
   createCompClipPlaceholder,
@@ -45,8 +46,8 @@ import { blobUrlManager } from './helpers/blobUrlManager';
 import { updateClipById } from './helpers/clipStateHelpers';
 
 export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
-  addClip: async (trackId, file, startTime, providedDuration, mediaFileId) => {
-    const mediaType = detectMediaType(file);
+  addClip: async (trackId, file, startTime, providedDuration, mediaFileId, mediaTypeOverride?) => {
+    const mediaType = (mediaTypeOverride as ReturnType<typeof detectMediaType> | 'gaussian-avatar' | 'gaussian-splat') || detectMediaType(file);
     const estimatedDuration = providedDuration ?? 5;
 
     log.debug('Adding clip', { mediaType, file: file.name });
@@ -59,8 +60,8 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       return;
     }
 
-    if ((mediaType === 'video' || mediaType === 'image' || mediaType === 'model') && targetTrack.type !== 'video') {
-      log.warn('Cannot add video/image/model to audio track');
+    if ((mediaType === 'video' || mediaType === 'image' || mediaType === 'model' || mediaType === 'gaussian-avatar' || mediaType === 'gaussian-splat') && targetTrack.type !== 'video') {
+      log.warn('Cannot add video/image/model/gaussian-avatar/gaussian-splat to audio track');
       return;
     }
     if (mediaType === 'audio' && targetTrack.type !== 'audio') {
@@ -233,6 +234,25 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       loadModelMedia({ clip: modelClip, updateClip });
       invalidateCache();
     }
+
+    // Legacy gaussian-avatar clips are intentionally disabled.
+    if (mediaType === 'gaussian-avatar') {
+      log.warn('Legacy gaussian-avatar clips are disabled. Import .ply or .splat instead.', {
+        file: file.name,
+        mediaFileId,
+      });
+      return;
+    }
+
+    // Handle Gaussian Splat files
+    if (mediaType === 'gaussian-splat') {
+      const splatClip = createGaussianSplatClipPlaceholder({ trackId, file, startTime, estimatedDuration: providedDuration ?? 30 });
+      splatClip.mediaFileId = mediaFileId;  // Link to MediaFile for nested comp lookup
+      set({ clips: [...clips, splatClip] });
+      updateDuration();
+      loadGaussianSplatMedia({ clip: splatClip, updateClip });
+      invalidateCache();
+    }
   },
 
   // Add a composition as a clip (nested composition)
@@ -378,7 +398,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       const targetTrack = tracks.find(t => t.id === newTrackId);
       const sourceType = movingClip.source?.type;
       if (targetTrack && sourceType) {
-        if ((sourceType === 'video' || sourceType === 'image') && targetTrack.type !== 'video') return;
+        if ((sourceType === 'video' || sourceType === 'image' || sourceType === 'camera') && targetTrack.type !== 'video') return;
         if (sourceType === 'audio' && targetTrack.type !== 'audio') return;
       }
     }
@@ -882,6 +902,9 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     const { clips, invalidateCache } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
+    if (clip.source?.type === 'gaussian-splat') {
+      return;
+    }
 
     const nowIs3D = !clip.is3D;
     set({

@@ -1,6 +1,10 @@
 // Composition-related types
 
 import type { ProjectKeyframe, ProjectMarker, ProjectEffect, ProjectMask, ProjectTransform } from './timeline.types';
+import type { MeshPrimitiveType, SceneCameraSettings } from '../../../stores/mediaStore/types';
+import type { GaussianSplatSettings } from '../../../engine/gaussian/types';
+import type { SplatEffectorSettings } from '../../../types/splatEffector';
+import type { Text3DProperties } from '../../../types';
 
 export interface ProjectTrack {
   id: string;
@@ -56,15 +60,22 @@ export interface ProjectClip {
   compositionId?: string;
 
   // Additional clip metadata (for restoration)
-  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid';
+  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector';
   naturalDuration?: number;
   linkedClipId?: string;
   linkedGroupId?: string;
   thumbnails?: string[];
   waveform?: number[];
+  meshType?: MeshPrimitiveType;
+  cameraSettings?: SceneCameraSettings;
+  splatEffectorSettings?: SplatEffectorSettings;
+  gaussianBlendshapes?: Record<string, number>;
+  gaussianSplatSettings?: GaussianSplatSettings;
+  is3D?: boolean;
 
   // Text clip support
   textProperties?: any;
+  text3DProperties?: Text3DProperties;
 
   // Solid clip support
   solidColor?: string;
@@ -91,6 +102,7 @@ export interface ProjectComposition {
   duration: number;
   backgroundColor: string;
   folderId: string | null;
+  labelColor?: string;
 
   // Tracks and clips
   tracks: ProjectTrack[];

@@ -1,6 +1,8 @@
 // Types for Three.js 3D layer integration
 
-import type { BlendMode } from '../../types';
+import type { BlendMode, Text3DProperties } from '../../types';
+import type { GaussianSplatSettings } from '../gaussian/types';
+import type { SplatEffectorMode } from '../../types/splatEffector';
 
 /** Data for a single 3D layer to be rendered by Three.js */
 export interface Layer3DData {
@@ -21,16 +23,38 @@ export interface Layer3DData {
   modelUrl?: string;  // Blob URL to OBJ/glTF/GLB file
   modelFileName?: string;  // Original filename (for format detection from blob URLs)
   meshType?: import('../../stores/mediaStore/types').MeshPrimitiveType;  // Primitive mesh type
+  text3DProperties?: Text3DProperties;
   wireframe?: boolean;  // Debug: show as wireframe
+  // Gaussian splat source
+  gaussianSplatUrl?: string;
+  gaussianSplatFileName?: string;
+  gaussianSplatFileHash?: string;
+  gaussianSplatSettings?: GaussianSplatSettings;
+}
+
+export interface SplatEffectorRuntimeData {
+  clipId: string;
+  position: { x: number; y: number; z: number };
+  rotation: { x: number; y: number; z: number };  // degrees
+  scale: { x: number; y: number; z: number };
+  radius: number;
+  mode: SplatEffectorMode;
+  strength: number;
+  falloff: number;
+  speed: number;
+  seed: number;
+  time: number;
 }
 
 /** Camera configuration from Composition */
 export interface CameraConfig {
   position: { x: number; y: number; z: number };
   target: { x: number; y: number; z: number };
+  up?: { x: number; y: number; z: number };
   fov: number;
   near: number;
   far: number;
+  applyDefaultDistance?: boolean;
 }
 
 /** Default camera values.
@@ -40,7 +64,9 @@ export interface CameraConfig {
 export const DEFAULT_CAMERA_CONFIG: CameraConfig = {
   position: { x: 0, y: 0, z: 0 },
   target: { x: 0, y: 0, z: 0 },
+  up: { x: 0, y: 1, z: 0 },
   fov: 50,
   near: 0.1,
   far: 1000,
+  applyDefaultDistance: true,
 };

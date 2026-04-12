@@ -7,10 +7,11 @@ import { LABEL_COLORS, getLabelHex } from './media/labelColors';
 import { CompositionSettingsDialog } from './media/CompositionSettingsDialog';
 import { SolidSettingsDialog } from './media/SolidSettingsDialog';
 import { LabelColorPicker } from './media/LabelColorPicker';
+import { handleSubmenuHover, handleSubmenuLeave } from './media/submenuPosition';
 
 const log = Logger.create('MediaPanel');
 import { useMediaStore } from '../../stores/mediaStore';
-import type { MediaFile, Composition, ProjectItem, SolidItem } from '../../stores/mediaStore';
+import type { MediaFile, Composition, ProjectItem, SolidItem, CameraItem } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useDockStore } from '../../stores/dockStore';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
@@ -67,13 +68,26 @@ function loadColumnOrder(): ColumnId[] {
   return DEFAULT_COLUMN_ORDER;
 }
 
+function getProjectItemIconType(item: ProjectItem | undefined): string | undefined {
+  if (!item || !('type' in item)) return undefined;
+  if (item.type === 'model') {
+    return 'meshType' in item && item.meshType === 'text3d'
+      ? 'text-3d'
+      : 'mesh';
+  }
+  return item.type;
+}
+
 export function MediaPanel() {
   // Reactive data - subscribe to specific values only
   const files = useMediaStore(state => state.files);
   const compositions = useMediaStore(state => state.compositions);
   const folders = useMediaStore(state => state.folders);
+  const textItems = useMediaStore(state => state.textItems);
   const solidItems = useMediaStore(state => state.solidItems);
   const meshItems = useMediaStore(state => state.meshItems);
+  const cameraItems = useMediaStore(state => state.cameraItems);
+  const splatEffectorItems = useMediaStore(state => state.splatEffectorItems);
   const selectedIds = useMediaStore(state => state.selectedIds);
   const expandedFolderIds = useMediaStore(state => state.expandedFolderIds);
   const fileSystemSupported = useMediaStore(state => state.fileSystemSupported);
@@ -105,13 +119,21 @@ export function MediaPanel() {
     moveToFolder,
     createTextItem,
     getOrCreateTextFolder,
+    removeTextItem,
     createSolidItem,
     getOrCreateSolidFolder,
     updateSolidItem,
     createMeshItem,
     getOrCreateMeshFolder,
     removeMeshItem,
+    createCameraItem,
+    getOrCreateCameraFolder,
+    removeCameraItem,
+    createSplatEffectorItem,
+    getOrCreateSplatEffectorFolder,
+    removeSplatEffectorItem,
     setLabelColor,
+    importGaussianSplat,
   } = useMediaStore.getState();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -214,7 +236,7 @@ export function MediaPanel() {
 
   // Sort items comparator
   const getSortValue = useCallback((item: ProjectItem, colId: ColumnId): string | number => {
-    const mediaFile = ('type' in item && item.type !== 'composition' && item.type !== 'text' && item.type !== 'solid') ? item as MediaFile : null;
+    const mediaFile = ('type' in item && item.type !== 'composition' && item.type !== 'text' && item.type !== 'solid' && item.type !== 'camera' && item.type !== 'splat-effector') ? item as MediaFile : null;
     switch (colId) {
       case 'name': return item.name.toLowerCase();
       case 'label': {
@@ -524,10 +546,13 @@ export function MediaPanel() {
       if (files.find(f => f.id === id)) removeFile(id);
       else if (compositions.find(c => c.id === id)) removeComposition(id);
       else if (folders.find(f => f.id === id)) removeFolder(id);
+      else if (textItems.find(t => t.id === id)) removeTextItem(id);
       else if (meshItems.find(m => m.id === id)) removeMeshItem(id);
+      else if (cameraItems.find(c => c.id === id)) removeCameraItem(id);
+      else if (splatEffectorItems.find(e => e.id === id)) removeSplatEffectorItem(id);
     });
     closeContextMenu();
-  }, [selectedIds, files, compositions, folders, meshItems, removeFile, removeComposition, removeFolder, removeMeshItem, closeContextMenu]);
+  }, [selectedIds, files, compositions, folders, textItems, meshItems, cameraItems, splatEffectorItems, removeFile, removeComposition, removeFolder, removeTextItem, removeMeshItem, removeCameraItem, removeSplatEffectorItem, closeContextMenu]);
 
   // Get the active parent folder (grid view: current open folder, list view: selected folder or null)
   const getActiveParentId = useCallback((): string | null => {
@@ -559,6 +584,12 @@ export function MediaPanel() {
     closeContextMenu();
   }, [createTextItem, getOrCreateTextFolder, closeContextMenu]);
 
+  const handleNewText3D = useCallback(() => {
+    const textFolderId = getOrCreateTextFolder();
+    createMeshItem('text3d', undefined, textFolderId);
+    closeContextMenu();
+  }, [createMeshItem, getOrCreateTextFolder, closeContextMenu]);
+
   // New solid item (in Media Panel, can be dragged to timeline)
   const handleNewSolid = useCallback(() => {
     const solidFolderId = getOrCreateSolidFolder();
@@ -572,6 +603,33 @@ export function MediaPanel() {
     createMeshItem(meshType, undefined, meshFolderId);
     closeContextMenu();
   }, [createMeshItem, getOrCreateMeshFolder, closeContextMenu]);
+
+  const handleNewCamera = useCallback(() => {
+    const cameraFolderId = getOrCreateCameraFolder();
+    createCameraItem(undefined, cameraFolderId);
+    closeContextMenu();
+  }, [createCameraItem, getOrCreateCameraFolder, closeContextMenu]);
+
+  const handleNewSplatEffector = useCallback(() => {
+    const effectorFolderId = getOrCreateSplatEffectorFolder();
+    createSplatEffectorItem(undefined, effectorFolderId);
+    closeContextMenu();
+  }, [createSplatEffectorItem, getOrCreateSplatEffectorFolder, closeContextMenu]);
+
+  // Import Gaussian Avatar (.zip) — opens file picker, imports with forced gaussian-avatar type
+  const handleImportGaussianSplat = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.ply,.splat';
+    input.onchange = async (e) => {
+      const fileList = (e.target as HTMLInputElement).files;
+      if (fileList && fileList.length > 0) {
+        await importGaussianSplat(fileList[0]);
+      }
+    };
+    input.click();
+    closeContextMenu();
+  }, [importGaussianSplat, closeContextMenu]);
 
   // Composition settings
   const openCompositionSettings = useCallback((comp: Composition) => {
@@ -698,6 +756,42 @@ export function MediaPanel() {
         meshType: meshItem.meshType,
       });
       e.dataTransfer.setData('application/x-mesh-item-id', item.id);
+      e.dataTransfer.effectAllowed = 'copyMove';
+      if (e.currentTarget instanceof HTMLElement) {
+        e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
+      }
+      return;
+    }
+
+    // Handle camera item drag
+    if (item.type === 'camera') {
+      const cameraItem = item as CameraItem;
+      setExternalDragPayload({
+        kind: 'camera',
+        id: item.id,
+        duration: cameraItem.duration,
+        hasAudio: false,
+        isAudio: false,
+        isVideo: true,
+      });
+      e.dataTransfer.setData('application/x-camera-item-id', item.id);
+      e.dataTransfer.effectAllowed = 'copyMove';
+      if (e.currentTarget instanceof HTMLElement) {
+        e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
+      }
+      return;
+    }
+
+    if (item.type === 'splat-effector') {
+      setExternalDragPayload({
+        kind: 'splat-effector',
+        id: item.id,
+        duration: item.duration,
+        hasAudio: false,
+        isAudio: false,
+        isVideo: true,
+      });
+      e.dataTransfer.setData('application/x-splat-effector-item-id', item.id);
       e.dataTransfer.effectAllowed = 'copyMove';
       if (e.currentTarget instanceof HTMLElement) {
         e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
@@ -984,7 +1078,7 @@ export function MediaPanel() {
             <span className="media-item-icon">
               {isFolder
                 ? <span className="media-folder-icon">&#128193;</span>
-                : <FileTypeIcon type={'type' in item ? item.type : undefined} />
+                : <FileTypeIcon type={getProjectItemIconType(item)} />
               }
             </span>
             {isRenaming ? (
@@ -1114,7 +1208,8 @@ export function MediaPanel() {
     const isSelected = selectedIds.includes(item.id);
     const isRenaming = renamingId === item.id;
     const isExpanded = isFolder && expandedFolderIds.includes(item.id);
-    const isMediaFile = !isFolder && 'type' in item && item.type !== 'composition' && item.type !== 'text' && item.type !== 'solid';
+    const itemType = 'type' in item ? item.type : undefined;
+    const isMediaFile = !isFolder && !!itemType && itemType !== 'composition' && itemType !== 'text' && itemType !== 'solid' && itemType !== 'model' && itemType !== 'camera';
     const hasFile = isMediaFile && 'file' in item && !!(item as MediaFile).file;
     const isImporting = isMediaFile && !!(item as MediaFile).isImporting;
     const isDragTarget = isFolder && dragOverFolderId === item.id;
@@ -1213,7 +1308,7 @@ export function MediaPanel() {
               <img src={thumbUrl} alt="" draggable={false} />
             ) : (
               <div className="media-grid-thumb-placeholder">
-                <FileTypeIcon type={isFolder ? 'folder' : isComp ? 'composition' : (item as MediaFile).type} large />
+                <FileTypeIcon type={isFolder ? 'folder' : isComp ? 'composition' : getProjectItemIconType(item)} large />
               </div>
             )}
             {duration ? (
@@ -1231,7 +1326,16 @@ export function MediaPanel() {
 
   // Get root items (with sorting applied)
   const rootItems = sortItems(getItemsByFolder(null));
-  const totalItems = files.length + compositions.length;
+  const totalItems = (
+    files.length +
+    compositions.length +
+    folders.length +
+    textItems.length +
+    solidItems.length +
+    meshItems.length +
+    cameraItems.length +
+    splatEffectorItems.length
+  );
 
   // Grid view: items for current folder + breadcrumb path
   const gridItems = sortItems(getItemsByFolder(gridFolderId));
@@ -1318,11 +1422,23 @@ export function MediaPanel() {
                   <span className="add-dropdown-icon"><FileTypeIcon type="text" /></span>
                   <span>Text</span>
                 </div>
+                <div className="add-dropdown-item" onClick={() => { handleNewText3D(); setAddDropdownOpen(false); }}>
+                  <span className="add-dropdown-icon"><FileTypeIcon type="text-3d" /></span>
+                  <span>3D Text</span>
+                </div>
                 <div className="add-dropdown-item" onClick={() => { handleNewSolid(); setAddDropdownOpen(false); }}>
                   <span className="add-dropdown-icon"><FileTypeIcon type="solid" /></span>
                   <span>Solid</span>
                 </div>
-                <div className="add-dropdown-item has-submenu">
+                <div className="add-dropdown-item" onClick={() => { handleNewCamera(); setAddDropdownOpen(false); }}>
+                  <span className="add-dropdown-icon"><FileTypeIcon type="camera" /></span>
+                  <span>Camera</span>
+                </div>
+                <div className="add-dropdown-item" onClick={() => { handleNewSplatEffector(); setAddDropdownOpen(false); }}>
+                  <span className="add-dropdown-icon"><FileTypeIcon type="splat-effector" /></span>
+                  <span>Splat Effector</span>
+                </div>
+                <div className="add-dropdown-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
                   <span className="add-dropdown-icon"><FileTypeIcon type="mesh" /></span>
                   <span>Mesh</span>
                   <span className="submenu-arrow">&#9654;</span>
@@ -1334,6 +1450,11 @@ export function MediaPanel() {
                     ))}
                   </div>
                 </div>
+                <div className="add-dropdown-item" onClick={() => { handleImportGaussianSplat(); setAddDropdownOpen(false); }}>
+                  <span className="add-dropdown-icon"><FileTypeIcon type="gaussian-splat" /></span>
+                  <span>Gaussian Splat</span>
+                </div>
+                <div className="add-dropdown-separator" />
                 <div className="add-dropdown-item" onClick={() => { /* TODO: Add adjustment layer */ setAddDropdownOpen(false); }}>
                   <span className="add-dropdown-icon"><FileTypeIcon type="solid" /></span>
                   <span>Adjustment Layer</span>
@@ -1350,7 +1471,7 @@ export function MediaPanel() {
         ref={fileInputRef}
         type="file"
         multiple
-        accept="video/*,audio/*,image/*"
+        accept="video/*,audio/*,image/*,.obj,.gltf,.glb,.fbx,.ply,.splat"
         style={{ display: 'none' }}
         onChange={handleFileChange}
       />
@@ -1498,8 +1619,11 @@ export function MediaPanel() {
           ? files.find(f => f.id === contextMenu.itemId) ||
             compositions.find(c => c.id === contextMenu.itemId) ||
             folders.find(f => f.id === contextMenu.itemId) ||
+            textItems.find(t => t.id === contextMenu.itemId) ||
             solidItems.find(s => s.id === contextMenu.itemId) ||
-            meshItems.find(m => m.id === contextMenu.itemId)
+            meshItems.find(m => m.id === contextMenu.itemId) ||
+            cameraItems.find(c => c.id === contextMenu.itemId) ||
+            splatEffectorItems.find(e => e.id === contextMenu.itemId)
           : null;
         const isVideoFile = selectedItem && 'type' in selectedItem && selectedItem.type === 'video';
         const isComposition = selectedItem && 'type' in selectedItem && selectedItem.type === 'composition';
@@ -1541,11 +1665,23 @@ export function MediaPanel() {
               <span className="context-menu-icon"><FileTypeIcon type="text" /></span>
               Text
             </div>
+            <div className="context-menu-item" onClick={() => { handleNewText3D(); closeContextMenu(); }}>
+              <span className="context-menu-icon"><FileTypeIcon type="text-3d" /></span>
+              3D Text
+            </div>
             <div className="context-menu-item" onClick={() => { handleNewSolid(); closeContextMenu(); }}>
               <span className="context-menu-icon"><FileTypeIcon type="solid" /></span>
               Solid
             </div>
-            <div className="context-menu-item has-submenu">
+            <div className="context-menu-item" onClick={() => { handleNewCamera(); closeContextMenu(); }}>
+              <span className="context-menu-icon"><FileTypeIcon type="camera" /></span>
+              Camera
+            </div>
+            <div className="context-menu-item" onClick={() => { handleNewSplatEffector(); closeContextMenu(); }}>
+              <span className="context-menu-icon"><FileTypeIcon type="splat-effector" /></span>
+              Splat Effector
+            </div>
+            <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
               <span className="context-menu-icon"><FileTypeIcon type="mesh" /></span>
               <span>Mesh</span>
               <span className="submenu-arrow">&#9654;</span>
@@ -1557,6 +1693,11 @@ export function MediaPanel() {
                 ))}
               </div>
             </div>
+            <div className="context-menu-item" onClick={() => { handleImportGaussianSplat(); closeContextMenu(); }}>
+              <span className="context-menu-icon"><FileTypeIcon type="gaussian-splat" /></span>
+              Gaussian Splat
+            </div>
+            <div className="context-menu-separator" />
             <div className="context-menu-item disabled" onClick={closeContextMenu}>
               <span className="context-menu-icon"><FileTypeIcon type="solid" /></span>
               Adjustment Layer
@@ -1577,7 +1718,7 @@ export function MediaPanel() {
 
                 {/* Move to Folder submenu */}
                 {availableFolders.length > 0 && (
-                  <div className="context-menu-item has-submenu">
+                  <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
                     <span>Move to Folder{multiSelect ? ` (${selectedIds.length})` : ''}</span>
                     <span className="submenu-arrow">▶</span>
                     <div className="context-submenu">
@@ -1663,7 +1804,7 @@ export function MediaPanel() {
 
                 {/* Show in Explorer submenu - only for single video with file */}
                 {!multiSelect && isVideoFile && mediaFile?.file && (
-                  <div className="context-menu-item has-submenu">
+                  <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
                     <span>Show in Explorer</span>
                     <span className="submenu-arrow">▶</span>
                     <div className="context-submenu">

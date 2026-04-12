@@ -6,6 +6,7 @@ import {
   isVideoFile,
   isAudioFile,
   isMediaFile,
+  isGaussianSplatFile,
   getVideoMetadataQuick,
 } from '../utils/fileTypeHelpers';
 import {
@@ -27,11 +28,13 @@ interface UseExternalDropProps {
   clips: TimelineClip[];
   pixelToTime: (pixel: number) => number;
   addTrack: (type: 'video' | 'audio') => string | undefined;
-  addClip: (trackId: string, file: File, startTime: number, duration?: number, mediaFileId?: string) => void;
+  addClip: (trackId: string, file: File, startTime: number, duration?: number, mediaFileId?: string, mediaTypeOverride?: string) => void;
   addCompClip: (trackId: string, comp: Composition, startTime: number) => void;
   addTextClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => Promise<string | null>;
   addSolidClip: (trackId: string, startTime: number, color?: string, duration?: number, skipMediaItem?: boolean) => string | null;
   addMeshClip: (trackId: string, startTime: number, meshType: import('../../../stores/mediaStore/types').MeshPrimitiveType, duration?: number, skipMediaItem?: boolean) => string | null;
+  addCameraClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
+  addSplatEffectorClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
 }
 
 interface UseExternalDropReturn {
@@ -89,6 +92,8 @@ export function useExternalDrop({
   addTextClip,
   addSolidClip,
   addMeshClip,
+  addCameraClip,
+  addSplatEffectorClip,
 }: UseExternalDropProps): UseExternalDropReturn {
   const [externalDrag, setExternalDrag] = useState<ExternalDragState | null>(null);
   const dragCounterRef = useRef(0);
@@ -295,6 +300,46 @@ export function useExternalDrop({
       };
     }
 
+    if (e.dataTransfer.types.includes('application/x-camera-item-id')) {
+      if (dragPayload?.kind === 'camera') {
+        return {
+          duration: dragPayload.duration ?? 10,
+          hasAudio: false,
+          isAudio: false,
+          isVideo: true,
+        };
+      }
+
+      const cameraItemId = e.dataTransfer.getData('application/x-camera-item-id');
+      const cameraItem = mediaStore.cameraItems.find((c) => c.id === cameraItemId);
+      return {
+        duration: cameraItem?.duration ?? 10,
+        hasAudio: false,
+        isAudio: false,
+        isVideo: true,
+      };
+    }
+
+    if (e.dataTransfer.types.includes('application/x-splat-effector-item-id')) {
+      if (dragPayload?.kind === 'splat-effector') {
+        return {
+          duration: dragPayload.duration ?? 10,
+          hasAudio: false,
+          isAudio: false,
+          isVideo: true,
+        };
+      }
+
+      const effectorItemId = e.dataTransfer.getData('application/x-splat-effector-item-id');
+      const effectorItem = mediaStore.splatEffectorItems.find((effector) => effector.id === effectorItemId);
+      return {
+        duration: effectorItem?.duration ?? 10,
+        hasAudio: false,
+        isAudio: false,
+        isVideo: true,
+      };
+    }
+
     if (e.dataTransfer.types.includes('application/x-media-file-id')) {
       if (dragPayload?.kind === 'media-file') {
         if (dragPayload.file && dragPayload.isVideo && dragPayload.duration === undefined) {
@@ -360,6 +405,14 @@ export function useExternalDrop({
             } else {
               requestVideoDragMetadata(cacheKey, file);
             }
+            break;
+          }
+
+          if (isGaussianSplatFile(file)) {
+            duration = duration ?? 10;
+            hasAudio = false;
+            isVideo = true;
+            isAudio = false;
             break;
           }
 
@@ -612,6 +665,80 @@ export function useExternalDrop({
         return;
       }
 
+      if (e.dataTransfer.types.includes('application/x-camera-item-id')) {
+        const cameraItemId = dragPayload?.kind === 'camera'
+          ? dragPayload.id
+          : e.dataTransfer.getData('application/x-camera-item-id');
+        const cameraItem = cameraItemId
+          ? mediaStore.cameraItems.find((c) => c.id === cameraItemId)
+          : null;
+        const duration = dragPayload?.kind === 'camera'
+          ? dragPayload.duration ?? 10
+          : cameraItem?.duration ?? 10;
+
+        if (isAudioTrack) {
+          setExternalDrag({
+            trackId: '',
+            startTime,
+            x: e.clientX,
+            y: e.clientY,
+            duration,
+            hasAudio: false,
+            isVideo: true,
+            isAudio: false,
+          });
+          return;
+        }
+        setExternalDrag(buildTrackPreviewState({
+          trackId,
+          desiredStartTime: startTime,
+          x: e.clientX,
+          y: e.clientY,
+          duration,
+          hasAudio: false,
+          isVideo: true,
+          isAudio: false,
+        }));
+        return;
+      }
+
+      if (e.dataTransfer.types.includes('application/x-splat-effector-item-id')) {
+        const effectorItemId = dragPayload?.kind === 'splat-effector'
+          ? dragPayload.id
+          : e.dataTransfer.getData('application/x-splat-effector-item-id');
+        const effectorItem = effectorItemId
+          ? mediaStore.splatEffectorItems.find((effector) => effector.id === effectorItemId)
+          : null;
+        const duration = dragPayload?.kind === 'splat-effector'
+          ? dragPayload.duration ?? 10
+          : effectorItem?.duration ?? 10;
+
+        if (isAudioTrack) {
+          setExternalDrag({
+            trackId: '',
+            startTime,
+            x: e.clientX,
+            y: e.clientY,
+            duration,
+            hasAudio: false,
+            isVideo: true,
+            isAudio: false,
+          });
+          return;
+        }
+        setExternalDrag(buildTrackPreviewState({
+          trackId,
+          desiredStartTime: startTime,
+          x: e.clientX,
+          y: e.clientY,
+          duration,
+          hasAudio: false,
+          isVideo: true,
+          isAudio: false,
+        }));
+        return;
+      }
+
       if (e.dataTransfer.types.includes('Files')) {
         let dur: number | undefined;
         let hasAudio: boolean | undefined;
@@ -624,6 +751,11 @@ export function useExternalDrop({
               const file = item.getAsFile();
               if (file && isAudioFile(file)) {
                 fileIsAudio = true;
+                break;
+              }
+              if (file && isGaussianSplatFile(file)) {
+                dur = 10;
+                hasAudio = false;
                 break;
               }
               if (file && isVideoFile(file)) {
@@ -683,9 +815,10 @@ export function useExternalDrop({
       const isMediaPanelDrag = e.dataTransfer.types.includes('application/x-media-file-id');
       const isTextDrag = e.dataTransfer.types.includes('application/x-text-item-id');
       const isSolidDrag = e.dataTransfer.types.includes('application/x-solid-item-id');
+      const isCameraDrag = e.dataTransfer.types.includes('application/x-camera-item-id');
       const isFileDrag = e.dataTransfer.types.includes('Files');
 
-      if (isCompDrag || isMediaPanelDrag || isTextDrag || isSolidDrag || isFileDrag) {
+      if (isCompDrag || isMediaPanelDrag || isTextDrag || isSolidDrag || isCameraDrag || isFileDrag) {
         const desiredStartTime = getDesiredStartTime(e.clientX);
         const preview = resolveImmediateDragPreview(e);
 
@@ -712,8 +845,8 @@ export function useExternalDrop({
           return;
         }
 
-        // Text, solid, composition items can only go on video tracks
-        if ((isTextDrag || isSolidDrag || isCompDrag) && isAudioTrack) {
+        // Text, solid, camera, and composition items can only go on video tracks
+        if ((isTextDrag || isSolidDrag || isCameraDrag || isCompDrag) && isAudioTrack) {
           e.dataTransfer.dropEffect = 'none';
           setExternalDrag((prev) => prev ? {
             ...prev,
@@ -952,12 +1085,37 @@ export function useExternalDrop({
         }
       }
 
+      // Handle camera item drag (skipMediaItem=true since it already exists in media panel)
+      const cameraItemId = e.dataTransfer.getData('application/x-camera-item-id');
+      if (cameraItemId) {
+        const mediaStore = useMediaStore.getState();
+        const cameraItem = mediaStore.cameraItems.find((c) => c.id === cameraItemId);
+        if (cameraItem) {
+          addCameraClip(newTrackId, startTime, cameraItem.duration, true);
+          return;
+        }
+      }
+
+      const effectorItemId = e.dataTransfer.getData('application/x-splat-effector-item-id');
+      if (effectorItemId) {
+        const mediaStore = useMediaStore.getState();
+        const effectorItem = mediaStore.splatEffectorItems.find((effector) => effector.id === effectorItemId);
+        if (effectorItem) {
+          addSplatEffectorClip(newTrackId, startTime, effectorItem.duration, true);
+          return;
+        }
+      }
+
       // Handle media panel drag
       if (mediaFileId) {
         const mediaStore = useMediaStore.getState();
         const mediaFile = mediaStore.files.find((f) => f.id === mediaFileId);
         if (mediaFile?.file) {
-          addClip(newTrackId, mediaFile.file, startTime, mediaFile.duration, mediaFileId);
+          // Pass mediaType override for formats that are intentionally clip-typed.
+          const typeOverride = mediaFile.type === 'gaussian-splat'
+            ? mediaFile.type
+            : undefined;
+          addClip(newTrackId, mediaFile.file, startTime, mediaFile.duration, mediaFileId, typeOverride);
           return;
         }
       }
@@ -1002,7 +1160,7 @@ export function useExternalDrop({
         }
       }
     },
-    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, addSolidClip, addMeshClip, externalDrag, timelineRef]
+    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, externalDrag, timelineRef]
   );
 
   // Handle external file drop on track
@@ -1068,6 +1226,27 @@ export function useExternalDrop({
         }
       }
 
+      // Handle camera item drag from media panel (skipMediaItem=true since it already exists)
+      const cameraItemId = e.dataTransfer.getData('application/x-camera-item-id');
+      if (cameraItemId) {
+        const mediaStore = useMediaStore.getState();
+        const cameraItem = mediaStore.cameraItems.find((c) => c.id === cameraItemId);
+        if (cameraItem && isVideoTrack) {
+          addCameraClip(trackId, resolveDropStartTime(cameraItem.duration), cameraItem.duration, true);
+          return;
+        }
+      }
+
+      const effectorItemId = e.dataTransfer.getData('application/x-splat-effector-item-id');
+      if (effectorItemId) {
+        const mediaStore = useMediaStore.getState();
+        const effectorItem = mediaStore.splatEffectorItems.find((effector) => effector.id === effectorItemId);
+        if (effectorItem && isVideoTrack) {
+          addSplatEffectorClip(trackId, resolveDropStartTime(effectorItem.duration), effectorItem.duration, true);
+          return;
+        }
+      }
+
       const mediaFileId = e.dataTransfer.getData('application/x-media-file-id');
       if (mediaFileId) {
         const mediaStore = useMediaStore.getState();
@@ -1081,7 +1260,11 @@ export function useExternalDrop({
           }
           // Video+audio files are allowed on both track types
 
-          addClip(trackId, mediaFile.file, resolveDropStartTime(mediaFile.duration), mediaFile.duration, mediaFileId);
+          // Pass mediaType override for formats that are intentionally clip-typed.
+          const typeOverride = mediaFile.type === 'gaussian-splat'
+            ? mediaFile.type
+            : undefined;
+          addClip(trackId, mediaFile.file, resolveDropStartTime(mediaFile.duration), mediaFile.duration, mediaFileId, typeOverride);
           return;
         }
       }
@@ -1153,7 +1336,7 @@ export function useExternalDrop({
         }
       }
     },
-    [addCompClip, addClip, addTextClip, addSolidClip, addMeshClip, externalDrag, tracks, getDesiredStartTime, resolveTrackStartTime]
+    [addCompClip, addClip, addTextClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, externalDrag, tracks, getDesiredStartTime, resolveTrackStartTime]
   );
 
   // Container-level drag leave: fully clear externalDrag when cursor leaves the timeline area

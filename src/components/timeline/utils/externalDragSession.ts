@@ -1,5 +1,5 @@
 export interface ExternalDragPayload {
-  kind: 'media-file' | 'composition' | 'text' | 'solid' | 'mesh';
+  kind: 'media-file' | 'composition' | 'text' | 'solid' | 'mesh' | 'camera' | 'splat-effector';
   id: string;
   duration?: number;
   hasAudio?: boolean;

@@ -208,7 +208,7 @@ function syncStatusFromClips(useMediaStore: MediaStore): void {
 }
 
 /**
- * Persist textItems and solidItems to localStorage on change.
+ * Persist generated media items to localStorage on change.
  */
 function setupItemPersistence(): void {
   const useMediaStore = getMediaStore();
@@ -240,6 +240,25 @@ function setupItemPersistence(): void {
     (meshItems: MediaState['meshItems']) => {
       try {
         localStorage.setItem('ms-meshItems', JSON.stringify(meshItems));
+      } catch { /* quota exceeded or unavailable */ }
+    }
+  );
+
+  // Subscribe to cameraItems changes
+  useMediaStore.subscribe(
+    (state: MediaState) => state.cameraItems,
+    (cameraItems: MediaState['cameraItems']) => {
+      try {
+        localStorage.setItem('ms-cameraItems', JSON.stringify(cameraItems));
+      } catch { /* quota exceeded or unavailable */ }
+    }
+  );
+
+  useMediaStore.subscribe(
+    (state: MediaState) => state.splatEffectorItems,
+    (splatEffectorItems: MediaState['splatEffectorItems']) => {
+      try {
+        localStorage.setItem('ms-splatEffectorItems', JSON.stringify(splatEffectorItems));
       } catch { /* quota exceeded or unavailable */ }
     }
   );

@@ -251,8 +251,11 @@ function localFileServer(): Plugin {
           '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
           '.mkv': 'video/x-matroska', '.avi': 'video/x-msvideo',
           '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.aac': 'audio/aac', '.ogg': 'audio/ogg',
+          '.m4a': 'audio/mp4',
           '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-          '.gif': 'image/gif', '.webp': 'image/webp',
+          '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp', '.svg': 'image/svg+xml',
+          '.obj': 'model/obj', '.gltf': 'model/gltf+json', '.glb': 'model/gltf-binary', '.fbx': 'application/octet-stream',
+          '.ply': 'application/octet-stream', '.splat': 'application/octet-stream',
         };
         res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
 
@@ -287,7 +290,7 @@ function localFileServer(): Plugin {
         const url = new URL(req.url!, `http://${req.headers.host}`);
         const dirPath = url.searchParams.get('dir');
         const extFilter = url.searchParams.get('ext')?.split(',') ||
-          ['.mp4', '.webm', '.mov', '.mkv', '.avi', '.mp3', '.wav', '.png', '.jpg', '.jpeg'];
+          ['.mp4', '.webm', '.mov', '.mkv', '.avi', '.mp3', '.wav', '.aac', '.ogg', '.m4a', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.obj', '.gltf', '.glb', '.fbx', '.ply', '.splat'];
 
         if (!dirPath) {
           res.statusCode = 400;
@@ -444,7 +447,35 @@ function blobStoreServer(): Plugin {
 // Flow: POST /api/ai-tools → Vite server → HMR → browser → aiTools.execute() → HMR → HTTP response
 function aiToolsBridge(): Plugin {
   const pendingRequests = new Map<string, { resolve: (value: unknown) => void; timer: ReturnType<typeof setTimeout> }>();
+  const clients = new Map<string, { tabId: string; visibilityState: string; hasFocus: boolean; lastSeenAt: number }>();
   let requestCounter = 0;
+
+  const pruneClients = () => {
+    const now = Date.now();
+    for (const [tabId, client] of clients) {
+      if (now - client.lastSeenAt > 120000) {
+        clients.delete(tabId);
+      }
+    }
+  };
+
+  const pickTargetTabId = (): string | null => {
+    pruneClients();
+    const liveClients = [...clients.values()];
+    if (liveClients.length === 0) {
+      return null;
+    }
+
+    liveClients.sort((a, b) => b.lastSeenAt - a.lastSeenAt);
+
+    const focusedVisible = liveClients.find((client) => client.visibilityState === 'visible' && client.hasFocus);
+    if (focusedVisible) return focusedVisible.tabId;
+
+    const visible = liveClients.find((client) => client.visibilityState === 'visible');
+    if (visible) return visible.tabId;
+
+    return liveClients[0].tabId;
+  };
 
   return {
     name: 'ai-tools-bridge',
@@ -472,12 +503,23 @@ function aiToolsBridge(): Plugin {
         }
       });
 
+      server.hot.on('ai-tools:presence', (data: { tabId: string; visibilityState?: string; hasFocus?: boolean }) => {
+        if (!data?.tabId) return;
+        clients.set(data.tabId, {
+          tabId: data.tabId,
+          visibilityState: data.visibilityState ?? 'hidden',
+          hasFocus: Boolean(data.hasFocus),
+          lastSeenAt: Date.now(),
+        });
+      });
+
       server.middlewares.use('/api/ai-tools', (req, res) => {
         // GET status endpoint is unauthenticated (shows readiness only)
         if (req.method === 'GET') {
           setCorsHeaders(req, res);
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ status: 'ready', pending: pendingRequests.size }));
+          pruneClients();
+          res.end(JSON.stringify({ status: 'ready', pending: pendingRequests.size, clients: clients.size }));
           return;
         }
 
@@ -503,6 +545,7 @@ function aiToolsBridge(): Plugin {
             }
 
             const requestId = `r${++requestCounter}-${crypto.randomUUID().slice(0, 8)}`;
+            const targetTabId = pickTargetTabId();
 
             const resultPromise = new Promise((resolve) => {
               const timer = setTimeout(() => {
@@ -511,7 +554,7 @@ function aiToolsBridge(): Plugin {
               }, 30000);
 
               pendingRequests.set(requestId, { resolve, timer });
-              server.hot.send('ai-tools:execute', { requestId, tool, args });
+              server.hot.send('ai-tools:execute', { requestId, tool, args, targetTabId });
             });
 
             resultPromise.then((result) => {
@@ -592,12 +635,18 @@ export default defineConfig(({ command }) => {
     },
     build: {
       target: 'esnext',
+      chunkSizeWarningLimit: 6000,
       rollupOptions: {
+        onwarn(warning, warn) {
+          if (warning.message.includes('dynamic import will not move module into another chunk')) {
+            return;
+          }
+          warn(warning);
+        },
         output: {
           manualChunks: {
             // Force heavy libs into separate chunks (loaded on demand)
             'mp4box': ['mp4box'],
-            'onnxruntime': ['onnxruntime-web'],
           },
         },
       },

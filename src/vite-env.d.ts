@@ -1,5 +1,17 @@
 /// <reference types="vite/client" />
 
+declare module '/gaussian-splat/gaussian-splat-renderer-for-lam.module.js' {
+  export const DropInViewer: new (options?: Record<string, unknown>) => import('three').Group & {
+    addSplatScene: (path: string, options?: Record<string, unknown>) => Promise<unknown>;
+    getSceneCount?: () => number;
+    getSplatScene?: (index: number) => { opacity?: number; visible?: boolean } | undefined;
+    splatMesh?: {
+      setSplatScale?: (scale: number) => void;
+    };
+    dispose?: () => Promise<void> | void;
+  };
+}
+
 // WGSL shader imports
 declare module '*.wgsl?raw' {
   const content: string;

@@ -13,6 +13,7 @@ import { layerBuilder } from '../../services/layerBuilder';
 import { sanitizePlayheadPosition } from '../../services/layerBuilder/PlayheadState';
 import { thumbnailCacheService } from '../../services/thumbnailCacheService';
 import type { WebCodecsPlayer } from '../../engine/WebCodecsPlayer';
+import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../../engine/gaussian/types';
 
 const log = Logger.create('Timeline');
 
@@ -122,10 +123,19 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         preservesPitch: clip.preservesPitch === false ? false : undefined,
         // Text clip support
         textProperties: clip.textProperties,
+        text3DProperties: clip.text3DProperties ?? clip.source?.text3DProperties,
         // Solid clip support
         solidColor: clip.source?.type === 'solid' ? (clip.solidColor || clip.name.replace('Solid ', '')) : undefined,
+        // Clip label color
         // 3D layer support
         is3D: clip.is3D || undefined,
+        meshType: clip.meshType ?? clip.source?.meshType,
+        cameraSettings: clip.source?.type === 'camera' ? clip.source.cameraSettings : undefined,
+        splatEffectorSettings: clip.source?.type === 'splat-effector' ? clip.source.splatEffectorSettings : undefined,
+        // Gaussian avatar blendshapes
+        gaussianBlendshapes: clip.source?.type === 'gaussian-avatar' ? clip.source.gaussianBlendshapes : undefined,
+        // Gaussian splat settings
+        gaussianSplatSettings: clip.source?.type === 'gaussian-splat' ? clip.source.gaussianSplatSettings : undefined,
       };
     });
 
@@ -277,6 +287,52 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
 
     // Restore clips - need to recreate media elements from file references
     const mediaStore = useMediaStore.getState();
+    const getPrimitiveMeshClipName = (serializedClip: SerializableClip): string => {
+      if (serializedClip.meshType === 'text3d') {
+        const textName = serializedClip.text3DProperties?.text?.trim().slice(0, 30);
+        return textName || serializedClip.name || '3D Text';
+      }
+
+      return serializedClip.name || serializedClip.meshType || 'Mesh';
+    };
+    const createPrimitiveMeshClip = (serializedClip: SerializableClip, clipId = serializedClip.id): TimelineClip => {
+      const text3DProperties = serializedClip.text3DProperties
+        ? { ...serializedClip.text3DProperties }
+        : undefined;
+
+      return {
+        id: clipId,
+        trackId: serializedClip.trackId,
+        name: getPrimitiveMeshClipName(serializedClip),
+        file: new File([], `mesh-${serializedClip.meshType}.dat`, { type: 'application/octet-stream' }),
+        mediaFileId: serializedClip.mediaFileId || undefined,
+        startTime: serializedClip.startTime,
+        duration: serializedClip.duration,
+        inPoint: serializedClip.inPoint,
+        outPoint: serializedClip.outPoint,
+        source: {
+          type: 'model',
+          meshType: serializedClip.meshType,
+          mediaFileId: serializedClip.mediaFileId || undefined,
+          naturalDuration: Number.MAX_SAFE_INTEGER,
+          ...(text3DProperties ? { text3DProperties } : {}),
+        },
+        thumbnails: serializedClip.thumbnails,
+        linkedClipId: serializedClip.linkedClipId,
+        linkedGroupId: serializedClip.linkedGroupId,
+        transform: serializedClip.transform,
+        effects: serializedClip.effects || [],
+        masks: serializedClip.masks,
+        reversed: serializedClip.reversed,
+        speed: serializedClip.speed,
+        preservesPitch: serializedClip.preservesPitch,
+        is3D: serializedClip.is3D ?? true,
+        meshType: serializedClip.meshType,
+        text3DProperties,
+        wireframe: false,
+        isLoading: false,
+      };
+    };
 
     for (const serializedClip of data.clips) {
       // Handle composition clips specially
@@ -467,6 +523,11 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                   continue;
                 }
                 // Regular media clip at this sub-level
+                if (nsc.sourceType === 'model' && nsc.meshType) {
+                  result.push(createPrimitiveMeshClip(nsc, `nested-${parentClipId}-${nsc.id}`));
+                  continue;
+                }
+
                 const mf = mediaStore.files.find(f => f.id === nsc.mediaFileId);
                 if (!mf) continue;
                 const hf = !!(mf.file);
@@ -483,11 +544,17 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                     type: nsc.sourceType || 'video',
                     naturalDuration: nsc.naturalDuration || nsc.duration,
                     mediaFileId: nsc.mediaFileId,
+                    ...(nsc.meshType ? { meshType: nsc.meshType } : {}),
+                    ...(nsc.text3DProperties ? { text3DProperties: { ...nsc.text3DProperties } } : {}),
                   },
+                  mediaFileId: nsc.mediaFileId || undefined,
                   thumbnails: nsc.thumbnails,
                   transform: nsc.transform,
                   effects: nsc.effects || [],
                   masks: nsc.masks || [],
+                  is3D: nsc.is3D,
+                  meshType: nsc.meshType,
+                  text3DProperties: nsc.text3DProperties ? { ...nsc.text3DProperties } : undefined,
                   isLoading: hf,
                   needsReload: !hf,
                 };
@@ -532,8 +599,17 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                       wakePreviewAfterRestore();
                     }, { once: true });
                   } else if (subType === 'model') {
-                    nc.source = { type: 'model', modelUrl: subFileUrl, naturalDuration: 3600, mediaFileId: nsc.mediaFileId };
+                    nc.source = {
+                      type: 'model',
+                      modelUrl: subFileUrl,
+                      naturalDuration: 3600,
+                      mediaFileId: nsc.mediaFileId,
+                      ...(nsc.meshType ? { meshType: nsc.meshType } : {}),
+                      ...(nsc.text3DProperties ? { text3DProperties: { ...nsc.text3DProperties } } : {}),
+                    };
                     nc.is3D = true;
+                    nc.meshType = nsc.meshType;
+                    nc.text3DProperties = nsc.text3DProperties ? { ...nsc.text3DProperties } : undefined;
                     nc.isLoading = false;
                   }
                 }
@@ -584,6 +660,16 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                 continue;
               }
 
+              if (nestedSerializedClip.sourceType === 'model' && nestedSerializedClip.meshType) {
+                nestedClips.push(
+                  createPrimitiveMeshClip(
+                    nestedSerializedClip,
+                    `nested-${compClip.id}-${nestedSerializedClip.id}`,
+                  ),
+                );
+                continue;
+              }
+
               const nestedMediaFile = mediaStore.files.find(f => f.id === nestedSerializedClip.mediaFileId);
               const hasFile = !!(nestedMediaFile?.file);
 
@@ -610,11 +696,17 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                   type: nestedSerializedClip.sourceType || 'video',
                   naturalDuration: nestedSerializedClip.naturalDuration || nestedSerializedClip.duration,
                   mediaFileId: nestedSerializedClip.mediaFileId,
+                  ...(nestedSerializedClip.meshType ? { meshType: nestedSerializedClip.meshType } : {}),
+                  ...(nestedSerializedClip.text3DProperties ? { text3DProperties: { ...nestedSerializedClip.text3DProperties } } : {}),
                 },
+                mediaFileId: nestedSerializedClip.mediaFileId || undefined,
                 thumbnails: nestedSerializedClip.thumbnails,
                 transform: nestedSerializedClip.transform,
                 effects: nestedSerializedClip.effects || [],
                 masks: nestedSerializedClip.masks || [],
+                is3D: nestedSerializedClip.is3D,
+                meshType: nestedSerializedClip.meshType,
+                text3DProperties: nestedSerializedClip.text3DProperties ? { ...nestedSerializedClip.text3DProperties } : undefined,
                 isLoading: hasFile,
                 needsReload: !hasFile,
               };
@@ -751,8 +843,17 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                 }, { once: true });
               } else if (nestedType === 'model') {
                 // 3D model — synchronous, just set blob URL
-                nestedClip.source = { type: 'model', modelUrl: nestedFileUrl, naturalDuration: 3600, mediaFileId: nestedSerializedClip.mediaFileId };
+                nestedClip.source = {
+                  type: 'model',
+                  modelUrl: nestedFileUrl,
+                  naturalDuration: 3600,
+                  mediaFileId: nestedSerializedClip.mediaFileId,
+                  ...(nestedSerializedClip.meshType ? { meshType: nestedSerializedClip.meshType } : {}),
+                  ...(nestedSerializedClip.text3DProperties ? { text3DProperties: { ...nestedSerializedClip.text3DProperties } } : {}),
+                };
                 nestedClip.is3D = true;
+                nestedClip.meshType = nestedSerializedClip.meshType;
+                nestedClip.text3DProperties = nestedSerializedClip.text3DProperties ? { ...nestedSerializedClip.text3DProperties } : undefined;
                 nestedClip.isLoading = false;
 
                 // Update store so render loop picks it up
@@ -893,6 +994,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           trackId: serializedClip.trackId,
           name: serializedClip.name,
           file: new File([], 'text-clip.txt', { type: 'text/plain' }),
+          mediaFileId: serializedClip.mediaFileId || undefined,
           startTime: serializedClip.startTime,
           duration: serializedClip.duration,
           inPoint: serializedClip.inPoint,
@@ -900,6 +1002,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           source: {
             type: 'text',
             textCanvas,
+            mediaFileId: serializedClip.mediaFileId || undefined,
             naturalDuration: serializedClip.duration,
           },
           transform: serializedClip.transform,
@@ -939,6 +1042,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           trackId: serializedClip.trackId,
           name: serializedClip.name,
           file: new File([], 'solid-clip.dat', { type: 'application/octet-stream' }),
+          mediaFileId: serializedClip.mediaFileId || undefined,
           startTime: serializedClip.startTime,
           duration: serializedClip.duration,
           inPoint: serializedClip.inPoint,
@@ -946,6 +1050,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           source: {
             type: 'solid',
             textCanvas: canvas,
+            mediaFileId: serializedClip.mediaFileId || undefined,
             naturalDuration: serializedClip.duration,
           },
           transform: serializedClip.transform,
@@ -962,6 +1067,90 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         }));
 
         log.debug('Restored solid clip', { clip: serializedClip.name, color });
+        continue;
+      }
+
+      // Camera clips - restore shared scene camera controls
+      if (serializedClip.sourceType === 'camera') {
+        const { DEFAULT_SCENE_CAMERA_SETTINGS } = await import('../mediaStore');
+
+        const cameraClip: TimelineClip = {
+          id: serializedClip.id,
+          trackId: serializedClip.trackId,
+          name: serializedClip.name || 'Camera',
+          file: new File([], 'camera-clip.dat', { type: 'application/octet-stream' }),
+          mediaFileId: serializedClip.mediaFileId || undefined,
+          startTime: serializedClip.startTime,
+          duration: serializedClip.duration,
+          inPoint: serializedClip.inPoint,
+          outPoint: serializedClip.outPoint,
+          source: {
+            type: 'camera',
+            cameraSettings: serializedClip.cameraSettings || { ...DEFAULT_SCENE_CAMERA_SETTINGS },
+            mediaFileId: serializedClip.mediaFileId || undefined,
+            naturalDuration: Number.MAX_SAFE_INTEGER,
+          },
+          transform: serializedClip.transform,
+          effects: serializedClip.effects || [],
+          masks: serializedClip.masks,
+          speed: serializedClip.speed,
+          preservesPitch: serializedClip.preservesPitch,
+          isLoading: false,
+        };
+
+        set(state => ({
+          clips: [...state.clips, cameraClip],
+        }));
+
+        log.debug('Restored camera clip', { clip: serializedClip.name });
+        continue;
+      }
+
+      if (serializedClip.sourceType === 'splat-effector') {
+        const { DEFAULT_SPLAT_EFFECTOR_SETTINGS } = await import('../../types/splatEffector');
+
+        const effectorClip: TimelineClip = {
+          id: serializedClip.id,
+          trackId: serializedClip.trackId,
+          name: serializedClip.name || 'Splat Effector',
+          file: new File([], 'splat-effector.dat', { type: 'application/octet-stream' }),
+          mediaFileId: serializedClip.mediaFileId || undefined,
+          startTime: serializedClip.startTime,
+          duration: serializedClip.duration,
+          inPoint: serializedClip.inPoint,
+          outPoint: serializedClip.outPoint,
+          source: {
+            type: 'splat-effector',
+            splatEffectorSettings: serializedClip.splatEffectorSettings || { ...DEFAULT_SPLAT_EFFECTOR_SETTINGS },
+            mediaFileId: serializedClip.mediaFileId || undefined,
+            naturalDuration: Number.MAX_SAFE_INTEGER,
+          },
+          transform: serializedClip.transform,
+          effects: serializedClip.effects || [],
+          masks: serializedClip.masks,
+          speed: serializedClip.speed,
+          preservesPitch: serializedClip.preservesPitch,
+          is3D: serializedClip.is3D ?? true,
+          isLoading: false,
+        };
+
+        set((state) => ({
+          clips: [...state.clips, effectorClip],
+        }));
+
+        log.debug('Restored splat effector clip', { clip: serializedClip.name });
+        continue;
+      }
+
+      // Primitive mesh clips - restore without a backing media file
+      if (serializedClip.sourceType === 'model' && serializedClip.meshType) {
+        const meshClip = createPrimitiveMeshClip(serializedClip);
+
+        set(state => ({
+          clips: [...state.clips, meshClip],
+        }));
+
+        log.debug('Restored mesh clip', { clip: serializedClip.name, meshType: serializedClip.meshType });
         continue;
       }
 
@@ -1018,6 +1207,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         preservesPitch: serializedClip.preservesPitch,
         // 3D layer support
         is3D: serializedClip.is3D,
+        meshType: serializedClip.meshType,
       };
 
       // Add clip to state
@@ -1225,6 +1415,48 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                   source: {
                     type: 'model' as const,
                     modelUrl: fileUrl,
+                    naturalDuration: serializedClip.naturalDuration || 3600,
+                    mediaFileId: serializedClip.mediaFileId,
+                  },
+                  is3D: true,
+                  isLoading: false,
+                }
+              : c
+          ),
+        }));
+        wakePreviewAfterRestore();
+      } else if (type === 'gaussian-avatar') {
+        // Gaussian Avatar clips — blob URL for the renderer to load
+        set(state => ({
+          clips: state.clips.map(c =>
+            c.id === clip.id
+              ? {
+                  ...c,
+                  source: {
+                    type: 'gaussian-avatar' as const,
+                    gaussianAvatarUrl: fileUrl,
+                    gaussianBlendshapes: serializedClip.gaussianBlendshapes || {},
+                    naturalDuration: serializedClip.naturalDuration || 3600,
+                    mediaFileId: serializedClip.mediaFileId,
+                  },
+                  is3D: true,
+                  isLoading: false,
+                }
+              : c
+          ),
+        }));
+        wakePreviewAfterRestore();
+      } else if (type === 'gaussian-splat') {
+        // Gaussian Splat clips — blob URL for the renderer to load
+        set(state => ({
+          clips: state.clips.map(c =>
+            c.id === clip.id
+              ? {
+                  ...c,
+                  source: {
+                    type: 'gaussian-splat' as const,
+                    gaussianSplatUrl: fileUrl,
+                    gaussianSplatSettings: serializedClip.gaussianSplatSettings || DEFAULT_GAUSSIAN_SPLAT_SETTINGS,
                     naturalDuration: serializedClip.naturalDuration || 3600,
                     mediaFileId: serializedClip.mediaFileId,
                   },

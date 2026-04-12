@@ -105,7 +105,7 @@ export function Timeline() {
 
   // Clip actions
   const {
-    addClip, addCompClip, addTextClip, addSolidClip, addMeshClip, moveClip, trimClip,
+    addClip, addCompClip, addTextClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, moveClip, trimClip,
     removeClip, selectClip, unlinkGroup, splitClip, splitClipAtPlayhead,
     toggleClipReverse, updateClipTransform, setClipParent, generateWaveformForClip,
     addClipEffect,
@@ -283,6 +283,8 @@ export function Timeline() {
     addTextClip,
     addSolidClip,
     addMeshClip,
+    addCameraClip,
+    addSplatEffectorClip,
   });
 
   // Transition drop handling for drag-and-drop transitions between clips
@@ -800,6 +802,44 @@ export function Timeline() {
 
   // anyVideoSolo and anyAudioSolo are already memoized at the top of the component
 
+  const trackHeaderWidth = 150;
+  const playheadLeft = timeToPixel(playheadPosition) - scrollX + trackHeaderWidth;
+  const showPlayhead = playheadLeft >= trackHeaderWidth;
+
+  useEffect(() => {
+    if (!isPlaying || isDraggingPlayhead) return;
+
+    const viewportWidth = timelineRef.current?.clientWidth;
+    if (!viewportWidth || viewportWidth <= 0) return;
+
+    const END_PADDING = 100;
+    const playheadPixel = timeToPixel(playheadPosition);
+    const viewportStart = scrollX;
+    const viewportEnd = scrollX + viewportWidth;
+    const maxScrollX = Math.max(0, duration * zoom - viewportWidth + END_PADDING);
+
+    if (playheadPixel > viewportEnd) {
+      const nextScrollX = Math.max(
+        0,
+        Math.min(maxScrollX, playheadPixel)
+      );
+      if (nextScrollX !== scrollX) {
+        setScrollX(nextScrollX);
+      }
+      return;
+    }
+
+    if (playheadPixel < viewportStart) {
+      const nextScrollX = Math.max(
+        0,
+        Math.min(maxScrollX, playheadPixel)
+      );
+      if (nextScrollX !== scrollX) {
+        setScrollX(nextScrollX);
+      }
+    }
+  }, [isPlaying, isDraggingPlayhead, playheadPosition, scrollX, zoom, duration, setScrollX, timeToPixel]);
+
   return (
     <div
       className={`timeline-container ${clipDrag || clipTrim ? 'is-dragging' : ''}`}
@@ -1237,15 +1277,17 @@ export function Timeline() {
           </div>{/* timeline-scroll-wrapper */}
 
           {/* Playhead - spans from ruler through all tracks */}
-          <div
-            className="playhead"
-            data-ai-id="timeline-playhead"
-            style={{ left: timeToPixel(playheadPosition) - scrollX + 150 }}
-            onMouseDown={handlePlayheadMouseDown}
-          >
-            <div className="playhead-head" />
-            <div className="playhead-line" />
-          </div>
+          {showPlayhead && (
+            <div
+              className="playhead"
+              data-ai-id="timeline-playhead"
+              style={{ left: playheadLeft }}
+              onMouseDown={handlePlayheadMouseDown}
+            >
+              <div className="playhead-head" />
+              <div className="playhead-line" />
+            </div>
+          )}
 
           {/* Timeline markers - span from ruler through all tracks like playhead */}
           {markers.map(marker => (

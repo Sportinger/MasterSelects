@@ -1,10 +1,11 @@
 // Properties Panel - Main container with lazy-loaded tabs
 import { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
+import { DEFAULT_TEXT_3D_PROPERTIES } from '../../../stores/timeline/constants';
 import { TextTab } from '../TextTab';
 
 // Tab type
-type PropertiesTab = 'transform' | 'effects' | 'masks' | 'transcript' | 'analysis' | 'text';
+type PropertiesTab = 'transform' | 'effects' | 'masks' | 'transcript' | 'analysis' | 'text' | '3d-text' | 'blendshapes' | 'gaussian-splat' | 'camera' | 'splat-effector';
 
 // Lazy load tab components for code splitting
 const TransformTab = lazy(() => import('./TransformTab').then(m => ({ default: m.TransformTab })));
@@ -12,6 +13,11 @@ const EffectsTab = lazy(() => import('./EffectsTab').then(m => ({ default: m.Eff
 const MasksTab = lazy(() => import('./MasksTab').then(m => ({ default: m.MasksTab })));
 const TranscriptTab = lazy(() => import('./TranscriptTab').then(m => ({ default: m.TranscriptTab })));
 const AnalysisTab = lazy(() => import('./AnalysisTab').then(m => ({ default: m.AnalysisTab })));
+const BlendshapesTab = lazy(() => import('./BlendshapesTab').then(m => ({ default: m.BlendshapesTab })));
+const GaussianSplatTab = lazy(() => import('./GaussianSplatTab').then(m => ({ default: m.GaussianSplatTab })));
+const CameraTab = lazy(() => import('./CameraTab').then(m => ({ default: m.CameraTab })));
+const SplatEffectorTab = lazy(() => import('./SplatEffectorTab').then(m => ({ default: m.SplatEffectorTab })));
+const ThreeDTextTab = lazy(() => import('./ThreeDTextTab').then(m => ({ default: m.ThreeDTextTab })));
 
 // Tab loading fallback
 function TabLoading() {
@@ -47,6 +53,17 @@ export function PropertiesPanel() {
 
   // Check if it's a solid clip
   const isSolidClip = selectedClip?.source?.type === 'solid';
+  const selectedMeshType = selectedClip?.meshType ?? selectedClip?.source?.meshType;
+  const is3DTextClip = selectedClip?.source?.type === 'model' && selectedMeshType === 'text3d';
+  const selectedText3DProperties = is3DTextClip
+    ? (selectedClip?.text3DProperties ?? selectedClip?.source?.text3DProperties ?? DEFAULT_TEXT_3D_PROPERTIES)
+    : undefined;
+
+  // Check if it's a gaussian avatar clip
+  const isGaussianAvatar = selectedClip?.source?.type === 'gaussian-avatar';
+  const isGaussianSplat = selectedClip?.source?.type === 'gaussian-splat';
+  const isCameraClip = selectedClip?.source?.type === 'camera';
+  const isSplatEffectorClip = selectedClip?.source?.type === 'splat-effector';
 
   // Reset tab when switching between audio/video/text/solid clips
   useEffect(() => {
@@ -61,17 +78,39 @@ export function PropertiesPanel() {
       }
 
       // Set appropriate default tab based on clip type
-      if (isSolidClip) {
+      if (isGaussianAvatar) {
+        setActiveTab('blendshapes');
+      } else if (isCameraClip) {
         setActiveTab('transform');
+      } else if (isSplatEffectorClip) {
+        setActiveTab('transform');
+      } else if (isGaussianSplat) {
+        setActiveTab('transform');
+      } else if (isSolidClip) {
+        setActiveTab('transform');
+      } else if (is3DTextClip) {
+        setActiveTab('3d-text');
       } else if (isTextClip) {
         setActiveTab('text');
-      } else if (isAudioClip && (activeTab === 'transform' || activeTab === 'masks' || activeTab === 'text')) {
+      } else if (isAudioClip && (activeTab === 'transform' || activeTab === 'masks' || activeTab === 'text' || activeTab === '3d-text' || activeTab === 'blendshapes')) {
         setActiveTab('effects');
-      } else if (!isAudioClip && !isTextClip && activeTab === 'text') {
+      } else if (
+        !isAudioClip &&
+        !isTextClip &&
+        !is3DTextClip &&
+        (
+          activeTab === 'text' ||
+          activeTab === '3d-text' ||
+          (!isGaussianAvatar && activeTab === 'blendshapes') ||
+          (!isGaussianSplat && activeTab === 'gaussian-splat') ||
+          (!isCameraClip && activeTab === 'camera') ||
+          (!isSplatEffectorClip && activeTab === 'splat-effector')
+        )
+      ) {
         setActiveTab('transform');
       }
     }
-  }, [selectedClipId, isAudioClip, isTextClip, isSolidClip, lastClipId, activeTab]);
+  }, [selectedClipId, isAudioClip, isTextClip, is3DTextClip, isSolidClip, isGaussianAvatar, isGaussianSplat, isCameraClip, isSplatEffectorClip, lastClipId, activeTab]);
 
   // Listen for external tab navigation requests (e.g. badge clicks in MediaPanel)
   useEffect(() => {
@@ -139,6 +178,11 @@ export function PropertiesPanel() {
               Transcript {selectedClip.transcript && selectedClip.transcript.length > 0 && <span className="badge">{selectedClip.transcript.length}</span>}
             </button>
           </>
+        ) : isCameraClip ? (
+          <>
+            <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>Transform</button>
+            <button className={`tab-btn ${activeTab === 'camera' ? 'active' : ''}`} onClick={() => setActiveTab('camera')}>Camera</button>
+          </>
         ) : isTextClip ? (
           <>
             <button className={`tab-btn ${activeTab === 'text' ? 'active' : ''}`} onClick={() => setActiveTab('text')}>Text</button>
@@ -150,9 +194,35 @@ export function PropertiesPanel() {
               Masks {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
             </button>
           </>
+        ) : is3DTextClip ? (
+          <>
+            <button className={`tab-btn ${activeTab === '3d-text' ? 'active' : ''}`} onClick={() => setActiveTab('3d-text')}>3D Text</button>
+            <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>Transform</button>
+            <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => setActiveTab('effects')}>
+              Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
+            </button>
+            <button className={`tab-btn ${activeTab === 'masks' ? 'active' : ''}`} onClick={() => setActiveTab('masks')}>
+              Masks {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
+            </button>
+          </>
         ) : (
           <>
             <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>Transform</button>
+            {isGaussianAvatar && (
+              <button className={`tab-btn ${activeTab === 'blendshapes' ? 'active' : ''}`} onClick={() => setActiveTab('blendshapes')}>
+                Blendshapes
+              </button>
+            )}
+            {isGaussianSplat && (
+              <button className={`tab-btn ${activeTab === 'gaussian-splat' ? 'active' : ''}`} onClick={() => setActiveTab('gaussian-splat')}>
+                Gaussian
+              </button>
+            )}
+            {isSplatEffectorClip && (
+              <button className={`tab-btn ${activeTab === 'splat-effector' ? 'active' : ''}`} onClick={() => setActiveTab('splat-effector')}>
+                Effector
+              </button>
+            )}
             <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => setActiveTab('effects')}>
               Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
             </button>
@@ -178,7 +248,14 @@ export function PropertiesPanel() {
           {activeTab === 'text' && isTextClip && selectedClip.textProperties && (
             <TextTab clipId={selectedClip.id} textProperties={selectedClip.textProperties} />
           )}
+          {activeTab === '3d-text' && is3DTextClip && selectedText3DProperties && (
+            <ThreeDTextTab clipId={selectedClip.id} text3DProperties={selectedText3DProperties} />
+          )}
           {activeTab === 'transform' && !isAudioClip && <TransformTab clipId={selectedClip.id} transform={transform} speed={interpolatedSpeed} is3D={selectedClip.is3D} hasKeyframes={hasKeyframes} />}
+          {activeTab === 'camera' && isCameraClip && <CameraTab clipId={selectedClip.id} />}
+          {activeTab === 'blendshapes' && isGaussianAvatar && <BlendshapesTab clipId={selectedClip.id} />}
+          {activeTab === 'gaussian-splat' && isGaussianSplat && <GaussianSplatTab clipId={selectedClip.id} />}
+          {activeTab === 'splat-effector' && isSplatEffectorClip && <SplatEffectorTab clipId={selectedClip.id} />}
           {activeTab === 'effects' && <EffectsTab clipId={selectedClip.id} effects={selectedClip.effects || []} isAudioClip={isAudioClip} />}
           {activeTab === 'masks' && !isAudioClip && <MasksTab clipId={selectedClip.id} masks={selectedClip.masks} />}
           {activeTab === 'transcript' && (

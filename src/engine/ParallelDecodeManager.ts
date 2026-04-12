@@ -12,7 +12,17 @@ import { Logger } from '../services/logger';
 const log = Logger.create('ParallelDecode');
 
 import * as MP4BoxModule from 'mp4box';
-const MP4Box = (MP4BoxModule as any).default || MP4BoxModule;
+
+const MP4Box = MP4BoxModule as unknown as {
+  createFile: typeof MP4BoxModule.createFile;
+  DataStream: {
+    new (buffer?: unknown, byteOffset?: number, endianness?: number): {
+      buffer: ArrayBuffer;
+      position?: number;
+    };
+    BIG_ENDIAN: number;
+  };
+};
 
 // MP4Box types
 interface MP4ArrayBuffer extends ArrayBuffer {
@@ -209,7 +219,7 @@ export class ParallelDecodeManager {
         reject(new Error(`MP4 parsing timeout for clip "${clipInfo.clipName}"`));
       }, 5000);
 
-      const mp4File = MP4Box.createFile() as MP4File;
+      const mp4File = MP4Box.createFile() as unknown as MP4File;
       const collectedSamples: Sample[] = [];
 
       // SYNC onReady — no await allowed here!

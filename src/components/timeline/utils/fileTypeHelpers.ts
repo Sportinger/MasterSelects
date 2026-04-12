@@ -18,6 +18,8 @@ const IMAGE_EXTENSIONS = [
   'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif', 'heic', 'heif',
 ];
 
+const GAUSSIAN_SPLAT_EXTENSIONS = ['ply', 'splat'];
+
 /**
  * Check if file is a video by MIME type or extension
  */
@@ -37,7 +39,15 @@ export function isAudioFile(file: File): boolean {
 }
 
 /**
- * Check if file is any media type (video/audio/image)
+ * Check if file is a gaussian splat file (.ply, .splat)
+ */
+export function isGaussianSplatFile(file: File): boolean {
+  const ext = file.name.split('.').pop()?.toLowerCase() || '';
+  return GAUSSIAN_SPLAT_EXTENSIONS.includes(ext);
+}
+
+/**
+ * Check if file is any media type (video/audio/image/gaussian-splat)
  */
 export function isMediaFile(file: File): boolean {
   if (
@@ -51,7 +61,8 @@ export function isMediaFile(file: File): boolean {
   return (
     VIDEO_EXTENSIONS.includes(ext) ||
     AUDIO_EXTENSIONS.includes(ext) ||
-    IMAGE_EXTENSIONS.includes(ext)
+    IMAGE_EXTENSIONS.includes(ext) ||
+    GAUSSIAN_SPLAT_EXTENSIONS.includes(ext)
   );
 }
 

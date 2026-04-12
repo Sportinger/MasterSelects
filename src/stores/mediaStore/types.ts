@@ -1,9 +1,10 @@
 // MediaStore types - extracted from mediaStore.ts
 
 import type { CompositionTimelineData, TranscriptWord, TranscriptStatus, AnalysisStatus } from '../../types';
+import type { SplatEffectorSettings } from '../../types/splatEffector';
 
 // Media item types
-export type MediaType = 'video' | 'audio' | 'image' | 'composition' | 'text' | 'solid' | 'model';
+export type MediaType = 'video' | 'audio' | 'image' | 'composition' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector';
 
 // Proxy status for video files
 export type ProxyStatus = 'none' | 'generating' | 'ready' | 'error';
@@ -45,7 +46,7 @@ export interface MediaItem {
 
 // Imported file
 export interface MediaFile extends MediaItem {
-  type: 'video' | 'audio' | 'image' | 'model';
+  type: 'video' | 'audio' | 'image' | 'model' | 'gaussian-avatar' | 'gaussian-splat';
   file?: File;
   url: string;
   duration?: number;
@@ -104,7 +105,7 @@ export interface SolidItem extends MediaItem {
 }
 
 // 3D mesh primitive types
-export type MeshPrimitiveType = 'cube' | 'sphere' | 'plane' | 'cylinder' | 'torus' | 'cone';
+export type MeshPrimitiveType = 'cube' | 'sphere' | 'plane' | 'cylinder' | 'torus' | 'cone' | 'text3d';
 
 // 3D mesh item (for Media Panel - can be dragged to timeline)
 export interface MeshItem extends MediaItem {
@@ -112,6 +113,30 @@ export interface MeshItem extends MediaItem {
   meshType: MeshPrimitiveType;
   color: string;      // Mesh material color
   duration: number;   // Default duration when added to timeline
+}
+
+export interface SceneCameraSettings {
+  fov: number;
+  near: number;
+  far: number;
+}
+
+export const DEFAULT_SCENE_CAMERA_SETTINGS: SceneCameraSettings = {
+  fov: 60,
+  near: 0.1,
+  far: 1000,
+};
+
+export interface CameraItem extends MediaItem {
+  type: 'camera';
+  duration: number;
+  cameraSettings: SceneCameraSettings;
+}
+
+export interface SplatEffectorItem extends MediaItem {
+  type: 'splat-effector';
+  duration: number;
+  splatEffectorSettings: SplatEffectorSettings;
 }
 
 // 3D camera configuration for compositions
@@ -156,7 +181,7 @@ export interface MediaFolder {
 }
 
 // Union type for all items
-export type ProjectItem = MediaFile | Composition | MediaFolder | TextItem | SolidItem | MeshItem;
+export type ProjectItem = MediaFile | Composition | MediaFolder | TextItem | SolidItem | MeshItem | CameraItem | SplatEffectorItem;
 
 // Slice creator type for mediaStore
 export type MediaSliceCreator<T> = (
@@ -173,6 +198,8 @@ export interface MediaState {
   textItems: TextItem[];
   solidItems: SolidItem[];
   meshItems: MeshItem[];
+  cameraItems: CameraItem[];
+  splatEffectorItems: SplatEffectorItem[];
 
   // Active composition
   activeCompositionId: string | null;

@@ -5,9 +5,18 @@
 import { Logger } from './logger';
 import * as MP4BoxModule from 'mp4box';
 
-const log = Logger.create('ProxyGenerator');
+const MP4Box = MP4BoxModule as unknown as {
+  createFile: typeof MP4BoxModule.createFile;
+  DataStream: {
+    new (buffer?: unknown, byteOffset?: number, endianness?: number): {
+      buffer: ArrayBuffer;
+      position?: number;
+    };
+    BIG_ENDIAN: number;
+  };
+};
 
-const MP4Box = (MP4BoxModule as any).default || MP4BoxModule;
+const log = Logger.create('ProxyGenerator');
 
 // Configuration
 const PROXY_FPS = 30;
@@ -198,7 +207,7 @@ class ProxyGeneratorWebCodecs {
   private async loadWithMP4Box(file: File): Promise<boolean> {
     // eslint-disable-next-line no-async-promise-executor
     return new Promise(async (resolve) => {
-      this.mp4File = MP4Box.createFile();
+      this.mp4File = MP4Box.createFile() as unknown as MP4File;
       const mp4File = this.mp4File!;
       let expectedSamples = 0;
       let samplesReady = false;

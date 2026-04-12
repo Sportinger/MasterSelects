@@ -68,12 +68,15 @@ export type BlendMode =
   | 'alpha-add';
 
 export interface LayerSource {
-  type: 'video' | 'image' | 'camera' | 'color' | 'text' | 'solid' | 'model';
+  type: 'video' | 'image' | 'camera' | 'color' | 'text' | 'solid' | 'model' | 'gaussian-avatar' | 'gaussian-splat';
   modelUrl?: string;  // Blob URL to 3D model file (OBJ/glTF/GLB)
   meshType?: import('../stores/mediaStore/types').MeshPrimitiveType;  // Primitive mesh type (cube, sphere, etc.)
   file?: File;
   videoElement?: HTMLVideoElement;
   mediaTime?: number;
+  mediaFileId?: string;
+  intrinsicWidth?: number;
+  intrinsicHeight?: number;
   imageElement?: HTMLImageElement;
   color?: string;
   texture?: GPUTexture;
@@ -89,11 +92,21 @@ export interface LayerSource {
   // Shared media runtime binding
   runtimeSourceId?: string;
   runtimeSessionKey?: string;
+  // Gaussian avatar support
+  gaussianAvatarUrl?: string;
+  gaussianBlendshapes?: Record<string, number>;
+  // Gaussian splat clip support
+  gaussianSplatUrl?: string;
+  gaussianSplatFileName?: string;
+  gaussianSplatFileHash?: string;
+  gaussianSplatSettings?: import('../engine/gaussian/types').GaussianSplatSettings;
+  cameraSettings?: import('../stores/mediaStore/types').SceneCameraSettings;
   // Nested composition support - pre-rendered layers from nested comp
   nestedComposition?: NestedCompositionData;
   // Text clip support
   textCanvas?: HTMLCanvasElement;
   textProperties?: TextClipProperties;
+  text3DProperties?: Text3DProperties;
 }
 
 // Data for pre-rendering nested compositions
@@ -142,6 +155,23 @@ export interface TextClipProperties {
   // Text on Path (bezier curve)
   pathEnabled: boolean;
   pathPoints: { x: number; y: number; handleIn: { x: number; y: number }; handleOut: { x: number; y: number } }[];
+}
+
+export interface Text3DProperties {
+  text: string;
+  fontFamily: 'helvetiker' | 'optimer' | 'gentilis';
+  fontWeight: 'regular' | 'bold';
+  size: number;
+  depth: number;
+  color: string;
+  letterSpacing: number;
+  lineHeight: number;
+  textAlign: 'left' | 'center' | 'right';
+  curveSegments: number;
+  bevelEnabled: boolean;
+  bevelThickness: number;
+  bevelSize: number;
+  bevelSegments: number;
 }
 
 export interface Effect {
@@ -390,9 +420,17 @@ export interface TimelineClip {
   inPoint: number;        // Trim in point within source (seconds)
   outPoint: number;       // Trim out point within source (seconds)
   source: {
-    type: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model';
+    type: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector';
     modelUrl?: string;  // Blob URL to 3D model file
     meshType?: import('../stores/mediaStore/types').MeshPrimitiveType;  // Primitive mesh type
+    text3DProperties?: Text3DProperties;
+    cameraSettings?: import('../stores/mediaStore/types').SceneCameraSettings;  // Shared-scene camera settings
+    splatEffectorSettings?: import('./splatEffector').SplatEffectorSettings;  // Shared-scene Three.js splat effector settings
+    gaussianAvatarUrl?: string;  // URL to gaussian splat avatar file
+    gaussianBlendshapes?: Record<string, number>;  // ARKit blendshape weights
+    gaussianSplatUrl?: string;  // URL to gaussian splat scene file
+    gaussianSplatFileName?: string;  // Original filename for format detection after blob URL conversion
+    gaussianSplatSettings?: import('../engine/gaussian/types').GaussianSplatSettings;  // Gaussian splat render settings
     videoElement?: HTMLVideoElement;
     audioElement?: HTMLAudioElement;
     imageElement?: HTMLImageElement;
@@ -452,6 +490,7 @@ export interface TimelineClip {
   sceneDescriptionMessage?: string;   // Status message during description
   // Text clip support
   textProperties?: TextClipProperties;
+  text3DProperties?: Text3DProperties;
   // Solid clip support
   solidColor?: string;
   // YouTube download support
@@ -502,7 +541,7 @@ export interface SerializableClip {
   duration: number;
   inPoint: number;
   outPoint: number;
-  sourceType: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model';
+  sourceType: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector';
   naturalDuration?: number;
   thumbnails?: string[];
   linkedClipId?: string;
@@ -531,6 +570,7 @@ export interface SerializableClip {
   preservesPitch?: boolean;  // Keep pitch when speed changes (default true)
   // Text clip support
   textProperties?: TextClipProperties;
+  text3DProperties?: Text3DProperties;
   // Solid clip support
   solidColor?: string;
   // Transition support
@@ -539,6 +579,12 @@ export interface SerializableClip {
   // 3D layer support
   is3D?: boolean;
   meshType?: import('../stores/mediaStore/types').MeshPrimitiveType;
+  cameraSettings?: import('../stores/mediaStore/types').SceneCameraSettings;
+  splatEffectorSettings?: import('./splatEffector').SplatEffectorSettings;
+  // Gaussian avatar blendshape state
+  gaussianBlendshapes?: Record<string, number>;
+  // Gaussian splat settings
+  gaussianSplatSettings?: import('../engine/gaussian/types').GaussianSplatSettings;
 }
 
 // Serializable timeline marker (for project save/load)

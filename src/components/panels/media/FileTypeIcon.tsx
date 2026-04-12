@@ -59,6 +59,13 @@ export const FileTypeIcon = memo(({ type, large }: FileTypeIconProps) => {
           <text x="8" y="11.5" textAnchor="middle" fill="#eeddcc" fontSize="9" fontWeight="bold" fontFamily="sans-serif">T</text>
         </svg>
       );
+    case 'text-3d':
+      return (
+        <svg style={style} viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#7b604a" stroke="#c8a07c" strokeWidth="0.7"/>
+          <text x="8" y="10.6" textAnchor="middle" fill="#f3e3cf" fontSize="6.4" fontWeight="bold" fontFamily="sans-serif">3T</text>
+        </svg>
+      );
     case 'solid':
       return (
         <svg style={style} viewBox="0 0 16 16" fill="none">
@@ -66,12 +73,60 @@ export const FileTypeIcon = memo(({ type, large }: FileTypeIconProps) => {
           <rect x="4" y="5" width="8" height="6" rx="0.5" fill="#bbb"/>
         </svg>
       );
+    case 'model':
     case 'mesh':
       return (
         <svg style={style} viewBox="0 0 16 16" fill="none">
           <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#4a6a6a" stroke="#6a9a9a" strokeWidth="0.7"/>
           <path d="M8 4L12 6.5V11L8 13.5L4 11V6.5L8 4Z" stroke="#8ad8d8" strokeWidth="0.8" fill="#3a5a5a"/>
           <path d="M8 4V13.5M4 6.5L12 11M12 6.5L4 11" stroke="#6ab8b8" strokeWidth="0.5" opacity="0.6"/>
+        </svg>
+      );
+    case 'camera':
+      return (
+        <svg style={style} viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#5a4f3a" stroke="#b49a64" strokeWidth="0.7"/>
+          <rect x="4.2" y="5.2" width="7.6" height="5.6" rx="0.8" fill="#3d3526" stroke="#d5bf84" strokeWidth="0.7"/>
+          <circle cx="8" cy="8" r="1.7" fill="#d5bf84" opacity="0.9"/>
+          <circle cx="8" cy="8" r="0.7" fill="#6e5d39"/>
+          <path d="M5 5.2L6 4h4l1 1.2" stroke="#d5bf84" strokeWidth="0.7" strokeLinecap="round"/>
+        </svg>
+      );
+    case 'splat-effector':
+      return (
+        <svg style={style} viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#3d5a47" stroke="#74c792" strokeWidth="0.7"/>
+          <circle cx="8" cy="8" r="2.3" fill="#183224" stroke="#a7f0c0" strokeWidth="0.8"/>
+          <path d="M8 3.5V5.4M8 10.6V12.5M3.5 8H5.4M10.6 8H12.5M4.8 4.8L6.1 6.1M9.9 9.9L11.2 11.2M11.2 4.8L9.9 6.1M6.1 9.9L4.8 11.2" stroke="#a7f0c0" strokeWidth="0.8" strokeLinecap="round"/>
+        </svg>
+      );
+    case 'gaussian-avatar':
+      return (
+        <svg style={style} viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#5a4a6a" stroke="#8a6aaa" strokeWidth="0.7"/>
+          {/* Head silhouette made of splat dots */}
+          <circle cx="8" cy="5.5" r="2.5" fill="#9a7abb" opacity="0.7"/>
+          <ellipse cx="8" cy="11" rx="3.5" ry="2.5" fill="#9a7abb" opacity="0.5"/>
+          {/* Splat particles */}
+          <circle cx="6" cy="5" r="0.7" fill="#cc99ee" opacity="0.8"/>
+          <circle cx="9.5" cy="4.5" r="0.5" fill="#cc99ee" opacity="0.7"/>
+          <circle cx="8" cy="6.5" r="0.6" fill="#bb88dd" opacity="0.6"/>
+          <circle cx="5.5" cy="10" r="0.5" fill="#cc99ee" opacity="0.5"/>
+          <circle cx="10" cy="10.5" r="0.5" fill="#cc99ee" opacity="0.5"/>
+        </svg>
+      );
+    case 'gaussian-splat':
+      return (
+        <svg style={style} viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#5a5f3a" stroke="#aab46a" strokeWidth="0.7"/>
+          <circle cx="5" cy="5" r="0.9" fill="#d9ef86" opacity="0.9"/>
+          <circle cx="8.2" cy="4.3" r="0.7" fill="#d9ef86" opacity="0.75"/>
+          <circle cx="10.8" cy="5.5" r="0.6" fill="#d9ef86" opacity="0.7"/>
+          <circle cx="6.1" cy="8.2" r="0.8" fill="#c6de74" opacity="0.8"/>
+          <circle cx="9.1" cy="8.8" r="0.7" fill="#c6de74" opacity="0.7"/>
+          <circle cx="5.2" cy="10.8" r="0.5" fill="#e7f6a5" opacity="0.65"/>
+          <circle cx="8.3" cy="11.4" r="0.8" fill="#d9ef86" opacity="0.75"/>
+          <circle cx="11.1" cy="10.2" r="0.5" fill="#e7f6a5" opacity="0.6"/>
         </svg>
       );
     default:
@@ -171,6 +226,14 @@ const LargeIcon = memo(({ type, style }: { type?: string; style: React.CSSProper
           <text x="24" y="32" textAnchor="middle" fill="#eeddcc" fontSize="22" fontWeight="bold" fontFamily="sans-serif">T</text>
         </svg>
       );
+    case 'text-3d':
+      return (
+        <svg style={style} viewBox="0 0 48 48" fill="none">
+          <rect x="4" y="8" width="40" height="32" rx="3" fill="#70543f"/>
+          <rect x="4" y="8" width="40" height="32" rx="3" stroke="#c79b71" strokeWidth="1"/>
+          <text x="24" y="31" textAnchor="middle" fill="#f3e3cf" fontSize="18" fontWeight="bold" fontFamily="sans-serif">3T</text>
+        </svg>
+      );
     case 'solid':
       return (
         <svg style={style} viewBox="0 0 48 48" fill="none">
@@ -179,6 +242,7 @@ const LargeIcon = memo(({ type, style }: { type?: string; style: React.CSSProper
           <rect x="12" y="16" width="24" height="16" rx="1" fill="#aaa"/>
         </svg>
       );
+    case 'model':
     case 'mesh':
       return (
         <svg style={style} viewBox="0 0 48 48" fill="none">
@@ -193,6 +257,62 @@ const LargeIcon = memo(({ type, style }: { type?: string; style: React.CSSProper
           <circle cx="36" cy="19" r="1.5" fill="#aaeaea"/>
           <circle cx="12" cy="19" r="1.5" fill="#aaeaea"/>
           <circle cx="24" cy="40" r="1.5" fill="#aaeaea"/>
+        </svg>
+      );
+    case 'camera':
+      return (
+        <svg style={style} viewBox="0 0 48 48" fill="none">
+          <rect x="4" y="8" width="40" height="32" rx="3" fill="#56492f"/>
+          <rect x="4" y="8" width="40" height="32" rx="3" stroke="#c7a86d" strokeWidth="1"/>
+          <path d="M14 16h6l2-3h4l2 3h6c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H14c-1.1 0-2-.9-2-2V18c0-1.1.9-2 2-2Z" fill="#30281b" stroke="#d8bc82" strokeWidth="1"/>
+          <circle cx="24" cy="24" r="6.5" fill="#d8bc82" opacity="0.9"/>
+          <circle cx="24" cy="24" r="3" fill="#6c5a36"/>
+          <circle cx="34" cy="19" r="1.5" fill="#d8bc82" opacity="0.85"/>
+        </svg>
+      );
+    case 'splat-effector':
+      return (
+        <svg style={style} viewBox="0 0 48 48" fill="none">
+          <rect x="4" y="8" width="40" height="32" rx="3" fill="#2c4e3b"/>
+          <rect x="4" y="8" width="40" height="32" rx="3" stroke="#6fd294" strokeWidth="1"/>
+          <circle cx="24" cy="24" r="7" fill="#173123" stroke="#aef2c7" strokeWidth="1.2"/>
+          <path d="M24 11v6M24 31v6M11 24h6M31 24h6M15.5 15.5l4.2 4.2M28.3 28.3l4.2 4.2M32.5 15.5l-4.2 4.2M19.7 28.3l-4.2 4.2" stroke="#aef2c7" strokeWidth="1.4" strokeLinecap="round"/>
+          <circle cx="24" cy="24" r="2.2" fill="#d6ffe4"/>
+        </svg>
+      );
+    case 'gaussian-avatar':
+      return (
+        <svg style={style} viewBox="0 0 48 48" fill="none">
+          <rect x="4" y="8" width="40" height="32" rx="3" fill="#4a3a5a"/>
+          <rect x="4" y="8" width="40" height="32" rx="3" stroke="#7a5a9a" strokeWidth="1"/>
+          {/* Head silhouette made of gaussian splat particles */}
+          <circle cx="24" cy="20" r="7" fill="#7a5a9a" opacity="0.6"/>
+          <ellipse cx="24" cy="34" rx="10" ry="6" fill="#7a5a9a" opacity="0.4"/>
+          {/* Splat dots */}
+          <circle cx="20" cy="18" r="2" fill="#cc99ee" opacity="0.8"/>
+          <circle cx="28" cy="17" r="1.5" fill="#cc99ee" opacity="0.7"/>
+          <circle cx="24" cy="22" r="1.8" fill="#bb88dd" opacity="0.6"/>
+          <circle cx="22" cy="15" r="1" fill="#ddaaff" opacity="0.5"/>
+          <circle cx="26" cy="20" r="1.2" fill="#ddaaff" opacity="0.6"/>
+          <circle cx="18" cy="32" r="1.5" fill="#cc99ee" opacity="0.5"/>
+          <circle cx="30" cy="33" r="1.3" fill="#cc99ee" opacity="0.5"/>
+          <circle cx="24" cy="30" r="1.5" fill="#bb88dd" opacity="0.4"/>
+        </svg>
+      );
+    case 'gaussian-splat':
+      return (
+        <svg style={style} viewBox="0 0 48 48" fill="none">
+          <rect x="4" y="8" width="40" height="32" rx="3" fill="#4a5030"/>
+          <rect x="4" y="8" width="40" height="32" rx="3" stroke="#93a455" strokeWidth="1"/>
+          <circle cx="14" cy="16" r="3" fill="#def28c" opacity="0.95"/>
+          <circle cx="23" cy="14" r="2.3" fill="#def28c" opacity="0.75"/>
+          <circle cx="31" cy="17" r="2" fill="#def28c" opacity="0.65"/>
+          <circle cx="18" cy="24" r="2.8" fill="#c8de74" opacity="0.85"/>
+          <circle cx="26" cy="26" r="2.4" fill="#c8de74" opacity="0.78"/>
+          <circle cx="34" cy="23" r="1.8" fill="#e8f7a7" opacity="0.62"/>
+          <circle cx="15" cy="32" r="2" fill="#e8f7a7" opacity="0.55"/>
+          <circle cx="23" cy="34" r="2.9" fill="#def28c" opacity="0.8"/>
+          <circle cx="31" cy="31" r="1.9" fill="#c8de74" opacity="0.65"/>
         </svg>
       );
     default:

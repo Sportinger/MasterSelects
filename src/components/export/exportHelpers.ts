@@ -9,6 +9,7 @@ import {
   cleanupLayerBuilder,
   initializeLayerBuilder,
 } from '../../engine/export/ExportLayerBuilder';
+import { preloadGaussianSplatsForExport } from '../../engine/export/preloadGaussianSplats';
 import { seekAllClipsToTime, waitForAllVideosReady } from '../../engine/export/VideoSeeker';
 import { getFrameTolerance } from '../../engine/export/types';
 import type { ExportClipState, ExportSettings, FrameContext } from '../../engine/export/types';
@@ -68,6 +69,10 @@ export class FFmpegFrameRenderer {
 
     const { tracks } = useTimelineStore.getState();
     initializeLayerBuilder(tracks);
+    await preloadGaussianSplatsForExport({
+      startTime: this.options.startTime,
+      endTime: this.options.endTime,
+    });
 
     this.initialized = true;
     log.info('Initialized FFmpeg frame renderer with runtime-backed export sessions');

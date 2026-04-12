@@ -98,11 +98,11 @@ describe('AI Tool Policy Registry', () => {
     }
   });
 
-  it('importLocalFiles excludes devBridge even though it is high risk', () => {
+  it('importLocalFiles allows devBridge and still requires confirmation', () => {
     const policy = getToolPolicy('importLocalFiles');
     expect(policy).toBeDefined();
     expect(policy!.requiresConfirmation).toBe(true);
-    expect(policy!.allowedCallers.includes('devBridge')).toBe(false);
+    expect(policy!.allowedCallers.includes('devBridge')).toBe(true);
   });
 
   it('mutating editor tools allow nativeHelper', () => {
@@ -144,8 +144,8 @@ describe('AI Tool Policy Registry', () => {
     expect(result.allowed).toBe(true);
   });
 
-  it('sensitive and local file tools still exclude nativeHelper', () => {
-    const helperBlockedTools = ['getLogs', 'getStats', 'getStatsHistory', 'getPlaybackTrace', 'importLocalFiles'];
+  it('sensitive telemetry tools still exclude nativeHelper', () => {
+    const helperBlockedTools = ['getLogs', 'getStats', 'getStatsHistory', 'getPlaybackTrace'];
     for (const name of helperBlockedTools) {
       const policy = getToolPolicy(name);
       expect(policy, `Missing policy for ${name}`).toBeDefined();
@@ -153,6 +153,15 @@ describe('AI Tool Policy Registry', () => {
         policy!.allowedCallers.includes('nativeHelper'),
         `${name} should not allow nativeHelper`
       ).toBe(false);
+    }
+  });
+
+  it('local file tools allow devBridge and nativeHelper', () => {
+    for (const name of ['listLocalFiles', 'importLocalFiles']) {
+      const policy = getToolPolicy(name);
+      expect(policy, `Missing policy for ${name}`).toBeDefined();
+      expect(policy!.allowedCallers.includes('devBridge'), `${name} should allow devBridge`).toBe(true);
+      expect(policy!.allowedCallers.includes('nativeHelper'), `${name} should allow nativeHelper`).toBe(true);
     }
   });
 

@@ -9,6 +9,8 @@ import { formatClipInfo } from '../utils';
 import { isAIExecutionActive, consumeStaggerDelay } from '../executionState';
 import { activateDockPanel } from '../aiFeedback';
 import { Logger } from '../../../services/logger';
+import { getGaussianSplatGpuRenderer } from '../../../engine/gaussian/core/GaussianSplatGpuRenderer';
+import { ensureRenderForDiagnostics } from './renderOnce';
 
 const log = Logger.create('AITool:Clips');
 
@@ -257,11 +259,35 @@ export async function handleGetClipDetails(
     return { success: false, error: `Clip not found: ${clipId}` };
   }
   const track = timelineStore.tracks.find(t => t.id === clip.trackId);
+  const gaussianRenderer = clip.source?.type === 'gaussian-splat'
+    ? getGaussianSplatGpuRenderer()
+    : null;
+  const renderDiagnostics = gaussianRenderer
+    ? await ensureRenderForDiagnostics()
+    : undefined;
+  const gaussianSceneLoaded = gaussianRenderer?.hasScene(clip.id);
+  const gaussianRenderDebug = gaussianRenderer?.getLastRenderDebug(clip.id) ?? undefined;
+  const gaussianTargetSummary = args.includeGaussianTargetSummary === true && gaussianRenderer
+    ? await gaussianRenderer.readLastRenderTargetSummary(clip.id)
+    : undefined;
 
   return {
     success: true,
     data: {
       ...formatClipInfo(clip, track),
+      source: clip.source
+        ? {
+            type: clip.source.type,
+            mediaFileId: clip.source.mediaFileId,
+            gaussianSplatUrl: clip.source.type === 'gaussian-splat' ? clip.source.gaussianSplatUrl : undefined,
+            gaussianSplatSettings: clip.source.type === 'gaussian-splat' ? clip.source.gaussianSplatSettings : undefined,
+          }
+        : null,
+      isLoading: clip.isLoading ?? false,
+      gaussianSceneLoaded,
+      renderDiagnostics,
+      gaussianRenderDebug,
+      gaussianTargetSummary,
       effects: clip.effects || [],
       masks: clip.masks || [],
       transcript: clip.transcript,
