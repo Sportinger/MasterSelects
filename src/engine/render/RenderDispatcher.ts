@@ -34,9 +34,11 @@ import { buildSplatCamera, resolveOrbitCameraPose } from '../gaussian/core/Splat
 import { loadGaussianSplatAssetCached } from '../gaussian/loaders';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../gaussian/types';
 import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
+import { waitForTargetPreparedSplatRuntime } from '../three/splatRuntimeCache';
 
 const log = Logger.create('RenderDispatcher');
 const GAUSSIAN_PLAYBACK_SORT_FREQUENCY = 6;
+const MAX_EXPORT_LAYER_NESTING_DEPTH = 8;
 
 /**
  * Mutable deps bag — the engine updates these references as they change
@@ -81,6 +83,7 @@ export class RenderDispatcher {
   lastRenderHadContent = false;
   lastRenderDebugSnapshot: RenderDispatcherDebugSnapshot | null = null;
   private deps: RenderDeps;
+  private renderTimeOverride: number | null = null;
   private lastPreviewSignature = '';
   private lastPreviewTargetTimeMs?: number;
   private static readonly MAX_DRAG_FALLBACK_DRIFT_SECONDS = 1.2;
@@ -93,12 +96,27 @@ export class RenderDispatcher {
   // Native Gaussian Splat rendering state (new WebGPU path)
   private splatLoadingClips = new Set<string>();
   private splatSceneBounds = new Map<string, { min: [number, number, number]; max: [number, number, number] }>();
+  private exportReadyThreeSceneResolutions = new Set<string>();
+  private exportReadyNativeSplatKeys = new Set<string>();
+  private exportReadyThreeSplatKeys = new Set<string>();
+  private exportReadyModelUrls = new Set<string>();
   private lastThreeSceneDebugKey = '';
 
   constructor(deps: RenderDeps) {
     this.deps = deps;
     // Legacy gaussian-avatar code stays on disk for migration/reference only.
     void this.processGaussianLayers;
+  }
+
+  setRenderTimeOverride(time: number | null): void {
+    this.renderTimeOverride = typeof time === 'number' && Number.isFinite(time) ? time : null;
+  }
+
+  private getEffectiveTimelineTime(): number {
+    if (this.renderTimeOverride !== null) {
+      return this.renderTimeOverride;
+    }
+    return useTimelineStore.getState().playheadPosition;
   }
 
   private resolveStable3DSourceDimensions(
@@ -150,6 +168,7 @@ export class RenderDispatcher {
     height: number,
   ): CameraConfig {
     const timelineStore = useTimelineStore.getState();
+    const timelineTime = this.getEffectiveTimelineTime();
     const buildCameraConfigFromClip = (
       cameraClip: (typeof timelineStore.clips)[number],
     ): CameraConfig | null => {
@@ -157,7 +176,7 @@ export class RenderDispatcher {
         return null;
       }
 
-      const clipLocalTime = timelineStore.playheadPosition - cameraClip.startTime;
+      const clipLocalTime = timelineTime - cameraClip.startTime;
       const transform = timelineStore.getInterpolatedTransform(cameraClip.id, clipLocalTime);
       const cameraSettings = cameraClip.source.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS;
       const defaultDistance = this.getSharedSceneDefaultCameraDistance(cameraSettings.fov);
@@ -203,8 +222,8 @@ export class RenderDispatcher {
       timelineStore.clips.some((clip) =>
         clip.trackId === track.id &&
         clip.source?.type === 'camera' &&
-        timelineStore.playheadPosition >= clip.startTime &&
-        timelineStore.playheadPosition < clip.startTime + clip.duration,
+        timelineTime >= clip.startTime &&
+        timelineTime < clip.startTime + clip.duration,
       ),
     );
 
@@ -212,8 +231,8 @@ export class RenderDispatcher {
       const activeCameraClip = timelineStore.clips.find((clip) =>
         clip.trackId === activeCameraTrack.id &&
         clip.source?.type === 'camera' &&
-        timelineStore.playheadPosition >= clip.startTime &&
-        timelineStore.playheadPosition < clip.startTime + clip.duration,
+        timelineTime >= clip.startTime &&
+        timelineTime < clip.startTime + clip.duration,
       );
 
       if (activeCameraClip?.source?.type === 'camera') {
@@ -238,7 +257,7 @@ export class RenderDispatcher {
 
   private collectActiveSplatEffectors(width: number, height: number): SplatEffectorRuntimeData[] {
     const timelineStore = useTimelineStore.getState();
-    const playhead = timelineStore.playheadPosition;
+    const playhead = this.getEffectiveTimelineTime();
     const worldHeight = 2.0;
     const halfWorldW = (worldHeight * (width / Math.max(height, 1))) / 2;
     const halfWorldH = worldHeight / 2;
@@ -316,6 +335,227 @@ export class RenderDispatcher {
 
     await this.loadAndUploadSplatScene(clipId, url, fileName, renderer);
     return renderer.hasScene(clipId);
+  }
+
+  async ensureThreeSceneRendererInitialized(width: number, height: number): Promise<boolean> {
+    const { getThreeSceneRenderer } = await import('../three/ThreeSceneRenderer');
+    const renderer = this.deps.threeSceneRenderer ?? getThreeSceneRenderer();
+    const initialized = await renderer.initialize(width, height);
+    if (initialized) {
+      this.deps.threeSceneRenderer = renderer;
+    }
+    return initialized;
+  }
+
+  async preloadThreeModelAsset(url: string, fileName: string): Promise<boolean> {
+    if (!url) return false;
+
+    const existingRenderer = this.deps.threeSceneRenderer;
+    let renderer = existingRenderer;
+    if (!renderer?.isInitialized) {
+      const resolution = this.deps.renderTargetManager?.getResolution() ?? { width: 1, height: 1 };
+      const initialized = await this.ensureThreeSceneRendererInitialized(resolution.width, resolution.height);
+      if (!initialized) {
+        return false;
+      }
+      renderer = this.deps.threeSceneRenderer ?? null;
+    }
+
+    if (!renderer) {
+      return false;
+    }
+
+    return renderer.preloadModel(url, fileName);
+  }
+
+  clearExportReadinessCache(): void {
+    this.exportReadyThreeSceneResolutions.clear();
+    this.exportReadyNativeSplatKeys.clear();
+    this.exportReadyThreeSplatKeys.clear();
+    this.exportReadyModelUrls.clear();
+  }
+
+  async ensureExportLayersReady(layers: Layer[]): Promise<void> {
+    const visibleLayers = this.collectVisibleExportLayers(layers);
+    if (visibleLayers.length === 0) {
+      return;
+    }
+
+    const nativeSplats = new Map<string, { clipId: string; url: string; fileName: string }>();
+    const threeSplats = new Map<string, {
+      cacheKey: string;
+      fileHash?: string;
+      file?: File;
+      url?: string;
+      fileName: string;
+      requestedMaxSplats: number;
+    }>();
+    const modelAssets = new Map<string, { url: string; fileName: string }>();
+    let needsThreeSceneRenderer = false;
+
+    for (const layer of visibleLayers) {
+      const source = layer.source;
+      if (!source) {
+        continue;
+      }
+
+      if (
+        layer.is3D === true &&
+        source.type !== 'camera' &&
+        !(source.type === 'gaussian-splat' && this.isNativeGaussianSplatSource(source))
+      ) {
+        needsThreeSceneRenderer = true;
+      }
+
+      if (source.type === 'model' && source.modelUrl) {
+        modelAssets.set(source.modelUrl, {
+          url: source.modelUrl,
+          fileName: source.file?.name ?? layer.name,
+        });
+      }
+
+      if (source.type !== 'gaussian-splat') {
+        continue;
+      }
+
+      const mediaFileId = source.mediaFileId;
+      const mediaFile = mediaFileId
+        ? useMediaStore.getState().files.find((file) => file.id === mediaFileId) ?? null
+        : null;
+      const fileName =
+        source.gaussianSplatFileName ??
+        mediaFile?.file?.name ??
+        source.file?.name ??
+        mediaFile?.name ??
+        layer.name;
+      const file =
+        source.file && (typeof source.file.size !== 'number' || source.file.size > 0)
+          ? source.file
+          : mediaFile?.file && (typeof mediaFile.file.size !== 'number' || mediaFile.file.size > 0)
+            ? mediaFile.file
+            : undefined;
+      const fileHash = source.gaussianSplatFileHash ?? mediaFile?.fileHash;
+      const requestedMaxSplats = source.gaussianSplatSettings?.render.maxSplats ?? 0;
+      const cacheKey =
+        fileHash ??
+        mediaFileId ??
+        `${fileName || source.gaussianSplatUrl || layer.id}|${source.gaussianSplatUrl || layer.id}`;
+
+      if (this.isNativeGaussianSplatSource(source)) {
+        if (!source.gaussianSplatUrl) {
+          throw new Error(`Precise export cannot load native gaussian splat "${layer.name}" without a URL`);
+        }
+        nativeSplats.set(layer.id, {
+          clipId: layer.sourceClipId ?? layer.id,
+          url: source.gaussianSplatUrl,
+          fileName,
+        });
+        continue;
+      }
+
+      if (!source.gaussianSplatUrl && !file) {
+        throw new Error(`Precise export cannot prepare gaussian splat "${layer.name}" without a URL or file`);
+      }
+
+      threeSplats.set(`${cacheKey}|${requestedMaxSplats}`, {
+        cacheKey,
+        fileHash,
+        file,
+        url: source.gaussianSplatUrl,
+        fileName,
+        requestedMaxSplats,
+      });
+    }
+
+    if (needsThreeSceneRenderer || modelAssets.size > 0 || threeSplats.size > 0) {
+      const resolution = this.deps.renderTargetManager?.getResolution() ?? { width: 1, height: 1 };
+      const resolutionKey = `${resolution.width}x${resolution.height}`;
+      if (!this.exportReadyThreeSceneResolutions.has(resolutionKey)) {
+        const initialized = await this.ensureThreeSceneRendererInitialized(resolution.width, resolution.height);
+        if (!initialized) {
+          throw new Error('Precise export could not initialize the Three.js renderer');
+        }
+        this.exportReadyThreeSceneResolutions.add(resolutionKey);
+      }
+    }
+
+    const readinessChecks = [
+      ...[...nativeSplats.values()].map(async ({ clipId, url, fileName }) => {
+        const nativeKey = `${clipId}|${url}`;
+        if (this.exportReadyNativeSplatKeys.has(nativeKey)) {
+          return;
+        }
+        const ready = await this.ensureGaussianSplatSceneLoaded(clipId, url, fileName);
+        if (!ready) {
+          throw new Error(`Native gaussian splat "${fileName}" was not ready in time`);
+        }
+        this.exportReadyNativeSplatKeys.add(nativeKey);
+      }),
+      ...[...modelAssets.values()].map(async ({ url, fileName }) => {
+        if (this.exportReadyModelUrls.has(url)) {
+          return;
+        }
+        const ready = await this.preloadThreeModelAsset(url, fileName);
+        if (!ready) {
+          throw new Error(`3D model "${fileName}" was not ready in time`);
+        }
+        this.exportReadyModelUrls.add(url);
+      }),
+      ...[...threeSplats.values()].map(async ({ cacheKey, fileHash, file, url, fileName, requestedMaxSplats }) => {
+        const threeSplatKey = `${cacheKey}|${requestedMaxSplats}`;
+        if (this.exportReadyThreeSplatKeys.has(threeSplatKey)) {
+          return;
+        }
+        await waitForTargetPreparedSplatRuntime({
+          cacheKey,
+          fileHash,
+          file,
+          url,
+          fileName,
+          requestedMaxSplats,
+        });
+        this.exportReadyThreeSplatKeys.add(threeSplatKey);
+      }),
+    ];
+
+    if (readinessChecks.length === 0) {
+      return;
+    }
+
+    const results = await Promise.allSettled(readinessChecks);
+    const failed = results.find((result) => result.status === 'rejected');
+    if (failed?.status === 'rejected') {
+      throw new Error(
+        `Precise export asset wait failed: ${
+          failed.reason instanceof Error ? failed.reason.message : String(failed.reason)
+        }`,
+      );
+    }
+  }
+
+  private collectVisibleExportLayers(
+    layers: Layer[],
+    depth = 0,
+    result: Layer[] = [],
+  ): Layer[] {
+    if (depth >= MAX_EXPORT_LAYER_NESTING_DEPTH) {
+      return result;
+    }
+
+    for (const layer of layers) {
+      if (!layer || layer.visible === false || layer.opacity === 0) {
+        continue;
+      }
+
+      result.push(layer);
+
+      const nestedLayers = layer.source?.nestedComposition?.layers;
+      if (Array.isArray(nestedLayers) && nestedLayers.length > 0) {
+        this.collectVisibleExportLayers(nestedLayers, depth + 1, result);
+      }
+    }
+
+    return result;
   }
 
   private async waitForGaussianSplatScene(
@@ -741,6 +981,10 @@ export class RenderDispatcher {
       return;
     }
 
+    const isRealtimePlayback = (this.deps.renderLoop?.getIsPlaying() ?? false)
+      && !this.deps.exportCanvasManager.getIsExporting();
+    const preciseSplatSorting = this.deps.exportCanvasManager.getIsExporting();
+
     // Build Layer3DData from the 3D layers
     const layers3D: Layer3DData[] = [];
     for (const idx of indices3D) {
@@ -770,6 +1014,7 @@ export class RenderDispatcher {
         sourceWidth: stableSourceSize.sourceWidth,
         sourceHeight: stableSourceSize.sourceHeight,
         videoElement: src?.videoElement ?? undefined,
+        preciseVideoSampling: !isRealtimePlayback,
         imageElement: src?.imageElement ?? undefined,
         canvas: src?.textCanvas ?? undefined,
         modelUrl: src?.modelUrl ?? undefined,
@@ -780,7 +1025,9 @@ export class RenderDispatcher {
         gaussianSplatUrl: src?.gaussianSplatUrl ?? undefined,
         gaussianSplatFileName: src?.gaussianSplatFileName ?? undefined,
         gaussianSplatFileHash: src?.gaussianSplatFileHash ?? undefined,
+        gaussianSplatMediaFileId: src?.mediaFileId ?? undefined,
         gaussianSplatSettings: src?.gaussianSplatSettings ?? undefined,
+        preciseSplatSorting,
       });
     }
 
@@ -788,8 +1035,6 @@ export class RenderDispatcher {
     const activeSplatEffectors = this.collectActiveSplatEffectors(width, height);
 
     // Render the 3D scene
-    const isRealtimePlayback = (this.deps.renderLoop?.getIsPlaying() ?? false)
-      && !this.deps.exportCanvasManager.getIsExporting();
     const canvas = renderer.renderScene(
       layers3D,
       cameraConfig,

@@ -10,11 +10,13 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
-import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
+import { DEFAULT_TEXT_3D_PROPERTIES, DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
+import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS, type GaussianSplatSettings } from '../gaussian/types';
 
 // Cache video tracks and solo state at export start (don't change during export)
 let cachedVideoTracks: TimelineTrack[] | null = null;
 let cachedAnyVideoSolo = false;
+const MAX_EXPORT_NESTING_DEPTH = 4;
 
 export function initializeLayerBuilder(tracks: TimelineTrack[]): void {
   cachedVideoTracks = tracks.filter(t => t.type === 'video');
@@ -24,6 +26,70 @@ export function initializeLayerBuilder(tracks: TimelineTrack[]): void {
 export function cleanupLayerBuilder(): void {
   cachedVideoTracks = null;
   cachedAnyVideoSolo = false;
+}
+
+function getClipMeshType(clip: TimelineClip) {
+  return clip.meshType ?? clip.source?.meshType;
+}
+
+function getClipMediaFile(clip: TimelineClip) {
+  const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
+  if (!mediaFileId) {
+    return null;
+  }
+  return useMediaStore.getState().files.find((file) => file.id === mediaFileId) ?? null;
+}
+
+function getClipText3DProperties(clip: TimelineClip) {
+  const meshType = getClipMeshType(clip);
+  if (meshType === 'text3d') {
+    return clip.text3DProperties ?? clip.source?.text3DProperties ?? DEFAULT_TEXT_3D_PROPERTIES;
+  }
+  return clip.text3DProperties ?? clip.source?.text3DProperties;
+}
+
+function buildModelSource(clip: TimelineClip): Layer['source'] {
+  const meshType = getClipMeshType(clip);
+  const text3DProperties = getClipText3DProperties(clip);
+
+  return {
+    type: 'model',
+    modelUrl: clip.source?.modelUrl,
+    ...(meshType ? { meshType } : {}),
+    ...(text3DProperties ? { text3DProperties } : {}),
+  };
+}
+
+function usesNativeGaussianSplatRenderer(clip: TimelineClip): boolean {
+  return (
+    clip.source?.type === 'gaussian-splat' &&
+    (
+      clip.source?.gaussianSplatSettings?.render.useNativeRenderer ??
+      DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render.useNativeRenderer
+    ) === true
+  );
+}
+
+function buildGaussianSplatSource(clip: TimelineClip, clipLocalTime: number): Layer['source'] {
+  const mediaFile = getClipMediaFile(clip);
+  const fileName =
+    clip.source?.gaussianSplatFileName ??
+    mediaFile?.file?.name ??
+    clip.file?.name ??
+    mediaFile?.name ??
+    clip.name;
+  const fileHash = clip.source?.gaussianSplatFileHash ?? mediaFile?.fileHash;
+  const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
+
+  return {
+    type: 'gaussian-splat',
+    gaussianSplatUrl: clip.source?.gaussianSplatUrl,
+    gaussianSplatFileName: fileName,
+    ...(fileHash ? { gaussianSplatFileHash: fileHash } : {}),
+    ...(mediaFileId ? { mediaFileId } : {}),
+    gaussianSplatSettings: buildExportGaussianSplatSettings(clip.source?.gaussianSplatSettings),
+    mediaTime: clipLocalTime,
+  };
 }
 
 function getExportVideoElement(
@@ -72,7 +138,7 @@ export function buildLayersAtTime(
       clipLocalTime,
       trackIndex,
       ctx,
-      clip.source?.type === 'gaussian-splat',
+      usesNativeGaussianSplatRenderer(clip),
     );
 
     // Handle nested compositions
@@ -96,6 +162,7 @@ export function buildLayersAtTime(
           layers: nestedLayers,
           width: compWidth,
           height: compHeight,
+          currentTime: clipLocalTime + (clip.inPoint || 0),
         };
 
         layers.push({
@@ -125,7 +192,7 @@ export function buildLayersAtTime(
     else if (clip.source?.type === 'model') {
       layers.push({
         ...baseLayerProps,
-        source: { type: 'model', modelUrl: clip.source.modelUrl },
+        source: buildModelSource(clip),
         is3D: true,
       });
     }
@@ -133,13 +200,7 @@ export function buildLayersAtTime(
     else if (clip.source?.type === 'gaussian-splat') {
       layers.push({
         ...baseLayerProps,
-        source: {
-          type: 'gaussian-splat',
-          gaussianSplatUrl: clip.source.gaussianSplatUrl,
-          gaussianSplatFileName: clip.file?.name ?? clip.name,
-          gaussianSplatSettings: clip.source.gaussianSplatSettings,
-          mediaTime: clipLocalTime,
-        },
+        source: buildGaussianSplatSource(clip, clipLocalTime),
         is3D: true,
       });
     }
@@ -153,6 +214,30 @@ export function buildLayersAtTime(
   }
 
   return layers;
+}
+
+function buildExportGaussianSplatSettings(
+  settings: GaussianSplatSettings | undefined,
+): GaussianSplatSettings {
+  const baseSettings = settings ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS;
+  return {
+    ...baseSettings,
+    render: {
+      ...DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render,
+      ...baseSettings.render,
+      // Export should favor completeness and stable depth ordering over preview performance.
+      maxSplats: 0,
+      sortFrequency: 1,
+    },
+    temporal: {
+      ...DEFAULT_GAUSSIAN_SPLAT_SETTINGS.temporal,
+      ...baseSettings.temporal,
+    },
+    particle: {
+      ...DEFAULT_GAUSSIAN_SPLAT_SETTINGS.particle,
+      ...baseSettings.particle,
+    },
+  };
 }
 
 /**
@@ -300,16 +385,21 @@ function buildNestedLayersForExport(
   mainTimelineTime: number,
   clipStates: Map<string, ExportClipState>,
   parallelDecoder: ParallelDecodeManager | null,
-  useParallelDecode: boolean
+  useParallelDecode: boolean,
+  depth: number = 0,
 ): Layer[] {
-  if (!clip.nestedClips || !clip.nestedTracks) return [];
+  if (!clip.nestedClips || !clip.nestedTracks || depth >= MAX_EXPORT_NESTING_DEPTH) return [];
 
   // Filter for video tracks that are visible (default to visible if not explicitly set to false)
-  const nestedVideoTracks = clip.nestedTracks.filter(t => t.type === 'video' && t.visible !== false);
+  const nestedVideoTracks = clip.nestedTracks.filter(t => t.type === 'video');
+  const nestedAnyVideoSolo = nestedVideoTracks.some(t => t.solo);
   const layers: Layer[] = [];
 
   for (let i = 0; i < nestedVideoTracks.length; i++) {
     const nestedTrack = nestedVideoTracks[i];
+    if (nestedTrack.visible === false) continue;
+    if (nestedAnyVideoSolo && !nestedTrack.solo) continue;
+
     const nestedClip = clip.nestedClips.find(
       nc =>
         nc.trackId === nestedTrack.id &&
@@ -321,78 +411,152 @@ function buildNestedLayersForExport(
 
     // Calculate the clip-local time for keyframe interpolation
     const nestedClipLocalTime = nestedTime - nestedClip.startTime;
-    const baseLayer = buildNestedBaseLayer(nestedClip, nestedClipLocalTime);
+    const nestedLayer = buildNestedLayerForExport(
+      nestedClip,
+      nestedClipLocalTime,
+      mainTimelineTime,
+      clipStates,
+      parallelDecoder,
+      useParallelDecode,
+      depth,
+    );
+    if (nestedLayer) {
+      layers.push(nestedLayer);
+    }
+  }
 
-    // Video clips - try parallel decode first, fallback to HTMLVideoElement
-    const exportVideo = getExportVideoElement(nestedClip, clipStates);
-    if (exportVideo) {
-      const nestedClipState = clipStates.get(nestedClip.id);
-      if (useParallelDecode && parallelDecoder) {
-        // Try parallel decode if clip is registered
-        if (parallelDecoder.hasClip(nestedClip.id)) {
-          const videoFrame = parallelDecoder.getFrameForClip(nestedClip.id, mainTimelineTime);
-          if (videoFrame) {
-            layers.push({
-              ...baseLayer,
-              source: {
-                type: 'video',
-                videoElement: exportVideo,
-                videoFrame: videoFrame,
-              },
-            } as Layer);
-            continue;
-          }
-          // Frame not available - log and fall through to HTMLVideoElement fallback
-          log.warn(`Parallel decode frame not available for nested clip "${nestedClip.name}" at ${mainTimelineTime.toFixed(3)}s, using HTMLVideoElement fallback`);
-        } else {
-          log.warn(`Nested clip "${nestedClip.name}" not in parallel decoder, using HTMLVideoElement fallback`);
-        }
-      }
+  return layers;
+}
 
-      if (nestedClipState?.isSequential && nestedClipState.webCodecsPlayer) {
-        const videoFrame = nestedClipState.webCodecsPlayer.getCurrentFrame();
+function buildNestedLayerForExport(
+  nestedClip: TimelineClip,
+  nestedClipLocalTime: number,
+  mainTimelineTime: number,
+  clipStates: Map<string, ExportClipState>,
+  parallelDecoder: ParallelDecodeManager | null,
+  useParallelDecode: boolean,
+  depth: number,
+): Layer | null {
+  const baseLayer = buildNestedBaseLayer(nestedClip, nestedClipLocalTime);
+
+  if (nestedClip.isComposition && nestedClip.nestedClips && nestedClip.nestedTracks) {
+    const subCompTime = nestedClipLocalTime + (nestedClip.inPoint || 0);
+    const subLayers = buildNestedLayersForExport(
+      nestedClip,
+      subCompTime,
+      mainTimelineTime,
+      clipStates,
+      parallelDecoder,
+      useParallelDecode,
+      depth + 1,
+    );
+
+    if (subLayers.length === 0) {
+      return null;
+    }
+
+    const composition = useMediaStore.getState().compositions.find(c => c.id === nestedClip.compositionId);
+    const compWidth = composition?.width || 1920;
+    const compHeight = composition?.height || 1080;
+
+    return {
+      ...baseLayer,
+      source: {
+        type: 'image',
+        nestedComposition: {
+          compositionId: nestedClip.compositionId || nestedClip.id,
+          layers: subLayers,
+          width: compWidth,
+          height: compHeight,
+          currentTime: subCompTime,
+        },
+      },
+    } as Layer;
+  }
+
+  const exportVideo = getExportVideoElement(nestedClip, clipStates);
+  if (exportVideo) {
+    const nestedClipState = clipStates.get(nestedClip.id);
+    if (useParallelDecode && parallelDecoder) {
+      if (parallelDecoder.hasClip(nestedClip.id)) {
+        const videoFrame = parallelDecoder.getFrameForClip(nestedClip.id, mainTimelineTime);
         if (videoFrame) {
-          layers.push({
+          return {
             ...baseLayer,
             source: {
               type: 'video',
               videoElement: exportVideo,
               videoFrame,
-              webCodecsPlayer: nestedClipState.webCodecsPlayer,
             },
-          } as Layer);
-          continue;
+          } as Layer;
         }
+        log.warn(`Parallel decode frame not available for nested clip "${nestedClip.name}" at ${mainTimelineTime.toFixed(3)}s, using HTMLVideoElement fallback`);
+      } else {
+        log.warn(`Nested clip "${nestedClip.name}" not in parallel decoder, using HTMLVideoElement fallback`);
       }
+    }
 
-      // Fallback: use HTMLVideoElement (less accurate but doesn't fail export)
-      const video = exportVideo;
-      if (video.readyState >= 2) {
-        layers.push({
+    if (nestedClipState?.isSequential && nestedClipState.webCodecsPlayer) {
+      const videoFrame = nestedClipState.webCodecsPlayer.getCurrentFrame();
+      if (videoFrame) {
+        return {
           ...baseLayer,
           source: {
             type: 'video',
-            videoElement: video,
-            webCodecsPlayer: nestedClipState?.webCodecsPlayer ?? undefined,
+            videoElement: exportVideo,
+            videoFrame,
+            webCodecsPlayer: nestedClipState.webCodecsPlayer,
           },
-        } as Layer);
-      } else {
-        log.warn(`Nested clip "${nestedClip.name}" video not ready (readyState=${video.readyState}), skipping frame`);
+        } as Layer;
       }
-    } else if (nestedClip.source?.imageElement) {
-      layers.push({
-        ...baseLayer,
-        source: { type: 'image', imageElement: nestedClip.source.imageElement },
-      } as Layer);
-    } else if (nestedClip.source?.textCanvas) {
-      layers.push({
-        ...baseLayer,
-        source: { type: 'text', textCanvas: nestedClip.source.textCanvas },
-      } as Layer);
     }
+
+    if (exportVideo.readyState >= 2) {
+      return {
+        ...baseLayer,
+        source: {
+          type: 'video',
+          videoElement: exportVideo,
+          webCodecsPlayer: nestedClipState?.webCodecsPlayer ?? undefined,
+        },
+      } as Layer;
+    }
+
+    log.warn(`Nested clip "${nestedClip.name}" video not ready (readyState=${exportVideo.readyState}), skipping frame`);
+    return null;
   }
 
-  return layers;
+  if (nestedClip.source?.type === 'image' && nestedClip.source.imageElement) {
+    return {
+      ...baseLayer,
+      source: { type: 'image', imageElement: nestedClip.source.imageElement },
+    } as Layer;
+  }
+
+  if (nestedClip.source?.type === 'model') {
+    return {
+      ...baseLayer,
+      source: buildModelSource(nestedClip),
+      is3D: true,
+    } as Layer;
+  }
+
+  if (nestedClip.source?.type === 'gaussian-splat') {
+    return {
+      ...baseLayer,
+      source: buildGaussianSplatSource(nestedClip, nestedClipLocalTime),
+      is3D: true,
+    } as Layer;
+  }
+
+  if ((nestedClip.source?.type === 'text' || nestedClip.source?.type === 'solid') && nestedClip.source.textCanvas) {
+    return {
+      ...baseLayer,
+      source: { type: 'text', textCanvas: nestedClip.source.textCanvas },
+    } as Layer;
+  }
+
+  return null;
 }
 
 /**
@@ -415,6 +579,7 @@ function buildNestedBaseLayer(nestedClip: TimelineClip, nestedClipLocalTime: num
     scale: {
       x: nestedClip.transform?.scale?.x ?? DEFAULT_TRANSFORM.scale.x,
       y: nestedClip.transform?.scale?.y ?? DEFAULT_TRANSFORM.scale.y,
+      ...(nestedClip.transform?.scale?.z !== undefined ? { z: nestedClip.transform.scale.z } : {}),
     },
     rotation: {
       x: nestedClip.transform?.rotation?.x ?? DEFAULT_TRANSFORM.rotation.x,
@@ -475,11 +640,13 @@ function buildNestedBaseLayer(nestedClip: TimelineClip, nestedClipLocalTime: num
     scale: {
       x: transform.scale?.x ?? 1,
       y: transform.scale?.y ?? 1,
+      ...(transform.scale?.z !== undefined ? { z: transform.scale.z } : {}),
     },
     rotation: {
       x: ((transform.rotation?.x || 0) * Math.PI) / 180,
       y: ((transform.rotation?.y || 0) * Math.PI) / 180,
       z: ((transform.rotation?.z || 0) * Math.PI) / 180,
     },
+    ...(nestedClip.is3D ? { is3D: true } : {}),
   };
 }

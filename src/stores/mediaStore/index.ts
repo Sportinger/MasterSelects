@@ -35,6 +35,8 @@ export type {
   SplatEffectorItem,
   MeshPrimitiveType,
   SceneCameraSettings,
+  SlotClipEndBehavior,
+  SlotClipSettings,
   ProjectItem,
 } from './types';
 export { DEFAULT_SCENE_CAMERA_SETTINGS } from './types';
@@ -96,6 +98,8 @@ export const useMediaStore = create<MediaStoreState>()(
     openCompositionIds: ['comp-1'],
     slotAssignments: {},
     slotDeckStates: {},
+    slotClipSettings: {},
+    selectedSlotCompositionId: null,
     previewCompositionId: null,
     sourceMonitorFileId: null,
     activeLayerSlots: {},

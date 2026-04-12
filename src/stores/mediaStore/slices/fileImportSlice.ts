@@ -17,7 +17,7 @@ export interface FileImportActions {
     file: File;
     handle: FileSystemFileHandle;
     absolutePath?: string;
-  }>) => Promise<MediaFile[]>;
+  }>, parentId?: string | null) => Promise<MediaFile[]>;
   importGaussianAvatar: (file: File, parentId?: string | null) => Promise<MediaFile>;
   importGaussianSplat: (file: File, parentId?: string | null) => Promise<MediaFile>;
 }
@@ -181,7 +181,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
     return imported;
   },
 
-  importFilesWithHandles: async (filesWithHandles) => {
+  importFilesWithHandles: async (filesWithHandles, parentId?: string | null) => {
     const imported: MediaFile[] = [];
 
     // Phase 1: Add all placeholders instantly
@@ -195,7 +195,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
     set((state) => ({
       files: [
         ...state.files,
-        ...entries.map(e => createPlaceholder(e.file, e.id)),
+        ...entries.map(e => createPlaceholder(e.file, e.id, parentId)),
       ],
     }));
 
@@ -207,7 +207,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
       log.debug('Stored file handle for ID:', id);
 
       try {
-        const importResult = await processImport({ file, id, handle, absolutePath });
+        const importResult = await processImport({ file, id, handle, absolutePath, parentId });
         set((state) => finalizePlaceholder(state, id, importResult.mediaFile));
         imported.push(importResult.mediaFile);
       } catch (err) {

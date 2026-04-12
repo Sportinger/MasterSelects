@@ -6,7 +6,7 @@ import { projectFileService } from '../../services/projectFileService';
 const log = Logger.create('SplatRuntimeCache');
 
 const RUNTIME_MAGIC = 0x53475254; // SGRT
-const RUNTIME_VERSION = 1;
+const RUNTIME_VERSION = 2;
 const HEADER_BYTE_LENGTH = 22 * 4;
 export const DEFAULT_SPLAT_BASE_LOD_MAX_SPLATS = 65536;
 

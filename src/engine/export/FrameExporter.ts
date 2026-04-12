@@ -14,7 +14,11 @@ import { VideoEncoderWrapper } from './VideoEncoderWrapper';
 import { prepareClipsForExport, cleanupExportMode } from './ClipPreparation';
 import { seekAllClipsToTime, waitForAllVideosReady } from './VideoSeeker';
 import { buildLayersAtTime, initializeLayerBuilder, cleanupLayerBuilder } from './ExportLayerBuilder';
-import { preloadGaussianSplatsForExport } from './preloadGaussianSplats';
+import {
+  collectRenderableExportClipsInRange,
+  preloadGaussianSplatsForExport,
+  preload3DAssetsForExport,
+} from './preloadGaussianSplats';
 import {
   RESOLUTION_PRESETS,
   FRAME_RATE_PRESETS,
@@ -67,10 +71,27 @@ export class FrameExporter {
     this.useParallelDecode = false;
   }
 
+  private shouldForcePreciseRendering(): boolean {
+    const state = useTimelineStore.getState();
+    const clipsInRange = collectRenderableExportClipsInRange(
+      this.settings.startTime,
+      this.settings.endTime,
+      Array.isArray(state.tracks) ? state.tracks : [],
+      Array.isArray(state.clips) ? state.clips : [],
+    );
+
+    return clipsInRange.some((clip) => clip.source?.type === 'gaussian-splat' || clip.is3D === true);
+  }
+
   async export(onProgress: (progress: ExportProgress) => void): Promise<Blob | null> {
-    const initialMode = this.exportMode;
+    const forcePreciseRendering = this.shouldForcePreciseRendering();
+    const initialMode = forcePreciseRendering ? 'precise' : this.exportMode;
     const attemptModes: ExportMode[] = initialMode === 'fast' ? ['fast', 'precise'] : [initialMode];
     let fallbackAttempted = false;
+
+    if (forcePreciseRendering && this.exportMode !== 'precise') {
+      log.info('Forcing PRECISE export mode for 3D and gaussian splat content');
+    }
 
     for (const attemptMode of attemptModes) {
       this.exportMode = attemptMode;
@@ -110,10 +131,15 @@ export class FrameExporter {
     const state = useTimelineStore.getState();
     const tracks = Array.isArray(state.tracks) ? state.tracks : [];
     const clips = Array.isArray(state.clips) ? state.clips : [];
-    const hasGaussianSplatsInRange = clips.some((clip) =>
-      clip.source?.type === 'gaussian-splat' &&
-      clip.startTime < endTime &&
-      clip.startTime + clip.duration > startTime,
+    const clipsInRange = collectRenderableExportClipsInRange(startTime, endTime, tracks, clips);
+    const hasGaussianSplatsInRange = clipsInRange.some((clip) =>
+      clip.source?.type === 'gaussian-splat',
+    );
+    const has3DAssetsInRange = clipsInRange.some((clip) =>
+      clip.is3D === true &&
+      clip.source?.type !== 'gaussian-splat' &&
+      clip.source?.type !== 'camera' &&
+      clip.source?.type !== 'splat-effector'
     );
 
     // For stacked alpha, the encoded video is double height (RGB top + alpha bottom)
@@ -143,14 +169,13 @@ export class FrameExporter {
     engine.setExporting(true);
 
     // Initialize export canvas for zero-copy VideoFrame creation
-    let useZeroCopy = false;
-    if (hasGaussianSplatsInRange) {
-      log.info('Gaussian splat export detected, forcing readPixels capture for correctness');
-    } else {
-      useZeroCopy = engine.initExportCanvas(width, height, this.settings.stackedAlpha);
-    }
+    const useZeroCopy = engine.initExportCanvas(width, height, this.settings.stackedAlpha);
     if (useZeroCopy) {
-      log.info('Using zero-copy export path (OffscreenCanvas -> VideoFrame)');
+      if (hasGaussianSplatsInRange || has3DAssetsInRange) {
+        log.info('Complex 3D export detected, using zero-copy export canvas path');
+      } else {
+        log.info('Using zero-copy export path (OffscreenCanvas -> VideoFrame)');
+      }
     } else {
       log.info('Falling back to readPixels export path');
     }
@@ -166,6 +191,14 @@ export class FrameExporter {
 
       // Initialize layer builder cache (tracks don't change during export)
       initializeLayerBuilder(tracks);
+      if (has3DAssetsInRange) {
+        await preload3DAssetsForExport({
+          startTime: this.settings.startTime,
+          endTime: this.settings.endTime,
+          width,
+          height,
+        });
+      }
       await preloadGaussianSplatsForExport({
         startTime: this.settings.startTime,
         endTime: this.settings.endTime,
@@ -209,6 +242,8 @@ export class FrameExporter {
           throw new Error('WebGPU device lost during export. Try keeping the browser tab in focus.');
         }
 
+        engine.setRenderTimeOverride(time);
+        await engine.ensureExportLayersReady(layers);
         engine.render(layers);
 
         // Calculate timestamp and duration in microseconds
@@ -325,6 +360,7 @@ export class FrameExporter {
     cleanupLayerBuilder();
     this.parallelDecoder = null;
     this.useParallelDecode = false;
+    engine.setRenderTimeOverride(null);
     engine.cleanupExportCanvas();
     engine.setExporting(false);
     engine.setResolution(originalDimensions.width, originalDimensions.height);

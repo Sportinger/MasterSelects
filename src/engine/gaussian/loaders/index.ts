@@ -15,8 +15,45 @@ import { parseGaussianSplatHeader as parseHeader } from './parseHeader.ts';
 import { loadPly } from './PlyLoader.ts';
 import { loadSplat } from './SplatLoader.ts';
 import { getSplatCache } from './splatCache.ts';
+import { applyCanonicalBasisCorrection, computeBoundingBox } from './normalize.ts';
 
 const log = Logger.create('GaussianLoader');
+
+function applyAssetBasisCorrection(asset: GaussianSplatAsset): GaussianSplatAsset {
+  let correctedBounds: { min: [number, number, number]; max: [number, number, number] } | null = null;
+
+  for (const frame of asset.frames) {
+    applyCanonicalBasisCorrection(frame.buffer.data, frame.buffer.splatCount);
+
+    const frameBounds = computeBoundingBox(frame.buffer.data, frame.buffer.splatCount);
+    if (!correctedBounds) {
+      correctedBounds = frameBounds;
+      continue;
+    }
+
+    correctedBounds = {
+      min: [
+        Math.min(correctedBounds.min[0], frameBounds.min[0]),
+        Math.min(correctedBounds.min[1], frameBounds.min[1]),
+        Math.min(correctedBounds.min[2], frameBounds.min[2]),
+      ],
+      max: [
+        Math.max(correctedBounds.max[0], frameBounds.max[0]),
+        Math.max(correctedBounds.max[1], frameBounds.max[1]),
+        Math.max(correctedBounds.max[2], frameBounds.max[2]),
+      ],
+    };
+  }
+
+  if (correctedBounds) {
+    asset.metadata = {
+      ...asset.metadata,
+      boundingBox: correctedBounds,
+    };
+  }
+
+  return asset;
+}
 
 /**
  * Load and parse a gaussian splat file into a full GaussianSplatAsset.
@@ -78,6 +115,8 @@ export async function loadGaussianSplatAsset(
     });
     throw err;
   }
+
+  asset = applyAssetBasisCorrection(asset);
 
   log.info('Gaussian splat asset loaded', {
     name: file.name,

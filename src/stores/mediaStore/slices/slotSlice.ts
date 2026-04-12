@@ -1,8 +1,16 @@
 // Slot assignment actions slice - extracted from compositionSlice
-// Manages Resolume-style slot grid assignments
+// Manages Resolume-style slot grid assignments and per-slot clip behavior
 
 import { flags } from '../../../engine/featureFlags';
-import type { Composition, MediaSliceCreator, MediaState, SlotDeckState } from '../types';
+import type {
+  Composition,
+  MediaSliceCreator,
+  MediaState,
+  SlotClipSettings,
+  SlotDeckState,
+} from '../types';
+
+export const MIN_SLOT_CLIP_WINDOW_SECONDS = 0.05;
 
 export interface SlotActions {
   moveSlot: (compId: string, toSlotIndex: number) => void;
@@ -10,6 +18,9 @@ export interface SlotActions {
   getSlotMap: (totalSlots: number) => (Composition | null)[];
   setSlotDeckState: (slotIndex: number, next: SlotDeckState) => void;
   clearSlotDeckState: (slotIndex: number) => void;
+  selectSlotComposition: (compositionId: string | null) => void;
+  ensureSlotClipSettings: (compositionId: string, duration: number) => void;
+  updateSlotClipSettings: (compositionId: string, duration: number, updates: Partial<SlotClipSettings>) => void;
 }
 
 interface SlotDeckManagerLike {
@@ -80,9 +91,48 @@ function findCompAtSlot(slotAssignments: Record<string, number>, slotIndex: numb
   return undefined;
 }
 
+function getDefaultSlotClipSettings(duration: number): SlotClipSettings {
+  const safeDuration = Math.max(duration, MIN_SLOT_CLIP_WINDOW_SECONDS);
+  return {
+    trimIn: 0,
+    trimOut: safeDuration,
+    endBehavior: 'loop',
+  };
+}
+
+function normalizeSlotClipSettings(duration: number, settings?: Partial<SlotClipSettings> | null): SlotClipSettings {
+  const defaults = getDefaultSlotClipSettings(duration);
+  const safeDuration = defaults.trimOut;
+  const requestedTrimIn = settings?.trimIn ?? defaults.trimIn;
+  const requestedTrimOut = settings?.trimOut ?? defaults.trimOut;
+  const endBehavior = settings?.endBehavior ?? defaults.endBehavior;
+
+  if (safeDuration <= MIN_SLOT_CLIP_WINDOW_SECONDS) {
+    return {
+      trimIn: 0,
+      trimOut: safeDuration,
+      endBehavior,
+    };
+  }
+
+  const trimIn = Math.max(0, Math.min(requestedTrimIn, safeDuration - MIN_SLOT_CLIP_WINDOW_SECONDS));
+  const minTrimOut = Math.min(safeDuration, trimIn + MIN_SLOT_CLIP_WINDOW_SECONDS);
+  const trimOut = Math.max(minTrimOut, Math.min(requestedTrimOut, safeDuration));
+
+  return {
+    trimIn,
+    trimOut,
+    endBehavior,
+  };
+}
+
+function areSlotClipSettingsEqual(a: SlotClipSettings, b: SlotClipSettings): boolean {
+  return a.trimIn === b.trimIn && a.trimOut === b.trimOut && a.endBehavior === b.endBehavior;
+}
+
 export const createSlotSlice: MediaSliceCreator<SlotActions> = (set, get) => ({
   moveSlot: (compId: string, toSlotIndex: number) => {
-    const { slotAssignments } = get();
+    const { slotAssignments, selectedSlotCompositionId } = get();
     const newAssignments = { ...slotAssignments };
     const sourceSlot = newAssignments[compId];
     const displacedCompId = findCompAtSlot(newAssignments, toSlotIndex, compId);
@@ -99,8 +149,13 @@ export const createSlotSlice: MediaSliceCreator<SlotActions> = (set, get) => ({
 
     newAssignments[compId] = toSlotIndex;
 
+    const nextSelection =
+      displacedCompId && sourceSlot === undefined && selectedSlotCompositionId === displacedCompId
+        ? null
+        : selectedSlotCompositionId;
+
     if (!flags.useWarmSlotDecks) {
-      set({ slotAssignments: newAssignments });
+      set({ slotAssignments: newAssignments, selectedSlotCompositionId: nextSelection });
       return;
     }
 
@@ -121,6 +176,7 @@ export const createSlotSlice: MediaSliceCreator<SlotActions> = (set, get) => ({
     set({
       slotAssignments: newAssignments,
       slotDeckStates: nextDeckStates,
+      selectedSlotCompositionId: nextSelection,
     });
 
     const slotDeckManager = resolveSlotDeckManager();
@@ -144,13 +200,15 @@ export const createSlotSlice: MediaSliceCreator<SlotActions> = (set, get) => ({
   },
 
   unassignSlot: (compId: string) => {
-    const { slotAssignments } = get();
+    const { slotAssignments, selectedSlotCompositionId } = get();
     const newAssignments = { ...slotAssignments };
     const slotIndex = newAssignments[compId];
     delete newAssignments[compId];
 
+    const nextSelection = selectedSlotCompositionId === compId ? null : selectedSlotCompositionId;
+
     if (!flags.useWarmSlotDecks) {
-      set({ slotAssignments: newAssignments });
+      set({ slotAssignments: newAssignments, selectedSlotCompositionId: nextSelection });
       return;
     }
 
@@ -162,6 +220,7 @@ export const createSlotSlice: MediaSliceCreator<SlotActions> = (set, get) => ({
     set({
       slotAssignments: newAssignments,
       slotDeckStates: nextDeckStates,
+      selectedSlotCompositionId: nextSelection,
     });
 
     if (slotIndex !== undefined) {
@@ -191,5 +250,47 @@ export const createSlotSlice: MediaSliceCreator<SlotActions> = (set, get) => ({
 
   clearSlotDeckState: (slotIndex: number) => {
     set((state) => clearSlotDeckStateMap(state, slotIndex));
+  },
+
+  selectSlotComposition: (compositionId: string | null) => {
+    set({ selectedSlotCompositionId: compositionId });
+  },
+
+  ensureSlotClipSettings: (compositionId: string, duration: number) => {
+    set((state) => {
+      const normalized = normalizeSlotClipSettings(duration, state.slotClipSettings[compositionId]);
+      const current = state.slotClipSettings[compositionId];
+      if (current && areSlotClipSettingsEqual(current, normalized)) {
+        return {};
+      }
+
+      return {
+        slotClipSettings: {
+          ...state.slotClipSettings,
+          [compositionId]: normalized,
+        },
+      };
+    });
+  },
+
+  updateSlotClipSettings: (compositionId: string, duration: number, updates: Partial<SlotClipSettings>) => {
+    set((state) => {
+      const current = state.slotClipSettings[compositionId];
+      const normalized = normalizeSlotClipSettings(duration, {
+        ...(current ?? getDefaultSlotClipSettings(duration)),
+        ...updates,
+      });
+
+      if (current && areSlotClipSettingsEqual(current, normalized)) {
+        return {};
+      }
+
+      return {
+        slotClipSettings: {
+          ...state.slotClipSettings,
+          [compositionId]: normalized,
+        },
+      };
+    });
   },
 });

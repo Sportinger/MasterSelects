@@ -60,6 +60,10 @@ export class WebGPUEngine {
 
   // Resources
   private sampler: GPUSampler | null = null;
+  private readbackBuffer: GPUBuffer | null = null;
+  private readbackBufferSize = 0;
+  private readbackBytesPerRow = 0;
+  private readbackHeight = 0;
 
   // Unified canvas management - single Map replaces 6 old Maps
   private targetCanvases: Map<string, { canvas: HTMLCanvasElement; context: GPUCanvasContext }> = new Map();
@@ -196,6 +200,8 @@ export class WebGPUEngine {
 
   private handleDeviceLost(): void {
     this.renderLoop?.stop();
+    this.renderDispatcher?.clearExportReadinessCache();
+    this.destroyReadbackBuffer();
 
     // Clear GPU resources
     this.renderTargetManager?.clearAll();
@@ -645,12 +651,28 @@ export class WebGPUEngine {
     this.renderDispatcher?.render(layers);
   }
 
+  setRenderTimeOverride(time: number | null): void {
+    this.renderDispatcher?.setRenderTimeOverride(time);
+  }
+
   async ensureGaussianSplatSceneLoaded(
     clipId: string,
     url: string | undefined,
     fileName: string,
   ): Promise<boolean> {
     return this.renderDispatcher?.ensureGaussianSplatSceneLoaded(clipId, url, fileName) ?? false;
+  }
+
+  async ensureThreeSceneRendererInitialized(width: number, height: number): Promise<boolean> {
+    return this.renderDispatcher?.ensureThreeSceneRendererInitialized(width, height) ?? false;
+  }
+
+  async preloadThreeModelAsset(url: string, fileName: string): Promise<boolean> {
+    return this.renderDispatcher?.preloadThreeModelAsset(url, fileName) ?? false;
+  }
+
+  async ensureExportLayersReady(layers: Layer[]): Promise<void> {
+    await this.renderDispatcher?.ensureExportLayersReady(layers);
   }
 
   renderToPreviewCanvas(canvasId: string, layers: Layer[]): void {
@@ -920,11 +942,10 @@ export class WebGPUEngine {
     const unalignedBytesPerRow = width * bytesPerPixel;
     const bytesPerRow = Math.ceil(unalignedBytesPerRow / 256) * 256;
     const bufferSize = bytesPerRow * height;
-
-    const stagingBuffer = device.createBuffer({
-      size: bufferSize,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-    });
+    const stagingBuffer = this.getOrCreateReadbackBuffer(device, bufferSize, bytesPerRow, height);
+    if (!stagingBuffer) {
+      return null;
+    }
 
     const commandEncoder = device.createCommandEncoder();
     commandEncoder.copyTextureToBuffer(
@@ -950,8 +971,45 @@ export class WebGPUEngine {
     }
 
     stagingBuffer.unmap();
-    stagingBuffer.destroy();
     return result;
+  }
+
+  private getOrCreateReadbackBuffer(
+    device: GPUDevice,
+    bufferSize: number,
+    bytesPerRow: number,
+    height: number,
+  ): GPUBuffer | null {
+    const needsNewBuffer =
+      !this.readbackBuffer ||
+      this.readbackBufferSize !== bufferSize ||
+      this.readbackBytesPerRow !== bytesPerRow ||
+      this.readbackHeight !== height;
+
+    if (needsNewBuffer) {
+      this.destroyReadbackBuffer();
+      this.readbackBuffer = device.createBuffer({
+        size: bufferSize,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+      });
+      this.readbackBufferSize = bufferSize;
+      this.readbackBytesPerRow = bytesPerRow;
+      this.readbackHeight = height;
+    }
+
+    return this.readbackBuffer;
+  }
+
+  private destroyReadbackBuffer(): void {
+    if (this.readbackBuffer) {
+      try {
+        this.readbackBuffer.destroy();
+      } catch {}
+      this.readbackBuffer = null;
+    }
+    this.readbackBufferSize = 0;
+    this.readbackBytesPerRow = 0;
+    this.readbackHeight = 0;
   }
 
   // === CLEANUP ===
@@ -970,6 +1028,7 @@ export class WebGPUEngine {
     this.effectsPipeline?.destroy();
     this.outputPipeline?.destroy();
     this.slicePipeline?.destroy();
+    this.destroyReadbackBuffer();
     this.context.destroy();
   }
 }

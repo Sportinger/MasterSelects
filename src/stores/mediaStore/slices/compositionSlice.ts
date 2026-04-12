@@ -315,13 +315,17 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
   removeComposition: (id: string) => {
     set((state) => {
       const newAssignments = { ...state.slotAssignments };
+      const newSlotClipSettings = { ...state.slotClipSettings };
       delete newAssignments[id];
+      delete newSlotClipSettings[id];
       return {
         compositions: state.compositions.filter((c) => c.id !== id),
         selectedIds: state.selectedIds.filter((sid) => sid !== id),
         activeCompositionId: state.activeCompositionId === id ? null : state.activeCompositionId,
         openCompositionIds: state.openCompositionIds.filter((cid) => cid !== id),
         slotAssignments: newAssignments,
+        slotClipSettings: newSlotClipSettings,
+        selectedSlotCompositionId: state.selectedSlotCompositionId === id ? null : state.selectedSlotCompositionId,
       };
     });
   },
@@ -380,6 +384,9 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
 
   setActiveComposition: (id: string | null) => {
     const { activeCompositionId, compositions } = get();
+    if (id === activeCompositionId) {
+      return;
+    }
     doSetActiveComposition(set, get, activeCompositionId, id, compositions);
   },
 
@@ -414,6 +421,13 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
         }
       }
       ts.play();
+      return;
+    }
+    // Same comp already active without playback restart requested → no-op.
+    // Re-loading the same composition clears selection/expanded keyframe rows
+    // and makes existing keyframes look like they vanished when returning
+    // from Slot View.
+    if (id === activeCompositionId) {
       return;
     }
     // Inline setActiveComposition logic
@@ -473,7 +487,17 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
       duration: mediaFile.duration || 60,
       backgroundColor: '#000000',
     };
-    set((state) => ({ compositions: [...state.compositions, comp] }));
+    set((state) => ({
+      compositions: [...state.compositions, comp],
+      slotClipSettings: {
+        ...state.slotClipSettings,
+        [comp.id]: {
+          trimIn: 0,
+          trimOut: Math.max(mediaFile.duration || comp.duration || 60, 0.05),
+          endBehavior: 'loop',
+        },
+      },
+    }));
 
     // Assign to slot (inline moveSlot logic)
     const { slotAssignments } = get();

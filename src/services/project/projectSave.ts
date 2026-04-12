@@ -18,6 +18,11 @@ import {
 import { toProjectTransform } from './transformSerialization';
 
 const log = Logger.create('ProjectSync');
+let projectStoreSyncInProgress = false;
+
+export function isProjectStoreSyncInProgress(): boolean {
+  return projectStoreSyncInProgress;
+}
 
 // ============================================
 // CONVERTER HELPERS (store → project format)
@@ -178,105 +183,111 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
  * Sync current store state to projectFileService
  */
 export async function syncStoresToProject(): Promise<void> {
-  const mediaState = useMediaStore.getState();
-  const timelineStore = useTimelineStore.getState();
+  projectStoreSyncInProgress = true;
+  try {
+    const mediaState = useMediaStore.getState();
+    const timelineStore = useTimelineStore.getState();
 
-  // Save current timeline to active composition first
-  if (mediaState.activeCompositionId) {
-    const timelineData = timelineStore.getSerializableState();
-    useMediaStore.setState((state) => ({
-      compositions: state.compositions.map((c) =>
-        c.id === mediaState.activeCompositionId ? { ...c, timelineData } : c
-      ),
-    }));
-  }
-
-  // Get fresh state after update
-  const freshState = useMediaStore.getState();
-
-  // Update project file data
-  projectFileService.updateMedia(convertMediaFiles(freshState.files));
-  projectFileService.updateCompositions(convertCompositions(freshState.compositions));
-  projectFileService.updateFolders(convertFolders(freshState.folders));
-
-  // Update active state
-  const projectData = projectFileService.getProjectData();
-  if (projectData) {
-    projectData.activeCompositionId = freshState.activeCompositionId;
-    projectData.openCompositionIds = freshState.openCompositionIds;
-    projectData.expandedFolderIds = freshState.expandedFolderIds;
-    projectData.slotAssignments = freshState.slotAssignments;
-
-    // Save YouTube panel state
-    const youtubeState = useYouTubeStore.getState().getState();
-    projectData.youtube = youtubeState;
-
-    // Save UI state (dock layout + composition view states)
-    const dockLayout = useDockStore.getState().getLayoutForProject();
-
-    // Build composition view state from all compositions
-    const compositionViewState: Record<string, {
-      playheadPosition?: number;
-      zoom?: number;
-      scrollX?: number;
-      inPoint?: number | null;
-      outPoint?: number | null;
-    }> = {};
-
-    // Get current timeline state for active composition
-    const timelineState = useTimelineStore.getState();
-    if (freshState.activeCompositionId) {
-      compositionViewState[freshState.activeCompositionId] = {
-        playheadPosition: timelineState.playheadPosition,
-        zoom: timelineState.zoom,
-        scrollX: timelineState.scrollX,
-        inPoint: timelineState.inPoint,
-        outPoint: timelineState.outPoint,
-      };
+    // Save current timeline to active composition first
+    if (mediaState.activeCompositionId) {
+      const timelineData = timelineStore.getSerializableState();
+      useMediaStore.setState((state) => ({
+        compositions: state.compositions.map((c) =>
+          c.id === mediaState.activeCompositionId ? { ...c, timelineData } : c
+        ),
+      }));
     }
 
-    // Also save view state from other compositions' timelineData
-    for (const comp of freshState.compositions) {
-      if (comp.id !== freshState.activeCompositionId && comp.timelineData) {
-        compositionViewState[comp.id] = {
-          playheadPosition: comp.timelineData.playheadPosition,
-          zoom: comp.timelineData.zoom,
-          scrollX: comp.timelineData.scrollX,
-          inPoint: comp.timelineData.inPoint,
-          outPoint: comp.timelineData.outPoint,
+    // Get fresh state after update
+    const freshState = useMediaStore.getState();
+
+    // Update project file data
+    projectFileService.updateMedia(convertMediaFiles(freshState.files));
+    projectFileService.updateCompositions(convertCompositions(freshState.compositions));
+    projectFileService.updateFolders(convertFolders(freshState.folders));
+
+    // Update active state
+    const projectData = projectFileService.getProjectData();
+    if (projectData) {
+      projectData.activeCompositionId = freshState.activeCompositionId;
+      projectData.openCompositionIds = freshState.openCompositionIds;
+      projectData.expandedFolderIds = freshState.expandedFolderIds;
+      projectData.slotAssignments = freshState.slotAssignments;
+      projectData.slotClipSettings = freshState.slotClipSettings;
+
+      // Save YouTube panel state
+      const youtubeState = useYouTubeStore.getState().getState();
+      projectData.youtube = youtubeState;
+
+      // Save UI state (dock layout + composition view states)
+      const dockLayout = useDockStore.getState().getLayoutForProject();
+
+      // Build composition view state from all compositions
+      const compositionViewState: Record<string, {
+        playheadPosition?: number;
+        zoom?: number;
+        scrollX?: number;
+        inPoint?: number | null;
+        outPoint?: number | null;
+      }> = {};
+
+      // Get current timeline state for active composition
+      const timelineState = useTimelineStore.getState();
+      if (freshState.activeCompositionId) {
+        compositionViewState[freshState.activeCompositionId] = {
+          playheadPosition: timelineState.playheadPosition,
+          zoom: timelineState.zoom,
+          scrollX: timelineState.scrollX,
+          inPoint: timelineState.inPoint,
+          outPoint: timelineState.outPoint,
         };
       }
+
+      // Also save view state from other compositions' timelineData
+      for (const comp of freshState.compositions) {
+        if (comp.id !== freshState.activeCompositionId && comp.timelineData) {
+          compositionViewState[comp.id] = {
+            playheadPosition: comp.timelineData.playheadPosition,
+            zoom: comp.timelineData.zoom,
+            scrollX: comp.timelineData.scrollX,
+            inPoint: comp.timelineData.inPoint,
+            outPoint: comp.timelineData.outPoint,
+          };
+        }
+      }
+
+      // Capture per-project UI settings from localStorage
+      const mediaPanelColumns = localStorage.getItem('media-panel-column-order');
+      const mediaPanelNameWidth = localStorage.getItem('media-panel-name-width');
+      const transcriptLanguage = localStorage.getItem('transcriptLanguage');
+      const settingsState = useSettingsStore.getState();
+
+      projectData.uiState = {
+        dockLayout,
+        compositionViewState,
+        mediaPanelColumns: mediaPanelColumns ? JSON.parse(mediaPanelColumns) : undefined,
+        mediaPanelNameWidth: mediaPanelNameWidth ? parseInt(mediaPanelNameWidth, 10) : undefined,
+        transcriptLanguage: transcriptLanguage || undefined,
+        thumbnailsEnabled: timelineState.thumbnailsEnabled,
+        waveformsEnabled: timelineState.waveformsEnabled,
+        proxyEnabled: useMediaStore.getState().proxyEnabled,
+        showTranscriptMarkers: timelineState.showTranscriptMarkers,
+        showChangelogOnStartup: settingsState.showChangelogOnStartup,
+        lastSeenChangelogVersion: settingsState.lastSeenChangelogVersion,
+      };
+
+      // Save generated media items
+      (projectData as any).textItems = freshState.textItems;
+      (projectData as any).solidItems = freshState.solidItems;
+      (projectData as any).meshItems = freshState.meshItems;
+      (projectData as any).cameraItems = freshState.cameraItems;
+      (projectData as any).splatEffectorItems = freshState.splatEffectorItems;
     }
 
-    // Capture per-project UI settings from localStorage
-    const mediaPanelColumns = localStorage.getItem('media-panel-column-order');
-    const mediaPanelNameWidth = localStorage.getItem('media-panel-name-width');
-    const transcriptLanguage = localStorage.getItem('transcriptLanguage');
-    const settingsState = useSettingsStore.getState();
-
-    projectData.uiState = {
-      dockLayout,
-      compositionViewState,
-      mediaPanelColumns: mediaPanelColumns ? JSON.parse(mediaPanelColumns) : undefined,
-      mediaPanelNameWidth: mediaPanelNameWidth ? parseInt(mediaPanelNameWidth, 10) : undefined,
-      transcriptLanguage: transcriptLanguage || undefined,
-      thumbnailsEnabled: timelineState.thumbnailsEnabled,
-      waveformsEnabled: timelineState.waveformsEnabled,
-      proxyEnabled: useMediaStore.getState().proxyEnabled,
-      showTranscriptMarkers: timelineState.showTranscriptMarkers,
-      showChangelogOnStartup: settingsState.showChangelogOnStartup,
-      lastSeenChangelogVersion: settingsState.lastSeenChangelogVersion,
-    };
-
-    // Save generated media items
-    (projectData as any).textItems = freshState.textItems;
-    (projectData as any).solidItems = freshState.solidItems;
-    (projectData as any).meshItems = freshState.meshItems;
-    (projectData as any).cameraItems = freshState.cameraItems;
-    (projectData as any).splatEffectorItems = freshState.splatEffectorItems;
+    log.info(' Synced stores to project');
+  } finally {
+    projectStoreSyncInProgress = false;
   }
-
-  log.info(' Synced stores to project');
 }
 
 /**

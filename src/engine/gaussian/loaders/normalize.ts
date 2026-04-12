@@ -10,6 +10,8 @@
 import type { GaussianSplatMetadata } from './types.ts';
 import { FLOATS_PER_SPLAT } from './types.ts';
 
+const BASIS_ROTATION_X_180: [number, number, number, number] = [0, 1, 0, 0];
+
 /**
  * Compute bounding box from canonical splat buffer.
  * Reads positions at stride-14 offsets.
@@ -56,6 +58,56 @@ export function normalizeQuaternion(w: number, x: number, y: number, z: number):
   }
   const inv = 1.0 / len;
   return [w * inv, x * inv, y * inv, z * inv];
+}
+
+function multiplyQuaternions(
+  aw: number,
+  ax: number,
+  ay: number,
+  az: number,
+  bw: number,
+  bx: number,
+  by: number,
+  bz: number,
+): [number, number, number, number] {
+  return normalizeQuaternion(
+    aw * bw - ax * bx - ay * by - az * bz,
+    aw * bx + ax * bw + ay * bz - az * by,
+    aw * by - ax * bz + ay * bw + az * bx,
+    aw * bz + ax * by - ay * bx + az * bw,
+  );
+}
+
+/**
+ * Align imported splat scenes with the editor's upright camera convention.
+ * Most gaussian-splat exports arrive in an OpenCV-style basis (+Y down, +Z forward),
+ * while the editor renderers assume +Y up and -Z forward.
+ */
+export function applyCanonicalBasisCorrection(
+  data: Float32Array,
+  splatCount: number,
+): void {
+  for (let i = 0; i < splatCount; i += 1) {
+    const base = i * FLOATS_PER_SPLAT;
+
+    data[base + 1] = -data[base + 1];
+    data[base + 2] = -data[base + 2];
+
+    const [nw, nx, ny, nz] = multiplyQuaternions(
+      BASIS_ROTATION_X_180[0],
+      BASIS_ROTATION_X_180[1],
+      BASIS_ROTATION_X_180[2],
+      BASIS_ROTATION_X_180[3],
+      data[base + 6],
+      data[base + 7],
+      data[base + 8],
+      data[base + 9],
+    );
+    data[base + 6] = nw;
+    data[base + 7] = nx;
+    data[base + 8] = ny;
+    data[base + 9] = nz;
+  }
 }
 
 /**

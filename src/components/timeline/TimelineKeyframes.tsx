@@ -1,3 +1,4 @@
+/* @refresh reset */
 // TimelineKeyframes component - Keyframe diamonds/handles with drag support
 
 import { useMemo, useState, useEffect, useCallback } from 'react';
@@ -84,8 +85,8 @@ function TimelineKeyframesComponent({
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
-    targetKeyframeId: string;
-    currentEasing: EasingType;
+    targetKeyframeIds: string[];
+    currentEasing: EasingType | null;
   } | null>(null);
   const { menuRef: contextMenuRef, adjustedPosition: contextMenuPosition } = useContextMenuPosition(
     contextMenu ? { x: contextMenu.x, y: contextMenu.y } : null
@@ -116,6 +117,73 @@ function TimelineKeyframesComponent({
 
     return result;
   }, [trackClips, property, clipKeyframes]);
+
+  const keyframeLookup = useMemo(() => {
+    const result = new Map<string, KeyframeData>();
+
+    clipKeyframes.forEach((keyframes, clipId) => {
+      keyframes.forEach((kf) => {
+        result.set(kf.id, { ...kf, clipId });
+      });
+    });
+
+    return result;
+  }, [clipKeyframes]);
+
+  const getEditableEasingTarget = useCallback((kf: KeyframeData): KeyframeData => {
+    const propKeyframes = (clipKeyframes.get(kf.clipId) || [])
+      .filter(candidate => candidate.property === kf.property)
+      .sort((a, b) => a.time - b.time);
+    const keyframeIndex = propKeyframes.findIndex(candidate => candidate.id === kf.id);
+
+    if (keyframeIndex === -1) {
+      return kf;
+    }
+
+    return keyframeIndex === propKeyframes.length - 1 && keyframeIndex > 0
+      ? { ...propKeyframes[keyframeIndex - 1], clipId: kf.clipId }
+      : { ...propKeyframes[keyframeIndex], clipId: kf.clipId };
+  }, [clipKeyframes]);
+
+  const getContextMenuTargets = useCallback((clickedKeyframe: KeyframeData) => {
+    const shouldApplyToSelection =
+      selectedKeyframeIds.has(clickedKeyframe.id) &&
+      selectedKeyframeIds.size > 1;
+
+    const sourceIds = shouldApplyToSelection
+      ? Array.from(selectedKeyframeIds)
+      : [clickedKeyframe.id];
+
+    const targetKeyframeIds: string[] = [];
+    const seenTargetIds = new Set<string>();
+
+    for (const keyframeId of sourceIds) {
+      const sourceKeyframe = keyframeLookup.get(keyframeId);
+      if (!sourceKeyframe) continue;
+
+      const targetKeyframe = getEditableEasingTarget(sourceKeyframe);
+      if (seenTargetIds.has(targetKeyframe.id)) continue;
+
+      seenTargetIds.add(targetKeyframe.id);
+      targetKeyframeIds.push(targetKeyframe.id);
+    }
+
+    if (targetKeyframeIds.length === 0) {
+      const fallbackTarget = getEditableEasingTarget(clickedKeyframe);
+      targetKeyframeIds.push(fallbackTarget.id);
+    }
+
+    const easingValues = targetKeyframeIds
+      .map((keyframeId) => keyframeLookup.get(keyframeId)?.easing)
+      .filter((easing): easing is string => Boolean(easing))
+      .map((easing) => normalizeEasingType(easing, 'linear'));
+
+    const currentEasing = easingValues.length > 0 && easingValues.every((easing) => easing === easingValues[0])
+      ? easingValues[0]
+      : null;
+
+    return { targetKeyframeIds, currentEasing };
+  }, [getEditableEasingTarget, keyframeLookup, selectedKeyframeIds]);
 
   // Calculate effective start time for a clip (handles drag preview)
   // This is called during render to always use latest clipDrag state
@@ -233,22 +301,15 @@ function TimelineKeyframesComponent({
   ) => {
     e.preventDefault();
     e.stopPropagation();
-
-    const propKeyframes = (clipKeyframes.get(kf.clipId) || [])
-      .filter(candidate => candidate.property === kf.property)
-      .sort((a, b) => a.time - b.time);
-    const keyframeIndex = propKeyframes.findIndex(candidate => candidate.id === kf.id);
-    const targetKeyframe = keyframeIndex === propKeyframes.length - 1 && keyframeIndex > 0
-      ? propKeyframes[keyframeIndex - 1]
-      : kf;
+    const { targetKeyframeIds, currentEasing } = getContextMenuTargets(kf);
 
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
-      targetKeyframeId: targetKeyframe.id,
-      currentEasing: normalizeEasingType(targetKeyframe.easing, 'linear'),
+      targetKeyframeIds,
+      currentEasing,
     });
-  }, [clipKeyframes]);
+  }, [getContextMenuTargets]);
 
   // Close context menu on click outside
   useEffect(() => {
@@ -262,7 +323,9 @@ function TimelineKeyframesComponent({
   // Handle easing selection
   const handleEasingSelect = useCallback((easing: EasingType) => {
     if (contextMenu) {
-      onUpdateKeyframe(contextMenu.targetKeyframeId, { easing });
+      contextMenu.targetKeyframeIds.forEach((keyframeId) => {
+        onUpdateKeyframe(keyframeId, { easing });
+      });
       setContextMenu(null);
     }
   }, [contextMenu, onUpdateKeyframe]);
@@ -311,7 +374,9 @@ function TimelineKeyframesComponent({
             e.stopPropagation();
           }}
         >
-          <div className="context-menu-title">Easing</div>
+          <div className="context-menu-title">
+            {contextMenu.targetKeyframeIds.length > 1 ? 'Easing (Multiple)' : 'Easing'}
+          </div>
           {EASING_OPTIONS.map((option) => (
             <div
               key={option.value}

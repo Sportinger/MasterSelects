@@ -565,7 +565,9 @@ export class NestedCompRenderer {
   private process3DLayersForNested(layerData: LayerRenderData[], width: number, height: number): void {
     const indices3D: number[] = [];
     for (let i = 0; i < layerData.length; i++) {
-      if (layerData[i].layer.is3D) indices3D.push(i);
+      if (layerData[i].layer.is3D && layerData[i].layer.source?.type !== 'gaussian-avatar') {
+        indices3D.push(i);
+      }
     }
     if (indices3D.length === 0) {
       // Debug: log what layers we have and why none are 3D
@@ -592,6 +594,7 @@ export class NestedCompRenderer {
     }
 
     // Build Layer3DData
+    const preciseSplatSorting = useTimelineStore.getState().isExporting === true;
     const layers3D: Layer3DData[] = [];
     for (const idx of indices3D) {
       const data = layerData[idx];
@@ -622,6 +625,12 @@ export class NestedCompRenderer {
         meshType: src?.meshType ?? undefined,
         text3DProperties: src?.text3DProperties ?? undefined,
         wireframe: layer.wireframe,
+        gaussianSplatUrl: src?.gaussianSplatUrl ?? undefined,
+        gaussianSplatFileName: src?.gaussianSplatFileName ?? undefined,
+        gaussianSplatFileHash: src?.gaussianSplatFileHash ?? undefined,
+        gaussianSplatMediaFileId: src?.mediaFileId ?? undefined,
+        gaussianSplatSettings: src?.gaussianSplatSettings ?? undefined,
+        preciseSplatSorting,
       });
     }
 
