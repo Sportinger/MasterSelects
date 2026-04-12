@@ -365,6 +365,8 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
       expandedFolderIds: [],
       slotAssignments: {},
       slotDeckStates: {},
+      slotClipSettings: {},
+      selectedSlotCompositionId: null,
       activeLayerSlots: {},
       layerOpacities: {},
       currentProjectId: null,

@@ -79,6 +79,11 @@ export interface ProjectFile {
 
   // Slot grid assignments (compId → slotIndex)
   slotAssignments?: Record<string, number>;
+  slotClipSettings?: Record<string, {
+    trimIn: number;
+    trimOut: number;
+    endBehavior: 'loop' | 'hold' | 'clear';
+  }>;
 
   // Media source folders (for relinking after cache clear)
   mediaSourceFolders?: string[];

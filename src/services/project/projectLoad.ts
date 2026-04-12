@@ -397,6 +397,8 @@ export async function loadProjectToStores(): Promise<void> {
     openCompositionIds: projectData.openCompositionIds || [],
     expandedFolderIds: projectData.expandedFolderIds || [],
     slotAssignments: projectData.slotAssignments || {},
+    slotClipSettings: projectData.slotClipSettings || {},
+    selectedSlotCompositionId: null,
   });
 
   // Load active composition's timeline

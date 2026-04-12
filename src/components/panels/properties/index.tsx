@@ -1,11 +1,12 @@
 // Properties Panel - Main container with lazy-loaded tabs
 import { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
+import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import { DEFAULT_TEXT_3D_PROPERTIES } from '../../../stores/timeline/constants';
 import { TextTab } from '../TextTab';
 
 // Tab type
-type PropertiesTab = 'transform' | 'effects' | 'masks' | 'transcript' | 'analysis' | 'text' | '3d-text' | 'blendshapes' | 'gaussian-splat' | 'camera' | 'splat-effector';
+type PropertiesTab = 'transform' | 'effects' | 'masks' | 'transcript' | 'analysis' | 'text' | '3d-text' | 'blendshapes' | 'gaussian-splat' | 'camera' | 'splat-effector' | 'slot-clip';
 
 // Lazy load tab components for code splitting
 const TransformTab = lazy(() => import('./TransformTab').then(m => ({ default: m.TransformTab })));
@@ -18,6 +19,7 @@ const GaussianSplatTab = lazy(() => import('./GaussianSplatTab').then(m => ({ de
 const CameraTab = lazy(() => import('./CameraTab').then(m => ({ default: m.CameraTab })));
 const SplatEffectorTab = lazy(() => import('./SplatEffectorTab').then(m => ({ default: m.SplatEffectorTab })));
 const ThreeDTextTab = lazy(() => import('./ThreeDTextTab').then(m => ({ default: m.ThreeDTextTab })));
+const SlotClipTab = lazy(() => import('./SlotClipTab').then(m => ({ default: m.SlotClipTab })));
 
 // Tab loading fallback
 function TabLoading() {
@@ -32,6 +34,12 @@ export function PropertiesPanel() {
   const primarySelectedClipId = useTimelineStore(state => state.primarySelectedClipId);
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
   const clipKeyframes = useTimelineStore(state => state.clipKeyframes);
+  const slotGridProgress = useTimelineStore(state => state.slotGridProgress);
+  const compositions = useMediaStore(state => state.compositions);
+  const slotAssignments = useMediaStore(state => state.slotAssignments);
+  const selectedSlotCompositionId = useMediaStore(state => state.selectedSlotCompositionId);
+  const selectSlotComposition = useMediaStore(state => state.selectSlotComposition) as (compositionId: string | null) => void;
+  const ensureSlotClipSettings = useMediaStore(state => state.ensureSlotClipSettings) as (compositionId: string, duration: number) => void;
   // Actions from getState() - stable, no subscription needed
   const { getInterpolatedTransform, getInterpolatedSpeed } = useTimelineStore.getState();
   const [activeTab, setActiveTab] = useState<PropertiesTab>('transform');
@@ -43,6 +51,11 @@ export function PropertiesPanel() {
     ? primarySelectedClipId
     : selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
   const selectedClip = clips.find(c => c.id === selectedClipId);
+  const selectedSlotComposition = selectedSlotCompositionId
+    ? compositions.find(c => c.id === selectedSlotCompositionId) ?? null
+    : null;
+  const selectedSlotIndex = selectedSlotComposition ? slotAssignments[selectedSlotComposition.id] : undefined;
+  const isSlotMode = slotGridProgress > 0.5 && !!selectedSlotComposition && selectedSlotIndex !== undefined;
 
   // Check if it's an audio clip
   const selectedTrack = selectedClip ? tracks.find(t => t.id === selectedClip.trackId) : null;
@@ -65,8 +78,32 @@ export function PropertiesPanel() {
   const isCameraClip = selectedClip?.source?.type === 'camera';
   const isSplatEffectorClip = selectedClip?.source?.type === 'splat-effector';
 
+  useEffect(() => {
+    if (selectedSlotCompositionId && !selectedSlotComposition) {
+      selectSlotComposition(null);
+    }
+  }, [selectedSlotComposition, selectedSlotCompositionId, selectSlotComposition]);
+
+  useEffect(() => {
+    if (!selectedSlotComposition || selectedSlotIndex === undefined) {
+      return;
+    }
+
+    ensureSlotClipSettings(selectedSlotComposition.id, selectedSlotComposition.duration);
+  }, [ensureSlotClipSettings, selectedSlotComposition, selectedSlotIndex]);
+
+  useEffect(() => {
+    if (isSlotMode && activeTab !== 'slot-clip') {
+      setActiveTab('slot-clip');
+    }
+  }, [activeTab, isSlotMode]);
+
   // Reset tab when switching between audio/video/text/solid clips
   useEffect(() => {
+    if (isSlotMode) {
+      return;
+    }
+
     if (selectedClipId && selectedClipId !== lastClipId) {
       setLastClipId(selectedClipId);
 
@@ -110,7 +147,7 @@ export function PropertiesPanel() {
         setActiveTab('transform');
       }
     }
-  }, [selectedClipId, isAudioClip, isTextClip, is3DTextClip, isSolidClip, isGaussianAvatar, isGaussianSplat, isCameraClip, isSplatEffectorClip, lastClipId, activeTab]);
+  }, [selectedClipId, isAudioClip, isTextClip, is3DTextClip, isSolidClip, isGaussianAvatar, isGaussianSplat, isCameraClip, isSplatEffectorClip, isSlotMode, lastClipId, activeTab]);
 
   // Listen for external tab navigation requests (e.g. badge clicks in MediaPanel)
   useEffect(() => {
@@ -129,6 +166,36 @@ export function PropertiesPanel() {
     if (!selectedClipId) return;
     useTimelineStore.getState().updateSolidColor(selectedClipId, e.target.value);
   }, [selectedClipId]);
+
+  if (slotGridProgress > 0.5 && !selectedSlotComposition) {
+    return (
+      <div className="properties-panel">
+        <div className="panel-header"><h3>Properties</h3></div>
+        <div className="panel-empty"><p>Select a slot to edit slot clip settings</p></div>
+      </div>
+    );
+  }
+
+  if (isSlotMode && selectedSlotComposition && selectedSlotIndex !== undefined) {
+    return (
+      <div className="properties-panel">
+        <div className="properties-tabs">
+          <button className="tab-btn active" onClick={() => setActiveTab('slot-clip')}>
+            Slot Clip
+          </button>
+        </div>
+
+        <div className="properties-content">
+          <Suspense fallback={<TabLoading />}>
+            <SlotClipTab
+              composition={selectedSlotComposition}
+              slotIndex={selectedSlotIndex}
+            />
+          </Suspense>
+        </div>
+      </div>
+    );
+  }
 
   if (!selectedClip) {
     return (

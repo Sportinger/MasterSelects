@@ -540,6 +540,12 @@ export function useEngine() {
       () => engine.requestRender()
     );
 
+    // Slot grid mode changes alter the main preview render path.
+    const unsubSlotGridProgress = useTimelineStore.subscribe(
+      (state) => state.slotGridProgress,
+      () => engine.requestRender()
+    );
+
     // Layer opacity changes (per-layer opacity sliders in slot view)
     const unsubLayerOpacities = useMediaStore.subscribe(
       (state) => state.layerOpacities,
@@ -554,6 +560,7 @@ export function useEngine() {
       unsubSettings();
       unsubActiveComp();
       unsubLayerSlots();
+      unsubSlotGridProgress();
       unsubLayerOpacities();
     };
   }, [isEngineReady]);

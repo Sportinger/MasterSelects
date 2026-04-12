@@ -6,6 +6,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
+import { useDockStore } from '../../stores/dockStore';
 import { playheadState } from '../../services/layerBuilder';
 import { layerPlaybackManager } from '../../services/layerPlaybackManager';
 import { slotDeckManager } from '../../services/slotDeckManager';
@@ -67,8 +68,10 @@ function getSlotDeckBadgeColor(status: SlotDeckState['status']): string {
 export function SlotGrid({ opacity }: SlotGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const slotGridProgress = useTimelineStore(state => state.slotGridProgress);
   const activeCompositionId = useMediaStore(state => state.activeCompositionId);
   const slotAssignments = useMediaStore(state => state.slotAssignments);
+  const selectedSlotCompositionId = useMediaStore(state => state.selectedSlotCompositionId);
   const activeLayerSlots = useMediaStore(state => state.activeLayerSlots);
   const slotDeckStates = useMediaStore(state => state.slotDeckStates);
   const openCompositionTab = useMediaStore(state => state.openCompositionTab);
@@ -78,6 +81,8 @@ export function SlotGrid({ opacity }: SlotGridProps) {
   const triggerLiveColumn = useMediaStore(state => state.triggerLiveColumn) as (colIndex: number) => void;
   const moveSlot = useMediaStore(state => state.moveSlot);
   const unassignSlot = useMediaStore(state => state.unassignSlot);
+  const selectSlotComposition = useMediaStore(state => state.selectSlotComposition) as (compositionId: string | null) => void;
+  const ensureSlotClipSettings = useMediaStore(state => state.ensureSlotClipSettings) as (compositionId: string, duration: number) => void;
   const assignMediaFileToSlot = useMediaStore(state => state.assignMediaFileToSlot);
   const getSlotMap = useMediaStore(state => state.getSlotMap);
   const layerOpacities = useMediaStore(state => state.layerOpacities);
@@ -143,11 +148,11 @@ export function SlotGrid({ opacity }: SlotGridProps) {
   // are "background" vs "editor-managed" even if activeLayerSlots didn't change)
   useEffect(() => {
     const { compositions } = useMediaStore.getState();
+    const slotModeActive = slotGridProgress > 0.5;
 
-    // Compute desired background layers: assigned AND not the current editor comp
     const desired: Record<number, string> = {};
     for (const [key, compId] of Object.entries(activeLayerSlots)) {
-      if (compId && compId !== activeCompositionId) {
+      if (compId && (slotModeActive || compId !== activeCompositionId)) {
         desired[Number(key)] = compId;
       }
     }
@@ -180,7 +185,7 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     }
 
     prevDesiredRef.current = desired;
-  }, [activeLayerSlots, activeCompositionId, slotAssignments]);
+  }, [activeLayerSlots, activeCompositionId, slotAssignments, slotGridProgress]);
 
   // Dismiss context menu on click-outside
   useEffect(() => {
@@ -227,19 +232,24 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     openCompositionTab(compId, { skipAnimation: true, playFromStart: true });
   }, [openCompositionTab]);
 
-  // Click = live trigger when flagged on, otherwise keep the existing editor-first path.
+  // Click = select slot, open Slot Clip tab, and keep layer activation local to slot view.
   const handleSlotClick = useCallback((comp: Composition, slotIndex: number) => {
     const layerIndex = Math.floor(slotIndex / GRID_COLS);
+    ensureSlotClipSettings(comp.id, comp.duration);
+    selectSlotComposition(comp.id);
+    if (activeCompositionId !== comp.id) {
+      openCompositionTab(comp.id, { skipAnimation: true });
+    }
+    useDockStore.getState().activatePanelType('clip-properties');
+    window.dispatchEvent(new CustomEvent('openPropertiesTab', { detail: { tab: 'slot-clip' } }));
+
     if (flags.useLiveSlotTrigger) {
       triggerLiveSlot(comp.id, layerIndex);
       return;
     }
 
-    // Set editor comp first so sync effect sees correct activeCompositionId.
-    openSlotInEditor(comp.id);
-    // Then update layer assignment.
     useMediaStore.getState().activateOnLayer(comp.id, layerIndex);
-  }, [openSlotInEditor, triggerLiveSlot]);
+  }, [activeCompositionId, ensureSlotClipSettings, openCompositionTab, selectSlotComposition, triggerLiveSlot]);
 
   const handleSlotDoubleClick = useCallback((comp: Composition) => {
     openSlotInEditor(comp.id);
@@ -251,6 +261,7 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     const { activeLayerSlots, activeCompositionId } = useMediaStore.getState();
     const compOnLayer = activeLayerSlots[layerIndex];
 
+    selectSlotComposition(null);
     deactivateLayer(layerIndex);
 
     // Check which layers are still active after removing this one
@@ -300,7 +311,7 @@ export function SlotGrid({ opacity }: SlotGridProps) {
       }
     }
     // If deactivated comp was NOT the editor-active one, other layers keep playing
-  }, [deactivateLayer]);
+  }, [deactivateLayer, selectSlotComposition]);
 
   // Click column header = activate all compositions in that column
   const handleColumnClick = useCallback((colIndex: number) => {
@@ -465,6 +476,7 @@ export function SlotGrid({ opacity }: SlotGridProps) {
               if (comp) {
                 const isEditorActive = comp.id === activeCompositionId;
                 const isLayerActive = activeLayerCompIds.has(comp.id);
+                const isSelected = comp.id === selectedSlotCompositionId;
                 const isSelf = comp.id === dragCompId;
                 // Find thumbnail from first video clip's media file
                 const firstVideoClip = comp.timelineData?.clips?.find(
@@ -478,6 +490,7 @@ export function SlotGrid({ opacity }: SlotGridProps) {
                       `slot-grid-item` +
                       `${isEditorActive ? ' active' : ''}` +
                       `${isLayerActive && !isEditorActive ? ' layer-active' : ''}` +
+                      `${isSelected ? ' selected' : ''}` +
                       `${isDragOver && !isSelf ? ' drag-over' : ''}`
                     }
                     data-comp-id={comp.id}

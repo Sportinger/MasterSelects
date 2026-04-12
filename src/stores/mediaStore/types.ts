@@ -31,6 +31,14 @@ export interface SlotDeckState {
   pinnedLayerIndex: number | null;
 }
 
+export type SlotClipEndBehavior = 'loop' | 'hold' | 'clear';
+
+export interface SlotClipSettings {
+  trimIn: number;
+  trimOut: number;
+  endBehavior: SlotClipEndBehavior;
+}
+
 // Label colors (AE-style)
 export type LabelColor = 'none' | 'red' | 'yellow' | 'blue' | 'green' | 'purple' | 'orange' | 'pink' | 'cyan' | 'brown' | 'lavender' | 'peach' | 'seafoam' | 'fuchsia' | 'tan' | 'aqua';
 
@@ -208,6 +216,8 @@ export interface MediaState {
   // Slot grid
   slotAssignments: Record<string, number>;  // compId → slotIndex
   slotDeckStates?: Record<number, SlotDeckState>;
+  slotClipSettings: Record<string, SlotClipSettings>;
+  selectedSlotCompositionId: string | null;
   previewCompositionId: string | null;
   sourceMonitorFileId: string | null;
 

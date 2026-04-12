@@ -46,12 +46,16 @@ export function DockTabPane({ group }: DockTabPaneProps) {
   const {
     getOpenCompositions,
     activeCompositionId,
+    compositions,
+    selectedSlotCompositionId,
     setActiveComposition,
     closeCompositionTab,
     reorderCompositionTabs
   } = useMediaStore(useShallow(s => ({
     getOpenCompositions: s.getOpenCompositions,
     activeCompositionId: s.activeCompositionId,
+    compositions: s.compositions,
+    selectedSlotCompositionId: s.selectedSlotCompositionId,
     setActiveComposition: s.setActiveComposition,
     closeCompositionTab: s.closeCompositionTab,
     reorderCompositionTabs: s.reorderCompositionTabs,
@@ -69,6 +73,13 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     const clip = clips.find(c => c.id === clipId);
     return clip?.name || null;
   }, [clips, selectedClipIds]);
+  const selectedSlotName = useMemo(() => {
+    if (slotGridProgress <= 0.5 || !selectedSlotCompositionId) {
+      return null;
+    }
+
+    return compositions.find((comp) => comp.id === selectedSlotCompositionId)?.name || null;
+  }, [compositions, selectedSlotCompositionId, slotGridProgress]);
 
   // State for dragging composition tabs
   const [draggedCompIndex, setDraggedCompIndex] = useState<number | null>(null);
@@ -512,8 +523,8 @@ export function DockTabPane({ group }: DockTabPaneProps) {
 
             // Dynamic tab title for clip-properties panel
             let tabTitle = panel.title;
-            if (panel.type === 'clip-properties' && selectedClipName) {
-              tabTitle = truncateText(selectedClipName, 18);
+            if (panel.type === 'clip-properties' && (selectedSlotName || selectedClipName)) {
+              tabTitle = truncateText(selectedSlotName || selectedClipName || panel.title, 18);
             }
 
             return (
@@ -526,7 +537,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
                 onMouseDown={(e) => handleTabMouseDown(e, panel, index)}
                 onMouseUp={handleTabMouseUp}
                 onMouseLeave={handleTabMouseLeave}
-                title={panel.type === 'clip-properties' ? selectedClipName || panel.title : panel.title}
+                title={panel.type === 'clip-properties' ? selectedSlotName || selectedClipName || panel.title : panel.title}
               >
                 <span className="dock-tab-title">{tabTitle}{WIP_PANEL_TYPES.includes(panel.type) && <span className="menu-wip-badge">🐛</span>}</span>
               </div>

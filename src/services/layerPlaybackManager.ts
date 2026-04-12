@@ -4,7 +4,7 @@
 
 import type { TimelineClip, TimelineTrack, Layer, NestedCompositionData } from '../types';
 import { engine } from '../engine/WebGPUEngine';
-import type { Composition } from '../stores/mediaStore/types';
+import type { Composition, SlotClipEndBehavior } from '../stores/mediaStore/types';
 import { useMediaStore } from '../stores/mediaStore';
 import { DEFAULT_TRANSFORM } from '../stores/timeline/constants';
 import { bindSourceRuntimeForOwner } from './mediaRuntime/clipBindings';
@@ -25,11 +25,23 @@ interface LayerCompState {
   clips: TimelineClip[];
   tracks: TimelineTrack[];
   duration: number;
-  // Independent time tracking (wall-clock based, not tied to global playhead)
-  activatedAt: number;   // performance.now() when this layer was activated
-  pausedAt: number | null; // if paused, the elapsed time at pause; null = running
+  // Anchor-based transport for slot playback.
+  anchorTime: number;
+  anchorStartedAt: number;
+  playbackState: 'playing' | 'paused' | 'stopped';
+  clearRequested: boolean;
   resourceOwnership: 'layer' | 'slot-deck';
   slotIndex: number | null;
+}
+
+interface LayerPlaybackInfo {
+  compositionId: string;
+  currentTime: number;
+  trimIn: number;
+  trimOut: number;
+  endBehavior: SlotClipEndBehavior;
+  playbackState: LayerCompState['playbackState'];
+  shouldRender: boolean;
 }
 
 class LayerPlaybackManager {
@@ -60,14 +72,17 @@ class LayerPlaybackManager {
     if (preparedDeck && options?.slotIndex !== undefined && options.slotIndex !== null) {
       const adopted = slotDeckManager.adoptDeckToLayer(options.slotIndex, layerIndex, initialElapsed);
       if (adopted) {
+        const initialTime = this.getInitialLayerTime(compositionId, preparedDeck.duration, initialElapsed);
         this.layerStates.set(layerIndex, {
           compositionId,
           composition: preparedDeck.composition,
           clips: preparedDeck.clips,
           tracks: preparedDeck.tracks,
           duration: preparedDeck.duration,
-          activatedAt: performance.now() - (initialElapsed ?? 0) * 1000,
-          pausedAt: null,
+          anchorTime: initialTime,
+          anchorStartedAt: performance.now(),
+          playbackState: 'playing',
+          clearRequested: false,
           resourceOwnership: 'slot-deck',
           slotIndex: options.slotIndex,
         });
@@ -86,16 +101,19 @@ class LayerPlaybackManager {
     const timelineData = comp.timelineData;
     if (!timelineData || !timelineData.clips || timelineData.clips.length === 0) {
       log.info(`Composition ${comp.name} has no timeline data, activating with empty state`);
+      const initialTime = this.getInitialLayerTime(compositionId, comp.duration, initialElapsed);
       this.layerStates.set(layerIndex, {
         compositionId,
         composition: comp,
         clips: [],
         tracks: timelineData?.tracks || [],
         duration: comp.duration,
-        activatedAt: performance.now() - (initialElapsed ?? 0) * 1000,
-        pausedAt: null,
+        anchorTime: initialTime,
+        anchorStartedAt: performance.now(),
+        playbackState: 'playing',
+        clearRequested: false,
         resourceOwnership: 'layer',
-        slotIndex: null,
+        slotIndex: options?.slotIndex ?? null,
       });
       return;
     }
@@ -151,16 +169,19 @@ class LayerPlaybackManager {
       hydratedClips.push(clip);
     }
 
+    const initialTime = this.getInitialLayerTime(compositionId, comp.duration, initialElapsed);
     this.layerStates.set(layerIndex, {
       compositionId,
       composition: comp,
       clips: hydratedClips,
       tracks: timelineData.tracks,
       duration: comp.duration,
-      activatedAt: performance.now() - (initialElapsed ?? 0) * 1000,
-      pausedAt: null,
+      anchorTime: initialTime,
+      anchorStartedAt: performance.now(),
+      playbackState: 'playing',
+      clearRequested: false,
       resourceOwnership: 'layer',
-      slotIndex: null,
+      slotIndex: options?.slotIndex ?? null,
     });
 
     log.info(`Activated layer ${layerIndex} with composition "${comp.name}" (${hydratedClips.length} clips, initialElapsed=${initialElapsed ?? 0}s)`);
@@ -234,14 +255,59 @@ class LayerPlaybackManager {
     return this.layerStates.has(layerIndex);
   }
 
-  /**
-   * Get the independent elapsed time for a layer (wall-clock based, not global playhead).
-   * Loops back to 0 when reaching composition duration.
-   */
-  getLayerTime(state: LayerCompState): number {
-    const elapsed = (performance.now() - state.activatedAt) / 1000;
-    // Loop within composition duration
-    return state.duration > 0 ? elapsed % state.duration : 0;
+  getLayerPlaybackInfo(layerIndex: number): LayerPlaybackInfo | null {
+    const state = this.layerStates.get(layerIndex);
+    if (!state) {
+      return null;
+    }
+
+    return this.resolveLayerPlayback(state, layerIndex);
+  }
+
+  playLayer(layerIndex: number): void {
+    const state = this.layerStates.get(layerIndex);
+    if (!state) {
+      return;
+    }
+
+    const { trimIn, trimOut, endBehavior } = this.getPlaybackWindow(state);
+    const resolved = this.resolveLayerPlayback(state, layerIndex);
+    const restartAtTrimIn =
+      endBehavior !== 'loop' &&
+      resolved.currentTime >= trimOut - 0.0001;
+
+    state.anchorTime = restartAtTrimIn ? trimIn : Math.max(trimIn, Math.min(resolved.currentTime, trimOut));
+    state.anchorStartedAt = performance.now();
+    state.playbackState = 'playing';
+    state.clearRequested = false;
+  }
+
+  pauseLayer(layerIndex: number): void {
+    const state = this.layerStates.get(layerIndex);
+    if (!state) {
+      return;
+    }
+
+    const resolved = this.resolveLayerPlayback(state, layerIndex);
+    state.anchorTime = resolved.currentTime;
+    state.anchorStartedAt = performance.now();
+    state.playbackState = 'paused';
+    state.clearRequested = false;
+    this.pauseMediaElements(state);
+  }
+
+  stopLayer(layerIndex: number): void {
+    const state = this.layerStates.get(layerIndex);
+    if (!state) {
+      return;
+    }
+
+    const { trimIn } = this.getPlaybackWindow(state);
+    state.anchorTime = trimIn;
+    state.anchorStartedAt = performance.now();
+    state.playbackState = 'stopped';
+    state.clearRequested = false;
+    this.pauseMediaElements(state);
   }
 
   /**
@@ -252,7 +318,12 @@ class LayerPlaybackManager {
     const state = this.layerStates.get(layerIndex);
     if (!state) return null;
 
-    const layerTime = this.getLayerTime(state);
+    const playback = this.resolveLayerPlayback(state, layerIndex);
+    if (!playback.shouldRender) {
+      return null;
+    }
+
+    const layerTime = playback.currentTime;
     const innerLayers = this.buildInnerLayers(state, layerTime);
     if (innerLayers.length === 0) return null;
 
@@ -282,6 +353,158 @@ class LayerPlaybackManager {
     };
 
     return layer;
+  }
+
+  private getPlaybackWindow(state: LayerCompState): {
+    trimIn: number;
+    trimOut: number;
+    endBehavior: SlotClipEndBehavior;
+  } {
+    const { slotClipSettings } = useMediaStore.getState();
+    const configured = slotClipSettings[state.compositionId];
+    const safeDuration = Math.max(state.duration, 0.05);
+
+    if (!configured) {
+      return {
+        trimIn: 0,
+        trimOut: safeDuration,
+        endBehavior: 'loop',
+      };
+    }
+
+    if (safeDuration <= 0.05) {
+      return {
+        trimIn: 0,
+        trimOut: safeDuration,
+        endBehavior: configured.endBehavior,
+      };
+    }
+
+    const trimIn = Math.max(0, Math.min(configured.trimIn, safeDuration - 0.05));
+    const trimOut = Math.max(trimIn + 0.05, Math.min(configured.trimOut, safeDuration));
+
+    return {
+      trimIn,
+      trimOut,
+      endBehavior: configured.endBehavior,
+    };
+  }
+
+  private getInitialLayerTime(compositionId: string, duration: number, initialElapsed?: number): number {
+    const safeDuration = Math.max(duration, 0.05);
+    const { slotClipSettings } = useMediaStore.getState();
+    const configured = slotClipSettings[compositionId];
+    if (!configured) {
+      return Math.max(0, Math.min(initialElapsed ?? 0, safeDuration));
+    }
+
+    const trimIn = Math.max(0, Math.min(configured.trimIn, safeDuration));
+    const trimOut = Math.max(trimIn, Math.min(configured.trimOut, safeDuration));
+    const candidate = initialElapsed ?? trimIn;
+
+    if (candidate < trimIn || candidate > trimOut) {
+      return trimIn;
+    }
+
+    return candidate;
+  }
+
+  private getAnchoredTime(state: LayerCompState): number {
+    if (state.playbackState === 'playing') {
+      const elapsed = (performance.now() - state.anchorStartedAt) / 1000;
+      return state.anchorTime + elapsed;
+    }
+
+    return state.anchorTime;
+  }
+
+  private requestClearLayer(layerIndex: number, state: LayerCompState): void {
+    if (state.clearRequested) {
+      return;
+    }
+
+    state.clearRequested = true;
+    this.pauseMediaElements(state);
+    useMediaStore.getState().deactivateLayer(layerIndex);
+  }
+
+  private resolveLayerPlayback(state: LayerCompState, layerIndex: number): LayerPlaybackInfo {
+    const { trimIn, trimOut, endBehavior } = this.getPlaybackWindow(state);
+    const rawTime = this.getAnchoredTime(state);
+
+    if (state.playbackState !== 'playing') {
+      return {
+        compositionId: state.compositionId,
+        currentTime: Math.max(trimIn, Math.min(rawTime, trimOut)),
+        trimIn,
+        trimOut,
+        endBehavior,
+        playbackState: state.playbackState,
+        shouldRender: !state.clearRequested,
+      };
+    }
+
+    if (endBehavior === 'loop') {
+      const span = Math.max(trimOut - trimIn, 0.05);
+      const wrappedTime = trimIn + ((((rawTime - trimIn) % span) + span) % span);
+      return {
+        compositionId: state.compositionId,
+        currentTime: Math.max(trimIn, Math.min(wrappedTime, trimOut)),
+        trimIn,
+        trimOut,
+        endBehavior,
+        playbackState: state.playbackState,
+        shouldRender: true,
+      };
+    }
+
+    if (rawTime <= trimOut) {
+      return {
+        compositionId: state.compositionId,
+        currentTime: Math.max(trimIn, rawTime),
+        trimIn,
+        trimOut,
+        endBehavior,
+        playbackState: state.playbackState,
+        shouldRender: true,
+      };
+    }
+
+    if (endBehavior === 'hold') {
+      state.anchorTime = trimOut;
+      state.anchorStartedAt = performance.now();
+      state.playbackState = 'paused';
+      return {
+        compositionId: state.compositionId,
+        currentTime: trimOut,
+        trimIn,
+        trimOut,
+        endBehavior,
+        playbackState: state.playbackState,
+        shouldRender: true,
+      };
+    }
+
+    state.anchorTime = trimIn;
+    state.anchorStartedAt = performance.now();
+    state.playbackState = 'stopped';
+    this.requestClearLayer(layerIndex, state);
+    return {
+      compositionId: state.compositionId,
+      currentTime: trimOut,
+      trimIn,
+      trimOut,
+      endBehavior,
+      playbackState: state.playbackState,
+      shouldRender: false,
+    };
+  }
+
+  private pauseMediaElements(state: LayerCompState): void {
+    for (const clip of state.clips) {
+      clip.source?.videoElement?.pause();
+      clip.source?.audioElement?.pause();
+    }
   }
 
   /**
@@ -386,8 +609,9 @@ class LayerPlaybackManager {
    * Sync video elements for all background layers (each uses its own independent time)
    */
   syncVideoElements(_playheadPosition: number, _isPlaying: boolean): void {
-    for (const [, state] of this.layerStates) {
-      const time = this.getLayerTime(state);
+    for (const [layerIndex, state] of this.layerStates) {
+      const playback = this.resolveLayerPlayback(state, layerIndex);
+      const time = playback.currentTime;
 
       for (const clip of state.clips) {
         if (!clip.source?.videoElement) continue;
@@ -395,7 +619,7 @@ class LayerPlaybackManager {
         const video = clip.source.videoElement;
         const isActive = time >= clip.startTime && time < clip.startTime + clip.duration;
 
-        if (!isActive) {
+        if (!playback.shouldRender || !isActive) {
           if (!video.paused) video.pause();
           continue;
         }
@@ -407,9 +631,17 @@ class LayerPlaybackManager {
 
         const timeDiff = Math.abs(video.currentTime - clipTime);
 
-        // Background layers always play (independent of global playback state)
-        if (video.paused) video.play().catch(() => {});
         if (timeDiff > 0.5) {
+          video.currentTime = clipTime;
+        }
+
+        if (playback.playbackState === 'playing') {
+          if (video.paused) video.play().catch(() => {});
+        } else if (!video.paused) {
+          video.pause();
+        }
+
+        if (playback.playbackState !== 'playing' && timeDiff > 0.05) {
           video.currentTime = clipTime;
         }
       }
@@ -420,8 +652,9 @@ class LayerPlaybackManager {
    * Sync audio elements for all background layers (each uses its own independent time)
    */
   syncAudioElements(_playheadPosition: number, _isPlaying: boolean): void {
-    for (const [, state] of this.layerStates) {
-      const time = this.getLayerTime(state);
+    for (const [layerIndex, state] of this.layerStates) {
+      const playback = this.resolveLayerPlayback(state, layerIndex);
+      const time = playback.currentTime;
 
       for (const clip of state.clips) {
         if (!clip.source?.audioElement) continue;
@@ -429,7 +662,7 @@ class LayerPlaybackManager {
         const audio = clip.source.audioElement;
         const isActive = time >= clip.startTime && time < clip.startTime + clip.duration;
 
-        if (!isActive) {
+        if (!playback.shouldRender || !isActive) {
           if (!audio.paused) audio.pause();
           continue;
         }
@@ -441,9 +674,17 @@ class LayerPlaybackManager {
 
         const timeDiff = Math.abs(audio.currentTime - clipTime);
 
-        // Background layers always play (independent of global playback state)
-        if (audio.paused) audio.play().catch(() => {});
         if (timeDiff > 0.3) {
+          audio.currentTime = clipTime;
+        }
+
+        if (playback.playbackState === 'playing') {
+          if (audio.paused) audio.play().catch(() => {});
+        } else if (!audio.paused) {
+          audio.pause();
+        }
+
+        if (playback.playbackState !== 'playing' && timeDiff > 0.05) {
           audio.currentTime = clipTime;
         }
       }

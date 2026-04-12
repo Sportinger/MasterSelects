@@ -7,7 +7,7 @@ import { useYouTubeStore } from '../../stores/youtubeStore';
 import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { projectFileService } from '../projectFileService';
-import { syncStoresToProject, saveCurrentProject } from './projectSave';
+import { isProjectStoreSyncInProgress, syncStoresToProject, saveCurrentProject } from './projectSave';
 import { loadProjectToStores } from './projectLoad';
 
 const log = Logger.create('ProjectSync');
@@ -15,22 +15,52 @@ const log = Logger.create('ProjectSync');
 // Debounced continuous save — saves 1s after the last change
 let continuousSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let isContinuousSaving = false;
-let hasPendingContinuousSave = false;
+let scheduledContinuousSaveDelayMs: number | null = null;
+let queuedContinuousSaveDelayMs: number | null = null;
 
-function scheduleContinuousSave(): void {
-  hasPendingContinuousSave = true;
+const DEFAULT_CONTINUOUS_SAVE_DELAY_MS = 1000;
+
+function clearScheduledContinuousSave(): void {
   if (continuousSaveTimer) {
     clearTimeout(continuousSaveTimer);
+    continuousSaveTimer = null;
   }
+  scheduledContinuousSaveDelayMs = null;
+}
+
+function queueContinuousSave(delayMs: number): void {
+  queuedContinuousSaveDelayMs = queuedContinuousSaveDelayMs === null
+    ? delayMs
+    : Math.min(queuedContinuousSaveDelayMs, delayMs);
+}
+
+function scheduleContinuousSave(delayMs: number = DEFAULT_CONTINUOUS_SAVE_DELAY_MS): void {
+  if (isContinuousSaving) {
+    queueContinuousSave(delayMs);
+    return;
+  }
+
+  if (
+    continuousSaveTimer &&
+    scheduledContinuousSaveDelayMs !== null &&
+    scheduledContinuousSaveDelayMs <= delayMs
+  ) {
+    return;
+  }
+
+  clearScheduledContinuousSave();
+  scheduledContinuousSaveDelayMs = delayMs;
   continuousSaveTimer = setTimeout(() => {
     void executeContinuousSave();
-  }, 1000);
+  }, delayMs);
 }
 
 async function executeContinuousSave(): Promise<void> {
-  continuousSaveTimer = null;
-  hasPendingContinuousSave = false;
-  if (isContinuousSaving) return; // Prevent overlapping saves
+  clearScheduledContinuousSave();
+  if (isContinuousSaving) {
+    queueContinuousSave(0);
+    return;
+  }
   if (!projectFileService.isProjectOpen()) {
     log.debug('Continuous save skipped — no project open');
     return;
@@ -44,6 +74,11 @@ async function executeContinuousSave(): Promise<void> {
     log.error('Continuous save failed:', err);
   } finally {
     isContinuousSaving = false;
+    if (queuedContinuousSaveDelayMs !== null) {
+      const nextDelay = queuedContinuousSaveDelayMs;
+      queuedContinuousSaveDelayMs = null;
+      scheduleContinuousSave(nextDelay);
+    }
   }
 }
 
@@ -53,14 +88,9 @@ async function executeContinuousSave(): Promise<void> {
  * then fires off saveProject (may or may not complete before page unload).
  */
 function flushContinuousSave(): void {
-  if (!hasPendingContinuousSave && !projectFileService.hasUnsavedChanges()) return;
   if (!projectFileService.isProjectOpen()) return;
 
-  if (continuousSaveTimer) {
-    clearTimeout(continuousSaveTimer);
-    continuousSaveTimer = null;
-  }
-  hasPendingContinuousSave = false;
+  clearScheduledContinuousSave();
 
   // Sync stores to project data (mostly synchronous work)
   void syncStoresToProject();
@@ -69,10 +99,14 @@ function flushContinuousSave(): void {
   log.info('Continuous save flushed on beforeunload');
 }
 
-function triggerContinuousSaveIfEnabled(): void {
+function triggerContinuousSaveIfEnabled(options?: { immediate?: boolean; delayMs?: number }): void {
   const { saveMode } = useSettingsStore.getState();
   if (saveMode === 'continuous') {
-    scheduleContinuousSave();
+    if (options?.immediate) {
+      void executeContinuousSave();
+      return;
+    }
+    scheduleContinuousSave(options?.delayMs ?? DEFAULT_CONTINUOUS_SAVE_DELAY_MS);
   }
 }
 
@@ -120,9 +154,9 @@ export function closeCurrentProject(): void {
 export function setupAutoSync(): void {
   // Subscribe to store changes and mark project dirty
   useMediaStore.subscribe(
-    (state) => [state.files, state.compositions, state.folders, state.slotAssignments],
+    (state) => [state.files, state.compositions, state.folders, state.slotAssignments, state.slotClipSettings],
     () => {
-      if (projectFileService.isProjectOpen()) {
+      if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
         projectFileService.markDirty();
         triggerContinuousSaveIfEnabled();
       }
@@ -130,11 +164,29 @@ export function setupAutoSync(): void {
   );
 
   useTimelineStore.subscribe(
-    (state) => [state.clips, state.tracks],
+    (state) => [
+      state.clips,
+      state.tracks,
+      state.markers,
+      state.inPoint,
+      state.outPoint,
+      state.loopPlayback,
+      state.durationLocked,
+    ],
     () => {
-      if (projectFileService.isProjectOpen()) {
+      if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
         projectFileService.markDirty();
         triggerContinuousSaveIfEnabled();
+      }
+    }
+  );
+
+  useTimelineStore.subscribe(
+    (state) => state.clipKeyframes,
+    () => {
+      if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
+        projectFileService.markDirty();
+        triggerContinuousSaveIfEnabled({ immediate: true });
       }
     }
   );
@@ -144,7 +196,7 @@ export function setupAutoSync(): void {
   useYouTubeStore.subscribe((state) => {
     if (state.videos !== prevYouTubeVideos) {
       prevYouTubeVideos = state.videos;
-      if (projectFileService.isProjectOpen()) {
+      if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
         projectFileService.markDirty();
         triggerContinuousSaveIfEnabled();
       }
@@ -156,7 +208,7 @@ export function setupAutoSync(): void {
   useDockStore.subscribe((state) => {
     if (state.layout !== prevDockLayout) {
       prevDockLayout = state.layout;
-      if (projectFileService.isProjectOpen()) {
+      if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
         projectFileService.markDirty();
         triggerContinuousSaveIfEnabled();
       }

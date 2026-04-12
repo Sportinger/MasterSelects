@@ -447,6 +447,8 @@ function blobStoreServer(): Plugin {
 // Flow: POST /api/ai-tools → Vite server → HMR → browser → aiTools.execute() → HMR → HTTP response
 function aiToolsBridge(): Plugin {
   const pendingRequests = new Map<string, { resolve: (value: unknown) => void; timer: ReturnType<typeof setTimeout> }>();
+  const pendingDebugRequests = new Map<string, { resolve: (value: unknown) => void; timer: ReturnType<typeof setTimeout> }>();
+  const pendingDebugActionRequests = new Map<string, { resolve: (value: unknown) => void; timer: ReturnType<typeof setTimeout> }>();
   const clients = new Map<string, { tabId: string; visibilityState: string; hasFocus: boolean; lastSeenAt: number }>();
   let requestCounter = 0;
 
@@ -503,6 +505,24 @@ function aiToolsBridge(): Plugin {
         }
       });
 
+      server.hot.on('debug-state:result', (data: { requestId: string; result: unknown }) => {
+        const pending = pendingDebugRequests.get(data.requestId);
+        if (pending) {
+          clearTimeout(pending.timer);
+          pendingDebugRequests.delete(data.requestId);
+          pending.resolve(data.result);
+        }
+      });
+
+      server.hot.on('debug-action:result', (data: { requestId: string; result: unknown }) => {
+        const pending = pendingDebugActionRequests.get(data.requestId);
+        if (pending) {
+          clearTimeout(pending.timer);
+          pendingDebugActionRequests.delete(data.requestId);
+          pending.resolve(data.result);
+        }
+      });
+
       server.hot.on('ai-tools:presence', (data: { tabId: string; visibilityState?: string; hasFocus?: boolean }) => {
         if (!data?.tabId) return;
         clients.set(data.tabId, {
@@ -555,6 +575,107 @@ function aiToolsBridge(): Plugin {
 
               pendingRequests.set(requestId, { resolve, timer });
               server.hot.send('ai-tools:execute', { requestId, tool, args, targetTabId });
+            });
+
+            resultPromise.then((result) => {
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(result));
+            });
+          } catch {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: false, error: 'Invalid JSON body' }));
+          }
+        });
+      });
+
+      const handleDebugStateRequest = (req: IncomingMessage, res: ServerResponse, defaultScope: string) => {
+        if (!validateBridgeRequest(req, res)) return;
+
+        if (req.method !== 'GET') {
+          res.statusCode = 405;
+          res.end('Method not allowed');
+          return;
+        }
+
+        const targetTabId = pickTargetTabId();
+        if (!targetTabId) {
+          res.statusCode = 503;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ success: false, error: 'No browser tab connected to the dev bridge' }));
+          return;
+        }
+
+        const url = new URL(req.url!, `http://${req.headers.host}`);
+        const scope = url.searchParams.get('scope') || defaultScope;
+        const requestId = `debug-${++requestCounter}-${crypto.randomUUID().slice(0, 8)}`;
+
+        const resultPromise = new Promise((resolve) => {
+          const timer = setTimeout(() => {
+            pendingDebugRequests.delete(requestId);
+            resolve({ success: false, error: 'Timeout: no browser tab responded within 30s' });
+          }, 30000);
+
+          pendingDebugRequests.set(requestId, { resolve, timer });
+          server.hot.send('debug-state:request', { requestId, scope, targetTabId });
+        });
+
+        resultPromise.then((result) => {
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(result));
+        });
+      };
+
+      server.middlewares.use('/api/debug/state', (req, res) => {
+        handleDebugStateRequest(req, res, 'all');
+      });
+
+      server.middlewares.use('/api/debug/preview-state', (req, res) => {
+        handleDebugStateRequest(req, res, 'preview');
+      });
+
+      server.middlewares.use('/api/debug/slot-state', (req, res) => {
+        handleDebugStateRequest(req, res, 'slots');
+      });
+
+      server.middlewares.use('/api/debug/action', (req, res) => {
+        if (!validateBridgeRequest(req, res)) return;
+
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.end('Method not allowed');
+          return;
+        }
+
+        const targetTabId = pickTargetTabId();
+        if (!targetTabId) {
+          res.statusCode = 503;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ success: false, error: 'No browser tab connected to the dev bridge' }));
+          return;
+        }
+
+        let body = '';
+        req.on('data', (chunk: Buffer) => body += chunk.toString());
+        req.on('end', () => {
+          try {
+            const { action, args = {} } = JSON.parse(body);
+            if (!action) {
+              res.statusCode = 400;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, error: 'Missing "action" field' }));
+              return;
+            }
+
+            const requestId = `debug-action-${++requestCounter}-${crypto.randomUUID().slice(0, 8)}`;
+            const resultPromise = new Promise((resolve) => {
+              const timer = setTimeout(() => {
+                pendingDebugActionRequests.delete(requestId);
+                resolve({ success: false, error: 'Timeout: no browser tab responded within 30s' });
+              }, 30000);
+
+              pendingDebugActionRequests.set(requestId, { resolve, timer });
+              server.hot.send('debug-action:request', { requestId, action, args, targetTabId });
             });
 
             resultPromise.then((result) => {

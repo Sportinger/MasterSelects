@@ -175,11 +175,25 @@ export class LayerBuilderService {
   buildLayersFromStore(): Layer[] {
     // Create frame context (single store read)
     const ctx = createFrameContext();
+    const { activeLayerSlots = {}, activeCompositionId } = useMediaStore.getState();
+    const slotGridActive = useTimelineStore.getState().slotGridProgress > 0.5;
+    const hasActiveLayerSlots = Object.keys(activeLayerSlots).length > 0;
+    const activeCompIsInProgram = activeCompositionId != null &&
+      Object.values(activeLayerSlots).some((compositionId) => compositionId === activeCompositionId);
+    const renderSlotProgramOnly =
+      slotGridActive &&
+      hasActiveLayerSlots &&
+      !activeCompIsInProgram;
 
     // No active editor composition → no primary layers to build
     // (all active comps are background layers managed by layerPlaybackManager)
-    const hasActiveComp = useMediaStore.getState().activeCompositionId != null;
+    const hasActiveComp = activeCompositionId != null;
     const hasStandaloneTimelineContent = ctx.clips.length > 0;
+    if (renderSlotProgramOnly) {
+      this.layerCache.invalidate();
+      return this.mergeBackgroundLayers([], ctx.playheadPosition);
+    }
+
     if (!hasActiveComp && !hasStandaloneTimelineContent) {
       this.layerCache.invalidate();
       return this.mergeBackgroundLayers([], ctx.playheadPosition);
@@ -247,10 +261,12 @@ export class LayerBuilderService {
 
     // Find which layer the primary (editor) composition is on
     let primaryLayerIndex = -1;
-    for (const [key, compId] of slotEntries) {
-      if (compId === activeCompositionId) {
-        primaryLayerIndex = Number(key);
-        break;
+    if (primaryLayers.length > 0) {
+      for (const [key, compId] of slotEntries) {
+        if (compId === activeCompositionId) {
+          primaryLayerIndex = Number(key);
+          break;
+        }
       }
     }
 
