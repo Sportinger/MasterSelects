@@ -1,8 +1,12 @@
 // AI Video Panel - AI video generation using PiAPI (Kling, Luma, Hailuo, etc.)
 // Supports text-to-video and image-to-video generation with timeline integration
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react';
 import { Logger } from '../../services/logger';
+
+const FlashBoardWorkspace = lazy(() =>
+  import('./flashboard/FlashBoardWorkspace').then((m) => ({ default: m.FlashBoardWorkspace }))
+);
 
 const log = Logger.create('AIVideoPanel');
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -171,6 +175,8 @@ export function AIVideoPanel() {
   const hasHostedKlingAccess = Boolean(
     accountSession?.authenticated && isHostedFeatureEnabled(entitlements.kling_generation),
   );
+
+  const [workspaceMode, setWorkspaceMode] = useState<'classic' | 'board'>('classic');
 
   // Panel tab state
   const [activeTab, setActiveTab] = useState<PanelTab>('generate');
@@ -733,8 +739,42 @@ export function AIVideoPanel() {
             ))}
           </select>
         </div>
+        <div className="ai-video-mode-toggle">
+          <button
+            className={`ai-video-mode-btn ${workspaceMode === 'classic' ? 'active' : ''}`}
+            onClick={() => setWorkspaceMode('classic')}
+          >
+            Classic
+          </button>
+          <button
+            className={`ai-video-mode-btn ${workspaceMode === 'board' ? 'active' : ''}`}
+            onClick={() => setWorkspaceMode('board')}
+          >
+            Board
+          </button>
+        </div>
       </div>
 
+      {workspaceMode === 'board' ? (
+        <Suspense
+          fallback={
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              Loading FlashBoard...
+            </div>
+          }
+        >
+          <FlashBoardWorkspace />
+        </Suspense>
+      ) : (
+      <>
       {/* Jobs Queue - shown at top when not empty */}
       {jobs.length > 0 && (
         <div className="jobs-section jobs-section-top">
@@ -1131,6 +1171,8 @@ export function AIVideoPanel() {
             </div>
           )}
         </div>
+      )}
+      </>
       )}
     </div>
   );

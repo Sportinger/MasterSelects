@@ -6,6 +6,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import { useYouTubeStore } from '../../stores/youtubeStore';
 import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useFlashBoardStore } from '../../stores/flashboardStore';
 import { projectFileService } from '../projectFileService';
 import { isProjectStoreSyncInProgress, syncStoresToProject, saveCurrentProject } from './projectSave';
 import { loadProjectToStores } from './projectLoad';
@@ -144,6 +145,12 @@ export async function openExistingProject(): Promise<boolean> {
  */
 export function closeCurrentProject(): void {
   projectFileService.closeProject();
+  useFlashBoardStore.setState({
+    activeBoardId: null,
+    boards: [],
+    selectedNodeIds: [],
+    composer: { draftNodeId: null, isOpen: false },
+  });
   useMediaStore.getState().newProject();
 }
 
@@ -187,6 +194,16 @@ export function setupAutoSync(): void {
       if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
         projectFileService.markDirty();
         triggerContinuousSaveIfEnabled({ immediate: true });
+      }
+    }
+  );
+
+  useFlashBoardStore.subscribe(
+    (state) => [state.boards, state.activeBoardId],
+    () => {
+      if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
+        projectFileService.markDirty();
+        triggerContinuousSaveIfEnabled();
       }
     }
   );

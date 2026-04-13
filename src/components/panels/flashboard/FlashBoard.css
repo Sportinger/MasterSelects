@@ -1,0 +1,518 @@
+/* FlashBoard Workspace Styles */
+
+.flashboard-workspace {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+/* ─── Toolbar ─── */
+
+.flashboard-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  font-size: 12px;
+}
+
+.flashboard-toolbar-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: default;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  min-width: 60px;
+}
+
+.flashboard-toolbar-name:hover {
+  background: var(--bg-hover);
+}
+
+.flashboard-toolbar-name-input {
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+  background: var(--bg-input);
+  font-size: 12px;
+  outline: none;
+  min-width: 60px;
+}
+
+.flashboard-toolbar-spacer {
+  flex: 1;
+}
+
+.flashboard-toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 4px;
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.flashboard-toolbar-btn:hover {
+  background: var(--accent-hover);
+}
+
+.flashboard-queue-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.flashboard-queue-badge.has-active {
+  background: rgba(79, 195, 247, 0.15);
+  color: #4fc3f7;
+}
+
+/* ─── Canvas ─── */
+
+.flashboard-canvas-area {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.flashboard-canvas {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  cursor: grab;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.04) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+.flashboard-canvas:active {
+  cursor: grabbing;
+}
+
+.flashboard-canvas.drag-over {
+  background-color: rgba(79, 195, 247, 0.04);
+  outline: 2px dashed rgba(79, 195, 247, 0.3);
+  outline-offset: -2px;
+}
+
+.flashboard-canvas-inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  width: 0;
+  height: 0;
+}
+
+/* ─── Node ─── */
+
+.flashboard-node {
+  position: absolute;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: box-shadow 0.15s ease;
+}
+
+.flashboard-node:hover {
+  border-color: var(--border-subtle);
+}
+
+.flashboard-node.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.flashboard-node.reference {
+  border-style: dashed;
+}
+
+.flashboard-node-status {
+  height: 3px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.flashboard-node.draft .flashboard-node-status {
+  background: var(--text-muted);
+}
+
+.flashboard-node.queued .flashboard-node-status {
+  background: #ffb74d;
+}
+
+.flashboard-node.processing .flashboard-node-status {
+  background: #4fc3f7;
+  animation: flashboard-pulse 1.5s ease-in-out infinite;
+}
+
+.flashboard-node.completed .flashboard-node-status {
+  background: #81c784;
+}
+
+.flashboard-node.failed .flashboard-node-status {
+  background: #ef5350;
+}
+
+.flashboard-node.canceled .flashboard-node-status {
+  background: var(--text-disabled);
+}
+
+@keyframes flashboard-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.flashboard-node-body {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-height: 0;
+}
+
+.flashboard-node-thumbnail {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  display: block;
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+.flashboard-node-prompt {
+  font-size: 11px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+
+.flashboard-node-prompt.empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.flashboard-node-provider {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.flashboard-node-progress {
+  height: 3px;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.flashboard-node-progress-bar {
+  height: 100%;
+  background: #4fc3f7;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.flashboard-node-error {
+  font-size: 10px;
+  color: #ef5350;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Context Menu ─── */
+
+.flashboard-context-menu {
+  position: fixed;
+  z-index: 10000;
+  min-width: 160px;
+  background: var(--bg-elevated, #2a2a3e);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 4px 0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.flashboard-context-item {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.flashboard-context-item:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+}
+
+.flashboard-context-item.danger {
+  color: #ef5350;
+}
+
+.flashboard-context-item.danger:hover {
+  background: rgba(239, 83, 80, 0.1);
+}
+
+.flashboard-context-separator {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
+
+/* ─── Compact Prompt Bubble (always visible, bottom-right) ─── */
+
+.fb-bubble {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 320px;
+  background: var(--bg-elevated, #252536);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fb-bubble-row {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  position: relative;
+}
+
+.fb-bubble-input {
+  flex: 1;
+  background: var(--bg-input, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 7px 24px 7px 10px;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+  min-height: 32px;
+  max-height: 80px;
+}
+
+.fb-bubble-input:focus { border-color: var(--accent); }
+
+.fb-bubble-close {
+  position: absolute;
+  right: 6px;
+  top: 4px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  line-height: 1;
+}
+
+.fb-bubble-close:hover { color: var(--text-primary); }
+
+.fb-bubble-bar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ─── Pill buttons (like classic AI Video panel) ─── */
+
+.fb-pill-group {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  position: relative;
+  flex-wrap: wrap;
+}
+
+.fb-pill {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary, #bbb);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.fb-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.fb-pill.active {
+  background: var(--accent, #7c4dff);
+  color: #fff;
+  border-color: var(--accent, #7c4dff);
+}
+
+.fb-pill svg { flex-shrink: 0; }
+
+/* ─── Generate button ─── */
+
+.fb-generate {
+  margin-left: auto;
+  padding: 5px 14px;
+  border: none;
+  border-radius: 16px;
+  background: var(--accent, #7c4dff);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+
+.fb-generate:hover { background: var(--accent-hover, #9c6fff); }
+.fb-generate:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ─── Popovers ─── */
+
+.fb-popover {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  background: var(--bg-elevated, #2a2a3e);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  min-width: 180px;
+  max-width: 300px;
+}
+
+.fb-popover-model {
+  min-width: 240px;
+}
+
+.fb-popover-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.fb-popover-group {
+  margin-bottom: 8px;
+}
+
+.fb-popover-group:last-child { margin-bottom: 0; }
+
+.fb-popover-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.fb-popover-pills {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.fb-popover-pill {
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary, #bbb);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.fb-popover-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.fb-popover-pill.active {
+  background: var(--accent, #7c4dff);
+  color: #fff;
+  border-color: var(--accent, #7c4dff);
+}
+
+/* ─── Mode Toggle (in AIVideoPanel header) ─── */
+
+.ai-video-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 5px;
+  background: var(--bg-tertiary);
+  margin-left: auto;
+}
+
+.ai-video-mode-btn {
+  padding: 2px 8px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.ai-video-mode-btn.active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.ai-video-mode-btn:hover:not(.active) {
+  color: var(--text-secondary);
+}

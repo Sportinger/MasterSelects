@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { useTimelineStore } from '../stores/timeline';
 import { useMediaStore } from '../stores/mediaStore';
 import { useDockStore } from '../stores/dockStore';
+import { useFlashBoardStore } from '../stores/flashboardStore';
 import { getShortcutRegistry } from '../services/shortcutRegistry';
 import {
   useHistoryStore,
@@ -54,6 +55,10 @@ export function useGlobalHistory() {
       dock: {
         getState: useDockStore.getState,
         setState: useDockStore.setState,
+      },
+      flashboard: {
+        getState: useFlashBoardStore.getState,
+        setState: useFlashBoardStore.setState,
       },
     });
 
@@ -178,6 +183,23 @@ export function useGlobalHistory() {
       { fireImmediately: false }
     );
 
+    const unsubFlashBoard = useFlashBoardStore.subscribe(
+      (state) => ({
+        boards: state.boards,
+        activeBoardId: state.activeBoardId,
+      }),
+      (curr, prev) => {
+        if (useHistoryStore.getState().isApplying) return;
+
+        if (curr.boards !== prev.boards) {
+          debouncedCapture('Modify board');
+        } else if (curr.activeBoardId !== prev.activeBoardId) {
+          debouncedCapture('Switch board');
+        }
+      },
+      { equalityFn: shallowEqual, fireImmediately: false }
+    );
+
     return () => {
       if (pendingTimer.current) {
         clearTimeout(pendingTimer.current);
@@ -186,6 +208,7 @@ export function useGlobalHistory() {
       unsubTimeline();
       unsubMedia();
       unsubDock();
+      unsubFlashBoard();
     };
   }, []);
 
