@@ -1,6 +1,8 @@
 import { useCallback } from 'react';
 import { useFlashBoardStore } from '../../../stores/flashboardStore';
 import { selectSelectedNodes } from '../../../stores/flashboardStore/selectors';
+import { getFlashBoardPriceEstimate } from '../../../services/flashboard/FlashBoardPricing';
+import { useMediaStore } from '../../../stores/mediaStore';
 
 export function FlashBoardInspector() {
   const selectedNodes = useFlashBoardStore(selectSelectedNodes);
@@ -12,26 +14,60 @@ export function FlashBoardInspector() {
   const composerOpen = useFlashBoardStore((s) => s.composer.isOpen);
 
   const node = selectedNodes[0];
-  if (!node || composerOpen) return null;
+  const nodeId = node?.id;
+  const request = node?.request;
 
-  const status = node.job?.status ?? 'draft';
+  const status = node?.job?.status ?? 'draft';
+  const priceEstimate = request
+    ? getFlashBoardPriceEstimate({
+      service: request.service,
+      providerId: request.providerId,
+      outputType: request.outputType,
+      mode: request.mode,
+      duration: request.duration,
+      imageSize: request.imageSize,
+      generateAudio: request.generateAudio,
+      multiShots: request.multiShots,
+    })
+    : null;
+  const startReferenceName = useMediaStore((s) =>
+    request?.startMediaFileId
+      ? s.files.find((file) => file.id === request.startMediaFileId)?.name
+      : undefined
+  );
+  const endReferenceName = useMediaStore((s) =>
+    request?.endMediaFileId
+      ? s.files.find((file) => file.id === request.endMediaFileId)?.name
+      : undefined
+  );
+  const referenceFrameNames = useMediaStore((s) =>
+    (request?.referenceMediaFileIds ?? [])
+      .map((mediaFileId) => s.files.find((file) => file.id === mediaFileId)?.name)
+      .filter((name): name is string => Boolean(name))
+  );
 
   const handleEdit = useCallback(() => {
-    openComposer(node.id);
-  }, [node.id, openComposer]);
+    if (!nodeId) return;
+    openComposer(nodeId);
+  }, [nodeId, openComposer]);
 
   const handleRetry = useCallback(() => {
-    queueNode(node.id);
-  }, [node.id, queueNode]);
+    if (!nodeId) return;
+    queueNode(nodeId);
+  }, [nodeId, queueNode]);
 
   const handleDuplicate = useCallback(() => {
-    duplicateNode(node.id);
-  }, [node.id, duplicateNode]);
+    if (!nodeId) return;
+    duplicateNode(nodeId);
+  }, [nodeId, duplicateNode]);
 
   const handleDelete = useCallback(() => {
-    removeNode(node.id);
+    if (!nodeId) return;
+    removeNode(nodeId);
     clearSelection();
-  }, [node.id, removeNode, clearSelection]);
+  }, [nodeId, removeNode, clearSelection]);
+
+  if (!node || composerOpen) return null;
 
   return (
     <div className="flashboard-inspector">
@@ -75,6 +111,42 @@ export function FlashBoardInspector() {
               {node.request.duration && `${node.request.duration}s`}
               {node.request.aspectRatio && ` / ${node.request.aspectRatio}`}
               {node.request.mode && ` / ${node.request.mode}`}
+              {node.request.generateAudio && ' / sound'}
+              {node.request.multiShots && ' / multi-shot'}
+            </p>
+          </div>
+        )}
+
+        {node.request?.multiShots && (node.request.multiPrompt?.length ?? 0) > 0 && (
+          <div className="flashboard-inspector-section">
+            <h4>Shots</h4>
+            <p style={{ whiteSpace: 'pre-wrap' }}>
+              {node.request.multiPrompt?.map((shot) => `${shot.index}. ${shot.duration}s - ${shot.prompt}`).join('\n')}
+            </p>
+          </div>
+        )}
+
+        {priceEstimate && (
+          <div className="flashboard-inspector-section">
+            <h4>Cost</h4>
+            <p>{priceEstimate.fullLabel}</p>
+          </div>
+        )}
+
+        {node.request?.outputType === 'image' && referenceFrameNames.length > 0 && (
+          <div className="flashboard-inspector-section">
+            <h4>Reference Frame</h4>
+            <p>{referenceFrameNames.join(', ')}</p>
+          </div>
+        )}
+
+        {node.request?.outputType !== 'image' && (startReferenceName || endReferenceName) && (
+          <div className="flashboard-inspector-section">
+            <h4>Reference Frames</h4>
+            <p>
+              {startReferenceName ? `Start: ${startReferenceName}` : 'Start: none'}
+              <br />
+              {endReferenceName ? `End: ${endReferenceName}` : 'End: none'}
             </p>
           </div>
         )}

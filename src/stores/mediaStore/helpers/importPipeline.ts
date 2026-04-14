@@ -21,6 +21,7 @@ export interface ImportParams {
   handle?: FileSystemFileHandle;
   absolutePath?: string;
   parentId?: string | null;
+  forceCopyToProject?: boolean;
   /** Force a specific media type instead of auto-detecting (e.g. 'gaussian-avatar' for .zip files) */
   typeOverride?: MediaFile['type'];
 }
@@ -42,7 +43,7 @@ export function generateId(): string {
  * Replaces duplicate logic in importFile, importFilesWithPicker, importFilesWithHandles.
  */
 export async function processImport(params: ImportParams): Promise<ImportResult> {
-  const { file, id, handle, absolutePath, parentId, typeOverride } = params;
+  const { file, id, handle, absolutePath, parentId, forceCopyToProject, typeOverride } = params;
 
   // Store handle if provided (for original file location)
   if (handle) {
@@ -72,19 +73,27 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
   const proxyInfo = await checkExistingProxy(fileHash, type);
 
   // Copy to Raw folder if enabled (unified - was 3x duplicate)
-  const copyResult = await copyToRawIfEnabled(file, id);
+  const copyResult = await copyToRawIfEnabled(file, id, forceCopyToProject === true);
 
   if (copyResult) {
     // The project-local RAW copy is the canonical media source. Promote it to the
     // primary handle so timeline clips and exports do not depend on the original file.
-    fileSystemService.storeFileHandle(id, copyResult.handle);
-    await projectDB.storeHandle(`media_${id}`, copyResult.handle);
+    const projectHandle = copyResult.handle;
+    if (projectHandle) {
+      fileSystemService.storeFileHandle(id, projectHandle);
+      await projectDB.storeHandle(`media_${id}`, projectHandle);
+    }
 
     try {
-      const projectFile = await copyResult.handle.getFile();
-      URL.revokeObjectURL(url);
-      canonicalFile = projectFile;
-      url = URL.createObjectURL(projectFile);
+      const projectFile = projectHandle
+        ? await projectHandle.getFile()
+        : (await projectFileService.getFileFromRaw(copyResult.relativePath))?.file;
+
+      if (projectFile) {
+        URL.revokeObjectURL(url);
+        canonicalFile = projectFile;
+        url = URL.createObjectURL(projectFile);
+      }
     } catch (e) {
       log.warn('Failed to promote RAW copy as canonical media source', {
         id,
@@ -106,7 +115,7 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
     url,
     thumbnailUrl,
     fileHash,
-    hasFileHandle: !!copyResult?.handle || !!handle,
+    hasFileHandle: !!copyResult || !!handle,
     filePath: handle?.name || file.name,
     absolutePath,
     projectPath: copyResult?.relativePath,
@@ -168,19 +177,22 @@ async function checkExistingProxy(
  */
 async function copyToRawIfEnabled(
   file: File,
-  mediaId: string
-): Promise<{ relativePath: string; handle: FileSystemFileHandle } | null> {
+  mediaId: string,
+  forceCopyToProject = false
+): Promise<{ relativePath: string; handle?: FileSystemFileHandle } | null> {
   const { copyMediaToProject } = useSettingsStore.getState();
 
-  if (!copyMediaToProject || !projectFileService.isProjectOpen()) {
+  if ((!copyMediaToProject && !forceCopyToProject) || !projectFileService.isProjectOpen()) {
     return null;
   }
 
   const result = await projectFileService.copyToRawFolder(file);
   if (result) {
     // Store the project file handle for the RAW copy
-    fileSystemService.storeFileHandle(`${mediaId}_project`, result.handle);
-    await projectDB.storeHandle(`media_${mediaId}_project`, result.handle);
+    if (result.handle) {
+      fileSystemService.storeFileHandle(`${mediaId}_project`, result.handle);
+      await projectDB.storeHandle(`media_${mediaId}_project`, result.handle);
+    }
     log.debug('Copied to Raw folder:', result.relativePath);
     return { relativePath: result.relativePath, handle: result.handle };
   }

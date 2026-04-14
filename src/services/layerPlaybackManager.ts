@@ -113,7 +113,7 @@ class LayerPlaybackManager {
         playbackState: 'playing',
         clearRequested: false,
         resourceOwnership: 'layer',
-        slotIndex: options?.slotIndex ?? null,
+        slotIndex: null,
       });
       return;
     }
@@ -181,7 +181,7 @@ class LayerPlaybackManager {
       playbackState: 'playing',
       clearRequested: false,
       resourceOwnership: 'layer',
-      slotIndex: options?.slotIndex ?? null,
+      slotIndex: null,
     });
 
     log.info(`Activated layer ${layerIndex} with composition "${comp.name}" (${hydratedClips.length} clips, initialElapsed=${initialElapsed ?? 0}s)`);
@@ -360,7 +360,7 @@ class LayerPlaybackManager {
     trimOut: number;
     endBehavior: SlotClipEndBehavior;
   } {
-    const { slotClipSettings } = useMediaStore.getState();
+    const slotClipSettings = useMediaStore.getState().slotClipSettings ?? {};
     const configured = slotClipSettings[state.compositionId];
     const safeDuration = Math.max(state.duration, 0.05);
 
@@ -392,7 +392,7 @@ class LayerPlaybackManager {
 
   private getInitialLayerTime(compositionId: string, duration: number, initialElapsed?: number): number {
     const safeDuration = Math.max(duration, 0.05);
-    const { slotClipSettings } = useMediaStore.getState();
+    const slotClipSettings = useMediaStore.getState().slotClipSettings ?? {};
     const configured = slotClipSettings[compositionId];
     if (!configured) {
       return Math.max(0, Math.min(initialElapsed ?? 0, safeDuration));

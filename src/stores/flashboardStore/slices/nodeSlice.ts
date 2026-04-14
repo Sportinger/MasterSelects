@@ -1,5 +1,6 @@
 import type { FlashBoard, FlashBoardNode, FlashBoardGenerationRequest, FlashBoardJobState, FlashBoardResult, FlashBoardStoreState } from '../types';
 import { flashBoardJobService } from '../../../services/flashboard/FlashBoardJobService';
+import { useMediaStore } from '../../mediaStore';
 
 type Set = (partial: Partial<FlashBoardStoreState> | ((state: FlashBoardStoreState) => Partial<FlashBoardStoreState>)) => void;
 type Get = () => FlashBoardStoreState;
@@ -12,8 +13,10 @@ export interface NodeSliceActions {
   updateNodeJob: (nodeId: string, patch: Partial<FlashBoardJobState>) => void;
   completeNode: (nodeId: string, result: FlashBoardResult) => void;
   failNode: (nodeId: string, error: string) => void;
+  bringNodesToFront: (nodeIds: string[]) => void;
   moveNode: (nodeId: string, position: { x: number; y: number }) => void;
   resizeNode: (nodeId: string, size: { width: number; height: number }) => void;
+  sendNodesToBack: (nodeIds: string[]) => void;
   duplicateNode: (nodeId: string) => FlashBoardNode | null;
   removeNode: (nodeId: string) => void;
   setSelectedNodes: (nodeIds: string[]) => void;
@@ -34,6 +37,29 @@ function findAndUpdateNode(
   });
 }
 
+function reorderNodes(boards: FlashBoard[], nodeIds: string[], placement: 'front' | 'back'): FlashBoard[] {
+  const nodeIdSet = new Set(nodeIds);
+
+  return boards.map((board) => {
+    const matchingNodes = board.nodes.filter((node) => nodeIdSet.has(node.id));
+    if (matchingNodes.length === 0) {
+      return board;
+    }
+
+    const remainingNodes = board.nodes.filter((node) => !nodeIdSet.has(node.id));
+    const reorderedNodes =
+      placement === 'front'
+        ? [...remainingNodes, ...matchingNodes]
+        : [...matchingNodes, ...remainingNodes];
+
+    return {
+      ...board,
+      nodes: reorderedNodes,
+      updatedAt: Date.now(),
+    };
+  });
+}
+
 export const createNodeSlice = (set: Set, get: Get): NodeSliceActions => ({
   createDraftNode: (boardId: string, position?: { x: number; y: number }): FlashBoardNode => {
     const now = Date.now();
@@ -43,7 +69,7 @@ export const createNodeSlice = (set: Set, get: Get): NodeSliceActions => ({
       createdAt: now,
       updatedAt: now,
       position: position ?? { x: 0, y: 0 },
-      size: { width: 280, height: 320 },
+      size: { width: 280, height: 157.5 },
       job: { status: 'draft' },
     };
     set((state) => ({
@@ -58,14 +84,24 @@ export const createNodeSlice = (set: Set, get: Get): NodeSliceActions => ({
 
   createReferenceNode: (boardId: string, mediaFileId: string, position?: { x: number; y: number }): FlashBoardNode => {
     const now = Date.now();
+    const mediaFile = useMediaStore.getState().files.find((file) => file.id === mediaFileId);
+    const width = mediaFile?.width && mediaFile.width > 0 ? mediaFile.width : undefined;
+    const height = mediaFile?.height && mediaFile.height > 0 ? mediaFile.height : undefined;
+    const aspectRatio = width && height ? width / height : 16 / 9;
+    const baseWidth = 200;
     const node: FlashBoardNode = {
       id: crypto.randomUUID(),
       kind: 'reference',
       createdAt: now,
       updatedAt: now,
       position: position ?? { x: 0, y: 0 },
-      size: { width: 200, height: 160 },
-      result: { mediaFileId, mediaType: 'video' },
+      size: { width: baseWidth, height: baseWidth / aspectRatio },
+      result: {
+        mediaFileId,
+        mediaType: mediaFile?.type === 'image' ? 'image' : 'video',
+        width,
+        height,
+      },
     };
     set((state) => ({
       boards: state.boards.map((b) =>
@@ -146,6 +182,14 @@ export const createNodeSlice = (set: Set, get: Get): NodeSliceActions => ({
     }));
   },
 
+  bringNodesToFront: (nodeIds: string[]): void => {
+    if (nodeIds.length === 0) return;
+
+    set((state) => ({
+      boards: reorderNodes(state.boards, nodeIds, 'front'),
+    }));
+  },
+
   moveNode: (nodeId: string, position: { x: number; y: number }): void => {
     set((state) => ({
       boards: findAndUpdateNode(state.boards, nodeId, (node) => ({
@@ -163,6 +207,14 @@ export const createNodeSlice = (set: Set, get: Get): NodeSliceActions => ({
         size,
         updatedAt: Date.now(),
       })),
+    }));
+  },
+
+  sendNodesToBack: (nodeIds: string[]): void => {
+    if (nodeIds.length === 0) return;
+
+    set((state) => ({
+      boards: reorderNodes(state.boards, nodeIds, 'back'),
     }));
   },
 

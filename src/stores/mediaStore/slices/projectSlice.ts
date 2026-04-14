@@ -64,8 +64,11 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
               if (result) {
                 file = result.file;
                 url = URL.createObjectURL(file);
-                fileSystemService.storeFileHandle(mediaFile.id, result.handle);
-                await projectDB.storeHandle(`media_${mediaFile.id}`, result.handle);
+                const projectHandle = result.handle;
+                if (projectHandle) {
+                  fileSystemService.storeFileHandle(mediaFile.id, projectHandle);
+                  await projectDB.storeHandle(`media_${mediaFile.id}`, projectHandle);
+                }
                 log.debug('Restored file from project RAW copy:', stored.name);
               }
             } catch (e) {

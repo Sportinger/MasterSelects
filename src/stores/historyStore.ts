@@ -4,11 +4,16 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { Logger } from '../services/logger';
+import { flashBoardMediaBridge } from '../services/flashboard/FlashBoardMediaBridge';
 import type { TimelineClip, TimelineTrack, Layer, Keyframe } from '../types';
 import type { MediaFile, Composition, MediaFolder, TextItem, SolidItem } from './mediaStore/types';
 import type { TimelineMarker } from './timeline/types';
 import type { DockNode } from '../types/dock';
-import type { FlashBoard } from './flashboardStore/types';
+import type {
+  FlashBoard,
+  FlashBoardComposerState,
+  FlashBoardGenerationMetadata,
+} from './flashboardStore/types';
 
 const log = Logger.create('History');
 
@@ -46,10 +51,12 @@ interface StateSnapshot {
     layout: DockNode | null;
   };
 
-  // FlashBoard state (boards + activeBoardId, excluding ephemeral UI state)
+  // FlashBoard state (boards + active board + composer config + generated-media metadata)
   flashboard: {
     activeBoardId: string | null;
     boards: FlashBoard[];
+    composer: FlashBoardComposerState;
+    generationMetadataByMediaId: Record<string, FlashBoardGenerationMetadata>;
   };
 }
 
@@ -114,7 +121,7 @@ interface FlashBoardStoreSnapshot {
   activeBoardId: string | null;
   boards: FlashBoard[];
   selectedNodeIds: string[];
-  composer: { draftNodeId: string | null; isOpen: boolean };
+  composer: FlashBoardComposerState;
 }
 
 // Callback to flush pending debounced captures before undo/redo (set by useGlobalHistory)
@@ -144,7 +151,7 @@ export function initHistoryStoreRefs(stores: {
   timeline: { getState: () => TimelineStoreState; setState: (state: Partial<TimelineStoreState>) => void };
   media: { getState: () => MediaStoreState; setState: (state: Partial<MediaStoreState>) => void };
   dock: { getState: () => any; setState: (state: any) => void };
-  flashboard: { getState: () => FlashBoardStoreSnapshot; setState: (state: Partial<FlashBoardStoreSnapshot>) => void };
+  flashboard?: { getState: () => FlashBoardStoreSnapshot; setState: (state: Partial<FlashBoardStoreSnapshot>) => void };
 }) {
   getTimelineState = stores.timeline.getState;
   setTimelineState = stores.timeline.setState;
@@ -152,8 +159,8 @@ export function initHistoryStoreRefs(stores: {
   setMediaState = stores.media.setState;
   getDockState = stores.dock.getState;
   setDockState = stores.dock.setState;
-  getFlashBoardState = stores.flashboard.getState;
-  setFlashBoardState = stores.flashboard.setState;
+  getFlashBoardState = stores.flashboard?.getState;
+  setFlashBoardState = stores.flashboard?.setState;
 }
 
 // Deep clone helper (handles most objects, excluding DOM elements and functions)
@@ -200,6 +207,17 @@ function deepClone<T>(obj: T, seen?: WeakSet<object>): T {
   return cloned;
 }
 
+function createDefaultFlashBoardComposer(): FlashBoardComposerState {
+  return {
+    draftNodeId: null,
+    isOpen: false,
+    generateAudio: false,
+    multiShots: false,
+    multiPrompt: [],
+    referenceMediaFileIds: [],
+  };
+}
+
 // Create snapshot from current state
 function createSnapshot(label: string): StateSnapshot {
   const timeline = getTimelineState?.() || ({} as any);
@@ -209,7 +227,7 @@ function createSnapshot(label: string): StateSnapshot {
     activeBoardId: null,
     boards: [],
     selectedNodeIds: [],
-    composer: { draftNodeId: null, isOpen: false },
+    composer: createDefaultFlashBoardComposer(),
   };
 
   // Convert Map<string, Keyframe[]> to plain object for cloning
@@ -249,6 +267,8 @@ function createSnapshot(label: string): StateSnapshot {
     flashboard: {
       activeBoardId: flashboard.activeBoardId ?? null,
       boards: deepClone(flashboard.boards || []),
+      composer: deepClone(flashboard.composer || createDefaultFlashBoardComposer()),
+      generationMetadataByMediaId: deepClone(flashBoardMediaBridge.serializeMetadata()),
     },
   };
 }
@@ -324,9 +344,13 @@ function applySnapshot(snapshot: StateSnapshot) {
       activeBoardId: snapshot.flashboard?.activeBoardId ?? null,
       boards: deepClone(snapshot.flashboard?.boards || []),
       selectedNodeIds: [],
-      composer: { draftNodeId: null, isOpen: false },
+      composer: deepClone(snapshot.flashboard?.composer || createDefaultFlashBoardComposer()),
     });
   }
+
+  flashBoardMediaBridge.hydrateMetadata(
+    deepClone(snapshot.flashboard?.generationMetadataByMediaId || {})
+  );
 }
 
 export const useHistoryStore = create<HistoryState>()(

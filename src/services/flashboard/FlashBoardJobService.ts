@@ -6,6 +6,8 @@ import type { TextToVideoParams, ImageToVideoParams } from '../piApiService';
 import type { FlashBoardGenerationRequest } from '../../stores/flashboardStore/types';
 import type { SubmitNodeJobInput, SubmitNodeJobResult } from './types';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useMediaStore } from '../../stores/mediaStore';
+import { createThumbnail } from '../../stores/mediaStore/helpers/thumbnailHelpers';
 
 const log = Logger.create('FlashBoardJob');
 
@@ -100,6 +102,44 @@ class FlashBoardJobService {
     }
   }
 
+  private async resolveReferenceImage(mediaFileId: string | undefined): Promise<string | undefined> {
+    if (!mediaFileId) {
+      return undefined;
+    }
+
+    const mediaFile = useMediaStore.getState().files.find((file) => file.id === mediaFileId);
+
+    if (!mediaFile) {
+      throw new Error('Reference media not found');
+    }
+
+    if (mediaFile.type === 'image') {
+      return mediaFile.url;
+    }
+
+    if (mediaFile.type === 'video') {
+      if (mediaFile.thumbnailUrl) {
+        return mediaFile.thumbnailUrl;
+      }
+
+      if (mediaFile.file) {
+        const thumbnailUrl = await createThumbnail(mediaFile.file, 'video');
+        if (thumbnailUrl) {
+          useMediaStore.setState((state) => ({
+            files: state.files.map((file) => (
+              file.id === mediaFile.id ? { ...file, thumbnailUrl } : file
+            )),
+          }));
+          return thumbnailUrl;
+        }
+      }
+
+      throw new Error('Reference video has no preview frame available');
+    }
+
+    throw new Error('Reference media must be an image or video');
+  }
+
   private async startJob(entry: QueueEntry): Promise<void> {
     const { nodeId, request, abortController } = entry;
 
@@ -119,12 +159,17 @@ class FlashBoardJobService {
           throw new Error(`${request.providerId} is currently only supported via Kie.ai`);
         }
 
+        const referenceImageInputs = (await Promise.all(
+          (request.referenceMediaFileIds ?? []).map((mediaFileId) => this.resolveReferenceImage(mediaFileId))
+        )).filter((imageUrl): imageUrl is string => Boolean(imageUrl));
+
         const remoteTaskId = await kieAiService.createTextToImage({
           provider: request.providerId,
           prompt: request.prompt,
           aspectRatio: request.aspectRatio,
           resolution: request.imageSize,
           outputFormat: 'png',
+          imageInputs: referenceImageInputs.length > 0 ? referenceImageInputs : undefined,
         });
 
         this.running.push({
@@ -177,7 +222,9 @@ class FlashBoardJobService {
           duration: request.duration || 5,
           aspectRatio: request.aspectRatio || '16:9',
           mode: request.mode || 'std',
-          sound: request.generateAudio,
+          sound: request.multiShots ? true : request.generateAudio,
+          multiShots: request.multiShots,
+          multiPrompt: request.multiPrompt,
         };
 
         if (request.service === 'piapi') {
@@ -188,6 +235,8 @@ class FlashBoardJobService {
           remoteTaskId = await cloudAiService.createTextToVideo(params);
         }
       } else {
+        const startImageUrl = await this.resolveReferenceImage(request.startMediaFileId);
+        const endImageUrl = await this.resolveReferenceImage(request.endMediaFileId);
         const params: ImageToVideoParams = {
           provider: request.providerId,
           version: request.version,
@@ -196,7 +245,11 @@ class FlashBoardJobService {
           duration: request.duration || 5,
           aspectRatio: request.aspectRatio || '16:9',
           mode: request.mode || 'std',
-          sound: request.generateAudio,
+          sound: request.multiShots ? true : request.generateAudio,
+          multiShots: request.multiShots,
+          multiPrompt: request.multiPrompt,
+          startImageUrl,
+          endImageUrl: request.multiShots ? undefined : endImageUrl,
         };
 
         if (request.service === 'piapi') {

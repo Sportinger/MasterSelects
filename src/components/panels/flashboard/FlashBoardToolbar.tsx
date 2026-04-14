@@ -2,41 +2,78 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useFlashBoardStore } from '../../../stores/flashboardStore';
 import { selectActiveBoard, selectQueuedNodes, selectProcessingNodes } from '../../../stores/flashboardStore/selectors';
 
+interface BoardContextMenuState {
+  boardId: string;
+  x: number;
+  y: number;
+}
+
 export function FlashBoardToolbar() {
   const board = useFlashBoardStore(selectActiveBoard);
+  const boards = useFlashBoardStore((s) => s.boards);
+  const createBoard = useFlashBoardStore((s) => s.createBoard);
+  const removeBoard = useFlashBoardStore((s) => s.removeBoard);
   const renameBoard = useFlashBoardStore((s) => s.renameBoard);
+  const setActiveBoard = useFlashBoardStore((s) => s.setActiveBoard);
   const createDraftNode = useFlashBoardStore((s) => s.createDraftNode);
   const openComposer = useFlashBoardStore((s) => s.openComposer);
   const queuedCount = useFlashBoardStore((s) => selectQueuedNodes(s).length);
   const processingCount = useFlashBoardStore((s) => selectProcessingNodes(s).length);
 
-  const [isEditing, setIsEditing] = useState(false);
+  const [editingBoardId, setEditingBoardId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  const [contextMenu, setContextMenu] = useState<BoardContextMenuState | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (isEditing && inputRef.current) {
+    if (editingBoardId && inputRef.current) {
       inputRef.current.focus();
       inputRef.current.select();
     }
-  }, [isEditing]);
+  }, [editingBoardId]);
 
-  const handleDoubleClick = useCallback(() => {
-    if (!board) return;
-    setEditName(board.name);
-    setIsEditing(true);
-  }, [board]);
+  useEffect(() => {
+    if (!contextMenu) {
+      return;
+    }
+
+    const handleClick = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setContextMenu(null);
+      }
+    };
+
+    window.addEventListener('mousedown', handleClick);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('mousedown', handleClick);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu]);
+
+  const startRename = useCallback((boardId: string, currentName: string) => {
+    setEditName(currentName);
+    setEditingBoardId(boardId);
+    setContextMenu(null);
+  }, []);
 
   const commitRename = useCallback(() => {
-    if (board && editName.trim()) {
-      renameBoard(board.id, editName.trim());
+    if (editingBoardId && editName.trim()) {
+      renameBoard(editingBoardId, editName.trim());
     }
-    setIsEditing(false);
-  }, [board, editName, renameBoard]);
+    setEditingBoardId(null);
+  }, [editingBoardId, editName, renameBoard]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') commitRename();
-    if (e.key === 'Escape') setIsEditing(false);
+    if (e.key === 'Escape') setEditingBoardId(null);
   }, [commitRename]);
 
   const handleNewDraft = useCallback(() => {
@@ -45,27 +82,77 @@ export function FlashBoardToolbar() {
     openComposer(node.id);
   }, [board, createDraftNode, openComposer]);
 
+  const handleNewBoard = useCallback(() => {
+    const nextIndex = boards.length + 1;
+    createBoard(`FlashBoard ${nextIndex}`);
+  }, [boards.length, createBoard]);
+
+  const handleTabContextMenu = useCallback((event: React.MouseEvent, boardId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    setContextMenu({
+      boardId,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  }, []);
+
+  const handleDeleteBoard = useCallback(() => {
+    if (!contextMenu) {
+      return;
+    }
+
+    removeBoard(contextMenu.boardId);
+    setContextMenu(null);
+  }, [contextMenu, removeBoard]);
+
   const activeCount = queuedCount + processingCount;
+  const contextBoard = contextMenu
+    ? boards.find((boardItem) => boardItem.id === contextMenu.boardId) ?? null
+    : null;
 
   return (
     <div className="flashboard-toolbar">
-      {isEditing ? (
-        <input
-          ref={inputRef}
-          className="flashboard-toolbar-name-input"
-          value={editName}
-          onChange={(e) => setEditName(e.target.value)}
-          onBlur={commitRename}
-          onKeyDown={handleKeyDown}
-        />
-      ) : (
-        <span
-          className="flashboard-toolbar-name"
-          onDoubleClick={handleDoubleClick}
+      <div className="flashboard-toolbar-tabs" role="tablist" aria-label="FlashBoards">
+        {boards.map((boardItem) => {
+          const isActive = boardItem.id === board?.id;
+          const isEditing = editingBoardId === boardItem.id;
+
+          return isEditing ? (
+            <input
+              key={boardItem.id}
+              ref={inputRef}
+              className="flashboard-toolbar-name-input flashboard-toolbar-tab-input"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={handleKeyDown}
+            />
+          ) : (
+            <button
+              key={boardItem.id}
+              type="button"
+              className={`flashboard-toolbar-tab ${isActive ? 'active' : ''}`}
+              onClick={() => setActiveBoard(boardItem.id)}
+              onDoubleClick={() => startRename(boardItem.id, boardItem.name)}
+              onContextMenu={(event) => handleTabContextMenu(event, boardItem.id)}
+              title={boardItem.name}
+            >
+              <span className="flashboard-toolbar-tab-label">{boardItem.name}</span>
+            </button>
+          );
+        })}
+
+        <button
+          type="button"
+          className="flashboard-toolbar-tab-add"
+          onClick={handleNewBoard}
+          title="New FlashBoard"
         >
-          {board?.name ?? 'FlashBoard'}
-        </span>
-      )}
+          +
+        </button>
+      </div>
 
       <div className="flashboard-toolbar-spacer" />
 
@@ -80,6 +167,29 @@ export function FlashBoardToolbar() {
       <button className="flashboard-toolbar-btn" onClick={handleNewDraft}>
         + New Draft
       </button>
+
+      {contextMenu && contextBoard && (
+        <div
+          ref={menuRef}
+          className="flashboard-context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onMouseDown={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <button
+            className="flashboard-context-item danger"
+            onClick={handleDeleteBoard}
+            disabled={boards.length <= 1}
+          >
+            Delete Board
+          </button>
+          {boards.length <= 1 && (
+            <button className="flashboard-context-item hint" disabled>
+              Create another board first
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -17,6 +17,8 @@ export function getCatalogEntries(): CatalogEntry[] {
       aspectRatios: p.supportedAspectRatios,
       supportsTextToVideo: p.supportsTextToVideo,
       supportsImageToVideo: p.supportsImageToVideo,
+      supportsGenerateAudio: false,
+      supportsMultiShot: false,
     });
   }
 
@@ -33,6 +35,8 @@ export function getCatalogEntries(): CatalogEntry[] {
       aspectRatios: p.supportedAspectRatios,
       supportsTextToVideo: p.supportsTextToVideo,
       supportsImageToVideo: p.supportsImageToVideo,
+      supportsGenerateAudio: p.id === 'kling-3.0',
+      supportsMultiShot: p.id === 'kling-3.0',
       ...(isImageOnly ? { supportsTextToImage: true, outputType: 'image' as const } : { outputType: 'video' as const }),
     });
   }
@@ -49,6 +53,8 @@ export function getCatalogEntries(): CatalogEntry[] {
     supportsTextToVideo: false,
     supportsImageToVideo: false,
     supportsTextToImage: true,
+    supportsGenerateAudio: false,
+    supportsMultiShot: false,
     imageSizes: ['1K', '2K', '4K'],
     outputType: 'image',
   });
@@ -64,6 +70,8 @@ export function getCatalogEntries(): CatalogEntry[] {
     aspectRatios: ['16:9', '9:16', '1:1'],
     supportsTextToVideo: true,
     supportsImageToVideo: true,
+    supportsGenerateAudio: true,
+    supportsMultiShot: true,
     outputType: 'video',
   });
 

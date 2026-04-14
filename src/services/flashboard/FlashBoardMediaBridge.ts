@@ -156,7 +156,10 @@ class FlashBoardMediaBridge {
       ? this.getOrCreateVideoSubfolder()
       : this.getOrCreateImageSubfolder();
 
-    const mediaFile = await useMediaStore.getState().importFile(file, folderId);
+    const mediaFile = await useMediaStore.getState().importFile(file, folderId, {
+      // Generated URLs expire, so project-local persistence should not depend on the global import setting.
+      forceCopyToProject: true,
+    });
 
     if (!mediaFile) {
       throw new Error('Failed to import media file into Media Pool');
@@ -182,6 +185,8 @@ class FlashBoardMediaBridge {
         duration: node.request.duration,
         aspectRatio: node.request.aspectRatio,
         generateAudio: node.request.generateAudio,
+        multiShots: node.request.multiShots,
+        multiPrompt: node.request.multiPrompt,
         startMediaFileId: node.request.startMediaFileId,
         endMediaFileId: node.request.endMediaFileId,
         referenceMediaFileIds: node.request.referenceMediaFileIds ?? [],

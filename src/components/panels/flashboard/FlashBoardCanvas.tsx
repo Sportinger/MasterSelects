@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFlashBoardStore } from '../../../stores/flashboardStore';
 import { selectActiveBoard, selectActiveBoardNodes, selectNodeById } from '../../../stores/flashboardStore/selectors';
+import { useMediaStore } from '../../../stores/mediaStore';
 import { FlashBoardNode } from './FlashBoardNode';
 import { FlashBoardContextMenu } from './FlashBoardContextMenu';
+import { resolveFlashBoardNodeDisplaySize } from './nodeSizing';
 
 interface ContextMenuState {
   x: number;
@@ -23,6 +25,7 @@ export function FlashBoardCanvas() {
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [overlapHoverNodeId, setOverlapHoverNodeId] = useState<string | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const zoom = board?.viewport.zoom ?? 1;
@@ -111,6 +114,7 @@ export function FlashBoardCanvas() {
     e.preventDefault();
     e.stopPropagation();
     const canvasPos = screenToCanvas(e.clientX, e.clientY);
+    setOverlapHoverNodeId(null);
     setContextMenu({ x: e.clientX, y: e.clientY, nodeId: null, canvasPosition: canvasPos });
   }, [screenToCanvas]);
 
@@ -118,8 +122,35 @@ export function FlashBoardCanvas() {
     e.preventDefault();
     e.stopPropagation();
     const canvasPos = screenToCanvas(e.clientX, e.clientY);
+    setOverlapHoverNodeId(null);
     setContextMenu({ x: e.clientX, y: e.clientY, nodeId, canvasPosition: canvasPos });
   }, [screenToCanvas]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (isPanning.current) {
+      setOverlapHoverNodeId(null);
+      return;
+    }
+
+    const stackedNodeIds: string[] = [];
+    for (const element of document.elementsFromPoint(e.clientX, e.clientY)) {
+      const nodeElement = element.closest<HTMLElement>('.flashboard-node[data-flashboard-node-id]');
+      const nodeId = nodeElement?.dataset.flashboardNodeId;
+      if (!nodeId || stackedNodeIds.includes(nodeId)) {
+        continue;
+      }
+      stackedNodeIds.push(nodeId);
+      if (stackedNodeIds.length >= 2) {
+        break;
+      }
+    }
+
+    setOverlapHoverNodeId(stackedNodeIds[1] ?? null);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setOverlapHoverNodeId(null);
+  }, []);
 
   // DnD handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -168,12 +199,25 @@ export function FlashBoardCanvas() {
   const contextNode = useFlashBoardStore((s) =>
     contextMenu?.nodeId ? selectNodeById(s, contextMenu.nodeId) : null
   );
+  const overlapOutlineNode = useFlashBoardStore((s) =>
+    overlapHoverNodeId ? selectNodeById(s, overlapHoverNodeId) : null
+  );
+  const overlapOutlineMediaFile = useMediaStore((s) => {
+    const mediaFileId = overlapOutlineNode?.result?.mediaFileId;
+    if (!mediaFileId) return undefined;
+    return s.files.find((file) => file.id === mediaFileId);
+  });
+  const overlapOutlineSize = overlapOutlineNode
+    ? resolveFlashBoardNodeDisplaySize(overlapOutlineNode, overlapOutlineMediaFile)
+    : null;
 
   return (
     <div
       ref={canvasRef}
       className={`flashboard-canvas ${isDragOver ? 'drag-over' : ''}`}
       onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
       onContextMenu={handleContextMenu}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -188,10 +232,22 @@ export function FlashBoardCanvas() {
             key={node.id}
             node={node}
             isSelected={selectedSet.has(node.id)}
+            isOverlapOutlined={overlapHoverNodeId === node.id}
             zoom={zoom}
             onContextMenu={handleNodeContextMenu}
           />
         ))}
+        {overlapOutlineNode && overlapOutlineSize && (
+          <div
+            className="flashboard-node-overlap-outline"
+            style={{
+              left: overlapOutlineNode.position.x,
+              top: overlapOutlineNode.position.y,
+              width: overlapOutlineSize.width,
+              height: overlapOutlineSize.height,
+            }}
+          />
+        )}
       </div>
 
       {contextMenu && board && (

@@ -18,7 +18,6 @@ import {
   piApiService,
   getVideoProviders,
   getProvider,
-  calculateCost,
   type VideoTask,
   type TextToVideoParams,
   type ImageToVideoParams,
@@ -28,8 +27,8 @@ import {
   kieAiService,
   getKieAiProviders,
   getKieAiProvider,
-  calculateKieAiCost,
 } from '../../services/kieAiService';
+import { getFlashBoardPriceEstimate } from '../../services/flashboard/FlashBoardPricing';
 import { ImageCropper, exportCroppedImage, type CropData } from './ImageCropper';
 import './AIVideoPanel.css';
 
@@ -651,10 +650,14 @@ export function AIVideoPanel() {
     await importVideoToProject({ ...job });
   }, [importVideoToProject]);
 
-  // Calculate current cost based on active service
-  const currentCost = selectedService === 'kieai'
-    ? calculateKieAiCost(selectedProvider, mode, duration, generateAudio)
-    : calculateCost(selectedProvider, mode, duration);
+  const currentPriceEstimate = getFlashBoardPriceEstimate({
+    service: boardService,
+    providerId: boardProviderId,
+    outputType: 'video',
+    mode,
+    duration,
+    generateAudio,
+  });
 
   return (
     <div className={`ai-video-panel ${!hasApiKey ? 'no-api-key' : ''}`}>
@@ -878,10 +881,9 @@ export function AIVideoPanel() {
             className="btn-generate-top"
             onClick={generateVideo}
             disabled={isGenerating || !prompt.trim()}
+            title={currentPriceEstimate?.fullLabel}
           >
-            {isGenerating ? 'Starting...' : `Generate (~${selectedService === 'kieai'
-              ? `${currentCost} cr`
-              : `$${currentCost.toFixed(2)}`})`}
+            {isGenerating ? 'Starting...' : `Generate (${currentPriceEstimate?.compactLabel ?? '--'})`}
           </button>
         </div>
       )}

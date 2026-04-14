@@ -11,6 +11,7 @@ import { useYouTubeStore } from '../../stores/youtubeStore';
 import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useFlashBoardStore } from '../../stores/flashboardStore';
+import { flashBoardMediaBridge } from '../flashboard/FlashBoardMediaBridge';
 import type {
   FlashBoard,
   FlashBoardJobState,
@@ -102,7 +103,10 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
           handle = result.handle;
           url = URL.createObjectURL(file);
           resolvedProjectPath = candidatePath;
-          await cacheProjectFileHandle(pm.id, result.handle, true);
+          const projectHandle = result.handle;
+          if (projectHandle) {
+            await cacheProjectFileHandle(pm.id, projectHandle, true);
+          }
           log.info('Restored file from project RAW path:', pm.name);
           break;
         } catch (e) {
@@ -386,7 +390,14 @@ function hydrateFlashBoardFromProject(data: ProjectFlashBoardState): void {
     activeBoardId: data.activeBoardId,
     boards,
     selectedNodeIds: [],
-    composer: { draftNodeId: null, isOpen: false },
+    composer: {
+      draftNodeId: null,
+      isOpen: false,
+      generateAudio: false,
+      multiShots: false,
+      multiPrompt: [],
+      referenceMediaFileIds: [],
+    },
   });
 }
 
@@ -478,14 +489,23 @@ export async function loadProjectToStores(): Promise<void> {
 
   if (projectData.flashboard) {
     hydrateFlashBoardFromProject(projectData.flashboard);
+    flashBoardMediaBridge.hydrateMetadata(projectData.flashboard.generationMetadataByMediaId ?? {});
     log.info(' Restored FlashBoard state from project');
   } else {
     useFlashBoardStore.setState({
       activeBoardId: null,
       boards: [],
       selectedNodeIds: [],
-      composer: { draftNodeId: null, isOpen: false },
+      composer: {
+        draftNodeId: null,
+        isOpen: false,
+        generateAudio: false,
+        multiShots: false,
+        multiPrompt: [],
+        referenceMediaFileIds: [],
+      },
     });
+    flashBoardMediaBridge.hydrateMetadata({});
   }
 
   // Restore per-project UI settings to localStorage

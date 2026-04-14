@@ -14,7 +14,14 @@ export const useFlashBoardStore = create<FlashBoardStore>()(
     boards: [],
     selectedNodeIds: [],
     viewMode: 'board' as const,
-    composer: { draftNodeId: null, isOpen: false },
+    composer: {
+      draftNodeId: null,
+      isOpen: false,
+      generateAudio: false,
+      multiShots: false,
+      multiPrompt: [],
+      referenceMediaFileIds: [],
+    },
 
     ...createBoardSlice(set as any, get as any),
     ...createNodeSlice(set as any, get as any),

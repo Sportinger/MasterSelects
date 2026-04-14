@@ -208,6 +208,8 @@ export interface TextToVideoParams {
   mode: string;
   cfgScale?: number;
   sound?: boolean;
+  multiShots?: boolean;
+  multiPrompt?: Array<{ index: number; prompt: string; duration: number }>;
 }
 
 export interface ImageToVideoParams {
@@ -222,6 +224,8 @@ export interface ImageToVideoParams {
   mode: string;
   cfgScale?: number;
   sound?: boolean;
+  multiShots?: boolean;
+  multiPrompt?: Array<{ index: number; prompt: string; duration: number }>;
 }
 
 export interface AccountInfo {

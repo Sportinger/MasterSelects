@@ -81,8 +81,12 @@ export function SlotGrid({ opacity }: SlotGridProps) {
   const triggerLiveColumn = useMediaStore(state => state.triggerLiveColumn) as (colIndex: number) => void;
   const moveSlot = useMediaStore(state => state.moveSlot);
   const unassignSlot = useMediaStore(state => state.unassignSlot);
-  const selectSlotComposition = useMediaStore(state => state.selectSlotComposition) as (compositionId: string | null) => void;
-  const ensureSlotClipSettings = useMediaStore(state => state.ensureSlotClipSettings) as (compositionId: string, duration: number) => void;
+  const selectSlotComposition = useMediaStore(
+    state => state.selectSlotComposition as ((compositionId: string | null) => void) | undefined
+  );
+  const ensureSlotClipSettings = useMediaStore(
+    state => state.ensureSlotClipSettings as ((compositionId: string, duration: number) => void) | undefined
+  );
   const assignMediaFileToSlot = useMediaStore(state => state.assignMediaFileToSlot);
   const getSlotMap = useMediaStore(state => state.getSlotMap);
   const layerOpacities = useMediaStore(state => state.layerOpacities);
@@ -235,12 +239,13 @@ export function SlotGrid({ opacity }: SlotGridProps) {
   // Click = select slot, open Slot Clip tab, and keep layer activation local to slot view.
   const handleSlotClick = useCallback((comp: Composition, slotIndex: number) => {
     const layerIndex = Math.floor(slotIndex / GRID_COLS);
-    ensureSlotClipSettings(comp.id, comp.duration);
-    selectSlotComposition(comp.id);
-    if (activeCompositionId !== comp.id) {
-      openCompositionTab(comp.id, { skipAnimation: true });
+    ensureSlotClipSettings?.(comp.id, comp.duration);
+    selectSlotComposition?.(comp.id);
+    try {
+      useDockStore.getState().activatePanelType('clip-properties');
+    } catch {
+      // Keep slot triggering functional even if dock persistence is unavailable.
     }
-    useDockStore.getState().activatePanelType('clip-properties');
     window.dispatchEvent(new CustomEvent('openPropertiesTab', { detail: { tab: 'slot-clip' } }));
 
     if (flags.useLiveSlotTrigger) {
@@ -248,8 +253,9 @@ export function SlotGrid({ opacity }: SlotGridProps) {
       return;
     }
 
+    openSlotInEditor(comp.id);
     useMediaStore.getState().activateOnLayer(comp.id, layerIndex);
-  }, [activeCompositionId, ensureSlotClipSettings, openCompositionTab, selectSlotComposition, triggerLiveSlot]);
+  }, [ensureSlotClipSettings, openSlotInEditor, selectSlotComposition, triggerLiveSlot]);
 
   const handleSlotDoubleClick = useCallback((comp: Composition) => {
     openSlotInEditor(comp.id);
@@ -261,7 +267,7 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     const { activeLayerSlots, activeCompositionId } = useMediaStore.getState();
     const compOnLayer = activeLayerSlots[layerIndex];
 
-    selectSlotComposition(null);
+    selectSlotComposition?.(null);
     deactivateLayer(layerIndex);
 
     // Check which layers are still active after removing this one

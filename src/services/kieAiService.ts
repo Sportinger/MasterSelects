@@ -81,6 +81,20 @@ function normalizeImageResolution(resolution?: string): '1K' | '2K' | '4K' {
   return '1K';
 }
 
+function normalizeMultiShotPrompt(
+  multiPrompt?: Array<{ index: number; prompt: string; duration: number }>
+): Array<{ index: number; prompt: string; duration: string }> | undefined {
+  const normalized = (multiPrompt ?? [])
+    .map((shot, index) => ({
+      index: index + 1,
+      prompt: typeof shot.prompt === 'string' ? shot.prompt.trim() : '',
+      duration: String(Math.max(1, Math.floor(Number(shot.duration) || 0))),
+    }))
+    .filter((shot) => shot.prompt.length > 0);
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 interface KieAiTaskResponse {
   code: number;
   msg: string;
@@ -270,15 +284,22 @@ class KieAiService {
   }
 
   async createTextToVideo(params: TextToVideoParams): Promise<string> {
+    const multiPrompt = params.multiShots ? normalizeMultiShotPrompt(params.multiPrompt) : undefined;
+    const effectiveSound = params.multiShots ? true : (params.sound ?? false);
+
     // Kie.ai Kling 3.0 API: no cfg_scale, no negative_prompt
     const input: Record<string, unknown> = {
       prompt: params.prompt,
       duration: String(params.duration),
       aspect_ratio: params.aspectRatio || '16:9',
       mode: params.mode || 'std',
-      sound: params.sound ?? false,
-      multi_shots: false,
+      sound: effectiveSound,
+      multi_shots: Boolean(params.multiShots),
     };
+
+    if (multiPrompt) {
+      input.multi_prompt = multiPrompt;
+    }
 
     const body = {
       model: 'kling-3.0/video',
@@ -306,7 +327,10 @@ class KieAiService {
 
     if (params.imageInputs?.length) {
       const uploaded = await Promise.all(
-        params.imageInputs.map((image) => this.uploadImage(image))
+        params.imageInputs.map(async (image) => {
+          const compressed = await this.compressImage(image);
+          return this.uploadImage(compressed);
+        })
       );
       input.image_input = uploaded;
     }
@@ -329,6 +353,8 @@ class KieAiService {
 
   async createImageToVideo(params: ImageToVideoParams): Promise<string> {
     const imageUrls: string[] = [];
+    const multiPrompt = params.multiShots ? normalizeMultiShotPrompt(params.multiPrompt) : undefined;
+    const effectiveSound = params.multiShots ? true : (params.sound ?? false);
 
     // Upload start image
     if (params.startImageUrl) {
@@ -339,7 +365,7 @@ class KieAiService {
     }
 
     // Upload end image (passed as second element in image_urls)
-    if (params.endImageUrl) {
+    if (params.endImageUrl && !params.multiShots) {
       log.debug('Compressing and uploading end image...');
       const compressed = await this.compressImage(params.endImageUrl);
       const url = await this.uploadImage(compressed);
@@ -351,12 +377,16 @@ class KieAiService {
       duration: String(params.duration),
       aspect_ratio: params.aspectRatio || '16:9',
       mode: params.mode || 'std',
-      sound: params.sound ?? false,
-      multi_shots: false,
+      sound: effectiveSound,
+      multi_shots: Boolean(params.multiShots),
     };
 
     if (imageUrls.length > 0) {
       input.image_urls = imageUrls;
+    }
+
+    if (multiPrompt) {
+      input.multi_prompt = multiPrompt;
     }
 
     // Kie.ai Kling 3.0: no cfg_scale, no negative_prompt

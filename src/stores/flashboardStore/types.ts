@@ -3,7 +3,28 @@ export interface FlashBoardStoreState {
   boards: FlashBoard[];
   selectedNodeIds: string[];
   viewMode: 'board';
-  composer: { draftNodeId: string | null; isOpen: boolean };
+  composer: FlashBoardComposerState;
+}
+
+export interface FlashBoardMultiShotPrompt {
+  index: number;
+  prompt: string;
+  duration: number;
+}
+
+export interface FlashBoardComposerState {
+  draftNodeId: string | null;
+  isOpen: boolean;
+  generateAudio: boolean;
+  multiShots: boolean;
+  multiPrompt: FlashBoardMultiShotPrompt[];
+  service?: 'piapi' | 'kieai' | 'cloud';
+  providerId?: string;
+  version?: string;
+  outputType?: 'video' | 'image';
+  startMediaFileId?: string;
+  endMediaFileId?: string;
+  referenceMediaFileIds: string[];
 }
 
 export interface FlashBoard {
@@ -39,6 +60,8 @@ export interface FlashBoardGenerationRequest {
   aspectRatio?: string;
   imageSize?: string;
   generateAudio?: boolean;
+  multiShots?: boolean;
+  multiPrompt?: FlashBoardMultiShotPrompt[];
   startMediaFileId?: string;
   endMediaFileId?: string;
   referenceMediaFileIds: string[];
@@ -101,6 +124,8 @@ export interface FlashBoardGenerationMetadata {
   aspectRatio?: string;
   imageSize?: string;
   generateAudio?: boolean;
+  multiShots?: boolean;
+  multiPrompt?: FlashBoardMultiShotPrompt[];
   startMediaFileId?: string;
   endMediaFileId?: string;
   referenceMediaFileIds: string[];

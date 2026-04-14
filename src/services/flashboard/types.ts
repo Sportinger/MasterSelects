@@ -22,6 +22,8 @@ export interface ImportGeneratedMediaInput {
     duration?: number;
     aspectRatio?: string;
     generateAudio?: boolean;
+    multiShots?: boolean;
+    multiPrompt?: FlashBoardGenerationRequest['multiPrompt'];
     startMediaFileId?: string;
     endMediaFileId?: string;
     referenceMediaFileIds: string[];
@@ -44,6 +46,8 @@ export interface CatalogEntry {
   supportsTextToVideo: boolean;
   supportsImageToVideo: boolean;
   supportsTextToImage?: boolean;
+  supportsGenerateAudio?: boolean;
+  supportsMultiShot?: boolean;
   imageSizes?: string[];
   outputType?: 'video' | 'image';
 }

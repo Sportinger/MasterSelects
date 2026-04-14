@@ -149,7 +149,14 @@ export function closeCurrentProject(): void {
     activeBoardId: null,
     boards: [],
     selectedNodeIds: [],
-    composer: { draftNodeId: null, isOpen: false },
+    composer: {
+      draftNodeId: null,
+      isOpen: false,
+      generateAudio: false,
+      multiShots: false,
+      multiPrompt: [],
+      referenceMediaFileIds: [],
+    },
   });
   useMediaStore.getState().newProject();
 }

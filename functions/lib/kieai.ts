@@ -2,6 +2,8 @@ import type { Env } from './env';
 
 const KIEAI_BASE_URL = 'https://api.kie.ai';
 const KIEAI_UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-stream-upload';
+// Hosted customer credits are priced at 4x the Kie.ai base cost for break-even.
+const HOSTED_KLING_BREAK_EVEN_MULTIPLIER = 4;
 
 export type HostedVideoTaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
@@ -10,6 +12,8 @@ export interface HostedVideoParams {
   duration: number;
   endImageUrl?: string;
   mode?: string;
+  multiPrompt?: Array<{ index: number; prompt: string; duration: number }>;
+  multiShots?: boolean;
   prompt: string;
   provider?: string;
   sound?: boolean;
@@ -164,19 +168,35 @@ function normalizeTaskStatus(state: string | undefined): HostedVideoTaskStatus {
   }
 }
 
+function normalizeMultiPrompt(
+  multiPrompt?: Array<{ index: number; prompt: string; duration: number }>,
+): Array<{ index: number; prompt: string; duration: string }> | undefined {
+  const normalized = (multiPrompt ?? [])
+    .map((shot, index) => ({
+      index: index + 1,
+      prompt: typeof shot.prompt === 'string' ? shot.prompt.trim() : '',
+      duration: String(Math.max(1, Math.floor(Number(shot.duration) || 0))),
+    }))
+    .filter((shot) => shot.prompt.length > 0);
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 export function calculateHostedKlingCost(
   mode: string,
   duration: number,
   sound: boolean,
+  multiShots = false,
 ): number {
   const normalizedMode = mode === 'pro' ? 'pro' : 'std';
   const durationSeconds = Math.max(3, Math.min(15, Math.floor(duration)));
+  const effectiveSound = multiShots ? true : sound;
+  const baseCost =
+    normalizedMode === 'pro'
+      ? durationSeconds * (effectiveSound ? 40 : 27)
+      : durationSeconds * (effectiveSound ? 30 : 20);
 
-  if (normalizedMode === 'pro') {
-    return durationSeconds * (sound ? 40 : 27);
-  }
-
-  return durationSeconds * (sound ? 30 : 20);
+  return baseCost * HOSTED_KLING_BREAK_EVEN_MULTIPLIER;
 }
 
 export async function createHostedKlingTask(
@@ -184,12 +204,14 @@ export async function createHostedKlingTask(
   params: HostedVideoParams,
 ): Promise<{ taskId: string }> {
   const imageUrls: string[] = [];
+  const multiPrompt = params.multiShots ? normalizeMultiPrompt(params.multiPrompt) : undefined;
+  const effectiveSound = params.multiShots ? true : Boolean(params.sound);
 
   if (params.startImageUrl) {
     imageUrls.push(await uploadImage(env, params.startImageUrl));
   }
 
-  if (params.endImageUrl) {
+  if (params.endImageUrl && !params.multiShots) {
     imageUrls.push(await uploadImage(env, params.endImageUrl));
   }
 
@@ -197,13 +219,17 @@ export async function createHostedKlingTask(
     aspect_ratio: params.aspectRatio ?? '16:9',
     duration: String(params.duration),
     mode: params.mode === 'pro' ? 'pro' : 'std',
-    multi_shots: false,
+    multi_shots: Boolean(params.multiShots),
     prompt: params.prompt,
-    sound: Boolean(params.sound),
+    sound: effectiveSound,
   };
 
   if (imageUrls.length > 0) {
     input.image_urls = imageUrls;
+  }
+
+  if (multiPrompt) {
+    input.multi_prompt = multiPrompt;
   }
 
   const payload = await kieAiJsonRequest<KieAiCreateTaskResponse>(env, '/api/v1/jobs/createTask', 'POST', {

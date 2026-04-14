@@ -305,7 +305,12 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     );
   }
 
-  const creditsRequired = calculateHostedKlingCost(params.mode ?? 'std', params.duration, Boolean(params.sound));
+  const creditsRequired = calculateHostedKlingCost(
+    params.mode ?? 'std',
+    params.duration,
+    Boolean(params.sound),
+    Boolean(params.multiShots),
+  );
   const idempotencyKey =
     typeof rawBody?.idempotencyKey === 'string' && rawBody.idempotencyKey.trim().length > 0
       ? rawBody.idempotencyKey.trim()
@@ -350,8 +355,10 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       hasEndImage: Boolean(params.endImageUrl),
       hasStartImage: Boolean(params.startImageUrl),
       mode: params.mode,
+      multiShots: Boolean(params.multiShots),
+      shotCount: params.multiPrompt?.length ?? 0,
       requestId,
-      sound: Boolean(params.sound),
+      sound: params.multiShots ? true : Boolean(params.sound),
     },
     model: 'kling-3.0',
     provider: 'kieai',
@@ -371,9 +378,11 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       {
         duration: params.duration,
         mode: params.mode ?? 'std',
+        multiShots: Boolean(params.multiShots),
         provider: 'kling-3.0',
         requestId,
-        sound: Boolean(params.sound),
+        shotCount: params.multiPrompt?.length ?? 0,
+        sound: params.multiShots ? true : Boolean(params.sound),
         taskId,
       },
     );

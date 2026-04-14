@@ -168,6 +168,8 @@ export interface CloudAiVideoRequest {
     duration?: number;
     endImageUrl?: string;
     mode?: 'pro' | 'std';
+    multiPrompt?: Array<{ index: number; prompt: string; duration: number }>;
+    multiShots?: boolean;
     prompt?: string;
     sound?: boolean;
     startImageUrl?: string;

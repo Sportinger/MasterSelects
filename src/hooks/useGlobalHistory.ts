@@ -5,6 +5,11 @@ import { useTimelineStore } from '../stores/timeline';
 import { useMediaStore } from '../stores/mediaStore';
 import { useDockStore } from '../stores/dockStore';
 import { useFlashBoardStore } from '../stores/flashboardStore';
+import type {
+  FlashBoard,
+  FlashBoardComposerState,
+  FlashBoardJobState,
+} from '../stores/flashboardStore';
 import { getShortcutRegistry } from '../services/shortcutRegistry';
 import {
   useHistoryStore,
@@ -28,6 +33,49 @@ function shallowEqual<T extends Record<string, unknown>>(a: T, b: T): boolean {
     if (!Object.is(a[key], b[key])) return false;
   }
   return true;
+}
+
+function normalizeFlashBoardJobForHistory(job?: FlashBoardJobState) {
+  if (!job || job.status === 'queued' || job.status === 'processing') {
+    return null;
+  }
+
+  return {
+    status: job.status,
+    error: job.status === 'failed' ? job.error ?? null : null,
+  };
+}
+
+function normalizeFlashBoardBoardsForHistory(boards: FlashBoard[]) {
+  return boards.map((board) => ({
+    id: board.id,
+    name: board.name,
+    viewport: board.viewport,
+    nodes: board.nodes.map((node) => ({
+      id: node.id,
+      kind: node.kind,
+      position: node.position,
+      size: node.size,
+      request: node.request ?? null,
+      result: node.result ?? null,
+      job: normalizeFlashBoardJobForHistory(node.job),
+    })),
+  }));
+}
+
+function normalizeFlashBoardComposerForHistory(composer: FlashBoardComposerState) {
+  return {
+    service: composer.service ?? null,
+    providerId: composer.providerId ?? null,
+    version: composer.version ?? null,
+    outputType: composer.outputType ?? null,
+    generateAudio: composer.generateAudio ?? false,
+    multiShots: composer.multiShots ?? false,
+    multiPrompt: composer.multiPrompt ?? [],
+    startMediaFileId: composer.startMediaFileId ?? null,
+    endMediaFileId: composer.endMediaFileId ?? null,
+    referenceMediaFileIds: composer.referenceMediaFileIds ?? [],
+  };
 }
 
 export function useGlobalHistory() {
@@ -185,16 +233,19 @@ export function useGlobalHistory() {
 
     const unsubFlashBoard = useFlashBoardStore.subscribe(
       (state) => ({
-        boards: state.boards,
         activeBoardId: state.activeBoardId,
+        boardsSignature: JSON.stringify(normalizeFlashBoardBoardsForHistory(state.boards)),
+        composerSignature: JSON.stringify(normalizeFlashBoardComposerForHistory(state.composer)),
       }),
       (curr, prev) => {
         if (useHistoryStore.getState().isApplying) return;
 
-        if (curr.boards !== prev.boards) {
-          debouncedCapture('Modify board');
-        } else if (curr.activeBoardId !== prev.activeBoardId) {
+        if (curr.activeBoardId !== prev.activeBoardId) {
           debouncedCapture('Switch board');
+        } else if (curr.composerSignature !== prev.composerSignature) {
+          debouncedCapture('Modify composer');
+        } else if (curr.boardsSignature !== prev.boardsSignature) {
+          debouncedCapture('Modify board');
         }
       },
       { equalityFn: shallowEqual, fireImmediately: false }

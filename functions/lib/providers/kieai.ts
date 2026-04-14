@@ -16,6 +16,38 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function normalizeHostedMultiPrompt(
+  value: unknown,
+): Array<{ index: number; prompt: string; duration: number }> | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const normalized = value
+    .map((entry, index) => {
+      if (!isRecord(entry)) {
+        return null;
+      }
+
+      const prompt = typeof entry.prompt === 'string' ? entry.prompt.trim() : '';
+      const duration = Number(entry.duration);
+
+      if (!prompt || !Number.isFinite(duration) || duration <= 0) {
+        return null;
+      }
+
+      return {
+        index: index + 1,
+        prompt,
+        duration: Math.floor(duration),
+      };
+    })
+    .filter((entry): entry is { index: number; prompt: string; duration: number } => Boolean(entry))
+    .slice(0, 5);
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 export function normalizeHostedKlingParams(value: unknown): HostedVideoParams | null {
   if (!isRecord(value)) {
     return null;
@@ -23,19 +55,36 @@ export function normalizeHostedKlingParams(value: unknown): HostedVideoParams | 
 
   const prompt = typeof value.prompt === 'string' ? value.prompt.trim() : '';
   const duration = Number(value.duration);
+  const multiShots = value.multiShots === true || value.multi_shots === true;
+
+  const normalizedDuration = Math.max(3, Math.min(15, Math.floor(duration)));
+  const multiPrompt = multiShots
+    ? normalizeHostedMultiPrompt(value.multiPrompt ?? value.multi_prompt)
+    : undefined;
 
   if (!prompt || !Number.isFinite(duration)) {
     return null;
   }
 
+  if (multiShots) {
+    const shotCount = multiPrompt?.length ?? 0;
+    const totalShotDuration = (multiPrompt ?? []).reduce((sum, shot) => sum + shot.duration, 0);
+
+    if (shotCount < 2 || shotCount > Math.min(5, normalizedDuration) || totalShotDuration !== normalizedDuration) {
+      return null;
+    }
+  }
+
   return {
     aspectRatio: typeof value.aspectRatio === 'string' && value.aspectRatio.trim() ? value.aspectRatio.trim() : '16:9',
-    duration: Math.max(3, Math.min(15, Math.floor(duration))),
-    endImageUrl: typeof value.endImageUrl === 'string' && value.endImageUrl.trim() ? value.endImageUrl.trim() : undefined,
+    duration: normalizedDuration,
+    endImageUrl: !multiShots && typeof value.endImageUrl === 'string' && value.endImageUrl.trim() ? value.endImageUrl.trim() : undefined,
     mode: value.mode === 'pro' ? 'pro' : 'std',
+    multiPrompt,
+    multiShots,
     prompt,
     provider: 'kling-3.0',
-    sound: value.sound === true,
+    sound: multiShots ? true : value.sound === true,
     startImageUrl: typeof value.startImageUrl === 'string' && value.startImageUrl.trim() ? value.startImageUrl.trim() : undefined,
   };
 }

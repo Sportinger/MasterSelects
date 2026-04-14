@@ -200,6 +200,8 @@ function serializeFlashBoardState(state: FlashBoardStoreState): ProjectFlashBoar
             duration: node.request.duration,
             aspectRatio: node.request.aspectRatio,
             generateAudio: node.request.generateAudio,
+            multiShots: node.request.multiShots,
+            multiPrompt: node.request.multiPrompt,
             startMediaFileId: node.request.startMediaFileId,
             endMediaFileId: node.request.endMediaFileId,
             referenceMediaFileIds: node.request.referenceMediaFileIds,
