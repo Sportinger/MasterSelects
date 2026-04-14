@@ -1,4 +1,4 @@
-import { getCurrentUser, json, methodNotAllowed, parseJson } from '../../lib/db';
+import { getCurrentUser, hasTrustedOrigin, json, methodNotAllowed, parseJson } from '../../lib/db';
 import { createStripePortalSession, getStripeConfig } from '../../lib/stripe';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
 
@@ -43,6 +43,16 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     return methodNotAllowed(['POST']);
   }
 
+  if (!hasTrustedOrigin(context.request)) {
+    return json(
+      {
+        error: 'forbidden_origin',
+        message: 'Billing portal requests must originate from the same site.',
+      },
+      { status: 403 },
+    );
+  }
+
   const user = getCurrentUser(context);
   if (!user) {
     return json(
@@ -83,6 +93,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   try {
     const session = await createStripePortalSession(stripeConfig, {
       customerId,
+      idempotencyKey: context.data.requestId ?? null,
       returnUrl,
     });
 

@@ -33,6 +33,13 @@ npm run dev:api
 
 For local auth and billing, create a `.dev.vars` file from `.dev.vars.example`.
 
+`npm run dev:api` now applies local D1 migrations automatically before starting Pages Functions.
+If you start `wrangler pages dev` manually, run this first:
+
+```powershell
+npm run cf:migrate:local
+```
+
 ## Secrets
 
 Set these as Cloudflare Pages / Workers secrets:
@@ -59,6 +66,13 @@ STRIPE_PRICE_STARTER=price_xxx
 STRIPE_PRICE_PRO=price_xxx
 STRIPE_PRICE_STUDIO=price_xxx
 ```
+
+Important:
+
+- Local development and preview deployments should use `ENVIRONMENT=development`.
+- Production deployments must use `ENVIRONMENT=production`.
+- In `wrangler.toml`, keep this split explicit with `[vars]` / `[env.preview.vars]` / `[env.production.vars]`.
+- If `STRIPE_SECRET_KEY` or `STRIPE_WEBHOOK_SECRET` is missing in production, pricing and billing sync will fail.
 
 ## Google OAuth
 

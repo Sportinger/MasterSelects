@@ -12043,12 +12043,12 @@ input[type="checkbox"] {
   }
 
   .changelog-notice-scribble {
-    left: 60px;
-    bottom: -1px;
+    left: 56px;
+    bottom: 5px;
   }
 
   .changelog-notice-scribble-text {
-    font-size: 21px;
+    font-size: 14px;
   }
 }
 
@@ -12175,14 +12175,14 @@ input[type="checkbox"] {
 
 .changelog-notice-scribble {
   position: absolute;
-  left: 66px;
-  bottom: -2px;
+  left: 62px;
+  bottom: 6px;
   z-index: 2;
   pointer-events: none;
   opacity: 0.92;
   display: inline-flex;
   align-items: flex-end;
-  gap: 4px;
+  gap: 3px;
   transform: rotate(10deg);
 }
 
@@ -12191,7 +12191,7 @@ input[type="checkbox"] {
   display: inline-block;
   color: #ff5a5f;
   font-family: 'Segoe Print', 'Bradley Hand', 'Marker Felt', 'Comic Sans MS', cursive;
-  font-size: 23px;
+  font-size: 15px;
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.03em;
@@ -12201,19 +12201,19 @@ input[type="checkbox"] {
 .changelog-notice-scribble-text::before {
   content: '';
   position: absolute;
-  left: -5px;
-  right: -4px;
+  left: -3px;
+  right: -3px;
   bottom: 1px;
-  height: 10px;
-  border-bottom: 2px solid rgba(255, 90, 95, 0.42);
+  height: 7px;
+  border-bottom: 1.5px solid rgba(255, 90, 95, 0.42);
   border-radius: 50%;
   transform: rotate(-2deg);
 }
 
 .changelog-notice-scribble-arrow {
-  width: 32px;
-  height: 16px;
-  margin-bottom: 6px;
+  width: 24px;
+  height: 12px;
+  margin-bottom: 4px;
   overflow: visible;
 }
 

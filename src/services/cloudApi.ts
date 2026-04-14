@@ -86,6 +86,7 @@ export interface BillingSummaryResponse {
 
 export interface CheckoutResponse {
   checkoutUrl: string | null;
+  destination?: 'checkout' | 'portal';
   id: string;
   planId: BillingPlanId | string;
   priceId: string;
@@ -342,21 +343,93 @@ export interface HostedVideoInfoResponse {
   provider: string;
 }
 
-async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {
+interface ApiRequestInit extends RequestInit {
+  timeoutMs?: number;
+}
+
+const DEFAULT_JSON_REQUEST_TIMEOUT_MS = 10_000;
+
+function createRequestController(signal?: AbortSignal | null, timeoutMs?: number): {
+  cleanup: () => void;
+  didTimeout: () => boolean;
+  signal: AbortSignal | undefined;
+} {
+  if (!signal && (!timeoutMs || timeoutMs <= 0)) {
+    return {
+      cleanup: () => undefined,
+      didTimeout: () => false,
+      signal: undefined,
+    };
+  }
+
+  const controller = new AbortController();
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+  const abortFromParent = () => controller.abort(signal?.reason);
+
+  if (signal) {
+    if (signal.aborted) {
+      controller.abort(signal.reason);
+    } else {
+      signal.addEventListener('abort', abortFromParent, { once: true });
+    }
+  }
+
+  if (timeoutMs && timeoutMs > 0) {
+    timeoutHandle = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+  }
+
+  return {
+    cleanup: () => {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+      if (signal) {
+        signal.removeEventListener('abort', abortFromParent);
+      }
+    },
+    didTimeout: () => timedOut,
+    signal: controller.signal,
+  };
+}
+
+function getApiTimeoutError(path: string, timeoutMs: number): Error {
+  if (isLocalViteOrigin() && isHostedCloudApiRoute(path)) {
+    return new Error(
+      `Hosted API route ${path} did not respond within ${Math.round(timeoutMs / 1000)}s. Check that "npm run dev:api" is healthy and restart the local backend if needed.`,
+    );
+  }
+
+  return new Error(`Request to ${path} timed out after ${timeoutMs}ms.`);
+}
+
+async function requestJson<T>(path: string, init: ApiRequestInit = {}): Promise<T> {
+  const { timeoutMs = DEFAULT_JSON_REQUEST_TIMEOUT_MS, ...requestInit } = init;
+  const requestController = createRequestController(requestInit.signal, timeoutMs);
   let response: Response;
 
   try {
     response = await fetch(path, {
       credentials: 'include',
-      ...init,
+      ...requestInit,
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
         'X-App-Version': APP_VERSION,
-        ...(init.headers ?? {}),
+        ...(requestInit.headers ?? {}),
       },
+      signal: requestController.signal,
     });
   } catch (error) {
+    requestController.cleanup();
+
+    if (requestController.didTimeout()) {
+      throw getApiTimeoutError(path, timeoutMs);
+    }
+
     if (isLocalViteOrigin() && isHostedCloudApiRoute(path)) {
       throw getLocalHostedApiError(path);
     }
@@ -364,6 +437,7 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
     throw error;
   }
 
+  requestController.cleanup();
   const text = await response.text();
 
   if (isLocalHostedApiMisconfigured(path, response, text)) {
@@ -425,11 +499,7 @@ export const cloudApi = {
   billing: {
     checkout(body: {
       cancelUrl?: string;
-      customerEmail?: string;
-      metadata?: Record<string, string | undefined>;
       planId?: BillingPlanId | string;
-      priceId?: string;
-      quantity?: number;
       successUrl?: string;
     }): Promise<CheckoutResponse> {
       return requestJson<CheckoutResponse>('/api/billing/checkout', {

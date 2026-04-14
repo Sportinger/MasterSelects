@@ -14,3 +14,9 @@ id = "daadda485425465791a1c83afc48be67"
 
 [vars]
 ENVIRONMENT = "development"
+
+[env.preview.vars]
+ENVIRONMENT = "development"
+
+[env.production.vars]
+ENVIRONMENT = "production"

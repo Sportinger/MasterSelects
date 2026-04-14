@@ -1,12 +1,12 @@
 {
   "name": "masterselects",
   "private": true,
-  "version": "1.4.3",
+  "version": "1.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "dev:cf": "wrangler pages dev . --port 8788 --persist-to .wrangler/state",
-    "dev:api": "npm run dev:cf",
+    "dev:api": "npm run cf:migrate:local && npm run dev:cf",
     "dev:full": "node scripts/dev-full.mjs",
     "dev:changelog": "vite --mode changelog",
     "build": "tsc -b && vite build",

@@ -7,10 +7,10 @@ interface PricingDialogProps {
 }
 
 const plans = [
-  { id: 'free', credits: 25, description: 'Hosted AI chat trial', featured: false, price: '0 €' },
-  { id: 'starter', credits: 4500, description: 'Hosted AI chat for light usage', featured: false, price: '4,90 €/mo' },
-  { id: 'pro', credits: 13500, description: 'Hosted chat plus Kling generation', featured: true, price: '14,90 €/mo' },
-  { id: 'studio', credits: 27000, description: 'High-volume credits and priority access', featured: false, price: '29,90 €/mo' },
+  { id: 'free', credits: 25, description: 'Hosted AI text chat trial', featured: false, price: '0 EUR' },
+  { id: 'starter', credits: 4500, description: 'Hosted AI text chat for light usage', featured: false, price: '4,90 EUR/mo' },
+  { id: 'pro', credits: 13500, description: 'More text credits plus priority queue', featured: true, price: '14,90 EUR/mo' },
+  { id: 'studio', credits: 27000, description: 'Highest text volume with priority access', featured: false, price: '29,90 EUR/mo' },
 ] as const;
 
 export function PricingDialog({ onClose }: PricingDialogProps) {
@@ -67,6 +67,11 @@ export function PricingDialog({ onClose }: PricingDialogProps) {
         <div className="auth-dialog-content">
           <div className="auth-dialog-intro">
             <h3 className="auth-dialog-subtitle">Choose a plan</h3>
+            <p className="auth-dialog-description">
+              Current launch phase includes hosted AI text chat only.
+              <br />
+              Video generation is not part of these plans yet.
+            </p>
           </div>
 
           <div className="pricing-plans-grid">

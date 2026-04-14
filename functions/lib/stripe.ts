@@ -12,6 +12,7 @@ export interface StripeCheckoutSessionInput {
   clientReferenceId?: string | null;
   customerEmail?: string | null;
   customerId?: string | null;
+  idempotencyKey?: string | null;
   metadata?: Record<string, string | undefined>;
   mode?: 'subscription' | 'payment';
   priceId: string;
@@ -22,6 +23,7 @@ export interface StripeCheckoutSessionInput {
 
 export interface StripePortalSessionInput {
   customerId: string;
+  idempotencyKey?: string | null;
   returnUrl: string;
 }
 
@@ -52,6 +54,12 @@ export interface StripeSubscriptionLike {
   current_period_start?: number;
   customer?: string | StripeCustomerLike;
   id?: string;
+  items?: {
+    data?: Array<{
+      plan?: string | StripePriceLike | null;
+      price?: string | StripePriceLike | null;
+    }> | null;
+  } | null;
   metadata?: Record<string, unknown>;
   status?: string;
 }
@@ -71,6 +79,10 @@ export interface StripeInvoiceLike {
   id?: string;
   metadata?: Record<string, unknown>;
   subscription?: string | StripeSubscriptionLike | string | null;
+}
+
+export interface StripePriceLike {
+  id?: string;
 }
 
 function trimToNull(value: string | undefined | null): string | null {
@@ -127,11 +139,13 @@ async function stripeApiRequest<T>(
   method: string,
   path: string,
   body?: URLSearchParams,
+  idempotencyKey?: string | null,
 ): Promise<T> {
   const response = await fetch(`${config.apiBase}${path}`, {
     headers: {
       Authorization: `Basic ${btoa(`${config.secretKey}:`)}`,
       'Content-Type': 'application/x-www-form-urlencoded',
+      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
     },
     method,
     body: body?.toString(),
@@ -186,7 +200,13 @@ export async function createStripeCheckoutSession(
     appendObjectParams(params, 'subscription_data[metadata]', input.subscriptionMetadata);
   }
 
-  return stripeApiRequest<{ id: string; url: string | null }>(config, 'POST', '/checkout/sessions', params);
+  return stripeApiRequest<{ id: string; url: string | null }>(
+    config,
+    'POST',
+    '/checkout/sessions',
+    params,
+    input.idempotencyKey ?? null,
+  );
 }
 
 export async function createStripePortalSession(
@@ -197,7 +217,68 @@ export async function createStripePortalSession(
   params.set('customer', input.customerId);
   params.set('return_url', input.returnUrl);
 
-  return stripeApiRequest<{ id: string; url: string }>(config, 'POST', '/billing_portal/sessions', params);
+  return stripeApiRequest<{ id: string; url: string }>(
+    config,
+    'POST',
+    '/billing_portal/sessions',
+    params,
+    input.idempotencyKey ?? null,
+  );
+}
+
+function normalizeStripePriceId(value: string | null | undefined): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function extractStripePriceId(price: string | StripePriceLike | null | undefined): string | null {
+  if (typeof price === 'string') {
+    return normalizeStripePriceId(price);
+  }
+
+  return normalizeStripePriceId(price?.id);
+}
+
+export function getStripePriceIdFromSubscription(subscription: StripeSubscriptionLike | null | undefined): string | null {
+  if (!subscription?.items?.data?.length) {
+    return null;
+  }
+
+  for (const item of subscription.items.data) {
+    const priceId = extractStripePriceId(item?.price) ?? extractStripePriceId(item?.plan);
+    if (priceId) {
+      return priceId;
+    }
+  }
+
+  return null;
+}
+
+export function getBillingPlanIdFromStripePriceId(env: Env, priceId: string | null | undefined): BillingPlanId | null {
+  const normalizedPriceId = normalizeStripePriceId(priceId);
+  if (!normalizedPriceId) {
+    return null;
+  }
+
+  const paidPlans: BillingPlanId[] = ['starter', 'pro', 'studio'];
+  for (const planId of paidPlans) {
+    if (getStripePriceId(env, planId) === normalizedPriceId) {
+      return planId;
+    }
+  }
+
+  return null;
+}
+
+export function getBillingPlanIdFromStripeSubscription(
+  env: Env,
+  subscription: StripeSubscriptionLike | null | undefined,
+): BillingPlanId | null {
+  const status = subscription?.status;
+  if (status && status !== 'active' && status !== 'trialing') {
+    return null;
+  }
+
+  return getBillingPlanIdFromStripePriceId(env, getStripePriceIdFromSubscription(subscription));
 }
 
 function hexFromBuffer(buffer: ArrayBuffer): string {

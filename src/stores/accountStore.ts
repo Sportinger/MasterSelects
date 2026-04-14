@@ -69,8 +69,6 @@ export const useAccountStore = create<AccountState>((set, get) => ({
   session: null,
   user: null,
   loadAccountState: async () => {
-    set({ isLoading: true, error: null, notice: null });
-
     try {
       const [me, billingSummary] = await Promise.all([cloudApi.auth.me(), cloudApi.billing.summary()]);
       set({
@@ -79,7 +77,6 @@ export const useAccountStore = create<AccountState>((set, get) => ({
         entitlements: billingSummary.entitlements ?? me.entitlements ?? {},
         hostedAIEnabled: billingSummary.hostedAIEnabled ?? me.hostedAIEnabled ?? false,
         isInitialized: true,
-        isLoading: false,
         session: me.session,
         user: me.user,
       });
@@ -91,7 +88,6 @@ export const useAccountStore = create<AccountState>((set, get) => ({
         error: error instanceof Error ? error.message : 'Failed to load account state',
         hostedAIEnabled: false,
         isInitialized: true,
-        isLoading: false,
         notice: null,
         session: null,
         user: null,
@@ -175,6 +171,13 @@ export const useAccountStore = create<AccountState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
+      const summary = get().billingSummary;
+      if (summary?.stripeCustomerId && summary.subscription && summary.subscription.status !== 'canceled') {
+        const portal = await cloudApi.billing.portal({ returnUrl: window.location.origin });
+        window.location.assign(portal.portalUrl);
+        return;
+      }
+
       const response = await cloudApi.billing.checkout({
         planId: pickCheckoutPlanId(planId),
         successUrl: `${window.location.origin}/?billing=success&plan=${encodeURIComponent(String(planId))}`,

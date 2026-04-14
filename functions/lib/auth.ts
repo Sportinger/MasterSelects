@@ -156,13 +156,25 @@ function safeRedirectTo(request: Request, redirectTo?: string | null): string {
   }
 }
 
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
+export function isLocalDevelopmentRequest(request: Request, env: Env): boolean {
+  if ((env.ENVIRONMENT ?? '').toLowerCase() !== 'development') {
+    return false;
+  }
+
+  try {
+    return isLoopbackHostname(new URL(request.url).hostname);
+  } catch {
+    return false;
+  }
+}
+
 function getSessionSecret(env: Env): string {
   if (env.SESSION_SECRET && env.SESSION_SECRET.trim()) {
     return env.SESSION_SECRET;
-  }
-
-  if ((env.ENVIRONMENT ?? '').toLowerCase() === 'development') {
-    return 'masterselects-dev-session-secret';
   }
 
   throw new Error('SESSION_SECRET is not configured');

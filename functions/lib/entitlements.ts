@@ -166,12 +166,8 @@ export function planIdFromSubscriptionStatus(
   status: string | null | undefined,
   metadataPlanId: string | null | undefined,
 ): BillingPlanId {
-  if (isBillingPlanId(metadataPlanId)) {
-    return metadataPlanId;
-  }
-
   if (status === 'active' || status === 'trialing') {
-    return 'pro';
+    return isBillingPlanId(metadataPlanId) ? metadataPlanId : 'pro';
   }
 
   return 'free';

@@ -254,7 +254,7 @@ export function getHelperBuildNotice(
   };
 
   // Append Native Helper download link if a release is available
-  if (publishedRelease) {
+  if (publishedRelease && !notice.link) {
     notice.link = {
       label: `Native Helper v${publishedRelease.version}`,
       href: publishedRelease.url,
@@ -266,7 +266,7 @@ export function getHelperBuildNotice(
 
 export function ReleaseCalendar({ weeks }: { weeks: ChangelogCalendarDay[][] }) {
   return (
-    <div className="changelog-calendar" aria-label="Recent changelog activity">
+    <div className="changelog-calendar" aria-label="Changelog activity since the start of the year">
       {weeks.map((week, weekIndex) => (
         <div key={`week-${weekIndex}`} className="changelog-calendar-week">
           {week.map((day) => (

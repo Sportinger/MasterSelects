@@ -1,5 +1,164 @@
 [
   {
+    "date": "2026-04-12",
+    "type": "new",
+    "title": "Camera Keyframes, FPS Navigation, and Splat Effector Clips",
+    "description": "Three.js scenes now support FPS-style camera navigation, camera transform keyframes, new splat effector clips, reusable numeric controls, and lower re-sort pressure for large splat scenes.",
+    "section": "3D / Animation",
+    "commits": [
+      "df59c9a4",
+      "88fe7d21",
+      "fd902454",
+      "716cc316"
+    ]
+  },
+  {
+    "date": "2026-04-12",
+    "type": "new",
+    "title": "Folder and Multi-File Import in the Media Panel",
+    "description": "Import whole folders or many files at once from the media panel instead of adding assets one by one.",
+    "section": "Media Panel",
+    "commits": [
+      "9b35fcd4"
+    ]
+  },
+  {
+    "date": "2026-04-12",
+    "type": "fix",
+    "title": "3D and Gaussian Splat Export Timing",
+    "description": "Export now waits for precise 3D and splat rendering before capture, fixing incomplete frames, refresh crashes, and mismatches between preview and exported output.",
+    "section": "Export / 3D",
+    "commits": [
+      "e1fc719e",
+      "934bc6c6",
+      "e09006f7"
+    ]
+  },
+  {
+    "date": "2026-04-12",
+    "type": "improve",
+    "title": "3D Clip Support, Slot View Playback, and Splat Orientation Polish",
+    "description": "Shared-scene 3D videos now scale and frame more reliably, volumetric splats keep correct orientation and scaling, and slot view playback plus timeline persistence behave more predictably in mixed 2D/3D projects.",
+    "section": "Timeline / 3D",
+    "commits": [
+      "a631a44a",
+      "2c3c1db9",
+      "2c7ded8d",
+      "9573aae6",
+      "9e4a9942"
+    ]
+  },
+  {
+    "date": "2026-04-11",
+    "type": "new",
+    "title": "Shared-Scene Gaussian Splat Renderer for Three.js",
+    "description": "Added a Three.js shared-scene gaussian splat renderer with a raised 2 million splat budget for heavier scenes.",
+    "section": "3D / Gaussian Splats",
+    "commits": [
+      "75476db1",
+      "e1c2e37e"
+    ]
+  },
+  {
+    "date": "2026-04-10",
+    "type": "new",
+    "title": "Interactive Tutorials and Splat Export Preload",
+    "description": "Added interactive in-app tutorials, preload support for gaussian splat export, and a WIP indicator for uncommitted project changes.",
+    "section": "Onboarding",
+    "commits": [
+      "a98f0931"
+    ]
+  },
+  {
+    "date": "2026-04-10",
+    "type": "new",
+    "title": "Timeline Label Colors with Project Persistence",
+    "description": "Clips can now get label colors from the timeline context menu, synced back to media items and persisted across project save/load.",
+    "section": "Timeline",
+    "commits": [
+      "8414a47c",
+      "53bd00d8"
+    ]
+  },
+  {
+    "date": "2026-04-10",
+    "type": "fix",
+    "title": "3D Media Panel and Menu Cleanup",
+    "description": "Fixed stale gaussian splat transforms during free-nav keyframe edits, corrected submenu positioning inside clipped panels, removed false '(reload required)' warnings for meshes and cameras, and repaired the Three.js shared-scene import path.",
+    "section": "UI / 3D",
+    "commits": [
+      "6ace2d29",
+      "9be7f034",
+      "4a7e48ef",
+      "c935db85"
+    ]
+  },
+  {
+    "date": "2026-03-31",
+    "type": "improve",
+    "title": "GitHub Sponsors Button",
+    "description": "Added a GitHub Sponsors button to the project surface.",
+    "section": "GitHub",
+    "commits": [
+      "bebf8140"
+    ]
+  },
+  {
+    "date": "2026-03-25",
+    "type": "new",
+    "title": "Gaussian Splats Become a Full Timeline Asset Type",
+    "description": "Gaussian splats landed end-to-end: source contracts, loader stack, GPU renderer, timeline UI, properties editing, drag-and-drop import, full render pipeline wiring, viewer tooling, frustum culling, bitonic depth sorting, temporal 4D playback, and particle effects.",
+    "section": "3D / Gaussian Splats",
+    "commits": [
+      "51a148e9",
+      "a4653119",
+      "778319a8",
+      "65ba77a4",
+      "49621e9e",
+      "425a049c",
+      "3406cb0d",
+      "a2d60d70",
+      "83144a8b"
+    ]
+  },
+  {
+    "date": "2026-03-25",
+    "type": "new",
+    "title": "Visitor Tray App, Live Log, and Grouped Notifications",
+    "description": "The visitor notifier expanded into a tray app with edge tracking, grouped live logs, optional-visit guards, and launch/privacy polish for monitoring incoming site visitors in real time.",
+    "section": "Desktop / Visitor Tray",
+    "commits": [
+      "c2dc75d4",
+      "e290bb14",
+      "89e84fee",
+      "05a08cdc",
+      "0d9337f3"
+    ]
+  },
+  {
+    "date": "2026-03-24",
+    "type": "new",
+    "title": "Real-Time Visitor Notification System",
+    "description": "Added the first real-time visitor notification pipeline for site activity.",
+    "section": "Website / Visitor Tray",
+    "commits": [
+      "e7256137"
+    ]
+  },
+  {
+    "date": "2026-03-24",
+    "type": "improve",
+    "title": "Gaussian Splat Debugging, Restore, and Relink Fixes",
+    "description": "Added gaussian splat debug tools and stabilized the early rendering path with blob URL proxying, better error handling, project restore fixes for gaussian avatars, and relink fixes for 3D model clips.",
+    "section": "3D / Gaussian Splats",
+    "commits": [
+      "dd9f6624",
+      "d7d13727",
+      "ed4e37eb",
+      "d143316c"
+    ]
+  },
+  {
     "date": "2026-03-23",
     "type": "new",
     "title": "User Activity Tracking",

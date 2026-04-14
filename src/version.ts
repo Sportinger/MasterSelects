@@ -1,7 +1,7 @@
 // App version - INCREMENT ON EVERY COMMIT!
 // Format: MAJOR.MINOR.PATCH
 // Increment PATCH (0.0.X) for each commit
-export const APP_VERSION = '1.4.3';
+export const APP_VERSION = '1.5.0';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -28,30 +28,30 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'WebCodecs Playback available! \u{1F680}',
-    message: 'Breakthrough: GPU-accelerated playback via WebCodecs.',
+    title: 'Gaussian Splats are Live!',
+    message: 'Import and play gaussian splat scenes directly in the timeline.',
     animated: true,
   },
 };
 
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
-  type: 'success',
-  title: 'FINALLY REAL 3D',
-  message: 'Three.js integrated! Import OBJ, glTF, GLB, FBX models directly into the timeline. Per-layer 3D toggle, perspective camera, AE-style rotation, full keyframe animation, and nested composition support.',
-  animated: true,
-};
-
-export const WIP_NOTICE: ChangelogNotice | null = {
   type: 'warning',
   title: 'Work in progress',
   message: '',
-  animated: true,
   link: {
     label: 'MatAnyone2',
     href: 'https://github.com/pq-yang/MatAnyone2',
     suffix: 'integration',
   },
+  animated: true,
+};
+
+export const WIP_NOTICE: ChangelogNotice | null = {
+  type: 'success',
+  title: 'Payments are Live',
+  message: 'If you want to buy AI credit, you can do that now. Your own AI key is optional.',
+  animated: true,
 };
 
 // Change entry type (used by UI)
@@ -153,6 +153,10 @@ function endOfWeekMonday(date: Date): Date {
 function startOfQuarter(date: Date): Date {
   const quarterStartMonth = Math.floor(date.getMonth() / 3) * 3;
   return new Date(date.getFullYear(), quarterStartMonth, 1);
+}
+
+function startOfYear(date: Date): Date {
+  return new Date(date.getFullYear(), 0, 1);
 }
 
 function formatCalendarTooltip(date: Date, count: number, communityCount: number): string {
@@ -291,7 +295,7 @@ export function getGroupedChangelog(
 export function getChangelogCalendar(
   entries: RawChangeEntry[] = RAW_CHANGELOG,
   now: Date = new Date(),
-  scope: 'quarter' | number = 'quarter'
+  scope: 'year' | 'quarter' | number = 'year'
 ): ChangelogCalendarDay[][] {
   const normalizedNow = startOfDay(now);
   const countsByDate = new Map<string, number>();
@@ -308,8 +312,10 @@ export function getChangelogCalendar(
   let rangeStart: Date | null = null;
   let rangeEnd: Date | null = null;
 
-  if (scope === 'quarter') {
-    rangeStart = startOfQuarter(normalizedNow);
+  if (scope === 'quarter' || scope === 'year') {
+    rangeStart = scope === 'year'
+      ? startOfYear(normalizedNow)
+      : startOfQuarter(normalizedNow);
     rangeEnd = normalizedNow;
     firstWeekStart = startOfWeekMonday(rangeStart);
     const finalWeekEnd = endOfWeekMonday(rangeEnd);

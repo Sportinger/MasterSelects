@@ -105,13 +105,13 @@ describe('getChangelogCalendar', () => {
     expect(communityDay?.tooltip).toContain('1 community');
   });
 
-  it('defaults to the current quarter including leading filler days before quarter start', () => {
+  it('defaults to the current year including leading filler days before year start', () => {
     const entries: RawChangeEntry[] = [
-      { date: '2026-01-01', type: 'new', title: 'Quarter start item' },
-      { date: '2026-03-16', type: 'fix', title: 'Today item' },
+      { date: '2026-01-01', type: 'new', title: 'Year start item' },
+      { date: '2026-04-14', type: 'fix', title: 'Today item' },
     ];
 
-    const calendar = getChangelogCalendar(entries, new Date(2026, 2, 16, 12, 0, 0));
+    const calendar = getChangelogCalendar(entries, new Date(2026, 3, 14, 12, 0, 0));
 
     expect(calendar[0][0]).toMatchObject({
       date: '2025-12-29',
@@ -125,7 +125,34 @@ describe('getChangelogCalendar', () => {
       level: 1,
     });
     expect(calendar.at(-1)?.at(-1)).toMatchObject({
-      date: '2026-03-22',
+      date: '2026-04-19',
+      isOutOfRange: true,
+      count: 0,
+    });
+  });
+
+  it('can still build a quarter-scoped calendar when requested explicitly', () => {
+    const entries: RawChangeEntry[] = [
+      { date: '2026-01-01', type: 'new', title: 'Year start item' },
+      { date: '2026-04-14', type: 'fix', title: 'Today item' },
+    ];
+
+    const calendar = getChangelogCalendar(entries, new Date(2026, 3, 14, 12, 0, 0), 'quarter');
+
+    expect(calendar[0][0]).toMatchObject({
+      date: '2026-03-30',
+      isOutOfRange: true,
+      count: 0,
+    });
+    expect(calendar[0][3]).toMatchObject({
+      date: '2026-04-02',
+      isOutOfRange: false,
+      count: 0,
+      level: 0,
+    });
+    expect(calendar.flat().find((day) => day.date === '2026-01-01')).toBeUndefined();
+    expect(calendar.at(-1)?.at(-1)).toMatchObject({
+      date: '2026-04-19',
       isOutOfRange: true,
       count: 0,
     });

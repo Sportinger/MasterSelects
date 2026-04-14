@@ -15,7 +15,7 @@ Three.js laedt Daten und bekommt den Layer in die Scene, aber der Splat ist aktu
 
 - Dev-Server nicht selbst neu starten.
 - Der laufende Dev-Server wird ueber `C:\Users\admin\Desktop\Spalts-DevServer.bat` gestartet.
-- AI-Bridge laeuft auf `http://localhost:5174`.
+- AI-Bridge laeuft auf `http://localhost:5173`.
 - Fuer Debugging wurden `reloadApp`, `captureFrame`, `getStats`, `getTimelineState` und `api/logs` benutzt.
 
 ### Bisherige Befunde

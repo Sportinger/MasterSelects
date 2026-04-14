@@ -710,7 +710,7 @@ export default defineConfig(({ command }) => {
     hostedApiProxyRoutes.map((route) => [
       route,
       {
-        changeOrigin: true,
+        changeOrigin: false,
         target: hostedApiProxyTarget,
       },
     ]),

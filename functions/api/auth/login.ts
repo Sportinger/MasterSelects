@@ -4,6 +4,7 @@ import {
   buildGoogleAuthorizationUrl,
   createMagicLinkToken,
   createLoginState,
+  isLocalDevelopmentRequest,
 } from '../../lib/auth';
 import { sendMagicLinkEmail } from '../../lib/authProviders';
 import { json, methodNotAllowed, parseJson } from '../../lib/db';
@@ -110,7 +111,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         email,
         expiresAt: state.expiresAt,
       });
-    } else if ((context.env.ENVIRONMENT ?? '').toLowerCase() === 'development') {
+    } else if (isLocalDevelopmentRequest(context.request, context.env)) {
       message = 'Magic link email provider is not configured. Development debug link returned.';
     } else {
       return json(

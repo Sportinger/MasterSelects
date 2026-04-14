@@ -8,6 +8,7 @@ import {
   upsertEntitlementsForPlan,
 } from '../../lib/entitlements';
 import {
+  getBillingPlanIdFromStripeSubscription,
   getStripeConfig,
   getStripeCustomerIdFromObject,
   getStripeObjectMetadata,
@@ -139,13 +140,17 @@ async function linkStripeCustomer(
 }
 
 async function upsertSubscription(
-  db: AppContext['env']['DB'],
+  env: AppContext['env'],
   userId: string,
   subscription: StripeSubscriptionLike,
 ): Promise<BillingPlanId> {
+  const db = env.DB;
   const customerId = getStripeCustomerIdFromObject(subscription);
   const metadata = getStripeObjectMetadata(subscription);
-  const planId = planIdFromSubscriptionStatus(subscription.status, getMetadataString(metadata, 'plan_id'));
+  const metadataPlanId = getMetadataString(metadata, 'plan_id');
+  const planId =
+    getBillingPlanIdFromStripeSubscription(env, subscription)
+    ?? planIdFromSubscriptionStatus(subscription.status, metadataPlanId);
   const now = new Date().toISOString();
   const stripeSubscriptionId = getString(subscription.id) ?? crypto.randomUUID();
 
@@ -363,7 +368,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   ) {
     const subscriptionUserId = userId ?? (await findUserIdForCustomer(context.env.DB, customerId));
     if (subscriptionUserId) {
-      await upsertSubscription(context.env.DB, subscriptionUserId, eventObject as StripeSubscriptionLike);
+      await upsertSubscription(context.env, subscriptionUserId, eventObject as StripeSubscriptionLike);
     }
   }
 

@@ -24,6 +24,19 @@ export function methodNotAllowed(allowed: string[]): Response {
   );
 }
 
+export function hasTrustedOrigin(request: Request): boolean {
+  const origin = request.headers.get('Origin');
+  if (!origin) {
+    return true;
+  }
+
+  try {
+    return new URL(origin).origin === new URL(request.url).origin;
+  } catch {
+    return false;
+  }
+}
+
 export function notImplemented(feature: string): Response {
   return json(
     {
