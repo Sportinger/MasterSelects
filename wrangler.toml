@@ -15,8 +15,32 @@ id = "daadda485425465791a1c83afc48be67"
 [vars]
 ENVIRONMENT = "development"
 
+[env.preview]
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "masterselects"
+database_id = "a2f0a1aa-6bd9-4c75-9406-d09b93635eac"
+migrations_dir = "migrations"
+
+[[env.preview.kv_namespaces]]
+binding = "KV"
+id = "daadda485425465791a1c83afc48be67"
+
 [env.preview.vars]
 ENVIRONMENT = "development"
+
+[env.production]
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "masterselects"
+database_id = "a2f0a1aa-6bd9-4c75-9406-d09b93635eac"
+migrations_dir = "migrations"
+
+[[env.production.kv_namespaces]]
+binding = "KV"
+id = "daadda485425465791a1c83afc48be67"
 
 [env.production.vars]
 ENVIRONMENT = "production"
