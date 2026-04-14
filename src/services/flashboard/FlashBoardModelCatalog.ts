@@ -75,6 +75,24 @@ export function getCatalogEntries(): CatalogEntry[] {
     outputType: 'video',
   });
 
+  entries.push({
+    service: 'cloud',
+    providerId: 'nano-banana-2',
+    name: 'Nano Banana 2 (Cloud)',
+    description: 'Hosted image generation via MasterSelects Cloud',
+    versions: ['latest'],
+    modes: [],
+    durations: [],
+    aspectRatios: ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'],
+    supportsTextToVideo: false,
+    supportsImageToVideo: false,
+    supportsTextToImage: true,
+    supportsGenerateAudio: false,
+    supportsMultiShot: false,
+    imageSizes: ['1K', '2K', '4K'],
+    outputType: 'image',
+  });
+
   return entries;
 }
 

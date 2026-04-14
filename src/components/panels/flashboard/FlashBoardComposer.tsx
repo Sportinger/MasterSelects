@@ -652,7 +652,7 @@ export function FlashBoardComposer({
           {popover === 'model' && (
             <div className="fb-popover fb-popover-model">
               <div className="fb-popover-title">Model</div>
-              {(serviceScope ? [serviceScope] : ['kieai', 'piapi', 'cloud']).map((svc) => {
+              {(serviceScope ? [serviceScope] : ['kieai', 'cloud']).map((svc) => {
                 const providers = visibleCatalog.filter((e) => e.service === svc);
                 if (providers.length === 0) return null;
                 return (

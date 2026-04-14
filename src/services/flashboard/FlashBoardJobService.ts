@@ -155,22 +155,31 @@ class FlashBoardJobService {
       }
 
       if (request.outputType === 'image' || request.providerId === 'nano-banana-2') {
-        if (request.service !== 'kieai') {
-          throw new Error(`${request.providerId} is currently only supported via Kie.ai`);
+        if (request.service !== 'kieai' && request.service !== 'cloud') {
+          throw new Error(`${request.providerId} is currently only supported via Kie.ai or MasterSelects Cloud`);
         }
 
         const referenceImageInputs = (await Promise.all(
           (request.referenceMediaFileIds ?? []).map((mediaFileId) => this.resolveReferenceImage(mediaFileId))
         )).filter((imageUrl): imageUrl is string => Boolean(imageUrl));
 
-        const remoteTaskId = await kieAiService.createTextToImage({
-          provider: request.providerId,
-          prompt: request.prompt,
-          aspectRatio: request.aspectRatio,
-          resolution: request.imageSize,
-          outputFormat: 'png',
-          imageInputs: referenceImageInputs.length > 0 ? referenceImageInputs : undefined,
-        });
+        const remoteTaskId = request.service === 'cloud'
+          ? await cloudAiService.createTextToImage({
+              provider: request.providerId,
+              prompt: request.prompt,
+              aspectRatio: request.aspectRatio,
+              resolution: request.imageSize,
+              outputFormat: 'png',
+              imageInputs: referenceImageInputs.length > 0 ? referenceImageInputs : undefined,
+            })
+          : await kieAiService.createTextToImage({
+              provider: request.providerId,
+              prompt: request.prompt,
+              aspectRatio: request.aspectRatio,
+              resolution: request.imageSize,
+              outputFormat: 'png',
+              imageInputs: referenceImageInputs.length > 0 ? referenceImageInputs : undefined,
+            });
 
         this.running.push({
           nodeId,
@@ -180,20 +189,29 @@ class FlashBoardJobService {
         });
         this.onUpdate?.(nodeId, { status: 'processing', remoteTaskId });
 
-        const result = await kieAiService.pollImageTaskUntilComplete(
-          remoteTaskId,
-          (task) => {
-            if (abortController.signal.aborted) throw new Error('Canceled');
-            this.onUpdate?.(nodeId, { status: 'processing', progress: task.progress, remoteTaskId });
-          },
-          5000,
-        );
+        const result = request.service === 'cloud'
+          ? await cloudAiService.pollTaskUntilComplete(
+              remoteTaskId,
+              (task) => {
+                if (abortController.signal.aborted) throw new Error('Canceled');
+                this.onUpdate?.(nodeId, { status: 'processing', progress: task.progress, remoteTaskId });
+              },
+              5000,
+            )
+          : await kieAiService.pollImageTaskUntilComplete(
+              remoteTaskId,
+              (task) => {
+                if (abortController.signal.aborted) throw new Error('Canceled');
+                this.onUpdate?.(nodeId, { status: 'processing', progress: task.progress, remoteTaskId });
+              },
+              5000,
+            );
 
         this.running = this.running.filter(r => r.nodeId !== nodeId);
-        if (result.status === 'completed' && result.imageUrl) {
+        if (result.status === 'completed' && (result.imageUrl || result.videoUrl)) {
           this.onUpdate?.(nodeId, {
             status: 'completed',
-            assetUrl: result.imageUrl,
+            assetUrl: result.imageUrl ?? result.videoUrl,
             mediaType: 'image',
             remoteTaskId,
           });

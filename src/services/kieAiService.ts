@@ -33,16 +33,16 @@ const KIEAI_PROVIDERS: VideoProvider[] = [
 ];
 
 // Kie.ai Kling 3.0 pricing in CREDITS per second
-// Source: https://kie.ai/kling-3-0
-// std no-audio: 20 credits/s ($0.10/s)
-// std audio:    30 credits/s ($0.15/s)
-// pro no-audio: 27 credits/s ($0.135/s)
-// pro audio:    40 credits/s ($0.20/s)
+// Source: current Kie.ai pricing shared by the user
+// std no-audio (720p): 14 credits/s ($0.07/s)
+// std audio (720p):    20 credits/s ($0.10/s)
+// pro no-audio (1080p): 18 credits/s ($0.09/s)
+// pro audio (1080p):    27 credits/s ($0.135/s)
 // 1 credit = $0.005
 const KIEAI_CREDITS_PER_SECOND: Record<string, Record<string, { normal: number; audio: number }>> = {
   'kling-3.0': {
-    'std': { normal: 20, audio: 30 },
-    'pro': { normal: 27, audio: 40 },
+    'std': { normal: 14, audio: 20 },
+    'pro': { normal: 18, audio: 27 },
   },
 };
 
@@ -57,9 +57,9 @@ export function getKieAiProvider(providerId: string): VideoProvider | undefined 
 // Calculate cost in credits for Kie.ai
 export function calculateKieAiCost(provider: string, mode: string, duration: number, sound = false): number {
   const providerRates = KIEAI_CREDITS_PER_SECOND[provider];
-  if (!providerRates) return duration * 20; // fallback
+  if (!providerRates) return duration * 14; // fallback
   const modeRates = providerRates[mode];
-  if (!modeRates) return duration * 20;
+  if (!modeRates) return duration * 14;
   const ratePerSecond = sound ? modeRates.audio : modeRates.normal;
   return duration * ratePerSecond;
 }

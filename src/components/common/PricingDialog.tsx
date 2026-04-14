@@ -7,10 +7,10 @@ interface PricingDialogProps {
 }
 
 const plans = [
-  { id: 'free', credits: 25, description: 'Hosted AI text chat trial', featured: false, price: '0 EUR' },
-  { id: 'starter', credits: 4500, description: 'Hosted AI text chat for light usage', featured: false, price: '4,90 EUR/mo' },
-  { id: 'pro', credits: 13500, description: 'More text credits plus priority queue', featured: true, price: '14,90 EUR/mo' },
-  { id: 'studio', credits: 27000, description: 'Highest text volume with priority access', featured: false, price: '29,90 EUR/mo' },
+  { id: 'free', credits: 25, description: 'Hosted AI starter credits', featured: false, price: '0 EUR' },
+  { id: 'starter', credits: 4500, description: 'Monthly credits for images and short videos', featured: false, price: '4,90 EUR/mo' },
+  { id: 'pro', credits: 13500, description: 'More credits plus priority queue', featured: true, price: '14,90 EUR/mo' },
+  { id: 'studio', credits: 27000, description: 'Highest credit volume with priority access', featured: false, price: '29,90 EUR/mo' },
 ] as const;
 
 export function PricingDialog({ onClose }: PricingDialogProps) {
@@ -68,9 +68,9 @@ export function PricingDialog({ onClose }: PricingDialogProps) {
           <div className="auth-dialog-intro">
             <h3 className="auth-dialog-subtitle">Choose a plan</h3>
             <p className="auth-dialog-description">
-              Current launch phase includes hosted AI text chat only.
+              Hosted AI credits cover chat, image generation, and video generation.
               <br />
-              Video generation is not part of these plans yet.
+              Video spends more credits than chat or images.
             </p>
           </div>
 

@@ -1,7 +1,10 @@
 import {
+  calculateHostedImageCost,
   calculateHostedKlingCost,
+  createHostedImageTask,
   createHostedKlingTask,
   getHostedKlingTask,
+  type HostedImageParams,
   type HostedVideoParams,
   type HostedVideoTask,
 } from '../kieai';
@@ -89,8 +92,46 @@ export function normalizeHostedKlingParams(value: unknown): HostedVideoParams | 
   };
 }
 
-export { calculateHostedKlingCost, createHostedKlingTask, getHostedKlingTask };
-export type { HostedVideoParams, HostedVideoTask };
+export function normalizeHostedImageParams(value: unknown): HostedImageParams | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const prompt = typeof value.prompt === 'string' ? value.prompt.trim() : '';
+  const requestedOutputType = typeof value.outputType === 'string' ? value.outputType.trim() : '';
+  const requestedProvider = typeof value.provider === 'string' ? value.provider.trim() : '';
+
+  if (requestedOutputType !== 'image' && requestedProvider !== 'nano-banana-2') {
+    return null;
+  }
+
+  const provider = requestedProvider || 'nano-banana-2';
+  const imageInputs = Array.isArray(value.imageInputs)
+    ? value.imageInputs.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+    : undefined;
+
+  if (!prompt) {
+    return null;
+  }
+
+  return {
+    aspectRatio: typeof value.aspectRatio === 'string' && value.aspectRatio.trim() ? value.aspectRatio.trim() : '1:1',
+    imageInputs: imageInputs?.length ? imageInputs : undefined,
+    outputFormat: value.outputFormat === 'jpeg' || value.outputFormat === 'webp' ? value.outputFormat : 'png',
+    prompt,
+    provider,
+    resolution: typeof value.resolution === 'string' && value.resolution.trim() ? value.resolution.trim() : '1K',
+  };
+}
+
+export {
+  calculateHostedImageCost,
+  calculateHostedKlingCost,
+  createHostedImageTask,
+  createHostedKlingTask,
+  getHostedKlingTask,
+};
+export type { HostedImageParams, HostedVideoParams, HostedVideoTask };
 
 export function buildHostedKlingCapabilities(): HostedKlingCapabilities {
   return {

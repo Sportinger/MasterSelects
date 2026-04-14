@@ -4,8 +4,8 @@ import { calculateCost as calculatePiApiCost } from '../piApiService';
 import type { CatalogEntry } from './types';
 
 const KIEAI_USD_PER_CREDIT = 0.005;
-// Hosted customer credits are priced at 4x the Kie.ai base cost for break-even.
-const HOSTED_KLING_BREAK_EVEN_MULTIPLIER = 4;
+// Hosted customer credits are priced at 5x vendor Kie credits for a small margin.
+const HOSTED_KIE_CREDIT_MULTIPLIER = 5;
 
 const KIEAI_IMAGE_USD_PRICING: Record<string, Record<string, number>> = {
   'nano-banana-2': {
@@ -57,7 +57,24 @@ function buildHostedKlingEstimate(input: FlashBoardPricingInput): FlashBoardPric
   const duration = normalizeVideoDuration(input.duration);
   const mode = normalizeMode(input.mode);
   const kieCredits = calculateKieAiCost('kling-3.0', mode, duration, resolveEffectiveAudio(input));
-  const hostedCredits = kieCredits * HOSTED_KLING_BREAK_EVEN_MULTIPLIER;
+  const hostedCredits = kieCredits * HOSTED_KIE_CREDIT_MULTIPLIER;
+
+  return {
+    compactLabel: `${hostedCredits} cr`,
+    fullLabel: `${hostedCredits} credits`,
+  };
+}
+
+function buildHostedImageEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate | null {
+  const size = input.imageSize ?? '1K';
+  const usd = KIEAI_IMAGE_USD_PRICING[input.providerId]?.[size];
+
+  if (usd == null) {
+    return null;
+  }
+
+  const kieCredits = Math.round(usd / KIEAI_USD_PER_CREDIT);
+  const hostedCredits = kieCredits * HOSTED_KIE_CREDIT_MULTIPLIER;
 
   return {
     compactLabel: `${hostedCredits} cr`,
@@ -69,11 +86,10 @@ function buildKieVideoEstimate(input: FlashBoardPricingInput): FlashBoardPriceEs
   const duration = normalizeVideoDuration(input.duration);
   const mode = normalizeMode(input.mode);
   const kieCredits = calculateKieAiCost(input.providerId, mode, duration, resolveEffectiveAudio(input));
-  const usd = kieCredits * KIEAI_USD_PER_CREDIT;
 
   return {
-    compactLabel: formatUsd(usd),
-    fullLabel: `${kieCredits} Kie credits (${formatUsd(usd)})`,
+    compactLabel: `${kieCredits} cr`,
+    fullLabel: `${kieCredits} Kie credits`,
   };
 }
 
@@ -88,8 +104,8 @@ function buildKieImageEstimate(input: FlashBoardPricingInput): FlashBoardPriceEs
   const kieCredits = Math.round(usd / KIEAI_USD_PER_CREDIT);
 
   return {
-    compactLabel: formatUsd(usd),
-    fullLabel: `${kieCredits} Kie credits (${formatUsd(usd)})`,
+    compactLabel: `${kieCredits} cr`,
+    fullLabel: `${kieCredits} Kie credits`,
   };
 }
 
@@ -106,6 +122,10 @@ function buildPiApiEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstim
 
 export function getFlashBoardPriceEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate | null {
   if (input.service === 'cloud') {
+    if (input.outputType === 'image' || input.providerId === 'nano-banana-2') {
+      return buildHostedImageEstimate(input);
+    }
+
     return buildHostedKlingEstimate(input);
   }
 

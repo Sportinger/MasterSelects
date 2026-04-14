@@ -3,10 +3,14 @@ import { getCreditLedgerEntryBySource, spendCredits } from '../../lib/credits';
 import { getCurrentUser, json, methodNotAllowed, parseJson } from '../../lib/db';
 import {
   buildHostedKlingCapabilities,
+  calculateHostedImageCost,
   calculateHostedKlingCost,
+  createHostedImageTask,
   createHostedKlingTask,
   getHostedKlingTask,
+  normalizeHostedImageParams,
   normalizeHostedKlingParams,
+  type HostedImageParams,
   type HostedVideoParams,
 } from '../../lib/providers/kieai';
 import {
@@ -27,6 +31,19 @@ interface HostedVideoRouteBody {
 interface HostedAiContext {
   billing: Awaited<ReturnType<typeof getUserBillingSnapshot>> | null;
   user: ReturnType<typeof getCurrentUser>;
+}
+
+interface HostedGenerationConfig {
+  creditsRequired: number;
+  description: string;
+  feature: string;
+  ledgerSource: string;
+  model: string;
+  outputType: 'image' | 'video';
+  params: HostedImageParams | HostedVideoParams;
+  provider: string;
+  requestUnits: string | null;
+  usageMetadata: Record<string, unknown>;
 }
 
 function buildRouteEnvelope<TData>(
@@ -75,12 +92,12 @@ function buildCapabilityResponse(context: AppContext, hostedContext: HostedAiCon
   const authenticated = Boolean(hostedContext.user);
 
   return buildRouteEnvelope({
-    byoRequired: !authenticated || !hostedContext.billing?.klingGenerationEnabled,
+    byoRequired: !authenticated,
     capability: capabilities as unknown as Record<string, unknown>,
     creditBalance: hostedContext.billing?.balance ?? 0,
     data: {
       capabilities,
-      feature: 'kling_generation',
+      feature: 'hosted_media_generation',
       modes: ['hosted', 'byo'],
       pollingSupported: true,
     },
@@ -95,12 +112,64 @@ function buildCapabilityResponse(context: AppContext, hostedContext: HostedAiCon
   });
 }
 
-function parseKlingParams(body: HostedVideoRouteBody): HostedVideoParams | null {
-  if (body.params) {
-    return normalizeHostedKlingParams(body.params);
+function parseHostedGeneration(body: HostedVideoRouteBody, requestId: string): HostedGenerationConfig | null {
+  const paramsInput = body.params ?? body;
+  const imageParams = normalizeHostedImageParams(paramsInput);
+
+  if (imageParams) {
+    return {
+      creditsRequired: calculateHostedImageCost(imageParams.provider, imageParams.resolution),
+      description: 'Hosted Nano Banana 2 generation',
+      feature: 'nano_banana_generation',
+      ledgerSource: `hosted:${imageParams.provider}`,
+      model: imageParams.provider,
+      outputType: 'image',
+      params: imageParams,
+      provider: imageParams.provider,
+      requestUnits: imageParams.resolution ?? '1K',
+      usageMetadata: {
+        aspectRatio: imageParams.aspectRatio,
+        outputFormat: imageParams.outputFormat ?? 'png',
+        provider: imageParams.provider,
+        referenceCount: imageParams.imageInputs?.length ?? 0,
+        requestId,
+        resolution: imageParams.resolution ?? '1K',
+      },
+    };
   }
 
-  return normalizeHostedKlingParams(body);
+  const videoParams = normalizeHostedKlingParams(paramsInput);
+  if (!videoParams) {
+    return null;
+  }
+
+  return {
+    creditsRequired: calculateHostedKlingCost(
+      videoParams.mode ?? 'std',
+      videoParams.duration,
+      Boolean(videoParams.sound),
+      Boolean(videoParams.multiShots),
+    ),
+    description: 'Hosted Kling 3.0 generation',
+    feature: 'kling_generation',
+    ledgerSource: 'hosted:kling_generation',
+    model: 'kling-3.0',
+    outputType: 'video',
+    params: videoParams,
+    provider: 'kling-3.0',
+    requestUnits: `${videoParams.duration}s`,
+    usageMetadata: {
+      aspectRatio: videoParams.aspectRatio,
+      duration: videoParams.duration,
+      hasEndImage: Boolean(videoParams.endImageUrl),
+      hasStartImage: Boolean(videoParams.startImageUrl),
+      mode: videoParams.mode,
+      multiShots: Boolean(videoParams.multiShots),
+      requestId,
+      shotCount: videoParams.multiPrompt?.length ?? 0,
+      sound: videoParams.multiShots ? true : Boolean(videoParams.sound),
+    },
+  };
 }
 
 export const onRequest: AppRouteHandler = async (context: AppContext): Promise<Response> => {
@@ -122,7 +191,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       if (!hostedContext.user) {
         return json(
           buildRouteEnvelope({
-            error: createGatewayError('auth_required', 'Hosted Kling task status requires a signed-in account.', {
+            error: createGatewayError('auth_required', 'Hosted AI task status requires a signed-in account.', {
               taskId,
             }),
             ok: false,
@@ -154,7 +223,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
           buildRouteEnvelope({
             error: createGatewayError(
               'provider_request_failed',
-              error instanceof Error ? error.message : 'Failed to load hosted video status.',
+              error instanceof Error ? error.message : 'Failed to load hosted AI task status.',
               { taskId },
             ),
             ok: false,
@@ -197,7 +266,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     if (!hostedContext.user) {
       return json(
         buildRouteEnvelope({
-          error: createGatewayError('auth_required', 'Hosted Kling task status requires a signed-in account.', {
+          error: createGatewayError('auth_required', 'Hosted AI task status requires a signed-in account.', {
             requestId,
             taskId,
           }),
@@ -230,7 +299,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         buildRouteEnvelope({
           error: createGatewayError(
             'provider_request_failed',
-            error instanceof Error ? error.message : 'Failed to load hosted video status.',
+            error instanceof Error ? error.message : 'Failed to load hosted AI task status.',
             { requestId, taskId },
           ),
           ok: false,
@@ -242,14 +311,14 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     }
   }
 
-  const params = rawBody ? parseKlingParams(rawBody) : null;
+  const generation = rawBody ? parseHostedGeneration(rawBody, requestId) : null;
 
-  if (!params) {
+  if (!generation) {
     return json(
       buildRouteEnvelope({
         error: createGatewayError(
           'invalid_request',
-          'Expected a prompt and duration for hosted Kling generation.',
+          'Expected valid hosted generation parameters.',
           { requestId },
         ),
         ok: false,
@@ -265,7 +334,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   if (!hostedContext.user) {
     return json(
       buildRouteEnvelope({
-        error: createGatewayError('auth_required', 'Hosted Kling requires a signed-in account.', {
+        error: createGatewayError('auth_required', 'Hosted AI generation requires a signed-in account.', {
           requestId,
         }),
         next: 'auth',
@@ -282,35 +351,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     );
   }
 
-  if (!hostedContext.billing?.klingGenerationEnabled) {
-    return json(
-      buildRouteEnvelope({
-        byoRequired: true,
-        error: createGatewayError(
-          'feature_not_enabled',
-          'Kling generation is not enabled for this account.',
-          { requestId },
-        ),
-        next: 'pricing',
-        ok: false,
-        requestId,
-        session: {
-          authenticated: true,
-          email: hostedContext.user.email,
-          provider: 'cookie_session',
-        },
-        status: 'requires_billing',
-      }),
-      { status: 403 },
-    );
-  }
-
-  const creditsRequired = calculateHostedKlingCost(
-    params.mode ?? 'std',
-    params.duration,
-    Boolean(params.sound),
-    Boolean(params.multiShots),
-  );
+  const { creditsRequired } = generation;
   const idempotencyKey =
     typeof rawBody?.idempotencyKey === 'string' && rawBody.idempotencyKey.trim().length > 0
       ? rawBody.idempotencyKey.trim()
@@ -318,18 +359,18 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   const existingCharge = await getCreditLedgerEntryBySource(
     context.env.DB,
     hostedContext.user.id,
-    'hosted:kling_generation',
+    generation.ledgerSource,
     idempotencyKey,
   );
 
-  if (!existingCharge && (hostedContext.billing.balance ?? 0) < creditsRequired) {
+  if (!existingCharge && (hostedContext.billing?.balance ?? 0) < creditsRequired) {
     return json(
       buildRouteEnvelope({
-        creditBalance: hostedContext.billing.balance,
+        creditBalance: hostedContext.billing?.balance ?? 0,
         error: createGatewayError(
           'insufficient_credits',
-          'You need more credits to create a hosted Kling generation.',
-          { requestId, creditsRequired },
+          'You need more credits to create this hosted generation.',
+          { creditsRequired, outputType: generation.outputType, requestId },
         ),
         next: 'pricing',
         ok: false,
@@ -347,42 +388,31 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
 
   await createUsageEvent(context.env.DB, {
     creditCost: creditsRequired,
-    feature: 'kling_generation',
+    feature: generation.feature,
     idempotencyKey,
-    metadata: {
-      aspectRatio: params.aspectRatio,
-      duration: params.duration,
-      hasEndImage: Boolean(params.endImageUrl),
-      hasStartImage: Boolean(params.startImageUrl),
-      mode: params.mode,
-      multiShots: Boolean(params.multiShots),
-      shotCount: params.multiPrompt?.length ?? 0,
-      requestId,
-      sound: params.multiShots ? true : Boolean(params.sound),
-    },
-    model: 'kling-3.0',
-    provider: 'kieai',
-    requestUnits: `${params.duration}s`,
+    metadata: generation.usageMetadata,
+    model: generation.model,
+    provider: generation.provider,
+    requestUnits: generation.requestUnits,
     userId: hostedContext.user.id,
   });
 
   try {
-    const { taskId } = await createHostedKlingTask(context.env, params);
+    const { taskId } = generation.outputType === 'image'
+      ? await createHostedImageTask(context.env, generation.params as HostedImageParams)
+      : await createHostedKlingTask(context.env, generation.params as HostedVideoParams);
     const charge = await spendCredits(
       context.env.DB,
       hostedContext.user.id,
       creditsRequired,
-      'hosted:kling_generation',
+      generation.ledgerSource,
       idempotencyKey,
-      'Hosted Kling 3.0 generation',
+      generation.description,
       {
-        duration: params.duration,
-        mode: params.mode ?? 'std',
-        multiShots: Boolean(params.multiShots),
-        provider: 'kling-3.0',
+        ...generation.usageMetadata,
+        outputType: generation.outputType,
+        provider: generation.provider,
         requestId,
-        shotCount: params.multiPrompt?.length ?? 0,
-        sound: params.multiShots ? true : Boolean(params.sound),
         taskId,
       },
     );
@@ -394,8 +424,8 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
           creditBalance: charge.balance,
           error: createGatewayError(
             'insufficient_credits',
-            'You need more credits to create a hosted Kling generation.',
-            { requestId, creditsRequired },
+            'You need more credits to create this hosted generation.',
+            { creditsRequired, outputType: generation.outputType, requestId },
           ),
           next: 'pricing',
           ok: false,
@@ -421,7 +451,8 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         creditBalance: charge.balance,
         creditsCharged: charge.charged ? creditsRequired : 0,
         data: {
-          provider: 'kling-3.0',
+          outputType: generation.outputType,
+          provider: generation.provider,
           taskId,
         },
         ok: true,
@@ -441,8 +472,8 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       buildRouteEnvelope({
         error: createGatewayError(
           'provider_request_failed',
-          error instanceof Error ? error.message : 'Hosted Kling generation failed.',
-          { requestId },
+          error instanceof Error ? error.message : 'Hosted AI generation failed.',
+          { outputType: generation.outputType, requestId },
         ),
         ok: false,
         requestId,

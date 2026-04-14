@@ -2,8 +2,16 @@ import type { Env } from './env';
 
 const KIEAI_BASE_URL = 'https://api.kie.ai';
 const KIEAI_UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-stream-upload';
-// Hosted customer credits are priced at 4x the Kie.ai base cost for break-even.
-const HOSTED_KLING_BREAK_EVEN_MULTIPLIER = 4;
+// Hosted customer credits are priced at 5x vendor Kie credits for a small margin.
+const HOSTED_KIE_CREDIT_MULTIPLIER = 5;
+const KIEAI_USD_PER_CREDIT = 0.005;
+const KIEAI_IMAGE_USD_PRICING: Record<string, Record<string, number>> = {
+  'nano-banana-2': {
+    '1K': 0.04,
+    '2K': 0.06,
+    '4K': 0.09,
+  },
+};
 
 export type HostedVideoTaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
@@ -25,8 +33,18 @@ export interface HostedVideoTask {
   createdAt: string;
   error?: string;
   id: string;
+  imageUrl?: string;
   status: HostedVideoTaskStatus;
   videoUrl?: string;
+}
+
+export interface HostedImageParams {
+  aspectRatio?: string;
+  imageInputs?: string[];
+  outputFormat?: 'png' | 'jpeg' | 'webp';
+  prompt: string;
+  provider: string;
+  resolution?: string;
 }
 
 interface KieAiCreateTaskResponse {
@@ -168,6 +186,52 @@ function normalizeTaskStatus(state: string | undefined): HostedVideoTaskStatus {
   }
 }
 
+function normalizeImageResolution(resolution?: string): '1K' | '2K' | '4K' {
+  if (resolution === '2K' || resolution === '4K') {
+    return resolution;
+  }
+
+  return '1K';
+}
+
+function getResultUrl(data: KieAiStatusResponse['data'] | undefined): string | undefined {
+  let resultUrl = data?.resultUrls?.[0];
+
+  if (!resultUrl && data?.resultJson) {
+    try {
+      const parsed = JSON.parse(data.resultJson) as {
+        resultUrls?: string[];
+        result_urls?: string[];
+      };
+      resultUrl = parsed.resultUrls?.[0] ?? parsed.result_urls?.[0];
+    } catch {
+      resultUrl = undefined;
+    }
+  }
+
+  return resultUrl;
+}
+
+function resolveResultType(url: string | undefined): { imageUrl?: string; videoUrl?: string } {
+  if (!url) {
+    return {};
+  }
+
+  const normalizedUrl = url.toLowerCase();
+  if (/\.(mp4|mov|m4v|webm|avi)(\?|$)/.test(normalizedUrl)) {
+    return { videoUrl: url };
+  }
+
+  if (/\.(png|jpe?g|webp|gif|bmp|svg)(\?|$)/.test(normalizedUrl)) {
+    return { imageUrl: url };
+  }
+
+  return {
+    imageUrl: url,
+    videoUrl: url,
+  };
+}
+
 function normalizeMultiPrompt(
   multiPrompt?: Array<{ index: number; prompt: string; duration: number }>,
 ): Array<{ index: number; prompt: string; duration: string }> | undefined {
@@ -193,10 +257,22 @@ export function calculateHostedKlingCost(
   const effectiveSound = multiShots ? true : sound;
   const baseCost =
     normalizedMode === 'pro'
-      ? durationSeconds * (effectiveSound ? 40 : 27)
-      : durationSeconds * (effectiveSound ? 30 : 20);
+      ? durationSeconds * (effectiveSound ? 27 : 18)
+      : durationSeconds * (effectiveSound ? 20 : 14);
 
-  return baseCost * HOSTED_KLING_BREAK_EVEN_MULTIPLIER;
+  return baseCost * HOSTED_KIE_CREDIT_MULTIPLIER;
+}
+
+export function calculateHostedImageCost(provider: string, resolution?: string): number {
+  const normalizedResolution = normalizeImageResolution(resolution);
+  const usd =
+    KIEAI_IMAGE_USD_PRICING[provider]?.[normalizedResolution]
+    ?? KIEAI_IMAGE_USD_PRICING['nano-banana-2']?.[normalizedResolution]
+    ?? KIEAI_IMAGE_USD_PRICING['nano-banana-2']?.['1K']
+    ?? 0.04;
+  const vendorCredits = Math.round(usd / KIEAI_USD_PER_CREDIT);
+
+  return vendorCredits * HOSTED_KIE_CREDIT_MULTIPLIER;
 }
 
 export async function createHostedKlingTask(
@@ -245,6 +321,33 @@ export async function createHostedKlingTask(
   return { taskId };
 }
 
+export async function createHostedImageTask(
+  env: Env,
+  params: HostedImageParams,
+): Promise<{ taskId: string }> {
+  const uploadedInputs = params.imageInputs?.length
+    ? await Promise.all(params.imageInputs.map((imageUrl) => uploadImage(env, imageUrl)))
+    : undefined;
+
+  const payload = await kieAiJsonRequest<KieAiCreateTaskResponse>(env, '/api/v1/jobs/createTask', 'POST', {
+    input: {
+      aspect_ratio: params.aspectRatio ?? '1:1',
+      ...(uploadedInputs?.length ? { image_input: uploadedInputs } : {}),
+      output_format: params.outputFormat ?? 'png',
+      prompt: params.prompt,
+      resolution: normalizeImageResolution(params.resolution),
+    },
+    model: params.provider,
+  });
+  const taskId = payload.data?.taskId;
+
+  if (payload.code !== 200 || !taskId) {
+    throw new Error(payload.msg ?? 'Failed to create hosted image task');
+  }
+
+  return { taskId };
+}
+
 export async function getHostedKlingTask(
   env: Env,
   taskId: string,
@@ -255,24 +358,15 @@ export async function getHostedKlingTask(
     'GET',
   );
   const status = normalizeTaskStatus(payload.data?.state);
-  let videoUrl = payload.data?.resultUrls?.[0];
-
-  if (!videoUrl && payload.data?.resultJson) {
-    try {
-      const parsed = JSON.parse(payload.data.resultJson) as {
-        resultUrls?: string[];
-      };
-      videoUrl = parsed.resultUrls?.[0];
-    } catch {
-      videoUrl = undefined;
-    }
-  }
+  const resultUrl = getResultUrl(payload.data);
+  const { imageUrl, videoUrl } = resolveResultType(resultUrl);
 
   return {
     completedAt: status === 'completed' ? new Date().toISOString() : undefined,
     createdAt: new Date().toISOString(),
     error: payload.data?.failMsg ?? payload.msg,
     id: payload.data?.taskId ?? taskId,
+    imageUrl,
     status,
     videoUrl,
   };

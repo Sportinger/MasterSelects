@@ -1,5 +1,6 @@
 import { cloudApi, type CloudAiChatRequest, type CloudAiGatewayEnvelope, type CloudAiVideoRequest } from './cloudApi';
 import { resolveAiAccess, type AiAccessDecision, type AiAccessInput } from './aiAccess';
+import type { TextToImageParams } from './kieAiService';
 import type {
   AccountInfo,
   ImageToVideoParams,
@@ -91,6 +92,16 @@ export function planAiAccess(feature: 'chat' | 'video', input: AiAccessInput): A
   });
 }
 
+function getHostedTaskId(response: CloudAiGatewayEnvelope, errorMessage: string): string {
+  const task = response.data as { taskId?: string } | null;
+
+  if (!task?.taskId) {
+    throw new Error(errorMessage);
+  }
+
+  return task.taskId;
+}
+
 export const cloudAiService = {
   async createChatCompletion(body: Record<string, unknown>): Promise<unknown> {
     const response = await cloudApi.ai.chat.create(body as unknown as CloudAiChatRequest);
@@ -111,13 +122,7 @@ export const cloudAiService = {
         startImageUrl: params.startImageUrl,
       },
     });
-    const task = response.data as { taskId?: string } | null;
-
-    if (!task?.taskId) {
-      throw new Error('Hosted Kling generation did not return a task id');
-    }
-
-    return task.taskId;
+    return getHostedTaskId(response, 'Hosted Kling generation did not return a task id');
   },
   async createTextToVideo(params: TextToVideoParams): Promise<string> {
     const response = await cloudApi.ai.video.create({
@@ -132,13 +137,22 @@ export const cloudAiService = {
         sound: params.sound,
       },
     });
-    const task = response.data as { taskId?: string } | null;
-
-    if (!task?.taskId) {
-      throw new Error('Hosted Kling generation did not return a task id');
-    }
-
-    return task.taskId;
+    return getHostedTaskId(response, 'Hosted Kling generation did not return a task id');
+  },
+  async createTextToImage(params: TextToImageParams): Promise<string> {
+    const response = await cloudApi.ai.video.create({
+      action: 'generate',
+      params: {
+        aspectRatio: params.aspectRatio,
+        imageInputs: params.imageInputs,
+        outputFormat: params.outputFormat,
+        outputType: 'image',
+        prompt: params.prompt,
+        provider: params.provider,
+        resolution: params.resolution,
+      },
+    });
+    return getHostedTaskId(response, 'Hosted image generation did not return a task id');
   },
   access: {
     resolve: resolveAiAccess,
@@ -239,6 +253,7 @@ export const cloudAiService = {
       createdAt?: string;
       error?: string;
       id?: string;
+      imageUrl?: string;
       status?: TaskStatus;
       taskId?: string;
       videoUrl?: string;
@@ -249,8 +264,9 @@ export const cloudAiService = {
       createdAt: task?.createdAt ? new Date(task.createdAt) : new Date(),
       error: task?.error,
       id: task?.id ?? task?.taskId ?? taskId,
+      imageUrl: task?.imageUrl ?? task?.videoUrl,
       status: task?.status ?? 'pending',
-      videoUrl: task?.videoUrl,
+      videoUrl: task?.videoUrl ?? task?.imageUrl,
     };
   },
   async pollTaskUntilComplete(

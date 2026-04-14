@@ -1,7 +1,7 @@
-// AI Video Panel - AI video generation using PiAPI (Kling, Luma, Hailuo, etc.)
+// AI Video Panel - AI video generation via Kie.ai or MasterSelects Cloud
 // Supports text-to-video and image-to-video generation with timeline integration
 
-import { useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo, lazy, Suspense } from 'react';
 import { Logger } from '../../services/logger';
 
 const FlashBoardWorkspace = lazy(() =>
@@ -15,9 +15,6 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { cloudAiService } from '../../services/cloudAiService';
 import {
-  piApiService,
-  getVideoProviders,
-  getProvider,
   type VideoTask,
   type TextToVideoParams,
   type ImageToVideoParams,
@@ -31,9 +28,6 @@ import {
 import { getFlashBoardPriceEstimate } from '../../services/flashboard/FlashBoardPricing';
 import { ImageCropper, exportCroppedImage, type CropData } from './ImageCropper';
 import './AIVideoPanel.css';
-
-// Video generation service backend
-type VideoService = 'piapi' | 'kieai';
 
 type GenerationType = 'text-to-video' | 'image-to-video';
 type PanelTab = 'generate' | 'history';
@@ -55,12 +49,13 @@ interface GenerationJob {
   addedToTimeline?: boolean;
 }
 
-// Store history in localStorage
-const HISTORY_KEY = 'piapi-generation-history';
+// Store history in localStorage and read the legacy PiAPI key for old installs.
+const HISTORY_KEY = 'ai-video-generation-history';
+const LEGACY_HISTORY_KEY = 'piapi-generation-history';
 
 function loadHistory(): GenerationJob[] {
   try {
-    const stored = localStorage.getItem(HISTORY_KEY);
+    const stored = localStorage.getItem(HISTORY_KEY) ?? localStorage.getItem(LEGACY_HISTORY_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
       return parsed.map((job: GenerationJob) => ({
@@ -157,77 +152,40 @@ function JobTimer({ startDate }: { startDate: Date }) {
   return <span className="job-timer">{formatElapsed(startDate)}</span>;
 }
 
-function isHostedFeatureEnabled(value: string | undefined): boolean {
-  return value === 'true' || value === '1' || value === 'enabled' || value === 'yes';
-}
-
 export function AIVideoPanel() {
   const { apiKeys, openSettings } = useSettingsStore();
   const accountSession = useAccountStore((s) => s.session);
-  const entitlements = useAccountStore((s) => s.entitlements);
   const loadAccountState = useAccountStore((s) => s.loadAccountState);
   const openAuthDialog = useAccountStore((s) => s.openAuthDialog);
-  const openPricingDialog = useAccountStore((s) => s.openPricingDialog);
-  const openAccountDialog = useAccountStore((s) => s.openAccountDialog);
   const { importFile } = useMediaStore();
   const { tracks, addClip, addTrack } = useTimelineStore();
-  const hasHostedKlingAccess = Boolean(
-    accountSession?.authenticated && isHostedFeatureEnabled(entitlements.kling_generation),
-  );
+  const hasHostedCloudAccess = Boolean(accountSession?.authenticated);
 
   const [workspaceMode, setWorkspaceMode] = useState<'classic' | 'board'>('board');
 
   // Panel tab state
   const [activeTab, setActiveTab] = useState<PanelTab>('generate');
 
-  // Service selection (PiAPI vs Kie.ai)
-  const [selectedService, setSelectedService] = useState<VideoService>(() => {
-    // Default to whichever service has a key configured
-    if (hasHostedKlingAccess || (apiKeys.kieai && !apiKeys.piapi)) return 'kieai';
-    return 'piapi';
-  });
-
-  // Get providers for selected service
-  const providers = selectedService === 'kieai' ? getKieAiProviders() : getVideoProviders();
+  const providers = getKieAiProviders();
 
   // Provider and model selection
-  const [selectedProvider, setSelectedProvider] = useState<string>(providers[0]?.id || 'kling');
-  const [selectedVersion, setSelectedVersion] = useState<string>(providers[0]?.versions[0] || '2.6');
+  const [selectedProvider, setSelectedProvider] = useState<string>(providers[0]?.id || 'kling-3.0');
+  const [selectedVersion, setSelectedVersion] = useState<string>(providers[0]?.versions[0] || '3.0');
 
   // Get current provider config
-  const currentProvider = (selectedService === 'kieai'
-    ? getKieAiProvider(selectedProvider)
-    : getProvider(selectedProvider)) || providers[0];
-  const boardService = selectedService === 'kieai' && hasHostedKlingAccess && !apiKeys.kieai ? 'cloud' : selectedService;
+  const currentProvider = getKieAiProvider(selectedProvider) || providers[0];
+  const boardService = !apiKeys.kieai && hasHostedCloudAccess ? 'cloud' : 'kieai';
   const boardProviderId = boardService === 'cloud' ? 'cloud-kling' : selectedProvider;
   const boardVersion = boardService === 'cloud' ? 'latest' : selectedVersion;
-
-  // Reset provider when service changes
-  useEffect(() => {
-    const serviceProviders = selectedService === 'kieai' ? getKieAiProviders() : getVideoProviders();
-    const firstProvider = serviceProviders[0];
-    if (firstProvider) {
-      setSelectedProvider(firstProvider.id);
-      setSelectedVersion(firstProvider.versions[0]);
-    }
-  }, [selectedService]);
-
-  useEffect(() => {
-    if (hasHostedKlingAccess && !apiKeys.kieai && !apiKeys.piapi && selectedService !== 'kieai') {
-      setSelectedService('kieai');
-    }
-  }, [hasHostedKlingAccess, apiKeys.kieai, apiKeys.piapi, selectedService]);
 
   // Generation type (default to image-to-video)
   const [generationType, setGenerationType] = useState<GenerationType>('image-to-video');
 
   // Common parameters
   const [prompt, setPrompt] = useState('');
-  const [negativePrompt, setNegativePrompt] = useState('');
   const [duration, setDuration] = useState<number>(5);
   const [aspectRatio, setAspectRatio] = useState<string>('16:9');
   const [mode, setMode] = useState<string>('std');
-  const [cfgScale, setCfgScale] = useState<number>(0.5);
   const [generateAudio, setGenerateAudio] = useState(false);
 
   // Image-to-video specific
@@ -237,7 +195,7 @@ export function AIVideoPanel() {
   const [endCropData, setEndCropData] = useState<CropData>({ offsetX: 0, offsetY: 0, scale: 1 });
 
   // Get current aspect ratio dimensions
-  const aspectDimensions = getAspectRatioDimensions(aspectRatio);
+  const aspectDimensions = useMemo(() => getAspectRatioDimensions(aspectRatio), [aspectRatio]);
 
   // Timeline integration options
   const [addToTimeline, setAddToTimeline] = useState(true);
@@ -257,22 +215,18 @@ export function AIVideoPanel() {
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
   // Check if API credentials are available for the selected service
-  const hasApiKey = selectedService === 'kieai' ? (!!apiKeys.kieai || hasHostedKlingAccess) : !!apiKeys.piapi;
+  const hasGenerationAccess = Boolean(apiKeys.kieai || hasHostedCloudAccess);
 
   // Fetch account balance
   const fetchAccountBalance = useCallback(async () => {
     setIsLoadingBalance(true);
     try {
-      let service: typeof cloudAiService | typeof kieAiService | typeof piApiService | null = null;
+      let service: typeof cloudAiService | typeof kieAiService | null = null;
 
-      if (selectedService === 'kieai') {
-        if (apiKeys.kieai) {
-          service = kieAiService;
-        } else if (hasHostedKlingAccess) {
-          service = cloudAiService;
-        }
-      } else if (apiKeys.piapi) {
-        service = piApiService;
+      if (apiKeys.kieai) {
+        service = kieAiService;
+      } else if (hasHostedCloudAccess) {
+        service = cloudAiService;
       }
 
       if (!service) {
@@ -287,22 +241,19 @@ export function AIVideoPanel() {
     } finally {
       setIsLoadingBalance(false);
     }
-  }, [apiKeys.piapi, apiKeys.kieai, hasHostedKlingAccess, selectedService]);
+  }, [apiKeys.kieai, hasHostedCloudAccess]);
 
   // Set API key when it changes and fetch balance
   useEffect(() => {
-    if (apiKeys.piapi) {
-      piApiService.setApiKey(apiKeys.piapi);
-    }
     if (apiKeys.kieai) {
       kieAiService.setApiKey(apiKeys.kieai);
     }
     fetchAccountBalance();
-  }, [apiKeys.piapi, apiKeys.kieai, fetchAccountBalance]);
+  }, [apiKeys.kieai, fetchAccountBalance]);
 
   // Update version when provider changes
   useEffect(() => {
-    const provider = selectedService === 'kieai' ? getKieAiProvider(selectedProvider) : getProvider(selectedProvider);
+    const provider = getKieAiProvider(selectedProvider);
     if (provider && !provider.versions.includes(selectedVersion)) {
       setSelectedVersion(provider.versions[0]);
     }
@@ -314,7 +265,7 @@ export function AIVideoPanel() {
     if (provider && !provider.supportedDurations.includes(duration)) {
       setDuration(provider.supportedDurations[0]);
     }
-  }, [selectedService, selectedProvider, selectedVersion, mode, duration]);
+  }, [selectedProvider, selectedVersion, mode, duration]);
 
   // Save history when it changes
   useEffect(() => {
@@ -408,12 +359,12 @@ export function AIVideoPanel() {
   }, []);
 
   // Export cropped image for API upload
-  const getCroppedImageUrl = async (
+  const getCroppedImageUrl = useCallback(async (
     imagePreview: string,
     cropData: CropData
-  ): Promise<string> => {
-    return exportCroppedImage(imagePreview, cropData, aspectDimensions, 1280);
-  };
+  ): Promise<string> => (
+    exportCroppedImage(imagePreview, cropData, aspectDimensions, 1280)
+  ), [aspectDimensions]);
 
   // Import video to media panel and optionally add to timeline
   const importVideoToProject = useCallback(async (job: GenerationJob) => {
@@ -481,16 +432,12 @@ export function AIVideoPanel() {
 
   // Get the active service instance
   const getActiveService = useCallback(() => {
-    if (selectedService === 'kieai') {
-      if (!apiKeys.kieai && hasHostedKlingAccess) {
-        return cloudAiService;
-      }
-
-      return kieAiService;
+    if (!apiKeys.kieai && hasHostedCloudAccess) {
+      return cloudAiService;
     }
 
-    return piApiService;
-  }, [apiKeys.kieai, hasHostedKlingAccess, selectedService]);
+    return kieAiService;
+  }, [apiKeys.kieai, hasHostedCloudAccess]);
 
   // Generate video
   const generateVideo = useCallback(async () => {
@@ -509,11 +456,9 @@ export function AIVideoPanel() {
           provider: selectedProvider,
           version: selectedVersion,
           prompt: prompt.trim(),
-          negativePrompt: negativePrompt.trim() || undefined,
           duration,
           aspectRatio,
           mode,
-          cfgScale,
           sound: generateAudio,
         };
 
@@ -524,11 +469,9 @@ export function AIVideoPanel() {
           provider: selectedProvider,
           version: selectedVersion,
           prompt: prompt.trim(),
-          negativePrompt: negativePrompt.trim() || undefined,
           duration,
           aspectRatio,
           mode,
-          cfgScale,
           sound: generateAudio,
           startImageUrl: startImagePreview ? await getCroppedImageUrl(startImagePreview, startCropData) : undefined,
           endImageUrl: endImagePreview ? await getCroppedImageUrl(endImagePreview, endCropData) : undefined,
@@ -537,8 +480,9 @@ export function AIVideoPanel() {
         taskId = await service.createImageToVideo(params);
       }
 
-      if (selectedService === 'kieai' && !apiKeys.kieai && hasHostedKlingAccess) {
+      if (!apiKeys.kieai && hasHostedCloudAccess) {
         void loadAccountState();
+        void fetchAccountBalance();
       }
 
       // Add job to list
@@ -598,9 +542,10 @@ export function AIVideoPanel() {
       setIsGenerating(false);
     }
   }, [
-    prompt, negativePrompt, selectedProvider, selectedVersion, duration, aspectRatio, mode, cfgScale, generateAudio,
+    prompt, selectedProvider, selectedVersion, duration, aspectRatio, mode, generateAudio,
     generationType, startImagePreview, startCropData, endImagePreview, endCropData, isGenerating,
-    importVideoToProject, getCroppedImageUrl, getActiveService, selectedService, apiKeys.kieai, hasHostedKlingAccess, loadAccountState,
+    importVideoToProject, getCroppedImageUrl, getActiveService, apiKeys.kieai, hasHostedCloudAccess, loadAccountState,
+    fetchAccountBalance,
   ]);
 
   // Remove job from list
@@ -660,48 +605,22 @@ export function AIVideoPanel() {
   });
 
   return (
-    <div className={`ai-video-panel ${!hasApiKey ? 'no-api-key' : ''}`}>
-      {/* API Key Overlay */}
-      {!hasApiKey && (
+    <div className={`ai-video-panel ${!hasGenerationAccess ? 'no-api-key' : ''}`}>
+      {/* Access Overlay */}
+      {!hasGenerationAccess && (
         <div className="ai-video-overlay">
           <div className="ai-video-overlay-content">
             <span className="no-key-icon">🎬</span>
-            <p>
-              {selectedService === 'kieai'
-                ? accountSession?.authenticated
-                  ? 'Hosted Kling needs a plan or Kie.ai key'
-                  : 'Sign in for hosted Kling 3.0'
-                : 'PiAPI key required for AI video generation'}
-            </p>
+            <p>Sign in to use MasterSelects Cloud credits</p>
             <span className="no-key-hint">
-              {selectedService === 'kieai'
-                ? 'Use MasterSelects Cloud for Kling 3.0 or add your own Kie.ai key in Settings.'
-                : 'Access Kling, Luma, Hailuo, and more models'}
+              If you prefer, you can still use your own Kie.ai key in Settings.
             </span>
             <div className="no-key-actions">
-              {selectedService === 'kieai' && !accountSession?.authenticated && (
-                <button className="btn-settings" onClick={openAuthDialog}>
-                  Sign in
-                </button>
-              )}
-              {selectedService === 'kieai' && accountSession?.authenticated && !hasHostedKlingAccess && (
-                <button className="btn-settings" onClick={openPricingDialog}>
-                  View plans
-                </button>
-              )}
-              {selectedService === 'kieai' && accountSession?.authenticated && (
-                <button className="btn-switch-service" onClick={openAccountDialog}>
-                  Account
-                </button>
-              )}
-              <button className="btn-settings" onClick={openSettings}>
-                {selectedService === 'kieai' ? 'API Keys' : 'Open Settings'}
+              <button className="btn-settings" onClick={openAuthDialog}>
+                Sign in
               </button>
-              <button
-                className="btn-switch-service"
-                onClick={() => setSelectedService(selectedService === 'kieai' ? 'piapi' : 'kieai')}
-              >
-                Switch to {selectedService === 'kieai' ? 'PiAPI' : 'Kling'}
+              <button className="btn-settings" onClick={openSettings}>
+                API Keys
               </button>
             </div>
           </div>
@@ -724,16 +643,6 @@ export function AIVideoPanel() {
           </button>
         </div>
         <div className="service-provider-selects">
-          <select
-            className="service-select"
-            value={selectedService}
-            onChange={(e) => setSelectedService(e.target.value as VideoService)}
-            disabled={isGenerating}
-            title="Video generation service"
-          >
-            <option value="piapi">PiAPI</option>
-            <option value="kieai">{hasHostedKlingAccess && !apiKeys.kieai ? 'MasterSelects Cloud' : 'Kie.ai'}</option>
-          </select>
           <select
             className="provider-select"
             value={selectedProvider}
@@ -854,14 +763,12 @@ export function AIVideoPanel() {
       )}
 
       {/* Balance bar + Generate button - always visible at top */}
-      {hasApiKey && (
+      {hasGenerationAccess && (
         <div className="balance-bar">
           <div className="credit-balance">
             {accountInfo ? (
               <span className="balance-amount">
-                {selectedService === 'kieai'
-                  ? `${accountInfo.credits} credits`
-                  : `$${accountInfo.creditsUsd.toFixed(2)}`}
+                {`${accountInfo.credits} credits`}
               </span>
             ) : (
               <span className="balance-loading">
@@ -972,21 +879,6 @@ export function AIVideoPanel() {
             />
           </div>
 
-          {/* Negative Prompt (PiAPI only - not supported by Kie.ai Kling 3.0) */}
-          {selectedService === 'piapi' && (
-            <div className="input-group">
-              <label>Negative Prompt (optional)</label>
-              <textarea
-                className="prompt-input negative"
-                value={negativePrompt}
-                onChange={(e) => setNegativePrompt(e.target.value)}
-                placeholder="What to avoid in the generation..."
-                disabled={isGenerating}
-                rows={2}
-              />
-            </div>
-          )}
-
           {/* Parameters Grid */}
           <div className="params-grid">
             {/* Version */}
@@ -1049,21 +941,6 @@ export function AIVideoPanel() {
               </div>
             )}
 
-            {/* CFG Scale (PiAPI Kling only - not supported by Kie.ai) */}
-            {selectedProvider === 'kling' && selectedService === 'piapi' && (
-              <div className="param-group cfg-slider">
-                <label>CFG Scale: {cfgScale.toFixed(2)}</label>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={cfgScale}
-                  onChange={(e) => setCfgScale(Number(e.target.value))}
-                  disabled={isGenerating}
-                />
-              </div>
-            )}
           </div>
 
           {/* Audio + Timeline Options */}
