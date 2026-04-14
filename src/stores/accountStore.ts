@@ -198,6 +198,12 @@ export const useAccountStore = create<AccountState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
+      const summary = get().billingSummary;
+      if (!summary?.stripeCustomerId) {
+        set({ dialog: 'pricing', isLoading: false });
+        return;
+      }
+
       const response = await cloudApi.billing.portal({ returnUrl: window.location.origin });
       window.location.assign(response.portalUrl);
     } catch (error) {

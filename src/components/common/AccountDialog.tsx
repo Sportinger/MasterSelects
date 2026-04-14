@@ -37,6 +37,7 @@ export function AccountDialog({ onClose }: AccountDialogProps) {
 
   const summary = billingSummary;
   const displayName = summary?.user?.displayName || summary?.user?.email || 'Guest';
+  const hasBillingAccount = Boolean(summary?.stripeCustomerId);
 
   return (
     <div className={`whats-new-backdrop ${isClosing ? 'closing' : ''}`} onClick={handleBackdropClick}>
@@ -97,7 +98,7 @@ export function AccountDialog({ onClose }: AccountDialogProps) {
 
           <div className="account-actions-row">
             <button className="auth-dialog-submit" disabled={isLoading} onClick={() => openBillingPortal()} type="button">
-              Manage billing
+              {hasBillingAccount ? 'Manage billing' : 'Set up billing'}
             </button>
             <button className="auth-dialog-action-secondary" disabled={isLoading} onClick={() => openPricingDialog()} type="button">
               Upgrade plan
