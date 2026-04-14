@@ -1,5 +1,5 @@
-// Kie.ai Service - Unified API for AI video generation via kie.ai
-// Currently supports: Kling 3.0 (text-to-video, image-to-video)
+// Kie.ai Service - Unified API for AI media generation via kie.ai
+// Currently supports: Kling 3.0 video and Nano Banana 2 images
 // Docs: https://kie.ai
 
 import { Logger } from './logger';
@@ -64,6 +64,23 @@ export function calculateKieAiCost(provider: string, mode: string, duration: num
   return duration * ratePerSecond;
 }
 
+export interface TextToImageParams {
+  provider: string;
+  prompt: string;
+  aspectRatio?: string;
+  resolution?: string;
+  outputFormat?: 'png' | 'jpeg' | 'webp';
+  imageInputs?: string[];
+}
+
+function normalizeImageResolution(resolution?: string): '1K' | '2K' | '4K' {
+  if (resolution === '2K' || resolution === '4K') {
+    return resolution;
+  }
+
+  return '1K';
+}
+
 interface KieAiTaskResponse {
   code: number;
   msg: string;
@@ -76,13 +93,46 @@ interface KieAiStatusResponse {
   code: number;
   msg?: string;
   data: {
+    completeTime?: number;
     taskId: string;
+    createTime?: number;
+    progress?: number;
     state: string;
     resultJson?: string;
     resultUrls?: string[];
     costTime?: string;
     failMsg?: string;
   };
+}
+
+function normalizeKieTaskStatus(state: string | undefined): TaskStatus {
+  switch ((state ?? '').toLowerCase()) {
+    case 'success':
+      return 'completed';
+    case 'processing':
+    case 'generating':
+    case 'queuing':
+    case 'waiting':
+      return 'processing';
+    case 'failed':
+    case 'fail':
+      return 'failed';
+    case 'pending':
+    default:
+      return 'pending';
+  }
+}
+
+function normalizeKieProgress(progress: number | undefined): number | undefined {
+  if (typeof progress !== 'number' || Number.isNaN(progress)) {
+    return undefined;
+  }
+
+  if (progress > 1) {
+    return Math.max(0, Math.min(1, progress / 100));
+  }
+
+  return Math.max(0, Math.min(1, progress));
 }
 
 class KieAiService {
@@ -246,6 +296,37 @@ class KieAiService {
     return result.data.taskId;
   }
 
+  async createTextToImage(params: TextToImageParams): Promise<string> {
+    const input: Record<string, unknown> = {
+      prompt: params.prompt,
+      aspect_ratio: params.aspectRatio || '1:1',
+      resolution: normalizeImageResolution(params.resolution),
+      output_format: params.outputFormat || 'png',
+    };
+
+    if (params.imageInputs?.length) {
+      const uploaded = await Promise.all(
+        params.imageInputs.map((image) => this.uploadImage(image))
+      );
+      input.image_input = uploaded;
+    }
+
+    const body = {
+      model: params.provider,
+      input,
+    };
+
+    log.debug('Creating text-to-image task:', JSON.stringify(body, null, 2));
+
+    const result = await this.request<KieAiTaskResponse>('/api/v1/jobs/createTask', 'POST', body);
+
+    if (result.code !== 200 || !result.data?.taskId) {
+      throw new Error(`Kie.ai error: ${result.msg || 'Failed to create image task'}`);
+    }
+
+    return result.data.taskId;
+  }
+
   async createImageToVideo(params: ImageToVideoParams): Promise<string> {
     const imageUrls: string[] = [];
 
@@ -305,24 +386,14 @@ class KieAiService {
       'GET'
     );
 
-    let status: TaskStatus = 'pending';
-    const taskState = result.data?.state?.toLowerCase() || '';
-
-    if (taskState === 'success') {
-      status = 'completed';
-    } else if (taskState === 'processing') {
-      status = 'processing';
-    } else if (taskState === 'failed') {
-      status = 'failed';
-    } else if (taskState === 'pending') {
-      status = 'pending';
-    }
+    const status = normalizeKieTaskStatus(result.data?.state);
 
     const task: VideoTask = {
       id: taskId,
       status,
+      progress: normalizeKieProgress(result.data?.progress),
       error: result.data?.failMsg,
-      createdAt: new Date(),
+      createdAt: result.data?.createTime ? new Date(result.data.createTime) : new Date(),
     };
 
     // Extract video URL from response
@@ -342,7 +413,42 @@ class KieAiService {
           log.warn('Failed to parse resultJson:', result.data.resultJson);
         }
       }
-      task.completedAt = new Date();
+      task.completedAt = result.data?.completeTime ? new Date(result.data.completeTime) : new Date();
+    }
+
+    return task;
+  }
+
+  async getImageTaskStatus(taskId: string): Promise<VideoTask> {
+    const result = await this.request<KieAiStatusResponse>(
+      `/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`,
+      'GET'
+    );
+
+    const status = normalizeKieTaskStatus(result.data?.state);
+
+    const task: VideoTask = {
+      id: taskId,
+      status,
+      progress: normalizeKieProgress(result.data?.progress),
+      error: result.data?.failMsg,
+      createdAt: result.data?.createTime ? new Date(result.data.createTime) : new Date(),
+    };
+
+    if (status === 'completed') {
+      if (result.data?.resultUrls?.length) {
+        task.imageUrl = result.data.resultUrls[0];
+      } else if (result.data?.resultJson) {
+        try {
+          const parsed = JSON.parse(result.data.resultJson);
+          if (parsed.resultUrls?.length) {
+            task.imageUrl = parsed.resultUrls[0];
+          }
+        } catch {
+          log.warn('Failed to parse image resultJson:', result.data.resultJson);
+        }
+      }
+      task.completedAt = result.data?.completeTime ? new Date(result.data.completeTime) : new Date();
     }
 
     return task;
@@ -371,6 +477,31 @@ class KieAiService {
     }
 
     throw new Error('Task timed out after 10 minutes');
+  }
+
+  async pollImageTaskUntilComplete(
+    taskId: string,
+    onProgress?: (task: VideoTask) => void,
+    pollInterval = 5000,
+    timeout = 180000
+  ): Promise<VideoTask> {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeout) {
+      const task = await this.getImageTaskStatus(taskId);
+
+      if (onProgress) {
+        onProgress(task);
+      }
+
+      if (task.status === 'completed' || task.status === 'failed') {
+        return task;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    throw new Error('Image task timed out after 3 minutes');
   }
 
   // Get remaining credits from Kie.ai

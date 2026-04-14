@@ -156,9 +156,14 @@
 }
 
 .flashboard-node-status {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   height: 3px;
   width: 100%;
   flex-shrink: 0;
+  z-index: 3;
 }
 
 .flashboard-node.draft .flashboard-node-status {
@@ -198,6 +203,59 @@
   gap: 4px;
   flex: 1;
   min-height: 0;
+  position: relative;
+}
+
+.flashboard-node.has-preview .flashboard-node-body {
+  padding: 0;
+}
+
+.flashboard-node-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  flex: 1;
+}
+
+.flashboard-node-preview {
+  position: absolute;
+  inset: 0;
+}
+
+.flashboard-node-drag-handle {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: grab;
+  z-index: 4;
+  transition: opacity 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+
+.flashboard-node-drag-handle:hover {
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.flashboard-node.has-preview .flashboard-node-drag-handle {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.flashboard-node.has-preview:hover .flashboard-node-drag-handle {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .flashboard-node-thumbnail {
@@ -207,6 +265,36 @@
   display: block;
   border-radius: 4px;
   margin-bottom: 4px;
+}
+
+.flashboard-node.has-preview .flashboard-node-thumbnail {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+  margin-bottom: 0;
+}
+
+.flashboard-node-overlay {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.06) 0%, rgba(0, 0, 0, 0.14) 26%, rgba(0, 0, 0, 0.78) 100%);
+  z-index: 2;
+}
+
+.flashboard-node:hover .flashboard-node-overlay {
+  opacity: 1;
+}
+
+.flashboard-node-overlay-body {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
 }
 
 .flashboard-node-prompt {
@@ -230,17 +318,61 @@
   color: var(--text-muted);
 }
 
+.flashboard-node.has-preview .flashboard-node-prompt,
+.flashboard-node.has-preview .flashboard-node-provider,
+.flashboard-node.has-preview .flashboard-node-meta,
+.flashboard-node.has-preview .flashboard-node-error {
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+.flashboard-node-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.flashboard-node-detail-pill {
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1.2;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-secondary);
+}
+
+.flashboard-node.has-preview .flashboard-node-detail-pill {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.flashboard-node-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
 .flashboard-node-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   height: 3px;
   background: var(--bg-tertiary);
-  border-radius: 2px;
   overflow: hidden;
+  z-index: 3;
+}
+
+.flashboard-node-progress.overlay {
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .flashboard-node-progress-bar {
   height: 100%;
   background: #4fc3f7;
-  border-radius: 2px;
   transition: width 0.3s ease;
 }
 
@@ -250,6 +382,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.flashboard-node.has-preview .flashboard-node-error {
+  color: #ff8a80;
 }
 
 /* ─── Context Menu ─── */

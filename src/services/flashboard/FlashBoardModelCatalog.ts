@@ -33,9 +33,25 @@ export function getCatalogEntries(): CatalogEntry[] {
       aspectRatios: p.supportedAspectRatios,
       supportsTextToVideo: p.supportsTextToVideo,
       supportsImageToVideo: p.supportsImageToVideo,
-      ...(isImageOnly ? { supportsTextToImage: true } : {}),
+      ...(isImageOnly ? { supportsTextToImage: true, outputType: 'image' as const } : { outputType: 'video' as const }),
     });
   }
+
+  entries.push({
+    service: 'kieai',
+    providerId: 'nano-banana-2',
+    name: 'Nano Banana 2',
+    description: 'Image generation via Kie.ai',
+    versions: ['3.1'],
+    modes: [],
+    durations: [],
+    aspectRatios: ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'],
+    supportsTextToVideo: false,
+    supportsImageToVideo: false,
+    supportsTextToImage: true,
+    imageSizes: ['1K', '2K', '4K'],
+    outputType: 'image',
+  });
 
   entries.push({
     service: 'cloud',
@@ -48,6 +64,7 @@ export function getCatalogEntries(): CatalogEntry[] {
     aspectRatios: ['16:9', '9:16', '1:1'],
     supportsTextToVideo: true,
     supportsImageToVideo: true,
+    outputType: 'video',
   });
 
   return entries;

@@ -176,7 +176,7 @@ export function AIVideoPanel() {
     accountSession?.authenticated && isHostedFeatureEnabled(entitlements.kling_generation),
   );
 
-  const [workspaceMode, setWorkspaceMode] = useState<'classic' | 'board'>('classic');
+  const [workspaceMode, setWorkspaceMode] = useState<'classic' | 'board'>('board');
 
   // Panel tab state
   const [activeTab, setActiveTab] = useState<PanelTab>('generate');
@@ -199,6 +199,9 @@ export function AIVideoPanel() {
   const currentProvider = (selectedService === 'kieai'
     ? getKieAiProvider(selectedProvider)
     : getProvider(selectedProvider)) || providers[0];
+  const boardService = selectedService === 'kieai' && hasHostedKlingAccess && !apiKeys.kieai ? 'cloud' : selectedService;
+  const boardProviderId = boardService === 'cloud' ? 'cloud-kling' : selectedProvider;
+  const boardVersion = boardService === 'cloud' ? 'latest' : selectedVersion;
 
   // Reset provider when service changes
   useEffect(() => {
@@ -771,7 +774,12 @@ export function AIVideoPanel() {
             </div>
           }
         >
-          <FlashBoardWorkspace />
+          <FlashBoardWorkspace
+            initialProviderId={boardProviderId}
+            initialService={boardService}
+            initialVersion={boardVersion}
+            serviceScope={boardService}
+          />
         </Suspense>
       ) : (
       <>

@@ -5,6 +5,7 @@ import { cloudAiService } from '../cloudAiService';
 import type { TextToVideoParams, ImageToVideoParams } from '../piApiService';
 import type { FlashBoardGenerationRequest } from '../../stores/flashboardStore/types';
 import type { SubmitNodeJobInput, SubmitNodeJobResult } from './types';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 const log = Logger.create('FlashBoardJob');
 
@@ -26,7 +27,8 @@ type JobUpdateCallback = (nodeId: string, update: {
   remoteTaskId?: string;
   progress?: number;
   error?: string;
-  videoUrl?: string;
+  assetUrl?: string;
+  mediaType?: 'video' | 'image';
 }) => void;
 
 class FlashBoardJobService {
@@ -36,7 +38,7 @@ class FlashBoardJobService {
   private maxConcurrentKieAi = 1;
   private onUpdate: JobUpdateCallback | null = null;
 
-  setUpdateCallback(cb: JobUpdateCallback): void {
+  setUpdateCallback(cb: JobUpdateCallback | null): void {
     this.onUpdate = cb;
   }
 
@@ -103,6 +105,63 @@ class FlashBoardJobService {
 
     try {
       this.onUpdate?.(nodeId, { status: 'processing' });
+
+      const { piapi, kieai } = useSettingsStore.getState().apiKeys;
+      if (request.service === 'piapi') {
+        piApiService.setApiKey(piapi);
+      }
+      if (request.service === 'kieai') {
+        kieAiService.setApiKey(kieai);
+      }
+
+      if (request.outputType === 'image' || request.providerId === 'nano-banana-2') {
+        if (request.service !== 'kieai') {
+          throw new Error(`${request.providerId} is currently only supported via Kie.ai`);
+        }
+
+        const remoteTaskId = await kieAiService.createTextToImage({
+          provider: request.providerId,
+          prompt: request.prompt,
+          aspectRatio: request.aspectRatio,
+          resolution: request.imageSize,
+          outputFormat: 'png',
+        });
+
+        this.running.push({
+          nodeId,
+          remoteTaskId,
+          service: request.service,
+          abortController,
+        });
+        this.onUpdate?.(nodeId, { status: 'processing', remoteTaskId });
+
+        const result = await kieAiService.pollImageTaskUntilComplete(
+          remoteTaskId,
+          (task) => {
+            if (abortController.signal.aborted) throw new Error('Canceled');
+            this.onUpdate?.(nodeId, { status: 'processing', progress: task.progress, remoteTaskId });
+          },
+          5000,
+        );
+
+        this.running = this.running.filter(r => r.nodeId !== nodeId);
+        if (result.status === 'completed' && result.imageUrl) {
+          this.onUpdate?.(nodeId, {
+            status: 'completed',
+            assetUrl: result.imageUrl,
+            mediaType: 'image',
+            remoteTaskId,
+          });
+        } else {
+          this.onUpdate?.(nodeId, {
+            status: 'failed',
+            error: result.error || 'Image generation failed',
+            remoteTaskId,
+          });
+        }
+        this.processQueue();
+        return;
+      }
 
       const hasStartImage = !!request.startMediaFileId;
       const isTextToVideo = !hasStartImage;
@@ -177,7 +236,7 @@ class FlashBoardJobService {
       this.running = this.running.filter(r => r.nodeId !== nodeId);
 
       if (task.status === 'completed' && task.videoUrl) {
-        this.onUpdate?.(nodeId, { status: 'completed', videoUrl: task.videoUrl });
+        this.onUpdate?.(nodeId, { status: 'completed', assetUrl: task.videoUrl, mediaType: 'video' });
       } else if (task.status === 'failed') {
         this.onUpdate?.(nodeId, { status: 'failed', error: task.error || 'Generation failed' });
       }

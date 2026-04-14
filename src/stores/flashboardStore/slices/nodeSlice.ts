@@ -1,4 +1,5 @@
 import type { FlashBoard, FlashBoardNode, FlashBoardGenerationRequest, FlashBoardJobState, FlashBoardResult, FlashBoardStoreState } from '../types';
+import { flashBoardJobService } from '../../../services/flashboard/FlashBoardJobService';
 
 type Set = (partial: Partial<FlashBoardStoreState> | ((state: FlashBoardStoreState) => Partial<FlashBoardStoreState>)) => void;
 type Get = () => FlashBoardStoreState;
@@ -87,13 +88,30 @@ export const createNodeSlice = (set: Set, get: Get): NodeSliceActions => ({
   },
 
   queueNode: (nodeId: string): void => {
+    const now = Date.now();
     set((state) => ({
       boards: findAndUpdateNode(state.boards, nodeId, (node) => ({
         ...node,
-        job: { ...node.job, status: 'queued' as const },
-        updatedAt: Date.now(),
+        job: {
+          ...node.job,
+          status: 'queued' as const,
+          error: undefined,
+          progress: undefined,
+          startedAt: now,
+          completedAt: undefined,
+        },
+        updatedAt: now,
       })),
     }));
+
+    const nextState = get();
+    for (const board of nextState.boards) {
+      const node = board.nodes.find((candidate) => candidate.id === nodeId);
+      if (node?.request) {
+        flashBoardJobService.submit({ nodeId, request: node.request });
+        break;
+      }
+    }
   },
 
   updateNodeJob: (nodeId: string, patch: Partial<FlashBoardJobState>): void => {

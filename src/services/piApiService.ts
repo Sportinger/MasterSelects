@@ -192,6 +192,7 @@ export interface VideoTask {
   status: TaskStatus;
   progress?: number;
   videoUrl?: string;
+  imageUrl?: string;
   error?: string;
   createdAt: Date;
   completedAt?: Date;

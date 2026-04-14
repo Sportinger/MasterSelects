@@ -44,4 +44,6 @@ export interface CatalogEntry {
   supportsTextToVideo: boolean;
   supportsImageToVideo: boolean;
   supportsTextToImage?: boolean;
+  imageSizes?: string[];
+  outputType?: 'video' | 'image';
 }

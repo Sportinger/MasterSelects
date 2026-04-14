@@ -132,7 +132,6 @@ export function ApiKeysSettings({ localKeys, onKeyChange }: ApiKeysSettingsProps
           onChange={(v) => onKeyChange('kieai', v)}
         />
       </div>
-
       <div className="settings-group">
         <div className="settings-group-title">YouTube</div>
 

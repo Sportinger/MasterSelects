@@ -31,11 +31,13 @@ export interface FlashBoardGenerationRequest {
   service: 'piapi' | 'kieai' | 'cloud';
   providerId: string;
   version: string;
+  outputType?: 'video' | 'image';
   mode?: string;
   prompt: string;
   negativePrompt?: string;
   duration?: number;
   aspectRatio?: string;
+  imageSize?: string;
   generateAudio?: boolean;
   startMediaFileId?: string;
   endMediaFileId?: string;
@@ -97,6 +99,7 @@ export interface FlashBoardGenerationMetadata {
   negativePrompt?: string;
   duration?: number;
   aspectRatio?: string;
+  imageSize?: string;
   generateAudio?: boolean;
   startMediaFileId?: string;
   endMediaFileId?: string;
