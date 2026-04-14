@@ -788,20 +788,6 @@ export function Timeline() {
     ]
   );
 
-  // No active composition - show empty state
-  if (openCompositions.length === 0) {
-    return (
-      <div className="timeline-container timeline-empty">
-        <div className="timeline-empty-message">
-          <p>No composition open</p>
-          <p className="hint">Double-click a composition in the Media panel to open it</p>
-        </div>
-      </div>
-    );
-  }
-
-  // anyVideoSolo and anyAudioSolo are already memoized at the top of the component
-
   const trackHeaderWidth = 150;
   const playheadLeft = timeToPixel(playheadPosition) - scrollX + trackHeaderWidth;
   const showPlayhead = playheadLeft >= trackHeaderWidth;
@@ -839,6 +825,20 @@ export function Timeline() {
       }
     }
   }, [isPlaying, isDraggingPlayhead, playheadPosition, scrollX, zoom, duration, setScrollX, timeToPixel]);
+
+  // No active composition - show empty state
+  if (openCompositions.length === 0) {
+    return (
+      <div className="timeline-container timeline-empty">
+        <div className="timeline-empty-message">
+          <p>No composition open</p>
+          <p className="hint">Double-click a composition in the Media panel to open it</p>
+        </div>
+      </div>
+    );
+  }
+
+  // anyVideoSolo and anyAudioSolo are already memoized at the top of the component
 
   return (
     <div

@@ -42,6 +42,8 @@ export const ACTION_META: ShortcutActionMeta[] = [
   // History
   { id: 'history.undo', label: 'Undo', category: 'History' },
   { id: 'history.redo', label: 'Redo', category: 'History' },
+  // Panels
+  { id: 'panel.toggleHoveredFullscreen', label: 'Toggle Hovered Tab Fullscreen', category: 'Panels' },
   // Preview
   { id: 'preview.editMode', label: 'Toggle Edit Mode', category: 'Preview' },
   { id: 'preview.slot1', label: 'Preview Slot 1', category: 'Preview' },
@@ -87,6 +89,8 @@ const BASE_MAP: ShortcutMap = {
   // History
   'history.undo': [{ key: 'z', ctrl: true }],
   'history.redo': [{ key: 'z', ctrl: true, shift: true }, { key: 'y', ctrl: true }],
+  // Panels
+  'panel.toggleHoveredFullscreen': [{ key: 'ü' }],
   // Overridden per preset:
   'tool.cutToggle': [{ key: 'c' }],
   'edit.splitAtPlayhead': [{ key: 'c', shift: true }],

@@ -15,6 +15,7 @@ Es ist eine neue Workspace-Ansicht fuer bestehende Generierungs-Flows.
 **V1 umfasst:**
 - Board-Ansicht innerhalb des bestehenden `ai-video` Panels
 - Text-to-video und image-to-video ueber bestehende Provider-Services
+- Text-to-image ueber bereits integrierte Bildmodelle, aktuell `Nano Banana 2`
 - Referenzen aus Preview, Media Pool und Desktop-Dateien
 - Generierte Medien landen zuerst im Media Pool, danach optional auf der Timeline
 - Persistenz im Projektmodell (`project.json`), nicht in losen Sidecar-JSON-Baeumen
@@ -23,7 +24,7 @@ Es ist eine neue Workspace-Ansicht fuer bestehende Generierungs-Flows.
 
 **Nicht Teil von V1:**
 - "66+ Modelle ueber Kie.ai"
-- Image-only Generation, solange dafuer kein bestehender Service im Repo vorhanden ist
+- zusaetzliche reine Bildmodelle jenseits der bereits integrierten `Nano Banana`-Route
 - Unbegrenzte Parallelitaet
 - Eigene Projektordner wie `project/flashboards/`
 - Eigener Undo-Stack
@@ -37,6 +38,7 @@ Es ist eine neue Workspace-Ansicht fuer bestehende Generierungs-Flows.
 - Board Export
 - Prompt Templates / Enhancer
 - Erweiterte Model Guides
+- `Nano Banana Pro` als naheliegende Erweiterung zur bestehenden `Nano Banana 2`-Integration
 - Zusätzliche Provider fuer reine Bildgenerierung
 - Alternative Layout-Modi
 
@@ -275,11 +277,14 @@ interface FlashBoardGenerationMetadata {
 - Video-Provider aus `piApiService`
 - Kie-Provider aus `kieAiService`
 - Hosted-Kling ueber dieselbe Request-Form wie `cloudAiService`
+- Konkrete V1-Kandidaten sind `Kling 3.0` fuer Video und `Nano Banana 2` fuer Bildgenerierung
+- Hosted-Varianten ueber `cloudAiService` koennen dieselben Kernmodelle spiegeln, insbesondere `Kling` und `Nano Banana 2`
 
 **V1 Regeln:**
 - Nur Modelle anzeigen, die das Repo heute schon ansprechen kann
 - Keine hartcodierte "66+ Modelle"-Behauptung
-- Keine Bildmodelle, wenn es dafuer noch keinen integrierten Client gibt
+- Bildmodelle nur dann anzeigen, wenn dafuer ein integrierter Client oder Hosted-Pfad existiert
+- Wenn ein Bildmodell bereits integriert ist, soll es explizit benannt werden statt nur generisch von "Bildgenerierung" zu sprechen
 
 ### 5.2 Job Service
 

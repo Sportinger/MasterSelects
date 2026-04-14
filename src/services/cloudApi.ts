@@ -167,8 +167,15 @@ export interface CloudAiVideoRequest {
     aspectRatio?: string;
     duration?: number;
     endImageUrl?: string;
+    imageInputs?: string[];
     mode?: 'pro' | 'std';
+    multiPrompt?: Array<{ index: number; prompt: string; duration: number }>;
+    multiShots?: boolean;
+    outputFormat?: 'jpeg' | 'png' | 'webp';
+    outputType?: 'image' | 'video';
+    provider?: string;
     prompt?: string;
+    resolution?: string;
     sound?: boolean;
     startImageUrl?: string;
   };
@@ -326,6 +333,7 @@ export interface HostedVideoStatusResponse {
   createdAt: string;
   error?: string;
   id: string;
+  imageUrl?: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   videoUrl?: string;
 }
@@ -333,6 +341,7 @@ export interface HostedVideoStatusResponse {
 export interface HostedVideoCreateResponse {
   creditBalance: number;
   creditsCharged: number;
+  outputType?: 'image' | 'video';
   provider: string;
   taskId: string;
 }

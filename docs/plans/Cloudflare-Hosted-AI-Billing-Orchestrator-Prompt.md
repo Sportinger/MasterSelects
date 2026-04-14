@@ -40,6 +40,8 @@ The first offer shown to users must be simple and legible:
 Do not position the first paid offer around a long list of advanced features.
 Lead with these two.
 
+`Nano Banana` image generation should still be called out in the planning output as the current image-generation track, but it should remain secondary to the simpler launch message above.
+
 The default user story must become:
 
 1. User opens the app.
@@ -115,7 +117,7 @@ Implement around this model unless product leadership changes it:
   - more Kling generation capacity
   - higher limits and priority queues
 - Credit Packs:
-  - one-time purchases for Kling overages and burst usage
+  - one-time purchases for Kling and Nano Banana overages / burst usage
 - Phase 2:
   - hosted transcription
   - hosted multicam
@@ -136,6 +138,7 @@ The first hosted rollout must cover:
 - hosted-vs-BYO feature gating
 
 Hosted transcription and hosted multicam should be treated as phase 2 unless they come almost for free after the hosted gateway exists.
+`Nano Banana` image generation should be tracked explicitly in the plan as the first hosted image-generation candidate, even if the initial UX still foregrounds AI Chat and Kling 3.0.
 
 ---
 
@@ -230,6 +233,7 @@ Then write a repo-specific summary in 10 to 20 bullets covering:
 
 - current onboarding flow
 - where AI features require provider keys today
+- which AI surfaces already exist today for Kling 3.0 and Nano Banana
 - which features already expose cost or credit concepts
 - what is local-first and should stay local-first
 - where new server boundaries need to exist

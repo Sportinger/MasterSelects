@@ -10,7 +10,7 @@ import { Logger } from '../../../services/logger';
 const log = Logger.create('Import');
 
 export interface FileImportActions {
-  importFile: (file: File, parentId?: string | null) => Promise<MediaFile>;
+  importFile: (file: File, parentId?: string | null, options?: { forceCopyToProject?: boolean }) => Promise<MediaFile>;
   importFiles: (files: FileList | File[], parentId?: string | null) => Promise<MediaFile[]>;
   importFilesWithPicker: () => Promise<MediaFile[]>;
   importFilesWithHandles: (filesWithHandles: Array<{
@@ -62,7 +62,7 @@ function finalizePlaceholder(state: { files: MediaFile[] }, id: string, result: 
 }
 
 export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set, get) => ({
-  importFile: async (file: File, parentId?: string | null) => {
+  importFile: async (file: File, parentId?: string | null, options?: { forceCopyToProject?: boolean }) => {
     // Deduplication: check if file with same name + size already exists
     const existing = get().files.find(f =>
       f.name === file.name && f.fileSize === file.size && !f.isImporting
@@ -83,7 +83,12 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
 
     // Phase 2: Full import in background
     try {
-      const result = await processImport({ file, id, parentId });
+      const result = await processImport({
+        file,
+        id,
+        parentId,
+        forceCopyToProject: options?.forceCopyToProject === true,
+      });
       set((state) => finalizePlaceholder(state, id, result.mediaFile));
       log.info('Complete:', result.mediaFile.name);
       return result.mediaFile;

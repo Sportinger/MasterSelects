@@ -54,7 +54,7 @@ interface APIKeys {
   assemblyai: string;
   deepgram: string;
   piapi: string;  // PiAPI key for AI video generation (Kling, Luma, etc.)
-  kieai: string;  // Kie.ai key for AI video generation (Kling 3.0, Seedance, etc.)
+  kieai: string;  // Kie.ai key for Kling 3.0 and Nano Banana 2
   youtube: string; // YouTube Data API v3 key (optional, Invidious works without)
   // Legacy Kling keys (deprecated, use piapi instead)
   klingAccessKey: string;

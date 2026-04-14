@@ -311,6 +311,13 @@ export class LayerCollector {
         }
       }
 
+      // PRECISE EXPORT MODE: dedicated export video elements are already seeked and warmed up
+      // by VideoSeeker. They do not participate in the preview scrub/presented-frame cache,
+      // so the preview-only hold heuristics below would otherwise drop valid export frames.
+      if (deps.isExporting && source.videoElement) {
+        return this.tryHTMLVideo(layer, source.videoElement, deps);
+      }
+
       const isDragging = useTimelineStore.getState().isDraggingPlayhead;
       const runtimeProvider = getRuntimeFrameProvider(source);
       const clipProvider = source.webCodecsPlayer?.isFullMode()
@@ -765,6 +772,49 @@ export class LayerCollector {
     if (video.readyState >= 2) {
       const currentTime = video.currentTime;
       const targetTime = this.getTargetVideoTime(layer, video);
+      if (deps.isExporting) {
+        const copiedFrame = getCopiedHtmlVideoPreviewFrame(
+          video,
+          deps.scrubbingCache,
+          targetTime,
+          layer.sourceClipId,
+          layer.sourceClipId,
+        );
+        if (copiedFrame) {
+          this.currentDecoder = 'HTMLVideo';
+          this.hasVideo = true;
+          return {
+            layer,
+            isVideo: false,
+            externalTexture: null,
+            textureView: copiedFrame.view,
+            sourceWidth: copiedFrame.width,
+            sourceHeight: copiedFrame.height,
+            displayedMediaTime: copiedFrame.mediaTime ?? currentTime,
+            targetMediaTime: targetTime,
+            previewPath: 'copied-preview',
+          };
+        }
+
+        const extTex = deps.textureManager.importVideoTexture(video);
+        if (extTex) {
+          deps.setLastVideoTime(videoKey, currentTime);
+          this.currentDecoder = 'HTMLVideo';
+          this.hasVideo = true;
+          return {
+            layer,
+            isVideo: true,
+            externalTexture: extTex,
+            textureView: null,
+            sourceWidth: video.videoWidth,
+            sourceHeight: video.videoHeight,
+            displayedMediaTime: currentTime,
+            targetMediaTime: targetTime,
+            previewPath: 'live-import',
+          };
+        }
+      }
+
       const isDragging = useTimelineStore.getState().isDraggingPlayhead;
       const isSettling = scrubSettleState.isPending(layer.sourceClipId);
       const isPausedSettle = !deps.isPlaying && !isDragging && isSettling;

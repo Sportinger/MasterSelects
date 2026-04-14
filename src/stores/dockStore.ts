@@ -13,6 +13,7 @@ import type {
   DockTabGroup,
   PanelData,
   PreviewPanelData,
+  HoveredDockTabTarget,
 } from '../types/dock';
 import { PANEL_CONFIGS } from '../types/dock';
 import {
@@ -22,6 +23,7 @@ import {
 } from '../utils/dockLayout';
 import { Logger } from '../services/logger';
 import { createPreviewPanelDataPatch, createPreviewPanelSource } from '../utils/previewPanelSource';
+import { useMediaStore } from './mediaStore';
 
 const log = Logger.create('DockStore');
 
@@ -141,6 +143,8 @@ interface DockState {
   layout: DockLayout;
   dragState: DockDragState;
   maxZIndex: number;
+  hoveredTabTarget: HoveredDockTabTarget | null;
+  maximizedPanelId: string | null;
 
   // Layout mutations
   setActiveTab: (groupId: string, index: number) => void;
@@ -161,6 +165,12 @@ interface DockState {
   updateDrag: (pos: { x: number; y: number }, dropTarget: DropTarget | null) => void;
   endDrag: () => void;
   cancelDrag: () => void;
+
+  // Hovered/maximized dock tabs
+  setHoveredTabTarget: (target: HoveredDockTabTarget | null) => void;
+  clearHoveredTabTarget: (panelId?: string) => void;
+  setMaximizedPanel: (panelId: string | null) => void;
+  toggleHoveredTabMaximized: () => void;
 
   // Panel zoom
   setPanelZoom: (panelId: string, zoom: number) => void;
@@ -194,6 +204,8 @@ export const useDockStore = create<DockState>()(
         layout: DEFAULT_LAYOUT,
         dragState: DEFAULT_DRAG_STATE,
         maxZIndex: 1000,
+        hoveredTabTarget: null,
+        maximizedPanelId: null,
 
         setActiveTab: (groupId, index) => {
           set((state) => ({
@@ -245,7 +257,11 @@ export const useDockStore = create<DockState>()(
             ...newLayout,
             root: collapseSingleChildSplits(newLayout.root),
           };
-          set({ layout: newLayout });
+          set((state) => ({
+            layout: newLayout,
+            hoveredTabTarget: state.hoveredTabTarget?.panelId === panelId ? null : state.hoveredTabTarget,
+            maximizedPanelId: state.maximizedPanelId === panelId ? null : state.maximizedPanelId,
+          }));
         },
 
         closePanelById: (panelId) => {
@@ -253,12 +269,14 @@ export const useDockStore = create<DockState>()(
           // First check floating panels
           const floating = layout.floatingPanels.find(f => f.panel.id === panelId);
           if (floating) {
-            set({
+            set((state) => ({
               layout: {
                 ...layout,
                 floatingPanels: layout.floatingPanels.filter(f => f.panel.id !== panelId),
               },
-            });
+              hoveredTabTarget: state.hoveredTabTarget?.panelId === panelId ? null : state.hoveredTabTarget,
+              maximizedPanelId: state.maximizedPanelId === panelId ? null : state.maximizedPanelId,
+            }));
             return;
           }
           // Find in docked panels
@@ -269,7 +287,11 @@ export const useDockStore = create<DockState>()(
               ...newLayout,
               root: collapseSingleChildSplits(newLayout.root),
             };
-            set({ layout: newLayout });
+            set((state) => ({
+              layout: newLayout,
+              hoveredTabTarget: state.hoveredTabTarget?.panelId === panelId ? null : state.hoveredTabTarget,
+              maximizedPanelId: state.maximizedPanelId === panelId ? null : state.maximizedPanelId,
+            }));
           }
         },
 
@@ -391,6 +413,52 @@ export const useDockStore = create<DockState>()(
           set({ dragState: DEFAULT_DRAG_STATE });
         },
 
+        setHoveredTabTarget: (target) => {
+          set({ hoveredTabTarget: target });
+        },
+
+        clearHoveredTabTarget: (panelId) => {
+          set((state) => {
+            if (!state.hoveredTabTarget) return {};
+            if (panelId && state.hoveredTabTarget.panelId !== panelId) return {};
+            return { hoveredTabTarget: null };
+          });
+        },
+
+        setMaximizedPanel: (panelId) => {
+          set({ maximizedPanelId: panelId });
+        },
+
+        toggleHoveredTabMaximized: () => {
+          const { hoveredTabTarget, maximizedPanelId, layout, setActiveTab } = get();
+
+          if (!hoveredTabTarget) {
+            if (maximizedPanelId) {
+              set({ maximizedPanelId: null });
+            }
+            return;
+          }
+
+          if (maximizedPanelId === hoveredTabTarget.panelId) {
+            set({ maximizedPanelId: null });
+            return;
+          }
+
+          if (hoveredTabTarget.kind === 'panel') {
+            const group = findTabGroupById(layout.root, hoveredTabTarget.groupId);
+            const panelIndex = group?.panels.findIndex(panel => panel.id === hoveredTabTarget.panelId) ?? -1;
+            if (!group || panelIndex < 0) {
+              set({ hoveredTabTarget: null, maximizedPanelId: null });
+              return;
+            }
+            setActiveTab(group.id, panelIndex);
+          } else if (hoveredTabTarget.compositionId) {
+            useMediaStore.getState().setActiveComposition(hoveredTabTarget.compositionId);
+          }
+
+          set({ maximizedPanelId: hoveredTabTarget.panelId });
+        },
+
         setPanelZoom: (panelId, zoom) => {
           const clampedZoom = Math.max(0.5, Math.min(2.0, zoom));
           set((state) => ({
@@ -477,18 +545,24 @@ export const useDockStore = create<DockState>()(
               ...newLayout,
               root: collapseSingleChildSplits(newLayout.root),
             };
-            set({ layout: newLayout });
+            set((state) => ({
+              layout: newLayout,
+              hoveredTabTarget: state.hoveredTabTarget?.panelId === result.panel.id ? null : state.hoveredTabTarget,
+              maximizedPanelId: state.maximizedPanelId === result.panel.id ? null : state.maximizedPanelId,
+            }));
           }
 
           // Also check floating panels
           const floatingIndex = layout.floatingPanels.findIndex((f) => f.panel.type === type);
           if (floatingIndex >= 0) {
-            set({
+            set((state) => ({
               layout: {
                 ...layout,
                 floatingPanels: layout.floatingPanels.filter((_, i) => i !== floatingIndex),
               },
-            });
+              hoveredTabTarget: state.hoveredTabTarget?.panelId === layout.floatingPanels[floatingIndex]?.panel.id ? null : state.hoveredTabTarget,
+              maximizedPanelId: state.maximizedPanelId === layout.floatingPanels[floatingIndex]?.panel.id ? null : state.maximizedPanelId,
+            }));
           }
         },
 
@@ -565,13 +639,13 @@ export const useDockStore = create<DockState>()(
           if (savedDefault) {
             try {
               const parsed = JSON.parse(savedDefault);
-              set({ layout: parsed, maxZIndex: 1000 });
+              set({ layout: parsed, maxZIndex: 1000, hoveredTabTarget: null, maximizedPanelId: null });
               return;
             } catch (e) {
               log.error('Failed to parse saved default layout:', e);
             }
           }
-          set({ layout: DEFAULT_LAYOUT, maxZIndex: 1000 });
+          set({ layout: DEFAULT_LAYOUT, maxZIndex: 1000, hoveredTabTarget: null, maximizedPanelId: null });
         },
 
         saveLayoutAsDefault: () => {
@@ -586,7 +660,7 @@ export const useDockStore = create<DockState>()(
         setLayoutFromProject: (layout: DockLayout) => {
           // Clean up any invalid panel types from the loaded layout
           const cleanedLayout = cleanupPersistedLayout(layout);
-          set({ layout: cleanedLayout, maxZIndex: 1000 });
+          set({ layout: cleanedLayout, maxZIndex: 1000, hoveredTabTarget: null, maximizedPanelId: null });
         },
       }),
       {

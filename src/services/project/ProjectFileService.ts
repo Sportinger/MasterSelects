@@ -6,6 +6,7 @@ import { Logger } from '../logger';
 import { FileStorageService, fileStorageService } from './core/FileStorageService';
 import { NativeFileStorageService, nativeFileStorageService } from './core/NativeFileStorageService';
 import { NativeProjectCoreService } from './core/NativeProjectCoreService';
+import { NativeHelperClient } from '../nativeHelper/NativeHelperClient';
 
 const log = Logger.create('ProjectFileService');
 import { ProjectCoreService } from './core/ProjectCoreService';
@@ -42,6 +43,125 @@ class ProjectFileService {
     this.cacheService = new CacheService(this.fileStorage);
     this.proxyStorageService = new ProxyStorageService();
     this.rawMediaService = new RawMediaService(this.fileStorage);
+  }
+
+  private joinPath(...parts: string[]): string {
+    return parts
+      .map((part) => part.replace(/\\/g, '/').replace(/\/+$/, ''))
+      .join('/');
+  }
+
+  private normalizeProjectRelativePath(path: string): string {
+    return path
+      .replace(/\\/g, '/')
+      .replace(/^\/+/, '')
+      .replace(/\/+/g, '/');
+  }
+
+  private getMimeTypeFromFileName(fileName: string): string {
+    const extension = fileName.split('.').pop()?.toLowerCase() ?? '';
+
+    switch (extension) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'gif':
+        return 'image/gif';
+      case 'mp4':
+        return 'video/mp4';
+      case 'mov':
+        return 'video/quicktime';
+      case 'webm':
+        return 'video/webm';
+      case 'mp3':
+        return 'audio/mpeg';
+      case 'wav':
+        return 'audio/wav';
+      case 'm4a':
+        return 'audio/mp4';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+
+  private async copyToRawFolderNative(
+    file: File,
+    fileName?: string,
+  ): Promise<{ handle?: FileSystemFileHandle; relativePath: string; alreadyExisted: boolean } | null> {
+    const projectPath = this.nativeCoreService?.getProjectPath();
+
+    if (!projectPath) {
+      log.warn('No native project open, cannot copy to Raw folder');
+      return null;
+    }
+
+    const rawFolderPath = this.joinPath(projectPath, PROJECT_FOLDERS.RAW);
+    const targetName = fileName || file.name;
+
+    await NativeHelperClient.createDir(rawFolderPath);
+
+    const entries = await NativeHelperClient.listDir(rawFolderPath);
+    const exactMatch = entries.find((entry) => entry.kind === 'file' && entry.name === targetName);
+
+    if (exactMatch && exactMatch.size === file.size) {
+      return {
+        relativePath: `${PROJECT_FOLDERS.RAW}/${targetName}`,
+        alreadyExisted: true,
+      };
+    }
+
+    let finalName = targetName;
+    let counter = 1;
+
+    while (entries.some((entry) => entry.kind === 'file' && entry.name === finalName)) {
+      const extensionIndex = targetName.lastIndexOf('.');
+      finalName = extensionIndex > 0
+        ? `${targetName.slice(0, extensionIndex)}_${counter}${targetName.slice(extensionIndex)}`
+        : `${targetName}_${counter}`;
+      counter += 1;
+    }
+
+    const fullPath = this.joinPath(projectPath, PROJECT_FOLDERS.RAW, finalName);
+    const success = await NativeHelperClient.writeFileBinary(fullPath, file);
+
+    if (!success) {
+      return null;
+    }
+
+    return {
+      relativePath: `${PROJECT_FOLDERS.RAW}/${finalName}`,
+      alreadyExisted: false,
+    };
+  }
+
+  private async getFileFromRawNative(
+    relativePath: string,
+  ): Promise<{ file: File; handle?: FileSystemFileHandle } | null> {
+    const projectPath = this.nativeCoreService?.getProjectPath();
+
+    if (!projectPath) {
+      return null;
+    }
+
+    const normalizedPath = this.normalizeProjectRelativePath(relativePath);
+    const fullPath = this.joinPath(projectPath, normalizedPath);
+    const fileBuffer = await NativeHelperClient.getDownloadedFile(fullPath);
+
+    if (!fileBuffer) {
+      return null;
+    }
+
+    const fileName = normalizedPath.split('/').pop() || 'project-media.bin';
+
+    return {
+      file: new File([fileBuffer], fileName, {
+        type: this.getMimeTypeFromFileName(fileName),
+      }),
+    };
   }
 
   // ============================================
@@ -311,7 +431,11 @@ class ProjectFileService {
   // RAW MEDIA SERVICE DELEGATION
   // ============================================
 
-  async copyToRawFolder(file: File, fileName?: string): Promise<{ handle: FileSystemFileHandle; relativePath: string; alreadyExisted: boolean } | null> {
+  async copyToRawFolder(file: File, fileName?: string): Promise<{ handle?: FileSystemFileHandle; relativePath: string; alreadyExisted: boolean } | null> {
+    if (this._activeBackend === 'native' && this.nativeCoreService) {
+      return this.copyToRawFolderNative(file, fileName);
+    }
+
     const handle = this.coreService.getProjectHandle();
     if (!handle) {
       log.warn('No project open, cannot copy to Raw folder');
@@ -320,7 +444,11 @@ class ProjectFileService {
     return this.rawMediaService.copyToRawFolder(handle, file, fileName);
   }
 
-  async getFileFromRaw(relativePath: string): Promise<{ file: File; handle: FileSystemFileHandle } | null> {
+  async getFileFromRaw(relativePath: string): Promise<{ file: File; handle?: FileSystemFileHandle } | null> {
+    if (this._activeBackend === 'native' && this.nativeCoreService) {
+      return this.getFileFromRawNative(relativePath);
+    }
+
     const handle = this.coreService.getProjectHandle();
     if (!handle) return null;
     return this.rawMediaService.getFileFromRaw(handle, relativePath);

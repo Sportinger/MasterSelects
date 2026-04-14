@@ -34,7 +34,20 @@ export function DockTabPane({ group }: DockTabPaneProps) {
   const [holdingTabId, setHoldingTabId] = useState<string | null>(null);
   const [holdProgress, setHoldProgress] = useState<'idle' | 'holding' | 'ready' | 'fading'>('idle');
 
-  const { setActiveTab, startDrag, updateDrag, dragState, setPanelZoom, layout, activatePanelType } = useDockStore(useShallow(s => ({
+  const {
+    setActiveTab,
+    startDrag,
+    updateDrag,
+    dragState,
+    setPanelZoom,
+    layout,
+    activatePanelType,
+    hoveredTabTarget,
+    setHoveredTabTarget,
+    clearHoveredTabTarget,
+    maximizedPanelId,
+    setMaximizedPanel,
+  } = useDockStore(useShallow(s => ({
     setActiveTab: s.setActiveTab,
     startDrag: s.startDrag,
     updateDrag: s.updateDrag,
@@ -42,6 +55,11 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     setPanelZoom: s.setPanelZoom,
     layout: s.layout,
     activatePanelType: s.activatePanelType,
+    hoveredTabTarget: s.hoveredTabTarget,
+    setHoveredTabTarget: s.setHoveredTabTarget,
+    clearHoveredTabTarget: s.clearHoveredTabTarget,
+    maximizedPanelId: s.maximizedPanelId,
+    setMaximizedPanel: s.setMaximizedPanel,
   })));
   const {
     getOpenCompositions,
@@ -93,9 +111,13 @@ export function DockTabPane({ group }: DockTabPaneProps) {
   const isDropTarget = dragState.dropTarget?.groupId === group.id;
   const dropPosition = dragState.dropTarget?.position;
   const panelZoom = activePanel ? (layout.panelZoom?.[activePanel.id] ?? 1.0) : 1.0;
+  const timelinePanel = useMemo(() => group.panels.find((panel) => panel.type === 'timeline') ?? null, [group.panels]);
+  const hoveredPanelId = hoveredTabTarget?.panelId ?? null;
+  const groupContainsMaximizedPanel = maximizedPanelId !== null && group.panels.some((panel) => panel.id === maximizedPanelId);
+  const isActivePanelMaximized = activePanel?.id === maximizedPanelId;
 
   // Check if this group contains a timeline panel
-  const hasTimelinePanel = group.panels.some(p => p.type === 'timeline');
+  const hasTimelinePanel = timelinePanel !== null;
   const openCompositions = hasTimelinePanel ? getOpenCompositions() : [];
 
   // Composition tab drag handlers (for reordering)
@@ -214,7 +236,10 @@ export function DockTabPane({ group }: DockTabPaneProps) {
 
   const handleTabClick = useCallback((index: number) => {
     setActiveTab(group.id, index);
-  }, [group.id, setActiveTab]);
+    if (groupContainsMaximizedPanel) {
+      setMaximizedPanel(group.panels[index]?.id ?? null);
+    }
+  }, [group.id, group.panels, groupContainsMaximizedPanel, setActiveTab, setMaximizedPanel]);
 
   const handleTabMouseDown = useCallback((e: React.MouseEvent, panel: DockPanel, index: number) => {
     if (e.button !== 0) return;
@@ -264,6 +289,54 @@ export function DockTabPane({ group }: DockTabPaneProps) {
       cancelHold();
     }
   }, [holdProgress, cancelHold]);
+
+  const handlePanelTabMouseEnter = useCallback((panel: DockPanel) => {
+    setHoveredTabTarget({
+      kind: 'panel',
+      panelId: panel.id,
+      groupId: group.id,
+    });
+  }, [group.id, setHoveredTabTarget]);
+
+  const handlePanelTabMouseLeave = useCallback((panelId: string) => {
+    handleTabMouseLeave();
+    clearHoveredTabTarget(panelId);
+  }, [clearHoveredTabTarget, handleTabMouseLeave]);
+
+  const handleCompositionTabMouseEnter = useCallback((compositionId: string) => {
+    if (!timelinePanel) return;
+    setHoveredTabTarget({
+      kind: 'timeline-composition',
+      panelId: timelinePanel.id,
+      groupId: group.id,
+      compositionId,
+    });
+  }, [group.id, setHoveredTabTarget, timelinePanel]);
+
+  const handleCompositionTabMouseLeave = useCallback(() => {
+    if (!timelinePanel) return;
+    clearHoveredTabTarget(timelinePanel.id);
+  }, [clearHoveredTabTarget, timelinePanel]);
+
+  const handlePaneMouseEnter = useCallback(() => {
+    if (hasTimelinePanel && timelinePanel) {
+      setHoveredTabTarget({
+        kind: activeCompositionId ? 'timeline-composition' : 'panel',
+        panelId: timelinePanel.id,
+        groupId: group.id,
+        compositionId: activeCompositionId ?? undefined,
+      });
+      return;
+    }
+
+    if (activePanel) {
+      setHoveredTabTarget({
+        kind: 'panel',
+        panelId: activePanel.id,
+        groupId: group.id,
+      });
+    }
+  }, [activeCompositionId, activePanel, group.id, hasTimelinePanel, setHoveredTabTarget, timelinePanel]);
 
   // Clean up timer on unmount and handle global mouse events during hold
   useEffect(() => {
@@ -325,7 +398,14 @@ export function DockTabPane({ group }: DockTabPaneProps) {
   }, [group.panels.length]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!dragState.isDragging || !containerRef.current) return;
+    if (!dragState.isDragging) {
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest('.dock-tab')) {
+        handlePaneMouseEnter();
+      }
+      return;
+    }
+    if (!containerRef.current) return;
     if (dragState.sourceGroupId === group.id && group.panels.length === 1) return;
 
     const rect = containerRef.current.getBoundingClientRect();
@@ -347,13 +427,14 @@ export function DockTabPane({ group }: DockTabPaneProps) {
       { x: e.clientX, y: e.clientY },
       { groupId: group.id, position, tabInsertIndex }
     );
-  }, [dragState.isDragging, dragState.sourceGroupId, group.id, group.panels.length, updateDrag, calculateTabInsertIndex]);
+  }, [dragState.isDragging, dragState.sourceGroupId, group.id, group.panels.length, updateDrag, calculateTabInsertIndex, handlePaneMouseEnter]);
 
   const handleMouseLeave = useCallback(() => {
+    clearHoveredTabTarget();
     if (dragState.isDragging && dragState.dropTarget?.groupId === group.id) {
       updateDrag(dragState.currentPos, null);
     }
-  }, [dragState, group.id, updateDrag]);
+  }, [clearHoveredTabTarget, dragState, group.id, updateDrag]);
 
   // Handle Ctrl+wheel for panel zoom (only on tab bar)
   useEffect(() => {
@@ -422,15 +503,16 @@ export function DockTabPane({ group }: DockTabPaneProps) {
   return (
     <div
       ref={containerRef}
-      className={`dock-tab-pane ${isDropTarget ? 'drop-target' : ''}`}
+      className={`dock-tab-pane ${isDropTarget ? 'drop-target' : ''} ${groupContainsMaximizedPanel ? 'is-maximized-pane' : ''}`}
       data-group-id={group.id}
+      onMouseEnter={handlePaneMouseEnter}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
       {/* Tab bar - Ctrl+wheel here to zoom panel, middle mouse to scroll */}
       <div
         ref={tabBarRef}
-        className={`dock-tab-bar ${isMiddleDragging ? 'middle-dragging' : ''}`}
+        className={`dock-tab-bar ${isMiddleDragging ? 'middle-dragging' : ''} ${groupContainsMaximizedPanel ? 'is-maximized-bar' : ''}`}
         title="Ctrl+Scroll to zoom | Hold to drag | Middle-click drag to scroll"
         onMouseDown={handleTabBarMouseDown}
         style={hasTimelinePanel && openCompositions.length > 0 && slotGridProgress > 0 ? {
@@ -445,7 +527,6 @@ export function DockTabPane({ group }: DockTabPaneProps) {
           <>
             {/* Drag handle for repositioning the timeline panel */}
             {(() => {
-              const timelinePanel = group.panels.find(p => p.type === 'timeline');
               const isHandleHolding = holdingTabId === 'timeline-handle' && holdProgress === 'holding';
               const isHandleReady = holdingTabId === 'timeline-handle' && holdProgress === 'ready';
               const isHandleFading = holdingTabId === 'timeline-handle' && holdProgress === 'fading';
@@ -486,12 +567,16 @@ export function DockTabPane({ group }: DockTabPaneProps) {
                 key={comp.id}
                 className={`dock-tab ${comp.id === activeCompositionId ? 'active' : ''} ${
                   draggedCompIndex === index ? 'dragging' : ''
-                } ${dropTargetIndex === index ? 'drop-target-tab' : ''}`}
+                } ${dropTargetIndex === index ? 'drop-target-tab' : ''} ${
+                  hoveredTabTarget?.kind === 'timeline-composition' && hoveredTabTarget.compositionId === comp.id ? 'shortcut-hover' : ''
+                } ${maximizedPanelId === timelinePanel?.id && comp.id === activeCompositionId ? 'maximized-target' : ''}`}
                 onClick={() => {
                   setActiveComposition(comp.id);
                   activatePanelType('media');
                 }}
                 title={comp.name}
+                onMouseEnter={() => handleCompositionTabMouseEnter(comp.id)}
+                onMouseLeave={handleCompositionTabMouseLeave}
                 draggable
                 onDragStart={(e) => handleCompDragStart(e, index)}
                 onDragOver={(e) => handleCompDragOver(e, index)}
@@ -532,11 +617,14 @@ export function DockTabPane({ group }: DockTabPaneProps) {
                 key={panel.id}
                 className={`dock-tab ${index === group.activeIndex ? 'active' : ''} ${
                   isDragging ? 'dragging' : ''
-                } ${isHolding ? 'hold-glow' : ''} ${isReady ? 'hold-ready' : ''} ${isFading ? 'hold-fade' : ''}`}
+                } ${isHolding ? 'hold-glow' : ''} ${isReady ? 'hold-ready' : ''} ${isFading ? 'hold-fade' : ''} ${
+                  hoveredPanelId === panel.id ? 'shortcut-hover' : ''
+                } ${maximizedPanelId === panel.id ? 'maximized-target' : ''}`}
                 onClick={() => handleTabClick(index)}
                 onMouseDown={(e) => handleTabMouseDown(e, panel, index)}
                 onMouseUp={handleTabMouseUp}
-                onMouseLeave={handleTabMouseLeave}
+                onMouseEnter={() => handlePanelTabMouseEnter(panel)}
+                onMouseLeave={() => handlePanelTabMouseLeave(panel.id)}
                 title={panel.type === 'clip-properties' ? selectedSlotName || selectedClipName || panel.title : panel.title}
               >
                 <span className="dock-tab-title">{tabTitle}{WIP_PANEL_TYPES.includes(panel.type) && <span className="menu-wip-badge">🐛</span>}</span>
@@ -548,8 +636,9 @@ export function DockTabPane({ group }: DockTabPaneProps) {
 
       {/* Panel content with zoom */}
       <div
-        className="dock-panel-content"
+        className={`dock-panel-content ${isActivePanelMaximized ? 'is-maximized-content' : ''}`}
         style={{ '--panel-zoom': panelZoom } as React.CSSProperties}
+        onMouseEnter={handlePaneMouseEnter}
       >
         <div className="dock-panel-content-inner">
           {activePanel && <DockPanelContent panel={activePanel} />}

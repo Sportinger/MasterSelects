@@ -74,6 +74,7 @@ All panels can be:
 - Resized via split panes
 - Closed/opened via View menu
 - Floated (detached from dock) as independent windows
+- Temporarily maximized from the currently hovered dock tab with animated expand/restore
 
 ### Tab Controls
 | Action | Method |
@@ -81,6 +82,7 @@ All panels can be:
 | Switch tab | Click |
 | Cycle tabs | Middle mouse scroll |
 | Drag tab | Hold 500ms + drag |
+| Maximize hovered tab | Hover a dock tab and press `ü` |
 
 ### Hold-to-Drag
 ```

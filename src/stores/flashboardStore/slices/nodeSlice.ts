@@ -1,0 +1,279 @@
+import type { FlashBoard, FlashBoardNode, FlashBoardGenerationRequest, FlashBoardJobState, FlashBoardResult, FlashBoardStoreState } from '../types';
+import { flashBoardJobService } from '../../../services/flashboard/FlashBoardJobService';
+import { useMediaStore } from '../../mediaStore';
+
+type Set = (partial: Partial<FlashBoardStoreState> | ((state: FlashBoardStoreState) => Partial<FlashBoardStoreState>)) => void;
+type Get = () => FlashBoardStoreState;
+
+export interface NodeSliceActions {
+  createDraftNode: (boardId: string, position?: { x: number; y: number }) => FlashBoardNode;
+  createReferenceNode: (boardId: string, mediaFileId: string, position?: { x: number; y: number }) => FlashBoardNode;
+  updateNodeRequest: (nodeId: string, patch: Partial<FlashBoardGenerationRequest>) => void;
+  queueNode: (nodeId: string) => void;
+  updateNodeJob: (nodeId: string, patch: Partial<FlashBoardJobState>) => void;
+  completeNode: (nodeId: string, result: FlashBoardResult) => void;
+  failNode: (nodeId: string, error: string) => void;
+  bringNodesToFront: (nodeIds: string[]) => void;
+  moveNode: (nodeId: string, position: { x: number; y: number }) => void;
+  resizeNode: (nodeId: string, size: { width: number; height: number }) => void;
+  sendNodesToBack: (nodeIds: string[]) => void;
+  duplicateNode: (nodeId: string) => FlashBoardNode | null;
+  removeNode: (nodeId: string) => void;
+  setSelectedNodes: (nodeIds: string[]) => void;
+  clearSelection: () => void;
+}
+
+function findAndUpdateNode(
+  boards: FlashBoard[],
+  nodeId: string,
+  updater: (node: FlashBoardNode) => FlashBoardNode
+): FlashBoard[] {
+  return boards.map((board) => {
+    const idx = board.nodes.findIndex((n) => n.id === nodeId);
+    if (idx === -1) return board;
+    const updatedNodes = [...board.nodes];
+    updatedNodes[idx] = updater(updatedNodes[idx]);
+    return { ...board, nodes: updatedNodes, updatedAt: Date.now() };
+  });
+}
+
+function reorderNodes(boards: FlashBoard[], nodeIds: string[], placement: 'front' | 'back'): FlashBoard[] {
+  const nodeIdSet = new Set(nodeIds);
+
+  return boards.map((board) => {
+    const matchingNodes = board.nodes.filter((node) => nodeIdSet.has(node.id));
+    if (matchingNodes.length === 0) {
+      return board;
+    }
+
+    const remainingNodes = board.nodes.filter((node) => !nodeIdSet.has(node.id));
+    const reorderedNodes =
+      placement === 'front'
+        ? [...remainingNodes, ...matchingNodes]
+        : [...matchingNodes, ...remainingNodes];
+
+    return {
+      ...board,
+      nodes: reorderedNodes,
+      updatedAt: Date.now(),
+    };
+  });
+}
+
+export const createNodeSlice = (set: Set, get: Get): NodeSliceActions => ({
+  createDraftNode: (boardId: string, position?: { x: number; y: number }): FlashBoardNode => {
+    const now = Date.now();
+    const node: FlashBoardNode = {
+      id: crypto.randomUUID(),
+      kind: 'generation',
+      createdAt: now,
+      updatedAt: now,
+      position: position ?? { x: 0, y: 0 },
+      size: { width: 280, height: 157.5 },
+      job: { status: 'draft' },
+    };
+    set((state) => ({
+      boards: state.boards.map((b) =>
+        b.id === boardId
+          ? { ...b, nodes: [...b.nodes, node], updatedAt: now }
+          : b
+      ),
+    }));
+    return node;
+  },
+
+  createReferenceNode: (boardId: string, mediaFileId: string, position?: { x: number; y: number }): FlashBoardNode => {
+    const now = Date.now();
+    const mediaFile = useMediaStore.getState().files.find((file) => file.id === mediaFileId);
+    const width = mediaFile?.width && mediaFile.width > 0 ? mediaFile.width : undefined;
+    const height = mediaFile?.height && mediaFile.height > 0 ? mediaFile.height : undefined;
+    const aspectRatio = width && height ? width / height : 16 / 9;
+    const baseWidth = 200;
+    const node: FlashBoardNode = {
+      id: crypto.randomUUID(),
+      kind: 'reference',
+      createdAt: now,
+      updatedAt: now,
+      position: position ?? { x: 0, y: 0 },
+      size: { width: baseWidth, height: baseWidth / aspectRatio },
+      result: {
+        mediaFileId,
+        mediaType: mediaFile?.type === 'image' ? 'image' : 'video',
+        width,
+        height,
+      },
+    };
+    set((state) => ({
+      boards: state.boards.map((b) =>
+        b.id === boardId
+          ? { ...b, nodes: [...b.nodes, node], updatedAt: now }
+          : b
+      ),
+    }));
+    return node;
+  },
+
+  updateNodeRequest: (nodeId: string, patch: Partial<FlashBoardGenerationRequest>): void => {
+    set((state) => ({
+      boards: findAndUpdateNode(state.boards, nodeId, (node) => ({
+        ...node,
+        request: { ...node.request, ...patch } as FlashBoardGenerationRequest,
+        updatedAt: Date.now(),
+      })),
+    }));
+  },
+
+  queueNode: (nodeId: string): void => {
+    const now = Date.now();
+    set((state) => ({
+      boards: findAndUpdateNode(state.boards, nodeId, (node) => ({
+        ...node,
+        job: {
+          ...node.job,
+          status: 'queued' as const,
+          error: undefined,
+          progress: undefined,
+          startedAt: now,
+          completedAt: undefined,
+        },
+        updatedAt: now,
+      })),
+    }));
+
+    const nextState = get();
+    for (const board of nextState.boards) {
+      const node = board.nodes.find((candidate) => candidate.id === nodeId);
+      if (node?.request) {
+        flashBoardJobService.submit({ nodeId, request: node.request });
+        break;
+      }
+    }
+  },
+
+  updateNodeJob: (nodeId: string, patch: Partial<FlashBoardJobState>): void => {
+    set((state) => ({
+      boards: findAndUpdateNode(state.boards, nodeId, (node) => ({
+        ...node,
+        job: { ...node.job, ...patch } as FlashBoardJobState,
+        updatedAt: Date.now(),
+      })),
+    }));
+  },
+
+  completeNode: (nodeId: string, result: FlashBoardResult): void => {
+    const now = Date.now();
+    set((state) => ({
+      boards: findAndUpdateNode(state.boards, nodeId, (node) => ({
+        ...node,
+        job: { ...node.job, status: 'completed' as const, completedAt: now },
+        result,
+        updatedAt: now,
+      })),
+    }));
+  },
+
+  failNode: (nodeId: string, error: string): void => {
+    set((state) => ({
+      boards: findAndUpdateNode(state.boards, nodeId, (node) => ({
+        ...node,
+        job: { ...node.job, status: 'failed' as const, error },
+        updatedAt: Date.now(),
+      })),
+    }));
+  },
+
+  bringNodesToFront: (nodeIds: string[]): void => {
+    if (nodeIds.length === 0) return;
+
+    set((state) => ({
+      boards: reorderNodes(state.boards, nodeIds, 'front'),
+    }));
+  },
+
+  moveNode: (nodeId: string, position: { x: number; y: number }): void => {
+    set((state) => ({
+      boards: findAndUpdateNode(state.boards, nodeId, (node) => ({
+        ...node,
+        position,
+        updatedAt: Date.now(),
+      })),
+    }));
+  },
+
+  resizeNode: (nodeId: string, size: { width: number; height: number }): void => {
+    set((state) => ({
+      boards: findAndUpdateNode(state.boards, nodeId, (node) => ({
+        ...node,
+        size,
+        updatedAt: Date.now(),
+      })),
+    }));
+  },
+
+  sendNodesToBack: (nodeIds: string[]): void => {
+    if (nodeIds.length === 0) return;
+
+    set((state) => ({
+      boards: reorderNodes(state.boards, nodeIds, 'back'),
+    }));
+  },
+
+  duplicateNode: (nodeId: string): FlashBoardNode | null => {
+    const state = get();
+    let sourceNode: FlashBoardNode | undefined;
+    let sourceBoardId: string | undefined;
+    for (const board of state.boards) {
+      const found = board.nodes.find((n) => n.id === nodeId);
+      if (found) {
+        sourceNode = found;
+        sourceBoardId = board.id;
+        break;
+      }
+    }
+    if (!sourceNode || !sourceBoardId) return null;
+
+    const now = Date.now();
+    const duplicate: FlashBoardNode = {
+      ...structuredClone(sourceNode),
+      id: crypto.randomUUID(),
+      createdAt: now,
+      updatedAt: now,
+      position: {
+        x: sourceNode.position.x + 30,
+        y: sourceNode.position.y + 30,
+      },
+    };
+
+    set((state) => ({
+      boards: state.boards.map((b) =>
+        b.id === sourceBoardId
+          ? { ...b, nodes: [...b.nodes, duplicate], updatedAt: now }
+          : b
+      ),
+    }));
+    return duplicate;
+  },
+
+  removeNode: (nodeId: string): void => {
+    set((state) => ({
+      boards: state.boards.map((b) => {
+        const idx = b.nodes.findIndex((n) => n.id === nodeId);
+        if (idx === -1) return b;
+        return {
+          ...b,
+          nodes: b.nodes.filter((n) => n.id !== nodeId),
+          updatedAt: Date.now(),
+        };
+      }),
+      selectedNodeIds: state.selectedNodeIds.filter((id) => id !== nodeId),
+    }));
+  },
+
+  setSelectedNodes: (nodeIds: string[]): void => {
+    set({ selectedNodeIds: nodeIds });
+  },
+
+  clearSelection: (): void => {
+    set({ selectedNodeIds: [] });
+  },
+});

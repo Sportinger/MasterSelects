@@ -6,6 +6,14 @@ import { useTimelineStore } from '../../stores/timeline';
 import { useYouTubeStore } from '../../stores/youtubeStore';
 import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useFlashBoardStore } from '../../stores/flashboardStore';
+import type {
+  FlashBoardGenerationMetadata,
+  FlashBoardStoreState,
+  ProjectFlashBoard,
+  ProjectFlashBoardNode,
+  ProjectFlashBoardState,
+} from '../../stores/flashboardStore/types';
 import {
   projectFileService,
   type ProjectMediaFile,
@@ -175,6 +183,69 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
   });
 }
 
+function serializeFlashBoardState(state: FlashBoardStoreState): ProjectFlashBoardState {
+  const generationMetadataByMediaId: Record<string, FlashBoardGenerationMetadata> = {};
+
+  const boards: ProjectFlashBoard[] = state.boards
+    .filter((board) => board.nodes.length > 0)
+    .map((board) => {
+      const nodes: ProjectFlashBoardNode[] = board.nodes.map((node) => {
+        if (node.result?.mediaFileId && node.request) {
+          generationMetadataByMediaId[node.result.mediaFileId] = {
+            mediaFileId: node.result.mediaFileId,
+            providerId: node.request.providerId,
+            version: node.request.version,
+            prompt: node.request.prompt,
+            negativePrompt: node.request.negativePrompt,
+            duration: node.request.duration,
+            aspectRatio: node.request.aspectRatio,
+            generateAudio: node.request.generateAudio,
+            multiShots: node.request.multiShots,
+            multiPrompt: node.request.multiPrompt,
+            startMediaFileId: node.request.startMediaFileId,
+            endMediaFileId: node.request.endMediaFileId,
+            referenceMediaFileIds: node.request.referenceMediaFileIds,
+            createdAt: new Date(node.createdAt).toISOString(),
+          };
+        }
+
+        let job: ProjectFlashBoardNode['job'];
+        if (node.job) {
+          const { remoteTaskId: _remoteTaskId, ...rest } = node.job;
+          job = rest;
+        }
+
+        return {
+          id: node.id,
+          kind: node.kind,
+          createdAt: new Date(node.createdAt).toISOString(),
+          updatedAt: new Date(node.updatedAt).toISOString(),
+          position: node.position,
+          size: node.size,
+          request: node.request,
+          job,
+          result: node.result,
+        };
+      });
+
+      return {
+        id: board.id,
+        name: board.name,
+        createdAt: new Date(board.createdAt).toISOString(),
+        updatedAt: new Date(board.updatedAt).toISOString(),
+        viewport: board.viewport,
+        nodes,
+      };
+    });
+
+  return {
+    version: 1,
+    activeBoardId: state.activeBoardId,
+    boards,
+    generationMetadataByMediaId,
+  };
+}
+
 // ============================================
 // SYNC & SAVE
 // ============================================
@@ -282,6 +353,14 @@ export async function syncStoresToProject(): Promise<void> {
       (projectData as any).meshItems = freshState.meshItems;
       (projectData as any).cameraItems = freshState.cameraItems;
       (projectData as any).splatEffectorItems = freshState.splatEffectorItems;
+
+      const flashBoardState = useFlashBoardStore.getState();
+      const hasBoardsToPersist = flashBoardState.boards.some((board) => board.nodes.length > 0);
+      if (hasBoardsToPersist) {
+        projectData.flashboard = serializeFlashBoardState(flashBoardState);
+      } else {
+        delete projectData.flashboard;
+      }
     }
 
     log.info(' Synced stores to project');

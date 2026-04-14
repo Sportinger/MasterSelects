@@ -10,6 +10,14 @@ import { useTimelineStore } from '../../stores/timeline';
 import { useYouTubeStore } from '../../stores/youtubeStore';
 import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useFlashBoardStore } from '../../stores/flashboardStore';
+import { flashBoardMediaBridge } from '../flashboard/FlashBoardMediaBridge';
+import type {
+  FlashBoard,
+  FlashBoardJobState,
+  FlashBoardNode,
+  ProjectFlashBoardState,
+} from '../../stores/flashboardStore/types';
 import {
   projectFileService,
   type ProjectMediaFile,
@@ -95,7 +103,10 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
           handle = result.handle;
           url = URL.createObjectURL(file);
           resolvedProjectPath = candidatePath;
-          await cacheProjectFileHandle(pm.id, result.handle, true);
+          const projectHandle = result.handle;
+          if (projectHandle) {
+            await cacheProjectFileHandle(pm.id, projectHandle, true);
+          }
           log.info('Restored file from project RAW path:', pm.name);
           break;
         } catch (e) {
@@ -339,6 +350,57 @@ function convertProjectFolderToStore(projectFolders: ProjectFolder[]): MediaFold
   }));
 }
 
+function hydrateFlashBoardFromProject(data: ProjectFlashBoardState): void {
+  const boards: FlashBoard[] = data.boards.map((board) => {
+    const nodes: FlashBoardNode[] = board.nodes.map((node) => {
+      let job: FlashBoardJobState | undefined;
+      if (node.job) {
+        const interrupted = node.job.status === 'queued' || node.job.status === 'processing';
+        job = {
+          ...node.job,
+          status: interrupted ? 'failed' : node.job.status,
+          error: interrupted && !node.job.error ? 'Job interrupted by reload' : node.job.error,
+        };
+      }
+
+      return {
+        id: node.id,
+        kind: node.kind,
+        createdAt: new Date(node.createdAt).getTime(),
+        updatedAt: new Date(node.updatedAt).getTime(),
+        position: node.position,
+        size: node.size,
+        request: node.request,
+        job,
+        result: node.result,
+      };
+    });
+
+    return {
+      id: board.id,
+      name: board.name,
+      createdAt: new Date(board.createdAt).getTime(),
+      updatedAt: new Date(board.updatedAt).getTime(),
+      viewport: board.viewport,
+      nodes,
+    };
+  });
+
+  useFlashBoardStore.setState({
+    activeBoardId: data.activeBoardId,
+    boards,
+    selectedNodeIds: [],
+    composer: {
+      draftNodeId: null,
+      isOpen: false,
+      generateAudio: false,
+      multiShots: false,
+      multiPrompt: [],
+      referenceMediaFileIds: [],
+    },
+  });
+}
+
 // ============================================
 // LOAD PROJECT TO STORES
 // ============================================
@@ -423,6 +485,27 @@ export async function loadProjectToStores(): Promise<void> {
   if (projectData.uiState?.dockLayout) {
     useDockStore.getState().setLayoutFromProject(projectData.uiState.dockLayout);
     log.info(' Restored dock layout from project');
+  }
+
+  if (projectData.flashboard) {
+    hydrateFlashBoardFromProject(projectData.flashboard);
+    flashBoardMediaBridge.hydrateMetadata(projectData.flashboard.generationMetadataByMediaId ?? {});
+    log.info(' Restored FlashBoard state from project');
+  } else {
+    useFlashBoardStore.setState({
+      activeBoardId: null,
+      boards: [],
+      selectedNodeIds: [],
+      composer: {
+        draftNodeId: null,
+        isOpen: false,
+        generateAudio: false,
+        multiShots: false,
+        multiPrompt: [],
+        referenceMediaFileIds: [],
+      },
+    });
+    flashBoardMediaBridge.hydrateMetadata({});
   }
 
   // Restore per-project UI settings to localStorage

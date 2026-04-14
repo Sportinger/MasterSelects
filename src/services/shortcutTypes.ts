@@ -35,6 +35,8 @@ export type ShortcutActionId =
   // History
   | 'history.undo'
   | 'history.redo'
+  // Panels
+  | 'panel.toggleHoveredFullscreen'
   // Preview
   | 'preview.editMode'
   | 'preview.slot1'
@@ -60,6 +62,7 @@ export type ShortcutCategory =
   | 'Navigation'
   | 'Editing'
   | 'Tools'
+  | 'Panels'
   | 'Project'
   | 'History'
   | 'Preview';

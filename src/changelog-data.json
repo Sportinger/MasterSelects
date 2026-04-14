@@ -1,5 +1,19 @@
 [
   {
+    "date": "2026-04-14",
+    "type": "fix",
+    "title": "3D Video Layers Stay Visible During Export",
+    "description": "Precise export now keeps 3D-transformed video layers renderable instead of dropping them to black when the export path uses dedicated HTML video elements.",
+    "section": "Export / 3D"
+  },
+  {
+    "date": "2026-04-14",
+    "type": "improve",
+    "title": "AI Plans Now Call Out Kling 3.0 and Nano Banana",
+    "description": "Planning docs now explicitly name Kling 3.0 as the current video track and Nano Banana as the current image-generation track, matching the repo's integrated services and hosted rollout direction.",
+    "section": "Docs / AI"
+  },
+  {
     "date": "2026-04-12",
     "type": "new",
     "title": "Camera Keyframes, FPS Navigation, and Splat Effector Clips",

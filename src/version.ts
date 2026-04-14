@@ -1,7 +1,6 @@
-// App version - INCREMENT ON EVERY COMMIT!
+// App version
 // Format: MAJOR.MINOR.PATCH
-// Increment PATCH (0.0.X) for each commit
-export const APP_VERSION = '1.5.0';
+export const APP_VERSION = '1.5.1';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';

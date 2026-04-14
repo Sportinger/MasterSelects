@@ -13,6 +13,7 @@ const CATEGORIES_ORDER: ShortcutCategory[] = [
   'Navigation',
   'Editing',
   'Tools',
+  'Panels',
   'Preview',
   'Project',
   'History',

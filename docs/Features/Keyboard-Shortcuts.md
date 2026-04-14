@@ -137,6 +137,12 @@ Applies to all selected clips. Cycles through all blend modes.
 | `Ctrl + Shift + Z` | Redo |
 | `Ctrl + Y` | Redo (alternative) |
 
+### Panels
+
+| Shortcut | Action |
+|----------|--------|
+| `ü` | Toggle fullscreen for the currently hovered dock tab |
+
 ---
 
 ## Modifiers

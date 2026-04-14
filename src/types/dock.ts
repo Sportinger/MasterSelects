@@ -87,6 +87,13 @@ export interface DockLayout {
   panelZoom: Record<string, number>; // Panel ID -> zoom level (1.0 = 100%)
 }
 
+export interface HoveredDockTabTarget {
+  kind: 'panel' | 'timeline-composition';
+  panelId: string;
+  groupId: string;
+  compositionId?: string;
+}
+
 // Drop target for drag operations
 export type DropPosition = 'center' | 'left' | 'right' | 'top' | 'bottom';
 

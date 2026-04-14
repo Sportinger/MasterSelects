@@ -4,6 +4,7 @@ import type { ProjectMediaFile } from './media.types';
 import type { ProjectComposition } from './composition.types';
 import type { ProjectFolder } from './folder.types';
 import type { DockLayout } from '../../../types/dock';
+import type { ProjectFlashBoardState } from '../../../stores/flashboardStore/types';
 
 export interface ProjectYouTubeVideo {
   id: string;
@@ -93,4 +94,7 @@ export interface ProjectFile {
 
   // UI state (dock layout, view positions, etc.)
   uiState?: ProjectUIState;
+
+  // FlashBoard AI workspace state
+  flashboard?: ProjectFlashBoardState;
 }

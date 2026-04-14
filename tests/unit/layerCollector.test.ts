@@ -989,6 +989,67 @@ describe('LayerCollector', () => {
     expect(collector.getDecoder()).toBe('HTMLVideo');
   });
 
+  it('keeps precise export videos renderable even without preview presented-frame history', () => {
+    const video = {
+      src: 'blob:export-video',
+      currentTime: 2.5,
+      readyState: 4,
+      seeking: false,
+      paused: true,
+      videoWidth: 1920,
+      videoHeight: 1080,
+    } as any;
+
+    hoisted.getRuntimeFrameProvider.mockReturnValue(null);
+    hoisted.readRuntimeFrameForSource.mockReturnValue(null);
+
+    const extTex = { label: 'export-video-texture' };
+    const textureManager = {
+      importVideoTexture: vi.fn(() => extTex),
+    };
+
+    const collector = new LayerCollector();
+    const result = collector.collect([{
+      id: 'layer-export-html',
+      sourceClipId: 'clip-export-html',
+      name: 'Video',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      source: {
+        type: 'video',
+        mediaTime: 2.5,
+        videoElement: video,
+      },
+    } as any], {
+      textureManager: textureManager as any,
+      scrubbingCache: null,
+      getLastVideoTime: () => undefined,
+      setLastVideoTime: () => {},
+      isExporting: true,
+      isPlaying: false,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(textureManager.importVideoTexture).toHaveBeenCalledWith(video);
+    expect(result[0]).toMatchObject({
+      isVideo: true,
+      externalTexture: extTex,
+      textureView: null,
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      displayedMediaTime: 2.5,
+      targetMediaTime: 2.5,
+      previewPath: 'live-import',
+    });
+    expect(collector.getDecoder()).toBe('HTMLVideo');
+    expect(collector.hasActiveVideo()).toBe(true);
+  });
+
   it('does not fall back to HTML preview when HTML preview fallback is disabled', () => {
     const video = {
       src: 'blob:test-video',

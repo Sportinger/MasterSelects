@@ -25,6 +25,13 @@ export function findNodeById(root: DockNode, id: string): DockNode | null {
   return null;
 }
 
+export function nodeContainsPanel(node: DockNode, panelId: string): boolean {
+  if (node.kind === 'tab-group') {
+    return node.panels.some((panel) => panel.id === panelId);
+  }
+  return nodeContainsPanel(node.children[0], panelId) || nodeContainsPanel(node.children[1], panelId);
+}
+
 // Find parent of a node
 export function findParentOfNode(
   root: DockNode,
