@@ -29,6 +29,8 @@ There is also a separate FCPXML export action for NLE interchange.
 
 `FrameExporter` is used for both the WebCodecs and HTMLVideo export buttons.
 
+Canvas-backed sources such as text, solids, and Lottie are re-rendered for every export frame before capture, so the exported frame matches the current timeline time instead of reusing a stale first-frame texture.
+
 ### Fast Mode
 
 - Uses WebCodecs sequential decoding for a single clip.

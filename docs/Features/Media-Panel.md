@@ -478,7 +478,8 @@ On project load:
 - Thumbnails restored from `Cache/thumbnails` by file hash
 - Existing proxies detected automatically, including legacy media-id based storage
 - Existing transcripts and analysis data loaded from the project folder
-- Blob URLs regenerated for available files
+- Dead blob/object URLs are regenerated for available files
+- If a retained `File` object is still present, image/video thumbnails are rebuilt when needed after refresh
 - Folder structure, expansion state, dock layout, and per-composition view state restored
 
 ### Media File IDs

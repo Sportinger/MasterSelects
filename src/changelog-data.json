@@ -1,5 +1,25 @@
 [
   {
+    "date": "2026-04-16",
+    "type": "new",
+    "title": "Lottie Clips Import, Loop, Properties, and Export",
+    "description": "`.lottie` packages and Lottie JSON now import as first-class timeline clips with deterministic preview/export rendering, save-load and clipboard persistence, a dedicated properties tab, and loop-aware timeline extension.",
+    "section": "Vector Animation / Timeline",
+    "commits": [
+      "0901f0ab"
+    ]
+  },
+  {
+    "date": "2026-04-16",
+    "type": "fix",
+    "title": "Media Previews Recover Broken Blob URLs After Reload",
+    "description": "The media panels now rebuild missing object URLs and thumbnails from retained File objects so image and video previews stop breaking after refresh or project restore.",
+    "section": "Media Panel / Persistence",
+    "commits": [
+      "0901f0ab"
+    ]
+  },
+  {
     "date": "2026-04-15",
     "type": "fix",
     "title": "README Startup Size and Three.js Bundle Notes Were Corrected",

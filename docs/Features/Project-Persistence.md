@@ -240,6 +240,7 @@ When opening a project, the app automatically:
 3. Checks read permission on restored handles
 4. Scans the `Raw/` folder for missing files (exact filename match, case-insensitive)
 5. Also checks stored IndexedDB handles for files not found in Raw
+6. Regenerates missing object URLs for files that were restored successfully and rebuilds previews when the underlying `File` object is still available
 
 ### Reload All Button
 In Media Panel toolbar:
@@ -301,6 +302,7 @@ interface ProjectFile {
 - Nested composition references
 - Text clip properties
 - Solid clip color
+- Vector animation settings (loop, end behavior, fit, animation selection, background)
 - Transcript and analysis data per clip
 - Scene description data
 
@@ -311,6 +313,7 @@ interface ProjectFile {
 - Bitrate and file size
 - hasAudio flag
 - Proxy status
+- Vector animation metadata (provider, animation names, default animation, frame count)
 - Folder organization (folderId)
 - `projectPath` when the file is copied into `Raw/`
 

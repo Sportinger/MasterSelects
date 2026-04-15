@@ -2,7 +2,7 @@
 
 # MasterSelects
 
-<h3>Browser-based Video Compositor & 3D Engine</h3>
+<h3>Browser-based Video Compositor, Vector Animation & 3D Engine</h3>
 
 <br>
 
@@ -15,11 +15,11 @@
 <p>
   GPU-first editing with <b>30 effects</b>, <b>37 blend modes</b>, <b>79 AI tools</b>, <b>real 3D via Three.js</b>, and only <b>14 dependencies</b>.<br>
   Built from scratch in <b>2,400+ lines of WGSL</b> and <b>138k lines of TypeScript</b>.<br>
-  Import <b>OBJ, glTF, GLB, FBX, PLY, SPLAT</b> assets directly into the timeline.
+  Import <b>.lottie, Lottie JSON, OBJ, glTF, GLB, FBX, PLY, SPLAT</b> assets directly into the timeline.
 </p>
 
 <p>
-  <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-1.5.1-blue.svg" alt="Version"></a>
+  <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-1.5.3-blue.svg" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
   <a href="https://app.fossa.com/projects/custom%2b61097%2fmasterselects"><img src="https://app.fossa.com/api/projects/custom%2b61097%2fmasterselects.svg?type=shield" alt="FOSSA Status"></a>
 </p>
@@ -56,6 +56,7 @@ Decoding depends on what the **browser** supports — the container is just the 
 <tr><td><b>Video codecs</b></td><td>H.264 (AVC), H.265 (HEVC)¹, VP8, VP9, AV1</td></tr>
 <tr><td><b>Audio files</b></td><td>WAV, MP3, OGG, FLAC, AAC, M4A, WMA, AIFF, OPUS</td></tr>
 <tr><td><b>Image</b></td><td>PNG, JPG/JPEG, WebP, GIF, BMP, SVG</td></tr>
+<tr><td><b>Vector animation</b></td><td><code>.lottie</code> packages and Lottie JSON files (content-sniffed)</td></tr>
 <tr><td><b>3D Models</b></td><td>OBJ, glTF, GLB, FBX — rendered via Three.js with lighting</td></tr>
 <tr><td><b>Gaussian Splats</b></td><td>PLY, SPLAT</td></tr>
 <tr><td><b>Download</b></td><td>YouTube, TikTok, Instagram, Twitter/X, Vimeo + <a href="https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md">all yt-dlp sites</a> via Native Helper</td></tr>
@@ -142,7 +143,8 @@ This requires the Native Helper to be running, a MasterSelects editor tab to be 
 | [**Export Pipeline**](docs/Features/Export.md) | WebCodecs Fast/Precise, FFmpeg WASM *(experimental / WIP)*, FCPXML, and PNG sequence export |
 | [**Live EQ & Audio**](docs/Features/Audio.md) | 10-band parametric EQ with real-time Web Audio preview |
 | [**Download Panel**](docs/Features/Download-Panel.md) | YouTube, TikTok, Instagram, Twitter/X, Vimeo, and other yt-dlp-supported sites via Native Helper |
-| [**Text & Solids**](docs/Features/Text-Clips.md) | 50 Google Fonts, stroke, shadow, solid color clips |
+| [**Vector Animation**](docs/Features/Vector-Animation.md) | `.lottie` and Lottie JSON clips with loop controls, fit, and deterministic preview/export |
+| [**Text & Solids**](docs/Features/Text-Clips.md) | 50 Google Fonts, stroke, shadow, and solid color clips |
 | [**Proxy System**](docs/Features/Proxy-System.md) | GPU-accelerated proxies with resume and cache indicator |
 | [**Output Manager**](docs/Features/Preview.md) | Multi-window outputs, source routing, corner pin warping, slice masks |
 | [**Slot Grid**](docs/Features/Slot-Grid.md) | Resolume-style 12x4 grid with multi-layer live playback and slot-clip trims |
@@ -318,6 +320,7 @@ src/
 │   ├── nativeHelper/    # Native decoder + WebSocket client
 │   ├── layerBuilder/    # Layer building + video sync
 │   ├── mediaRuntime/    # Media runtime bindings + playback
+│   ├── vectorAnimation/ # Lottie metadata sniffing + runtime canvas playback
 │   └── export/          # FCPXML export
 ├── shaders/             # WGSL (composite, effects, output, optical flow, slice)
 ├── hooks/               # React hooks (useEngine, useGlobalHistory, useMIDI, useTheme)

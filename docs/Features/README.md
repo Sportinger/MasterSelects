@@ -4,7 +4,7 @@
 
 Current feature documentation for the `staging` branch.
 
-Version 1.5.1 | April 2026
+Version 1.5.3 | April 2026
 
 ---
 
@@ -23,6 +23,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | **AI Control** | OpenAI chat with 79 exported tools plus local/native bridge access for external agents |
 | **AI Video Workspace** | Classic AI Video plus FlashBoard board-mode generation and media import |
 | **3D Layers** | Three.js layers, camera clips, Gaussian splats, and splat effectors |
+| **Vector Animation** | Lottie clips with deterministic canvas playback, looping, and export |
 | **Audio** | Element-synced playback, drift correction, waveform extraction, EQ, and audio export |
 | **Project Storage** | `project.json` source of truth, RAW-copy-first media flow, autosave, relink, backups |
 | **Native Helper** | Firefox storage backend, yt-dlp download flow, local AI bridge, native jobs |
@@ -53,6 +54,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | [Masks](./Masks.md) | Overlay mask editing, feathering, stored modes, and current limitations |
 | [Text Clips](./Text-Clips.md) | Canvas-backed text rendering, typography controls, and timeline text items |
 | [3D Layers](./3D-Layers.md) | Three.js scene path, native Gaussian splats, cameras, and splat effectors |
+| [Vector Animation](./Vector-Animation.md) | Lottie import, runtime playback, looping, and export behavior |
 | [Audio](./Audio.md) | Playback sync, EQ, waveform extraction, audio clip behavior, and export |
 | [Export](./Export.md) | WebCodecs fast/precise export, FFmpeg WASM path, and interchange output |
 | [Proxy System](./Proxy-System.md) | Proxy generation, on-disk frame layout, audio proxies, and warmup behavior |
@@ -109,7 +111,7 @@ Native Helper     Rust service with HTTP/WebSocket bridge, yt-dlp, helper-backed
 
 ## Audit Notes
 
-- The authoritative app version is [`src/version.ts`](../../src/version.ts), currently `1.5.1`.
+- The authoritative app version is [`src/version.ts`](../../src/version.ts), currently `1.5.3`.
 - Preview quality is wired into engine-backed preview resolution through `useEngine()`; it does not affect export resolution or the HTML-only source monitor.
 - `openComposition` and `searchVideos` are still the two known AI dispatch gaps.
 - Gaussian AI tool definitions exist in code but are not exported through `AI_TOOLS` yet.
@@ -120,4 +122,4 @@ Native Helper     Rust service with HTTP/WebSocket bridge, yt-dlp, helper-backed
 ## Version History
 
 See [`src/version.ts`](../../src/version.ts) and [`src/changelog-data.json`](../../src/changelog-data.json) for the authoritative changelog.
-Current version: 1.5.1.
+Current version: 1.5.3.

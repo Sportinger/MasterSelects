@@ -56,6 +56,7 @@ getTrackChildren()  // Query child tracks
 - Imported from `.lottie` packages or Lottie JSON files from the Media Panel.
 - Uses the same canvas-backed render path as text and solids, so preview, nested comps, and export stay deterministic.
 - Exposes per-clip loop, end behavior, fit, animation selection, and background controls in the Properties panel.
+- When loop is enabled, the clip can be extended beyond its source duration on the right trim edge without freezing on the first pass.
 
 ### Solid
 - Flat color clips used for mattes and backgrounds.
