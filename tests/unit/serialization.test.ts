@@ -128,6 +128,13 @@ describe('SerializableClip structure', () => {
       reversed: true,
       isComposition: true,
       compositionId: 'comp-1',
+      vectorAnimationSettings: {
+        loop: true,
+        endBehavior: 'loop',
+        fit: 'cover',
+        animationName: 'intro',
+        backgroundColor: '#123456',
+      },
     });
 
     const json = JSON.stringify(clip);
@@ -141,6 +148,13 @@ describe('SerializableClip structure', () => {
     expect(restored.reversed).toBe(true);
     expect(restored.isComposition).toBe(true);
     expect(restored.compositionId).toBe('comp-1');
+    expect(restored.vectorAnimationSettings).toEqual({
+      loop: true,
+      endBehavior: 'loop',
+      fit: 'cover',
+      animationName: 'intro',
+      backgroundColor: '#123456',
+    });
   });
 });
 

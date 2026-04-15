@@ -2,7 +2,7 @@
 
 # MasterSelects
 
-<h3>Browser-based Video Compositor & 3D Engine</h3>
+<h3>Browser-based Video Compositor, Vector Animation & 3D Engine</h3>
 
 <br>
 
@@ -15,11 +15,11 @@
 <p>
   GPU-first editing with <b>30 effects</b>, <b>37 blend modes</b>, <b>79 AI tools</b>, <b>real 3D via Three.js</b>, and only <b>14 dependencies</b>.<br>
   Built from scratch in <b>2,400+ lines of WGSL</b> and <b>138k lines of TypeScript</b>.<br>
-  Import <b>OBJ, glTF, GLB, FBX, PLY, SPLAT</b> assets directly into the timeline.
+  Import <b>.lottie, Lottie JSON, OBJ, glTF, GLB, FBX, PLY, SPLAT</b> assets directly into the timeline.
 </p>
 
 <p>
-  <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-1.5.1-blue.svg" alt="Version"></a>
+  <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-1.5.4-blue.svg" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
   <a href="https://app.fossa.com/projects/custom%2b61097%2fmasterselects"><img src="https://app.fossa.com/api/projects/custom%2b61097%2fmasterselects.svg?type=shield" alt="FOSSA Status"></a>
 </p>
@@ -56,14 +56,17 @@ Decoding depends on what the **browser** supports — the container is just the 
 <tr><td><b>Video codecs</b></td><td>H.264 (AVC), H.265 (HEVC)¹, VP8, VP9, AV1</td></tr>
 <tr><td><b>Audio files</b></td><td>WAV, MP3, OGG, FLAC, AAC, M4A, WMA, AIFF, OPUS</td></tr>
 <tr><td><b>Image</b></td><td>PNG, JPG/JPEG, WebP, GIF, BMP, SVG</td></tr>
+<tr><td><b>Vector animation</b></td><td><code>.lottie</code> packages and Lottie JSON files (content-sniffed)</td></tr>
 <tr><td><b>3D Models</b></td><td>OBJ, glTF, GLB, FBX — rendered via Three.js with lighting</td></tr>
 <tr><td><b>Gaussian Splats</b></td><td>PLY, SPLAT</td></tr>
 <tr><td><b>Download</b></td><td>YouTube, TikTok, Instagram, Twitter/X, Vimeo + <a href="https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md">all yt-dlp sites</a> via Native Helper</td></tr>
 <tr><th colspan="2">Export (Encode)</th></tr>
-<tr><td><b>Containers</b></td><td>MP4, WebM</td></tr>
+<tr><td><b>Video containers</b></td><td>MP4, WebM via WebCodecs / HTMLVideo; MOV, MKV, AVI, MXF via FFmpeg WASM</td></tr>
+<tr><td><b>FFmpeg codecs</b></td><td>ProRes, DNxHR, FFV1, UTVideo, MJPEG</td></tr>
 <tr><td><b>Video codecs</b></td><td>H.264, H.265¹, VP9, AV1 — GPU-accelerated via WebCodecs</td></tr>
-<tr><td><b>Audio codecs</b></td><td>AAC (MP4), Opus (WebM)</td></tr>
-<tr><td><b>Interchange</b></td><td>FCPXML (Final Cut Pro / DaVinci Resolve), PNG sequence</td></tr>
+<tr><td><b>Image export</b></td><td>PNG, JPG/JPEG, WebP, BMP (current playhead frame)</td></tr>
+<tr><td><b>Audio-only export</b></td><td>AAC or OGG/Opus depending on browser codec support</td></tr>
+<tr><td><b>Interchange</b></td><td>FCPXML (Final Cut Pro / DaVinci Resolve)</td></tr>
 </table>
 
 ¹ H.265 decode/encode depends on OS & hardware — full support on Windows, partial on macOS/Linux.
@@ -139,10 +142,11 @@ This requires the Native Helper to be running, a MasterSelects editor tab to be 
 | [**AI Integration**](docs/Features/AI-Integration.md) | Built-in OpenAI chat, 79 exported tool-callable edit actions, and local/native bridges for external agents |
 | [**FlashBoard**](docs/Features/FlashBoard.md) | Node-based AI canvas for text-to-video, image-to-video, and image generation |
 | [**Multicam AI**](docs/Features/Multicam-AI.md) | Sync cameras, transcribe footage, and generate Claude-powered multicam EDLs *(experimental)* |
-| [**Export Pipeline**](docs/Features/Export.md) | WebCodecs Fast/Precise, FFmpeg WASM *(experimental / WIP)*, FCPXML, and PNG sequence export |
+| [**Export Pipeline**](docs/Features/Export.md) | WebCodecs Fast/Precise, FFmpeg intermediates, image/audio-only export, FCPXML, and project-persistent presets |
 | [**Live EQ & Audio**](docs/Features/Audio.md) | 10-band parametric EQ with real-time Web Audio preview |
 | [**Download Panel**](docs/Features/Download-Panel.md) | YouTube, TikTok, Instagram, Twitter/X, Vimeo, and other yt-dlp-supported sites via Native Helper |
-| [**Text & Solids**](docs/Features/Text-Clips.md) | 50 Google Fonts, stroke, shadow, solid color clips |
+| [**Vector Animation**](docs/Features/Vector-Animation.md) | `.lottie` and Lottie JSON clips with loop controls, fit, and deterministic preview/export |
+| [**Text & Solids**](docs/Features/Text-Clips.md) | 50 Google Fonts, stroke, shadow, and solid color clips |
 | [**Proxy System**](docs/Features/Proxy-System.md) | GPU-accelerated proxies with resume and cache indicator |
 | [**Output Manager**](docs/Features/Preview.md) | Multi-window outputs, source routing, corner pin warping, slice masks |
 | [**Slot Grid**](docs/Features/Slot-Grid.md) | Resolume-style 12x4 grid with multi-layer live playback and slot-clip trims |
@@ -230,7 +234,7 @@ If something breaks, refresh. If it's still broken, [open an issue](https://gith
 
 - **Frontend:** React 19, TypeScript, Zustand, Vite 7.2
 - **Rendering:** WebGPU + 2,500+ lines of WGSL shaders
-- **Video:** WebCodecs, mp4box, mp4-muxer, webm-muxer, HTMLVideo fallback, experimental FFmpeg WASM export path
+- **Video:** WebCodecs, MediaBunny, mp4box, HTMLVideo fallback, and experimental FFmpeg WASM export path
 - **Audio:** Web Audio API with 10-band live EQ, element-synced playback, drift correction, and waveform extraction
 - **AI:** Built-in OpenAI editor chat with 79 exported tools, Native Helper HTTP bridge for Claude Code / external agents, Claude/Anthropic for experimental multicam EDLs, SAM2 via ONNX Runtime, MatAnyone2 via Native Helper, local Whisper via Hugging Face Transformers, and Kie.ai / hosted cloud / PiAPI-backed generation flows
 - **Native:** Rust helper for Firefox storage backend, native decode/encode, and yt-dlp downloads
@@ -318,6 +322,7 @@ src/
 │   ├── nativeHelper/    # Native decoder + WebSocket client
 │   ├── layerBuilder/    # Layer building + video sync
 │   ├── mediaRuntime/    # Media runtime bindings + playback
+│   ├── vectorAnimation/ # Lottie metadata sniffing + runtime canvas playback
 │   └── export/          # FCPXML export
 ├── shaders/             # WGSL (composite, effects, output, optical flow, slice)
 ├── hooks/               # React hooks (useEngine, useGlobalHistory, useMIDI, useTheme)

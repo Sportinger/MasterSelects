@@ -1,9 +1,11 @@
 // Media-related types
 
+import type { VectorAnimationMetadata } from '../../../types/vectorAnimation';
+
 export interface ProjectMediaFile {
   id: string;
   name: string;
-  type: 'video' | 'audio' | 'image';
+  type: 'video' | 'audio' | 'image' | 'lottie' | 'rive';
 
   // Path to original file (absolute or relative to Raw/)
   sourcePath: string;
@@ -25,6 +27,8 @@ export interface ProjectMediaFile {
 
   // Proxy status
   hasProxy: boolean;
+
+  vectorAnimation?: VectorAnimationMetadata;
 
   // Folder organization
   folderId: string | null;

@@ -2,9 +2,25 @@
 
 import type { CompositionTimelineData, TranscriptWord, TranscriptStatus, AnalysisStatus } from '../../types';
 import type { SplatEffectorSettings } from '../../types/splatEffector';
+import type { VectorAnimationMetadata, VectorAnimationProvider } from '../../types/vectorAnimation';
 
 // Media item types
-export type MediaType = 'video' | 'audio' | 'image' | 'composition' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector';
+export type ImportedMediaType =
+  | 'video'
+  | 'audio'
+  | 'image'
+  | 'model'
+  | 'gaussian-avatar'
+  | 'gaussian-splat'
+  | VectorAnimationProvider;
+
+export type MediaType =
+  | ImportedMediaType
+  | 'composition'
+  | 'text'
+  | 'solid'
+  | 'camera'
+  | 'splat-effector';
 
 // Proxy status for video files
 export type ProxyStatus = 'none' | 'generating' | 'ready' | 'error';
@@ -54,7 +70,7 @@ export interface MediaItem {
 
 // Imported file
 export interface MediaFile extends MediaItem {
-  type: 'video' | 'audio' | 'image' | 'model' | 'gaussian-avatar' | 'gaussian-splat';
+  type: ImportedMediaType;
   file?: File;
   url: string;
   duration?: number;
@@ -91,6 +107,7 @@ export interface MediaFile extends MediaItem {
   projectPath?: string;
   // Import loading state
   isImporting?: boolean;
+  vectorAnimation?: VectorAnimationMetadata;
 }
 
 // Text item (for Media Panel - can be dragged to timeline)

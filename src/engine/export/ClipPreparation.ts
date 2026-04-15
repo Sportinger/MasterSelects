@@ -15,6 +15,7 @@ import { bindSourceRuntimeForOwner } from '../../services/mediaRuntime/clipBindi
 import { mediaRuntimeRegistry } from '../../services/mediaRuntime/registry';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 import type { WebCodecsPlayer } from '../WebCodecsPlayer';
+import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
 
 const log = Logger.create('ClipPreparation');
 const FAST_EXPORT_SINGLE_FILE_LIMIT_BYTES = 1536 * 1024 * 1024; // 1.5 GB
@@ -300,6 +301,29 @@ export async function prepareClipsForExport(
     const clipEnd = clip.startTime + clip.duration;
     return clip.startTime < endTime && clipEnd > startTime;
   });
+
+  const lottieClips: TimelineClip[] = [];
+  for (const clip of videoClips) {
+    if (clip.source?.type === 'lottie') {
+      lottieClips.push(clip);
+    }
+    if (clip.isComposition && clip.nestedClips?.length) {
+      for (const nestedClip of clip.nestedClips) {
+        if (nestedClip.source?.type === 'lottie') {
+          lottieClips.push(nestedClip);
+        }
+      }
+    }
+  }
+
+  if (lottieClips.length > 0) {
+    await Promise.all(lottieClips.map(async (clip) => {
+      if (!clip.file) {
+        return;
+      }
+      await lottieRuntimeManager.prepareClipSource(clip, clip.file);
+    }));
+  }
 
   log.info(`Preparing ${videoClips.length} video clips for ${exportMode.toUpperCase()} export...`);
 

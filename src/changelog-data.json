@@ -1,5 +1,56 @@
 [
   {
+    "date": "2026-04-16",
+    "type": "improve",
+    "title": "Export Panel Was Rebuilt Around Deliverables and Presets",
+    "description": "The export tab now uses grouped Video/Image/Audio/XML containers, a sticky badge summary, clickable section jumps, named project-persistent presets with Load/Update/Save, and shared export state that participates in undo/redo and project restore.",
+    "section": "Export / Persistence",
+    "commits": [
+      "337031ff",
+      "e5a74cc6"
+    ]
+  },
+  {
+    "date": "2026-04-16",
+    "type": "fix",
+    "title": "WebCodecs Export Bitrate Controls Now Reach the Encoder",
+    "description": "The selected bitrate and VBR/CBR mode are now passed into the WebCodecs encoder configuration, with a constant-bitrate fallback path and clearer UI messaging that browser bitrate values are still targets rather than exact final file sizes.",
+    "section": "Export / Encoding",
+    "commits": [
+      "e5a74cc6"
+    ]
+  },
+  {
+    "date": "2026-04-16",
+    "type": "improve",
+    "title": "Export Documentation and README Now Match the Current Runtime",
+    "description": "The export docs, project persistence docs, and README were updated to reflect the current preset system, container modes, FFmpeg intermediate formats, audio-only/image export behavior, and the actual MediaBunny-based export stack.",
+    "section": "Documentation",
+    "commits": [
+      "e5a74cc6"
+    ]
+  },
+  {
+    "date": "2026-04-16",
+    "type": "new",
+    "title": "Lottie Clips Import, Loop, Properties, and Export",
+    "description": "`.lottie` packages and Lottie JSON now import as first-class timeline clips with deterministic preview/export rendering, save-load and clipboard persistence, a dedicated properties tab, and loop-aware timeline extension.",
+    "section": "Vector Animation / Timeline",
+    "commits": [
+      "0901f0ab"
+    ]
+  },
+  {
+    "date": "2026-04-16",
+    "type": "fix",
+    "title": "Media Previews Recover Broken Blob URLs After Reload",
+    "description": "The media panels now rebuild missing object URLs and thumbnails from retained File objects so image and video previews stop breaking after refresh or project restore.",
+    "section": "Media Panel / Persistence",
+    "commits": [
+      "0901f0ab"
+    ]
+  },
+  {
     "date": "2026-04-15",
     "type": "fix",
     "title": "README Startup Size and Three.js Bundle Notes Were Corrected",

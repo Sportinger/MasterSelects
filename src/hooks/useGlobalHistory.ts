@@ -5,6 +5,7 @@ import { useTimelineStore } from '../stores/timeline';
 import { useMediaStore } from '../stores/mediaStore';
 import { useDockStore } from '../stores/dockStore';
 import { useFlashBoardStore } from '../stores/flashboardStore';
+import { useExportStore } from '../stores/exportStore';
 import type {
   FlashBoard,
   FlashBoardComposerState,
@@ -107,6 +108,10 @@ export function useGlobalHistory() {
       flashboard: {
         getState: useFlashBoardStore.getState,
         setState: useFlashBoardStore.setState,
+      },
+      export: {
+        getState: useExportStore.getState,
+        setState: useExportStore.setState,
       },
     });
 
@@ -251,6 +256,26 @@ export function useGlobalHistory() {
       { equalityFn: shallowEqual, fireImmediately: false }
     );
 
+    const unsubExport = useExportStore.subscribe(
+      (state) => ({
+        settings: state.settings,
+        presets: state.presets,
+        selectedPresetId: state.selectedPresetId,
+      }),
+      (curr, prev) => {
+        if (useHistoryStore.getState().isApplying) return;
+
+        if (curr.presets !== prev.presets) {
+          debouncedCapture('Modify export presets');
+        } else if (curr.selectedPresetId !== prev.selectedPresetId) {
+          debouncedCapture('Select export preset');
+        } else if (curr.settings !== prev.settings) {
+          debouncedCapture('Modify export settings');
+        }
+      },
+      { equalityFn: shallowEqual, fireImmediately: false }
+    );
+
     return () => {
       if (pendingTimer.current) {
         clearTimeout(pendingTimer.current);
@@ -260,6 +285,7 @@ export function useGlobalHistory() {
       unsubMedia();
       unsubDock();
       unsubFlashBoard();
+      unsubExport();
     };
   }, []);
 

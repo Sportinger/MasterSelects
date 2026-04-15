@@ -19,6 +19,7 @@ export interface ExportSettings {
   codec: VideoCodec;
   container: ContainerFormat;
   bitrate: number;
+  rateControl?: 'vbr' | 'cbr';
   startTime: number;
   endTime: number;
   // Audio settings

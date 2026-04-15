@@ -7,6 +7,7 @@ import { Logger } from '../../services/logger';
 import { captureSnapshot } from '../historyStore';
 import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../mediaStore';
 import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
+import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
 
 const log = Logger.create('Clipboard');
 
@@ -55,6 +56,9 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         outPoint: clip.outPoint,
         sourceType: clip.source?.type || 'video',
         naturalDuration: clip.source?.naturalDuration,
+        vectorAnimationSettings: clip.source?.vectorAnimationSettings
+          ? { ...clip.source.vectorAnimationSettings }
+          : undefined,
         cameraSettings: clip.source?.type === 'camera' && clip.source.cameraSettings
           ? { ...clip.source.cameraSettings }
           : undefined,
@@ -194,6 +198,11 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
           type: 'text' as const,
           mediaFileId: clipData.mediaFileId,
           naturalDuration: clipData.naturalDuration ?? clipData.duration,
+        } : clipData.sourceType === 'lottie' && clipData.mediaFileId ? {
+          type: 'lottie' as const,
+          mediaFileId: clipData.mediaFileId,
+          naturalDuration: clipData.naturalDuration ?? clipData.duration,
+          vectorAnimationSettings: clipData.vectorAnimationSettings,
         } : clipData.mediaFileId ? {
           type: clipData.sourceType,
           mediaFileId: clipData.mediaFileId,
@@ -268,7 +277,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
     log.info('Pasted clips', { count: newClips.length, ids: newClips.map(c => c.id) });
 
     // Reload media for pasted clips asynchronously
-    import('../mediaStore').then(({ useMediaStore }) => {
+    import('../mediaStore').then(async ({ useMediaStore }) => {
       const mediaStore = useMediaStore.getState();
 
       for (const newClip of newClips) {
@@ -370,9 +379,60 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
           continue;
         }
 
-        // Load media based on type
-        const fileUrl = URL.createObjectURL(mediaFile.file);
         const sourceType = newClip.source?.type;
+
+        if (sourceType === 'lottie') {
+          try {
+            const runtimeClip: TimelineClip = {
+              ...newClip,
+              file: mediaFile.file,
+              source: {
+                type: 'lottie',
+                mediaFileId,
+                naturalDuration: newClip.source?.naturalDuration ?? newClip.duration,
+                vectorAnimationSettings: newClip.source?.vectorAnimationSettings,
+              },
+            };
+            const runtime = await lottieRuntimeManager.prepareClipSource(runtimeClip, mediaFile.file);
+            const naturalDuration =
+              runtime.metadata.duration ??
+              newClip.source?.naturalDuration ??
+              newClip.duration;
+            lottieRuntimeManager.renderClipAtTime(runtimeClip, runtimeClip.startTime);
+
+            set((state) => ({
+              clips: state.clips.map((c) =>
+                c.id === newClip.id
+                  ? {
+                      ...c,
+                      file: mediaFile.file!,
+                      source: {
+                        type: 'lottie' as const,
+                        textCanvas: runtime.canvas,
+                        mediaFileId,
+                        naturalDuration,
+                        vectorAnimationSettings: runtimeClip.source?.vectorAnimationSettings,
+                      },
+                      isLoading: false,
+                      needsReload: false,
+                    }
+                  : c
+              ),
+            }));
+          } catch (error) {
+            log.warn('Failed to restore pasted lottie clip', { clipId: newClip.id, error });
+            set((state) => ({
+              clips: state.clips.map((c) =>
+                c.id === newClip.id
+                  ? { ...c, isLoading: false }
+                  : c
+              ),
+            }));
+          }
+          continue;
+        }
+
+        const fileUrl = URL.createObjectURL(mediaFile.file);
 
         if (sourceType === 'video') {
           const video = document.createElement('video');

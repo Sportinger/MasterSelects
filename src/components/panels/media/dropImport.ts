@@ -1,4 +1,4 @@
-import { detectMediaType } from '../../../stores/timeline/helpers/mediaTypeHelpers';
+import { classifyMediaType } from '../../../stores/timeline/helpers/mediaTypeHelpers';
 
 export interface MediaFolderLike {
   id: string;
@@ -58,10 +58,6 @@ interface FileSystemDirectoryEntryLike extends FileSystemEntryLike {
 interface FileSystemDirectoryHandleIteratorLike {
   values?: () => AsyncIterable<FileSystemHandle>;
   entries?: () => AsyncIterable<[string, FileSystemHandle]>;
-}
-
-function isSupportedImportFile(file: File): boolean {
-  return detectMediaType(file) !== 'unknown';
 }
 
 function buildDropRecordKey(record: DroppedMediaFileRecord): string {
@@ -185,10 +181,6 @@ export async function collectDroppedMediaFiles(dataTransfer: DataTransfer): Prom
   const seenLooseFileKeys = new Set<string>();
 
   const pushRecord = (record: DroppedMediaFileRecord): void => {
-    if (!isSupportedImportFile(record.file)) {
-      return;
-    }
-
     const key = buildDropRecordKey(record);
     if (seenRecordKeys.has(key)) {
       return;
@@ -211,11 +203,14 @@ export async function collectDroppedMediaFiles(dataTransfer: DataTransfer): Prom
         const handle = await itemWithHandle.getAsFileSystemHandle();
         if (handle?.kind === 'file') {
           const fileHandle = handle as FileSystemFileHandle;
-          pushRecord({
-            file: await fileHandle.getFile(),
-            handle: fileHandle,
-            folderSegments: [],
-          });
+          const file = await fileHandle.getFile();
+          if ((await classifyMediaType(file)) !== 'unknown') {
+            pushRecord({
+              file,
+              handle: fileHandle,
+              folderSegments: [],
+            });
+          }
           continue;
         }
 
@@ -234,10 +229,13 @@ export async function collectDroppedMediaFiles(dataTransfer: DataTransfer): Prom
     if (typeof itemWithHandle.webkitGetAsEntry === 'function') {
       const entry = itemWithHandle.webkitGetAsEntry();
       if (entry?.isFile) {
-        pushRecord({
-          file: await getFileFromEntry(entry as unknown as FileSystemFileEntryLike),
-          folderSegments: [],
-        });
+        const file = await getFileFromEntry(entry as unknown as FileSystemFileEntryLike);
+        if ((await classifyMediaType(file)) !== 'unknown') {
+          pushRecord({
+            file,
+            folderSegments: [],
+          });
+        }
         continue;
       }
 
@@ -253,7 +251,7 @@ export async function collectDroppedMediaFiles(dataTransfer: DataTransfer): Prom
     }
 
     const file = item.getAsFile();
-    if (file) {
+    if (file && (await classifyMediaType(file)) !== 'unknown') {
       pushRecord({
         file,
         folderSegments: [],
@@ -266,10 +264,12 @@ export async function collectDroppedMediaFiles(dataTransfer: DataTransfer): Prom
       continue;
     }
 
-    pushRecord({
-      file,
-      folderSegments: [],
-    });
+    if ((await classifyMediaType(file)) !== 'unknown') {
+      pushRecord({
+        file,
+        folderSegments: [],
+      });
+    }
   }
 
   return records;
@@ -289,10 +289,6 @@ export function planDroppedMediaImports(
   }
 
   for (const record of records) {
-    if (!isSupportedImportFile(record.file)) {
-      continue;
-    }
-
     let parentId = targetParentId;
     for (const segment of record.folderSegments) {
       const trimmedSegment = segment.trim();

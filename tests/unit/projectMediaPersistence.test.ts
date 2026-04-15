@@ -218,6 +218,113 @@ describe('project media persistence', () => {
     ]);
   });
 
+  it('persists vector animation metadata and clip settings for lottie assets', async () => {
+    mocks.mediaState.activeCompositionId = 'comp-1';
+    mocks.mediaState.files = [{
+      id: 'media-lottie-1',
+      name: 'anim.lottie',
+      type: 'lottie',
+      filePath: 'C:/capture/anim.lottie',
+      projectPath: 'Raw/anim.lottie',
+      duration: 4,
+      width: 640,
+      height: 360,
+      fps: 30,
+      fileSize: 4096,
+      proxyStatus: 'none',
+      parentId: null,
+      createdAt: 1,
+      vectorAnimation: {
+        provider: 'lottie',
+        width: 640,
+        height: 360,
+        fps: 30,
+        duration: 4,
+        totalFrames: 120,
+        animationNames: ['intro', 'loop'],
+        defaultAnimationName: 'intro',
+      },
+    }];
+    mocks.mediaState.compositions = [{
+      id: 'comp-1',
+      name: 'Comp 1',
+      type: 'composition',
+      parentId: null,
+      createdAt: 1,
+      width: 1920,
+      height: 1080,
+      frameRate: 30,
+      duration: 60,
+      backgroundColor: '#000000',
+      timelineData: { tracks: [], clips: [] },
+    }];
+    mocks.timelineState.getSerializableState.mockReturnValue({
+      tracks: [{ id: 'track-v1', name: 'Video 1', type: 'video', height: 60, muted: false, visible: true, solo: false }],
+      clips: [{
+        id: 'clip-lottie-1',
+        trackId: 'track-v1',
+        name: 'anim.lottie',
+        mediaFileId: 'media-lottie-1',
+        startTime: 0,
+        duration: 4,
+        inPoint: 0,
+        outPoint: 4,
+        sourceType: 'lottie',
+        naturalDuration: 4,
+        transform: {
+          opacity: 1,
+          blendMode: 'normal',
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+        },
+        effects: [],
+        vectorAnimationSettings: {
+          loop: true,
+          endBehavior: 'loop',
+          fit: 'cover',
+          animationName: 'loop',
+          backgroundColor: '#112233',
+        },
+      }],
+      playheadPosition: 0,
+      duration: 60,
+      zoom: 1,
+      scrollX: 0,
+      inPoint: null,
+      outPoint: null,
+      loopPlayback: false,
+    });
+
+    const { syncStoresToProject } = await import('../../src/services/project/projectSave');
+    await syncStoresToProject();
+
+    expect(mocks.updateMedia).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 'media-lottie-1',
+        type: 'lottie',
+        vectorAnimation: expect.objectContaining({
+          provider: 'lottie',
+          animationNames: ['intro', 'loop'],
+        }),
+      }),
+    ]);
+    expect(mocks.updateCompositions).toHaveBeenCalledWith([
+      expect.objectContaining({
+        clips: [
+          expect.objectContaining({
+            id: 'clip-lottie-1',
+            sourceType: 'lottie',
+            vectorAnimationSettings: expect.objectContaining({
+              animationName: 'loop',
+              backgroundColor: '#112233',
+            }),
+          }),
+        ],
+      }),
+    ]);
+  });
+
   it('persists gaussian splat transform scale and splat settings into project compositions', async () => {
     mocks.mediaState.activeCompositionId = 'comp-1';
     mocks.mediaState.compositions = [{

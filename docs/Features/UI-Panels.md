@@ -327,6 +327,7 @@ The unified Properties panel adapts its tabs to the selected clip type and to sl
 
 | Clip Type | Tabs |
 |-----------|------|
+| **Lottie** | Lottie, Transform, Effects, Masks |
 | **Gaussian avatar** | Blendshapes, Transform, Effects, Masks |
 | **Gaussian splat** | Transform, Gaussian Splat, Effects, Masks |
 | **Camera** | Transform, Camera |

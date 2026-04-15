@@ -15,8 +15,10 @@ import type {
   TextClipProperties,
   Text3DProperties,
   Layer,
+  SerializableClip,
 } from '../../types';
 import type { Composition } from '../mediaStore';
+import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
 
 // Re-export imported types for convenience
 export type {
@@ -35,6 +37,7 @@ export type {
   TextClipProperties,
   Text3DProperties,
   Layer,
+  SerializableClip,
 };
 
 // Mask edit mode types
@@ -399,7 +402,7 @@ export interface ClipboardClipData {
   duration: number;
   inPoint: number;
   outPoint: number;
-  sourceType: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector';
+  sourceType: SerializableClip['sourceType'];
   naturalDuration?: number;
   transform: ClipTransform;
   effects: Effect[];
@@ -412,6 +415,7 @@ export interface ClipboardClipData {
   textProperties?: import('../../types').TextClipProperties;
   text3DProperties?: import('../../types').Text3DProperties;
   solidColor?: string;
+  vectorAnimationSettings?: VectorAnimationClipSettings;
   cameraSettings?: import('../mediaStore/types').SceneCameraSettings;
   meshType?: import('../mediaStore/types').MeshPrimitiveType;
   splatEffectorSettings?: import('../../types/splatEffector').SplatEffectorSettings;

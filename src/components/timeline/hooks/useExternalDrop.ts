@@ -9,6 +9,7 @@ import {
   isGaussianSplatFile,
   getVideoMetadataQuick,
 } from '../utils/fileTypeHelpers';
+import { classifyMediaType } from '../../../stores/timeline/helpers/mediaTypeHelpers';
 import {
   findClosestNonOverlappingStartTime,
   findFirstTrackWithoutOverlap,
@@ -1112,7 +1113,7 @@ export function useExternalDrop({
         const mediaFile = mediaStore.files.find((f) => f.id === mediaFileId);
         if (mediaFile?.file) {
           // Pass mediaType override for formats that are intentionally clip-typed.
-          const typeOverride = mediaFile.type === 'gaussian-splat'
+          const typeOverride = mediaFile.type === 'gaussian-splat' || mediaFile.type === 'lottie' || mediaFile.type === 'rive'
             ? mediaFile.type
             : undefined;
           addClip(newTrackId, mediaFile.file, startTime, mediaFile.duration, mediaFileId, typeOverride);
@@ -1135,8 +1136,12 @@ export function useExternalDrop({
                 const file = await handle.getFile();
                 if (filePath) (file as any).path = filePath;
                 if (isMediaFile(file)) {
+                  const typeOverride = await classifyMediaType(file);
+                  if (typeOverride === 'unknown') {
+                    return;
+                  }
                   // Add clip immediately for instant visual feedback
-                  addClip(newTrackId, file, startTime, cachedDuration);
+                  addClip(newTrackId, file, startTime, cachedDuration, undefined, typeOverride);
                   // Fire-and-forget media import (loadVideoMedia will pick it up)
                   mediaStore.importFilesWithHandles([{ file, handle, absolutePath: filePath }]);
                   log.debug('Imported file with handle:', { name: file.name, absolutePath: filePath });
@@ -1152,8 +1157,12 @@ export function useExternalDrop({
           const file = item.getAsFile();
           if (file && filePath) (file as any).path = filePath;
           if (file && isMediaFile(file)) {
+            const typeOverride = await classifyMediaType(file);
+            if (typeOverride === 'unknown') {
+              return;
+            }
             // Add clip immediately for instant visual feedback
-            addClip(newTrackId, file, startTime, cachedDuration);
+            addClip(newTrackId, file, startTime, cachedDuration, undefined, typeOverride);
             // Fire-and-forget media import (loadVideoMedia will pick it up)
             mediaStore.importFile(file);
           }
@@ -1261,7 +1270,7 @@ export function useExternalDrop({
           // Video+audio files are allowed on both track types
 
           // Pass mediaType override for formats that are intentionally clip-typed.
-          const typeOverride = mediaFile.type === 'gaussian-splat'
+          const typeOverride = mediaFile.type === 'gaussian-splat' || mediaFile.type === 'lottie' || mediaFile.type === 'rive'
             ? mediaFile.type
             : undefined;
           addClip(trackId, mediaFile.file, resolveDropStartTime(mediaFile.duration), mediaFile.duration, mediaFileId, typeOverride);
@@ -1294,6 +1303,10 @@ export function useExternalDrop({
                 }
                 log.debug('File from handle:', { name: file.name, type: file.type, size: file.size, path: filePath });
                 if (isMediaFile(file)) {
+                  const typeOverride = await classifyMediaType(file);
+                  if (typeOverride === 'unknown') {
+                    return;
+                  }
                   // Audio-only files can only go on audio tracks
                   const fileIsAudio = isAudioFile(file);
                   if (fileIsAudio && isVideoTrack) {
@@ -1302,7 +1315,7 @@ export function useExternalDrop({
                   }
 
                   // Add clip immediately for instant visual feedback
-                  addClip(trackId, file, resolveDropStartTime(cachedDuration), cachedDuration);
+                  addClip(trackId, file, resolveDropStartTime(cachedDuration), cachedDuration, undefined, typeOverride);
                   // Fire-and-forget media import (loadVideoMedia will pick it up)
                   mediaStore.importFilesWithHandles([{ file, handle, absolutePath: filePath }]);
                   log.debug('Imported file with handle:', { name: file.name, absolutePath: filePath });
@@ -1321,6 +1334,10 @@ export function useExternalDrop({
           }
           log.debug('Fallback file:', { name: file?.name, type: file?.type, path: filePath });
           if (file && isMediaFile(file)) {
+            const typeOverride = await classifyMediaType(file);
+            if (typeOverride === 'unknown') {
+              return;
+            }
             // Audio-only files can only go on audio tracks
             const fileIsAudio = isAudioFile(file);
             if (fileIsAudio && isVideoTrack) {
@@ -1329,7 +1346,7 @@ export function useExternalDrop({
             }
 
             // Add clip immediately for instant visual feedback
-            addClip(trackId, file, resolveDropStartTime(cachedDuration), cachedDuration);
+            addClip(trackId, file, resolveDropStartTime(cachedDuration), cachedDuration, undefined, typeOverride);
             // Fire-and-forget media import (loadVideoMedia will pick it up)
             mediaStore.importFile(file);
           }

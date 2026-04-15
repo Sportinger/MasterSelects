@@ -164,9 +164,11 @@ export class RawMediaService {
     const id = `media-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     // Determine file type
-    let type: 'video' | 'audio' | 'image' = 'video';
+    let type: 'video' | 'audio' | 'image' | 'lottie' | 'rive' = 'video';
     if (file.type.startsWith('audio/')) type = 'audio';
     else if (file.type.startsWith('image/')) type = 'image';
+    else if (file.name.toLowerCase().endsWith('.lottie')) type = 'lottie';
+    else if (file.name.toLowerCase().endsWith('.riv')) type = 'rive';
 
     // Get source path (if available from File System Access API)
     let sourcePath = file.name;

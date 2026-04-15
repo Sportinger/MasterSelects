@@ -12,6 +12,7 @@ import { audioManager, audioStatusTracker } from '../../../services/audioManager
 import { Logger } from '../../../services/logger';
 import { getInterpolatedClipTransform } from '../../../utils/keyframeInterpolation';
 import { DEFAULT_TRANSFORM } from '../../../stores/timeline/constants';
+import { lottieRuntimeManager } from '../../../services/vectorAnimation/LottieRuntimeManager';
 
 const log = Logger.create('useLayerSync');
 
@@ -240,6 +241,37 @@ export function useLayerSync({
             source: {
               type: 'image',
               imageElement: nestedClip.source.imageElement,
+            },
+            effects,
+            position: {
+              x: transform.position?.x || 0,
+              y: transform.position?.y || 0,
+              z: transform.position?.z || 0,
+            },
+            scale: {
+              x: transform.scale?.x ?? 1,
+              y: transform.scale?.y ?? 1,
+            },
+            rotation: {
+              x: ((transform.rotation?.x || 0) * Math.PI) / 180,
+              y: ((transform.rotation?.y || 0) * Math.PI) / 180,
+              z: ((transform.rotation?.z || 0) * Math.PI) / 180,
+            },
+          });
+        } else if (nestedClip.source?.textCanvas) {
+          if (nestedClip.source.type === 'lottie') {
+            lottieRuntimeManager.renderClipAtTime(nestedClip, nestedClip.startTime + nestedLocalTime);
+          }
+
+          layers.push({
+            id: `nested-layer-${nestedClip.id}`,
+            name: nestedClip.name,
+            visible: true,
+            opacity: transform.opacity ?? 1,
+            blendMode: transform.blendMode || 'normal',
+            source: {
+              type: 'text',
+              textCanvas: nestedClip.source.textCanvas,
             },
             effects,
             position: {
@@ -759,7 +791,11 @@ export function useLayerSync({
           layersChanged = true;
         }
       } else if (clip?.source?.textCanvas) {
-        // Text/Solid clip handling (both use canvas)
+        if (clip.source.type === 'lottie') {
+          lottieRuntimeManager.renderClipAtTime(clip, playheadPosition);
+        }
+
+        // Text/Solid/Lottie clip handling (all use canvas)
         const textCanvas = clip.source.textCanvas;
         const textClipLocalTime = playheadPosition - clip.startTime;
         const transform = getInterpolatedTransform(clip.id, textClipLocalTime);

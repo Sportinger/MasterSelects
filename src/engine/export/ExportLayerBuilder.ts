@@ -12,6 +12,7 @@ import { ParallelDecodeManager } from '../ParallelDecodeManager';
 import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
 import { DEFAULT_TEXT_3D_PROPERTIES, DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS, type GaussianSplatSettings } from '../gaussian/types';
+import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
 
 // Cache video tracks and solo state at export start (don't change during export)
 let cachedVideoTracks: TimelineTrack[] | null = null;
@@ -204,8 +205,11 @@ export function buildLayersAtTime(
         is3D: true,
       });
     }
-    // Handle text and solid clips
-    else if ((clip.source?.type === 'text' || clip.source?.type === 'solid') && clip.source.textCanvas) {
+    // Handle text, solid, and Lottie clips
+    else if ((clip.source?.type === 'text' || clip.source?.type === 'solid' || clip.source?.type === 'lottie') && clip.source.textCanvas) {
+      if (clip.source.type === 'lottie') {
+        lottieRuntimeManager.renderClipAtTime(clip, time);
+      }
       layers.push({
         ...baseLayerProps,
         source: { type: 'text', textCanvas: clip.source.textCanvas },
@@ -549,7 +553,10 @@ function buildNestedLayerForExport(
     } as Layer;
   }
 
-  if ((nestedClip.source?.type === 'text' || nestedClip.source?.type === 'solid') && nestedClip.source.textCanvas) {
+  if ((nestedClip.source?.type === 'text' || nestedClip.source?.type === 'solid' || nestedClip.source?.type === 'lottie') && nestedClip.source.textCanvas) {
+    if (nestedClip.source.type === 'lottie') {
+      lottieRuntimeManager.renderClipAtTime(nestedClip, nestedClip.startTime + nestedClipLocalTime);
+    }
     return {
       ...baseLayer,
       source: { type: 'text', textCanvas: nestedClip.source.textCanvas },

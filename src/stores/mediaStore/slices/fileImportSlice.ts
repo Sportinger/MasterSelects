@@ -2,12 +2,14 @@
 
 import type { MediaFile, MediaSliceCreator } from '../types';
 import { generateId, processImport } from '../helpers/importPipeline';
-import { detectMediaType } from '../../timeline/helpers/mediaTypeHelpers';
+import { classifyMediaType } from '../../timeline/helpers/mediaTypeHelpers';
 import { fileSystemService } from '../../../services/fileSystemService';
 import { projectDB } from '../../../services/projectDB';
 import { Logger } from '../../../services/logger';
 
 const log = Logger.create('Import');
+
+type ImportableMediaType = MediaFile['type'];
 
 export interface FileImportActions {
   importFile: (file: File, parentId?: string | null, options?: { forceCopyToProject?: boolean }) => Promise<MediaFile>;
@@ -22,12 +24,19 @@ export interface FileImportActions {
   importGaussianSplat: (file: File, parentId?: string | null) => Promise<MediaFile>;
 }
 
+async function resolveImportType(file: File): Promise<ImportableMediaType> {
+  const type = await classifyMediaType(file);
+  if (type === 'unknown') {
+    throw new Error(`Unsupported media type: ${file.name}`);
+  }
+  return type as ImportableMediaType;
+}
+
 /**
  * Create a placeholder MediaFile that appears instantly in the media panel.
  * Shows as grey/loading while the full import runs in the background.
  */
-function createPlaceholder(file: File, id: string, parentId?: string | null): MediaFile {
-  const type = detectMediaType(file) as 'video' | 'audio' | 'image' | 'model' | 'gaussian-splat';
+function createPlaceholder(file: File, id: string, type: ImportableMediaType, parentId?: string | null): MediaFile {
   return {
     id,
     name: file.name,
@@ -47,10 +56,8 @@ function createPlaceholder(file: File, id: string, parentId?: string | null): Me
  */
 function finalizePlaceholder(state: { files: MediaFile[] }, id: string, result: MediaFile): { files: MediaFile[] } {
   return {
-    files: state.files.map(f => {
+    files: state.files.map((f) => {
       if (f.id !== id) return f;
-      // Merge: keep parentId/labelColor from current state (user may have moved it),
-      // but take everything else from import result
       return {
         ...result,
         parentId: f.parentId,
@@ -63,40 +70,38 @@ function finalizePlaceholder(state: { files: MediaFile[] }, id: string, result: 
 
 export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set, get) => ({
   importFile: async (file: File, parentId?: string | null, options?: { forceCopyToProject?: boolean }) => {
-    // Deduplication: check if file with same name + size already exists
-    const existing = get().files.find(f =>
+    const existing = get().files.find((f) =>
       f.name === file.name && f.fileSize === file.size && !f.isImporting
     );
     if (existing) {
-      log.info(`Skipping duplicate: ${file.name} (${file.size} bytes) — already exists as ${existing.id}`);
+      log.info(`Skipping duplicate: ${file.name} (${file.size} bytes) - already exists as ${existing.id}`);
       return existing;
     }
 
     const id = generateId();
-    log.info(`Starting: ${file.name} type: ${file.type} size: ${file.size}`);
+    const type = await resolveImportType(file);
+    log.info(`Starting: ${file.name} type: ${type} size: ${file.size}`);
 
-    // Phase 1: Add placeholder instantly
-    const placeholder = createPlaceholder(file, id, parentId);
+    const placeholder = createPlaceholder(file, id, type, parentId);
     set((state) => ({
       files: [...state.files, placeholder],
     }));
 
-    // Phase 2: Full import in background
     try {
       const result = await processImport({
         file,
         id,
         parentId,
         forceCopyToProject: options?.forceCopyToProject === true,
+        typeOverride: type,
       });
       set((state) => finalizePlaceholder(state, id, result.mediaFile));
       log.info('Complete:', result.mediaFile.name);
       return result.mediaFile;
     } catch (err) {
       log.error(`Import failed: ${file.name}`, err);
-      // Remove placeholder on failure
       set((state) => ({
-        files: state.files.filter(f => f.id !== id),
+        files: state.files.filter((f) => f.id !== id),
       }));
       throw err;
     }
@@ -106,39 +111,38 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
     const fileArray = Array.from(files);
     const imported: MediaFile[] = [];
 
-    // Phase 1: Add all placeholders instantly
-    const entries = fileArray.map(file => ({
+    const entries = await Promise.all(fileArray.map(async (file) => ({
       file,
       id: generateId(),
-    }));
+      type: await resolveImportType(file),
+    })));
 
     set((state) => ({
       files: [
         ...state.files,
-        ...entries.map(e => createPlaceholder(e.file, e.id, parentId)),
+        ...entries.map((entry) => createPlaceholder(entry.file, entry.id, entry.type, parentId)),
       ],
     }));
 
-    // Phase 2: Process in parallel batches of 3
     const batchSize = 3;
     for (let i = 0; i < entries.length; i += batchSize) {
       const batch = entries.slice(i, i + batchSize);
       const results = await Promise.all(
-        batch.map(async ({ file, id }) => {
+        batch.map(async ({ file, id, type }) => {
           try {
-            const result = await processImport({ file, id, parentId });
+            const result = await processImport({ file, id, parentId, typeOverride: type });
             set((state) => finalizePlaceholder(state, id, result.mediaFile));
             return result.mediaFile;
           } catch (err) {
             log.error(`Import failed: ${file.name}`, err);
             set((state) => ({
-              files: state.files.filter(f => f.id !== id),
+              files: state.files.filter((f) => f.id !== id),
             }));
             return null;
           }
         })
       );
-      imported.push(...results.filter((r): r is MediaFile => r !== null));
+      imported.push(...results.filter((result): result is MediaFile => result !== null));
     }
 
     return imported;
@@ -149,36 +153,33 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
     if (!result || result.length === 0) return [];
 
     const imported: MediaFile[] = [];
-
-    // Phase 1: Add all placeholders instantly
-    const entries = result.map(({ file, handle }) => ({
+    const entries = await Promise.all(result.map(async ({ file, handle }) => ({
       file,
       handle,
       id: generateId(),
-    }));
+      type: await resolveImportType(file),
+    })));
 
     set((state) => ({
       files: [
         ...state.files,
-        ...entries.map(e => createPlaceholder(e.file, e.id)),
+        ...entries.map((entry) => createPlaceholder(entry.file, entry.id, entry.type)),
       ],
     }));
 
-    // Phase 2: Process each file
-    for (const { file, handle, id } of entries) {
-      // Store original handle
+    for (const { file, handle, id, type } of entries) {
       fileSystemService.storeFileHandle(id, handle);
       await projectDB.storeHandle(`media_${id}`, handle);
       log.debug('Stored file handle for ID:', id);
 
       try {
-        const importResult = await processImport({ file, id, handle });
+        const importResult = await processImport({ file, id, handle, typeOverride: type });
         set((state) => finalizePlaceholder(state, id, importResult.mediaFile));
         imported.push(importResult.mediaFile);
       } catch (err) {
         log.error(`Import failed: ${file.name}`, err);
         set((state) => ({
-          files: state.files.filter(f => f.id !== id),
+          files: state.files.filter((f) => f.id !== id),
         }));
       }
     }
@@ -189,36 +190,34 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
   importFilesWithHandles: async (filesWithHandles, parentId?: string | null) => {
     const imported: MediaFile[] = [];
 
-    // Phase 1: Add all placeholders instantly
-    const entries = filesWithHandles.map(({ file, handle, absolutePath }) => ({
+    const entries = await Promise.all(filesWithHandles.map(async ({ file, handle, absolutePath }) => ({
       file,
       handle,
       absolutePath,
       id: generateId(),
-    }));
+      type: await resolveImportType(file),
+    })));
 
     set((state) => ({
       files: [
         ...state.files,
-        ...entries.map(e => createPlaceholder(e.file, e.id, parentId)),
+        ...entries.map((entry) => createPlaceholder(entry.file, entry.id, entry.type, parentId)),
       ],
     }));
 
-    // Phase 2: Process each file
-    for (const { file, handle, absolutePath, id } of entries) {
-      // Store original handle
+    for (const { file, handle, absolutePath, id, type } of entries) {
       fileSystemService.storeFileHandle(id, handle);
       await projectDB.storeHandle(`media_${id}`, handle);
       log.debug('Stored file handle for ID:', id);
 
       try {
-        const importResult = await processImport({ file, id, handle, absolutePath, parentId });
+        const importResult = await processImport({ file, id, handle, absolutePath, parentId, typeOverride: type });
         set((state) => finalizePlaceholder(state, id, importResult.mediaFile));
         imported.push(importResult.mediaFile);
       } catch (err) {
         log.error(`Import failed: ${file.name}`, err);
         set((state) => ({
-          files: state.files.filter(f => f.id !== id),
+          files: state.files.filter((f) => f.id !== id),
         }));
       }
     }
@@ -237,7 +236,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
       f.name === file.name && f.fileSize === file.size && !f.isImporting
     );
     if (existing) {
-      log.info(`Skipping duplicate gaussian avatar: ${file.name} (${file.size} bytes) — already exists as ${existing.id}`);
+      log.info(`Skipping duplicate gaussian avatar: ${file.name} (${file.size} bytes) - already exists as ${existing.id}`);
       return existing;
     }
 
@@ -278,19 +277,17 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
   },
 
   importGaussianSplat: async (file: File, parentId?: string | null) => {
-    // Deduplication: check if file with same name + size already exists
-    const existing = get().files.find(f =>
+    const existing = get().files.find((f) =>
       f.name === file.name && f.fileSize === file.size && !f.isImporting
     );
     if (existing) {
-      log.info(`Skipping duplicate gaussian splat: ${file.name} (${file.size} bytes) — already exists as ${existing.id}`);
+      log.info(`Skipping duplicate gaussian splat: ${file.name} (${file.size} bytes) - already exists as ${existing.id}`);
       return existing;
     }
 
     const id = generateId();
     log.info(`Starting gaussian splat import: ${file.name} type: ${file.type} size: ${file.size}`);
 
-    // Phase 1: Add placeholder instantly with forced gaussian-splat type
     const placeholder: MediaFile = {
       id,
       name: file.name,
@@ -306,7 +303,6 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
       files: [...state.files, placeholder],
     }));
 
-    // Phase 2: Full import in background with type override
     try {
       const result = await processImport({ file, id, parentId, typeOverride: 'gaussian-splat' });
       set((state) => finalizePlaceholder(state, id, result.mediaFile));
@@ -314,9 +310,8 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
       return result.mediaFile;
     } catch (err) {
       log.error(`Gaussian splat import failed: ${file.name}`, err);
-      // Remove placeholder on failure
       set((state) => ({
-        files: state.files.filter(f => f.id !== id),
+        files: state.files.filter((f) => f.id !== id),
       }));
       throw err;
     }

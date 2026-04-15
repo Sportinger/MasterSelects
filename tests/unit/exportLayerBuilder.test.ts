@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildLayersAtTime,
   cleanupLayerBuilder,
@@ -7,6 +7,7 @@ import {
 import type { ExportClipState, FrameContext } from '../../src/engine/export/types';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
+import { lottieRuntimeManager } from '../../src/services/vectorAnimation/LottieRuntimeManager';
 
 describe('ExportLayerBuilder', () => {
   beforeEach(() => {
@@ -444,5 +445,64 @@ describe('ExportLayerBuilder', () => {
     expect(nestedLayers[1]?.source?.gaussianSplatFileHash).toBe('nested-hash');
     expect(nestedLayers[1]?.source?.gaussianSplatSettings?.render.maxSplats).toBe(0);
     expect(nestedLayers[1]?.source?.gaussianSplatSettings?.render.sortFrequency).toBe(1);
+  });
+
+  it('exports lottie clips via the shared text canvas path', () => {
+    const track = {
+      id: 'track-1',
+      type: 'video',
+      visible: true,
+      solo: false,
+    } as any;
+    const canvas = document.createElement('canvas');
+    const renderSpy = vi.spyOn(lottieRuntimeManager, 'renderClipAtTime').mockReturnValue(canvas);
+
+    const clip = {
+      id: 'clip-lottie',
+      name: 'Lottie Clip',
+      trackId: 'track-1',
+      startTime: 0,
+      duration: 4,
+      inPoint: 0,
+      outPoint: 4,
+      source: {
+        type: 'lottie',
+        textCanvas: canvas,
+        naturalDuration: 4,
+      },
+      transform: {},
+      effects: [],
+      file: new File(['lottie'], 'anim.lottie', { type: 'application/zip' }),
+    } as any;
+
+    const ctx: FrameContext = {
+      time: 1,
+      fps: 30,
+      frameTolerance: 50_000,
+      clipsAtTime: [clip],
+      trackMap: new Map([[track.id, track]]),
+      clipsByTrack: new Map([[track.id, clip]]),
+      getInterpolatedTransform: () => ({
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+        opacity: 1,
+        blendMode: 'normal',
+      }),
+      getInterpolatedEffects: () => [],
+      getSourceTimeForClip: () => 1,
+      getInterpolatedSpeed: () => 1,
+    };
+
+    initializeLayerBuilder([track]);
+
+    const layers = buildLayersAtTime(ctx, new Map(), null, false);
+
+    expect(renderSpy).toHaveBeenCalledWith(clip, 1);
+    expect(layers).toHaveLength(1);
+    expect(layers[0]?.source?.type).toBe('text');
+    expect(layers[0]?.source?.textCanvas).toBe(canvas);
+
+    renderSpy.mockRestore();
   });
 });

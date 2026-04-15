@@ -44,6 +44,24 @@ export const FileTypeIcon = memo(({ type, large }: FileTypeIconProps) => {
           <path d="M1.5 11l3.5-3 2.5 2 3-4 4 5v0.5c0 .55-.45 1-1 1h-12c-.55 0-1-.45-1-1z" fill="#7a9aba" opacity="0.8"/>
         </svg>
       );
+    case 'lottie':
+      return (
+        <svg style={style} viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#4d5a74" stroke="#8cc7ff" strokeWidth="0.7"/>
+          <path d="M4 10.5c1.1-2.8 3.1-4.8 5.9-5.9" stroke="#8cc7ff" strokeWidth="1.1" strokeLinecap="round"/>
+          <path d="M7.2 11.7c.8-1.8 2.1-3.1 3.9-3.9" stroke="#cce9ff" strokeWidth="1" strokeLinecap="round"/>
+          <circle cx="4" cy="10.5" r="1" fill="#8cc7ff"/>
+          <circle cx="10" cy="4.5" r="1" fill="#8cc7ff"/>
+          <circle cx="11.1" cy="7.8" r="0.8" fill="#cce9ff"/>
+        </svg>
+      );
+    case 'rive':
+      return (
+        <svg style={style} viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#5b4d72" stroke="#d8b6ff" strokeWidth="0.7"/>
+          <path d="M5 12V4h3.2c1.8 0 2.8.9 2.8 2.3 0 .9-.5 1.7-1.4 2.1L12 12H10l-2.2-3H7v3H5zm2-4.7h1.1c1 0 1.6-.4 1.6-1.1 0-.7-.5-1-1.6-1H7v2.1z" fill="#f1e4ff"/>
+        </svg>
+      );
     case 'composition':
       return (
         <svg style={style} viewBox="0 0 16 16" fill="none">
@@ -216,6 +234,26 @@ const LargeIcon = memo(({ type, style }: { type?: string; style: React.CSSProper
           <rect x="4" y="8" width="40" height="32" rx="3" stroke="#6a8aaa" strokeWidth="1"/>
           <circle cx="16" cy="18" r="4" fill="#8abbee" opacity="0.7"/>
           <path d="M4.5 32l10-8 7 5.5 8.5-11L44 35v3c0 1.38-1.12 2.5-2.5 2.5h-35c-1.38 0-2.5-1.12-2.5-2.5V32z" fill="#6a8aaa" opacity="0.6"/>
+        </svg>
+      );
+    case 'lottie':
+      return (
+        <svg style={style} viewBox="0 0 48 48" fill="none">
+          <rect x="4" y="8" width="40" height="32" rx="3" fill="#33455f"/>
+          <rect x="4" y="8" width="40" height="32" rx="3" stroke="#8cc7ff" strokeWidth="1"/>
+          <path d="M12 30c3.5-9 10-15.5 19-19" stroke="#8cc7ff" strokeWidth="2.4" strokeLinecap="round"/>
+          <path d="M21 34c2.3-5.3 6-9 11.3-11.3" stroke="#d9f0ff" strokeWidth="2.1" strokeLinecap="round"/>
+          <circle cx="12" cy="30" r="2.5" fill="#8cc7ff"/>
+          <circle cx="31" cy="11" r="2.5" fill="#8cc7ff"/>
+          <circle cx="33.5" cy="22.5" r="2" fill="#d9f0ff"/>
+        </svg>
+      );
+    case 'rive':
+      return (
+        <svg style={style} viewBox="0 0 48 48" fill="none">
+          <rect x="4" y="8" width="40" height="32" rx="3" fill="#4d3f63"/>
+          <rect x="4" y="8" width="40" height="32" rx="3" stroke="#d8b6ff" strokeWidth="1"/>
+          <path d="M15 35V13h10.2c5.4 0 8.8 2.8 8.8 7 0 2.7-1.5 4.9-4.1 6l6.1 9H30.4l-5-7.5H21V35h-6zm6-12.3h3.7c2.8 0 4.4-1 4.4-2.8 0-1.8-1.5-2.7-4.4-2.7H21v5.5z" fill="#f1e4ff"/>
         </svg>
       );
     case 'text':

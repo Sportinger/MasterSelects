@@ -146,7 +146,7 @@ export function useClipDrag({
         const sourceType = clipForTrackCheck?.source?.type;
         const requiredTrackType: 'video' | 'audio' | null =
           sourceType === 'audio' ? 'audio' :
-          (sourceType === 'video' || sourceType === 'image' || sourceType === 'text' || sourceType === 'solid' || sourceType === 'model' || sourceType === 'gaussian-splat' || sourceType === 'camera' || sourceType === 'splat-effector') ? 'video' :
+          (sourceType === 'video' || sourceType === 'image' || sourceType === 'lottie' || sourceType === 'text' || sourceType === 'solid' || sourceType === 'model' || sourceType === 'gaussian-splat' || sourceType === 'camera' || sourceType === 'splat-effector') ? 'video' :
           null;
 
         let currentY = 24;

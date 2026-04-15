@@ -7,6 +7,7 @@ import { useYouTubeStore } from '../../stores/youtubeStore';
 import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useFlashBoardStore } from '../../stores/flashboardStore';
+import { getExportStoreData, useExportStore } from '../../stores/exportStore';
 import type {
   FlashBoardGenerationMetadata,
   FlashBoardStoreState,
@@ -43,7 +44,7 @@ function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
   return files.map((file) => ({
     id: file.id,
     name: file.name,
-    type: file.type as 'video' | 'audio' | 'image',
+    type: file.type as 'video' | 'audio' | 'image' | 'lottie' | 'rive',
     sourcePath: file.filePath || file.name,
     projectPath: file.projectPath,
     duration: file.duration,
@@ -57,6 +58,7 @@ function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
     fileSize: file.fileSize,
     hasAudio: file.hasAudio,
     hasProxy: file.proxyStatus === 'ready',
+    vectorAnimation: file.vectorAnimation,
     folderId: file.parentId,
     labelColor: file.labelColor && file.labelColor !== 'none' ? file.labelColor : undefined,
     importedAt: new Date(file.createdAt).toISOString(),
@@ -152,6 +154,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       textProperties: c.textProperties || undefined,
       // Solid clip support
       solidColor: c.solidColor || undefined,
+      vectorAnimationSettings: c.source?.vectorAnimationSettings || c.vectorAnimationSettings || undefined,
       // Transcript data
       transcript: c.transcript || undefined,
       transcriptStatus: c.transcriptStatus || undefined,
@@ -345,6 +348,7 @@ export async function syncStoresToProject(): Promise<void> {
         showTranscriptMarkers: timelineState.showTranscriptMarkers,
         showChangelogOnStartup: settingsState.showChangelogOnStartup,
         lastSeenChangelogVersion: settingsState.lastSeenChangelogVersion,
+        exportState: getExportStoreData(useExportStore.getState()),
       };
 
       // Save generated media items

@@ -5,6 +5,7 @@ import type { ProjectComposition } from './composition.types';
 import type { ProjectFolder } from './folder.types';
 import type { DockLayout } from '../../../types/dock';
 import type { ProjectFlashBoardState } from '../../../stores/flashboardStore/types';
+import type { ExportStoreData } from '../../../stores/exportStore';
 
 export interface ProjectYouTubeVideo {
   id: string;
@@ -53,6 +54,7 @@ export interface ProjectUIState {
   showTranscriptMarkers?: boolean;
   showChangelogOnStartup?: boolean;
   lastSeenChangelogVersion?: string | null;
+  exportState?: ExportStoreData;
 }
 
 export interface ProjectFile {

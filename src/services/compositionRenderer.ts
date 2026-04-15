@@ -24,15 +24,17 @@ import {
   updateRuntimePlaybackTime,
 } from './mediaRuntime/runtimePlayback';
 import { mediaRuntimeRegistry } from './mediaRuntime/registry';
+import { lottieRuntimeManager } from './vectorAnimation/LottieRuntimeManager';
 
 type CompositionClipSourceEntry = {
   clipId: string;
-  type: 'video' | 'image' | 'audio' | 'text';
+  type: 'video' | 'image' | 'audio' | 'text' | 'lottie';
   videoElement?: HTMLVideoElement;
   webCodecsPlayer?: LayerSource['webCodecsPlayer'];
   imageElement?: HTMLImageElement;
   textCanvas?: HTMLCanvasElement;
   file?: File;
+  lottieClip?: TimelineClip;
   naturalDuration: number;
   runtimeSourceId?: string;
   runtimeSessionKey?: string;
@@ -105,6 +107,29 @@ class CompositionRendererService {
       type: 'text',
       textCanvas: entry.textCanvas,
     };
+  }
+
+  private buildSerializableLottieClip(clip: SerializableClip, file: File): TimelineClip {
+    return {
+      id: clip.id,
+      trackId: clip.trackId,
+      name: clip.name,
+      file,
+      startTime: clip.startTime,
+      duration: clip.duration,
+      inPoint: clip.inPoint,
+      outPoint: clip.outPoint,
+      source: {
+        type: 'lottie',
+        mediaFileId: clip.mediaFileId,
+        naturalDuration: clip.naturalDuration ?? clip.duration,
+        vectorAnimationSettings: clip.vectorAnimationSettings,
+      },
+      effects: clip.effects || [],
+      transform: clip.transform,
+      reversed: clip.reversed,
+      isLoading: false,
+    } as TimelineClip;
   }
 
   private buildBackgroundVideoLayerSource(
@@ -281,12 +306,13 @@ class CompositionRendererService {
           continue;
         }
 
-        if (sourceType === 'text' && timelineClip.source.textCanvas) {
+        if ((sourceType === 'text' || sourceType === 'lottie') && timelineClip.source.textCanvas) {
           sources.clipSources.set(clip.id, {
             clipId: clip.id,
-            type: 'text',
+            type: sourceType,
             textCanvas: timelineClip.source.textCanvas,
             naturalDuration: clip.duration,
+            ...(sourceType === 'lottie' ? { lottieClip: timelineClip } : {}),
           });
           continue;
         }
@@ -324,12 +350,13 @@ class CompositionRendererService {
                 timelineClip.source
               ),
             });
-          } else if (sourceType === 'text' && timelineClip.source.textCanvas) {
+          } else if ((sourceType === 'text' || sourceType === 'lottie') && timelineClip.source.textCanvas) {
             sources.clipSources.set(clip.id, {
               clipId: clip.id,
-              type: 'text',
+              type: sourceType,
               textCanvas: timelineClip.source.textCanvas,
               naturalDuration: clip.duration,
+              ...(sourceType === 'lottie' ? { lottieClip: timelineClip } : {}),
             });
           }
         }
@@ -368,6 +395,8 @@ class CompositionRendererService {
         loadPromises.push(this.loadVideoSource(sources, serializableClip, mediaFile.file));
       } else if (sourceType === 'image') {
         loadPromises.push(this.loadImageSource(sources, serializableClip, mediaFile.file));
+      } else if (sourceType === 'lottie') {
+        loadPromises.push(this.loadLottieSource(sources, serializableClip, mediaFile.file));
       }
     }
 
@@ -483,6 +512,29 @@ class CompositionRendererService {
         resolve();
       };
     });
+  }
+
+  private async loadLottieSource(sources: CompositionSources, clip: SerializableClip, file: File): Promise<void> {
+    try {
+      const lottieClip = this.buildSerializableLottieClip(clip, file);
+      const runtime = await lottieRuntimeManager.prepareClipSource(lottieClip, file);
+      lottieClip.source = {
+        ...lottieClip.source!,
+        textCanvas: runtime.canvas,
+        naturalDuration: runtime.metadata.duration ?? clip.naturalDuration ?? clip.duration,
+      };
+
+      sources.clipSources.set(clip.id, {
+        clipId: clip.id,
+        type: 'lottie',
+        textCanvas: runtime.canvas,
+        file,
+        lottieClip,
+        naturalDuration: runtime.metadata.duration ?? clip.naturalDuration ?? clip.duration,
+      });
+    } catch (error) {
+      log.error(`Failed to load lottie: ${file.name}`, error);
+    }
   }
 
   /**
@@ -602,6 +654,18 @@ class CompositionRendererService {
         );
       } else if (source.imageElement) {
         layerSource = this.getBaseLayerSource(source);
+      } else if (source.type === 'lottie') {
+        const runtimeClip =
+          isActiveComp && timelineClip.source?.type === 'lottie'
+            ? timelineClip
+            : source.lottieClip;
+        if (runtimeClip) {
+          lottieRuntimeManager.renderClipAtTime(runtimeClip, time);
+          layerSource = {
+            type: 'text',
+            textCanvas: runtimeClip.source?.textCanvas ?? source.textCanvas,
+          };
+        }
       } else if (source.textCanvas) {
         layerSource = this.getBaseLayerSource(source);
       }
@@ -761,6 +825,9 @@ class CompositionRendererService {
           },
         } as Layer);
       } else if (nestedClip.source?.textCanvas) {
+        if (nestedClip.source.type === 'lottie') {
+          lottieRuntimeManager.renderClipAtTime(nestedClip, nestedTime);
+        }
         nestedLayers.push({
           ...baseLayer,
           source: {

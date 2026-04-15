@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LayerBuilderService } from '../../src/services/layerBuilder/LayerBuilderService';
 import { flags } from '../../src/engine/featureFlags';
 import { useTimelineStore } from '../../src/stores/timeline';
@@ -12,6 +12,7 @@ import {
 } from '../../src/services/mediaRuntime/runtimePlayback';
 import { mediaRuntimeRegistry } from '../../src/services/mediaRuntime/registry';
 import { scrubSettleState } from '../../src/services/scrubSettleState';
+import { lottieRuntimeManager } from '../../src/services/vectorAnimation/LottieRuntimeManager';
 
 const initialTimelineState = useTimelineStore.getState();
 const initialMediaState = useMediaStore.getState();
@@ -189,6 +190,67 @@ describe('LayerBuilderService paused visual provider selection', () => {
 
     expect(layers).toHaveLength(1);
     expect(layers[0]?.source?.webCodecsPlayer).toBe(clipPlayer);
+  });
+
+  it('routes lottie clips through the existing canvas layer path', () => {
+    const service = new LayerBuilderService();
+    const canvas = document.createElement('canvas');
+    const renderSpy = vi.spyOn(lottieRuntimeManager, 'renderClipAtTime').mockReturnValue(canvas);
+
+    useMediaStore.setState({
+      activeCompositionId: null,
+      activeLayerSlots: {},
+      layerOpacities: {},
+      files: [],
+      compositions: [],
+      proxyEnabled: false,
+    } as any);
+
+    useTimelineStore.setState({
+      tracks: [
+        {
+          id: 'track-v1',
+          name: 'Video 1',
+          type: 'video',
+          visible: true,
+          muted: false,
+          solo: false,
+        },
+      ],
+      clips: [
+        {
+          id: 'clip-lottie-1',
+          trackId: 'track-v1',
+          name: 'anim.lottie',
+          file: new File(['lottie'], 'anim.lottie', { type: 'application/zip' }),
+          startTime: 0,
+          duration: 4,
+          inPoint: 0,
+          outPoint: 4,
+          effects: [],
+          transform: { ...DEFAULT_TRANSFORM },
+          source: {
+            type: 'lottie',
+            textCanvas: canvas,
+            naturalDuration: 4,
+          },
+          isLoading: false,
+        },
+      ],
+      playheadPosition: 1,
+      isPlaying: false,
+      isDraggingPlayhead: false,
+      playbackSpeed: 1,
+    } as any);
+
+    const layers = service.buildLayersFromStore();
+
+    expect(renderSpy).toHaveBeenCalledWith(expect.objectContaining({ id: 'clip-lottie-1' }), 1);
+    expect(layers).toHaveLength(1);
+    expect(layers[0]?.source?.type).toBe('text');
+    expect(layers[0]?.source?.textCanvas).toBe(canvas);
+
+    renderSpy.mockRestore();
   });
 
   it('keeps full WebCodecs preview bound to the scrub runtime while actively dragging the playhead', () => {

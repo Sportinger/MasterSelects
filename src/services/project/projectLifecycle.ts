@@ -7,6 +7,7 @@ import { useYouTubeStore } from '../../stores/youtubeStore';
 import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useFlashBoardStore } from '../../stores/flashboardStore';
+import { useExportStore } from '../../stores/exportStore';
 import { projectFileService } from '../projectFileService';
 import { isProjectStoreSyncInProgress, syncStoresToProject, saveCurrentProject } from './projectSave';
 import { loadProjectToStores } from './projectLoad';
@@ -158,6 +159,7 @@ export function closeCurrentProject(): void {
       referenceMediaFileIds: [],
     },
   });
+  useExportStore.getState().reset();
   useMediaStore.getState().newProject();
 }
 
@@ -207,6 +209,16 @@ export function setupAutoSync(): void {
 
   useFlashBoardStore.subscribe(
     (state) => [state.boards, state.activeBoardId],
+    () => {
+      if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
+        projectFileService.markDirty();
+        triggerContinuousSaveIfEnabled();
+      }
+    }
+  );
+
+  useExportStore.subscribe(
+    (state) => [state.settings, state.presets, state.selectedPresetId],
     () => {
       if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
         projectFileService.markDirty();

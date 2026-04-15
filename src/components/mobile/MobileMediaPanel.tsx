@@ -13,6 +13,7 @@ export function MobileMediaPanel({ isOpen, onClose }: MobileMediaPanelProps) {
   const files = useMediaStore((s) => s.files);
   const compositions = useMediaStore((s) => s.compositions);
   const importFiles = useMediaStore((s) => s.importFiles);
+  const refreshFileUrls = useMediaStore((s) => s.refreshFileUrls);
   const tracks = useTimelineStore((s) => s.tracks);
   const addClip = useTimelineStore((s) => s.addClip);
   const playheadPosition = useTimelineStore((s) => s.playheadPosition);
@@ -112,7 +113,11 @@ export function MobileMediaPanel({ isOpen, onClose }: MobileMediaPanelProps) {
                 >
                   <div className="media-thumbnail">
                     {file.thumbnailUrl ? (
-                      <img src={file.thumbnailUrl} alt="" />
+                      <img
+                        src={file.thumbnailUrl}
+                        alt=""
+                        onError={() => { void refreshFileUrls(file.id); }}
+                      />
                     ) : (
                       <div className="media-icon">
                         {file.type === 'video' ? '🎥' : file.type === 'audio' ? '🎵' : '🖼️'}

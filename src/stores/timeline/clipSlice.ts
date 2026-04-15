@@ -24,10 +24,11 @@ function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
 }
 
 // Import extracted modules
-import { detectMediaType } from './helpers/mediaTypeHelpers';
+import { classifyMediaType } from './helpers/mediaTypeHelpers';
 import { loadVideoMedia } from './clip/addVideoClip';
 import { createAudioClipPlaceholder, loadAudioMedia } from './clip/addAudioClip';
 import { createImageClipPlaceholder, loadImageMedia } from './clip/addImageClip';
+import { createLottieClipPlaceholder, loadLottieMedia } from './clip/addLottieClip';
 import { createModelClipPlaceholder, loadModelMedia } from './clip/addModelClip';
 import { createGaussianSplatClipPlaceholder, loadGaussianSplatMedia } from './clip/addGaussianSplatClip';
 import { createVideoElement, createAudioElement } from './helpers/webCodecsHelpers';
@@ -44,10 +45,12 @@ import {
 } from './helpers/idGenerator';
 import { blobUrlManager } from './helpers/blobUrlManager';
 import { updateClipById } from './helpers/clipStateHelpers';
+import { readLottieMetadata } from '../../services/vectorAnimation/lottieMetadata';
+import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
 
 export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   addClip: async (trackId, file, startTime, providedDuration, mediaFileId, mediaTypeOverride?) => {
-    const mediaType = (mediaTypeOverride as ReturnType<typeof detectMediaType> | 'gaussian-avatar' | 'gaussian-splat') || detectMediaType(file);
+    const mediaType = (mediaTypeOverride as Awaited<ReturnType<typeof classifyMediaType>> | 'gaussian-avatar' | 'gaussian-splat') || await classifyMediaType(file);
     const estimatedDuration = providedDuration ?? 5;
 
     log.debug('Adding clip', { mediaType, file: file.name });
@@ -60,8 +63,13 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       return;
     }
 
-    if ((mediaType === 'video' || mediaType === 'image' || mediaType === 'model' || mediaType === 'gaussian-avatar' || mediaType === 'gaussian-splat') && targetTrack.type !== 'video') {
-      log.warn('Cannot add video/image/model/gaussian-avatar/gaussian-splat to audio track');
+    if (mediaType === 'unknown') {
+      log.warn('Unsupported clip type', { file: file.name });
+      return;
+    }
+
+    if ((mediaType === 'video' || mediaType === 'image' || mediaType === 'lottie' || mediaType === 'model' || mediaType === 'gaussian-avatar' || mediaType === 'gaussian-splat') && targetTrack.type !== 'video') {
+      log.warn('Cannot add visual clip to audio track');
       return;
     }
     if (mediaType === 'audio' && targetTrack.type !== 'audio') {
@@ -80,12 +88,19 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
     // Look up transcript from MediaFile for carry-over to new clips
     let sourceTranscript: import('../../types').TranscriptWord[] | undefined;
+    let sourceMediaFile:
+      | {
+        transcript?: import('../../types').TranscriptWord[];
+        transcriptStatus?: string;
+        vectorAnimation?: import('../../types').VectorAnimationMetadata;
+      }
+      | undefined;
     if (mediaFileId) {
       try {
         const { useMediaStore } = await import('../mediaStore');
-        const mf = useMediaStore.getState().files.find((f: { id: string }) => f.id === mediaFileId);
-        if (mf?.transcriptStatus === 'ready' && mf.transcript?.length) {
-          sourceTranscript = mf.transcript;
+        sourceMediaFile = useMediaStore.getState().files.find((f: { id: string }) => f.id === mediaFileId);
+        if (sourceMediaFile?.transcriptStatus === 'ready' && sourceMediaFile.transcript?.length) {
+          sourceTranscript = sourceMediaFile.transcript;
         }
       } catch { /* mediaStore not ready */ }
     }
@@ -208,6 +223,31 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         file,
         mediaFileId,
         waveformsEnabled,
+        updateClip,
+      });
+
+      invalidateCache();
+      return;
+    }
+
+    if (mediaType === 'lottie') {
+      const vectorAnimationMetadata = sourceMediaFile?.vectorAnimation ?? await readLottieMetadata(file);
+      const lottieClip = createLottieClipPlaceholder({
+        trackId,
+        file,
+        startTime,
+        estimatedDuration: providedDuration ?? vectorAnimationMetadata.duration ?? estimatedDuration,
+        mediaFileId,
+        metadata: vectorAnimationMetadata,
+      });
+      set({ clips: [...clips, lottieClip] });
+      updateDuration();
+
+      await loadLottieMedia({
+        clip: lottieClip,
+        file,
+        mediaFileId,
+        metadata: vectorAnimationMetadata,
         updateClip,
       });
 
@@ -361,6 +401,9 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         audio.src = '';
         audio.load();
       }
+      if (clip.source?.type === 'lottie') {
+        lottieRuntimeManager.destroyClipRuntime(clip.id);
+      }
       blobUrlManager.revokeAll(removeId);
     }
 
@@ -398,7 +441,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       const targetTrack = tracks.find(t => t.id === newTrackId);
       const sourceType = movingClip.source?.type;
       if (targetTrack && sourceType) {
-        if ((sourceType === 'video' || sourceType === 'image' || sourceType === 'camera') && targetTrack.type !== 'video') return;
+        if ((sourceType === 'video' || sourceType === 'image' || sourceType === 'lottie' || sourceType === 'camera') && targetTrack.type !== 'video') return;
         if (sourceType === 'audio' && targetTrack.type !== 'audio') return;
       }
     }

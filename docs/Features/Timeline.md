@@ -2,14 +2,14 @@
 
 [<- Back to Index](./README.md)
 
-The Timeline is the core editing interface for multi-track editing. It now covers video, audio, text, solid, mesh, composition, camera, and splat-effector clips, with keyframe lanes, transitions, multicam grouping, pick-whip parenting, and slot-grid playback.
+The Timeline is the core editing interface for multi-track editing. It now covers video, audio, image, Lottie, text, solid, mesh, composition, camera, and splat-effector clips, with keyframe lanes, transitions, multicam grouping, pick-whip parenting, and slot-grid playback.
 
 ---
 
 ## Track Types
 
 ### Video Tracks
-- Hold video, image, text, solid, mesh, composition, camera, and splat-effector clips.
+- Hold video, image, Lottie, text, solid, mesh, composition, camera, and splat-effector clips.
 - Higher tracks render on top of lower tracks.
 - Expanded tracks can show keyframe property rows and curve editors.
 - Default layout starts with `Video 2` above `Video 1`.
@@ -52,6 +52,12 @@ getTrackChildren()  // Query child tracks
 - Created through the timeline text slice.
 - Supports typography, stroke, shadow, and path text.
 
+### Lottie
+- Imported from `.lottie` packages or Lottie JSON files from the Media Panel.
+- Uses the same canvas-backed render path as text and solids, so preview, nested comps, and export stay deterministic.
+- Exposes per-clip loop, end behavior, fit, animation selection, and background controls in the Properties panel.
+- When loop is enabled, the clip can be extended beyond its source duration on the right trim edge without freezing on the first pass.
+
 ### Solid
 - Flat color clips used for mattes and backgrounds.
 
@@ -88,6 +94,7 @@ getTrackChildren()  // Query child tracks
 
 ### Copy and Paste
 - Copying clips includes linked audio automatically when the video clip is selected.
+- Copy/paste preserves Lottie clip type and vector animation settings.
 - Copying keyframes stores them relative to the earliest copied keyframe.
 - Pasting keyframes targets the selected clip when exactly one clip is selected; otherwise it falls back to the original clip from the clipboard data.
 
@@ -138,6 +145,7 @@ getTrackChildren()  // Query child tracks
 - Composition clips can be nested to a depth of 8.
 - Composition changes propagate into nested render data.
 - Composition switches trigger clip entrance/exit animations in the timeline UI.
+- Lottie clips inside nested comps render through the same canvas path used in the primary timeline and export flow.
 
 ### Transitions
 - Transitions operate between adjacent clips on the same track.

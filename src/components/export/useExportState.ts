@@ -1,6 +1,7 @@
-// Export state management hook - encapsulates all ExportPanel state and initialization effects
+// Export state management hook - uses the shared export store for undo/project persistence
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { Logger } from '../../services/logger';
 import { FrameExporter } from '../../engine/export';
 import type { ExportProgress, VideoCodec, ContainerFormat } from '../../engine/export';
@@ -19,80 +20,85 @@ import type {
   DnxhrProfile,
 } from '../../engine/ffmpeg';
 import type { Composition } from '../../stores/mediaStore';
+import {
+  useExportStore,
+  type ExportEncoderType,
+  type ExportImageFormat,
+  type ExportSpecialContainer,
+  type ExportVisualMode,
+} from '../../stores/exportStore';
 
 const log = Logger.create('ExportState');
 
-export type EncoderType = 'webcodecs' | 'htmlvideo' | 'ffmpeg';
+export type EncoderType = ExportEncoderType;
 
-export function useExportState(composition: Composition | undefined) {
-  // Encoder selection
-  const [encoder, setEncoder] = useState<EncoderType>('webcodecs');
+export function useExportState(_composition: Composition | undefined) {
+  const {
+    settings,
+    setSettings,
+  } = useExportStore(useShallow((state) => ({
+    settings: state.settings,
+    setSettings: state.setSettings,
+  })));
 
-  // Shared settings
-  const [width, setWidth] = useState(composition?.width ?? 1920);
-  const [height, setHeight] = useState(composition?.height ?? 1080);
-  const [customWidth, setCustomWidth] = useState(composition?.width ?? 1920);
-  const [customHeight, setCustomHeight] = useState(composition?.height ?? 1080);
-  const [useCustomResolution, setUseCustomResolution] = useState(false);
-  const [fps, setFps] = useState(composition?.frameRate ?? 30);
-  const [customFps, setCustomFps] = useState(30);
-  const [useCustomFps, setUseCustomFps] = useState(false);
-  const [useInOut, setUseInOut] = useState(true);
-  const [filename, setFilename] = useState('export');
+  const {
+    encoder,
+    width,
+    height,
+    customWidth,
+    customHeight,
+    useCustomResolution,
+    fps,
+    customFps,
+    useCustomFps,
+    useInOut,
+    filename,
+    bitrate,
+    containerFormat,
+    videoCodec,
+    rateControl,
+    ffmpegCodec,
+    ffmpegContainer,
+    ffmpegPreset,
+    proresProfile,
+    dnxhrProfile,
+    ffmpegQuality,
+    ffmpegBitrate,
+    ffmpegRateControl,
+    stackedAlpha,
+    includeAudio,
+    audioSampleRate,
+    audioBitrate,
+    normalizeAudio,
+    videoEnabled,
+    visualMode,
+    imageFormat,
+    imageQuality,
+    specialContainer,
+  } = settings;
 
-  // WebCodecs settings
-  const [bitrate, setBitrate] = useState(15_000_000);
-  const [containerFormat, setContainerFormat] = useState<ContainerFormat>('mp4');
-  const [videoCodec, setVideoCodec] = useState<VideoCodec>('h264');
   const [codecSupport, setCodecSupport] = useState<Record<VideoCodec, boolean>>({
-    h264: true, h265: false, vp9: false, av1: false
+    h264: true,
+    h265: false,
+    vp9: false,
+    av1: false,
   });
-  const [rateControl, setRateControl] = useState<'vbr' | 'cbr'>('vbr');
-
-  // FFmpeg settings (default to ProRes which is most universally useful)
-  const [ffmpegCodec, setFfmpegCodec] = useState<FFmpegVideoCodec>('prores');
-  const [ffmpegContainer, setFfmpegContainer] = useState<FFmpegContainer>('mov');
-  const [ffmpegPreset, setFfmpegPreset] = useState<string>('');
-  const [proresProfile, setProresProfile] = useState<ProResProfile>('hq');
-  const [dnxhrProfile, setDnxhrProfile] = useState<DnxhrProfile>('dnxhr_hq');
-  const [ffmpegQuality, setFfmpegQuality] = useState(18);
-  const [ffmpegBitrate, setFfmpegBitrate] = useState(20_000_000);
-  const [ffmpegRateControl, setFfmpegRateControl] = useState<'crf' | 'cbr' | 'vbr'>('crf');
-
-  // FFmpeg loading state
   const [isFFmpegLoading, setIsFFmpegLoading] = useState(false);
   const [isFFmpegReady, setIsFFmpegReady] = useState(false);
   const [ffmpegLoadError, setFfmpegLoadError] = useState<string | null>(null);
-
-  // Alpha settings
-  const [stackedAlpha, setStackedAlpha] = useState(false);
-
-  // Audio settings
-  const [includeAudio, setIncludeAudio] = useState(true);
-  const [audioSampleRate, setAudioSampleRate] = useState<44100 | 48000>(48000);
-  const [audioBitrate, setAudioBitrate] = useState(256000);
-  const [normalizeAudio, setNormalizeAudio] = useState(false);
-
-  // Export state
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState<ExportProgress | null>(null);
   const [ffmpegProgress, setFfmpegProgress] = useState<FFmpegProgress | null>(null);
   const [exportPhase, setExportPhase] = useState<'idle' | 'rendering' | 'audio' | 'encoding'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [exporter, setExporter] = useState<FrameExporter | null>(null);
-
-  // Check WebCodecs support
   const [isSupported, setIsSupported] = useState(true);
   const [isAudioSupported, setIsAudioSupported] = useState(true);
   const [audioCodec, setAudioCodec] = useState<AudioCodec | null>(null);
 
-  // Check FFmpeg support
   const isFFmpegSupported = FFmpegBridge.isSupported();
   const isFFmpegMultiThreaded = FFmpegBridge.isMultiThreaded();
 
-  // --- Effects ---
-
-  // Detect WebCodecs and audio support on mount
   useEffect(() => {
     setIsSupported(FrameExporter.isSupported());
     AudioEncoderWrapper.detectSupportedCodec().then(result => {
@@ -102,18 +108,16 @@ export function useExportState(composition: Composition | undefined) {
         log.info(`Audio codec detected: ${result.codec.toUpperCase()}`);
       } else {
         setIsAudioSupported(false);
-        setIncludeAudio(false);
+        setSettings({ includeAudio: false });
         log.warn('No audio encoding supported in this browser');
       }
     });
-  }, []);
+  }, [setSettings]);
 
-  // Check codec support when resolution changes
   useEffect(() => {
     const checkSupport = async () => {
       const actualWidth = useCustomResolution ? customWidth : width;
       const actualHeight = useCustomResolution ? customHeight : height;
-
       const support: Record<VideoCodec, boolean> = {
         h264: await FrameExporter.checkCodecSupport('h264', actualWidth, actualHeight),
         h265: await FrameExporter.checkCodecSupport('h265', actualWidth, actualHeight),
@@ -122,38 +126,29 @@ export function useExportState(composition: Composition | undefined) {
       };
       setCodecSupport(support);
 
-      // If current codec is not supported, select first supported one
       const availableCodecs = FrameExporter.getVideoCodecs(containerFormat);
       if (!support[videoCodec]) {
         const firstSupported = availableCodecs.find(c => support[c.id]);
         if (firstSupported) {
-          setVideoCodec(firstSupported.id);
+          setSettings({ videoCodec: firstSupported.id });
         }
       }
     };
-    checkSupport();
-  }, [width, height, customWidth, customHeight, useCustomResolution, containerFormat, videoCodec]);
 
-  // Update video codec when container changes
+    void checkSupport();
+  }, [containerFormat, customHeight, customWidth, setSettings, useCustomResolution, videoCodec, width, height]);
+
   useEffect(() => {
     const availableCodecs = FrameExporter.getVideoCodecs(containerFormat);
     if (!availableCodecs.find(c => c.id === videoCodec)) {
-      setVideoCodec(availableCodecs[0].id);
+      setSettings({ videoCodec: availableCodecs[0].id });
     }
-  }, [containerFormat, videoCodec]);
-
-  // Update recommended bitrate when resolution changes
-  useEffect(() => {
-    setBitrate(FrameExporter.getRecommendedBitrate(width, height, fps));
-  }, [width, height, fps]);
-
-  // --- Handlers ---
+  }, [containerFormat, setSettings, videoCodec]);
 
   const handleResolutionChange = useCallback((value: string) => {
-    const [w, h] = value.split('x').map(Number);
-    setWidth(w);
-    setHeight(h);
-  }, []);
+    const [nextWidth, nextHeight] = value.split('x').map(Number);
+    setSettings({ width: nextWidth, height: nextHeight });
+  }, [setSettings]);
 
   const loadFFmpeg = useCallback(async () => {
     if (isFFmpegReady) return;
@@ -177,99 +172,159 @@ export function useExportState(composition: Composition | undefined) {
   const applyFFmpegPreset = useCallback((presetId: string) => {
     const presetConfig = PLATFORM_PRESETS[presetId];
     if (!presetConfig) {
-      setFfmpegPreset('');
+      setSettings({ ffmpegPreset: '' });
       return;
     }
 
-    setFfmpegCodec(presetConfig.codec);
-    setFfmpegContainer(presetConfig.container);
+    const patch: Partial<typeof settings> = {
+      ffmpegCodec: presetConfig.codec,
+      ffmpegContainer: presetConfig.container,
+      ffmpegPreset: presetId,
+    };
 
     if (presetConfig.quality !== undefined) {
-      setFfmpegRateControl('crf');
-      setFfmpegQuality(presetConfig.quality);
+      patch.ffmpegRateControl = 'crf';
+      patch.ffmpegQuality = presetConfig.quality;
     }
     if (presetConfig.bitrate !== undefined) {
-      setFfmpegRateControl('vbr');
-      setFfmpegBitrate(presetConfig.bitrate);
+      patch.ffmpegRateControl = 'vbr';
+      patch.ffmpegBitrate = presetConfig.bitrate;
     }
     if (presetConfig.proresProfile) {
-      setProresProfile(presetConfig.proresProfile);
+      patch.proresProfile = presetConfig.proresProfile;
     }
     if (presetConfig.dnxhrProfile) {
-      setDnxhrProfile(presetConfig.dnxhrProfile);
+      patch.dnxhrProfile = presetConfig.dnxhrProfile;
     }
 
-    setFfmpegPreset(presetId);
-  }, []);
+    setSettings(patch);
+  }, [setSettings, settings]);
 
   const handleFFmpegContainerChange = useCallback((newContainer: FFmpegContainer) => {
-    setFfmpegContainer(newContainer);
-    setFfmpegPreset('');
+    const patch: Partial<typeof settings> = {
+      ffmpegContainer: newContainer,
+      ffmpegPreset: '',
+    };
 
     const codecInfo = getCodecInfo(ffmpegCodec);
     if (codecInfo && !codecInfo.containers.includes(newContainer)) {
       if (newContainer === 'mxf') {
-        setFfmpegCodec('dnxhd');
+        patch.ffmpegCodec = 'dnxhd';
       } else if (newContainer === 'mov') {
-        setFfmpegCodec('prores');
+        patch.ffmpegCodec = 'prores';
       } else if (newContainer === 'mkv' || newContainer === 'avi') {
-        setFfmpegCodec('mjpeg');
+        patch.ffmpegCodec = 'mjpeg';
       }
     }
-  }, [ffmpegCodec]);
+
+    setSettings(patch);
+  }, [ffmpegCodec, setSettings, settings]);
 
   const handleFFmpegCodecChange = useCallback((newCodec: FFmpegVideoCodec) => {
-    setFfmpegCodec(newCodec);
-    setFfmpegPreset('');
+    const patch: Partial<typeof settings> = {
+      ffmpegCodec: newCodec,
+      ffmpegPreset: '',
+    };
 
     const codecInfo = getCodecInfo(newCodec);
     if (codecInfo && !codecInfo.containers.includes(ffmpegContainer)) {
-      setFfmpegContainer(codecInfo.containers[0]);
+      patch.ffmpegContainer = codecInfo.containers[0];
     }
-  }, [ffmpegContainer]);
+
+    setSettings(patch);
+  }, [ffmpegContainer, setSettings, settings]);
 
   return {
-    // Encoder
-    encoder, setEncoder,
-    // Resolution
-    width, setWidth, height, setHeight,
-    customWidth, setCustomWidth, customHeight, setCustomHeight,
-    useCustomResolution, setUseCustomResolution,
-    // Frame rate
-    fps, setFps, customFps, setCustomFps, useCustomFps, setUseCustomFps,
-    // Range
-    useInOut, setUseInOut,
-    // Filename
-    filename, setFilename,
-    // WebCodecs
-    bitrate, setBitrate, containerFormat, setContainerFormat,
-    videoCodec, setVideoCodec, codecSupport, rateControl, setRateControl,
-    // FFmpeg
-    ffmpegCodec, ffmpegContainer, ffmpegPreset,
-    proresProfile, setProresProfile, dnxhrProfile, setDnxhrProfile,
-    ffmpegQuality, setFfmpegQuality, ffmpegBitrate, setFfmpegBitrate,
-    ffmpegRateControl, setFfmpegRateControl,
-    // FFmpeg loading
-    isFFmpegLoading, isFFmpegReady, ffmpegLoadError,
-    // Alpha
-    stackedAlpha, setStackedAlpha,
-    // Audio
-    includeAudio, setIncludeAudio,
-    audioSampleRate, setAudioSampleRate,
-    audioBitrate, setAudioBitrate,
-    normalizeAudio, setNormalizeAudio,
-    // Export state
-    isExporting, setIsExporting,
-    progress, setProgress,
-    ffmpegProgress, setFfmpegProgress,
-    exportPhase, setExportPhase,
-    error, setError,
-    exporter, setExporter,
-    // Support detection
-    isSupported, isAudioSupported, audioCodec,
-    isFFmpegSupported, isFFmpegMultiThreaded,
-    // Handlers
-    handleResolutionChange, loadFFmpeg, applyFFmpegPreset,
-    handleFFmpegContainerChange, handleFFmpegCodecChange,
+    encoder,
+    setEncoder: (value: EncoderType) => setSettings({ encoder: value }),
+    width,
+    setWidth: (value: number) => setSettings({ width: value }),
+    height,
+    setHeight: (value: number) => setSettings({ height: value }),
+    customWidth,
+    setCustomWidth: (value: number) => setSettings({ customWidth: value }),
+    customHeight,
+    setCustomHeight: (value: number) => setSettings({ customHeight: value }),
+    useCustomResolution,
+    setUseCustomResolution: (value: boolean) => setSettings({ useCustomResolution: value }),
+    fps,
+    setFps: (value: number) => setSettings({ fps: value }),
+    customFps,
+    setCustomFps: (value: number) => setSettings({ customFps: value }),
+    useCustomFps,
+    setUseCustomFps: (value: boolean) => setSettings({ useCustomFps: value }),
+    useInOut,
+    setUseInOut: (value: boolean) => setSettings({ useInOut: value }),
+    filename,
+    setFilename: (value: string) => setSettings({ filename: value }),
+    bitrate,
+    setBitrate: (value: number) => setSettings({ bitrate: value }),
+    containerFormat,
+    setContainerFormat: (value: ContainerFormat) => setSettings({ containerFormat: value }),
+    videoCodec,
+    setVideoCodec: (value: VideoCodec) => setSettings({ videoCodec: value }),
+    codecSupport,
+    rateControl,
+    setRateControl: (value: 'vbr' | 'cbr') => setSettings({ rateControl: value }),
+    ffmpegCodec,
+    setFfmpegCodec: (value: FFmpegVideoCodec) => setSettings({ ffmpegCodec: value }),
+    ffmpegContainer,
+    setFfmpegContainer: (value: FFmpegContainer) => setSettings({ ffmpegContainer: value }),
+    ffmpegPreset,
+    proresProfile,
+    setProresProfile: (value: ProResProfile) => setSettings({ proresProfile: value }),
+    dnxhrProfile,
+    setDnxhrProfile: (value: DnxhrProfile) => setSettings({ dnxhrProfile: value }),
+    ffmpegQuality,
+    setFfmpegQuality: (value: number) => setSettings({ ffmpegQuality: value }),
+    ffmpegBitrate,
+    setFfmpegBitrate: (value: number) => setSettings({ ffmpegBitrate: value }),
+    ffmpegRateControl,
+    setFfmpegRateControl: (value: 'crf' | 'cbr' | 'vbr') => setSettings({ ffmpegRateControl: value }),
+    isFFmpegLoading,
+    isFFmpegReady,
+    ffmpegLoadError,
+    stackedAlpha,
+    setStackedAlpha: (value: boolean) => setSettings({ stackedAlpha: value }),
+    includeAudio,
+    setIncludeAudio: (value: boolean) => setSettings({ includeAudio: value }),
+    audioSampleRate,
+    setAudioSampleRate: (value: 44100 | 48000) => setSettings({ audioSampleRate: value }),
+    audioBitrate,
+    setAudioBitrate: (value: number) => setSettings({ audioBitrate: value }),
+    normalizeAudio,
+    setNormalizeAudio: (value: boolean) => setSettings({ normalizeAudio: value }),
+    videoEnabled,
+    setVideoEnabled: (value: boolean) => setSettings({ videoEnabled: value }),
+    visualMode,
+    setVisualMode: (value: ExportVisualMode) => setSettings({ visualMode: value }),
+    imageFormat,
+    setImageFormat: (value: ExportImageFormat) => setSettings({ imageFormat: value }),
+    imageQuality,
+    setImageQuality: (value: number) => setSettings({ imageQuality: value }),
+    specialContainer,
+    setSpecialContainer: (value: ExportSpecialContainer) => setSettings({ specialContainer: value }),
+    isExporting,
+    setIsExporting,
+    progress,
+    setProgress,
+    ffmpegProgress,
+    setFfmpegProgress,
+    exportPhase,
+    setExportPhase,
+    error,
+    setError,
+    exporter,
+    setExporter,
+    isSupported,
+    isAudioSupported,
+    audioCodec,
+    isFFmpegSupported,
+    isFFmpegMultiThreaded,
+    handleResolutionChange,
+    loadFFmpeg,
+    applyFFmpegPreset,
+    handleFFmpegContainerChange,
+    handleFFmpegCodecChange,
   };
 }

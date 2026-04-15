@@ -2,6 +2,7 @@
 // Handles nested composition loading, audio mixdown, and linked audio creation
 
 import type { TimelineClip, TimelineTrack, CompositionTimelineData, SerializableClip, Keyframe } from '../../../types';
+import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
 import type { Composition } from '../types';
 import { DEFAULT_TRANSFORM, calculateNativeScale, MAX_NESTING_DEPTH } from '../constants';
 import { useMediaStore } from '../../mediaStore';
@@ -13,6 +14,7 @@ import { blobUrlManager } from '../helpers/blobUrlManager';
 import { updateClipById } from '../helpers/clipStateHelpers';
 import { Logger } from '../../../services/logger';
 import { thumbnailRenderer } from '../../../services/thumbnailRenderer';
+import { lottieRuntimeManager } from '../../../services/vectorAnimation/LottieRuntimeManager';
 // Note: compositionRenderer is used elsewhere for cache invalidation
 
 const log = Logger.create('AddCompClip');
@@ -160,6 +162,24 @@ export async function buildClipSegments(
         }
       } catch (e) {
         log.warn('Failed to generate image segment thumbnail', { clipId: serializedClip.id });
+      }
+    } else if (nestedClip?.source?.textCanvas) {
+      if (nestedClip.source.type === 'lottie') {
+        lottieRuntimeManager.renderClipAtTime(nestedClip, nestedClip.startTime);
+      }
+
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 160;
+        canvas.height = 90;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(nestedClip.source.textCanvas, 0, 0, canvas.width, canvas.height);
+          thumbnails = [canvas.toDataURL('image/jpeg', 0.7)];
+        }
+      } catch (e) {
+        log.warn('Failed to generate canvas segment thumbnail', { clipId: serializedClip.id, error: e });
       }
     }
 
@@ -337,21 +357,31 @@ async function loadSubNestedClips(
       inPoint: sc.inPoint,
       outPoint: sc.outPoint,
       source: null,
+      mediaFileId: sc.mediaFileId,
       thumbnails: sc.thumbnails,
       transform: sc.transform,
       effects: sc.effects || [],
       masks: sc.masks || [],
+      reversed: sc.reversed,
+      speed: sc.speed,
+      preservesPitch: sc.preservesPitch,
       isLoading: true,
     };
     result.push(clip);
 
     // Load media directly on the clip object (no store update needed)
     const type = sc.sourceType;
-    const fileUrl = blobUrlManager.create(clipId, mediaFile.file, (type === 'video' ? 'video' : type === 'audio' ? 'audio' : type === 'model' ? 'model' : 'image') as 'video' | 'audio' | 'image' | 'model');
+    const fileUrl = type === 'lottie'
+      ? null
+      : blobUrlManager.create(
+        clipId,
+        mediaFile.file,
+        (type === 'video' ? 'video' : type === 'audio' ? 'audio' : type === 'model' ? 'model' : 'image') as 'video' | 'audio' | 'image' | 'model'
+      );
 
     if (type === 'video') {
       const video = document.createElement('video');
-      video.src = fileUrl;
+      video.src = fileUrl!;
       video.muted = true;
       video.playsInline = true;
       video.preload = 'auto';
@@ -376,21 +406,44 @@ async function loadSubNestedClips(
       }, { once: true });
     } else if (type === 'image') {
       const img = new Image();
-      img.src = fileUrl;
+      img.src = fileUrl!;
       img.addEventListener('load', () => {
         clip.source = { type: 'image', imageElement: img };
         clip.isLoading = false;
       }, { once: true });
     } else if (type === 'audio') {
       const audio = document.createElement('audio');
-      audio.src = fileUrl;
+      audio.src = fileUrl!;
       audio.preload = 'auto';
       audio.addEventListener('canplaythrough', () => {
         clip.source = { type: 'audio', audioElement: audio, naturalDuration: audio.duration };
         clip.isLoading = false;
       }, { once: true });
+    } else if (type === 'lottie') {
+      clip.source = {
+        type: 'lottie',
+        mediaFileId: sc.mediaFileId,
+        naturalDuration: sc.naturalDuration,
+        vectorAnimationSettings: sc.vectorAnimationSettings,
+      };
+      void lottieRuntimeManager.prepareClipSource(clip, mediaFile.file).then((runtime) => {
+        const naturalDuration = runtime.metadata.duration ?? sc.naturalDuration ?? sc.duration;
+        clip.source = {
+          type: 'lottie',
+          textCanvas: runtime.canvas,
+          mediaFileId: sc.mediaFileId,
+          naturalDuration,
+          vectorAnimationSettings: sc.vectorAnimationSettings,
+        };
+        clip.isLoading = false;
+        lottieRuntimeManager.renderClipAtTime(clip, clip.startTime);
+        log.debug('Sub-nested lottie loaded', { clipId, name: clip.name, depth });
+      }).catch((error) => {
+        clip.isLoading = false;
+        log.warn('Failed to load sub-nested lottie', { clipId, error });
+      });
     } else if (type === 'model') {
-      clip.source = { type: 'model', modelUrl: fileUrl, naturalDuration: 3600 };
+      clip.source = { type: 'model', modelUrl: fileUrl!, naturalDuration: 3600 };
       clip.is3D = true;
       clip.isLoading = false;
     }
@@ -510,6 +563,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
       inPoint: serializedClip.inPoint,
       outPoint: serializedClip.outPoint,
       source: null,
+      mediaFileId: serializedClip.mediaFileId,
       thumbnails: serializedClip.thumbnails,
       linkedClipId: serializedClip.linkedClipId,
       waveform: serializedClip.waveform,
@@ -518,6 +572,9 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
       masks: serializedClip.masks || [],
       isLoading: true,
       is3D: serializedClip.is3D,
+      reversed: serializedClip.reversed,
+      speed: serializedClip.speed,
+      preservesPitch: serializedClip.preservesPitch,
     };
 
     nestedClips.push(nestedClip);
@@ -540,18 +597,34 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
     // Load media element async - track URL for cleanup
     const type = serializedClip.sourceType;
     const urlType = type === 'video' ? 'video' : type === 'audio' ? 'audio' : type === 'model' ? 'model' : 'image';
-    const fileUrl = blobUrlManager.create(nestedClip.id, mediaFile.file, urlType as 'video' | 'audio' | 'image' | 'model');
+    const fileUrl = type === 'lottie'
+      ? null
+      : blobUrlManager.create(nestedClip.id, mediaFile.file, urlType as 'video' | 'audio' | 'image' | 'model');
 
     if (type === 'video') {
-      loadVideoNestedClip(compClipId, nestedClip.id, fileUrl, mediaFile.file, get, set);
+      loadVideoNestedClip(compClipId, nestedClip.id, fileUrl!, mediaFile.file, get, set);
     } else if (type === 'audio') {
-      loadAudioNestedClip(compClipId, nestedClip.id, fileUrl, get, set);
+      loadAudioNestedClip(compClipId, nestedClip.id, fileUrl!, get, set);
     } else if (type === 'image') {
-      loadImageNestedClip(compClipId, nestedClip.id, fileUrl, get, set);
+      loadImageNestedClip(compClipId, nestedClip.id, fileUrl!, get, set);
+    } else if (type === 'lottie') {
+      loadLottieNestedClip(
+        compClipId,
+        nestedClip.id,
+        mediaFile.file,
+        {
+          mediaFileId: serializedClip.mediaFileId,
+          naturalDuration: serializedClip.naturalDuration,
+          vectorAnimationSettings: serializedClip.vectorAnimationSettings,
+        },
+        nestedClip,
+        get,
+        set
+      );
     } else if (type === 'model') {
       // 3D model — set directly on clip object (synchronous, no async load needed)
       // Must mutate the local object because the array is returned before store updates apply
-      nestedClip.source = { type: 'model', modelUrl: fileUrl, naturalDuration: 3600 };
+      nestedClip.source = { type: 'model', modelUrl: fileUrl!, naturalDuration: 3600 };
       nestedClip.is3D = true;
       nestedClip.isLoading = false;
     }
@@ -726,6 +799,80 @@ function loadImageNestedClip(
 
     log.debug('Nested image loaded', { compClipId, nestedClipId });
   }, { once: true });
+}
+
+function loadLottieNestedClip(
+  compClipId: string,
+  nestedClipId: string,
+  file: File,
+  sourceInfo: {
+    mediaFileId?: string;
+    naturalDuration?: number;
+    vectorAnimationSettings?: VectorAnimationClipSettings;
+  },
+  targetClip: TimelineClip | undefined,
+  get: CompClipStoreGet,
+  set: CompClipStoreSet
+): void {
+  const baseClip = get().clips
+    .find((clip) => clip.id === compClipId)
+    ?.nestedClips?.find((clip) => clip.id === nestedClipId) ?? targetClip;
+
+  const runtimeClip: TimelineClip = {
+    ...(baseClip ?? {
+      id: nestedClipId,
+      trackId: '',
+      name: file.name,
+      file,
+      startTime: 0,
+      duration: sourceInfo.naturalDuration ?? 0,
+      inPoint: 0,
+      outPoint: sourceInfo.naturalDuration ?? 0,
+      transform: { ...DEFAULT_TRANSFORM },
+      effects: [],
+    }),
+    file,
+    source: {
+      type: 'lottie',
+      mediaFileId: sourceInfo.mediaFileId,
+      naturalDuration: sourceInfo.naturalDuration,
+      vectorAnimationSettings: sourceInfo.vectorAnimationSettings,
+    },
+  };
+
+  void lottieRuntimeManager.prepareClipSource(runtimeClip, file).then((runtime) => {
+    const naturalDuration =
+      runtime.metadata.duration ??
+      sourceInfo.naturalDuration ??
+      runtimeClip.duration;
+    runtimeClip.source = {
+      type: 'lottie',
+      textCanvas: runtime.canvas,
+      mediaFileId: sourceInfo.mediaFileId,
+      naturalDuration,
+      vectorAnimationSettings: sourceInfo.vectorAnimationSettings,
+    };
+    lottieRuntimeManager.renderClipAtTime(runtimeClip, runtimeClip.startTime);
+
+    set({
+      clips: updateNestedClipInCompClip(get().clips, compClipId, nestedClipId, {
+        file,
+        source: runtimeClip.source,
+        isLoading: false,
+      }),
+    });
+
+    const { invalidateCache } = get();
+    invalidateCache?.();
+    log.debug('Nested lottie loaded', { compClipId, nestedClipId });
+  }).catch((error) => {
+    set({
+      clips: updateNestedClipInCompClip(get().clips, compClipId, nestedClipId, {
+        isLoading: false,
+      }),
+    });
+    log.warn('Nested lottie load failed', { compClipId, nestedClipId, error });
+  });
 }
 
 export interface GenerateCompThumbnailsParams {

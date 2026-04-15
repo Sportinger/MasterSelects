@@ -14,6 +14,8 @@ import type {
   FlashBoardComposerState,
   FlashBoardGenerationMetadata,
 } from './flashboardStore/types';
+import type { ExportStoreData } from './exportStore';
+import { createDefaultExportStoreData, getExportStoreData } from './exportStore';
 
 const log = Logger.create('History');
 
@@ -58,6 +60,8 @@ interface StateSnapshot {
     composer: FlashBoardComposerState;
     generationMetadataByMediaId: Record<string, FlashBoardGenerationMetadata>;
   };
+
+  export: ExportStoreData;
 }
 
 interface HistoryState {
@@ -124,6 +128,8 @@ interface FlashBoardStoreSnapshot {
   composer: FlashBoardComposerState;
 }
 
+type ExportStoreSnapshot = ExportStoreData;
+
 // Callback to flush pending debounced captures before undo/redo (set by useGlobalHistory)
 // Flush = execute the pending capture immediately so its state isn't lost
 let flushPendingCaptureCallback: (() => void) | null = null;
@@ -145,6 +151,8 @@ let getDockState: (() => any) | undefined;
 let setDockState: ((state: any) => void) | undefined;
 let getFlashBoardState: (() => FlashBoardStoreSnapshot) | undefined;
 let setFlashBoardState: ((state: Partial<FlashBoardStoreSnapshot>) => void) | undefined;
+let getExportState: (() => ExportStoreSnapshot) | undefined;
+let setExportState: ((state: Partial<ExportStoreSnapshot>) => void) | undefined;
 
 // Initialize store references (called from useGlobalHistory)
 export function initHistoryStoreRefs(stores: {
@@ -152,6 +160,7 @@ export function initHistoryStoreRefs(stores: {
   media: { getState: () => MediaStoreState; setState: (state: Partial<MediaStoreState>) => void };
   dock: { getState: () => any; setState: (state: any) => void };
   flashboard?: { getState: () => FlashBoardStoreSnapshot; setState: (state: Partial<FlashBoardStoreSnapshot>) => void };
+  export?: { getState: () => ExportStoreSnapshot; setState: (state: Partial<ExportStoreSnapshot>) => void };
 }) {
   getTimelineState = stores.timeline.getState;
   setTimelineState = stores.timeline.setState;
@@ -161,6 +170,8 @@ export function initHistoryStoreRefs(stores: {
   setDockState = stores.dock.setState;
   getFlashBoardState = stores.flashboard?.getState;
   setFlashBoardState = stores.flashboard?.setState;
+  getExportState = stores.export?.getState;
+  setExportState = stores.export?.setState;
 }
 
 // Deep clone helper (handles most objects, excluding DOM elements and functions)
@@ -270,6 +281,7 @@ function createSnapshot(label: string): StateSnapshot {
       composer: deepClone(flashboard.composer || createDefaultFlashBoardComposer()),
       generationMetadataByMediaId: deepClone(flashBoardMediaBridge.serializeMetadata()),
     },
+    export: deepClone(getExportStoreData(getExportState?.() || createDefaultExportStoreData())),
   };
 }
 
@@ -351,6 +363,10 @@ function applySnapshot(snapshot: StateSnapshot) {
   flashBoardMediaBridge.hydrateMetadata(
     deepClone(snapshot.flashboard?.generationMetadataByMediaId || {})
   );
+
+  if (setExportState) {
+    setExportState(deepClone(snapshot.export));
+  }
 }
 
 export const useHistoryStore = create<HistoryState>()(
