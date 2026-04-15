@@ -1,6 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFlashBoardStore } from '../../../stores/flashboardStore';
-import { selectActiveBoard, selectActiveBoardNodes, selectNodeById } from '../../../stores/flashboardStore/selectors';
+import {
+  selectActiveBoard,
+  selectActiveBoardNodes,
+  selectActiveBoardReferenceUsageByMediaFileId,
+  selectNodeById,
+} from '../../../stores/flashboardStore/selectors';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { FlashBoardNode } from './FlashBoardNode';
 import { FlashBoardContextMenu } from './FlashBoardContextMenu';
@@ -13,19 +18,51 @@ interface ContextMenuState {
   canvasPosition: { x: number; y: number };
 }
 
+interface PanSession {
+  latestClientX: number;
+  latestClientY: number;
+  currentPanX: number;
+  currentPanY: number;
+}
+
+interface MarqueeSelectionState {
+  startClientX: number;
+  startClientY: number;
+  currentClientX: number;
+  currentClientY: number;
+  hasDragged: boolean;
+}
+
+const NODE_VISIBILITY_OVERSCAN_PX = 240;
+const MARQUEE_SELECTION_THRESHOLD = 4;
+
 export function FlashBoardCanvas() {
   const board = useFlashBoardStore(selectActiveBoard);
   const nodes = useFlashBoardStore(selectActiveBoardNodes);
+  const referenceUsageByMediaFileId = useFlashBoardStore(selectActiveBoardReferenceUsageByMediaFileId);
+  const hoveredComposerReference = useFlashBoardStore((s) => s.hoveredComposerReference);
   const selectedNodeIds = useFlashBoardStore((s) => s.selectedNodeIds);
   const clearSelection = useFlashBoardStore((s) => s.clearSelection);
+  const setSelectedNodes = useFlashBoardStore((s) => s.setSelectedNodes);
   const updateViewport = useFlashBoardStore((s) => s.updateViewport);
   const createReferenceNode = useFlashBoardStore((s) => s.createReferenceNode);
+  const mediaFiles = useMediaStore((s) => s.files);
 
   const isPanning = useRef(false);
-  const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+  const marqueeSelectionRef = useRef<MarqueeSelectionState | null>(null);
+  const suppressContextMenuRef = useRef(false);
+  const panStart = useRef<PanSession>({
+    latestClientX: 0,
+    latestClientY: 0,
+    currentPanX: 0,
+    currentPanY: 0,
+  });
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isPointerLocked, setIsPointerLocked] = useState(false);
   const [overlapHoverNodeId, setOverlapHoverNodeId] = useState<string | null>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  const [marqueeSelection, setMarqueeSelection] = useState<MarqueeSelectionState | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const zoom = board?.viewport.zoom ?? 1;
@@ -69,48 +106,227 @@ export function FlashBoardCanvas() {
     return () => el.removeEventListener('wheel', handler);
   }, []);
 
+  useEffect(() => {
+    const handlePointerLockChange = () => {
+      setIsPointerLocked(document.pointerLockElement === canvasRef.current);
+    };
+
+    const handlePointerLockError = () => {
+      setIsPointerLocked(false);
+    };
+
+    document.addEventListener('pointerlockchange', handlePointerLockChange);
+    document.addEventListener('pointerlockerror', handlePointerLockError);
+
+    return () => {
+      document.removeEventListener('pointerlockchange', handlePointerLockChange);
+      document.removeEventListener('pointerlockerror', handlePointerLockError);
+    };
+  }, []);
+
+  useEffect(() => {
+    const canvasElement = canvasRef.current;
+    if (!canvasElement) {
+      return;
+    }
+
+    const updateSize = () => {
+      const rect = canvasElement.getBoundingClientRect();
+      setCanvasSize({ width: rect.width, height: rect.height });
+    };
+
+    updateSize();
+
+    const resizeObserver = new ResizeObserver(() => updateSize());
+    resizeObserver.observe(canvasElement);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  const mediaFilesById = useMemo(
+    () => new Map(mediaFiles.map((file) => [file.id, file])),
+    [mediaFiles],
+  );
+  const selectNodesInMarquee = useCallback((startClientX: number, startClientY: number, endClientX: number, endClientY: number) => {
+    const start = screenToCanvas(startClientX, startClientY);
+    const end = screenToCanvas(endClientX, endClientY);
+    const minX = Math.min(start.x, end.x);
+    const minY = Math.min(start.y, end.y);
+    const maxX = Math.max(start.x, end.x);
+    const maxY = Math.max(start.y, end.y);
+
+    const nextSelectedNodeIds = nodes.filter((node) => {
+      const mediaFileId = node.result?.mediaFileId;
+      const mediaFile = mediaFileId ? mediaFilesById.get(mediaFileId) : undefined;
+      const { width, height } = resolveFlashBoardNodeDisplaySize(node, mediaFile);
+      const left = node.position.x;
+      const top = node.position.y;
+      const right = left + width;
+      const bottom = top + height;
+
+      return right >= minX && left <= maxX && bottom >= minY && top <= maxY;
+    }).map((node) => node.id);
+
+    setSelectedNodes(nextSelectedNodeIds);
+  }, [mediaFilesById, nodes, screenToCanvas, setSelectedNodes]);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    // Right-click: don't interfere, let contextmenu handle it
-    if (e.button === 2) return;
-    // Close context menu on any left/middle click
     if (contextMenu) {
       setContextMenu(null);
     }
+    if (e.button === 2) {
+      const session: MarqueeSelectionState = {
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        currentClientX: e.clientX,
+        currentClientY: e.clientY,
+        hasDragged: false,
+      };
+      marqueeSelectionRef.current = session;
+
+      const handleMouseMove = (ev: MouseEvent) => {
+        const currentSession = marqueeSelectionRef.current;
+        if (!currentSession) {
+          return;
+        }
+
+        currentSession.currentClientX = ev.clientX;
+        currentSession.currentClientY = ev.clientY;
+        const dragDistance = Math.hypot(
+          ev.clientX - currentSession.startClientX,
+          ev.clientY - currentSession.startClientY,
+        );
+
+        if (!currentSession.hasDragged && dragDistance >= MARQUEE_SELECTION_THRESHOLD) {
+          currentSession.hasDragged = true;
+          suppressContextMenuRef.current = true;
+          setOverlapHoverNodeId(null);
+        }
+
+        if (!currentSession.hasDragged) {
+          return;
+        }
+
+        setMarqueeSelection({ ...currentSession });
+        selectNodesInMarquee(
+          currentSession.startClientX,
+          currentSession.startClientY,
+          currentSession.currentClientX,
+          currentSession.currentClientY,
+        );
+      };
+
+      const finishMarquee = () => {
+        const currentSession = marqueeSelectionRef.current;
+        if (currentSession?.hasDragged) {
+          selectNodesInMarquee(
+            currentSession.startClientX,
+            currentSession.startClientY,
+            currentSession.currentClientX,
+            currentSession.currentClientY,
+          );
+        }
+        marqueeSelectionRef.current = null;
+        setMarqueeSelection(null);
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('blur', handleWindowBlur);
+      };
+
+      const handleMouseUp = () => {
+        finishMarquee();
+      };
+
+      const handleWindowBlur = () => {
+        finishMarquee();
+      };
+
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('blur', handleWindowBlur);
+      return;
+    }
+
     if (e.button === 0) {
       clearSelection();
     }
     if (e.button === 0 || e.button === 1) {
       if (!board) return;
+      if (e.button === 1) {
+        e.preventDefault();
+      }
       isPanning.current = true;
+      const canvasElement = canvasRef.current;
       panStart.current = {
-        x: e.clientX,
-        y: e.clientY,
-        panX: board.viewport.panX,
-        panY: board.viewport.panY,
+        latestClientX: e.clientX,
+        latestClientY: e.clientY,
+        currentPanX: board.viewport.panX,
+        currentPanY: board.viewport.panY,
       };
 
       const handleMouseMove = (ev: MouseEvent) => {
         if (!isPanning.current || !board) return;
-        const dx = ev.clientX - panStart.current.x;
-        const dy = ev.clientY - panStart.current.y;
+        const pointerLocked = document.pointerLockElement === canvasElement;
+        let deltaX: number;
+        let deltaY: number;
+
+        if (pointerLocked) {
+          deltaX = ev.movementX;
+          deltaY = ev.movementY;
+        } else {
+          deltaX = ev.clientX - panStart.current.latestClientX;
+          deltaY = ev.clientY - panStart.current.latestClientY;
+          panStart.current.latestClientX = ev.clientX;
+          panStart.current.latestClientY = ev.clientY;
+        }
+
+        const nextPanX = panStart.current.currentPanX + deltaX;
+        const nextPanY = panStart.current.currentPanY + deltaY;
+        panStart.current.currentPanX = nextPanX;
+        panStart.current.currentPanY = nextPanY;
         updateViewport(board.id, {
-          panX: panStart.current.panX + dx,
-          panY: panStart.current.panY + dy,
+          panX: nextPanX,
+          panY: nextPanY,
         });
       };
 
-      const handleMouseUp = () => {
+      const finishPan = () => {
         isPanning.current = false;
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('blur', handleWindowBlur);
+        if (document.pointerLockElement === canvasElement) {
+          void document.exitPointerLock();
+        }
       };
 
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
+      const handleMouseUp = () => {
+        finishPan();
+      };
+
+      const handleWindowBlur = () => {
+        finishPan();
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('blur', handleWindowBlur);
+
+      if (canvasElement?.requestPointerLock) {
+        void Promise.resolve(canvasElement.requestPointerLock()).catch(() => undefined);
+      }
     }
-  }, [board, clearSelection, updateViewport, contextMenu]);
+  }, [board, clearSelection, contextMenu, selectNodesInMarquee, updateViewport]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    if (suppressContextMenuRef.current) {
+      suppressContextMenuRef.current = false;
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     const canvasPos = screenToCanvas(e.clientX, e.clientY);
@@ -127,6 +343,10 @@ export function FlashBoardCanvas() {
   }, [screenToCanvas]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (marqueeSelectionRef.current) {
+      setOverlapHoverNodeId(null);
+      return;
+    }
     if (isPanning.current) {
       setOverlapHoverNodeId(null);
       return;
@@ -195,6 +415,30 @@ export function FlashBoardCanvas() {
     }
   }, [board, screenToCanvas, createReferenceNode]);
 
+  const visibleNodes = useMemo(() => {
+    if (canvasSize.width <= 0 || canvasSize.height <= 0) {
+      return nodes;
+    }
+
+    const overscanWorld = NODE_VISIBILITY_OVERSCAN_PX / Math.max(zoom, 0.1);
+    const minX = ((-panX) / Math.max(zoom, 0.1)) - overscanWorld;
+    const minY = ((-panY) / Math.max(zoom, 0.1)) - overscanWorld;
+    const maxX = ((canvasSize.width - panX) / Math.max(zoom, 0.1)) + overscanWorld;
+    const maxY = ((canvasSize.height - panY) / Math.max(zoom, 0.1)) + overscanWorld;
+
+    return nodes.filter((node) => {
+      const mediaFileId = node.result?.mediaFileId;
+      const mediaFile = mediaFileId ? mediaFilesById.get(mediaFileId) : undefined;
+      const { width, height } = resolveFlashBoardNodeDisplaySize(node, mediaFile);
+      const left = node.position.x;
+      const top = node.position.y;
+      const right = left + width;
+      const bottom = top + height;
+
+      return right >= minX && left <= maxX && bottom >= minY && top <= maxY;
+    });
+  }, [canvasSize.height, canvasSize.width, mediaFilesById, nodes, panX, panY, zoom]);
+
   const selectedSet = new Set(selectedNodeIds);
   const contextNode = useFlashBoardStore((s) =>
     contextMenu?.nodeId ? selectNodeById(s, contextMenu.nodeId) : null
@@ -210,11 +454,34 @@ export function FlashBoardCanvas() {
   const overlapOutlineSize = overlapOutlineNode
     ? resolveFlashBoardNodeDisplaySize(overlapOutlineNode, overlapOutlineMediaFile)
     : null;
+  const marqueeRect = useMemo(() => {
+    if (!marqueeSelection?.hasDragged) {
+      return null;
+    }
+
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return null;
+    }
+
+    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+    const startX = clamp(marqueeSelection.startClientX - rect.left, 0, rect.width);
+    const startY = clamp(marqueeSelection.startClientY - rect.top, 0, rect.height);
+    const endX = clamp(marqueeSelection.currentClientX - rect.left, 0, rect.width);
+    const endY = clamp(marqueeSelection.currentClientY - rect.top, 0, rect.height);
+
+    return {
+      left: Math.min(startX, endX),
+      top: Math.min(startY, endY),
+      width: Math.abs(endX - startX),
+      height: Math.abs(endY - startY),
+    };
+  }, [marqueeSelection]);
 
   return (
     <div
       ref={canvasRef}
-      className={`flashboard-canvas ${isDragOver ? 'drag-over' : ''}`}
+      className={`flashboard-canvas ${isDragOver ? 'drag-over' : ''} ${isPointerLocked ? 'pointer-locked' : ''}`}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
@@ -227,13 +494,19 @@ export function FlashBoardCanvas() {
         className="flashboard-canvas-inner"
         style={{ transform: `translate(${panX}px, ${panY}px) scale(${zoom})` }}
       >
-        {nodes.map((node) => (
+        {visibleNodes.map((node) => (
           <FlashBoardNode
             key={node.id}
             node={node}
             isSelected={selectedSet.has(node.id)}
             isOverlapOutlined={overlapHoverNodeId === node.id}
             zoom={zoom}
+            referenceUsage={node.result?.mediaFileId ? referenceUsageByMediaFileId[node.result.mediaFileId] : undefined}
+            hoveredComposerReferenceRole={
+              node.result?.mediaFileId && hoveredComposerReference?.mediaFileId === node.result.mediaFileId
+                ? hoveredComposerReference.role
+                : undefined
+            }
             onContextMenu={handleNodeContextMenu}
           />
         ))}
@@ -249,6 +522,13 @@ export function FlashBoardCanvas() {
           />
         )}
       </div>
+
+      {marqueeRect && (
+        <div
+          className="flashboard-canvas-marquee"
+          style={marqueeRect}
+        />
+      )}
 
       {contextMenu && board && (
         <FlashBoardContextMenu

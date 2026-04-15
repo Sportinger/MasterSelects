@@ -8,6 +8,7 @@ import type { SubmitNodeJobInput, SubmitNodeJobResult } from './types';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useMediaStore } from '../../stores/mediaStore';
 import { createThumbnail } from '../../stores/mediaStore/helpers/thumbnailHelpers';
+import { getCatalogEntry } from './FlashBoardModelCatalog';
 
 const log = Logger.create('FlashBoardJob');
 
@@ -159,8 +160,12 @@ class FlashBoardJobService {
           throw new Error(`${request.providerId} is currently only supported via Kie.ai or MasterSelects Cloud`);
         }
 
+        const catalogEntry = getCatalogEntry(request.service, request.providerId);
+        const effectiveReferenceMediaFileIds = typeof catalogEntry?.maxReferenceImages === 'number'
+          ? (request.referenceMediaFileIds ?? []).slice(0, catalogEntry.maxReferenceImages)
+          : (request.referenceMediaFileIds ?? []);
         const referenceImageInputs = (await Promise.all(
-          (request.referenceMediaFileIds ?? []).map((mediaFileId) => this.resolveReferenceImage(mediaFileId))
+          effectiveReferenceMediaFileIds.map((mediaFileId) => this.resolveReferenceImage(mediaFileId))
         )).filter((imageUrl): imageUrl is string => Boolean(imageUrl));
 
         const remoteTaskId = request.service === 'cloud'

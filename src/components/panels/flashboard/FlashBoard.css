@@ -184,6 +184,10 @@
   cursor: grabbing;
 }
 
+.flashboard-canvas.pointer-locked {
+  cursor: none;
+}
+
 .flashboard-canvas.drag-over {
   background-color: rgba(79, 195, 247, 0.04);
   outline: 2px dashed rgba(79, 195, 247, 0.3);
@@ -197,6 +201,16 @@
   transform-origin: 0 0;
   width: 0;
   height: 0;
+}
+
+.flashboard-canvas-marquee {
+  position: absolute;
+  pointer-events: none;
+  border: 1px solid rgba(79, 195, 247, 0.92);
+  background: rgba(79, 195, 247, 0.14);
+  box-shadow: 0 0 0 1px rgba(79, 195, 247, 0.18), 0 0 26px rgba(79, 195, 247, 0.14);
+  border-radius: 8px;
+  z-index: 20;
 }
 
 /* ─── Node ─── */
@@ -214,6 +228,24 @@
   transition: box-shadow 0.15s ease;
 }
 
+.flashboard-node.has-reference-role:hover,
+.flashboard-node.has-reference-role.selected {
+  animation: flashboard-reference-glow 2.8s ease-in-out infinite;
+  will-change: box-shadow;
+}
+
+.flashboard-node.composer-reference-hovered {
+  animation: flashboard-reference-glow 0.9s ease-in-out infinite;
+  will-change: box-shadow;
+  z-index: 8;
+}
+
+.flashboard-node.composer-reference-hovered .flashboard-node-preview,
+.flashboard-node.composer-reference-hovered .flashboard-node-overlay,
+.flashboard-node.composer-reference-hovered .flashboard-node-content {
+  filter: brightness(1.1) saturate(1.14);
+}
+
 .flashboard-node:hover {
   border-color: var(--border-subtle);
 }
@@ -229,6 +261,15 @@
 
 .flashboard-node.reference {
   border-style: dashed;
+}
+
+@keyframes flashboard-reference-glow {
+  0%, 100% {
+    box-shadow: var(--flashboard-node-shadow-rest);
+  }
+  50% {
+    box-shadow: var(--flashboard-node-shadow-peak);
+  }
 }
 
 @keyframes flashboard-pulse {
@@ -274,10 +315,10 @@
 
 .flashboard-node-drag-handle {
   position: absolute;
-  top: 10px;
-  right: 12px;
-  width: 54px;
-  height: 54px;
+  top: calc(10px * var(--flashboard-ui-scale, 1));
+  right: calc(12px * var(--flashboard-ui-scale, 1));
+  width: calc(54px * var(--flashboard-ui-scale, 1));
+  height: calc(54px * var(--flashboard-ui-scale, 1));
   border-radius: 999px;
   display: flex;
   align-items: center;
@@ -285,7 +326,7 @@
   background: rgba(0, 0, 0, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: var(--text-secondary);
-  font-size: 30px;
+  font-size: calc(30px * var(--flashboard-ui-scale, 1));
   font-weight: 700;
   cursor: grab;
   z-index: 4;
@@ -299,7 +340,7 @@
 
 .flashboard-node.has-preview .flashboard-node-drag-handle {
   opacity: 0;
-  transform: translateY(-4px);
+  transform: translateY(calc(-4px * var(--flashboard-ui-scale, 1)));
 }
 
 .flashboard-node.has-preview:hover .flashboard-node-drag-handle {
@@ -309,19 +350,19 @@
 
 .flashboard-node-video-controls {
   position: absolute;
-  left: 10px;
-  right: 76px;
-  bottom: 10px;
+  left: calc(10px * var(--flashboard-ui-scale, 1));
+  right: calc(76px * var(--flashboard-ui-scale, 1));
+  bottom: calc(10px * var(--flashboard-ui-scale, 1));
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: calc(10px * var(--flashboard-ui-scale, 1));
+  padding: calc(10px * var(--flashboard-ui-scale, 1)) calc(12px * var(--flashboard-ui-scale, 1));
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.62);
   backdrop-filter: blur(8px);
   z-index: 5;
   opacity: 0;
-  transform: translateY(6px);
+  transform: translateY(calc(6px * var(--flashboard-ui-scale, 1)));
   pointer-events: none;
   transition: opacity 0.18s ease, transform 0.18s ease;
 }
@@ -333,13 +374,13 @@
 }
 
 .flashboard-node-video-play {
-  width: 34px;
-  height: 34px;
+  width: calc(34px * var(--flashboard-ui-scale, 1));
+  height: calc(34px * var(--flashboard-ui-scale, 1));
   border: none;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.16);
   color: #fff;
-  font-size: 14px;
+  font-size: calc(14px * var(--flashboard-ui-scale, 1));
   font-weight: 700;
   line-height: 1;
   cursor: pointer;
@@ -359,7 +400,7 @@
 
 .flashboard-node-video-time {
   color: rgba(255, 255, 255, 0.9);
-  font-size: 20px;
+  font-size: calc(20px * var(--flashboard-ui-scale, 1));
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
@@ -368,11 +409,11 @@
 
 .flashboard-node-resize-handle {
   position: absolute;
-  right: 6px;
-  bottom: 6px;
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
+  right: calc(6px * var(--flashboard-ui-scale, 1));
+  bottom: calc(6px * var(--flashboard-ui-scale, 1));
+  width: calc(14px * var(--flashboard-ui-scale, 1));
+  height: calc(14px * var(--flashboard-ui-scale, 1));
+  border-radius: calc(3px * var(--flashboard-ui-scale, 1));
   background: rgba(0, 0, 0, 0.58);
   border: 1px solid rgba(255, 255, 255, 0.16);
   z-index: 4;
@@ -384,7 +425,7 @@
 .flashboard-node-resize-handle::before {
   content: '';
   position: absolute;
-  inset: 3px;
+  inset: calc(3px * var(--flashboard-ui-scale, 1));
   border-right: 1px solid rgba(255, 255, 255, 0.82);
   border-bottom: 1px solid rgba(255, 255, 255, 0.82);
 }
@@ -406,65 +447,65 @@
 
 .flashboard-node-resize-zone.n {
   top: 0;
-  left: 18px;
-  right: 18px;
-  height: 16px;
+  left: calc(18px * var(--flashboard-ui-scale, 1));
+  right: calc(18px * var(--flashboard-ui-scale, 1));
+  height: calc(16px * var(--flashboard-ui-scale, 1));
   cursor: ns-resize;
 }
 
 .flashboard-node-resize-zone.s {
   bottom: 0;
-  left: 18px;
-  right: 18px;
-  height: 16px;
+  left: calc(18px * var(--flashboard-ui-scale, 1));
+  right: calc(18px * var(--flashboard-ui-scale, 1));
+  height: calc(16px * var(--flashboard-ui-scale, 1));
   cursor: ns-resize;
 }
 
 .flashboard-node-resize-zone.e {
-  top: 18px;
+  top: calc(18px * var(--flashboard-ui-scale, 1));
   right: 0;
-  bottom: 18px;
-  width: 16px;
+  bottom: calc(18px * var(--flashboard-ui-scale, 1));
+  width: calc(16px * var(--flashboard-ui-scale, 1));
   cursor: ew-resize;
 }
 
 .flashboard-node-resize-zone.w {
-  top: 18px;
+  top: calc(18px * var(--flashboard-ui-scale, 1));
   left: 0;
-  bottom: 18px;
-  width: 16px;
+  bottom: calc(18px * var(--flashboard-ui-scale, 1));
+  width: calc(16px * var(--flashboard-ui-scale, 1));
   cursor: ew-resize;
 }
 
 .flashboard-node-resize-zone.ne {
   top: 0;
   right: 0;
-  width: 18px;
-  height: 18px;
+  width: calc(18px * var(--flashboard-ui-scale, 1));
+  height: calc(18px * var(--flashboard-ui-scale, 1));
   cursor: nesw-resize;
 }
 
 .flashboard-node-resize-zone.se {
   right: 0;
   bottom: 0;
-  width: 18px;
-  height: 18px;
+  width: calc(18px * var(--flashboard-ui-scale, 1));
+  height: calc(18px * var(--flashboard-ui-scale, 1));
   cursor: nwse-resize;
 }
 
 .flashboard-node-resize-zone.sw {
   left: 0;
   bottom: 0;
-  width: 18px;
-  height: 18px;
+  width: calc(18px * var(--flashboard-ui-scale, 1));
+  height: calc(18px * var(--flashboard-ui-scale, 1));
   cursor: nesw-resize;
 }
 
 .flashboard-node-resize-zone.nw {
   top: 0;
   left: 0;
-  width: 18px;
-  height: 18px;
+  width: calc(18px * var(--flashboard-ui-scale, 1));
+  height: calc(18px * var(--flashboard-ui-scale, 1));
   cursor: nwse-resize;
 }
 
@@ -510,7 +551,7 @@
 }
 
 .flashboard-node.has-video-preview .flashboard-node-overlay-body {
-  padding-bottom: 72px;
+  padding-bottom: calc(72px * var(--flashboard-ui-scale, 1));
 }
 
 .flashboard-node-overlay-body {
@@ -518,12 +559,12 @@
   inset: auto 0 0 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 14px;
+  gap: calc(8px * var(--flashboard-ui-scale, 1));
+  padding: calc(14px * var(--flashboard-ui-scale, 1));
 }
 
 .flashboard-node-prompt {
-  font-size: 22px;
+  font-size: calc(22px * var(--flashboard-ui-scale, 1));
   font-weight: 600;
   color: var(--text-primary);
   line-height: 1.25;
@@ -540,7 +581,7 @@
 }
 
 .flashboard-node-provider {
-  font-size: 16px;
+  font-size: calc(16px * var(--flashboard-ui-scale, 1));
   color: var(--text-muted);
 }
 
@@ -555,13 +596,13 @@
 .flashboard-node-details {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: calc(6px * var(--flashboard-ui-scale, 1));
 }
 
 .flashboard-node-detail-pill {
-  padding: 4px 10px;
+  padding: calc(4px * var(--flashboard-ui-scale, 1)) calc(10px * var(--flashboard-ui-scale, 1));
   border-radius: 999px;
-  font-size: 15px;
+  font-size: calc(15px * var(--flashboard-ui-scale, 1));
   font-weight: 500;
   line-height: 1.2;
   background: rgba(255, 255, 255, 0.12);
@@ -577,8 +618,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  font-size: 20px;
+  gap: calc(8px * var(--flashboard-ui-scale, 1));
+  font-size: calc(20px * var(--flashboard-ui-scale, 1));
   font-weight: 600;
   color: var(--text-muted);
 }
@@ -605,7 +646,7 @@
 }
 
 .flashboard-node-error {
-  font-size: 16px;
+  font-size: calc(16px * var(--flashboard-ui-scale, 1));
   line-height: 1.25;
   color: #ef5350;
   overflow: hidden;
@@ -707,11 +748,13 @@
   color: var(--text-primary);
   font-size: 12px;
   padding: 7px 24px 7px 10px;
-  resize: none;
+  resize: vertical;
   outline: none;
   font-family: inherit;
-  min-height: 32px;
-  max-height: 80px;
+  min-height: 52px;
+  max-height: min(42vh, 320px);
+  line-height: 1.45;
+  overflow-y: auto;
 }
 
 .fb-bubble-input:focus { border-color: var(--accent); }
@@ -730,6 +773,81 @@
 }
 
 .fb-bubble-close:hover { color: var(--text-primary); }
+
+.fb-bubble-reference-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fb-bubble-reference-hint {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.fb-bubble-reference-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 8px 4px 6px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.fb-bubble-reference-badge.start {
+  background: rgba(61, 181, 88, 0.16);
+  border-color: rgba(61, 181, 88, 0.38);
+  color: #9ee3ab;
+}
+
+.fb-bubble-reference-badge.end {
+  background: rgba(210, 74, 65, 0.16);
+  border-color: rgba(210, 74, 65, 0.38);
+  color: #ff9b93;
+}
+
+.fb-bubble-reference-badge.reference {
+  background: rgba(63, 129, 230, 0.16);
+  border-color: rgba(63, 129, 230, 0.38);
+  color: #9ebfff;
+}
+
+.fb-bubble-reference-role {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.fb-bubble-reference-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+
+.fb-bubble-reference-close {
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.fb-bubble-reference-close:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
 
 .fb-multishot-panel {
   display: flex;

@@ -14,6 +14,7 @@ import type {
   PanelData,
   PreviewPanelData,
   HoveredDockTabTarget,
+  SavedDockLayout,
 } from '../types/dock';
 import { PANEL_CONFIGS } from '../types/dock';
 import {
@@ -26,14 +27,110 @@ import { createPreviewPanelDataPatch, createPreviewPanelSource } from '../utils/
 import { useMediaStore } from './mediaStore';
 
 const log = Logger.create('DockStore');
+const LEGACY_DEFAULT_LAYOUT_STORAGE_KEY = 'webvj-dock-layout-default';
 
 // Valid panel types (used to filter out removed panels from saved layouts)
 const VALID_PANEL_TYPES = new Set(Object.keys(PANEL_CONFIGS));
+const LEGACY_PANEL_TYPE_ALIASES: Partial<Record<PanelType, PanelType>> = {
+  youtube: 'download',
+};
+const COLLAPSED_LEGACY_ALIAS_TYPES = new Set<PanelType>(['download']);
 
-// Filter out invalid panel types from a layout node
+interface NormalizedDockPanel {
+  panel: DockPanel;
+  sourceType: PanelType;
+}
+
+interface NormalizedFloatingPanel {
+  floatingPanel: FloatingPanel;
+  sourceType: PanelType;
+}
+
+function resolvePanelType(type: PanelType): PanelType {
+  return LEGACY_PANEL_TYPE_ALIASES[type] ?? type;
+}
+
+function normalizeDockPanel(panel: DockPanel): NormalizedDockPanel | null {
+  const normalizedType = resolvePanelType(panel.type);
+  if (!VALID_PANEL_TYPES.has(normalizedType)) {
+    return null;
+  }
+
+  return {
+    sourceType: panel.type,
+    panel: {
+      ...panel,
+      type: normalizedType,
+      title: normalizedType === panel.type ? panel.title : PANEL_CONFIGS[normalizedType].title,
+    },
+  };
+}
+
+function collapseAliasedPanels(panels: NormalizedDockPanel[]): DockPanel[] {
+  const preferredPanelIds = new Map<PanelType, string>();
+
+  for (const panelType of COLLAPSED_LEGACY_ALIAS_TYPES) {
+    const candidates = panels.filter((candidate) => candidate.panel.type === panelType);
+    if (candidates.length <= 1) {
+      continue;
+    }
+
+    const preferredCandidate = candidates.find((candidate) => candidate.sourceType === panelType) ?? candidates[0];
+    preferredPanelIds.set(panelType, preferredCandidate.panel.id);
+  }
+
+  return panels
+    .filter((candidate) => {
+      const preferredPanelId = preferredPanelIds.get(candidate.panel.type);
+      return preferredPanelId === undefined || candidate.panel.id === preferredPanelId;
+    })
+    .map((candidate) => candidate.panel);
+}
+
+function normalizeFloatingPanel(floatingPanel: FloatingPanel): NormalizedFloatingPanel | null {
+  const normalizedDockPanel = normalizeDockPanel(floatingPanel.panel);
+  if (!normalizedDockPanel) {
+    return null;
+  }
+
+  return {
+    sourceType: normalizedDockPanel.sourceType,
+    floatingPanel: {
+      ...floatingPanel,
+      panel: normalizedDockPanel.panel,
+    },
+  };
+}
+
+function collapseAliasedFloatingPanels(floatingPanels: NormalizedFloatingPanel[]): FloatingPanel[] {
+  const preferredPanelIds = new Map<PanelType, string>();
+
+  for (const panelType of COLLAPSED_LEGACY_ALIAS_TYPES) {
+    const candidates = floatingPanels.filter((candidate) => candidate.floatingPanel.panel.type === panelType);
+    if (candidates.length <= 1) {
+      continue;
+    }
+
+    const preferredCandidate = candidates.find((candidate) => candidate.sourceType === panelType) ?? candidates[0];
+    preferredPanelIds.set(panelType, preferredCandidate.floatingPanel.panel.id);
+  }
+
+  return floatingPanels
+    .filter((candidate) => {
+      const preferredPanelId = preferredPanelIds.get(candidate.floatingPanel.panel.type);
+      return preferredPanelId === undefined || candidate.floatingPanel.panel.id === preferredPanelId;
+    })
+    .map((candidate) => candidate.floatingPanel);
+}
+
+// Normalize legacy aliases and filter out invalid panel types from a layout node
 function filterInvalidPanels(node: DockNode): DockNode | null {
   if (node.kind === 'tab-group') {
-    const validPanels = node.panels.filter(p => VALID_PANEL_TYPES.has(p.type));
+    const validPanels = collapseAliasedPanels(
+      node.panels
+        .map(normalizeDockPanel)
+        .filter((panel): panel is NormalizedDockPanel => panel !== null)
+    );
     if (validPanels.length === 0) return null;
     return {
       ...node,
@@ -57,8 +154,33 @@ function cleanupPersistedLayout(layout: DockLayout): DockLayout {
   return {
     ...layout,
     root: cleanedRoot || DEFAULT_LAYOUT.root,
-    floatingPanels: layout.floatingPanels.filter(fp => VALID_PANEL_TYPES.has(fp.panel.type)),
+    floatingPanels: collapseAliasedFloatingPanels(
+      layout.floatingPanels
+        .map(normalizeFloatingPanel)
+        .filter((panel): panel is NormalizedFloatingPanel => panel !== null)
+    ),
   };
+}
+
+function cloneDockLayout(layout: DockLayout): DockLayout {
+  return JSON.parse(JSON.stringify(layout)) as DockLayout;
+}
+
+function getLayoutMaxZIndex(layout: DockLayout): number {
+  return layout.floatingPanels.reduce((maxZIndex, floatingPanel) => (
+    Math.max(maxZIndex, floatingPanel.zIndex)
+  ), 1000);
+}
+
+function cleanupSavedLayout(savedLayout: SavedDockLayout): SavedDockLayout {
+  return {
+    ...savedLayout,
+    layout: cleanupPersistedLayout(savedLayout.layout),
+  };
+}
+
+function areDockLayoutsEqual(left: DockLayout, right: DockLayout): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 // Default layout configuration
@@ -145,6 +267,8 @@ interface DockState {
   maxZIndex: number;
   hoveredTabTarget: HoveredDockTabTarget | null;
   maximizedPanelId: string | null;
+  savedLayouts: SavedDockLayout[];
+  defaultSavedLayoutId: string | null;
 
   // Layout mutations
   setActiveTab: (groupId: string, index: number) => void;
@@ -189,6 +313,9 @@ interface DockState {
   updatePanelData: (panelId: string, data: Partial<import('../types/dock').PanelData>) => void;
 
   // Layout management
+  saveNamedLayout: (name: string) => SavedDockLayout | null;
+  loadSavedLayout: (layoutId: string) => void;
+  setDefaultSavedLayout: (layoutId: string | null) => void;
   resetLayout: () => void;
   saveLayoutAsDefault: () => void;
 
@@ -206,6 +333,8 @@ export const useDockStore = create<DockState>()(
         maxZIndex: 1000,
         hoveredTabTarget: null,
         maximizedPanelId: null,
+        savedLayouts: [],
+        defaultSavedLayoutId: null,
 
         setActiveTab: (groupId, index) => {
           set((state) => ({
@@ -482,15 +611,16 @@ export const useDockStore = create<DockState>()(
           collectPanelTypes(layout.root, types);
           // Also check floating panels
           layout.floatingPanels.forEach((f) => {
-            if (!types.includes(f.panel.type)) {
-              types.push(f.panel.type);
+            const normalizedType = resolvePanelType(f.panel.type);
+            if (!types.includes(normalizedType)) {
+              types.push(normalizedType);
             }
           });
           return types;
         },
 
         isPanelTypeVisible: (type) => {
-          return get().getVisiblePanelTypes().includes(type);
+          return get().getVisiblePanelTypes().includes(resolvePanelType(type));
         },
 
         togglePanelType: (type) => {
@@ -503,13 +633,14 @@ export const useDockStore = create<DockState>()(
         },
 
         showPanelType: (type) => {
+          const resolvedType = resolvePanelType(type);
           const { layout, isPanelTypeVisible } = get();
-          if (isPanelTypeVisible(type)) return; // Already visible
+          if (isPanelTypeVisible(resolvedType)) return; // Already visible
 
-          const config = PANEL_CONFIGS[type];
+          const config = PANEL_CONFIGS[resolvedType];
           const newPanel: DockPanel = {
-            id: type,
-            type,
+            id: resolvedType,
+            type: resolvedType,
             title: config.title,
           };
 
@@ -535,10 +666,11 @@ export const useDockStore = create<DockState>()(
         },
 
         hidePanelType: (type) => {
+          const resolvedType = resolvePanelType(type);
           const { layout } = get();
 
           // Find and remove the panel from the layout
-          const result = findPanelAndGroup(layout.root, type);
+          const result = findPanelAndGroup(layout.root, resolvedType);
           if (result) {
             let newLayout = removePanel(layout, result.panel.id, result.groupId);
             newLayout = {
@@ -553,7 +685,7 @@ export const useDockStore = create<DockState>()(
           }
 
           // Also check floating panels
-          const floatingIndex = layout.floatingPanels.findIndex((f) => f.panel.type === type);
+          const floatingIndex = layout.floatingPanels.findIndex((f) => resolvePanelType(f.panel.type) === resolvedType);
           if (floatingIndex >= 0) {
             set((state) => ({
               layout: {
@@ -567,20 +699,21 @@ export const useDockStore = create<DockState>()(
         },
 
         activatePanelType: (type) => {
+          const resolvedType = resolvePanelType(type);
           const { layout, setActiveTab, showPanelType, isPanelTypeVisible, bringToFront } = get();
 
           // First make sure the panel is visible
-          if (!isPanelTypeVisible(type)) {
-            showPanelType(type);
+          if (!isPanelTypeVisible(resolvedType)) {
+            showPanelType(resolvedType);
           }
 
           // Find the panel in the layout and activate it
-          const result = findPanelAndGroup(layout.root, type);
+          const result = findPanelAndGroup(layout.root, resolvedType);
           if (result) {
             // Find the actual tab group to get the panel index
             const group = findTabGroupById(layout.root, result.groupId);
             if (group) {
-              const panelIndex = group.panels.findIndex(p => p.type === type);
+              const panelIndex = group.panels.findIndex((p) => resolvePanelType(p.type) === resolvedType);
               if (panelIndex >= 0) {
                 setActiveTab(result.groupId, panelIndex);
               }
@@ -588,7 +721,7 @@ export const useDockStore = create<DockState>()(
           }
 
           // Also check floating panels
-          const floatingPanel = layout.floatingPanels.find(f => f.panel.type === type);
+          const floatingPanel = layout.floatingPanels.find((f) => resolvePanelType(f.panel.type) === resolvedType);
           if (floatingPanel) {
             bringToFront(floatingPanel.id);
           }
@@ -633,41 +766,151 @@ export const useDockStore = create<DockState>()(
           }));
         },
 
+        saveNamedLayout: (name) => {
+          const trimmedName = name.trim();
+          if (!trimmedName) {
+            return null;
+          }
+
+          const cleanedLayout = cleanupPersistedLayout(cloneDockLayout(get().layout));
+          const now = Date.now();
+          const existingLayout = get().savedLayouts.find((savedLayout) => (
+            savedLayout.name.trim().toLowerCase() === trimmedName.toLowerCase()
+          ));
+          const nextSavedLayout: SavedDockLayout = existingLayout
+            ? {
+                ...existingLayout,
+                name: trimmedName,
+                layout: cleanedLayout,
+                updatedAt: now,
+              }
+            : {
+                id: `saved-layout-${now}-${Math.random().toString(36).slice(2, 8)}`,
+                name: trimmedName,
+                layout: cleanedLayout,
+                createdAt: now,
+                updatedAt: now,
+              };
+
+          set((state) => ({
+            savedLayouts: [
+              nextSavedLayout,
+              ...state.savedLayouts.filter((savedLayout) => savedLayout.id !== nextSavedLayout.id),
+            ],
+          }));
+
+          return nextSavedLayout;
+        },
+
+        loadSavedLayout: (layoutId) => {
+          const savedLayout = get().savedLayouts.find((candidate) => candidate.id === layoutId);
+          if (!savedLayout) {
+            return;
+          }
+
+          const nextLayout = cleanupPersistedLayout(cloneDockLayout(savedLayout.layout));
+          set({
+            layout: nextLayout,
+            maxZIndex: getLayoutMaxZIndex(nextLayout),
+            hoveredTabTarget: null,
+            maximizedPanelId: null,
+          });
+        },
+
+        setDefaultSavedLayout: (layoutId) => {
+          if (layoutId !== null && !get().savedLayouts.some((savedLayout) => savedLayout.id === layoutId)) {
+            return;
+          }
+
+          set({ defaultSavedLayoutId: layoutId });
+        },
+
         resetLayout: () => {
-          // Check if there's a saved default layout
-          const savedDefault = localStorage.getItem('webvj-dock-layout-default');
+          const { defaultSavedLayoutId, savedLayouts } = get();
+          if (defaultSavedLayoutId) {
+            const defaultSavedLayout = savedLayouts.find((savedLayout) => savedLayout.id === defaultSavedLayoutId);
+            if (defaultSavedLayout) {
+              const nextLayout = cleanupPersistedLayout(cloneDockLayout(defaultSavedLayout.layout));
+              set({
+                layout: nextLayout,
+                maxZIndex: getLayoutMaxZIndex(nextLayout),
+                hoveredTabTarget: null,
+                maximizedPanelId: null,
+              });
+              return;
+            }
+          }
+
+          // Check if there's a legacy raw default layout
+          const savedDefault = localStorage.getItem(LEGACY_DEFAULT_LAYOUT_STORAGE_KEY);
           if (savedDefault) {
             try {
-              const parsed = JSON.parse(savedDefault);
-              set({ layout: parsed, maxZIndex: 1000, hoveredTabTarget: null, maximizedPanelId: null });
+              const parsed = cleanupPersistedLayout(JSON.parse(savedDefault) as DockLayout);
+              set({
+                layout: parsed,
+                maxZIndex: getLayoutMaxZIndex(parsed),
+                hoveredTabTarget: null,
+                maximizedPanelId: null,
+              });
               return;
             } catch (e) {
               log.error('Failed to parse saved default layout:', e);
             }
           }
-          set({ layout: DEFAULT_LAYOUT, maxZIndex: 1000, hoveredTabTarget: null, maximizedPanelId: null });
+          set({
+            layout: cloneDockLayout(DEFAULT_LAYOUT),
+            maxZIndex: getLayoutMaxZIndex(DEFAULT_LAYOUT),
+            hoveredTabTarget: null,
+            maximizedPanelId: null,
+          });
         },
 
         saveLayoutAsDefault: () => {
           const { layout } = get();
-          localStorage.setItem('webvj-dock-layout-default', JSON.stringify(layout));
+          const cleanedLayout = cleanupPersistedLayout(cloneDockLayout(layout));
+          localStorage.setItem(LEGACY_DEFAULT_LAYOUT_STORAGE_KEY, JSON.stringify(cleanedLayout));
+
+          const matchingSavedLayout = get().savedLayouts.find((savedLayout) => (
+            areDockLayoutsEqual(savedLayout.layout, cleanedLayout)
+          ));
+          set({ defaultSavedLayoutId: matchingSavedLayout?.id ?? null });
         },
 
         getLayoutForProject: () => {
-          return get().layout;
+          return cleanupPersistedLayout(cloneDockLayout(get().layout));
         },
 
         setLayoutFromProject: (layout: DockLayout) => {
           // Clean up any invalid panel types from the loaded layout
           const cleanedLayout = cleanupPersistedLayout(layout);
-          set({ layout: cleanedLayout, maxZIndex: 1000, hoveredTabTarget: null, maximizedPanelId: null });
+          set({
+            layout: cleanedLayout,
+            maxZIndex: getLayoutMaxZIndex(cleanedLayout),
+            hoveredTabTarget: null,
+            maximizedPanelId: null,
+          });
         },
       }),
       {
         name: 'webvj-dock-layout',
-        partialize: (state) => ({ layout: state.layout, maxZIndex: state.maxZIndex }),
+        partialize: (state) => ({
+          layout: state.layout,
+          maxZIndex: state.maxZIndex,
+          savedLayouts: state.savedLayouts,
+          defaultSavedLayoutId: state.defaultSavedLayoutId,
+        }),
         merge: (persistedState, currentState) => {
           const persisted = persistedState as Partial<DockState> | undefined;
+          const savedLayouts = Array.isArray(persisted?.savedLayouts)
+            ? persisted.savedLayouts.map(cleanupSavedLayout)
+            : currentState.savedLayouts;
+          const defaultSavedLayoutId = (
+            typeof persisted?.defaultSavedLayoutId === 'string'
+            && savedLayouts.some((savedLayout) => savedLayout.id === persisted.defaultSavedLayoutId)
+          )
+            ? persisted.defaultSavedLayoutId
+            : null;
+
           if (persisted?.layout) {
             // Clean up any invalid panel types from persisted layout
             const cleanedLayout = cleanupPersistedLayout(persisted.layout);
@@ -675,9 +918,15 @@ export const useDockStore = create<DockState>()(
               ...currentState,
               layout: cleanedLayout,
               maxZIndex: persisted.maxZIndex ?? currentState.maxZIndex,
+              savedLayouts,
+              defaultSavedLayoutId,
             };
           }
-          return currentState;
+          return {
+            ...currentState,
+            savedLayouts,
+            defaultSavedLayoutId,
+          };
         },
       }
     )
@@ -741,8 +990,9 @@ function findPanelInNode(node: DockNode, panelId: string): DockPanel | null {
 function collectPanelTypes(node: DockNode, types: PanelType[]): void {
   if (node.kind === 'tab-group') {
     node.panels.forEach((p) => {
-      if (!types.includes(p.type)) {
-        types.push(p.type);
+      const normalizedType = resolvePanelType(p.type);
+      if (!types.includes(normalizedType)) {
+        types.push(normalizedType);
       }
     });
   } else {
@@ -777,7 +1027,7 @@ function findPanelAndGroup(
   panelType: PanelType
 ): { panel: DockPanel; groupId: string } | null {
   if (node.kind === 'tab-group') {
-    const panel = node.panels.find((p) => p.type === panelType);
+    const panel = node.panels.find((p) => resolvePanelType(p.type) === panelType);
     if (panel) {
       return { panel, groupId: node.id };
     }

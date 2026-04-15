@@ -1,5 +1,37 @@
 import type { FlashBoard, FlashBoardNode, FlashBoardStoreState } from './types';
 
+export interface FlashBoardMediaReferenceUsage {
+  start: boolean;
+  end: boolean;
+  reference: boolean;
+}
+
+const EMPTY_NODES: FlashBoardNode[] = [];
+const EMPTY_REFERENCE_IDS: string[] = [];
+
+let cachedReferenceUsageNodes: FlashBoardNode[] = EMPTY_NODES;
+let cachedReferenceUsageComposerStart: string | undefined;
+let cachedReferenceUsageComposerEnd: string | undefined;
+let cachedReferenceUsageComposerReferenceIds: string[] = EMPTY_REFERENCE_IDS;
+let cachedReferenceUsageResult: Record<string, FlashBoardMediaReferenceUsage> = {};
+
+function markReferenceUsage(
+  usageByMediaId: Record<string, FlashBoardMediaReferenceUsage>,
+  mediaFileId: string | undefined,
+  role: keyof FlashBoardMediaReferenceUsage,
+): void {
+  if (!mediaFileId) {
+    return;
+  }
+
+  usageByMediaId[mediaFileId] ??= {
+    start: false,
+    end: false,
+    reference: false,
+  };
+  usageByMediaId[mediaFileId][role] = true;
+}
+
 export const selectActiveBoard = (state: FlashBoardStoreState): FlashBoard | undefined =>
   state.boards.find((b) => b.id === state.activeBoardId);
 
@@ -42,4 +74,52 @@ export const selectProcessingNodes = (state: FlashBoardStoreState): FlashBoardNo
     }
   }
   return nodes;
+};
+
+export const selectActiveBoardReferenceUsageByMediaFileId = (
+  state: FlashBoardStoreState
+): Record<string, FlashBoardMediaReferenceUsage> => {
+  const board = selectActiveBoard(state);
+  const boardNodes = board?.nodes ?? EMPTY_NODES;
+  const composerReferenceIds = state.composer.referenceMediaFileIds ?? EMPTY_REFERENCE_IDS;
+
+  if (
+    cachedReferenceUsageNodes === boardNodes &&
+    cachedReferenceUsageComposerStart === state.composer.startMediaFileId &&
+    cachedReferenceUsageComposerEnd === state.composer.endMediaFileId &&
+    cachedReferenceUsageComposerReferenceIds === composerReferenceIds
+  ) {
+    return cachedReferenceUsageResult;
+  }
+
+  const usageByMediaId: Record<string, FlashBoardMediaReferenceUsage> = {};
+
+  for (const node of boardNodes) {
+    const request = node.request;
+    if (!request) {
+      continue;
+    }
+
+    markReferenceUsage(usageByMediaId, request.startMediaFileId, 'start');
+    markReferenceUsage(usageByMediaId, request.endMediaFileId, 'end');
+
+    for (const mediaFileId of request.referenceMediaFileIds ?? []) {
+      markReferenceUsage(usageByMediaId, mediaFileId, 'reference');
+    }
+  }
+
+  markReferenceUsage(usageByMediaId, state.composer.startMediaFileId, 'start');
+  markReferenceUsage(usageByMediaId, state.composer.endMediaFileId, 'end');
+
+  for (const mediaFileId of composerReferenceIds) {
+    markReferenceUsage(usageByMediaId, mediaFileId, 'reference');
+  }
+
+  cachedReferenceUsageNodes = boardNodes;
+  cachedReferenceUsageComposerStart = state.composer.startMediaFileId;
+  cachedReferenceUsageComposerEnd = state.composer.endMediaFileId;
+  cachedReferenceUsageComposerReferenceIds = composerReferenceIds;
+  cachedReferenceUsageResult = usageByMediaId;
+
+  return usageByMediaId;
 };

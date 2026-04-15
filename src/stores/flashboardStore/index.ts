@@ -22,6 +22,7 @@ export const useFlashBoardStore = create<FlashBoardStore>()(
       multiPrompt: [],
       referenceMediaFileIds: [],
     },
+    hoveredComposerReference: null,
 
     ...createBoardSlice(set as any, get as any),
     ...createNodeSlice(set as any, get as any),

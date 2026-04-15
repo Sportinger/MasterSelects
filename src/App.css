@@ -1048,6 +1048,58 @@ input, textarea {
   display: block;
 }
 
+.menu-nested-submenu-layouts {
+  min-width: 320px;
+}
+
+.menu-nested-submenu-panels {
+  min-width: 240px;
+}
+
+.menu-layout-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  padding: 0 6px;
+}
+
+.menu-layout-load {
+  flex: 1;
+  min-width: 0;
+  border-radius: var(--radius-sm);
+}
+
+.menu-layout-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-layout-default-btn {
+  flex: 0 0 auto;
+  min-width: 64px;
+  margin: 2px 0;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.menu-layout-default-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.menu-layout-default-btn.active {
+  border-color: var(--accent);
+  background: rgba(92, 153, 255, 0.12);
+  color: var(--accent);
+}
+
 .project-name.no-project {
   color: var(--text-secondary);
   cursor: default;

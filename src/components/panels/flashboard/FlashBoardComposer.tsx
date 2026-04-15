@@ -1,12 +1,24 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useFlashBoardStore } from '../../../stores/flashboardStore';
-import type { FlashBoardMultiShotPrompt } from '../../../stores/flashboardStore';
+import type {
+  FlashBoardComposerReferenceRole,
+  FlashBoardMultiShotPrompt,
+} from '../../../stores/flashboardStore';
 import { selectActiveBoard } from '../../../stores/flashboardStore/selectors';
+import { useMediaStore } from '../../../stores/mediaStore';
 import { getCatalogEntries } from '../../../services/flashboard/FlashBoardModelCatalog';
 import { getCatalogEntryPriceEstimate, getFlashBoardPriceEstimate } from '../../../services/flashboard/FlashBoardPricing';
 import type { CatalogEntry } from '../../../services/flashboard/types';
 
 type PopoverType = 'model' | 'aspect' | 'duration' | 'mode' | 'imageSize' | null;
+
+interface ComposerReferenceBadge {
+  key: string;
+  role: FlashBoardComposerReferenceRole;
+  mediaFileId: string;
+  roleLabel: string;
+  displayName: string;
+}
 
 interface FlashBoardComposerProps {
   initialProviderId?: string;
@@ -154,6 +166,26 @@ function buildFallbackPrompt(shots: FlashBoardMultiShotPrompt[]): string {
     .join(' / ');
 }
 
+function clampReferenceMediaFileIds(referenceMediaFileIds: string[], maxReferenceImages?: number): string[] {
+  const uniqueIds = referenceMediaFileIds.filter((mediaFileId, index) => (
+    referenceMediaFileIds.indexOf(mediaFileId) === index
+  ));
+  const hasDuplicates = uniqueIds.length !== referenceMediaFileIds.length;
+
+  if (
+    typeof maxReferenceImages !== 'number'
+    || !Number.isFinite(maxReferenceImages)
+    || maxReferenceImages <= 0
+  ) {
+    return hasDuplicates ? uniqueIds : referenceMediaFileIds;
+  }
+
+  const limitedIds = uniqueIds.slice(0, maxReferenceImages);
+  return !hasDuplicates && limitedIds.length === referenceMediaFileIds.length
+    ? referenceMediaFileIds
+    : limitedIds;
+}
+
 export function FlashBoardComposer({
   initialProviderId,
   initialService,
@@ -166,6 +198,8 @@ export function FlashBoardComposer({
   const updateNodeRequest = useFlashBoardStore((s) => s.updateNodeRequest);
   const updateComposer = useFlashBoardStore((s) => s.updateComposer);
   const queueNode = useFlashBoardStore((s) => s.queueNode);
+  const setHoveredComposerReference = useFlashBoardStore((s) => s.setHoveredComposerReference);
+  const mediaFiles = useMediaStore((s) => s.files);
 
   const catalog = useMemo(() => getCatalogEntries(), []);
   const visibleCatalog = useMemo(
@@ -259,8 +293,52 @@ export function FlashBoardComposer({
       })
       : null
   ), [selectedEntry, service, providerId, mode, duration, imageSize, effectiveGenerateAudio, multiShots]);
+  const maxReferenceImages = selectedEntry?.supportsTextToImage ? selectedEntry.maxReferenceImages : undefined;
+  const effectiveReferenceMediaFileIds = useMemo(
+    () => clampReferenceMediaFileIds(composer.referenceMediaFileIds ?? [], maxReferenceImages),
+    [composer.referenceMediaFileIds, maxReferenceImages]
+  );
   const canGenerate = Boolean(board && effectivePrompt) && !multiShotValidationError;
   const canAddShot = multiShots && normalizedMultiPrompt.length < Math.min(MAX_MULTI_SHOTS, Math.max(1, duration));
+  const mediaFileNamesById = useMemo(
+    () => new Map(mediaFiles.map((file) => [file.id, file.name])),
+    [mediaFiles]
+  );
+  const composerReferenceBadges = useMemo<ComposerReferenceBadge[]>(() => {
+    const badges: ComposerReferenceBadge[] = [];
+
+    if (composer.startMediaFileId) {
+      badges.push({
+        key: `start-${composer.startMediaFileId}`,
+        role: 'start',
+        mediaFileId: composer.startMediaFileId,
+        roleLabel: 'IN',
+        displayName: mediaFileNamesById.get(composer.startMediaFileId) ?? 'Start frame',
+      });
+    }
+
+    if (composer.endMediaFileId) {
+      badges.push({
+        key: `end-${composer.endMediaFileId}`,
+        role: 'end',
+        mediaFileId: composer.endMediaFileId,
+        roleLabel: 'OUT',
+        displayName: mediaFileNamesById.get(composer.endMediaFileId) ?? 'End frame',
+      });
+    }
+
+    effectiveReferenceMediaFileIds.forEach((mediaFileId, index) => {
+      badges.push({
+        key: `reference-${mediaFileId}`,
+        role: 'reference',
+        mediaFileId,
+        roleLabel: `REF ${index + 1}`,
+        displayName: mediaFileNamesById.get(mediaFileId) ?? 'Reference frame',
+      });
+    });
+
+    return badges;
+  }, [composer.endMediaFileId, composer.startMediaFileId, effectiveReferenceMediaFileIds, mediaFileNamesById]);
 
   useEffect(() => {
     if (visibleCatalog.length === 0) {
@@ -364,6 +442,13 @@ export function FlashBoardComposer({
       nextPatch.referenceMediaFileIds = [];
     }
 
+    if (
+      selectedEntry.supportsTextToImage
+      && composer.referenceMediaFileIds !== effectiveReferenceMediaFileIds
+    ) {
+      nextPatch.referenceMediaFileIds = effectiveReferenceMediaFileIds;
+    }
+
     if (Object.keys(nextPatch).length > 0) {
       updateComposer(nextPatch);
     }
@@ -374,10 +459,10 @@ export function FlashBoardComposer({
     composer.multiShots,
     composer.outputType,
     composer.providerId,
-    composer.referenceMediaFileIds,
     composer.service,
     composer.startMediaFileId,
     composer.version,
+    effectiveReferenceMediaFileIds,
     effectiveGenerateAudio,
     multiShots,
     normalizedMultiPrompt,
@@ -419,7 +504,9 @@ export function FlashBoardComposer({
         outputType: entry.outputType ?? 'video',
         startMediaFileId: entry.supportsImageToVideo ? composer.startMediaFileId : undefined,
         endMediaFileId: entry.supportsImageToVideo && !multiShots ? composer.endMediaFileId : undefined,
-        referenceMediaFileIds: entry.supportsTextToImage ? composer.referenceMediaFileIds : [],
+        referenceMediaFileIds: entry.supportsTextToImage
+          ? clampReferenceMediaFileIds(composer.referenceMediaFileIds, entry.maxReferenceImages)
+          : [],
       });
     }
     setPopover(null);
@@ -444,7 +531,7 @@ export function FlashBoardComposer({
       multiPrompt: multiShots ? normalizedMultiPrompt : undefined,
       startMediaFileId: selectedEntry.supportsImageToVideo ? composer.startMediaFileId : undefined,
       endMediaFileId: selectedEntry.supportsImageToVideo && !multiShots ? composer.endMediaFileId : undefined,
-      referenceMediaFileIds: selectedEntry.supportsTextToImage ? composer.referenceMediaFileIds : [],
+      referenceMediaFileIds: selectedEntry.supportsTextToImage ? effectiveReferenceMediaFileIds : [],
     });
     queueNode(node.id);
     setPrompt('');
@@ -452,13 +539,13 @@ export function FlashBoardComposer({
     board,
     canGenerate,
     composer.endMediaFileId,
-    composer.referenceMediaFileIds,
     composer.startMediaFileId,
     createDraftNode,
     duration,
     aspectRatio,
     effectiveGenerateAudio,
     effectivePrompt,
+    effectiveReferenceMediaFileIds,
     imageSize,
     mode,
     multiShots,
@@ -536,6 +623,23 @@ export function FlashBoardComposer({
     setMultiPrompt((current) => removeMultiPrompt(current, index, duration));
   }, [duration]);
 
+  const handleRemoveComposerReference = useCallback((badge: ComposerReferenceBadge) => {
+    setHoveredComposerReference(null);
+    if (badge.role === 'start') {
+      updateComposer({ startMediaFileId: undefined });
+      return;
+    }
+
+    if (badge.role === 'end') {
+      updateComposer({ endMediaFileId: undefined });
+      return;
+    }
+
+    updateComposer({
+      referenceMediaFileIds: effectiveReferenceMediaFileIds.filter((id) => id !== badge.mediaFileId),
+    });
+  }, [effectiveReferenceMediaFileIds, setHoveredComposerReference, updateComposer]);
+
   if (!board) return null;
 
   return (
@@ -546,10 +650,43 @@ export function FlashBoardComposer({
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder={multiShots ? 'Overall scene or style (optional when using multishot)...' : 'Describe what to generate...'}
-          rows={multiShots ? 2 : 1}
+          rows={multiShots ? 3 : 2}
         />
         <button className="fb-bubble-close" onClick={() => setPrompt('')} title="Clear">&times;</button>
       </div>
+
+      {composerReferenceBadges.length > 0 && (
+        <>
+          <div className="fb-bubble-reference-badges">
+            {composerReferenceBadges.map((badge) => (
+              <div
+                key={badge.key}
+                className={`fb-bubble-reference-badge ${badge.role}`}
+                title={badge.displayName}
+                onMouseEnter={() => setHoveredComposerReference({ mediaFileId: badge.mediaFileId, role: badge.role })}
+                onMouseLeave={() => setHoveredComposerReference(null)}
+              >
+                <span className="fb-bubble-reference-role">{badge.roleLabel}</span>
+                <span className="fb-bubble-reference-name">{badge.displayName}</span>
+                <button
+                  className="fb-bubble-reference-close"
+                  type="button"
+                  onClick={() => handleRemoveComposerReference(badge)}
+                  title={`${badge.roleLabel} entfernen`}
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+          </div>
+          {selectedEntry?.supportsTextToImage && effectiveReferenceMediaFileIds.length > 0 && (
+            <div className="fb-bubble-reference-hint">
+              Use REF 1, REF 2, ... in the prompt. {effectiveReferenceMediaFileIds.length}
+              {typeof maxReferenceImages === 'number' ? `/${maxReferenceImages}` : ''} linked.
+            </div>
+          )}
+        </>
+      )}
 
       {multiShots && (
         <div className="fb-multishot-panel">

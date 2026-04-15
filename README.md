@@ -13,13 +13,13 @@
 
 
 <p>
-  GPU-first editing with <b>30 effects</b>, <b>37 blend modes</b>, <b>76 AI tools</b>, <b>real 3D via Three.js</b>, and only <b>14 dependencies</b>.<br>
+  GPU-first editing with <b>30 effects</b>, <b>37 blend modes</b>, <b>79 AI tools</b>, <b>real 3D via Three.js</b>, and only <b>14 dependencies</b>.<br>
   Built from scratch in <b>2,400+ lines of WGSL</b> and <b>138k lines of TypeScript</b>.<br>
-  Import <b>OBJ, glTF, GLB, FBX</b> models directly into the timeline.
+  Import <b>OBJ, glTF, GLB, FBX, PLY, SPLAT</b> assets directly into the timeline.
 </p>
 
 <p>
-  <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-1.4.3-blue.svg" alt="Version"></a>
+  <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-1.5.1-blue.svg" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
   <a href="https://app.fossa.com/projects/custom%2b61097%2fmasterselects"><img src="https://app.fossa.com/api/projects/custom%2b61097%2fmasterselects.svg?type=shield" alt="FOSSA Status"></a>
 </p>
@@ -31,6 +31,11 @@
   <a href="#"><img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript"></a>
   <a href="#"><img src="https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite"></a>
   <a href="#native-helper"><img src="https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white" alt="Rust"></a>
+</p>
+
+<p>
+  <a href="https://discord.com/invite/K8dApzG3XC"><img src="https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="https://www.reddit.com/r/masterselects/"><img src="https://img.shields.io/badge/Reddit-FF4500?style=for-the-badge&logo=reddit&logoColor=white" alt="Reddit"></a>
 </p>
 
 <br>
@@ -47,11 +52,12 @@ Decoding depends on what the **browser** supports — the container is just the 
 
 <table>
 <tr><th colspan="2">Import (Decode)</th></tr>
-<tr><td><b>Containers</b></td><td>MP4, MOV, WebM, MKV, AVI, M4V</td></tr>
+<tr><td><b>Video files</b></td><td>MP4, WebM, MOV, AVI, MKV, WMV, M4V, FLV</td></tr>
 <tr><td><b>Video codecs</b></td><td>H.264 (AVC), H.265 (HEVC)¹, VP8, VP9, AV1</td></tr>
-<tr><td><b>Audio codecs</b></td><td>AAC, MP3, Opus, Vorbis, FLAC, WAV/PCM</td></tr>
-<tr><td><b>Image</b></td><td>PNG, JPG, WebP, GIF, BMP, AVIF, SVG</td></tr>
+<tr><td><b>Audio files</b></td><td>WAV, MP3, OGG, FLAC, AAC, M4A, WMA, AIFF, OPUS</td></tr>
+<tr><td><b>Image</b></td><td>PNG, JPG/JPEG, WebP, GIF, BMP, SVG</td></tr>
 <tr><td><b>3D Models</b></td><td>OBJ, glTF, GLB, FBX — rendered via Three.js with lighting</td></tr>
+<tr><td><b>Gaussian Splats</b></td><td>PLY, SPLAT</td></tr>
 <tr><td><b>Download</b></td><td>YouTube, TikTok, Instagram, Twitter/X, Vimeo + <a href="https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md">all yt-dlp sites</a> via Native Helper</td></tr>
 <tr><th colspan="2">Export (Encode)</th></tr>
 <tr><td><b>Containers</b></td><td>MP4, WebM</td></tr>
@@ -76,7 +82,7 @@ Most browser-based video editors share a pattern: Canvas 2D compositing, heavywe
 
 **3-tier scrubbing cache.** **300 GPU textures in VRAM** for instant scrub (Tier 1), per-video last-frame cache for seek transitions (Tier 2), and a **900-frame RAM Preview** with CPU/GPU promotion (Tier 3). When the cache is warm, **scrubbing doesn't decode at all**.
 
-**13 production dependencies.** React, Zustand, mp4box, mp4/webm muxers, HuggingFace Transformers, ONNX Runtime, SoundTouch, WebGPU types, plus an **experimental FFmpeg WASM path**. **Everything else is custom-built from scratch**: the entire WebGPU compositor, all 30 effect shaders, the keyframe animation system, the export engine, the audio mixer, the text renderer, the mask engine, the video scope renderers, the dock/panel system, the timeline UI. Zero runtime abstraction layers between your timeline and the GPU.
+**14 production dependencies.** React, Zustand, MediaBunny, mp4box, Three.js, HuggingFace Transformers, ONNX Runtime, SoundTouch, WebGPU types, plus an **experimental FFmpeg WASM path**. **Everything else is custom-built from scratch**: the entire WebGPU compositor, all 30 effect shaders, the keyframe animation system, the export engine, the audio mixer, the text renderer, the mask engine, the video scope renderers, the dock/panel system, the timeline UI. Zero runtime abstraction layers between your timeline and the GPU.
 
 **Nested composition rendering.** Compositions within compositions, each with their own resolution. Rendered to **pooled GPU textures** with frame-level caching, composited in the parent's ping-pong pass, all in a **single `device.queue.submit()`**.
 
@@ -88,7 +94,7 @@ Most browser-based video editors share a pattern: Canvas 2D compositing, heavywe
 
 No Adobe subscription, no patience for cracks, and every free online editor felt like garbage. I wanted something that actually works: fast in the browser, GPU-first, built for real editing instead of templates, and open enough that AI can steer the timeline instead of just suggesting ideas.
 
-**The vision:** an editor where AI can directly operate the tool. The built-in chat connects to OpenAI and exposes **76 editing tools**. External agents can steer the running editor over a local HTTP bridge, and in development the Vite bridge still exists too. Live outputs still matter too - I've been doing video art for 16 years, so multi-output routing was never optional.
+**The vision:** an editor where AI can directly operate the tool. The built-in chat connects to OpenAI and exposes **79 exported editing tools**. External agents can steer the running editor over the local/native HTTP bridge, and in development the Vite bridge still exists too. Live outputs still matter too - I've been doing video art for 16 years, so multi-output routing was never optional.
 
 Built with Claude as my pair-programmer. Every feature gets debugged, refactored, and beaten into shape until it does what I need. ~120k lines of TypeScript, ~2,500 lines of WGSL, and a Rust native helper for the stuff browsers still can't do cleanly.
 
@@ -98,10 +104,11 @@ Built with Claude as my pair-programmer. Every feature gets debugged, refactored
 
 MasterSelects is being built around the idea that AI should be able to *do the edit*, not just talk about it.
 
-- **Built-in editor chat:** OpenAI-powered, with direct access to 76 timeline/media/editing tools
-- **External agent bridge:** Claude Code or any other agent can drive the running editor via the Native Helper HTTP bridge
+- **Built-in editor chat:** OpenAI-powered, with direct access to 79 exported timeline/media/editing tools
+- **External agent bridge:** Claude Code or any other local agent can drive the running editor via the Native Helper HTTP bridge, and in development the same tool surface is also available through the Vite bridge and `window.aiTools`
+- **AI video and image generation:** Classic AI Video plus FlashBoard route through Kie.ai, hosted cloud, and PiAPI-backed catalogs depending on account and key setup
 - **Experimental multicam AI:** Claude/Anthropic generates edit decision lists for the multicam workflow
-- **On-device AI:** SAM2 segmentation in-browser via ONNX Runtime, plus local Whisper transcription via Transformers.js
+- **On-device AI:** SAM2 segmentation in-browser via ONNX Runtime, MatAnyone2 via Native Helper, plus local Whisper transcription via Transformers.js
 
 Example Native Helper bridge call:
 
@@ -127,17 +134,18 @@ This requires the Native Helper to be running, a MasterSelects editor tab to be 
 | [**Vector Masks**](docs/Features/Masks.md) | Pen tool, edge dragging, feathering, multiple masks per clip |
 | [**SAM2 Segmentation**](docs/Features/AI-Integration.md) | AI object selection in preview - click to mask, propagate across frames |
 | [**Transitions**](docs/Features/UI-Panels.md#transitions-panel) | Crossfade transitions with GPU-accelerated rendering *(experimental)* |
-| [**AI Integration**](docs/Features/AI-Integration.md) | Built-in OpenAI chat, 76 tool-callable edit actions, and a local bridge for external agents |
+| [**AI Integration**](docs/Features/AI-Integration.md) | Built-in OpenAI chat, 79 exported tool-callable edit actions, and local/native bridges for external agents |
+| [**FlashBoard**](docs/Features/FlashBoard.md) | Node-based AI canvas for text-to-video, image-to-video, and image generation |
 | [**Multicam AI**](docs/Features/Multicam-AI.md) | Sync cameras, transcribe footage, and generate Claude-powered multicam EDLs *(experimental)* |
-| [**Export Pipeline**](docs/Features/Export.md) | WebCodecs Fast, HTMLVideo Precise, FFmpeg WASM *(experimental / WIP)*, FCPXML |
+| [**Export Pipeline**](docs/Features/Export.md) | WebCodecs Fast/Precise, FFmpeg WASM *(experimental / WIP)*, FCPXML, and PNG sequence export |
 | [**Live EQ & Audio**](docs/Features/Audio.md) | 10-band parametric EQ with real-time Web Audio preview |
 | [**Download Panel**](docs/Features/Download-Panel.md) | YouTube, TikTok, Instagram, Twitter/X, Vimeo, and other yt-dlp-supported sites via Native Helper |
 | [**Text & Solids**](docs/Features/Text-Clips.md) | 50 Google Fonts, stroke, shadow, solid color clips |
 | [**Proxy System**](docs/Features/Proxy-System.md) | GPU-accelerated proxies with resume and cache indicator |
 | [**Output Manager**](docs/Features/Preview.md) | Multi-window outputs, source routing, corner pin warping, slice masks |
-| [**Slot Grid**](docs/Features/UI-Panels.md) | Resolume-style 12x4 grid with multi-layer live playback |
+| [**Slot Grid**](docs/Features/Slot-Grid.md) | Resolume-style 12x4 grid with multi-layer live playback and slot-clip trims |
 | [**Preview & Playback**](docs/Features/Preview.md) | RAM Preview, transform handles, multiple render targets |
-| [**Project Storage**](docs/Features/Project-Persistence.md) | Local folders, raw media auto-copy, autosave, backups |
+| [**Project Storage**](docs/Features/Project-Persistence.md) | Local folders, raw media auto-copy, continuous save by default, interval mode, backups |
 | [**Interactive Tutorial**](docs/Features/UI-Panels.md) | Guided onboarding with animated Clippy mascot |
 
 <details>
@@ -221,8 +229,8 @@ If something breaks, refresh. If it's still broken, [open an issue](https://gith
 - **Frontend:** React 19, TypeScript, Zustand, Vite 7.2
 - **Rendering:** WebGPU + 2,500+ lines of WGSL shaders
 - **Video:** WebCodecs, mp4box, mp4-muxer, webm-muxer, HTMLVideo fallback, experimental FFmpeg WASM export path
-- **Audio:** Web Audio API with 10-band live EQ, audio master clock, varispeed
-- **AI:** Built-in OpenAI editor chat with 76 tools, Native Helper HTTP bridge for Claude Code / external agents, Claude/Anthropic for experimental multicam EDLs, SAM2 via ONNX Runtime, local Whisper via Hugging Face Transformers, PiAPI video generation
+- **Audio:** Web Audio API with 10-band live EQ, element-synced playback, drift correction, and waveform extraction
+- **AI:** Built-in OpenAI editor chat with 79 exported tools, Native Helper HTTP bridge for Claude Code / external agents, Claude/Anthropic for experimental multicam EDLs, SAM2 via ONNX Runtime, MatAnyone2 via Native Helper, local Whisper via Hugging Face Transformers, and Kie.ai / hosted cloud / PiAPI-backed generation flows
 - **Native:** Rust helper for Firefox storage backend, native decode/encode, and yt-dlp downloads
 - **Storage:** File System Access API on Chrome, Native Helper backend on Firefox, IndexedDB, local project folders with raw media
 
@@ -302,7 +310,7 @@ src/
 ├── effects/             # 30 GPU effects (color/, blur/, distort/, stylize/, keying/)
 ├── transitions/         # Transition definitions (crossfade)
 ├── services/            # Audio, AI, Project, NativeHelper, Logger, LayerBuilder, MediaRuntime
-│   ├── aiTools/         # 76 AI tool definitions + handlers
+│   ├── aiTools/         # 79 exported AI tool definitions + handlers
 │   ├── sam2/            # SAM2 model manager + service
 │   ├── project/         # Project persistence, save/load
 │   ├── nativeHelper/    # Native decoder + WebSocket client

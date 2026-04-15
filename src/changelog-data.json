@@ -1,5 +1,46 @@
 [
   {
+    "date": "2026-04-15",
+    "type": "improve",
+    "title": "Managed Billing Flows and Account UI Are Now Live",
+    "description": "Hosted billing now supports guided plan upgrades, downgrades, cancellations, proration-aware Stripe webhooks, instant hosted credit balance sync, and a richer account and pricing surface in the app.",
+    "section": "Billing / Account",
+    "commits": [
+      "c6f1d7bf"
+    ]
+  },
+  {
+    "date": "2026-04-15",
+    "type": "improve",
+    "title": "FlashBoard Interactions and Panel Layouts Feel Tighter",
+    "description": "FlashBoard editing now has better node interaction handling, richer preview capture support, improved docking behavior, and cleaner panel layout polish across the AI video workflow.",
+    "section": "FlashBoard / UI",
+    "commits": [
+      "83550626"
+    ]
+  },
+  {
+    "date": "2026-04-15",
+    "type": "improve",
+    "title": "Feature Docs Were Re-Audited Against the Current Code",
+    "description": "README and the feature guides were refreshed from a code-based audit, adding dedicated docs for FlashBoard, Slot Grid, Media Runtime, Playback Debugging, and Visitor Notifier while removing stale claims.",
+    "section": "Documentation",
+    "commits": [
+      "4a27d885"
+    ]
+  },
+  {
+    "date": "2026-04-15",
+    "type": "improve",
+    "title": "GitHub Now Surfaces Discord and Reddit More Clearly",
+    "description": "The README and issue creation flow now point users directly to Discord and Reddit so the community entry points are visible from the repository front page.",
+    "section": "GitHub / Community",
+    "commits": [
+      "2e60fbe4"
+    ],
+    "highlight": "community"
+  },
+  {
     "date": "2026-04-14",
     "type": "fix",
     "title": "3D Video Layers Stay Visible During Export",

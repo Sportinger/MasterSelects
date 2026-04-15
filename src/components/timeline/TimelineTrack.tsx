@@ -184,8 +184,16 @@ function TimelineTrackComponent({
   onMoveKeyframe,
   onUpdateBezierHandle,
 }: TimelineTrackProps) {
-  // Get clips belonging to this track
-  const trackClips = clips.filter((c) => c.trackId === track.id);
+  // Deduplicate by clip id so transient store/render races do not produce duplicate React keys.
+  const trackClips = useMemo(() => {
+    const uniqueClips = new Map<string, typeof clips[number]>();
+    clips.forEach((clip) => {
+      if (clip.trackId !== track.id || uniqueClips.has(clip.id)) return;
+      uniqueClips.set(clip.id, clip);
+    });
+    return Array.from(uniqueClips.values());
+  }, [clips, track.id]);
+  const trackClipIds = useMemo(() => new Set(trackClips.map((clip) => clip.id)), [trackClips]);
   const selectedTrackClip = trackClips.find((c) => selectedClipIds.has(c.id));
 
   return (
@@ -210,7 +218,7 @@ function TimelineTrackComponent({
           clipDrag.currentTrackId === track.id &&
           clipDrag.originalTrackId !== track.id &&
           clips
-            .filter((c) => c.id === clipDrag.clipId)
+            .filter((c) => c.id === clipDrag.clipId && !trackClipIds.has(c.id))
             .map((clip) => renderClip(clip, track.id))}
         {/* External file drag preview - video clip */}
         {externalDrag && externalDrag.trackId === track.id && (

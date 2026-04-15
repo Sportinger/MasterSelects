@@ -87,6 +87,14 @@ export interface DockLayout {
   panelZoom: Record<string, number>; // Panel ID -> zoom level (1.0 = 100%)
 }
 
+export interface SavedDockLayout {
+  id: string;
+  name: string;
+  layout: DockLayout;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface HoveredDockTabTarget {
   kind: 'panel' | 'timeline-composition';
   panelId: string;

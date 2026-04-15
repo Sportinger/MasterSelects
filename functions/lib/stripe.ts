@@ -22,10 +22,26 @@ export interface StripeCheckoutSessionInput {
 }
 
 export interface StripePortalSessionInput {
+  flow?: StripePortalFlow | null;
   customerId: string;
   idempotencyKey?: string | null;
   returnUrl: string;
 }
+
+export type StripePortalFlow =
+  | {
+      afterCompletionReturnUrl?: string | null;
+      subscriptionId: string;
+      type: 'subscription_cancel';
+    }
+  | {
+      afterCompletionReturnUrl?: string | null;
+      itemId: string;
+      priceId: string;
+      quantity?: number | null;
+      subscriptionId: string;
+      type: 'subscription_update_confirm';
+    };
 
 export interface StripeWebhookEvent<TData = Record<string, unknown>> {
   api_version?: string;
@@ -49,6 +65,8 @@ export interface StripeCustomerLike {
 }
 
 export interface StripeSubscriptionLike {
+  cancel_at?: number | null;
+  canceled_at?: number | null;
   cancel_at_period_end?: boolean;
   current_period_end?: number;
   current_period_start?: number;
@@ -56,8 +74,12 @@ export interface StripeSubscriptionLike {
   id?: string;
   items?: {
     data?: Array<{
+      current_period_end?: number | null;
+      current_period_start?: number | null;
+      id?: string | null;
       plan?: string | StripePriceLike | null;
       price?: string | StripePriceLike | null;
+      quantity?: number | null;
     }> | null;
   } | null;
   metadata?: Record<string, unknown>;
@@ -75,14 +97,96 @@ export interface StripeCheckoutSessionLike {
 
 export interface StripeInvoiceLike {
   amount_paid?: number;
+  billing_reason?: string | null;
   customer?: string | StripeCustomerLike | null;
   id?: string;
+  lines?: {
+    data?: Array<{
+      amount?: number | null;
+      metadata?: Record<string, unknown> | null;
+      parent?: {
+        subscription_item_details?: {
+          proration_details?: {
+            credited_items?: {
+              invoice?: string | null;
+              invoice_line_items?: string[] | null;
+            } | null;
+          } | null;
+          proration?: boolean | null;
+          subscription?: string | null;
+        } | null;
+      } | null;
+      period?: {
+        end?: number | null;
+        start?: number | null;
+      } | null;
+      pricing?: {
+        price_details?: {
+          price?: string | null;
+        } | null;
+      } | null;
+    }> | null;
+  } | null;
   metadata?: Record<string, unknown>;
+  parent?: {
+    subscription_details?: {
+      metadata?: Record<string, unknown>;
+      subscription?: string | null;
+    } | null;
+  } | null;
   subscription?: string | StripeSubscriptionLike | string | null;
 }
 
 export interface StripePriceLike {
   id?: string;
+}
+
+export function getStripeSubscriptionPeriodStart(subscription: StripeSubscriptionLike | null | undefined): number | null {
+  if (!subscription) {
+    return null;
+  }
+
+  if (typeof subscription.current_period_start === 'number' && Number.isFinite(subscription.current_period_start)) {
+    return subscription.current_period_start;
+  }
+
+  const itemStart = subscription.items?.data?.find(
+    (item) => typeof item?.current_period_start === 'number' && Number.isFinite(item.current_period_start),
+  )?.current_period_start;
+
+  return typeof itemStart === 'number' && Number.isFinite(itemStart) ? itemStart : null;
+}
+
+export function getStripeSubscriptionPeriodEnd(subscription: StripeSubscriptionLike | null | undefined): number | null {
+  if (!subscription) {
+    return null;
+  }
+
+  if (typeof subscription.current_period_end === 'number' && Number.isFinite(subscription.current_period_end)) {
+    return subscription.current_period_end;
+  }
+
+  const itemEnd = subscription.items?.data?.find(
+    (item) => typeof item?.current_period_end === 'number' && Number.isFinite(item.current_period_end),
+  )?.current_period_end;
+  if (typeof itemEnd === 'number' && Number.isFinite(itemEnd)) {
+    return itemEnd;
+  }
+
+  return typeof subscription.cancel_at === 'number' && Number.isFinite(subscription.cancel_at)
+    ? subscription.cancel_at
+    : null;
+}
+
+export function hasStripeScheduledCancellation(subscription: StripeSubscriptionLike | null | undefined): boolean {
+  if (!subscription) {
+    return false;
+  }
+
+  return Boolean(
+    subscription.cancel_at_period_end
+    || (typeof subscription.cancel_at === 'number' && Number.isFinite(subscription.cancel_at)),
+  );
 }
 
 function trimToNull(value: string | undefined | null): string | null {
@@ -217,12 +321,47 @@ export async function createStripePortalSession(
   params.set('customer', input.customerId);
   params.set('return_url', input.returnUrl);
 
+  if (input.flow?.afterCompletionReturnUrl) {
+    params.set('flow_data[after_completion][type]', 'redirect');
+    params.set('flow_data[after_completion][redirect][return_url]', input.flow.afterCompletionReturnUrl);
+  }
+
+  if (input.flow?.type === 'subscription_cancel') {
+    params.set('flow_data[type]', 'subscription_cancel');
+    params.set('flow_data[subscription_cancel][subscription]', input.flow.subscriptionId);
+  }
+
+  if (input.flow?.type === 'subscription_update_confirm') {
+    params.set('flow_data[type]', 'subscription_update_confirm');
+    params.set('flow_data[subscription_update_confirm][subscription]', input.flow.subscriptionId);
+    params.set('flow_data[subscription_update_confirm][items][0][id]', input.flow.itemId);
+    params.set('flow_data[subscription_update_confirm][items][0][price]', input.flow.priceId);
+
+    if (typeof input.flow.quantity === 'number' && Number.isFinite(input.flow.quantity) && input.flow.quantity > 0) {
+      params.set('flow_data[subscription_update_confirm][items][0][quantity]', String(input.flow.quantity));
+    }
+  }
+
   return stripeApiRequest<{ id: string; url: string }>(
     config,
     'POST',
     '/billing_portal/sessions',
     params,
     input.idempotencyKey ?? null,
+  );
+}
+
+export async function getStripeSubscription(
+  config: StripeConfig,
+  subscriptionId: string,
+  idempotencyKey?: string | null,
+): Promise<StripeSubscriptionLike> {
+  return stripeApiRequest<StripeSubscriptionLike>(
+    config,
+    'GET',
+    `/subscriptions/${encodeURIComponent(subscriptionId)}?expand[]=items.data.price`,
+    undefined,
+    idempotencyKey ?? null,
   );
 }
 

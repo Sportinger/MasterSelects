@@ -1,4 +1,8 @@
-import type { FlashBoardComposerState, FlashBoardStoreState } from '../types';
+import type {
+  FlashBoardComposerState,
+  FlashBoardHoveredComposerReference,
+  FlashBoardStoreState,
+} from '../types';
 
 type Set = (partial: Partial<FlashBoardStoreState> | ((state: FlashBoardStoreState) => Partial<FlashBoardStoreState>)) => void;
 
@@ -6,6 +10,7 @@ export interface UiSliceActions {
   openComposer: (draftNodeId: string) => void;
   closeComposer: () => void;
   updateComposer: (patch: Partial<FlashBoardComposerState>) => void;
+  setHoveredComposerReference: (reference: FlashBoardHoveredComposerReference | null) => void;
 }
 
 export const createUiSlice = (set: Set): UiSliceActions => ({
@@ -18,6 +23,7 @@ export const createUiSlice = (set: Set): UiSliceActions => ({
   closeComposer: (): void => {
     set((state) => ({
       composer: { ...state.composer, draftNodeId: null, isOpen: false },
+      hoveredComposerReference: null,
     }));
   },
 
@@ -32,5 +38,9 @@ export const createUiSlice = (set: Set): UiSliceActions => ({
         referenceMediaFileIds: patch.referenceMediaFileIds ?? state.composer.referenceMediaFileIds ?? [],
       },
     }));
+  },
+
+  setHoveredComposerReference: (reference: FlashBoardHoveredComposerReference | null): void => {
+    set({ hoveredComposerReference: reference });
   },
 });

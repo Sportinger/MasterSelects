@@ -1,169 +1,128 @@
-[← Back to Index](./README.md)
+[Back to Index](./README.md)
 
 # AI Multicam Editor
 
-Automatischer Multicam-Schnitt via LLM + Computer Vision Analyse.
+Automatischer Multicam-Schnitt via lokaler Analyse, lokalem Whisper-Transkript und Claude-gestuetzter EDL-Erzeugung.
 
-> **Status:** Implemented. The core pipeline (analysis, transcription, EDL generation, timeline integration) is functional. Face detection is a placeholder (returns empty). Analysis runs on CPU via Canvas, not GPU compute shaders (see "Future: GPU Pipeline" below).
+> **Status:** Implemented. Analyse, Transkription, EDL-Generierung und Timeline-Apply sind funktional. Face detection und Speaker-Diarisierung sind nicht implementiert.
 
 ---
 
-## Konzept
-
-Das LLM bekommt keine Bilder, sondern nur extrahierte Metadaten als Kurven/Graphen plus Transcript. Basierend darauf erstellt es einen Schnittplan (EDL).
+## Pipeline
 
 ```
-+-------------------------------------------------------------+
-|                    Video Input (N Kameras)                    |
-+-------------------------------------------------------------+
-                              |
-                              v
-+-------------------------------------------------------------+
-|              CV Analysis (CPU-basiert, Canvas 2D)            |
-|  +----------+ +----------+ +----------+ +----------+        |
-|  | Bewegung | | Schaerfe | | Audio    | | Gesichter|        |
-|  | (Canvas) | | (Canvas) | | (WebAudio)| (TODO)   |        |
-|  +----------+ +----------+ +----------+ +----------+        |
-+-------------------------------------------------------------+
-                              |
-                              v
-+-------------------------------------------------------------+
-|                   Metadaten pro Zeitpunkt                    |
-|  {                                                          |
-|    timestamp: 00:00:05,                                     |
-|    cameras: [                                               |
-|      { id: "cam-1", motion: 0.1, sharpness: 0.8 },         |
-|      { id: "cam-2", motion: 0.0, sharpness: 0.9 },         |
-|    ],                                                       |
-|    audio: { level: 0.7 },                                   |
-|    transcript: "Also ich denke dass..."                     |
-|  }                                                          |
-+-------------------------------------------------------------+
-                              |
-                              v
-+-------------------------------------------------------------+
-|                    LLM (Claude Sonnet 4)                     |
-|  Input:  Metadata + Transcript + Edit Style Rules            |
-|  Output: EDL (Edit Decision List) as JSON                    |
-+-------------------------------------------------------------+
-                              |
-                              v
-+-------------------------------------------------------------+
-|                   Timeline Integration                       |
-|  - Apply EDL directly to timeline tracks                     |
-+-------------------------------------------------------------+
+N Kameras
+  -> Audio sync
+  -> CPU-basierte Analyse
+  -> lokales Whisper-Transkript
+  -> Claude EDL
+  -> Timeline-Apply
 ```
+
+Das LLM bekommt keine Frames direkt. Es arbeitet mit:
+
+- Kamerametadaten
+- sampled motion/sharpness/audio data
+- dem Transkript
+- dem gewaehlten Edit-Stil
 
 ---
 
 ## Current Implementation
 
-### Analysis Pipeline (`multicamAnalyzer.ts`)
+### Analyse
 
-The actual implementation uses CPU-based analysis via Canvas 2D (not WebGPU compute shaders):
+`multicamAnalyzer.ts` analysiert jede Kamera sequentiell und nutzt Canvas 2D statt WebGPU:
 
-**Motion Detection** — Frame-difference on luminance (CPU):
-- Frames extracted at 320x180 resolution via `HTMLVideoElement` + `canvas.drawImage()`
-- Every 4th pixel sampled for performance
-- Luminance diff normalized to 0-1 range
-- Sample interval: 500ms
+- Frame extraction at `320x180`
+- Sample interval: `500ms`
+- Motion: luminance frame diff
+- Sharpness: Laplacian variance
+- Audio: RMS values from `audioAnalyzer`
+- Face detection: placeholder, returns `[]`
 
-**Sharpness Detection** — Laplacian variance (CPU):
-- Same Canvas 2D frame extraction
-- Laplacian kernel applied in JavaScript loop
-- Variance of results → higher = sharper
-- Normalized to 0-1 range
+Die Analyse laeuft kameraweise nacheinander, nicht parallel. Ein Cancel-Controller kann den Lauf abbrechen und die UI yieldet regelmaessig, damit der Browser responsiv bleibt.
 
-**Audio Analysis** — via `audioAnalyzer` service:
-- RMS levels per sample interval
-- Separate audio level map per camera
+### Transkription
 
-**Face Detection** — Placeholder:
-- Returns empty array (`[]`)
-- TODO: Implement with TensorFlow.js or similar
+`whisperService.ts` nutzt Browser-basierte `@huggingface/transformers` mit `Xenova/whisper-tiny`.
 
-**Per-camera sequential analysis:**
-- Cameras analyzed one at a time (not parallel)
-- Progress callback per camera and overall
-- Cancellation support via controller object
-- UI yields every 10 frames to keep responsive
+Wichtige Details:
 
-### Store (`multicamStore.ts`)
+- Es transkribiert die Audiospur der Master-Kamera
+- Wenn kein Master gesetzt ist, faellt es auf die erste Kamera zurueck
+- Die Ausgabe-Texte bekommen standardmaessig `Speaker 1`
+- Speaker diarization ist noch nicht vorhanden
 
-```typescript
-interface MultiCamStore {
-  // Cameras
-  cameras: MultiCamSource[];
-  masterCameraId: string | null;
+### EDL-Erzeugung
 
-  // Analysis
-  analysis: MultiCamAnalysis | null;
-  analysisStatus: 'idle' | 'analyzing' | 'complete' | 'error';
-  analysisProgress: number;
+`claudeService.ts` sendet direkt aus dem Browser an:
 
-  // Transcript
-  transcript: TranscriptEntry[];
-  transcriptStatus: 'idle' | 'loading-model' | 'generating' | 'complete' | 'error';
+- `https://api.anthropic.com/v1/messages`
 
-  // EDL
-  edl: EditDecision[];
-  edlStatus: 'idle' | 'generating' | 'complete' | 'error';
+Aktuell verwendet es:
 
-  // Settings
-  editStyle: 'podcast' | 'interview' | 'music' | 'documentary' | 'custom';
-  customPrompt: string;
-  apiKeySet: boolean;
+- model: `claude-sonnet-4-20250514`
+- `max_tokens: 4096`
+- header `anthropic-dangerous-direct-browser-access: true`
 
-  // Actions
-  addCamera(mediaFile: MediaFile): void;
-  removeCamera(id: string): void;
-  syncCameras(): Promise<void>;       // Audio-based sync via audioSync service
-  analyzeAll(): Promise<void>;         // Run CV analysis
-  generateTranscript(): Promise<void>; // Local Whisper transcription
-  importTranscript(entries): void;     // Import existing transcript
-  generateEDL(): Promise<void>;        // Claude API call
-  applyEDLToTimeline(): void;          // Create clips from EDL
-}
-```
+Der Prompt enthaelt:
 
-### Claude Service (`claudeService.ts`)
+- Kamera-Name und Rolle
+- Edit-Stil-Presets
+- sampled analysis data
+- audio levels
+- das komplette Transcript
 
-```typescript
-// API
-endpoint: 'https://api.anthropic.com/v1/messages'
-model: 'claude-sonnet-4-20250514'
-max_tokens: 4096
-
-// Prompt includes:
-// - Camera info (names, roles)
-// - Edit style instructions (preset or custom)
-// - Sampled analysis data (motion/sharpness per camera, max 100 entries)
-// - Audio levels
-// - Full transcript with timestamps and speakers
-```
-
-### Panel UI (`MultiCamPanel.tsx`)
-
-Full workflow panel with:
-- Camera cards (thumbnails, role selection, master badge)
-- Add cameras from media panel
-- Audio sync between cameras
-- Analysis trigger with progress
-- Transcript generation or import
-- Edit style selection (podcast, interview, music, documentary, custom)
-- EDL generation and manual editing
-- Apply EDL to timeline
-
-### API Key Management
-
-The Claude API key for multicam is stored separately from other API keys:
-- Uses `apiKeyManager` with encrypted IndexedDB storage (Web Crypto API)
-- Legacy key ID: `claude-api-key`
-- Checked on store initialization
+Die Antwort wird als JSON-Array von Edit-Entscheidungen geparst.
 
 ---
 
-## Data Structures (Actual)
+## Store And UI
+
+`multicamStore.ts` verwaltet:
+
+- camera list and master camera
+- analysis status/progress/error
+- transcript status/progress/error
+- EDL status/error
+- edit style and custom prompt
+- selection and EDL preview state
+
+`MultiCamPanel.tsx` bietet den aktuellen UI-Workflow:
+
+- Kameras aus importierten Media-Dateien hinzufuegen
+- Audio sync starten
+- Analyse starten
+- Transcript generieren oder importieren
+- Edit Style waehlen
+- Claude API key setzen
+- EDL generieren und manuell bearbeiten
+- EDL auf die Timeline anwenden
+
+---
+
+## API Key Handling
+
+Multicam nutzt den gemeinsamen `apiKeyManager` fuer lokale, verschluesselte Speicherung in IndexedDB.
+
+- Legacy key id: `claude-api-key`
+- Der Store speichert nur `apiKeySet`, nicht den Klartext-Key
+- Beim Start wird asynchron geprueft, ob ein Key bereits vorhanden ist
+
+Das ist ein lokaler Browser-Key, kein Cloudflare-Secret.
+
+---
+
+## Timeline Apply
+
+`applyEDLToTimeline()` erstellt einen neuen Video-Track, fuegt Clips fuer jede Edit-Entscheidung ein und trimmt sie unter Beruecksichtigung des Sync-Offsets.
+
+Das ist direkte Timeline-Integration, kein Export in Premiere XML oder Resolve EDL.
+
+---
+
+## Data Shapes
 
 ```typescript
 interface MultiCamSource {
@@ -171,200 +130,73 @@ interface MultiCamSource {
   mediaFileId: string;
   name: string;
   role: 'wide' | 'closeup' | 'detail' | 'custom';
-  syncOffset: number;   // ms, relative to master
-  duration: number;      // ms
+  customRole?: string;
+  syncOffset: number;
+  duration: number;
   thumbnailUrl?: string;
 }
 
 interface MultiCamAnalysis {
-  projectDuration: number;  // ms
-  sampleInterval: number;   // ms (500)
+  projectDuration: number;
+  sampleInterval: number;
   cameras: CameraAnalysis[];
   audioLevels: { timestamp: number; level: number }[];
 }
 
-interface CameraAnalysis {
-  cameraId: string;
-  frames: FrameAnalysis[];
-}
-
 interface FrameAnalysis {
-  timestamp: number;  // ms
-  motion: number;     // 0-1
-  sharpness: number;  // 0-1
-  faces: DetectedFace[];  // Currently always empty
-  audioLevel: number; // 0-1
-}
-
-interface EditDecision {
-  id: string;
-  start: number;      // ms
-  end: number;         // ms
-  cameraId: string;
-  reason?: string;
-  confidence?: number; // 0-1
+  timestamp: number;
+  motion: number;
+  sharpness: number;
+  faces: DetectedFace[];
+  audioLevel: number;
 }
 
 interface TranscriptEntry {
   id: string;
-  start: number;  // ms
-  end: number;     // ms
+  start: number;
+  end: number;
   speaker: string;
   text: string;
 }
 
-type EditStyle = 'podcast' | 'interview' | 'music' | 'documentary' | 'custom';
-```
-
----
-
-## Edit Style Presets
-
-| Style | Key Rules |
-|-------|-----------|
-| `podcast` | Cut to speaker, reaction shots sparingly, 3s min, avoid mid-sentence cuts |
-| `interview` | Show interviewee primarily, interviewer for questions, 2s min |
-| `music` | Cut on beat, motion-driven, 1-2s min, faster pacing |
-| `documentary` | Long cuts (5+s), B-roll, wide establishing shots, follow narrative |
-| `custom` | User-provided instructions |
-
----
-
-## LLM Prompt Structure (Actual)
-
-The prompt sent to Claude follows this structure:
-```
-You are an expert video editor. Generate an edit decision list (EDL) for a multicam video.
-
-PROJECT INFORMATION:
-- Total duration: MM:SS
-- Number of cameras: N
-
-CAMERAS:
-  Camera 1 (id): "Name" - Role: wide/closeup/etc.
-
-[Edit Style Instructions from preset]
-[Optional custom instructions]
-
-ANALYSIS DATA:
-  Sample interval, per-camera avg motion/sharpness,
-  Timeline data (motion/sharpness per camera at each timestamp)
-
-TRANSCRIPT:
-  [Timestamped speaker-attributed text]
-
-OUTPUT FORMAT:
-  JSON array of {start, end, cameraId, reason}
-```
-
----
-
-## Audio Sync
-
-Camera synchronization uses the `audioSync` service:
-- Cross-correlation of audio waveforms
-- Master camera set to offset 0
-- Other cameras get calculated offset in ms
-- Manual offset adjustment also supported
-
----
-
-## Implemented Features (Checklist)
-
-- [x] Camera management (add, remove, reorder, roles)
-- [x] Master camera selection
-- [x] Audio-based camera sync
-- [x] Motion detection (CPU, frame-difference)
-- [x] Sharpness detection (CPU, Laplacian variance)
-- [x] Audio level analysis
-- [x] Local Whisper transcription (via `@huggingface/transformers`)
-- [x] Transcript import
-- [x] Claude API EDL generation
-- [x] 5 edit style presets + custom
-- [x] EDL manual editing (update, insert, remove decisions)
-- [x] Apply EDL to timeline (create clips with correct in/out points and sync offsets)
-- [x] Cancellation support for analysis
-- [x] API key encrypted storage
-- [x] Full panel UI
-
-## Not Yet Implemented
-
-- [ ] Face detection (placeholder returns empty array)
-- [ ] WebGPU compute shader analysis (currently CPU-based)
-- [ ] Premiere XML export
-- [ ] DaVinci Resolve EDL export
-- [ ] Face clustering / speaker-to-camera mapping
-- [ ] Chunked processing for long videos
-- [ ] Beat detection for music edits
-
----
-
-## Future: GPU Pipeline (Design)
-
-The original design envisioned WebGPU compute shaders for analysis. This remains a future optimization:
-
-### Motion Detection (WebGPU Compute Shader)
-```wgsl
-@compute @workgroup_size(16, 16)
-fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-    let prev = textureLoad(prevFrame, id.xy, 0);
-    let curr = textureLoad(currFrame, id.xy, 0);
-    let prevLum = dot(prev.rgb, vec3(0.299, 0.587, 0.114));
-    let currLum = dot(curr.rgb, vec3(0.299, 0.587, 0.114));
-    let diff = abs(currLum - prevLum);
-    atomicAdd(&result, diff);
+interface EditDecision {
+  id: string;
+  start: number;
+  end: number;
+  cameraId: string;
+  reason?: string;
+  confidence?: number;
 }
 ```
 
-### Sharpness Detection (WebGPU Compute Shader)
-```wgsl
-@compute @workgroup_size(16, 16)
-fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-    let c = textureLoad(frame, id.xy, 0).rgb;
-    let t = textureLoad(frame, id.xy + vec2(0, -1), 0).rgb;
-    let b = textureLoad(frame, id.xy + vec2(0, 1), 0).rgb;
-    let l = textureLoad(frame, id.xy + vec2(-1, 0), 0).rgb;
-    let r = textureLoad(frame, id.xy + vec2(1, 0), 0).rgb;
-    let lap = 4.0 * c - t - b - l - r;
-    let lum = dot(lap, vec3(0.299, 0.587, 0.114));
-    atomicAdd(&variance, lum * lum);
-    atomicAdd(&count, 1u);
-}
-```
+---
 
-### Face Detection
-Would use TensorFlow.js with WebGPU backend (BlazeFace model, ~190KB).
+## Edit Styles
+
+- `podcast`
+- `interview`
+- `music`
+- `documentary`
+- `custom`
+
+The presets are baked into the prompt and steer the EDL generation strategy, but they do not enforce hard rules in the store.
 
 ---
 
-## Dependencies (Current)
+## Current Limitations
 
-```
-@huggingface/transformers  — Local Whisper transcription
-audioSync service          — Cross-correlation for camera sync
-audioAnalyzer service      — Audio level analysis
-claudeService              — Claude API for EDL generation
-apiKeyManager              — Encrypted key storage
-```
-
-No TensorFlow.js dependencies currently required (face detection not implemented).
-
----
-
-## Tests
-
-| Test File | Tests | Coverage |
-|-----------|-------|----------|
-| [`crossCorrelation.test.ts`](../../tests/unit/crossCorrelation.test.ts) | 45 | Audio sync cross-correlation |
-
-Run tests: `npx vitest run`
+- Face detection returns empty arrays.
+- Transcript speaker labels are not diarized.
+- Analysis is CPU-based, not GPU-based.
+- The AI generation call is direct browser access to Anthropic, so it depends on the user's local API key.
+- Premiere XML and DaVinci Resolve export are not implemented.
 
 ---
 
 ## Related Documents
 
-- [AI Integration](./AI-Integration.md) -- AI tools and OpenAI function calling
-- [Audio](./Audio.md) -- Audio processing, cross-correlation sync
+- [Audio](./Audio.md)
+- [Timeline](./Timeline.md)
 
 ---
 

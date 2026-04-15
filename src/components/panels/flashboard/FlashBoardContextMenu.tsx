@@ -1,8 +1,30 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFlashBoardStore } from '../../../stores/flashboardStore';
 import type { FlashBoardNode } from '../../../stores/flashboardStore/types';
 import { flashBoardMediaBridge } from '../../../services/flashboard/FlashBoardMediaBridge';
 import { getCatalogEntry } from '../../../services/flashboard/FlashBoardModelCatalog';
+import { Logger } from '../../../services/logger';
+
+const log = Logger.create('FlashBoardContextMenu');
+
+function appendReferenceMediaFileId(
+  currentIds: string[],
+  mediaFileId: string,
+  maxReferenceImages?: number,
+): string[] {
+  const withoutExisting = currentIds.filter((id) => id !== mediaFileId);
+
+  if (
+    typeof maxReferenceImages === 'number'
+    && Number.isFinite(maxReferenceImages)
+    && maxReferenceImages > 0
+    && withoutExisting.length >= maxReferenceImages
+  ) {
+    return currentIds;
+  }
+
+  return [...withoutExisting, mediaFileId];
+}
 
 interface ContextMenuProps {
   x: number;
@@ -18,6 +40,7 @@ export function FlashBoardContextMenu({ x, y, node, boardId, canvasPosition, onC
   const selectedNodeIds = useFlashBoardStore((s) => s.selectedNodeIds);
   const composer = useFlashBoardStore((s) => s.composer);
   const createDraftNode = useFlashBoardStore((s) => s.createDraftNode);
+  const createReferenceNode = useFlashBoardStore((s) => s.createReferenceNode);
   const bringNodesToFront = useFlashBoardStore((s) => s.bringNodesToFront);
   const openComposer = useFlashBoardStore((s) => s.openComposer);
   const duplicateNode = useFlashBoardStore((s) => s.duplicateNode);
@@ -28,6 +51,7 @@ export function FlashBoardContextMenu({ x, y, node, boardId, canvasPosition, onC
   const updateNodeRequest = useFlashBoardStore((s) => s.updateNodeRequest);
   const clearSelection = useFlashBoardStore((s) => s.clearSelection);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [isAddingCurrentFrame, setIsAddingCurrentFrame] = useState(false);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -100,8 +124,23 @@ export function FlashBoardContextMenu({ x, y, node, boardId, canvasPosition, onC
     ? composer
     : null;
   const composerVideoTargetMultiShots = Boolean(composerVideoTarget?.multiShots);
+  const activeImageReferenceCatalogEntry = selectedImageTarget ? selectedTargetCatalogEntry : composerCatalogEntry;
   const activeImageReferenceTarget = selectedImageTarget ?? composerImageTarget;
   const activeVideoReferenceTarget = selectedVideoTarget ?? composerVideoTarget;
+  const activeImageReferenceIds = selectedImageTarget?.request?.referenceMediaFileIds
+    ?? composerImageTarget?.referenceMediaFileIds
+    ?? [];
+  const activeImageReferenceLimit = activeImageReferenceCatalogEntry?.maxReferenceImages;
+  const isAlreadyAssignedAsImageReference = Boolean(
+    node?.result?.mediaFileId && activeImageReferenceIds.includes(node.result.mediaFileId)
+  );
+  const isImageReferenceLimitReached = Boolean(
+    node?.result?.mediaFileId
+    && activeImageReferenceTarget
+    && activeImageReferenceLimit
+    && activeImageReferenceIds.length >= activeImageReferenceLimit
+    && !isAlreadyAssignedAsImageReference
+  );
   const composerTargetLabel = composerCatalogEntry
     ? composerCatalogEntry.name.replace(' (Kie.ai)', '')
     : 'current composer';
@@ -111,7 +150,7 @@ export function FlashBoardContextMenu({ x, y, node, boardId, canvasPosition, onC
     ? !selectedVideoTargetMultiShots
     : !composerVideoTargetMultiShots;
   const canAssignVideoReference = Boolean(node?.result?.mediaFileId && activeVideoReferenceTarget);
-  const canAssignImageReference = Boolean(node?.result?.mediaFileId && activeImageReferenceTarget);
+  const canAssignImageReference = Boolean(node?.result?.mediaFileId && activeImageReferenceTarget) && !isImageReferenceLimitReached;
   const canSendBackward = targetNodeIds.length > 0 && boardNodes.length > 1;
   const canBringForward = targetNodeIds.length > 0 && boardNodes.length > 1;
 
@@ -120,6 +159,23 @@ export function FlashBoardContextMenu({ x, y, node, boardId, canvasPosition, onC
     openComposer(n.id);
     onClose();
   }, [boardId, canvasPosition, createDraftNode, openComposer, onClose]);
+
+  const handleAddCurrentFrame = useCallback(async () => {
+    if (isAddingCurrentFrame) {
+      return;
+    }
+
+    setIsAddingCurrentFrame(true);
+    try {
+      const mediaFile = await flashBoardMediaBridge.importCurrentFrame();
+      createReferenceNode(boardId, mediaFile.id, canvasPosition);
+      setIsAddingCurrentFrame(false);
+      onClose();
+    } catch (error) {
+      log.error('Failed to add current frame to FlashBoard', error);
+      setIsAddingCurrentFrame(false);
+    }
+  }, [boardId, canvasPosition, createReferenceNode, isAddingCurrentFrame, onClose]);
 
   const handleEdit = useCallback(() => {
     if (!node) return;
@@ -152,11 +208,11 @@ export function FlashBoardContextMenu({ x, y, node, boardId, canvasPosition, onC
   }, [onClose, sendNodesToBack, targetNodeIds]);
 
   const handleDelete = useCallback(() => {
-    if (!node) return;
-    removeNode(node.id);
+    if (targetNodeIds.length === 0) return;
+    targetNodeIds.forEach((nodeId) => removeNode(nodeId));
     clearSelection();
     onClose();
-  }, [node, removeNode, clearSelection, onClose]);
+  }, [clearSelection, onClose, removeNode, targetNodeIds]);
 
   const handleAddToTimeline = useCallback(() => {
     if (!node?.result?.mediaFileId) return;
@@ -171,12 +227,20 @@ export function FlashBoardContextMenu({ x, y, node, boardId, canvasPosition, onC
       if (selectedImageTarget) {
         updateNodeRequest(selectedImageTarget.id, {
           outputType: 'image',
-          referenceMediaFileIds: [node.result.mediaFileId],
+          referenceMediaFileIds: appendReferenceMediaFileId(
+            selectedImageTarget.request?.referenceMediaFileIds ?? [],
+            node.result.mediaFileId,
+            selectedTargetCatalogEntry?.maxReferenceImages,
+          ),
         });
       } else if (composerImageTarget) {
         updateComposer({
           outputType: 'image',
-          referenceMediaFileIds: [node.result.mediaFileId],
+          referenceMediaFileIds: appendReferenceMediaFileId(
+            composerImageTarget.referenceMediaFileIds ?? [],
+            node.result.mediaFileId,
+            composerCatalogEntry?.maxReferenceImages,
+          ),
         });
       } else {
         return;
@@ -198,7 +262,7 @@ export function FlashBoardContextMenu({ x, y, node, boardId, canvasPosition, onC
     }
 
     onClose();
-  }, [composerImageTarget, composerVideoTarget, node, onClose, selectedImageTarget, selectedVideoTarget, updateComposer, updateNodeRequest]);
+  }, [composerCatalogEntry?.maxReferenceImages, composerImageTarget, composerVideoTarget, node, onClose, selectedImageTarget, selectedTargetCatalogEntry?.maxReferenceImages, selectedVideoTarget, updateComposer, updateNodeRequest]);
 
   const handleClearReference = useCallback((slot: 'start' | 'end' | 'reference') => {
     if (!generationNode) return;
@@ -228,6 +292,15 @@ export function FlashBoardContextMenu({ x, y, node, boardId, canvasPosition, onC
         <>
           <button className="flashboard-context-item" onClick={handleNewDraft}>
             New Draft
+          </button>
+          <button
+            className="flashboard-context-item"
+            disabled={isAddingCurrentFrame}
+            onClick={() => {
+              void handleAddCurrentFrame();
+            }}
+          >
+            {isAddingCurrentFrame ? 'Adding Current Frame...' : 'Add Current Frame'}
           </button>
         </>
       )}
@@ -261,7 +334,12 @@ export function FlashBoardContextMenu({ x, y, node, boardId, canvasPosition, onC
                   disabled={!canAssignImageReference}
                   onClick={() => handleAssignReference('reference')}
                 >
-                  Set As Reference Frame for {imageReferenceTargetLabel}
+                  {isAlreadyAssignedAsImageReference ? 'Move To Last Reference Slot' : 'Add As Reference Frame'} for {imageReferenceTargetLabel}
+                </button>
+              )}
+              {isImageReferenceLimitReached && (
+                <button className="flashboard-context-item hint" disabled>
+                  Reference limit reached ({activeImageReferenceIds.length}/{activeImageReferenceLimit})
                 </button>
               )}
               {!activeVideoReferenceTarget && !activeImageReferenceTarget && (

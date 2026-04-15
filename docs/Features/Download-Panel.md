@@ -1,12 +1,27 @@
-[← Back to Index](./README.md)
+# Download Panel
 
-# Download Panel (formerly YouTube Panel)
+[Back to Index](./README.md)
 
-MASterSelects includes a built-in Download panel for searching, downloading, and editing online videos from multiple platforms directly in your project.
+Search, inspect, download, and timeline-import online videos through the Native Helper and `yt-dlp`.
+
+---
+
+## Overview
+
+The Download panel and the older YouTube-labeled panel share the same implementation. The surface supports:
+
+- direct URL paste for YouTube and other `yt-dlp`-supported sites
+- YouTube keyword search when a YouTube Data API key is configured
+- quality selection through the Native Helper
+- download-only and add-to-timeline flows
+- existing-download detection inside the current project
+- re-download and copy-URL actions from each result card
+
+---
 
 ## Supported Platforms
 
-The Download panel supports video URLs from the following platforms via yt-dlp:
+The panel detects common platforms up front and otherwise falls back to a generic `yt-dlp` flow.
 
 | Platform | URL Detection | Project Subfolder |
 |----------|---------------|-------------------|
@@ -18,122 +33,142 @@ The Download panel supports video URLs from the following platforms via yt-dlp:
 | Reddit | `reddit.com` | `Downloads/Reddit/` |
 | Vimeo | `vimeo.com` | `Downloads/Vimeo/` |
 | Twitch | `twitch.tv` | `Downloads/Twitch/` |
-| Dailymotion | `dailymotion.com` | `Downloads/Other/` |
-| Other | Any HTTP(S) URL | `Downloads/Other/` |
+| Other | any other HTTP(S) URL | `Downloads/Other/` |
 
-Any URL supported by yt-dlp can be downloaded via the Native Helper, even if the platform is not explicitly listed above. Unrecognized platforms are stored under `Downloads/Other/`.
+Any site that `yt-dlp` can fetch can still be downloaded even if it is not listed in the table above.
 
-## Download Panel
+---
 
-Access the Download panel from the dock system. It provides:
+## Input Modes
 
-- **URL Paste**: Paste any supported video URL to fetch metadata and add to the panel
-- **YouTube Search**: Search YouTube videos via the Data API (requires API key) or paste YouTube URLs directly (no key required)
-- **Thumbnails**: Display video thumbnails, titles, channels, and duration
-- **Quality Selection**: Choose video quality/format before downloading (via Native Helper)
-- **Download**: Download videos via Native Helper (yt-dlp)
-- **Add to Timeline**: Download and add directly to the timeline in one step
-- **Auto Download**: Toggle to automatically start downloading when a URL is pasted
+### URL Paste
 
-## Download Methods
+- Pasting a YouTube URL or 11-character video ID uses the oEmbed metadata path first
+- Pasting a non-YouTube URL asks the Native Helper for format/info metadata
+- Optional `Auto Download` starts the download immediately after paste when the helper is connected
 
-### Native Helper (Required)
+### YouTube Search
 
-The Native Helper provides downloads for all supported platforms:
+- Requires the YouTube Data API key in Settings
+- Search results are persisted in `youtubeStore` with the project
+- Search is YouTube-only; other platforms are URL-first
 
-1. Install the Native Helper from the toolbar indicator
-2. The helper includes yt-dlp which supports hundreds of video sites
-3. Downloads are saved to the project's `Downloads/<Platform>/` folder
-4. H.264 codec is preferred for maximum compatibility
+---
 
-Non-YouTube URLs **require** the Native Helper. YouTube URLs also work best with the helper for quality selection and reliable downloads.
+## Native Helper Flow
 
-### YouTube oEmbed Metadata
+Downloads require the Native Helper for the actual media transfer.
 
-For YouTube URLs specifically, video metadata (title, channel, thumbnail) is fetched via the YouTube oEmbed API without requiring the Native Helper or an API key. The actual download still requires the Native Helper.
+1. The panel asks the helper for available formats
+2. The helper runs `yt-dlp`
+3. Progress callbacks feed percent and transfer speed back into the panel
+4. The downloaded file is fetched from the helper
+5. If a project is open, the file is written into `Downloads/<Platform>/`
+6. The saved file can then be imported to the media pool and/or converted into a real timeline clip
 
-## Adding Videos to Timeline
+If no project is open, the downloaded file stays in memory as a `File`.
 
-### Quick Add
+---
 
-1. Paste a video URL in the Download panel
-2. The panel auto-detects the platform and fetches metadata
-3. Click the "+" button to add to timeline
-4. Select video quality (format dialog appears)
-5. Video downloads and appears on the timeline at the playhead position
+## Result Cards
 
-### Drag & Drop
+Each result card can show:
 
-1. Drag a video card from the Download panel
-2. Drop it onto the timeline
-3. The video downloads and is placed at the drop position
+- title, channel/uploader, thumbnail, and duration
+- a downloaded badge when the file already exists in the open project
+- a download button
+- a re-download button once the file is already present
+- an add-to-timeline button
+- a copy-URL button
 
-### Download Only
+When a project is open, the panel checks whether `Downloads/<Platform>/<SanitizedTitle>.mp4` already exists and marks matching cards as downloaded.
 
-Click the download arrow button on a video card to download the file without adding it to the timeline. The file is saved to the project's platform-specific subfolder and also offered as a browser download.
+---
 
-## Project Storage
+## Download Progress
 
-Downloaded videos are organized into platform-specific subfolders:
+While a download is running:
 
-```
-{ProjectFolder}/
-  Downloads/
-    YT/            # YouTube videos
-    TikTok/        # TikTok videos
-    Instagram/     # Instagram videos
-    Twitter/       # Twitter/X videos
-    Facebook/      # Facebook videos
-    Reddit/        # Reddit videos
-    Vimeo/         # Vimeo videos
-    Twitch/        # Twitch clips
-    Other/         # Dailymotion, unrecognized platforms
-```
+- the card gets a downloading state
+- the overlay shows percent complete
+- transfer speed is displayed when the helper provides it
+- the same progress/speed data is mirrored into pending timeline download clips when the download started from `Add to Timeline`
 
-- Files are automatically saved when a project is open
-- Downloaded files are added to the Media Panel
-- Files persist with project saves
-- When no project is open, files are kept in memory only
+The helper-reported progress represents the whole pipeline, including download, processing, and final file handoff.
+
+---
+
+## Add To Timeline
+
+`Add to Timeline` does not wait for the final file before showing something in the editor.
+
+### Pending Clip Flow
+
+1. A pending download clip is inserted on the first video track at the current playhead
+2. The clip stores the source title, thumbnail, duration estimate, and download status
+3. Progress updates stream into that pending clip while the helper is downloading
+4. Once the file arrives, the pending clip is converted into a normal playable media clip
+5. On failure, the clip stores the error state instead
+
+### Drag Behavior
+
+- Not-yet-downloaded cards are visual drag sources only
+- Already-downloaded cards are pre-imported into the media store
+- Once pre-imported, dragging the card to the timeline uses the real media-file drag payload instead of starting a new URL-only flow
+
+---
 
 ## Format Selection
 
-When downloading via Native Helper, a format dialog shows available qualities. The system prefers:
+When the helper can enumerate formats, the panel opens a quality dialog before download/timeline import.
 
-| Priority | Codec | Container | Notes |
-|----------|-------|-----------|-------|
-| 1 | H.264 | MP4 | Best compatibility |
-| 2 | VP9 | WebM | Good quality, larger files |
-| 3 | AV1 | WebM | Best compression, may need fallback |
+The recommended order is:
 
-The system prefers H.264 for maximum WebCodecs compatibility during export. If no format recommendations are available, the default format is used automatically.
+| Priority | Codec | Container | Reason |
+|----------|-------|-----------|--------|
+| 1 | H.264 | MP4 | best browser/export compatibility |
+| 2 | VP9 | WebM | good fallback quality |
+| 3 | AV1 | WebM | compression-efficient but more compatibility-sensitive |
 
-## Troubleshooting
+If no recommendations are available, the panel falls back to the helper default.
 
-| Issue | Solution |
-|-------|----------|
-| Downloads fail | Check Native Helper is running |
-| No quality options | Install Native Helper for quality selection |
-| Non-YouTube URL fails | Native Helper is required for non-YouTube platforms |
-| Video won't play | Check codec support, prefer H.264 |
-| Audio missing | Ensure audio track was included in download |
-| "URL may not be supported" | yt-dlp may not support this particular site |
-
-## API Keys (Optional)
-
-For YouTube search functionality, configure the YouTube Data API key:
-
-1. Open Settings from the menu
-2. Enter YouTube Data API key
-3. API provides search results with metadata (title, duration, views, channel)
-
-Without an API key, you can still paste YouTube URLs directly (metadata is fetched via oEmbed). Non-YouTube platforms do not require any API key.
+If YouTube blocks anonymous extraction, the helper retries with Chrome cookies before failing.
 
 ---
 
-## Tests
+## Project Storage
 
-No dedicated unit tests — this feature requires network access and the Native Helper (yt-dlp).
+When a project is open, downloads are saved here:
+
+```text
+ProjectFolder/
+  Downloads/
+    YT/
+    TikTok/
+    Instagram/
+    Twitter/
+    Facebook/
+    Reddit/
+    Vimeo/
+    Twitch/
+    Other/
+```
+
+File names are sanitized from the source title and saved as `.mp4`.
 
 ---
 
-*See also: [Media Panel](./Media-Panel.md) | [Native Helper](./Native-Helper.md)*
+## Limitations
+
+- The helper is required for the actual download path
+- Non-YouTube metadata lookup also depends on the helper
+- Search without a YouTube API key is limited to pasted URLs/IDs
+- Duplicate detection is filename/title based inside the project download folders; it is not a remote content hash
+
+---
+
+## Related Features
+
+- [Media Panel](./Media-Panel.md)
+- [Project Persistence](./Project-Persistence.md)
+- [Native Helper](./Native-Helper.md)

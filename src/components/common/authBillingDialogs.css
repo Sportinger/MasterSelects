@@ -404,6 +404,10 @@
   width: 680px;
 }
 
+.welcome-overlay.auth-dialog-pricing {
+  width: min(1180px, 94vw);
+}
+
 /* ─── Secondary / Ghost action buttons ─── */
 
 .auth-dialog-action-secondary,
@@ -532,39 +536,165 @@
 /* ─── Pricing Dialog (Changelog-style) ─── */
 
 .pricing-plans-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
 }
 
 .pricing-plan-card {
-  padding: 16px 18px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-rows: auto auto;
-  gap: 4px 16px;
-  align-items: center;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 420px;
+  padding: 20px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.08), transparent 44%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .pricing-plan-featured {
-  border-color: rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(230, 214, 153, 0.38);
+  background:
+    radial-gradient(circle at top, rgba(230, 214, 153, 0.16), transparent 48%),
+    linear-gradient(180deg, rgba(255, 248, 214, 0.08), rgba(255, 255, 255, 0.03));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 16px 32px rgba(0, 0, 0, 0.18);
+}
+
+.pricing-plan-current {
+  border-color: rgba(216, 190, 118, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 244, 204, 0.08),
+    0 12px 24px rgba(0, 0, 0, 0.18);
+}
+
+.pricing-plan-current::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 22px;
+  border: 1px solid rgba(232, 210, 145, 0.52);
+  pointer-events: none;
+}
+
+.pricing-plan-card-free {
+  background:
+    radial-gradient(circle at top, rgba(150, 150, 150, 0.08), transparent 44%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+}
+
+.pricing-plan-card-starter {
+  background:
+    radial-gradient(circle at top, rgba(149, 176, 255, 0.16), transparent 46%),
+    linear-gradient(180deg, rgba(197, 215, 255, 0.08), rgba(255, 255, 255, 0.02));
+}
+
+.pricing-plan-card-pro {
+  background:
+    radial-gradient(circle at top, rgba(232, 220, 164, 0.2), transparent 48%),
+    linear-gradient(180deg, rgba(255, 244, 204, 0.10), rgba(255, 255, 255, 0.03));
+}
+
+.pricing-plan-card-studio {
+  background:
+    radial-gradient(circle at top, rgba(178, 218, 193, 0.18), transparent 46%),
+    linear-gradient(180deg, rgba(212, 246, 223, 0.08), rgba(255, 255, 255, 0.02));
+}
+
+.pricing-dialog-content {
+  gap: 28px;
+}
+
+.pricing-dialog-intro {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: end;
+}
+
+.pricing-dialog-current-plan {
+  min-width: 190px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.pricing-dialog-current-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.34);
+}
+
+.pricing-dialog-current-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.pricing-dialog-current-note {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(255, 237, 187, 0.78);
+}
+
+.pricing-plan-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pricing-plan-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.pricing-plan-badge-featured {
+  border-color: rgba(230, 214, 153, 0.45);
+  background: rgba(230, 214, 153, 0.12);
+  color: rgba(255, 244, 204, 0.92);
+}
+
+.pricing-plan-badge-current {
+  border-color: rgba(232, 210, 145, 0.44);
+  background: rgba(232, 210, 145, 0.12);
+  color: rgba(255, 237, 187, 0.96);
 }
 
 .pricing-plan-top {
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 10px;
-  grid-column: 1 / -1;
 }
 
 .pricing-plan-name {
   margin: 0;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 29px;
+  font-weight: 700;
   letter-spacing: 0.02em;
   color: var(--text-primary, #f2f5ff);
 }
@@ -572,28 +702,96 @@
 .pricing-plan-description {
   margin: 0;
   font-size: 13px;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.45);
+  line-height: 1.65;
+  min-height: calc(1.65em * 2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.54);
+}
+
+.pricing-plan-price-block {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .pricing-plan-price {
-  font-size: 12px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.35);
-  white-space: nowrap;
-  font-style: italic;
+  font-size: 40px;
+  line-height: 0.95;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.96);
 }
 
-.pricing-plan-credits {
+.pricing-plan-price-note {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.pricing-plan-credit-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 15px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.pricing-plan-credit-value {
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.93);
+}
+
+.pricing-plan-credit-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.pricing-plan-feature-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+.pricing-plan-feature {
+  position: relative;
+  padding-left: 16px;
   font-size: 13px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.pricing-plan-feature::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
 }
 
 .pricing-plan-cta {
-  grid-column: 2;
-  grid-row: 2;
-  padding: 7px 18px;
+  width: 100%;
+  min-height: 42px;
+  margin-top: auto;
+  padding: 10px 18px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.06);
@@ -792,5 +990,399 @@
 
   .account-metrics-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1080px) {
+  .pricing-plans-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pricing-dialog-intro {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 700px) {
+  .welcome-overlay.auth-dialog-pricing {
+    width: min(100%, 94vw);
+  }
+
+  .pricing-plans-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pricing-plan-card {
+    min-height: 0;
+  }
+}
+
+/* Account Dialog Overrides */
+
+.account-dialog-content {
+  gap: 20px;
+}
+
+.account-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.account-hero-copy {
+  gap: 6px;
+}
+
+.account-hero-kicker,
+.account-panel-label {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.34);
+}
+
+.account-hero-meta {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.46);
+}
+
+.account-hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.account-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.74);
+}
+
+.account-hero-badge-accent {
+  border-color: rgba(232, 210, 145, 0.34);
+  background: rgba(232, 210, 145, 0.1);
+  color: rgba(255, 237, 187, 0.96);
+}
+
+.account-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.account-metrics-grid {
+  gap: 12px;
+}
+
+.account-metric-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 132px;
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.06), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.02));
+  text-align: left;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.account-metric-card-plan {
+  background:
+    radial-gradient(circle at top left, rgba(149, 176, 255, 0.16), transparent 46%),
+    linear-gradient(180deg, rgba(197, 215, 255, 0.08), rgba(255, 255, 255, 0.02));
+}
+
+.account-metric-card-credits {
+  background:
+    radial-gradient(circle at top left, rgba(232, 210, 145, 0.14), transparent 44%),
+    linear-gradient(180deg, rgba(255, 244, 204, 0.08), rgba(255, 255, 255, 0.02));
+}
+
+.account-metric-card-hosted {
+  background:
+    radial-gradient(circle at top left, rgba(178, 218, 193, 0.14), transparent 44%),
+    linear-gradient(180deg, rgba(212, 246, 223, 0.07), rgba(255, 255, 255, 0.02));
+}
+
+.account-metric-label {
+  margin-bottom: 0;
+  font-weight: 700;
+}
+
+.account-metric-value {
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.account-metric-detail {
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.account-usage-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.04), transparent 40%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.015));
+}
+
+.account-usage-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.account-usage-summary {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.44);
+}
+
+.account-usage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.account-usage-entry {
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.account-usage-feature {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.account-usage-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.account-usage-detail {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.44);
+}
+
+.account-usage-count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.54);
+}
+
+.account-usage-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font-size: inherit;
+}
+
+.account-usage-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.account-usage-empty-detail {
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.account-actions-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+.account-actions-row .auth-dialog-submit,
+.account-actions-row .auth-dialog-action-secondary {
+  width: 100%;
+}
+
+.account-actions-row-single {
+  grid-template-columns: 1fr;
+}
+
+.account-signout-row {
+  padding-top: 8px;
+}
+
+/* Pricing Dialog Interaction Overrides */
+
+.pricing-plan-selectable {
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
+}
+
+.pricing-plan-selectable:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.pricing-plan-selectable:focus-visible {
+  outline: none;
+  border-color: rgba(232, 210, 145, 0.44);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(232, 210, 145, 0.34);
+}
+
+.pricing-plan-disabled {
+  cursor: default;
+  opacity: 0.52;
+}
+
+.pricing-plan-current {
+  border-color: rgba(216, 190, 118, 0.22);
+}
+
+.pricing-plan-current::after {
+  content: none;
+}
+
+.pricing-plan-selected {
+  border-color: rgba(232, 210, 145, 0.44);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 244, 204, 0.08),
+    0 16px 32px rgba(0, 0, 0, 0.18);
+}
+
+.pricing-plan-selected::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 22px;
+  border: 1px solid rgba(232, 210, 145, 0.56);
+  pointer-events: none;
+}
+
+.pricing-plan-badge-next {
+  border-color: rgba(232, 210, 145, 0.44);
+  background: rgba(232, 210, 145, 0.12);
+  color: rgba(255, 237, 187, 0.96);
+}
+
+.pricing-dialog-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 18px 20px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.05), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.02));
+}
+
+.pricing-dialog-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pricing-dialog-selection-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.34);
+}
+
+.pricing-dialog-selection-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.pricing-dialog-selection-note {
+  font-size: 13px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.pricing-dialog-submit {
+  margin-top: 0;
+  min-width: 250px;
+}
+
+@media (max-width: 700px) {
+  .account-hero {
+    flex-direction: column;
+  }
+
+  .account-hero-badges {
+    justify-content: flex-start;
+  }
+
+  .account-actions-row {
+    grid-template-columns: 1fr;
+  }
+
+  .account-usage-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .account-usage-entry {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .pricing-dialog-footer {
+    grid-template-columns: 1fr;
+  }
+
+  .pricing-dialog-submit {
+    min-width: 0;
+    width: 100%;
   }
 }

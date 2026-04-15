@@ -19,20 +19,19 @@ Security model, secret handling, and trust boundaries for MasterSelects.
 
 ## Trust Model
 
-MasterSelects is a **local-first application** that runs entirely in the browser. All media processing, rendering, and editing happen client-side using WebGPU, WebCodecs, and Web Workers. No user data is sent to external servers unless explicitly triggered by the user (e.g., AI API calls, transcription services).
+MasterSelects is a local-first application. Rendering, editing, and most analysis happen in the browser, but the app also has two explicit local bridge surfaces:
+- The Vite dev bridge used in development
+- The Native Helper bridge used for production/local companion workflows
 
-**Trusted boundaries:**
-- The browser origin (`localhost:5173` in dev, or the deployed domain)
-- IndexedDB storage (encrypted API keys)
-- OPFS storage (SAM2 model cache)
+The main trust boundaries are:
+- The browser origin
+- The dev bridge auth token injected by Vite
+- The Native Helper auth token generated at startup
+- Explicit allowed file roots
+- IndexedDB for encrypted API keys
+- OPFS for the SAM 2 model cache
 
-**External services (user-initiated only):**
-- OpenAI API (AI chat, transcription)
-- PiAPI (AI video generation)
-- AssemblyAI / Deepgram (transcription)
-- YouTube Data API (video search)
-- Kling AI (direct video generation)
-- Anthropic API (multicam EDL generation)
+External services are only contacted when the user enables a feature that needs them, such as AI chat, transcription, AI video generation, or multicam EDL generation.
 
 ---
 
@@ -40,16 +39,15 @@ MasterSelects is a **local-first application** that runs entirely in the browser
 
 ### Storage
 
-API keys are stored **encrypted in IndexedDB** using the Web Crypto API:
+API keys are stored encrypted in IndexedDB using the Web Crypto API:
 
-- Each browser instance generates a unique AES-256-GCM encryption key
-- The encryption key is stored in IndexedDB alongside the encrypted keys
-- This protects against **casual inspection** (e.g., browsing IndexedDB in DevTools)
-- It does **not** protect against same-origin scripts or browser extensions with storage access
+- Each browser instance generates a unique AES-256-GCM key
+- The encryption key is stored alongside the encrypted secrets in IndexedDB
+- This blocks casual inspection, but not same-origin scripts or browser extensions with storage access
 
-### File Export (Disabled)
+### File Export
 
-The `.keys.enc` file export/import feature has been **disabled**. The previous implementation used a deterministic passphrase hardcoded in source code, which provided only obfuscation rather than real security. Keys must be re-entered manually on new machines until a user-passphrase-based encryption scheme is implemented.
+The `.keys.enc` export/import path remains disabled. The previous implementation relied on a deterministic hardcoded passphrase, so it was only obfuscation. Keys must be re-entered manually on a new machine until a passphrase-based scheme is implemented.
 
 ### Key Types
 
@@ -68,12 +66,13 @@ The `.keys.enc` file export/import feature has been **disabled**. The previous i
 
 ## Log Redaction
 
-All log output is automatically scanned for common secret patterns and redacted before being stored in the log buffer. This applies to:
+All log output is scanned for common secret patterns and redacted before it is stored in the log buffer or exposed through the AI bridge.
 
-- Log messages (`log.info(...)`, `log.warn(...)`, etc.)
+This applies to:
+- Log messages
 - Data objects attached to log entries
 - Error messages and stack traces
-- AI tool bridge responses (defense-in-depth)
+- AI tool bridge responses
 
 ### Patterns Detected
 
@@ -83,54 +82,72 @@ All log output is automatically scanned for common secret patterns and redacted 
 | Bearer tokens | `Bearer eyJ...` |
 | `x-api-key` header values | `x-api-key: abc123...` |
 | URL key parameters | `?key=AIzaSy...` |
-| Long hex tokens (40+ chars) | `a1b2c3d4...` (40+ hex chars) |
-| Long alphanumeric tokens | `AbCd...` (40+ chars) |
+| Long hex tokens | 40+ hex chars |
+| Long alphanumeric tokens | 40+ chars |
 
-### Preserved (Not Redacted)
+### Preserved
 
 | Type | Why |
 |------|-----|
-| UUIDs | Used as clip/track IDs throughout the app |
+| UUIDs | Used as clip and track IDs |
 | Hex color codes | Short hex strings like `#ff4444` |
-| Short strings | Anything under 15 characters |
+| Short strings | Anything under the secret-length thresholds |
 | Normal log text | Common messages, numbers, paths |
 
 ---
 
 ## Bridge Security
 
-### Development (HMR Bridge)
+### Development Bridge
 
-In development mode, external AI agents can execute tools via `POST /api/ai-tools`. This bridge:
+The Vite dev bridge exposes local HTTP endpoints for AI tooling and local file access. The browser only attaches the dev bridge token when `__DEV_BRIDGE_TOKEN__` is present.
 
-- Only runs when the Vite dev server is active (`import.meta.env.DEV`)
-- Routes through HMR WebSocket to the browser tab
-- Requires a per-session Bearer token
-- Rejects non-loopback browser origins
-- Restricts local file reads/listings to explicit allowed roots (`repo root`, temp, Desktop, Documents, Downloads, Videos, plus optional `MASTERSELECTS_ALLOWED_FILE_ROOTS`)
+The current flow is:
+```
+POST /api/ai-tools -> Vite server -> HMR -> browser -> executeAITool()
+```
 
-### Production (Native Helper Bridge)
+The bridge also serves local file endpoints used by the AI media tools:
+- `/api/local-file`
+- `/api/local-files`
 
-In production, the Rust native helper provides a WebSocket + HTTP bridge:
+Those routes are protected by:
+- A bearer token injected by Vite
+- Loopback-only origins
+- Explicit allowed roots
+- Absolute-path validation plus traversal rejection
 
-- WebSocket on port `9876`, HTTP on port `9877`
-- Binds to `127.0.0.1` (localhost only, not exposed to network)
-- Authenticates via a random Bearer token generated at helper startup
-- Restricts file reads, uploads, and path searches to explicit allowed directories rather than the full home directory
+Allowed roots are seeded from the Vite config from the project root, temp directory, Desktop, Documents, Downloads, and Videos, and can be extended through `MASTERSELECTS_ALLOWED_FILE_ROOTS`.
+
+### Native Helper Bridge
+
+The Native Helper runs on `127.0.0.1` only and uses its own random auth token:
+- HTTP on port `9877`
+- WebSocket on port `9876`
+- `GET /ai-tools` and `GET /api/ai-tools` are status-only and do not require auth
+- `POST /ai-tools` and `POST /api/ai-tools` require the bearer token
+- `GET /startup-token` is localhost-only and lets the browser discover the helper token
+
+The helper also writes its auth token to a temp file named `masterselects-helper.token` so the browser can discover it during startup.
+
+The helper enforces:
+- Bearer-token authentication for HTTP and WebSocket requests
+- Origin checks for the WebSocket connection
+- Explicit allowed file roots for file reads, uploads, and directory listing
+- Rejection of traversal and UNC paths
+
+The AI chat approval UI is separate from these bridge checks. It is a user-experience gate for mutating or sensitive tools, not the underlying security boundary.
 
 ---
 
 ## Known Limitations
 
-1. **IndexedDB encryption key stored alongside encrypted data.** The AES-256-GCM key is in the same IndexedDB, so a same-origin script with storage access could decrypt all keys. This is defense against casual inspection, not a full security boundary.
-
-2. **No CSP headers in development.** The Vite dev server does not set Content-Security-Policy headers. Production deployments should configure appropriate CSP.
-
-3. **Log redaction is pattern-based.** Novel secret formats not matching the known patterns will not be redacted. The patterns are tuned for the specific API services used by MasterSelects.
-
-4. **Dev bridge token is local-process-scoped.** The HMR-based AI tool bridge requires a per-session Bearer token, but the token is written to `.ai-bridge-token` in the project root. Any local process with file read access can obtain the token. This prevents cross-origin web attacks but not local process compromise.
-
-5. **API keys are sent to third-party services.** When using AI features, API keys are transmitted to external services (OpenAI, PiAPI, etc.) over HTTPS. Users should review the privacy policies of these services.
+1. IndexedDB encryption is only defense against casual inspection. A same-origin script or extension with storage access can still read the keys.
+2. Development does not add CSP headers by default.
+3. Log redaction is pattern-based. Unrecognized secret formats may still leak if they reach the logger before redaction rules are added.
+4. The dev bridge token is local-process-scoped. The token file is stored in the project root as `.ai-bridge-token`, so any local process with file access can read it.
+5. The Native Helper can be started with `--no-auth`, but that disables the auth boundary entirely and is not recommended.
+6. API keys are still sent to external services over HTTPS when you enable AI features that need them.
 
 ---
 
@@ -138,11 +155,11 @@ In production, the Rust native helper provides a WebSocket + HTTP bridge:
 
 If you discover a security vulnerability:
 
-1. **Do not** open a public GitHub issue
+1. Do not open a public GitHub issue
 2. Contact the maintainers privately
 3. Include steps to reproduce the issue
 4. Allow reasonable time for a fix before disclosure
 
 ---
 
-*Source: `src/services/security/redact.ts`, `src/services/logger.ts`, `src/services/apiKeyManager.ts`*
+*Source: `src/services/security/redact.ts`, `src/services/logger.ts`, `src/services/security/fileAccessBroker.ts`, `src/services/security/devBridgeAuth.ts`, `vite.config.ts`, `tools/native-helper/src/server.rs`, `tools/native-helper/src/main.rs`, `src/components/panels/AIChatPanel.tsx`*

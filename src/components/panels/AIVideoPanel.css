@@ -744,6 +744,35 @@
   gap: var(--sp-2);
 }
 
+.ai-video-error-panel {
+  margin: var(--sp-3);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.ai-video-error-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-video-error-copy strong {
+  color: var(--text-primary);
+}
+
+.ai-video-error-copy span {
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.ai-video-error-actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+
 .error-icon {
   flex-shrink: 0;
   width: 18px;

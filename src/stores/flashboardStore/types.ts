@@ -4,6 +4,7 @@ export interface FlashBoardStoreState {
   selectedNodeIds: string[];
   viewMode: 'board';
   composer: FlashBoardComposerState;
+  hoveredComposerReference: FlashBoardHoveredComposerReference | null;
 }
 
 export interface FlashBoardMultiShotPrompt {
@@ -25,6 +26,13 @@ export interface FlashBoardComposerState {
   startMediaFileId?: string;
   endMediaFileId?: string;
   referenceMediaFileIds: string[];
+}
+
+export type FlashBoardComposerReferenceRole = 'start' | 'end' | 'reference';
+
+export interface FlashBoardHoveredComposerReference {
+  mediaFileId: string;
+  role: FlashBoardComposerReferenceRole;
 }
 
 export interface FlashBoard {

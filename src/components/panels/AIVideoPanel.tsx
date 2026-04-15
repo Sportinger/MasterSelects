@@ -1,7 +1,7 @@
 // AI Video Panel - AI video generation via Kie.ai or MasterSelects Cloud
 // Supports text-to-video and image-to-video generation with timeline integration
 
-import { useState, useCallback, useRef, useEffect, useMemo, lazy, Suspense } from 'react';
+import { Component, type ReactNode, useState, useCallback, useRef, useEffect, useMemo, lazy, Suspense } from 'react';
 import { Logger } from '../../services/logger';
 
 const FlashBoardWorkspace = lazy(() =>
@@ -26,11 +26,63 @@ import {
   getKieAiProvider,
 } from '../../services/kieAiService';
 import { getFlashBoardPriceEstimate } from '../../services/flashboard/FlashBoardPricing';
+import { captureCurrentPreviewFrameDataUrl } from '../../services/previewFrameCapture';
 import { ImageCropper, exportCroppedImage, type CropData } from './ImageCropper';
 import './AIVideoPanel.css';
 
 type GenerationType = 'text-to-video' | 'image-to-video';
 type PanelTab = 'generate' | 'history';
+
+interface FlashBoardErrorBoundaryProps {
+  children: ReactNode;
+  onRetry: () => void;
+  onUseClassic: () => void;
+}
+
+interface FlashBoardErrorBoundaryState {
+  error: Error | null;
+}
+
+class FlashBoardErrorBoundary extends Component<FlashBoardErrorBoundaryProps, FlashBoardErrorBoundaryState> {
+  state: FlashBoardErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): FlashBoardErrorBoundaryState {
+    return { error };
+  }
+
+  componentDidCatch(error: Error) {
+    log.error('FlashBoard workspace failed to load', error);
+  }
+
+  render() {
+    if (this.state.error) {
+      const isDynamicImportError = this.state.error.message.includes('Failed to fetch dynamically imported module');
+      const message = isDynamicImportError
+        ? 'Das ist meist ein Vite-/Browser-Cachefehler nach HMR. Board neu laden oder auf Classic wechseln.'
+        : this.state.error.message;
+
+      return (
+        <div className="ai-video-error ai-video-error-panel">
+          <span className="error-icon">!</span>
+          <div className="ai-video-error-copy">
+            <strong>FlashBoard konnte nicht geladen werden.</strong>
+            <span>{message}</span>
+          </div>
+          <div className="ai-video-error-actions">
+            <button className="btn btn-sm" onClick={this.props.onRetry}>
+              Retry Board
+            </button>
+            <button className="btn btn-sm" onClick={this.props.onUseClassic}>
+              Use Classic
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 interface GenerationJob {
   id: string;
@@ -87,34 +139,6 @@ function getOrCreateAIVideoFolder(): string {
   return newFolder.id;
 }
 
-// Capture current frame from engine
-async function captureCurrentFrame(): Promise<string | null> {
-  try {
-    // Dynamic import to avoid circular deps
-    const { engine } = await import('../../engine/WebGPUEngine');
-    if (!engine) return null;
-
-    const pixels = await engine.readPixels();
-    if (!pixels) return null;
-
-    const { width, height } = engine.getOutputDimensions();
-
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-
-    const imageData = new ImageData(new Uint8ClampedArray(pixels), width, height);
-    ctx.putImageData(imageData, 0, 0);
-
-    return canvas.toDataURL('image/png');
-  } catch (e) {
-    log.error('Failed to capture frame', e);
-    return null;
-  }
-}
-
 // Download video from URL and create File object
 async function downloadVideoAsFile(url: string, filename: string): Promise<File | null> {
   try {
@@ -162,6 +186,7 @@ export function AIVideoPanel() {
   const hasHostedCloudAccess = Boolean(accountSession?.authenticated);
 
   const [workspaceMode, setWorkspaceMode] = useState<'classic' | 'board'>('board');
+  const [boardRetryKey, setBoardRetryKey] = useState(0);
 
   // Panel tab state
   const [activeTab, setActiveTab] = useState<PanelTab>('generate');
@@ -272,6 +297,15 @@ export function AIVideoPanel() {
     saveHistory(history);
   }, [history]);
 
+  const handleRetryBoard = useCallback(() => {
+    setBoardRetryKey((current) => current + 1);
+  }, []);
+
+  const handleUseClassicMode = useCallback(() => {
+    setWorkspaceMode('classic');
+    setBoardRetryKey((current) => current + 1);
+  }, []);
+
   // Handle file drop for start image
   const handleStartDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -342,7 +376,7 @@ export function AIVideoPanel() {
 
   // Use current frame from timeline for start
   const useCurrentFrameStart = useCallback(async () => {
-    const dataUrl = await captureCurrentFrame();
+    const dataUrl = await captureCurrentPreviewFrameDataUrl();
     if (dataUrl) {
       setStartImagePreview(dataUrl);
       setStartCropData({ offsetX: 0, offsetY: 0, scale: 1 });
@@ -351,7 +385,7 @@ export function AIVideoPanel() {
 
   // Use current frame from timeline for end
   const useCurrentFrameEnd = useCallback(async () => {
-    const dataUrl = await captureCurrentFrame();
+    const dataUrl = await captureCurrentPreviewFrameDataUrl();
     if (dataUrl) {
       setEndImagePreview(dataUrl);
       setEndCropData({ offsetX: 0, offsetY: 0, scale: 1 });
@@ -671,28 +705,34 @@ export function AIVideoPanel() {
       </div>
 
       {workspaceMode === 'board' ? (
-        <Suspense
-          fallback={
-            <div
-              style={{
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              Loading FlashBoard...
-            </div>
-          }
+        <FlashBoardErrorBoundary
+          key={boardRetryKey}
+          onRetry={handleRetryBoard}
+          onUseClassic={handleUseClassicMode}
         >
-          <FlashBoardWorkspace
-            initialProviderId={boardProviderId}
-            initialService={boardService}
-            initialVersion={boardVersion}
-            serviceScope={boardService}
-          />
-        </Suspense>
+          <Suspense
+            fallback={
+              <div
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                Loading FlashBoard...
+              </div>
+            }
+          >
+            <FlashBoardWorkspace
+              initialProviderId={boardProviderId}
+              initialService={boardService}
+              initialVersion={boardVersion}
+              serviceScope={boardService}
+            />
+          </Suspense>
+        </FlashBoardErrorBoundary>
       ) : (
       <>
       {/* Jobs Queue - shown at top when not empty */}

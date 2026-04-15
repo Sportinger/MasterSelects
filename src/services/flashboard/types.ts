@@ -49,5 +49,6 @@ export interface CatalogEntry {
   supportsGenerateAudio?: boolean;
   supportsMultiShot?: boolean;
   imageSizes?: string[];
+  maxReferenceImages?: number;
   outputType?: 'video' | 'image';
 }

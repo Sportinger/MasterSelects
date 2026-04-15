@@ -12,6 +12,8 @@ The Native Helper is a lightweight Rust binary that runs locally and communicate
 2. **File System Access**: Read/write files, create directories, folder picker -- primarily used for Firefox project persistence (since Firefox lacks the File System Access API)
 3. **AI Bridge**: Forward AI tool calls from local agents to the running MasterSelects editor session
 
+The browser client can discover the auth token automatically from `GET /startup-token` on the local HTTP server, then authenticate over WebSocket/HTTP as needed.
+
 > **Note**: The browser-side code (`src/services/nativeHelper/`) still contains protocol types for video decode/encode commands (`open`, `decode`, `prefetch`, `start_encode`, etc.) and a `NativeDecoder` class. These are **not implemented on the current Rust server side** and represent planned future functionality. The current Rust helper handles downloads, file system operations, and the AI bridge.
 
 ## Features
@@ -24,6 +26,8 @@ The Native Helper is a lightweight Rust binary that runs locally and communicate
 - **Firefox persistence** -- Enables full project save/load on Firefox via file system commands
 - **External AI control** -- Local `POST /api/ai-tools` bridge for Claude Code, curl, and other local agents
 - **System tray** -- On Windows, runs as a system tray app with auto-start and self-update support
+- **Temp download dir** -- yt-dlp writes to the helper's local download folder (`temp/masterselects-downloads`) before files are copied into a project
+- **Default project root** -- projects are created under `Documents/MasterSelects` when available, otherwise `Home/MasterSelects`, unless `MASTERSELECTS_PROJECT_ROOT` is set to an absolute path
 
 ## Architecture
 
@@ -77,6 +81,7 @@ Options:
       --generate-token           Generate and print auth token, then exit
       --log-level <LEVEL>        Log level (trace/debug/info/warn/error) [default: info]
       --console                  Run in console mode (Windows only; Linux/macOS always console)
+      --no-auth                  Disable authentication (not recommended)
   -h, --help                     Print help
   -V, --version                  Print version
 ```
@@ -88,6 +93,7 @@ Options:
 1. Run the Native Helper
 2. The toolbar will show "Turbo" when connected
 3. Downloads, Firefox file system operations, and the local AI bridge are now available
+4. If the helper starts with auth enabled, the browser can usually discover the token automatically from `/startup-token`
 
 ### Status Indicator
 
@@ -99,6 +105,8 @@ Click the indicator for details:
 - Helper version
 - yt-dlp availability
 - Download directory
+- Project root
+- File system command support
 
 ## Protocol
 
@@ -125,6 +133,7 @@ The helper communicates via WebSocket (port 9876) with JSON commands:
 | `exists` | Check if a path exists |
 | `rename` | Rename or move a file/directory |
 | `pick_folder` | Open native OS folder picker dialog |
+| `mat_anyone_*` | MatAnyone2 setup, model download, inference, cancel, uninstall |
 
 ### HTTP Server
 
@@ -132,11 +141,12 @@ An HTTP server runs on port 9877 (WebSocket port + 1).
 
 | Endpoint | Purpose |
 |---------|---------|
-| `GET /file?path=...` | Serve local files to the browser |
-| `POST /upload?path=...` | Upload/write local files efficiently |
-| `GET /project-root` | Return the default project root |
-| `GET /api/ai-tools` | AI bridge status |
-| `POST /api/ai-tools` | Forward AI tool calls to the connected editor session |
+| `GET /file?path=...` | Serve local files to the browser (auth required) |
+| `POST /upload?path=...` | Upload/write local files efficiently (auth required) |
+| `GET /project-root` | Return the default project root (no auth) |
+| `GET /startup-token` | Return the current auth token for local discovery (no auth) |
+| `GET /api/ai-tools` | AI bridge status (no auth) |
+| `POST /api/ai-tools` | Forward AI tool calls to the connected editor session (auth required) |
 
 Example:
 
@@ -152,6 +162,7 @@ curl -X POST http://127.0.0.1:9877/api/ai-tools \
 - **Origin validation** -- Only accepts connections from allowed origins
 - **Auth token** -- Token-based authentication for HTTP and WebSocket bridge operations
 - **No external network access** -- Only local file system and yt-dlp subprocess
+- **Allowed origins** -- Defaults include localhost and the main MasterSelects production/Pages domains; preview subdomains can be added with `--allowed-origins`
 
 ## Technical Details
 
@@ -224,6 +235,7 @@ cargo build --release
 1. Check yt-dlp is installed and available on PATH
 2. Run `yt-dlp --version` to verify
 3. Check helper log output for errors
+4. If YouTube reports bot or sign-in blocking, close Chrome completely and retry so yt-dlp can read cookies
 
 ### Connection errors
 

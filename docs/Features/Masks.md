@@ -1,274 +1,107 @@
 # Masks
 
-[← Back to Index](./README.md)
+[Back to Index](./README.md)
 
-Vector mask system with GPU-accelerated feathering.
+MasterSelects supports per-clip vector masks with preview-overlay editing, bezier handles, and GPU compositing through the layer pipeline.
 
----
+## At A Glance
 
-## Table of Contents
+- Masks are stored on timeline clips as `ClipMask[]`.
+- The properties panel exposes rectangle, ellipse, and pen creation.
+- The preview overlay supports vertex, handle, edge, and whole-mask dragging.
+- Mask changes are serialized with the project.
 
-- [Shape Tools](#shape-tools)
-- [Mask Modes](#mask-modes)
-- [Vertex Editing](#vertex-editing)
-- [Feathering](#feathering)
-- [Mask Properties](#mask-properties)
+## Data Model
 
----
+`ClipMask` currently includes:
 
-## Shape Tools
+- `id` and `name`
+- `vertices`
+- `closed`
+- `opacity`
+- `feather`
+- `featherQuality`
+- `inverted`
+- `mode`
+- `expanded`
+- `position`
+- `visible`
 
-### Available Shapes
+`MaskMode` is currently `add`, `subtract`, or `intersect`.
+The UI stores that value and persists it, but the current compositor uses the clip-level mask texture plus inversion when rendering. The preview overlay does not implement separate per-mask compositing passes.
 
-| Shape | Creation | Notes |
-|-------|----------|-------|
-| **Rectangle** | Click-drag corners | Instant shape |
-| **Ellipse** | Click-drag bounds | Bezier approximation (k=0.5523) |
-| **Freehand** | Click vertices | Pen tool, double-click to close |
-| **Bezier Path** | Click + drag handles | Full cubic bezier |
+## Creating Masks
 
-### Drawing Modes
-```typescript
-type MaskEditMode =
-  | 'none'
-  | 'drawing'
-  | 'editing'
-  | 'drawingRect'
-  | 'drawingEllipse'
-  | 'drawingPen'
-```
+The properties panel exposes three creation flows:
 
-### Creating Masks
-1. Select clip
-2. Choose shape tool from panel
-3. Draw in preview
-4. Shape becomes editable
+- Rectangle mask
+- Ellipse mask
+- Pen mask
 
----
+Rectangle and ellipse masks can be drawn directly on the preview by dragging.
+Pen mode adds points by clicking in the preview.
+Clicking the first point closes the path once at least three vertices exist.
 
-## Mask Modes
+`MaskEditMode` currently includes:
 
-### Add Mode (Default)
-- Reveals area inside mask
-- Multiple Add masks combine (union)
-- First mask shows only inside
+- `none`
+- `drawing`
+- `editing`
+- `drawingRect`
+- `drawingEllipse`
+- `drawingPen`
 
-### Subtract Mode
-- Hides area inside mask
-- Cuts holes in existing masks
-- Works as first mask (shows everything except)
+## Editing In Preview
 
-### Intersect Mode
-- Shows only overlapping areas
-- Requires existing mask
+The preview overlay is implemented in `src/components/preview/MaskOverlay.tsx`.
 
-### Combining Example
-```
-Mask 1 (Add):      Large rectangle
-Mask 2 (Subtract): Small circle
-Result:            Rectangle with hole
-```
+- Active masks render as SVG paths over the preview.
+- Visible masks show vertex squares, bezier handle circles, and edge hit areas.
+- Whole-mask dragging moves all vertices together.
+- Dragging an edge moves the two adjacent vertices together.
+- Dragging a vertex moves that vertex.
+- Shift-drag on a vertex scales both bezier handles while keeping the vertex fixed.
+- `Delete` removes selected vertices.
+- `Escape` exits drawing or editing modes.
 
----
-
-## Vertex Editing
-
-### Selection
-- Click vertex to select
-- Selected shows as cyan square
-- Multiple selection supported
-
-### Moving
-- Drag vertex to reposition
-- Real-time preview update
-
-### Edge Dragging
-- Drag a line segment between two mask vertices to move both at once
-- Works alongside vertex and whole-mask dragging
-- Intuitive for reshaping mask boundaries
-
-### Bezier Handles
-```typescript
-interface BezierHandle {
-  x: number;  // Time offset
-  y: number;  // Value offset
-}
-```
-
-- **In-handle**: Controls incoming curve
-- **Out-handle**: Controls outgoing curve
-- Drag each independently
-- `Shift + drag`: Scale both handles proportionally
-
-### Deleting Vertices
-- Select vertex
-- Press `Delete` or `Backspace`
-
----
-
-## Feathering
-
-### GPU Blur Implementation
-3-tier quality system:
-
-| Quality | Taps | Range |
-|---------|------|-------|
-| Low | 17-tap | 1-33 |
-| Medium | 33-tap | 34-66 |
-| High | 61-tap | 67-100 |
-
-### Blur Algorithm
-```
-Multi-ring sampling at radii:
-0.2r, 0.4r, 0.6r, 0.8r, 1.0r, 1.2r, 1.4r
-Weighted averaging for smooth edges
-```
-
-### Controls
-- **Feather slider**: 0-50 pixels
-- **Quality slider**: 1-100 (affects tap count)
-- Real-time preview
-
----
+The overlay uses normalized coordinates internally and maps them to the preview canvas size.
 
 ## Mask Properties
 
-### Per-Mask Settings
-```typescript
-interface ClipMask {
-  id: string;
-  name: string;           // Display name of the mask
-  mode: 'add' | 'subtract' | 'intersect';
-  opacity: number;        // 0-1
-  feather: number;        // 0-50 pixels
-  featherQuality: number; // 1-100
-  inverted: boolean;
-  expanded: boolean;      // Whether mask is expanded in UI
-  visible: boolean;       // Whether mask is visible/applied
-  position: { x: number; y: number };
-  vertices: MaskVertex[];
-  closed: boolean;
-}
-```
+The properties panel exposes the following controls per mask:
 
-### Mask Operations (17 total)
-```typescript
-// Core CRUD (4)
-addMask(clipId)
-removeMask(clipId, maskId)
-updateMask(clipId, maskId, updates)
-reorderMasks(clipId, fromIndex, toIndex)
+- Name
+- Visibility toggle
+- Mode dropdown
+- Opacity
+- Feather
+- Feather quality
+- Position X / Y
+- Inverted
 
-// Edit mode & state (4)
-setMaskEditMode(mode)                    // Switch between select/draw modes
-setMaskDragging(isDragging)              // Drag state for UI feedback
-setMaskDrawStart(point | null)           // Starting point for new mask draw
-setActiveMask(clipId, maskIndex | null)  // Set which mask is being edited
+`featherQuality` is stored as a 1-100 value in the UI and defaults to `50` for new masks.
 
-// Vertex selection (2)
-selectVertex(clipId, maskIndex, vertexIndex) // Select individual vertex
-deselectAllVertices()                        // Clear vertex selection
+## Rendering Path
 
-// Getters (1)
-getClipMasks(clipId): ClipMask[]         // Get all masks for a clip
+The compositor reads a per-layer mask texture through `maskClipId`.
+If a clip has masks, `LayerBuilderService` sets the layer's mask lookup id and an inversion flag.
+`MaskTextureManager` falls back to a white texture when no mask texture exists.
 
-// Preset shapes (2)
-addRectangleMask(clipId)                 // Create rectangle mask preset
-addEllipseMask(clipId)                   // Create ellipse mask preset
-```
+Relevant files:
 
-### Vertex Operations
-```typescript
-addVertex(clipId, maskId, vertex, index?)
-removeVertex(clipId, maskId, vertexId)
-updateVertex(clipId, maskId, vertexId, updates)
-closeMask(clipId, maskId)
-```
+- `src/stores/timeline/maskSlice.ts`
+- `src/components/panels/properties/MasksTab.tsx`
+- `src/components/preview/MaskOverlay.tsx`
+- `src/components/preview/useMaskVertexDrag.ts`
+- `src/components/preview/useMaskDrag.ts`
+- `src/components/preview/useMaskEdgeDrag.ts`
+- `src/components/preview/useMaskShapeDraw.ts`
+- `src/engine/texture/MaskTextureManager.ts`
 
----
+## Limitations
 
-## Visual Feedback
+- Animated mask paths are not implemented.
+- Mask tracking is not implemented.
+- Mask interpolation between shapes is not implemented.
+- The mask `mode` field is stored and editable, but it is not currently used as a separate compositing stage in the code we inspected.
 
-### Overlay Colors
-- **Blue dashed**: Unclosed path
-- **Cyan solid**: Closed path
-- **Red**: First vertex (in drawing mode)
-- **Orange**: Bezier handle lines
-- **Cyan squares**: Vertex points
-
-### Cursor States
-- **Crosshair**: Drawing modes
-- **Move**: Over mask fill
-- **Pointer**: Over handles
-
-### Instructions
-On-screen text shows current mode instructions.
-
----
-
-## Rendering Pipeline
-
-### Performance Optimizations
-- Skip history snapshots during mask dragging for smooth interaction
-- Vertex and handle updates throttled to 60fps (16ms interval) during drag operations
-- Whole-mask dragging also throttled to ~60fps to prevent excessive store updates
-- Mask texture regeneration skipped entirely during active drag for smooth interaction
-- GPU texture updates throttled at 30fps instead of every frame
-- Targeted cache invalidation (only affected layers)
-
-### CPU Generation
-```typescript
-// maskRenderer.ts
-generateMaskTexture(masks, width, height)
-- Uses OffscreenCanvas with Canvas2D
-- Bezier paths via ctx.bezierCurveTo()
-- Composite operations for modes
-- Returns ImageData (RGBA)
-```
-
-### GPU Application
-```wgsl
-// composite.wgsl
-- Receives mask as texture_2d<f32>
-- Applies feather blur
-- Handles inversion
-- R channel = mask value
-```
-
-### Coordinate System
-- Normalized coordinates (0-1)
-- Transforms with layer position/scale
-- Applied in output frame space
-- SVG overlay preserves aspect ratio
-
----
-
-## Tests
-
-| Test File | Tests | Coverage |
-|-----------|-------|----------|
-| [`maskSlice.test.ts`](../../tests/stores/timeline/maskSlice.test.ts) | 78 | Mask CRUD, modes, vertices, preset shapes, workflows |
-
-Run tests: `npx vitest run`
-
----
-
-## Not Implemented
-
-- Animated mask paths
-- Mask tracking
-- Rotobezier (auto-smooth)
-- Mask interpolation between shapes
-
----
-
-## Related Features
-
-- [Effects](./Effects.md) - Visual effects
-- [Preview](./Preview.md) - Edit mode
-- [GPU Engine](./GPU-Engine.md) - Rendering
-- [Keyboard Shortcuts](./Keyboard-Shortcuts.md)
-
----
-
-*Source: `src/stores/timeline/maskSlice.ts`, `src/components/preview/MaskOverlay.tsx`, `src/utils/maskRenderer.ts`*

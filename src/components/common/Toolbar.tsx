@@ -32,6 +32,16 @@ import { openOutputManager } from '../outputManager/OutputManagerBoot';
 
 type MenuId = 'file' | 'edit' | 'view' | 'output' | 'info' | null;
 
+const VIEW_HIDDEN_PANEL_TYPES = new Set<PanelType>(['youtube']);
+const VIEW_CORE_PANEL_TYPES = (Object.keys(PANEL_CONFIGS) as PanelType[])
+  .filter((type) => (
+    !VIEW_HIDDEN_PANEL_TYPES.has(type)
+    && !SCOPE_PANEL_TYPES.includes(type)
+    && !WIP_PANEL_TYPES.includes(type)
+    && !AI_PANEL_TYPES.includes(type)
+  ));
+const VIEW_WIP_ONLY_PANEL_TYPES = WIP_PANEL_TYPES.filter((type) => !AI_PANEL_TYPES.includes(type));
+
 interface ToolbarProps {
   onOpenChangelog?: () => void;
   onOpenSplash?: () => void;
@@ -47,11 +57,26 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
     }
     return result;
   }, [targets]);
-  const { resetLayout, isPanelTypeVisible, togglePanelType, saveLayoutAsDefault } = useDockStore(useShallow(s => ({
+  const {
+    resetLayout,
+    isPanelTypeVisible,
+    togglePanelType,
+    saveLayoutAsDefault,
+    saveNamedLayout,
+    loadSavedLayout,
+    savedLayouts,
+    defaultSavedLayoutId,
+    setDefaultSavedLayout,
+  } = useDockStore(useShallow(s => ({
     resetLayout: s.resetLayout,
     isPanelTypeVisible: s.isPanelTypeVisible,
     togglePanelType: s.togglePanelType,
     saveLayoutAsDefault: s.saveLayoutAsDefault,
+    saveNamedLayout: s.saveNamedLayout,
+    loadSavedLayout: s.loadSavedLayout,
+    savedLayouts: s.savedLayouts,
+    defaultSavedLayoutId: s.defaultSavedLayoutId,
+    setDefaultSavedLayout: s.setDefaultSavedLayout,
   })));
   const accountCredits = useAccountStore((s) => s.creditBalance);
   const accountSession = useAccountStore((s) => s.session);
@@ -412,6 +437,36 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
       paste: r.getLabel('edit.paste'),
     };
   }, []);
+  const sortedSavedLayouts = useMemo(() => {
+    return [...savedLayouts].sort((left, right) => {
+      const leftIsDefault = left.id === defaultSavedLayoutId;
+      const rightIsDefault = right.id === defaultSavedLayoutId;
+      if (leftIsDefault !== rightIsDefault) {
+        return leftIsDefault ? -1 : 1;
+      }
+      return right.updatedAt - left.updatedAt;
+    });
+  }, [defaultSavedLayoutId, savedLayouts]);
+
+  const handleSaveNamedLayout = useCallback(() => {
+    const name = window.prompt('Save current layout as:', 'New Layout');
+    if (!name?.trim()) {
+      return;
+    }
+
+    saveNamedLayout(name);
+    closeMenu();
+  }, [saveNamedLayout]);
+
+  const handleLoadSavedLayout = useCallback((layoutId: string) => {
+    loadSavedLayout(layoutId);
+    closeMenu();
+  }, [loadSavedLayout]);
+
+  const handleSetDefaultSavedLayout = useCallback((layoutId: string) => {
+    setDefaultSavedLayout(layoutId);
+    closeMenu();
+  }, [setDefaultSavedLayout]);
 
   return (
     <div className="toolbar">
@@ -616,11 +671,13 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
           </button>
           {openMenu === 'view' && (
             <div className="menu-dropdown menu-dropdown-wide">
-              <div className="menu-submenu">
-                <span className="menu-label">Panels</span>
-                {(Object.keys(PANEL_CONFIGS) as PanelType[])
-                  .filter((type) => !SCOPE_PANEL_TYPES.includes(type) && !WIP_PANEL_TYPES.includes(type) && !AI_PANEL_TYPES.includes(type))
-                  .map((type) => {
+              <div className="menu-item-with-submenu">
+                <button className="menu-option">
+                  <span>Panels</span>
+                </button>
+                <div className="menu-nested-submenu menu-nested-submenu-panels">
+                  <span className="menu-sublabel">Core</span>
+                  {VIEW_CORE_PANEL_TYPES.map((type) => {
                     const config = PANEL_CONFIGS[type];
                     const isVisible = isPanelTypeVisible(type);
                     return (
@@ -633,74 +690,109 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
                       </button>
                     );
                   })}
-                <div className="menu-item-with-submenu">
-                  <button className="menu-option">
-                    <span>   AI</span>
-                  </button>
-                  <div className="menu-nested-submenu">
-                    {AI_PANEL_TYPES.map((type) => {
-                      const config = PANEL_CONFIGS[type];
-                      const isWip = WIP_PANEL_TYPES.includes(type);
-                      const isVisible = isPanelTypeVisible(type);
-                      return (
-                        <button
-                          key={type}
-                          className={`menu-option ${isWip ? 'menu-option-wip' : ''} ${isVisible ? 'checked' : ''}`}
-                          onClick={isWip ? undefined : () => togglePanelType(type)}
-                          disabled={isWip}
-                        >
-                          <span>{isVisible ? '✓ ' : '   '}{config.title}</span>
-                          {isWip && <span className="menu-wip-badge">🐛</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                {WIP_PANEL_TYPES.filter((type) => !AI_PANEL_TYPES.includes(type)).map((type) => {
-                  const config = PANEL_CONFIGS[type];
-                  return (
-                    <button
-                      key={type}
-                      className="menu-option menu-option-wip"
-                      disabled
-                    >
-                      <span>   {config.title}</span>
-                      <span className="menu-wip-badge">🐛</span>
-                    </button>
-                  );
-                })}
-                <div className="menu-item-with-submenu">
-                  <button className="menu-option">
-                    <span>   Scopes</span>
-                  </button>
-                  <div className="menu-nested-submenu">
-                    {SCOPE_PANEL_TYPES.map((type) => {
-                      const config = PANEL_CONFIGS[type];
-                      const isVisible = isPanelTypeVisible(type);
-                      return (
-                        <button
-                          key={type}
-                          className={`menu-option ${isVisible ? 'checked' : ''}`}
-                          onClick={() => togglePanelType(type)}
-                        >
-                          <span>{isVisible ? '✓ ' : '   '}{config.title}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+
+                  <div className="menu-separator" />
+                  <span className="menu-sublabel">AI</span>
+                  {AI_PANEL_TYPES.map((type) => {
+                    const config = PANEL_CONFIGS[type];
+                    const isWip = WIP_PANEL_TYPES.includes(type);
+                    const isVisible = isPanelTypeVisible(type);
+                    return (
+                      <button
+                        key={type}
+                        className={`menu-option ${isWip ? 'menu-option-wip' : ''} ${isVisible ? 'checked' : ''}`}
+                        onClick={isWip ? undefined : () => togglePanelType(type)}
+                        disabled={isWip}
+                      >
+                        <span>{isVisible ? '✓ ' : '   '}{config.title}</span>
+                        {isWip && <span className="menu-wip-badge">🐛</span>}
+                      </button>
+                    );
+                  })}
+
+                  <div className="menu-separator" />
+                  <span className="menu-sublabel">Scopes</span>
+                  {SCOPE_PANEL_TYPES.map((type) => {
+                    const config = PANEL_CONFIGS[type];
+                    const isVisible = isPanelTypeVisible(type);
+                    return (
+                      <button
+                        key={type}
+                        className={`menu-option ${isVisible ? 'checked' : ''}`}
+                        onClick={() => togglePanelType(type)}
+                      >
+                        <span>{isVisible ? '✓ ' : '   '}{config.title}</span>
+                      </button>
+                    );
+                  })}
+
+                  {VIEW_WIP_ONLY_PANEL_TYPES.length > 0 && (
+                    <>
+                      <div className="menu-separator" />
+                      <span className="menu-sublabel">Work in Progress</span>
+                      {VIEW_WIP_ONLY_PANEL_TYPES.map((type) => {
+                        const config = PANEL_CONFIGS[type];
+                        return (
+                          <button
+                            key={type}
+                            className="menu-option menu-option-wip"
+                            disabled
+                          >
+                            <span>   {config.title}</span>
+                            <span className="menu-wip-badge">🐛</span>
+                          </button>
+                        );
+                      })}
+                    </>
+                  )}
                 </div>
               </div>
               <div className="menu-separator" />
-              <button className="menu-option" onClick={handleNewOutput} disabled={!isEngineReady}>
-                <span>New Output Window</span>
-              </button>
-              <div className="menu-separator" />
-              <button className="menu-option" onClick={() => { saveLayoutAsDefault(); closeMenu(); }}>
-                <span>Save Layout as Default</span>
-              </button>
-              <button className="menu-option" onClick={() => { resetLayout(); closeMenu(); }}>
-                <span>Reset Layout</span>
-              </button>
+              <div className="menu-item-with-submenu">
+                <button className="menu-option">
+                  <span>Layouts</span>
+                </button>
+                <div className="menu-nested-submenu menu-nested-submenu-layouts">
+                  <button className="menu-option" onClick={handleSaveNamedLayout}>
+                    <span>Save Current Layout...</span>
+                  </button>
+                  <button className="menu-option" onClick={() => { saveLayoutAsDefault(); closeMenu(); }}>
+                    <span>Set Current as Default</span>
+                  </button>
+                  <button className="menu-option" onClick={() => { resetLayout(); closeMenu(); }}>
+                    <span>Load Default Layout</span>
+                  </button>
+                  <div className="menu-separator" />
+                  <span className="menu-sublabel">Saved Layouts</span>
+                  {sortedSavedLayouts.length === 0 ? (
+                    <span className="menu-empty">No saved layouts</span>
+                  ) : (
+                    sortedSavedLayouts.map((savedLayout) => {
+                      const isDefaultLayout = savedLayout.id === defaultSavedLayoutId;
+                      return (
+                        <div key={savedLayout.id} className="menu-layout-row">
+                          <button
+                            className={`menu-option menu-layout-load ${isDefaultLayout ? 'checked' : ''}`}
+                            onClick={() => handleLoadSavedLayout(savedLayout.id)}
+                            title={savedLayout.name}
+                          >
+                            <span className="menu-layout-name">{savedLayout.name}</span>
+                            {isDefaultLayout && <span className="menu-hint">Default</span>}
+                          </button>
+                          <button
+                            className={`menu-layout-default-btn ${isDefaultLayout ? 'active' : ''}`}
+                            onClick={() => handleSetDefaultSavedLayout(savedLayout.id)}
+                            title={isDefaultLayout ? 'Default layout' : 'Set as default'}
+                            type="button"
+                          >
+                            {isDefaultLayout ? 'Default' : 'Set'}
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>

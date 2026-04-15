@@ -45,7 +45,7 @@ export function getCatalogEntries(): CatalogEntry[] {
     service: 'kieai',
     providerId: 'nano-banana-2',
     name: 'Nano Banana 2',
-    description: 'Image generation via Kie.ai',
+    description: 'Image generation via Kie.ai with up to 14 ordered reference images',
     versions: ['3.1'],
     modes: [],
     durations: [],
@@ -56,6 +56,7 @@ export function getCatalogEntries(): CatalogEntry[] {
     supportsGenerateAudio: false,
     supportsMultiShot: false,
     imageSizes: ['1K', '2K', '4K'],
+    maxReferenceImages: 14,
     outputType: 'image',
   });
 
@@ -79,7 +80,7 @@ export function getCatalogEntries(): CatalogEntry[] {
     service: 'cloud',
     providerId: 'nano-banana-2',
     name: 'Nano Banana 2 (Cloud)',
-    description: 'Hosted image generation via MasterSelects Cloud',
+    description: 'Hosted image generation via MasterSelects Cloud with up to 14 ordered reference images',
     versions: ['latest'],
     modes: [],
     durations: [],
@@ -90,6 +91,7 @@ export function getCatalogEntries(): CatalogEntry[] {
     supportsGenerateAudio: false,
     supportsMultiShot: false,
     imageSizes: ['1K', '2K', '4K'],
+    maxReferenceImages: 14,
     outputType: 'image',
   });
 

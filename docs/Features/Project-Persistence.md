@@ -2,7 +2,7 @@
 
 [← Back to Index](./README.md)
 
-Local project folder storage with auto-save, backups, and smart media relinking. Supports two backends: **File System Access API** (Chrome/Edge) and **Native Helper** (Firefox).
+Local project folder storage with continuous save by default, optional interval autosave, backups, and smart media relinking. Supports two backends: **File System Access API** (Chrome/Edge) and **Native Helper** (Firefox when the helper is connected).
 
 ---
 
@@ -33,19 +33,19 @@ On first launch or when no project is open, the Welcome Overlay appears:
 | Browser | Behavior |
 |---------|----------|
 | Chrome / Edge / Chromium | Full FSA support -- folder picker opens natively |
-| Firefox | Detected as WebGPU-capable; uses **Native Helper** backend for persistence |
+| Firefox | Uses **Native Helper** backend for persistence when the helper is connected |
 | Safari / other | **"Unsupported Browser"** warning with Chrome download link |
 
 For Firefox users:
 - The overlay checks if the Native Helper is running and connected
 - If available, activates the native backend and shows "New Project" / "Open Existing" buttons (using the OS folder picker via Native Helper)
-- If unavailable or outdated, shows a message: "Project saving requires the Native Helper in Firefox. Install it for full project support, or use Chrome/Edge."
+- If unavailable or outdated, persistence is unavailable until the helper is installed and connected
 
 ### Select Project Folder
 1. Click **"New Project"**
 2. Choose or create a folder for your project
-3. App creates an `Untitled` subfolder with `project.json` and required subfolders
-4. Folder handle stored in IndexedDB (FSA) or path stored in localStorage (Native) for future sessions
+3. App creates the project folder with `project.json` plus the standard subfolders (`Raw/`, `Downloads/`, `Proxy/`, `Cache/`, `Analysis/`, `Transcripts/`, `Renders/`, `Backups/`)
+4. Folder handle stored in IndexedDB (FSA) or path stored in localStorage (`ms-native-last-project-path`) for future sessions
 
 ### Continue Without Saving
 - Click **"Start editing"** or press **Enter**
@@ -69,10 +69,12 @@ The project system supports two backends, selected automatically based on browse
 ### Native Helper Backend (Firefox)
 - Uses a local Rust helper (`tools/native-helper`) communicating via WebSocket (port 9876) and HTTP (port 9877)
 - OS folder picker via `NativeHelperClient.pickFolder()`
-- File I/O via `NativeHelperClient.writeFile()` / `readFileText()` / `writeFileBinary()`
+- File I/O via `NativeHelperClient.writeFile()` / `readFileText()` / `writeFileBinary()` plus `createDir()`, `deleteFile()`, `rename()`, `exists()`, `listDir()`, and `pickFolder()`
+- Project files are written through the helper's path-based storage layer; the browser never needs a `FileSystemDirectoryHandle`
 - Last project path stored in `localStorage` key `ms-native-last-project-path`
 - No permission prompts needed -- the Native Helper has full filesystem access
 - Project listing: `NativeProjectCoreService.listProjects()` scans the project root for directories containing `project.json`
+- The default project root comes from the helper (`Documents/MasterSelects` when available, otherwise `Home/MasterSelects`, or `MASTERSELECTS_PROJECT_ROOT` when set to an absolute path)
 
 ### Backend Switching
 The `ProjectFileService` facade routes all calls to the active backend:
@@ -111,6 +113,7 @@ MyProject/
 +-- Proxy/                 # Generated proxy video/audio files
 +-- Cache/                 # Cached derived data
 |   +-- thumbnails/        # Media thumbnails (WebP, keyed by file hash)
+|   +-- splats/            # Cached Gaussian splat runtimes
 |   +-- waveforms/         # Waveform data (Float32Array binary)
 +-- Analysis/              # Clip analysis data (per media file)
 +-- Transcripts/           # Transcript data (per media file)
@@ -140,14 +143,15 @@ When importing media files (controlled by `copyMediaToProject` setting):
 - Original files remain untouched at their source location
 - If a file with the same name and size already exists, reuses the existing copy
 - If a file with the same name but different size exists, adds a numeric suffix
+- The copied `Raw/` file becomes the canonical source for relinking when it exists
 - Project becomes portable -- copy the folder to another machine
 
 ### Auto-Relink from Raw Folder
 When opening a project with missing media files:
-- App automatically scans the `Raw/` folder for matching files
-- Matches by **exact filename** (case-insensitive)
+- App automatically scans the `Raw/` folder for matching files first
+- Matches by **filename only** (case-insensitive)
 - Files are restored from Raw without user intervention
-- Also attempts to restore from stored file handles in IndexedDB
+- If the Raw copy is not available, it falls back to stored file handles in IndexedDB
 - Includes retry logic for handles that may not be immediately ready
 
 ### Benefits of Local Storage
@@ -161,20 +165,21 @@ When opening a project with missing media files:
 ## Auto-Save
 
 ### How Auto-Save Works
-There are two layers of auto-save:
+There are two save modes in the current branch:
 
-1. **Configurable autosave** (Toolbar): Managed in the `Toolbar.tsx` component via `setInterval`. When triggered on a dirty project, it first creates a backup, then saves.
-2. **Internal dirty-check** (ProjectCoreService): A 30-second `setInterval` that saves if the project is marked dirty. This runs automatically when a project is opened/created.
+1. **Continuous save** (default): `projectLifecycle.ts` subscribes to the media, timeline, FlashBoard, dock, and download-related stores, marks the project dirty, and writes the project after a short debounce. Keyframe changes flush more aggressively.
+2. **Interval save**: `Toolbar.tsx` can still run a timer-based autosave loop. In this mode, the timer creates a backup first and then saves the project.
 
 ### Autosave Configuration
-Access via **File -> Autosave** submenu:
+Access via **Settings -> General** for save mode, plus **File -> Autosave** for the interval controls:
 
 | Setting | Options | Default |
 |---------|---------|---------|
+| Save Mode | `continuous`, `interval` | **continuous** |
 | Enable Autosave | On/Off | **On** |
-| Interval | 1, 2, 5, 10 minutes | 5 min |
+| Interval | 1, 2, 5, 10 minutes | 5 min (interval mode only) |
 
-Settings persisted in `settingsStore` (localStorage).
+Settings persist in `settingsStore` (localStorage).
 
 ### Automatic Dirty Marking
 The `setupAutoSync()` function (in `projectLifecycle.ts`) subscribes to store changes and marks the project dirty when:
@@ -190,14 +195,14 @@ The `setupAutoSync()` function (in `projectLifecycle.ts`) subscribes to store ch
 - Syncs all store state to project data, then writes `project.json`
 
 ### On Page Unload
-The `beforeunload` handler saves the current timeline state to the active composition in memory and disposes audio resources. It does **not** write to disk (since async writes are unreliable during unload).
+In continuous-save mode, `beforeunload` flushes the pending store sync and kicks off a final best-effort project write. This still cannot fully guarantee the disk write completes before the page closes, but it is more aggressive than the old "memory only" unload path.
 
 ---
 
 ## Backup System
 
 ### How It Works
-Before each **configurable autosave** (from the File menu interval), the current project file is automatically backed up:
+Before each **interval autosave** (the timer-driven File menu path), the current project file is automatically backed up:
 1. Read current `project.json` content from disk
 2. Copy to `Backups/` folder with timestamp name
 3. Name format: `project_2026-01-11_14-30-00.json`
@@ -307,6 +312,7 @@ interface ProjectFile {
 - hasAudio flag
 - Proxy status
 - Folder organization (folderId)
+- `projectPath` when the file is copied into `Raw/`
 
 ### UI State (saved per project)
 - Dock/panel layout
@@ -314,6 +320,11 @@ interface ProjectFile {
 - Media panel column order and name width
 - Transcript language preference
 - View toggles: thumbnails, waveforms, proxy, transcript markers
+- Changelog preferences (`showChangelogOnStartup`, `lastSeenChangelogVersion`)
+
+### Other Persisted Panels
+- YouTube panel state is saved in `project.json`
+- FlashBoard workspace state is saved in `project.json` when boards exist
 
 ### Stored in Project Folder
 | Location | Contents |
@@ -368,7 +379,7 @@ On app load, attempts to restore the previously opened project:
 - **FSA**: Retrieves `lastProject` handle from IndexedDB, checks permission
 - **Native**: Reads path from `localStorage` key `ms-native-last-project-path`
 - If permission is needed, shows a "Grant Access" prompt
-- If project folder no longer exists, attempts to recreate an "Untitled" project in the parent folder
+- If the project folder no longer exists, the saved path is cleared and the user must choose/open another project
 
 ---
 
@@ -403,8 +414,11 @@ Each composition stores its own resolution (width/height) in the project file:
 
 ### Actions
 ```typescript
-saveLayoutAsDefault()  // View menu
-resetLayout()          // View menu
+saveNamedLayout()      // View -> Layouts
+loadSavedLayout()      // View -> Layouts
+setDefaultSavedLayout()// View -> Layouts
+saveLayoutAsDefault()  // View -> Layouts
+resetLayout()          // View -> Layouts
 ```
 
 ---
@@ -443,7 +457,7 @@ If IndexedDB storage becomes corrupted, an error dialog appears automatically:
 |---------|----------|--------|
 | **Project Folder** | Project data, proxies, analysis, transcripts, cache, renders | Disk space |
 | **IndexedDB** | File handles, media metadata, proxy frames (legacy), analysis cache, thumbnails | ~50MB |
-| **localStorage** | App settings, autosave config, dock layout (fallback), Native Helper last project path | ~5MB |
+| **localStorage** | App settings, autosave config, named/default dock layouts, dock layout fallback, Native Helper last project path | ~5MB |
 
 ---
 

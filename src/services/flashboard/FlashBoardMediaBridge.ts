@@ -1,11 +1,13 @@
 import { Logger } from '../logger';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useFlashBoardStore } from '../../stores/flashboardStore';
+import { captureCurrentPreviewFrameFile } from '../previewFrameCapture';
 import type {
   FlashBoardGenerationMetadata,
   FlashBoardResult,
   FlashBoardNode,
 } from '../../stores/flashboardStore/types';
+import type { MediaFile } from '../../stores/mediaStore';
 import { setExternalDragPayload, clearExternalDragPayload } from '../../components/timeline/utils/externalDragSession';
 
 const log = Logger.create('FlashBoardMedia');
@@ -200,6 +202,21 @@ class FlashBoardMediaBridge {
 
     log.info(`Imported AI media: ${filename} -> ${mediaFile.id}`);
     return result;
+  }
+
+  async importCurrentFrame(): Promise<MediaFile> {
+    const file = await captureCurrentPreviewFrameFile('flashboard_frame');
+    if (!file) {
+      throw new Error('Current preview frame is not available.');
+    }
+
+    const folderId = this.getOrCreateImageSubfolder();
+    const mediaFile = await useMediaStore.getState().importFile(file, folderId, {
+      forceCopyToProject: true,
+    });
+
+    log.info(`Imported current preview frame: ${mediaFile.name} -> ${mediaFile.id}`);
+    return mediaFile;
   }
 
   // ---------------------------------------------------------------------------
