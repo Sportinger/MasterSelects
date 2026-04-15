@@ -33,6 +33,11 @@
   <a href="#native-helper"><img src="https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white" alt="Rust"></a>
 </p>
 
+<p>
+  <a href="https://discord.com/invite/K8dApzG3XC"><b>Discord</b></a> |
+  <a href="https://www.reddit.com/r/masterselects/"><b>Reddit</b></a>
+</p>
+
 <br>
 
 <video src="https://github.com/user-attachments/assets/24966b2a-064f-49c8-bc7f-88472a5e4cb0" autoplay loop muted playsinline width="100%"></video>
