@@ -1,299 +1,153 @@
 # Keyboard Shortcuts
 
-[← Back to Index](./README.md)
+[<- Back to Index](./README.md)
 
-Complete reference of all keyboard shortcuts and NLE presets (verified from codebase + official documentation).
+Current shortcut bindings are routed through `shortcutRegistry`, so presets and per-action overrides update live from Settings.
 
 ---
 
 ## Presets
 
-MasterSelects ships with 6 shortcut presets. Switch in **Preferences → Shortcuts → Active Preset**.
+MasterSelects ships with 6 presets:
 
-| Preset | Based on | Key Differences from MasterSelects |
-|--------|----------|-----------------------------------|
-| **MasterSelects** | Custom | Default — balanced NLE layout |
-| **Premiere Pro** | Adobe PPro | `Ctrl+K` split, `Ctrl+L` loop, `Ctrl+Shift+X` clear I/O, `Ctrl+Alt+N` new project |
-| **DaVinci Resolve** | BMD Resolve | `B` blade tool, `Ctrl+B` split, `Ctrl+/` loop, `Alt+X` clear I/O, no New/Open Project |
-| **Final Cut Pro** | Apple FCP | `B` blade tool, `Ctrl+B` split, `Ctrl+L` loop, `Alt+X` clear I/O, no Save/Save As |
-| **After Effects** | Adobe AE | `B`/`N` in/out, `Ctrl+Shift+D` split, `PageUp/Down` frame step, `Shift+=/-` blend modes, no JKL shuttle, no razor tool |
-| **Beginner** | MasterSelects | Same as MasterSelects — simplest layout |
+- MasterSelects
+- Premiere Pro
+- DaVinci Resolve
+- Final Cut Pro
+- After Effects
+- Beginner
 
-### Preset Detail: Differences Per Action
+`Beginner` currently matches `MasterSelects`.
 
-| Action | MasterSelects | Premiere Pro | DaVinci Resolve | Final Cut Pro | After Effects |
-|--------|--------------|--------------|-----------------|---------------|---------------|
-| Play/Pause | `Space` | `Space` | `Space` | `Space` | `Space` |
-| Pause | `K` | `K` | `K` | `K` | — |
-| Play Forward | `L` | `L` | `L` | `L` | — |
-| Play Reverse | `J` | `J` | `J` | `J` | — |
-| Toggle Loop | `Shift+L` | `Ctrl+L` | `Ctrl+/` | `Ctrl+L` | — |
-| Frame Forward | `→` | `→` | `→` | `→` | `PageDown` / `Ctrl+→` |
-| Frame Backward | `←` | `←` | `←` | `←` | `PageUp` / `Ctrl+←` |
-| Set In Point | `I` | `I` | `I` | `I` | `B` |
-| Set Out Point | `O` | `O` | `O` | `O` | `N` |
-| Clear In/Out | `X` | `Ctrl+Shift+X` | `Alt+X` | `Alt+X` | — |
-| Add Marker | `M` | `M` | `M` | `M` | `Numpad *` / `Shift+8` |
-| Split at Playhead | `Shift+C` | `Ctrl+K` | `Ctrl+B` | `Ctrl+B` | `Ctrl+Shift+D` |
-| Delete | `Del` / `Backspace` | `Del` / `Backspace` | `Backspace` / `Del` | `Del` / `Backspace` | `Del` |
-| Copy | `Ctrl+C` | `Ctrl+C` | `Ctrl+C` | `Ctrl+C` | `Ctrl+C` |
-| Paste | `Ctrl+V` | `Ctrl+V` | `Ctrl+V` | `Ctrl+V` | `Ctrl+V` |
-| Next Blend Mode | `+` / `Numpad+` | `+` / `Numpad+` | `+` / `Numpad+` | `+` / `Numpad+` | `Shift+=` |
-| Prev Blend Mode | `-` / `Numpad-` | `-` / `Numpad-` | `-` / `Numpad-` | `-` / `Numpad-` | `Shift+-` |
-| Cut/Razor Tool | `C` | `C` | `B` | `B` | — |
-| New Project | `Ctrl+N` | `Ctrl+Alt+N` | — | `Ctrl+N` | `Ctrl+Alt+N` |
-| Open Project | `Ctrl+O` | `Ctrl+O` | — | `Ctrl+O` | `Ctrl+O` |
-| Save | `Ctrl+S` | `Ctrl+S` | `Ctrl+S` | — | `Ctrl+S` |
-| Save As | `Ctrl+Shift+S` | `Ctrl+Shift+S` | `Ctrl+Shift+S` | — | `Ctrl+Shift+S` |
-| Undo | `Ctrl+Z` | `Ctrl+Z` | `Ctrl+Z` | `Ctrl+Z` | `Ctrl+Z` |
-| Redo | `Ctrl+Shift+Z` / `Ctrl+Y` | `Ctrl+Shift+Z` | `Ctrl+Shift+Z` | `Ctrl+Shift+Z` | `Ctrl+Shift+Z` |
+### Preset Differences
 
-**—** = No binding (action not available or not mapped in that NLE).
+| Action | MasterSelects / Beginner | Premiere Pro | DaVinci Resolve | Final Cut Pro | After Effects |
+|--------|--------------------------|--------------|-----------------|---------------|---------------|
+| Loop | `Shift+L` | `Ctrl+L` | `Ctrl+/` | `Ctrl+L` | none |
+| Cut tool | `C` | `C` | `B` | `B` | none |
+| Split at playhead | `Shift+C` | `Ctrl+K` | `Ctrl+B` | `Ctrl+B` | `Ctrl+Shift+D` |
+| Clear In/Out | `X` | `Ctrl+Shift+X` | `Alt+X` | `Alt+X` | none |
+| Frame step | `Left/Right` | `Left/Right` | `Left/Right` | `Left/Right` | `PageUp/PageDown` or `Ctrl+Left/Right` |
+| Add marker | `M` | `M` | `M` | `M` | `Numpad*` or `Shift+8` |
+| New project | `Ctrl+N` | `Ctrl+Alt+N` | none | `Ctrl+N` | `Ctrl+Alt+N` |
+| Open project | `Ctrl+O` | `Ctrl+O` | none | `Ctrl+O` | `Ctrl+O` |
+| Save | `Ctrl+S` | `Ctrl+S` | `Ctrl+S` | none | `Ctrl+S` |
+| Save As | `Ctrl+Shift+S` | `Ctrl+Shift+S` | `Ctrl+Shift+S` | none | `Ctrl+Shift+S` |
+| Redo | `Ctrl+Shift+Z` or `Ctrl+Y` | `Ctrl+Shift+Z` | `Ctrl+Shift+Z` | `Ctrl+Shift+Z` | `Ctrl+Shift+Z` |
 
-> **Note:** On Mac, `Ctrl` maps to `Cmd` and `Alt` maps to `Option`. All presets handle this automatically.
+On Mac, `Ctrl` maps to `Cmd` and `Alt` maps to `Option`.
 
 ---
 
-## MasterSelects Default Shortcuts
+## Current Bindings
 
 ### Playback
 
-| Shortcut | Action |
-|----------|--------|
-| `Space` | Play/Pause toggle |
-| `J` | Reverse playback (press multiple times for faster) |
-| `K` | Pause playback |
-| `L` | Forward playback (press multiple times for faster) |
-| `Shift + L` | Toggle loop playback |
-| `I` | Set In point at playhead |
-| `O` | Set Out point at playhead |
-| `X` | Clear In/Out points |
+- `Space` toggles play/pause.
+- `J` reverses playback.
+- `K` pauses playback.
+- `L` plays forward.
+- `Shift+L` toggles loop playback in the default preset.
+- `I` sets the in point at the playhead.
+- `O` sets the out point at the playhead.
+- `X` clears in/out in the default preset.
 
-### Timeline Navigation
+### Navigation
 
-| Shortcut | Action |
-|----------|--------|
-| `Scroll` | Vertical scroll (snaps to track boundaries) |
-| `Shift + Scroll` | Horizontal scroll |
-| `Ctrl + Scroll` or `Alt + Scroll` | Zoom (exponential 8% per step, centered on playhead) |
-| `Ctrl + Shift + Scroll` | Toggle slot grid view (animated transition) |
-| `←` / `→` | Frame-by-frame navigation |
+- `Shift+Scroll` pans horizontally.
+- `Ctrl+Scroll` or `Alt+Scroll` zooms the timeline around the playhead.
+- `Ctrl+Shift+Scroll` or `Cmd+Shift+Scroll` toggles slot-grid view.
+- `Left` and `Right` arrows step one frame at a time.
 
 ### Editing
 
-| Shortcut | Action |
-|----------|--------|
-| `C` | Toggle cut tool mode (click clips to split them) |
-| `Shift + C` | Split clip at playhead position |
-| `Ctrl + C` | Copy selected keyframes (or clips if no keyframes selected) |
-| `Ctrl + V` | Paste keyframes at playhead (falls back to paste clips if no keyframes in clipboard) |
-| `Delete` / `Backspace` | Delete selected (keyframes first, then clips) |
-| `M` | Add marker at playhead |
-| `Tab` | Toggle edit mode in preview |
-| `Escape` | Exit cut tool mode (return to select tool) |
+- `C` toggles the cut tool in the default preset.
+- `Escape` exits cut mode.
+- `Shift+C` splits the clip at the playhead in the default preset.
+- `Ctrl+C` copies selected keyframes when any are selected; otherwise it copies selected clips.
+- `Ctrl+V` pastes keyframes when the clipboard contains keyframes; otherwise it pastes clips.
+- `Delete` / `Backspace` removes selected keyframes first, then clips.
+- `M` adds a marker at the playhead.
 
 ### Selection
 
-| Action | Method |
-|--------|--------|
-| Single select | Click clip |
-| Multi-select | `Shift + Click` |
-| Add/remove from selection | `Ctrl + Click` |
-| Linked clip select | Click (selects both video + audio) |
-| Independent select | `Shift + Click` linked clip |
-| Move multi-selection | Drag any selected clip |
-| Deselect | Click empty area or marquee in empty area |
+- Click selects a single clip.
+- `Ctrl+Click` / `Cmd+Click` adds or removes a clip from the selection.
+- `Shift+Click` toggles only the clicked clip.
+- Normal click on a linked video clip selects the linked audio clip too.
+- `Alt+drag` moves linked clips independently.
 
 ### Keyframes
 
-| Action | Method |
-|--------|--------|
-| Select keyframe | Click diamond |
-| Multi-select | `Shift + Click` |
-| Fine drag | `Shift + Drag` (10x slower) |
-| Copy keyframes | `Ctrl + C` (with keyframes selected) |
-| Paste keyframes | `Ctrl + V` (at playhead on selected clip) |
-| Move multi-select | Drag any selected keyframe |
-| Easing menu | Right-click keyframe |
+- Click a diamond to select a keyframe.
+- `Shift+Click` adds or removes keyframes from the selection.
+- `Shift+drag` moves keyframes more slowly.
+- Right-click a keyframe to change easing.
+- Right-click a Bezier handle to reset it to its default position.
 
 ### Blend Modes
 
-| Shortcut | Action |
-|----------|--------|
-| `+` | Next blend mode (any method: Shift+=, Numpad+, direct + key) |
-| `-` | Previous blend mode (any method: -, Numpad-, Shift+_ ) |
-
-Applies to all selected clips. Cycles through all blend modes.
+- `+` or `Numpad+` advances the blend mode on the selected clip(s).
+- `-` or `Numpad-` moves to the previous blend mode.
+- In After Effects preset mode, the blend-mode bindings follow the AE-style `Shift+=` / `Shift+-` layout.
 
 ### Project
 
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl + N` | New Project |
-| `Ctrl + S` | Save Project |
-| `Ctrl + Shift + S` | Save As (new project name) |
-| `Ctrl + O` | Open Project |
-| `Ctrl + Z` | Undo |
-| `Ctrl + Shift + Z` | Redo |
-| `Ctrl + Y` | Redo (alternative) |
+- `Ctrl+N` creates a new project in presets that expose it.
+- `Ctrl+O` opens a project in presets that expose it.
+- `Ctrl+S` saves the current project.
+- `Ctrl+Shift+S` saves as a new project name.
+- `Ctrl+Z` undoes the last action.
+- `Ctrl+Shift+Z` redoes the last action.
+- `Ctrl+Y` is available in the default preset only.
+
+### Preview
+
+- `Tab` toggles preview edit mode on the active editable preview source.
+- `1`, `2`, `3`, and `4` highlight the matching slot in the multi-preview panel.
 
 ### Panels
 
-| Shortcut | Action |
-|----------|--------|
-| `ü` | Toggle fullscreen for the currently hovered dock tab |
+- The German-layout `u-umlaut` key toggles fullscreen for the hovered dock tab.
 
 ---
 
-## Modifiers
+## Context-Specific Behavior
 
-### Shift Key
-| Context | Effect |
-|---------|--------|
-| + Scroll | Horizontal scroll |
-| + Drag playhead | Snap to keyframes |
-| + Drag keyframe | Fine control (10x slower) |
-| + `C` | Split clip at playhead |
-| + `L` | Toggle loop playback |
-| + Marquee | Extend selection |
-| + Drag curve handle | Constrain horizontal |
+### Timeline Keyframes
 
-### Alt Key
-| Context | Effect |
-|---------|--------|
-| + Scroll | Zoom timeline (same as Ctrl+Scroll) |
-| + Drag clip | Skip linked clip movement |
-| + Drag in group | Skip group movement |
-
-### Ctrl/Cmd Key
-| Context | Effect |
-|---------|--------|
-| + Scroll | Zoom timeline (same as Alt+Scroll) |
-| + Shift + Scroll | Toggle slot grid view |
-| + Click | Add/remove from selection |
-| + `Z` | Undo |
-| + `Shift + Z` | Redo |
-| + `Y` | Redo (alternative) |
-| + `S` | Save |
-| + `Shift + S` | Save As |
-| + `N` | New Project |
-| + `O` | Open Project |
-
----
-
-## Context-Specific
-
-### Property Values
-| Action | Effect |
-|--------|--------|
-| Left-click drag | Scrub value |
-| Right-click | Reset to default |
-
-### Track Headers
-| Action | Effect |
-|--------|--------|
-| Double-click name | Edit track name |
-| Click Eye | Toggle visibility |
-| Click M | Toggle mute |
-| Click S | Toggle solo |
-| Click expand arrow | Show keyframe lanes |
-
-### Clip Clips
-| Action | Effect |
-|--------|--------|
-| Drag center | Move clip |
-| Drag edges | Trim clip |
-| Right-click | Context menu |
+- `Ctrl+C` / `Ctrl+V` obey the keyframe clipboard first.
+- Paste uses the selected clip when exactly one clip is selected; otherwise it falls back to the original clip from the copied keyframes.
 
 ### Preview Edit Mode
-| Action | Effect |
-|--------|--------|
-| `Tab` | Toggle edit mode on/off |
-| Drag center | Move layer |
-| Drag corner handle | Scale layer |
-| Drag edge handle | Scale from edge |
-| `Shift + Drag` | Lock aspect ratio during scale |
 
-### Curve Editor
-| Action | Effect |
-|--------|--------|
-| Drag keyframe | Move time + value |
-| `Shift + Drag` | Constrain axis |
-| Drag handle | Adjust bezier curve |
-| Click empty | Deselect |
+- `Tab` only works when the preview source is editable.
+- The preview panel ignores the shortcut when showing a non-editable source monitor.
 
----
+### Docking
 
-## Quick Reference Card
+- `Escape` also cancels panel drag operations in the dock container.
 
-```
-┌─────────────────────────────────────────┐
-│           PLAYBACK                      │
-│  Space = Play    J/K/L = Shuttle       │
-│  I/O = In/Out    X = Clear I/O         │
-│  Shift+L = Toggle Loop                 │
-├─────────────────────────────────────────┤
-│           EDITING                       │
-│  C = Cut Tool    Shift+C = Split       │
-│  M = Add Marker  Del = Delete          │
-│  Ctrl+C = Copy   Ctrl+V = Paste        │
-│  Ctrl+Z = Undo   Ctrl+Shift+Z = Redo   │
-│  Ctrl+Y = Redo   Tab = Edit Mode       │
-│  Esc = Exit Cut Tool                   │
-├─────────────────────────────────────────┤
-│           SELECTION                     │
-│  Shift+Click = Multi-select            │
-│  Ctrl+Click = Add/Remove               │
-├─────────────────────────────────────────┤
-│           PROJECT                       │
-│  Ctrl+N = New    Ctrl+S = Save         │
-│  Ctrl+O = Open   Ctrl+Shift+S = SaveAs │
-├─────────────────────────────────────────┤
-│           NAVIGATION                    │
-│  Ctrl/Alt+Scroll = Zoom (exponential)  │
-│  Shift+Scroll = H-Scroll               │
-│  Ctrl+Shift+Scroll = Slot Grid Toggle  │
-│  ← / → = Frame-by-frame               │
-├─────────────────────────────────────────┤
-│           BLEND MODES                   │
-│  + = Next    - = Previous              │
-│  (Numpad, Shift+=, or direct + key)    │
-└─────────────────────────────────────────┘
-```
+### Inputs
+
+- Most handlers ignore text inputs and content-editable fields.
+- Save / Save As still prevent the browser default save dialog even when focus is inside an input.
 
 ---
 
 ## Customization
 
-Shortcuts are fully customizable in **Preferences → Shortcuts**:
-
-- **Preset selection:** Choose from MasterSelects, Premiere Pro, DaVinci Resolve, Final Cut Pro, After Effects, or Beginner
-- **Per-key override:** Click any shortcut keycap in the list to record a new binding
-- **Custom presets:** Save your current configuration as a named preset for later
-- **Conflict detection:** The UI warns when two actions share the same key combination
-- **Reset:** "Reset All to Preset" clears all overrides back to the active preset's defaults
-
-Shortcut preferences are persisted in localStorage and survive page reloads.
+- Shortcuts can be changed in `Preferences -> Shortcuts`.
+- Each action can store one or more combos.
+- Conflicts are detected live in the UI.
+- Custom named presets are saved locally.
+- Resetting to a preset clears manual overrides.
 
 ---
 
-## Related Features
+## Related Docs
 
-- [Timeline](./Timeline.md) - Main editing
-- [Keyframes](./Keyframes.md) - Animation
-- [Preview](./Preview.md) - Playback
-- [Effects](./Effects.md) - Blend modes
-
----
-
-## Tests
-
-| Test File | Tests | Coverage |
-|-----------|-------|----------|
-| [`playbackSlice.test.ts`](../../tests/stores/timeline/playbackSlice.test.ts) | 16 | Playback shortcuts (space, JKL, in/out) |
-
-Run tests: `npx vitest run`
-
----
-
-*Updated March 2026 - verified against codebase + official NLE documentation*
+- [Timeline](./Timeline.md)
+- [Keyframes](./Keyframes.md)
+- [Preview](./Preview.md)
+- [Effects](./Effects.md)

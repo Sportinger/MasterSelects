@@ -10,6 +10,7 @@ Import, organize, and manage media assets with folder structure, proxy generatio
 
 - [Importing Media](#importing-media)
 - [View Modes](#view-modes)
+- [Source Thumbnail Cache](#source-thumbnail-cache)
 - [Folder Organization](#folder-organization)
 - [Compositions](#compositions)
 - [Proxy Generation](#proxy-generation)
@@ -32,6 +33,11 @@ Import, organize, and manage media assets with folder structure, proxy generatio
 | **Audio** | WAV, MP3, OGG, FLAC, AAC, M4A, WMA, AIFF, OPUS |
 | **Image** | PNG, JPG/JPEG, GIF, WebP, BMP, SVG |
 
+The panel also accepts a few specialized asset types that flow into the timeline as 3D clips:
+
+- `model` files: OBJ, glTF/GLB, FBX
+- `gaussian-splat` files: PLY, SPLAT
+
 ### Import Methods
 
 #### Import Button
@@ -42,16 +48,22 @@ Click the **+ Add** button for creating new items:
 - **Composition** - New composition (uses active comp's output resolution)
 - **Folder** - New folder for organization
 - **Text** - New text item (placed in auto-created "Text" folder)
+- **3D Text** - New 3D text mesh item
 - **Solid** - New solid color item (placed in auto-created "Solids" folder)
+- **Camera** - New camera item
+- **Splat Effector** - New splat-effector item
 - **Mesh** ▶ - Submenu with 3D primitive meshes (placed in auto-created "Meshes" folder):
   - Cube, Sphere, Plane, Cylinder, Torus, Cone
   - Creates a `MeshItem` which can be dragged to the timeline as a 3D clip
 - **Adjustment Layer** - Coming soon
+- **Gaussian Splat** - Import a gaussian-splat asset directly from the add menu
 
 #### Drag and Drop
 - Drag files directly from the OS file explorer into the Media Panel
+- Drag folders directly into the panel; nested folders are recreated inside the project
 - Multiple files supported
 - Attempts to acquire file handles via `getAsFileSystemHandle` for persistence
+- Falls back to legacy directory-entry walking where needed
 - Falls back to standard File objects when handles are unavailable
 
 ### Import Pipeline
@@ -63,12 +75,14 @@ Imports use a two-phase approach:
    - Media info extraction (dimensions, duration, FPS, codec, bitrate, audio detection)
    - Thumbnail generation (for video and image files)
    - File hash calculation (for deduplication and proxy matching)
-   - Copy to project RAW folder (if enabled in settings)
+   - Copy to project RAW folder when `copyMediaToProject` is enabled, or when the import is forced
    - Existing proxy detection (by file hash)
 
 **Deduplication:** Files with matching name + size are automatically skipped.
 
 **Batch processing:** When importing multiple files, up to 3 files are processed in parallel.
+
+If a project-local `Raw/` copy is created, that copy becomes the canonical source for the imported asset. The store promotes the copied handle so later reloads and exports do not depend on the original file.
 
 ### File System Access API
 When supported (Chrome/Edge):
@@ -76,6 +90,7 @@ When supported (Chrome/Edge):
 - Persistent file handles stored in IndexedDB
 - Path information preserved
 - Handles from drag-and-drop also captured when available
+- If the same media is also copied into the project `Raw/` folder, that project copy is preferred on reload
 
 ### Large File Handling
 | Size | Behavior |
@@ -104,7 +119,7 @@ When supported (Chrome/Edge):
 
 ## View Modes
 
-The panel supports two view modes, toggled via buttons in the header. The selected mode is persisted in `localStorage`.
+The panel supports two view modes through a single header toggle button that swaps between list and grid icons. The selected mode is persisted in `localStorage`.
 
 ### List View (default)
 - Table layout with sortable, reorderable columns
@@ -120,6 +135,18 @@ The panel supports two view modes, toggled via buttons in the header. The select
 - Hover tooltip shows detailed metadata (resolution, duration, codec, bitrate, file size)
 - Duration badge overlay on video and composition thumbnails
 - Item count badge on folder thumbnails
+
+---
+
+## Source Thumbnail Cache
+
+Video thumbnails are generated per source media file, not per clip instance.
+
+- Generation runs at roughly **1 thumbnail per second of source media**
+- Split and trimmed clips reuse the same source thumbnail set instead of regenerating thumbnails
+- Thumbnails are cached in IndexedDB and promoted into an in-memory URL cache on load
+- The cache can also be reused by file hash when the same source is imported again
+- Large files above the thumbnail threshold skip this generation path entirely
 
 ---
 
@@ -431,22 +458,24 @@ interface MediaFile {
 ## Project Integration
 
 ### Auto-Save
-Media references saved with project to IndexedDB, including:
+Media references are saved with the project file, while IndexedDB keeps the handle cache and other reload helpers:
 - File metadata (name, type, dimensions, duration, codec, etc.)
 - File handles (for reload on next session)
 - Folder structure
 - Composition state with timeline data
 - Text items and solid items (via localStorage)
+- When present, `projectPath` points at the copied `Raw/<name>` file and is used for automatic relinking
 
 ### Restoration
 On project load:
-- Media metadata restored from IndexedDB
-- File handles used to restore file access (with permission requests)
-- Thumbnails restored from project folder (by file hash)
-- Existing proxies detected automatically
-- Existing transcripts loaded from project folder
+- Project-local `Raw/` copies are tried first and become the canonical source when available
+- Media metadata restored from IndexedDB and project JSON
+- File handles used to restore file access when no `Raw/` copy is available
+- Thumbnails restored from `Cache/thumbnails` by file hash
+- Existing proxies detected automatically, including legacy media-id based storage
+- Existing transcripts and analysis data loaded from the project folder
 - Blob URLs regenerated for available files
-- Folder structure and expansion state restored
+- Folder structure, expansion state, dock layout, and per-composition view state restored
 
 ### Media File IDs
 - Each media has a unique timestamp-based ID
@@ -466,8 +495,10 @@ When media files lose access (e.g., after browser restart):
 
 ### Reload Strategy
 Files are reloaded in priority order:
-1. **Project RAW folder** - If file was copied to project and project is open
-2. **Stored file handle** - Request permission to re-access original file location
+1. **Project RAW folder** - If the asset was copied into the project and the project is open
+2. **Stored file handle** - Re-access the original file location, including permission re-checks
+
+On project load, the app also tries to auto-relink missing files silently from `Raw/` and then falls back to stored handles in IndexedDB. This is case-insensitive on filename only; there is no content-hash relink pass.
 
 ### Double-Click Reload
 Double-clicking a file that has lost access triggers a single-file reload attempt with permission request.

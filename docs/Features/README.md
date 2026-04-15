@@ -1,249 +1,123 @@
-[← Back to Project](../../README.md)
+[Back to Project](../../README.md)
 
-# MASterSelects Documentation
+# MasterSelects Documentation
 
-**Professional WebGPU Video Compositor & Timeline Editor**
+Current feature documentation for the `staging` branch.
 
-Version 1.4.3 | April 2026
+Version 1.5.1 | April 2026
 
 ---
 
 ## Overview
 
-MASterSelects is a browser-based professional video editing application built on cutting-edge WebGPU technology. It delivers After Effects-style compositing, multi-track timeline editing, AI-powered workflows, and real-time GPU rendering—all running entirely in the browser with no plugins or installations required.
+MasterSelects is a browser-based WebGPU compositor and media editor with timeline editing, nested compositions, AI-assisted workflows, project-local media management, and an optional native helper for the browser gaps that still matter.
 
-### Key Highlights
+The docs in this folder were re-audited against the current codebase and now track the active implementation instead of older roadmap claims.
+
+### Current Highlights
 
 | Capability | Description |
-|------------|-------------|
-| **WebGPU Rendering** | Hardware-accelerated compositing with zero-copy video textures at 60fps |
-| **Multi-track Timeline** | Professional NLE with video/audio tracks, nested compositions, and multicam |
-| **Keyframe Animation** | Full property animation with bezier curve editor and 5 easing modes |
-| **AI Integration** | 76 intelligent editing tools via OpenAI function calling (GPT-4/GPT-5) |
-| **AI Video Generation** | PiAPI integration for AI-powered video creation |
-| **SAM2 Segmentation** | Click-to-segment object tracking with WebGPU ONNX inference |
-| **Download Panel** | Download videos from YouTube, TikTok, Instagram, Twitter/X and more |
-| **3D Layer System** | Three.js integration: per-layer 3D toggle, OBJ/glTF/GLB model import, primitive mesh creation (Cube/Sphere/Plane/Cylinder/Torus/Cone), perspective camera |
-| **30 GPU Effects** | Modular color, blur, distort, stylize, keying effects with quality controls |
-| **37 Blend Modes** | After Effects-style blend modes including stencil and silhouette |
-| **Video Scopes** | GPU-accelerated Histogram, Vectorscope, Waveform monitor (DaVinci-style) |
-| **Text Clips** | Typography with 50 Google Fonts, stroke, shadow effects |
-| **Solid Color Clips** | Solid color layers with color picker and comp dimensions |
-| **Professional Audio** | 10-band parametric EQ with live Web Audio, audio master clock, varispeed |
-| **Multicam Support** | Audio-based cross-correlation synchronization |
-| **Transitions** | Crossfade transitions with GPU-accelerated rendering |
-| **4 Export Modes** | WebCodecs Fast, HTMLVideo Precise, FFmpeg WASM, FCP XML interchange |
-| **Parallel Decoding** | Multi-clip parallel decode for faster exports |
-| **Output Manager** | Source routing, slice management, corner pin warping, multi-window control |
-| **Slot Grid** | Resolume-style 4x12 grid with multi-layer playback and column activation |
-| **Native Helper** | Project storage for Firefox, yt-dlp downloads, AI bridge |
-| **Local Storage** | Project folder with Raw media, autosave, backups, smart relinking |
-| **Mobile Support** | Responsive UI with touch gestures |
-
----
-
-## Technology Stack
-
-```
-Frontend          React 19 + TypeScript + Vite 7.2
-State Management  Zustand with modular slice architecture
-GPU Rendering     WebGPU + WGSL shaders (2,500+ lines)
-3D Engine         Three.js (lazy-loaded, isolated scene renderer)
-GPU Effects       30 modular effects with individual WGSL shaders
-Video Decoding    WebCodecs API with hardware acceleration + parallel decode
-Video Encoding    WebCodecs (Fast/Precise) + FFmpeg WASM (ProRes, DNxHR, HAP)
-Audio Processing  Web Audio API, audio master clock, varispeed scrubbing
-AI Services       OpenAI GPT-4/GPT-5 function calling, PiAPI video generation
-Persistence       File System Access API + local project folders with Raw media
-Native Helper     Rust + FFmpeg + yt-dlp (unified cross-platform)
-UI Framework      Custom dockable panel system with mobile support
-```
+|---|---|
+| **WebGPU Rendering** | Shared render path for main preview, independent targets, output windows, and export |
+| **Timeline Editing** | Multi-track editing, nested compositions, markers, shortcuts, and keyframes |
+| **AI Control** | OpenAI chat with 79 exported tools plus local/native bridge access for external agents |
+| **AI Video Workspace** | Classic AI Video plus FlashBoard board-mode generation and media import |
+| **3D Layers** | Three.js layers, camera clips, Gaussian splats, and splat effectors |
+| **Audio** | Element-synced playback, drift correction, waveform extraction, EQ, and audio export |
+| **Project Storage** | `project.json` source of truth, RAW-copy-first media flow, autosave, relink, backups |
+| **Native Helper** | Firefox storage backend, yt-dlp download flow, local AI bridge, native jobs |
+| **Security And Debugging** | Token-gated bridges, allowed-root file policy, playback monitors, logger tooling |
 
 ---
 
 ## Documentation Index
 
-### Feature Documentation
+### Core Editing
 
 | Document | Description |
-|----------|-------------|
-| [Timeline](./Timeline.md) | Multi-track editing, clips, snapping, compositions, multicam |
-| [Keyframes](./Keyframes.md) | Animation system, curve editor, bezier interpolation |
-| [Preview & Playback](./Preview.md) | RAM Preview, scrubbing, multiple outputs, edit mode |
-| [Output Manager](./Preview.md#output-manager) | Source routing, slices, corner pin warping, mask layers |
-| [3D Layers](./3D-Layers.md) | Three.js 3D layers, OBJ/glTF model import, perspective camera |
-| [Effects](./Effects.md) | 30 modular GPU effects, 37 blend modes, transforms |
-| [Masks](./Masks.md) | Shape masks, pen tool, GPU feathering |
-| [AI Integration](./AI-Integration.md) | 76 AI tools, transcription, AI video generation |
-| [Media Panel](./Media-Panel.md) | Import, folder organization, columns, compositions |
-| [Audio](./Audio.md) | 10-band EQ, audio master clock, varispeed scrubbing |
-| [Text Clips](./Text-Clips.md) | Typography, 50 Google Fonts, stroke, shadow |
-| [Export](./Export.md) | WebCodecs Fast/Precise, FFmpeg, parallel decoding |
-| [UI & Panels](./UI-Panels.md) | Dockable panels, layouts, menus, mobile support |
-| [GPU Engine](./GPU-Engine.md) | WebGPU architecture, modular render pipeline |
-| [Project Persistence](./Project-Persistence.md) | Local folders, Raw media, autosave, backups |
-| [Proxy System](./Proxy-System.md) | GPU-accelerated proxy generation |
-| [Download Panel](./Download-Panel.md) | YouTube, TikTok, Instagram, Twitter/X downloads |
-| [Native Helper](./Native-Helper.md) | Project storage (Firefox), yt-dlp downloads, AI bridge |
-| [Multicam AI](./Multicam-AI.md) | Audio-based sync, cross-correlation |
-| [Keyboard Shortcuts](./Keyboard-Shortcuts.md) | Complete shortcut reference |
-| [Debugging](./Debugging.md) | Logger service, module filtering, AI-agent inspection |
+|---|---|
+| [Timeline](./Timeline.md) | Tracks, clips, nested comps, markers, selection, and editing flow |
+| [Slot Grid](./Slot-Grid.md) | 12x4 live grid overlay, slot clip trimming, layer triggering, and deck warmup behavior |
+| [Keyframes](./Keyframes.md) | Animated properties, effect params, fades, easing, and visibility rules |
+| [Preview](./Preview.md) | Main preview, source monitor, output windows, RAM preview, and target routing |
+| [UI Panels](./UI-Panels.md) | Dock layout, panel catalog, properties tabs, mobile UI, and workspace surfaces |
+| [Keyboard Shortcuts](./Keyboard-Shortcuts.md) | Current shortcut registry, playback controls, and preset behavior |
 
-### Planning Documents
+### Rendering And Media
 
 | Document | Description |
-|----------|-------------|
-| [FFmpeg WASM Build Plan](../plans/FFMPEG_WASM_BUILD_PLAN.md) | Custom FFmpeg WASM build with professional codecs |
+|---|---|
+| [GPU Engine](./GPU-Engine.md) | WebGPU engine, render loop, fallback paths, caches, and export boundary |
+| [Media Runtime](./Media-Runtime.md) | Shared source/runtime registry, decode sessions, frame-provider reuse, and slot/background playback bindings |
+| [Effects](./Effects.md) | Current effect registry, categories, quality controls, and inline effect behavior |
+| [Masks](./Masks.md) | Overlay mask editing, feathering, stored modes, and current limitations |
+| [Text Clips](./Text-Clips.md) | Canvas-backed text rendering, typography controls, and timeline text items |
+| [3D Layers](./3D-Layers.md) | Three.js scene path, native Gaussian splats, cameras, and splat effectors |
+| [Audio](./Audio.md) | Playback sync, EQ, waveform extraction, audio clip behavior, and export |
+| [Export](./Export.md) | WebCodecs fast/precise export, FFmpeg WASM path, and interchange output |
+| [Proxy System](./Proxy-System.md) | Proxy generation, on-disk frame layout, audio proxies, and warmup behavior |
+| [Media Panel](./Media-Panel.md) | Import flow, RAW-copy promotion, folders, compositions, and relinking |
+| [Project Persistence](./Project-Persistence.md) | Save/load model, IndexedDB handle cache, continuous save, interval save mode, relink, and project roots |
+| [Download Panel](./Download-Panel.md) | yt-dlp-backed downloads, platform mapping, and cookie retry behavior |
+| [Native Helper](./Native-Helper.md) | Local HTTP/WebSocket APIs, auth startup token, and helper-backed flows |
 
-> Feature details are documented in the individual feature docs linked in the Documentation Index above.
+### AI, Security, And Operations
+
+| Document | Description |
+|---|---|
+| [AI Integration](./AI-Integration.md) | OpenAI chat, 79 exported tools, segmentation, transcription, and bridge behavior |
+| [FlashBoard](./FlashBoard.md) | Board-mode AI canvas for text-to-video, image-to-video, and image generation |
+| [Multicam AI](./Multicam-AI.md) | Sync, transcription, multicam analysis, and Anthropic-powered EDL generation |
+| [Debugging](./Debugging.md) | Logger service, runtime monitors, log sync, and AI-facing debug tools |
+| [Playback Debugging](./Playback-Debugging.md) | Focused workflow for preview stalls, drift, and decode/render mismatches |
+| [Security](./Security.md) | Trust boundaries, bridge auth, allowed roots, secret handling, and limitations |
+| [Hosted AI Setup](../cloudflare-hosted-ai-setup.md) | Cloudflare Pages/API setup for hosted account, billing, and AI routes |
+| [Visitor Notifier](./Visitor-Notifier.md) | Cloudflare visit feed, `/api/visits`, and the Windows tray notifier workflow |
 
 ---
 
-## Architecture
+## Current Stack
 
-```
-+-------------------------------------------------------------------------+
-|                              UI Layer                                    |
-|  +--------------+ +--------------+ +--------------+ +------------------+ |
-|  |  Timeline    | |   Preview    | |   Media      | |  Effects/Props   | |
-|  |   (React)    | |  (Canvas)    | |   Panel      | |  AI Chat Panel   | |
-|  +--------------+ +--------------+ +--------------+ +------------------+ |
-|-------------------------------------------------------------------------|
-|                         State Layer (Zustand)                            |
-|  +--------------+ +--------------+ +--------------+ +------------------+ |
-|  |  Timeline    | |   Dock       | |   Media      | |    Multicam      | |
-|  |   Store      | |   Store      | |   Store      | |     Store        | |
-|  | (17 slices)  | |              | |              | |                  | |
-|  +--------------+ +--------------+ +--------------+ +------------------+ |
-|-------------------------------------------------------------------------|
-|                        Engine Layer (WebGPU)                             |
-|  +--------------+ +--------------+ +--------------+ +------------------+ |
-|  | Compositor   | |  Effects     | |  Texture     | |     Frame        | |
-|  |  Pipeline    | |  Pipeline    | |  Manager     | |    Exporter      | |
-|  +--------------+ +--------------+ +--------------+ +------------------+ |
-|  +--------------+ +--------------+ +--------------+                      |
-|  |   Mask       | |  Scrubbing   | |  Optical     |                      |
-|  |  Manager     | |   Cache      | |    Flow      |                      |
-|  +--------------+ +--------------+ +--------------+                      |
-|-------------------------------------------------------------------------|
-|                          Services Layer                                  |
-|  +--------------+ +--------------+ +--------------+ +------------------+ |
-|  |   Audio      | |  Whisper     | |  Project     | |    AI Tools      | |
-|  |  Manager     | |  Service     | |     DB       | |   (OpenAI)       | |
-|  +--------------+ +--------------+ +--------------+ +------------------+ |
-|  +--------------+ +--------------+ +--------------+                      |
-|  |   Proxy      | | FileSystem   | |   Audio      |                      |
-|  | Generator    | |  Service     | |    Sync      |                      |
-|  +--------------+ +--------------+ +--------------+                      |
-+-------------------------------------------------------------------------+
-```
-
-### WGSL Shader Breakdown
-
-| File | Lines | Purpose |
-|------|-------|---------|
-| `composite.wgsl` | 618 | Layer compositing, 37 blend modes |
-| `opticalflow.wgsl` | 326 | Motion analysis, scene detection |
-| `effects.wgsl` | 243 | GPU effect implementations |
-| `output.wgsl` | 83 | Final output passthrough |
-| `slice.wgsl` | 33 | Output slice rendering |
-| `common.wgsl` (`src/effects/_shared/common.wgsl`) | 154 | Shared effect utilities |
-| 30 effect shaders | ~1,108 | Individual GPU effect shaders |
-| **Total** | **~2,565** | *Plus ~435 lines inline WGSL in CompositorPipeline.ts* |
-
-### Zustand Store Architecture
-
-```
-timelineStore/
-  trackSlice.ts            # Track CRUD operations
-  clipSlice.ts             # Clip operations, transforms
-  playbackSlice.ts         # Play/pause, seeking, time
-  keyframeSlice.ts         # Keyframe CRUD, interpolation
-  selectionSlice.ts        # Clip/keyframe selection
-  maskSlice.ts             # Mask shapes and vertices
-  transitionSlice.ts       # Crossfade transitions
-  ramPreviewSlice.ts       # RAM Preview cache control
-  proxyCacheSlice.ts       # Proxy cache invalidation
-  clipEffectSlice.ts       # Effect instances on clips
-  linkedGroupSlice.ts      # Video-audio linked groups
-  downloadClipSlice.ts     # Download clip management
-  solidClipSlice.ts        # Solid color clip creation
-  textClipSlice.ts         # Text clip creation
-  clipboardSlice.ts        # Cut/copy/paste with media reload
-  aiActionFeedbackSlice.ts # AI visual feedback overlays
-  markerSlice.ts           # Timeline markers
+```text
+Frontend          React 19 + TypeScript + Vite 7.x
+State             Zustand with modular timeline and media slices
+Rendering         WebGPU + WGSL + Three.js for 3D layers
+Media             MediaBunny, WebCodecs, HTML media fallback paths
+Audio             Web Audio API, EQ, drift correction, waveform extraction
+AI                OpenAI chat, Kie.ai, hosted cloud, PiAPI catalog, SAM2, MatAnyone2
+Persistence       File System Access API, project-local RAW copies, IndexedDB handle/cache storage
+Native Helper     Rust service with HTTP/WebSocket bridge, yt-dlp, helper-backed jobs
 ```
 
 ---
 
-## Source Code Reference
+## Source Map
 
 | Area | Location |
-|------|----------|
-| Timeline Components | `src/components/timeline/` |
-| Panel Components | `src/components/panels/` |
-| Preview System | `src/components/preview/` |
-| GPU Engine | `src/engine/` |
-| WGSL Shaders | `src/shaders/` |
-| State Management | `src/stores/` |
-| Services | `src/services/` |
-| React Hooks | `src/hooks/` |
+|---|---|
+| UI components | `src/components/` |
+| Timeline UI and interactions | `src/components/timeline/` |
+| Preview and output surfaces | `src/components/preview/`, `src/components/outputManager/` |
+| Panels and workspace shells | `src/components/panels/` |
+| State stores | `src/stores/`, `src/stores/mediaStore/` |
+| GPU engine | `src/engine/` |
+| Effects and shaders | `src/effects/`, `src/shaders/`, `src/transitions/` |
+| Services and bridges | `src/services/` |
+| Native helper | `tools/native-helper/` |
 
 ---
 
-## Test Coverage
+## Audit Notes
 
-Overview of unit test coverage across feature areas. Run all tests with `npx vitest run`.
-
-| Feature Area | Test Files | Notes |
-|-------------|-----------|-------|
-| [Timeline](./Timeline.md) | clipSlice, trackSlice, selectionSlice, playbackSlice, markerSlice | Clips, tracks, selection, playback, markers |
-| [Keyframes](./Keyframes.md) | keyframeSlice, keyframeInterpolation | Keyframe CRUD, easing, bezier interpolation |
-| [Preview](./Preview.md) | layerCollector, layerBuilderService, webCodecsPlayer, videoSyncManager, videoSyncManagerSyncGate | Layer collection, media runtime, WebCodecs playback |
-| [Export](./Export.md) | exportUtils, webCodecsHelpers | FCP XML, time calculations, codecs, presets |
-| [Audio](./Audio.md) | audioUtils, crossCorrelation, speedIntegration | AudioUtils, cross-correlation, playback speed |
-| [Effects](./Effects.md) | effectsRegistry, typeHelpers | Registry, type helpers |
-| [GPU Engine](./GPU-Engine.md) | transformComposition, compositor | Transform composition, cycle detection |
-| [Masks](./Masks.md) | maskSlice | Mask CRUD, modes, vertices, workflows |
-| [AI Integration](./AI-Integration.md) | aiToolDefinitions | Tool definitions, schemas, MODIFYING_TOOLS |
-| [Text Clips](./Text-Clips.md) | clipSlice | Covered by clipSlice tests |
-| [Media Panel](./Media-Panel.md) | fileManageSlice, compositionSlice | Files, compositions |
-| [Proxy System](./Proxy-System.md) | -- | Hardware-dependent |
-| [Download Panel](./Download-Panel.md) | -- | Requires network/native helper |
-| [Project Persistence](./Project-Persistence.md) | serialization, historyStore | Serialization, undo/redo |
-| [Native Helper](./Native-Helper.md) | -- | Rust binary, tested separately |
-| [Keyboard Shortcuts](./Keyboard-Shortcuts.md) | playbackSlice, speedIntegration | Playback, speed integration |
-| [UI Panels](./UI-Panels.md) | -- | React component-level UI |
-| [Multicam AI](./Multicam-AI.md) | crossCorrelation | Audio sync cross-correlation |
-| Engine internals | mediaRuntime, framePhaseMonitor, playbackDebugStats, playbackHealthMonitor, playbackSliceGate, externalDragPlacement, externalDragSession, logger | Playback pipeline, drag-drop, logging |
-
-**Total: ~1,717 tests across 44 test files**
-
----
-
-## Not Yet Implemented
-
-The following features are planned but not currently available:
-
-- Cloud storage integration
-- Asset library across projects
-- Batch import settings
-- Multi-pass encoding
-- Background export queue
+- The authoritative app version is [`src/version.ts`](../../src/version.ts), currently `1.5.1`.
+- Preview quality is wired into engine-backed preview resolution through `useEngine()`; it does not affect export resolution or the HTML-only source monitor.
+- `openComposition` and `searchVideos` are still the two known AI dispatch gaps.
+- Gaussian AI tool definitions exist in code but are not exported through `AI_TOOLS` yet.
+- This index intentionally points to implementation docs, not roadmap claims.
 
 ---
 
 ## Version History
 
-See `src/version.ts` and `src/changelog-data.json` for the authoritative changelog.
-Current version: 1.4.3.
-
----
-
-## License
-
-MIT - see [LICENSE](../../LICENSE)
-
----
-
-*Documentation updated March 2026*
+See [`src/version.ts`](../../src/version.ts) and [`src/changelog-data.json`](../../src/changelog-data.json) for the authoritative changelog.
+Current version: 1.5.1.

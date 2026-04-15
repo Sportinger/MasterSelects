@@ -1,211 +1,153 @@
 # Proxy System
 
-[← Back to Index](./README.md)
+[Back to Index](./README.md)
 
-WebCodecs-accelerated proxy generation for smooth editing of large video files.
-
----
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Proxy Generation](#proxy-generation)
-- [Proxy Playback](#proxy-playback)
-- [Storage](#storage)
-- [Configuration](#configuration)
+Proxy generation and playback for smoother editing of large video files.
 
 ---
 
 ## Overview
 
-### Purpose
-Large video files (4K, high bitrate) can be slow to scrub. Proxies provide:
-- Smaller, faster decode files
-- Smooth timeline scrubbing
-- Full quality on export
+Proxies are stored inside the project folder and are used only when proxy mode is enabled. The current implementation does not generate a separate proxy folder picker or a detached proxy library.
 
-### How It Works
-1. Generate low-res proxy of video
-2. Edit using proxy files
-3. Final export uses original media
+### Current Behavior
+
+- Proxy mode mutes and pauses the original video elements when enabled.
+- Proxy frames are loaded from the project folder when they exist.
+- The editor falls back to the original media when proxy data is missing.
+- Audio proxy files are optional and non-fatal.
 
 ---
 
 ## Proxy Generation
 
-### Starting Generation
-1. Right-click video in Media Panel
-2. Select "Generate Proxy"
-3. Generation starts in background (proxies stored in project folder automatically)
+Proxy generation is handled by `ProxyGeneratorWebCodecs`.
 
-### Generation Process (WebCodecs + Parallel Canvas)
-The proxy generator uses a pipeline for maximum speed:
+### Current Pipeline
 
-1. **Video Demuxing**: MP4Box parses the video container and extracts samples
-2. **Video Decoding**: WebCodecs VideoDecoder with hardware acceleration
-3. **Parallel Canvas Resize**: Pool of 8 OffscreenCanvases resize frames in parallel
-4. **JPEG Encoding**: Each canvas independently does `drawImage` then `convertToBlob` to JPEG
+1. MP4Box parses the source file.
+2. WebCodecs `VideoDecoder` decodes frames.
+3. A pool of 8 `OffscreenCanvas` instances resizes and encodes frames in parallel.
+4. Each frame is encoded to a JPEG blob.
+5. The frame is saved to the project proxy folder.
 
-### Resume from Disk
-- Proxy generation can be interrupted and **resumed from disk**
-- If generation is interrupted (browser close, crash), it picks up where it left off
-- Already-generated frame indices on disk are skipped automatically
-- No need to start over from scratch
+### Current Settings
 
-### Technical Details
-- **Max Resolution**: 1280px width (maintains aspect ratio)
-- **Canvas Pool Size**: 8 parallel encoding canvases
-- **Decode Batch Size**: 30 samples fed at a time before yielding
-- **Output Format**: JPEG at 82% quality
-- **Frame Rate**: 30 fps proxy
-- **Fallback**: If decode fails with codec description, retries without description
+- Maximum width: 1280 px
+- Proxy frame rate: 30 fps
+- JPEG quality: 0.82
+- Decode batch size: 30 samples
 
-### Automatic Project Folder Storage
-Proxies are automatically stored in your project folder:
-```
-MyProject/
-  Proxy/
-    {mediaHash}/
-      frames/
-        000000.jpg
-        000001.jpg
-        ...
-```
+### Resume Support
 
-No folder picker needed - proxies go directly to project folder.
+- Existing frame indices are read from disk before generation starts.
+- Already-saved frames are skipped.
+- Generation can resume after interruption instead of starting over.
 
-### Partial Proxies
-- Can use proxy while generating
-- Frames available immediately
-- Falls back to original for missing frames
+### Completion Rule
 
-### Audio Extraction
-- After video proxy frames complete, audio is extracted in the background (non-blocking)
-- Audio proxy is stored separately via `projectFileService.saveProxyAudio()`
-- Audio extraction failures are non-fatal
+- A proxy is marked ready when it reaches at least 98 percent of the expected frame count.
 
----
+### Resource Limit
 
-## Proxy Playback
-
-### Automatic Switching
-Editor automatically uses:
-- Proxy frames when available
-- Original video when proxy missing
-- Seamless transition between
-
-### Timeline Integration
-- Proxy frames display in preview
-- Scrubbing uses proxy cache
-- Playback synced with timeline
-- **Yellow indicator** on timeline ruler shows cached proxy frames (proxy cache indicator)
-- **Warmup button**: Preload proxy frames into cache before playback for smoother start
-
-### Preview Quality
-- Proxies shown during editing
-- Clear enough for decision-making
-- Full quality visible in export preview
+- Only one proxy generation runs at a time.
 
 ---
 
 ## Storage
 
-### Project Folder Storage
-Proxies stored in your project folder:
-- No separate folder selection needed
-- Files persist with project
-- Hash-based deduplication
+Proxies are stored in the project folder under `Proxy/{mediaId}/`.
 
-### File Organization
-```
-ProjectFolder/Proxy/{mediaHash}/frames/
-```
-- `{mediaHash}` = content hash of file (first 2MB)
-- Same file imported twice shares proxies
-- Portable with project folder
+### Current On-Disk Layout
 
-### Storage Requirements
-- Depends on proxy resolution (1280px max)
-- Delete `Proxy/` folder to reclaim space
+- Proxy frames are written as `frame_000000.webp`, `frame_000001.webp`, and so on.
+- Audio proxy is written as `audio.m4a`.
+- A `proxy.mp4` file is supported by the storage facade, but this branch does not use that path in the active generation flow.
+
+### Important Drift
+
+- The generator currently writes JPEG blobs, even though the frame files are named with a `.webp` extension.
+- Browsers load the files by bytes, so playback still works, but the extension does not match the encoded content.
 
 ### Deduplication
-Files are identified by content hash:
-- Same video = same proxies
-- Re-import doesn't regenerate
+
+- Storage is keyed by `fileHash` when available.
+- If no file hash is available, the media file ID is used.
 
 ---
 
-## Configuration
+## Proxy Playback
 
-### Proxy Mode Toggle
-- Proxy mode starts disabled (`proxyEnabled: false`)
-- Toggle enables/disables proxy playback
-- When enabled, all video elements are muted and paused (proxy frames replace video playback)
+`proxyFrameCache` loads frames from the project folder and keeps them in memory for fast scrubbing.
 
-### Proxy Completion
-- Proxy is considered complete when >= 98% of expected frames are generated
-- Completion check: `frameCount >= Math.ceil(duration * 30) * 0.98`
+### Current Behavior
 
----
+- Exact frame lookups are cached in memory.
+- The cache also preloads nearby frames to smooth playback and scrubbing.
+- Playback can use proxy audio when it exists.
+- Missing proxy frames fall back to the original source media.
 
-## Background Processing
+### Cache Limits
 
-### Progress Indication
-- Shows generation progress as percentage
-- Frame count progress
-- Cancelable (preserves partial proxy as "ready" if frames exist)
+- Frame cache size: 900 frames
+- Scrubbing preload window: 90 frames around the scrub position in active scrubs
+- Parallel preload batch size: 16
 
-### Resource Usage
-- WebCodecs hardware-accelerated decoding
-- Doesn't block UI
-- Can edit while generating
-- Only one proxy generates at a time (`currentlyGeneratingProxyId` gate)
+### Limitation
+
+- The proxy cache only reads from the project folder. It does not use IndexedDB as an alternate store.
 
 ---
 
-## Troubleshooting
+## Warmup
 
-### Proxy Not Used
-- Check if proxy mode is enabled
-- Verify proxy status is 'ready'
-- Check file permissions
+The warmup button in the proxy cache path does not generate proxy files.
 
-### Slow Generation
-- WebCodecs hardware acceleration required
-- Check chrome://gpu
-- Large files take time
+### What It Does
 
-### Storage Full
-- Delete old proxies (remove `Proxy/` folder in project)
-- Check disk space
+- It seeks the source video elements in 0.5 second steps.
+- It is meant to warm browser decode and cache state.
+- It includes nested composition clips.
 
----
+### What It Does Not Do
 
-## Technical Implementation
-
-### Files
-
-| File | Purpose |
-|------|---------|
-| `src/services/proxyGenerator.ts` | `ProxyGeneratorWebCodecs` class - MP4Box demuxing + WebCodecs decode + parallel canvas JPEG encode |
-| `src/stores/mediaStore/slices/proxySlice.ts` | Zustand slice: generateProxy, cancelProxyGeneration, proxy state management |
-| `src/stores/mediaStore/constants.ts` | `PROXY_FPS = 30` |
-| `src/services/projectFileService.ts` | Disk I/O: saveProxyFrame, getProxyFrameCount, getProxyFrameIndices |
-| `src/services/audioExtractor.ts` | Audio proxy extraction (lazy-imported) |
+- It does not create new proxy frames.
+- It does not convert media into proxy format.
 
 ---
 
-## Related Features
+## Audio Proxies
 
-- [Media Panel](./Media-Panel.md) - Proxy controls
-- [GPU Engine](./GPU-Engine.md) - GPU acceleration
-- [Preview](./Preview.md) - Proxy playback
-- [Project Persistence](./Project-Persistence.md) - Proxy paths
+After the video frames finish, the code attempts to extract audio in the background.
+
+### Current Behavior
+
+- Audio extraction is non-blocking after the frame sequence completes.
+- Audio proxy failures are treated as non-fatal.
+- If extraction succeeds, the audio is saved as `audio.m4a`.
+
+### Limitation
+
+- Proxy audio is best-effort. The editor keeps working even if audio extraction fails.
 
 ---
 
-## Tests
+## Current Limitations
 
-No dedicated unit tests -- this feature requires hardware-dependent APIs (WebCodecs, OffscreenCanvas) that cannot be easily mocked.
+- Frame files are named `.webp` even though the generator writes JPEG blobs.
+- `proxy.mp4` storage support exists but is not part of the active generation flow.
+- Proxy generation is browser-session based and relies on WebCodecs and OffscreenCanvas support.
+- Only one generation can run at a time.
 
 ---
+
+## Sources
+
+Key implementation files:
+
+- `src/services/proxyGenerator.ts`
+- `src/services/proxyFrameCache.ts`
+- `src/stores/mediaStore/slices/proxySlice.ts`
+- `src/stores/timeline/proxyCacheSlice.ts`
+- `src/services/project/ProjectFileService.ts`
+- `src/services/project/domains/ProxyStorageService.ts`
