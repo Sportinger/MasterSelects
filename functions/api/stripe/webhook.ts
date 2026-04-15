@@ -2,16 +2,21 @@ import { json, methodNotAllowed } from '../../lib/db';
 import { grantPlanCredits } from '../../lib/credits';
 import {
   getBillingPlan,
-  normalizeBillingPlanId,
+  isBillingPlanId,
   planIdFromSubscriptionStatus,
   type BillingPlanId,
   upsertEntitlementsForPlan,
 } from '../../lib/entitlements';
 import {
   getBillingPlanIdFromStripeSubscription,
+  getBillingPlanIdFromStripePriceId,
   getStripeConfig,
   getStripeCustomerIdFromObject,
   getStripeObjectMetadata,
+  getStripeSubscriptionPeriodEnd,
+  getStripeSubscriptionPeriodStart,
+  getStripeSubscription,
+  hasStripeScheduledCancellation,
   type StripeCheckoutSessionLike,
   type StripeInvoiceLike,
   type StripeSubscriptionLike,
@@ -153,6 +158,9 @@ async function upsertSubscription(
     ?? planIdFromSubscriptionStatus(subscription.status, metadataPlanId);
   const now = new Date().toISOString();
   const stripeSubscriptionId = getString(subscription.id) ?? crypto.randomUUID();
+  const periodStart = getStripeSubscriptionPeriodStart(subscription);
+  const periodEnd = getStripeSubscriptionPeriodEnd(subscription);
+  const cancelScheduled = hasStripeScheduledCancellation(subscription);
 
   await db
     .prepare(
@@ -180,18 +188,18 @@ async function upsertSubscription(
           updated_at = excluded.updated_at
       `,
     )
-    .bind(
-      crypto.randomUUID(),
-      userId,
-      stripeSubscriptionId,
-      planId,
-      subscription.status ?? 'incomplete',
-      subscription.current_period_start ? new Date(subscription.current_period_start * 1000).toISOString() : null,
-      subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
-      subscription.cancel_at_period_end ? 1 : 0,
-      now,
-      now,
-    )
+      .bind(
+        crypto.randomUUID(),
+        userId,
+        stripeSubscriptionId,
+        planId,
+        subscription.status ?? 'incomplete',
+        periodStart ? new Date(periodStart * 1000).toISOString() : null,
+        periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
+        cancelScheduled ? 1 : 0,
+        now,
+        now,
+      )
     .run();
 
   await upsertEntitlementsForPlan(db, userId, planId, `stripe:subscription:${stripeSubscriptionId}`);
@@ -209,7 +217,222 @@ function getInvoiceSubscriptionId(invoice: StripeInvoiceLike): string | null {
     return invoice.subscription.id;
   }
 
+  const parentSubscriptionId = getString(invoice.parent?.subscription_details?.subscription);
+  if (parentSubscriptionId) {
+    return parentSubscriptionId;
+  }
+
   return null;
+}
+
+interface SubscriptionPeriodWindow {
+  end: number;
+  start: number;
+}
+
+type StripeInvoiceLineLike = NonNullable<NonNullable<StripeInvoiceLike['lines']>['data']>[number];
+
+interface InvoiceProrationPlanChange {
+  fromPlanId: BillingPlanId;
+  periodEnd: number;
+  periodStart: number;
+  subscriptionId: string;
+  toPlanId: BillingPlanId;
+}
+
+function getNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function parseIsoTimestamp(value: string | null | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : null;
+}
+
+function hasInvoiceProrationLines(invoice: StripeInvoiceLike): boolean {
+  return Boolean(
+    invoice.lines?.data?.some((line) => line?.parent?.subscription_item_details?.proration === true),
+  );
+}
+
+function getInvoiceLinePlanId(env: AppContext['env'], line: StripeInvoiceLineLike): BillingPlanId | null {
+  const metadata = isRecord(line?.metadata) ? line.metadata : {};
+  const explicitPlanId = getExplicitPlanId(metadata);
+  if (explicitPlanId) {
+    return explicitPlanId;
+  }
+
+  return getBillingPlanIdFromStripePriceId(env, getString(line?.pricing?.price_details?.price));
+}
+
+export function extractInvoiceProrationPlanChange(
+  env: AppContext['env'],
+  invoice: StripeInvoiceLike,
+): InvoiceProrationPlanChange | null {
+  const prorationLines = invoice.lines?.data?.filter((line) => line?.parent?.subscription_item_details?.proration === true) ?? [];
+  if (prorationLines.length === 0) {
+    return null;
+  }
+
+  let fromLine: (typeof prorationLines)[number] | null = null;
+  let toLine: (typeof prorationLines)[number] | null = null;
+
+  for (const line of prorationLines) {
+    const amount = getNumber(line?.amount) ?? 0;
+    const planId = getInvoiceLinePlanId(env, line);
+    if (!planId) {
+      continue;
+    }
+
+    if (amount < 0 && (!fromLine || Math.abs(amount) > Math.abs(getNumber(fromLine.amount) ?? 0))) {
+      fromLine = line;
+    }
+
+    if (amount > 0 && (!toLine || amount > (getNumber(toLine.amount) ?? 0))) {
+      toLine = line;
+    }
+  }
+
+  const fromPlanId = fromLine ? getInvoiceLinePlanId(env, fromLine) : null;
+  const toPlanId = toLine ? getInvoiceLinePlanId(env, toLine) : null;
+  const periodStart = getNumber(toLine?.period?.start);
+  const periodEnd = getNumber(toLine?.period?.end);
+  const subscriptionId =
+    getString(toLine?.parent?.subscription_item_details?.subscription)
+    ?? getString(fromLine?.parent?.subscription_item_details?.subscription)
+    ?? getInvoiceSubscriptionId(invoice);
+
+  if (!fromPlanId || !toPlanId || !periodStart || !periodEnd || !subscriptionId) {
+    return null;
+  }
+
+  return {
+    fromPlanId,
+    periodEnd,
+    periodStart,
+    subscriptionId,
+    toPlanId,
+  };
+}
+
+async function getSubscriptionPeriodWindow(
+  env: AppContext['env'],
+  db: AppContext['env']['DB'],
+  subscriptionId: string,
+  requestId: string | null,
+): Promise<SubscriptionPeriodWindow | null> {
+  try {
+    const local = await db
+      .prepare(
+        `
+          SELECT current_period_start, current_period_end
+          FROM subscriptions
+          WHERE stripe_subscription_id = ?
+          LIMIT 1
+        `,
+      )
+      .bind(subscriptionId)
+      .first<{ current_period_end: string | null; current_period_start: string | null }>();
+
+    const localStart = parseIsoTimestamp(local?.current_period_start ?? null);
+    const localEnd = parseIsoTimestamp(local?.current_period_end ?? null);
+    if (localStart && localEnd && localEnd > localStart) {
+      return { end: localEnd, start: localStart };
+    }
+  } catch {
+    // Fall through to Stripe lookup.
+  }
+
+  const stripeConfig = getStripeConfig(env);
+  if (!stripeConfig) {
+    return null;
+  }
+
+  try {
+    const subscription = await getStripeSubscription(stripeConfig, subscriptionId, requestId);
+    const stripeStart = getStripeSubscriptionPeriodStart(subscription);
+    const stripeEnd = getStripeSubscriptionPeriodEnd(subscription);
+    if (stripeStart && stripeEnd && stripeEnd > stripeStart) {
+      return { end: stripeEnd, start: stripeStart };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+export function calculateProratedUpgradeCredits(
+  fromPlanId: BillingPlanId,
+  toPlanId: BillingPlanId,
+  remainingPeriodStart: number,
+  remainingPeriodEnd: number,
+  subscriptionPeriodStart: number,
+  subscriptionPeriodEnd: number,
+): number {
+  const baseDelta = getBillingPlan(toPlanId).monthlyCredits - getBillingPlan(fromPlanId).monthlyCredits;
+  if (baseDelta <= 0) {
+    return 0;
+  }
+
+  const remainingSeconds = remainingPeriodEnd - remainingPeriodStart;
+  const totalSeconds = subscriptionPeriodEnd - subscriptionPeriodStart;
+  if (remainingSeconds <= 0 || totalSeconds <= 0) {
+    return 0;
+  }
+
+  const fraction = Math.max(0, Math.min(1, remainingSeconds / totalSeconds));
+  return Math.max(0, Math.min(baseDelta, Math.round(baseDelta * fraction)));
+}
+
+async function resolveProratedUpgradeCreditGrant(
+  env: AppContext['env'],
+  db: AppContext['env']['DB'],
+  invoice: StripeInvoiceLike,
+  requestId: string | null,
+): Promise<null | {
+  amount: number;
+  fromPlanId: BillingPlanId;
+  periodEnd: number;
+  periodStart: number;
+  subscriptionPeriodEnd: number;
+  subscriptionPeriodStart: number;
+  toPlanId: BillingPlanId;
+}> {
+  if (getString(invoice.billing_reason) !== 'subscription_update' || !hasInvoiceProrationLines(invoice)) {
+    return null;
+  }
+
+  const change = extractInvoiceProrationPlanChange(env, invoice);
+  if (!change) {
+    throw new Error('proration_plan_change_unresolved');
+  }
+
+  const subscriptionWindow = await getSubscriptionPeriodWindow(env, db, change.subscriptionId, requestId);
+  if (!subscriptionWindow) {
+    throw new Error('subscription_period_window_unresolved');
+  }
+
+  return {
+    amount: calculateProratedUpgradeCredits(
+      change.fromPlanId,
+      change.toPlanId,
+      change.periodStart,
+      change.periodEnd,
+      subscriptionWindow.start,
+      subscriptionWindow.end,
+    ),
+    fromPlanId: change.fromPlanId,
+    periodEnd: change.periodEnd,
+    periodStart: change.periodStart,
+    subscriptionPeriodEnd: subscriptionWindow.end,
+    subscriptionPeriodStart: subscriptionWindow.start,
+    toPlanId: change.toPlanId,
+  };
 }
 
 async function grantInvoiceCredits(
@@ -235,6 +458,22 @@ async function grantInvoiceCredits(
   });
 }
 
+export function shouldGrantInvoiceCredits(invoice: StripeInvoiceLike): boolean {
+  const billingReason = getString(invoice.billing_reason);
+  if (billingReason === 'subscription_create' || billingReason === 'subscription_cycle') {
+    return true;
+  }
+
+  const hasProrationLine = Boolean(
+    invoice.lines?.data?.some((line) => line?.parent?.subscription_item_details?.proration === true),
+  );
+  if (hasProrationLine) {
+    return false;
+  }
+
+  return billingReason == null;
+}
+
 async function writeWebhookRecord(
   db: AppContext['env']['DB'],
   event: StripeWebhookEvent,
@@ -255,9 +494,12 @@ async function writeWebhookRecord(
   }
 }
 
-async function lookupPlanIdFromSubscription(db: AppContext['env']['DB'], subscriptionId: string | null): Promise<BillingPlanId> {
+async function lookupPlanIdFromSubscription(
+  db: AppContext['env']['DB'],
+  subscriptionId: string | null,
+): Promise<BillingPlanId | null> {
   if (!subscriptionId) {
-    return 'pro';
+    return null;
   }
 
   try {
@@ -273,9 +515,64 @@ async function lookupPlanIdFromSubscription(db: AppContext['env']['DB'], subscri
       .bind(subscriptionId)
       .first<{ plan_id: string }>();
 
-    return normalizeBillingPlanId(row?.plan_id, 'pro');
+    return row?.plan_id && isBillingPlanId(row.plan_id) ? row.plan_id : null;
   } catch {
-    return 'pro';
+    return null;
+  }
+}
+
+function getExplicitPlanId(metadata: Record<string, unknown>): BillingPlanId | null {
+  const planId = getMetadataString(metadata, 'plan_id');
+  return planId && isBillingPlanId(planId) ? planId : null;
+}
+
+export async function resolveInvoicePlanId(
+  env: AppContext['env'],
+  db: AppContext['env']['DB'],
+  invoice: StripeInvoiceLike,
+  requestId: string | null,
+): Promise<BillingPlanId | null> {
+  const explicitPlanId = getExplicitPlanId(getStripeObjectMetadata(invoice));
+  if (explicitPlanId) {
+    return explicitPlanId;
+  }
+
+  const parentSubscriptionMetadata = isRecord(invoice.parent?.subscription_details?.metadata)
+    ? invoice.parent.subscription_details.metadata
+    : {};
+  const parentPlanId = getExplicitPlanId(parentSubscriptionMetadata);
+  if (parentPlanId) {
+    return parentPlanId;
+  }
+
+  if (invoice.subscription && typeof invoice.subscription !== 'string') {
+    const embeddedPlanId =
+      getBillingPlanIdFromStripeSubscription(env, invoice.subscription)
+      ?? getExplicitPlanId(getStripeObjectMetadata(invoice.subscription));
+    if (embeddedPlanId) {
+      return embeddedPlanId;
+    }
+  }
+
+  const subscriptionId = getInvoiceSubscriptionId(invoice);
+  const localPlanId = await lookupPlanIdFromSubscription(db, subscriptionId);
+  if (localPlanId) {
+    return localPlanId;
+  }
+
+  const stripeConfig = getStripeConfig(env);
+  if (!stripeConfig || !subscriptionId) {
+    return null;
+  }
+
+  try {
+    const subscription = await getStripeSubscription(stripeConfig, subscriptionId, requestId);
+    return (
+      getBillingPlanIdFromStripeSubscription(env, subscription)
+      ?? getExplicitPlanId(getStripeObjectMetadata(subscription))
+    );
+  } catch {
+    return null;
   }
 }
 
@@ -374,10 +671,77 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
 
   if (event.type === 'invoice.paid' && userId) {
     const invoice = eventObject as StripeInvoiceLike;
-    const metadata = getStripeObjectMetadata(invoice);
-    const subscriptionId = getInvoiceSubscriptionId(invoice);
-    const explicitPlanId = getMetadataString(metadata, 'plan_id');
-    const planId = explicitPlanId ? normalizeBillingPlanId(explicitPlanId, 'pro') : await lookupPlanIdFromSubscription(context.env.DB, subscriptionId);
+    let prorationGrant: Awaited<ReturnType<typeof resolveProratedUpgradeCreditGrant>> = null;
+    try {
+      prorationGrant = await resolveProratedUpgradeCreditGrant(
+        context.env,
+        context.env.DB,
+        invoice,
+        context.data.requestId ?? event.id,
+      );
+    } catch {
+      return json(
+        {
+          error: 'proration_credit_resolution_failed',
+          eventId: event.id,
+          eventType: event.type,
+          message: 'Unable to resolve prorated upgrade credits for paid invoice. Webhook should be retried.',
+        },
+        { status: 503 },
+      );
+    }
+
+    if (prorationGrant?.amount && prorationGrant.amount > 0) {
+      await grantPlanCredits(
+        context.env.DB,
+        userId,
+        prorationGrant.amount,
+        'stripe:invoice_paid_proration',
+        getString(invoice.id) ?? event.id,
+        {
+          credit_delta_base: getBillingPlan(prorationGrant.toPlanId).monthlyCredits - getBillingPlan(prorationGrant.fromPlanId).monthlyCredits,
+          from_plan_id: prorationGrant.fromPlanId,
+          grant_type: 'upgrade_proration',
+          period_end: prorationGrant.periodEnd,
+          period_start: prorationGrant.periodStart,
+          stripe_customer_id: getStripeCustomerIdFromObject(invoice),
+          stripe_invoice_id: getString(invoice.id),
+          subscription_period_end: prorationGrant.subscriptionPeriodEnd,
+          subscription_period_start: prorationGrant.subscriptionPeriodStart,
+          to_plan_id: prorationGrant.toPlanId,
+        },
+      );
+    }
+
+    if (!shouldGrantInvoiceCredits(invoice)) {
+      await writeWebhookRecord(context.env.DB, event, payloadHash);
+
+      return json({
+        eventId: event.id,
+        eventType: event.type,
+        grantedCredits: Boolean(prorationGrant?.amount && prorationGrant.amount > 0),
+        ok: true,
+      });
+    }
+
+    const planId = await resolveInvoicePlanId(
+      context.env,
+      context.env.DB,
+      invoice,
+      context.data.requestId ?? event.id,
+    );
+
+    if (!planId) {
+      return json(
+        {
+          error: 'plan_resolution_failed',
+          eventId: event.id,
+          eventType: event.type,
+          message: 'Unable to resolve billing plan for paid invoice. Webhook should be retried.',
+        },
+        { status: 503 },
+      );
+    }
 
     await grantInvoiceCredits(context.env.DB, userId, invoice, planId);
   }

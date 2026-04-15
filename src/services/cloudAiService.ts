@@ -1,6 +1,7 @@
 import { cloudApi, type CloudAiChatRequest, type CloudAiGatewayEnvelope, type CloudAiVideoRequest } from './cloudApi';
 import { resolveAiAccess, type AiAccessDecision, type AiAccessInput } from './aiAccess';
 import type { TextToImageParams } from './kieAiService';
+import { useAccountStore } from '../stores/accountStore';
 import type {
   AccountInfo,
   ImageToVideoParams,
@@ -102,9 +103,18 @@ function getHostedTaskId(response: CloudAiGatewayEnvelope, errorMessage: string)
   return task.taskId;
 }
 
+function syncHostedCreditBalance(response: { creditBalance?: number | null }): void {
+  if (typeof response.creditBalance !== 'number' || !Number.isFinite(response.creditBalance)) {
+    return;
+  }
+
+  useAccountStore.getState().applyHostedCreditBalance(response.creditBalance);
+}
+
 export const cloudAiService = {
   async createChatCompletion(body: Record<string, unknown>): Promise<unknown> {
     const response = await cloudApi.ai.chat.create(body as unknown as CloudAiChatRequest);
+    syncHostedCreditBalance(response);
     return response.data ?? response;
   },
   async createImageToVideo(params: ImageToVideoParams): Promise<string> {
@@ -122,6 +132,7 @@ export const cloudAiService = {
         startImageUrl: params.startImageUrl,
       },
     });
+    syncHostedCreditBalance(response);
     return getHostedTaskId(response, 'Hosted Kling generation did not return a task id');
   },
   async createTextToVideo(params: TextToVideoParams): Promise<string> {
@@ -137,6 +148,7 @@ export const cloudAiService = {
         sound: params.sound,
       },
     });
+    syncHostedCreditBalance(response);
     return getHostedTaskId(response, 'Hosted Kling generation did not return a task id');
   },
   async createTextToImage(params: TextToImageParams): Promise<string> {
@@ -152,6 +164,7 @@ export const cloudAiService = {
         resolution: params.resolution,
       },
     });
+    syncHostedCreditBalance(response);
     return getHostedTaskId(response, 'Hosted image generation did not return a task id');
   },
   access: {
@@ -172,6 +185,7 @@ export const cloudAiService = {
       }
 
       const response = await cloudApi.ai.chat.create(body);
+      syncHostedCreditBalance(response);
       return {
         decision,
         response,
@@ -214,6 +228,7 @@ export const cloudAiService = {
       }
 
       const response = await cloudApi.ai.video.create(body);
+      syncHostedCreditBalance(response);
       return {
         decision,
         response,
@@ -237,6 +252,7 @@ export const cloudAiService = {
   },
   async getAccountInfo(): Promise<AccountInfo> {
     const info = await cloudApi.ai.video.capabilities();
+    syncHostedCreditBalance(info);
     const creditBalance = typeof info.creditBalance === 'number' ? info.creditBalance : 0;
 
     return {

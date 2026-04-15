@@ -192,7 +192,6 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
   // Drag-and-drop reorder state
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dropIdx, setDropIdx] = useState<number | null>(null);
-  const [effectMode, setEffectMode] = useState<'video' | 'audio'>(isAudioClip ? 'audio' : 'video');
 
   const handleBatchStart = useCallback(() => startBatch('Adjust effect'), []);
   const handleBatchEnd = useCallback(() => endBatch(), []);
@@ -212,7 +211,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
   return (
     <div className="properties-tab-content effects-tab">
       <div className="effect-add-row">
-        {effectMode === 'video' && (
+        {!isAudioClip && (
           <select onChange={(e) => { if (e.target.value) { addClipEffect(clipId, e.target.value); e.target.value = ''; } }} defaultValue="">
             <option value="" disabled>+ Add Effect</option>
             {effectCategories.map(({ category, effects: catEffects }) => (
@@ -224,33 +223,10 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
             ))}
           </select>
         )}
-        {effectMode === 'audio' && <span className="effect-mode-label">Audio</span>}
-        <div className="effect-mode-toggle">
-          <button
-            className={`effect-mode-btn ${effectMode === 'video' ? 'active' : ''}`}
-            onClick={() => setEffectMode('video')}
-            title="Video Effects"
-          >
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="2" y="3" width="20" height="14" rx="2" />
-              <polyline points="8 21 12 17 16 21" />
-            </svg>
-          </button>
-          <button
-            className={`effect-mode-btn ${effectMode === 'audio' ? 'active' : ''}`}
-            onClick={() => setEffectMode('audio')}
-            title="Audio Effects"
-          >
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M9 18V5l12-2v13" />
-              <circle cx="6" cy="18" r="3" />
-              <circle cx="18" cy="16" r="3" />
-            </svg>
-          </button>
-        </div>
+        {isAudioClip && <span className="effect-mode-label">Audio</span>}
       </div>
 
-      {effectMode === 'audio' ? (
+      {isAudioClip ? (
         <VolumeTab clipId={clipId} effects={effects} />
       ) : videoEffects.length === 0 ? (
         <div className="panel-empty"><p>No effects applied</p></div>

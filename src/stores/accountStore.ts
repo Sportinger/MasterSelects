@@ -4,6 +4,7 @@ import { cloudApi, type AuthProvider, type BillingPlanId, type BillingSummaryRes
 export type AccountDialogKind = 'auth' | 'pricing' | 'account' | null;
 
 export interface AccountState {
+  applyHostedCreditBalance: (creditBalance: number) => void;
   billingSummary: BillingSummaryResponse | null;
   creditBalance: number;
   dialog: AccountDialogKind;
@@ -57,6 +58,17 @@ function applyDevMock(set: (partial: Partial<AccountState>) => void, planId: str
 }
 
 export const useAccountStore = create<AccountState>((set, get) => ({
+  applyHostedCreditBalance: (creditBalance) => {
+    set((state) => ({
+      billingSummary: state.billingSummary
+        ? {
+            ...state.billingSummary,
+            creditBalance,
+          }
+        : null,
+      creditBalance,
+    }));
+  },
   billingSummary: null,
   creditBalance: 0,
   dialog: null,
@@ -171,13 +183,6 @@ export const useAccountStore = create<AccountState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const summary = get().billingSummary;
-      if (summary?.stripeCustomerId && summary.subscription && summary.subscription.status !== 'canceled') {
-        const portal = await cloudApi.billing.portal({ returnUrl: window.location.origin });
-        window.location.assign(portal.portalUrl);
-        return;
-      }
-
       const response = await cloudApi.billing.checkout({
         planId: pickCheckoutPlanId(planId),
         successUrl: `${window.location.origin}/?billing=success&plan=${encodeURIComponent(String(planId))}`,

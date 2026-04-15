@@ -89,7 +89,7 @@ export interface CheckoutResponse {
   destination?: 'checkout' | 'portal';
   id: string;
   planId: BillingPlanId | string;
-  priceId: string;
+  priceId: string | null;
 }
 
 export interface PortalResponse {

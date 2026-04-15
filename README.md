@@ -15,7 +15,7 @@
 <p>
   GPU-first editing with <b>30 effects</b>, <b>37 blend modes</b>, <b>79 AI tools</b>, <b>real 3D via Three.js</b>, and only <b>14 dependencies</b>.<br>
   Built from scratch in <b>2,400+ lines of WGSL</b> and <b>138k lines of TypeScript</b>.<br>
-  Import <b>OBJ, glTF, GLB, FBX</b> models directly into the timeline.
+  Import <b>OBJ, glTF, GLB, FBX, PLY, SPLAT</b> assets directly into the timeline.
 </p>
 
 <p>
@@ -52,11 +52,12 @@ Decoding depends on what the **browser** supports — the container is just the 
 
 <table>
 <tr><th colspan="2">Import (Decode)</th></tr>
-<tr><td><b>Containers</b></td><td>MP4, MOV, WebM, MKV, AVI, M4V</td></tr>
+<tr><td><b>Video files</b></td><td>MP4, WebM, MOV, AVI, MKV, WMV, M4V, FLV</td></tr>
 <tr><td><b>Video codecs</b></td><td>H.264 (AVC), H.265 (HEVC)¹, VP8, VP9, AV1</td></tr>
-<tr><td><b>Audio codecs</b></td><td>AAC, MP3, Opus, Vorbis, FLAC, WAV/PCM</td></tr>
-<tr><td><b>Image</b></td><td>PNG, JPG, WebP, GIF, BMP, AVIF, SVG</td></tr>
+<tr><td><b>Audio files</b></td><td>WAV, MP3, OGG, FLAC, AAC, M4A, WMA, AIFF, OPUS</td></tr>
+<tr><td><b>Image</b></td><td>PNG, JPG/JPEG, WebP, GIF, BMP, SVG</td></tr>
 <tr><td><b>3D Models</b></td><td>OBJ, glTF, GLB, FBX — rendered via Three.js with lighting</td></tr>
+<tr><td><b>Gaussian Splats</b></td><td>PLY, SPLAT</td></tr>
 <tr><td><b>Download</b></td><td>YouTube, TikTok, Instagram, Twitter/X, Vimeo + <a href="https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md">all yt-dlp sites</a> via Native Helper</td></tr>
 <tr><th colspan="2">Export (Encode)</th></tr>
 <tr><td><b>Containers</b></td><td>MP4, WebM</td></tr>

@@ -1,10 +1,11 @@
 import { getCurrentUser, hasTrustedOrigin, json, methodNotAllowed, parseJson } from '../../lib/db';
-import { type BillingPlanId, normalizeBillingPlanId } from '../../lib/entitlements';
+import { getBillingPlan, type BillingPlanId, normalizeBillingPlanId } from '../../lib/entitlements';
 import {
   createStripeCheckoutSession,
   createStripePortalSession,
   getStripeConfig,
   getStripePriceId,
+  getStripeSubscription,
 } from '../../lib/stripe';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
 
@@ -17,6 +18,11 @@ interface CheckoutRequestBody {
 interface SubscriptionRow {
   plan_id: string;
   status: string;
+  stripe_subscription_id: string | null;
+}
+
+function getString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
 
 /** Only allow redirect URLs that point back to our own origin. */
@@ -56,7 +62,7 @@ async function getLatestSubscription(db: AppContext['env']['DB'], userId: string
     return await db
       .prepare(
         `
-          SELECT plan_id, status
+          SELECT plan_id, status, stripe_subscription_id
           FROM subscriptions
           WHERE user_id = ?
           ORDER BY
@@ -82,6 +88,14 @@ async function getLatestSubscription(db: AppContext['env']['DB'], userId: string
 
 function hasManagedSubscription(status: string | null | undefined): boolean {
   return status === 'active' || status === 'trialing' || status === 'past_due' || status === 'incomplete' || status === 'paused';
+}
+
+function isManagedPlanChange(currentPlanId: string | null | undefined, targetPlanId: BillingPlanId): boolean {
+  if (targetPlanId === 'free') {
+    return false;
+  }
+
+  return getBillingPlan(currentPlanId).id !== getBillingPlan(targetPlanId).id;
 }
 
 export const onRequest: AppRouteHandler = async (context: AppContext): Promise<Response> => {
@@ -123,8 +137,18 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   }
 
   const planId = normalizeBillingPlanId(body.planId, 'pro' as BillingPlanId);
-  const priceId = getStripePriceId(context.env, planId);
-  if (!priceId) {
+  const origin = new URL(context.request.url).origin;
+  const successUrl = safeUrl(body.successUrl, origin, `${origin}/?billing=success&plan=${encodeURIComponent(planId)}`);
+  const cancelUrl = safeUrl(body.cancelUrl, origin, `${origin}/?billing=cancel`);
+  const [customerId, latestSubscription] = await Promise.all([
+    getStripeCustomerId(context.env.DB, user.id),
+    getLatestSubscription(context.env.DB, user.id),
+  ]);
+  const currentPlanId = normalizeBillingPlanId(latestSubscription?.plan_id, 'free');
+  const activeManagedSubscription = Boolean(customerId && hasManagedSubscription(latestSubscription?.status));
+  const priceId = planId === 'free' ? null : getStripePriceId(context.env, planId);
+
+  if (!activeManagedSubscription && !priceId) {
     return json(
       {
         error: 'stripe_price_missing',
@@ -135,16 +159,63 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     );
   }
 
-  const origin = new URL(context.request.url).origin;
-  const successUrl = safeUrl(body.successUrl, origin, `${origin}/?billing=success&plan=${encodeURIComponent(planId)}`);
-  const cancelUrl = safeUrl(body.cancelUrl, origin, `${origin}/?billing=cancel`);
-  const [customerId, latestSubscription] = await Promise.all([
-    getStripeCustomerId(context.env.DB, user.id),
-    getLatestSubscription(context.env.DB, user.id),
-  ]);
-
   try {
-    if (customerId && hasManagedSubscription(latestSubscription?.status)) {
+    if (activeManagedSubscription && customerId) {
+      const stripeSubscriptionId = getString(latestSubscription?.stripe_subscription_id);
+      if (stripeSubscriptionId && planId === 'free') {
+        const portal = await createStripePortalSession(stripeConfig, {
+          customerId,
+          flow: {
+            afterCompletionReturnUrl: successUrl,
+            subscriptionId: stripeSubscriptionId,
+            type: 'subscription_cancel',
+          },
+          idempotencyKey: context.data.requestId ?? null,
+          returnUrl: cancelUrl,
+        });
+
+        return json({
+          checkoutUrl: portal.url,
+          destination: 'portal',
+          id: portal.id,
+          planId,
+          priceId,
+        });
+      }
+
+      if (stripeSubscriptionId && isManagedPlanChange(currentPlanId, planId) && priceId) {
+        const stripeSubscription = await getStripeSubscription(
+          stripeConfig,
+          stripeSubscriptionId,
+          context.data.requestId ?? null,
+        );
+        const primaryItem = stripeSubscription.items?.data?.[0];
+        const subscriptionItemId = getString(primaryItem?.id);
+        if (subscriptionItemId) {
+          const portal = await createStripePortalSession(stripeConfig, {
+            customerId,
+            flow: {
+              afterCompletionReturnUrl: successUrl,
+              itemId: subscriptionItemId,
+              priceId,
+              quantity: primaryItem?.quantity ?? null,
+              subscriptionId: stripeSubscriptionId,
+              type: 'subscription_update_confirm',
+            },
+            idempotencyKey: context.data.requestId ?? null,
+            returnUrl: cancelUrl,
+          });
+
+          return json({
+            checkoutUrl: portal.url,
+            destination: 'portal',
+            id: portal.id,
+            planId,
+            priceId,
+          });
+        }
+      }
+
       const portal = await createStripePortalSession(stripeConfig, {
         customerId,
         idempotencyKey: context.data.requestId ?? null,
@@ -155,9 +226,19 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         checkoutUrl: portal.url,
         destination: 'portal',
         id: portal.id,
-        planId: normalizeBillingPlanId(latestSubscription?.plan_id, planId),
+        planId,
         priceId,
       });
+    }
+
+    if (!priceId) {
+      return json(
+        {
+          error: 'stripe_price_missing',
+          message: 'Selected plan is not available for checkout.',
+        },
+        { status: 500 },
+      );
     }
 
     const session = await createStripeCheckoutSession(stripeConfig, {
