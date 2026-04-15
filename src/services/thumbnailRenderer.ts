@@ -371,7 +371,13 @@ class ThumbnailRendererService {
     // Note: sourceType might be undefined, so we include clips without it too
     const videoClips = clips.filter((c: { trackId: string; sourceType?: string }) => {
       const isOnVideoTrack = videoTrackIds.has(c.trackId);
-      const isVisualType = !c.sourceType || c.sourceType === 'video' || c.sourceType === 'image' || c.sourceType === 'text';
+      const isVisualType =
+        !c.sourceType ||
+        c.sourceType === 'video' ||
+        c.sourceType === 'image' ||
+        c.sourceType === 'text' ||
+        c.sourceType === 'solid' ||
+        c.sourceType === 'lottie';
       return isOnVideoTrack && isVisualType;
     });
 

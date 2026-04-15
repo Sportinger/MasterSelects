@@ -6,6 +6,7 @@ import { useMediaStore } from '../stores/mediaStore';
 import { DEFAULT_TRANSFORM } from '../stores/timeline/constants';
 import { bindSourceRuntimeForOwner } from './mediaRuntime/clipBindings';
 import { mediaRuntimeRegistry } from './mediaRuntime/registry';
+import { lottieRuntimeManager } from './vectorAnimation/LottieRuntimeManager';
 
 type DecoderMode = SlotDeckState['decoderMode'];
 type SlotDeckStatus = SlotDeckState['status'];
@@ -225,6 +226,9 @@ class SlotDeckManager {
         clip.source.audioElement.src = '';
         clip.source.audioElement.load();
       }
+      if (clip.source?.type === 'lottie') {
+        lottieRuntimeManager.destroyClipRuntime(clip.id);
+      }
     }
     this.decks.delete(entry.slotIndex);
     this.pushDisposedState(entry.slotIndex);
@@ -335,6 +339,45 @@ class SlotDeckManager {
     }, { once: true });
   }
 
+  private loadLottieForClip(entry: SlotDeckEntry, clip: TimelineClip, file: File): void {
+    void (async () => {
+      try {
+        if (clip.source?.type !== 'lottie') {
+          clip.source = {
+            type: 'lottie',
+            mediaFileId: clip.mediaFileId,
+            naturalDuration: clip.duration,
+          };
+        }
+
+        const runtime = await lottieRuntimeManager.prepareClipSource(clip, file);
+        if (this.decks.get(entry.slotIndex) !== entry || entry.pendingDispose) {
+          lottieRuntimeManager.destroyClipRuntime(clip.id);
+          return;
+        }
+
+        const naturalDuration =
+          runtime.metadata.duration ??
+          clip.source?.naturalDuration ??
+          clip.duration;
+        clip.file = file;
+        clip.source = {
+          type: 'lottie',
+          textCanvas: runtime.canvas,
+          mediaFileId: clip.mediaFileId,
+          naturalDuration,
+          vectorAnimationSettings: clip.source?.vectorAnimationSettings,
+        };
+        clip.isLoading = false;
+        lottieRuntimeManager.renderClipAtTime(clip, clip.startTime);
+        this.markClipReady(entry, 'html', { visual: true });
+      } catch (error) {
+        clip.isLoading = false;
+        this.markDeckFailure(entry, error);
+      }
+    })();
+  }
+
   prepareSlot(slotIndex: number, compositionId: string): void {
     if (!flags.useWarmSlotDecks) {
       return;
@@ -419,11 +462,12 @@ class SlotDeckManager {
     const { files } = useMediaStore.getState();
 
     for (const serializedClip of timelineData.clips) {
+      const mediaFile = files.find((file) => file.id === serializedClip.mediaFileId);
       const clip: TimelineClip = {
         id: serializedClip.id,
         trackId: serializedClip.trackId,
         name: serializedClip.name,
-        file: null as never,
+        file: (mediaFile?.file ?? null) as never,
         startTime: serializedClip.startTime,
         duration: serializedClip.duration,
         inPoint: serializedClip.inPoint,
@@ -438,7 +482,6 @@ class SlotDeckManager {
         masks: serializedClip.masks,
       };
 
-      const mediaFile = files.find((file) => file.id === serializedClip.mediaFileId);
       const sourceType = serializedClip.sourceType;
       const fileUrl = mediaFile?.url;
 
@@ -454,6 +497,16 @@ class SlotDeckManager {
         entry.preparedClipCount += 1;
         clip.isLoading = true;
         this.loadImageForClip(entry, clip, fileUrl);
+      } else if (sourceType === 'lottie' && mediaFile?.file) {
+        entry.preparedClipCount += 1;
+        clip.isLoading = true;
+        clip.source = {
+          type: 'lottie',
+          mediaFileId: serializedClip.mediaFileId,
+          naturalDuration: serializedClip.naturalDuration,
+          vectorAnimationSettings: serializedClip.vectorAnimationSettings,
+        };
+        this.loadLottieForClip(entry, clip, mediaFile.file);
       } else {
         clip.isLoading = false;
       }

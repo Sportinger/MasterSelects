@@ -40,7 +40,7 @@ export interface StoredThumbnail {
 export interface StoredMediaFile {
   id: string;
   name: string;
-  type: 'video' | 'audio' | 'image';
+  type: 'video' | 'audio' | 'image' | 'lottie' | 'rive';
   // No longer storing blob - only metadata and file hash for deduplication
   fileHash?: string; // SHA-256 hash for proxy/thumbnail deduplication
   duration?: number;

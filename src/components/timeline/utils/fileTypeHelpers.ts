@@ -19,6 +19,7 @@ const IMAGE_EXTENSIONS = [
 ];
 
 const GAUSSIAN_SPLAT_EXTENSIONS = ['ply', 'splat'];
+const VECTOR_ANIMATION_EXTENSIONS = ['lottie', 'riv', 'json'];
 
 /**
  * Check if file is a video by MIME type or extension
@@ -62,7 +63,8 @@ export function isMediaFile(file: File): boolean {
     VIDEO_EXTENSIONS.includes(ext) ||
     AUDIO_EXTENSIONS.includes(ext) ||
     IMAGE_EXTENSIONS.includes(ext) ||
-    GAUSSIAN_SPLAT_EXTENSIONS.includes(ext)
+    GAUSSIAN_SPLAT_EXTENSIONS.includes(ext) ||
+    VECTOR_ANIMATION_EXTENSIONS.includes(ext)
   );
 }
 

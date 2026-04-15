@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  detectMediaType: vi.fn(() => 'video'),
+  classifyMediaType: vi.fn(async () => 'video'),
   calculateFileHash: vi.fn(async () => 'hash-123'),
   getMediaInfo: vi.fn(async () => ({ duration: 12.5, width: 1920, height: 1080 })),
   createThumbnail: vi.fn(async () => undefined),
@@ -11,10 +11,20 @@ const mocks = vi.hoisted(() => ({
   copyToRawFolder: vi.fn(),
   getProxyFrameCount: vi.fn(async () => 0),
   isProjectOpen: vi.fn(() => true),
+  prepareLottieAsset: vi.fn(async () => ({
+    metadata: {
+      provider: 'lottie',
+      width: 640,
+      height: 360,
+      fps: 30,
+      duration: 4,
+      totalFrames: 120,
+    },
+  })),
 }));
 
 vi.mock('../../src/stores/timeline/helpers/mediaTypeHelpers', () => ({
-  detectMediaType: mocks.detectMediaType,
+  classifyMediaType: mocks.classifyMediaType,
 }));
 
 vi.mock('../../src/stores/mediaStore/helpers/fileHashHelpers', () => ({
@@ -50,6 +60,10 @@ vi.mock('../../src/services/projectFileService', () => ({
   },
 }));
 
+vi.mock('../../src/services/vectorAnimation/lottieMetadata', () => ({
+  prepareLottieAsset: mocks.prepareLottieAsset,
+}));
+
 vi.mock('../../src/stores/settingsStore', () => ({
   useSettingsStore: {
     getState: () => ({ copyMediaToProject: true }),
@@ -61,7 +75,7 @@ import { processImport } from '../../src/stores/mediaStore/helpers/importPipelin
 describe('processImport', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.detectMediaType.mockReturnValue('video');
+    mocks.classifyMediaType.mockResolvedValue('video');
     mocks.isProjectOpen.mockReturnValue(true);
   });
 
@@ -102,5 +116,32 @@ describe('processImport', () => {
     expect(mocks.storeHandle).toHaveBeenCalledWith('media_media-1', rawHandle);
     expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:original');
     expect(createObjectURLSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('stores Lottie metadata without using HTML media probing', async () => {
+    mocks.classifyMediaType.mockResolvedValue('lottie');
+    const lottieFile = new File(['{"v":"5.8.1"}'], 'anim.lottie', {
+      type: 'application/zip',
+      lastModified: 2,
+    });
+
+    const result = await processImport({
+      file: lottieFile,
+      id: 'media-lottie-1',
+    });
+
+    expect(mocks.prepareLottieAsset).toHaveBeenCalledWith(lottieFile);
+    expect(mocks.getMediaInfo).not.toHaveBeenCalled();
+    expect(result.mediaFile.type).toBe('lottie');
+    expect(result.mediaFile.vectorAnimation).toEqual(expect.objectContaining({
+      provider: 'lottie',
+      width: 640,
+      height: 360,
+      duration: 4,
+    }));
+    expect(result.mediaFile.width).toBe(640);
+    expect(result.mediaFile.height).toBe(360);
+    expect(result.mediaFile.fps).toBe(30);
+    expect(result.mediaFile.duration).toBe(4);
   });
 });

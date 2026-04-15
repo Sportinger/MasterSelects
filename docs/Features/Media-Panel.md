@@ -32,11 +32,14 @@ Import, organize, and manage media assets with folder structure, proxy generatio
 | **Video** | MP4, WebM, MOV, AVI, MKV, WMV, M4V, FLV |
 | **Audio** | WAV, MP3, OGG, FLAC, AAC, M4A, WMA, AIFF, OPUS |
 | **Image** | PNG, JPG/JPEG, GIF, WebP, BMP, SVG |
+| **Vector Animation** | `.lottie`, Lottie JSON (`.json`, content-sniffed) |
 
 The panel also accepts a few specialized asset types that flow into the timeline as 3D clips:
 
 - `model` files: OBJ, glTF/GLB, FBX
 - `gaussian-splat` files: PLY, SPLAT
+
+Lottie imports are treated as first-class media items. `.json` files are only accepted when their contents actually match Lottie structure, so arbitrary JSON data is not misclassified as animation.
 
 ### Import Methods
 
@@ -377,7 +380,7 @@ Clicking transcript or analysis badges selects the corresponding clip in the tim
 interface MediaFile {
   id: string;
   name: string;
-  type: 'video' | 'audio' | 'image';
+  type: 'video' | 'audio' | 'image' | 'lottie' | 'rive';
   file?: File;               // Undefined when needs reload
   url: string;
   parentId: string | null;
@@ -411,6 +414,7 @@ interface MediaFile {
   // Analysis
   analysisStatus?: AnalysisStatus;
   analysisCoverage?: number;
+  vectorAnimation?: VectorAnimationMetadata;
   // File System Access API
   hasFileHandle?: boolean;
   filePath?: string;
@@ -431,7 +435,7 @@ interface MediaFile {
 ### Drag Types
 | Item Type | Drag Payload Kind | Data Transfer Key |
 |-----------|-------------------|-------------------|
-| Media file (video/image) | `media-file` | `application/x-media-file-id` |
+| Media file (video/image/lottie) | `media-file` | `application/x-media-file-id` |
 | Media file (audio) | `media-file` (marked as audio) | `application/x-media-file-id` |
 | Composition | `composition` | `application/x-composition-id` |
 | Text item | `text` | `application/x-text-item-id` |
@@ -450,7 +454,7 @@ interface MediaFile {
 ### Track Type Enforcement
 | Media Type | Allowed Tracks |
 |------------|----------------|
-| Video/Image/Composition/Text/Solid/Mesh | Video tracks only |
+| Video/Image/Lottie/Composition/Text/Solid/Mesh | Video tracks only |
 | Audio | Audio tracks only |
 
 ---

@@ -1,6 +1,6 @@
 // Structural Sharing types — efficient undo/redo snapshots
 
-import type { TimelineClip, TimelineTrack, Keyframe } from '../../types/index.ts';
+import type { TimelineClip, TimelineTrack, Keyframe, SerializableClip } from '../../types/index.ts';
 import type { TimelineMarker } from '../../stores/timeline/types.ts';
 
 /**
@@ -15,7 +15,7 @@ export interface SerializedClipState {
   duration: number;
   inPoint: number;
   outPoint: number;
-  sourceType: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector';
+  sourceType: SerializableClip['sourceType'];
   mediaFileId?: string;
   transform: TimelineClip['transform'];
   effects: TimelineClip['effects'];

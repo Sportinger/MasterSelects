@@ -14,6 +14,8 @@ import { sanitizePlayheadPosition } from '../../services/layerBuilder/PlayheadSt
 import { thumbnailCacheService } from '../../services/thumbnailCacheService';
 import type { WebCodecsPlayer } from '../../engine/WebCodecsPlayer';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../../engine/gaussian/types';
+import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
+import { readLottieMetadata } from '../../services/vectorAnimation/lottieMetadata';
 
 const log = Logger.create('Timeline');
 
@@ -126,6 +128,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         text3DProperties: clip.text3DProperties ?? clip.source?.text3DProperties,
         // Solid clip support
         solidColor: clip.source?.type === 'solid' ? (clip.solidColor || clip.name.replace('Solid ', '')) : undefined,
+        vectorAnimationSettings: clip.source?.vectorAnimationSettings,
         // Clip label color
         // 3D layer support
         is3D: clip.is3D || undefined,
@@ -1184,6 +1187,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           type: serializedClip.sourceType,
           mediaFileId: serializedClip.mediaFileId, // Preserve mediaFileId for cache lookups
           naturalDuration: serializedClip.naturalDuration,
+          vectorAnimationSettings: serializedClip.vectorAnimationSettings,
         },
         mediaFileId: serializedClip.mediaFileId, // Restore top-level mediaFileId for audio/proxy lookup
         needsReload: needsReload, // Flag for UI to show reload indicator
@@ -1405,6 +1409,52 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           }));
           wakePreviewAfterRestore();
         }, { once: true });
+      } else if (type === 'lottie') {
+        void (async () => {
+          try {
+            const runtimeClip: TimelineClip = {
+              ...clip,
+              file: mediaFile.file!,
+              source: {
+                type: 'lottie',
+                mediaFileId: serializedClip.mediaFileId,
+                naturalDuration: serializedClip.naturalDuration,
+                vectorAnimationSettings: serializedClip.vectorAnimationSettings,
+              },
+            };
+            const metadata = await readLottieMetadata(mediaFile.file!);
+            const runtime = await lottieRuntimeManager.prepareClipSource(runtimeClip, mediaFile.file!);
+            set((state) => ({
+              clips: state.clips.map((currentClip) =>
+                currentClip.id === clip.id
+                  ? {
+                      ...currentClip,
+                      file: mediaFile.file!,
+                      source: {
+                        type: 'lottie',
+                        textCanvas: runtime.canvas,
+                        mediaFileId: serializedClip.mediaFileId,
+                        naturalDuration: metadata.duration ?? serializedClip.naturalDuration ?? serializedClip.duration,
+                        vectorAnimationSettings: serializedClip.vectorAnimationSettings,
+                      },
+                      isLoading: false,
+                      needsReload: false,
+                    }
+                  : currentClip
+              ),
+            }));
+            wakePreviewAfterRestore();
+          } catch (error) {
+            log.warn('Failed to restore lottie clip', { clip: clip.name, error });
+            set((state) => ({
+              clips: state.clips.map((currentClip) =>
+                currentClip.id === clip.id
+                  ? { ...currentClip, isLoading: false }
+                  : currentClip
+              ),
+            }));
+          }
+        })();
       } else if (type === 'model') {
         // 3D Model clips — just need a blob URL, Three.js handles loading
         set(state => ({
@@ -1520,6 +1570,9 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         try { if (audio.src) URL.revokeObjectURL(audio.src); } catch {}
         audio.removeAttribute('src');
         audio.load();
+      }
+      if (clip.source?.type === 'lottie') {
+        lottieRuntimeManager.destroyClipRuntime(clip.id);
       }
       // WebCodecsPlayers stay in globalWcpCache — don't destroy them.
       // Pause them so the decoder isn't running while detached.

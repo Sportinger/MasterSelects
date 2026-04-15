@@ -4,6 +4,10 @@ import { Logger } from '../../services/logger';
 
 const log = Logger.create('TextureManager');
 
+function isDynamicCanvas(canvas: HTMLCanvasElement): boolean {
+  return Boolean(canvas.dataset.masterselectsDynamic);
+}
+
 export class TextureManager {
   private device: GPUDevice;
 
@@ -71,7 +75,17 @@ export class TextureManager {
 
     // Check cache first
     const cached = this.canvasTextures.get(canvas);
-    if (cached) return cached;
+    if (cached) {
+      if (!isDynamicCanvas(canvas)) {
+        return cached;
+      }
+
+      if (this.updateCanvasTexture(canvas)) {
+        return cached;
+      }
+
+      this.removeCanvasTexture(canvas);
+    }
 
     try {
       const texture = this.device.createTexture({

@@ -26,6 +26,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { DEFAULT_TRANSFORM, MAX_NESTING_DEPTH } from '../../stores/timeline/constants';
 import { prewarmGaussianSplatRuntime } from '../../engine/three/splatRuntimeCache';
+import { lottieRuntimeManager } from '../vectorAnimation/LottieRuntimeManager';
 
 const log = Logger.create('LayerBuilder');
 
@@ -175,6 +176,7 @@ export class LayerBuilderService {
   buildLayersFromStore(): Layer[] {
     // Create frame context (single store read)
     const ctx = createFrameContext();
+    this.syncActiveLottieClips(ctx);
     const { activeLayerSlots = {}, activeCompositionId } = useMediaStore.getState();
     const slotGridActive = useTimelineStore.getState().slotGridProgress > 0.5;
     const hasActiveLayerSlots = Object.keys(activeLayerSlots).length > 0;
@@ -240,6 +242,34 @@ export class LayerBuilderService {
 
     // Merge background layers from active layer slots
     return this.mergeBackgroundLayers(primaryLayers, ctx.playheadPosition);
+  }
+
+  private collectKnownClipIds(clips: TimelineClip[]): string[] {
+    const ids: string[] = [];
+    const visit = (clip: TimelineClip) => {
+      ids.push(clip.id);
+      if (clip.nestedClips?.length) {
+        for (const nestedClip of clip.nestedClips) {
+          visit(nestedClip);
+        }
+      }
+    };
+
+    for (const clip of clips) {
+      visit(clip);
+    }
+
+    return ids;
+  }
+
+  private syncActiveLottieClips(ctx: FrameContext): void {
+    for (const clip of ctx.clipsAtTime) {
+      if (clip.source?.type === 'lottie') {
+        lottieRuntimeManager.renderClipAtTime(clip, ctx.playheadPosition);
+      }
+    }
+
+    lottieRuntimeManager.pruneClipRuntimes(this.collectKnownClipIds(ctx.clips));
   }
 
   /**
@@ -406,6 +436,13 @@ export class LayerBuilderService {
     // Image clip
     else if (clip.source?.imageElement) {
       layer = this.buildImageLayer(clip, layerIndex, ctx, opacityOverride);
+    }
+    // Lottie/vector canvas-backed clip
+    else if (clip.source?.type === 'lottie') {
+      lottieRuntimeManager.renderClipAtTime(clip, ctx.playheadPosition);
+      if (clip.source?.textCanvas) {
+        layer = this.buildTextLayer(clip, layerIndex, ctx, opacityOverride);
+      }
     }
     // Text clip
     else if (clip.source?.textCanvas) {
@@ -1225,6 +1262,14 @@ export class LayerBuilderService {
         ...baseLayer,
         source: { type: 'image', imageElement: nestedClip.source.imageElement },
       } as Layer;
+    } else if (nestedClip.source?.type === 'lottie') {
+      lottieRuntimeManager.renderClipAtTime(nestedClip, nestedClip.startTime + nestedClipLocalTime);
+      if (nestedClip.source?.textCanvas) {
+        return {
+          ...baseLayer,
+          source: { type: 'text', textCanvas: nestedClip.source.textCanvas },
+        } as Layer;
+      }
     } else if (nestedClip.source?.type === 'model') {
       return {
         ...baseLayer,

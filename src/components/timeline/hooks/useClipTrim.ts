@@ -3,6 +3,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import type { TimelineClip } from '../../../types';
+import { shouldLoopVectorAnimation } from '../../../types/vectorAnimation';
 import type { ClipTrimState } from '../types';
 
 interface UseClipTrimProps {
@@ -22,6 +23,11 @@ interface UseClipTrimReturn {
   clipTrim: ClipTrimState | null;
   clipTrimRef: React.MutableRefObject<ClipTrimState | null>;
   handleTrimStart: (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => void;
+}
+
+function canLoopExtendVectorClip(clip: TimelineClip): boolean {
+  return clip.source?.type === 'lottie' &&
+    shouldLoopVectorAnimation(clip.source.vectorAnimationSettings);
 }
 
 export function useClipTrim({
@@ -96,6 +102,7 @@ export function useClipTrim({
         // Generated clips can be extended infinitely (no natural duration limit)
         const sourceType = clipToTrim.source?.type;
         const isInfiniteClip = sourceType === 'text' || sourceType === 'image' || sourceType === 'solid' || sourceType === 'camera';
+        const canLoopExtendRight = canLoopExtendVectorClip(clipToTrim);
         const maxDuration = isInfiniteClip
           ? Number.MAX_SAFE_INTEGER
           : (clipToTrim.source?.naturalDuration || clipToTrim.duration);
@@ -115,7 +122,9 @@ export function useClipTrim({
           newStartTime = trim.originalStartTime + clampedDelta;
           newInPoint = trim.originalInPoint + clampedDelta;
         } else {
-          const maxExtend = maxDuration - trim.originalOutPoint;
+          const maxExtend = canLoopExtendRight
+            ? Number.MAX_SAFE_INTEGER
+            : maxDuration - trim.originalOutPoint;
           const minTrim = -(trim.originalDuration - 0.1);
           const clampedDelta = Math.max(minTrim, Math.min(maxExtend, deltaTime));
           newOutPoint = trim.originalOutPoint + clampedDelta;
@@ -130,8 +139,11 @@ export function useClipTrim({
         if (!trim.altKey && clipToTrim.linkedClipId) {
           const linkedClip = clipMap.get(clipToTrim.linkedClipId);
           if (linkedClip) {
+            const linkedCanLoopExtendRight = canLoopExtendVectorClip(linkedClip);
             const linkedMaxDuration =
-              linkedClip.source?.naturalDuration || linkedClip.duration;
+              linkedCanLoopExtendRight
+                ? Number.MAX_SAFE_INTEGER
+                : (linkedClip.source?.naturalDuration || linkedClip.duration);
             if (trim.edge === 'left') {
               const linkedNewInPoint = Math.max(
                 0,

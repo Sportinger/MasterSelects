@@ -283,6 +283,7 @@ function FlashBoardNodeComponent({
     if (!mediaFileId) return undefined;
     return s.files.find((f) => f.id === mediaFileId);
   });
+  const refreshFileUrls = useMediaStore((s) => s.refreshFileUrls);
   const mediaType = mediaFile?.type ?? node.result?.mediaType;
   const isVideoPreview = mediaType === 'video' && Boolean(mediaFile?.url);
   const videoUrl = isVideoPreview ? mediaFile?.url : undefined;
@@ -310,6 +311,12 @@ function FlashBoardNodeComponent({
     ? videoPreviewState.duration
     : (mediaFile?.duration ?? node.result?.duration ?? 0);
   const resolvedIsVideoPlaying = videoStateMatchesMedia ? videoPreviewState.isPlaying : false;
+  const handleThumbnailError = useCallback(() => {
+    if (!mediaFileId) {
+      return;
+    }
+    void refreshFileUrls(mediaFileId);
+  }, [mediaFileId, refreshFileUrls]);
   const shouldRenderLiveVideo = isVideoPreview && (resolvedIsVideoPlaying || isHovered || isSelected || !thumbnailUrl);
   const hasReferenceRole = referenceRoles.length > 0;
   const isComposerReferenceHovered = Boolean(hoveredComposerReferenceRole);
@@ -883,7 +890,14 @@ function FlashBoardNodeComponent({
               </div>
             ) : thumbnailUrl ? (
               <div className="flashboard-node-preview">
-                <img className="flashboard-node-thumbnail" src={thumbnailUrl} alt="" draggable={false} loading="lazy" />
+                <img
+                  className="flashboard-node-thumbnail"
+                  src={thumbnailUrl}
+                  alt=""
+                  draggable={false}
+                  loading="lazy"
+                  onError={handleThumbnailError}
+                />
               </div>
             ) : null}
             {mediaFileId && (

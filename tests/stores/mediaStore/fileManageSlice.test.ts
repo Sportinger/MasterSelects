@@ -868,6 +868,37 @@ describe('MediaStore - File Management', () => {
     });
   });
 
+  describe('refreshFileUrls', () => {
+    it('should recreate image blob urls from the current file object', async () => {
+      const createObjectURL = vi.spyOn(URL, 'createObjectURL')
+        .mockReturnValueOnce('blob:http://localhost/refreshed-file')
+        .mockReturnValueOnce('blob:http://localhost/refreshed-thumb');
+      const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      const file = makeMediaFile({
+        id: 'img-1',
+        type: 'image',
+        name: 'still.png',
+        file: new File(['image'], 'still.png', { type: 'image/png' }),
+        url: 'blob:http://localhost/original-file',
+        thumbnailUrl: 'blob:http://localhost/original-thumb',
+      });
+
+      store.setState({ files: [file] });
+
+      const result = await store.getState().refreshFileUrls('img-1');
+      const updated = store.getState().files[0];
+
+      expect(result).toBe(true);
+      expect(updated.url).toBe('blob:http://localhost/refreshed-file');
+      expect(updated.thumbnailUrl).toBe('blob:http://localhost/refreshed-thumb');
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/original-file');
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/original-thumb');
+
+      createObjectURL.mockRestore();
+      revokeObjectURL.mockRestore();
+    });
+  });
+
   // --- moveToFolder advanced ---
 
   describe('moveToFolder advanced', () => {

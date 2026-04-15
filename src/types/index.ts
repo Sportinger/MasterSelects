@@ -1,5 +1,23 @@
 // Core types for WebVJ Mixer
 
+import type {
+  VectorAnimationClipSettings,
+  VectorAnimationProvider,
+} from './vectorAnimation';
+
+export type TimelineSourceType =
+  | 'video'
+  | 'audio'
+  | 'image'
+  | 'text'
+  | 'solid'
+  | 'model'
+  | 'camera'
+  | 'gaussian-avatar'
+  | 'gaussian-splat'
+  | 'splat-effector'
+  | VectorAnimationProvider;
+
 export interface Layer {
   id: string;
   name: string;
@@ -420,7 +438,7 @@ export interface TimelineClip {
   inPoint: number;        // Trim in point within source (seconds)
   outPoint: number;       // Trim out point within source (seconds)
   source: {
-    type: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector';
+    type: TimelineSourceType;
     modelUrl?: string;  // Blob URL to 3D model file
     meshType?: import('../stores/mediaStore/types').MeshPrimitiveType;  // Primitive mesh type
     text3DProperties?: Text3DProperties;
@@ -440,6 +458,7 @@ export interface TimelineClip {
     naturalDuration?: number;
     mediaFileId?: string;  // Reference to MediaFile for proxy lookup
     textCanvas?: HTMLCanvasElement;  // Pre-rendered text/solid canvas for text and solid clips
+    vectorAnimationSettings?: VectorAnimationClipSettings;
     filePath?: string;  // Path to original file (for native helper to access directly)
     runtimeSourceId?: string;
     runtimeSessionKey?: string;
@@ -542,7 +561,7 @@ export interface SerializableClip {
   duration: number;
   inPoint: number;
   outPoint: number;
-  sourceType: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector';
+  sourceType: TimelineSourceType;
   naturalDuration?: number;
   thumbnails?: string[];
   linkedClipId?: string;
@@ -574,6 +593,7 @@ export interface SerializableClip {
   text3DProperties?: Text3DProperties;
   // Solid clip support
   solidColor?: string;
+  vectorAnimationSettings?: VectorAnimationClipSettings;
   // Transition support
   transitionIn?: TimelineTransition;
   transitionOut?: TimelineTransition;
@@ -703,3 +723,9 @@ export type {
   RenderDestinationType,
   RenderTarget,
 } from './renderTarget';
+
+export type {
+  VectorAnimationClipSettings,
+  VectorAnimationMetadata,
+  VectorAnimationProvider,
+} from './vectorAnimation';

@@ -8,12 +8,18 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { getLabelHex } from '../panels/MediaPanel';
 // PickWhip disabled
 import { Logger } from '../../services/logger';
+import { shouldLoopVectorAnimation } from '../../types/vectorAnimation';
 import { ClipWaveform } from './components/ClipWaveform';
 import { ClipAnalysisOverlay } from './components/ClipAnalysisOverlay';
 import { FadeCurve } from './components/FadeCurve';
 import { useThumbnailCache } from '../../hooks/useThumbnailCache';
 
 const log = Logger.create('TimelineClip');
+
+function canLoopExtendVectorClip(clip: TimelineClipProps['clip']): boolean {
+  return clip.source?.type === 'lottie' &&
+    shouldLoopVectorAnimation(clip.source.vectorAnimationSettings);
+}
 
 type StaticClipIconKind = 'camera' | 'gaussian-splat' | 'model';
 
@@ -265,6 +271,7 @@ function TimelineClipComponent({
 
   // Determine if this is a solid clip
   const isSolidClip = clip.source?.type === 'solid';
+  const isLottieClip = clip.source?.type === 'lottie';
   const isCameraClip = clip.source?.type === 'camera';
   const isGaussianSplatClip = clip.source?.type === 'gaussian-splat';
   const isSplatEffectorClip = clip.source?.type === 'splat-effector';
@@ -299,6 +306,7 @@ function TimelineClipComponent({
     const deltaTime = pixelToTime(deltaX);
     const sourceType = clip.source?.type;
     const isInfiniteClip = sourceType === 'text' || sourceType === 'image' || sourceType === 'solid' || sourceType === 'camera' || sourceType === 'splat-effector';
+    const canLoopExtendRight = canLoopExtendVectorClip(clip);
     const maxDuration = isInfiniteClip
       ? Number.MAX_SAFE_INTEGER
       : (clip.source?.naturalDuration || clip.duration);
@@ -314,7 +322,9 @@ function TimelineClipComponent({
       // Update inPoint when trimming left edge
       displayInPoint = clipTrim.originalInPoint + clampedDelta;
     } else {
-      const maxExtend = maxDuration - clipTrim.originalOutPoint;
+      const maxExtend = canLoopExtendRight
+        ? Number.MAX_SAFE_INTEGER
+        : maxDuration - clipTrim.originalOutPoint;
       const minTrim = -(clipTrim.originalDuration - 0.1);
       const clampedDelta = Math.max(minTrim, Math.min(maxExtend, deltaTime));
       displayDuration = clipTrim.originalDuration + clampedDelta;
@@ -325,6 +335,7 @@ function TimelineClipComponent({
     // Apply same trim to linked clip visually
     const deltaX = clipTrim.currentX - clipTrim.startX;
     const deltaTime = pixelToTime(deltaX);
+    const canLoopExtendRight = canLoopExtendVectorClip(clip);
     const maxDuration = clip.source?.naturalDuration || clip.duration;
 
     if (clipTrim.edge === 'left') {
@@ -335,7 +346,9 @@ function TimelineClipComponent({
       displayDuration = clip.duration - clampedDelta;
       displayInPoint = clip.inPoint + clampedDelta;
     } else {
-      const maxExtend = maxDuration - clip.outPoint;
+      const maxExtend = canLoopExtendRight
+        ? Number.MAX_SAFE_INTEGER
+        : maxDuration - clip.outPoint;
       const minTrim = -(clip.duration - 0.1);
       const clampedDelta = Math.max(minTrim, Math.min(maxExtend, deltaTime));
       displayDuration = clip.duration + clampedDelta;
@@ -846,6 +859,9 @@ function TimelineClipComponent({
               <span className="clip-text-icon" title={isText3DClip ? '3D Text Clip' : 'Text Clip'}>
                 {isText3DClip ? '3T' : 'T'}
               </span>
+            )}
+            {isLottieClip && (
+              <span className="clip-text-icon" title="Lottie Clip">L</span>
             )}
             {staticClipIconKind && (
               <StaticClipIcon

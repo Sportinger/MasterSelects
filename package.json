@@ -28,6 +28,7 @@
     "@ffmpeg/ffmpeg": "^0.12.6",
     "@ffmpeg/util": "^0.12.2",
     "@huggingface/transformers": "^3.8.1",
+    "@lottiefiles/dotlottie-web": "^0.71.0",
     "@types/three": "^0.183.1",
     "@webgpu/types": "^0.1.66",
     "mediabunny": "^1.39.2",

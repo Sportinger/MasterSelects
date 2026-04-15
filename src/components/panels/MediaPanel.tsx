@@ -94,6 +94,7 @@ export function MediaPanel() {
   const fileSystemSupported = useMediaStore(state => state.fileSystemSupported);
   const proxyFolderName = useMediaStore(state => state.proxyFolderName);
   const activeCompositionId = useMediaStore(state => state.activeCompositionId);
+  const refreshFileUrls = useMediaStore(state => state.refreshFileUrls);
 
   // Actions from getState() - stable, no subscription needed
   const {
@@ -1295,7 +1296,12 @@ export function MediaPanel() {
         >
           <div className="media-grid-thumb">
             {thumbUrl ? (
-              <img src={thumbUrl} alt="" draggable={false} />
+              <img
+                src={thumbUrl}
+                alt=""
+                draggable={false}
+                onError={mediaFile ? () => { void refreshFileUrls(mediaFile.id); } : undefined}
+              />
             ) : (
               <div className="media-grid-thumb-placeholder">
                 <FileTypeIcon type={isFolder ? 'folder' : isComp ? 'composition' : getProjectItemIconType(item)} large />

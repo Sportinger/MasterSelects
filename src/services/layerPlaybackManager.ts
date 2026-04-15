@@ -16,6 +16,7 @@ import {
 import { flags } from '../engine/featureFlags';
 import { Logger } from './logger';
 import { slotDeckManager } from './slotDeckManager';
+import { lottieRuntimeManager } from './vectorAnimation/LottieRuntimeManager';
 
 const log = Logger.create('LayerPlayback');
 
@@ -122,11 +123,12 @@ class LayerPlaybackManager {
     const hydratedClips: TimelineClip[] = [];
 
     for (const serializedClip of timelineData.clips) {
+      const mediaFile = files.find(f => f.id === serializedClip.mediaFileId);
       const clip: TimelineClip = {
         id: serializedClip.id,
         trackId: serializedClip.trackId,
         name: serializedClip.name,
-        file: null as any,
+        file: (mediaFile?.file ?? null) as any,
         startTime: serializedClip.startTime,
         duration: serializedClip.duration,
         inPoint: serializedClip.inPoint,
@@ -141,8 +143,6 @@ class LayerPlaybackManager {
         masks: serializedClip.masks,
       };
 
-      // Find media file
-      const mediaFile = files.find(f => f.id === serializedClip.mediaFileId);
       if (!mediaFile && !serializedClip.isComposition) {
         // Can't load without media file (unless it's a nested comp)
         clip.isLoading = false;
@@ -162,6 +162,15 @@ class LayerPlaybackManager {
       } else if (sourceType === 'image' && fileUrl) {
         clip.isLoading = true;
         this.loadImageForClip(clip, layerIndex, fileUrl);
+      } else if (sourceType === 'lottie' && mediaFile?.file) {
+        clip.isLoading = true;
+        clip.source = {
+          type: 'lottie',
+          mediaFileId: serializedClip.mediaFileId,
+          naturalDuration: serializedClip.naturalDuration,
+          vectorAnimationSettings: serializedClip.vectorAnimationSettings,
+        };
+        this.loadLottieForClip(clip, mediaFile.file);
       } else {
         clip.isLoading = false;
       }
@@ -215,6 +224,9 @@ class LayerPlaybackManager {
         clip.source.audioElement.pause();
         clip.source.audioElement.src = '';
         clip.source.audioElement.load();
+      }
+      if (clip.source?.type === 'lottie') {
+        lottieRuntimeManager.destroyClipRuntime(clip.id);
       }
       if (clip.source?.runtimeSourceId && clip.source.runtimeSessionKey) {
         mediaRuntimeRegistry.releaseSession(
@@ -528,6 +540,9 @@ class LayerPlaybackManager {
 
       // Build transform
       const transform = clip.transform || DEFAULT_TRANSFORM;
+      if (clip.source?.type === 'lottie') {
+        lottieRuntimeManager.renderClipAtTime(clip, time);
+      }
       const clipTime = clip.reversed
         ? clip.outPoint - clipLocalTime
         : clipLocalTime + clip.inPoint;
@@ -792,6 +807,38 @@ class LayerPlaybackManager {
       clip.isLoading = false;
       log.warn(`Failed to load image for background clip ${clip.name}`);
     }, { once: true });
+  }
+
+  private loadLottieForClip(clip: TimelineClip, file: File): void {
+    void (async () => {
+      try {
+        if (clip.source?.type !== 'lottie') {
+          clip.source = {
+            type: 'lottie',
+            mediaFileId: clip.mediaFileId,
+            naturalDuration: clip.duration,
+          };
+        }
+        const runtime = await lottieRuntimeManager.prepareClipSource(clip, file);
+        const naturalDuration =
+          runtime.metadata.duration ??
+          clip.source?.naturalDuration ??
+          clip.duration;
+        clip.file = file;
+        clip.source = {
+          type: 'lottie',
+          textCanvas: runtime.canvas,
+          mediaFileId: clip.mediaFileId,
+          naturalDuration,
+          vectorAnimationSettings: clip.source?.vectorAnimationSettings,
+        };
+        clip.isLoading = false;
+        lottieRuntimeManager.renderClipAtTime(clip, clip.startTime);
+      } catch (error) {
+        clip.isLoading = false;
+        log.warn(`Failed to load lottie for background clip ${clip.name}`, error);
+      }
+    })();
   }
 }
 

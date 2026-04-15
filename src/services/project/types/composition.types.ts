@@ -5,6 +5,7 @@ import type { MeshPrimitiveType, SceneCameraSettings } from '../../../stores/med
 import type { GaussianSplatSettings } from '../../../engine/gaussian/types';
 import type { SplatEffectorSettings } from '../../../types/splatEffector';
 import type { Text3DProperties } from '../../../types';
+import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
 
 export interface ProjectTrack {
   id: string;
@@ -60,7 +61,7 @@ export interface ProjectClip {
   compositionId?: string;
 
   // Additional clip metadata (for restoration)
-  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector';
+  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'lottie' | 'rive';
   naturalDuration?: number;
   linkedClipId?: string;
   linkedGroupId?: string;
@@ -79,6 +80,8 @@ export interface ProjectClip {
 
   // Solid clip support
   solidColor?: string;
+
+  vectorAnimationSettings?: VectorAnimationClipSettings;
 
   // Transcript data
   transcript?: any[];

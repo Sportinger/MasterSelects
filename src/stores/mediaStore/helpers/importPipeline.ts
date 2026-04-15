@@ -2,7 +2,7 @@
 
 import type { MediaFile, ProxyStatus } from '../types';
 import { PROXY_FPS } from '../constants';
-import { detectMediaType } from '../../timeline/helpers/mediaTypeHelpers';
+import { classifyMediaType } from '../../timeline/helpers/mediaTypeHelpers';
 import { calculateFileHash } from './fileHashHelpers';
 import { getMediaInfo } from './mediaInfoHelpers';
 import { createThumbnail, handleThumbnailDedup } from './thumbnailHelpers';
@@ -12,6 +12,7 @@ import { projectDB } from '../../../services/projectDB';
 import { useSettingsStore } from '../../settingsStore';
 import { Logger } from '../../../services/logger';
 import { prewarmGaussianSplatRuntime } from '../../../engine/three/splatRuntimeCache';
+import { prepareLottieAsset } from '../../../services/vectorAnimation/lottieMetadata';
 
 const log = Logger.create('Import');
 
@@ -52,15 +53,35 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
   }
 
   // Detect type using shared helper from clipSlice, or use override if provided
-  const type: MediaFile['type'] = typeOverride ?? ((detectMediaType(file) === 'model' ? 'model' : detectMediaType(file)) as MediaFile['type']);
+  const detectedType = await classifyMediaType(file);
+  if (detectedType === 'unknown' && !typeOverride) {
+    throw new Error(`Unsupported media type: ${file.name}`);
+  }
+
+  const type: MediaFile['type'] = typeOverride ?? detectedType as MediaFile['type'];
   let canonicalFile = file;
   let url = URL.createObjectURL(file);
 
-  // Get info and thumbnail in parallel (skip for 3D models — no video/audio metadata)
+  const vectorAnimationInfo = type === 'lottie'
+    ? await prepareLottieAsset(file).then((prepared) => ({
+      duration: prepared.metadata.duration,
+      fileSize: file.size,
+      fps: prepared.metadata.fps,
+      height: prepared.metadata.height,
+      vectorAnimation: prepared.metadata,
+      width: prepared.metadata.width,
+    }))
+    : null;
+
+  // Get info and thumbnail in parallel (skip for 3D/vector formats - no HTML media metadata)
   const isMediaType = type === 'video' || type === 'audio' || type === 'image';
   const [info, rawThumbnail] = await Promise.all([
-    isMediaType ? getMediaInfo(file, type as 'video' | 'audio' | 'image') : Promise.resolve({ duration: 10, fileSize: file.size }),
-    type === 'video' || type === 'image' ? createThumbnail(file, type as 'video' | 'image') : Promise.resolve(undefined),
+    isMediaType
+      ? getMediaInfo(file, type as 'video' | 'audio' | 'image')
+      : Promise.resolve(vectorAnimationInfo ?? { duration: 10, fileSize: file.size }),
+    type === 'video' || type === 'image'
+      ? createThumbnail(file, type as 'video' | 'image')
+      : Promise.resolve(undefined),
   ]);
 
   // Calculate hash for deduplication

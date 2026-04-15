@@ -1,7 +1,7 @@
 // File management actions - remove, rename, reload
 // SIMPLIFIED: Uses RAW folder for easy relinking
 
-import type { MediaSliceCreator } from '../types';
+import type { MediaSliceCreator, MediaState } from '../types';
 import { projectFileService } from '../../../services/projectFileService';
 import { fileSystemService } from '../../../services/fileSystemService';
 import { projectDB } from '../../../services/projectDB';
@@ -9,12 +9,17 @@ import { useTimelineStore } from '../../timeline';
 import { Logger } from '../../../services/logger';
 import { engine } from '../../../engine/WebGPUEngine';
 import { thumbnailCacheService } from '../../../services/thumbnailCacheService';
+import { lottieRuntimeManager } from '../../../services/vectorAnimation/LottieRuntimeManager';
+import { readLottieMetadata } from '../../../services/vectorAnimation/lottieMetadata';
+import { createThumbnail } from '../helpers/thumbnailHelpers';
 
 const log = Logger.create('Reload');
+const isBlobUrl = (value?: string): value is string => typeof value === 'string' && value.startsWith('blob:');
 
 export interface FileManageActions {
   removeFile: (id: string) => void;
   renameFile: (id: string, name: string) => void;
+  refreshFileUrls: (id: string, options?: { refreshThumbnail?: boolean }) => Promise<boolean>;
   reloadFile: (id: string) => Promise<boolean>;
   reloadAllFiles: () => Promise<number>;
 }
@@ -35,6 +40,52 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
     set((state) => ({
       files: state.files.map((f) => (f.id === id ? { ...f, name } : f)),
     }));
+  },
+
+  refreshFileUrls: async (id: string, options) => {
+    const mediaFile = get().files.find((f) => f.id === id);
+    if (!mediaFile) return false;
+
+    if (!mediaFile.file) {
+      return (get() as MediaState & FileManageActions).reloadFile(id);
+    }
+
+    const refreshThumbnail = options?.refreshThumbnail ?? true;
+    const oldUrl = mediaFile.url;
+    const oldThumbnailUrl = mediaFile.thumbnailUrl;
+    const url = URL.createObjectURL(mediaFile.file);
+    let thumbnailUrl = mediaFile.thumbnailUrl;
+
+    if (refreshThumbnail) {
+      if (mediaFile.type === 'image') {
+        thumbnailUrl = URL.createObjectURL(mediaFile.file);
+      } else if (mediaFile.type === 'video') {
+        thumbnailUrl = await createThumbnail(mediaFile.file, 'video');
+      }
+    }
+
+    set((state) => ({
+      files: state.files.map((file) =>
+        file.id === id
+          ? { ...file, url, thumbnailUrl }
+          : file
+      ),
+    }));
+
+    if (isBlobUrl(oldUrl)) {
+      URL.revokeObjectURL(oldUrl);
+    }
+
+    if (refreshThumbnail && isBlobUrl(oldThumbnailUrl) && oldThumbnailUrl !== oldUrl) {
+      URL.revokeObjectURL(oldThumbnailUrl);
+    }
+
+    log.info('Refreshed media blob URLs', {
+      id: mediaFile.id,
+      name: mediaFile.name,
+      refreshThumbnail,
+    });
+    return true;
   },
 
   /**
@@ -301,6 +352,37 @@ export async function updateTimelineClips(mediaFileId: string, file: File): Prom
           isLoading: false,
         });
       }, { once: true });
+    } else if (sourceType === 'lottie') {
+      try {
+        const metadata = await readLottieMetadata(file);
+        const runtime = await lottieRuntimeManager.prepareClipSource({
+          ...clip,
+          file,
+          source: {
+            ...clip.source!,
+            textCanvas: clip.source?.textCanvas,
+          },
+        }, file);
+
+        timelineStore.updateClip(clip.id, {
+          file,
+          needsReload: false,
+          isLoading: false,
+          source: {
+            ...clip.source!,
+            type: 'lottie',
+            textCanvas: runtime.canvas,
+            naturalDuration: metadata.duration ?? clip.duration,
+            mediaFileId,
+          },
+        });
+      } catch (error) {
+        log.warn('Failed to reload lottie for clip', { clipName: clip.name, error });
+        timelineStore.updateClip(clip.id, {
+          needsReload: false,
+          isLoading: false,
+        });
+      }
     } else if (sourceType === 'model') {
       // 3D Model — create blob URL for Three.js loader
       const modelUrl = URL.createObjectURL(file);

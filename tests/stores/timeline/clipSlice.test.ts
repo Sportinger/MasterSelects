@@ -1317,6 +1317,22 @@ describe('clipSlice', () => {
 
       expect(moved.trackId).toBe('video-1'); // should not change
     });
+
+    it('prevents moving lottie clip to audio track', () => {
+      const clip = createMockClip({
+        id: 'clip-1',
+        trackId: 'video-1',
+        startTime: 0,
+        duration: 5,
+        source: { type: 'lottie', naturalDuration: 5 } as any,
+      });
+      store = createTestTimelineStore({ clips: [clip], snappingEnabled: false } as any);
+
+      store.getState().moveClip('clip-1', 0, 'audio-1');
+      const moved = store.getState().clips.find(c => c.id === 'clip-1')!;
+
+      expect(moved.trackId).toBe('video-1');
+    });
   });
 
   // ========== Additional updateClipTransform edge cases ==========

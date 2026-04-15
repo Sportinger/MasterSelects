@@ -1,12 +1,15 @@
 // Media type detection helpers - shared across clipSlice and other components
 // Eliminates duplication of file type detection logic
 
+import { readLottieJsonFile } from '../../../services/vectorAnimation/lottieJsonSniffer';
+
 export const AUDIO_EXTENSIONS = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'] as const;
 export const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'wmv', 'm4v', 'flv'] as const;
 export const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'] as const;
 export const MODEL_EXTENSIONS = ['obj', 'gltf', 'glb', 'fbx'] as const;
+export const VECTOR_ANIMATION_EXTENSIONS = ['lottie', 'riv'] as const;
 
-export type MediaType = 'video' | 'audio' | 'image' | 'model' | 'gaussian-splat' | 'unknown';
+export type MediaType = 'video' | 'audio' | 'image' | 'model' | 'gaussian-splat' | 'lottie' | 'rive' | 'unknown';
 
 /**
  * Detect the media type of a file using MIME type with fallback to extension.
@@ -29,7 +32,26 @@ export function detectMediaType(file: File): MediaType {
   if (GAUSSIAN_SPLAT_EXTENSIONS.includes(ext as typeof GAUSSIAN_SPLAT_EXTENSIONS[number])) {
     return 'gaussian-splat';
   }
+  if (ext === 'lottie') {
+    return 'lottie';
+  }
+  if (ext === 'riv') {
+    return 'rive';
+  }
   return 'unknown';
+}
+
+/**
+ * Async media type classification for formats that require content sniffing.
+ */
+export async function classifyMediaType(file: File): Promise<MediaType> {
+  const syncType = detectMediaType(file);
+  if (syncType !== 'unknown') {
+    return syncType;
+  }
+
+  const lottieJson = await readLottieJsonFile(file);
+  return lottieJson ? 'lottie' : 'unknown';
 }
 
 /**
@@ -94,4 +116,10 @@ export function isGaussianSplatFile(file: File | string): boolean {
   const name = typeof file === 'string' ? file : file.name;
   const ext = name.split('.').pop()?.toLowerCase() || '';
   return GAUSSIAN_SPLAT_EXTENSIONS.includes(ext as typeof GAUSSIAN_SPLAT_EXTENSIONS[number]);
+}
+
+export function isVectorAnimationFile(file: File | string): boolean {
+  const name = typeof file === 'string' ? file : file.name;
+  const ext = name.split('.').pop()?.toLowerCase() || '';
+  return VECTOR_ANIMATION_EXTENSIONS.includes(ext as typeof VECTOR_ANIMATION_EXTENSIONS[number]);
 }

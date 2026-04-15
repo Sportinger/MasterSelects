@@ -32,6 +32,7 @@ import {
   getStoredProjectFileHandle,
 } from './mediaSourceResolver';
 import { fromProjectTransform } from './transformSerialization';
+import { lottieRuntimeManager } from '../vectorAnimation/LottieRuntimeManager';
 
 const log = Logger.create('ProjectSync');
 
@@ -216,6 +217,7 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
       hasFileHandle: !!handle,
       filePath: pm.sourcePath,
       projectPath: resolvedProjectPath,
+      vectorAnimation: pm.vectorAnimation,
       labelColor: pm.labelColor as import('../../stores/mediaStore/types').LabelColor | undefined,
       transcriptStatus,
       transcript,
@@ -296,6 +298,7 @@ function convertProjectCompositionToStore(
         text3DProperties: c.text3DProperties,
         // Solid clip support
         solidColor: c.solidColor,
+        vectorAnimationSettings: c.vectorAnimationSettings,
         // 3D layer support
         is3D: c.is3D,
         // Transcript data
@@ -568,6 +571,7 @@ async function refreshMediaMetadata(): Promise<void> {
   const mediaState = useMediaStore.getState();
   // Refresh files that have a file object but are missing important metadata
   const filesToRefresh = mediaState.files.filter(f =>
+    (f.type === 'video' || f.type === 'audio' || f.type === 'image') &&
     f.file && (
       f.codec === undefined ||
       f.container === undefined ||
@@ -590,8 +594,6 @@ async function refreshMediaMetadata(): Promise<void> {
 
     await Promise.all(batch.map(async (mediaFile) => {
       if (!mediaFile.file) return;
-      // Skip 3D models — they have no video/audio metadata
-      if (mediaFile.type === 'model') return;
 
       try {
         const info = await getMediaInfo(mediaFile.file, mediaFile.type as 'video' | 'audio' | 'image');
@@ -862,17 +864,61 @@ async function reloadNestedCompositionClips(): Promise<void> {
         inPoint: nestedSerializedClip.inPoint,
         outPoint: nestedSerializedClip.outPoint,
         source: null,
+        mediaFileId: nestedSerializedClip.mediaFileId,
         thumbnails: nestedSerializedClip.thumbnails,
         transform: nestedSerializedClip.transform,
         effects: nestedSerializedClip.effects || [],
         masks: nestedSerializedClip.masks || [],
+        reversed: nestedSerializedClip.reversed,
+        speed: nestedSerializedClip.speed,
+        preservesPitch: nestedSerializedClip.preservesPitch,
         isLoading: true,
       };
 
       nestedClips.push(nestedClip);
 
-      // Load the video/audio/image element
       const sourceType = nestedSerializedClip.sourceType;
+      const notifyNestedReload = () => {
+        useTimelineStore.setState((state) => ({
+          clips: [...state.clips],
+        }));
+      };
+
+      if (sourceType === 'lottie') {
+        try {
+          nestedClip.source = {
+            type: 'lottie',
+            mediaFileId: nestedSerializedClip.mediaFileId,
+            naturalDuration: nestedSerializedClip.naturalDuration,
+            vectorAnimationSettings: nestedSerializedClip.vectorAnimationSettings,
+          };
+          const runtime = await lottieRuntimeManager.prepareClipSource(nestedClip, nestedMediaFile.file);
+          const naturalDuration =
+            runtime.metadata.duration ??
+            nestedSerializedClip.naturalDuration ??
+            nestedSerializedClip.duration;
+
+          nestedClip.source = {
+            type: 'lottie',
+            textCanvas: runtime.canvas,
+            mediaFileId: nestedSerializedClip.mediaFileId,
+            naturalDuration,
+            vectorAnimationSettings: nestedSerializedClip.vectorAnimationSettings,
+          };
+          nestedClip.isLoading = false;
+          lottieRuntimeManager.renderClipAtTime(nestedClip, nestedClip.startTime);
+          notifyNestedReload();
+        } catch (error) {
+          nestedClip.isLoading = false;
+          log.warn('Failed to reload nested lottie clip', {
+            compClipId: compClip.id,
+            nestedClipId: nestedClip.id,
+            error,
+          });
+        }
+        continue;
+      }
+
       const fileUrl = URL.createObjectURL(nestedMediaFile.file);
 
       if (sourceType === 'video') {
@@ -892,8 +938,7 @@ async function reloadNestedCompositionClips(): Promise<void> {
           nestedClip.isLoading = false;
 
           // Trigger state update
-          const currentClips = timelineStore.clips;
-          useTimelineStore.setState({ clips: [...currentClips] });
+          notifyNestedReload();
 
           // Pre-cache frame via createImageBitmap for immediate scrubbing without play()
           engine.preCacheVideoFrame(video);
@@ -913,8 +958,7 @@ async function reloadNestedCompositionClips(): Promise<void> {
           };
           nestedClip.isLoading = false;
 
-          const currentClips = timelineStore.clips;
-          useTimelineStore.setState({ clips: [...currentClips] });
+          notifyNestedReload();
         }, { once: true });
 
         audio.load();
@@ -930,8 +974,7 @@ async function reloadNestedCompositionClips(): Promise<void> {
           };
           nestedClip.isLoading = false;
 
-          const currentClips = timelineStore.clips;
-          useTimelineStore.setState({ clips: [...currentClips] });
+          notifyNestedReload();
         }, { once: true });
       }
     }
