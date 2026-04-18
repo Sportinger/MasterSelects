@@ -1,6 +1,13 @@
 // MediaStore types - extracted from mediaStore.ts
 
-import type { CompositionTimelineData, TranscriptWord, TranscriptStatus, AnalysisStatus } from '../../types';
+import type {
+  AnalysisStatus,
+  CompositionTimelineData,
+  GaussianSplatSequenceData,
+  ModelSequenceData,
+  TranscriptStatus,
+  TranscriptWord,
+} from '../../types';
 import type { SplatEffectorSettings } from '../../types/splatEffector';
 import type { VectorAnimationMetadata, VectorAnimationProvider } from '../../types/vectorAnimation';
 
@@ -73,6 +80,9 @@ export interface MediaFile extends MediaItem {
   type: ImportedMediaType;
   file?: File;
   url: string;
+  modelSequence?: ModelSequenceData;
+  gaussianSplatSequence?: GaussianSplatSequenceData;
+  importProgress?: number;
   duration?: number;
   width?: number;
   height?: number;

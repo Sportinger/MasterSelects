@@ -63,6 +63,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
           ? { ...clip.source.cameraSettings }
           : undefined,
         meshType: clip.meshType || clip.source?.meshType,
+        threeDEffectorsEnabled: clip.source?.threeDEffectorsEnabled,
         splatEffectorSettings: clip.source?.type === 'splat-effector' && clip.source.splatEffectorSettings
           ? { ...clip.source.splatEffectorSettings }
           : undefined,
@@ -177,6 +178,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
           meshType: clipData.meshType,
           mediaFileId: clipData.mediaFileId,
           naturalDuration: clipData.naturalDuration ?? Number.MAX_SAFE_INTEGER,
+          threeDEffectorsEnabled: clipData.threeDEffectorsEnabled ?? true,
           ...(text3DProperties ? { text3DProperties } : {}),
         } : isCameraClip ? {
           type: 'camera' as const,
@@ -207,6 +209,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
           type: clipData.sourceType,
           mediaFileId: clipData.mediaFileId,
           naturalDuration: clipData.naturalDuration,
+          threeDEffectorsEnabled: clipData.threeDEffectorsEnabled ?? true,
         } : null,
         transform: {
           ...clipData.transform,

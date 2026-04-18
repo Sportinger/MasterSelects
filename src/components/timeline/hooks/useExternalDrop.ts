@@ -6,6 +6,7 @@ import {
   isVideoFile,
   isAudioFile,
   isMediaFile,
+  isModelFile,
   isGaussianSplatFile,
   getVideoMetadataQuick,
 } from '../utils/fileTypeHelpers';
@@ -410,6 +411,14 @@ export function useExternalDrop({
           }
 
           if (isGaussianSplatFile(file)) {
+            duration = duration ?? 10;
+            hasAudio = false;
+            isVideo = true;
+            isAudio = false;
+            break;
+          }
+
+          if (isModelFile(file)) {
             duration = duration ?? 10;
             hasAudio = false;
             isVideo = true;
@@ -1113,7 +1122,7 @@ export function useExternalDrop({
         const mediaFile = mediaStore.files.find((f) => f.id === mediaFileId);
         if (mediaFile?.file) {
           // Pass mediaType override for formats that are intentionally clip-typed.
-          const typeOverride = mediaFile.type === 'gaussian-splat' || mediaFile.type === 'lottie' || mediaFile.type === 'rive'
+          const typeOverride = mediaFile.type === 'gaussian-splat' || mediaFile.type === 'lottie' || mediaFile.type === 'rive' || mediaFile.type === 'model'
             ? mediaFile.type
             : undefined;
           addClip(newTrackId, mediaFile.file, startTime, mediaFile.duration, mediaFileId, typeOverride);
@@ -1270,7 +1279,7 @@ export function useExternalDrop({
           // Video+audio files are allowed on both track types
 
           // Pass mediaType override for formats that are intentionally clip-typed.
-          const typeOverride = mediaFile.type === 'gaussian-splat' || mediaFile.type === 'lottie' || mediaFile.type === 'rive'
+          const typeOverride = mediaFile.type === 'gaussian-splat' || mediaFile.type === 'lottie' || mediaFile.type === 'rive' || mediaFile.type === 'model'
             ? mediaFile.type
             : undefined;
           addClip(trackId, mediaFile.file, resolveDropStartTime(mediaFile.duration), mediaFile.duration, mediaFileId, typeOverride);

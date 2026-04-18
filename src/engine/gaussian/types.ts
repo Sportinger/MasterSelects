@@ -1,3 +1,5 @@
+import type { GaussianSplatSequenceData } from '../../types';
+
 // Gaussian Splat Avatar types
 
 /** ARKit 52 blendshape names for facial animation */
@@ -56,6 +58,7 @@ export interface GaussianSplatRenderSettings {
   useNativeRenderer: boolean;
   maxSplats: number;
   splatScale: number;
+  orientationPreset?: 'default' | 'flip-x-180';
   nearPlane: number;
   farPlane: number;
   backgroundColor: string;
@@ -88,6 +91,7 @@ export const DEFAULT_GAUSSIAN_SPLAT_SETTINGS: GaussianSplatSettings = {
     useNativeRenderer: false,
     maxSplats: 0,
     splatScale: 1.0,
+    orientationPreset: 'default',
     nearPlane: 1.0,
     farPlane: 1000,
     backgroundColor: 'transparent',
@@ -107,3 +111,57 @@ export const DEFAULT_GAUSSIAN_SPLAT_SETTINGS: GaussianSplatSettings = {
     seed: 42,
   },
 };
+
+function getGaussianSplatSourceFileName(
+  fileName?: string,
+  sequence?: GaussianSplatSequenceData,
+): string | undefined {
+  return sequence?.frames[0]?.name ?? fileName;
+}
+
+export function cloneGaussianSplatSettings(
+  settings?: GaussianSplatSettings,
+): GaussianSplatSettings {
+  const base = settings ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS;
+  return {
+    render: {
+      ...DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render,
+      ...base.render,
+    },
+    temporal: {
+      ...DEFAULT_GAUSSIAN_SPLAT_SETTINGS.temporal,
+      ...base.temporal,
+    },
+    particle: {
+      ...DEFAULT_GAUSSIAN_SPLAT_SETTINGS.particle,
+      ...base.particle,
+    },
+  };
+}
+
+export function shouldDefaultFlipGaussianSplatOrientation(
+  options: {
+    fileName?: string;
+    sequence?: GaussianSplatSequenceData;
+  },
+): boolean {
+  const resolvedFileName = getGaussianSplatSourceFileName(options.fileName, options.sequence);
+  return !!resolvedFileName && /\.ply$/i.test(resolvedFileName);
+}
+
+export function resolveGaussianSplatSettingsForSource(
+  settings: GaussianSplatSettings | undefined,
+  options: {
+    fileName?: string;
+    sequence?: GaussianSplatSequenceData;
+  },
+): GaussianSplatSettings {
+  const nextSettings = cloneGaussianSplatSettings(settings);
+  if (
+    settings?.render?.orientationPreset == null &&
+    shouldDefaultFlipGaussianSplatOrientation(options)
+  ) {
+    nextSettings.render.orientationPreset = 'flip-x-180';
+  }
+  return nextSettings;
+}

@@ -77,6 +77,14 @@ class ProjectFileService {
         return 'video/quicktime';
       case 'webm':
         return 'video/webm';
+      case 'glb':
+        return 'model/gltf-binary';
+      case 'gltf':
+        return 'model/gltf+json';
+      case 'obj':
+        return 'model/obj';
+      case 'fbx':
+        return 'application/octet-stream';
       case 'mp3':
         return 'audio/mpeg';
       case 'wav':

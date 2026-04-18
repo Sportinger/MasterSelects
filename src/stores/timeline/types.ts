@@ -419,6 +419,7 @@ export interface ClipboardClipData {
   cameraSettings?: import('../mediaStore/types').SceneCameraSettings;
   meshType?: import('../mediaStore/types').MeshPrimitiveType;
   splatEffectorSettings?: import('../../types/splatEffector').SplatEffectorSettings;
+  threeDEffectorsEnabled?: boolean;
   // Visual data (thumbnails, waveforms)
   thumbnails?: string[];
   waveform?: number[];

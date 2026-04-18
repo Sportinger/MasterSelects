@@ -14,6 +14,7 @@ import { Logger } from '../../services/logger';
 import type { Layer3DData, CameraConfig, SplatEffectorRuntimeData } from './types';
 import { DEFAULT_CAMERA_CONFIG } from './types';
 import { resolveSplatSortPolicy } from './splatSortPolicy';
+import { applyThreeDEffectorsToObjectTransform } from '../../utils/threeDEffectors';
 import {
   DEFAULT_SPLAT_BASE_LOD_MAX_SPLATS,
   getPreparedSplatRuntimeSync,
@@ -66,6 +67,7 @@ interface ManagedSplat {
   geometry: import('three').InstancedBufferGeometry;
   material: SplatShaderMaterial;
   splatUrl?: string;
+  sourceCacheKey?: string;
   loadPromise: Promise<void> | null;
   splatCount: number;
   centers: Float32Array;
@@ -108,6 +110,8 @@ const modelCache = new Map<string, import('three').Group>();
 const modelLoading = new Set<string>();
 const text3DFontLoader = new FontLoader();
 const text3DFontCache = new Map<string, ParsedText3DFont>();
+const THREE_SPLAT_SEQUENCE_SAFE_MAX_SPLATS = 16384;
+const THREE_SPLAT_SEQUENCE_MIN_SORT_FREQUENCY = 4;
 const TEXT_3D_FONT_DATA: Record<'helvetiker' | 'optimer' | 'gentilis', Record<'regular' | 'bold', object>> = {
   helvetiker: {
     regular: helvetikerRegular as object,
@@ -147,6 +151,15 @@ export class ThreeSceneRenderer {
     return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
   }
 
+  private getGaussianSplatOrientationOffset(layer: Layer3DData): { x: number; y: number; z: number } {
+    switch (layer.gaussianSplatSettings?.render?.orientationPreset) {
+      case 'flip-x-180':
+        return { x: Math.PI, y: 0, z: 0 };
+      default:
+        return { x: 0, y: 0, z: 0 };
+    }
+  }
+
   private createFloatDataTexture(
     T: THREE,
     data: Float32Array,
@@ -167,6 +180,24 @@ export class ThreeSceneRenderer {
 
   private createZeroFloatDataTexture(T: THREE): import('three').DataTexture {
     return this.createFloatDataTexture(T, new Float32Array(4), 1, 1);
+  }
+
+  private replaceFloatDataTexture(
+    T: THREE,
+    existing: import('three').DataTexture,
+    data: Float32Array,
+    width: number,
+    height: number,
+  ): import('three').DataTexture {
+    const image = existing.image as { width?: number; height?: number; data?: ArrayLike<number> } | undefined;
+    if (image?.width === width && image?.height === height) {
+      image.data = data;
+      existing.needsUpdate = true;
+      return existing;
+    }
+
+    existing.dispose();
+    return this.createFloatDataTexture(T, data, width, height);
   }
 
   private getLayerPosition(layer: Layer3DData): { x: number; y: number; z: number } {
@@ -555,6 +586,7 @@ export class ThreeSceneRenderer {
       geometry,
       material,
       loadPromise: null,
+      sourceCacheKey: undefined,
       splatCount: 0,
       centers: new Float32Array(),
       colors: new Float32Array(),
@@ -596,12 +628,14 @@ export class ThreeSceneRenderer {
   private getSplatRuntimeSourceOptions(layer: Layer3DData): {
     cacheKey: string;
     fileHash?: string;
+    file?: File;
     url?: string;
     fileName?: string;
     requestedMaxSplats: number;
   } {
-    const requestedMaxSplats = layer.gaussianSplatSettings?.render.maxSplats ?? 0;
+    const requestedMaxSplats = this.getEffectiveSplatRequestedMaxSplats(layer);
     const cacheKey =
+      layer.gaussianSplatRuntimeKey ??
       layer.gaussianSplatFileHash ??
       layer.gaussianSplatMediaFileId ??
       `${layer.gaussianSplatFileName || layer.gaussianSplatUrl || layer.clipId}|${layer.gaussianSplatUrl || layer.clipId}`;
@@ -609,10 +643,26 @@ export class ThreeSceneRenderer {
     return {
       cacheKey,
       fileHash: layer.gaussianSplatFileHash,
+      file: layer.gaussianSplatFile,
       url: layer.gaussianSplatUrl,
       fileName: layer.gaussianSplatFileName,
       requestedMaxSplats,
     };
+  }
+
+  private isSequenceSplatLayer(layer: Layer3DData): boolean {
+    return layer.gaussianSplatIsSequence === true;
+  }
+
+  private getEffectiveSplatRequestedMaxSplats(layer: Layer3DData): number {
+    const requestedMaxSplats = layer.gaussianSplatSettings?.render.maxSplats ?? 0;
+    if (!this.isSequenceSplatLayer(layer)) {
+      return requestedMaxSplats;
+    }
+    if (requestedMaxSplats <= 0) {
+      return THREE_SPLAT_SEQUENCE_SAFE_MAX_SPLATS;
+    }
+    return Math.min(requestedMaxSplats, THREE_SPLAT_SEQUENCE_SAFE_MAX_SPLATS);
   }
 
   private applyPreparedSplatRuntime(
@@ -641,7 +691,7 @@ export class ThreeSceneRenderer {
     managed.lastSortTimeMs = 0;
     managed.bounds = runtime.normalizedBounds;
     managed.normalizationScale = runtime.normalizationScale;
-    managed.requestedMaxSplats = layer.gaussianSplatSettings?.render.maxSplats ?? 0;
+    managed.requestedMaxSplats = this.getEffectiveSplatRequestedMaxSplats(layer);
     managed.appliedRuntimeKey = runtime.runtimeKey;
     managed.stagedTargetRuntime = null;
     managed.stagedLastStepMs = 0;
@@ -652,45 +702,44 @@ export class ThreeSceneRenderer {
     managed.axisZTextureData = runtime.axisZTextureData;
     managed.orderTextureData = new Float32Array(runtime.orderTemplateData);
 
-    managed.centerOpacityTexture.dispose();
-    managed.colorTexture.dispose();
-    managed.axisXTexture.dispose();
-    managed.axisYTexture.dispose();
-    managed.axisZTexture.dispose();
-    managed.orderTexture.dispose();
-
-    managed.centerOpacityTexture = this.createFloatDataTexture(
+    managed.centerOpacityTexture = this.replaceFloatDataTexture(
       T,
+      managed.centerOpacityTexture,
       runtime.centerOpacityTextureData,
       runtime.textureWidth,
       runtime.textureHeight,
     );
-    managed.colorTexture = this.createFloatDataTexture(
+    managed.colorTexture = this.replaceFloatDataTexture(
       T,
+      managed.colorTexture,
       runtime.colorTextureData,
       runtime.textureWidth,
       runtime.textureHeight,
     );
-    managed.axisXTexture = this.createFloatDataTexture(
+    managed.axisXTexture = this.replaceFloatDataTexture(
       T,
+      managed.axisXTexture,
       runtime.axisXTextureData,
       runtime.textureWidth,
       runtime.textureHeight,
     );
-    managed.axisYTexture = this.createFloatDataTexture(
+    managed.axisYTexture = this.replaceFloatDataTexture(
       T,
+      managed.axisYTexture,
       runtime.axisYTextureData,
       runtime.textureWidth,
       runtime.textureHeight,
     );
-    managed.axisZTexture = this.createFloatDataTexture(
+    managed.axisZTexture = this.replaceFloatDataTexture(
       T,
+      managed.axisZTexture,
       runtime.axisZTextureData,
       runtime.textureWidth,
       runtime.textureHeight,
     );
-    managed.orderTexture = this.createFloatDataTexture(
+    managed.orderTexture = this.replaceFloatDataTexture(
       T,
+      managed.orderTexture,
       managed.orderTextureData,
       runtime.textureWidth,
       runtime.textureHeight,
@@ -777,45 +826,44 @@ export class ThreeSceneRenderer {
       0,
     );
 
-    managed.centerOpacityTexture.dispose();
-    managed.colorTexture.dispose();
-    managed.axisXTexture.dispose();
-    managed.axisYTexture.dispose();
-    managed.axisZTexture.dispose();
-    managed.orderTexture.dispose();
-
-    managed.centerOpacityTexture = this.createFloatDataTexture(
+    managed.centerOpacityTexture = this.replaceFloatDataTexture(
       T,
+      managed.centerOpacityTexture,
       managed.centerOpacityTextureData,
       targetRuntime.textureWidth,
       targetRuntime.textureHeight,
     );
-    managed.colorTexture = this.createFloatDataTexture(
+    managed.colorTexture = this.replaceFloatDataTexture(
       T,
+      managed.colorTexture,
       managed.colorTextureData,
       targetRuntime.textureWidth,
       targetRuntime.textureHeight,
     );
-    managed.axisXTexture = this.createFloatDataTexture(
+    managed.axisXTexture = this.replaceFloatDataTexture(
       T,
+      managed.axisXTexture,
       managed.axisXTextureData,
       targetRuntime.textureWidth,
       targetRuntime.textureHeight,
     );
-    managed.axisYTexture = this.createFloatDataTexture(
+    managed.axisYTexture = this.replaceFloatDataTexture(
       T,
+      managed.axisYTexture,
       managed.axisYTextureData,
       targetRuntime.textureWidth,
       targetRuntime.textureHeight,
     );
-    managed.axisZTexture = this.createFloatDataTexture(
+    managed.axisZTexture = this.replaceFloatDataTexture(
       T,
+      managed.axisZTexture,
       managed.axisZTextureData,
       targetRuntime.textureWidth,
       targetRuntime.textureHeight,
     );
-    managed.orderTexture = this.createFloatDataTexture(
+    managed.orderTexture = this.replaceFloatDataTexture(
       T,
+      managed.orderTexture,
       managed.orderTextureData,
       targetRuntime.textureWidth,
       targetRuntime.textureHeight,
@@ -922,6 +970,9 @@ export class ThreeSceneRenderer {
     managed: ManagedSplat,
     layer: Layer3DData,
   ): void {
+    if (this.isSequenceSplatLayer(layer)) {
+      return;
+    }
     const sourceOptions = this.getSplatRuntimeSourceOptions(layer);
     void waitForTargetPreparedSplatRuntime(sourceOptions)
       .then((runtime) => {
@@ -953,12 +1004,19 @@ export class ThreeSceneRenderer {
     layer: Layer3DData,
   ): Promise<void> {
     const sourceOptions = this.getSplatRuntimeSourceOptions(layer);
-    prewarmGaussianSplatRuntime(sourceOptions);
+    const expectedSourceCacheKey = sourceOptions.cacheKey;
+    if (!this.isSequenceSplatLayer(layer)) {
+      prewarmGaussianSplatRuntime(sourceOptions);
+    }
 
     const { runtime, usingBase } = await resolvePreparedSplatRuntime(sourceOptions);
+    if (managed.sourceCacheKey !== expectedSourceCacheKey) {
+      return;
+    }
     this.applyPreparedSplatRuntime(T, managed, layer, runtime);
 
     if (
+      !this.isSequenceSplatLayer(layer) &&
       usingBase &&
       runtime.splatCount < runtime.totalSplats &&
       (sourceOptions.requestedMaxSplats === 0 || sourceOptions.requestedMaxSplats > DEFAULT_SPLAT_BASE_LOD_MAX_SPLATS)
@@ -1221,10 +1279,11 @@ export class ThreeSceneRenderer {
 
     for (const layer of layers) {
       activeLayerIds.add(layer.layerId);
+      const layerEffectors = layer.threeDEffectorsEnabled === false ? [] : effectors;
 
       if (layer.gaussianSplatUrl) {
         this.disposeManagedMeshById(layer.layerId);
-        this.syncSplatLayer(layer, outputAspect, worldHeight, effectors, realtimePlayback);
+        this.syncSplatLayer(layer, outputAspect, worldHeight, layerEffectors, realtimePlayback);
         continue;
       }
 
@@ -1390,6 +1449,42 @@ export class ThreeSceneRenderer {
         scale.z,
       );
 
+      if (managed.kind !== 'plane' && layerEffectors.length > 0) {
+        const effectedTransform = applyThreeDEffectorsToObjectTransform({
+          position: {
+            x: managed.mesh.position.x,
+            y: managed.mesh.position.y,
+            z: managed.mesh.position.z,
+          },
+          rotation: {
+            x: managed.mesh.rotation.x,
+            y: managed.mesh.rotation.y,
+            z: managed.mesh.rotation.z,
+          },
+          scale: {
+            x: managed.mesh.scale.x,
+            y: managed.mesh.scale.y,
+            z: managed.mesh.scale.z,
+          },
+        }, layerEffectors, layer.layerId);
+
+        managed.mesh.position.set(
+          effectedTransform.position.x,
+          effectedTransform.position.y,
+          effectedTransform.position.z,
+        );
+        managed.mesh.rotation.set(
+          effectedTransform.rotation.x,
+          effectedTransform.rotation.y,
+          effectedTransform.rotation.z,
+        );
+        managed.mesh.scale.set(
+          effectedTransform.scale.x,
+          effectedTransform.scale.y,
+          effectedTransform.scale.z,
+        );
+      }
+
       if (managed.kind === 'model') {
         (managed.mesh as import('three').Group).traverse((child) => {
           if (!(child as import('three').Mesh).isMesh) return;
@@ -1536,16 +1631,18 @@ export class ThreeSceneRenderer {
     if (!this.scene || !this.THREE) return;
 
     let managed = this.splatObjects.get(layer.layerId);
-    const requestedMaxSplats = layer.gaussianSplatSettings?.render.maxSplats ?? 0;
+    const isSequence = this.isSequenceSplatLayer(layer);
+    const requestedMaxSplats = this.getEffectiveSplatRequestedMaxSplats(layer);
     const sourceOptions = this.getSplatRuntimeSourceOptions(layer);
-    const cachedTargetRuntime = !realtimePlayback
+    const cachedTargetRuntime = !isSequence && !realtimePlayback
       ? getPreparedSplatRuntimeSync({ ...sourceOptions, variant: 'target' })
       : null;
+    const cachedBaseRuntime = getPreparedSplatRuntimeSync({ ...sourceOptions, variant: 'base' });
     const needsManagedRebuild =
       !managed ||
-      managed.splatUrl !== layer.gaussianSplatUrl ||
       managed.rendererRevision !== THREE_SPLAT_RENDERER_REVISION ||
-      managed.requestedMaxSplats !== requestedMaxSplats;
+      managed.requestedMaxSplats !== requestedMaxSplats ||
+      (!isSequence && managed.splatUrl !== layer.gaussianSplatUrl);
     if (needsManagedRebuild) {
       if (managed) {
         this.disposeManagedSplat(managed);
@@ -1554,16 +1651,40 @@ export class ThreeSceneRenderer {
       managed = this.createManagedSplat(this.THREE, layer.layerId);
       const managedRef = managed;
       managed.splatUrl = layer.gaussianSplatUrl;
+      managed.sourceCacheKey = sourceOptions.cacheKey;
       this.splatObjects.set(layer.layerId, managed);
       this.scene.add(managed.mesh);
 
       if (layer.gaussianSplatUrl) {
         if (cachedTargetRuntime) {
           this.applyPreparedSplatRuntime(this.THREE, managedRef, layer, cachedTargetRuntime);
+        } else if (cachedBaseRuntime) {
+          this.applyPreparedSplatRuntime(this.THREE, managedRef, layer, cachedBaseRuntime);
         } else {
           managed.loadPromise = this.populateSplatGeometry(this.THREE, managedRef, layer)
             .catch((error) => {
               log.error('Failed to build Three.js gaussian splat mesh', {
+                layerId: layer.layerId,
+                fileName: layer.gaussianSplatFileName,
+                error,
+              });
+            })
+            .finally(() => {
+              managedRef.loadPromise = null;
+            });
+        }
+      }
+    } else if (managed && isSequence && managed.sourceCacheKey !== sourceOptions.cacheKey) {
+      managed.splatUrl = layer.gaussianSplatUrl;
+      managed.sourceCacheKey = sourceOptions.cacheKey;
+      if (!managed.loadPromise && layer.gaussianSplatUrl) {
+        if (cachedBaseRuntime) {
+          this.applyPreparedSplatRuntime(this.THREE, managed, layer, cachedBaseRuntime);
+        } else {
+          const managedRef = managed;
+          managed.loadPromise = this.populateSplatGeometry(this.THREE, managedRef, layer)
+            .catch((error) => {
+              log.error('Failed to swap Three.js gaussian splat sequence frame', {
                 layerId: layer.layerId,
                 fileName: layer.gaussianSplatFileName,
                 error,
@@ -1609,6 +1730,7 @@ export class ThreeSceneRenderer {
     const position = this.getLayerPosition(layer);
     const scale = this.getLayerScale(layer);
     const rotation = this.getLayerRotationRadians(layer);
+    const orientationOffset = this.getGaussianSplatOrientationOffset(layer);
     managed.mesh.position.set(
       position.x * halfWorldW,
       -position.y * halfWorldH,
@@ -1616,9 +1738,9 @@ export class ThreeSceneRenderer {
     );
     managed.mesh.rotation.order = 'ZYX';
     managed.mesh.rotation.set(
-      -rotation.x,
-      rotation.y,
-      rotation.z,
+      -rotation.x + orientationOffset.x,
+      rotation.y + orientationOffset.y,
+      rotation.z + orientationOffset.z,
     );
     managed.mesh.scale.set(
       scale.x,
@@ -1633,7 +1755,15 @@ export class ThreeSceneRenderer {
     const preciseSorting = layer.preciseSplatSorting === true;
     managed.sortFrequency = preciseSorting
       ? 1
-      : Math.max(0, layer.gaussianSplatSettings?.render?.sortFrequency ?? 1);
+      : Math.max(
+          0,
+          isSequence && realtimePlayback
+            ? Math.max(
+                layer.gaussianSplatSettings?.render?.sortFrequency ?? 1,
+                THREE_SPLAT_SEQUENCE_MIN_SORT_FREQUENCY,
+              )
+            : (layer.gaussianSplatSettings?.render?.sortFrequency ?? 1),
+        );
     if (managed.splatCount > 0) {
       this.advanceStagedSplatUpgrade(managed, realtimePlayback);
       this.updateSplatSort(managed, preciseSorting, realtimePlayback, preciseSorting);

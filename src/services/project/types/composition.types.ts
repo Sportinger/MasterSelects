@@ -4,7 +4,7 @@ import type { ProjectKeyframe, ProjectMarker, ProjectEffect, ProjectMask, Projec
 import type { MeshPrimitiveType, SceneCameraSettings } from '../../../stores/mediaStore/types';
 import type { GaussianSplatSettings } from '../../../engine/gaussian/types';
 import type { SplatEffectorSettings } from '../../../types/splatEffector';
-import type { Text3DProperties } from '../../../types';
+import type { GaussianSplatSequenceData, ModelSequenceData, Text3DProperties } from '../../../types';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
 
 export interface ProjectTrack {
@@ -73,6 +73,9 @@ export interface ProjectClip {
   gaussianBlendshapes?: Record<string, number>;
   gaussianSplatSettings?: GaussianSplatSettings;
   is3D?: boolean;
+  modelSequence?: ModelSequenceData;
+  gaussianSplatSequence?: GaussianSplatSequenceData;
+  threeDEffectorsEnabled?: boolean;
 
   // Text clip support
   textProperties?: any;

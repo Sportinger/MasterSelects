@@ -315,7 +315,7 @@ export const useMediaStore = create<MediaStoreState>()(
       const id = `splat-effector-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const newEffector: import('./types').SplatEffectorItem = {
         id,
-        name: name || `Splat Effector ${splatEffectorItems.length + 1}`,
+        name: name || `3D Effector ${splatEffectorItems.length + 1}`,
         type: 'splat-effector',
         parentId: parentId !== undefined ? parentId : null,
         createdAt: Date.now(),

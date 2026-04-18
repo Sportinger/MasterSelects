@@ -22,7 +22,7 @@ export const createSplatEffectorClipSlice: SliceCreator<SplatEffectorClipActions
     const effectorClip: TimelineClip = {
       id: clipId,
       trackId,
-      name: 'Splat Effector',
+      name: '3D Effector',
       file: new File([], 'splat-effector.dat', { type: 'application/octet-stream' }),
       startTime,
       duration,

@@ -2,7 +2,13 @@
 // Extracted from index.ts for maintainability
 
 import type { SliceCreator, TimelineClip, TimelineUtils, Keyframe, CompositionTimelineData } from './types';
-import type { SerializableClip, ClipAnalysis, FrameAnalysisData } from '../../types';
+import type {
+  SerializableClip,
+  ClipAnalysis,
+  FrameAnalysisData,
+  GaussianSplatSequenceData,
+  ModelSequenceData,
+} from '../../types';
 import { DEFAULT_TRACKS, MAX_NESTING_DEPTH } from './constants';
 import { useMediaStore } from '../mediaStore';
 import { calculateNestedClipBoundaries, buildClipSegments } from './clip/addCompClip';
@@ -13,9 +19,14 @@ import { layerBuilder } from '../../services/layerBuilder';
 import { sanitizePlayheadPosition } from '../../services/layerBuilder/PlayheadState';
 import { thumbnailCacheService } from '../../services/thumbnailCacheService';
 import type { WebCodecsPlayer } from '../../engine/WebCodecsPlayer';
-import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../../engine/gaussian/types';
+import {
+  DEFAULT_GAUSSIAN_SPLAT_SETTINGS,
+  resolveGaussianSplatSettingsForSource,
+} from '../../engine/gaussian/types';
 import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
 import { readLottieMetadata } from '../../services/vectorAnimation/lottieMetadata';
+import { resolveGaussianSplatSequenceData } from '../../utils/gaussianSplatSequence';
+import { resolveModelSequenceData } from '../../utils/modelSequence';
 
 const log = Logger.create('Timeline');
 
@@ -132,11 +143,13 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         // Clip label color
         // 3D layer support
         is3D: clip.is3D || undefined,
+        threeDEffectorsEnabled: clip.source?.threeDEffectorsEnabled,
         meshType: clip.meshType ?? clip.source?.meshType,
         cameraSettings: clip.source?.type === 'camera' ? clip.source.cameraSettings : undefined,
         splatEffectorSettings: clip.source?.type === 'splat-effector' ? clip.source.splatEffectorSettings : undefined,
         // Gaussian avatar blendshapes
         gaussianBlendshapes: clip.source?.type === 'gaussian-avatar' ? clip.source.gaussianBlendshapes : undefined,
+        gaussianSplatSequence: clip.source?.type === 'gaussian-splat' ? clip.source.gaussianSplatSequence : undefined,
         // Gaussian splat settings
         gaussianSplatSettings: clip.source?.type === 'gaussian-splat' ? clip.source.gaussianSplatSettings : undefined,
       };
@@ -318,6 +331,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           meshType: serializedClip.meshType,
           mediaFileId: serializedClip.mediaFileId || undefined,
           naturalDuration: Number.MAX_SAFE_INTEGER,
+          threeDEffectorsEnabled: serializedClip.threeDEffectorsEnabled ?? true,
           ...(text3DProperties ? { text3DProperties } : {}),
         },
         thumbnails: serializedClip.thumbnails,
@@ -547,6 +561,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                     type: nsc.sourceType || 'video',
                     naturalDuration: nsc.naturalDuration || nsc.duration,
                     mediaFileId: nsc.mediaFileId,
+                    threeDEffectorsEnabled: nsc.threeDEffectorsEnabled ?? true,
                     ...(nsc.meshType ? { meshType: nsc.meshType } : {}),
                     ...(nsc.text3DProperties ? { text3DProperties: { ...nsc.text3DProperties } } : {}),
                   },
@@ -1115,7 +1130,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         const effectorClip: TimelineClip = {
           id: serializedClip.id,
           trackId: serializedClip.trackId,
-          name: serializedClip.name || 'Splat Effector',
+          name: serializedClip.name || '3D Effector',
           file: new File([], 'splat-effector.dat', { type: 'application/octet-stream' }),
           mediaFileId: serializedClip.mediaFileId || undefined,
           startTime: serializedClip.startTime,
@@ -1172,6 +1187,21 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
 
       // Create placeholder file if missing
       const file = mediaFile.file || new File([], mediaFile.name || 'pending', { type: 'video/mp4' });
+      const restoredModelSequence: ModelSequenceData | undefined = serializedClip.sourceType === 'model'
+        ? resolveModelSequenceData(serializedClip.modelSequence, mediaFile.modelSequence)
+        : undefined;
+      const restoredGaussianSplatSequence: GaussianSplatSequenceData | undefined = serializedClip.sourceType === 'gaussian-splat'
+        ? resolveGaussianSplatSequenceData(serializedClip.gaussianSplatSequence, mediaFile.gaussianSplatSequence)
+        : undefined;
+      const restoredGaussianSplatSettings = serializedClip.sourceType === 'gaussian-splat'
+        ? resolveGaussianSplatSettingsForSource(serializedClip.gaussianSplatSettings, {
+            fileName:
+              restoredGaussianSplatSequence?.frames[0]?.name ??
+              mediaFile.file?.name ??
+              mediaFile.name,
+            sequence: restoredGaussianSplatSequence,
+          })
+        : undefined;
 
       // Create the clip with loading state
       const clip: TimelineClip = {
@@ -1188,6 +1218,14 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           mediaFileId: serializedClip.mediaFileId, // Preserve mediaFileId for cache lookups
           naturalDuration: serializedClip.naturalDuration,
           vectorAnimationSettings: serializedClip.vectorAnimationSettings,
+          threeDEffectorsEnabled: serializedClip.threeDEffectorsEnabled ?? true,
+          modelSequence: serializedClip.sourceType === 'model'
+            ? restoredModelSequence
+            : undefined,
+          gaussianSplatSequence: serializedClip.sourceType === 'gaussian-splat'
+            ? restoredGaussianSplatSequence
+            : undefined,
+          gaussianSplatSettings: restoredGaussianSplatSettings,
         },
         mediaFileId: serializedClip.mediaFileId, // Restore top-level mediaFileId for audio/proxy lookup
         needsReload: needsReload, // Flag for UI to show reload indicator
@@ -1457,6 +1495,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         })();
       } else if (type === 'model') {
         // 3D Model clips — just need a blob URL, Three.js handles loading
+        const firstModelFrame = restoredModelSequence?.frames[0];
         set(state => ({
           clips: state.clips.map(c =>
             c.id === clip.id
@@ -1464,9 +1503,13 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                   ...c,
                   source: {
                     type: 'model' as const,
-                    modelUrl: fileUrl,
+                    modelUrl: firstModelFrame?.modelUrl ?? fileUrl,
+                    ...(restoredModelSequence ? { modelSequence: restoredModelSequence } : {}),
                     naturalDuration: serializedClip.naturalDuration || 3600,
                     mediaFileId: serializedClip.mediaFileId,
+                    threeDEffectorsEnabled: serializedClip.threeDEffectorsEnabled ?? true,
+                    ...(serializedClip.meshType ? { meshType: serializedClip.meshType } : {}),
+                    ...(serializedClip.text3DProperties ? { text3DProperties: serializedClip.text3DProperties } : {}),
                   },
                   is3D: true,
                   isLoading: false,
@@ -1498,6 +1541,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         wakePreviewAfterRestore();
       } else if (type === 'gaussian-splat') {
         // Gaussian Splat clips — blob URL for the renderer to load
+        const firstSequenceFrame = restoredGaussianSplatSequence?.frames[0];
         set(state => ({
           clips: state.clips.map(c =>
             c.id === clip.id
@@ -1505,10 +1549,23 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                   ...c,
                   source: {
                     type: 'gaussian-splat' as const,
-                    gaussianSplatUrl: fileUrl,
-                    gaussianSplatSettings: serializedClip.gaussianSplatSettings || DEFAULT_GAUSSIAN_SPLAT_SETTINGS,
+                    gaussianSplatUrl:
+                      firstSequenceFrame?.splatUrl ??
+                      fileUrl,
+                    gaussianSplatFileName:
+                      firstSequenceFrame?.name ??
+                      mediaFile.file?.name ??
+                      mediaFile.name,
+                    gaussianSplatRuntimeKey:
+                      firstSequenceFrame?.projectPath ??
+                      firstSequenceFrame?.absolutePath ??
+                      firstSequenceFrame?.sourcePath ??
+                      firstSequenceFrame?.name,
+                    gaussianSplatSequence: restoredGaussianSplatSequence,
+                    gaussianSplatSettings: restoredGaussianSplatSettings || DEFAULT_GAUSSIAN_SPLAT_SETTINGS,
                     naturalDuration: serializedClip.naturalDuration || 3600,
                     mediaFileId: serializedClip.mediaFileId,
+                    threeDEffectorsEnabled: serializedClip.threeDEffectorsEnabled ?? true,
                   },
                   is3D: true,
                   isLoading: false,

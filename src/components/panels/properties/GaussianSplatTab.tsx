@@ -2,6 +2,7 @@
 
 import { useCallback } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
+import { useMediaStore } from '../../../stores/mediaStore';
 import { useHistoryStore } from '../../../stores/historyStore';
 import { DraggableNumber } from './shared';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../../../engine/gaussian/types';
@@ -13,9 +14,15 @@ interface GaussianSplatTabProps {
 
 export function GaussianSplatTab({ clipId }: GaussianSplatTabProps) {
   const clip = useTimelineStore((state) => state.clips.find((c) => c.id === clipId));
+  const mediaFile = useMediaStore((state) => {
+    const mediaFileId = clip?.mediaFileId ?? clip?.source?.mediaFileId;
+    return mediaFileId ? state.files.find((file) => file.id === mediaFileId) : undefined;
+  });
   const settings: GaussianSplatSettings = clip?.source?.gaussianSplatSettings ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS;
+  const hasSequence = !!(clip?.source?.gaussianSplatSequence ?? mediaFile?.gaussianSplatSequence);
   const render = settings.render;
-  const nativeRender = render.useNativeRenderer === true;
+  const nativeRender = !hasSequence && render.useNativeRenderer === true;
+  const orientationPreset = render.orientationPreset ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render.orientationPreset ?? 'default';
   const maxSplatsSuffix = render.maxSplats === 0
     ? (nativeRender ? ' (unlimited)' : ' (all)')
     : '';
@@ -87,13 +94,27 @@ export function GaussianSplatTab({ clipId }: GaussianSplatTabProps) {
           <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Native Render</label>
           <button
             className={`btn btn-xs ${nativeRender ? 'btn-active' : ''}`}
-            onClick={() => updateRenderSetting('useNativeRenderer', !nativeRender)}
-            title={nativeRender ? 'Use the native WebGPU splat renderer' : 'Use the shared Three.js 3D scene renderer'}
+            onClick={() => {
+              if (hasSequence) return;
+              updateRenderSetting('useNativeRenderer', !nativeRender);
+            }}
+            disabled={hasSequence}
+            title={
+              hasSequence
+                ? 'Splat sequences currently stay on the shared Three.js renderer'
+                : nativeRender
+                  ? 'Use the native WebGPU splat renderer'
+                  : 'Use the shared Three.js 3D scene renderer'
+            }
           >
             {nativeRender ? 'On' : 'Off'}
           </button>
           <span style={{ color: '#8d99a6', fontSize: '11px' }}>
-            {nativeRender ? 'Dedicated native path' : 'Shared scene path'}
+            {hasSequence
+              ? 'Sequence: shared scene only'
+              : nativeRender
+                ? 'Dedicated native path'
+                : 'Shared scene path'}
           </span>
         </div>
 
@@ -111,6 +132,26 @@ export function GaussianSplatTab({ clipId }: GaussianSplatTabProps) {
             sensitivity={0.02}
             decimals={2}
           />
+        </div>
+
+        <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', gap: '6px' }}>
+          <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Orientation</label>
+          <button
+            className={`btn btn-xs ${orientationPreset === 'default' ? 'btn-active' : ''}`}
+            onClick={() => updateRenderSetting('orientationPreset', 'default')}
+            disabled={nativeRender}
+            title={nativeRender ? 'Shared-scene orientation presets are unavailable in native render mode' : 'Use the imported source basis'}
+          >
+            Default
+          </button>
+          <button
+            className={`btn btn-xs ${orientationPreset === 'flip-x-180' ? 'btn-active' : ''}`}
+            onClick={() => updateRenderSetting('orientationPreset', 'flip-x-180')}
+            disabled={nativeRender}
+            title={nativeRender ? 'Shared-scene orientation presets are unavailable in native render mode' : 'Rotate the source basis by 180 degrees around X'}
+          >
+            Flip X 180
+          </button>
         </div>
 
         <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>

@@ -1,7 +1,7 @@
 // 3D Model clip addition — OBJ, glTF, GLB, FBX
 // Creates a timeline clip with is3D=true that renders via Three.js
 
-import type { TimelineClip } from '../../../types';
+import type { ModelSequenceData, TimelineClip } from '../../../types';
 import { DEFAULT_TRANSFORM } from '../constants';
 import { generateClipId } from '../helpers/idGenerator';
 import { blobUrlManager } from '../helpers/blobUrlManager';
@@ -15,6 +15,7 @@ export interface AddModelClipParams {
   startTime: number;
   estimatedDuration: number;
   mediaFileId?: string;
+  modelSequence?: ModelSequenceData;
 }
 
 /**
@@ -22,8 +23,11 @@ export interface AddModelClipParams {
  * Auto-sets is3D=true so it renders via Three.js.
  */
 export function createModelClipPlaceholder(params: AddModelClipParams): TimelineClip {
-  const { trackId, file, startTime, estimatedDuration } = params;
+  const { trackId, file, startTime, estimatedDuration, modelSequence } = params;
   const clipId = generateClipId('clip-3d');
+  const naturalDuration = modelSequence
+    ? estimatedDuration || DEFAULT_MODEL_DURATION
+    : MAX_MODEL_DURATION;
 
   return {
     id: clipId,
@@ -34,7 +38,13 @@ export function createModelClipPlaceholder(params: AddModelClipParams): Timeline
     duration: estimatedDuration || DEFAULT_MODEL_DURATION,
     inPoint: 0,
     outPoint: estimatedDuration || DEFAULT_MODEL_DURATION,
-    source: { type: 'model', naturalDuration: MAX_MODEL_DURATION, mediaFileId: params.mediaFileId },
+    source: {
+      type: 'model',
+      naturalDuration,
+      mediaFileId: params.mediaFileId,
+      threeDEffectorsEnabled: true,
+      ...(modelSequence ? { modelSequence } : {}),
+    },
     mediaFileId: params.mediaFileId,
     transform: { ...DEFAULT_TRANSFORM },
     effects: [],
@@ -54,9 +64,10 @@ export interface LoadModelMediaParams {
  */
 export function loadModelMedia(params: LoadModelMediaParams): void {
   const { clip, updateClip } = params;
+  const sequenceModelUrl = clip.source?.modelSequence?.frames[0]?.modelUrl;
 
   // Create a blob URL that Three.js can fetch
-  const modelUrl = blobUrlManager.create(clip.id, clip.file, 'model');
+  const modelUrl = sequenceModelUrl ?? blobUrlManager.create(clip.id, clip.file, 'model');
 
   updateClip(clip.id, {
     source: {

@@ -34,6 +34,12 @@ import {
 } from './mediaSourceResolver';
 import { fromProjectTransform } from './transformSerialization';
 import { lottieRuntimeManager } from '../vectorAnimation/LottieRuntimeManager';
+import type {
+  GaussianSplatSequenceData,
+  GaussianSplatSequenceFrame,
+  ModelSequenceData,
+  ModelSequenceFrame,
+} from '../../types';
 
 const log = Logger.create('ProjectSync');
 
@@ -54,6 +60,60 @@ function calcRangeCoverage(ranges: [number, number][], totalDuration: number): n
   }
   const covered = merged.reduce((sum, [s, e]) => sum + (e - s), 0);
   return Math.min(1, covered / totalDuration);
+}
+
+function getSequenceFrameHandleCacheKey(mediaFileId: string, frameIndex: number): string {
+  return `${mediaFileId}_frame_${frameIndex}`;
+}
+
+async function restoreSequenceFrameFromHandle(
+  mediaFileId: string,
+  frameIndex: number,
+): Promise<{ file: File; handle: FileSystemFileHandle } | null> {
+  const cacheKey = getSequenceFrameHandleCacheKey(mediaFileId, frameIndex);
+  let handle = fileSystemService.getFileHandle(cacheKey);
+
+  if (!handle) {
+    try {
+      const storedHandle = await projectDB.getStoredHandle(`media_${cacheKey}`);
+      if (storedHandle && storedHandle.kind === 'file' && 'getFile' in storedHandle) {
+        handle = storedHandle as FileSystemFileHandle;
+        fileSystemService.storeFileHandle(cacheKey, handle);
+      }
+    } catch (error) {
+      log.warn('Could not restore sequence frame handle from IndexedDB', {
+        mediaFileId,
+        frameIndex,
+        error,
+      });
+      return null;
+    }
+  }
+
+  if (!handle) {
+    return null;
+  }
+
+  try {
+    const permission = 'queryPermission' in handle
+      ? await handle.queryPermission({ mode: 'read' })
+      : 'granted';
+    if (permission !== 'granted') {
+      return null;
+    }
+
+    return {
+      file: await handle.getFile(),
+      handle,
+    };
+  } catch (error) {
+    log.warn('Could not read sequence frame handle', {
+      mediaFileId,
+      frameIndex,
+      error,
+    });
+    return null;
+  }
 }
 
 // ============================================
@@ -88,6 +148,98 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
       }
     }
 
+    let modelSequence: ModelSequenceData | undefined;
+    if (pm.modelSequence) {
+      const sequenceFrames: ModelSequenceFrame[] = [];
+      for (let frameIndex = 0; frameIndex < pm.modelSequence.frames.length; frameIndex += 1) {
+        const frame = pm.modelSequence.frames[frameIndex];
+        let frameFile = frame.file;
+        let modelUrl = frame.modelUrl;
+
+        if (!frameFile && frame.projectPath && projectFileService.isProjectOpen()) {
+          try {
+            const result = await projectFileService.getFileFromRaw(frame.projectPath);
+            if (result?.file) {
+              frameFile = result.file;
+              modelUrl = URL.createObjectURL(result.file);
+            }
+          } catch (error) {
+            log.warn(`Could not restore model sequence frame for ${pm.name}`, {
+              frame: frame.name,
+              error,
+            });
+          }
+        }
+
+        if (!frameFile) {
+          const restoredFrame = await restoreSequenceFrameFromHandle(pm.id, frameIndex);
+          if (restoredFrame) {
+            frameFile = restoredFrame.file;
+            modelUrl = URL.createObjectURL(restoredFrame.file);
+          }
+        }
+
+        sequenceFrames.push({
+          name: frame.name,
+          projectPath: frame.projectPath,
+          sourcePath: frame.sourcePath,
+          absolutePath: frame.absolutePath,
+          file: frameFile,
+          modelUrl,
+        });
+      }
+
+      modelSequence = {
+        ...pm.modelSequence,
+        frames: sequenceFrames,
+      };
+    }
+    let gaussianSplatSequence: GaussianSplatSequenceData | undefined;
+    if (pm.gaussianSplatSequence) {
+      const sequenceFrames: GaussianSplatSequenceFrame[] = [];
+      for (let frameIndex = 0; frameIndex < pm.gaussianSplatSequence.frames.length; frameIndex += 1) {
+        const frame = pm.gaussianSplatSequence.frames[frameIndex];
+        let frameFile = frame.file;
+        let splatUrl = frame.splatUrl;
+
+        if (!frameFile && frame.projectPath && projectFileService.isProjectOpen()) {
+          try {
+            const result = await projectFileService.getFileFromRaw(frame.projectPath);
+            if (result?.file) {
+              frameFile = result.file;
+              splatUrl = URL.createObjectURL(result.file);
+            }
+          } catch (error) {
+            log.warn(`Could not restore gaussian splat sequence frame for ${pm.name}`, {
+              frame: frame.name,
+              error,
+            });
+          }
+        }
+
+        if (!frameFile) {
+          const restoredFrame = await restoreSequenceFrameFromHandle(pm.id, frameIndex);
+          if (restoredFrame) {
+            frameFile = restoredFrame.file;
+            splatUrl = URL.createObjectURL(restoredFrame.file);
+          }
+        }
+
+        sequenceFrames.push({
+          name: frame.name,
+          projectPath: frame.projectPath,
+          sourcePath: frame.sourcePath,
+          absolutePath: frame.absolutePath,
+          file: frameFile,
+          splatUrl,
+        });
+      }
+
+      gaussianSplatSequence = {
+        ...pm.gaussianSplatSequence,
+        frames: sequenceFrames,
+      };
+    }
     if (!file && projectFileService.isProjectOpen()) {
       for (const candidatePath of getProjectRawPathCandidates({
         mediaFileId: pm.id,
@@ -116,6 +268,17 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
         }
       }
     }
+
+    const representativeFile = file ?? modelSequence?.frames[0]?.file ?? gaussianSplatSequence?.frames[0]?.file;
+    const representativeUrl =
+      url ||
+      modelSequence?.frames[0]?.modelUrl ||
+      gaussianSplatSequence?.frames[0]?.splatUrl ||
+      '';
+    const representativeProjectPath =
+      resolvedProjectPath ??
+      modelSequence?.frames[0]?.projectPath ??
+      gaussianSplatSequence?.frames[0]?.projectPath;
 
     // Fall back to the primary file handle for non-project media or legacy data.
     if (!file) {
@@ -201,8 +364,8 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
       type: pm.type,
       parentId: pm.folderId,
       createdAt: new Date(pm.importedAt).getTime(),
-      file,
-      url,
+      file: representativeFile,
+      url: representativeUrl,
       thumbnailUrl,
       duration: pm.duration,
       width: pm.width,
@@ -214,10 +377,12 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
       bitrate: pm.bitrate,
       fileSize: pm.fileSize,
       hasAudio: pm.hasAudio,
+      modelSequence,
+      gaussianSplatSequence,
       proxyStatus: pm.hasProxy ? 'ready' : 'none',
       hasFileHandle: !!handle,
       filePath: pm.sourcePath,
-      projectPath: resolvedProjectPath,
+      projectPath: representativeProjectPath,
       vectorAnimation: pm.vectorAnimation,
       labelColor: pm.labelColor as import('../../stores/mediaStore/types').LabelColor | undefined,
       transcriptStatus,
@@ -272,6 +437,9 @@ function convertProjectCompositionToStore(
         linkedClipId: c.linkedClipId,
         linkedGroupId: c.linkedGroupId,
         waveform: c.waveform,
+        modelSequence: c.modelSequence,
+        gaussianSplatSequence: c.gaussianSplatSequence,
+        threeDEffectorsEnabled: c.threeDEffectorsEnabled,
         meshType: c.meshType,
         cameraSettings: c.cameraSettings,
         splatEffectorSettings: c.splatEffectorSettings,

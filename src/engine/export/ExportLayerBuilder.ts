@@ -13,6 +13,13 @@ import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation'
 import { DEFAULT_TEXT_3D_PROPERTIES, DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS, type GaussianSplatSettings } from '../gaussian/types';
 import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
+import {
+  getGaussianSplatSequenceFrame,
+  getGaussianSplatSequenceFrameRuntimeKey,
+  getGaussianSplatSequenceFrameUrl,
+  resolveGaussianSplatSequenceData,
+} from '../../utils/gaussianSplatSequence';
+import { getModelSequenceFrameUrl, resolveModelSequenceData } from '../../utils/modelSequence';
 
 // Cache video tracks and solo state at export start (don't change during export)
 let cachedVideoTracks: TimelineTrack[] | null = null;
@@ -49,20 +56,35 @@ function getClipText3DProperties(clip: TimelineClip) {
   return clip.text3DProperties ?? clip.source?.text3DProperties;
 }
 
-function buildModelSource(clip: TimelineClip): Layer['source'] {
+function getClipSourceWindowTime(clip: TimelineClip, clipLocalTime: number, ctx: FrameContext): number {
+  const sourceTime = ctx.getSourceTimeForClip(clip.id, clipLocalTime);
+  const initialSpeed = ctx.getInterpolatedSpeed(clip.id, 0);
+  const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
+  return Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
+}
+
+function buildModelSource(clip: TimelineClip, sourceTime: number): Layer['source'] {
   const meshType = getClipMeshType(clip);
   const text3DProperties = getClipText3DProperties(clip);
+  const modelSequence = resolveModelSequenceData(
+    clip.source?.modelSequence,
+    getClipMediaFile(clip)?.modelSequence,
+  );
 
   return {
     type: 'model',
-    modelUrl: clip.source?.modelUrl,
+    modelUrl: getModelSequenceFrameUrl(modelSequence, sourceTime, clip.source?.modelUrl),
+    ...(modelSequence ? { modelSequence } : {}),
     ...(meshType ? { meshType } : {}),
     ...(text3DProperties ? { text3DProperties } : {}),
   };
 }
 
 function usesNativeGaussianSplatRenderer(clip: TimelineClip): boolean {
+  const mediaFile = getClipMediaFile(clip);
+  const hasSequence = !!(clip.source?.gaussianSplatSequence ?? mediaFile?.gaussianSplatSequence);
   return (
+    !hasSequence &&
     clip.source?.type === 'gaussian-splat' &&
     (
       clip.source?.gaussianSplatSettings?.render.useNativeRenderer ??
@@ -73,22 +95,45 @@ function usesNativeGaussianSplatRenderer(clip: TimelineClip): boolean {
 
 function buildGaussianSplatSource(clip: TimelineClip, clipLocalTime: number): Layer['source'] {
   const mediaFile = getClipMediaFile(clip);
+  const gaussianSplatSequence = resolveGaussianSplatSequenceData(
+    clip.source?.gaussianSplatSequence,
+    mediaFile?.gaussianSplatSequence,
+  );
+  const sequenceFrame = getGaussianSplatSequenceFrame(gaussianSplatSequence, clipLocalTime);
   const fileName =
+    sequenceFrame?.name ??
     clip.source?.gaussianSplatFileName ??
     mediaFile?.file?.name ??
     clip.file?.name ??
     mediaFile?.name ??
     clip.name;
-  const fileHash = clip.source?.gaussianSplatFileHash ?? mediaFile?.fileHash;
+  const fileHash = gaussianSplatSequence
+    ? undefined
+    : (clip.source?.gaussianSplatFileHash ?? mediaFile?.fileHash);
   const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
 
   return {
     type: 'gaussian-splat',
-    gaussianSplatUrl: clip.source?.gaussianSplatUrl,
+    file:
+      sequenceFrame?.file ??
+      mediaFile?.file ??
+      clip.source?.file ??
+      clip.file,
+    gaussianSplatUrl: getGaussianSplatSequenceFrameUrl(gaussianSplatSequence, clipLocalTime, clip.source?.gaussianSplatUrl),
     gaussianSplatFileName: fileName,
     ...(fileHash ? { gaussianSplatFileHash: fileHash } : {}),
+    gaussianSplatRuntimeKey: getGaussianSplatSequenceFrameRuntimeKey(
+      gaussianSplatSequence,
+      clipLocalTime,
+      clip.source?.gaussianSplatRuntimeKey ??
+        fileHash ??
+        fileName ??
+        clip.source?.gaussianSplatUrl ??
+        clip.id,
+    ),
+    ...(gaussianSplatSequence ? { gaussianSplatSequence } : {}),
     ...(mediaFileId ? { mediaFileId } : {}),
-    gaussianSplatSettings: buildExportGaussianSplatSettings(clip.source?.gaussianSplatSettings),
+    gaussianSplatSettings: buildExportGaussianSplatSettings(clip.source?.gaussianSplatSettings, !!gaussianSplatSequence),
     mediaTime: clipLocalTime,
   };
 }
@@ -191,9 +236,10 @@ export function buildLayersAtTime(
     }
     // Handle 3D model clips
     else if (clip.source?.type === 'model') {
+      const modelSourceTime = getClipSourceWindowTime(clip, clipLocalTime, ctx);
       layers.push({
         ...baseLayerProps,
-        source: buildModelSource(clip),
+        source: buildModelSource(clip, modelSourceTime),
         is3D: true,
       });
     }
@@ -222,6 +268,7 @@ export function buildLayersAtTime(
 
 function buildExportGaussianSplatSettings(
   settings: GaussianSplatSettings | undefined,
+  forceSharedScene = false,
 ): GaussianSplatSettings {
   const baseSettings = settings ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS;
   return {
@@ -229,6 +276,7 @@ function buildExportGaussianSplatSettings(
     render: {
       ...DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render,
       ...baseSettings.render,
+      ...(forceSharedScene ? { useNativeRenderer: false } : {}),
       // Export should favor completeness and stable depth ordering over preview performance.
       maxSplats: 0,
       sortFrequency: 1,
@@ -538,9 +586,12 @@ function buildNestedLayerForExport(
   }
 
   if (nestedClip.source?.type === 'model') {
+    const nestedSourceTime = nestedClip.reversed
+      ? nestedClip.outPoint - nestedClipLocalTime
+      : nestedClipLocalTime + nestedClip.inPoint;
     return {
       ...baseLayer,
-      source: buildModelSource(nestedClip),
+      source: buildModelSource(nestedClip, nestedSourceTime),
       is3D: true,
     } as Layer;
   }

@@ -7,6 +7,7 @@ import { LABEL_COLORS, getLabelHex } from './media/labelColors';
 import { CompositionSettingsDialog } from './media/CompositionSettingsDialog';
 import { SolidSettingsDialog } from './media/SolidSettingsDialog';
 import { LabelColorPicker } from './media/LabelColorPicker';
+import { getItemImportProgress, isImportedMediaFileItem } from './media/itemTypeGuards';
 import { handleSubmenuHover, handleSubmenuLeave } from './media/submenuPosition';
 import { collectDroppedMediaFiles, planDroppedMediaImports } from './media/dropImport';
 
@@ -1049,7 +1050,8 @@ export function MediaPanel() {
           </div>
         );
       }
-      case 'name':
+      case 'name': {
+        const importProgress = getItemImportProgress(item);
         return (
           <div
             className="media-col media-col-name"
@@ -1093,6 +1095,14 @@ export function MediaPanel() {
                 onClick={(e) => handleNameClick(e, item.id, item.name)}
               >
                 {item.name}
+              </span>
+            )}
+            {importProgress !== null && (
+              <span
+                className="media-item-import-progress"
+                title={`Importing: ${importProgress}%`}
+              >
+                {importProgress}%
               </span>
             )}
             {'proxyStatus' in item && item.proxyStatus === 'ready' && (
@@ -1155,12 +1165,17 @@ export function MediaPanel() {
             })()}
           </div>
         );
-      case 'duration':
+      }
+      case 'duration': {
+        const importProgress = getItemImportProgress(item);
         return (
           <div className="media-col media-col-duration">
-            {'duration' in item && item.duration ? formatDuration(item.duration) : '–'}
+            {importProgress !== null
+              ? `Import ${importProgress}%`
+              : ('duration' in item && item.duration ? formatDuration(item.duration) : '–')}
           </div>
         );
+      }
       case 'resolution':
         return (
           <div className="media-col media-col-resolution">
@@ -1199,19 +1214,18 @@ export function MediaPanel() {
     const isSelected = selectedIds.includes(item.id);
     const isRenaming = renamingId === item.id;
     const isExpanded = isFolder && expandedFolderIds.includes(item.id);
-    const itemType = 'type' in item ? item.type : undefined;
-    const isMediaFile = !isFolder && !!itemType && itemType !== 'composition' && itemType !== 'text' && itemType !== 'solid' && itemType !== 'model' && itemType !== 'camera';
-    const hasFile = isMediaFile && 'file' in item && !!(item as MediaFile).file;
-    const isImporting = isMediaFile && !!(item as MediaFile).isImporting;
+    const isMediaFile = isImportedMediaFileItem(item);
+    const hasFile = isMediaFile && !!item.file;
+    const isImporting = isMediaFile && !!item.isImporting;
     const isDragTarget = isFolder && dragOverFolderId === item.id;
     const isBeingDragged = internalDragId === item.id;
-    const mediaFile = isMediaFile ? (item as MediaFile) : null;
+    const mediaFile = isMediaFile ? item : null;
 
     return (
       <div key={item.id} data-item-id={item.id}>
         <div
           className={`media-item ${isSelected ? 'selected' : ''} ${isFolder ? 'folder' : ''} ${isMediaFile && !hasFile ? 'no-file' : ''} ${isImporting ? 'importing' : ''} ${isDragTarget ? 'drag-target' : ''} ${isBeingDragged ? 'dragging' : ''}`}
-          draggable
+          draggable={!isImporting}
           onDragStart={(e) => handleDragStart(e, item)}
           onDragEnd={handleDragEnd}
           onDragOver={isFolder ? (e) => handleFolderDragOver(e, item.id) : undefined}
@@ -1266,12 +1280,14 @@ export function MediaPanel() {
   const renderGridItem = (item: ProjectItem) => {
     const isFolder = 'isExpanded' in item;
     const isSelected = selectedIds.includes(item.id);
-    const isMediaFile = !isFolder && 'type' in item && item.type !== 'composition' && item.type !== 'text' && item.type !== 'solid';
-    const mediaFile = isMediaFile ? (item as MediaFile) : null;
+    const isMediaFile = isImportedMediaFileItem(item);
+    const mediaFile = isMediaFile ? item : null;
     const isComp = !isFolder && 'type' in item && item.type === 'composition';
     const comp = isComp ? (item as Composition) : null;
     const thumbUrl = mediaFile?.thumbnailUrl;
     const isDragTarget = isFolder && dragOverFolderId === item.id;
+    const isImporting = !!mediaFile?.isImporting;
+    const importProgress = getItemImportProgress(item);
 
     // Duration badge: videos + compositions
     const duration = mediaFile?.duration || comp?.duration;
@@ -1282,8 +1298,8 @@ export function MediaPanel() {
     return (
       <div key={item.id} data-item-id={item.id}>
         <div
-          className={`media-grid-item ${isSelected ? 'selected' : ''} ${isFolder ? 'folder' : ''} ${isDragTarget ? 'drag-target' : ''}`}
-          draggable
+          className={`media-grid-item ${isSelected ? 'selected' : ''} ${isFolder ? 'folder' : ''} ${isDragTarget ? 'drag-target' : ''} ${isImporting ? 'importing' : ''}`}
+          draggable={!isImporting}
           onDragStart={(e) => handleDragStart(e, item)}
           onDragEnd={handleDragEnd}
           onDragOver={isFolder ? (e) => handleFolderDragOver(e, item.id) : undefined}
@@ -1312,6 +1328,9 @@ export function MediaPanel() {
             ) : null}
             {isFolder && folderCount > 0 && (
               <span className="media-grid-badge">{folderCount}</span>
+            )}
+            {importProgress !== null && (
+              <span className="media-grid-import-badge">{importProgress}%</span>
             )}
           </div>
           <div className="media-grid-name" title={item.name}>{item.name}</div>
@@ -1432,7 +1451,7 @@ export function MediaPanel() {
                 </div>
                 <div className="add-dropdown-item" onClick={() => { handleNewSplatEffector(); setAddDropdownOpen(false); }}>
                   <span className="add-dropdown-icon"><FileTypeIcon type="splat-effector" /></span>
-                  <span>Splat Effector</span>
+                  <span>3D Effector</span>
                 </div>
                 <div className="add-dropdown-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
                   <span className="add-dropdown-icon"><FileTypeIcon type="mesh" /></span>
@@ -1675,7 +1694,7 @@ export function MediaPanel() {
             </div>
             <div className="context-menu-item" onClick={() => { handleNewSplatEffector(); closeContextMenu(); }}>
               <span className="context-menu-icon"><FileTypeIcon type="splat-effector" /></span>
-              Splat Effector
+              3D Effector
             </div>
             <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
               <span className="context-menu-icon"><FileTypeIcon type="mesh" /></span>

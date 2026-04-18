@@ -41,7 +41,7 @@ export function SplatEffectorTab({ clipId }: SplatEffectorTabProps) {
   }, [clipId]);
 
   const handleDragStart = useCallback(() => {
-    useHistoryStore.getState().startBatch('Splat effector setting');
+    useHistoryStore.getState().startBatch('3D effector setting');
   }, []);
 
   const handleDragEnd = useCallback(() => {
@@ -64,12 +64,12 @@ export function SplatEffectorTab({ clipId }: SplatEffectorTabProps) {
             fontWeight: 500,
           }}
         >
-          Three.js Only
+          Shared Scene Only
         </span>
       </div>
 
       <div style={{ marginBottom: '8px', color: '#8d99a6', lineHeight: 1.45 }}>
-        Active effector clips deform Three.js splats live at playback time. Transform controls position, rotation, and radius via scale.
+        Active 3D effector clips influence shared-scene 3D layers at playback time. Splats deform directly; models, primitives, and 3D text receive object-level motion. Transform controls position, rotation, and radius via scale.
       </div>
 
       <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', gap: '6px' }}>

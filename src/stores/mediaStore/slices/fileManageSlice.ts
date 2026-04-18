@@ -5,6 +5,7 @@ import type { MediaSliceCreator, MediaState } from '../types';
 import { projectFileService } from '../../../services/projectFileService';
 import { fileSystemService } from '../../../services/fileSystemService';
 import { projectDB } from '../../../services/projectDB';
+import { useMediaStore } from '..';
 import { useTimelineStore } from '../../timeline';
 import { Logger } from '../../../services/logger';
 import { engine } from '../../../engine/WebGPUEngine';
@@ -12,6 +13,7 @@ import { thumbnailCacheService } from '../../../services/thumbnailCacheService';
 import { lottieRuntimeManager } from '../../../services/vectorAnimation/LottieRuntimeManager';
 import { readLottieMetadata } from '../../../services/vectorAnimation/lottieMetadata';
 import { createThumbnail } from '../helpers/thumbnailHelpers';
+import { resolveGaussianSplatSequenceData } from '../../../utils/gaussianSplatSequence';
 
 const log = Logger.create('Reload');
 const isBlobUrl = (value?: string): value is string => typeof value === 'string' && value.startsWith('blob:');
@@ -239,6 +241,7 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
  */
 export async function updateTimelineClips(mediaFileId: string, file: File): Promise<void> {
   const timelineStore = useTimelineStore.getState();
+  const mediaFile = useMediaStore.getState().files.find((entry) => entry.id === mediaFileId);
   const clips = timelineStore.clips.filter(
     c => c.source?.mediaFileId === mediaFileId && c.needsReload
   );
@@ -410,7 +413,12 @@ export async function updateTimelineClips(mediaFileId: string, file: File): Prom
       });
     } else if (sourceType === 'gaussian-splat') {
       // Gaussian splat — create blob URL for the renderer
-      const gaussianSplatUrl = URL.createObjectURL(file);
+      const gaussianSplatSequence = resolveGaussianSplatSequenceData(
+        clip.source?.gaussianSplatSequence,
+        mediaFile?.gaussianSplatSequence,
+      );
+      const firstFrame = gaussianSplatSequence?.frames[0];
+      const gaussianSplatUrl = firstFrame?.splatUrl ?? URL.createObjectURL(file);
       timelineStore.updateClip(clip.id, {
         file,
         needsReload: false,
@@ -418,6 +426,13 @@ export async function updateTimelineClips(mediaFileId: string, file: File): Prom
         source: {
           ...clip.source!,
           gaussianSplatUrl,
+          gaussianSplatFileName: firstFrame?.name ?? file.name,
+          gaussianSplatRuntimeKey:
+            firstFrame?.projectPath ??
+            firstFrame?.absolutePath ??
+            firstFrame?.sourcePath ??
+            firstFrame?.name,
+          gaussianSplatSequence,
           gaussianSplatSettings: clip.source?.gaussianSplatSettings,
         },
       });

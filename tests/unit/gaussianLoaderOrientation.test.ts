@@ -30,6 +30,58 @@ function createSplatFile(): File {
   } as unknown as File;
 }
 
+function createPointCloudPlyFile(): File {
+  const header = [
+    'ply',
+    'format binary_little_endian 1.0',
+    'element vertex 4',
+    'property float x',
+    'property float y',
+    'property float z',
+    'property uchar red',
+    'property uchar green',
+    'property uchar blue',
+    'property uchar alpha',
+    'end_header',
+    '',
+  ].join('\n');
+
+  const headerBytes = new TextEncoder().encode(header);
+  const stride = 16;
+  const payload = new ArrayBuffer(stride * 4);
+  const view = new DataView(payload);
+  const vertices = [
+    { x: 0, y: 0, z: 0, r: 255, g: 0, b: 0, a: 255 },
+    { x: 1, y: 0, z: 0, r: 0, g: 255, b: 0, a: 255 },
+    { x: 0, y: 1, z: 0, r: 0, g: 0, b: 255, a: 255 },
+    { x: 1, y: 1, z: 0, r: 255, g: 255, b: 255, a: 255 },
+  ];
+
+  vertices.forEach((vertex, index) => {
+    const offset = index * stride;
+    view.setFloat32(offset + 0, vertex.x, true);
+    view.setFloat32(offset + 4, vertex.y, true);
+    view.setFloat32(offset + 8, vertex.z, true);
+    view.setUint8(offset + 12, vertex.r);
+    view.setUint8(offset + 13, vertex.g);
+    view.setUint8(offset + 14, vertex.b);
+    view.setUint8(offset + 15, vertex.a);
+  });
+
+  const bytes = new Uint8Array(headerBytes.byteLength + payload.byteLength);
+  bytes.set(headerBytes, 0);
+  bytes.set(new Uint8Array(payload), headerBytes.byteLength);
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+
+  return {
+    name: 'point-cloud.ply',
+    size: bytes.byteLength,
+    type: 'application/octet-stream',
+    arrayBuffer: async () => buffer,
+    slice: (start?: number, end?: number) => new Blob([bytes.slice(start ?? 0, end ?? bytes.byteLength)]),
+  } as unknown as File;
+}
+
 describe('gaussian splat loader orientation', () => {
   it('rotates canonical splat data into the editor basis', () => {
     const data = new Float32Array([
@@ -55,5 +107,16 @@ describe('gaussian splat loader orientation', () => {
       min: [1, -2, -3],
       max: [1, -2, -3],
     });
+  });
+
+  it('estimates small isotropic splat sizes for plain xyz+rgba PLY point clouds', async () => {
+    const asset = await loadGaussianSplatAsset(createPointCloudPlyFile(), 'ply');
+    const data = asset.frames[0]?.buffer.data;
+
+    expect(data).toBeDefined();
+    expect(data![3]).toBeGreaterThan(0);
+    expect(data![3]).toBeLessThan(1);
+    expect(data![4]).toBe(data![3]);
+    expect(data![5]).toBe(data![3]);
   });
 });

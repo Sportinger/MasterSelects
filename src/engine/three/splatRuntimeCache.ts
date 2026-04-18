@@ -168,6 +168,11 @@ async function loadAsset(options: RuntimeSourceOptions): Promise<GaussianSplatAs
   })();
 
   assetPromiseCache.set(options.cacheKey, promise);
+  void promise.catch(() => {
+    if (assetPromiseCache.get(options.cacheKey) === promise) {
+      assetPromiseCache.delete(options.cacheKey);
+    }
+  });
   return promise;
 }
 
@@ -506,6 +511,11 @@ async function ensurePreparedRuntime(options: RuntimeRequestOptions): Promise<Pr
   })();
 
   runtimePromiseCache.set(runtimeKey, promise);
+  void promise.catch(() => {
+    if (runtimePromiseCache.get(runtimeKey) === promise) {
+      runtimePromiseCache.delete(runtimeKey);
+    }
+  });
   return promise;
 }
 

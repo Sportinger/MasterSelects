@@ -18,6 +18,7 @@ const IMAGE_EXTENSIONS = [
   'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif', 'heic', 'heif',
 ];
 
+const MODEL_EXTENSIONS = ['obj', 'gltf', 'glb', 'fbx'];
 const GAUSSIAN_SPLAT_EXTENSIONS = ['ply', 'splat'];
 const VECTOR_ANIMATION_EXTENSIONS = ['lottie', 'riv', 'json'];
 
@@ -48,7 +49,15 @@ export function isGaussianSplatFile(file: File): boolean {
 }
 
 /**
- * Check if file is any media type (video/audio/image/gaussian-splat)
+ * Check if file is a 3D model file.
+ */
+export function isModelFile(file: File): boolean {
+  const ext = file.name.split('.').pop()?.toLowerCase() || '';
+  return MODEL_EXTENSIONS.includes(ext);
+}
+
+/**
+ * Check if file is any media type (video/audio/image/model/gaussian-splat/vector animation)
  */
 export function isMediaFile(file: File): boolean {
   if (
@@ -59,13 +68,14 @@ export function isMediaFile(file: File): boolean {
     return true;
   }
   const ext = file.name.split('.').pop()?.toLowerCase() || '';
-  return (
-    VIDEO_EXTENSIONS.includes(ext) ||
-    AUDIO_EXTENSIONS.includes(ext) ||
-    IMAGE_EXTENSIONS.includes(ext) ||
-    GAUSSIAN_SPLAT_EXTENSIONS.includes(ext) ||
-    VECTOR_ANIMATION_EXTENSIONS.includes(ext)
-  );
+    return (
+      VIDEO_EXTENSIONS.includes(ext) ||
+      AUDIO_EXTENSIONS.includes(ext) ||
+      IMAGE_EXTENSIONS.includes(ext) ||
+      MODEL_EXTENSIONS.includes(ext) ||
+      GAUSSIAN_SPLAT_EXTENSIONS.includes(ext) ||
+      VECTOR_ANIMATION_EXTENSIONS.includes(ext)
+    );
 }
 
 /**

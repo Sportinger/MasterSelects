@@ -870,7 +870,7 @@ function TimelineClipComponent({
               />
             )}
             {isSplatEffectorClip && (
-              <span className="clip-text-icon" title="Splat Effector Clip">E</span>
+              <span className="clip-text-icon" title="3D Effector Clip">E</span>
             )}
             <span className="clip-name">
               {isTextClip && clip.textProperties

@@ -210,6 +210,28 @@ function readPropertyValue(dataView: DataView, byteOffset: number, prop: Resolve
   }
 }
 
+function estimatePointCloudScale(
+  boundingBox: { min: [number, number, number]; max: [number, number, number] },
+  splatCount: number,
+): number {
+  if (splatCount <= 0) {
+    return 0.01;
+  }
+
+  const extentX = Math.max(0, boundingBox.max[0] - boundingBox.min[0]);
+  const extentY = Math.max(0, boundingBox.max[1] - boundingBox.min[1]);
+  const extentZ = Math.max(0, boundingBox.max[2] - boundingBox.min[2]);
+  const sortedExtents = [extentX, extentY, extentZ].toSorted((a, b) => b - a);
+  const primaryArea = Math.max(sortedExtents[0] * Math.max(sortedExtents[1], 1e-6), 1e-8);
+  const maxExtent = Math.max(sortedExtents[0], 1e-4);
+  const estimatedSpacing = Math.sqrt(primaryArea / splatCount);
+
+  return Math.max(
+    maxExtent * 0.0005,
+    Math.min(maxExtent * 0.05, estimatedSpacing),
+  );
+}
+
 // ── Full loader ──────────────────────────────────────────────────────────────
 
 /**
@@ -270,6 +292,8 @@ export async function loadPly(file: File): Promise<GaussianSplatAsset> {
   const data = new Float32Array(splatCount * FLOATS_PER_SPLAT);
   const dataView = new DataView(arrayBuffer, header.headerByteLength);
   const stride = header.perVertexByteStride;
+  const hasExplicitScale = !!(propSx && propSy && propSz);
+  const shouldEstimatePointCloudScale = !hasExplicitScale;
 
   // Determine if color properties are u8 (direct RGB) vs float (SH DC)
   const colorIsDirect = propDc0 !== null && (propDc0.type === 'uchar' || propDc0.type === 'uint8');
@@ -284,7 +308,7 @@ export async function loadPly(file: File): Promise<GaussianSplatAsset> {
     data[outBase + 2] = readPropertyValue(dataView, vertexOffset, propZ);
 
     // Scale (exp-activated)
-    if (propSx && propSy && propSz) {
+    if (hasExplicitScale) {
       data[outBase + 3] = Math.exp(readPropertyValue(dataView, vertexOffset, propSx));
       data[outBase + 4] = Math.exp(readPropertyValue(dataView, vertexOffset, propSy));
       data[outBase + 5] = Math.exp(readPropertyValue(dataView, vertexOffset, propSz));
@@ -374,6 +398,21 @@ export async function loadPly(file: File): Promise<GaussianSplatAsset> {
   }
 
   const boundingBox = computeBoundingBox(data, splatCount);
+  if (shouldEstimatePointCloudScale && splatCount > 0) {
+    const estimatedScale = estimatePointCloudScale(boundingBox, splatCount);
+    for (let i = 0; i < splatCount; i += 1) {
+      const outBase = i * FLOATS_PER_SPLAT;
+      data[outBase + 3] = estimatedScale;
+      data[outBase + 4] = estimatedScale;
+      data[outBase + 5] = estimatedScale;
+    }
+
+    log.info('PLY point cloud scale estimated', {
+      splatCount,
+      estimatedScale,
+      boundingBox,
+    });
+  }
   const metadata = buildMetadata(
     'ply',
     splatCount,

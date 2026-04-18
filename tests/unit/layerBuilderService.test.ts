@@ -253,6 +253,206 @@ describe('LayerBuilderService paused visual provider selection', () => {
     renderSpy.mockRestore();
   });
 
+  it('selects the correct model sequence frame for preview layers', () => {
+    const service = new LayerBuilderService();
+
+    useMediaStore.setState({
+      activeCompositionId: null,
+      activeLayerSlots: {},
+      layerOpacities: {},
+      files: [{
+        id: 'media-model-seq-1',
+        name: 'hero (3f)',
+        type: 'model',
+        createdAt: 1,
+        modelSequence: {
+          fps: 2,
+          frameCount: 3,
+          playbackMode: 'clamp',
+          sequenceName: 'hero',
+          frames: [
+            { name: 'hero000000.glb', modelUrl: 'blob:hero-0' },
+            { name: 'hero000001.glb', modelUrl: 'blob:hero-1' },
+            { name: 'hero000002.glb', modelUrl: 'blob:hero-2' },
+          ],
+        },
+      }],
+      compositions: [],
+      proxyEnabled: false,
+    } as any);
+
+    useTimelineStore.setState({
+      tracks: [
+        {
+          id: 'track-v1',
+          name: 'Video 1',
+          type: 'video',
+          visible: true,
+          muted: false,
+          solo: false,
+        },
+      ],
+      clips: [
+        {
+          id: 'clip-model-seq-1',
+          trackId: 'track-v1',
+          name: 'Hero Sequence',
+          mediaFileId: 'media-model-seq-1',
+          startTime: 0,
+          duration: 2,
+          inPoint: 0,
+          outPoint: 2,
+          effects: [],
+          transform: { ...DEFAULT_TRANSFORM },
+          source: {
+            type: 'model',
+            mediaFileId: 'media-model-seq-1',
+            modelSequence: {
+              fps: 2,
+              frameCount: 3,
+              playbackMode: 'clamp',
+              sequenceName: 'hero',
+              frames: [
+                { name: 'hero000000.glb', modelUrl: 'blob:hero-0' },
+                { name: 'hero000001.glb', modelUrl: 'blob:hero-1' },
+                { name: 'hero000002.glb', modelUrl: 'blob:hero-2' },
+              ],
+            },
+          },
+          isLoading: false,
+          is3D: true,
+        },
+      ],
+      playheadPosition: 0.5,
+      isPlaying: false,
+      isDraggingPlayhead: false,
+      playbackSpeed: 1,
+    } as any);
+
+    const layers = service.buildLayersFromStore();
+
+    expect(layers).toHaveLength(1);
+    expect(layers[0]?.source?.type).toBe('model');
+    expect(layers[0]?.source?.modelUrl).toBe('blob:hero-1');
+  });
+
+  it('selects the correct gaussian splat sequence frame and keeps it on the shared scene path', () => {
+    const service = new LayerBuilderService();
+    const frameFiles = [
+      new File(['0'], 'scan000000.ply', { type: 'application/octet-stream' }),
+      new File(['1'], 'scan000001.ply', { type: 'application/octet-stream' }),
+      new File(['2'], 'scan000002.ply', { type: 'application/octet-stream' }),
+    ];
+
+    useMediaStore.setState({
+      activeCompositionId: null,
+      activeLayerSlots: {},
+      layerOpacities: {},
+      files: [{
+        id: 'media-splat-seq-1',
+        name: 'scan (3f)',
+        type: 'gaussian-splat',
+        createdAt: 1,
+        gaussianSplatSequence: {
+          fps: 2,
+          frameCount: 3,
+          playbackMode: 'clamp',
+          sequenceName: 'scan',
+          frames: [
+            { name: 'scan000000.ply', projectPath: 'Raw/scan000000.ply', file: frameFiles[0], splatUrl: 'blob:scan-0' },
+            { name: 'scan000001.ply', projectPath: 'Raw/scan000001.ply', file: frameFiles[1], splatUrl: 'blob:scan-1' },
+            { name: 'scan000002.ply', projectPath: 'Raw/scan000002.ply', file: frameFiles[2], splatUrl: 'blob:scan-2' },
+          ],
+        },
+      }],
+      compositions: [],
+      proxyEnabled: false,
+    } as any);
+
+    useTimelineStore.setState({
+      tracks: [
+        {
+          id: 'track-v1',
+          name: 'Video 1',
+          type: 'video',
+          visible: true,
+          muted: false,
+          solo: false,
+        },
+      ],
+      clips: [
+        {
+          id: 'clip-splat-seq-1',
+          trackId: 'track-v1',
+          name: 'Scan Sequence',
+          mediaFileId: 'media-splat-seq-1',
+          startTime: 0,
+          duration: 2,
+          inPoint: 0,
+          outPoint: 2,
+          effects: [],
+          transform: { ...DEFAULT_TRANSFORM },
+          source: {
+            type: 'gaussian-splat',
+            mediaFileId: 'media-splat-seq-1',
+            gaussianSplatSequence: {
+              fps: 2,
+              frameCount: 3,
+              playbackMode: 'clamp',
+              sequenceName: 'scan',
+              frames: [
+                { name: 'scan000000.ply', projectPath: 'Raw/scan000000.ply', file: frameFiles[0], splatUrl: 'blob:scan-0' },
+                { name: 'scan000001.ply', projectPath: 'Raw/scan000001.ply', file: frameFiles[1], splatUrl: 'blob:scan-1' },
+                { name: 'scan000002.ply', projectPath: 'Raw/scan000002.ply', file: frameFiles[2], splatUrl: 'blob:scan-2' },
+              ],
+            },
+            gaussianSplatSettings: {
+              render: {
+                useNativeRenderer: true,
+                maxSplats: 2048,
+                splatScale: 1,
+                nearPlane: 0.1,
+                farPlane: 1000,
+                backgroundColor: 'transparent',
+                sortFrequency: 8,
+              },
+              temporal: {
+                enabled: false,
+                playbackMode: 'loop',
+                sequenceFps: 30,
+                frameBlend: 0,
+              },
+              particle: {
+                enabled: false,
+                effectType: 'none',
+                intensity: 0,
+                speed: 1,
+                seed: 1,
+              },
+            },
+          },
+          isLoading: false,
+          is3D: true,
+        },
+      ],
+      playheadPosition: 0.5,
+      isPlaying: false,
+      isDraggingPlayhead: false,
+      playbackSpeed: 1,
+    } as any);
+
+    const layers = service.buildLayersFromStore();
+
+    expect(layers).toHaveLength(1);
+    expect(layers[0]?.source?.type).toBe('gaussian-splat');
+    expect(layers[0]?.source?.gaussianSplatUrl).toBe('blob:scan-1');
+    expect(layers[0]?.source?.gaussianSplatFileName).toBe('scan000001.ply');
+    expect(layers[0]?.source?.gaussianSplatFileHash).toBeUndefined();
+    expect(layers[0]?.source?.gaussianSplatRuntimeKey).toBe('Raw/scan000001.ply');
+    expect(layers[0]?.source?.file).toBe(frameFiles[1]);
+    expect(layers[0]?.source?.gaussianSplatSettings?.render.useNativeRenderer).toBe(false);
+  });
+
   it('keeps full WebCodecs preview bound to the scrub runtime while actively dragging the playhead', () => {
     const service = new LayerBuilderService();
     const videoElement = { currentTime: 1.25 } as HTMLVideoElement;

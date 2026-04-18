@@ -37,6 +37,36 @@ export function isProjectStoreSyncInProgress(): boolean {
 // CONVERTER HELPERS (store → project format)
 // ============================================
 
+function serializeModelSequence(sequence: MediaFile['modelSequence'] | ProjectClip['modelSequence']) {
+  return sequence
+    ? {
+        ...sequence,
+        frames: sequence.frames.map((frame) => ({
+          name: frame.name,
+          projectPath: frame.projectPath,
+          sourcePath: frame.sourcePath,
+          absolutePath: frame.absolutePath,
+        })),
+      }
+    : undefined;
+}
+
+function serializeGaussianSplatSequence(
+  sequence: MediaFile['gaussianSplatSequence'] | ProjectClip['gaussianSplatSequence'],
+) {
+  return sequence
+    ? {
+        ...sequence,
+        frames: sequence.frames.map((frame) => ({
+          name: frame.name,
+          projectPath: frame.projectPath,
+          sourcePath: frame.sourcePath,
+          absolutePath: frame.absolutePath,
+        })),
+      }
+    : undefined;
+}
+
 /**
  * Convert mediaStore files to ProjectMediaFile format
  */
@@ -44,7 +74,7 @@ function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
   return files.map((file) => ({
     id: file.id,
     name: file.name,
-    type: file.type as 'video' | 'audio' | 'image' | 'lottie' | 'rive',
+    type: file.type as 'video' | 'audio' | 'image' | 'model' | 'gaussian-splat' | 'lottie' | 'rive',
     sourcePath: file.filePath || file.name,
     projectPath: file.projectPath,
     duration: file.duration,
@@ -59,6 +89,8 @@ function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
     hasAudio: file.hasAudio,
     hasProxy: file.proxyStatus === 'ready',
     vectorAnimation: file.vectorAnimation,
+    modelSequence: serializeModelSequence(file.modelSequence),
+    gaussianSplatSequence: serializeGaussianSplatSequence(file.gaussianSplatSequence),
     folderId: file.parentId,
     labelColor: file.labelColor && file.labelColor !== 'none' ? file.labelColor : undefined,
     importedAt: new Date(file.createdAt).toISOString(),
@@ -108,10 +140,13 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       linkedClipId: c.linkedClipId,
       linkedGroupId: c.linkedGroupId,
       waveform: c.waveform,
+      modelSequence: serializeModelSequence(c.source?.modelSequence || c.modelSequence),
+      gaussianSplatSequence: serializeGaussianSplatSequence(c.source?.gaussianSplatSequence || c.gaussianSplatSequence),
       meshType: c.source?.meshType || c.meshType,
       text3DProperties: c.source?.text3DProperties || c.text3DProperties,
       cameraSettings: c.source?.cameraSettings || c.cameraSettings,
       splatEffectorSettings: c.source?.splatEffectorSettings || c.splatEffectorSettings,
+      threeDEffectorsEnabled: c.source?.threeDEffectorsEnabled,
       gaussianBlendshapes: c.source?.gaussianBlendshapes || c.gaussianBlendshapes,
       gaussianSplatSettings: c.source?.gaussianSplatSettings || c.gaussianSplatSettings,
       is3D: c.is3D || undefined,

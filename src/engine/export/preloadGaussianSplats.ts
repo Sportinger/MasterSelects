@@ -125,7 +125,9 @@ export async function preloadGaussianSplatsForExport(options: PreloadOptions): P
       : mediaFile?.file && (typeof mediaFile.file.size !== 'number' || mediaFile.file.size > 0)
         ? mediaFile.file
       : undefined;
-    const fileHash = clip.source?.gaussianSplatFileHash ?? mediaFile?.fileHash;
+    const fileHash = clip.source?.gaussianSplatSequence || mediaFile?.gaussianSplatSequence
+      ? undefined
+      : (clip.source?.gaussianSplatFileHash ?? mediaFile?.fileHash);
     const useNativeRenderer =
       clip.source?.gaussianSplatSettings?.render.useNativeRenderer ??
       DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render.useNativeRenderer;

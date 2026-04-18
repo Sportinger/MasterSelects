@@ -87,6 +87,11 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
   const setGaussianSplatNavClipId = useEngineStore((s) => s.setGaussianSplatNavClipId);
   const setGaussianSplatNavFpsMode = useEngineStore((s) => s.setGaussianSplatNavFpsMode);
   const clip = useTimelineStore((s) => s.clips.find((c) => c.id === clipId));
+  const gaussianSplatSequence = useMediaStore((s) => {
+    const mediaFileId = clip?.mediaFileId ?? clip?.source?.mediaFileId;
+    if (!mediaFileId) return undefined;
+    return s.files.find((file) => file.id === mediaFileId)?.gaussianSplatSequence;
+  });
   const wireframe = clip?.wireframe ?? false;
   const sourceType = clip?.source?.type;
   const isModel = sourceType === 'model';
@@ -94,7 +99,11 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
   const isGaussianSplat = sourceType === 'gaussian-splat';
   const isSplatEffector = sourceType === 'splat-effector';
   const renderSettings = clip?.source?.gaussianSplatSettings?.render ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render;
-  const isNativeGaussianSplat = isGaussianSplat && renderSettings.useNativeRenderer === true;
+  const hasGaussianSplatSequence = !!(clip?.source?.gaussianSplatSequence ?? gaussianSplatSequence);
+  const isNativeGaussianSplat = isGaussianSplat && !hasGaussianSplatSequence && renderSettings.useNativeRenderer === true;
+  const supportsThreeDEffectorToggle = isModel || isGaussianSplat;
+  const canToggleThreeDEffectors = isModel || (isGaussianSplat && !isNativeGaussianSplat);
+  const threeDEffectorsEnabled = clip?.source?.threeDEffectorsEnabled !== false;
   const supportsScaleZ = isModel || isSplatEffector || (isGaussianSplat && !isNativeGaussianSplat);
   const usesCameraControls = isCameraClip || isNativeGaussianSplat;
   const isLocked3D = isModel || isGaussianSplat || isSplatEffector;
@@ -158,6 +167,15 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
   const handleOpacityChange = (pct: number) => handlePropertyChange('opacity', Math.max(0, Math.min(100, pct)) / 100);
   const speedPct = speed * 100;
   const handleSpeedChange = (pct: number) => handlePropertyChange('speed', pct / 100);
+  const handleThreeDEffectorsToggle = useCallback(() => {
+    if (!clip?.source) return;
+    updateClip(clipId, {
+      source: {
+        ...clip.source,
+        threeDEffectorsEnabled: !threeDEffectorsEnabled,
+      },
+    });
+  }, [clip, clipId, threeDEffectorsEnabled, updateClip]);
 
   const cameraControlsHint = isCameraClip
     ? 'Scene cameras drive the shared 3D scene for splats and other 3D objects.'
@@ -220,6 +238,26 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
               >
                 Wire
               </button>
+            )}
+          </div>
+        )}
+        {supportsThreeDEffectorToggle && (
+          <div className="control-row">
+            <label className="prop-label">3D Effector</label>
+            {canToggleThreeDEffectors ? (
+              <button
+                className={`btn btn-xs ${threeDEffectorsEnabled ? 'btn-active' : ''}`}
+                onClick={handleThreeDEffectorsToggle}
+                title={threeDEffectorsEnabled ? 'Disable 3D effector influence' : 'Enable 3D effector influence'}
+              >
+                {threeDEffectorsEnabled ? 'On' : 'Off'}
+              </button>
+            ) : (
+              <span style={{ color: '#8d99a6', fontSize: '11px' }}>
+                {hasGaussianSplatSequence
+                  ? 'Splat sequences stay on shared 3D effectors'
+                  : 'Native splats ignore shared 3D effectors'}
+              </span>
             )}
           </div>
         )}

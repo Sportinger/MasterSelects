@@ -92,6 +92,8 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       | {
         transcript?: import('../../types').TranscriptWord[];
         transcriptStatus?: string;
+        modelSequence?: import('../../types').ModelSequenceData;
+        gaussianSplatSequence?: import('../../types').GaussianSplatSequenceData;
         vectorAnimation?: import('../../types').VectorAnimationMetadata;
       }
       | undefined;
@@ -267,7 +269,17 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
     // Handle 3D model files
     if (mediaType === 'model') {
-      const modelClip = createModelClipPlaceholder({ trackId, file, startTime, estimatedDuration: providedDuration ?? 10 });
+      const modelSequenceDuration = sourceMediaFile?.modelSequence
+        ? (providedDuration ?? sourceMediaFile.modelSequence.frameCount / Math.max(1, sourceMediaFile.modelSequence.fps || 30))
+        : undefined;
+      const modelClip = createModelClipPlaceholder({
+        trackId,
+        file,
+        startTime,
+        estimatedDuration: modelSequenceDuration ?? providedDuration ?? 10,
+        mediaFileId,
+        modelSequence: sourceMediaFile?.modelSequence,
+      });
       modelClip.mediaFileId = mediaFileId;  // Link to MediaFile for nested comp lookup
       set({ clips: [...clips, modelClip] });
       updateDuration();
@@ -286,7 +298,17 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
     // Handle Gaussian Splat files
     if (mediaType === 'gaussian-splat') {
-      const splatClip = createGaussianSplatClipPlaceholder({ trackId, file, startTime, estimatedDuration: providedDuration ?? 30 });
+      const gaussianSplatSequenceDuration = sourceMediaFile?.gaussianSplatSequence
+        ? (providedDuration ?? sourceMediaFile.gaussianSplatSequence.frameCount / Math.max(1, sourceMediaFile.gaussianSplatSequence.fps || 30))
+        : undefined;
+      const splatClip = createGaussianSplatClipPlaceholder({
+        trackId,
+        file,
+        startTime,
+        estimatedDuration: gaussianSplatSequenceDuration ?? providedDuration ?? 30,
+        mediaFileId,
+        gaussianSplatSequence: sourceMediaFile?.gaussianSplatSequence,
+      });
       splatClip.mediaFileId = mediaFileId;  // Link to MediaFile for nested comp lookup
       set({ clips: [...clips, splatClip] });
       updateDuration();

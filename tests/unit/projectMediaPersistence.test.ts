@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   getFileFromRaw: vi.fn(),
   getTranscript: vi.fn(async () => null),
   getAnalysisRanges: vi.fn(async () => []),
+  scanRawFolder: vi.fn(async () => new Map()),
   isProjectOpen: vi.fn(() => true),
   saveProject: vi.fn(async () => true),
   getStoredHandle: vi.fn(async () => null),
@@ -106,6 +107,7 @@ vi.mock('../../src/services/projectFileService', () => ({
     getFileFromRaw: mocks.getFileFromRaw,
     getTranscript: mocks.getTranscript,
     getAnalysisRanges: mocks.getAnalysisRanges,
+    scanRawFolder: mocks.scanRawFolder,
     isProjectOpen: mocks.isProjectOpen,
     saveProject: mocks.saveProject,
   },
@@ -325,6 +327,311 @@ describe('project media persistence', () => {
     ]);
   });
 
+  it('persists model sequence metadata for glb sequence assets', async () => {
+    const modelSequence = {
+      fps: 30,
+      frameCount: 3,
+      playbackMode: 'clamp' as const,
+      sequenceName: 'hero',
+      frames: [
+        {
+          name: 'hero000000.glb',
+          projectPath: 'Raw/hero-seq_000000_hero000000.glb',
+          sourcePath: 'C:/capture/hero000000.glb',
+          absolutePath: 'C:/capture/hero000000.glb',
+          file: new File(['0'], 'hero000000.glb', { type: 'model/gltf-binary' }),
+          modelUrl: 'blob:hero-0',
+        },
+        {
+          name: 'hero000001.glb',
+          projectPath: 'Raw/hero-seq_000001_hero000001.glb',
+          sourcePath: 'C:/capture/hero000001.glb',
+          absolutePath: 'C:/capture/hero000001.glb',
+          file: new File(['1'], 'hero000001.glb', { type: 'model/gltf-binary' }),
+          modelUrl: 'blob:hero-1',
+        },
+        {
+          name: 'hero000002.glb',
+          projectPath: 'Raw/hero-seq_000002_hero000002.glb',
+          sourcePath: 'C:/capture/hero000002.glb',
+          absolutePath: 'C:/capture/hero000002.glb',
+          file: new File(['2'], 'hero000002.glb', { type: 'model/gltf-binary' }),
+          modelUrl: 'blob:hero-2',
+        },
+      ],
+    };
+
+    mocks.mediaState.activeCompositionId = 'comp-1';
+    mocks.mediaState.files = [{
+      id: 'media-model-seq-1',
+      name: 'hero (3f)',
+      type: 'model',
+      filePath: 'C:/capture/hero000000.glb',
+      projectPath: 'Raw/hero-seq_000000_hero000000.glb',
+      duration: 0.1,
+      fps: 30,
+      fileSize: 4096,
+      proxyStatus: 'none',
+      parentId: null,
+      createdAt: 1,
+      modelSequence,
+    }];
+    mocks.mediaState.compositions = [{
+      id: 'comp-1',
+      name: 'Comp 1',
+      type: 'composition',
+      parentId: null,
+      createdAt: 1,
+      width: 1920,
+      height: 1080,
+      frameRate: 30,
+      duration: 60,
+      backgroundColor: '#000000',
+      timelineData: { tracks: [], clips: [] },
+    }];
+    mocks.timelineState.getSerializableState.mockReturnValue({
+      tracks: [{ id: 'track-v1', name: 'Video 1', type: 'video', height: 60, muted: false, visible: true, solo: false }],
+      clips: [{
+        id: 'clip-model-seq-1',
+        trackId: 'track-v1',
+        name: 'Hero Sequence',
+        mediaFileId: 'media-model-seq-1',
+        startTime: 0,
+        duration: 0.1,
+        inPoint: 0,
+        outPoint: 0.1,
+        sourceType: 'model',
+        naturalDuration: 0.1,
+        source: {
+          type: 'model',
+          mediaFileId: 'media-model-seq-1',
+          modelSequence,
+        },
+        transform: {
+          opacity: 1,
+          blendMode: 'normal',
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1, z: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+        },
+        effects: [],
+        is3D: true,
+      }],
+      playheadPosition: 0,
+      duration: 60,
+      zoom: 1,
+      scrollX: 0,
+      inPoint: null,
+      outPoint: null,
+      loopPlayback: false,
+    });
+
+    const { syncStoresToProject } = await import('../../src/services/project/projectSave');
+    await syncStoresToProject();
+
+    expect(mocks.updateMedia).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 'media-model-seq-1',
+        type: 'model',
+        modelSequence: expect.objectContaining({
+          fps: 30,
+          frameCount: 3,
+          frames: [
+            expect.objectContaining({
+              name: 'hero000000.glb',
+              projectPath: 'Raw/hero-seq_000000_hero000000.glb',
+              sourcePath: 'C:/capture/hero000000.glb',
+              absolutePath: 'C:/capture/hero000000.glb',
+            }),
+            expect.objectContaining({
+              name: 'hero000001.glb',
+              projectPath: 'Raw/hero-seq_000001_hero000001.glb',
+              sourcePath: 'C:/capture/hero000001.glb',
+              absolutePath: 'C:/capture/hero000001.glb',
+            }),
+            expect.objectContaining({
+              name: 'hero000002.glb',
+              projectPath: 'Raw/hero-seq_000002_hero000002.glb',
+              sourcePath: 'C:/capture/hero000002.glb',
+              absolutePath: 'C:/capture/hero000002.glb',
+            }),
+          ],
+        }),
+      }),
+    ]);
+    expect(mocks.updateCompositions).toHaveBeenCalledWith([
+      expect.objectContaining({
+        clips: [
+          expect.objectContaining({
+            id: 'clip-model-seq-1',
+            sourceType: 'model',
+            modelSequence: expect.objectContaining({
+              frameCount: 3,
+            }),
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it('persists gaussian splat sequence metadata for numbered ply sequence assets', async () => {
+    const gaussianSplatSequence = {
+      fps: 30,
+      frameCount: 3,
+      playbackMode: 'clamp' as const,
+      sequenceName: 'scan',
+      frames: [
+        {
+          name: 'scan000000.ply',
+          projectPath: 'Raw/scan-seq_000000_scan000000.ply',
+          sourcePath: 'C:/capture/scan000000.ply',
+          absolutePath: 'C:/capture/scan000000.ply',
+          file: new File(['0'], 'scan000000.ply', { type: 'application/octet-stream' }),
+          splatUrl: 'blob:scan-0',
+        },
+        {
+          name: 'scan000001.ply',
+          projectPath: 'Raw/scan-seq_000001_scan000001.ply',
+          sourcePath: 'C:/capture/scan000001.ply',
+          absolutePath: 'C:/capture/scan000001.ply',
+          file: new File(['1'], 'scan000001.ply', { type: 'application/octet-stream' }),
+          splatUrl: 'blob:scan-1',
+        },
+        {
+          name: 'scan000002.ply',
+          projectPath: 'Raw/scan-seq_000002_scan000002.ply',
+          sourcePath: 'C:/capture/scan000002.ply',
+          absolutePath: 'C:/capture/scan000002.ply',
+          file: new File(['2'], 'scan000002.ply', { type: 'application/octet-stream' }),
+          splatUrl: 'blob:scan-2',
+        },
+      ],
+    };
+
+    mocks.mediaState.activeCompositionId = 'comp-1';
+    mocks.mediaState.files = [{
+      id: 'media-splat-seq-1',
+      name: 'scan (3f)',
+      type: 'gaussian-splat',
+      filePath: 'C:/capture/scan000000.ply',
+      projectPath: 'Raw/scan-seq_000000_scan000000.ply',
+      duration: 0.1,
+      fps: 30,
+      fileSize: 4096,
+      proxyStatus: 'none',
+      parentId: null,
+      createdAt: 1,
+      gaussianSplatSequence,
+    }];
+    mocks.mediaState.compositions = [{
+      id: 'comp-1',
+      name: 'Comp 1',
+      type: 'composition',
+      parentId: null,
+      createdAt: 1,
+      width: 1920,
+      height: 1080,
+      frameRate: 30,
+      duration: 60,
+      backgroundColor: '#000000',
+      timelineData: { tracks: [], clips: [] },
+    }];
+    mocks.timelineState.getSerializableState.mockReturnValue({
+      tracks: [{ id: 'track-v1', name: 'Video 1', type: 'video', height: 60, muted: false, visible: true, solo: false }],
+      clips: [{
+        id: 'clip-splat-seq-1',
+        trackId: 'track-v1',
+        name: 'Scan Sequence',
+        mediaFileId: 'media-splat-seq-1',
+        startTime: 0,
+        duration: 0.1,
+        inPoint: 0,
+        outPoint: 0.1,
+        sourceType: 'gaussian-splat',
+        naturalDuration: 0.1,
+        source: {
+          type: 'gaussian-splat',
+          mediaFileId: 'media-splat-seq-1',
+          gaussianSplatSequence,
+        },
+        transform: {
+          opacity: 1,
+          blendMode: 'normal',
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1, z: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+        },
+        effects: [],
+        is3D: true,
+      }],
+      playheadPosition: 0,
+      duration: 60,
+      zoom: 1,
+      scrollX: 0,
+      inPoint: null,
+      outPoint: null,
+      loopPlayback: false,
+    });
+
+    const { syncStoresToProject } = await import('../../src/services/project/projectSave');
+    await syncStoresToProject();
+
+    expect(mocks.updateMedia).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 'media-splat-seq-1',
+        type: 'gaussian-splat',
+        gaussianSplatSequence: expect.objectContaining({
+          fps: 30,
+          frameCount: 3,
+          frames: [
+            expect.objectContaining({
+              name: 'scan000000.ply',
+              projectPath: 'Raw/scan-seq_000000_scan000000.ply',
+              sourcePath: 'C:/capture/scan000000.ply',
+              absolutePath: 'C:/capture/scan000000.ply',
+            }),
+            expect.objectContaining({
+              name: 'scan000001.ply',
+              projectPath: 'Raw/scan-seq_000001_scan000001.ply',
+              sourcePath: 'C:/capture/scan000001.ply',
+              absolutePath: 'C:/capture/scan000001.ply',
+            }),
+            expect.objectContaining({
+              name: 'scan000002.ply',
+              projectPath: 'Raw/scan-seq_000002_scan000002.ply',
+              sourcePath: 'C:/capture/scan000002.ply',
+              absolutePath: 'C:/capture/scan000002.ply',
+            }),
+          ],
+        }),
+      }),
+    ]);
+    expect(mocks.updateCompositions).toHaveBeenCalledWith([
+      expect.objectContaining({
+        clips: [
+          expect.objectContaining({
+            id: 'clip-splat-seq-1',
+            sourceType: 'gaussian-splat',
+            gaussianSplatSequence: expect.objectContaining({
+              frameCount: 3,
+              frames: [
+                expect.not.objectContaining({
+                  file: expect.anything(),
+                }),
+                expect.not.objectContaining({
+                  file: expect.anything(),
+                }),
+                expect.not.objectContaining({
+                  file: expect.anything(),
+                }),
+              ],
+            }),
+          }),
+        ],
+      }),
+    ]);
+  });
+
   it('persists gaussian splat transform scale and splat settings into project compositions', async () => {
     mocks.mediaState.activeCompositionId = 'comp-1';
     mocks.mediaState.compositions = [{
@@ -480,6 +787,356 @@ describe('project media persistence', () => {
         }),
       ],
     }));
+  });
+
+  it('restores model sequence frame urls from project RAW files when loading a project', async () => {
+    const frameFiles = [
+      new File(['0'], 'hero000000.glb', { type: 'model/gltf-binary' }),
+      new File(['1'], 'hero000001.glb', { type: 'model/gltf-binary' }),
+      new File(['2'], 'hero000002.glb', { type: 'model/gltf-binary' }),
+    ];
+
+    mocks.getProjectData.mockReturnValue({
+      media: [{
+        id: 'media-model-seq-1',
+        name: 'hero (3f)',
+        type: 'model',
+        sourcePath: 'C:/capture/hero000000.glb',
+        projectPath: 'Raw/hero-seq_000000_hero000000.glb',
+        duration: 0.1,
+        width: 1920,
+        height: 1080,
+        frameRate: 30,
+        hasProxy: false,
+        folderId: null,
+        importedAt: new Date(1).toISOString(),
+        modelSequence: {
+          fps: 30,
+          frameCount: 3,
+          playbackMode: 'clamp',
+          sequenceName: 'hero',
+          frames: [
+            {
+              name: 'hero000000.glb',
+              projectPath: 'Raw/hero-seq_000000_hero000000.glb',
+              sourcePath: 'C:/capture/hero000000.glb',
+              absolutePath: 'C:/capture/hero000000.glb',
+            },
+            {
+              name: 'hero000001.glb',
+              projectPath: 'Raw/hero-seq_000001_hero000001.glb',
+              sourcePath: 'C:/capture/hero000001.glb',
+              absolutePath: 'C:/capture/hero000001.glb',
+            },
+            {
+              name: 'hero000002.glb',
+              projectPath: 'Raw/hero-seq_000002_hero000002.glb',
+              sourcePath: 'C:/capture/hero000002.glb',
+              absolutePath: 'C:/capture/hero000002.glb',
+            },
+          ],
+        },
+      }],
+      compositions: [],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: null,
+      openCompositionIds: [],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+    });
+    mocks.getFileFromRaw.mockImplementation(async (relativePath: string) => {
+      const fileByPath: Record<string, File> = {
+        'Raw/hero-seq_000000_hero000000.glb': frameFiles[0],
+        'Raw/hero-seq_000001_hero000001.glb': frameFiles[1],
+        'Raw/hero-seq_000002_hero000002.glb': frameFiles[2],
+      };
+      const file = fileByPath[relativePath];
+      return file ? { file } : null;
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    expect(mocks.mediaState.files).toEqual([
+      expect.objectContaining({
+        id: 'media-model-seq-1',
+        type: 'model',
+        file: frameFiles[0],
+        projectPath: 'Raw/hero-seq_000000_hero000000.glb',
+        modelSequence: expect.objectContaining({
+          frameCount: 3,
+          frames: [
+            expect.objectContaining({
+              file: frameFiles[0],
+              modelUrl: 'blob:project-media',
+            }),
+            expect.objectContaining({
+              file: frameFiles[1],
+              modelUrl: 'blob:project-media',
+            }),
+            expect.objectContaining({
+              file: frameFiles[2],
+              modelUrl: 'blob:project-media',
+            }),
+          ],
+        }),
+      }),
+    ]);
+  });
+
+  it('restores gaussian splat sequence frame urls from project RAW files when loading a project', async () => {
+    const frameFiles = [
+      new File(['0'], 'scan000000.ply', { type: 'application/octet-stream' }),
+      new File(['1'], 'scan000001.ply', { type: 'application/octet-stream' }),
+      new File(['2'], 'scan000002.ply', { type: 'application/octet-stream' }),
+    ];
+
+    mocks.getProjectData.mockReturnValue({
+      media: [{
+        id: 'media-splat-seq-1',
+        name: 'scan (3f)',
+        type: 'gaussian-splat',
+        sourcePath: 'C:/capture/scan000000.ply',
+        projectPath: 'Raw/scan-seq_000000_scan000000.ply',
+        duration: 0.1,
+        width: 1920,
+        height: 1080,
+        frameRate: 30,
+        hasProxy: false,
+        folderId: null,
+        importedAt: new Date(1).toISOString(),
+        gaussianSplatSequence: {
+          fps: 30,
+          frameCount: 3,
+          playbackMode: 'clamp',
+          sequenceName: 'scan',
+          frames: [
+            {
+              name: 'scan000000.ply',
+              projectPath: 'Raw/scan-seq_000000_scan000000.ply',
+              sourcePath: 'C:/capture/scan000000.ply',
+              absolutePath: 'C:/capture/scan000000.ply',
+            },
+            {
+              name: 'scan000001.ply',
+              projectPath: 'Raw/scan-seq_000001_scan000001.ply',
+              sourcePath: 'C:/capture/scan000001.ply',
+              absolutePath: 'C:/capture/scan000001.ply',
+            },
+            {
+              name: 'scan000002.ply',
+              projectPath: 'Raw/scan-seq_000002_scan000002.ply',
+              sourcePath: 'C:/capture/scan000002.ply',
+              absolutePath: 'C:/capture/scan000002.ply',
+            },
+          ],
+        },
+      }],
+      compositions: [],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: null,
+      openCompositionIds: [],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+    });
+    mocks.getFileFromRaw.mockImplementation(async (relativePath: string) => {
+      const fileByPath: Record<string, File> = {
+        'Raw/scan-seq_000000_scan000000.ply': frameFiles[0],
+        'Raw/scan-seq_000001_scan000001.ply': frameFiles[1],
+        'Raw/scan-seq_000002_scan000002.ply': frameFiles[2],
+      };
+      const file = fileByPath[relativePath];
+      return file ? { file } : null;
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    expect(mocks.mediaState.files).toEqual([
+      expect.objectContaining({
+        id: 'media-splat-seq-1',
+        type: 'gaussian-splat',
+        file: frameFiles[0],
+        projectPath: 'Raw/scan-seq_000000_scan000000.ply',
+        gaussianSplatSequence: expect.objectContaining({
+          frameCount: 3,
+          frames: [
+            expect.objectContaining({
+              file: frameFiles[0],
+              splatUrl: 'blob:project-media',
+            }),
+            expect.objectContaining({
+              file: frameFiles[1],
+              splatUrl: 'blob:project-media',
+            }),
+            expect.objectContaining({
+              file: frameFiles[2],
+              splatUrl: 'blob:project-media',
+            }),
+          ],
+        }),
+      }),
+    ]);
+  });
+
+  it('restores model sequence frames from stored frame handles when no RAW copies exist', async () => {
+    const frameFiles = [
+      new File(['0'], 'hero000000.glb', { type: 'model/gltf-binary' }),
+      new File(['1'], 'hero000001.glb', { type: 'model/gltf-binary' }),
+      new File(['2'], 'hero000002.glb', { type: 'model/gltf-binary' }),
+    ];
+
+    const frameHandles = frameFiles.map((file) => ({
+      kind: 'file',
+      name: file.name,
+      getFile: vi.fn(async () => file),
+      queryPermission: vi.fn(async () => 'granted'),
+    })) as unknown as FileSystemFileHandle[];
+
+    mocks.getProjectData.mockReturnValue({
+      media: [{
+        id: 'media-model-seq-2',
+        name: 'hero (3f)',
+        type: 'model',
+        sourcePath: 'C:/capture/hero000000.glb',
+        duration: 0.1,
+        width: 1920,
+        height: 1080,
+        frameRate: 30,
+        hasProxy: false,
+        folderId: null,
+        importedAt: new Date(1).toISOString(),
+        modelSequence: {
+          fps: 30,
+          frameCount: 3,
+          playbackMode: 'clamp',
+          sequenceName: 'hero',
+          frames: [
+            { name: 'hero000000.glb', sourcePath: 'C:/capture/hero000000.glb', absolutePath: 'C:/capture/hero000000.glb' },
+            { name: 'hero000001.glb', sourcePath: 'C:/capture/hero000001.glb', absolutePath: 'C:/capture/hero000001.glb' },
+            { name: 'hero000002.glb', sourcePath: 'C:/capture/hero000002.glb', absolutePath: 'C:/capture/hero000002.glb' },
+          ],
+        },
+      }],
+      compositions: [],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: null,
+      openCompositionIds: [],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+    });
+    mocks.getStoredHandle.mockImplementation(async (key: string) => {
+      const byKey: Record<string, FileSystemHandle> = {
+        'media_media-model-seq-2': frameHandles[0],
+        'media_media-model-seq-2_frame_0': frameHandles[0],
+        'media_media-model-seq-2_frame_1': frameHandles[1],
+        'media_media-model-seq-2_frame_2': frameHandles[2],
+      };
+      return byKey[key] ?? null;
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    expect(mocks.mediaState.files).toEqual([
+      expect.objectContaining({
+        id: 'media-model-seq-2',
+        type: 'model',
+        file: frameFiles[0],
+        modelSequence: expect.objectContaining({
+          frameCount: 3,
+          frames: [
+            expect.objectContaining({ file: frameFiles[0], modelUrl: 'blob:project-media' }),
+            expect.objectContaining({ file: frameFiles[1], modelUrl: 'blob:project-media' }),
+            expect.objectContaining({ file: frameFiles[2], modelUrl: 'blob:project-media' }),
+          ],
+        }),
+      }),
+    ]);
+  });
+
+  it('restores gaussian splat sequence frames from stored frame handles when no RAW copies exist', async () => {
+    const frameFiles = [
+      new File(['0'], 'scan000000.ply', { type: 'application/octet-stream' }),
+      new File(['1'], 'scan000001.ply', { type: 'application/octet-stream' }),
+      new File(['2'], 'scan000002.ply', { type: 'application/octet-stream' }),
+    ];
+
+    const frameHandles = frameFiles.map((file) => ({
+      kind: 'file',
+      name: file.name,
+      getFile: vi.fn(async () => file),
+      queryPermission: vi.fn(async () => 'granted'),
+    })) as unknown as FileSystemFileHandle[];
+
+    mocks.getProjectData.mockReturnValue({
+      media: [{
+        id: 'media-splat-seq-2',
+        name: 'scan (3f)',
+        type: 'gaussian-splat',
+        sourcePath: 'C:/capture/scan000000.ply',
+        duration: 0.1,
+        width: 1920,
+        height: 1080,
+        frameRate: 30,
+        hasProxy: false,
+        folderId: null,
+        importedAt: new Date(1).toISOString(),
+        gaussianSplatSequence: {
+          fps: 30,
+          frameCount: 3,
+          playbackMode: 'clamp',
+          sequenceName: 'scan',
+          frames: [
+            { name: 'scan000000.ply', sourcePath: 'C:/capture/scan000000.ply', absolutePath: 'C:/capture/scan000000.ply' },
+            { name: 'scan000001.ply', sourcePath: 'C:/capture/scan000001.ply', absolutePath: 'C:/capture/scan000001.ply' },
+            { name: 'scan000002.ply', sourcePath: 'C:/capture/scan000002.ply', absolutePath: 'C:/capture/scan000002.ply' },
+          ],
+        },
+      }],
+      compositions: [],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: null,
+      openCompositionIds: [],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+    });
+    mocks.getStoredHandle.mockImplementation(async (key: string) => {
+      const byKey: Record<string, FileSystemHandle> = {
+        'media_media-splat-seq-2': frameHandles[0],
+        'media_media-splat-seq-2_frame_0': frameHandles[0],
+        'media_media-splat-seq-2_frame_1': frameHandles[1],
+        'media_media-splat-seq-2_frame_2': frameHandles[2],
+      };
+      return byKey[key] ?? null;
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    expect(mocks.mediaState.files).toEqual([
+      expect.objectContaining({
+        id: 'media-splat-seq-2',
+        type: 'gaussian-splat',
+        file: frameFiles[0],
+        gaussianSplatSequence: expect.objectContaining({
+          frameCount: 3,
+          frames: [
+            expect.objectContaining({ file: frameFiles[0], splatUrl: 'blob:project-media' }),
+            expect.objectContaining({ file: frameFiles[1], splatUrl: 'blob:project-media' }),
+            expect.objectContaining({ file: frameFiles[2], splatUrl: 'blob:project-media' }),
+          ],
+        }),
+      }),
+    ]);
   });
 
   it('restores project transforms as nested clip transforms for gaussian splats', async () => {

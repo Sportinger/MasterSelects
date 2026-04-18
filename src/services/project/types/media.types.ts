@@ -1,11 +1,12 @@
 // Media-related types
 
 import type { VectorAnimationMetadata } from '../../../types/vectorAnimation';
+import type { GaussianSplatSequenceData, ModelSequenceData } from '../../../types';
 
 export interface ProjectMediaFile {
   id: string;
   name: string;
-  type: 'video' | 'audio' | 'image' | 'lottie' | 'rive';
+  type: 'video' | 'audio' | 'image' | 'model' | 'gaussian-splat' | 'lottie' | 'rive';
 
   // Path to original file (absolute or relative to Raw/)
   sourcePath: string;
@@ -29,6 +30,8 @@ export interface ProjectMediaFile {
   hasProxy: boolean;
 
   vectorAnimation?: VectorAnimationMetadata;
+  modelSequence?: ModelSequenceData;
+  gaussianSplatSequence?: GaussianSplatSequenceData;
 
   // Folder organization
   folderId: string | null;
