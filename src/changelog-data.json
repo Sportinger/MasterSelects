@@ -1,5 +1,36 @@
 [
   {
+    "date": "2026-04-18",
+    "type": "new",
+    "title": "MasterSelects Now Opens Through a Dedicated Landing Page",
+    "description": "New visitors now enter through a separate marketing landing page with its own routing and entry experience instead of dropping directly into the editor.",
+    "section": "Marketing / Routing",
+    "commits": [
+      "a03f7cc6"
+    ]
+  },
+  {
+    "date": "2026-04-18",
+    "type": "fix",
+    "title": "Gaussian Splat Sequences Survive Refresh and Export Reliably",
+    "description": "PLY and model sequences now restore their source frames after refresh, and precise export waits for the correct per-frame Three.js splat runtimes so offline renders no longer drop or black out sequence frames.",
+    "section": "3D / Gaussian Splats",
+    "commits": [
+      "9ec01b6c",
+      "8ac855e6"
+    ]
+  },
+  {
+    "date": "2026-04-18",
+    "type": "fix",
+    "title": "PLY Sequences Keep Stable Position and Scale Across Frames",
+    "description": "Gaussian splat sequences now use a shared normalization reference instead of re-centering and re-scaling every frame independently, which removes deterministic position and scale jumps during playback and export.",
+    "section": "3D / Gaussian Splats",
+    "commits": [
+      "ac0d4388"
+    ]
+  },
+  {
     "date": "2026-04-16",
     "type": "improve",
     "title": "Export Panel Was Rebuilt Around Deliverables and Presets",
