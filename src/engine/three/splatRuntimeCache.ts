@@ -551,6 +551,13 @@ export async function waitForTargetPreparedSplatRuntime(
   return ensurePreparedRuntime({ ...options, variant: 'target', requestedMaxSplats });
 }
 
+export async function waitForBasePreparedSplatRuntime(
+  options: RuntimeSourceOptions,
+): Promise<PreparedSplatRuntime> {
+  const requestedMaxSplats = normalizeRequestedMaxSplats(options.requestedMaxSplats);
+  return ensurePreparedRuntime({ ...options, variant: 'base', requestedMaxSplats });
+}
+
 export function prewarmGaussianSplatRuntime(options: RuntimeSourceOptions): void {
   const requestedMaxSplats = normalizeRequestedMaxSplats(options.requestedMaxSplats);
   const baseTaskKey = buildRuntimeKey(options.cacheKey, 'base', requestedMaxSplats);

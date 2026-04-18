@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RenderDispatcher } from '../../src/engine/render/RenderDispatcher';
-import { waitForTargetPreparedSplatRuntime } from '../../src/engine/three/splatRuntimeCache';
+import { waitForBasePreparedSplatRuntime, waitForTargetPreparedSplatRuntime } from '../../src/engine/three/splatRuntimeCache';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 
@@ -20,6 +20,7 @@ vi.mock('../../src/services/performanceMonitor', () => ({
 }));
 
 vi.mock('../../src/engine/three/splatRuntimeCache', () => ({
+  waitForBasePreparedSplatRuntime: vi.fn(async () => ({})),
   waitForTargetPreparedSplatRuntime: vi.fn(async () => ({})),
 }));
 
@@ -316,6 +317,100 @@ describe('RenderDispatcher empty playback hold', () => {
       }),
     );
     expect(deps.renderTargetManager.getResolution).toHaveBeenCalled();
+  });
+
+  it('waits for base three.js splat runtimes for sequence layers during precise export', async () => {
+    const { dispatcher } = createDispatcher(false);
+
+    vi.spyOn(dispatcher, 'ensureThreeSceneRendererInitialized').mockResolvedValue(true);
+
+    await dispatcher.ensureExportLayersReady([
+      {
+        id: 'three-sequence',
+        name: 'Three Sequence',
+        visible: true,
+        opacity: 1,
+        is3D: true,
+        source: {
+          type: 'gaussian-splat',
+          gaussianSplatUrl: 'blob:sequence-frame-1',
+          gaussianSplatFileName: 'frame_0001.ply',
+          gaussianSplatSequence: {
+            frameCount: 2,
+            fps: 24,
+            frames: [],
+          },
+          gaussianSplatSettings: {
+            render: {
+              useNativeRenderer: false,
+              maxSplats: 0,
+            },
+          },
+        },
+      },
+    ] as any);
+
+    expect(waitForBasePreparedSplatRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cacheKey: 'frame_0001.ply|blob:sequence-frame-1',
+        fileHash: undefined,
+        fileName: 'frame_0001.ply',
+        url: 'blob:sequence-frame-1',
+        requestedMaxSplats: 0,
+      }),
+    );
+    expect(waitForTargetPreparedSplatRuntime).not.toHaveBeenCalled();
+  });
+
+  it('does not collapse sequence export readiness to mediaFileId across different frame runtimes', async () => {
+    const { dispatcher } = createDispatcher(false);
+
+    vi.spyOn(dispatcher, 'ensureThreeSceneRendererInitialized').mockResolvedValue(true);
+
+    const makeLayer = (runtimeKey: string, url: string) => ({
+      id: `three-sequence-${runtimeKey}`,
+      name: 'Three Sequence',
+      visible: true,
+      opacity: 1,
+      is3D: true,
+      source: {
+        type: 'gaussian-splat',
+        mediaFileId: 'media-sequence-1',
+        gaussianSplatUrl: url,
+        gaussianSplatFileName: 'frame_0001.ply',
+        gaussianSplatRuntimeKey: runtimeKey,
+        gaussianSplatSequence: {
+          frameCount: 2,
+          fps: 24,
+          frames: [],
+        },
+        gaussianSplatSettings: {
+          render: {
+            useNativeRenderer: false,
+            maxSplats: 0,
+          },
+        },
+      },
+    });
+
+    await dispatcher.ensureExportLayersReady([makeLayer('sequence/frame-0001', 'blob:sequence-frame-1')] as any);
+    await dispatcher.ensureExportLayersReady([makeLayer('sequence/frame-0002', 'blob:sequence-frame-2')] as any);
+
+    expect(waitForBasePreparedSplatRuntime).toHaveBeenCalledTimes(2);
+    expect(waitForBasePreparedSplatRuntime).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        cacheKey: 'sequence/frame-0001',
+        url: 'blob:sequence-frame-1',
+      }),
+    );
+    expect(waitForBasePreparedSplatRuntime).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        cacheKey: 'sequence/frame-0002',
+        url: 'blob:sequence-frame-2',
+      }),
+    );
   });
 
   it('fails precise export when a required asset does not become ready', async () => {

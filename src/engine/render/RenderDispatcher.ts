@@ -34,7 +34,7 @@ import { buildSplatCamera, resolveOrbitCameraPose } from '../gaussian/core/Splat
 import { loadGaussianSplatAssetCached } from '../gaussian/loaders';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../gaussian/types';
 import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
-import { waitForTargetPreparedSplatRuntime } from '../three/splatRuntimeCache';
+import { waitForBasePreparedSplatRuntime, waitForTargetPreparedSplatRuntime } from '../three/splatRuntimeCache';
 
 const log = Logger.create('RenderDispatcher');
 const GAUSSIAN_PLAYBACK_SORT_FREQUENCY = 6;
@@ -388,6 +388,7 @@ export class RenderDispatcher {
       file?: File;
       url?: string;
       fileName: string;
+      preferBaseRuntime: boolean;
       requestedMaxSplats: number;
     }>();
     const modelAssets = new Map<string, { url: string; fileName: string }>();
@@ -434,12 +435,16 @@ export class RenderDispatcher {
           : mediaFile?.file && (typeof mediaFile.file.size !== 'number' || mediaFile.file.size > 0)
             ? mediaFile.file
             : undefined;
-      const fileHash = source.gaussianSplatFileHash ?? mediaFile?.fileHash;
+      const preferBaseRuntime = !!(source.gaussianSplatSequence || mediaFile?.gaussianSplatSequence);
+      const fileHash = preferBaseRuntime ? undefined : (source.gaussianSplatFileHash ?? mediaFile?.fileHash);
       const requestedMaxSplats = source.gaussianSplatSettings?.render.maxSplats ?? 0;
-      const cacheKey =
-        fileHash ??
-        mediaFileId ??
+      const runtimeCacheKey =
+        source.gaussianSplatRuntimeKey ??
         `${fileName || source.gaussianSplatUrl || layer.id}|${source.gaussianSplatUrl || layer.id}`;
+      const cacheKey =
+        preferBaseRuntime
+          ? runtimeCacheKey
+          : (fileHash ?? mediaFileId ?? runtimeCacheKey);
 
       if (this.isNativeGaussianSplatSource(source)) {
         if (!source.gaussianSplatUrl) {
@@ -463,6 +468,7 @@ export class RenderDispatcher {
         file,
         url: source.gaussianSplatUrl,
         fileName,
+        preferBaseRuntime,
         requestedMaxSplats,
       });
     }
@@ -501,12 +507,13 @@ export class RenderDispatcher {
         }
         this.exportReadyModelUrls.add(url);
       }),
-      ...[...threeSplats.values()].map(async ({ cacheKey, fileHash, file, url, fileName, requestedMaxSplats }) => {
-        const threeSplatKey = `${cacheKey}|${requestedMaxSplats}`;
+      ...[...threeSplats.values()].map(async ({ cacheKey, fileHash, file, url, fileName, preferBaseRuntime, requestedMaxSplats }) => {
+        const variant = preferBaseRuntime ? 'base' : 'target';
+        const threeSplatKey = `${cacheKey}|${variant}|${requestedMaxSplats}`;
         if (this.exportReadyThreeSplatKeys.has(threeSplatKey)) {
           return;
         }
-        await waitForTargetPreparedSplatRuntime({
+        await (preferBaseRuntime ? waitForBasePreparedSplatRuntime : waitForTargetPreparedSplatRuntime)({
           cacheKey,
           fileHash,
           file,

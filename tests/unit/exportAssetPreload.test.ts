@@ -3,7 +3,7 @@ import { preload3DAssetsForExport, preloadGaussianSplatsForExport } from '../../
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { engine } from '../../src/engine/WebGPUEngine';
-import { waitForTargetPreparedSplatRuntime } from '../../src/engine/three/splatRuntimeCache';
+import { waitForBasePreparedSplatRuntime, waitForTargetPreparedSplatRuntime } from '../../src/engine/three/splatRuntimeCache';
 
 vi.mock('../../src/services/logger', () => ({
   Logger: {
@@ -25,6 +25,7 @@ vi.mock('../../src/engine/WebGPUEngine', () => ({
 }));
 
 vi.mock('../../src/engine/three/splatRuntimeCache', () => ({
+  waitForBasePreparedSplatRuntime: vi.fn(async () => ({})),
   waitForTargetPreparedSplatRuntime: vi.fn(async () => ({})),
 }));
 
@@ -135,6 +136,50 @@ describe('export asset preload helpers', () => {
         requestedMaxSplats: 0,
       }),
     );
+    expect(waitForBasePreparedSplatRuntime).not.toHaveBeenCalled();
+  });
+
+  it('preloads base three.js gaussian splat runtimes for sequence export clips', async () => {
+    useTimelineStore.setState({
+      clips: [
+        {
+          id: 'splat-sequence',
+          name: 'Sequence Splat',
+          trackId: 'track-1',
+          file: { name: 'hero_0001.ply' },
+          startTime: 1,
+          duration: 4,
+          source: {
+            type: 'gaussian-splat',
+            gaussianSplatUrl: 'blob:splat-sequence-frame-1',
+            gaussianSplatFileName: 'hero_0001.ply',
+            gaussianSplatSequence: {
+              frameCount: 2,
+              fps: 24,
+              frames: [],
+            },
+            gaussianSplatSettings: {
+              render: {
+                useNativeRenderer: false,
+              },
+            },
+          },
+        },
+      ],
+    } as any);
+
+    await preloadGaussianSplatsForExport({ startTime: 0, endTime: 5 });
+
+    expect(waitForBasePreparedSplatRuntime).toHaveBeenCalledTimes(1);
+    expect(waitForBasePreparedSplatRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cacheKey: 'hero_0001.ply|blob:splat-sequence-frame-1',
+        url: 'blob:splat-sequence-frame-1',
+        fileName: 'hero_0001.ply',
+        requestedMaxSplats: 0,
+      }),
+    );
+    expect(waitForTargetPreparedSplatRuntime).not.toHaveBeenCalled();
   });
 
   it('initializes the 3D renderer and preloads overlapping model assets', async () => {
