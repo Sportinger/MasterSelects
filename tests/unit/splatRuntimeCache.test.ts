@@ -15,7 +15,21 @@ vi.mock('../../src/services/projectFileService', () => ({
   },
 }));
 
-function createAsset(sourceFile: File): GaussianSplatAsset {
+function createAsset(
+  sourceFile: File,
+  options?: {
+    bounds?: {
+      min: [number, number, number];
+      max: [number, number, number];
+    };
+    center?: [number, number, number];
+  },
+): GaussianSplatAsset {
+  const center = options?.center ?? [0, 0, 0];
+  const bounds = options?.bounds ?? {
+    min: [0, 0, 0] as [number, number, number],
+    max: [1, 1, 1] as [number, number, number],
+  };
   return {
     metadata: {
       format: 'ply',
@@ -24,10 +38,7 @@ function createAsset(sourceFile: File): GaussianSplatAsset {
       frameCount: 1,
       fps: 0,
       totalDuration: 0,
-      boundingBox: {
-        min: [0, 0, 0],
-        max: [1, 1, 1],
-      },
+      boundingBox: bounds,
       byteSize: 56,
       perSplatByteStride: 56,
       hasSphericalHarmonics: false,
@@ -39,9 +50,9 @@ function createAsset(sourceFile: File): GaussianSplatAsset {
         index: 0,
         buffer: {
           data: new Float32Array([
-            0, 0, 0,
+            center[0], center[1], center[2],
             1, 1, 1,
-            0, 0, 0, 1,
+            1, 0, 0, 0,
             1, 1, 1,
             1,
           ]),
@@ -88,5 +99,73 @@ describe('splatRuntimeCache', () => {
     });
 
     expect(loadGaussianSplatAssetMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('normalizes later sequence frames against the first frame bounds when shared bounds are missing', async () => {
+    const frameA = new File([new Uint8Array([1])], 'frame0000000.ply', {
+      type: 'application/octet-stream',
+    });
+    const frameB = new File([new Uint8Array([2])], 'frame0000001.ply', {
+      type: 'application/octet-stream',
+    });
+
+    loadGaussianSplatAssetMock.mockImplementation(async (file: File) => {
+      if (file.name === frameA.name) {
+        return createAsset(file, {
+          bounds: {
+            min: [0, 0, 0],
+            max: [10, 10, 10],
+          },
+          center: [5, 5, 5],
+        });
+      }
+
+      return createAsset(file, {
+        bounds: {
+          min: [10, 0, 0],
+          max: [30, 10, 10],
+        },
+        center: [20, 5, 5],
+      });
+    });
+
+    const { waitForBasePreparedSplatRuntime } = await import('../../src/engine/three/splatRuntimeCache');
+    const runtime = await waitForBasePreparedSplatRuntime({
+      cacheKey: 'Raw/frame0000001.ply',
+      file: frameB,
+      fileName: frameB.name,
+      gaussianSplatSequence: {
+        fps: 24,
+        frameCount: 2,
+        frames: [
+          {
+            name: frameA.name,
+            projectPath: 'Raw/frame0000000.ply',
+            file: frameA,
+            splatUrl: 'blob:frame-a',
+          },
+          {
+            name: frameB.name,
+            projectPath: 'Raw/frame0000001.ply',
+            file: frameB,
+            splatUrl: 'blob:frame-b',
+          },
+        ],
+      },
+    });
+
+    expect(loadGaussianSplatAssetMock).toHaveBeenCalledTimes(2);
+    expect(loadGaussianSplatAssetMock.mock.calls.map(([file]) => file.name).sort()).toEqual([
+      frameA.name,
+      frameB.name,
+    ]);
+    expect(runtime.rawBounds).toEqual({
+      min: [0, 0, 0],
+      max: [10, 10, 10],
+    });
+    expect(runtime.normalizationScale).toBeCloseTo(0.1);
+    expect(runtime.centers[0]).toBeCloseTo(1.5);
+    expect(runtime.centers[1]).toBeCloseTo(0);
+    expect(runtime.centers[2]).toBeCloseTo(0);
   });
 });

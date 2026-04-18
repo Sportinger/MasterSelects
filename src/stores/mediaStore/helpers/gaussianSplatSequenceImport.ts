@@ -1,3 +1,4 @@
+import { loadGaussianSplatAsset } from '../../../engine/gaussian/loaders';
 import { Logger } from '../../../services/logger';
 import { projectDB } from '../../../services/projectDB';
 import { projectFileService } from '../../../services/projectFileService';
@@ -5,6 +6,7 @@ import { fileSystemService } from '../../../services/fileSystemService';
 import type { GaussianSplatSequenceData, GaussianSplatSequenceFrame } from '../../../types';
 import {
   buildGaussianSplatSequenceData,
+  cloneGaussianSplatBounds,
   getGaussianSplatSequenceDuration,
   type GaussianSplatSequenceImportEntry,
   type GroupedGaussianSplatSequence,
@@ -37,6 +39,25 @@ function buildSequenceSlug(id: string, sequenceName: string): string {
 
 function getSequenceFrameHandleCacheKey(id: string, index: number): string {
   return `${id}_frame_${index}`;
+}
+
+async function resolveSequenceSharedBounds(
+  entry: GaussianSplatSequenceImportEntry | undefined,
+): Promise<GaussianSplatSequenceData['sharedBounds']> {
+  if (!entry?.file) {
+    return undefined;
+  }
+
+  try {
+    const asset = await loadGaussianSplatAsset(entry.file);
+    return cloneGaussianSplatBounds(asset.metadata.boundingBox);
+  } catch (error) {
+    log.warn('Failed to resolve gaussian splat sequence shared bounds', {
+      fileName: entry.file.name,
+      error,
+    });
+    return undefined;
+  }
 }
 
 async function maybeCopyFramesToProject(
@@ -137,10 +158,12 @@ export async function processGaussianSplatSequenceImport<T extends GaussianSplat
     advanceProgress();
   }
 
+  const sharedBounds = await resolveSequenceSharedBounds(firstEntry);
   const gaussianSplatSequence: GaussianSplatSequenceData = buildGaussianSplatSequenceData(frames, {
     fps: 30,
     playbackMode: 'clamp',
     sequenceName: sequence.sequenceName,
+    sharedBounds,
   });
 
   const duration = getGaussianSplatSequenceDuration(gaussianSplatSequence);

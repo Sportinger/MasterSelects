@@ -156,6 +156,10 @@ describe('export asset preload helpers', () => {
             gaussianSplatSequence: {
               frameCount: 2,
               fps: 24,
+              sharedBounds: {
+                min: [-1, -1, -1],
+                max: [1, 1, 1],
+              },
               frames: [],
             },
             gaussianSplatSettings: {
@@ -176,6 +180,12 @@ describe('export asset preload helpers', () => {
         cacheKey: 'hero_0001.ply|blob:splat-sequence-frame-1',
         url: 'blob:splat-sequence-frame-1',
         fileName: 'hero_0001.ply',
+        gaussianSplatSequence: expect.objectContaining({
+          sharedBounds: {
+            min: [-1, -1, -1],
+            max: [1, 1, 1],
+          },
+        }),
         requestedMaxSplats: 0,
       }),
     );

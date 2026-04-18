@@ -86,6 +86,34 @@ describe('gaussianSplatSequence utilities', () => {
     expect(getGaussianSplatSequenceFrameRuntimeKey(undefined, 1.1, 'fallback-key')).toBe('fallback-key');
   });
 
+  it('preserves shared sequence bounds when hydrating runtime data from fallback media', () => {
+    const restored = resolveGaussianSplatSequenceData(
+      buildGaussianSplatSequenceData([
+        { name: 'scan000000.ply', projectPath: 'Raw/scan000000.ply' },
+        { name: 'scan000001.ply', projectPath: 'Raw/scan000001.ply' },
+      ], {
+        sharedBounds: {
+          min: [-1, -2, -3],
+          max: [4, 5, 6],
+        },
+      }),
+      buildGaussianSplatSequenceData([
+        { name: 'scan000000.ply', projectPath: 'Raw/scan000000.ply', file: createSplatFile('scan000000.ply'), splatUrl: 'blob:scan-0' },
+        { name: 'scan000001.ply', projectPath: 'Raw/scan000001.ply', file: createSplatFile('scan000001.ply'), splatUrl: 'blob:scan-1' },
+      ], {
+        sharedBounds: {
+          min: [0, 0, 0],
+          max: [10, 10, 10],
+        },
+      }),
+    );
+
+    expect(restored?.sharedBounds).toEqual({
+      min: [-1, -2, -3],
+      max: [4, 5, 6],
+    });
+  });
+
   it('hydrates serialized splat sequence frames from the media-store sequence when runtime data is missing', () => {
     const restored = resolveGaussianSplatSequenceData(
       buildGaussianSplatSequenceData([
@@ -95,9 +123,18 @@ describe('gaussianSplatSequence utilities', () => {
       buildGaussianSplatSequenceData([
         { name: 'scan000000.ply', projectPath: 'Raw/scan000000.ply', file: createSplatFile('scan000000.ply'), splatUrl: 'blob:scan-0' },
         { name: 'scan000001.ply', projectPath: 'Raw/scan000001.ply', file: createSplatFile('scan000001.ply'), splatUrl: 'blob:scan-1' },
-      ]),
+      ], {
+        sharedBounds: {
+          min: [0, 0, 0],
+          max: [10, 10, 10],
+        },
+      }),
     );
 
+    expect(restored?.sharedBounds).toEqual({
+      min: [0, 0, 0],
+      max: [10, 10, 10],
+    });
     expect(restored?.frames[0]).toEqual(expect.objectContaining({
       file: expect.any(File),
       splatUrl: 'blob:scan-0',
@@ -127,9 +164,18 @@ describe('gaussianSplatSequence utilities', () => {
       buildGaussianSplatSequenceData([
         { name: 'scan000000.ply', projectPath: 'Raw/scan000000.ply', file: createSplatFile('scan000000.ply'), splatUrl: 'blob:scan-0' },
         { name: 'scan000001.ply', projectPath: 'Raw/scan000001.ply', file: createSplatFile('scan000001.ply'), splatUrl: 'blob:scan-1' },
-      ]),
+      ], {
+        sharedBounds: {
+          min: [0, 0, 0],
+          max: [10, 10, 10],
+        },
+      }),
     );
 
+    expect(restored?.sharedBounds).toEqual({
+      min: [0, 0, 0],
+      max: [10, 10, 10],
+    });
     expect(restored?.frames[0]).toEqual(expect.objectContaining({
       file: expect.any(File),
       splatUrl: 'blob:scan-0',

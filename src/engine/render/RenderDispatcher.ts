@@ -388,6 +388,7 @@ export class RenderDispatcher {
       file?: File;
       url?: string;
       fileName: string;
+      gaussianSplatSequence?: NonNullable<Layer['source']>['gaussianSplatSequence'];
       preferBaseRuntime: boolean;
       requestedMaxSplats: number;
     }>();
@@ -435,7 +436,8 @@ export class RenderDispatcher {
           : mediaFile?.file && (typeof mediaFile.file.size !== 'number' || mediaFile.file.size > 0)
             ? mediaFile.file
             : undefined;
-      const preferBaseRuntime = !!(source.gaussianSplatSequence || mediaFile?.gaussianSplatSequence);
+      const gaussianSplatSequence = source.gaussianSplatSequence ?? mediaFile?.gaussianSplatSequence;
+      const preferBaseRuntime = !!gaussianSplatSequence;
       const fileHash = preferBaseRuntime ? undefined : (source.gaussianSplatFileHash ?? mediaFile?.fileHash);
       const requestedMaxSplats = source.gaussianSplatSettings?.render.maxSplats ?? 0;
       const runtimeCacheKey =
@@ -468,6 +470,7 @@ export class RenderDispatcher {
         file,
         url: source.gaussianSplatUrl,
         fileName,
+        gaussianSplatSequence,
         preferBaseRuntime,
         requestedMaxSplats,
       });
@@ -507,7 +510,16 @@ export class RenderDispatcher {
         }
         this.exportReadyModelUrls.add(url);
       }),
-      ...[...threeSplats.values()].map(async ({ cacheKey, fileHash, file, url, fileName, preferBaseRuntime, requestedMaxSplats }) => {
+      ...[...threeSplats.values()].map(async ({
+        cacheKey,
+        fileHash,
+        file,
+        url,
+        fileName,
+        gaussianSplatSequence,
+        preferBaseRuntime,
+        requestedMaxSplats,
+      }) => {
         const variant = preferBaseRuntime ? 'base' : 'target';
         const threeSplatKey = `${cacheKey}|${variant}|${requestedMaxSplats}`;
         if (this.exportReadyThreeSplatKeys.has(threeSplatKey)) {
@@ -519,6 +531,7 @@ export class RenderDispatcher {
           file,
           url,
           fileName,
+          gaussianSplatSequence,
           requestedMaxSplats,
         });
         this.exportReadyThreeSplatKeys.add(threeSplatKey);
@@ -1036,6 +1049,7 @@ export class RenderDispatcher {
         gaussianSplatFileHash: src?.gaussianSplatFileHash ?? undefined,
         gaussianSplatRuntimeKey: src?.gaussianSplatRuntimeKey ?? undefined,
         gaussianSplatIsSequence: !!src?.gaussianSplatSequence,
+        gaussianSplatSequence: src?.gaussianSplatSequence ?? undefined,
         gaussianSplatMediaFileId: src?.mediaFileId ?? undefined,
         gaussianSplatSettings: src?.gaussianSplatSettings ?? undefined,
         preciseSplatSorting,

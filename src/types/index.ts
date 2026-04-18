@@ -46,11 +46,17 @@ export interface GaussianSplatSequenceFrame {
   splatUrl?: string;
 }
 
+export interface GaussianSplatBounds {
+  min: [number, number, number];
+  max: [number, number, number];
+}
+
 export interface GaussianSplatSequenceData {
   fps: number;
   frameCount: number;
   playbackMode?: ModelSequencePlaybackMode;
   sequenceName?: string;
+  sharedBounds?: GaussianSplatBounds;
   frames: GaussianSplatSequenceFrame[];
 }
 

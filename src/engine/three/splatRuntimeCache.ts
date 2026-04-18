@@ -2,6 +2,12 @@ import { loadGaussianSplatAsset } from '../gaussian/loaders';
 import type { GaussianSplatAsset, GaussianSplatFormat } from '../gaussian/loaders';
 import { Logger } from '../../services/logger';
 import { projectFileService } from '../../services/projectFileService';
+import type { GaussianSplatBounds, GaussianSplatSequenceData } from '../../types';
+import {
+  cloneGaussianSplatBounds,
+  getGaussianSplatSequenceReferenceFrame,
+  getGaussianSplatSequenceReferenceRuntimeKey,
+} from '../../utils/gaussianSplatSequence';
 
 const log = Logger.create('SplatRuntimeCache');
 
@@ -37,6 +43,7 @@ interface RuntimeSourceOptions {
   file?: File;
   url?: string;
   fileName?: string;
+  gaussianSplatSequence?: GaussianSplatSequenceData;
   requestedMaxSplats?: number;
 }
 
@@ -63,8 +70,32 @@ function buildVariantName(variant: 'base' | 'target', requestedMaxSplats: number
   return requestedMaxSplats > 0 ? `target-${requestedMaxSplats}` : 'target-all';
 }
 
-function buildRuntimeKey(cacheKey: string, variant: 'base' | 'target', requestedMaxSplats: number): string {
-  return `${cacheKey}|${buildVariantName(variant, requestedMaxSplats)}`;
+function serializeBoundsKey(bounds: GaussianSplatBounds): string {
+  return `${bounds.min.join(',')}|${bounds.max.join(',')}`;
+}
+
+function buildSequenceNormalizationKey(sequence: GaussianSplatSequenceData | undefined): string | undefined {
+  if (!sequence) {
+    return undefined;
+  }
+
+  const referenceKey = getGaussianSplatSequenceReferenceRuntimeKey(sequence);
+  if (referenceKey) {
+    return referenceKey;
+  }
+
+  return sequence.sharedBounds ? `bounds:${serializeBoundsKey(sequence.sharedBounds)}` : undefined;
+}
+
+function buildRuntimeKey(
+  cacheKey: string,
+  variant: 'base' | 'target',
+  requestedMaxSplats: number,
+  sequence: GaussianSplatSequenceData | undefined,
+): string {
+  const normalizationKey = buildSequenceNormalizationKey(sequence);
+  const baseKey = `${cacheKey}|${buildVariantName(variant, requestedMaxSplats)}`;
+  return normalizationKey ? `${baseKey}|norm:${normalizationKey}` : baseKey;
 }
 
 function resolveGaussianSplatFormat(fileName?: string, url?: string): GaussianSplatFormat | undefined {
@@ -181,6 +212,7 @@ function buildPreparedRuntime(
   asset: GaussianSplatAsset,
   variant: 'base' | 'target',
   requestedMaxSplats: number,
+  normalizationBounds: GaussianSplatBounds,
 ): PreparedSplatRuntime {
   const frame = asset.frames[0];
   if (!frame) {
@@ -189,7 +221,7 @@ function buildPreparedRuntime(
 
   const canonical = frame.buffer.data;
   const totalSplats = frame.buffer.splatCount;
-  const rawBounds = asset.metadata.boundingBox;
+  const rawBounds = cloneGaussianSplatBounds(normalizationBounds) ?? asset.metadata.boundingBox;
   const rawCenterX = (rawBounds.min[0] + rawBounds.max[0]) * 0.5;
   const rawCenterY = (rawBounds.min[1] + rawBounds.max[1]) * 0.5;
   const rawCenterZ = (rawBounds.min[2] + rawBounds.max[2]) * 0.5;
@@ -306,6 +338,36 @@ function buildPreparedRuntime(
     axisZTextureData,
     orderTemplateData,
   };
+}
+
+async function resolveRuntimeNormalizationBounds(
+  options: RuntimeSourceOptions,
+  asset: GaussianSplatAsset,
+): Promise<GaussianSplatBounds> {
+  const sharedBounds = cloneGaussianSplatBounds(options.gaussianSplatSequence?.sharedBounds);
+  if (sharedBounds) {
+    return sharedBounds;
+  }
+
+  const referenceFrame = getGaussianSplatSequenceReferenceFrame(options.gaussianSplatSequence);
+  const referenceKey = getGaussianSplatSequenceReferenceRuntimeKey(options.gaussianSplatSequence);
+  if (referenceFrame && referenceKey) {
+    if (referenceKey === options.cacheKey) {
+      return cloneGaussianSplatBounds(asset.metadata.boundingBox) ?? asset.metadata.boundingBox;
+    }
+
+    if (referenceFrame.file || referenceFrame.splatUrl) {
+      const referenceAsset = await loadAsset({
+        cacheKey: referenceKey,
+        file: referenceFrame.file,
+        url: referenceFrame.splatUrl,
+        fileName: referenceFrame.name,
+      });
+      return cloneGaussianSplatBounds(referenceAsset.metadata.boundingBox) ?? referenceAsset.metadata.boundingBox;
+    }
+  }
+
+  return cloneGaussianSplatBounds(asset.metadata.boundingBox) ?? asset.metadata.boundingBox;
 }
 
 function serializeRuntime(runtime: PreparedSplatRuntime): Blob {
@@ -480,7 +542,12 @@ async function persistRuntimeToProjectCache(
 
 async function ensurePreparedRuntime(options: RuntimeRequestOptions): Promise<PreparedSplatRuntime> {
   const requestedMaxSplats = normalizeRequestedMaxSplats(options.requestedMaxSplats);
-  const runtimeKey = buildRuntimeKey(options.cacheKey, options.variant, requestedMaxSplats);
+  const runtimeKey = buildRuntimeKey(
+    options.cacheKey,
+    options.variant,
+    requestedMaxSplats,
+    options.gaussianSplatSequence,
+  );
   const existing = runtimeValueCache.get(runtimeKey);
   if (existing) return existing;
 
@@ -499,11 +566,13 @@ async function ensurePreparedRuntime(options: RuntimeRequestOptions): Promise<Pr
     }
 
     const asset = await loadAsset(options);
+    const normalizationBounds = await resolveRuntimeNormalizationBounds(options, asset);
     const runtime = buildPreparedRuntime(
       runtimeKey,
       asset,
       options.variant,
       requestedMaxSplats,
+      normalizationBounds,
     );
     runtimeValueCache.set(runtimeKey, runtime);
     void persistRuntimeToProjectCache(options.fileHash, runtime);
@@ -523,7 +592,9 @@ export function getPreparedSplatRuntimeSync(
   options: RuntimeRequestOptions,
 ): PreparedSplatRuntime | null {
   const requestedMaxSplats = normalizeRequestedMaxSplats(options.requestedMaxSplats);
-  return runtimeValueCache.get(buildRuntimeKey(options.cacheKey, options.variant, requestedMaxSplats)) ?? null;
+  return runtimeValueCache.get(
+    buildRuntimeKey(options.cacheKey, options.variant, requestedMaxSplats, options.gaussianSplatSequence),
+  ) ?? null;
 }
 
 export async function resolvePreparedSplatRuntime(
@@ -560,7 +631,12 @@ export async function waitForBasePreparedSplatRuntime(
 
 export function prewarmGaussianSplatRuntime(options: RuntimeSourceOptions): void {
   const requestedMaxSplats = normalizeRequestedMaxSplats(options.requestedMaxSplats);
-  const baseTaskKey = buildRuntimeKey(options.cacheKey, 'base', requestedMaxSplats);
+  const baseTaskKey = buildRuntimeKey(
+    options.cacheKey,
+    'base',
+    requestedMaxSplats,
+    options.gaussianSplatSequence,
+  );
   scheduleIdle(baseTaskKey, () => {
     void ensurePreparedRuntime({ ...options, variant: 'base', requestedMaxSplats }).catch((error) => {
       log.warn('Failed to prewarm gaussian splat base runtime', {
@@ -571,7 +647,12 @@ export function prewarmGaussianSplatRuntime(options: RuntimeSourceOptions): void
     });
   });
 
-  const targetTaskKey = buildRuntimeKey(options.cacheKey, 'target', requestedMaxSplats);
+  const targetTaskKey = buildRuntimeKey(
+    options.cacheKey,
+    'target',
+    requestedMaxSplats,
+    options.gaussianSplatSequence,
+  );
   scheduleIdle(targetTaskKey, () => {
     void ensurePreparedRuntime({ ...options, variant: 'target', requestedMaxSplats }).catch((error) => {
       log.warn('Failed to prewarm gaussian splat target runtime', {

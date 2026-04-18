@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   storeHandle: vi.fn(async () => undefined),
   copyToRawFolder: vi.fn(),
   isProjectOpen: vi.fn(() => true),
+  loadGaussianSplatAsset: vi.fn(),
 }));
 
 vi.mock('../../src/stores/settingsStore', () => ({
@@ -35,6 +36,10 @@ vi.mock('../../src/services/projectFileService', () => ({
   },
 }));
 
+vi.mock('../../src/engine/gaussian/loaders', () => ({
+  loadGaussianSplatAsset: mocks.loadGaussianSplatAsset,
+}));
+
 describe('sequence import persistence', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -53,6 +58,35 @@ describe('sequence import persistence', () => {
       }
       return 'blob:unknown';
     });
+    mocks.loadGaussianSplatAsset.mockImplementation(async (file: File) => ({
+      metadata: {
+        format: 'ply',
+        splatCount: 1,
+        isTemporal: false,
+        frameCount: 1,
+        fps: 0,
+        totalDuration: 0,
+        boundingBox: {
+          min: [-1, -2, -3],
+          max: [4, 5, 6],
+        },
+        byteSize: 56,
+        perSplatByteStride: 56,
+        hasSphericalHarmonics: false,
+        shDegree: 0,
+        compressionType: 'none',
+      },
+      frames: [{
+        index: 0,
+        buffer: {
+          data: new Float32Array(14),
+          splatCount: 1,
+          shDegree: 0,
+        },
+      }],
+      sourceFile: file,
+      sourceUrl: `memory://${file.name}`,
+    }));
   });
 
   it('copies gaussian splat sequences into project RAW when imported without handles', async () => {
@@ -78,6 +112,12 @@ describe('sequence import persistence', () => {
     expect(mocks.copyToRawFolder).toHaveBeenCalledTimes(2);
     expect(result.projectPath).toBe('Raw/scan-splat-seq-1_000000_scan000000.ply');
     expect(result.hasFileHandle).toBe(true);
+    expect(mocks.loadGaussianSplatAsset).toHaveBeenCalledTimes(1);
+    expect(mocks.loadGaussianSplatAsset).toHaveBeenCalledWith(frameA);
+    expect(result.gaussianSplatSequence?.sharedBounds).toEqual({
+      min: [-1, -2, -3],
+      max: [4, 5, 6],
+    });
     expect(result.gaussianSplatSequence?.frames).toEqual([
       expect.objectContaining({
         name: 'scan000000.ply',
@@ -115,6 +155,7 @@ describe('sequence import persistence', () => {
     expect(mocks.copyToRawFolder).toHaveBeenCalledTimes(2);
     expect(result.projectPath).toBe('Raw/hero-model-seq-1_000000_hero000000.glb');
     expect(result.hasFileHandle).toBe(true);
+    expect(mocks.loadGaussianSplatAsset).not.toHaveBeenCalled();
     expect(result.modelSequence?.frames).toEqual([
       expect.objectContaining({
         name: 'hero000000.glb',

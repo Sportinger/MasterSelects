@@ -1,4 +1,5 @@
 import type {
+  GaussianSplatBounds,
   GaussianSplatSequenceData,
   GaussianSplatSequenceFrame,
   ModelSequencePlaybackMode,
@@ -20,6 +21,18 @@ export interface GroupedGaussianSplatSequence<T extends GaussianSplatSequenceImp
   frameCount: number;
   prefix: string;
   sequenceName: string;
+}
+
+export function cloneGaussianSplatBounds(
+  bounds: GaussianSplatBounds | undefined,
+): GaussianSplatBounds | undefined {
+  if (!bounds) {
+    return undefined;
+  }
+  return {
+    min: [...bounds.min] as [number, number, number],
+    max: [...bounds.max] as [number, number, number],
+  };
 }
 
 interface ParsedGaussianSplatSequenceName {
@@ -113,13 +126,16 @@ export function buildGaussianSplatSequenceData(
     fps?: number;
     playbackMode?: ModelSequencePlaybackMode;
     sequenceName?: string;
+    sharedBounds?: GaussianSplatBounds;
   },
 ): GaussianSplatSequenceData {
+  const sharedBounds = cloneGaussianSplatBounds(options?.sharedBounds);
   return {
     fps: options?.fps ?? DEFAULT_GAUSSIAN_SPLAT_SEQUENCE_FPS,
     frameCount: frames.length,
     playbackMode: options?.playbackMode ?? 'clamp',
     sequenceName: options?.sequenceName,
+    ...(sharedBounds ? { sharedBounds } : {}),
     frames,
   };
 }
@@ -241,6 +257,23 @@ function getGaussianSplatSequenceFrameIdentity(frame: GaussianSplatSequenceFrame
   );
 }
 
+export function getGaussianSplatSequenceReferenceFrame(
+  sequence: GaussianSplatSequenceData | undefined,
+): GaussianSplatSequenceFrame | undefined {
+  return sequence?.frames[0];
+}
+
+export function getGaussianSplatSequenceReferenceRuntimeKey(
+  sequence: GaussianSplatSequenceData | undefined,
+  fallbackKey?: string,
+): string | undefined {
+  const frame = getGaussianSplatSequenceReferenceFrame(sequence);
+  if (!frame) {
+    return fallbackKey;
+  }
+  return getGaussianSplatSequenceFrameIdentity(frame, 0) || fallbackKey;
+}
+
 export function hasRenderableGaussianSplatSequenceFrames(
   sequence: GaussianSplatSequenceData | undefined,
 ): boolean {
@@ -265,9 +298,11 @@ export function resolveGaussianSplatSequenceData(
     fallback.frames.map((frame, index) => [getGaussianSplatSequenceFrameIdentity(frame, index), frame]),
   );
 
+  const sharedBounds = cloneGaussianSplatBounds(primary.sharedBounds ?? fallback.sharedBounds);
   return {
     ...fallback,
     ...primary,
+    ...(sharedBounds ? { sharedBounds } : {}),
     frames: primary.frames.map((frame, index) => {
       const fallbackFrame =
         fallbackFrames.get(getGaussianSplatSequenceFrameIdentity(frame, index)) ??

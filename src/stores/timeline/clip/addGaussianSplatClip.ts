@@ -111,6 +111,7 @@ export function loadGaussianSplatMedia(params: LoadGaussianSplatMediaParams): vo
       file: clip.file,
       url: gaussianSplatUrl,
       fileName: sequenceFrame?.name ?? clip.file.name,
+      gaussianSplatSequence: clip.source?.gaussianSplatSequence,
       requestedMaxSplats: clip.source?.gaussianSplatSettings?.render.maxSplats ?? 0,
     });
   } catch (err) {

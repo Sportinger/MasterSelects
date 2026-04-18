@@ -480,6 +480,10 @@ describe('project media persistence', () => {
       frameCount: 3,
       playbackMode: 'clamp' as const,
       sequenceName: 'scan',
+      sharedBounds: {
+        min: [-2, -1, 0],
+        max: [5, 6, 7],
+      },
       frames: [
         {
           name: 'scan000000.ply',
@@ -583,6 +587,10 @@ describe('project media persistence', () => {
         gaussianSplatSequence: expect.objectContaining({
           fps: 30,
           frameCount: 3,
+          sharedBounds: {
+            min: [-2, -1, 0],
+            max: [5, 6, 7],
+          },
           frames: [
             expect.objectContaining({
               name: 'scan000000.ply',
@@ -614,6 +622,10 @@ describe('project media persistence', () => {
             sourceType: 'gaussian-splat',
             gaussianSplatSequence: expect.objectContaining({
               frameCount: 3,
+              sharedBounds: {
+                min: [-2, -1, 0],
+                max: [5, 6, 7],
+              },
               frames: [
                 expect.not.objectContaining({
                   file: expect.anything(),
@@ -912,6 +924,10 @@ describe('project media persistence', () => {
           frameCount: 3,
           playbackMode: 'clamp',
           sequenceName: 'scan',
+          sharedBounds: {
+            min: [-2, -1, 0],
+            max: [5, 6, 7],
+          },
           frames: [
             {
               name: 'scan000000.ply',
@@ -964,6 +980,10 @@ describe('project media persistence', () => {
         projectPath: 'Raw/scan-seq_000000_scan000000.ply',
         gaussianSplatSequence: expect.objectContaining({
           frameCount: 3,
+          sharedBounds: {
+            min: [-2, -1, 0],
+            max: [5, 6, 7],
+          },
           frames: [
             expect.objectContaining({
               file: frameFiles[0],
@@ -1093,6 +1113,10 @@ describe('project media persistence', () => {
           frameCount: 3,
           playbackMode: 'clamp',
           sequenceName: 'scan',
+          sharedBounds: {
+            min: [-2, -1, 0],
+            max: [5, 6, 7],
+          },
           frames: [
             { name: 'scan000000.ply', sourcePath: 'C:/capture/scan000000.ply', absolutePath: 'C:/capture/scan000000.ply' },
             { name: 'scan000001.ply', sourcePath: 'C:/capture/scan000001.ply', absolutePath: 'C:/capture/scan000001.ply' },
@@ -1129,6 +1153,10 @@ describe('project media persistence', () => {
         file: frameFiles[0],
         gaussianSplatSequence: expect.objectContaining({
           frameCount: 3,
+          sharedBounds: {
+            min: [-2, -1, 0],
+            max: [5, 6, 7],
+          },
           frames: [
             expect.objectContaining({ file: frameFiles[0], splatUrl: 'blob:project-media' }),
             expect.objectContaining({ file: frameFiles[1], splatUrl: 'blob:project-media' }),

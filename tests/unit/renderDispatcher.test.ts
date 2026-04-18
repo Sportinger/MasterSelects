@@ -338,6 +338,10 @@ describe('RenderDispatcher empty playback hold', () => {
           gaussianSplatSequence: {
             frameCount: 2,
             fps: 24,
+            sharedBounds: {
+              min: [-1, -1, -1],
+              max: [1, 1, 1],
+            },
             frames: [],
           },
           gaussianSplatSettings: {
@@ -356,6 +360,12 @@ describe('RenderDispatcher empty playback hold', () => {
         fileHash: undefined,
         fileName: 'frame_0001.ply',
         url: 'blob:sequence-frame-1',
+        gaussianSplatSequence: expect.objectContaining({
+          sharedBounds: {
+            min: [-1, -1, -1],
+            max: [1, 1, 1],
+          },
+        }),
         requestedMaxSplats: 0,
       }),
     );

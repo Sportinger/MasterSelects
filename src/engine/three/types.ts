@@ -1,6 +1,6 @@
 // Types for Three.js 3D layer integration
 
-import type { BlendMode, Text3DProperties } from '../../types';
+import type { BlendMode, GaussianSplatSequenceData, Text3DProperties } from '../../types';
 import type { GaussianSplatSettings } from '../gaussian/types';
 import type { SplatEffectorMode } from '../../types/splatEffector';
 
@@ -34,6 +34,7 @@ export interface Layer3DData {
   gaussianSplatFileHash?: string;
   gaussianSplatRuntimeKey?: string;
   gaussianSplatIsSequence?: boolean;
+  gaussianSplatSequence?: GaussianSplatSequenceData;
   gaussianSplatMediaFileId?: string;
   gaussianSplatSettings?: GaussianSplatSettings;
   preciseSplatSorting?: boolean;

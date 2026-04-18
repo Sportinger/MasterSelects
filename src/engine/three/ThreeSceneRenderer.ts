@@ -631,6 +631,7 @@ export class ThreeSceneRenderer {
     file?: File;
     url?: string;
     fileName?: string;
+    gaussianSplatSequence?: Layer3DData['gaussianSplatSequence'];
     requestedMaxSplats: number;
   } {
     const requestedMaxSplats = this.getEffectiveSplatRequestedMaxSplats(layer);
@@ -646,6 +647,7 @@ export class ThreeSceneRenderer {
       file: layer.gaussianSplatFile,
       url: layer.gaussianSplatUrl,
       fileName: layer.gaussianSplatFileName,
+      gaussianSplatSequence: layer.gaussianSplatSequence,
       requestedMaxSplats,
     };
   }
