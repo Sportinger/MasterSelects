@@ -34,7 +34,11 @@ import { buildSplatCamera, resolveOrbitCameraPose } from '../gaussian/core/Splat
 import { loadGaussianSplatAssetCached } from '../gaussian/loaders';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../gaussian/types';
 import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
-import { waitForBasePreparedSplatRuntime, waitForTargetPreparedSplatRuntime } from '../three/splatRuntimeCache';
+import {
+  getPreparedSplatRuntimeSync,
+  waitForBasePreparedSplatRuntime,
+  waitForTargetPreparedSplatRuntime,
+} from '../three/splatRuntimeCache';
 
 const log = Logger.create('RenderDispatcher');
 const GAUSSIAN_PLAYBACK_SORT_FREQUENCY = 6;
@@ -375,6 +379,101 @@ export class RenderDispatcher {
     this.exportReadyModelUrls.clear();
   }
 
+  private describeExportReadinessError(error: unknown): string {
+    return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  }
+
+  private isRecoverableThreeSplatExportError(error: unknown): boolean {
+    const message = this.describeExportReadinessError(error).toLowerCase();
+    return message.includes('array buffer allocation failed') || message.includes('out of memory');
+  }
+
+  private async ensureThreeSplatRuntimeReadyForExport(options: {
+    cacheKey: string;
+    fileHash?: string;
+    file?: File;
+    url?: string;
+    fileName: string;
+    gaussianSplatSequence?: NonNullable<Layer['source']>['gaussianSplatSequence'];
+    preferBaseRuntime: boolean;
+    requestedMaxSplats: number;
+  }): Promise<void> {
+    const {
+      cacheKey,
+      fileHash,
+      file,
+      url,
+      fileName,
+      gaussianSplatSequence,
+      preferBaseRuntime,
+      requestedMaxSplats,
+    } = options;
+    const variant = preferBaseRuntime ? 'base' : 'target';
+    const threeSplatKey = `${cacheKey}|${variant}|${requestedMaxSplats}`;
+    if (this.exportReadyThreeSplatKeys.has(threeSplatKey)) {
+      return;
+    }
+
+    const sourceOptions = {
+      cacheKey,
+      fileHash,
+      file,
+      url,
+      fileName,
+      gaussianSplatSequence,
+      requestedMaxSplats,
+    };
+
+    if (preferBaseRuntime) {
+      await waitForBasePreparedSplatRuntime(sourceOptions);
+      this.exportReadyThreeSplatKeys.add(threeSplatKey);
+      return;
+    }
+
+    try {
+      await waitForTargetPreparedSplatRuntime(sourceOptions);
+      this.exportReadyThreeSplatKeys.add(threeSplatKey);
+      return;
+    } catch (targetError) {
+      const cachedBaseRuntime = getPreparedSplatRuntimeSync({
+        ...sourceOptions,
+        variant: 'base',
+      });
+      if (cachedBaseRuntime) {
+        log.warn('Precise export falling back to cached base Three.js splat runtime', {
+          cacheKey,
+          fileName,
+          requestedMaxSplats,
+          error: targetError,
+        });
+        this.exportReadyThreeSplatKeys.add(threeSplatKey);
+        return;
+      }
+
+      if (!this.isRecoverableThreeSplatExportError(targetError)) {
+        throw targetError;
+      }
+
+      try {
+        await waitForBasePreparedSplatRuntime(sourceOptions);
+      } catch (fallbackError) {
+        throw new Error(
+          `Three.js gaussian splat export fallback failed after target runtime error ` +
+          `(${this.describeExportReadinessError(targetError)}). ` +
+          `Fallback error: ${this.describeExportReadinessError(fallbackError)}`,
+        );
+      }
+
+      log.warn('Precise export falling back to rebuilt base Three.js splat runtime', {
+        cacheKey,
+        fileName,
+        requestedMaxSplats,
+        error: targetError,
+      });
+      this.exportReadyThreeSplatKeys.add(threeSplatKey);
+    }
+  }
+
   async ensureExportLayersReady(layers: Layer[]): Promise<void> {
     const visibleLayers = this.collectVisibleExportLayers(layers);
     if (visibleLayers.length === 0) {
@@ -520,21 +619,16 @@ export class RenderDispatcher {
         preferBaseRuntime,
         requestedMaxSplats,
       }) => {
-        const variant = preferBaseRuntime ? 'base' : 'target';
-        const threeSplatKey = `${cacheKey}|${variant}|${requestedMaxSplats}`;
-        if (this.exportReadyThreeSplatKeys.has(threeSplatKey)) {
-          return;
-        }
-        await (preferBaseRuntime ? waitForBasePreparedSplatRuntime : waitForTargetPreparedSplatRuntime)({
+        await this.ensureThreeSplatRuntimeReadyForExport({
           cacheKey,
           fileHash,
           file,
           url,
           fileName,
           gaussianSplatSequence,
+          preferBaseRuntime,
           requestedMaxSplats,
         });
-        this.exportReadyThreeSplatKeys.add(threeSplatKey);
       }),
     ];
 
