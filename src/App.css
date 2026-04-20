@@ -8443,6 +8443,11 @@ input[type="checkbox"] {
   background: rgba(45, 140, 235, 0.15);
 }
 
+.media-grid-item.importing {
+  opacity: 0.55;
+  cursor: progress;
+}
+
 .media-grid-thumb {
   position: relative;
   aspect-ratio: 16 / 9;
@@ -8489,6 +8494,20 @@ input[type="checkbox"] {
   border-radius: 8px;
   font-variant-numeric: tabular-nums;
   min-width: 16px;
+  text-align: center;
+}
+
+.media-grid-import-badge {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  background: rgba(45, 140, 235, 0.18);
+  color: var(--accent);
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+  min-width: 28px;
   text-align: center;
 }
 
@@ -8555,6 +8574,7 @@ input[type="checkbox"] {
 
 .media-item.importing {
   opacity: 0.5;
+  cursor: progress;
 }
 
 .media-item.importing .media-col-name::after {
@@ -8567,6 +8587,20 @@ input[type="checkbox"] {
 @keyframes importPulse {
   0%, 100% { opacity: 0.5; }
   50% { opacity: 1; }
+}
+
+.media-item-import-progress {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  padding: 1px 5px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: rgba(45, 140, 235, 0.18);
+  color: var(--accent);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
 .media-folder-arrow {

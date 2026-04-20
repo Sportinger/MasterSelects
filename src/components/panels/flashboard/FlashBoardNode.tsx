@@ -230,6 +230,7 @@ function FlashBoardNodeComponent({
       duration: node.request.duration,
       imageSize: node.request.imageSize,
       generateAudio: node.request.generateAudio,
+      hasStartFrame: Boolean(node.request.startMediaFileId),
       multiShots: node.request.multiShots,
     })?.compactLabel ?? null
     : null;

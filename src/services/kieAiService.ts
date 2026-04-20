@@ -1,5 +1,5 @@
 // Kie.ai Service - Unified API for AI media generation via kie.ai
-// Currently supports: Kling 3.0 video and Nano Banana 2 images
+// Currently supports: Kling 3.0 + Seedance 2.0 video and Nano Banana 2 images
 // Docs: https://kie.ai
 
 import { Logger } from './logger';
@@ -16,6 +16,10 @@ const log = Logger.create('KieAI');
 
 const BASE_URL = 'https://api.kie.ai';
 const UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-stream-upload';
+
+const KIEAI_SEEDANCE_2_PROVIDER_ID = 'seedance-2';
+const KIEAI_SEEDANCE_2_MODEL_ID = 'bytedance/seedance-2';
+const KIEAI_SEEDANCE_2_DEFAULT_RESOLUTION = '720p';
 
 // Kie.ai providers (Kling 3.0 only for now)
 const KIEAI_PROVIDERS: VideoProvider[] = [
@@ -44,6 +48,12 @@ const KIEAI_CREDITS_PER_SECOND: Record<string, Record<string, { normal: number; 
     'std': { normal: 14, audio: 20 },
     'pro': { normal: 18, audio: 27 },
   },
+  [KIEAI_SEEDANCE_2_PROVIDER_ID]: {
+    // Based on the current Kie.ai Seedance 2.0 pricing:
+    // text-to-video 720p: ~$0.205/s, image-to-video 720p: ~$0.125/s
+    // Kie credits currently map 1 credit = $0.005.
+    'std': { normal: 41, audio: 41 },
+  },
 };
 
 export function getKieAiProviders(): VideoProvider[] {
@@ -55,7 +65,20 @@ export function getKieAiProvider(providerId: string): VideoProvider | undefined 
 }
 
 // Calculate cost in credits for Kie.ai
-export function calculateKieAiCost(provider: string, mode: string, duration: number, sound = false): number {
+export function calculateKieAiCost(
+  provider: string,
+  mode: string,
+  duration: number,
+  sound = false,
+  options?: {
+    hasStartFrame?: boolean;
+  },
+): number {
+  if (provider === KIEAI_SEEDANCE_2_PROVIDER_ID) {
+    const ratePerSecond = options?.hasStartFrame ? 25 : 41;
+    return duration * ratePerSecond;
+  }
+
   const providerRates = KIEAI_CREDITS_PER_SECOND[provider];
   if (!providerRates) return duration * 14; // fallback
   const modeRates = providerRates[mode];
@@ -117,6 +140,10 @@ interface KieAiStatusResponse {
     costTime?: string;
     failMsg?: string;
   };
+}
+
+function isSeedance2Provider(provider: string | undefined): boolean {
+  return provider === KIEAI_SEEDANCE_2_PROVIDER_ID;
 }
 
 function normalizeKieTaskStatus(state: string | undefined): TaskStatus {
@@ -212,6 +239,11 @@ class KieAiService {
     return result.data.downloadUrl;
   }
 
+  private async prepareUploadedImageUrl(sourceUrl: string): Promise<string> {
+    const compressed = await this.compressImage(sourceUrl);
+    return this.uploadImage(compressed);
+  }
+
   // Compress image before upload
   private async compressImage(dataUrl: string, maxWidth = 1280, quality = 0.8): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -284,6 +316,31 @@ class KieAiService {
   }
 
   async createTextToVideo(params: TextToVideoParams): Promise<string> {
+    if (isSeedance2Provider(params.provider)) {
+      const input: Record<string, unknown> = {
+        prompt: params.prompt,
+        duration: params.duration,
+        aspect_ratio: params.aspectRatio || '16:9',
+        resolution: KIEAI_SEEDANCE_2_DEFAULT_RESOLUTION,
+        generate_audio: Boolean(params.sound),
+      };
+
+      const body = {
+        model: KIEAI_SEEDANCE_2_MODEL_ID,
+        input,
+      };
+
+      log.debug('Creating Seedance 2.0 text-to-video task:', JSON.stringify(body, null, 2));
+
+      const result = await this.request<KieAiTaskResponse>('/api/v1/jobs/createTask', 'POST', body);
+
+      if (result.code !== 200 || !result.data?.taskId) {
+        throw new Error(`Kie.ai error: ${result.msg || 'Failed to create task'}`);
+      }
+
+      return result.data.taskId;
+    }
+
     const multiPrompt = params.multiShots ? normalizeMultiShotPrompt(params.multiPrompt) : undefined;
     const effectiveSound = params.multiShots ? true : (params.sound ?? false);
 
@@ -352,6 +409,44 @@ class KieAiService {
   }
 
   async createImageToVideo(params: ImageToVideoParams): Promise<string> {
+    if (isSeedance2Provider(params.provider)) {
+      const input: Record<string, unknown> = {
+        prompt: params.prompt || '',
+        duration: params.duration,
+        aspect_ratio: params.aspectRatio || '16:9',
+        resolution: KIEAI_SEEDANCE_2_DEFAULT_RESOLUTION,
+        generate_audio: Boolean(params.sound),
+      };
+
+      if (params.startImageUrl) {
+        log.debug('Compressing and uploading Seedance 2 start image...');
+        input.first_frame_url = await this.prepareUploadedImageUrl(params.startImageUrl);
+      }
+
+      if (params.endImageUrl) {
+        log.debug('Compressing and uploading Seedance 2 end image...');
+        input.last_frame_url = await this.prepareUploadedImageUrl(params.endImageUrl);
+      }
+
+      const body = {
+        model: KIEAI_SEEDANCE_2_MODEL_ID,
+        input,
+      };
+
+      log.debug('Creating Seedance 2.0 image-to-video task:', {
+        hasStartImage: Boolean(input.first_frame_url),
+        hasEndImage: Boolean(input.last_frame_url),
+      });
+
+      const result = await this.request<KieAiTaskResponse>('/api/v1/jobs/createTask', 'POST', body);
+
+      if (result.code !== 200 || !result.data?.taskId) {
+        throw new Error(`Kie.ai error: ${result.msg || 'Failed to create task'}`);
+      }
+
+      return result.data.taskId;
+    }
+
     const imageUrls: string[] = [];
     const multiPrompt = params.multiShots ? normalizeMultiShotPrompt(params.multiPrompt) : undefined;
     const effectiveSound = params.multiShots ? true : (params.sound ?? false);
@@ -359,16 +454,14 @@ class KieAiService {
     // Upload start image
     if (params.startImageUrl) {
       log.debug('Compressing and uploading start image...');
-      const compressed = await this.compressImage(params.startImageUrl);
-      const url = await this.uploadImage(compressed);
+      const url = await this.prepareUploadedImageUrl(params.startImageUrl);
       imageUrls.push(url);
     }
 
     // Upload end image (passed as second element in image_urls)
     if (params.endImageUrl && !params.multiShots) {
       log.debug('Compressing and uploading end image...');
-      const compressed = await this.compressImage(params.endImageUrl);
-      const url = await this.uploadImage(compressed);
+      const url = await this.prepareUploadedImageUrl(params.endImageUrl);
       imageUrls.push(url);
     }
 

@@ -2,6 +2,22 @@ import { getVideoProviders } from '../piApiService';
 import { getKieAiProviders } from '../kieAiService';
 import type { CatalogEntry } from './types';
 
+const KIEAI_SEEDANCE_2_ENTRY: CatalogEntry = {
+  service: 'kieai',
+  providerId: 'seedance-2',
+  name: 'Seedance 2.0 (Kie.ai)',
+  description: 'ByteDance Seedance 2.0 via Kie.ai for text-to-video and image-to-video',
+  versions: ['2.0'],
+  modes: [],
+  durations: [4, 8, 12],
+  aspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'],
+  supportsTextToVideo: true,
+  supportsImageToVideo: true,
+  supportsGenerateAudio: true,
+  supportsMultiShot: false,
+  outputType: 'video',
+};
+
 export function getCatalogEntries(): CatalogEntry[] {
   const entries: CatalogEntry[] = [];
 
@@ -40,6 +56,8 @@ export function getCatalogEntries(): CatalogEntry[] {
       ...(isImageOnly ? { supportsTextToImage: true, outputType: 'image' as const } : { outputType: 'video' as const }),
     });
   }
+
+  entries.push(KIEAI_SEEDANCE_2_ENTRY);
 
   entries.push({
     service: 'kieai',

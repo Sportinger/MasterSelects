@@ -38,7 +38,28 @@ Die alten Claude-Commands unter `C:\Users\admin\.claude\commands\` sollen in Cod
 
 Wenn ein Skill nicht verfuegbar ist, direkt ueber lokale Skripte, MCP-Tools, HTTP-Bridge oder API arbeiten. Nicht an Claude-Command-Dateien haengen bleiben.
 
-## 0.2 MasterSelects Debug Bridge
+## 0.2 gstack Integration
+
+`gstack` ist fuer strukturierte Planung, Reviews, Browser-QA und Security-Checks verfuegbar. Global installieren, nicht ins Repo vendorisieren.
+
+Installationspfade:
+
+- Codex: `git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/gstack && cd ~/gstack && ./setup --host codex`
+- Claude Code: `git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup --team`
+- Windows: Git Bash oder WSL verwenden; `bun` und `node` muessen installiert sein
+- Nach der Codex-Installation Codex neu starten, damit neue Skills geladen werden
+
+Einsatzregeln:
+
+- `masterselects` bleibt erste Wahl fuer Timeline-, Preview-, Clip- und Debug-Bridge-Automation in der lokalen App
+- `gstack-office-hours`, `gstack-autoplan`, `gstack-plan-eng-review`, `gstack-plan-design-review` und `gstack-plan-devex-review` fuer Discovery, Scope und Plan-Qualitaet
+- `gstack-review` fuer unabhaengige Code-Reviews
+- `gstack-investigate` fuer Root-Cause-Debugging statt Trial-and-Error-Fixes
+- `gstack-cso` fuer Security-Reviews
+- `gstack-qa`, `gstack-qa-only`, `gstack-browse`, `gstack-open-gstack-browser` und `gstack-setup-browser-cookies` fuer Browser-QA, Repros und auth-geschuetzte Flows
+- `gstack-upgrade` verwenden, statt eine Repo-lokale gstack-Kopie zu pflegen
+
+## 0.3 MasterSelects Debug Bridge
 
 Fuer App-Debugging existieren lokale AI-Tools hinter `POST http://localhost:5173/api/ai-tools`. Voraussetzung: Dev-Server laeuft und die App ist im Browser geoeffnet.
 
