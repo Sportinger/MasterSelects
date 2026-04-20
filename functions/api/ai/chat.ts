@@ -22,6 +22,7 @@ interface HostedChatRouteBody {
   idempotencyKey?: string;
   messages?: unknown;
   model?: string;
+  reasoning_effort?: string;
   stream?: boolean;
 }
 
@@ -249,6 +250,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     max_tokens: request.max_tokens,
     messages: request.messages,
     model: request.model,
+    reasoning_effort: request.reasoning_effort,
     response_format: request.response_format,
     stream: false,
     tool_choice: request.tool_choice,

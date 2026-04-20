@@ -29,29 +29,40 @@ GPT-powered editing with 79 exported tools across 15 exported definition groups,
 
 ### Features
 - Interactive chat interface
-- Model selection dropdown
+- Model selection badge with popover
+- Shared hosted-credit pricing per model
 - Conversation history
 - Clear chat button
 - Auto-scrolling
 - Tool execution indicators
+- Styled approval cards for mutating/sensitive tool calls
+- Compact control pills below the prompt box
+- Optional per-panel approval bypass toggle below the send button
+- Thinking-effort selector for supported OpenAI chat models
 
 ### Available Models
 ```
-GPT-5.2, GPT-5.2 Pro
-GPT-5.1, GPT-5.1 Codex, GPT-5.1 Codex Mini
+GPT-5.4, GPT-5.4 Mini, GPT-5.4 Nano
+GPT-5.3 Chat, GPT-5.3 Codex
+GPT-5.2, GPT-5.2 Codex
+GPT-5.1, GPT-5.1 Codex Mini
 GPT-5, GPT-5 Mini, GPT-5 Nano
 GPT-4.1, GPT-4.1 Mini, GPT-4.1 Nano
 GPT-4o, GPT-4o Mini
-o3, o4-mini, o3-pro (reasoning)
+o3, o4-mini, o3-mini
 ```
 
 Default model: `gpt-5.1`
 
+The dropdown is sourced from `src/shared/openAiModelCatalog.ts`. That same catalog also drives hosted chat billing in `functions/lib/modelPricing.ts`, so the UI label and the charged credits stay in sync.
+The same catalog also marks which models support OpenAI reasoning effort controls, so the chat panel only shows the Thinking control when the selected model can use it.
+
 ### Editor Mode
-When enabled:
+The AI chat panel always runs with editor tools enabled:
 - Includes timeline context in prompts
 - Uses the exported AI tool catalog from `src/services/aiTools/definitions`
 - The chat UI applies its own approval gate before calling mutating or sensitive tools
+- Users can temporarily bypass those confirmations from the panel
 - AI can manipulate timeline directly
 
 The current tool surface is 79 exported tool definitions across 15 exported definition groups. Two dispatch gaps remain in the shared registry:
@@ -92,6 +103,7 @@ That console surface is dev-only. The Vite dev bridge and the Native Helper HTTP
 - Active IN / OUT / REF assignments appear as removable color badges around the prompt box
 - Hovering a prompt-box badge strongly emphasizes the linked board node for as long as the badge is hovered
 - Nano Banana 2 accepts up to 14 ordered reference images; the composer labels them as `REF 1`, `REF 2`, ... so prompts can refer to them explicitly
+- FlashBoard's Kie.ai catalog includes Kling 3.0, Seedance 2.0, and Nano Banana 2; Seedance 2.0 currently ships as a Board-only Kie option with text-to-video and image-to-video support
 - IN / OUT / REF outlines scale with zoom and use a stronger glow so references stay readable while navigating the board
 
 ### Current Backends
@@ -100,7 +112,7 @@ The current AI Video stack is no longer best described as "PiAPI as one unified 
 
 | Backend | Where it is used | Notes |
 |---------|------------------|-------|
-| `Kie.ai` | Classic generator and FlashBoard | Current provider list comes from `getKieAiProviders()`; user-supplied key in Settings |
+| `Kie.ai` | Classic generator and FlashBoard | Classic provider list comes from `getKieAiProviders()`; FlashBoard extends the Kie catalog with Seedance 2.0; user-supplied key in Settings |
 | `MasterSelects Cloud` | Classic generator and FlashBoard when hosted access is available | Hosted credits/account flow; board mode resolves to hosted Kling when no local Kie key is present |
 | `PiAPI` | Legacy compatibility and some catalog/pricing metadata | Still present in older history/key migration paths and FlashBoard pricing/catalog helpers, but not the primary runtime path the current panel describes |
 
