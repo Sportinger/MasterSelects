@@ -168,4 +168,60 @@ describe('splatRuntimeCache', () => {
     expect(runtime.centers[1]).toBeCloseTo(0);
     expect(runtime.centers[2]).toBeCloseTo(0);
   });
+
+  it('evicts prepared runtimes by byte budget and reloads assets after eviction', async () => {
+    const frameA = new File([new Uint8Array([1])], 'frame0000000.ply', {
+      type: 'application/octet-stream',
+    });
+    const frameB = new File([new Uint8Array([2])], 'frame0000001.ply', {
+      type: 'application/octet-stream',
+    });
+
+    loadGaussianSplatAssetMock.mockImplementation(async (file: File) => (
+      createAsset(file, {
+        center: file.name === frameA.name ? [1, 0, 0] : [2, 0, 0],
+      })
+    ));
+
+    const {
+      getPreparedSplatRuntimeSync,
+      setPreparedSplatRuntimeCacheMaxBytes,
+      waitForBasePreparedSplatRuntime,
+    } = await import('../../src/engine/three/splatRuntimeCache');
+
+    setPreparedSplatRuntimeCacheMaxBytes(120);
+
+    await waitForBasePreparedSplatRuntime({
+      cacheKey: 'Raw/frame0000000.ply',
+      file: frameA,
+      fileName: frameA.name,
+    });
+    expect(getPreparedSplatRuntimeSync({
+      cacheKey: 'Raw/frame0000000.ply',
+      file: frameA,
+      fileName: frameA.name,
+      variant: 'base',
+    })).not.toBeNull();
+
+    await waitForBasePreparedSplatRuntime({
+      cacheKey: 'Raw/frame0000001.ply',
+      file: frameB,
+      fileName: frameB.name,
+    });
+
+    expect(getPreparedSplatRuntimeSync({
+      cacheKey: 'Raw/frame0000000.ply',
+      file: frameA,
+      fileName: frameA.name,
+      variant: 'base',
+    })).toBeNull();
+
+    await waitForBasePreparedSplatRuntime({
+      cacheKey: 'Raw/frame0000000.ply',
+      file: frameA,
+      fileName: frameA.name,
+    });
+
+    expect(loadGaussianSplatAssetMock).toHaveBeenCalledTimes(3);
+  });
 });
