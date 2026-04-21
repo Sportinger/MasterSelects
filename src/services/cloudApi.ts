@@ -146,15 +146,12 @@ export interface CloudAiChatMessage {
   tool_call_id?: string;
 }
 
-export type CloudAiReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
-
 export interface CloudAiChatRequest {
   max_completion_tokens?: number;
   idempotencyKey?: string;
   max_tokens?: number;
   messages: CloudAiChatMessage[];
   model?: string;
-  reasoning_effort?: CloudAiReasoningEffort;
   response_format?: Record<string, unknown>;
   stream?: boolean;
   tool_choice?: unknown;

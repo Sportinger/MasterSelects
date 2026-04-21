@@ -2,14 +2,14 @@
 
 [<- Back to Index](./README.md)
 
-The Timeline is the core editing interface for multi-track editing. It now covers video, audio, image, Lottie, text, solid, mesh, composition, camera, and 3D-effector clips, with keyframe lanes, transitions, multicam grouping, pick-whip parenting, and slot-grid playback.
+The Timeline is the core editing interface for multi-track editing. It now covers video, audio, image, Lottie, text, solid, mesh, composition, camera, and splat-effector clips, with keyframe lanes, transitions, multicam grouping, pick-whip parenting, and slot-grid playback.
 
 ---
 
 ## Track Types
 
 ### Video Tracks
-- Hold video, image, Lottie, text, solid, mesh, composition, camera, and 3D-effector clips.
+- Hold video, image, Lottie, text, solid, mesh, composition, camera, and splat-effector clips.
 - Higher tracks render on top of lower tracks.
 - Expanded tracks can show keyframe property rows and curve editors.
 - Default layout starts with `Video 2` above `Video 1`.
@@ -69,8 +69,8 @@ getTrackChildren()  // Query child tracks
 - Nested compositions can be dropped from the media panel.
 - Double-click enters the nested comp for editing.
 
-### Camera and 3D Effector
-- Camera clips and 3D-effector clips are first-class clip types in the store and copy/paste flow.
+### Camera and Splat Effector
+- Camera clips and splat-effector clips are first-class clip types in the store and copy/paste flow.
 - Camera/native-gaussian clips expose camera-oriented property labels in the keyframe UI.
 
 ### YouTube Download

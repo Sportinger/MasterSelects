@@ -25,7 +25,6 @@ export interface FlashBoardPriceEstimate {
 export interface FlashBoardPricingInput {
   duration?: number;
   generateAudio?: boolean;
-  hasStartFrame?: boolean;
   imageSize?: string;
   mode?: string;
   multiShots?: boolean;
@@ -86,15 +85,7 @@ function buildHostedImageEstimate(input: FlashBoardPricingInput): FlashBoardPric
 function buildKieVideoEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate {
   const duration = normalizeVideoDuration(input.duration);
   const mode = normalizeMode(input.mode);
-  const kieCredits = calculateKieAiCost(
-    input.providerId,
-    mode,
-    duration,
-    resolveEffectiveAudio(input),
-    {
-      hasStartFrame: input.hasStartFrame,
-    },
-  );
+  const kieCredits = calculateKieAiCost(input.providerId, mode, duration, resolveEffectiveAudio(input));
 
   return {
     compactLabel: `${kieCredits} cr`,
@@ -156,7 +147,6 @@ export function getCatalogEntryPriceEstimate(
   return getFlashBoardPriceEstimate({
     duration: entry.durations.includes(overrides.duration ?? -1) ? overrides.duration : entry.durations[0],
     generateAudio: overrides.generateAudio ?? false,
-    hasStartFrame: overrides.hasStartFrame ?? false,
     imageSize: entry.imageSizes?.includes(overrides.imageSize ?? '') ? overrides.imageSize : entry.imageSizes?.[0],
     mode: entry.modes.includes(overrides.mode ?? '') ? overrides.mode : entry.modes[0],
     multiShots: overrides.multiShots ?? false,

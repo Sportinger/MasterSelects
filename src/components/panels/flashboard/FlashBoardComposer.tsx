@@ -289,21 +289,10 @@ export function FlashBoardComposer({
         duration,
         imageSize,
         generateAudio: effectiveGenerateAudio,
-        hasStartFrame: Boolean(composer.startMediaFileId),
         multiShots,
       })
       : null
-  ), [
-    selectedEntry,
-    service,
-    providerId,
-    mode,
-    duration,
-    imageSize,
-    effectiveGenerateAudio,
-    composer.startMediaFileId,
-    multiShots,
-  ]);
+  ), [selectedEntry, service, providerId, mode, duration, imageSize, effectiveGenerateAudio, multiShots]);
   const maxReferenceImages = selectedEntry?.supportsTextToImage ? selectedEntry.maxReferenceImages : undefined;
   const effectiveReferenceMediaFileIds = useMemo(
     () => clampReferenceMediaFileIds(composer.referenceMediaFileIds ?? [], maxReferenceImages),
@@ -532,7 +521,7 @@ export function FlashBoardComposer({
       providerId,
       version,
       outputType: selectedEntry.outputType ?? 'video',
-      mode: selectedEntry.modes.length > 0 ? mode : undefined,
+      mode,
       prompt: effectivePrompt,
       duration,
       aspectRatio,
@@ -816,7 +805,6 @@ export function FlashBoardComposer({
                           imageSize,
                           mode,
                           generateAudio: p.supportsGenerateAudio ? effectiveGenerateAudio : false,
-                          hasStartFrame: Boolean(composer.startMediaFileId),
                           multiShots: p.supportsMultiShot ? multiShots : false,
                         });
 
@@ -868,7 +856,6 @@ export function FlashBoardComposer({
                     duration: d,
                     imageSize,
                     generateAudio: effectiveGenerateAudio,
-                    hasStartFrame: Boolean(composer.startMediaFileId),
                     multiShots,
                   });
 
@@ -900,7 +887,6 @@ export function FlashBoardComposer({
                     duration,
                     imageSize: size,
                     generateAudio: effectiveGenerateAudio,
-                    hasStartFrame: Boolean(composer.startMediaFileId),
                     multiShots,
                   });
 
@@ -932,7 +918,6 @@ export function FlashBoardComposer({
                     duration,
                     imageSize,
                     generateAudio: effectiveGenerateAudio,
-                    hasStartFrame: Boolean(composer.startMediaFileId),
                     multiShots,
                   });
 

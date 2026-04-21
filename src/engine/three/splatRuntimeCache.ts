@@ -647,10 +647,6 @@ export function prewarmGaussianSplatRuntime(options: RuntimeSourceOptions): void
     });
   });
 
-  if (options.gaussianSplatSequence) {
-    return;
-  }
-
   const targetTaskKey = buildRuntimeKey(
     options.cacheKey,
     'target',

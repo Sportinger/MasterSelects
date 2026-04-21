@@ -1,35 +1,5 @@
 [
   {
-    "date": "2026-04-20",
-    "type": "new",
-    "title": "FlashBoard Adds Seedance 2.0 via Kie.ai",
-    "description": "FlashBoard now exposes Seedance 2.0 in the model catalog and pricing flow, with the Kie.ai service path updated so text-to-video and sequence-oriented generation can be routed through the board UI.",
-    "section": "FlashBoard / AI Video",
-    "commits": [
-      "324a5e81"
-    ]
-  },
-  {
-    "date": "2026-04-20",
-    "type": "improve",
-    "title": "AI Chat Model Catalog and Landing Experience Were Refreshed",
-    "description": "The OpenAI model catalog, AI chat pricing/model wiring, and the dedicated landing page were updated together so the public entry flow and in-app AI surfaces stay aligned with the current product lineup.",
-    "section": "AI Chat / Landing",
-    "commits": [
-      "324a5e81"
-    ]
-  },
-  {
-    "date": "2026-04-20",
-    "type": "fix",
-    "title": "Overlaid PLY and Splat Sequences Stay in Sync During Playback",
-    "description": "Gaussian splat sequence playback now prewarms the upcoming per-frame Three.js runtimes instead of waiting for on-demand cache misses, which removes the small playback offset that could appear when `.ply` and `.splat` layers were stacked together.",
-    "section": "3D / Gaussian Splats",
-    "commits": [
-      "196389f6"
-    ]
-  },
-  {
     "date": "2026-04-18",
     "type": "new",
     "title": "MasterSelects Now Opens Through a Dedicated Landing Page",

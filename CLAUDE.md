@@ -30,30 +30,6 @@ Die `/masterselects` Skill stellt 4 Debug-Tools bereit, die über den HTTP Bridg
 
 ---
 
-## 0.2 gstack Integration
-
-`gstack` ist fuer strukturierte Planung, Reviews, Browser-QA und Security-Checks verfuegbar. Global installieren, nicht ins Repo vendorisieren.
-
-Installationspfade:
-
-- Codex: `git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/gstack && cd ~/gstack && ./setup --host codex`
-- Claude Code: `git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup --team`
-- Windows: Git Bash oder WSL verwenden; `bun` und `node` muessen installiert sein
-- Nach der Codex-Installation Codex neu starten, damit neue Skills geladen werden
-
-Einsatzregeln:
-
-- `/masterselects` bleibt erste Wahl fuer Timeline-, Preview-, Clip- und Debug-Bridge-Automation in der lokalen App
-- `gstack-office-hours`, `gstack-autoplan`, `gstack-plan-eng-review`, `gstack-plan-design-review` und `gstack-plan-devex-review` fuer Discovery, Scope und Plan-Qualitaet in Codex
-- `/office-hours`, `/autoplan`, `/plan-eng-review`, `/plan-design-review` und `/plan-devex-review` fuer denselben Workflow in Claude Code
-- `gstack-review` oder `/review` fuer unabhaengige Code-Reviews
-- `gstack-investigate` oder `/investigate` fuer Root-Cause-Debugging statt Trial-and-Error-Fixes
-- `gstack-cso` oder `/cso` fuer Security-Reviews
-- `gstack-qa`, `gstack-qa-only`, `gstack-browse`, `gstack-open-gstack-browser`, `gstack-setup-browser-cookies` oder die entsprechenden Slash-Commands fuer Browser-QA, Repros und auth-geschuetzte Flows
-- `gstack-upgrade` oder `/gstack-upgrade` verwenden, statt eine Repo-lokale gstack-Kopie zu pflegen
-
----
-
 ## 1. Workflow (WICHTIG!)
 
 ### Branch-Regeln

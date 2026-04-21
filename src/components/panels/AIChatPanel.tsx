@@ -5,13 +5,34 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useAccountStore } from '../../stores/accountStore';
 import { AI_TOOLS, executeAITool, getQuickTimelineSummary, getToolPolicy } from '../../services/aiTools';
 import { cloudAiService } from '../../services/cloudAiService';
-import {
-  DEFAULT_OPENAI_MODEL_ID,
-  OPENAI_CHAT_DROPDOWN_MODELS,
-  type OpenAiReasoningEffort,
-} from '../../shared/openAiModelCatalog';
 import type { ToolPolicyEntry } from '../../services/aiTools';
 import './AIChatPanel.css';
+
+// Available OpenAI models with credit cost per request
+const OPENAI_MODELS = [
+  // GPT-5.2 series (newest - Dec 2025)
+  { id: 'gpt-5.2', name: 'GPT-5.2 (Thinking)', credits: 8 },
+  { id: 'gpt-5.2-pro', name: 'GPT-5.2 Pro', credits: 10 },
+  // GPT-5.1 series
+  { id: 'gpt-5.1', name: 'GPT-5.1', credits: 5 },
+  { id: 'gpt-5.1-codex', name: 'GPT-5.1 Codex', credits: 5 },
+  { id: 'gpt-5.1-codex-mini', name: 'GPT-5.1 Codex Mini', credits: 1 },
+  // GPT-5 series
+  { id: 'gpt-5', name: 'GPT-5', credits: 5 },
+  { id: 'gpt-5-mini', name: 'GPT-5 Mini', credits: 1 },
+  { id: 'gpt-5-nano', name: 'GPT-5 Nano', credits: 1 },
+  // Reasoning models
+  { id: 'o3', name: 'o3 (Reasoning)', credits: 5 },
+  { id: 'o4-mini', name: 'o4-mini (Reasoning)', credits: 3 },
+  { id: 'o3-pro', name: 'o3-pro (Deep Reasoning)', credits: 50 },
+  // GPT-4.1 series
+  { id: 'gpt-4.1', name: 'GPT-4.1', credits: 5 },
+  { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', credits: 1 },
+  { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', credits: 1 },
+  // GPT-4o series (legacy)
+  { id: 'gpt-4o', name: 'GPT-4o', credits: 5 },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', credits: 1 },
+];
 
 // System prompt for editor mode
 const EDITOR_SYSTEM_PROMPT = `You are an AI video editing assistant with direct access to the timeline AND media panel. You can:
@@ -94,45 +115,10 @@ interface PendingApproval {
   resolve: (approved: boolean) => void;
 }
 
-type AiApprovalMode = 'auto' | 'confirm-destructive' | 'confirm-all-mutating';
-type ChatControlPopover = 'model' | 'reasoning' | null;
-
 const MAX_TOOL_RESULT_MESSAGE_CHARS = 12000;
 const MAX_TOOL_RESULT_ARRAY_ITEMS = 20;
 const MAX_TOOL_RESULT_OBJECT_KEYS = 30;
 const MAX_TOOL_RESULT_STRING_CHARS = 1200;
-const REASONING_OPTION_COPY: Record<OpenAiReasoningEffort, { compactLabel: string; description: string; label: string }> = {
-  none: {
-    compactLabel: 'none',
-    description: 'No extra reasoning step. Fastest and cheapest.',
-    label: 'None',
-  },
-  minimal: {
-    compactLabel: 'min',
-    description: 'Very light reasoning for quick replies.',
-    label: 'Minimal',
-  },
-  low: {
-    compactLabel: 'low',
-    description: 'Low reasoning effort with lower latency.',
-    label: 'Low',
-  },
-  medium: {
-    compactLabel: 'med',
-    description: 'Balanced reasoning depth and speed.',
-    label: 'Medium',
-  },
-  high: {
-    compactLabel: 'high',
-    description: 'Deeper reasoning for harder edits or planning.',
-    label: 'High',
-  },
-  xhigh: {
-    compactLabel: 'xhigh',
-    description: 'Maximum available reasoning for supported models.',
-    label: 'XHigh',
-  },
-};
 
 function truncateText(value: string, maxLength: number): string {
   if (value.length <= maxLength) {
@@ -272,7 +258,7 @@ function sanitizeConversationHistory(messages: Message[]): Message[] {
 
 function shouldRequireConfirmation(
   policy: ToolPolicyEntry | undefined,
-  approvalMode: AiApprovalMode,
+  approvalMode: 'auto' | 'confirm-destructive' | 'confirm-all-mutating',
 ): boolean {
   if (!policy) return true; // unknown tools require confirmation
   if (approvalMode === 'auto') return false;
@@ -324,17 +310,14 @@ export function AIChatPanel() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [model, setModel] = useState(DEFAULT_OPENAI_MODEL_ID);
-  const [reasoningEffort, setReasoningEffort] = useState<OpenAiReasoningEffort | null>('none');
+  const [model, setModel] = useState('gpt-5.1');
   const [error, setError] = useState<string | null>(null);
-  const [bypassToolApprovals, setBypassToolApprovals] = useState(false);
-  const [controlPopover, setControlPopover] = useState<ChatControlPopover>(null);
+  const [editorMode, setEditorMode] = useState(true); // Enable tools by default
   const [currentToolAction, setCurrentToolAction] = useState<string | null>(null);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [onboardingClosing, setOnboardingClosing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const controlPopoverRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -345,57 +328,19 @@ export function AIChatPanel() {
   const hasApiKey = !!apiKeys.openai;
   const accessMode: 'hosted' | 'byo' | 'none' = hasHostedAccess ? 'hosted' : hasApiKey ? 'byo' : 'none';
   const hasAccess = accessMode !== 'none';
-  const effectiveApprovalMode: AiApprovalMode = bypassToolApprovals ? 'auto' : aiApprovalMode;
-  const selectedModel = OPENAI_CHAT_DROPDOWN_MODELS.find((entry) => entry.id === model);
-  const supportedReasoningEfforts = selectedModel?.supportedReasoningEfforts;
-  const reasoningChipLabel = reasoningEffort ? REASONING_OPTION_COPY[reasoningEffort].compactLabel : null;
-  const modelChipLabel = selectedModel
-    ? `${selectedModel.label} · ${selectedModel.creditCost === 1 ? '1 cr' : `${selectedModel.creditCost} cr`}`
-    : model;
-  const bypassToggleHint = bypassToolApprovals
-    ? 'Tools run immediately in this panel'
-    : 'Keep confirmation prompts for tool actions';
-
-  useEffect(() => {
-    const availableReasoningEfforts = selectedModel?.supportedReasoningEfforts ?? [];
-
-    if (!selectedModel || availableReasoningEfforts.length === 0) {
-      setReasoningEffort(null);
-      setControlPopover(null);
-      return;
-    }
-
-    if (reasoningEffort && availableReasoningEfforts.includes(reasoningEffort)) {
-      return;
-    }
-
-    setReasoningEffort(selectedModel.defaultReasoningEffort ?? availableReasoningEfforts[0] ?? null);
-  }, [reasoningEffort, selectedModel]);
-
-  useEffect(() => {
-    if (!controlPopover) {
-      return;
-    }
-
-    const handleOutsideClick = (event: MouseEvent) => {
-      if (controlPopoverRef.current && !controlPopoverRef.current.contains(event.target as Node)) {
-        setControlPopover(null);
-      }
-    };
-
-    window.addEventListener('mousedown', handleOutsideClick);
-    return () => window.removeEventListener('mousedown', handleOutsideClick);
-  }, [controlPopover]);
 
   // Build API messages from chat history
   const buildAPIMessages = useCallback((userContent: string): APIMessage[] => {
     const apiMessages: APIMessage[] = [];
     const safeMessages = sanitizeConversationHistory(messages);
 
-    apiMessages.push({
-      role: 'system',
-      content: EDITOR_SYSTEM_PROMPT + getQuickTimelineSummary(),
-    });
+    // Add system prompt in editor mode
+    if (editorMode) {
+      apiMessages.push({
+        role: 'system',
+        content: EDITOR_SYSTEM_PROMPT + getQuickTimelineSummary(),
+      });
+    }
 
     // Add conversation history
     for (const msg of safeMessages) {
@@ -428,7 +373,7 @@ export function AIChatPanel() {
     apiMessages.push({ role: 'user', content: userContent });
 
     return apiMessages;
-  }, [messages]);
+  }, [messages, editorMode]);
 
   // Call OpenAI API
   const callOpenAI = useCallback(async (
@@ -449,12 +394,11 @@ export function AIChatPanel() {
         : { max_tokens: 4096 }),
     };
 
-    if (reasoningEffort) {
-      requestBody.reasoning_effort = reasoningEffort;
+    // Add tools in editor mode
+    if (editorMode) {
+      requestBody.tools = AI_TOOLS;
+      requestBody.tool_choice = 'auto';
     }
-
-    requestBody.tools = AI_TOOLS;
-    requestBody.tool_choice = 'auto';
 
     if (accessMode === 'hosted') {
       if (idempotencyKey) {
@@ -479,7 +423,7 @@ export function AIChatPanel() {
     }
 
     return parseChatCompletionPayload(await response.json());
-  }, [accessMode, model, reasoningEffort, apiKeys.openai]);
+  }, [accessMode, model, editorMode, apiKeys.openai]);
 
   // Send message to OpenAI (with tool calling loop)
   const sendMessage = useCallback(async () => {
@@ -564,7 +508,7 @@ export function AIChatPanel() {
 
           // Check if this tool requires user confirmation
           const policy = getToolPolicy(toolCall.name);
-          const needsConfirmation = shouldRequireConfirmation(policy, effectiveApprovalMode);
+          const needsConfirmation = shouldRequireConfirmation(policy, aiApprovalMode);
 
           let result: { success: boolean; data?: unknown; error?: string };
 
@@ -629,7 +573,7 @@ export function AIChatPanel() {
       setIsLoading(false);
       setCurrentToolAction(null);
     }
-  }, [input, hasAccess, isLoading, buildAPIMessages, callOpenAI, effectiveApprovalMode, accessMode, loadAccountState]);
+  }, [input, hasAccess, isLoading, buildAPIMessages, callOpenAI, aiApprovalMode, accessMode, loadAccountState]);
 
   // Handle key press
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -687,6 +631,45 @@ export function AIChatPanel() {
           </div>
         </div>
       )}
+      {/* Header */}
+      <div className="ai-chat-header">
+        <div className="ai-chat-title-group">
+          <h2>AI Editor</h2>
+          <span className={`ai-access-chip ${accessMode}`}>
+            {accessMode === 'hosted' ? 'Cloud' : accessMode === 'byo' ? 'OpenAI key' : 'Locked'}
+          </span>
+        </div>
+        <div className="ai-chat-controls">
+          <label className="editor-mode-toggle" title="Enable timeline editing tools">
+            <input
+              type="checkbox"
+              checked={editorMode}
+              onChange={(e) => setEditorMode(e.target.checked)}
+              disabled={isLoading}
+            />
+            <span className="toggle-label">Tools</span>
+          </label>
+          <select
+            className="model-select"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            disabled={isLoading}
+          >
+            {OPENAI_MODELS.map(m => (
+              <option key={m.id} value={m.id}>{m.name} ({m.credits === 1 ? '1 credit' : `${m.credits} credits`})</option>
+            ))}
+          </select>
+          <button
+            className="btn-clear"
+            onClick={clearChat}
+            disabled={isLoading || messages.length === 0}
+            title="Clear chat"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+
       {/* Messages */}
       <div className="ai-chat-messages">
         {messages.length === 0 ? (
@@ -711,8 +694,8 @@ export function AIChatPanel() {
                       <li><strong>Downloads:</strong> "Search YouTube for nature footage and download it"</li>
                     </ul>
                     <p className="ai-chat-onboarding-note">
-                      AI chat runs directly against the editor tool surface.
-                      Use the approval mode in Settings or the Auto tools switch below to control confirmations.
+                      The <strong>Tools</strong> toggle enables timeline editing. Turn it off for a normal chat.
+                      Use the approval mode in Settings to control which actions need your confirmation.
                     </p>
                   </div>
                   <button className="ai-chat-onboarding-dismiss" onClick={dismissOnboarding}>
@@ -722,9 +705,11 @@ export function AIChatPanel() {
               </div>
             )}
             <div className="ai-chat-welcome">
-              <p>AI Editor Ready</p>
+              <p>{editorMode ? 'AI Editor Ready' : 'Start a conversation'}</p>
               <span className="welcome-hint">
-                Ask me to edit your timeline - cut clips, remove silence, etc.
+                {editorMode
+                  ? 'Ask me to edit your timeline - cut clips, remove silence, etc.'
+                  : `Using ${OPENAI_MODELS.find(m => m.id === model)?.name}`}
               </span>
             </div>
           </>
@@ -801,13 +786,8 @@ export function AIChatPanel() {
         {pendingApproval && (
           <div className="ai-chat-message tool-approval">
             <div className="tool-approval-banner">
-              <div className="tool-approval-header">
-                <span className="tool-approval-label">Approval required</span>
-                <span className="tool-approval-name">{pendingApproval.toolName}</span>
-              </div>
-              <p className="tool-approval-copy">
-                The AI wants to run this editor action.
-              </p>
+              <span className="tool-approval-label">Confirm action:</span>
+              <span className="tool-approval-name">{pendingApproval.toolName}</span>
               <pre className="tool-approval-args">
                 {JSON.stringify(pendingApproval.args, null, 2).substring(0, 200)}
               </pre>
@@ -816,7 +796,7 @@ export function AIChatPanel() {
                   className="btn-approve"
                   onClick={() => pendingApproval.resolve(true)}
                 >
-                  Allow action
+                  Allow
                 </button>
                 <button
                   className="btn-deny"
@@ -855,125 +835,25 @@ export function AIChatPanel() {
 
       {/* Input */}
       <div className="ai-chat-input-area">
-        <div className="ai-chat-composer">
-          <div className="ai-chat-input-row">
-            <textarea
-              ref={inputRef}
-              className="ai-chat-input"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="e.g., 'Remove all silent parts' or 'Split clip at 5 seconds'"
-              disabled={isLoading || !hasAccess}
-              rows={2}
-            />
-            <button
-              className="btn-send"
-              onClick={sendMessage}
-              disabled={!input.trim() || isLoading || !hasAccess}
-            >
-              {isLoading ? '...' : 'Send'}
-            </button>
-          </div>
-          <div className="ai-chat-control-bar">
-            <div className="ai-chat-pill-group" ref={controlPopoverRef}>
-              <button
-                className={`ai-chat-pill ${controlPopover === 'model' ? 'active' : ''}`}
-                type="button"
-                onClick={() => setControlPopover((current) => current === 'model' ? null : 'model')}
-                title="Model selection"
-                disabled={isLoading}
-              >
-                {modelChipLabel}
-              </button>
-
-              {controlPopover === 'model' && (
-                <div className="ai-chat-popover ai-chat-popover-model">
-                  <div className="ai-chat-popover-title">Model</div>
-                  <div className="ai-chat-popover-pills">
-                    {OPENAI_CHAT_DROPDOWN_MODELS.map((entry) => (
-                      <button
-                        key={entry.id}
-                        className={`ai-chat-popover-pill ${model === entry.id ? 'active' : ''}`}
-                        type="button"
-                        onClick={() => {
-                          setModel(entry.id);
-                          setControlPopover(null);
-                        }}
-                      >
-                        <span className="ai-chat-popover-pill-label">{entry.label}</span>
-                        <span className="ai-chat-popover-pill-meta">
-                          {entry.creditCost === 1 ? '1 credit' : `${entry.creditCost} credits`} · {entry.tier}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <label
-                className={`ai-chat-pill ai-chat-toggle-pill ${bypassToolApprovals ? 'active' : ''}`}
-                title={bypassToggleHint}
-              >
-                <input
-                  type="checkbox"
-                  checked={bypassToolApprovals}
-                  onChange={(e) => setBypassToolApprovals(e.target.checked)}
-                  disabled={isLoading || !!pendingApproval || !hasAccess}
-                />
-                <span className="ai-chat-toggle-dot" />
-                <span>Auto tools</span>
-              </label>
-
-              {(supportedReasoningEfforts?.length ?? 0) > 0 && reasoningChipLabel && (
-                <>
-                  <button
-                    className={`ai-chat-pill ${controlPopover === 'reasoning' ? 'active' : ''}`}
-                    type="button"
-                    onClick={() => setControlPopover((current) => current === 'reasoning' ? null : 'reasoning')}
-                    title="Thinking effort"
-                  >
-                    Thinking {reasoningChipLabel}
-                  </button>
-
-                  {controlPopover === 'reasoning' && (
-                    <div className="ai-chat-popover">
-                      <div className="ai-chat-popover-title">Thinking</div>
-                      <div className="ai-chat-popover-pills">
-                        {supportedReasoningEfforts?.map((effort) => (
-                          <button
-                            key={effort}
-                            className={`ai-chat-popover-pill ${reasoningEffort === effort ? 'active' : ''}`}
-                            type="button"
-                            onClick={() => {
-                              setReasoningEffort(effort);
-                              setControlPopover(null);
-                            }}
-                          >
-                            <span className="ai-chat-popover-pill-label">
-                              {REASONING_OPTION_COPY[effort].label}
-                            </span>
-                            <span className="ai-chat-popover-pill-meta">
-                              {REASONING_OPTION_COPY[effort].description}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-            <button
-              className="ai-chat-pill ai-chat-clear-bottom"
-              onClick={clearChat}
-              disabled={isLoading || messages.length === 0}
-              title="Clear chat"
-            >
-              Clear
-            </button>
-          </div>
-        </div>
+        <textarea
+          ref={inputRef}
+          className="ai-chat-input"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={editorMode
+            ? "e.g., 'Remove all silent parts' or 'Split clip at 5 seconds'"
+            : "Type a message... (Enter to send)"}
+          disabled={isLoading || !hasAccess}
+          rows={2}
+        />
+        <button
+          className="btn-send"
+          onClick={sendMessage}
+          disabled={!input.trim() || isLoading || !hasAccess}
+        >
+          {isLoading ? '...' : 'Send'}
+        </button>
       </div>
     </div>
   );

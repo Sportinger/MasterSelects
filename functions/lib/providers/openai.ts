@@ -23,7 +23,6 @@ export interface HostedChatRequest {
   max_tokens?: number;
   messages: HostedChatMessage[];
   model: string;
-  reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   response_format?: Record<string, unknown>;
   stream?: boolean;
   tool_choice?: unknown;
@@ -38,15 +37,6 @@ export interface HostedChatCapabilities {
   provider: 'openai';
   streamingSupported: false;
 }
-
-const SUPPORTED_REASONING_EFFORTS = new Set<NonNullable<HostedChatRequest['reasoning_effort']>>([
-  'none',
-  'minimal',
-  'low',
-  'medium',
-  'high',
-  'xhigh',
-]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -142,19 +132,12 @@ export function normalizeHostedChatRequest(body: unknown): HostedChatRequest | n
   }
 
   const model = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : 'gpt-4.1-mini';
-  const reasoningEffortCandidate =
-    typeof body.reasoning_effort === 'string'
-      ? body.reasoning_effort.trim() as NonNullable<HostedChatRequest['reasoning_effort']>
-      : undefined;
 
   return {
     max_completion_tokens: normalizeNumericValue(body.max_completion_tokens),
     max_tokens: normalizeNumericValue(body.max_tokens),
     messages,
     model,
-    reasoning_effort: reasoningEffortCandidate && SUPPORTED_REASONING_EFFORTS.has(reasoningEffortCandidate)
-      ? reasoningEffortCandidate
-      : undefined,
     response_format: isRecord(body.response_format) ? body.response_format : undefined,
     stream: body.stream === true,
     tool_choice: body.tool_choice,
@@ -170,7 +153,6 @@ export async function runHostedChatCompletion(env: Env, request: HostedChatReque
     max_tokens: request.max_tokens,
     messages: request.messages,
     model: request.model,
-    reasoning_effort: request.reasoning_effort,
     response_format: request.response_format,
     stream: false,
     tool_choice: request.tool_choice,

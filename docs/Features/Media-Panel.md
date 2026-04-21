@@ -39,9 +39,6 @@ The panel also accepts a few specialized asset types that flow into the timeline
 - `model` files: OBJ, glTF/GLB, FBX
 - `gaussian-splat` files: PLY, SPLAT
 
-Numbered `.glb` files with a shared prefix are detected as a sequence during batch import. A folder containing `frame000000.glb`, `frame000001.glb`, `frame000002.glb` and so on will appear as one model asset instead of many separate files.
-Numbered `.ply` or `.splat` files with a shared prefix are also detected as a sequence during batch import. A folder containing `scan000000.ply`, `scan000001.ply`, `scan000002.ply` and so on will appear as one gaussian-splat asset instead of many separate files.
-
 Lottie imports are treated as first-class media items. `.json` files are only accepted when their contents actually match Lottie structure, so arbitrary JSON data is not misclassified as animation.
 
 ### Import Methods
@@ -57,7 +54,7 @@ Click the **+ Add** button for creating new items:
 - **3D Text** - New 3D text mesh item
 - **Solid** - New solid color item (placed in auto-created "Solids" folder)
 - **Camera** - New camera item
-- **3D Effector** - New shared-scene 3D effector item
+- **Splat Effector** - New splat-effector item
 - **Mesh** ▶ - Submenu with 3D primitive meshes (placed in auto-created "Meshes" folder):
   - Cube, Sphere, Plane, Cylinder, Torus, Cone
   - Creates a `MeshItem` which can be dragged to the timeline as a 3D clip
@@ -78,13 +75,11 @@ Imports use a two-phase approach:
 
 1. **Phase 1 (instant):** A placeholder entry appears immediately in the panel with `isImporting: true`, showing file name and size
 2. **Phase 2 (background):** Full processing runs in the background:
-    - Media info extraction (dimensions, duration, FPS, codec, bitrate, audio detection)
-    - Thumbnail generation (for video and image files)
-    - File hash calculation (for deduplication and proxy matching)
-    - Copy to project RAW folder when `copyMediaToProject` is enabled, or when the import is forced
-    - Numbered GLB sequence grouping into a single 30fps model-sequence asset
-    - Numbered PLY/SPLAT sequence grouping into a single 30fps gaussian-splat sequence asset
-    - Existing proxy detection (by file hash)
+   - Media info extraction (dimensions, duration, FPS, codec, bitrate, audio detection)
+   - Thumbnail generation (for video and image files)
+   - File hash calculation (for deduplication and proxy matching)
+   - Copy to project RAW folder when `copyMediaToProject` is enabled, or when the import is forced
+   - Existing proxy detection (by file hash)
 
 **Deduplication:** Files with matching name + size are automatically skipped.
 
@@ -453,7 +448,6 @@ interface MediaFile {
 - Uses actual media duration
 - Audio-only files restricted to audio tracks
 - Files still importing or missing cannot be dragged to timeline
-- Numbered gaussian-splat sequences always stay on the shared Three.js 3D renderer path after drop
 - Compositions cannot be dragged into themselves (active comp check)
 - Mesh items create 3D clips with `is3D: true` and `meshType` (rendered via Three.js)
 

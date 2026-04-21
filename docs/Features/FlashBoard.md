@@ -13,7 +13,7 @@ FlashBoard is the AI canvas workspace behind the AI Video panel's Board mode. It
 FlashBoard is not a separate model backend. It is a workspace layer on top of the existing AI services:
 
 - `piapi` for the PiAPI catalog
-- `kieai` for Kie.ai Kling 3.0, Seedance 2.0, and Nano Banana 2
+- `kieai` for Kie.ai Kling 3.0 and Nano Banana 2
 - `cloud` for hosted Kling 3.0 and hosted Nano Banana 2
 
 The AI Video panel switches into FlashBoard when the user selects Board mode. If the user has no Kie.ai key and is signed in to MasterSelects Cloud, the board uses the hosted cloud service scope. Otherwise it stays on Kie.ai.
@@ -68,12 +68,9 @@ The board uses the shared catalog from `FlashBoardModelCatalog`:
 
 - PiAPI video providers from the shared PiAPI catalog
 - Kie.ai Kling 3.0 video
-- Kie.ai Seedance 2.0 video
 - Kie.ai Nano Banana 2 image generation
 - Cloud Kling 3.0 video
 - Cloud Nano Banana 2 image generation
-
-Seedance 2.0 is currently exposed only in FlashBoard on the Kie.ai path. The existing Classic AI Video flow remains narrower and continues to focus on the classic Kie provider list.
 
 The classic AI Video flow is narrower: it currently exposes only the Kie.ai Kling 3.0 provider list, while FlashBoard exposes the richer catalog.
 

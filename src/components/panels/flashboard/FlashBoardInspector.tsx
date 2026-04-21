@@ -27,7 +27,6 @@ export function FlashBoardInspector() {
       duration: request.duration,
       imageSize: request.imageSize,
       generateAudio: request.generateAudio,
-      hasStartFrame: Boolean(request.startMediaFileId),
       multiShots: request.multiShots,
     })
     : null;

@@ -1083,57 +1083,7 @@ export class LayerBuilderService {
       if (clip.startTime > rangeEnd || clip.startTime + clip.duration < rangeStart) continue;
 
       const mediaFile = getMediaFileForClip(ctx, clip);
-      const gaussianSplatSequence = this.getClipGaussianSplatSequence(clip);
-      if (gaussianSplatSequence) {
-        const fps = Number.isFinite(gaussianSplatSequence.fps) && gaussianSplatSequence.fps > 0
-          ? gaussianSplatSequence.fps
-          : LAYER_BUILDER_CONSTANTS.FRAME_RATE;
-        const frameDuration = 1 / Math.max(fps, 1);
-        const requestedMaxSplats = clip.source?.gaussianSplatSettings?.render.maxSplats ?? 0;
-        const currentLocalTime = Math.max(0, Math.min(clip.duration, ctx.playheadPosition - clip.startTime));
-        const localRangeEnd = Math.max(
-          currentLocalTime,
-          Math.min(clip.duration, Math.max(0, rangeEnd - clip.startTime)),
-        );
-        const lookaheadFrames = ctx.isPlaying
-          ? Math.max(4, Math.min(12, Math.ceil(fps * 0.4)))
-          : 4;
-        const seenRuntimeKeys = new Set<string>();
-
-        for (let offset = 0; offset < lookaheadFrames; offset += 1) {
-          const sampleTime = Math.min(localRangeEnd, currentLocalTime + offset * frameDuration);
-          const sequenceFrame = getGaussianSplatSequenceFrame(gaussianSplatSequence, sampleTime);
-          const runtimeKey = getGaussianSplatSequenceFrameRuntimeKey(
-            gaussianSplatSequence,
-            sampleTime,
-            clip.source?.gaussianSplatRuntimeKey ??
-              mediaFile?.id ??
-              clip.source?.mediaFileId ??
-              clip.id,
-          );
-          if (!sequenceFrame || !runtimeKey || seenRuntimeKeys.has(runtimeKey)) {
-            continue;
-          }
-
-          const frameFile = sequenceFrame.file;
-          const frameUrl = sequenceFrame.splatUrl;
-          if (!frameFile && !frameUrl) {
-            continue;
-          }
-
-          seenRuntimeKeys.add(runtimeKey);
-          prewarmGaussianSplatRuntime({
-            cacheKey: runtimeKey,
-            file: frameFile,
-            url: frameUrl,
-            fileName: sequenceFrame.name ?? clip.source?.gaussianSplatFileName ?? clip.file?.name ?? clip.name,
-            gaussianSplatSequence,
-            requestedMaxSplats,
-          });
-        }
-        continue;
-      }
-
+      if (clip.source?.gaussianSplatSequence || mediaFile?.gaussianSplatSequence) continue;
       const file = mediaFile?.file ?? clip.file;
       if (!file) continue;
 
