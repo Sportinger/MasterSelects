@@ -13,8 +13,8 @@ import shaderSource from '../shaders/radixSort.wgsl?raw';
 
 const log = Logger.create('SplatSortPass');
 
-/** Uniform buffer: mat4x4f (64) + u32 splatCount + u32 blockSize + u32 subBlockSize + u32 pad = 80 bytes */
-const SORT_UNIFORM_SIZE = 80;
+/** Uniform buffer: mat4x4f view (64) + mat4x4f world (64) + u32 splatCount + u32 blockSize + u32 subBlockSize + u32 pad = 144 bytes */
+const SORT_UNIFORM_SIZE = 144;
 
 export class SplatSortPass {
   private device: GPUDevice | null = null;
@@ -77,6 +77,7 @@ export class SplatSortPass {
     indexBuffer: GPUBuffer,
     visibleCount: number,
     viewMatrix: Float32Array,
+    worldMatrix: Float32Array,
   ): GPUBuffer | null {
     if (!this._initialized || !this.depthKeyPipeline || !this.bitonicStepPipeline) {
       log.warn('Cannot execute: sort pass not initialized');
@@ -118,7 +119,7 @@ export class SplatSortPass {
       });
 
       // ── Step 1: Compute depth keys ─────────────────────────────────────────
-      this.writeUniforms(device, viewMatrix, visibleCount, 0, 0);
+      this.writeUniforms(device, viewMatrix, worldMatrix, visibleCount, 0, 0);
 
       {
         const pass = commandEncoder.beginComputePass({ label: 'splat-depth-keys' });
@@ -141,7 +142,7 @@ export class SplatSortPass {
       for (let k = 2; k <= n; k *= 2) {
         // Inner loop: j = k/2, k/4, ..., 1
         for (let j = k >> 1; j > 0; j >>= 1) {
-          this.writeUniforms(device, viewMatrix, visibleCount, k, j);
+          this.writeUniforms(device, viewMatrix, worldMatrix, visibleCount, k, j);
 
           const pass = commandEncoder.beginComputePass({
             label: `splat-bitonic-k${k}-j${j}`,
@@ -307,6 +308,7 @@ export class SplatSortPass {
   private writeUniforms(
     device: GPUDevice,
     viewMatrix: Float32Array,
+    worldMatrix: Float32Array,
     splatCount: number,
     blockSize: number,
     subBlockSize: number,
@@ -320,11 +322,14 @@ export class SplatSortPass {
     // mat4x4f viewMatrix (16 floats)
     f32.set(viewMatrix, 0);
 
-    // u32 params at offset 16 (in f32 units)
-    u32[16] = splatCount;
-    u32[17] = blockSize;
-    u32[18] = subBlockSize;
-    // u32[19] = pad
+    // mat4x4f worldMatrix (16 floats)
+    f32.set(worldMatrix, 16);
+
+    // u32 params at offset 32 (in f32 units)
+    u32[32] = splatCount;
+    u32[33] = blockSize;
+    u32[34] = subBlockSize;
+    // u32[35] = pad
 
     device.queue.writeBuffer(this.uniformBuffer, 0, data);
   }

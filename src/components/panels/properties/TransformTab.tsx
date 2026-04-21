@@ -2,10 +2,9 @@
 import { useCallback } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
-import { useEngineStore } from '../../../stores/engineStore';
+import { selectSceneNavClipId, selectSceneNavFpsMode, useEngineStore } from '../../../stores/engineStore';
 import { startBatch, endBatch } from '../../../stores/historyStore';
 import type { BlendMode, AnimatableProperty } from '../../../types';
-import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../../../engine/gaussian/types';
 import {
   KeyframeToggle,
   ScaleKeyframeToggle,
@@ -82,33 +81,25 @@ function RotationValue({ label, degrees, onChange, onDragStart, onDragEnd }: {
 
 export function TransformTab({ clipId, transform, speed = 1, is3D = false }: TransformTabProps) {
   const { setPropertyValue, updateClipTransform, toggle3D, updateClip } = useTimelineStore.getState();
-  const gaussianSplatNavClipId = useEngineStore((s) => s.gaussianSplatNavClipId);
-  const gaussianSplatNavFpsMode = useEngineStore((s) => s.gaussianSplatNavFpsMode);
-  const setGaussianSplatNavClipId = useEngineStore((s) => s.setGaussianSplatNavClipId);
-  const setGaussianSplatNavFpsMode = useEngineStore((s) => s.setGaussianSplatNavFpsMode);
+  const sceneNavClipId = useEngineStore(selectSceneNavClipId);
+  const sceneNavFpsMode = useEngineStore(selectSceneNavFpsMode);
+  const setSceneNavClipId = useEngineStore((s) => s.setSceneNavClipId);
+  const setSceneNavFpsMode = useEngineStore((s) => s.setSceneNavFpsMode);
   const clip = useTimelineStore((s) => s.clips.find((c) => c.id === clipId));
-  const gaussianSplatSequence = useMediaStore((s) => {
-    const mediaFileId = clip?.mediaFileId ?? clip?.source?.mediaFileId;
-    if (!mediaFileId) return undefined;
-    return s.files.find((file) => file.id === mediaFileId)?.gaussianSplatSequence;
-  });
   const wireframe = clip?.wireframe ?? false;
   const sourceType = clip?.source?.type;
   const isModel = sourceType === 'model';
   const isCameraClip = sourceType === 'camera';
   const isGaussianSplat = sourceType === 'gaussian-splat';
   const isSplatEffector = sourceType === 'splat-effector';
-  const renderSettings = clip?.source?.gaussianSplatSettings?.render ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render;
-  const hasGaussianSplatSequence = !!(clip?.source?.gaussianSplatSequence ?? gaussianSplatSequence);
-  const isNativeGaussianSplat = isGaussianSplat && !hasGaussianSplatSequence && renderSettings.useNativeRenderer === true;
   const supportsThreeDEffectorToggle = isModel || isGaussianSplat;
-  const canToggleThreeDEffectors = isModel || (isGaussianSplat && !isNativeGaussianSplat);
+  const canToggleThreeDEffectors = supportsThreeDEffectorToggle;
   const threeDEffectorsEnabled = clip?.source?.threeDEffectorsEnabled !== false;
-  const supportsScaleZ = isModel || isSplatEffector || (isGaussianSplat && !isNativeGaussianSplat);
-  const usesCameraControls = isCameraClip || isNativeGaussianSplat;
+  const supportsScaleZ = isModel || isSplatEffector || isGaussianSplat;
+  const usesCameraControls = isCameraClip;
   const isLocked3D = isModel || isGaussianSplat || isSplatEffector;
-  const isEffectively3D = usesCameraControls || isLocked3D || is3D;
-  const gaussianNavEnabled = usesCameraControls && gaussianSplatNavClipId === clipId;
+  const isEffectively3D = isCameraClip || isLocked3D || is3D;
+  const sceneNavEnabled = usesCameraControls && sceneNavClipId === clipId;
 
   const handleBatchStart = useCallback(() => startBatch('Adjust transform'), []);
   const handleBatchEnd = useCallback(() => endBatch(), []);
@@ -177,10 +168,8 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
     });
   }, [clip, clipId, threeDEffectorsEnabled, updateClip]);
 
-  const cameraControlsHint = isCameraClip
-    ? 'Scene cameras drive the shared 3D scene for splats and other 3D objects.'
-    : 'Native gaussian splats use these controls as camera orbit, pan and zoom.';
-  const showCameraPositionValues = usesCameraControls && gaussianSplatNavFpsMode;
+  const cameraControlsHint = 'Scene cameras drive the common 3D scene for splats, planes, meshes, text, and models.';
+  const showCameraPositionValues = usesCameraControls && sceneNavFpsMode;
   const cameraPositionLabel = showCameraPositionValues ? 'Position' : usesCameraControls ? 'Camera' : 'Position';
 
   return (
@@ -195,21 +184,21 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
           <div className="control-row">
             <label className="prop-label">Free Nav</label>
             <button
-              className={`btn btn-xs ${gaussianNavEnabled ? 'btn-active' : ''}`}
-              onClick={() => setGaussianSplatNavClipId(gaussianNavEnabled ? null : clipId)}
-              title={gaussianNavEnabled ? 'Disable preview mouse navigation' : 'Enable preview mouse navigation'}
+              className={`btn btn-xs ${sceneNavEnabled ? 'btn-active' : ''}`}
+              onClick={() => setSceneNavClipId(sceneNavEnabled ? null : clipId)}
+              title={sceneNavEnabled ? 'Disable preview scene navigation' : 'Enable preview scene navigation'}
             >
-              {gaussianNavEnabled ? 'On' : 'Off'}
+              {sceneNavEnabled ? 'On' : 'Off'}
             </button>
             <button
-              className={`btn btn-xs ${gaussianSplatNavFpsMode ? 'btn-active' : ''}`}
-              onClick={() => setGaussianSplatNavFpsMode(!gaussianSplatNavFpsMode)}
-              title={gaussianSplatNavFpsMode ? 'Use orbit mouse look' : 'Use FPS mouse look'}
+              className={`btn btn-xs ${sceneNavFpsMode ? 'btn-active' : ''}`}
+              onClick={() => setSceneNavFpsMode(!sceneNavFpsMode)}
+              title={sceneNavFpsMode ? 'Use orbit mouse look' : 'Use FPS mouse look'}
             >
               FPS
             </button>
             <span style={{ color: '#8d99a6', fontSize: '11px' }}>
-              {gaussianSplatNavFpsMode
+              {sceneNavFpsMode
                 ? 'Click preview, hold LMB to look, WASD move, Q/E up-down, MMB/RMB/Shift+LMB pan, wheel zoom. Dist = orbit distance.'
                 : 'Click preview, then WASD move, Q/E up-down, LMB orbit, MMB/RMB/Shift+LMB pan, wheel zoom. Dist = orbit distance.'}
             </span>
@@ -244,7 +233,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
         {supportsThreeDEffectorToggle && (
           <div className="control-row">
             <label className="prop-label">3D Effector</label>
-            {canToggleThreeDEffectors ? (
+            {canToggleThreeDEffectors && (
               <button
                 className={`btn btn-xs ${threeDEffectorsEnabled ? 'btn-active' : ''}`}
                 onClick={handleThreeDEffectorsToggle}
@@ -252,12 +241,6 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
               >
                 {threeDEffectorsEnabled ? 'On' : 'Off'}
               </button>
-            ) : (
-              <span style={{ color: '#8d99a6', fontSize: '11px' }}>
-                {hasGaussianSplatSequence
-                  ? 'Splat sequences stay on shared 3D effectors'
-                  : 'Native splats ignore shared 3D effectors'}
-              </span>
             )}
           </div>
         )}

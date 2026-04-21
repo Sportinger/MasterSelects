@@ -387,7 +387,7 @@ export async function updateTimelineClips(mediaFileId: string, file: File): Prom
         });
       }
     } else if (sourceType === 'model') {
-      // 3D Model — create blob URL for Three.js loader
+      // 3D Model — create blob URL for the shared scene loader
       const modelUrl = URL.createObjectURL(file);
       timelineStore.updateClip(clip.id, {
         file,

@@ -17,7 +17,6 @@ import type { PerformanceStats } from '../stats/PerformanceStats';
 import type { RenderLoop } from './RenderLoop';
 import { useRenderTargetStore } from '../../stores/renderTargetStore';
 import { useSliceStore } from '../../stores/sliceStore';
-import { useEngineStore } from '../../stores/engineStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { reportRenderTime } from '../../services/performanceMonitor';
 import { Logger } from '../../services/logger';
@@ -25,16 +24,19 @@ import { scrubSettleState } from '../../services/scrubSettleState';
 import { vfPipelineMonitor } from '../../services/vfPipelineMonitor';
 import { getCopiedHtmlVideoPreviewFrame } from './htmlVideoPreviewFallback';
 import { flags } from '../featureFlags';
-import type { ThreeSceneRenderer } from '../three/ThreeSceneRenderer';
-import type { Layer3DData, CameraConfig, SplatEffectorRuntimeData } from '../three/types';
-import { DEFAULT_CAMERA_CONFIG } from '../three/types';
-import { useMediaStore, DEFAULT_SCENE_CAMERA_SETTINGS } from '../../stores/mediaStore';
+import type { NativeSceneRenderer } from '../native3d/NativeSceneRenderer';
+import { collectActiveSceneSplatEffectors } from '../scene/SceneEffectorUtils';
+import { collectScene3DLayers } from '../scene/SceneLayerCollector';
+import { resolveRenderableSharedSceneCamera, resolveSharedSceneCamera } from '../scene/SceneCameraUtils';
+import type { SceneSplatEffectorRuntimeData, SceneSplatLayer } from '../scene/types';
+import { useMediaStore } from '../../stores/mediaStore';
 import { getGaussianSplatGpuRenderer } from '../gaussian/core/GaussianSplatGpuRenderer';
-import { buildSplatCamera, resolveOrbitCameraPose } from '../gaussian/core/SplatCameraUtils';
 import { loadGaussianSplatAssetCached } from '../gaussian/loaders';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../gaussian/types';
-import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
-import { waitForBasePreparedSplatRuntime, waitForTargetPreparedSplatRuntime } from '../three/splatRuntimeCache';
+import {
+  buildSharedSplatRuntimeRequest,
+  resolveSharedSplatSceneKey,
+} from '../scene/runtime/SharedSplatRuntimeUtils';
 
 const log = Logger.create('RenderDispatcher');
 const GAUSSIAN_PLAYBACK_SORT_FREQUENCY = 6;
@@ -63,7 +65,7 @@ export interface RenderDeps {
   exportCanvasManager: ExportCanvasManager;
   performanceStats: PerformanceStats;
   renderLoop: RenderLoop | null;
-  threeSceneRenderer?: ThreeSceneRenderer | null;
+  sceneRenderer?: NativeSceneRenderer | null;
 }
 
 export interface RenderDispatcherDebugSnapshot {
@@ -88,24 +90,21 @@ export class RenderDispatcher {
   private lastPreviewTargetTimeMs?: number;
   private static readonly MAX_DRAG_FALLBACK_DRIFT_SECONDS = 1.2;
   private static readonly MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS = 0.9;
-  // 3D scene rendering state
-  private threeSceneTexture: GPUTexture | null = null;
-  private threeSceneView: GPUTextureView | null = null;
-  private threeSceneInitializing = false;
-  private threeSceneImportCanvas: HTMLCanvasElement | null = null;
+  private sceneRendererInitializing = false;
   // Native Gaussian Splat rendering state (new WebGPU path)
   private splatLoadingClips = new Set<string>();
   private splatSceneBounds = new Map<string, { min: [number, number, number]; max: [number, number, number] }>();
-  private exportReadyThreeSceneResolutions = new Set<string>();
-  private exportReadyNativeSplatKeys = new Set<string>();
-  private exportReadyThreeSplatKeys = new Set<string>();
+  private exportReadySceneRendererResolutions = new Set<string>();
+  private exportReadyNativeSplatSceneKeys = new Set<string>();
   private exportReadyModelUrls = new Set<string>();
-  private lastThreeSceneDebugKey = '';
+  private lastSceneRenderDebugKey = '';
 
   constructor(deps: RenderDeps) {
     this.deps = deps;
     // Legacy gaussian-avatar code stays on disk for migration/reference only.
     void this.processGaussianLayers;
+    // Legacy per-layer native splat bridge stays on disk for migration/reference only.
+    void this.processGaussianSplatLayers;
   }
 
   setRenderTimeOverride(time: number | null): void {
@@ -119,203 +118,36 @@ export class RenderDispatcher {
     return useTimelineStore.getState().playheadPosition;
   }
 
-  private resolveStable3DSourceDimensions(
-    data: LayerRenderData,
-    width: number,
-    height: number,
-  ): { sourceWidth: number; sourceHeight: number } {
-    const fallbackWidth =
-      typeof data.sourceWidth === 'number' && Number.isFinite(data.sourceWidth) && data.sourceWidth > 0
-        ? data.sourceWidth
-        : width;
-    const fallbackHeight =
-      typeof data.sourceHeight === 'number' && Number.isFinite(data.sourceHeight) && data.sourceHeight > 0
-        ? data.sourceHeight
-        : height;
-
-    const intrinsicWidth = data.layer.source?.intrinsicWidth;
-    const intrinsicHeight = data.layer.source?.intrinsicHeight;
-
-    return {
-      sourceWidth:
-        typeof intrinsicWidth === 'number' && Number.isFinite(intrinsicWidth) && intrinsicWidth > 0
-          ? intrinsicWidth
-          : fallbackWidth,
-      sourceHeight:
-        typeof intrinsicHeight === 'number' && Number.isFinite(intrinsicHeight) && intrinsicHeight > 0
-          ? intrinsicHeight
-          : fallbackHeight,
-    };
-  }
-
   private isNativeGaussianSplatSource(source: Layer['source'] | undefined): boolean {
-    if (source?.type !== 'gaussian-splat') return false;
-    return (
-      source.gaussianSplatSettings?.render.useNativeRenderer ??
-      DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render.useNativeRenderer
-    ) === true;
+    return source?.type === 'gaussian-splat';
   }
 
-  private getSharedSceneDefaultCameraDistance(fovDegrees: number): number {
-    const worldHeight = 2.0;
-    const fovRadians = (Math.max(fovDegrees, 1) * Math.PI) / 180;
-    return worldHeight / (2 * Math.tan(fovRadians * 0.5));
-  }
-
-  private resolveSharedSceneCameraConfig(
-    _layers3D: Layer3DData[],
-    width: number,
-    height: number,
-  ): CameraConfig {
-    const timelineStore = useTimelineStore.getState();
-    const timelineTime = this.getEffectiveTimelineTime();
-    const buildCameraConfigFromClip = (
-      cameraClip: (typeof timelineStore.clips)[number],
-    ): CameraConfig | null => {
-      if (cameraClip.source?.type !== 'camera') {
-        return null;
-      }
-
-      const clipLocalTime = timelineTime - cameraClip.startTime;
-      const transform = timelineStore.getInterpolatedTransform(cameraClip.id, clipLocalTime);
-      const cameraSettings = cameraClip.source.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS;
-      const defaultDistance = this.getSharedSceneDefaultCameraDistance(cameraSettings.fov);
-      const pose = resolveOrbitCameraPose(
-        {
-          position: transform.position,
-          scale: transform.scale,
-          rotation: transform.rotation,
-        },
-        {
-          nearPlane: cameraSettings.near,
-          farPlane: cameraSettings.far,
-          fov: cameraSettings.fov,
-          minimumDistance: defaultDistance,
-        },
-        { width, height },
-      );
-
-      return {
-        position: pose.eye,
-        target: pose.target,
-        up: pose.up,
-        fov: pose.fovDegrees,
-        near: pose.near,
-        far: pose.far,
-        applyDefaultDistance: false,
-      };
-    };
-
-    const navClipId = useEngineStore.getState().gaussianSplatNavClipId;
-    const navCameraClip = navClipId
-      ? timelineStore.clips.find((clip) => clip.id === navClipId && clip.source?.type === 'camera')
-      : undefined;
-    const navCameraConfig = navCameraClip ? buildCameraConfigFromClip(navCameraClip) : null;
-    if (navCameraConfig) {
-      return navCameraConfig;
-    }
-
-    const videoTracks = timelineStore.tracks.filter(
-      (track) => track.type === 'video' && track.visible !== false,
-    );
-    const activeCameraTrack = [...videoTracks].reverse().find((track) =>
-      timelineStore.clips.some((clip) =>
-        clip.trackId === track.id &&
-        clip.source?.type === 'camera' &&
-        timelineTime >= clip.startTime &&
-        timelineTime < clip.startTime + clip.duration,
-      ),
-    );
-
-    if (activeCameraTrack) {
-      const activeCameraClip = timelineStore.clips.find((clip) =>
-        clip.trackId === activeCameraTrack.id &&
-        clip.source?.type === 'camera' &&
-        timelineTime >= clip.startTime &&
-        timelineTime < clip.startTime + clip.duration,
-      );
-
-      if (activeCameraClip?.source?.type === 'camera') {
-        const activeCameraConfig = buildCameraConfigFromClip(activeCameraClip);
-        if (activeCameraConfig) {
-          return activeCameraConfig;
-        }
-      }
-    }
-
-    const activeComp = useMediaStore.getState().getActiveComposition();
-    if (activeComp?.camera?.enabled) {
-      return {
-        ...DEFAULT_CAMERA_CONFIG,
-        ...activeComp.camera,
-        applyDefaultDistance: true,
-      };
-    }
-
-    return { ...DEFAULT_CAMERA_CONFIG };
-  }
-
-  private collectActiveSplatEffectors(width: number, height: number): SplatEffectorRuntimeData[] {
-    const timelineStore = useTimelineStore.getState();
-    const playhead = this.getEffectiveTimelineTime();
-    const worldHeight = 2.0;
-    const halfWorldW = (worldHeight * (width / Math.max(height, 1))) / 2;
-    const halfWorldH = worldHeight / 2;
-    const visibleTrackIds = new Set(
-      timelineStore.tracks
-        .filter((track) => track.type === 'video' && track.visible !== false)
-        .map((track) => track.id),
-    );
-
-    return timelineStore.clips
-      .filter((clip) => {
-        if (clip.source?.type !== 'splat-effector') return false;
-        if (!visibleTrackIds.has(clip.trackId)) return false;
-        return playhead >= clip.startTime && playhead < clip.startTime + clip.duration;
-      })
-      .map((clip) => {
-        const clipLocalTime = playhead - clip.startTime;
-        const transform = timelineStore.getInterpolatedTransform(clip.id, clipLocalTime);
-        const settings = clip.source?.splatEffectorSettings ?? DEFAULT_SPLAT_EFFECTOR_SETTINGS;
-        const scaleZ = transform.scale.z ?? 1;
-        const scaleX = Math.abs(transform.scale.x);
-        const scaleY = Math.abs(transform.scale.y);
-        const scaleZAbs = Math.abs(scaleZ);
-
-        return {
-          clipId: clip.id,
-          position: {
-            x: transform.position.x * halfWorldW,
-            y: -transform.position.y * halfWorldH,
-            z: transform.position.z,
-          },
-          rotation: {
-            x: transform.rotation.x,
-            y: transform.rotation.y,
-            z: transform.rotation.z,
-          },
-          scale: {
-            x: scaleX,
-            y: scaleY,
-            z: scaleZAbs,
-          },
-          radius: Math.max(scaleX, scaleY, scaleZAbs, 0.0001),
-          mode: settings.mode,
-          strength: settings.strength,
-          falloff: settings.falloff,
-          speed: settings.speed,
-          seed: settings.seed,
-          time: clipLocalTime,
-        };
-      });
-  }
-
-  async ensureGaussianSplatSceneLoaded(
+  private getNativeGaussianSplatSceneKey(
     clipId: string,
-    url: string | undefined,
-    fileName: string,
-  ): Promise<boolean> {
-    if (!url) return false;
+    runtimeKey?: string,
+  ): string {
+    return resolveSharedSplatSceneKey({
+      clipId,
+      runtimeKey,
+    });
+  }
+
+  private collectActiveSplatEffectors(width: number, height: number): SceneSplatEffectorRuntimeData[] {
+    return collectActiveSceneSplatEffectors(
+      width,
+      height,
+      this.getEffectiveTimelineTime(),
+    );
+  }
+
+  async ensureGaussianSplatSceneLoaded(options: {
+    sceneKey: string;
+    clipId?: string;
+    url?: string;
+    fileName: string;
+    file?: File;
+  }): Promise<boolean> {
+    if (!options.url && !options.file) return false;
 
     const device = this.deps.getDevice();
     if (!device) return false;
@@ -325,40 +157,40 @@ export class RenderDispatcher {
       renderer.initialize(device);
     }
 
-    if (renderer.hasScene(clipId)) {
+    if (renderer.hasScene(options.sceneKey)) {
       return true;
     }
 
-    if (this.splatLoadingClips.has(clipId)) {
-      return this.waitForGaussianSplatScene(clipId, renderer);
+    if (this.splatLoadingClips.has(options.sceneKey)) {
+      return this.waitForGaussianSplatScene(options.sceneKey, renderer);
     }
 
-    await this.loadAndUploadSplatScene(clipId, url, fileName, renderer);
-    return renderer.hasScene(clipId);
+    await this.loadAndUploadSplatScene(options, renderer);
+    return renderer.hasScene(options.sceneKey);
   }
 
-  async ensureThreeSceneRendererInitialized(width: number, height: number): Promise<boolean> {
-    const { getThreeSceneRenderer } = await import('../three/ThreeSceneRenderer');
-    const renderer = this.deps.threeSceneRenderer ?? getThreeSceneRenderer();
+  async ensureSceneRendererInitialized(width: number, height: number): Promise<boolean> {
+    const { getNativeSceneRenderer } = await import('../native3d/NativeSceneRenderer');
+    const renderer = this.deps.sceneRenderer ?? getNativeSceneRenderer();
     const initialized = await renderer.initialize(width, height);
     if (initialized) {
-      this.deps.threeSceneRenderer = renderer;
+      this.deps.sceneRenderer = renderer;
     }
     return initialized;
   }
 
-  async preloadThreeModelAsset(url: string, fileName: string): Promise<boolean> {
+  async preloadSceneModelAsset(url: string, fileName: string): Promise<boolean> {
     if (!url) return false;
 
-    const existingRenderer = this.deps.threeSceneRenderer;
+    const existingRenderer = this.deps.sceneRenderer;
     let renderer = existingRenderer;
     if (!renderer?.isInitialized) {
       const resolution = this.deps.renderTargetManager?.getResolution() ?? { width: 1, height: 1 };
-      const initialized = await this.ensureThreeSceneRendererInitialized(resolution.width, resolution.height);
+      const initialized = await this.ensureSceneRendererInitialized(resolution.width, resolution.height);
       if (!initialized) {
         return false;
       }
-      renderer = this.deps.threeSceneRenderer ?? null;
+      renderer = this.deps.sceneRenderer ?? null;
     }
 
     if (!renderer) {
@@ -369,9 +201,8 @@ export class RenderDispatcher {
   }
 
   clearExportReadinessCache(): void {
-    this.exportReadyThreeSceneResolutions.clear();
-    this.exportReadyNativeSplatKeys.clear();
-    this.exportReadyThreeSplatKeys.clear();
+    this.exportReadySceneRendererResolutions.clear();
+    this.exportReadyNativeSplatSceneKeys.clear();
     this.exportReadyModelUrls.clear();
   }
 
@@ -381,19 +212,9 @@ export class RenderDispatcher {
       return;
     }
 
-    const nativeSplats = new Map<string, { clipId: string; url: string; fileName: string }>();
-    const threeSplats = new Map<string, {
-      cacheKey: string;
-      fileHash?: string;
-      file?: File;
-      url?: string;
-      fileName: string;
-      gaussianSplatSequence?: NonNullable<Layer['source']>['gaussianSplatSequence'];
-      preferBaseRuntime: boolean;
-      requestedMaxSplats: number;
-    }>();
+    const nativeSplats = new Map<string, ReturnType<typeof buildSharedSplatRuntimeRequest>>();
     const modelAssets = new Map<string, { url: string; fileName: string }>();
-    let needsThreeSceneRenderer = false;
+    let needsSceneRenderer = false;
 
     for (const layer of visibleLayers) {
       const source = layer.source;
@@ -403,10 +224,9 @@ export class RenderDispatcher {
 
       if (
         layer.is3D === true &&
-        source.type !== 'camera' &&
-        !(source.type === 'gaussian-splat' && this.isNativeGaussianSplatSource(source))
+        source.type !== 'camera'
       ) {
-        needsThreeSceneRenderer = true;
+        needsSceneRenderer = true;
       }
 
       if (source.type === 'model' && source.modelUrl) {
@@ -440,101 +260,63 @@ export class RenderDispatcher {
       const preferBaseRuntime = !!gaussianSplatSequence;
       const fileHash = preferBaseRuntime ? undefined : (source.gaussianSplatFileHash ?? mediaFile?.fileHash);
       const requestedMaxSplats = source.gaussianSplatSettings?.render.maxSplats ?? 0;
-      const runtimeCacheKey =
-        source.gaussianSplatRuntimeKey ??
-        `${fileName || source.gaussianSplatUrl || layer.id}|${source.gaussianSplatUrl || layer.id}`;
-      const cacheKey =
-        preferBaseRuntime
-          ? runtimeCacheKey
-          : (fileHash ?? mediaFileId ?? runtimeCacheKey);
-
-      if (this.isNativeGaussianSplatSource(source)) {
-        if (!source.gaussianSplatUrl) {
-          throw new Error(`Precise export cannot load native gaussian splat "${layer.name}" without a URL`);
-        }
-        nativeSplats.set(layer.id, {
-          clipId: layer.sourceClipId ?? layer.id,
-          url: source.gaussianSplatUrl,
-          fileName,
-        });
-        continue;
-      }
-
-      if (!source.gaussianSplatUrl && !file) {
-        throw new Error(`Precise export cannot prepare gaussian splat "${layer.name}" without a URL or file`);
-      }
-
-      threeSplats.set(`${cacheKey}|${requestedMaxSplats}`, {
-        cacheKey,
-        fileHash,
-        file,
+      const request = buildSharedSplatRuntimeRequest({
+        clipId: layer.sourceClipId ?? layer.id,
+        runtimeKey: source.gaussianSplatRuntimeKey,
         url: source.gaussianSplatUrl,
+        file,
         fileName,
+        fileHash,
+        mediaFileId,
         gaussianSplatSequence,
-        preferBaseRuntime,
+        gaussianSplatSettings: source.gaussianSplatSettings,
         requestedMaxSplats,
       });
+
+      if (!request.url && !request.file) {
+        throw new Error(`Precise export cannot load gaussian splat "${layer.name}" without a URL or file`);
+      }
+      nativeSplats.set(request.sceneKey, request);
     }
 
-    if (needsThreeSceneRenderer || modelAssets.size > 0 || threeSplats.size > 0) {
+    if (needsSceneRenderer || modelAssets.size > 0) {
       const resolution = this.deps.renderTargetManager?.getResolution() ?? { width: 1, height: 1 };
       const resolutionKey = `${resolution.width}x${resolution.height}`;
-      if (!this.exportReadyThreeSceneResolutions.has(resolutionKey)) {
-        const initialized = await this.ensureThreeSceneRendererInitialized(resolution.width, resolution.height);
+      if (!this.exportReadySceneRendererResolutions.has(resolutionKey)) {
+        const initialized = await this.ensureSceneRendererInitialized(resolution.width, resolution.height);
         if (!initialized) {
-          throw new Error('Precise export could not initialize the Three.js renderer');
+          throw new Error('Precise export could not initialize the shared scene renderer');
         }
-        this.exportReadyThreeSceneResolutions.add(resolutionKey);
+        this.exportReadySceneRendererResolutions.add(resolutionKey);
       }
     }
 
     const readinessChecks = [
-      ...[...nativeSplats.values()].map(async ({ clipId, url, fileName }) => {
-        const nativeKey = `${clipId}|${url}`;
-        if (this.exportReadyNativeSplatKeys.has(nativeKey)) {
+      ...[...nativeSplats.values()].map(async (request) => {
+        if (this.exportReadyNativeSplatSceneKeys.has(request.sceneKey)) {
           return;
         }
-        const ready = await this.ensureGaussianSplatSceneLoaded(clipId, url, fileName);
+        const ready = await this.ensureGaussianSplatSceneLoaded({
+          sceneKey: request.sceneKey,
+          clipId: request.clipId,
+          url: request.url,
+          fileName: request.fileName,
+          file: request.file,
+        });
         if (!ready) {
-          throw new Error(`Native gaussian splat "${fileName}" was not ready in time`);
+          throw new Error(`Native gaussian splat "${request.fileName}" was not ready in time`);
         }
-        this.exportReadyNativeSplatKeys.add(nativeKey);
+        this.exportReadyNativeSplatSceneKeys.add(request.sceneKey);
       }),
       ...[...modelAssets.values()].map(async ({ url, fileName }) => {
         if (this.exportReadyModelUrls.has(url)) {
           return;
         }
-        const ready = await this.preloadThreeModelAsset(url, fileName);
+        const ready = await this.preloadSceneModelAsset(url, fileName);
         if (!ready) {
           throw new Error(`3D model "${fileName}" was not ready in time`);
         }
         this.exportReadyModelUrls.add(url);
-      }),
-      ...[...threeSplats.values()].map(async ({
-        cacheKey,
-        fileHash,
-        file,
-        url,
-        fileName,
-        gaussianSplatSequence,
-        preferBaseRuntime,
-        requestedMaxSplats,
-      }) => {
-        const variant = preferBaseRuntime ? 'base' : 'target';
-        const threeSplatKey = `${cacheKey}|${variant}|${requestedMaxSplats}`;
-        if (this.exportReadyThreeSplatKeys.has(threeSplatKey)) {
-          return;
-        }
-        await (preferBaseRuntime ? waitForBasePreparedSplatRuntime : waitForTargetPreparedSplatRuntime)({
-          cacheKey,
-          fileHash,
-          file,
-          url,
-          fileName,
-          gaussianSplatSequence,
-          requestedMaxSplats,
-        });
-        this.exportReadyThreeSplatKeys.add(threeSplatKey);
       }),
     ];
 
@@ -579,14 +361,14 @@ export class RenderDispatcher {
   }
 
   private async waitForGaussianSplatScene(
-    clipId: string,
+    sceneKey: string,
     renderer: ReturnType<typeof getGaussianSplatGpuRenderer>,
     timeoutMs = 15000,
   ): Promise<boolean> {
     const startedAt = performance.now();
 
-    while (this.splatLoadingClips.has(clipId)) {
-      if (renderer.hasScene(clipId)) {
+    while (this.splatLoadingClips.has(sceneKey)) {
+      if (renderer.hasScene(sceneKey)) {
         return true;
       }
       if (performance.now() - startedAt >= timeoutMs) {
@@ -595,7 +377,7 @@ export class RenderDispatcher {
       await new Promise<void>((resolve) => window.setTimeout(resolve, 16));
     }
 
-    return renderer.hasScene(clipId);
+    return renderer.hasScene(sceneKey);
   }
 
   private getTargetVideoTime(layer: Layer, video: HTMLVideoElement): number {
@@ -764,7 +546,7 @@ export class RenderDispatcher {
       finalLayerData: layerData.length,
     };
     this.lastRenderDebugSnapshot = debugSnapshot;
-    const threeSceneDebugPayload = {
+    const sceneRenderDebugPayload = {
       input: layers.map((layer) => layer ? {
         id: layer.id,
         sourceClipId: layer.sourceClipId,
@@ -783,10 +565,10 @@ export class RenderDispatcher {
         hasTextureView: !!data.textureView,
       })),
     };
-    const threeSceneDebugKey = JSON.stringify(threeSceneDebugPayload);
-    if (threeSceneDebugKey !== this.lastThreeSceneDebugKey) {
-      this.lastThreeSceneDebugKey = threeSceneDebugKey;
-      log.warn('Three.js render input changed', threeSceneDebugPayload);
+    const sceneRenderDebugKey = JSON.stringify(sceneRenderDebugPayload);
+    if (sceneRenderDebugKey !== this.lastSceneRenderDebugKey) {
+      this.lastSceneRenderDebugKey = sceneRenderDebugKey;
+      log.warn('Shared scene render input changed', sceneRenderDebugPayload);
     }
 
     // Update stats
@@ -816,24 +598,13 @@ export class RenderDispatcher {
     }
     this.lastRenderHadContent = true;
 
-    // === 3D Layer Pass (Three.js) ===
-    // If any layers have is3D=true and the feature flag is on,
-    // render them via Three.js to an OffscreenCanvas, import as texture,
-    // and replace individual 3D layers with a single synthetic layer.
+    // === Shared 3D Scene Pass ===
     if (flags.use3DLayers) {
       this.process3DLayers(layerData, device, width, height);
     }
     debugSnapshot.after3DLayerData = layerData.length;
 
     const commandBuffers: GPUCommandBuffer[] = [];
-
-    // === Native Gaussian Splat Pass (WebGPU) ===
-    const gaussianSummary = this.processGaussianSplatLayers(layerData, device, width, height);
-    debugSnapshot.gaussianCandidates = gaussianSummary.gaussianCandidates;
-    debugSnapshot.gaussianRendered = gaussianSummary.rendered;
-    debugSnapshot.gaussianPendingLoad = gaussianSummary.pendingLoad;
-    debugSnapshot.gaussianMissingUrl = gaussianSummary.missingUrl;
-    debugSnapshot.gaussianNoTextureView = gaussianSummary.noTextureView;
     debugSnapshot.finalLayerData = layerData.length;
 
     // Pre-render nested compositions (batched with main composite)
@@ -845,7 +616,17 @@ export class RenderDispatcher {
         hasNestedComps = true;
         const nc = data.layer.source.nestedComposition;
         const view = d.nestedCompRenderer!.preRender(
-          nc.compositionId, nc.layers, nc.width, nc.height, preRenderEncoder, d.sampler, nc.currentTime, 0, skipEffects
+          nc.compositionId,
+          nc.layers,
+          nc.width,
+          nc.height,
+          preRenderEncoder,
+          d.sampler,
+          nc.currentTime,
+          nc.sceneClips,
+          nc.sceneTracks,
+          0,
+          skipEffects,
         );
         if (view) data.textureView = view;
       }
@@ -954,169 +735,102 @@ export class RenderDispatcher {
   }
 
   /**
-   * Process 3D layers: render them via Three.js to a texture,
-   * then replace individual 3D LayerRenderData entries with a single synthetic entry.
+   * Process 3D layers through the shared scene renderer and replace them
+   * with a single synthetic LayerRenderData entry.
    */
   private process3DLayers(layerData: LayerRenderData[], device: GPUDevice, width: number, height: number): void {
-    // Find 3D layers
     const indices3D: number[] = [];
     for (let i = 0; i < layerData.length; i++) {
       const source = layerData[i].layer.source;
-      if (
-        layerData[i].layer.is3D &&
-        source?.type !== 'gaussian-avatar' &&
-        (
-          source?.type !== 'gaussian-splat' ||
-          !this.isNativeGaussianSplatSource(source)
-        )
-      ) {
-        indices3D.push(i);
+      if (!layerData[i].layer.is3D || source?.type === 'gaussian-avatar') {
+        continue;
       }
+      indices3D.push(i);
     }
     if (indices3D.length === 0) return;
-
     const d = this.deps;
-    const renderer = d.threeSceneRenderer;
+    const renderer = d.sceneRenderer;
+    const isRealtimePlayback = (this.deps.renderLoop?.getIsPlaying() ?? false)
+      && !this.deps.exportCanvasManager.getIsExporting();
+    const preciseSplatSorting = this.deps.exportCanvasManager.getIsExporting();
+
     if (!renderer || !renderer.isInitialized) {
       // Lazy init happens async — on the first frame with 3D layers,
       // we trigger init and skip the 3D pass. Next frames will render.
-      if (!this.threeSceneInitializing && !renderer?.isInitialized) {
-        this.threeSceneInitializing = true;
-        import('../three/ThreeSceneRenderer').then(({ getThreeSceneRenderer }) => {
-          const r = getThreeSceneRenderer();
+      if (!this.sceneRendererInitializing && !renderer?.isInitialized) {
+        this.sceneRendererInitializing = true;
+        import('../native3d/NativeSceneRenderer').then(({ getNativeSceneRenderer }) => {
+          const r = getNativeSceneRenderer();
           r.initialize(width, height).then((ok) => {
             if (ok) {
-              d.threeSceneRenderer = r;
-              log.info('Three.js 3D renderer initialized lazily');
+              d.sceneRenderer = r;
+              log.info('Shared scene renderer initialized lazily');
             }
-            this.threeSceneInitializing = false;
+            this.sceneRendererInitializing = false;
           });
         });
       }
       // Remove 3D layers from layerData so the old 2D shader doesn't render them
-      // with its fake perspective distortion while Three.js is loading
+      // with its fake perspective distortion while the shared scene renderer is loading.
       for (let i = indices3D.length - 1; i >= 0; i--) {
         layerData.splice(indices3D[i], 1);
       }
       return;
     }
 
-    const isRealtimePlayback = (this.deps.renderLoop?.getIsPlaying() ?? false)
-      && !this.deps.exportCanvasManager.getIsExporting();
-    const preciseSplatSorting = this.deps.exportCanvasManager.getIsExporting();
-
-    // Build Layer3DData from the 3D layers
-    const layers3D: Layer3DData[] = [];
-    for (const idx of indices3D) {
-      const data = layerData[idx];
-      const layer = data.layer;
-      const src = layer.source;
-      const stableSourceSize = this.resolveStable3DSourceDimensions(data, width, height);
-      const rot = typeof layer.rotation === 'number'
-        ? { x: 0, y: 0, z: layer.rotation }
-        : layer.rotation;
-      const radToDeg = 180 / Math.PI;
-
-      layers3D.push({
-        layerId: layer.id,
-        clipId: layer.sourceClipId || layer.id,
-        position: layer.position,
-        // Render-layer rotations are stored in radians for the 2D compositor pipeline.
-        // ThreeSceneRenderer expects degrees and converts to radians internally.
-        rotation: {
-          x: rot.x * radToDeg,
-          y: rot.y * radToDeg,
-          z: rot.z * radToDeg,
-        },
-        scale: { x: layer.scale.x, y: layer.scale.y, z: layer.scale.z ?? 1 },
-        threeDEffectorsEnabled: src?.threeDEffectorsEnabled,
-        opacity: layer.opacity,
-        blendMode: layer.blendMode,
-        sourceWidth: stableSourceSize.sourceWidth,
-        sourceHeight: stableSourceSize.sourceHeight,
-        videoElement: src?.videoElement ?? undefined,
-        preciseVideoSampling: !isRealtimePlayback,
-        imageElement: src?.imageElement ?? undefined,
-        canvas: src?.textCanvas ?? undefined,
-        modelUrl: src?.modelUrl ?? undefined,
-        modelFileName: layer.name,  // Original filename for format detection
-        meshType: src?.meshType ?? undefined,
-        text3DProperties: src?.text3DProperties ?? undefined,
-        wireframe: layer.wireframe,
-        gaussianSplatFile: src?.file ?? undefined,
-        gaussianSplatUrl: src?.gaussianSplatUrl ?? undefined,
-        gaussianSplatFileName: src?.gaussianSplatFileName ?? undefined,
-        gaussianSplatFileHash: src?.gaussianSplatFileHash ?? undefined,
-        gaussianSplatRuntimeKey: src?.gaussianSplatRuntimeKey ?? undefined,
-        gaussianSplatIsSequence: !!src?.gaussianSplatSequence,
-        gaussianSplatSequence: src?.gaussianSplatSequence ?? undefined,
-        gaussianSplatMediaFileId: src?.mediaFileId ?? undefined,
-        gaussianSplatSettings: src?.gaussianSplatSettings ?? undefined,
-        preciseSplatSorting,
-      });
-    }
-
-    const cameraConfig = this.resolveSharedSceneCameraConfig(layers3D, width, height);
-    const activeSplatEffectors = this.collectActiveSplatEffectors(width, height);
-
-    // Render the 3D scene
-    const canvas = renderer.renderScene(
-      layers3D,
-      cameraConfig,
+    const includedLayers = new Set(indices3D.map((index) => layerData[index]));
+    const layers3D = collectScene3DLayers(layerData, {
       width,
       height,
+      preciseVideoSampling: !isRealtimePlayback,
+      preciseSplatSorting,
+      includeLayer: (data) => includedLayers.has(data),
+    });
+
+    const camera = resolveSharedSceneCamera(
+      { width, height },
+      this.getEffectiveTimelineTime(),
+    );
+    const activeSplatEffectors = this.collectActiveSplatEffectors(width, height);
+    const nativeSplatLayers = layers3D.filter((layer): layer is SceneSplatLayer =>
+      layer.kind === 'splat',
+    );
+    for (const layer of nativeSplatLayers) {
+      const sceneKey = this.getNativeGaussianSplatSceneKey(layer.clipId, layer.gaussianSplatRuntimeKey);
+      const nativeRenderer = getGaussianSplatGpuRenderer();
+      if (!nativeRenderer.hasScene(sceneKey) && !this.splatLoadingClips.has(sceneKey)) {
+        void this.ensureGaussianSplatSceneLoaded({
+          sceneKey,
+          clipId: layer.clipId,
+          url: layer.gaussianSplatUrl,
+          fileName: layer.gaussianSplatFileName ?? layer.layerId,
+          file: layer.gaussianSplatFile,
+        });
+      }
+    }
+
+    const textureView = renderer.renderScene(
+      device,
+      layers3D,
+      camera,
       activeSplatEffectors,
       isRealtimePlayback,
     );
-    if (!canvas) return;
-
-    // Import the OffscreenCanvas as a GPU texture
-    // Ensure we have a texture of the right size
-    if (!this.threeSceneTexture || this.threeSceneTexture.width !== width || this.threeSceneTexture.height !== height) {
-      this.threeSceneTexture?.destroy();
-      this.threeSceneTexture = device.createTexture({
-        size: { width, height },
-        format: 'rgba8unorm',
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
-      });
-      this.threeSceneView = this.threeSceneTexture.createView();
+    if (!textureView) {
+      for (let i = indices3D.length - 1; i >= 0; i--) {
+        layerData.splice(indices3D[i], 1);
+      }
+      return;
     }
-
-    let importSource: HTMLCanvasElement | OffscreenCanvas = canvas;
-    if (canvas instanceof HTMLCanvasElement) {
-      if (!this.threeSceneImportCanvas) {
-        this.threeSceneImportCanvas = document.createElement('canvas');
-      }
-      if (
-        this.threeSceneImportCanvas.width !== width ||
-        this.threeSceneImportCanvas.height !== height
-      ) {
-        this.threeSceneImportCanvas.width = width;
-        this.threeSceneImportCanvas.height = height;
-      }
-      const importCtx = this.threeSceneImportCanvas.getContext('2d');
-      if (importCtx) {
-        importCtx.clearRect(0, 0, width, height);
-        importCtx.drawImage(canvas, 0, 0, width, height);
-        importSource = this.threeSceneImportCanvas;
-      }
-    }
-
-    // Copy Three.js canvas content to GPU texture
-    device.queue.copyExternalImageToTexture(
-      { source: importSource },
-      { texture: this.threeSceneTexture },
-      { width, height },
-    );
 
     // Create a synthetic layer for the 3D scene
     // For a single 3D layer, pass its opacity/blendMode to the compositor directly.
-    // For multiple, Three.js handles per-layer opacity internally; composite at 100%.
+    // For multiple, the shared scene renderer handles per-layer opacity internally.
     const insertIdx = indices3D[0];
     const firstLayer = layerData[indices3D[0]].layer;
     const isSingle3D = indices3D.length === 1;
     const syntheticLayer: Layer = {
-      id: '__three_scene__',
+      id: '__scene_3d__',
       name: '3D Scene',
       visible: true,
       opacity: isSingle3D ? firstLayer.opacity : 1,
@@ -1132,7 +846,7 @@ export class RenderDispatcher {
       layer: syntheticLayer,
       isVideo: false,
       externalTexture: null,
-      textureView: this.threeSceneView,
+      textureView,
       sourceWidth: width,
       sourceHeight: height,
     };
@@ -1147,7 +861,7 @@ export class RenderDispatcher {
   /**
    * Process Gaussian Splat avatar layers: grab the renderer's canvas,
    * import as GPU texture, replace with synthetic layer.
-   * Unlike Three.js (frame-on-demand), the Gaussian renderer runs its own rAF loop —
+   * Unlike the old frame-on-demand shared-scene path, the Gaussian renderer runs its own rAF loop —
    * we simply capture the latest frame each compositor cycle.
    */
   private processGaussianLayers(layerData: LayerRenderData[], device: GPUDevice, width: number, height: number): void {
@@ -1268,7 +982,7 @@ export class RenderDispatcher {
       return;
     }
 
-    // Create synthetic layer (same pattern as __three_scene__)
+    // Create synthetic layer for the bridged renderer output.
     const insertIdx = indices[0];
     const firstLayer = layerData[indices[0]].layer;
     const isSingle = indices.length === 1;
@@ -1343,6 +1057,22 @@ export class RenderDispatcher {
     renderer.beginFrame();
     const isRealtimePlayback = (this.deps.renderLoop?.getIsPlaying() ?? false)
       && !this.deps.exportCanvasManager.getIsExporting();
+    const preciseSplatSorting = this.deps.exportCanvasManager.getIsExporting();
+    const activeSplatEffectors = this.collectActiveSplatEffectors(width, height);
+    const sceneCamera = resolveRenderableSharedSceneCamera(
+      { width, height },
+      this.getEffectiveTimelineTime(),
+    );
+    const sceneSplatLayers = new Map(
+      collectScene3DLayers(layerData, {
+        width,
+        height,
+        preciseSplatSorting,
+        includeLayer: (candidate) => this.isNativeGaussianSplatSource(candidate.layer.source),
+      })
+        .filter((layer) => layer.kind === 'splat')
+        .map((layer) => [layer.layerId, layer] as const),
+    );
 
     // Process each gaussian-splat layer individually (reverse iteration for safe splice)
     for (let i = layerData.length - 1; i >= 0; i--) {
@@ -1351,6 +1081,7 @@ export class RenderDispatcher {
       if (source?.type !== 'gaussian-splat' || !this.isNativeGaussianSplatSource(source)) continue;
 
       const clipId = data.layer.sourceClipId || data.layer.id;
+      const sceneKey = this.getNativeGaussianSplatSceneKey(clipId, source.gaussianSplatRuntimeKey);
       const splatUrl = source.gaussianSplatUrl;
       const settings = source.gaussianSplatSettings;
       const renderSettings = settings?.render ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render;
@@ -1359,6 +1090,7 @@ export class RenderDispatcher {
           ? 0
           : Math.max(renderSettings.sortFrequency, GAUSSIAN_PLAYBACK_SORT_FREQUENCY))
         : renderSettings.sortFrequency;
+      const sceneLayer = sceneSplatLayers.get(data.layer.id);
 
       // No URL — remove layer
       if (!splatUrl) {
@@ -1367,38 +1099,38 @@ export class RenderDispatcher {
         continue;
       }
 
+      if (!sceneLayer) {
+        summary.noTextureView++;
+        layerData.splice(i, 1);
+        continue;
+      }
+
       // Upload scene if not cached — trigger async load, skip this frame
-      if (!renderer.hasScene(clipId)) {
-        this.loadAndUploadSplatScene(
+      if (!renderer.hasScene(sceneKey)) {
+        this.loadAndUploadSplatScene({
+          sceneKey,
           clipId,
-          splatUrl,
-          source.gaussianSplatFileName ?? data.layer.name,
-          renderer,
-        );
+          url: splatUrl,
+          fileName: source.gaussianSplatFileName ?? data.layer.name,
+          file: source.file,
+        }, renderer);
         summary.pendingLoad++;
         layerData.splice(i, 1);
         continue;
       }
 
-      // Build camera from layer transform + render settings
-      const camera = buildSplatCamera(
-        data.layer,
-        renderSettings,
-        { width, height },
-        this.splatSceneBounds.get(clipId),
-      );
-
-      // Render this single splat into its own texture
-      // Wave 5: pass clip-local time and particle/temporal settings from layer source
+      // Render this splat layer as a shared-scene object with its own world transform.
       const gaussianCommandEncoder = device.createCommandEncoder();
       const textureView = renderer.renderToTexture(
-        clipId, camera, { width, height }, gaussianCommandEncoder,
+        sceneKey, sceneCamera, { width, height }, gaussianCommandEncoder,
         {
           clipLocalTime: source.mediaTime,
           backgroundColor: renderSettings.backgroundColor,
+          effectors: sceneLayer.threeDEffectorsEnabled === false ? [] : activeSplatEffectors,
+          worldMatrix: sceneLayer.worldMatrix,
           maxSplats: renderSettings.maxSplats,
           particleSettings: settings?.particle,
-          precise: this.deps.exportCanvasManager.getIsExporting(),
+          precise: preciseSplatSorting,
           sortFrequency: liveSortFrequency,
           temporalSettings: settings?.temporal,
         },
@@ -1439,35 +1171,56 @@ export class RenderDispatcher {
 
   /** Async helper: fetch splat file, parse, and upload to GPU renderer */
   private async loadAndUploadSplatScene(
-    clipId: string,
-    url: string,
-    fileName: string,
+    request: {
+      sceneKey: string;
+      clipId?: string;
+      url?: string;
+      fileName: string;
+      file?: File;
+    },
     renderer: ReturnType<typeof getGaussianSplatGpuRenderer>,
   ): Promise<void> {
-    if (this.splatLoadingClips.has(clipId)) return;
-    this.splatLoadingClips.add(clipId);
+    if (this.splatLoadingClips.has(request.sceneKey)) return;
+    this.splatLoadingClips.add(request.sceneKey);
 
     try {
-      const response = await fetch(url);
-      const arrayBuffer = await response.arrayBuffer();
-      const file = new File([arrayBuffer], fileName || 'splat.ply');
-      const asset = await loadGaussianSplatAssetCached(clipId, file);
+      let file = request.file;
+      if (!file) {
+        if (!request.url) {
+          return;
+        }
+        const response = await fetch(request.url);
+        const arrayBuffer = await response.arrayBuffer();
+        file = new File([arrayBuffer], request.fileName || 'splat.ply');
+      }
+      const asset = await loadGaussianSplatAssetCached(request.sceneKey, file);
 
       if (asset?.frames[0]?.buffer) {
         if (asset.metadata?.boundingBox) {
-          this.splatSceneBounds.set(clipId, asset.metadata.boundingBox);
+          this.splatSceneBounds.set(request.sceneKey, asset.metadata.boundingBox);
+          if (request.clipId && request.clipId !== request.sceneKey) {
+            this.splatSceneBounds.set(request.clipId, asset.metadata.boundingBox);
+          }
         }
-        renderer.uploadScene(clipId, {
+        renderer.uploadScene(request.sceneKey, {
           splatCount: asset.frames[0].buffer.splatCount,
           data: asset.frames[0].buffer.data,
         });
-        log.info('Gaussian splat scene uploaded', { clipId, splatCount: asset.frames[0].buffer.splatCount });
+        log.info('Gaussian splat scene uploaded', {
+          clipId: request.clipId ?? request.sceneKey,
+          sceneKey: request.sceneKey,
+          splatCount: asset.frames[0].buffer.splatCount,
+        });
         this.deps.renderLoop?.requestRender();
       }
     } catch (err) {
-      log.error('Failed to load gaussian splat scene', { clipId, err });
+      log.error('Failed to load gaussian splat scene', {
+        clipId: request.clipId ?? request.sceneKey,
+        sceneKey: request.sceneKey,
+        err,
+      });
     } finally {
-      this.splatLoadingClips.delete(clipId);
+      this.splatLoadingClips.delete(request.sceneKey);
     }
   }
 

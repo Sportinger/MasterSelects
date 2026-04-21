@@ -8,7 +8,7 @@ import { blobUrlManager } from '../helpers/blobUrlManager';
 import {
   resolveGaussianSplatSettingsForSource,
 } from '../../../engine/gaussian/types';
-import { prewarmGaussianSplatRuntime } from '../../../engine/three/splatRuntimeCache';
+import { prewarmGaussianSplatRuntime } from '../../../engine/scene/runtime/SharedSplatRuntimeCache';
 
 const DEFAULT_SPLAT_DURATION = 30; // seconds
 const MAX_SPLAT_DURATION = 3600; // 1 hour

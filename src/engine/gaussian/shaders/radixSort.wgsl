@@ -12,6 +12,7 @@
 
 struct SortUniforms {
   viewMatrix: mat4x4f,
+  worldMatrix: mat4x4f,
   splatCount: u32,
   // Bitonic step params
   blockSize: u32,    // k in bitonic sort (doubles each outer step)
@@ -60,8 +61,8 @@ fn computeDepthKeys(@builtin(global_invocation_id) gid: vec3u) {
   // Read splat position
   let pos = vec3f(splatData[base + 0u], splatData[base + 1u], splatData[base + 2u]);
 
-  // Transform to view space — we only need the z component (depth)
-  let worldPos = vec4f(pos, 1.0);
+  // Transform to shared-scene world space first, then into view space.
+  let worldPos = params.worldMatrix * vec4f(pos, 1.0);
   let viewPos = params.viewMatrix * worldPos;
   let depth = viewPos.z; // In a right-handed view, z is negative for visible objects
 

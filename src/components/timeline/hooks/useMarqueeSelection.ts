@@ -145,11 +145,7 @@ export function useMarqueeSelection({
         }
 
         const showsCamera3DProps =
-          selectedTrackClip.source?.type === 'camera' ||
-          (
-            selectedTrackClip.source?.type === 'gaussian-splat' &&
-            selectedTrackClip.source.gaussianSplatSettings?.render.useNativeRenderer === true
-          );
+          selectedTrackClip.source?.type === 'camera';
         const propertyOrder = showsCamera3DProps
           ? ['opacity', 'position.x', 'position.y', 'scale.z', 'position.z', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z']
           : ['opacity', 'position.x', 'position.y', 'position.z', 'scale.x', 'scale.y', 'scale.z', 'rotation.x', 'rotation.y', 'rotation.z'];

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../src/engine/three/splatRuntimeCache', () => ({
+vi.mock('../../src/engine/scene/runtime/SharedSplatRuntimeCache', () => ({
   prewarmGaussianSplatRuntime: vi.fn(),
 }));
 

@@ -22,7 +22,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | **Timeline Editing** | Multi-track editing, nested compositions, markers, shortcuts, and keyframes |
 | **AI Control** | OpenAI chat with 79 exported tools plus local/native bridge access for external agents |
 | **AI Video Workspace** | Classic AI Video plus FlashBoard board-mode generation and media import |
-| **3D Layers** | Three.js layers, camera clips, Gaussian splats, and splat effectors |
+| **3D Layers** | Shared-scene 3D layers, camera clips, Gaussian splats, and splat effectors |
 | **Vector Animation** | Lottie clips with deterministic canvas playback, looping, and export |
 | **Audio** | Element-synced playback, drift correction, waveform extraction, EQ, and audio export |
 | **Project Storage** | `project.json` source of truth, RAW-copy-first media flow, autosave, relink, backups |
@@ -53,7 +53,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | [Effects](./Effects.md) | Current effect registry, categories, quality controls, and inline effect behavior |
 | [Masks](./Masks.md) | Overlay mask editing, feathering, stored modes, and current limitations |
 | [Text Clips](./Text-Clips.md) | Canvas-backed text rendering, typography controls, and timeline text items |
-| [3D Layers](./3D-Layers.md) | Three.js scene path, native Gaussian splats, cameras, and splat effectors |
+| [3D Layers](./3D-Layers.md) | Shared-scene path, native Gaussian splats, cameras, and splat effectors |
 | [Vector Animation](./Vector-Animation.md) | Lottie import, runtime playback, looping, and export behavior |
 | [Audio](./Audio.md) | Playback sync, EQ, waveform extraction, audio clip behavior, and export |
 | [Export](./Export.md) | WebCodecs fast/precise export, FFmpeg intermediates, image/audio-only export, FCPXML, and project-persistent presets |
@@ -84,7 +84,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 ```text
 Frontend          React 19 + TypeScript + Vite 7.x
 State             Zustand with modular timeline and media slices
-Rendering         WebGPU + WGSL + Three.js for 3D layers
+Rendering         WebGPU + WGSL + shared-scene 3D runtime
 Media             MediaBunny, WebCodecs, HTML media fallback paths
 Audio             Web Audio API, EQ, drift correction, waveform extraction
 AI                OpenAI chat, Kie.ai, hosted cloud, PiAPI catalog, SAM2, MatAnyone2

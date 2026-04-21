@@ -6,6 +6,7 @@
 
 struct CullUniforms {
   viewProj: mat4x4f,
+  world: mat4x4f,
   splatCount: u32,
   _pad0: u32,
   _pad1: u32,
@@ -16,6 +17,14 @@ struct CullUniforms {
 
 @group(2) @binding(0) var<storage, read_write> visibleIndices: array<u32>;
 @group(2) @binding(1) var<storage, read_write> counter: array<atomic<u32>>;
+
+fn extractWorldScale(world: mat4x4f) -> vec3f {
+  return vec3f(
+    length(world[0].xyz),
+    length(world[1].xyz),
+    length(world[2].xyz),
+  );
+}
 
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3u) {
@@ -36,8 +45,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     splatData[base + 5u],
   );
 
-  // Transform center into homogeneous clip space.
-  let clip = cull.viewProj * vec4f(pos, 1.0);
+  // Transform center into shared-scene world space, then clip space.
+  let worldPos = cull.world * vec4f(pos, 1.0);
+  let clip = cull.viewProj * worldPos;
   if (clip.w <= 0.0001) {
     return;
   }
@@ -45,7 +55,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let ndc = clip.xyz / clip.w;
 
   // Conservative margin derived from the world-space scale.
-  let radius = 3.0 * max(scale.x, max(scale.y, scale.z));
+  let worldScale = extractWorldScale(cull.world);
+  let supportScale = scale * worldScale;
+  let radius = 3.0 * max(supportScale.x, max(supportScale.y, supportScale.z));
   let margin = max(0.05, radius * 0.01);
 
   if (ndc.x < -1.0 - margin || ndc.x > 1.0 + margin) {

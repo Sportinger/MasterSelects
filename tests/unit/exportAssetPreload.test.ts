@@ -3,7 +3,6 @@ import { preload3DAssetsForExport, preloadGaussianSplatsForExport } from '../../
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { engine } from '../../src/engine/WebGPUEngine';
-import { waitForBasePreparedSplatRuntime, waitForTargetPreparedSplatRuntime } from '../../src/engine/three/splatRuntimeCache';
 
 vi.mock('../../src/services/logger', () => ({
   Logger: {
@@ -19,14 +18,9 @@ vi.mock('../../src/services/logger', () => ({
 vi.mock('../../src/engine/WebGPUEngine', () => ({
   engine: {
     ensureGaussianSplatSceneLoaded: vi.fn(async () => true),
-    ensureThreeSceneRendererInitialized: vi.fn(async () => true),
-    preloadThreeModelAsset: vi.fn(async () => true),
+    ensureSceneRendererInitialized: vi.fn(async () => true),
+    preloadSceneModelAsset: vi.fn(async () => true),
   },
-}));
-
-vi.mock('../../src/engine/three/splatRuntimeCache', () => ({
-  waitForBasePreparedSplatRuntime: vi.fn(async () => ({})),
-  waitForTargetPreparedSplatRuntime: vi.fn(async () => ({})),
 }));
 
 describe('export asset preload helpers', () => {
@@ -93,14 +87,16 @@ describe('export asset preload helpers', () => {
 
     expect(engine.ensureGaussianSplatSceneLoaded).toHaveBeenCalledTimes(1);
     expect(engine.ensureGaussianSplatSceneLoaded).toHaveBeenCalledWith(
-      'splat-in-range',
-      'blob:splat-in-range',
-      'hero.splat',
+      expect.objectContaining({
+        sceneKey: 'splat-in-range',
+        clipId: 'splat-in-range',
+        url: 'blob:splat-in-range',
+        fileName: 'hero.splat',
+      }),
     );
-    expect(waitForTargetPreparedSplatRuntime).not.toHaveBeenCalled();
   });
 
-  it('preloads full three.js gaussian splat runtimes for non-native export clips', async () => {
+  it('preloads gaussian splats through the native scene loader even for legacy false clips', async () => {
     useTimelineStore.setState({
       clips: [
         {
@@ -126,20 +122,18 @@ describe('export asset preload helpers', () => {
 
     await preloadGaussianSplatsForExport({ startTime: 0, endTime: 5 });
 
-    expect(engine.ensureThreeSceneRendererInitialized).toHaveBeenCalledWith(1, 1);
-    expect(waitForTargetPreparedSplatRuntime).toHaveBeenCalledTimes(1);
-    expect(waitForTargetPreparedSplatRuntime).toHaveBeenCalledWith(
+    expect(engine.ensureGaussianSplatSceneLoaded).toHaveBeenCalledTimes(1);
+    expect(engine.ensureGaussianSplatSceneLoaded).toHaveBeenCalledWith(
       expect.objectContaining({
-        cacheKey: 'hero.splat|blob:splat-three',
+        sceneKey: 'splat-three',
+        clipId: 'splat-three',
         url: 'blob:splat-three',
         fileName: 'hero.splat',
-        requestedMaxSplats: 0,
       }),
     );
-    expect(waitForBasePreparedSplatRuntime).not.toHaveBeenCalled();
   });
 
-  it('preloads base three.js gaussian splat runtimes for sequence export clips', async () => {
+  it('preloads gaussian splat sequences through the native scene loader without a Three fallback', async () => {
     useTimelineStore.setState({
       clips: [
         {
@@ -174,22 +168,57 @@ describe('export asset preload helpers', () => {
 
     await preloadGaussianSplatsForExport({ startTime: 0, endTime: 5 });
 
-    expect(waitForBasePreparedSplatRuntime).toHaveBeenCalledTimes(1);
-    expect(waitForBasePreparedSplatRuntime).toHaveBeenCalledWith(
+    expect(engine.ensureGaussianSplatSceneLoaded).toHaveBeenCalledTimes(1);
+    expect(engine.ensureGaussianSplatSceneLoaded).toHaveBeenCalledWith(
       expect.objectContaining({
-        cacheKey: 'hero_0001.ply|blob:splat-sequence-frame-1',
+        sceneKey: 'splat-sequence',
+        clipId: 'splat-sequence',
         url: 'blob:splat-sequence-frame-1',
         fileName: 'hero_0001.ply',
-        gaussianSplatSequence: expect.objectContaining({
-          sharedBounds: {
-            min: [-1, -1, -1],
-            max: [1, 1, 1],
-          },
-        }),
-        requestedMaxSplats: 0,
       }),
     );
-    expect(waitForTargetPreparedSplatRuntime).not.toHaveBeenCalled();
+  });
+
+  it('preloads native gaussian splat sequence scenes by per-frame runtime key', async () => {
+    useTimelineStore.setState({
+      clips: [
+        {
+          id: 'splat-sequence-native',
+          name: 'Native Sequence',
+          trackId: 'track-1',
+          file: { name: 'hero_0002.ply' },
+          startTime: 1,
+          duration: 4,
+          source: {
+            type: 'gaussian-splat',
+            gaussianSplatUrl: 'blob:splat-sequence-frame-2',
+            gaussianSplatFileName: 'hero_0002.ply',
+            gaussianSplatRuntimeKey: 'Raw/hero_0002.ply',
+            gaussianSplatSequence: {
+              frameCount: 2,
+              fps: 24,
+              frames: [],
+            },
+            gaussianSplatSettings: {
+              render: {
+                useNativeRenderer: true,
+              },
+            },
+          },
+        },
+      ],
+    } as any);
+
+    await preloadGaussianSplatsForExport({ startTime: 0, endTime: 5 });
+
+    expect(engine.ensureGaussianSplatSceneLoaded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sceneKey: 'Raw/hero_0002.ply',
+        clipId: 'splat-sequence-native',
+        url: 'blob:splat-sequence-frame-2',
+        fileName: 'hero_0002.ply',
+      }),
+    );
   });
 
   it('initializes the 3D renderer and preloads overlapping model assets', async () => {
@@ -242,10 +271,10 @@ describe('export asset preload helpers', () => {
       height: 1080,
     });
 
-    expect(engine.ensureThreeSceneRendererInitialized).toHaveBeenCalledTimes(1);
-    expect(engine.ensureThreeSceneRendererInitialized).toHaveBeenCalledWith(1920, 1080);
-    expect(engine.preloadThreeModelAsset).toHaveBeenCalledTimes(1);
-    expect(engine.preloadThreeModelAsset).toHaveBeenCalledWith(
+    expect(engine.ensureSceneRendererInitialized).toHaveBeenCalledTimes(1);
+    expect(engine.ensureSceneRendererInitialized).toHaveBeenCalledWith(1920, 1080);
+    expect(engine.preloadSceneModelAsset).toHaveBeenCalledTimes(1);
+    expect(engine.preloadSceneModelAsset).toHaveBeenCalledWith(
       'blob:model-in-range',
       'scene.glb',
     );
@@ -334,16 +363,16 @@ describe('export asset preload helpers', () => {
       height: 1080,
     });
 
-    expect(waitForTargetPreparedSplatRuntime).toHaveBeenCalledWith(
+    expect(engine.ensureGaussianSplatSceneLoaded).toHaveBeenCalledWith(
       expect.objectContaining({
-        cacheKey: 'nested-hash',
+        sceneKey: 'nested-splat',
+        clipId: 'nested-splat',
         file: undefined,
         url: 'blob:nested-splat',
         fileName: 'nested.splat',
-        requestedMaxSplats: 0,
       }),
     );
-    expect(engine.preloadThreeModelAsset).toHaveBeenCalledWith(
+    expect(engine.preloadSceneModelAsset).toHaveBeenCalledWith(
       'blob:nested-model',
       'nested.glb',
     );
@@ -393,10 +422,13 @@ describe('export asset preload helpers', () => {
     try {
       await preloadGaussianSplatsForExport({ startTime: 0, endTime: 4 });
 
-      expect(waitForTargetPreparedSplatRuntime).toHaveBeenCalledWith(
+      expect(engine.ensureGaussianSplatSceneLoaded).toHaveBeenCalledWith(
         expect.objectContaining({
-          cacheKey: 'media-hash-1',
-          fileHash: 'media-hash-1',
+          sceneKey: 'splat-media-backed',
+          clipId: 'splat-media-backed',
+          file: expect.objectContaining({
+            name: 'media-hero.splat',
+          }),
           fileName: 'media-hero.splat',
           url: 'blob:media-splat',
         }),

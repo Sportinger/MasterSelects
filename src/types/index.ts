@@ -72,7 +72,7 @@ export interface Layer {
   position: { x: number; y: number; z: number };
   scale: { x: number; y: number; z?: number };
   rotation: number | { x: number; y: number; z: number };  // Single value (z only) or full 3D rotation
-  is3D?: boolean;  // When true, layer is rendered as a 3D plane via Three.js
+  is3D?: boolean;  // When true, layer participates in the shared 3D scene
   wireframe?: boolean;  // Debug: show as wireframe
   // Mask properties (passed from timeline clip masks for GPU processing)
   maskFeather?: number;  // Blur radius in pixels (0-50), handled in GPU shader
@@ -180,6 +180,8 @@ export interface NestedCompositionData {
   width: number;
   height: number;
   currentTime?: number;  // Current time for frame caching
+  sceneClips?: TimelineClip[];
+  sceneTracks?: TimelineTrack[];
 }
 
 // Text clip typography properties
@@ -492,7 +494,7 @@ export interface TimelineClip {
     meshType?: import('../stores/mediaStore/types').MeshPrimitiveType;  // Primitive mesh type
     text3DProperties?: Text3DProperties;
     cameraSettings?: import('../stores/mediaStore/types').SceneCameraSettings;  // Shared-scene camera settings
-    splatEffectorSettings?: import('./splatEffector').SplatEffectorSettings;  // Shared-scene Three.js splat effector settings
+    splatEffectorSettings?: import('./splatEffector').SplatEffectorSettings;  // Shared-scene splat effector settings
     gaussianAvatarUrl?: string;  // URL to gaussian splat avatar file
     gaussianBlendshapes?: Record<string, number>;  // ARKit blendshape weights
     gaussianSplatUrl?: string;  // URL to gaussian splat scene file

@@ -13,8 +13,8 @@ interface EngineState {
   engineStats: EngineStats;
   gpuInfo: { vendor: string; device: string; description: string } | null;
   linuxVulkanWarning: boolean;
-  gaussianSplatNavClipId: string | null;
-  gaussianSplatNavFpsMode: boolean;
+  sceneNavClipId: string | null;
+  sceneNavFpsMode: boolean;
 
   // Actions
   setEngineReady: (ready: boolean) => void;
@@ -23,8 +23,20 @@ interface EngineState {
   setGpuInfo: (info: { vendor: string; device: string; description: string } | null) => void;
   setLinuxVulkanWarning: (show: boolean) => void;
   dismissLinuxVulkanWarning: () => void;
-  setGaussianSplatNavClipId: (clipId: string | null) => void;
-  setGaussianSplatNavFpsMode: (enabled: boolean) => void;
+  setSceneNavClipId: (clipId: string | null) => void;
+  setSceneNavFpsMode: (enabled: boolean) => void;
+}
+
+export function selectSceneNavClipId(
+  state: Pick<EngineState, 'sceneNavClipId'>,
+): string | null {
+  return state.sceneNavClipId ?? null;
+}
+
+export function selectSceneNavFpsMode(
+  state: Pick<EngineState, 'sceneNavFpsMode'>,
+): boolean {
+  return state.sceneNavFpsMode ?? false;
 }
 
 // Check if Linux Vulkan warning was already dismissed
@@ -38,8 +50,8 @@ export const useEngineStore = create<EngineState>()(
     engineInitError: null,
     gpuInfo: null,
     linuxVulkanWarning: false,
-    gaussianSplatNavClipId: null,
-    gaussianSplatNavFpsMode: false,
+    sceneNavClipId: null,
+    sceneNavFpsMode: false,
     engineStats: {
       fps: 0,
       frameTime: 0,
@@ -83,12 +95,12 @@ export const useEngineStore = create<EngineState>()(
       set({ linuxVulkanWarning: false });
     },
 
-    setGaussianSplatNavClipId: (clipId: string | null) => {
-      set({ gaussianSplatNavClipId: clipId });
+    setSceneNavClipId: (clipId: string | null) => {
+      set({ sceneNavClipId: clipId });
     },
 
-    setGaussianSplatNavFpsMode: (enabled: boolean) => {
-      set({ gaussianSplatNavFpsMode: enabled });
+    setSceneNavFpsMode: (enabled: boolean) => {
+      set({ sceneNavFpsMode: enabled });
     },
   }))
 );

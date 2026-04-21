@@ -92,7 +92,7 @@ describe('ExportLayerBuilder', () => {
     expect(layers[0]?.source?.webCodecsPlayer).toBe(clipStates.get('clip-1')?.webCodecsPlayer);
   });
 
-  it('keeps gaussian splat renderer selection but forces full-quality export settings', () => {
+  it('forces gaussian splats onto the native scene path while keeping full-quality export settings', () => {
     const track = {
       id: 'track-1',
       type: 'video',
@@ -164,13 +164,13 @@ describe('ExportLayerBuilder', () => {
     const settings = layers[0]?.source?.gaussianSplatSettings;
 
     expect(layers).toHaveLength(1);
-    expect(settings?.render.useNativeRenderer).toBe(false);
+    expect(settings?.render.useNativeRenderer).toBe(true);
     expect(settings?.render.maxSplats).toBe(0);
     expect(settings?.render.sortFrequency).toBe(1);
     expect(settings?.render.splatScale).toBe(1.5);
   });
 
-  it('keeps non-native gaussian splat rotations in the three.js path as radians', () => {
+  it('converts gaussian splat export rotations to radians for the native shared scene', () => {
     const track = {
       id: 'track-1',
       type: 'video',
@@ -380,7 +380,7 @@ describe('ExportLayerBuilder', () => {
     expect(layers[0]?.source?.modelSequence?.frameCount).toBe(3);
   });
 
-  it('resolves the correct gaussian splat sequence frame for export and forces shared-scene rendering', () => {
+  it('resolves the correct gaussian splat sequence frame for export and keeps native renderer selection', () => {
     const track = {
       id: 'track-1',
       type: 'video',
@@ -496,7 +496,7 @@ describe('ExportLayerBuilder', () => {
     expect(layers[0]?.source?.gaussianSplatFileHash).toBeUndefined();
     expect(layers[0]?.source?.gaussianSplatRuntimeKey).toBe('Raw/scan000001.ply');
     expect(layers[0]?.source?.file).toBe(frameFiles[1]);
-    expect(layers[0]?.source?.gaussianSplatSettings?.render.useNativeRenderer).toBe(false);
+    expect(layers[0]?.source?.gaussianSplatSettings?.render.useNativeRenderer).toBe(true);
     expect(layers[0]?.source?.gaussianSplatSettings?.render.maxSplats).toBe(0);
     expect(layers[0]?.source?.gaussianSplatSettings?.render.sortFrequency).toBe(1);
   });
@@ -646,12 +646,79 @@ describe('ExportLayerBuilder', () => {
     const nestedLayers = layers[0]?.source?.nestedComposition?.layers ?? [];
 
     expect(layers).toHaveLength(1);
+    expect(layers[0]?.source?.nestedComposition?.sceneClips).toBe(compositionClip.nestedClips);
+    expect(layers[0]?.source?.nestedComposition?.sceneTracks).toBe(compositionClip.nestedTracks);
     expect(nestedLayers).toHaveLength(2);
     expect(nestedLayers[0]?.source?.meshType).toBe('text3d');
     expect(nestedLayers[0]?.source?.text3DProperties?.text).toBe('Nested Hello');
     expect(nestedLayers[1]?.source?.gaussianSplatFileHash).toBe('nested-hash');
+    expect(nestedLayers[1]?.source?.gaussianSplatSettings?.render.useNativeRenderer).toBe(true);
     expect(nestedLayers[1]?.source?.gaussianSplatSettings?.render.maxSplats).toBe(0);
     expect(nestedLayers[1]?.source?.gaussianSplatSettings?.render.sortFrequency).toBe(1);
+  });
+
+  it('keeps sequence gaussian splat export rotations in radians for the native shared scene', () => {
+    const track = {
+      id: 'track-1',
+      type: 'video',
+      visible: true,
+      solo: false,
+    } as any;
+
+    const clip = {
+      id: 'clip-native-sequence-rotation',
+      name: 'Native Sequence Rotation',
+      trackId: 'track-1',
+      startTime: 0,
+      duration: 5,
+      source: {
+        type: 'gaussian-splat',
+        gaussianSplatUrl: 'blob:splat',
+        gaussianSplatRuntimeKey: 'Raw/frame_0002.ply',
+        gaussianSplatSequence: {
+          frameCount: 2,
+          fps: 24,
+          frames: [],
+        },
+        gaussianSplatSettings: {
+          render: {
+            useNativeRenderer: true,
+          },
+        },
+      },
+      transform: {},
+      is3D: true,
+    } as any;
+
+    const ctx: FrameContext = {
+      time: 1,
+      fps: 30,
+      frameTolerance: 50_000,
+      clipsAtTime: [clip],
+      trackMap: new Map([[track.id, track]]),
+      clipsByTrack: new Map([[track.id, clip]]),
+      getInterpolatedTransform: () => ({
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+        rotation: { x: 90, y: 45, z: 180 },
+        opacity: 1,
+        blendMode: 'normal',
+      }),
+      getInterpolatedEffects: () => [],
+      getSourceTimeForClip: () => 1,
+      getInterpolatedSpeed: () => 1,
+    };
+
+    initializeLayerBuilder([track]);
+
+    const layers = buildLayersAtTime(ctx, new Map(), null, false);
+
+    expect(layers).toHaveLength(1);
+    expect(layers[0]?.rotation).toMatchObject({
+      x: Math.PI / 2,
+      y: Math.PI / 4,
+      z: Math.PI,
+    });
   });
 
   it('exports lottie clips via the shared text canvas path', () => {

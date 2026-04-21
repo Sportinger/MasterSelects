@@ -19,7 +19,7 @@ const DEFAULT_LOCAL_FILE_EXTENSIONS = [
   '.mp4', '.webm', '.mov', '.mkv', '.avi',
   '.mp3', '.wav', '.aac', '.ogg', '.m4a',
   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg',
-  '.obj', '.gltf', '.glb', '.fbx',
+  '.obj', '.gltf', '.glb',
   '.ply', '.splat',
 ] as const;
 
@@ -44,7 +44,6 @@ const LOCAL_FILE_MIME_TYPES: Record<string, string> = {
   '.obj': 'model/obj',
   '.gltf': 'model/gltf+json',
   '.glb': 'model/gltf-binary',
-  '.fbx': 'application/octet-stream',
   '.ply': 'application/octet-stream',
   '.splat': 'application/octet-stream',
 };

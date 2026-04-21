@@ -7,8 +7,8 @@ import shaderSource from '../shaders/visibilityCull.wgsl?raw';
 
 const log = Logger.create('SplatVisibilityPass');
 
-/** Uniform buffer layout: mat4x4f (64 bytes) + u32 splatCount + 3×u32 padding = 80 bytes */
-const CULL_UNIFORM_SIZE = 80;
+/** Uniform buffer layout: mat4x4f viewProj (64) + mat4x4f world (64) + u32 splatCount + 3×u32 padding = 144 bytes */
+const CULL_UNIFORM_SIZE = 144;
 
 export class SplatVisibilityPass {
   private device: GPUDevice | null = null;
@@ -65,6 +65,7 @@ export class SplatVisibilityPass {
     splatCount: number,
     cameraViewMatrix: Float32Array,
     cameraProjectionMatrix: Float32Array,
+    worldMatrix: Float32Array,
   ): { visibleIndexBuffer: GPUBuffer; counterBuffer: GPUBuffer } | null {
     if (!this._initialized || !this.pipeline) {
       log.warn('Cannot execute: pass not initialized');
@@ -85,9 +86,11 @@ export class SplatVisibilityPass {
 
       // mat4x4f viewProj (16 floats = 64 bytes)
       f32View.set(viewProj, 0);
-      // u32 splatCount at offset 16 (in f32 units)
-      u32View[16] = splatCount;
-      // padding at 17, 18, 19
+      // mat4x4f world (16 floats = 64 bytes) at offset 16
+      f32View.set(worldMatrix, 16);
+      // u32 splatCount at offset 32 (in f32 units)
+      u32View[32] = splatCount;
+      // padding at 33, 34, 35
 
       device.queue.writeBuffer(this.cullUniformBuffer!, 0, uniformData);
 

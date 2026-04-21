@@ -2,7 +2,6 @@
 
 import { useCallback } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
-import { useMediaStore } from '../../../stores/mediaStore';
 import { useHistoryStore } from '../../../stores/historyStore';
 import { DraggableNumber } from './shared';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../../../engine/gaussian/types';
@@ -14,18 +13,10 @@ interface GaussianSplatTabProps {
 
 export function GaussianSplatTab({ clipId }: GaussianSplatTabProps) {
   const clip = useTimelineStore((state) => state.clips.find((c) => c.id === clipId));
-  const mediaFile = useMediaStore((state) => {
-    const mediaFileId = clip?.mediaFileId ?? clip?.source?.mediaFileId;
-    return mediaFileId ? state.files.find((file) => file.id === mediaFileId) : undefined;
-  });
   const settings: GaussianSplatSettings = clip?.source?.gaussianSplatSettings ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS;
-  const hasSequence = !!(clip?.source?.gaussianSplatSequence ?? mediaFile?.gaussianSplatSequence);
   const render = settings.render;
-  const nativeRender = !hasSequence && render.useNativeRenderer === true;
   const orientationPreset = render.orientationPreset ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render.orientationPreset ?? 'default';
-  const maxSplatsSuffix = render.maxSplats === 0
-    ? (nativeRender ? ' (unlimited)' : ' (all)')
-    : '';
+  const maxSplatsSuffix = render.maxSplats === 0 ? ' (unlimited)' : '';
 
   const updateRenderSetting = useCallback(<K extends keyof GaussianSplatRenderSettings>(key: K, value: GaussianSplatRenderSettings[K]) => {
     const { clips, updateDuration } = useTimelineStore.getState();
@@ -58,10 +49,6 @@ export function GaussianSplatTab({ clipId }: GaussianSplatTabProps) {
 
   if (!clip) return null;
 
-  const nativeOnlyStyle = nativeRender
-    ? undefined
-    : { opacity: 0.45, pointerEvents: 'none' as const };
-
   return (
     <div className="gaussian-splat-tab" style={{ padding: '8px 10px', fontSize: '11px' }}>
       <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -80,9 +67,7 @@ export function GaussianSplatTab({ clipId }: GaussianSplatTabProps) {
       </div>
 
       <div style={{ marginBottom: '10px', color: '#8d99a6', lineHeight: 1.45 }}>
-        {nativeRender
-          ? 'Native render uses the dedicated WebGPU splat renderer and the splat-specific orbit camera.'
-          : 'Three.js render places this splat in the shared 3D scene together with meshes, models, and scene cameras.'}
+        This splat renders through the shared native WebGPU scene path and follows the same camera, object transform, depth, and effector contract as the rest of the 3D scene.
       </div>
 
       <div style={{ marginBottom: '14px' }}>
@@ -91,30 +76,12 @@ export function GaussianSplatTab({ clipId }: GaussianSplatTabProps) {
         </div>
 
         <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', gap: '6px' }}>
-          <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Native Render</label>
-          <button
-            className={`btn btn-xs ${nativeRender ? 'btn-active' : ''}`}
-            onClick={() => {
-              if (hasSequence) return;
-              updateRenderSetting('useNativeRenderer', !nativeRender);
-            }}
-            disabled={hasSequence}
-            title={
-              hasSequence
-                ? 'Splat sequences currently stay on the shared Three.js renderer'
-                : nativeRender
-                  ? 'Use the native WebGPU splat renderer'
-                  : 'Use the shared Three.js 3D scene renderer'
-            }
-          >
-            {nativeRender ? 'On' : 'Off'}
+          <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Renderer</label>
+          <button className="btn btn-xs btn-active" disabled title="The shared native scene is now the only runtime path">
+            Native
           </button>
           <span style={{ color: '#8d99a6', fontSize: '11px' }}>
-            {hasSequence
-              ? 'Sequence: shared scene only'
-              : nativeRender
-                ? 'Dedicated native path'
-                : 'Shared scene path'}
+            Shared WebGPU scene object
           </span>
         </div>
 
@@ -139,16 +106,14 @@ export function GaussianSplatTab({ clipId }: GaussianSplatTabProps) {
           <button
             className={`btn btn-xs ${orientationPreset === 'default' ? 'btn-active' : ''}`}
             onClick={() => updateRenderSetting('orientationPreset', 'default')}
-            disabled={nativeRender}
-            title={nativeRender ? 'Shared-scene orientation presets are unavailable in native render mode' : 'Use the imported source basis'}
+            title="Use the imported source basis"
           >
             Default
           </button>
           <button
             className={`btn btn-xs ${orientationPreset === 'flip-x-180' ? 'btn-active' : ''}`}
             onClick={() => updateRenderSetting('orientationPreset', 'flip-x-180')}
-            disabled={nativeRender}
-            title={nativeRender ? 'Shared-scene orientation presets are unavailable in native render mode' : 'Rotate the source basis by 180 degrees around X'}
+            title="Rotate the source basis by 180 degrees around X"
           >
             Flip X 180
           </button>
@@ -188,38 +153,36 @@ export function GaussianSplatTab({ clipId }: GaussianSplatTabProps) {
           />
         </div>
 
-        <div style={nativeOnlyStyle}>
-          <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
-            <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Near Plane</label>
-            <DraggableNumber
-              value={render.nearPlane}
-              onChange={(value) => updateRenderSetting('nearPlane', value)}
-              defaultValue={DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render.nearPlane}
-              persistenceKey="gaussian.render.nearPlane"
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              min={0.01}
-              max={10}
-              sensitivity={0.5}
-              decimals={2}
-            />
-          </div>
+        <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
+          <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Near Plane</label>
+          <DraggableNumber
+            value={render.nearPlane}
+            onChange={(value) => updateRenderSetting('nearPlane', value)}
+            defaultValue={DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render.nearPlane}
+            persistenceKey="gaussian.render.nearPlane"
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            min={0.01}
+            max={10}
+            sensitivity={0.5}
+            decimals={2}
+          />
+        </div>
 
-          <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
-            <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Far Plane</label>
-            <DraggableNumber
-              value={render.farPlane}
-              onChange={(value) => updateRenderSetting('farPlane', value)}
-              defaultValue={DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render.farPlane}
-              persistenceKey="gaussian.render.farPlane"
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              min={10}
-              max={10000}
-              sensitivity={20}
-              decimals={0}
-            />
-          </div>
+        <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
+          <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Far Plane</label>
+          <DraggableNumber
+            value={render.farPlane}
+            onChange={(value) => updateRenderSetting('farPlane', value)}
+            defaultValue={DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render.farPlane}
+            persistenceKey="gaussian.render.farPlane"
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            min={10}
+            max={10000}
+            sensitivity={20}
+            decimals={0}
+          />
         </div>
       </div>
     </div>

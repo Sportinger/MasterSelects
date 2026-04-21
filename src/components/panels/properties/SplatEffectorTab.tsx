@@ -64,12 +64,12 @@ export function SplatEffectorTab({ clipId }: SplatEffectorTabProps) {
             fontWeight: 500,
           }}
         >
-          Shared Scene Only
+          Scene Effector
         </span>
       </div>
 
       <div style={{ marginBottom: '8px', color: '#8d99a6', lineHeight: 1.45 }}>
-        Active 3D effector clips influence shared-scene 3D layers at playback time. Splats deform directly; models, primitives, and 3D text receive object-level motion. Transform controls position, rotation, and radius via scale.
+        Active 3D effector clips influence scene-driven 3D objects at playback time. Splats deform directly; models, primitives, and 3D text receive object-level motion. 3D planes stay excluded in phase 1. Transform controls position, rotation, and radius via scale.
       </div>
 
       <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', gap: '6px' }}>

@@ -8,6 +8,7 @@ struct CameraUniforms {
   projection: mat4x4f,
   viewport:   vec2f,
   _pad:       vec2f,
+  world:      mat4x4f,
 }
 
 @group(1) @binding(0) var<uniform> camera: CameraUniforms;
@@ -55,6 +56,22 @@ fn buildCovariance3D(scale: vec3f, rot: mat3x3f) -> mat3x3f {
   // R * S * R^T
   let m = rot * s;
   return m * transpose(rot);
+}
+
+fn extractWorldLinear(world: mat4x4f) -> mat3x3f {
+  return mat3x3f(
+    world[0].xyz,
+    world[1].xyz,
+    world[2].xyz,
+  );
+}
+
+fn getWorldScale(worldLinear: mat3x3f) -> vec3f {
+  return vec3f(
+    length(worldLinear[0]),
+    length(worldLinear[1]),
+    length(worldLinear[2]),
+  );
 }
 
 // Project 3D covariance to 2D screen-space covariance via Jacobian
@@ -140,12 +157,14 @@ fn vs_main(
   let color = vec3f(splatData[base + 10u], splatData[base + 11u], splatData[base + 12u]);
   let alpha = splatData[base + 13u];
 
-  // Compute 3D covariance
+  // Transform splat-local data into world space via the scene layer transform.
   let rot = quatToMat3(quat);
-  let cov3d = buildCovariance3D(scale, rot);
+  let covLocal = buildCovariance3D(scale, rot);
+  let worldLinear = extractWorldLinear(camera.world);
+  let covWorld = worldLinear * covLocal * transpose(worldLinear);
 
-  // Transform mean to camera space
-  let meanWorld = vec4f(pos, 1.0);
+  // Transform mean to world and then to camera space.
+  let meanWorld = camera.world * vec4f(pos, 1.0);
   let meanCam4 = camera.view * meanWorld;
   let meanCam = meanCam4.xyz;
 
@@ -154,7 +173,9 @@ fn vs_main(
   // the near plane heavily; those produce gigantic projected billboards and smear
   // over the full frame when flying through the cloud.
   let viewDepth = -meanCam.z;
-  let supportRadius3d = 3.0 * max(scale.x, max(scale.y, scale.z));
+  let worldScale = getWorldScale(worldLinear);
+  let supportScale = scale * worldScale;
+  let supportRadius3d = 3.0 * max(supportScale.x, max(supportScale.y, supportScale.z));
   let minRenderableDepth = max(0.05, supportRadius3d);
   if (viewDepth <= minRenderableDepth) {
     out.position = vec4f(0.0, 0.0, 2.0, 1.0); // behind clip plane
@@ -172,7 +193,7 @@ fn vs_main(
   );
 
   // Project covariance to 2D
-  let cov2d = projectCovariance(cov3d, meanCam, focal);
+  let cov2d = projectCovariance(covWorld, meanCam, focal);
   let cr = conicAndRadius(cov2d);
   let conic = select(vec3f(0.01, 0.0, 0.01), cr.xyz, cr.w > 0.0);
   let radius = clamp(cr.w, 1.0, 512.0);

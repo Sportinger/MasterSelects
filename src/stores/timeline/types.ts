@@ -203,7 +203,7 @@ export interface MeshClipActions {
   updateText3DProperties: (clipId: string, props: Partial<Text3DProperties>) => void;
 }
 
-// Camera clip actions (shared Three.js scene camera)
+// Camera clip actions (shared 3D scene camera)
 export interface CameraClipActions {
   addCameraClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
 }

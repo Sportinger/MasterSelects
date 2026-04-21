@@ -10,7 +10,7 @@ const capabilityColumns = [
   },
   {
     title: 'Beyond media',
-    items: ['PDF, SVG, JSON, CSV', '3D formats like OBJ, FBX, glTF', 'Everything can become a visual signal'],
+    items: ['PDF, SVG, JSON, CSV', '3D formats like OBJ and glTF', 'Everything can become a visual signal'],
   },
   {
     title: 'Operator flow',

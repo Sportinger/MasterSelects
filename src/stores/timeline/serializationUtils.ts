@@ -1494,7 +1494,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           }
         })();
       } else if (type === 'model') {
-        // 3D Model clips — just need a blob URL, Three.js handles loading
+        // 3D Model clips — just need a blob URL, the shared scene renderer handles loading
         const firstModelFrame = restoredModelSequence?.frames[0];
         set(state => ({
           clips: state.clips.map(c =>

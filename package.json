@@ -29,7 +29,6 @@
     "@ffmpeg/util": "^0.12.2",
     "@huggingface/transformers": "^3.8.1",
     "@lottiefiles/dotlottie-web": "^0.71.0",
-    "@types/three": "^0.183.1",
     "@webgpu/types": "^0.1.66",
     "mediabunny": "^1.39.2",
     "mp4box": "^2.3.0",
@@ -37,7 +36,6 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "soundtouch-ts": "^1.1.1",
-    "three": "^0.183.2",
     "zustand": "^5.0.9"
   },
   "devDependencies": {

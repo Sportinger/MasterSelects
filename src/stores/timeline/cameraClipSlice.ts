@@ -1,4 +1,4 @@
-// Camera clip actions slice - shared Three.js scene cameras on the timeline
+// Camera clip actions slice - shared 3D scene cameras on the timeline
 
 import type { TimelineClip } from '../../types';
 import type { CameraClipActions, SliceCreator } from './types';

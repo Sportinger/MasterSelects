@@ -9,6 +9,8 @@ import { SplatRenderTargetPool } from './SplatRenderTargetPool';
 import { SplatVisibilityPass } from './SplatVisibilityPass';
 import { SplatSortPass } from './SplatSortPass';
 import { ParticleCompute } from '../effects/ParticleCompute';
+import { EffectorCompute } from '../../native3d/passes/EffectorCompute';
+import type { SceneSplatEffectorRuntimeData } from '../../scene/types';
 import type { GaussianSplatParticleSettings, GaussianSplatTemporalSettings } from '../types';
 import shaderSource from '../shaders/gaussianSplat.wgsl?raw';
 
@@ -71,6 +73,22 @@ export interface SplatRenderOptions {
   clipLocalTime?: number;
   /** Clear color for the render target. Use "transparent" to preserve alpha. */
   backgroundColor?: string;
+  /** Render into an existing color attachment instead of an internal pooled target. */
+  outputView?: GPUTextureView;
+  /** Color load operation for the target render pass. */
+  colorLoadOp?: GPULoadOp;
+  /** Optional shared scene depth attachment. Splats depth-test against it but never write depth. */
+  depthView?: GPUTextureView;
+  /** Depth load operation for the render pass. */
+  depthLoadOp?: GPULoadOp;
+  /** Depth store operation for the render pass. */
+  depthStoreOp?: GPUStoreOp;
+  /** Depth clear value used when depthLoadOp is 'clear'. */
+  depthClearValue?: number;
+  /** Optional per-layer world transform for shared-scene rendering. */
+  worldMatrix?: Float32Array;
+  /** Object-level 3D effectors in shared scene space. */
+  effectors?: SceneSplatEffectorRuntimeData[];
   /** Max splat budget (0 = unlimited) */
   maxSplats?: number;
   /** Particle effect settings */
@@ -83,11 +101,24 @@ export interface SplatRenderOptions {
   precise?: boolean;
 }
 
-// Camera uniform buffer size: 2 mat4x4f (128 bytes) + vec2f (8 bytes) + vec2f pad (8 bytes) = 144 bytes
-const CAMERA_UNIFORM_SIZE = 144;
+// Camera uniform buffer size:
+//   view mat4x4f (64)
+//   projection mat4x4f (64)
+//   viewport vec2f (8)
+//   pad vec2f (8)
+//   world mat4x4f (64)
+// = 208 bytes
+const CAMERA_UNIFORM_SIZE = 208;
+const SPLAT_DEPTH_FORMAT: GPUTextureFormat = 'depth24plus';
 
 // Floats per splat in the canonical layout
 const FLOATS_PER_SPLAT = 14;
+const IDENTITY_MATRIX = new Float32Array([
+  1, 0, 0, 0,
+  0, 1, 0, 0,
+  0, 0, 1, 0,
+  0, 0, 0, 1,
+]);
 
 // ── Performance thresholds ────────────────────────────────────────────────────
 /** Only run frustum culling for scenes above this count */
@@ -100,6 +131,7 @@ const SORT_THRESHOLD = 50000;
 export class GaussianSplatGpuRenderer {
   private device: GPUDevice | null = null;
   private pipeline: GPURenderPipeline | null = null;
+  private pipelineWithDepth: GPURenderPipeline | null = null;
   private sceneCache: Map<string, SplatSceneGpuResources> = new Map();
   private cameraUniformBuffer: GPUBuffer | null = null;
   private renderTargetPool!: SplatRenderTargetPool;
@@ -111,7 +143,10 @@ export class GaussianSplatGpuRenderer {
   private cameraBindGroup: GPUBindGroup | null = null;
 
   // Wave 5: Particle compute subsystem
+  private effectorCompute: EffectorCompute = new EffectorCompute();
   private particleCompute: ParticleCompute = new ParticleCompute();
+  /** Per-clip effector output buffers (keyed by clipId) */
+  private effectorOutputBuffers: Map<string, { buffer: GPUBuffer; splatCount: number }> = new Map();
   /** Per-clip particle output buffers (keyed by clipId) */
   private particleOutputBuffers: Map<string, { buffer: GPUBuffer; splatCount: number }> = new Map();
   // Wave 4: GPU sort + cull passes
@@ -149,6 +184,7 @@ export class GaussianSplatGpuRenderer {
       this.visibilityPass.initialize(device);
       // Sort pass is initialized lazily per-scene (needs maxSplatCount)
 
+      this.effectorCompute.initialize(device);
       // Wave 5: Initialize particle compute subsystem
       this.particleCompute.initialize(device);
       this._initialized = true;
@@ -236,6 +272,7 @@ export class GaussianSplatGpuRenderer {
       scene.identityIndexBuffer.destroy();
       this.sceneCache.delete(clipId);
       this.lastVisibleCount.delete(clipId);
+      this.releaseEffectorBuffer(clipId);
       // Also clean up particle buffers for this clip
       this.releaseParticleBuffer(clipId);
       log.debug('Released scene', { clipId });
@@ -277,7 +314,8 @@ export class GaussianSplatGpuRenderer {
 
     try {
       // Update camera uniforms
-      this.writeCameraUniforms(camera);
+      const worldMatrix = options?.worldMatrix ?? IDENTITY_MATRIX;
+      this.writeCameraUniforms(camera, worldMatrix);
 
       const maxSplats = options?.maxSplats ?? 0;
       const sortFrequency = options?.sortFrequency ?? 1;
@@ -287,6 +325,26 @@ export class GaussianSplatGpuRenderer {
       // Determine which splat data buffer to use (may be overridden by particle pass)
       let activeSplatBuffer = scene.splatBuffer;
       let activeSplatCount = scene.splatCount;
+      const effectors = options?.effectors ?? [];
+
+      if (effectors.length > 0 && this.effectorCompute.isInitialized) {
+        const localEffectors = this.effectorCompute.prepareLocalSplatEffectors(worldMatrix, effectors);
+        if (localEffectors.length > 0) {
+          const effectorOutput = this.getOrCreateEffectorBuffer(clipId, scene.splatCount);
+          if (effectorOutput) {
+            this.effectorCompute.execute(
+              this.device,
+              commandEncoder,
+              activeSplatBuffer,
+              effectorOutput.buffer,
+              scene.splatCount,
+              localEffectors,
+            );
+            activeSplatBuffer = effectorOutput.buffer;
+            activeSplatCount = scene.splatCount;
+          }
+        }
+      }
 
       // ── Step 2: Particle offsets (compute pass) [Wave 5] ──
       const particleSettings = options?.particleSettings;
@@ -302,7 +360,7 @@ export class GaussianSplatGpuRenderer {
           this.particleCompute.execute(
             this.device,
             commandEncoder,
-            scene.splatBuffer,
+            activeSplatBuffer,
             particleOutput.buffer,
             scene.splatCount,
             clipLocalTime,
@@ -331,7 +389,7 @@ export class GaussianSplatGpuRenderer {
         const cullResult = this.visibilityPass.execute(
           this.device, commandEncoder,
           activeSplatBuffer, effectiveSplatCount,
-          camera.viewMatrix, camera.projectionMatrix,
+          camera.viewMatrix, camera.projectionMatrix, worldMatrix,
         );
 
         if (cullResult) {
@@ -381,6 +439,7 @@ export class GaussianSplatGpuRenderer {
           this.device, commandEncoder,
           activeSplatBuffer, sourceIndexBuffer, sortCount,
           camera.viewMatrix,
+          worldMatrix,
         );
 
         if (sorted) {
@@ -392,12 +451,20 @@ export class GaussianSplatGpuRenderer {
       }
 
       // ── Step 5: Rasterize ────────────────────────────────────────────────
-      const { texture: targetTexture, view: targetView } = this.renderTargetPool.acquire(viewport.width, viewport.height);
-      this.lastRenderTargets.set(clipId, {
-        texture: targetTexture,
-        width: viewport.width,
-        height: viewport.height,
-      });
+      let targetTexture: GPUTexture | null = null;
+      let targetView = options?.outputView ?? null;
+      if (!targetView) {
+        const pooledTarget = this.renderTargetPool.acquire(viewport.width, viewport.height);
+        targetTexture = pooledTarget.texture;
+        targetView = pooledTarget.view;
+        this.lastRenderTargets.set(clipId, {
+          texture: targetTexture,
+          width: viewport.width,
+          height: viewport.height,
+        });
+      } else {
+        this.lastRenderTargets.delete(clipId);
+      }
 
       // Determine which bind group to use
       let renderBindGroup = scene.bindGroup; // default: identity indices + original data
@@ -427,14 +494,24 @@ export class GaussianSplatGpuRenderer {
           {
             view: targetView,
             clearValue: clearColor,
-            loadOp: 'clear',
+            loadOp: options?.colorLoadOp ?? 'clear',
             storeOp: 'store',
           },
         ],
+        ...(options?.depthView
+          ? {
+            depthStencilAttachment: {
+              view: options.depthView,
+              depthClearValue: options.depthClearValue ?? 1,
+              depthLoadOp: options.depthLoadOp ?? 'load',
+              depthStoreOp: options.depthStoreOp ?? 'store',
+            },
+          }
+          : {}),
         label: `splat-render-pass-${clipId}`,
       });
 
-      passEncoder.setPipeline(this.pipeline);
+      passEncoder.setPipeline(options?.depthView ? (this.pipelineWithDepth ?? this.pipeline) : this.pipeline);
       passEncoder.setBindGroup(0, renderBindGroup);
       passEncoder.setBindGroup(1, this.cameraBindGroup!);
 
@@ -572,6 +649,43 @@ export class GaussianSplatGpuRenderer {
   // ── Private ────────────────────────────────────────────────────────────────
 
   /** Get or create a particle output buffer for a clip (reused across frames) */
+  private getOrCreateEffectorBuffer(
+    clipId: string,
+    splatCount: number,
+  ): { buffer: GPUBuffer; splatCount: number } | null {
+    if (!this.device) return null;
+
+    const existing = this.effectorOutputBuffers.get(clipId);
+    if (existing && existing.splatCount === splatCount) {
+      return existing;
+    }
+
+    if (existing) {
+      existing.buffer.destroy();
+    }
+
+    const byteSize = splatCount * FLOATS_PER_SPLAT * 4;
+    const buffer = this.device.createBuffer({
+      size: byteSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      label: `effector-output-${clipId}`,
+    });
+
+    const entry = { buffer, splatCount };
+    this.effectorOutputBuffers.set(clipId, entry);
+    return entry;
+  }
+
+  /** Release effector buffer for a specific clip */
+  private releaseEffectorBuffer(clipId: string): void {
+    const entry = this.effectorOutputBuffers.get(clipId);
+    if (entry) {
+      entry.buffer.destroy();
+      this.effectorOutputBuffers.delete(clipId);
+    }
+  }
+
+  /** Get or create a particle output buffer for a clip (reused across frames) */
   private getOrCreateParticleBuffer(
     clipId: string,
     splatCount: number,
@@ -622,11 +736,18 @@ export class GaussianSplatGpuRenderer {
     this.lastRenderTargets.clear();
     this.renderDebugLoggedClips.clear();
 
+    for (const [, entry] of this.effectorOutputBuffers) {
+      entry.buffer.destroy();
+    }
+    this.effectorOutputBuffers.clear();
+
     // Wave 5: Dispose particle output buffers
     for (const [, entry] of this.particleOutputBuffers) {
       entry.buffer.destroy();
     }
     this.particleOutputBuffers.clear();
+
+    this.effectorCompute.dispose();
 
     // Wave 5: Dispose particle compute subsystem
     this.particleCompute.dispose();
@@ -648,6 +769,7 @@ export class GaussianSplatGpuRenderer {
 
     // Nullify pipeline and layouts (they don't need explicit destruction)
     this.pipeline = null;
+    this.pipelineWithDepth = null;
     this.splatDataBindGroupLayout = null;
     this.cameraBindGroupLayout = null;
     this.cameraBindGroup = null;
@@ -729,6 +851,45 @@ export class GaussianSplatGpuRenderer {
       label: 'gaussian-splat-render-pipeline',
     });
 
+    this.pipelineWithDepth = this.device.createRenderPipeline({
+      layout: pipelineLayout,
+      vertex: {
+        module: shaderModule,
+        entryPoint: 'vs_main',
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: 'fs_main',
+        targets: [
+          {
+            format: 'rgba8unorm',
+            blend: {
+              color: {
+                srcFactor: 'one',
+                dstFactor: 'one-minus-src-alpha',
+                operation: 'add',
+              },
+              alpha: {
+                srcFactor: 'one',
+                dstFactor: 'one-minus-src-alpha',
+                operation: 'add',
+              },
+            },
+          },
+        ],
+      },
+      primitive: {
+        topology: 'triangle-strip',
+        stripIndexFormat: undefined,
+      },
+      depthStencil: {
+        format: SPLAT_DEPTH_FORMAT,
+        depthWriteEnabled: false,
+        depthCompare: 'less-equal',
+      },
+      label: 'gaussian-splat-depth-tested-render-pipeline',
+    });
+
     log.debug('Render pipeline created');
   }
 
@@ -750,10 +911,15 @@ export class GaussianSplatGpuRenderer {
     });
   }
 
-  private writeCameraUniforms(camera: SplatCameraParams): void {
+  private writeCameraUniforms(camera: SplatCameraParams, worldMatrix: Float32Array): void {
     if (!this.device || !this.cameraUniformBuffer) return;
 
-    // Layout: mat4x4f view (64 bytes) + mat4x4f projection (64 bytes) + vec2f viewport (8 bytes) + vec2f pad (8 bytes)
+    // Layout:
+    //   mat4x4f view (64 bytes)
+    //   mat4x4f projection (64 bytes)
+    //   vec2f viewport (8 bytes)
+    //   vec2f pad (8 bytes)
+    //   mat4x4f world (64 bytes)
     const data = new Float32Array(CAMERA_UNIFORM_SIZE / 4);
 
     // Copy view matrix (16 floats at offset 0)
@@ -767,6 +933,9 @@ export class GaussianSplatGpuRenderer {
     data[33] = camera.viewport.height;
 
     // Padding (2 floats at offset 34) — zero-initialized by Float32Array
+
+    // Copy world matrix (16 floats at offset 36)
+    data.set(worldMatrix, 36);
 
     this.device.queue.writeBuffer(this.cameraUniformBuffer, 0, data);
   }

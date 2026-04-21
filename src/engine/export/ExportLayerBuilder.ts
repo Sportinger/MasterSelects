@@ -80,19 +80,6 @@ function buildModelSource(clip: TimelineClip, sourceTime: number): Layer['source
   };
 }
 
-function usesNativeGaussianSplatRenderer(clip: TimelineClip): boolean {
-  const mediaFile = getClipMediaFile(clip);
-  const hasSequence = !!(clip.source?.gaussianSplatSequence ?? mediaFile?.gaussianSplatSequence);
-  return (
-    !hasSequence &&
-    clip.source?.type === 'gaussian-splat' &&
-    (
-      clip.source?.gaussianSplatSettings?.render.useNativeRenderer ??
-      DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render.useNativeRenderer
-    ) === true
-  );
-}
-
 function buildGaussianSplatSource(clip: TimelineClip, clipLocalTime: number): Layer['source'] {
   const mediaFile = getClipMediaFile(clip);
   const gaussianSplatSequence = resolveGaussianSplatSequenceData(
@@ -133,7 +120,7 @@ function buildGaussianSplatSource(clip: TimelineClip, clipLocalTime: number): La
     ),
     ...(gaussianSplatSequence ? { gaussianSplatSequence } : {}),
     ...(mediaFileId ? { mediaFileId } : {}),
-    gaussianSplatSettings: buildExportGaussianSplatSettings(clip.source?.gaussianSplatSettings, !!gaussianSplatSequence),
+    gaussianSplatSettings: buildExportGaussianSplatSettings(clip.source?.gaussianSplatSettings),
     mediaTime: clipLocalTime,
   };
 }
@@ -184,7 +171,6 @@ export function buildLayersAtTime(
       clipLocalTime,
       trackIndex,
       ctx,
-      usesNativeGaussianSplatRenderer(clip),
     );
 
     // Handle nested compositions
@@ -209,6 +195,8 @@ export function buildLayersAtTime(
           width: compWidth,
           height: compHeight,
           currentTime: clipLocalTime + (clip.inPoint || 0),
+          sceneClips: clip.nestedClips,
+          sceneTracks: clip.nestedTracks,
         };
 
         layers.push({
@@ -268,7 +256,6 @@ export function buildLayersAtTime(
 
 function buildExportGaussianSplatSettings(
   settings: GaussianSplatSettings | undefined,
-  forceSharedScene = false,
 ): GaussianSplatSettings {
   const baseSettings = settings ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS;
   return {
@@ -276,7 +263,7 @@ function buildExportGaussianSplatSettings(
     render: {
       ...DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render,
       ...baseSettings.render,
-      ...(forceSharedScene ? { useNativeRenderer: false } : {}),
+      useNativeRenderer: true,
       // Export should favor completeness and stable depth ordering over preview performance.
       maxSplats: 0,
       sortFrequency: 1,
@@ -301,7 +288,6 @@ function buildBaseLayerProps(
   clipLocalTime: number,
   trackIndex: number,
   ctx: FrameContext,
-  preserveRotationDegrees = false,
 ): BaseLayerProps {
   const { getInterpolatedTransform, getInterpolatedEffects } = ctx;
 
@@ -347,9 +333,9 @@ function buildBaseLayerProps(
       ...(transform.scale?.z !== undefined ? { z: transform.scale.z } : {}),
     },
     rotation: {
-      x: preserveRotationDegrees ? (transform.rotation?.x ?? 0) : ((transform.rotation?.x ?? 0) * Math.PI) / 180,
-      y: preserveRotationDegrees ? (transform.rotation?.y ?? 0) : ((transform.rotation?.y ?? 0) * Math.PI) / 180,
-      z: preserveRotationDegrees ? (transform.rotation?.z ?? 0) : ((transform.rotation?.z ?? 0) * Math.PI) / 180,
+      x: ((transform.rotation?.x ?? 0) * Math.PI) / 180,
+      y: ((transform.rotation?.y ?? 0) * Math.PI) / 180,
+      z: ((transform.rotation?.z ?? 0) * Math.PI) / 180,
     },
     ...(clip.is3D ? { is3D: true } : {}),
   };
@@ -521,6 +507,8 @@ function buildNestedLayerForExport(
           width: compWidth,
           height: compHeight,
           currentTime: subCompTime,
+          sceneClips: nestedClip.nestedClips,
+          sceneTracks: nestedClip.nestedTracks,
         },
       },
     } as Layer;

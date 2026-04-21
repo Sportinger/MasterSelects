@@ -88,7 +88,7 @@ export interface GaussianSplatSettings {
 
 export const DEFAULT_GAUSSIAN_SPLAT_SETTINGS: GaussianSplatSettings = {
   render: {
-    useNativeRenderer: false,
+    useNativeRenderer: true,
     maxSplats: 0,
     splatScale: 1.0,
     orientationPreset: 'default',
