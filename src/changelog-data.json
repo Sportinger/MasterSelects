@@ -1,17 +1,6 @@
 [
   {
     "date": "2026-04-20",
-    "type": "fix",
-    "title": "Heavy Gaussian Splat Exports No Longer Crash the Browser",
-    "description": "Precise export now survives oversized Three.js splat runtime preparation by falling back cleanly, and the prepared runtime cache is byte-bounded so long PLY or splat sequences stop retaining every full frame runtime in memory during export.",
-    "section": "3D / Gaussian Splats",
-    "commits": [
-      "edbdcb60",
-      "ae364519"
-    ]
-  },
-  {
-    "date": "2026-04-20",
     "type": "new",
     "title": "FlashBoard Adds Seedance 2.0 via Kie.ai",
     "description": "FlashBoard now exposes Seedance 2.0 in the model catalog and pricing flow, with the Kie.ai service path updated so text-to-video and sequence-oriented generation can be routed through the board UI.",

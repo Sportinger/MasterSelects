@@ -15,7 +15,6 @@ const RUNTIME_MAGIC = 0x53475254; // SGRT
 const RUNTIME_VERSION = 2;
 const HEADER_BYTE_LENGTH = 22 * 4;
 export const DEFAULT_SPLAT_BASE_LOD_MAX_SPLATS = 65536;
-export const DEFAULT_PREPARED_SPLAT_RUNTIME_CACHE_MAX_BYTES = 256 * 1024 * 1024;
 
 export interface PreparedSplatRuntime {
   runtimeKey: string;
@@ -55,10 +54,7 @@ interface RuntimeRequestOptions extends RuntimeSourceOptions {
 const assetPromiseCache = new Map<string, Promise<GaussianSplatAsset>>();
 const runtimePromiseCache = new Map<string, Promise<PreparedSplatRuntime>>();
 const runtimeValueCache = new Map<string, PreparedSplatRuntime>();
-const runtimeValueSizeCache = new Map<string, number>();
 const idlePrewarmKeys = new Set<string>();
-let preparedRuntimeCacheMaxBytes = DEFAULT_PREPARED_SPLAT_RUNTIME_CACHE_MAX_BYTES;
-let preparedRuntimeCacheBytes = 0;
 
 function normalizeRequestedMaxSplats(requestedMaxSplats: number | undefined): number {
   const normalized = Math.floor(requestedMaxSplats ?? 0);
@@ -121,76 +117,6 @@ function cloneViewBytes(view: Float32Array): ArrayBuffer {
   const bytes = new Uint8Array(view.byteLength);
   bytes.set(new Uint8Array(view.buffer, view.byteOffset, view.byteLength));
   return bytes.buffer as ArrayBuffer;
-}
-
-function getPreparedRuntimeByteLength(runtime: PreparedSplatRuntime): number {
-  return runtime.centers.byteLength
-    + runtime.centerOpacityTextureData.byteLength
-    + runtime.colorTextureData.byteLength
-    + runtime.axisXTextureData.byteLength
-    + runtime.axisYTextureData.byteLength
-    + runtime.axisZTextureData.byteLength
-    + runtime.orderTemplateData.byteLength;
-}
-
-function deletePreparedRuntime(runtimeKey: string): void {
-  const size = runtimeValueSizeCache.get(runtimeKey);
-  if (typeof size === 'number') {
-    preparedRuntimeCacheBytes = Math.max(0, preparedRuntimeCacheBytes - size);
-    runtimeValueSizeCache.delete(runtimeKey);
-  }
-  runtimeValueCache.delete(runtimeKey);
-}
-
-function touchPreparedRuntime(runtimeKey: string): PreparedSplatRuntime | null {
-  const runtime = runtimeValueCache.get(runtimeKey);
-  if (!runtime) {
-    return null;
-  }
-
-  runtimeValueCache.delete(runtimeKey);
-  runtimeValueCache.set(runtimeKey, runtime);
-  return runtime;
-}
-
-function trimPreparedRuntimeCache(): void {
-  while (preparedRuntimeCacheBytes > preparedRuntimeCacheMaxBytes && runtimeValueCache.size > 0) {
-    const oldestKey = runtimeValueCache.keys().next().value;
-    if (oldestKey === undefined) {
-      break;
-    }
-    deletePreparedRuntime(oldestKey);
-  }
-}
-
-function storePreparedRuntime(runtime: PreparedSplatRuntime): PreparedSplatRuntime {
-  const size = getPreparedRuntimeByteLength(runtime);
-  deletePreparedRuntime(runtime.runtimeKey);
-
-  if (size > preparedRuntimeCacheMaxBytes) {
-    log.debug('Skipping prepared gaussian splat runtime cache for oversize entry', {
-      runtimeKey: runtime.runtimeKey,
-      size,
-      preparedRuntimeCacheMaxBytes,
-    });
-    return runtime;
-  }
-
-  runtimeValueCache.set(runtime.runtimeKey, runtime);
-  runtimeValueSizeCache.set(runtime.runtimeKey, size);
-  preparedRuntimeCacheBytes += size;
-  trimPreparedRuntimeCache();
-  return touchPreparedRuntime(runtime.runtimeKey) ?? runtime;
-}
-
-function getRuntimeKeyForOptions(options: RuntimeRequestOptions): string {
-  const requestedMaxSplats = normalizeRequestedMaxSplats(options.requestedMaxSplats);
-  return buildRuntimeKey(
-    options.cacheKey,
-    options.variant,
-    requestedMaxSplats,
-    options.gaussianSplatSequence,
-  );
 }
 
 function gcd(a: number, b: number): number {
@@ -273,11 +199,7 @@ async function loadAsset(options: RuntimeSourceOptions): Promise<GaussianSplatAs
   })();
 
   assetPromiseCache.set(options.cacheKey, promise);
-  void promise.then(() => {
-    if (assetPromiseCache.get(options.cacheKey) === promise) {
-      assetPromiseCache.delete(options.cacheKey);
-    }
-  }, () => {
+  void promise.catch(() => {
     if (assetPromiseCache.get(options.cacheKey) === promise) {
       assetPromiseCache.delete(options.cacheKey);
     }
@@ -582,7 +504,8 @@ async function loadRuntimeFromProjectCache(
   try {
     const buffer = await file.arrayBuffer();
     const runtime = deserializeRuntime(runtimeKey, buffer);
-    return storePreparedRuntime(runtime);
+    runtimeValueCache.set(runtimeKey, runtime);
+    return runtime;
   } catch (error) {
     log.warn('Failed to read gaussian splat runtime cache file', {
       fileHash,
@@ -619,8 +542,13 @@ async function persistRuntimeToProjectCache(
 
 async function ensurePreparedRuntime(options: RuntimeRequestOptions): Promise<PreparedSplatRuntime> {
   const requestedMaxSplats = normalizeRequestedMaxSplats(options.requestedMaxSplats);
-  const runtimeKey = getRuntimeKeyForOptions(options);
-  const existing = touchPreparedRuntime(runtimeKey);
+  const runtimeKey = buildRuntimeKey(
+    options.cacheKey,
+    options.variant,
+    requestedMaxSplats,
+    options.gaussianSplatSequence,
+  );
+  const existing = runtimeValueCache.get(runtimeKey);
   if (existing) return existing;
 
   const existingPromise = runtimePromiseCache.get(runtimeKey);
@@ -646,17 +574,13 @@ async function ensurePreparedRuntime(options: RuntimeRequestOptions): Promise<Pr
       requestedMaxSplats,
       normalizationBounds,
     );
-    storePreparedRuntime(runtime);
+    runtimeValueCache.set(runtimeKey, runtime);
     void persistRuntimeToProjectCache(options.fileHash, runtime);
     return runtime;
   })();
 
   runtimePromiseCache.set(runtimeKey, promise);
-  void promise.then(() => {
-    if (runtimePromiseCache.get(runtimeKey) === promise) {
-      runtimePromiseCache.delete(runtimeKey);
-    }
-  }, () => {
+  void promise.catch(() => {
     if (runtimePromiseCache.get(runtimeKey) === promise) {
       runtimePromiseCache.delete(runtimeKey);
     }
@@ -667,34 +591,10 @@ async function ensurePreparedRuntime(options: RuntimeRequestOptions): Promise<Pr
 export function getPreparedSplatRuntimeSync(
   options: RuntimeRequestOptions,
 ): PreparedSplatRuntime | null {
-  return touchPreparedRuntime(getRuntimeKeyForOptions(options));
-}
-
-export function clearPreparedSplatRuntimeCache(): void {
-  assetPromiseCache.clear();
-  runtimePromiseCache.clear();
-  runtimeValueCache.clear();
-  runtimeValueSizeCache.clear();
-  idlePrewarmKeys.clear();
-  preparedRuntimeCacheBytes = 0;
-}
-
-export function setPreparedSplatRuntimeCacheMaxBytes(maxBytes: number): void {
-  const normalized = Math.max(0, Math.floor(maxBytes));
-  preparedRuntimeCacheMaxBytes = normalized;
-  trimPreparedRuntimeCache();
-}
-
-export function getPreparedSplatRuntimeCacheStats(): {
-  runtimeCount: number;
-  totalBytes: number;
-  maxBytes: number;
-} {
-  return {
-    runtimeCount: runtimeValueCache.size,
-    totalBytes: preparedRuntimeCacheBytes,
-    maxBytes: preparedRuntimeCacheMaxBytes,
-  };
+  const requestedMaxSplats = normalizeRequestedMaxSplats(options.requestedMaxSplats);
+  return runtimeValueCache.get(
+    buildRuntimeKey(options.cacheKey, options.variant, requestedMaxSplats, options.gaussianSplatSequence),
+  ) ?? null;
 }
 
 export async function resolvePreparedSplatRuntime(
