@@ -21,6 +21,8 @@ export const createMarkerSlice: SliceCreator<MarkerActions> = (set, get) => ({
       time: clampedTime,
       label: label || '',
       color: color || DEFAULT_MARKER_COLOR,
+      stopPlayback: undefined,
+      midiBindings: undefined,
     };
 
     set(state => ({

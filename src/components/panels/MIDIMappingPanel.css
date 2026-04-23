@@ -1,0 +1,292 @@
+.midi-mapping-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+.midi-mapping-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2-5) var(--sp-3);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+}
+
+.midi-mapping-header h2 {
+  margin: 0;
+  font-size: var(--font-lg);
+  font-weight: var(--font-semibold);
+}
+
+.midi-mapping-header p {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.midi-mapping-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1-5);
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.midi-mapping-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.midi-mapping-status-dot.is-live {
+  background: var(--success-light);
+  box-shadow: 0 0 8px var(--success-light);
+}
+
+.midi-mapping-learn-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--accent-subtle) 70%, transparent);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.midi-mapping-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
+  align-content: start;
+}
+
+.midi-mapping-card {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  padding: var(--sp-2-5);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease,
+    background-color 140ms ease;
+}
+
+.midi-mapping-card.is-clickable {
+  cursor: pointer;
+}
+
+.midi-mapping-card.is-clickable:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-color));
+  transform: translateY(-1px);
+}
+
+.midi-mapping-card.is-clickable:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.midi-mapping-card.is-previewing {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border-color));
+  background: color-mix(in srgb, var(--accent-subtle) 55%, var(--bg-tertiary));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent),
+    0 0 20px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.midi-mapping-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.midi-mapping-binding {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--accent);
+}
+
+.midi-mapping-scope {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--font-xs);
+  font-weight: var(--font-medium);
+}
+
+.midi-mapping-scope-transport {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.midi-mapping-scope-marker {
+  background: var(--warning-dim);
+  color: var(--warning-light);
+}
+
+.midi-mapping-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0-5);
+}
+
+.midi-mapping-card-main strong {
+  font-size: var(--font-md);
+  color: var(--text-primary);
+}
+
+.midi-mapping-card-main span {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.midi-mapping-card-footer {
+  margin-top: var(--sp-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+
+.midi-mapping-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex-wrap: wrap;
+}
+
+.midi-mapping-editor {
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border-color);
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.midi-mapping-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+
+.midi-mapping-field {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.midi-mapping-field span {
+  font-size: var(--font-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.midi-mapping-field input,
+.midi-mapping-field select {
+  width: 100%;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-size: var(--font-sm);
+}
+
+.midi-mapping-field input:focus,
+.midi-mapping-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.midi-mapping-field small {
+  font-size: var(--font-xs);
+  color: var(--accent);
+}
+
+.midi-mapping-field-wide {
+  grid-column: 1 / -1;
+}
+
+.midi-mapping-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex-wrap: wrap;
+}
+
+.midi-mapping-editor-hint {
+  margin: 0;
+  font-size: var(--font-xs);
+  line-height: var(--leading-relaxed);
+  color: var(--text-muted);
+}
+
+.midi-mapping-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--sp-2);
+  padding: var(--sp-5);
+  color: var(--text-muted);
+}
+
+.midi-mapping-empty p {
+  margin: 0;
+  max-width: 420px;
+  font-size: var(--font-md);
+  line-height: var(--leading-relaxed);
+}
+
+.midi-mapping-empty-muted {
+  color: var(--text-secondary);
+}
+
+.midi-mapping-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.midi-mapping-list::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+.midi-mapping-list::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.midi-mapping-list::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+@media (max-width: 900px) {
+  .midi-mapping-header,
+  .midi-mapping-card-footer,
+  .midi-mapping-learn-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .midi-mapping-editor-grid {
+    grid-template-columns: 1fr;
+  }
+}

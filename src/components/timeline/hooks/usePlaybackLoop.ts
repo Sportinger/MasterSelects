@@ -6,6 +6,7 @@ import {
   clearInternalPlaybackHold,
   playheadState,
 } from '../../../services/layerBuilder';
+import { findStopMarkerInPlaybackRange } from '../../../services/timeline/stopMarkers';
 
 interface UsePlaybackLoopProps {
   isPlaying: boolean;
@@ -41,6 +42,20 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
     playheadState.isUsingInternalPosition = true;
     playheadState.playbackJustStarted = true; // Signal for initial audio sync
 
+    const stopPlaybackAt = (position: number) => {
+      const timelineStore = useTimelineStore.getState();
+      timelineStore.pause();
+      clearInternalPlaybackHold();
+      playheadState.position = position;
+      playheadState.isUsingInternalPosition = false;
+      playheadState.hasMasterAudio = false;
+      playheadState.masterAudioElement = null;
+      useTimelineStore.setState({
+        playheadPosition: position,
+        playbackSpeed: 1,
+      });
+    };
+
     const updatePlayhead = (currentTime: number) => {
       try {
         const state = useTimelineStore.getState();
@@ -51,10 +66,12 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
           loopPlayback: lp,
           pause: ps,
           clips,
+          markers,
           playbackSpeed,
         } = state;
         const effectiveEnd = op !== null ? op : dur;
         const effectiveStart = ip !== null ? ip : 0;
+        const previousPosition = playheadState.position;
 
         let newPosition: number;
         const heldPlaybackPosition = playheadState.heldPlaybackPosition;
@@ -89,6 +106,12 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
         }
         lastTime = currentTime;
 
+        const stopMarker = findStopMarkerInPlaybackRange(markers, previousPosition, newPosition);
+        if (stopMarker) {
+          stopPlaybackAt(stopMarker.time);
+          return;
+        }
+
         // Handle end of timeline / looping (forward playback)
         if (newPosition >= effectiveEnd && playbackSpeed > 0) {
           if (lp) {
@@ -110,13 +133,7 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
           } else {
             newPosition = effectiveEnd;
             ps();
-            // Reset playback speed to normal when stopping
-            useTimelineStore.setState({ playbackSpeed: 1 });
-            playheadState.position = newPosition;
-            playheadState.isUsingInternalPosition = false;
-            playheadState.hasMasterAudio = false;
-            playheadState.masterAudioElement = null;
-            useTimelineStore.setState({ playheadPosition: newPosition });
+            stopPlaybackAt(newPosition);
             return;
           }
         }
@@ -142,13 +159,7 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
           } else {
             newPosition = effectiveStart;
             ps();
-            // Reset playback speed to normal when stopping
-            useTimelineStore.setState({ playbackSpeed: 1 });
-            playheadState.position = newPosition;
-            playheadState.isUsingInternalPosition = false;
-            playheadState.hasMasterAudio = false;
-            playheadState.masterAudioElement = null;
-            useTimelineStore.setState({ playheadPosition: newPosition });
+            stopPlaybackAt(newPosition);
             return;
           }
         }

@@ -75,6 +75,10 @@ export function useMarkerDrag({
 
   // Handle timeline marker drag start
   const handleTimelineMarkerMouseDown = useCallback((e: React.MouseEvent, markerId: string) => {
+    if (e.button !== 0) {
+      return;
+    }
+
     e.preventDefault();
     e.stopPropagation();
     const marker = markers.find(m => m.id === markerId);

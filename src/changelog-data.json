@@ -1,5 +1,25 @@
 [
   {
+    "date": "2026-04-23",
+    "type": "new",
+    "title": "Browser MIDI Control Added with Learn Mode and a Dedicated Mapping Panel",
+    "description": "MasterSelects now supports direct browser MIDI input over Web MIDI with a dedicated Settings tab, transport bindings, a dockable MIDI Mapping panel, note learn mode, manual reassignment, and project-persistent marker plus transport mappings.",
+    "section": "MIDI / Workflow",
+    "commits": [
+      "8e2701c3"
+    ]
+  },
+  {
+    "date": "2026-04-23",
+    "type": "improve",
+    "title": "Timeline Markers Can Now Trigger Playback and Auto-Stop the Playhead",
+    "description": "Markers now expose right-click MIDI actions for Jump, Play From Marker, and Jump To Marker And Stop, and any marker can be turned into a Stop Marker so playback halts automatically when the playhead crosses it.",
+    "section": "Timeline / Markers",
+    "commits": [
+      "8e2701c3"
+    ]
+  },
+  {
     "date": "2026-04-18",
     "type": "new",
     "title": "MasterSelects Now Opens Through a Dedicated Landing Page",

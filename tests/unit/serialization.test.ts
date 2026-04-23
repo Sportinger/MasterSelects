@@ -306,8 +306,24 @@ describe('CompositionTimelineData round-trip', () => {
   it('markers serialize and deserialize', () => {
     const data = makeTimelineData({
       markers: [
-        { id: 'm1', time: 5, label: 'Intro', color: '#ff0000' },
-        { id: 'm2', time: 15, label: 'Chorus', color: '#00ff00' },
+        {
+          id: 'm1',
+          time: 5,
+          label: 'Intro',
+          color: '#ff0000',
+          midiBindings: [
+            { action: 'playFromMarker', channel: 1, note: 36 },
+          ],
+        },
+        {
+          id: 'm2',
+          time: 15,
+          label: 'Chorus',
+          color: '#00ff00',
+          midiBindings: [
+            { action: 'jumpToMarker', channel: 2, note: 48 },
+          ],
+        },
       ],
     });
 
@@ -317,6 +333,12 @@ describe('CompositionTimelineData round-trip', () => {
     expect(restored.markers).toHaveLength(2);
     expect(restored.markers![0].label).toBe('Intro');
     expect(restored.markers![1].time).toBe(15);
+    expect(restored.markers![0].midiBindings).toEqual([
+      { action: 'playFromMarker', channel: 1, note: 36 },
+    ]);
+    expect(restored.markers![1].midiBindings).toEqual([
+      { action: 'jumpToMarker', channel: 2, note: 48 },
+    ]);
   });
 });
 

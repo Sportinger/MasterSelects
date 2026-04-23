@@ -8,6 +8,7 @@ import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useFlashBoardStore } from '../../stores/flashboardStore';
 import { getExportStoreData, useExportStore } from '../../stores/exportStore';
+import { useMIDIStore } from '../../stores/midiStore';
 import type {
   FlashBoardGenerationMetadata,
   FlashBoardStoreState,
@@ -201,8 +202,15 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       sceneDescriptionStatus: c.sceneDescriptionStatus || undefined,
     }));
 
-    // Note: markers not currently stored in CompositionTimelineData
-    const markers: ProjectMarker[] = [];
+    const markers: ProjectMarker[] = (timelineData?.markers || []).map((marker: any) => ({
+      id: marker.id,
+      time: marker.time,
+      name: marker.label || '',
+      color: marker.color || '#2997E5',
+      duration: 0,
+      stopPlayback: marker.stopPlayback === true ? true : undefined,
+      midiBindings: marker.midiBindings || undefined,
+    }));
 
     return {
       id: comp.id,
@@ -370,6 +378,7 @@ export async function syncStoresToProject(): Promise<void> {
       const mediaPanelNameWidth = localStorage.getItem('media-panel-name-width');
       const transcriptLanguage = localStorage.getItem('transcriptLanguage');
       const settingsState = useSettingsStore.getState();
+      const midiState = useMIDIStore.getState();
 
       projectData.uiState = {
         dockLayout,
@@ -383,6 +392,13 @@ export async function syncStoresToProject(): Promise<void> {
         showTranscriptMarkers: timelineState.showTranscriptMarkers,
         showChangelogOnStartup: settingsState.showChangelogOnStartup,
         lastSeenChangelogVersion: settingsState.lastSeenChangelogVersion,
+        midi: {
+          isEnabled: midiState.isEnabled,
+          transportBindings: {
+            playPause: midiState.transportBindings.playPause,
+            stop: midiState.transportBindings.stop,
+          },
+        },
         exportState: getExportStoreData(useExportStore.getState()),
       };
 

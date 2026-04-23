@@ -61,7 +61,15 @@ const mocks = vi.hoisted(() => ({
     lastSeenChangelogVersion: '1.0.0',
     loadApiKeys: vi.fn(async () => undefined),
   },
+  midiState: {
+    isEnabled: false,
+    transportBindings: {
+      playPause: null as { channel: number; note: number } | null,
+      stop: null as { channel: number; note: number } | null,
+    },
+  },
   mediaSetState: vi.fn(),
+  midiSetState: vi.fn(),
   createObjectURL: vi.fn(() => 'blob:project-media'),
   settingsSetState: vi.fn(),
 }));
@@ -95,6 +103,13 @@ vi.mock('../../src/stores/settingsStore', () => ({
   useSettingsStore: {
     getState: () => mocks.settingsState,
     setState: mocks.settingsSetState,
+  },
+}));
+
+vi.mock('../../src/stores/midiStore', () => ({
+  useMIDIStore: {
+    getState: () => mocks.midiState,
+    setState: mocks.midiSetState,
   },
 }));
 
@@ -158,6 +173,11 @@ describe('project media persistence', () => {
     mocks.mediaState.expandedFolderIds = [];
     mocks.mediaState.slotAssignments = {};
     mocks.mediaState.proxyEnabled = false;
+    mocks.midiState.isEnabled = false;
+    mocks.midiState.transportBindings = {
+      playPause: null,
+      stop: null,
+    };
     mocks.timelineState.clips = [];
     mocks.getProjectData.mockReturnValue({
       media: [],
@@ -175,6 +195,9 @@ describe('project media persistence', () => {
         ? partial(mocks.mediaState)
         : partial;
       Object.assign(mocks.mediaState, nextPartial);
+    });
+    mocks.midiSetState.mockImplementation((partial: Record<string, unknown>) => {
+      Object.assign(mocks.midiState, partial);
     });
     vi.spyOn(URL, 'createObjectURL').mockImplementation(mocks.createObjectURL);
     Object.defineProperty(globalThis, 'localStorage', {
@@ -218,6 +241,104 @@ describe('project media persistence', () => {
         projectPath: 'Raw/clip.mp4',
       }),
     ]);
+  });
+
+  it('persists marker MIDI bindings when syncing stores to the project file', async () => {
+    mocks.mediaState.activeCompositionId = 'comp-1';
+    mocks.mediaState.compositions = [{
+      id: 'comp-1',
+      name: 'Comp 1',
+      type: 'composition',
+      parentId: null,
+      createdAt: 1,
+      width: 1920,
+      height: 1080,
+      frameRate: 30,
+      duration: 60,
+      backgroundColor: '#000000',
+      timelineData: { tracks: [], clips: [], markers: [] },
+    }];
+    mocks.timelineState.getSerializableState.mockReturnValue({
+      tracks: [{ id: 'track-v1', name: 'Video 1', type: 'video', height: 60, muted: false, visible: true, solo: false }],
+      clips: [],
+      markers: [
+        {
+          id: 'marker-1',
+          time: 12.5,
+          label: 'Drop',
+          color: '#ff6600',
+          stopPlayback: true,
+          midiBindings: [
+            { action: 'playFromMarker', channel: 1, note: 36 },
+            { action: 'jumpToMarker', channel: 1, note: 37 },
+            { action: 'jumpToMarkerAndStop', channel: 1, note: 38 },
+          ],
+        },
+      ],
+      playheadPosition: 0,
+      duration: 60,
+      zoom: 1,
+      scrollX: 0,
+      inPoint: null,
+      outPoint: null,
+      loopPlayback: false,
+    });
+
+    const { syncStoresToProject } = await import('../../src/services/project/projectSave');
+    await syncStoresToProject();
+
+    expect(mocks.updateCompositions).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 'comp-1',
+        markers: [
+          expect.objectContaining({
+            id: 'marker-1',
+            time: 12.5,
+            name: 'Drop',
+            color: '#ff6600',
+            stopPlayback: true,
+            midiBindings: [
+              { action: 'playFromMarker', channel: 1, note: 36 },
+              { action: 'jumpToMarker', channel: 1, note: 37 },
+              { action: 'jumpToMarkerAndStop', channel: 1, note: 38 },
+            ],
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it('persists transport MIDI bindings in project uiState when syncing stores to the project file', async () => {
+    const projectData = {
+      media: [],
+      compositions: [],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: null,
+      openCompositionIds: [],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+    };
+    mocks.getProjectData.mockReturnValue(projectData);
+    mocks.midiState.isEnabled = true;
+    mocks.midiState.transportBindings = {
+      playPause: { channel: 1, note: 48 },
+      stop: { channel: 1, note: 49 },
+    };
+
+    const { syncStoresToProject } = await import('../../src/services/project/projectSave');
+    await syncStoresToProject();
+
+    expect(projectData.uiState).toEqual(expect.objectContaining({
+      midi: {
+        isEnabled: true,
+        transportBindings: {
+          playPause: { channel: 1, note: 48 },
+          stop: { channel: 1, note: 49 },
+        },
+      },
+    }));
   });
 
   it('persists vector animation metadata and clip settings for lottie assets', async () => {
@@ -798,6 +919,93 @@ describe('project media persistence', () => {
           file: rawFile,
         }),
       ],
+    }));
+  });
+
+  it('restores stop markers and marker MIDI bindings when loading a composition', async () => {
+    mocks.getProjectData.mockReturnValue({
+      media: [],
+      compositions: [{
+        id: 'comp-1',
+        name: 'Comp 1',
+        width: 1920,
+        height: 1080,
+        frameRate: 30,
+        duration: 60,
+        backgroundColor: '#000000',
+        folderId: null,
+        tracks: [],
+        clips: [],
+        markers: [{
+          id: 'marker-1',
+          time: 12.5,
+          name: 'Drop',
+          color: '#ff6600',
+          duration: 0,
+          stopPlayback: true,
+          midiBindings: [
+            { action: 'jumpToMarkerAndStop', channel: 2, note: 44 },
+          ],
+        }],
+      }],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: 'comp-1',
+      openCompositionIds: ['comp-1'],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    expect(mocks.timelineState.loadState).toHaveBeenCalledWith(expect.objectContaining({
+      markers: [
+        expect.objectContaining({
+          id: 'marker-1',
+          time: 12.5,
+          label: 'Drop',
+          color: '#ff6600',
+          stopPlayback: true,
+          midiBindings: [
+            { action: 'jumpToMarkerAndStop', channel: 2, note: 44 },
+          ],
+        }),
+      ],
+    }));
+  });
+
+  it('restores transport MIDI bindings from project uiState', async () => {
+    mocks.getProjectData.mockReturnValue({
+      media: [],
+      compositions: [],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: null,
+      openCompositionIds: [],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {
+        midi: {
+          isEnabled: true,
+          transportBindings: {
+            playPause: { channel: 3, note: 50 },
+            stop: { channel: 3, note: 51 },
+          },
+        },
+      },
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    expect(mocks.midiSetState).toHaveBeenCalledWith(expect.objectContaining({
+      isEnabled: true,
+      transportBindings: {
+        playPause: { channel: 3, note: 50 },
+        stop: { channel: 3, note: 51 },
+      },
     }));
   });
 
