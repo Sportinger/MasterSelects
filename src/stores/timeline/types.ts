@@ -19,6 +19,7 @@ import type {
 } from '../../types';
 import type { Composition } from '../mediaStore';
 import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
+import type { MarkerMIDIBinding } from '../../types/midi';
 
 // Re-export imported types for convenience
 export type {
@@ -75,6 +76,8 @@ export interface TimelineMarker {
   time: number;
   label: string;
   color: string;
+  stopPlayback?: boolean;
+  midiBindings?: MarkerMIDIBinding[];
 }
 
 // Timeline state interface
@@ -203,7 +206,7 @@ export interface MeshClipActions {
   updateText3DProperties: (clipId: string, props: Partial<Text3DProperties>) => void;
 }
 
-// Camera clip actions (shared Three.js scene camera)
+// Camera clip actions (shared 3D scene camera)
 export interface CameraClipActions {
   addCameraClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
 }

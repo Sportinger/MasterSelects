@@ -292,6 +292,7 @@ interface ProjectFile {
 
 ### Per Composition
 - All tracks and clips
+- Timeline markers and per-marker MIDI bindings
 - Clip positions and durations
 - Trim points (inPoint/outPoint)
 - Transform properties (position, scale, rotation, anchor, opacity, blend mode)
@@ -323,6 +324,7 @@ interface ProjectFile {
 - Composition view state per composition (playhead, zoom, scroll, in/out points)
 - Media panel column order and name width
 - Transcript language preference
+- Global MIDI state: enabled flag and transport bindings (`Play / Pause`, `Stop`)
 - View toggles: thumbnails, waveforms, proxy, transcript markers
 - Changelog preferences (`showChangelogOnStartup`, `lastSeenChangelogVersion`)
 - Export panel state: live export settings, named export presets, and the selected preset

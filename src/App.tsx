@@ -29,6 +29,7 @@ import { useTheme } from './hooks/useTheme';
 import { useGlobalHistory } from './hooks/useGlobalHistory';
 import { useClipPanelSync } from './hooks/useClipPanelSync';
 import { useIsMobile, useForceMobile } from './hooks/useIsMobile';
+import { useMIDIRuntime } from './hooks/useMIDIRuntime';
 import { useAccountStore } from './stores/accountStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { projectDB } from './services/projectDB';
@@ -62,6 +63,9 @@ function App() {
 
   // Auto-switch panels based on clip selection
   useClipPanelSync();
+
+  // Browser MIDI runtime
+  useMIDIRuntime();
 
   // Check if there's a stored project in IndexedDB (the only allowed browser storage)
   const [isChecking, setIsChecking] = useState(true);

@@ -12,6 +12,7 @@ import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useFlashBoardStore } from '../../stores/flashboardStore';
 import { useExportStore } from '../../stores/exportStore';
+import { useMIDIStore } from '../../stores/midiStore';
 import { flashBoardMediaBridge } from '../flashboard/FlashBoardMediaBridge';
 import type {
   FlashBoard,
@@ -488,6 +489,14 @@ function convertProjectCompositionToStore(
       inPoint: viewState?.inPoint ?? null,
       outPoint: viewState?.outPoint ?? null,
       loopPlayback: false,
+      markers: (pc.markers || []).map((marker) => ({
+        id: marker.id,
+        time: marker.time,
+        label: marker.name || '',
+        color: marker.color,
+        stopPlayback: marker.stopPlayback === true ? true : undefined,
+        midiBindings: marker.midiBindings,
+      })),
     };
 
     const comp: Composition = {
@@ -712,6 +721,25 @@ export async function loadProjectToStores(): Promise<void> {
     }
     if (Object.keys(changelogSettings).length > 0) {
       useSettingsStore.setState(changelogSettings);
+    }
+
+    if (ui.midi) {
+      const midiState: Partial<ReturnType<typeof useMIDIStore.getState>> = {};
+
+      if (ui.midi.isEnabled !== undefined) {
+        midiState.isEnabled = ui.midi.isEnabled;
+      }
+
+      if (ui.midi.transportBindings) {
+        midiState.transportBindings = {
+          playPause: ui.midi.transportBindings.playPause ?? null,
+          stop: ui.midi.transportBindings.stop ?? null,
+        };
+      }
+
+      if (Object.keys(midiState).length > 0) {
+        useMIDIStore.setState(midiState);
+      }
     }
   }
 

@@ -65,4 +65,6 @@ export interface ProjectMarker {
   name: string;
   color: string;
   duration: number;
+  stopPlayback?: boolean;
+  midiBindings?: import('../../../types/midi').MarkerMIDIBinding[];
 }
