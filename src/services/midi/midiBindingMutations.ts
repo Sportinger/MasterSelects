@@ -12,6 +12,7 @@ interface ConflictOptions {
   transportAction?: MIDITransportAction;
   markerId?: string;
   markerAction?: MarkerMIDIAction;
+  slotIndex?: number;
 }
 
 function updateMarkerBindings(markerId: string, bindings: MarkerMIDIBinding[]): void {
@@ -33,6 +34,14 @@ export function removeConflictingMIDIBinding(
     const isSameTarget = options?.transportAction === action;
     if (existingBinding && !isSameTarget && midiBindingsMatch(existingBinding, binding)) {
       midiStore.setTransportBinding(action, null);
+    }
+  });
+
+  Object.entries(midiStore.slotBindings).forEach(([slotKey, existingBinding]) => {
+    const slotIndex = Number(slotKey);
+    const isSameTarget = options?.slotIndex === slotIndex;
+    if (existingBinding && !isSameTarget && midiBindingsMatch(existingBinding, binding)) {
+      midiStore.setSlotBinding(slotIndex, null);
     }
   });
 
@@ -103,6 +112,25 @@ export function setMarkerMIDIBinding(
     action,
   });
   updateMarkerBindings(markerId, nextBindings);
+}
+
+export function setSlotMIDIBinding(
+  slotIndex: number,
+  binding: MIDINoteBinding | null
+): void {
+  const midiStore = useMIDIStore.getState();
+
+  if (!Number.isInteger(slotIndex) || slotIndex < 0) {
+    return;
+  }
+
+  if (!binding) {
+    midiStore.setSlotBinding(slotIndex, null);
+    return;
+  }
+
+  removeConflictingMIDIBinding(binding, { slotIndex });
+  midiStore.setSlotBinding(slotIndex, binding);
 }
 
 export function moveMarkerMIDIBinding(params: {

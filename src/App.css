@@ -3768,6 +3768,10 @@ input, textarea {
   gap: var(--sp-2);
 }
 
+.slot-clip-summary-title {
+  min-width: 0;
+}
+
 .slot-clip-title {
   margin-top: 2px;
   font-size: var(--font-md);
@@ -3794,11 +3798,17 @@ input, textarea {
 
 .slot-clip-summary-meta span {
   padding: 3px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
   font-size: var(--font-xs);
+}
+
+.slot-clip-summary-meta .slot-clip-status-active {
+  border-color: rgba(58, 206, 128, 0.38);
+  color: #56d98f;
+  background: rgba(58, 206, 128, 0.11);
 }
 
 .slot-clip-transport {
@@ -3823,6 +3833,11 @@ input, textarea {
   font-weight: var(--font-medium);
 }
 
+.slot-clip-transport-btn.primary {
+  border-color: rgba(74, 158, 255, 0.5);
+  background: rgba(74, 158, 255, 0.16);
+}
+
 .slot-clip-transport-btn:hover:not(:disabled),
 .slot-clip-end-btn:hover {
   background: var(--bg-hover);
@@ -3833,89 +3848,237 @@ input, textarea {
   cursor: default;
 }
 
+.slot-clip-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.slot-clip-section-header span {
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+
 .slot-clip-timeline-shell {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-1);
-}
-
-.slot-clip-timeline-preview {
-  position: relative;
-  min-height: 84px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.18)),
-    linear-gradient(135deg, rgba(74, 158, 255, 0.08), rgba(240, 196, 90, 0.04));
-  overflow: hidden;
-}
-
-.slot-clip-range-overlay {
-  position: relative;
-  height: 26px;
-  border-radius: var(--radius-md);
   background: var(--bg-primary);
-  border: 1px solid var(--border-color);
   overflow: hidden;
 }
 
-.slot-clip-range-mask {
+.slot-clip-ruler {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  color: var(--text-tertiary);
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.slot-clip-ruler span:nth-child(2) {
+  text-align: center;
+}
+
+.slot-clip-ruler span:nth-child(3) {
+  text-align: right;
+}
+
+.slot-clip-track-stack {
+  position: relative;
+  min-height: 116px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.035) 0,
+      rgba(255, 255, 255, 0.035) 1px,
+      transparent 1px,
+      transparent 10%
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(0, 0, 0, 0.12));
+  overflow: hidden;
+}
+
+.slot-clip-track-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  min-height: 29px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.slot-clip-track-row:last-of-type {
+  border-bottom: none;
+}
+
+.slot-clip-track-label {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid var(--border-color);
+  background: rgba(0, 0, 0, 0.32);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: var(--font-semibold);
+}
+
+.slot-clip-track-label-audio {
+  color: #57cf87;
+}
+
+.slot-clip-track-label-video {
+  color: #63adff;
+}
+
+.slot-clip-track-lane {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.slot-clip-clip {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  min-width: 3px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(98, 157, 255, 0.64);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.slot-clip-clip span {
+  display: block;
+  padding: 2px 5px;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slot-clip-clip-audio {
+  background: rgba(56, 190, 108, 0.68);
+}
+
+.slot-clip-clip-image,
+.slot-clip-clip-lottie {
+  background: rgba(153, 122, 255, 0.66);
+}
+
+.slot-clip-clip-text,
+.slot-clip-clip-solid {
+  background: rgba(238, 156, 68, 0.66);
+}
+
+.slot-clip-clip-model,
+.slot-clip-clip-gaussian-avatar,
+.slot-clip-clip-gaussian-splat,
+.slot-clip-clip-splat-effector,
+.slot-clip-clip-camera {
+  background: rgba(90, 202, 200, 0.64);
+}
+
+.slot-clip-empty-timeline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 116px;
+  color: var(--text-tertiary);
+  font-size: var(--font-sm);
+}
+
+.slot-clip-trim-mask {
   position: absolute;
   top: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.45);
   pointer-events: none;
+  z-index: 2;
 }
 
-.slot-clip-range-mask-left {
+.slot-clip-trim-mask-left {
   left: 0;
 }
 
-.slot-clip-range-mask-right {
+.slot-clip-trim-mask-right {
   right: 0;
 }
 
 .slot-clip-range-window {
   position: absolute;
-  top: 2px;
-  bottom: 2px;
-  border-radius: var(--radius-sm);
-  background: rgba(74, 158, 255, 0.18);
-  border: 1px solid rgba(74, 158, 255, 0.45);
+  top: 0;
+  bottom: 0;
+  background: rgba(74, 158, 255, 0.08);
+  border-left: 1px solid rgba(240, 196, 90, 0.7);
+  border-right: 1px solid rgba(240, 196, 90, 0.7);
   pointer-events: none;
+  z-index: 3;
+}
+
+.slot-clip-range-progress {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(74, 158, 255, 0.12);
+  pointer-events: none;
+  z-index: 3;
 }
 
 .slot-clip-playhead {
   position: absolute;
-  top: 2px;
-  bottom: 2px;
+  top: 0;
+  bottom: 0;
   width: 2px;
   margin-left: -1px;
   background: #ff6b57;
   box-shadow: 0 0 0 1px rgba(255, 107, 87, 0.18);
   pointer-events: none;
+  z-index: 5;
 }
 
 .slot-clip-handle {
   position: absolute;
-  top: 2px;
-  bottom: 2px;
-  width: 10px;
-  margin-left: -5px;
-  border-radius: 999px;
-  background: #f0c45a;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  margin-left: -7px;
+  background: transparent;
   border: none;
   cursor: ew-resize;
-  z-index: 2;
+  z-index: 6;
+}
+
+.slot-clip-handle::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 5px;
+  width: 4px;
+  border-radius: var(--radius-sm);
+  background: #f0c45a;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.22);
 }
 
 .slot-clip-handle.dragging {
-  box-shadow: 0 0 0 2px rgba(240, 196, 90, 0.2);
+  background: rgba(240, 196, 90, 0.08);
 }
 
 .slot-clip-timecodes {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
   gap: var(--sp-1);
 }
 

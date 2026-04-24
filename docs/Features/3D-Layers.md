@@ -88,7 +88,7 @@ Camera clips expose their own Properties tab with:
 
 The Transform tab becomes scene-navigation controls for the active camera clip. In FPS mode, the preview accepts WASD/QE navigation plus uncapped mouse look. Free scene navigation now belongs to camera clips rather than gaussian-splat clips.
 
-Camera rotation keyframes interpolate through the shortest angular path so timeline flights do not spin the long way around when yaw, pitch, or roll crosses a 360-degree wrap. FPS-look camera segments with keyed position/forward travel render through world-pose interpolation, keeping vertical-look roll moves from drifting away between keyframes.
+Camera rotation keyframes interpolate through the shortest angular path so timeline flights do not spin the long way around when yaw, pitch, or roll crosses a 360-degree wrap. Camera transform keyframes for pan, distance, zoom, forward travel, and rotation render through world-pose interpolation: the camera eye and target are interpolated between keyed world poses, keeping FPS-look moves, zoom-outs, and vertical-look roll moves from drifting away between keyframes.
 
 ## Gaussian Splats
 

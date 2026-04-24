@@ -121,6 +121,11 @@ export function usePlayheadDrag({
     (e: React.MouseEvent, type: 'in' | 'out') => {
       e.stopPropagation();
       e.preventDefault();
+
+      if (isPlaying) {
+        pause();
+      }
+
       const originalTime = type === 'in' ? inPoint : outPoint;
       if (originalTime === null) return;
 
@@ -130,7 +135,7 @@ export function usePlayheadDrag({
         originalTime,
       });
     },
-    [inPoint, outPoint]
+    [isPlaying, pause, inPoint, outPoint]
   );
 
   // Handle marker dragging

@@ -5,6 +5,7 @@ import { useTimelineStore } from '../../src/stores/timeline';
 import {
   moveMarkerMIDIBinding,
   setMarkerMIDIBinding,
+  setSlotMIDIBinding,
   setTransportMIDIBinding,
 } from '../../src/services/midi/midiBindingMutations';
 
@@ -30,6 +31,7 @@ describe('midiBindingMutations', () => {
         playPause: null,
         stop: null,
       },
+      slotBindings: {},
     });
 
     useTimelineStore.setState({
@@ -87,5 +89,27 @@ describe('midiBindingMutations', () => {
       { action: 'playFromMarker', channel: 1, note: 62 },
       { action: 'jumpToMarker', channel: 1, note: 60 },
     ]);
+  });
+
+  it('clears conflicting slot bindings when assigning a transport note', () => {
+    setSlotMIDIBinding(0, { channel: 1, note: 64 });
+
+    setTransportMIDIBinding('playPause', { channel: 1, note: 64 });
+
+    expect(useMIDIStore.getState().slotBindings[0]).toBeUndefined();
+    expect(useMIDIStore.getState().transportBindings.playPause).toEqual({ channel: 1, note: 64 });
+  });
+
+  it('clears conflicting transport and marker bindings when assigning a slot note', () => {
+    setTransportMIDIBinding('playPause', { channel: 1, note: 64 });
+    setMarkerMIDIBinding('marker-b', 'playFromMarker', { channel: 1, note: 65 });
+
+    setSlotMIDIBinding(5, { channel: 1, note: 64 });
+    setSlotMIDIBinding(6, { channel: 1, note: 65 });
+
+    expect(useMIDIStore.getState().transportBindings.playPause).toBeNull();
+    expect(useTimelineStore.getState().markers[1]?.midiBindings).toBeUndefined();
+    expect(useMIDIStore.getState().slotBindings[5]).toEqual({ channel: 1, note: 64 });
+    expect(useMIDIStore.getState().slotBindings[6]).toEqual({ channel: 1, note: 65 });
   });
 });

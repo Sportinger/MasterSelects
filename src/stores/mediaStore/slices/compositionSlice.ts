@@ -13,6 +13,7 @@ import type { SlotDeckState } from '../types';
 export interface CompositionSwitchOptions {
   skipAnimation?: boolean;
   playFromStart?: boolean;
+  playFromTime?: number;
 }
 
 export interface CompositionActions {
@@ -60,6 +61,13 @@ function createWarmingSlotDeckState(slotIndex: number, compositionId: string | n
 const DURATION_SYNC_EPSILON = 0.0001;
 const AUTO_TIMELINE_MIN_DURATION = 60;
 const AUTO_TIMELINE_PADDING_SECONDS = 10;
+
+function resolvePlayStartTime(options?: CompositionSwitchOptions): number {
+  const requested = options?.playFromTime;
+  return typeof requested === 'number' && Number.isFinite(requested)
+    ? Math.max(0, requested)
+    : 0;
+}
 
 type NestedCompReferenceClip = Pick<SerializableClip, 'isComposition' | 'compositionId' | 'inPoint' | 'outPoint' | 'duration'> &
   Partial<Pick<SerializableClip, 'sourceType' | 'naturalDuration' | 'waveform'>> &
@@ -403,11 +411,12 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
     // Same comp already active + playFromStart → just restart playback (no reload)
     if (id === activeCompositionId && options?.playFromStart) {
       const ts = useTimelineStore.getState();
+      const playStartTime = resolvePlayStartTime(options);
       // Stop first to reset everything cleanly, then restart
       ts.pause();
-      ts.setPlayheadPosition(0);
+      ts.setPlayheadPosition(playStartTime);
       // Reset the high-frequency playhead and audio master
-      playheadState.position = 0;
+      playheadState.position = playStartTime;
       playheadState.hasMasterAudio = false;
       playheadState.masterAudioElement = null;
       playheadState.playbackJustStarted = true;
@@ -776,6 +785,7 @@ async function finishCompositionSwitch(
   const timelineStore = useTimelineStore.getState();
   const skipAnimation = options?.skipAnimation ?? false;
   const playFromStart = options?.playFromStart ?? false;
+  const playStartTime = resolvePlayStartTime(options);
 
   // Update active composition
   set({ activeCompositionId: newId });
@@ -787,7 +797,7 @@ async function finishCompositionSwitch(
     await timelineStore.loadState(newComp?.timelineData);
 
     if (playFromStart) {
-      timelineStore.setPlayheadPosition(0);
+      timelineStore.setPlayheadPosition(playStartTime);
       timelineStore.play();
     } else if (syncedPlayhead !== null && syncedPlayhead >= 0) {
       timelineStore.setPlayheadPosition(syncedPlayhead);

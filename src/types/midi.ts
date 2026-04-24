@@ -2,6 +2,8 @@ export type MIDITransportAction = 'playPause' | 'stop';
 
 export type MarkerMIDIAction = 'playFromMarker' | 'jumpToMarker' | 'jumpToMarkerAndStop';
 
+export type MIDISlotAction = 'triggerSlot';
+
 export interface MIDIDeviceInfo {
   id: string;
   name: string;
@@ -15,6 +17,11 @@ export interface MIDINoteBinding {
 
 export interface MarkerMIDIBinding extends MIDINoteBinding {
   action: MarkerMIDIAction;
+}
+
+export interface SlotMIDIBinding extends MIDINoteBinding {
+  action: MIDISlotAction;
+  slotIndex: number;
 }
 
 export interface MIDILastMessage {
@@ -38,6 +45,13 @@ export type MIDILearnTarget =
       markerLabel: string;
       action: MarkerMIDIAction;
       sourceMarkerId?: string;
+    }
+  | {
+      kind: 'slot';
+      slotIndex: number;
+      slotLabel: string;
+      compositionId?: string;
+      compositionName?: string;
     };
 
 export type MIDIPermissionState = PermissionState | 'unknown' | 'unsupported';
@@ -72,6 +86,11 @@ export function describeMIDILearnTarget(target: MIDILearnTarget | null): string 
     return target.action === 'playPause'
       ? 'Waiting for a note for Play/Pause'
       : 'Waiting for a note for Stop';
+  }
+
+  if (target.kind === 'slot') {
+    const compositionSuffix = target.compositionName ? ` (${target.compositionName})` : '';
+    return `Waiting for a note for ${target.slotLabel}${compositionSuffix} -> Trigger Slot`;
   }
 
   const markerLabel = target.markerLabel || 'Marker';

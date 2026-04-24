@@ -6,6 +6,7 @@ import {
   resolveSharedSceneCameraConfig,
 } from '../../src/engine/scene/SceneCameraUtils';
 import {
+  resolveOrbitCameraFrame,
   resolveOrbitCameraPose,
   resolveOrbitCameraTranslationForFixedEye,
 } from '../../src/engine/gaussian/core/SplatCameraUtils';
@@ -262,15 +263,19 @@ describe('SceneCameraUtils', () => {
       viewport,
     );
 
-    expect(config).toMatchObject({
-      position: expected.eye,
-      target: expected.target,
-      up: expected.up,
-      fov: expected.fovDegrees,
-      near: expected.near,
-      far: expected.far,
-      applyDefaultDistance: false,
-    });
+    expect(config.position.x).toBeCloseTo(expected.eye.x, 5);
+    expect(config.position.y).toBeCloseTo(expected.eye.y, 5);
+    expect(config.position.z).toBeCloseTo(expected.eye.z, 5);
+    expect(config.target.x).toBeCloseTo(expected.target.x, 5);
+    expect(config.target.y).toBeCloseTo(expected.target.y, 5);
+    expect(config.target.z).toBeCloseTo(expected.target.z, 5);
+    expect(config.up.x).toBeCloseTo(expected.up.x, 5);
+    expect(config.up.y).toBeCloseTo(expected.up.y, 5);
+    expect(config.up.z).toBeCloseTo(expected.up.z, 5);
+    expect(config.fov).toBe(expected.fovDegrees);
+    expect(config.near).toBe(expected.near);
+    expect(config.far).toBe(expected.far);
+    expect(config.applyDefaultDistance).toBe(false);
   });
 
   it('interpolates FPS look camera keyframes as world poses near vertical pitch', () => {
@@ -359,5 +364,140 @@ describe('SceneCameraUtils', () => {
     expect(config.position.x).toBeCloseTo(startPose.eye.x, 5);
     expect(config.position.y).toBeCloseTo(startPose.eye.y, 5);
     expect(config.position.z).toBeCloseTo(startPose.eye.z, 5);
+  });
+
+  it('interpolates pure camera zoom keyframes in world pose space', () => {
+    const viewport = { width: 1920, height: 1080 };
+    const settings = {
+      nearPlane: 0.1,
+      farPlane: 1000,
+      fov: 60,
+      minimumDistance: getSharedSceneDefaultCameraDistance(60),
+    };
+    const cameraClip = {
+      id: 'zoom-camera',
+      trackId: 'camera-track',
+      startTime: 0,
+      duration: 2,
+      transform: {
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 0 },
+        rotation: { x: 0, y: 0, z: 0 },
+        opacity: 1,
+        blendMode: 'normal',
+      },
+      source: {
+        type: 'camera',
+        cameraSettings: {
+          fov: 60,
+          near: 0.1,
+          far: 1000,
+        },
+      },
+    };
+    const startFrame = resolveOrbitCameraFrame(cameraClip.transform, settings, viewport);
+    const endFrame = resolveOrbitCameraFrame(
+      {
+        ...cameraClip.transform,
+        scale: { x: 0.25, y: 0.25, z: 0 },
+      },
+      settings,
+      viewport,
+    );
+
+    const config = resolveSharedSceneCameraConfig(viewport, 1, {
+      sceneNavClipId: 'zoom-camera',
+      tracks: [{
+        id: 'camera-track',
+        type: 'video',
+        visible: true,
+      }],
+      clips: [cameraClip as any],
+      clipKeyframes: new Map([[
+        'zoom-camera',
+        [
+          { id: 'sx0', clipId: 'zoom-camera', property: 'scale.x', time: 0, value: 1, easing: 'linear' },
+          { id: 'sx1', clipId: 'zoom-camera', property: 'scale.x', time: 2, value: 0.25, easing: 'linear' },
+          { id: 'sy0', clipId: 'zoom-camera', property: 'scale.y', time: 0, value: 1, easing: 'linear' },
+          { id: 'sy1', clipId: 'zoom-camera', property: 'scale.y', time: 2, value: 0.25, easing: 'linear' },
+        ],
+      ]]),
+    });
+
+    expect(config.position.z).toBeCloseTo((startFrame.eye.z + endFrame.eye.z) / 2, 5);
+    expect(config.target).toEqual({ x: 0, y: 0, z: 0 });
+  });
+
+  it('interpolates camera targets directly between keyed world poses', () => {
+    const viewport = { width: 1920, height: 1080 };
+    const settings = {
+      nearPlane: 0.1,
+      farPlane: 1000,
+      fov: 60,
+      minimumDistance: getSharedSceneDefaultCameraDistance(60),
+    };
+    const startTransform = {
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 0 },
+      rotation: { x: 0, y: 0, z: 0 },
+    };
+    const endTransform = {
+      position: { x: 1, y: 0, z: 0 },
+      scale: { x: 0.5, y: 0.5, z: 0 },
+      rotation: { x: 0, y: 90, z: 0 },
+    };
+    const cameraClip = {
+      id: 'target-camera',
+      trackId: 'camera-track',
+      startTime: 0,
+      duration: 2,
+      transform: {
+        ...startTransform,
+        opacity: 1,
+        blendMode: 'normal',
+      },
+      source: {
+        type: 'camera',
+        cameraSettings: {
+          fov: 60,
+          near: 0.1,
+          far: 1000,
+        },
+      },
+    };
+    const startFrame = resolveOrbitCameraFrame(startTransform, settings, viewport);
+    const endFrame = resolveOrbitCameraFrame(endTransform, settings, viewport);
+    const expectedTarget = {
+      x: (startFrame.target.x + endFrame.target.x) / 2,
+      y: (startFrame.target.y + endFrame.target.y) / 2,
+      z: (startFrame.target.z + endFrame.target.z) / 2,
+    };
+
+    const config = resolveSharedSceneCameraConfig(viewport, 1, {
+      sceneNavClipId: 'target-camera',
+      tracks: [{
+        id: 'camera-track',
+        type: 'video',
+        visible: true,
+      }],
+      clips: [cameraClip as any],
+      clipKeyframes: new Map([[
+        'target-camera',
+        [
+          { id: 'px0', clipId: 'target-camera', property: 'position.x', time: 0, value: startTransform.position.x, easing: 'linear' },
+          { id: 'px1', clipId: 'target-camera', property: 'position.x', time: 2, value: endTransform.position.x, easing: 'linear' },
+          { id: 'sx0', clipId: 'target-camera', property: 'scale.x', time: 0, value: startTransform.scale.x, easing: 'linear' },
+          { id: 'sx1', clipId: 'target-camera', property: 'scale.x', time: 2, value: endTransform.scale.x, easing: 'linear' },
+          { id: 'sy0', clipId: 'target-camera', property: 'scale.y', time: 0, value: startTransform.scale.y, easing: 'linear' },
+          { id: 'sy1', clipId: 'target-camera', property: 'scale.y', time: 2, value: endTransform.scale.y, easing: 'linear' },
+          { id: 'ry0', clipId: 'target-camera', property: 'rotation.y', time: 0, value: startTransform.rotation.y, easing: 'linear' },
+          { id: 'ry1', clipId: 'target-camera', property: 'rotation.y', time: 2, value: endTransform.rotation.y, easing: 'linear' },
+        ],
+      ]]),
+    });
+
+    expect(config.target.x).toBeCloseTo(expectedTarget.x, 5);
+    expect(config.target.y).toBeCloseTo(expectedTarget.y, 5);
+    expect(config.target.z).toBeCloseTo(expectedTarget.z, 5);
   });
 });

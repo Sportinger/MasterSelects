@@ -179,13 +179,13 @@ MasterSelects currently exposes 17 dockable panel types, plus the Slot Grid over
 
 - Open from `View -> Panels -> MIDI Mapping`
 - Shows all currently assigned MIDI notes in one list
-- Includes both global transport bindings and per-marker bindings
+- Includes global transport bindings, per-marker bindings, and Slot Grid trigger bindings
 - Each row shows the note, target, and resulting command behavior
 - Click any mapping card to trigger the assigned action and preview what the MIDI note does
 - `Edit` opens inline controls for manual channel/note changes and marker reassignment
 - `Learn` and `Clear` remain available directly from the panel
 - Marker bindings support `Jump To Marker`, `Play From Marker`, and `Jump To Marker And Stop`
-- Transport and marker learning still happen in Settings and the marker context menu
+- Slot bindings can be created from the Slot Grid filled-slot context menu, which opens this panel with a pending `Listening...` mapping
 
 ### AI Chat Panel
 
@@ -289,11 +289,11 @@ Resolume-style slot grid for simultaneous multi-layer composition playback. The 
 | Action | Behavior |
 |--------|----------|
 | Click a filled slot | Select slot clip settings, open the Slot Clip tab, and either open the comp in the editor or trigger it live depending on `useLiveSlotTrigger` |
-| Re-click an active slot | Restart playback from the beginning |
+| Re-click an active slot | Restart playback from the slot trim-in point |
 | Click an empty slot | Deactivate that layer |
 | Click a column header | Activate all compositions in that column |
 | Drag a slot | Reorder or swap a composition position |
-| Right-click a filled slot | Open in Editor or Remove from Slot |
+| Right-click a filled slot | Open in Editor, map MIDI to the slot, or Remove from Slot |
 
 ### Multi-Layer Playback
 
@@ -356,6 +356,7 @@ The unified Properties panel adapts its tabs to the selected clip type and to sl
 - Tabs switch automatically based on clip type
 - Badge counts appear for effects, masks, transcripts, and analysis readiness
 - Slot grid mode switches the panel to the Slot Clip tab
+- The Slot Clip tab shows the slotted composition tracks, the configured trim window, and the current live layer playhead on one range timeline
 
 ---
 

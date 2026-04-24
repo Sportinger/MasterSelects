@@ -1,9 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { createJSONStorage } from 'zustand/middleware';
 import { SlotGrid } from '../../src/components/timeline/SlotGrid';
 import { flags } from '../../src/engine/featureFlags';
 import { useMediaStore } from '../../src/stores/mediaStore';
-import type { SlotDeckState } from '../../src/stores/mediaStore/types';
+import { useDockStore } from '../../src/stores/dockStore';
+import { useMIDIStore } from '../../src/stores/midiStore';
+import { layerPlaybackManager } from '../../src/services/layerPlaybackManager';
+import type { SlotClipSettings, SlotDeckState } from '../../src/stores/mediaStore/types';
 
 vi.mock('../../src/services/layerBuilder', () => ({
   playheadState: {
@@ -17,6 +21,7 @@ vi.mock('../../src/services/layerPlaybackManager', () => ({
     activateLayer: vi.fn(),
     deactivateLayer: vi.fn(),
     buildLayersForLayer: vi.fn(),
+    getLayerPlaybackInfo: vi.fn(() => null),
   },
 }));
 
@@ -100,6 +105,7 @@ type MockComposition = {
 type MockMediaState = {
   activeCompositionId: string | null;
   slotAssignments: Record<string, number>;
+  slotClipSettings: Record<string, SlotClipSettings>;
   activeLayerSlots: Record<number, string | null>;
   slotDeckStates: Record<number, SlotDeckState>;
   openCompositionTab: ReturnType<typeof vi.fn>;
@@ -116,10 +122,16 @@ type MockMediaState = {
   compositions: MockComposition[];
   files: Array<{ id: string; thumbnailUrl?: string }>;
   activateOnLayer: ReturnType<typeof vi.fn>;
+  ensureSlotClipSettings: ReturnType<typeof vi.fn>;
   setActiveComposition: ReturnType<typeof vi.fn>;
 };
 
 const mockedUseMediaStore = useMediaStore as unknown as MockMediaStore;
+const mockedLayerPlaybackManager = layerPlaybackManager as unknown as {
+  activateLayer: MockFn;
+  deactivateLayer: MockFn;
+  getLayerPlaybackInfo: MockFn;
+};
 
 function createComposition(id = 'comp-1', name = 'Comp 1'): MockComposition {
   return {
@@ -153,6 +165,24 @@ describe('SlotGrid live trigger flag', () => {
   beforeEach(() => {
     flags.useLiveSlotTrigger = false;
     flags.useWarmSlotDecks = false;
+    mockedLayerPlaybackManager.activateLayer.mockClear();
+    mockedLayerPlaybackManager.deactivateLayer.mockClear();
+    mockedLayerPlaybackManager.getLayerPlaybackInfo.mockReturnValue(null);
+    useMIDIStore.persist.setOptions({
+      storage: createJSONStorage(() => ({
+        getItem: () => null,
+        setItem: () => {},
+        removeItem: () => {},
+      })),
+    });
+    useMIDIStore.setState({
+      learnTarget: null,
+      slotBindings: {},
+      transportBindings: {
+        playPause: null,
+        stop: null,
+      },
+    });
 
     const comp = createComposition();
     const slotMap = new Array(48).fill(null);
@@ -161,6 +191,13 @@ describe('SlotGrid live trigger flag', () => {
     mediaState = {
       activeCompositionId: null,
       slotAssignments: { [comp.id]: 0 },
+      slotClipSettings: {
+        [comp.id]: {
+          trimIn: 0,
+          trimOut: 60,
+          endBehavior: 'loop',
+        },
+      },
       activeLayerSlots: {},
       slotDeckStates: {},
       openCompositionTab: vi.fn(),
@@ -177,6 +214,13 @@ describe('SlotGrid live trigger flag', () => {
       compositions: [comp],
       files: [],
       activateOnLayer: vi.fn(),
+      ensureSlotClipSettings: vi.fn((compositionId: string, duration: number) => {
+        mediaState.slotClipSettings[compositionId] ??= {
+          trimIn: 0,
+          trimOut: duration,
+          endBehavior: 'loop',
+        };
+      }),
       setActiveComposition: vi.fn(),
     };
 
@@ -198,9 +242,29 @@ describe('SlotGrid live trigger flag', () => {
     expect(mediaState.openCompositionTab).toHaveBeenCalledWith('comp-1', {
       skipAnimation: true,
       playFromStart: true,
+      playFromTime: 0,
     });
     expect(mediaState.activateOnLayer).toHaveBeenCalledWith('comp-1', 0);
     expect(mediaState.triggerLiveSlot).not.toHaveBeenCalled();
+  });
+
+  it('opens the slot editor playback at the configured slot range start', () => {
+    mediaState.slotClipSettings['comp-1'] = {
+      trimIn: 12,
+      trimOut: 40,
+      endBehavior: 'loop',
+    };
+
+    const { container } = render(<SlotGrid opacity={1} />);
+    const slot = container.querySelector('[data-comp-id="comp-1"]') as HTMLElement;
+
+    fireEvent.click(slot);
+
+    expect(mediaState.openCompositionTab).toHaveBeenCalledWith('comp-1', {
+      skipAnimation: true,
+      playFromStart: true,
+      playFromTime: 12,
+    });
   });
 
   it('routes slot click through live triggering without opening the editor when the flag is on', () => {
@@ -227,6 +291,39 @@ describe('SlotGrid live trigger flag', () => {
     expect(mediaState.activateColumn).not.toHaveBeenCalled();
   });
 
+  it('starts slotted layer playback from the slot range start instead of the saved editor playhead', () => {
+    mediaState.activeLayerSlots = { 0: 'comp-1' };
+    mediaState.compositions[0].timelineData.playheadPosition = 17;
+
+    render(<SlotGrid opacity={1} />);
+
+    expect(mockedLayerPlaybackManager.activateLayer).toHaveBeenCalledWith(
+      0,
+      'comp-1',
+      undefined,
+      { slotIndex: 0 }
+    );
+  });
+
+  it('re-clicking an active live slot restarts layer playback at the slot range start', () => {
+    flags.useLiveSlotTrigger = true;
+    mediaState.activeLayerSlots = { 0: 'comp-1' };
+
+    const { container } = render(<SlotGrid opacity={1} />);
+    mockedLayerPlaybackManager.activateLayer.mockClear();
+    const slot = container.querySelector('[data-comp-id="comp-1"]') as HTMLElement;
+
+    fireEvent.click(slot);
+
+    expect(mediaState.triggerLiveSlot).toHaveBeenCalledWith('comp-1', 0);
+    expect(mockedLayerPlaybackManager.activateLayer).toHaveBeenCalledWith(
+      0,
+      'comp-1',
+      undefined,
+      { slotIndex: 0 }
+    );
+  });
+
   it('keeps an explicit editor-open action available through the slot context menu', () => {
     flags.useLiveSlotTrigger = true;
 
@@ -239,7 +336,31 @@ describe('SlotGrid live trigger flag', () => {
     expect(mediaState.openCompositionTab).toHaveBeenCalledWith('comp-1', {
       skipAnimation: true,
       playFromStart: true,
+      playFromTime: 0,
     });
+  });
+
+  it('arms MIDI learn for a filled slot from the context menu and opens the mapping panel', () => {
+    const activatePanelType = vi
+      .spyOn(useDockStore.getState(), 'activatePanelType')
+      .mockImplementation(() => undefined);
+
+    const { container } = render(<SlotGrid opacity={1} />);
+    const slot = container.querySelector('[data-comp-id="comp-1"]') as HTMLElement;
+
+    fireEvent.contextMenu(slot, { clientX: 16, clientY: 24 });
+    fireEvent.click(screen.getByText('Map MIDI to Slot A1'));
+
+    expect(activatePanelType).toHaveBeenCalledWith('midi-mapping');
+    expect(useMIDIStore.getState().learnTarget).toMatchObject({
+      kind: 'slot',
+      slotIndex: 0,
+      slotLabel: 'A1',
+      compositionId: 'comp-1',
+      compositionName: 'Comp 1',
+    });
+
+    activatePanelType.mockRestore();
   });
 
   it('renders slot deck readiness badges from transient slotDeckStates', () => {

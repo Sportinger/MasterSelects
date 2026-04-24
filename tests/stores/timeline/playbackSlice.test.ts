@@ -80,6 +80,55 @@ describe('playbackSlice', () => {
     expect(store.getState().isPlaying).toBe(true);
   });
 
+  it('play: does not move playhead when no range is active', async () => {
+    store.getState().setPlayheadPosition(15);
+    await store.getState().play();
+    expect(store.getState().playheadPosition).toBe(15);
+  });
+
+  it('play: starts from in point when playhead is before active range', async () => {
+    store.getState().setInPoint(10);
+    store.getState().setOutPoint(30);
+    store.getState().setPlayheadPosition(0);
+
+    await store.getState().play();
+
+    expect(store.getState().playheadPosition).toBe(10);
+    expect(store.getState().isPlaying).toBe(true);
+  });
+
+  it('play: restarts from in point when playhead is at out point', async () => {
+    store.getState().setInPoint(10);
+    store.getState().setOutPoint(30);
+    store.getState().setPlayheadPosition(30);
+
+    await store.getState().play();
+
+    expect(store.getState().playheadPosition).toBe(10);
+  });
+
+  it('play: preserves playhead when already inside active range', async () => {
+    store.getState().setInPoint(10);
+    store.getState().setOutPoint(30);
+    store.getState().setPlayheadPosition(20);
+
+    await store.getState().play();
+
+    expect(store.getState().playheadPosition).toBe(20);
+  });
+
+  it('play: starts reverse playback from out point when playhead is outside active range', async () => {
+    store.getState().setInPoint(10);
+    store.getState().setOutPoint(30);
+    store.getState().setPlayheadPosition(5);
+    store.getState().setPlaybackSpeed(-1);
+
+    await store.getState().play();
+
+    expect(store.getState().playheadPosition).toBe(30);
+    expect(store.getState().playbackSpeed).toBe(-1);
+  });
+
   // ─── setDraggingPlayhead ──────────────────────────────────────────────
 
   it('setDraggingPlayhead: sets isDraggingPlayhead to true', () => {

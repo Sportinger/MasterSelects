@@ -43,6 +43,7 @@ export function useMIDI() {
     lastMessage,
     learnTarget,
     transportBindings,
+    slotBindings,
     setSupported,
     setEnabled,
     setConnectionStatus,
@@ -138,6 +139,21 @@ export function useMIDI() {
     });
   }, [startLearning]);
 
+  const startLearningSlotBinding = useCallback((
+    slotIndex: number,
+    slotLabel: string,
+    compositionId?: string,
+    compositionName?: string
+  ) => {
+    startLearning({
+      kind: 'slot',
+      slotIndex,
+      slotLabel,
+      compositionId,
+      compositionName,
+    });
+  }, [startLearning]);
+
   const clearTransportBinding = useCallback((action: MIDITransportAction) => {
     setTransportBinding(action, null);
   }, [setTransportBinding]);
@@ -152,10 +168,12 @@ export function useMIDI() {
     lastMessage,
     learnTarget: learnTarget as MIDILearnTarget | null,
     transportBindings: transportBindings as Record<MIDITransportAction, MIDINoteBinding | null>,
+    slotBindings: slotBindings as Record<number, MIDINoteBinding | null>,
     enableMIDI,
     disableMIDI,
     startLearningTransportBinding,
     startLearningMarkerBinding,
+    startLearningSlotBinding,
     clearTransportBinding,
     cancelLearning,
   };
