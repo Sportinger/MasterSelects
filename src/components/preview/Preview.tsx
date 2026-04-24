@@ -7,7 +7,13 @@ import { Logger } from '../../services/logger';
 const log = Logger.create('Preview');
 import { useEngine } from '../../hooks/useEngine';
 import { useShortcut } from '../../hooks/useShortcut';
-import { selectSceneNavClipId, selectSceneNavFpsMode, selectSceneNavFpsMoveSpeed, useEngineStore } from '../../stores/engineStore';
+import {
+  selectSceneNavClipId,
+  selectSceneNavFpsMode,
+  selectSceneNavFpsMoveSpeed,
+  stepSceneNavFpsMoveSpeed,
+  useEngineStore,
+} from '../../stores/engineStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore, DEFAULT_SCENE_CAMERA_SETTINGS } from '../../stores/mediaStore';
 import { useDockStore } from '../../stores/dockStore';
@@ -69,6 +75,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const sceneNavClipId = useEngineStore(selectSceneNavClipId);
   const sceneNavFpsMode = useEngineStore(selectSceneNavFpsMode);
   const sceneNavFpsMoveSpeed = useEngineStore(selectSceneNavFpsMoveSpeed);
+  const setSceneNavFpsMoveSpeed = useEngineStore((s) => s.setSceneNavFpsMoveSpeed);
   const { clips, selectedClipIds, primarySelectedClipId, selectClip, updateClipTransform, maskEditMode, layers, selectedLayerId, selectLayer, updateLayer, tracks } = useTimelineStore(useShallow(s => ({
     clips: s.clips,
     selectedClipIds: s.selectedClipIds,
@@ -885,6 +892,22 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   // Handle zoom with scroll wheel in edit mode
   const handleWheel = useCallback((e: React.WheelEvent) => {
     if (sceneNavEnabled && selectedSceneNavClip && isCanvasInteractionTarget(e.target)) {
+      const shouldAdjustFpsSpeed = sceneNavFpsMode && (
+        gaussianKeyboardMoveCodesRef.current.size > 0 ||
+        gaussianFpsLookStart.current.clipId !== null
+      );
+      if (shouldAdjustFpsSpeed) {
+        e.preventDefault();
+        const direction = e.deltaY < 0 ? 1 : e.deltaY > 0 ? -1 : 0;
+        if (direction !== 0) {
+          setSceneNavFpsMoveSpeed(stepSceneNavFpsMoveSpeed(
+            useEngineStore.getState().sceneNavFpsMoveSpeed,
+            direction,
+          ));
+        }
+        return;
+      }
+
       const freshTransform = getFreshSceneNavTransform(selectedSceneNavClip);
       if (!freshTransform) return;
 
@@ -934,10 +957,12 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     containerSize,
     editMode,
     sceneNavEnabled,
+    sceneNavFpsMode,
     getFreshSceneNavTransform,
     isCanvasInteractionTarget,
     scheduleGaussianWheelBatchEnd,
     applySceneCameraValues,
+    setSceneNavFpsMoveSpeed,
     selectedSceneNavClip,
     viewPan,
     viewZoom,
@@ -1256,7 +1281,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         {sceneNavEnabled && (
           <div className="preview-edit-hint">
             {sceneNavFpsMode
-              ? 'Scene Nav: click preview, hold LMB to look, WASD move, Q/E up-down, MMB/RMB/Shift+LMB pan, wheel zoom'
+              ? 'Scene Nav: click preview, hold LMB to look, WASD/QE move, MMB/RMB/Shift+LMB pan, wheel speed while moving/looking, wheel zoom otherwise'
               : 'Scene Nav: click preview, WASD move, Q/E up-down, LMB orbit, MMB/RMB/Shift+LMB pan, wheel zoom'}
           </div>
         )}

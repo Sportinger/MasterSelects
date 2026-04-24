@@ -89,6 +89,8 @@ export interface SplatRenderOptions {
   depthView?: GPUTextureView;
   /** Whether splat fragments should update the shared depth attachment. */
   depthWrite?: boolean;
+  /** Whether the splat pass writes color; false is used for depth-mask-only passes. */
+  colorWrite?: boolean;
   /** Depth load operation for the render pass. */
   depthLoadOp?: GPULoadOp;
   /** Depth store operation for the render pass. */
@@ -99,6 +101,8 @@ export interface SplatRenderOptions {
   worldMatrix?: Float32Array;
   /** Layer opacity multiplier applied before premultiplied-alpha output. */
   layerOpacity?: number;
+  /** Fragment alpha cutoff for depth-mask passes. Color passes should leave this at the default. */
+  depthAlphaCutoff?: number;
   /** Object-level 3D effectors in shared scene space. */
   effectors?: SceneSplatEffectorRuntimeData[];
   /** Max splat budget (0 = unlimited) */
@@ -119,7 +123,7 @@ export interface SplatRenderOptions {
 //   viewport vec2f (8)
 //   pad vec2f (8)
 //   world mat4x4f (64)
-//   layer vec4f (16) - x = opacity
+//   layer vec4f (16) - x = opacity, y = fragment alpha cutoff
 // = 224 bytes
 const CAMERA_UNIFORM_SIZE = 224;
 const SPLAT_DEPTH_FORMAT: GPUTextureFormat = 'depth24plus';
@@ -146,6 +150,7 @@ export class GaussianSplatGpuRenderer {
   private pipeline: GPURenderPipeline | null = null;
   private pipelineWithDepth: GPURenderPipeline | null = null;
   private pipelineWithDepthWrite: GPURenderPipeline | null = null;
+  private pipelineWithDepthWriteMask: GPURenderPipeline | null = null;
   private sceneCache: Map<string, SplatSceneGpuResources> = new Map();
   private cameraUniformPool: CameraUniformResource[] = [];
   private cameraUniformCursor = 0;
@@ -352,7 +357,8 @@ export class GaussianSplatGpuRenderer {
       // Update camera uniforms
       const worldMatrix = options?.worldMatrix ?? IDENTITY_MATRIX;
       const layerOpacity = clamp01(options?.layerOpacity ?? 1);
-      const cameraBindGroup = this.writeCameraUniforms(camera, worldMatrix, layerOpacity);
+      const depthAlphaCutoff = clamp01(options?.depthAlphaCutoff ?? 0);
+      const cameraBindGroup = this.writeCameraUniforms(camera, worldMatrix, layerOpacity, depthAlphaCutoff);
       if (!cameraBindGroup) {
         return null;
       }
@@ -579,7 +585,11 @@ export class GaussianSplatGpuRenderer {
         label: `splat-render-pass-${clipId}`,
       });
 
-      passEncoder.setPipeline(this.getRenderPipeline(!!options?.depthView, options?.depthWrite === true));
+      passEncoder.setPipeline(this.getRenderPipeline(
+        !!options?.depthView,
+        options?.depthWrite === true,
+        options?.colorWrite !== false,
+      ));
       passEncoder.setBindGroup(0, renderBindGroup);
       passEncoder.setBindGroup(1, cameraBindGroup);
 
@@ -842,6 +852,7 @@ export class GaussianSplatGpuRenderer {
     this.pipeline = null;
     this.pipelineWithDepth = null;
     this.pipelineWithDepthWrite = null;
+    this.pipelineWithDepthWriteMask = null;
     this.splatDataBindGroupLayout = null;
     this.cameraBindGroupLayout = null;
   }
@@ -876,7 +887,7 @@ export class GaussianSplatGpuRenderer {
       entries: [
         {
           binding: 0,
-          visibility: GPUShaderStage.VERTEX,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
           buffer: { type: 'uniform' },
         },
       ],
@@ -1000,6 +1011,34 @@ export class GaussianSplatGpuRenderer {
       label: 'gaussian-splat-depth-writing-render-pipeline',
     });
 
+    this.pipelineWithDepthWriteMask = this.device.createRenderPipeline({
+      layout: pipelineLayout,
+      vertex: {
+        module: shaderModule,
+        entryPoint: 'vs_main',
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: 'fs_main',
+        targets: [
+          {
+            format: 'rgba8unorm',
+            writeMask: 0,
+          },
+        ],
+      },
+      primitive: {
+        topology: 'triangle-strip',
+        stripIndexFormat: undefined,
+      },
+      depthStencil: {
+        format: SPLAT_DEPTH_FORMAT,
+        depthWriteEnabled: true,
+        depthCompare: 'less-equal',
+      },
+      label: 'gaussian-splat-depth-mask-render-pipeline',
+    });
+
     log.debug('Render pipeline created');
   }
 
@@ -1035,11 +1074,14 @@ export class GaussianSplatGpuRenderer {
     return resource;
   }
 
-  private getRenderPipeline(hasDepth: boolean, depthWrite: boolean): GPURenderPipeline {
+  private getRenderPipeline(hasDepth: boolean, depthWrite: boolean, colorWrite: boolean): GPURenderPipeline {
     if (!hasDepth) {
       return this.pipeline!;
     }
     if (depthWrite) {
+      if (!colorWrite) {
+        return this.pipelineWithDepthWriteMask ?? this.pipelineWithDepthWrite ?? this.pipelineWithDepth ?? this.pipeline!;
+      }
       return this.pipelineWithDepthWrite ?? this.pipelineWithDepth ?? this.pipeline!;
     }
     return this.pipelineWithDepth ?? this.pipeline!;
@@ -1049,6 +1091,7 @@ export class GaussianSplatGpuRenderer {
     camera: SplatCameraParams,
     worldMatrix: Float32Array,
     layerOpacity: number,
+    depthAlphaCutoff: number,
   ): GPUBindGroup | null {
     if (!this.device) return null;
     const resource = this.getCameraUniformResource();
@@ -1060,7 +1103,7 @@ export class GaussianSplatGpuRenderer {
     //   vec2f viewport (8 bytes)
     //   vec2f pad (8 bytes)
     //   mat4x4f world (64 bytes)
-    //   vec4f layer (16 bytes; x = opacity)
+    //   vec4f layer (16 bytes; x = opacity, y = fragment alpha cutoff)
     const data = new Float32Array(CAMERA_UNIFORM_SIZE / 4);
 
     // Copy view matrix (16 floats at offset 0)
@@ -1080,6 +1123,7 @@ export class GaussianSplatGpuRenderer {
 
     // Layer controls (4 floats at offset 52)
     data[52] = layerOpacity;
+    data[53] = depthAlphaCutoff;
 
     this.device.queue.writeBuffer(resource.buffer, 0, data);
     return resource.bindGroup;

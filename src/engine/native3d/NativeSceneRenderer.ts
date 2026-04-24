@@ -21,6 +21,7 @@ const log = Logger.create('NativeSceneRenderer');
 const PLANE_UNIFORM_SIZE = 80;
 const SCENE_DEPTH_FORMAT: GPUTextureFormat = 'depth24plus';
 const WORLD_HEIGHT = 2.0;
+const SPLAT_SOFT_DEPTH_ALPHA_CUTOFF = 0.42;
 
 interface CachedPlaneTexture {
   source: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement;
@@ -266,8 +267,9 @@ export class NativeSceneRenderer {
 
     // Shared native scene pass graph, phase 1:
     //   1. Opaque depth-writing geometry -> scene color + shared depth
-    //   2. Splats -> scene color + shared depth, depth-test and depth-write
-    //   3. Transparent planes/materials -> scene color after splats
+    //   2. Splats -> scene color, depth-tested but no writes for full gaussian blending quality
+    //   3. Splats -> shared soft depth mask, writing only high-alpha cores for cross-splat occlusion
+    //   4. Transparent planes/materials -> scene color after splats
     const clearPass = commandEncoder.beginRenderPass({
       colorAttachments: [
         {
@@ -309,6 +311,7 @@ export class NativeSceneRenderer {
     for (const layer of sortedLayers) {
       const renderSettings = layer.gaussianSplatSettings?.render ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render;
       const sceneKey = this.getSplatSceneKey(layer);
+      const layerEffectors = this.effectorCompute.resolveEffectorsForLayer(layer, effectors);
       const textureView = renderer.renderToTexture(
         sceneKey,
         camera,
@@ -322,9 +325,10 @@ export class NativeSceneRenderer {
           depthView: this.sceneDepthView,
           depthLoadOp: 'load',
           depthStoreOp: 'store',
-          depthWrite: true,
+          depthWrite: false,
           layerOpacity: layer.opacity,
-          effectors: this.effectorCompute.resolveEffectorsForLayer(layer, effectors),
+          depthAlphaCutoff: 0,
+          effectors: layerEffectors,
           worldMatrix: layer.worldMatrix,
           maxSplats: renderSettings.maxSplats,
           particleSettings: layer.gaussianSplatSettings?.particle,
@@ -340,6 +344,37 @@ export class NativeSceneRenderer {
       );
 
       if (!textureView) {
+        return null;
+      }
+
+      const depthMaskView = renderer.renderToTexture(
+        sceneKey,
+        camera,
+        camera.viewport,
+        commandEncoder,
+        {
+          clipLocalTime: layer.mediaTime,
+          backgroundColor: 'transparent',
+          outputView: this.sceneView,
+          colorLoadOp: 'load',
+          depthView: this.sceneDepthView,
+          depthLoadOp: 'load',
+          depthStoreOp: 'store',
+          depthWrite: true,
+          colorWrite: false,
+          layerOpacity: layer.opacity,
+          depthAlphaCutoff: SPLAT_SOFT_DEPTH_ALPHA_CUTOFF,
+          effectors: layerEffectors,
+          worldMatrix: layer.worldMatrix,
+          maxSplats: renderSettings.maxSplats,
+          particleSettings: layer.gaussianSplatSettings?.particle,
+          precise: false,
+          sortFrequency: 0,
+          temporalSettings: layer.gaussianSplatSettings?.temporal,
+        },
+      );
+
+      if (!depthMaskView) {
         return null;
       }
     }

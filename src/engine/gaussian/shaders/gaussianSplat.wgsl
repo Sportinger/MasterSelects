@@ -9,7 +9,7 @@ struct CameraUniforms {
   viewport:   vec2f,
   _pad:       vec2f,
   world:      mat4x4f,
-  layer:      vec4f, // x = clip/layer opacity multiplier
+  layer:      vec4f, // x = clip/layer opacity multiplier, y = fragment alpha cutoff
 }
 
 @group(1) @binding(0) var<uniform> camera: CameraUniforms;
@@ -274,7 +274,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
   let normalizedFalloff = (exp(-4.0 * support) - edgeExp) / (1.0 - edgeExp);
   let a = min(0.99, in.opacity * normalizedFalloff);
 
-  if (a < 1.0 / 255.0) {
+  let alphaCutoff = max(1.0 / 255.0, camera.layer.y);
+  if (a < alphaCutoff) {
     discard;
   }
 

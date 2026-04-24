@@ -15,6 +15,12 @@ describe('gaussianSplat.wgsl projection', () => {
     expect(shaderSource).toContain('out.opacity = renderAlpha;');
   });
 
+  it('supports a higher fragment alpha cutoff for soft depth-mask passes', () => {
+    expect(shaderSource).toContain('y = fragment alpha cutoff');
+    expect(shaderSource).toContain('let alphaCutoff = max(1.0 / 255.0, camera.layer.y);');
+    expect(shaderSource).toContain('if (a < alphaCutoff)');
+  });
+
   it('uses oriented covariance ellipse support instead of axis-aligned splat quads', () => {
     expect(shaderSource).toContain('let rawAxis1 = vec2f(offDiagonal, lambda1 - diagonal1);');
     expect(shaderSource).toContain('let pixelOffset = uv.x * axis1Length * axis1 + uv.y * axis2Length * axis2;');

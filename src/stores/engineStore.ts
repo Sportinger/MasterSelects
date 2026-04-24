@@ -29,6 +29,41 @@ interface EngineState {
   setSceneNavFpsMoveSpeed: (speed: number) => void;
 }
 
+export const SCENE_NAV_FPS_MOVE_SPEED_STEPS = [
+  0.1, 0.2, 0.3, 0.4, 0.5,
+  0.6, 0.7, 0.8, 0.9, 1,
+  1.5, 2, 3, 4, 5, 6, 7, 8,
+] as const;
+
+export function getSceneNavFpsMoveSpeedStepIndex(speed: number): number {
+  const targetSpeed = Number.isFinite(speed) ? speed : 1;
+  let nearestIndex = 0;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < SCENE_NAV_FPS_MOVE_SPEED_STEPS.length; i += 1) {
+    const distance = Math.abs(SCENE_NAV_FPS_MOVE_SPEED_STEPS[i] - targetSpeed);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestIndex = i;
+    }
+  }
+
+  return nearestIndex;
+}
+
+export function snapSceneNavFpsMoveSpeed(speed: number): number {
+  return SCENE_NAV_FPS_MOVE_SPEED_STEPS[getSceneNavFpsMoveSpeedStepIndex(speed)] ?? 1;
+}
+
+export function stepSceneNavFpsMoveSpeed(speed: number, direction: -1 | 1): number {
+  const currentIndex = getSceneNavFpsMoveSpeedStepIndex(speed);
+  const nextIndex = Math.max(
+    0,
+    Math.min(SCENE_NAV_FPS_MOVE_SPEED_STEPS.length - 1, currentIndex + direction),
+  );
+  return SCENE_NAV_FPS_MOVE_SPEED_STEPS[nextIndex] ?? 1;
+}
+
 export function selectSceneNavClipId(
   state: Pick<EngineState, 'sceneNavClipId'>,
 ): string | null {
@@ -113,10 +148,7 @@ export const useEngineStore = create<EngineState>()(
     },
 
     setSceneNavFpsMoveSpeed: (speed: number) => {
-      const nextSpeed = Number.isFinite(speed)
-        ? Math.max(0.1, Math.min(8, speed))
-        : 1;
-      set({ sceneNavFpsMoveSpeed: nextSpeed });
+      set({ sceneNavFpsMoveSpeed: snapSceneNavFpsMoveSpeed(speed) });
     },
   }))
 );

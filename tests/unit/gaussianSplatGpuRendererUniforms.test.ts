@@ -19,6 +19,10 @@ Object.assign(globalThis, {
     COPY_DST: 2,
     STORAGE: 4,
   },
+  GPUShaderStage: {
+    VERTEX: 1,
+    FRAGMENT: 2,
+  },
 });
 
 function makeCamera(): SplatCameraParams {
@@ -65,6 +69,29 @@ function makeScene(bindGroup: unknown) {
 }
 
 describe('GaussianSplatGpuRenderer camera uniforms', () => {
+  it('exposes camera uniforms to the fragment shader for depth alpha cutoff', () => {
+    const createBindGroupLayout = vi.fn((descriptor: { label?: string }) => ({
+      label: descriptor.label,
+    }));
+    const device = {
+      createShaderModule: vi.fn(() => ({ label: 'shader-module' })),
+      createBindGroupLayout,
+      createPipelineLayout: vi.fn(() => ({ label: 'pipeline-layout' })),
+      createRenderPipeline: vi.fn(() => ({ label: 'pipeline' })),
+    };
+    const renderer = new GaussianSplatGpuRenderer() as any;
+    renderer.device = device;
+
+    renderer.createPipeline();
+
+    const cameraLayout = createBindGroupLayout.mock.calls.find(
+      ([descriptor]) => descriptor.label === 'splat-camera-bind-group-layout',
+    )?.[0];
+    expect(cameraLayout?.entries[0]?.visibility).toBe(
+      (globalThis.GPUShaderStage as any).VERTEX | (globalThis.GPUShaderStage as any).FRAGMENT,
+    );
+  });
+
   it('uses a distinct camera bind group for each splat rendered in the same command encoder', () => {
     const renderPasses: Array<{ setBindGroup: ReturnType<typeof vi.fn> }> = [];
     const writeBuffer = vi.fn();

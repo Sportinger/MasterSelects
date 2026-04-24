@@ -2,7 +2,13 @@
 import { useCallback } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
-import { selectSceneNavFpsMode, selectSceneNavFpsMoveSpeed, useEngineStore } from '../../../stores/engineStore';
+import {
+  SCENE_NAV_FPS_MOVE_SPEED_STEPS,
+  getSceneNavFpsMoveSpeedStepIndex,
+  selectSceneNavFpsMode,
+  selectSceneNavFpsMoveSpeed,
+  useEngineStore,
+} from '../../../stores/engineStore';
 import { startBatch, endBatch } from '../../../stores/historyStore';
 import type { BlendMode, AnimatableProperty } from '../../../types';
 import {
@@ -85,6 +91,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
   const sceneNavFpsMoveSpeed = useEngineStore(selectSceneNavFpsMoveSpeed);
   const setSceneNavFpsMode = useEngineStore((s) => s.setSceneNavFpsMode);
   const setSceneNavFpsMoveSpeed = useEngineStore((s) => s.setSceneNavFpsMoveSpeed);
+  const sceneNavFpsMoveSpeedIndex = getSceneNavFpsMoveSpeedStepIndex(sceneNavFpsMoveSpeed);
   const clip = useTimelineStore((s) => s.clips.find((c) => c.id === clipId));
   const wireframe = clip?.wireframe ?? false;
   const sourceType = clip?.source?.type;
@@ -191,18 +198,21 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
               <div className="scene-nav-speed-control" title="FPS movement speed">
                 <input
                   type="range"
-                  min={0.1}
-                  max={8}
-                  step={0.1}
-                  value={sceneNavFpsMoveSpeed}
-                  onChange={(event) => setSceneNavFpsMoveSpeed(Number(event.target.value))}
+                  min={0}
+                  max={SCENE_NAV_FPS_MOVE_SPEED_STEPS.length - 1}
+                  step={1}
+                  value={sceneNavFpsMoveSpeedIndex}
+                  onChange={(event) => {
+                    const speed = SCENE_NAV_FPS_MOVE_SPEED_STEPS[Number(event.target.value)];
+                    if (speed !== undefined) setSceneNavFpsMoveSpeed(speed);
+                  }}
                 />
                 <span>{sceneNavFpsMoveSpeed.toFixed(1)}x</span>
               </div>
             )}
             <span style={{ color: '#8d99a6', fontSize: '11px' }}>
               {sceneNavFpsMode
-                ? 'Click preview, hold LMB to look, WASD move, Q/E up-down, MMB/RMB/Shift+LMB pan, wheel zoom. Dist = orbit distance.'
+                ? 'Click preview, hold LMB to look, WASD/QE move, MMB/RMB/Shift+LMB pan, wheel speed while moving/looking, wheel zoom otherwise. Dist = orbit distance.'
                 : 'Click preview, then WASD move, Q/E up-down, LMB orbit, MMB/RMB/Shift+LMB pan, wheel zoom. Dist = orbit distance.'}
             </span>
           </div>
