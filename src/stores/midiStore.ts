@@ -11,6 +11,7 @@ import type {
 type MIDIConnectionStatus = 'idle' | 'requesting' | 'connected' | 'error';
 
 type MIDITransportBindings = Record<MIDITransportAction, MIDINoteBinding | null>;
+type MIDISlotBindings = Record<number, MIDINoteBinding | null>;
 
 interface MIDIStoreState {
   isSupported: boolean;
@@ -21,12 +22,14 @@ interface MIDIStoreState {
   lastMessage: MIDILastMessage | null;
   learnTarget: MIDILearnTarget | null;
   transportBindings: MIDITransportBindings;
+  slotBindings: MIDISlotBindings;
   setSupported: (supported: boolean) => void;
   setEnabled: (enabled: boolean) => void;
   setConnectionStatus: (status: MIDIConnectionStatus, error?: string | null) => void;
   setDevices: (devices: MIDIDeviceInfo[]) => void;
   setLastMessage: (message: MIDILastMessage | null) => void;
   setTransportBinding: (action: MIDITransportAction, binding: MIDINoteBinding | null) => void;
+  setSlotBinding: (slotIndex: number, binding: MIDINoteBinding | null) => void;
   startLearning: (target: MIDILearnTarget) => void;
   cancelLearning: () => void;
   resetRuntimeState: () => void;
@@ -49,6 +52,7 @@ export const useMIDIStore = create<MIDIStoreState>()(
         lastMessage: null,
         learnTarget: null,
         transportBindings: initialTransportBindings,
+        slotBindings: {},
         setSupported: (isSupported) => set({ isSupported }),
         setEnabled: (isEnabled) => set({ isEnabled }),
         setConnectionStatus: (connectionStatus, connectionError = null) =>
@@ -62,6 +66,16 @@ export const useMIDIStore = create<MIDIStoreState>()(
               [action]: binding,
             },
           })),
+        setSlotBinding: (slotIndex, binding) =>
+          set((state) => {
+            const nextBindings = { ...state.slotBindings };
+            if (binding) {
+              nextBindings[slotIndex] = binding;
+            } else {
+              delete nextBindings[slotIndex];
+            }
+            return { slotBindings: nextBindings };
+          }),
         startLearning: (learnTarget) => set({ learnTarget }),
         cancelLearning: () => set({ learnTarget: null }),
         resetRuntimeState: () =>
@@ -78,6 +92,7 @@ export const useMIDIStore = create<MIDIStoreState>()(
         partialize: (state) => ({
           isEnabled: state.isEnabled,
           transportBindings: state.transportBindings,
+          slotBindings: state.slotBindings,
         }),
       }
     )

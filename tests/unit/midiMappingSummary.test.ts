@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectMIDIMappingSummary } from '../../src/services/midi/midiMappingSummary';
+import { collectMIDIMappingSummary, getSlotGridLabel } from '../../src/services/midi/midiMappingSummary';
 import type { TimelineMarker } from '../../src/stores/timeline/types';
 
 describe('collectMIDIMappingSummary', () => {
@@ -77,5 +77,37 @@ describe('collectMIDIMappingSummary', () => {
     );
 
     expect(result[0]?.targetLabel).toBe('Long at 01:02:03');
+  });
+
+  it('collects slot mappings with grid labels and composition names', () => {
+    const result = collectMIDIMappingSummary(
+      {
+        playPause: null,
+        stop: null,
+      },
+      [],
+      {
+        0: { channel: 1, note: 36 },
+        13: { channel: 1, note: 37 },
+      },
+      [
+        { slotIndex: 13, label: 'B2', compositionName: 'Loop B' },
+      ]
+    );
+
+    expect(getSlotGridLabel(0)).toBe('A1');
+    expect(getSlotGridLabel(13)).toBe('B2');
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      scope: 'slot',
+      action: 'triggerSlot',
+      targetLabel: 'A1',
+      behaviorLabel: 'Trigger this slot on its layer',
+    });
+    expect(result[1]).toMatchObject({
+      scope: 'slot',
+      action: 'triggerSlot',
+      targetLabel: 'B2 - Loop B',
+    });
   });
 });

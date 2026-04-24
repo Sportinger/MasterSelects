@@ -10,10 +10,12 @@ import {
 import {
   triggerMarkerMIDIBinding,
   triggerMIDITransportAction,
+  triggerSlotMIDIAction,
 } from '../services/midi/midiCommands';
 import {
   moveMarkerMIDIBinding,
   setMarkerMIDIBinding,
+  setSlotMIDIBinding,
   setTransportMIDIBinding,
 } from '../services/midi/midiBindingMutations';
 
@@ -75,7 +77,7 @@ export function useMIDIRuntime() {
           if (learnTarget) {
             if (learnTarget.kind === 'transport') {
               setTransportMIDIBinding(learnTarget.action, learnedBinding);
-            } else {
+            } else if (learnTarget.kind === 'marker') {
               if (learnTarget.sourceMarkerId && learnTarget.sourceMarkerId !== learnTarget.markerId) {
                 moveMarkerMIDIBinding({
                   fromMarkerId: learnTarget.sourceMarkerId,
@@ -90,6 +92,8 @@ export function useMIDIRuntime() {
                   learnedBinding
                 );
               }
+            } else {
+              setSlotMIDIBinding(learnTarget.slotIndex, learnedBinding);
             }
             midiStore.cancelLearning();
             return;
@@ -111,6 +115,14 @@ export function useMIDIRuntime() {
 
           if (markerBinding) {
             void triggerMarkerMIDIBinding(markerBinding);
+            return;
+          }
+
+          const slotBindingEntry = Object.entries(midiStore.slotBindings)
+            .find(([, binding]) => binding && midiBindingsMatch(binding, learnedBinding));
+
+          if (slotBindingEntry) {
+            void triggerSlotMIDIAction(Number(slotBindingEntry[0]));
           }
           return;
         }

@@ -8,19 +8,24 @@ import {
 } from 'react';
 import { useMIDI } from '../../hooks/useMIDI';
 import { useTimelineStore } from '../../stores/timeline';
+import { useMediaStore } from '../../stores/mediaStore';
 import {
   collectMIDIMappingSummary,
+  getSlotGridLabel,
   getMarkerTargetLabel,
   type MIDIMappingSummaryEntry,
+  type MIDISlotTarget,
 } from '../../services/midi/midiMappingSummary';
 import {
   moveMarkerMIDIBinding,
   setMarkerMIDIBinding,
+  setSlotMIDIBinding,
   setTransportMIDIBinding,
 } from '../../services/midi/midiBindingMutations';
 import {
   triggerMIDITransportAction,
   triggerMarkerMIDIAction,
+  triggerSlotMIDIAction,
 } from '../../services/midi/midiCommands';
 import {
   describeMIDILearnTarget,
@@ -35,7 +40,7 @@ function MIDIMappingEmptyState({ isEnabled }: { isEnabled: boolean }) {
     <div className="midi-mapping-empty">
       <p>No MIDI mappings assigned yet.</p>
       <p>
-        Add transport bindings in Settings / MIDI and marker bindings from the timeline marker right-click menu.
+        Add transport bindings in Settings / MIDI, marker bindings from the timeline marker menu, or slot bindings from the Slot Grid menu.
       </p>
       {!isEnabled && (
         <p className="midi-mapping-empty-muted">
@@ -71,18 +76,55 @@ export function MIDIMappingPanel() {
     learnTarget,
     startLearningTransportBinding,
     startLearningMarkerBinding,
+    startLearningSlotBinding,
     cancelLearning,
+    slotBindings,
   } = useMIDI();
   const markers = useTimelineStore((state) => state.markers);
+  const compositions = useMediaStore((state) => state.compositions);
+  const slotAssignments = useMediaStore((state) => state.slotAssignments);
   const [draft, setDraft] = useState<MIDIMappingDraft | null>(null);
   const [previewingMappingId, setPreviewingMappingId] = useState<string | null>(null);
   const previewResetTimeoutRef = useRef<number | null>(null);
 
+  const slotTargets = useMemo<MIDISlotTarget[]>(() => {
+    const targets = new Map<number, MIDISlotTarget>();
+
+    for (const [slotKey] of Object.entries(slotBindings)) {
+      const slotIndex = Number(slotKey);
+      if (Number.isInteger(slotIndex) && slotIndex >= 0) {
+        targets.set(slotIndex, {
+          slotIndex,
+          label: getSlotGridLabel(slotIndex),
+        });
+      }
+    }
+
+    for (const [compositionId, slotIndex] of Object.entries(slotAssignments)) {
+      if (!Number.isInteger(slotIndex) || slotIndex < 0) {
+        continue;
+      }
+
+      const composition = compositions.find((candidate) => candidate.id === compositionId);
+      targets.set(slotIndex, {
+        slotIndex,
+        label: getSlotGridLabel(slotIndex),
+        compositionName: composition?.name,
+      });
+    }
+
+    return Array.from(targets.values());
+  }, [compositions, slotAssignments, slotBindings]);
+
   const mappings = useMemo(
-    () => collectMIDIMappingSummary(transportBindings, markers),
-    [markers, transportBindings]
+    () => collectMIDIMappingSummary(transportBindings, markers, slotBindings, slotTargets),
+    [markers, slotBindings, slotTargets, transportBindings]
   );
   const learnDescription = describeMIDILearnTarget(learnTarget);
+  const pendingSlotLearnTarget = learnTarget?.kind === 'slot' ? learnTarget : null;
+  const shouldShowPendingSlotCard = !!pendingSlotLearnTarget && !mappings.some((mapping) => (
+    mapping.scope === 'slot' && mapping.slotIndex === pendingSlotLearnTarget.slotIndex
+  ));
 
   useEffect(() => () => {
     if (previewResetTimeoutRef.current !== null) {
@@ -127,6 +169,11 @@ export function MIDIMappingPanel() {
       return;
     }
 
+    if (mapping.scope === 'slot' && mapping.slotIndex !== undefined) {
+      void triggerSlotMIDIAction(mapping.slotIndex);
+      return;
+    }
+
     const previewMarkerTime = resolvePreviewMarkerTime(mapping);
     if (previewMarkerTime === undefined) {
       return;
@@ -163,6 +210,8 @@ export function MIDIMappingPanel() {
   const clearMapping = (mapping: MIDIMappingSummaryEntry) => {
     if (mapping.scope === 'transport') {
       setTransportMIDIBinding(mapping.action as MIDITransportAction, null);
+    } else if (mapping.scope === 'slot' && mapping.slotIndex !== undefined) {
+      setSlotMIDIBinding(mapping.slotIndex, null);
     } else if (mapping.markerId) {
       setMarkerMIDIBinding(mapping.markerId, mapping.action as MarkerMIDIAction, null);
     }
@@ -175,6 +224,11 @@ export function MIDIMappingPanel() {
       (learnTarget?.kind === 'transport'
         && mapping.scope === 'transport'
         && learnTarget.action === mapping.action)
+      || (
+        learnTarget?.kind === 'slot'
+        && mapping.scope === 'slot'
+        && learnTarget.slotIndex === mapping.slotIndex
+      )
       || (
         learnTarget?.kind === 'marker'
         && mapping.scope === 'marker'
@@ -207,6 +261,14 @@ export function MIDIMappingPanel() {
       return;
     }
 
+    if (mapping.scope === 'slot') {
+      if (mapping.slotIndex !== undefined) {
+        setSlotMIDIBinding(mapping.slotIndex, nextBinding);
+      }
+      closeEditor();
+      return;
+    }
+
     const nextMarkerId = draft.markerId ?? mapping.markerId;
     if (!nextMarkerId || !mapping.markerId) {
       return;
@@ -229,6 +291,19 @@ export function MIDIMappingPanel() {
   const startLearningForMapping = (mapping: MIDIMappingSummaryEntry) => {
     if (mapping.scope === 'transport') {
       startLearningTransportBinding(mapping.action as MIDITransportAction);
+      return;
+    }
+
+    if (mapping.scope === 'slot') {
+      if (mapping.slotIndex !== undefined) {
+        const target = slotTargets.find((candidate) => candidate.slotIndex === mapping.slotIndex);
+        startLearningSlotBinding(
+          mapping.slotIndex,
+          target?.label ?? getSlotGridLabel(mapping.slotIndex),
+          undefined,
+          target?.compositionName
+        );
+      }
       return;
     }
 
@@ -275,16 +350,39 @@ export function MIDIMappingPanel() {
         </div>
       )}
 
-      {mappings.length === 0 ? (
+      {mappings.length === 0 && !shouldShowPendingSlotCard ? (
         <MIDIMappingEmptyState isEnabled={isEnabled} />
       ) : (
         <div className="midi-mapping-list">
+          {pendingSlotLearnTarget && shouldShowPendingSlotCard && (
+            <div className="midi-mapping-card is-learning">
+              <div className="midi-mapping-card-top">
+                <span className="midi-mapping-binding">Listening...</span>
+                <span className="midi-mapping-scope midi-mapping-scope-slot">Slot</span>
+              </div>
+              <div className="midi-mapping-card-main">
+                <strong>Trigger Slot</strong>
+                <span>
+                  {pendingSlotLearnTarget.slotLabel}
+                  {pendingSlotLearnTarget.compositionName ? ` - ${pendingSlotLearnTarget.compositionName}` : ''}
+                </span>
+              </div>
+              <div className="midi-mapping-card-footer">
+                <span>Trigger this slot on its layer</span>
+                <div className="midi-mapping-card-actions">
+                  <button className="settings-button" onClick={cancelLearning}>
+                    Cancel Learn
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           {mappings.map((mapping) => {
             const isEditing = draft?.mappingId === mapping.id;
             const channelValue = isEditing ? draft.channel : String(mapping.binding.channel);
             const noteValue = isEditing ? draft.note : String(mapping.binding.note);
             const selectedMarkerId = isEditing ? draft.markerId ?? mapping.markerId : mapping.markerId;
-            const isPreviewable = mapping.scope === 'transport' || mapping.markerTime !== undefined;
+            const isPreviewable = mapping.scope === 'transport' || mapping.scope === 'slot' || mapping.markerTime !== undefined;
             const notePreview = getMIDINoteName(
               clampInteger(noteValue, mapping.binding.note, 0, 127)
             );
@@ -296,6 +394,11 @@ export function MIDIMappingPanel() {
               (learnTarget?.kind === 'transport'
                 && mapping.scope === 'transport'
                 && learnTarget.action === mapping.action)
+              || (
+                learnTarget?.kind === 'slot'
+                && mapping.scope === 'slot'
+                && learnTarget.slotIndex === mapping.slotIndex
+              )
               || (
                 learnTarget?.kind === 'marker'
                 && mapping.scope === 'marker'
@@ -316,7 +419,7 @@ export function MIDIMappingPanel() {
                 <div className="midi-mapping-card-top">
                   <span className="midi-mapping-binding">{mapping.bindingLabel}</span>
                   <span className={`midi-mapping-scope midi-mapping-scope-${mapping.scope}`}>
-                    {mapping.scope === 'transport' ? 'Transport' : 'Marker'}
+                    {mapping.scope === 'transport' ? 'Transport' : mapping.scope === 'slot' ? 'Slot' : 'Marker'}
                   </span>
                 </div>
                 <div className="midi-mapping-card-main">

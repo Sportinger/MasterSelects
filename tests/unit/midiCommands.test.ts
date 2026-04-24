@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTimelineStore } from '../../src/stores/timeline';
+import { useMediaStore } from '../../src/stores/mediaStore';
 import {
   triggerMIDITransportAction,
   triggerMarkerMIDIAction,
   triggerMarkerMIDIBinding,
+  triggerSlotMIDIAction,
+  triggerSlotMIDIBinding,
 } from '../../src/services/midi/midiCommands';
 
 describe('midiCommands', () => {
@@ -18,6 +21,7 @@ describe('midiCommands', () => {
 
   afterEach(() => {
     globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    useMediaStore.setState({ slotAssignments: {} });
     vi.restoreAllMocks();
   });
 
@@ -108,5 +112,26 @@ describe('midiCommands', () => {
     expect(setPlayheadPosition).toHaveBeenCalledWith(9.75);
     expect(play).toHaveBeenCalledTimes(1);
     expect(setPlaybackSpeed).toHaveBeenCalledWith(1);
+  });
+
+  it('triggers slot bindings on the assigned slot layer', async () => {
+    const triggerLiveSlot = vi.fn();
+    vi.spyOn(useMediaStore, 'getState').mockReturnValue({
+      slotAssignments: {
+        'comp-slot': 13,
+      },
+      triggerLiveSlot,
+    } as ReturnType<typeof useMediaStore.getState>);
+
+    await triggerSlotMIDIAction(13);
+    await triggerSlotMIDIBinding({
+      action: 'triggerSlot',
+      slotIndex: 13,
+      channel: 1,
+      note: 36,
+    });
+
+    expect(triggerLiveSlot).toHaveBeenCalledTimes(2);
+    expect(triggerLiveSlot).toHaveBeenCalledWith('comp-slot', 1);
   });
 });

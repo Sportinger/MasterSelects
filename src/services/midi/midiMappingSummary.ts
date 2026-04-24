@@ -2,14 +2,15 @@ import type { TimelineMarker } from '../../stores/timeline/types';
 import {
   formatMIDINoteBinding,
   type MarkerMIDIAction,
+  type MIDISlotAction,
   type MIDINoteBinding,
   type MIDITransportAction,
 } from '../../types/midi';
 
 export interface MIDIMappingSummaryEntry {
   id: string;
-  scope: 'transport' | 'marker';
-  action: MIDITransportAction | MarkerMIDIAction;
+  scope: 'transport' | 'marker' | 'slot';
+  action: MIDITransportAction | MarkerMIDIAction | MIDISlotAction;
   actionLabel: string;
   targetLabel: string;
   behaviorLabel: string;
@@ -17,9 +18,17 @@ export interface MIDIMappingSummaryEntry {
   bindingLabel: string;
   markerId?: string;
   markerTime?: number;
+  slotIndex?: number;
 }
 
 type MIDITransportBindings = Record<MIDITransportAction, MIDINoteBinding | null>;
+type MIDISlotBindings = Record<number, MIDINoteBinding | null>;
+
+export interface MIDISlotTarget {
+  slotIndex: number;
+  label: string;
+  compositionName?: string;
+}
 
 export function formatMarkerTime(seconds: number): string {
   const safeSeconds = Math.max(0, seconds);
@@ -68,6 +77,19 @@ function getMarkerBehaviorLabel(action: MarkerMIDIAction): string {
   return 'Move the playhead to the marker time and keep the current playback state';
 }
 
+export function getSlotGridLabel(slotIndex: number): string {
+  const safeSlotIndex = Math.max(0, Math.floor(slotIndex));
+  const row = Math.floor(safeSlotIndex / 12);
+  const col = safeSlotIndex % 12;
+  return `${String.fromCharCode(65 + row)}${col + 1}`;
+}
+
+function getSlotTargetLabel(slotIndex: number, slotTargets: MIDISlotTarget[]): string {
+  const target = slotTargets.find((candidate) => candidate.slotIndex === slotIndex);
+  const label = target?.label ?? getSlotGridLabel(slotIndex);
+  return target?.compositionName ? `${label} - ${target.compositionName}` : label;
+}
+
 export function getMarkerTargetLabel(marker: TimelineMarker): string {
   const label = marker.label.trim() || 'Marker';
   return `${label} at ${formatMarkerTime(marker.time)}`;
@@ -75,7 +97,9 @@ export function getMarkerTargetLabel(marker: TimelineMarker): string {
 
 export function collectMIDIMappingSummary(
   transportBindings: MIDITransportBindings,
-  markers: TimelineMarker[]
+  markers: TimelineMarker[],
+  slotBindings: MIDISlotBindings = {},
+  slotTargets: MIDISlotTarget[] = []
 ): MIDIMappingSummaryEntry[] {
   const transportEntries: MIDIMappingSummaryEntry[] = (Object.entries(transportBindings) as Array<[
     MIDITransportAction,
@@ -107,7 +131,27 @@ export function collectMIDIMappingSummary(
     }))
   ));
 
-  return [...transportEntries, ...markerEntries].sort((left, right) => {
+  const slotEntries: MIDIMappingSummaryEntry[] = Object.entries(slotBindings)
+    .flatMap(([slotKey, binding]) => {
+      if (!binding) {
+        return [];
+      }
+
+      const slotIndex = Number(slotKey);
+      return [{
+        id: `slot-${slotIndex}-${binding.channel}-${binding.note}`,
+        scope: 'slot' as const,
+        action: 'triggerSlot' as const,
+        actionLabel: 'Trigger Slot',
+        targetLabel: getSlotTargetLabel(slotIndex, slotTargets),
+        behaviorLabel: 'Trigger this slot on its layer',
+        binding,
+        bindingLabel: formatMIDINoteBinding(binding),
+        slotIndex,
+      }];
+    });
+
+  return [...transportEntries, ...markerEntries, ...slotEntries].sort((left, right) => {
     if (left.binding.channel !== right.binding.channel) {
       return left.binding.channel - right.binding.channel;
     }

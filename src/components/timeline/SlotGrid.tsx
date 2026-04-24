@@ -7,9 +7,11 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, memo } fro
 import { useMediaStore } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useDockStore } from '../../stores/dockStore';
+import { useMIDIStore } from '../../stores/midiStore';
 import { playheadState } from '../../services/layerBuilder';
 import { layerPlaybackManager } from '../../services/layerPlaybackManager';
 import { slotDeckManager } from '../../services/slotDeckManager';
+import { getSlotGridLabel } from '../../services/midi/midiMappingSummary';
 import { flags } from '../../engine/featureFlags';
 import { animateSlotGrid } from './slotGridAnimation';
 import { MiniTimeline } from './MiniTimeline';
@@ -141,7 +143,13 @@ export function SlotGrid({ opacity }: SlotGridProps) {
   const [isExternalDrag, setIsExternalDrag] = useState(false);
 
   // Context menu state
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; compId: string } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    compId: string;
+    compName: string;
+    slotIndex: number;
+  } | null>(null);
 
   // Track previous "desired background layers" to diff — only process layers that actually changed
   // A layer is "desired background" when it has a comp assigned AND that comp is NOT the editor comp
@@ -182,9 +190,9 @@ export function SlotGrid({ opacity }: SlotGridProps) {
       // Activate new background layer
       if (newCompId) {
         const comp = compositions.find(c => c.id === newCompId);
-        const savedPosition = comp?.timelineData?.playheadPosition ?? 0;
         const slotIndex = slotAssignments[newCompId] ?? null;
-        layerPlaybackManager.activateLayer(layerIndex, newCompId, savedPosition, { slotIndex });
+        const initialElapsed = slotIndex === null ? (comp?.timelineData?.playheadPosition ?? 0) : undefined;
+        layerPlaybackManager.activateLayer(layerIndex, newCompId, initialElapsed, { slotIndex });
       }
     }
 
@@ -239,6 +247,7 @@ export function SlotGrid({ opacity }: SlotGridProps) {
   // Click = select slot, open Slot Clip tab, and keep layer activation local to slot view.
   const handleSlotClick = useCallback((comp: Composition, slotIndex: number) => {
     const layerIndex = Math.floor(slotIndex / GRID_COLS);
+    const wasLayerActiveForComp = useMediaStore.getState().activeLayerSlots[layerIndex] === comp.id;
     ensureSlotClipSettings?.(comp.id, comp.duration);
     selectSlotComposition?.(comp.id);
     try {
@@ -250,11 +259,17 @@ export function SlotGrid({ opacity }: SlotGridProps) {
 
     if (flags.useLiveSlotTrigger) {
       triggerLiveSlot(comp.id, layerIndex);
+      if (wasLayerActiveForComp) {
+        layerPlaybackManager.activateLayer(layerIndex, comp.id, undefined, { slotIndex });
+      }
       return;
     }
 
     openSlotInEditor(comp.id);
     useMediaStore.getState().activateOnLayer(comp.id, layerIndex);
+    if (wasLayerActiveForComp) {
+      layerPlaybackManager.activateLayer(layerIndex, comp.id, undefined, { slotIndex });
+    }
   }, [ensureSlotClipSettings, openSlotInEditor, selectSlotComposition, triggerLiveSlot]);
 
   const handleSlotDoubleClick = useCallback((comp: Composition) => {
@@ -339,10 +354,16 @@ export function SlotGrid({ opacity }: SlotGridProps) {
   }, [activateColumn, getSlotMap, openSlotInEditor, triggerLiveColumn]);
 
   // Right-click context menu on filled slots
-  const handleContextMenu = useCallback((e: React.MouseEvent, comp: Composition) => {
+  const handleContextMenu = useCallback((e: React.MouseEvent, comp: Composition, slotIndex: number) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, compId: comp.id });
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      compId: comp.id,
+      compName: comp.name,
+      slotIndex,
+    });
   }, []);
 
   const handleRemoveFromSlot = useCallback(() => {
@@ -358,6 +379,28 @@ export function SlotGrid({ opacity }: SlotGridProps) {
       setContextMenu(null);
     }
   }, [contextMenu, openSlotInEditor]);
+
+  const handleMapMIDISlot = useCallback(() => {
+    if (!contextMenu) {
+      return;
+    }
+
+    const slotLabel = getSlotGridLabel(contextMenu.slotIndex);
+    try {
+      useDockStore.getState().activatePanelType('midi-mapping');
+    } catch {
+      // Learning can still be armed even if the dock layout cannot be updated.
+    }
+
+    useMIDIStore.getState().startLearning({
+      kind: 'slot',
+      slotIndex: contextMenu.slotIndex,
+      slotLabel,
+      compositionId: contextMenu.compId,
+      compositionName: contextMenu.compName,
+    });
+    setContextMenu(null);
+  }, [contextMenu]);
 
   // Drag handlers — track comp ID, not slot index
   const handleDragStart = useCallback((e: React.DragEvent, comp: Composition) => {
@@ -508,7 +551,7 @@ export function SlotGrid({ opacity }: SlotGridProps) {
                     }}
                     onClick={() => handleSlotClick(comp, slotIndex)}
                     onDoubleClick={() => handleSlotDoubleClick(comp)}
-                    onContextMenu={(e) => handleContextMenu(e, comp)}
+                    onContextMenu={(e) => handleContextMenu(e, comp, slotIndex)}
                     title={
                       `${flags.useLiveSlotTrigger
                         ? `${comp.name} - Click to trigger live, double-click to open in editor`
@@ -633,6 +676,9 @@ export function SlotGrid({ opacity }: SlotGridProps) {
           onMouseDown={(e) => e.stopPropagation()}
         >
           <button onClick={handleOpenInEditor}>Open in Editor</button>
+          <button onClick={handleMapMIDISlot}>
+            Map MIDI to Slot {getSlotGridLabel(contextMenu.slotIndex)}
+          </button>
           <button onClick={handleRemoveFromSlot}>Remove from Slot</button>
         </div>
       )}
@@ -702,8 +748,11 @@ const SlotTimeOverlay = memo(function SlotTimeOverlay({
 
     const update = () => {
       const isEditor = useMediaStore.getState().activeCompositionId === compId;
+      const layerPlayback = layerPlaybackManager.getLayerPlaybackInfo(layerIndex);
       let pos: number;
-      if (isEditor) {
+      if (layerPlayback?.compositionId === compId) {
+        pos = layerPlayback.currentTime;
+      } else if (isEditor) {
         // Editor comp: must reflect pause/scrub/seek — read from global playhead
         pos = playheadState.isUsingInternalPosition
           ? playheadState.position
