@@ -289,7 +289,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
     // Legacy gaussian-avatar clips are intentionally disabled.
     if (mediaType === 'gaussian-avatar') {
-      log.warn('Legacy gaussian-avatar clips are disabled. Import .ply or .splat instead.', {
+      log.warn('Legacy gaussian-avatar clips are disabled. Import a gaussian-splat scene file instead.', {
         file: file.name,
         mediaFileId,
       });

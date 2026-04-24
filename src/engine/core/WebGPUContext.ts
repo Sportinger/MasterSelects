@@ -92,16 +92,20 @@ export class WebGPUContext {
         return false;
       }
       log.info('Adapter obtained');
+      log.info('Adapter limits', {
+        maxTextureDimension2D: this.adapter.limits.maxTextureDimension2D,
+        maxStorageBufferBindingSize: this.adapter.limits.maxStorageBufferBindingSize,
+        maxBufferSize: this.adapter.limits.maxBufferSize,
+      });
 
       // Request device — try with limits, fallback without
       log.info('Requesting GPU device...');
       try {
+        const requiredLimits = this.buildRequiredLimits(this.adapter);
         this.device = await this.withTimeout(
           this.adapter.requestDevice({
             requiredFeatures: [],
-            requiredLimits: {
-              maxTextureDimension2D: 4096,
-            },
+            requiredLimits,
           }),
           5000,
           'requestDevice (with limits)',
@@ -212,6 +216,14 @@ export class WebGPUContext {
 
   getAdapter(): GPUAdapter | null {
     return this.adapter;
+  }
+
+  private buildRequiredLimits(adapter: GPUAdapter): GPUDeviceDescriptor['requiredLimits'] {
+    return {
+      maxTextureDimension2D: Math.min(4096, adapter.limits.maxTextureDimension2D),
+      maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
+      maxBufferSize: adapter.limits.maxBufferSize,
+    };
   }
 
   get initialized(): boolean {

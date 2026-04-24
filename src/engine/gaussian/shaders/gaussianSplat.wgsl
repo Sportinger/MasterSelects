@@ -8,6 +8,8 @@ struct CameraUniforms {
   projection: mat4x4f,
   viewport:   vec2f,
   _pad:       vec2f,
+  world:      mat4x4f,
+  layer:      vec4f, // x = clip/layer opacity multiplier, y = fragment alpha cutoff
 }
 
 @group(1) @binding(0) var<uniform> camera: CameraUniforms;
@@ -23,8 +25,7 @@ struct VertexOutput {
   @builtin(position) position: vec4f,
   @location(0) color:   vec3f,
   @location(1) opacity: f32,
-  @location(2) conic:   vec3f,   // inverse 2D covariance (a, b, c)
-  @location(3) offset:  vec2f,   // UV offset from splat center
+  @location(2) uv:      vec2f,   // normalized ellipse coordinates
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -57,33 +58,50 @@ fn buildCovariance3D(scale: vec3f, rot: mat3x3f) -> mat3x3f {
   return m * transpose(rot);
 }
 
+fn extractWorldLinear(world: mat4x4f) -> mat3x3f {
+  return mat3x3f(
+    world[0].xyz,
+    world[1].xyz,
+    world[2].xyz,
+  );
+}
+
+fn getWorldScale(worldLinear: mat3x3f) -> vec3f {
+  return vec3f(
+    length(worldLinear[0]),
+    length(worldLinear[1]),
+    length(worldLinear[2]),
+  );
+}
+
 // Project 3D covariance to 2D screen-space covariance via Jacobian
 fn projectCovariance(
   cov3d: mat3x3f,
   meanCam: vec3f,
   focal: vec2f,
 ) -> vec3f {
-  let tx = meanCam.x;
-  let ty = meanCam.y;
-  let tz = meanCam.z;
+  let safeZ = select(-0.0001, meanCam.z, abs(meanCam.z) > 0.0001);
+  let jx = focal.x / safeZ;
+  let jy = focal.y / safeZ;
+  let j2x = -jx / safeZ * meanCam.x;
+  let j2y = -jy / safeZ * meanCam.y;
 
-  // Clamp tz to avoid division by near-zero
-  let tz2 = max(tz * tz, 0.0001);
-
-  // Jacobian of perspective projection
+  // PlayCanvas/SuperSplat layout: derivative terms live in the third row
+  // of the column-major matrix, then projection is transpose(T) * cov * T.
   let J = mat3x3f(
-    vec3f(focal.x / tz, 0.0,          0.0),
-    vec3f(0.0,          focal.y / tz,  0.0),
-    vec3f(-focal.x * tx / tz2, -focal.y * ty / tz2, 0.0),
+    vec3f(jx, 0.0, j2x),
+    vec3f(0.0, jy, j2y),
+    vec3f(0.0, 0.0, 0.0),
   );
 
-  let T = J * mat3x3f(
+  let W = transpose(mat3x3f(
     vec3f(camera.view[0].x, camera.view[0].y, camera.view[0].z),
     vec3f(camera.view[1].x, camera.view[1].y, camera.view[1].z),
     vec3f(camera.view[2].x, camera.view[2].y, camera.view[2].z),
-  );
+  ));
 
-  let cov2d = T * cov3d * transpose(T);
+  let T = W * J;
+  let cov2d = transpose(T) * cov3d * T;
 
   // Return upper-triangle of 2D covariance: (xx, xy, yy) with low-pass filter
   return vec3f(
@@ -118,6 +136,23 @@ fn conicAndRadius(cov2d: vec3f) -> vec4f {
   return vec4f(conic, radius);
 }
 
+fn alphaClipScale(alpha: f32) -> f32 {
+  return select(
+    0.0,
+    min(1.0, sqrt(log(255.0 * alpha)) * 0.5),
+    alpha > 1.0 / 255.0,
+  );
+}
+
+fn discardVertex() -> VertexOutput {
+  var out: VertexOutput;
+  out.position = vec4f(0.0, 0.0, 2.0, 1.0);
+  out.color = vec3f(0.0);
+  out.opacity = 0.0;
+  out.uv = vec2f(2.0);
+  return out;
+}
+
 
 // ── Vertex Shader (instanced quads) ─────────────────────────────────────────
 @vertex
@@ -139,13 +174,16 @@ fn vs_main(
   let quat  = vec4f(splatData[base + 6u], splatData[base + 7u], splatData[base + 8u], splatData[base + 9u]);
   let color = vec3f(splatData[base + 10u], splatData[base + 11u], splatData[base + 12u]);
   let alpha = splatData[base + 13u];
+  let renderAlpha = alpha * clamp(camera.layer.x, 0.0, 1.0);
 
-  // Compute 3D covariance
+  // Transform splat-local data into world space via the scene layer transform.
   let rot = quatToMat3(quat);
-  let cov3d = buildCovariance3D(scale, rot);
+  let covLocal = buildCovariance3D(scale, rot);
+  let worldLinear = extractWorldLinear(camera.world);
+  let covWorld = worldLinear * covLocal * transpose(worldLinear);
 
-  // Transform mean to camera space
-  let meanWorld = vec4f(pos, 1.0);
+  // Transform mean to world and then to camera space.
+  let meanWorld = camera.world * vec4f(pos, 1.0);
   let meanCam4 = camera.view * meanWorld;
   let meanCam = meanCam4.xyz;
 
@@ -154,15 +192,12 @@ fn vs_main(
   // the near plane heavily; those produce gigantic projected billboards and smear
   // over the full frame when flying through the cloud.
   let viewDepth = -meanCam.z;
-  let supportRadius3d = 3.0 * max(scale.x, max(scale.y, scale.z));
+  let worldScale = getWorldScale(worldLinear);
+  let supportScale = scale * worldScale;
+  let supportRadius3d = 3.0 * max(supportScale.x, max(supportScale.y, supportScale.z));
   let minRenderableDepth = max(0.05, supportRadius3d);
   if (viewDepth <= minRenderableDepth) {
-    out.position = vec4f(0.0, 0.0, 2.0, 1.0); // behind clip plane
-    out.color = vec3f(0.0);
-    out.opacity = 0.0;
-    out.conic = vec3f(0.0);
-    out.offset = vec2f(0.0);
-    return out;
+    return discardVertex();
   }
 
   // Focal length from projection matrix
@@ -172,10 +207,31 @@ fn vs_main(
   );
 
   // Project covariance to 2D
-  let cov2d = projectCovariance(cov3d, meanCam, focal);
-  let cr = conicAndRadius(cov2d);
-  let conic = select(vec3f(0.01, 0.0, 0.01), cr.xyz, cr.w > 0.0);
-  let radius = clamp(cr.w, 1.0, 512.0);
+  let cov2d = projectCovariance(covWorld, meanCam, focal);
+  let diagonal1 = cov2d.x;
+  let offDiagonal = cov2d.y;
+  let diagonal2 = cov2d.z;
+  let mid = 0.5 * (diagonal1 + diagonal2);
+  let eigenRadius = length(vec2f((diagonal1 - diagonal2) * 0.5, offDiagonal));
+  let lambda1 = mid + eigenRadius;
+  let lambda2 = max(mid - eigenRadius, 0.1);
+
+  if (!(lambda1 > 0.0) || !(lambda2 > 0.0) || !(renderAlpha > 1.0 / 255.0)) {
+    return discardVertex();
+  }
+
+  let viewportMin = min(1024.0, min(camera.viewport.x, camera.viewport.y));
+  let axis1Length = 2.0 * min(sqrt(2.0 * lambda1), viewportMin);
+  let axis2Length = 2.0 * min(sqrt(2.0 * lambda2), viewportMin);
+  if (axis1Length < 2.0 && axis2Length < 2.0) {
+    return discardVertex();
+  }
+
+  let rawAxis1 = vec2f(offDiagonal, lambda1 - diagonal1);
+  let rawAxis1LengthSq = dot(rawAxis1, rawAxis1);
+  let safeAxis1 = rawAxis1 * inverseSqrt(max(rawAxis1LengthSq, 1e-10));
+  let axis1 = select(vec2f(1.0, 0.0), safeAxis1, rawAxis1LengthSq > 1e-10);
+  let axis2 = vec2f(axis1.y, -axis1.x);
 
   // Project mean to clip space
   let meanClip = camera.projection * meanCam4;
@@ -189,19 +245,18 @@ fn vs_main(
   );
 
   let cornerOffset = quadOffsets[vertexIndex % 4u];
-
-  // Scale offset by radius in NDC
-  let ndcOffset = cornerOffset * radius / camera.viewport;
+  let uv = cornerOffset * alphaClipScale(renderAlpha);
+  let pixelOffset = uv.x * axis1Length * axis1 + uv.y * axis2Length * axis2;
+  let ndcOffset = pixelOffset / camera.viewport * 2.0;
 
   out.position = vec4f(
-    meanClip.xy / meanClip.w + ndcOffset * 2.0,
+    meanClip.xy / meanClip.w + ndcOffset,
     meanClip.z / meanClip.w,
     1.0,
   );
   out.color = color;
-  out.opacity = alpha;
-  out.conic = conic;
-  out.offset = cornerOffset * radius;
+  out.opacity = renderAlpha;
+  out.uv = uv;
 
   return out;
 }
@@ -210,20 +265,17 @@ fn vs_main(
 // ── Fragment Shader ─────────────────────────────────────────────────────────
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-  let dx = in.offset.x;
-  let dy = in.offset.y;
-
-  // Evaluate 2D gaussian
-  let power = -0.5 * (in.conic.x * dx * dx + 2.0 * in.conic.y * dx * dy + in.conic.z * dy * dy);
-
-  // Outside the bell curve.
-  if (power > 0.0) {
+  let support = dot(in.uv, in.uv);
+  if (support > 1.0) {
     discard;
   }
 
-  let a = min(0.99, in.opacity * exp(power));
+  let edgeExp = exp(-4.0);
+  let normalizedFalloff = (exp(-4.0 * support) - edgeExp) / (1.0 - edgeExp);
+  let a = min(0.99, in.opacity * normalizedFalloff);
 
-  if (a < 1.0 / 255.0) {
+  let alphaCutoff = max(1.0 / 255.0, camera.layer.y);
+  if (a < alphaCutoff) {
     discard;
   }
 

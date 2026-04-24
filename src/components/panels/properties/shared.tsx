@@ -26,6 +26,142 @@ export const formatBlendModeName = (mode: BlendMode): string => {
   return mode.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 };
 
+type KeyframeToggleDragMode = 'enable' | 'disable';
+
+type KeyframeToggleDragSession = {
+  mode: KeyframeToggleDragMode;
+  pointerId: number;
+  visited: Set<string>;
+};
+
+type KeyframeToggleEntry = {
+  property: AnimatableProperty;
+  value: number;
+};
+
+let keyframeToggleDragSession: KeyframeToggleDragSession | null = null;
+
+function endKeyframeToggleDrag() {
+  keyframeToggleDragSession = null;
+  window.removeEventListener('pointerup', endKeyframeToggleDrag);
+  window.removeEventListener('pointercancel', endKeyframeToggleDrag);
+  window.removeEventListener('blur', endKeyframeToggleDrag);
+}
+
+function applyKeyframeToggleEntries(
+  mode: KeyframeToggleDragMode,
+  clipId: string,
+  entries: KeyframeToggleEntry[],
+) {
+  const store = useTimelineStore.getState();
+
+  entries.forEach(({ property, value }) => {
+    if (mode === 'disable') {
+      store.disablePropertyKeyframes(clipId, property, value);
+      return;
+    }
+
+    if (store.isRecording(clipId, property) || store.hasKeyframes(clipId, property)) {
+      return;
+    }
+
+    store.addKeyframe(clipId, property, value);
+    store.toggleKeyframeRecording(clipId, property);
+  });
+}
+
+function StopwatchIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="13" r="7" />
+      <line x1="12" y1="13" x2="12" y2="9" />
+      <line x1="12" y1="2" x2="12" y2="5" />
+      <line x1="9" y1="3" x2="15" y2="3" />
+    </svg>
+  );
+}
+
+function KeyframeStopwatchButton({
+  dragId,
+  mode,
+  className,
+  title,
+  onApply,
+}: {
+  dragId: string;
+  mode: KeyframeToggleDragMode;
+  className: string;
+  title: string;
+  onApply: (mode: KeyframeToggleDragMode) => void;
+}) {
+  const ignoreNextClick = useRef(false);
+
+  const applyOnceForDrag = useCallback(() => {
+    const session = keyframeToggleDragSession;
+    if (!session || session.visited.has(dragId)) return;
+
+    session.visited.add(dragId);
+    onApply(session.mode);
+  }, [dragId, onApply]);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    ignoreNextClick.current = true;
+
+    endKeyframeToggleDrag();
+    keyframeToggleDragSession = {
+      mode,
+      pointerId: e.pointerId,
+      visited: new Set([dragId]),
+    };
+    window.addEventListener('pointerup', endKeyframeToggleDrag);
+    window.addEventListener('pointercancel', endKeyframeToggleDrag);
+    window.addEventListener('blur', endKeyframeToggleDrag);
+
+    onApply(mode);
+  }, [dragId, mode, onApply]);
+
+  const handlePointerEnter = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    const session = keyframeToggleDragSession;
+    if (!session) return;
+
+    if ((e.buttons & 1) !== 1 || e.pointerId !== session.pointerId) {
+      endKeyframeToggleDrag();
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    applyOnceForDrag();
+  }, [applyOnceForDrag]);
+
+  const handleClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (ignoreNextClick.current) {
+      ignoreNextClick.current = false;
+      e.preventDefault();
+      return;
+    }
+
+    onApply(mode);
+  }, [mode, onApply]);
+
+  return (
+    <button
+      className={className}
+      onPointerDown={handlePointerDown}
+      onPointerEnter={handlePointerEnter}
+      onClick={handleClick}
+      title={title}
+    >
+      <StopwatchIcon />
+    </button>
+  );
+}
+
 // Keyframe toggle button
 interface KeyframeToggleProps {
   clipId: string;
@@ -35,35 +171,22 @@ interface KeyframeToggleProps {
 
 export function KeyframeToggle({ clipId, property, value }: KeyframeToggleProps) {
   // Use getState() for actions - they're stable and don't need subscriptions
-  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe, disablePropertyKeyframes } = useTimelineStore.getState();
+  const { isRecording, hasKeyframes } = useTimelineStore.getState();
   const recording = isRecording(clipId, property);
   const hasKfs = hasKeyframes(clipId, property);
 
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (recording || hasKfs) {
-      // Turning OFF: save current value as static, remove all keyframes
-      disablePropertyKeyframes(clipId, property, value);
-    } else {
-      // Turning ON: add initial keyframe and enable recording
-      addKeyframe(clipId, property, value);
-      toggleKeyframeRecording(clipId, property);
-    }
-  };
+  const handleApply = useCallback((mode: KeyframeToggleDragMode) => {
+    applyKeyframeToggleEntries(mode, clipId, [{ property, value }]);
+  }, [clipId, property, value]);
 
   return (
-    <button
+    <KeyframeStopwatchButton
+      dragId={`${clipId}:${property}`}
+      mode={recording || hasKfs ? 'disable' : 'enable'}
       className={`keyframe-toggle ${recording ? 'recording' : ''} ${hasKfs ? 'has-keyframes' : ''}`}
-      onClick={handleClick}
       title={recording ? 'Stop recording keyframes' : hasKfs ? 'Enable keyframe recording' : 'Add keyframe'}
-    >
-      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="13" r="7" />
-        <line x1="12" y1="13" x2="12" y2="9" />
-        <line x1="12" y1="2" x2="12" y2="5" />
-        <line x1="9" y1="3" x2="15" y2="3" />
-      </svg>
-    </button>
+      onApply={handleApply}
+    />
   );
 }
 
@@ -80,7 +203,7 @@ export function ScaleKeyframeToggle({
   scaleZ?: number;
 }) {
   // Use getState() for actions - they're stable and don't need subscriptions
-  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe, disablePropertyKeyframes } = useTimelineStore.getState();
+  const { isRecording, hasKeyframes } = useTimelineStore.getState();
 
   const xRecording = isRecording(clipId, 'scale.x');
   const yRecording = isRecording(clipId, 'scale.y');
@@ -92,47 +215,28 @@ export function ScaleKeyframeToggle({
   const anyRecording = xRecording || yRecording || zRecording;
   const anyHasKfs = xHasKfs || yHasKfs || zHasKfs;
 
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (anyRecording || anyHasKfs) {
-      // Turning OFF: save current values as static, remove all keyframes
-      disablePropertyKeyframes(clipId, 'scale.x', scaleX);
-      disablePropertyKeyframes(clipId, 'scale.y', scaleY);
-      if (scaleZ !== undefined) {
-        disablePropertyKeyframes(clipId, 'scale.z', scaleZ);
-      }
-    } else {
-      // Turning ON: add initial keyframes and enable recording
-      addKeyframe(clipId, 'scale.x', scaleX);
-      addKeyframe(clipId, 'scale.y', scaleY);
-      toggleKeyframeRecording(clipId, 'scale.x');
-      toggleKeyframeRecording(clipId, 'scale.y');
-      if (scaleZ !== undefined) {
-        addKeyframe(clipId, 'scale.z', scaleZ);
-        toggleKeyframeRecording(clipId, 'scale.z');
-      }
-    }
-  };
+  const handleApply = useCallback((mode: KeyframeToggleDragMode) => {
+    applyKeyframeToggleEntries(mode, clipId, [
+      { property: 'scale.x', value: scaleX },
+      { property: 'scale.y', value: scaleY },
+      ...(scaleZ !== undefined ? [{ property: 'scale.z' as AnimatableProperty, value: scaleZ }] : []),
+    ]);
+  }, [clipId, scaleX, scaleY, scaleZ]);
 
   return (
-    <button
+    <KeyframeStopwatchButton
+      dragId={`${clipId}:scale:${scaleZ !== undefined ? 'xyz' : 'xy'}`}
+      mode={anyRecording || anyHasKfs ? 'disable' : 'enable'}
       className={`keyframe-toggle ${anyRecording ? 'recording' : ''} ${anyHasKfs ? 'has-keyframes' : ''}`}
-      onClick={handleClick}
       title={anyRecording ? 'Stop recording scale keyframes' : anyHasKfs ? 'Enable scale keyframe recording' : 'Add scale keyframes'}
-    >
-      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="13" r="7" />
-        <line x1="12" y1="13" x2="12" y2="9" />
-        <line x1="12" y1="2" x2="12" y2="5" />
-        <line x1="9" y1="3" x2="15" y2="3" />
-      </svg>
-    </button>
+      onApply={handleApply}
+    />
   );
 }
 
 // Master keyframe toggle for Position X, Y, Z together
 export function PositionKeyframeToggle({ clipId, x, y, z }: { clipId: string; x: number; y: number; z: number }) {
-  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe, disablePropertyKeyframes } = useTimelineStore.getState();
+  const { isRecording, hasKeyframes } = useTimelineStore.getState();
 
   const xRec = isRecording(clipId, 'position.x');
   const yRec = isRecording(clipId, 'position.y');
@@ -144,43 +248,28 @@ export function PositionKeyframeToggle({ clipId, x, y, z }: { clipId: string; x:
   const anyRecording = xRec || yRec || zRec;
   const anyHasKfs = xKfs || yKfs || zKfs;
 
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (anyRecording || anyHasKfs) {
-      // Turning OFF: save current values as static, remove all keyframes
-      disablePropertyKeyframes(clipId, 'position.x', x);
-      disablePropertyKeyframes(clipId, 'position.y', y);
-      disablePropertyKeyframes(clipId, 'position.z', z);
-    } else {
-      // Turning ON: add initial keyframes and enable recording
-      addKeyframe(clipId, 'position.x', x);
-      addKeyframe(clipId, 'position.y', y);
-      addKeyframe(clipId, 'position.z', z);
-      toggleKeyframeRecording(clipId, 'position.x');
-      toggleKeyframeRecording(clipId, 'position.y');
-      toggleKeyframeRecording(clipId, 'position.z');
-    }
-  };
+  const handleApply = useCallback((mode: KeyframeToggleDragMode) => {
+    applyKeyframeToggleEntries(mode, clipId, [
+      { property: 'position.x', value: x },
+      { property: 'position.y', value: y },
+      { property: 'position.z', value: z },
+    ]);
+  }, [clipId, x, y, z]);
 
   return (
-    <button
+    <KeyframeStopwatchButton
+      dragId={`${clipId}:position`}
+      mode={anyRecording || anyHasKfs ? 'disable' : 'enable'}
       className={`keyframe-toggle ${anyRecording ? 'recording' : ''} ${anyHasKfs ? 'has-keyframes' : ''}`}
-      onClick={handleClick}
       title={anyRecording ? 'Stop recording position keyframes' : anyHasKfs ? 'Enable position keyframe recording' : 'Add position keyframes'}
-    >
-      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="13" r="7" />
-        <line x1="12" y1="13" x2="12" y2="9" />
-        <line x1="12" y1="2" x2="12" y2="5" />
-        <line x1="9" y1="3" x2="15" y2="3" />
-      </svg>
-    </button>
+      onApply={handleApply}
+    />
   );
 }
 
 // Master keyframe toggle for camera move X, Y and forward Z (stored in scale.z)
 export function CameraPositionKeyframeToggle({ clipId, x, y, z }: { clipId: string; x: number; y: number; z: number }) {
-  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe, disablePropertyKeyframes } = useTimelineStore.getState();
+  const { isRecording, hasKeyframes } = useTimelineStore.getState();
 
   const xRec = isRecording(clipId, 'position.x');
   const yRec = isRecording(clipId, 'position.y');
@@ -192,41 +281,28 @@ export function CameraPositionKeyframeToggle({ clipId, x, y, z }: { clipId: stri
   const anyRecording = xRec || yRec || zRec;
   const anyHasKfs = xKfs || yKfs || zKfs;
 
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (anyRecording || anyHasKfs) {
-      disablePropertyKeyframes(clipId, 'position.x', x);
-      disablePropertyKeyframes(clipId, 'position.y', y);
-      disablePropertyKeyframes(clipId, 'scale.z', z);
-    } else {
-      addKeyframe(clipId, 'position.x', x);
-      addKeyframe(clipId, 'position.y', y);
-      addKeyframe(clipId, 'scale.z', z);
-      toggleKeyframeRecording(clipId, 'position.x');
-      toggleKeyframeRecording(clipId, 'position.y');
-      toggleKeyframeRecording(clipId, 'scale.z');
-    }
-  };
+  const handleApply = useCallback((mode: KeyframeToggleDragMode) => {
+    applyKeyframeToggleEntries(mode, clipId, [
+      { property: 'position.x', value: x },
+      { property: 'position.y', value: y },
+      { property: 'scale.z', value: z },
+    ]);
+  }, [clipId, x, y, z]);
 
   return (
-    <button
+    <KeyframeStopwatchButton
+      dragId={`${clipId}:camera-position`}
+      mode={anyRecording || anyHasKfs ? 'disable' : 'enable'}
       className={`keyframe-toggle ${anyRecording ? 'recording' : ''} ${anyHasKfs ? 'has-keyframes' : ''}`}
-      onClick={handleClick}
       title={anyRecording ? 'Stop recording camera position keyframes' : anyHasKfs ? 'Enable camera position keyframe recording' : 'Add camera position keyframes'}
-    >
-      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="13" r="7" />
-        <line x1="12" y1="13" x2="12" y2="9" />
-        <line x1="12" y1="2" x2="12" y2="5" />
-        <line x1="9" y1="3" x2="15" y2="3" />
-      </svg>
-    </button>
+      onApply={handleApply}
+    />
   );
 }
 
 // Master keyframe toggle for Rotation X, Y, Z together
 export function RotationKeyframeToggle({ clipId, x, y, z }: { clipId: string; x: number; y: number; z: number }) {
-  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe, disablePropertyKeyframes } = useTimelineStore.getState();
+  const { isRecording, hasKeyframes } = useTimelineStore.getState();
 
   const xRec = isRecording(clipId, 'rotation.x');
   const yRec = isRecording(clipId, 'rotation.y');
@@ -238,37 +314,22 @@ export function RotationKeyframeToggle({ clipId, x, y, z }: { clipId: string; x:
   const anyRecording = xRec || yRec || zRec;
   const anyHasKfs = xKfs || yKfs || zKfs;
 
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (anyRecording || anyHasKfs) {
-      // Turning OFF: save current values as static, remove all keyframes
-      disablePropertyKeyframes(clipId, 'rotation.x', x);
-      disablePropertyKeyframes(clipId, 'rotation.y', y);
-      disablePropertyKeyframes(clipId, 'rotation.z', z);
-    } else {
-      // Turning ON: add initial keyframes and enable recording
-      addKeyframe(clipId, 'rotation.x', x);
-      addKeyframe(clipId, 'rotation.y', y);
-      addKeyframe(clipId, 'rotation.z', z);
-      toggleKeyframeRecording(clipId, 'rotation.x');
-      toggleKeyframeRecording(clipId, 'rotation.y');
-      toggleKeyframeRecording(clipId, 'rotation.z');
-    }
-  };
+  const handleApply = useCallback((mode: KeyframeToggleDragMode) => {
+    applyKeyframeToggleEntries(mode, clipId, [
+      { property: 'rotation.x', value: x },
+      { property: 'rotation.y', value: y },
+      { property: 'rotation.z', value: z },
+    ]);
+  }, [clipId, x, y, z]);
 
   return (
-    <button
+    <KeyframeStopwatchButton
+      dragId={`${clipId}:rotation`}
+      mode={anyRecording || anyHasKfs ? 'disable' : 'enable'}
       className={`keyframe-toggle ${anyRecording ? 'recording' : ''} ${anyHasKfs ? 'has-keyframes' : ''}`}
-      onClick={handleClick}
       title={anyRecording ? 'Stop recording rotation keyframes' : anyHasKfs ? 'Enable rotation keyframe recording' : 'Add rotation keyframes'}
-    >
-      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="13" r="7" />
-        <line x1="12" y1="13" x2="12" y2="9" />
-        <line x1="12" y1="2" x2="12" y2="5" />
-        <line x1="9" y1="3" x2="15" y2="3" />
-      </svg>
-    </button>
+      onApply={handleApply}
+    />
   );
 }
 
@@ -460,68 +521,53 @@ export function LegacyDraggableNumber({ value, onChange, defaultValue, sensitivi
 // Effect keyframe toggle
 export function EffectKeyframeToggle({ clipId, effectId, paramName, value }: { clipId: string; effectId: string; paramName: string; value: number }) {
   // Use getState() for actions - they're stable and don't need subscriptions
-  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe, disablePropertyKeyframes } = useTimelineStore.getState();
+  const { isRecording, hasKeyframes } = useTimelineStore.getState();
   const property = createEffectProperty(effectId, paramName);
   const recording = isRecording(clipId, property);
   const hasKfs = hasKeyframes(clipId, property);
 
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (recording || hasKfs) {
-      // Turning OFF: save current value as static, remove all keyframes
-      disablePropertyKeyframes(clipId, property, value);
-    } else {
-      // Turning ON: add initial keyframe and enable recording
-      addKeyframe(clipId, property, value);
-      toggleKeyframeRecording(clipId, property);
-    }
-  };
+  const handleApply = useCallback((mode: KeyframeToggleDragMode) => {
+    applyKeyframeToggleEntries(mode, clipId, [{ property, value }]);
+  }, [clipId, property, value]);
 
   return (
-    <button className={`keyframe-toggle ${recording ? 'recording' : ''} ${hasKfs ? 'has-keyframes' : ''}`}
-      onClick={handleClick} title={recording ? 'Stop recording keyframes' : hasKfs ? 'Enable keyframe recording' : 'Add keyframe'}>
-      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="13" r="7" /><line x1="12" y1="13" x2="12" y2="9" />
-        <line x1="12" y1="2" x2="12" y2="5" /><line x1="9" y1="3" x2="15" y2="3" />
-      </svg>
-    </button>
+    <KeyframeStopwatchButton
+      dragId={`${clipId}:${property}`}
+      mode={recording || hasKfs ? 'disable' : 'enable'}
+      className={`keyframe-toggle ${recording ? 'recording' : ''} ${hasKfs ? 'has-keyframes' : ''}`}
+      title={recording ? 'Stop recording keyframes' : hasKfs ? 'Enable keyframe recording' : 'Add keyframe'}
+      onApply={handleApply}
+    />
   );
 }
 
 // Master keyframe toggle for all 10 EQ bands at once
 export function EQKeyframeToggle({ clipId, effectId, eqBands }: { clipId: string; effectId: string; eqBands: number[] }) {
   // Use getState() for actions - they're stable and don't need subscriptions
-  const { isRecording, toggleKeyframeRecording, hasKeyframes, addKeyframe, disablePropertyKeyframes } = useTimelineStore.getState();
+  const { isRecording, hasKeyframes } = useTimelineStore.getState();
 
   // Check if any band is recording or has keyframes
   const anyRecording = EQ_BAND_PARAMS.some(param => isRecording(clipId, createEffectProperty(effectId, param)));
   const anyHasKfs = EQ_BAND_PARAMS.some(param => hasKeyframes(clipId, createEffectProperty(effectId, param)));
 
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (anyRecording || anyHasKfs) {
-      // Turning OFF: save current values as static, remove all keyframes
-      EQ_BAND_PARAMS.forEach((param, index) => {
-        const property = createEffectProperty(effectId, param);
-        disablePropertyKeyframes(clipId, property, eqBands[index]);
-      });
-    } else {
-      // Turning ON: add initial keyframes and enable recording
-      EQ_BAND_PARAMS.forEach((param, index) => {
-        const property = createEffectProperty(effectId, param);
-        addKeyframe(clipId, property, eqBands[index]);
-        toggleKeyframeRecording(clipId, property);
-      });
-    }
-  };
+  const handleApply = useCallback((mode: KeyframeToggleDragMode) => {
+    applyKeyframeToggleEntries(
+      mode,
+      clipId,
+      EQ_BAND_PARAMS.map((param, index) => ({
+        property: createEffectProperty(effectId, param),
+        value: eqBands[index],
+      })),
+    );
+  }, [clipId, effectId, eqBands]);
 
   return (
-    <button className={`keyframe-toggle ${anyRecording ? 'recording' : ''} ${anyHasKfs ? 'has-keyframes' : ''}`}
-      onClick={handleClick} title={anyRecording ? 'Stop recording EQ keyframes' : anyHasKfs ? 'Enable EQ keyframe recording' : 'Add EQ keyframes'}>
-      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="13" r="7" /><line x1="12" y1="13" x2="12" y2="9" />
-        <line x1="12" y1="2" x2="12" y2="5" /><line x1="9" y1="3" x2="15" y2="3" />
-      </svg>
-    </button>
+    <KeyframeStopwatchButton
+      dragId={`${clipId}:effect:${effectId}:eq`}
+      mode={anyRecording || anyHasKfs ? 'disable' : 'enable'}
+      className={`keyframe-toggle ${anyRecording ? 'recording' : ''} ${anyHasKfs ? 'has-keyframes' : ''}`}
+      title={anyRecording ? 'Stop recording EQ keyframes' : anyHasKfs ? 'Enable EQ keyframe recording' : 'Add EQ keyframes'}
+      onApply={handleApply}
+    />
   );
 }

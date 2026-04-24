@@ -1,13 +1,13 @@
-import { loadGaussianSplatAsset } from '../gaussian/loaders';
-import type { GaussianSplatAsset, GaussianSplatFormat } from '../gaussian/loaders';
-import { Logger } from '../../services/logger';
-import { projectFileService } from '../../services/projectFileService';
-import type { GaussianSplatBounds, GaussianSplatSequenceData } from '../../types';
+import { loadGaussianSplatAsset } from '../../gaussian/loaders';
+import type { GaussianSplatAsset, GaussianSplatFormat } from '../../gaussian/loaders';
+import { Logger } from '../../../services/logger';
+import { projectFileService } from '../../../services/projectFileService';
+import type { GaussianSplatBounds, GaussianSplatSequenceData } from '../../../types';
 import {
   cloneGaussianSplatBounds,
   getGaussianSplatSequenceReferenceFrame,
   getGaussianSplatSequenceReferenceRuntimeKey,
-} from '../../utils/gaussianSplatSequence';
+} from '../../../utils/gaussianSplatSequence';
 
 const log = Logger.create('SplatRuntimeCache');
 
@@ -103,6 +103,10 @@ function resolveGaussianSplatFormat(fileName?: string, url?: string): GaussianSp
   if (candidate.endsWith('.ply')) return 'ply';
   if (candidate.endsWith('.splat')) return 'splat';
   if (candidate.endsWith('.ksplat')) return 'ksplat';
+  if (candidate.endsWith('.spz')) return 'spz';
+  if (candidate.endsWith('.sog')) return 'sog';
+  if (candidate.endsWith('.lcc')) return 'lcc';
+  if (candidate.endsWith('.zip')) return 'gsplat-zip';
   return undefined;
 }
 

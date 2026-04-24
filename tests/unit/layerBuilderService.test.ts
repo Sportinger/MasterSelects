@@ -336,7 +336,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
     expect(layers[0]?.source?.modelUrl).toBe('blob:hero-1');
   });
 
-  it('selects the correct gaussian splat sequence frame and keeps it on the shared scene path', () => {
+  it('selects the correct gaussian splat sequence frame and keeps native renderer selection', () => {
     const service = new LayerBuilderService();
     const frameFiles = [
       new File(['0'], 'scan000000.ply', { type: 'application/octet-stream' }),
@@ -450,7 +450,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
     expect(layers[0]?.source?.gaussianSplatFileHash).toBeUndefined();
     expect(layers[0]?.source?.gaussianSplatRuntimeKey).toBe('Raw/scan000001.ply');
     expect(layers[0]?.source?.file).toBe(frameFiles[1]);
-    expect(layers[0]?.source?.gaussianSplatSettings?.render.useNativeRenderer).toBe(false);
+    expect(layers[0]?.source?.gaussianSplatSettings?.render.useNativeRenderer).toBe(true);
   });
 
   it('keeps full WebCodecs preview bound to the scrub runtime while actively dragging the playhead', () => {
@@ -1105,5 +1105,113 @@ describe('LayerBuilderService paused visual provider selection', () => {
     expect(secondLayers).toHaveLength(1);
     expect(secondLayers[0]?.sourceClipId).toBe('clip-b');
     expect(secondLayers[0]?.source?.webCodecsPlayer).toBe(clipPlayerB);
+  });
+
+  it('builds nested gaussian splat layers into the shared 3D layer contract', () => {
+    const service = new LayerBuilderService();
+    const file = new File(['splat'], 'nested.splat', { type: 'application/octet-stream' });
+
+    useMediaStore.setState({
+      activeCompositionId: null,
+      activeLayerSlots: {},
+      layerOpacities: {},
+      files: [
+        {
+          id: 'media-splat-1',
+          file,
+          fileHash: 'splat-hash-1',
+          name: 'nested.splat',
+        },
+      ],
+      compositions: [{ id: 'comp-1', width: 1920, height: 1080 }],
+      proxyEnabled: false,
+    } as any);
+
+    useTimelineStore.setState({
+      tracks: [
+        {
+          id: 'track-v1',
+          name: 'Video 1',
+          type: 'video',
+          visible: true,
+          muted: false,
+          solo: false,
+        },
+      ],
+      clips: [
+        {
+          id: 'comp-clip-1',
+          trackId: 'track-v1',
+          name: 'Comp 1',
+          startTime: 0,
+          duration: 10,
+          inPoint: 0,
+          outPoint: 10,
+          effects: [],
+          transform: { ...DEFAULT_TRANSFORM },
+          isComposition: true,
+          compositionId: 'comp-1',
+          nestedTracks: [
+            {
+              id: 'nested-track-v1',
+              name: 'Nested 3D',
+              type: 'video',
+              visible: true,
+              muted: false,
+              solo: false,
+            },
+          ],
+          nestedClips: [
+            {
+              id: 'nested-splat-1',
+              trackId: 'nested-track-v1',
+              mediaFileId: 'media-splat-1',
+              name: 'nested.splat',
+              file,
+              startTime: 0,
+              duration: 10,
+              inPoint: 0,
+              outPoint: 10,
+              effects: [],
+              transform: { ...DEFAULT_TRANSFORM },
+              source: {
+                type: 'gaussian-splat',
+                mediaFileId: 'media-splat-1',
+                gaussianSplatUrl: 'blob:nested-splat',
+                gaussianSplatFileName: 'nested.splat',
+                gaussianSplatSettings: {
+                  render: {
+                    useNativeRenderer: true,
+                  },
+                },
+              },
+              isLoading: false,
+            },
+          ],
+          isLoading: false,
+        },
+      ],
+      playheadPosition: 2,
+      isPlaying: false,
+      isDraggingPlayhead: false,
+      playbackSpeed: 1,
+    } as any);
+
+    const layers = service.buildLayersFromStore();
+    const nestedLayers = (layers[0]?.source as any)?.nestedComposition?.layers;
+
+    expect(nestedLayers).toHaveLength(1);
+    expect(nestedLayers[0]).toMatchObject({
+      sourceClipId: 'nested-splat-1',
+      is3D: true,
+      source: expect.objectContaining({
+        type: 'gaussian-splat',
+        gaussianSplatUrl: 'blob:nested-splat',
+        gaussianSplatFileName: 'nested.splat',
+        mediaFileId: 'media-splat-1',
+      }),
+    });
+    expect(nestedLayers[0]?.source?.gaussianSplatRuntimeKey).toBeTruthy();
+    expect(nestedLayers[0]?.source?.gaussianSplatSettings?.render?.useNativeRenderer).toBe(true);
   });
 });

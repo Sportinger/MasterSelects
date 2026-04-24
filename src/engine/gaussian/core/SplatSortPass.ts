@@ -13,8 +13,14 @@ import shaderSource from '../shaders/radixSort.wgsl?raw';
 
 const log = Logger.create('SplatSortPass');
 
-/** Uniform buffer: mat4x4f (64) + u32 splatCount + u32 blockSize + u32 subBlockSize + u32 pad = 80 bytes */
-const SORT_UNIFORM_SIZE = 80;
+/** Uniform buffer: mat4x4f view (64) + mat4x4f world (64) + 4x u32 params = 144 bytes */
+const SORT_UNIFORM_SIZE = 144;
+
+export interface BitonicSortPlan {
+  visibleCount: number;
+  paddedCount: number;
+  workgroupCount: number;
+}
 
 export class SplatSortPass {
   private device: GPUDevice | null = null;
@@ -77,6 +83,7 @@ export class SplatSortPass {
     indexBuffer: GPUBuffer,
     visibleCount: number,
     viewMatrix: Float32Array,
+    worldMatrix: Float32Array,
   ): GPUBuffer | null {
     if (!this._initialized || !this.depthKeyPipeline || !this.bitonicStepPipeline) {
       log.warn('Cannot execute: sort pass not initialized');
@@ -89,7 +96,8 @@ export class SplatSortPass {
     }
 
     try {
-      this.ensureBuffers(device, visibleCount);
+      const sortPlan = buildBitonicSortPlan(visibleCount);
+      this.ensureBuffers(device, sortPlan.paddedCount);
 
       // Copy visible indices to our sortable buffer
       commandEncoder.copyBufferToBuffer(
@@ -98,7 +106,7 @@ export class SplatSortPass {
         visibleCount * 4,
       );
 
-      const workgroupCount = Math.ceil(visibleCount / 256);
+      const workgroupCount = sortPlan.workgroupCount;
 
       // Create splat data bind group
       const splatDataBindGroup = device.createBindGroup({
@@ -118,7 +126,7 @@ export class SplatSortPass {
       });
 
       // ── Step 1: Compute depth keys ─────────────────────────────────────────
-      this.writeUniforms(device, viewMatrix, visibleCount, 0, 0);
+      this.writeUniforms(device, viewMatrix, worldMatrix, visibleCount, sortPlan.paddedCount, 0, 0);
 
       {
         const pass = commandEncoder.beginComputePass({ label: 'splat-depth-keys' });
@@ -131,17 +139,11 @@ export class SplatSortPass {
       }
 
       // ── Step 2: Bitonic sort steps ─────────────────────────────────────────
-      // Pad visibleCount to next power of 2 for bitonic sort
-      const n = nextPowerOf2(visibleCount);
-
-      // For elements beyond visibleCount, we rely on keys[idx] being 0 (initialized)
-      // and the bounds check in the shader (idx >= splatCount → return)
-
-      // Outer loop: k = 2, 4, 8, ..., n
-      for (let k = 2; k <= n; k *= 2) {
+      // Outer loop: k = 2, 4, 8, ..., paddedCount
+      for (let k = 2; k <= sortPlan.paddedCount; k *= 2) {
         // Inner loop: j = k/2, k/4, ..., 1
         for (let j = k >> 1; j > 0; j >>= 1) {
-          this.writeUniforms(device, viewMatrix, visibleCount, k, j);
+          this.writeUniforms(device, viewMatrix, worldMatrix, visibleCount, sortPlan.paddedCount, k, j);
 
           const pass = commandEncoder.beginComputePass({
             label: `splat-bitonic-k${k}-j${j}`,
@@ -307,7 +309,9 @@ export class SplatSortPass {
   private writeUniforms(
     device: GPUDevice,
     viewMatrix: Float32Array,
-    splatCount: number,
+    worldMatrix: Float32Array,
+    visibleCount: number,
+    sortCount: number,
     blockSize: number,
     subBlockSize: number,
   ): void {
@@ -320,11 +324,14 @@ export class SplatSortPass {
     // mat4x4f viewMatrix (16 floats)
     f32.set(viewMatrix, 0);
 
-    // u32 params at offset 16 (in f32 units)
-    u32[16] = splatCount;
-    u32[17] = blockSize;
-    u32[18] = subBlockSize;
-    // u32[19] = pad
+    // mat4x4f worldMatrix (16 floats)
+    f32.set(worldMatrix, 16);
+
+    // u32 params at offset 32 (in f32 units)
+    u32[32] = visibleCount;
+    u32[33] = sortCount;
+    u32[34] = blockSize;
+    u32[35] = subBlockSize;
 
     device.queue.writeBuffer(this.uniformBuffer, 0, data);
   }
@@ -340,4 +347,13 @@ function nextPowerOf2(n: number): number {
   v |= v >> 8;
   v |= v >> 16;
   return v + 1;
+}
+
+export function buildBitonicSortPlan(visibleCount: number): BitonicSortPlan {
+  const paddedCount = nextPowerOf2(Math.max(visibleCount, 1));
+  return {
+    visibleCount,
+    paddedCount,
+    workgroupCount: Math.ceil(paddedCount / 256),
+  };
 }

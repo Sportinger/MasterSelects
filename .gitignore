@@ -89,3 +89,4 @@ _fremd/
 
 # Windows artifacts
 nul
+.gstack/

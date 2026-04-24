@@ -1,5 +1,5 @@
-// 3D Model clip addition — OBJ, glTF, GLB, FBX
-// Creates a timeline clip with is3D=true that renders via Three.js
+// 3D Model clip addition — OBJ, glTF, GLB
+// Creates a timeline clip with is3D=true that renders via the shared 3D scene
 
 import type { ModelSequenceData, TimelineClip } from '../../../types';
 import { DEFAULT_TRANSFORM } from '../constants';
@@ -20,7 +20,7 @@ export interface AddModelClipParams {
 
 /**
  * Create placeholder model clip immediately.
- * Auto-sets is3D=true so it renders via Three.js.
+ * Auto-sets is3D=true so it renders via the shared 3D scene.
  */
 export function createModelClipPlaceholder(params: AddModelClipParams): TimelineClip {
   const { trackId, file, startTime, estimatedDuration, modelSequence } = params;
@@ -49,7 +49,7 @@ export function createModelClipPlaceholder(params: AddModelClipParams): Timeline
     transform: { ...DEFAULT_TRANSFORM },
     effects: [],
     is3D: true,  // Auto-enable 3D for model clips
-    isLoading: false,  // No async loading needed — Three.js loads lazily
+    isLoading: false,  // No async loading needed — the scene renderer loads lazily
   };
 }
 
@@ -59,14 +59,14 @@ export interface LoadModelMediaParams {
 }
 
 /**
- * "Load" model media — creates blob URL for Three.js to load later.
+ * "Load" model media — creates a blob URL for the shared scene renderer to load later.
  * No HTMLVideoElement or HTMLImageElement needed.
  */
 export function loadModelMedia(params: LoadModelMediaParams): void {
   const { clip, updateClip } = params;
   const sequenceModelUrl = clip.source?.modelSequence?.frames[0]?.modelUrl;
 
-  // Create a blob URL that Three.js can fetch
+  // Create a blob URL that the shared scene renderer can fetch
   const modelUrl = sequenceModelUrl ?? blobUrlManager.create(clip.id, clip.file, 'model');
 
   updateClip(clip.id, {

@@ -36,8 +36,8 @@ Import, organize, and manage media assets with folder structure, proxy generatio
 
 The panel also accepts a few specialized asset types that flow into the timeline as 3D clips:
 
-- `model` files: OBJ, glTF/GLB, FBX
-- `gaussian-splat` files: PLY, SPLAT
+- `model` files: OBJ, glTF/GLB
+- `gaussian-splat` files: PLY, compressed PLY, SPLAT, KSPLAT, SPZ, SOG, LCC, and SOG-style ZIP payloads
 
 Lottie imports are treated as first-class media items. `.json` files are only accepted when their contents actually match Lottie structure, so arbitrary JSON data is not misclassified as animation.
 
@@ -449,7 +449,7 @@ interface MediaFile {
 - Audio-only files restricted to audio tracks
 - Files still importing or missing cannot be dragged to timeline
 - Compositions cannot be dragged into themselves (active comp check)
-- Mesh items create 3D clips with `is3D: true` and `meshType` (rendered via Three.js)
+- Mesh items create 3D clips with `is3D: true` and `meshType` (rendered via the shared 3D scene)
 
 ### Track Type Enforcement
 | Media Type | Allowed Tracks |

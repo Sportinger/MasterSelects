@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RenderDispatcher } from '../../src/engine/render/RenderDispatcher';
-import { waitForBasePreparedSplatRuntime, waitForTargetPreparedSplatRuntime } from '../../src/engine/three/splatRuntimeCache';
+import { useEngineStore } from '../../src/stores/engineStore';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 
@@ -17,11 +17,6 @@ vi.mock('../../src/services/logger', () => ({
 
 vi.mock('../../src/services/performanceMonitor', () => ({
   reportRenderTime: vi.fn(),
-}));
-
-vi.mock('../../src/engine/three/splatRuntimeCache', () => ({
-  waitForBasePreparedSplatRuntime: vi.fn(async () => ({})),
-  waitForTargetPreparedSplatRuntime: vi.fn(async () => ({})),
 }));
 
 function createDispatcher(isPlaying = true) {
@@ -91,8 +86,14 @@ function createDispatcher(isPlaying = true) {
 describe('RenderDispatcher empty playback hold', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useEngineStore.setState({
+      sceneNavClipId: null,
+      sceneNavFpsMode: false,
+    } as any);
     useMediaStore.setState({
       files: [],
+      activeCompositionId: null,
+      compositions: [],
     } as any);
     useTimelineStore.setState({
       isDraggingPlayhead: false,
@@ -173,6 +174,13 @@ describe('RenderDispatcher empty playback hold', () => {
         trackId: 'track-1',
         startTime: 5,
         duration: 2,
+        transform: {
+          position: { x: 0.25, y: -0.5, z: 3 },
+          scale: { x: 0.4, y: 0.6, z: 0.8 },
+          rotation: { x: 10, y: 20, z: 30 },
+          opacity: 1,
+          blendMode: 'normal',
+        },
         source: {
           type: 'splat-effector',
           splatEffectorSettings: {
@@ -184,13 +192,6 @@ describe('RenderDispatcher empty playback hold', () => {
           },
         },
       }],
-      getInterpolatedTransform: () => ({
-        position: { x: 0.25, y: -0.5, z: 3 },
-        scale: { x: 0.4, y: 0.6, z: 0.8 },
-        rotation: { x: 10, y: 20, z: 30 },
-        opacity: 1,
-        blendMode: 'normal',
-      }),
     } as any);
 
     expect((dispatcher as any).collectActiveSplatEffectors(1920, 1080)).toHaveLength(0);
@@ -226,11 +227,456 @@ describe('RenderDispatcher empty playback hold', () => {
     });
   });
 
+  it('routes native gaussian splats through the shared scene renderer with the shared camera and effectors', () => {
+    const { dispatcher, deps } = createDispatcher(false);
+    deps.sceneRenderer = {
+      isInitialized: true,
+      renderScene: vi.fn(() => ({ label: 'shared-scene-view' })),
+    };
+
+    useTimelineStore.setState({
+      playheadPosition: 0.25,
+      tracks: [{
+        id: 'track-1',
+        type: 'video',
+        visible: true,
+      }],
+      clips: [{
+        id: 'effector-1',
+        trackId: 'track-1',
+        startTime: 0,
+        duration: 1,
+        transform: {
+          position: { x: 0.1, y: -0.2, z: 1.5 },
+          scale: { x: 0.5, y: 0.4, z: 0.75 },
+          rotation: { x: 10, y: 20, z: 30 },
+          opacity: 1,
+          blendMode: 'normal',
+        },
+        source: {
+          type: 'splat-effector',
+          splatEffectorSettings: {
+            mode: 'swirl',
+            strength: 45,
+            falloff: 1.5,
+            speed: 1.25,
+            seed: 9,
+          },
+        },
+      }],
+    } as any);
+
+    const layerData = [
+      {
+        layer: {
+          id: 'native-splat-layer',
+          sourceClipId: 'native-splat-clip',
+          name: 'Native Splat',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal',
+          is3D: true,
+          position: { x: 0.25, y: -0.5, z: 3 },
+          scale: { x: 2, y: 1.5, z: 0.75 },
+          rotation: { x: 0.1, y: -0.2, z: 0.3 },
+          source: {
+            type: 'gaussian-splat',
+            gaussianSplatUrl: 'blob:native-splat',
+            gaussianSplatFileName: 'native.ply',
+            gaussianSplatSettings: {
+              render: {
+                useNativeRenderer: true,
+                backgroundColor: 'transparent',
+                maxSplats: 0,
+                sortFrequency: 1,
+              },
+            },
+            mediaTime: 1.25,
+          },
+        },
+        isVideo: false,
+        externalTexture: null,
+        textureView: null,
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+      },
+    ] as any;
+
+    (dispatcher as any).process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+
+    expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
+    const [deviceArg, layers3D, camera, effectors, isRealtimePlayback] =
+      deps.sceneRenderer.renderScene.mock.calls[0];
+    expect(deviceArg).toEqual({});
+    expect(layers3D).toHaveLength(1);
+    expect(layers3D[0]).toMatchObject({
+      kind: 'splat',
+      layerId: 'native-splat-layer',
+      clipId: 'native-splat-clip',
+    });
+    expect(layers3D[0].worldMatrix).toBeInstanceOf(Float32Array);
+    expect(layers3D[0].worldMatrix[12]).toBeCloseTo(0.25);
+    expect(layers3D[0].worldMatrix[13]).toBeCloseTo(-0.5);
+    expect(layers3D[0].worldMatrix[14]).toBeCloseTo(3);
+    expect(camera.cameraPosition.x).toBeCloseTo(0);
+    expect(camera.cameraPosition.y).toBeCloseTo(0);
+    expect(camera.cameraPosition.z).toBeCloseTo(0);
+    expect(effectors).toHaveLength(1);
+    expect(effectors[0]).toMatchObject({
+      clipId: 'effector-1',
+      mode: 'swirl',
+      strength: 45,
+    });
+    expect(isRealtimePlayback).toBe(false);
+
+    expect(layerData).toHaveLength(1);
+    expect(layerData[0]?.textureView).toEqual({ label: 'shared-scene-view' });
+    expect(layerData[0]?.layer.id).toBe('__scene_3d__');
+    expect(layerData[0]?.layer.position).toEqual({ x: 0, y: 0, z: 0 });
+    expect(layerData[0]?.layer.scale).toEqual({ x: 1, y: 1 });
+    expect(layerData[0]?.layer.rotation).toEqual({ x: 0, y: 0, z: 0 });
+  });
+
+  it('routes pure native gaussian-splat scenes through the shared scene renderer', () => {
+    const { dispatcher, deps } = createDispatcher(false);
+    deps.sceneRenderer = {
+      isInitialized: true,
+      renderScene: vi.fn(() => ({ label: 'shared-scene-view' })),
+    };
+
+    const layerData = [
+      {
+        layer: {
+          id: 'native-splat-layer',
+          sourceClipId: 'native-splat-clip',
+          name: 'Native Splat',
+          visible: true,
+          opacity: 0.75,
+          blendMode: 'screen',
+          effects: [{ id: 'fx-1' }],
+          is3D: true,
+          position: { x: 0.5, y: -0.25, z: 2 },
+          scale: { x: 1, y: 1, z: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+          source: {
+            type: 'gaussian-splat',
+            gaussianSplatUrl: 'blob:native-splat',
+            gaussianSplatFileName: 'native.ply',
+            gaussianSplatSettings: {
+              render: {
+                useNativeRenderer: true,
+              },
+            },
+          },
+        },
+        isVideo: false,
+        externalTexture: null,
+        textureView: null,
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+      },
+    ] as any;
+
+    (dispatcher as any).process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+
+    expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
+    const [deviceArg, layers3D] = deps.sceneRenderer.renderScene.mock.calls[0];
+    expect(deviceArg).toEqual({});
+    expect(layers3D).toHaveLength(1);
+    expect(layers3D[0]).toMatchObject({
+      kind: 'splat',
+      layerId: 'native-splat-layer',
+      clipId: 'native-splat-clip',
+    });
+
+    expect(layerData).toHaveLength(1);
+    expect(layerData[0]?.textureView).toEqual({ label: 'shared-scene-view' });
+    expect(layerData[0]?.layer.id).toBe('__scene_3d__');
+    expect(layerData[0]?.layer.opacity).toBeCloseTo(0.75);
+    expect(layerData[0]?.layer.blendMode).toBe('screen');
+  });
+
+  it('routes plane plus primitive plus native gaussian-splat scenes through the shared scene renderer once native assets are ready', () => {
+    const { dispatcher, deps } = createDispatcher(false);
+    deps.sceneRenderer = {
+      isInitialized: true,
+      renderScene: vi.fn(() => ({ label: 'shared-scene-mixed-view' })),
+    };
+
+    const layerData = [
+      {
+        layer: {
+          id: 'video-plane',
+          sourceClipId: 'video-plane-clip',
+          name: 'Video Plane',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal',
+          is3D: true,
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1, z: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+          source: {
+            type: 'video',
+            videoElement: {
+              readyState: 4,
+              videoWidth: 1920,
+              videoHeight: 1080,
+            },
+          },
+        },
+        isVideo: true,
+        externalTexture: null,
+        textureView: { label: 'plane-layer-view' },
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+      },
+      {
+        layer: {
+          id: 'cube-mesh',
+          sourceClipId: 'cube-mesh-clip',
+          name: 'Cube Mesh',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal',
+          is3D: true,
+          position: { x: -0.5, y: 0.25, z: 0.75 },
+          scale: { x: 1, y: 1, z: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+          source: {
+            type: 'model',
+            meshType: 'cube',
+          },
+        },
+        isVideo: false,
+        externalTexture: null,
+        textureView: null,
+        sourceWidth: 100,
+        sourceHeight: 100,
+      },
+      {
+        layer: {
+          id: 'native-splat-layer',
+          sourceClipId: 'native-splat-clip',
+          name: 'Native Splat',
+          visible: true,
+          opacity: 0.8,
+          blendMode: 'screen',
+          effects: [{ id: 'fx-1' }],
+          is3D: true,
+          position: { x: 0.25, y: 0, z: 2 },
+          scale: { x: 1, y: 1, z: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+          source: {
+            type: 'gaussian-splat',
+            gaussianSplatUrl: 'blob:native-splat',
+            gaussianSplatFileName: 'native.ply',
+            gaussianSplatSettings: {
+              render: {
+                useNativeRenderer: true,
+              },
+            },
+          },
+        },
+        isVideo: false,
+        externalTexture: null,
+        textureView: null,
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+      },
+    ] as any;
+
+    (dispatcher as any).process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+
+    expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
+    const [, layers3D] = deps.sceneRenderer.renderScene.mock.calls[0];
+    expect(layers3D).toHaveLength(3);
+    expect(layers3D.map((layer: any) => layer.kind)).toEqual(['plane', 'primitive', 'splat']);
+
+    expect(layerData).toHaveLength(1);
+    expect(layerData[0]?.textureView).toEqual({ label: 'shared-scene-mixed-view' });
+    expect(layerData[0]?.layer.id).toBe('__scene_3d__');
+    expect(layerData[0]?.layer.opacity).toBe(1);
+    expect(layerData[0]?.layer.blendMode).toBe('normal');
+  });
+
+  it('routes 3D text plus native gaussian-splat scenes through the shared scene renderer once native assets are ready', () => {
+    const { dispatcher, deps } = createDispatcher(false);
+    deps.sceneRenderer = {
+      isInitialized: true,
+      renderScene: vi.fn(() => ({ label: 'shared-scene-text-view' })),
+    };
+
+    const layerData = [
+      {
+        layer: {
+          id: 'headline-text',
+          sourceClipId: 'headline-text-clip',
+          name: 'Headline Text',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal',
+          is3D: true,
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1, z: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+          source: {
+            type: 'model',
+            meshType: 'text3d',
+            text3DProperties: {
+              text: 'Native',
+              fontFamily: 'helvetiker',
+              fontWeight: 'bold',
+              size: 0.42,
+              depth: 0.14,
+              color: '#ffffff',
+              letterSpacing: 0.02,
+              lineHeight: 1.15,
+              textAlign: 'center',
+              curveSegments: 8,
+              bevelEnabled: true,
+              bevelThickness: 0.02,
+              bevelSize: 0.01,
+              bevelSegments: 2,
+            },
+          },
+        },
+        isVideo: false,
+        externalTexture: null,
+        textureView: null,
+        sourceWidth: 100,
+        sourceHeight: 100,
+      },
+      {
+        layer: {
+          id: 'native-splat-layer',
+          sourceClipId: 'native-splat-clip',
+          name: 'Native Splat',
+          visible: true,
+          opacity: 0.8,
+          blendMode: 'screen',
+          effects: [{ id: 'fx-1' }],
+          is3D: true,
+          position: { x: 0.25, y: 0, z: 2 },
+          scale: { x: 1, y: 1, z: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+          source: {
+            type: 'gaussian-splat',
+            gaussianSplatUrl: 'blob:native-splat',
+            gaussianSplatFileName: 'native.ply',
+            gaussianSplatSettings: {
+              render: {
+                useNativeRenderer: true,
+              },
+            },
+          },
+        },
+        isVideo: false,
+        externalTexture: null,
+        textureView: null,
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+      },
+    ] as any;
+
+    (dispatcher as any).process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+
+    expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
+    const [, layers3D] = deps.sceneRenderer.renderScene.mock.calls[0];
+    expect(layers3D).toHaveLength(2);
+    expect(layers3D.map((layer: any) => layer.kind)).toEqual(['text3d', 'splat']);
+
+    expect(layerData).toHaveLength(1);
+    expect(layerData[0]?.textureView).toEqual({ label: 'shared-scene-text-view' });
+    expect(layerData[0]?.layer.id).toBe('__scene_3d__');
+  });
+
+  it('routes imported models plus native gaussian-splat scenes through the shared scene renderer', () => {
+    const { dispatcher, deps } = createDispatcher(false);
+    deps.sceneRenderer = {
+      isInitialized: true,
+      renderScene: vi.fn(() => ({ label: 'shared-scene-model-view' })),
+    };
+
+    const layerData = [
+      {
+        layer: {
+          id: 'hero-model',
+          sourceClipId: 'hero-model-clip',
+          name: 'Hero Model',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal',
+          is3D: true,
+          position: { x: -0.2, y: 0.1, z: 0.5 },
+          scale: { x: 1, y: 1, z: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+          source: {
+            type: 'model',
+            modelUrl: 'blob:hero-model',
+            file: new File(['model'], 'hero.glb'),
+          },
+        },
+        isVideo: false,
+        externalTexture: null,
+        textureView: null,
+        sourceWidth: 100,
+        sourceHeight: 100,
+      },
+      {
+        layer: {
+          id: 'native-splat-layer',
+          sourceClipId: 'native-splat-clip',
+          name: 'Native Splat',
+          visible: true,
+          opacity: 0.8,
+          blendMode: 'screen',
+          effects: [{ id: 'fx-1' }],
+          is3D: true,
+          position: { x: 0.25, y: 0, z: 2 },
+          scale: { x: 1, y: 1, z: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+          source: {
+            type: 'gaussian-splat',
+            gaussianSplatUrl: 'blob:native-splat',
+            gaussianSplatFileName: 'native.ply',
+            gaussianSplatSettings: {
+              render: {
+                useNativeRenderer: true,
+              },
+            },
+          },
+        },
+        isVideo: false,
+        externalTexture: null,
+        textureView: null,
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+      },
+    ] as any;
+
+    (dispatcher as any).process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+
+    expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
+    const [, layers3D] = deps.sceneRenderer.renderScene.mock.calls[0];
+    expect(layers3D).toHaveLength(2);
+    expect(layers3D.map((layer: any) => layer.kind)).toEqual(['model', 'splat']);
+    expect(layers3D[0]).toMatchObject({
+      kind: 'model',
+      modelUrl: 'blob:hero-model',
+      modelFileName: 'hero.glb',
+    });
+
+    expect(layerData).toHaveLength(1);
+    expect(layerData[0]?.textureView).toEqual({ label: 'shared-scene-model-view' });
+    expect(layerData[0]?.layer.id).toBe('__scene_3d__');
+  });
+
   it('waits for nested 3D and splat assets before precise export rendering', async () => {
     const { dispatcher, deps } = createDispatcher(false);
 
-    vi.spyOn(dispatcher, 'ensureThreeSceneRendererInitialized').mockResolvedValue(true);
-    vi.spyOn(dispatcher, 'preloadThreeModelAsset').mockResolvedValue(true);
+    vi.spyOn(dispatcher, 'ensureSceneRendererInitialized').mockResolvedValue(true);
+    vi.spyOn(dispatcher, 'preloadSceneModelAsset').mockResolvedValue(true);
     vi.spyOn(dispatcher, 'ensureGaussianSplatSceneLoaded').mockResolvedValue(true);
 
     await dispatcher.ensureExportLayersReady([
@@ -300,29 +746,32 @@ describe('RenderDispatcher empty playback hold', () => {
       },
     ] as any);
 
-    expect(dispatcher.ensureThreeSceneRendererInitialized).toHaveBeenCalledWith(1920, 1080);
-    expect(dispatcher.preloadThreeModelAsset).toHaveBeenCalledWith('blob:model-1', 'Hero Model');
+    expect(dispatcher.ensureSceneRendererInitialized).toHaveBeenCalledWith(1920, 1080);
+    expect(dispatcher.preloadSceneModelAsset).toHaveBeenCalledWith('blob:model-1', 'Hero Model');
     expect(dispatcher.ensureGaussianSplatSceneLoaded).toHaveBeenCalledWith(
-      'native-splat',
-      'blob:native-splat',
-      'native.splat',
-    );
-    expect(waitForTargetPreparedSplatRuntime).toHaveBeenCalledWith(
       expect.objectContaining({
-        cacheKey: 'media-hash-1',
-        fileHash: 'media-hash-1',
+        sceneKey: 'native-splat',
+        clipId: 'native-splat',
+        url: 'blob:native-splat',
+        fileName: 'native.splat',
+      }),
+    );
+    expect(dispatcher.ensureGaussianSplatSceneLoaded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sceneKey: 'nested-splat',
+        clipId: 'nested-splat',
         fileName: 'media-backed.splat',
         url: 'blob:media-splat',
-        requestedMaxSplats: 0,
       }),
     );
     expect(deps.renderTargetManager.getResolution).toHaveBeenCalled();
   });
 
-  it('waits for base three.js splat runtimes for sequence layers during precise export', async () => {
+  it('waits for native sequence scene loading for sequence layers during precise export', async () => {
     const { dispatcher } = createDispatcher(false);
 
-    vi.spyOn(dispatcher, 'ensureThreeSceneRendererInitialized').mockResolvedValue(true);
+    vi.spyOn(dispatcher, 'ensureSceneRendererInitialized').mockResolvedValue(true);
+    vi.spyOn(dispatcher, 'ensureGaussianSplatSceneLoaded').mockResolvedValue(true);
 
     await dispatcher.ensureExportLayersReady([
       {
@@ -354,28 +803,66 @@ describe('RenderDispatcher empty playback hold', () => {
       },
     ] as any);
 
-    expect(waitForBasePreparedSplatRuntime).toHaveBeenCalledWith(
+    expect(dispatcher.ensureGaussianSplatSceneLoaded).toHaveBeenCalledWith(
       expect.objectContaining({
-        cacheKey: 'frame_0001.ply|blob:sequence-frame-1',
-        fileHash: undefined,
+        sceneKey: 'three-sequence',
+        clipId: 'three-sequence',
         fileName: 'frame_0001.ply',
         url: 'blob:sequence-frame-1',
-        gaussianSplatSequence: expect.objectContaining({
-          sharedBounds: {
-            min: [-1, -1, -1],
-            max: [1, 1, 1],
-          },
-        }),
-        requestedMaxSplats: 0,
       }),
     );
-    expect(waitForTargetPreparedSplatRuntime).not.toHaveBeenCalled();
+  });
+
+  it('waits for native sequence scenes by runtime key during precise export', async () => {
+    const { dispatcher } = createDispatcher(false);
+
+    vi.spyOn(dispatcher, 'ensureSceneRendererInitialized').mockResolvedValue(true);
+    vi.spyOn(dispatcher, 'ensureGaussianSplatSceneLoaded').mockResolvedValue(true);
+
+    await dispatcher.ensureExportLayersReady([
+      {
+        id: 'native-sequence',
+        name: 'Native Sequence',
+        sourceClipId: 'native-sequence',
+        visible: true,
+        opacity: 1,
+        is3D: true,
+        source: {
+          type: 'gaussian-splat',
+          gaussianSplatUrl: 'blob:sequence-frame-2',
+          gaussianSplatFileName: 'frame_0002.ply',
+          gaussianSplatRuntimeKey: 'sequence/frame-0002',
+          gaussianSplatSequence: {
+            frameCount: 2,
+            fps: 24,
+            frames: [],
+          },
+          gaussianSplatSettings: {
+            render: {
+              useNativeRenderer: true,
+              maxSplats: 0,
+            },
+          },
+        },
+      },
+    ] as any);
+
+    expect(dispatcher.ensureSceneRendererInitialized).toHaveBeenCalledWith(1920, 1080);
+    expect(dispatcher.ensureGaussianSplatSceneLoaded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sceneKey: 'sequence/frame-0002',
+        clipId: 'native-sequence',
+        url: 'blob:sequence-frame-2',
+        fileName: 'frame_0002.ply',
+      }),
+    );
   });
 
   it('does not collapse sequence export readiness to mediaFileId across different frame runtimes', async () => {
     const { dispatcher } = createDispatcher(false);
 
-    vi.spyOn(dispatcher, 'ensureThreeSceneRendererInitialized').mockResolvedValue(true);
+    vi.spyOn(dispatcher, 'ensureSceneRendererInitialized').mockResolvedValue(true);
+    vi.spyOn(dispatcher, 'ensureGaussianSplatSceneLoaded').mockResolvedValue(true);
 
     const makeLayer = (runtimeKey: string, url: string) => ({
       id: `three-sequence-${runtimeKey}`,
@@ -406,18 +893,20 @@ describe('RenderDispatcher empty playback hold', () => {
     await dispatcher.ensureExportLayersReady([makeLayer('sequence/frame-0001', 'blob:sequence-frame-1')] as any);
     await dispatcher.ensureExportLayersReady([makeLayer('sequence/frame-0002', 'blob:sequence-frame-2')] as any);
 
-    expect(waitForBasePreparedSplatRuntime).toHaveBeenCalledTimes(2);
-    expect(waitForBasePreparedSplatRuntime).toHaveBeenNthCalledWith(
+    expect(dispatcher.ensureGaussianSplatSceneLoaded).toHaveBeenCalledTimes(2);
+    expect(dispatcher.ensureGaussianSplatSceneLoaded).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        cacheKey: 'sequence/frame-0001',
+        sceneKey: 'sequence/frame-0001',
+        clipId: 'three-sequence-sequence/frame-0001',
         url: 'blob:sequence-frame-1',
       }),
     );
-    expect(waitForBasePreparedSplatRuntime).toHaveBeenNthCalledWith(
+    expect(dispatcher.ensureGaussianSplatSceneLoaded).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        cacheKey: 'sequence/frame-0002',
+        sceneKey: 'sequence/frame-0002',
+        clipId: 'three-sequence-sequence/frame-0002',
         url: 'blob:sequence-frame-2',
       }),
     );
@@ -426,8 +915,8 @@ describe('RenderDispatcher empty playback hold', () => {
   it('fails precise export when a required asset does not become ready', async () => {
     const { dispatcher } = createDispatcher(false);
 
-    vi.spyOn(dispatcher, 'ensureThreeSceneRendererInitialized').mockResolvedValue(true);
-    vi.spyOn(dispatcher, 'preloadThreeModelAsset').mockResolvedValue(false);
+    vi.spyOn(dispatcher, 'ensureSceneRendererInitialized').mockResolvedValue(true);
+    vi.spyOn(dispatcher, 'preloadSceneModelAsset').mockResolvedValue(false);
 
     await expect(dispatcher.ensureExportLayersReady([
       {
@@ -447,8 +936,8 @@ describe('RenderDispatcher empty playback hold', () => {
   it('reuses export readiness cache for repeated frames with the same assets', async () => {
     const { dispatcher } = createDispatcher(false);
 
-    vi.spyOn(dispatcher, 'ensureThreeSceneRendererInitialized').mockResolvedValue(true);
-    vi.spyOn(dispatcher, 'preloadThreeModelAsset').mockResolvedValue(true);
+    vi.spyOn(dispatcher, 'ensureSceneRendererInitialized').mockResolvedValue(true);
+    vi.spyOn(dispatcher, 'preloadSceneModelAsset').mockResolvedValue(true);
     vi.spyOn(dispatcher, 'ensureGaussianSplatSceneLoaded').mockResolvedValue(true);
 
     const layers = [
@@ -505,9 +994,8 @@ describe('RenderDispatcher empty playback hold', () => {
     await dispatcher.ensureExportLayersReady(layers);
     await dispatcher.ensureExportLayersReady(layers);
 
-    expect(dispatcher.ensureThreeSceneRendererInitialized).toHaveBeenCalledTimes(1);
-    expect(dispatcher.preloadThreeModelAsset).toHaveBeenCalledTimes(1);
-    expect(dispatcher.ensureGaussianSplatSceneLoaded).toHaveBeenCalledTimes(1);
-    expect(waitForTargetPreparedSplatRuntime).toHaveBeenCalledTimes(1);
+    expect(dispatcher.ensureSceneRendererInitialized).toHaveBeenCalledTimes(1);
+    expect(dispatcher.preloadSceneModelAsset).toHaveBeenCalledTimes(1);
+    expect(dispatcher.ensureGaussianSplatSceneLoaded).toHaveBeenCalledTimes(2);
   });
 });

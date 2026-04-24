@@ -11,7 +11,7 @@ import { fileSystemService } from '../../../services/fileSystemService';
 import { projectDB } from '../../../services/projectDB';
 import { useSettingsStore } from '../../settingsStore';
 import { Logger } from '../../../services/logger';
-import { prewarmGaussianSplatRuntime } from '../../../engine/three/splatRuntimeCache';
+import { prewarmGaussianSplatRuntime } from '../../../engine/scene/runtime/SharedSplatRuntimeCache';
 import { prepareLottieAsset } from '../../../services/vectorAnimation/lottieMetadata';
 
 const log = Logger.create('Import');

@@ -922,6 +922,39 @@ describe('project media persistence', () => {
     }));
   });
 
+  it('restores transport MIDI bindings from project uiState', async () => {
+    mocks.getProjectData.mockReturnValue({
+      media: [],
+      compositions: [],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: null,
+      openCompositionIds: [],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {
+        midi: {
+          isEnabled: true,
+          transportBindings: {
+            playPause: { channel: 3, note: 50 },
+            stop: { channel: 3, note: 51 },
+          },
+        },
+      },
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    expect(mocks.midiSetState).toHaveBeenCalledWith(expect.objectContaining({
+      isEnabled: true,
+      transportBindings: {
+        playPause: { channel: 3, note: 50 },
+        stop: { channel: 3, note: 51 },
+      },
+    }));
+  });
+
   it('restores stop markers and marker MIDI bindings when loading a composition', async () => {
     mocks.getProjectData.mockReturnValue({
       media: [],
@@ -973,39 +1006,6 @@ describe('project media persistence', () => {
           ],
         }),
       ],
-    }));
-  });
-
-  it('restores transport MIDI bindings from project uiState', async () => {
-    mocks.getProjectData.mockReturnValue({
-      media: [],
-      compositions: [],
-      folders: [],
-      settings: { width: 1920, height: 1080, frameRate: 30 },
-      activeCompositionId: null,
-      openCompositionIds: [],
-      expandedFolderIds: [],
-      slotAssignments: {},
-      uiState: {
-        midi: {
-          isEnabled: true,
-          transportBindings: {
-            playPause: { channel: 3, note: 50 },
-            stop: { channel: 3, note: 51 },
-          },
-        },
-      },
-    });
-
-    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
-    await loadProjectToStores();
-
-    expect(mocks.midiSetState).toHaveBeenCalledWith(expect.objectContaining({
-      isEnabled: true,
-      transportBindings: {
-        playPause: { channel: 3, note: 50 },
-        stop: { channel: 3, note: 51 },
-      },
     }));
   });
 

@@ -29,11 +29,12 @@ import {
   resolveGaussianSplatSequenceData,
 } from '../../utils/gaussianSplatSequence';
 import { getModelSequenceFrameUrl, resolveModelSequenceData } from '../../utils/modelSequence';
-import { resolveThreeDEffectorsEnabled } from '../../utils/threeDEffectors';
+import { resolveSceneEffectorsEnabled } from '../../engine/scene/SceneEffectorUtils';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { DEFAULT_TRANSFORM, MAX_NESTING_DEPTH } from '../../stores/timeline/constants';
-import { prewarmGaussianSplatRuntime } from '../../engine/three/splatRuntimeCache';
+import { prewarmGaussianSplatRuntime } from '../../engine/scene/runtime/SharedSplatRuntimeCache';
+import { resolveSharedSplatUseNativeRenderer } from '../../engine/scene/runtime/SharedSplatRuntimeUtils';
 import { lottieRuntimeManager } from '../vectorAnimation/LottieRuntimeManager';
 
 const log = Logger.create('LayerBuilder');
@@ -514,7 +515,7 @@ export class LayerBuilderService {
     else if (clip.source?.type === 'camera') {
       layer = null;
     }
-    // Splat effector clip (non-rendering scene controller for Three.js splats)
+    // Splat effector clip (non-rendering scene controller for shared-scene splats)
     else if (clip.source?.type === 'splat-effector') {
       layer = null;
     }
@@ -560,6 +561,8 @@ export class LayerBuilderService {
       width: compWidth,
       height: compHeight,
       currentTime: ctx.playheadPosition,
+      sceneClips: clip.nestedClips,
+      sceneTracks: clip.nestedTracks,
     };
 
     // Apply transition opacity override if provided
@@ -889,7 +892,7 @@ export class LayerBuilderService {
   }
 
   /**
-   * Build 3D model layer — rendered by Three.js
+   * Build 3D model layer — rendered by the shared 3D scene
    */
   private buildModelLayer(clip: TimelineClip, layerIndex: number, ctx: FrameContext, opacityOverride?: number): Layer {
     const timeInfo = getClipTimeInfo(ctx, clip);
@@ -918,7 +921,8 @@ export class LayerBuilderService {
       source: {
         type: 'model',
         modelUrl,
-        threeDEffectorsEnabled: resolveThreeDEffectorsEnabled(clip.source?.threeDEffectorsEnabled),
+        file: clip.file,
+        threeDEffectorsEnabled: resolveSceneEffectorsEnabled(clip.source?.threeDEffectorsEnabled),
         meshType,
         text3DProperties,
       },
@@ -975,43 +979,58 @@ export class LayerBuilderService {
   /**
    * Build Gaussian Splat layer — rendered natively via WebGPU
    */
+  private buildGaussianSplatSourcePayload(
+    clip: TimelineClip,
+    clipLocalTime: number,
+    mediaFile?: { id?: string; fileHash?: string; file?: File | undefined },
+  ): Layer['source'] {
+    const gaussianSplatSequence = this.getClipGaussianSplatSequence(clip);
+    const sequenceFrame = this.resolveClipGaussianSplatFrame(clip, clipLocalTime);
+    const useNativeRenderer = resolveSharedSplatUseNativeRenderer(clip.source?.gaussianSplatSettings);
+
+    return {
+      type: 'gaussian-splat',
+      mediaFileId: mediaFile?.id ?? clip.mediaFileId ?? clip.source?.mediaFileId,
+      file: this.resolveClipGaussianSplatFile(clip, clipLocalTime, mediaFile),
+      gaussianSplatUrl: this.resolveClipGaussianSplatUrl(clip, clipLocalTime),
+      gaussianSplatFileName: sequenceFrame?.name ?? clip.source?.gaussianSplatFileName ?? clip.file?.name ?? clip.name,
+      gaussianSplatFileHash: gaussianSplatSequence ? undefined : mediaFile?.fileHash,
+      gaussianSplatRuntimeKey: getGaussianSplatSequenceFrameRuntimeKey(
+        gaussianSplatSequence,
+        clipLocalTime,
+        clip.source?.gaussianSplatRuntimeKey ??
+          clip.source?.gaussianSplatFileHash ??
+          clip.source?.gaussianSplatFileName ??
+          clip.source?.gaussianSplatUrl ??
+          clip.id,
+      ),
+      gaussianSplatSequence,
+      gaussianSplatSettings: clip.source?.gaussianSplatSettings
+        ? {
+            ...clip.source.gaussianSplatSettings,
+            render: {
+              ...clip.source.gaussianSplatSettings.render,
+              useNativeRenderer,
+            },
+          }
+        : clip.source?.gaussianSplatSettings,
+      threeDEffectorsEnabled: resolveSceneEffectorsEnabled(clip.source?.threeDEffectorsEnabled),
+      mediaTime: clipLocalTime,
+    };
+  }
+
   private buildGaussianSplatLayer(clip: TimelineClip, layerIndex: number, ctx: FrameContext, opacityOverride?: number): Layer {
     const timeInfo = getClipTimeInfo(ctx, clip);
     const mediaFile = getMediaFileForClip(ctx, clip);
-    const gaussianSplatSequence = this.getClipGaussianSplatSequence(clip);
-    const sequenceFrame = this.resolveClipGaussianSplatFrame(clip, timeInfo.clipLocalTime);
-    const renderSettings = clip.source?.gaussianSplatSettings?.render;
-    const useNativeRenderer = !gaussianSplatSequence && renderSettings?.useNativeRenderer === true;
-    const transform = useNativeRenderer
-      ? (() => {
-          const interpolatedTransform = ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime);
-          // Native gaussian splat camera controls use rotation in degrees.
-          return {
-            position: {
-              x: interpolatedTransform.position.x,
-              y: interpolatedTransform.position.y,
-              z: interpolatedTransform.position.z,
-            },
-            scale: {
-              x: interpolatedTransform.scale.x,
-              y: interpolatedTransform.scale.y,
-              ...(interpolatedTransform.scale.z !== undefined
-                ? { z: interpolatedTransform.scale.z }
-                : {}),
-            },
-            rotation: {
-              x: interpolatedTransform.rotation.x,
-              y: interpolatedTransform.rotation.y,
-              z: interpolatedTransform.rotation.z,
-            },
-            opacity: interpolatedTransform.opacity,
-            blendMode: interpolatedTransform.blendMode,
-          };
-        })()
-      : this.transformCache.getTransform(
-          `${ctx.activeCompId}_${layerIndex}`,
-          ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime)
-        );
+    const source = this.buildGaussianSplatSourcePayload(
+      clip,
+      timeInfo.clipLocalTime,
+      mediaFile,
+    );
+    const transform = this.transformCache.getTransform(
+      `${ctx.activeCompId}_${layerIndex}`,
+      ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime),
+    );
     const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
 
     const finalOpacity = opacityOverride !== undefined
@@ -1025,35 +1044,7 @@ export class LayerBuilderService {
       visible: true,
       opacity: finalOpacity,
       blendMode: transform.blendMode as BlendMode,
-      source: {
-        type: 'gaussian-splat',
-        mediaFileId: mediaFile?.id ?? clip.mediaFileId ?? clip.source?.mediaFileId,
-        file: this.resolveClipGaussianSplatFile(clip, timeInfo.clipLocalTime, mediaFile),
-        gaussianSplatUrl: this.resolveClipGaussianSplatUrl(clip, timeInfo.clipLocalTime),
-        gaussianSplatFileName: sequenceFrame?.name ?? clip.source?.gaussianSplatFileName ?? clip.file?.name ?? clip.name,
-        gaussianSplatFileHash: gaussianSplatSequence ? undefined : mediaFile?.fileHash,
-        gaussianSplatRuntimeKey: getGaussianSplatSequenceFrameRuntimeKey(
-          gaussianSplatSequence,
-          timeInfo.clipLocalTime,
-          clip.source?.gaussianSplatRuntimeKey ??
-            clip.source?.gaussianSplatFileHash ??
-            clip.source?.gaussianSplatFileName ??
-            clip.source?.gaussianSplatUrl ??
-            clip.id,
-        ),
-        gaussianSplatSequence,
-        gaussianSplatSettings: clip.source?.gaussianSplatSettings
-          ? {
-              ...clip.source.gaussianSplatSettings,
-              render: {
-                ...clip.source.gaussianSplatSettings.render,
-                useNativeRenderer,
-              },
-            }
-          : clip.source?.gaussianSplatSettings,
-        threeDEffectorsEnabled: resolveThreeDEffectorsEnabled(clip.source?.threeDEffectorsEnabled),
-        mediaTime: timeInfo.clipLocalTime,
-      },
+      source,
       effects,
       position: transform.position,
       scale: transform.scale,
@@ -1079,7 +1070,6 @@ export class LayerBuilderService {
     for (const clip of ctx.clips) {
       if (clip.source?.type !== 'gaussian-splat') continue;
       if (!isVideoTrackVisible(ctx, clip.trackId)) continue;
-      if ((clip.source.gaussianSplatSettings?.render.useNativeRenderer ?? false) === true) continue;
       if (clip.startTime > rangeEnd || clip.startTime + clip.duration < rangeStart) continue;
 
       const mediaFile = getMediaFileForClip(ctx, clip);
@@ -1285,6 +1275,8 @@ export class LayerBuilderService {
         width: subWidth,
         height: subHeight,
         currentTime: nestedClipLocalTime,
+        sceneClips: nestedClip.nestedClips,
+        sceneTracks: nestedClip.nestedTracks,
       };
 
       return {
@@ -1366,12 +1358,29 @@ export class LayerBuilderService {
         source: {
           type: 'model',
           modelUrl: this.resolveClipModelUrl(nestedClip, nestedSourceTime),
-          threeDEffectorsEnabled: resolveThreeDEffectorsEnabled(nestedClip.source?.threeDEffectorsEnabled),
+          file: nestedClip.file,
+          threeDEffectorsEnabled: resolveSceneEffectorsEnabled(nestedClip.source?.threeDEffectorsEnabled),
           meshType: nestedClip.meshType ?? nestedClip.source?.meshType,
           text3DProperties: (nestedClip.meshType ?? nestedClip.source?.meshType) === 'text3d'
             ? (nestedClip.text3DProperties ?? nestedClip.source?.text3DProperties ?? DEFAULT_TEXT_3D_PROPERTIES)
             : (nestedClip.text3DProperties ?? nestedClip.source?.text3DProperties),
         },
+        is3D: true,
+      } as Layer;
+    } else if (nestedClip.source?.type === 'gaussian-splat') {
+      const mediaFile =
+        getMediaFileForClip(ctx, nestedClip) ??
+        useMediaStore.getState().files.find((file) =>
+          file.id === nestedClip.mediaFileId || file.id === nestedClip.source?.mediaFileId,
+        );
+      const source = this.buildGaussianSplatSourcePayload(
+        nestedClip,
+        nestedClipLocalTime,
+        mediaFile,
+      );
+      return {
+        ...baseLayer,
+        source,
         is3D: true,
       } as Layer;
     }

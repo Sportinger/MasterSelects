@@ -7,7 +7,13 @@ import { Logger } from '../../services/logger';
 const log = Logger.create('Preview');
 import { useEngine } from '../../hooks/useEngine';
 import { useShortcut } from '../../hooks/useShortcut';
-import { useEngineStore } from '../../stores/engineStore';
+import {
+  selectSceneNavClipId,
+  selectSceneNavFpsMode,
+  selectSceneNavFpsMoveSpeed,
+  stepSceneNavFpsMoveSpeed,
+  useEngineStore,
+} from '../../stores/engineStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore, DEFAULT_SCENE_CAMERA_SETTINGS } from '../../stores/mediaStore';
 import { useDockStore } from '../../stores/dockStore';
@@ -25,7 +31,6 @@ import { useLayerDrag } from './useLayerDrag';
 import { useSAM2Store } from '../../stores/sam2Store';
 import { renderScheduler } from '../../services/renderScheduler';
 import { engine } from '../../engine/WebGPUEngine';
-import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../../engine/gaussian/types';
 import { resolveOrbitCameraTranslationForFixedEye } from '../../engine/gaussian/core/SplatCameraUtils';
 import type { PreviewPanelSource } from '../../types/dock';
 import {
@@ -50,8 +55,6 @@ function getSharedSceneDefaultCameraDistance(fovDegrees: number): number {
   return worldHeight / (2 * Math.tan(fovRadians * 0.5));
 }
 
-const DEFAULT_NATIVE_GAUSSIAN_CAMERA_FOV = 60;
-const DEFAULT_NATIVE_GAUSSIAN_MIN_DISTANCE = 5;
 const CAMERA_NAV_FPS_LOOK_SPEED = 0.18;
 const CAMERA_NAV_FPS_PITCH_LIMIT = 89.5;
 
@@ -69,8 +72,10 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const engineInitFailed = useEngineStore((s) => s.engineInitFailed);
   const engineInitError = useEngineStore((s) => s.engineInitError);
   const engineStats = useEngineStore(s => s.engineStats);
-  const gaussianSplatNavClipId = useEngineStore((s) => s.gaussianSplatNavClipId);
-  const gaussianSplatNavFpsMode = useEngineStore((s) => s.gaussianSplatNavFpsMode);
+  const sceneNavClipId = useEngineStore(selectSceneNavClipId);
+  const sceneNavFpsMode = useEngineStore(selectSceneNavFpsMode);
+  const sceneNavFpsMoveSpeed = useEngineStore(selectSceneNavFpsMoveSpeed);
+  const setSceneNavFpsMoveSpeed = useEngineStore((s) => s.setSceneNavFpsMoveSpeed);
   const { clips, selectedClipIds, primarySelectedClipId, selectClip, updateClipTransform, maskEditMode, layers, selectedLayerId, selectLayer, updateLayer, tracks } = useTimelineStore(useShallow(s => ({
     clips: s.clips,
     selectedClipIds: s.selectedClipIds,
@@ -336,43 +341,27 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     [clips, selectedClipId],
   );
 
-  const selectedCameraNavClip = useMemo(
-    () => {
-      if (!selectedClip?.source) return null;
-
-      if (selectedClip.source.type === 'camera') {
-        return selectedClip;
-      }
-
-      if (selectedClip.source.type !== 'gaussian-splat') {
-        return null;
-      }
-
-      const useNativeRenderer =
-        selectedClip.source.gaussianSplatSettings?.render.useNativeRenderer ??
-        DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render.useNativeRenderer;
-
-      return useNativeRenderer ? selectedClip : null;
-    },
+  const selectedSceneNavClip = useMemo(
+    () => (selectedClip?.source?.type === 'camera' ? selectedClip : null),
     [selectedClip],
   );
 
-  // Read fresh nav transform at call-site to avoid stale closure after keyframe edits.
-  const getFreshCameraNavTransform = useCallback((clip: typeof selectedCameraNavClip) => {
+  // Read fresh scene-nav transform at call-site to avoid stale closure after keyframe edits.
+  const getFreshSceneNavTransform = useCallback((clip: typeof selectedSceneNavClip) => {
     if (!clip) return null;
     const { playheadPosition: ph, getInterpolatedTransform } = useTimelineStore.getState();
     const clipLocalTime = ph - clip.startTime;
     return getInterpolatedTransform(clip.id, clipLocalTime);
   }, []);
 
-  const gaussianNavEnabled = Boolean(
+  const sceneNavEnabled = Boolean(
     isEditableSource &&
     !editMode &&
-    selectedCameraNavClip &&
-    gaussianSplatNavClipId === selectedCameraNavClip.id,
+    selectedSceneNavClip &&
+    sceneNavClipId === selectedSceneNavClip.id,
   );
 
-  const getGaussianPointerLockTarget = useCallback(() => {
+  const getSceneNavPointerLockTarget = useCallback(() => {
     return canvasWrapperRef.current ?? containerRef.current;
   }, []);
 
@@ -391,7 +380,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     endBatch();
   }, []);
 
-  const applyGaussianCameraValues = useCallback((clipId: string, values: {
+  const applySceneCameraValues = useCallback((clipId: string, values: {
     positionX?: number;
     positionY?: number;
     scale?: number;
@@ -468,7 +457,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
   const scheduleGaussianWheelBatchEnd = useCallback(() => {
     if (gaussianWheelBatchTimerRef.current === null) {
-      startBatch('Gaussian zoom');
+      startBatch('Scene zoom');
     } else {
       window.clearTimeout(gaussianWheelBatchTimerRef.current);
     }
@@ -478,36 +467,19 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     }, 180);
   }, []);
 
-  const getCameraNavSolveSettings = useCallback((clip: typeof selectedCameraNavClip) => {
-    if (!clip?.source) return null;
+  const getSceneNavSolveSettings = useCallback((clip: typeof selectedSceneNavClip) => {
+    if (clip?.source?.type !== 'camera') return null;
 
-    if (clip.source.type === 'camera') {
-      const cameraSettings = clip.source.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS;
-      return {
-        settings: {
-          nearPlane: cameraSettings.near,
-          farPlane: cameraSettings.far,
-          fov: cameraSettings.fov,
-          minimumDistance: getSharedSceneDefaultCameraDistance(cameraSettings.fov),
-        },
-        sceneBounds: undefined,
-      };
-    }
-
-    if (clip.source.type === 'gaussian-splat') {
-      const renderSettings = clip.source.gaussianSplatSettings?.render ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render;
-      return {
-        settings: {
-          nearPlane: renderSettings.nearPlane,
-          farPlane: renderSettings.farPlane,
-          fov: DEFAULT_NATIVE_GAUSSIAN_CAMERA_FOV,
-          minimumDistance: DEFAULT_NATIVE_GAUSSIAN_MIN_DISTANCE,
-        },
-        sceneBounds: engine.getGaussianSplatSceneBounds(clip.id),
-      };
-    }
-
-    return null;
+    const cameraSettings = clip.source.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS;
+    return {
+      settings: {
+        nearPlane: cameraSettings.near,
+        farPlane: cameraSettings.far,
+        fov: cameraSettings.fov,
+        minimumDistance: getSharedSceneDefaultCameraDistance(cameraSettings.fov),
+      },
+      sceneBounds: undefined,
+    };
   }, []);
 
   const finishGaussianKeyboardBatch = useCallback(() => {
@@ -538,7 +510,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     setIsGaussianFpsLooking(false);
 
     if (exitPointerLock) {
-      const pointerLockTarget = getGaussianPointerLockTarget();
+      const pointerLockTarget = getSceneNavPointerLockTarget();
       if (pointerLockTarget && document.pointerLockElement === pointerLockTarget) {
         document.exitPointerLock();
       }
@@ -547,12 +519,12 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     if (activeClipId) {
       endBatch();
     }
-  }, [getGaussianPointerLockTarget]);
+  }, [getSceneNavPointerLockTarget]);
 
   const tickGaussianKeyboardMovement = useCallback((timestamp: number) => {
     gaussianKeyboardFrameRef.current = null;
 
-    if (!gaussianNavEnabled || !selectedCameraNavClip || document.activeElement !== containerRef.current) {
+    if (!sceneNavEnabled || !selectedSceneNavClip || document.activeElement !== containerRef.current) {
       stopGaussianKeyboardMovement();
       return;
     }
@@ -569,7 +541,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       : Math.min(0.05, (timestamp - gaussianKeyboardLastTimeRef.current) / 1000);
     gaussianKeyboardLastTimeRef.current = timestamp;
 
-    const freshTransform = getFreshCameraNavTransform(selectedCameraNavClip);
+    const freshTransform = getFreshSceneNavTransform(selectedSceneNavClip);
     if (!freshTransform) {
       stopGaussianKeyboardMovement();
       return;
@@ -587,19 +559,20 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
     const zoom = Math.max(0.01, freshTransform.scale.x || 1);
     const zoomDamping = 1 / Math.sqrt(Math.max(0.35, zoom));
-    const clipSource = selectedCameraNavClip.source;
-    const fovDegrees = clipSource?.type === 'camera'
-      ? clipSource.cameraSettings?.fov ?? DEFAULT_SCENE_CAMERA_SETTINGS.fov
-      : DEFAULT_NATIVE_GAUSSIAN_CAMERA_FOV;
-    const minimumDistance = clipSource?.type === 'camera'
-      ? getSharedSceneDefaultCameraDistance(fovDegrees)
-      : DEFAULT_NATIVE_GAUSSIAN_MIN_DISTANCE;
+    const clipSource = selectedSceneNavClip.source;
+    if (!clipSource || clipSource.type !== 'camera') {
+      stopGaussianKeyboardMovement();
+      return;
+    }
+    const fovDegrees = clipSource.cameraSettings?.fov ?? DEFAULT_SCENE_CAMERA_SETTINGS.fov;
+    const minimumDistance = getSharedSceneDefaultCameraDistance(fovDegrees);
     const baseDistance = freshTransform.position.z !== 0 ? Math.abs(freshTransform.position.z) : minimumDistance;
     const currentDistance = baseDistance / zoom;
-    const panStep = 0.9 * zoomDamping * dt;
-    const forwardStep = Math.max(0.15, currentDistance * 0.85) * dt;
+    const keyboardMoveSpeed = sceneNavFpsMode ? sceneNavFpsMoveSpeed : 1;
+    const panStep = 0.9 * zoomDamping * dt * keyboardMoveSpeed;
+    const forwardStep = Math.max(0.15, currentDistance * 0.85) * dt * keyboardMoveSpeed;
 
-    applyGaussianCameraValues(selectedCameraNavClip.id, {
+    applySceneCameraValues(selectedSceneNavClip.id, {
       ...(rightInput !== 0 ? { positionX: freshTransform.position.x + rightInput * panStep } : {}),
       ...(upInput !== 0 ? { positionY: freshTransform.position.y + upInput * panStep } : {}),
       ...(forwardInput !== 0
@@ -609,11 +582,13 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
     gaussianKeyboardFrameRef.current = window.requestAnimationFrame(tickGaussianKeyboardMovement);
   }, [
-    applyGaussianCameraValues,
+    applySceneCameraValues,
     finishGaussianKeyboardBatch,
-    gaussianNavEnabled,
-    getFreshCameraNavTransform,
-    selectedCameraNavClip,
+    sceneNavEnabled,
+    sceneNavFpsMode,
+    sceneNavFpsMoveSpeed,
+    getFreshSceneNavTransform,
+    selectedSceneNavClip,
     stopGaussianKeyboardLoop,
     stopGaussianKeyboardMovement,
   ]);
@@ -623,23 +598,23 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     gaussianKeyboardFrameRef.current = window.requestAnimationFrame(tickGaussianKeyboardMovement);
   }, [tickGaussianKeyboardMovement]);
 
-  const handleGaussianNavKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!gaussianNavEnabled || !selectedCameraNavClip) return;
+  const handleSceneNavKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!sceneNavEnabled || !selectedSceneNavClip) return;
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     if (!isCameraNavMoveCode(e.code)) return;
 
     e.preventDefault();
 
     if (!gaussianKeyboardBatchActiveRef.current) {
-      startBatch('Gaussian move');
+      startBatch('Scene move');
       gaussianKeyboardBatchActiveRef.current = true;
     }
 
     gaussianKeyboardMoveCodesRef.current.add(e.code);
     startGaussianKeyboardMovement();
-  }, [gaussianNavEnabled, selectedCameraNavClip, startGaussianKeyboardMovement]);
+  }, [sceneNavEnabled, selectedSceneNavClip, startGaussianKeyboardMovement]);
 
-  const handleGaussianNavKeyUp = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleSceneNavKeyUp = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (!isCameraNavMoveCode(e.code)) return;
 
     e.preventDefault();
@@ -651,7 +626,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     }
   }, [finishGaussianKeyboardBatch, stopGaussianKeyboardLoop]);
 
-  const handleGaussianNavBlur = useCallback(() => {
+  const handleSceneNavBlur = useCallback(() => {
     stopGaussianFpsLook();
     stopGaussianKeyboardMovement();
   }, [stopGaussianFpsLook, stopGaussianKeyboardMovement]);
@@ -677,7 +652,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   }, [stopGaussianFpsLook, stopGaussianKeyboardMovement]);
 
   useEffect(() => {
-    if (gaussianNavEnabled) return;
+    if (sceneNavEnabled) return;
     stopGaussianFpsLook();
     stopGaussianKeyboardMovement();
     if (isGaussianOrbiting) {
@@ -690,10 +665,10 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       setIsGaussianPanning(false);
       endBatch();
     }
-  }, [gaussianNavEnabled, isGaussianOrbiting, isGaussianPanning, stopGaussianFpsLook, stopGaussianKeyboardMovement]);
+  }, [sceneNavEnabled, isGaussianOrbiting, isGaussianPanning, stopGaussianFpsLook, stopGaussianKeyboardMovement]);
 
   useEffect(() => {
-    if (gaussianSplatNavFpsMode) {
+    if (sceneNavFpsMode) {
       if (isGaussianOrbiting) {
         gaussianOrbitStart.current.clipId = null;
         setIsGaussianOrbiting(false);
@@ -705,7 +680,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     if (isGaussianFpsLooking) {
       stopGaussianFpsLook();
     }
-  }, [gaussianSplatNavFpsMode, isGaussianFpsLooking, isGaussianOrbiting, stopGaussianFpsLook]);
+  }, [sceneNavFpsMode, isGaussianFpsLooking, isGaussianOrbiting, stopGaussianFpsLook]);
 
   useEffect(() => {
     if (!isGaussianOrbiting) return;
@@ -719,7 +694,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       const nextPitch = pitch + dy * 0.25;
       const nextYaw = yaw - dx * 0.25;
 
-      applyGaussianCameraValues(clipId, {
+      applySceneCameraValues(clipId, {
         rotationX: nextPitch,
         rotationY: nextYaw,
       });
@@ -738,20 +713,20 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', finishGaussianOrbit);
     };
-  }, [applyGaussianCameraValues, isGaussianOrbiting]);
+  }, [applySceneCameraValues, isGaussianOrbiting]);
 
   useEffect(() => {
-    if (!isGaussianFpsLooking || !selectedCameraNavClip) return;
+    if (!isGaussianFpsLooking || !selectedSceneNavClip) return;
 
     const handleWindowMouseMove = (e: MouseEvent) => {
       const { clipId, x, y } = gaussianFpsLookStart.current;
       if (!clipId) return;
 
-      const freshTransform = getFreshCameraNavTransform(selectedCameraNavClip);
-      const solveSettings = getCameraNavSolveSettings(selectedCameraNavClip);
+      const freshTransform = getFreshSceneNavTransform(selectedSceneNavClip);
+      const solveSettings = getSceneNavSolveSettings(selectedSceneNavClip);
       if (!freshTransform || !solveSettings) return;
 
-      const pointerLockTarget = getGaussianPointerLockTarget();
+      const pointerLockTarget = getSceneNavPointerLockTarget();
       const pointerLockActive = pointerLockTarget !== null && document.pointerLockElement === pointerLockTarget;
       const deltaX = pointerLockActive ? e.movementX : e.clientX - x;
       const deltaY = pointerLockActive ? e.movementY : e.clientY - y;
@@ -780,7 +755,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         solveSettings.sceneBounds,
       );
 
-      applyGaussianCameraValues(clipId, {
+      applySceneCameraValues(clipId, {
         positionX: nextTranslation.positionX,
         positionY: nextTranslation.positionY,
         forwardOffset: nextTranslation.forwardOffset,
@@ -794,7 +769,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     };
 
     const handlePointerLockChange = () => {
-      const pointerLockTarget = getGaussianPointerLockTarget();
+      const pointerLockTarget = getSceneNavPointerLockTarget();
       const pointerLockActive = pointerLockTarget !== null && document.pointerLockElement === pointerLockTarget;
       if (!pointerLockActive && gaussianFpsLookStart.current.clipId) {
         stopGaussianFpsLook(false);
@@ -811,14 +786,14 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       document.removeEventListener('pointerlockchange', handlePointerLockChange);
     };
   }, [
-    applyGaussianCameraValues,
+    applySceneCameraValues,
     effectiveResolution.height,
     effectiveResolution.width,
-    getCameraNavSolveSettings,
-    getFreshCameraNavTransform,
-    getGaussianPointerLockTarget,
+    getSceneNavSolveSettings,
+    getFreshSceneNavTransform,
+    getSceneNavPointerLockTarget,
     isGaussianFpsLooking,
-    selectedCameraNavClip,
+    selectedSceneNavClip,
     stopGaussianFpsLook,
   ]);
 
@@ -837,7 +812,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       const nextPanX = panX - dx * panScaleX;
       const nextPanY = panY + dy * panScaleY;
 
-      applyGaussianCameraValues(clipId, {
+      applySceneCameraValues(clipId, {
         positionX: nextPanX,
         positionY: nextPanY,
       });
@@ -856,7 +831,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', finishGaussianPan);
     };
-  }, [applyGaussianCameraValues, effectiveResolution.height, effectiveResolution.width, isGaussianPanning]);
+  }, [applySceneCameraValues, effectiveResolution.height, effectiveResolution.width, isGaussianPanning]);
 
   // Sync layer selection when clip is selected in timeline (for edit mode)
   useEffect(() => {
@@ -916,8 +891,24 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
   // Handle zoom with scroll wheel in edit mode
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (gaussianNavEnabled && selectedCameraNavClip && isCanvasInteractionTarget(e.target)) {
-      const freshTransform = getFreshCameraNavTransform(selectedCameraNavClip);
+    if (sceneNavEnabled && selectedSceneNavClip && isCanvasInteractionTarget(e.target)) {
+      const shouldAdjustFpsSpeed = sceneNavFpsMode && (
+        gaussianKeyboardMoveCodesRef.current.size > 0 ||
+        gaussianFpsLookStart.current.clipId !== null
+      );
+      if (shouldAdjustFpsSpeed) {
+        e.preventDefault();
+        const direction = e.deltaY < 0 ? 1 : e.deltaY > 0 ? -1 : 0;
+        if (direction !== 0) {
+          setSceneNavFpsMoveSpeed(stepSceneNavFpsMoveSpeed(
+            useEngineStore.getState().sceneNavFpsMoveSpeed,
+            direction,
+          ));
+        }
+        return;
+      }
+
+      const freshTransform = getFreshSceneNavTransform(selectedSceneNavClip);
       if (!freshTransform) return;
 
       e.preventDefault();
@@ -927,7 +918,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       const zoomFactor = Math.exp(-e.deltaY * 0.0025);
       const nextZoom = Math.max(0.05, Math.min(40, currentZoom * zoomFactor));
 
-      applyGaussianCameraValues(selectedCameraNavClip.id, {
+      applySceneCameraValues(selectedSceneNavClip.id, {
         scale: nextZoom,
       });
       return;
@@ -965,12 +956,14 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   }, [
     containerSize,
     editMode,
-    gaussianNavEnabled,
-    getFreshCameraNavTransform,
+    sceneNavEnabled,
+    sceneNavFpsMode,
+    getFreshSceneNavTransform,
     isCanvasInteractionTarget,
     scheduleGaussianWheelBatchEnd,
-    applyGaussianCameraValues,
-    selectedCameraNavClip,
+    applySceneCameraValues,
+    setSceneNavFpsMoveSpeed,
+    selectedSceneNavClip,
     viewPan,
     viewZoom,
   ]);
@@ -980,20 +973,20 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     setEditMode(prev => !prev);
   }, { enabled: isEditableSource });
 
-  // Handle gaussian nav and edit-mode panning
+  // Handle scene navigation and edit-mode panning
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (gaussianNavEnabled && selectedCameraNavClip && isCanvasInteractionTarget(e.target)) {
+    if (sceneNavEnabled && selectedSceneNavClip && isCanvasInteractionTarget(e.target)) {
       containerRef.current?.focus({ preventScroll: true });
-      const freshTransform = getFreshCameraNavTransform(selectedCameraNavClip);
+      const freshTransform = getFreshSceneNavTransform(selectedSceneNavClip);
       if (!freshTransform) return;
 
       if (e.button === 0) {
         if (e.shiftKey) {
           e.preventDefault();
           endGaussianWheelBatch();
-          startBatch('Gaussian pan');
+          startBatch('Scene pan');
           gaussianPanStart.current = {
-            clipId: selectedCameraNavClip.id,
+            clipId: selectedSceneNavClip.id,
             x: e.clientX,
             y: e.clientY,
             panX: freshTransform.position.x,
@@ -1006,19 +999,19 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         }
         e.preventDefault();
         endGaussianWheelBatch();
-        if (gaussianSplatNavFpsMode) {
-          startBatch('Gaussian look');
+        if (sceneNavFpsMode) {
+          startBatch('Scene look');
           gaussianFpsLookStart.current = {
-            clipId: selectedCameraNavClip.id,
+            clipId: selectedSceneNavClip.id,
             x: e.clientX,
             y: e.clientY,
           };
-          getGaussianPointerLockTarget()?.requestPointerLock?.();
+          getSceneNavPointerLockTarget()?.requestPointerLock?.();
           setIsGaussianFpsLooking(true);
         } else {
-          startBatch('Gaussian orbit');
+          startBatch('Scene orbit');
           gaussianOrbitStart.current = {
-            clipId: selectedCameraNavClip.id,
+            clipId: selectedSceneNavClip.id,
             x: e.clientX,
             y: e.clientY,
             pitch: freshTransform.rotation.x,
@@ -1033,9 +1026,9 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       if (e.button === 1 || e.button === 2) {
         e.preventDefault();
         endGaussianWheelBatch();
-        startBatch('Gaussian pan');
+        startBatch('Scene pan');
         gaussianPanStart.current = {
-          clipId: selectedCameraNavClip.id,
+          clipId: selectedSceneNavClip.id,
           x: e.clientX,
           y: e.clientY,
           panX: freshTransform.position.x,
@@ -1063,12 +1056,12 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   }, [
     editMode,
     endGaussianWheelBatch,
-    gaussianNavEnabled,
-    gaussianSplatNavFpsMode,
-    getFreshCameraNavTransform,
-    getGaussianPointerLockTarget,
+    sceneNavEnabled,
+    sceneNavFpsMode,
+    getFreshSceneNavTransform,
+    getSceneNavPointerLockTarget,
     isCanvasInteractionTarget,
-    selectedCameraNavClip,
+    selectedSceneNavClip,
     viewPan,
   ]);
 
@@ -1088,16 +1081,16 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   }, []);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    if (gaussianNavEnabled && isCanvasInteractionTarget(e.target)) {
+    if (sceneNavEnabled && isCanvasInteractionTarget(e.target)) {
       e.preventDefault();
     }
-  }, [gaussianNavEnabled, isCanvasInteractionTarget]);
+  }, [sceneNavEnabled, isCanvasInteractionTarget]);
 
   const handleAuxClick = useCallback((e: React.MouseEvent) => {
-    if (gaussianNavEnabled && isCanvasInteractionTarget(e.target)) {
+    if (sceneNavEnabled && isCanvasInteractionTarget(e.target)) {
       e.preventDefault();
     }
-  }, [gaussianNavEnabled, isCanvasInteractionTarget]);
+  }, [sceneNavEnabled, isCanvasInteractionTarget]);
 
   // Reset view
   const resetView = useCallback(() => {
@@ -1150,9 +1143,9 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       onMouseLeave={handleMouseUp}
       onContextMenu={handleContextMenu}
       onAuxClick={handleAuxClick}
-      onKeyDownCapture={handleGaussianNavKeyDown}
-      onKeyUpCapture={handleGaussianNavKeyUp}
-      onBlur={handleGaussianNavBlur}
+      onKeyDownCapture={handleSceneNavKeyDown}
+      onKeyUpCapture={handleSceneNavKeyUp}
+      onBlur={handleSceneNavBlur}
       tabIndex={0}
       style={{
         cursor: isGaussianOrbiting || isGaussianPanning
@@ -1161,8 +1154,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
             ? 'crosshair'
           : isPanning
             ? 'grabbing'
-            : gaussianNavEnabled
-              ? (gaussianSplatNavFpsMode ? 'crosshair' : 'grab')
+            : sceneNavEnabled
+              ? (sceneNavFpsMode ? 'crosshair' : 'grab')
               : editMode
                 ? 'crosshair'
                 : 'default',
@@ -1285,19 +1278,11 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
             Drag: Move | Handles: Scale (Shift: Lock Ratio) | Scroll: Zoom | Alt+Drag: Pan
           </div>
         )}
-        {gaussianNavEnabled && (
+        {sceneNavEnabled && (
           <div className="preview-edit-hint">
-            {selectedCameraNavClip?.source?.type === 'camera'
-              ? (
-                  gaussianSplatNavFpsMode
-                    ? 'Scene Camera Nav: click preview, hold LMB to look, WASD move, Q/E up-down, MMB/RMB/Shift+LMB pan, wheel zoom'
-                    : 'Scene Camera Nav: click preview, WASD move, Q/E up-down, LMB orbit, MMB/RMB/Shift+LMB pan, wheel zoom'
-                )
-              : (
-                  gaussianSplatNavFpsMode
-                    ? 'Gaussian Nav: click preview, hold LMB to look, WASD move, Q/E up-down, MMB/RMB/Shift+LMB pan, wheel zoom'
-                    : 'Gaussian Nav: click preview, WASD move, Q/E up-down, LMB orbit, MMB/RMB/Shift+LMB pan, wheel zoom'
-                )}
+            {sceneNavFpsMode
+              ? 'Scene Nav: click preview, hold LMB to look, WASD/QE move, MMB/RMB/Shift+LMB pan, wheel speed while moving/looking, wheel zoom otherwise'
+              : 'Scene Nav: click preview, WASD move, Q/E up-down, LMB orbit, MMB/RMB/Shift+LMB pan, wheel zoom'}
           </div>
         )}
 

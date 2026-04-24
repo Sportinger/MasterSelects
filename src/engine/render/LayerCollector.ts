@@ -227,7 +227,7 @@ export class LayerCollector {
       return null;
     }
 
-    // 3D Model sources — no GPU texture needed, handled by ThreeSceneRenderer
+    // 3D model sources do not contribute a 2D GPU texture here.
     if (sourceType === 'model') {
       return {
         layer,

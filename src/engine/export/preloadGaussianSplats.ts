@@ -2,10 +2,11 @@ import { Logger } from '../../services/logger';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
 import type { TimelineClip, TimelineTrack } from '../../stores/timeline/types';
-import type { GaussianSplatSequenceData } from '../../types';
 import { engine } from '../WebGPUEngine';
-import { waitForBasePreparedSplatRuntime, waitForTargetPreparedSplatRuntime } from '../three/splatRuntimeCache';
-import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../gaussian/types';
+import {
+  buildSharedSplatRuntimeRequest,
+  getUsableSplatFile,
+} from '../scene/runtime/SharedSplatRuntimeUtils';
 
 const log = Logger.create('ExportAssetPreload');
 const MAX_EXPORT_NESTING_DEPTH = 4;
@@ -99,109 +100,75 @@ export async function preloadGaussianSplatsForExport(options: PreloadOptions): P
     return;
   }
 
-  const uniqueSplats = new Map<string, {
-    cacheKey: string;
-    clipId: string;
-    url: string;
-    fileName: string;
-    fileHash?: string;
-    file?: File;
-    gaussianSplatSequence?: GaussianSplatSequenceData;
-    isSequence: boolean;
-    useNativeRenderer: boolean;
-  }>();
+  const uniqueSplats = new Map<string, ReturnType<typeof buildSharedSplatRuntimeRequest>>();
   for (const clip of clips) {
     const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
     const mediaFile = mediaFileId
       ? useMediaStore.getState().files.find((file) => file.id === mediaFileId) ?? null
       : null;
     const url = clip.source?.gaussianSplatUrl;
-    if (!url) continue;
     const fileName =
       clip.source?.gaussianSplatFileName ??
       mediaFile?.file?.name ??
       clip.file?.name ??
       mediaFile?.name ??
       clip.name;
-    const file = clip.file && (typeof clip.file.size !== 'number' || clip.file.size > 0)
-      ? clip.file
-      : mediaFile?.file && (typeof mediaFile.file.size !== 'number' || mediaFile.file.size > 0)
-        ? mediaFile.file
-      : undefined;
+    const file = getUsableSplatFile(clip.file, mediaFile?.file);
     const gaussianSplatSequence = clip.source?.gaussianSplatSequence ?? mediaFile?.gaussianSplatSequence;
-    const isSequence = !!gaussianSplatSequence;
-    const fileHash = isSequence
+    const fileHash = gaussianSplatSequence
       ? undefined
       : (clip.source?.gaussianSplatFileHash ?? mediaFile?.fileHash);
-    const useNativeRenderer =
-      clip.source?.gaussianSplatSettings?.render.useNativeRenderer ??
-      DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render.useNativeRenderer;
-    const cacheKey = fileHash ?? mediaFileId ?? `${fileName || url || clip.id}|${url || clip.id}`;
-    uniqueSplats.set(cacheKey, {
-      cacheKey,
+    const request = buildSharedSplatRuntimeRequest({
       clipId: clip.id,
+      runtimeKey: clip.source?.gaussianSplatRuntimeKey,
       url,
+      file,
       fileName,
       fileHash,
-      file,
+      mediaFileId,
       gaussianSplatSequence,
-      isSequence,
-      useNativeRenderer,
+      gaussianSplatSettings: clip.source?.gaussianSplatSettings,
+      requestedMaxSplats: 0,
     });
+    uniqueSplats.set(request.sceneKey, request);
   }
 
   if (uniqueSplats.size === 0) {
     return;
   }
 
-  const splatEntries = [...uniqueSplats.values()];
-  const nativeSplats = splatEntries.filter((entry) => entry.useNativeRenderer);
-  const threeSplats = splatEntries.filter((entry) => !entry.useNativeRenderer);
+  const nativeSplats = [...uniqueSplats.values()];
+  const nativePreloadSplats = nativeSplats.filter(({ url, file }) => !!url || !!file);
 
   const nativeResults = await Promise.allSettled(
-    nativeSplats.map(({ clipId, url, fileName }) =>
-      engine.ensureGaussianSplatSceneLoaded(clipId, url, fileName),
-    ),
+    nativePreloadSplats.map(({ sceneKey, clipId, url, fileName, file }) =>
+        engine.ensureGaussianSplatSceneLoaded({
+          sceneKey,
+          clipId,
+          url,
+          fileName,
+          file,
+        }),
+      ),
   );
 
-  let threeResults: PromiseSettledResult<unknown>[] = [];
-  if (threeSplats.length > 0) {
-    const initialized = await engine.ensureThreeSceneRendererInitialized(1, 1);
-    if (!initialized) {
-      log.warn('Three.js renderer could not be initialized for gaussian splat export preloading');
-    } else {
-      threeResults = await Promise.allSettled(
-        threeSplats.map(({ cacheKey, fileHash, file, url, fileName, gaussianSplatSequence, isSequence }) =>
-          (isSequence ? waitForBasePreparedSplatRuntime : waitForTargetPreparedSplatRuntime)({
-            cacheKey,
-            fileHash,
-            file,
-            url,
-            fileName,
-            gaussianSplatSequence,
-            // Export should build the full splat runtime, regardless of preview cap.
-            requestedMaxSplats: 0,
-          }),
-        ),
-      );
-    }
-  }
+  nativeSplats
+    .filter(({ url, file }) => !url && !file)
+    .forEach(({ clipId }) => {
+      log.warn('Native scene gaussian splat preload skipped because no URL or file was available', { clipId });
+    });
 
   nativeResults.forEach((result, index) => {
-    const clip = nativeSplats[index];
+    const clip = nativePreloadSplats[index];
+    if (!clip) {
+      return;
+    }
     if (result.status === 'rejected') {
-      log.warn('Gaussian splat preload failed', { clipId: clip.clipId, error: result.reason });
+      log.warn('Native scene gaussian splat preload failed', { clipId: clip.clipId, error: result.reason });
       return;
     }
     if (!result.value) {
-      log.warn('Gaussian splat preload did not finish with a ready scene', { clipId: clip.clipId });
-    }
-  });
-
-  threeResults.forEach((result, index) => {
-    const clip = threeSplats[index];
-    if (result.status === 'rejected') {
-      log.warn('Three.js gaussian splat runtime preload failed', { clipId: clip.clipId, error: result.reason });
+      log.warn('Native scene gaussian splat preload did not finish with a ready scene', { clipId: clip.clipId });
     }
   });
 }
@@ -218,9 +185,9 @@ export async function preload3DAssetsForExport(options: Preload3DOptions): Promi
     return;
   }
 
-  const rendererReady = await engine.ensureThreeSceneRendererInitialized(options.width, options.height);
+  const rendererReady = await engine.ensureSceneRendererInitialized(options.width, options.height);
   if (!rendererReady) {
-    log.warn('Three.js renderer could not be initialized before export');
+    log.warn('Shared scene renderer could not be initialized before export');
     return;
   }
 
@@ -243,7 +210,7 @@ export async function preload3DAssetsForExport(options: Preload3DOptions): Promi
 
   const results = await Promise.allSettled(
     modelPreloads.map((preload) =>
-      engine.preloadThreeModelAsset(preload.modelUrl, preload.fileName),
+      engine.preloadSceneModelAsset(preload.modelUrl, preload.fileName),
     ),
   );
   results.forEach((result, index) => {

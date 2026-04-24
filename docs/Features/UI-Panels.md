@@ -115,7 +115,7 @@ MasterSelects currently exposes 17 dockable panel types, plus the Slot Grid over
 | **Media** | `media` | Media browser, folders, and project items |
 | **Properties** | `clip-properties` | Unified clip inspector |
 | **Export** | `export` | Render and export controls |
-| **MIDI Mapping** | `midi-mapping` | Overview and editor for assigned MIDI notes |
+| **MIDI Mapping** | `midi-mapping` | Editable list of assigned MIDI notes and trigger previews |
 | **AI Chat** | `ai-chat` | Editing assistant chat |
 | **AI Video** | `ai-video` | Classic generator plus FlashBoard workspace |
 | **AI Segment** | `ai-segment` | Local SAM2 segmentation tools |
@@ -181,10 +181,11 @@ MasterSelects currently exposes 17 dockable panel types, plus the Slot Grid over
 - Shows all currently assigned MIDI notes in one list
 - Includes both global transport bindings and per-marker bindings
 - Each row shows the note, target, and resulting command behavior
-- Existing entries can be edited directly:
-- Change channel and note manually
-- Relearn the binding from incoming MIDI
-- Move a marker binding to another available marker from a dropdown list
+- Click any mapping card to trigger the assigned action and preview what the MIDI note does
+- `Edit` opens inline controls for manual channel/note changes and marker reassignment
+- `Learn` and `Clear` remain available directly from the panel
+- Marker bindings support `Jump To Marker`, `Play From Marker`, and `Jump To Marker And Stop`
+- Transport and marker learning still happen in Settings and the marker context menu
 
 ### AI Chat Panel
 
@@ -413,6 +414,7 @@ MIDI Control (N devices)
 
 - `View -> Panels -> MIDI Mapping` opens the dedicated mapping panel
 - The panel lists all assigned transport and marker bindings
+- Clicking a binding previews the exact trigger path without needing a physical MIDI note
 - Empty-state guidance points back to Settings and the marker right-click menu
 
 ---

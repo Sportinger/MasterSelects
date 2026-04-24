@@ -70,6 +70,11 @@ function formatEditableValue(value: number, decimals: number): string {
   return value.toFixed(decimals);
 }
 
+function roundValue(value: number, decimals: number): number {
+  const factor = Math.pow(10, decimals + 2);
+  return Math.round(value * factor) / factor;
+}
+
 function parseOptionalNumber(value: string): number | undefined {
   const normalized = value.trim().replace(',', '.');
   if (normalized.length === 0) return undefined;
@@ -117,13 +122,17 @@ export function EditableDraggableNumber({
   onDragEnd,
 }: EditableDraggableNumberProps) {
   const spanRef = useRef<HTMLSpanElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLSpanElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const accumulatedDelta = useRef(0);
+  const rawDragDistance = useRef(0);
   const startValue = useRef(0);
   const lastClientX = useRef(0);
   const hasPointerLock = useRef(false);
   const dragStarted = useRef(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftValue, setDraftValue] = useState(() => formatEditableValue(value, decimals));
   const [draftDefaultValue, setDraftDefaultValue] = useState('');
   const [showBoundsPopover, setShowBoundsPopover] = useState(false);
   const [draftMin, setDraftMin] = useState('');
@@ -145,12 +154,28 @@ export function EditableDraggableNumber({
   const effectiveDefaultValue = persistedSettings?.defaultValue ?? defaultValue;
 
   const controlTitle = useMemo(() => {
-    const parts = ['Drag to change', 'right-click to edit default/min/max'];
+    const parts = ['Drag to change', 'Shift-drag coarse', 'Ctrl-drag fine', 'double-click to type'];
     if (effectiveDefaultValue !== undefined) {
-      parts.push('double-click to reset');
+      parts.push('right-click to default');
     }
+    parts.push('middle-click for range');
     return parts.join(', ');
   }, [effectiveDefaultValue]);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setDraftValue(formatEditableValue(value, decimals));
+    }
+  }, [decimals, isEditing, value]);
+
+  useEffect(() => {
+    if (!isEditing) return;
+    const rafId = window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
+    return () => window.cancelAnimationFrame(rafId);
+  }, [isEditing]);
 
   const syncBoundsDraft = useCallback(() => {
     setDraftDefaultValue(
@@ -161,6 +186,12 @@ export function EditableDraggableNumber({
     setDraftMin(effectiveMin !== undefined ? String(effectiveMin) : '');
     setDraftMax(effectiveMax !== undefined ? String(effectiveMax) : '');
   }, [decimals, effectiveDefaultValue, effectiveMax, effectiveMin]);
+
+  const openBoundsPopover = useCallback(() => {
+    setIsEditing(false);
+    syncBoundsDraft();
+    setShowBoundsPopover(true);
+  }, [syncBoundsDraft]);
 
   useEffect(() => {
     setDraftDefaultValue(
@@ -266,10 +297,18 @@ export function EditableDraggableNumber({
   }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (isEditing) return;
+    if (e.button === 1) {
+      e.preventDefault();
+      e.stopPropagation();
+      openBoundsPopover();
+      return;
+    }
     if (showBoundsPopover || e.button !== 0) return;
     e.preventDefault();
 
     accumulatedDelta.current = 0;
+    rawDragDistance.current = 0;
     startValue.current = value;
     lastClientX.current = e.clientX;
     hasPointerLock.current = false;
@@ -285,26 +324,25 @@ export function EditableDraggableNumber({
       }
 
       if (!dragStarted.current) {
-        accumulatedDelta.current += dx;
-        if (Math.abs(accumulatedDelta.current) < 2) {
+        rawDragDistance.current += dx;
+        if (Math.abs(rawDragDistance.current) < 2) {
           return;
         }
         dragStarted.current = true;
         onDragStart?.();
         requestPointerLock();
-      } else {
-        accumulatedDelta.current += dx;
       }
 
       let modifierMultiplier = 1;
-      if (event.ctrlKey) modifierMultiplier = 0.05;
-      else if (event.shiftKey) modifierMultiplier = 0.2;
+      if (event.shiftKey) modifierMultiplier = 10;
+      else if (event.ctrlKey) modifierMultiplier = 0.1;
 
+      accumulatedDelta.current += dx * modifierMultiplier;
       const perPixelStep = getPerPixelStep(startValue.current, sensitivity, decimals, effectiveMin, effectiveMax);
-      const deltaValue = accumulatedDelta.current * perPixelStep * modifierMultiplier;
+      const deltaValue = accumulatedDelta.current * perPixelStep;
       const unclampedValue = startValue.current + deltaValue;
       const nextValue = clampValue(unclampedValue, effectiveMin, effectiveMax);
-      const preciseValue = Math.round(nextValue * Math.pow(10, decimals + 2)) / Math.pow(10, decimals + 2);
+      const preciseValue = roundValue(nextValue, decimals);
       onChange(preciseValue);
     };
 
@@ -330,9 +368,11 @@ export function EditableDraggableNumber({
     onChange,
     onDragEnd,
     onDragStart,
+    openBoundsPopover,
     requestPointerLock,
     sensitivity,
     showBoundsPopover,
+    isEditing,
     value,
   ]);
 
@@ -361,7 +401,7 @@ export function EditableDraggableNumber({
     }
 
     const clampedCurrent = clampValue(value, nextSettings.min, nextSettings.max);
-    const roundedValue = Math.round(clampedCurrent * Math.pow(10, decimals + 2)) / Math.pow(10, decimals + 2);
+    const roundedValue = roundValue(clampedCurrent, decimals);
     if (roundedValue !== value) {
       onChange(roundedValue);
     }
@@ -387,9 +427,37 @@ export function EditableDraggableNumber({
     if (effectiveDefaultValue === undefined) return;
     const nextValue = clampValue(effectiveDefaultValue, effectiveMin, effectiveMax);
     onChange(nextValue);
+    setDraftValue(formatEditableValue(nextValue, decimals));
     setDraftDefaultValue(formatEditableValue(nextValue, decimals));
     setShowBoundsPopover(false);
   }, [decimals, effectiveDefaultValue, effectiveMax, effectiveMin, onChange]);
+
+  const beginEditing = useCallback(() => {
+    setShowBoundsPopover(false);
+    setDraftValue(formatEditableValue(value, decimals));
+    setIsEditing(true);
+  }, [decimals, value]);
+
+  const cancelEditing = useCallback(() => {
+    setDraftValue(formatEditableValue(value, decimals));
+    setIsEditing(false);
+  }, [decimals, value]);
+
+  const commitEditing = useCallback(() => {
+    const parsedValue = parseOptionalNumber(draftValue);
+    if (parsedValue === undefined) {
+      cancelEditing();
+      return;
+    }
+
+    const nextValue = roundValue(
+      clampValue(parsedValue, effectiveMin, effectiveMax),
+      decimals,
+    );
+    onChange(nextValue);
+    setDraftValue(formatEditableValue(nextValue, decimals));
+    setIsEditing(false);
+  }, [cancelEditing, decimals, draftValue, effectiveMax, effectiveMin, onChange]);
 
   const popover = showBoundsPopover && typeof document !== 'undefined'
     ? createPortal(
@@ -453,25 +521,53 @@ export function EditableDraggableNumber({
 
   return (
     <span ref={rootRef} className="draggable-number-anchor">
-      <span
-        ref={spanRef}
-        className="draggable-number"
-        onMouseDown={handleMouseDown}
-        onDoubleClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          handleResetToDefault();
-        }}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          syncBoundsDraft();
-          setShowBoundsPopover(true);
-        }}
-        title={controlTitle}
-      >
-        {value.toFixed(decimals)}{suffix}
-      </span>
+      {isEditing ? (
+        <input
+          ref={inputRef}
+          className="draggable-number draggable-number-input"
+          type="text"
+          inputMode="decimal"
+          value={draftValue}
+          style={{ width: `${Math.max(4, Math.min(18, draftValue.length + 1))}ch` }}
+          onChange={(e) => setDraftValue(e.target.value)}
+          onBlur={commitEditing}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              commitEditing();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              cancelEditing();
+            }
+          }}
+          title="Enter value"
+        />
+      ) : (
+        <span
+          ref={spanRef}
+          className="draggable-number"
+          onMouseDown={handleMouseDown}
+          onAuxClick={(e) => {
+            if (e.button === 1) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }}
+          onDoubleClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            beginEditing();
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleResetToDefault();
+          }}
+          title={controlTitle}
+        >
+          {value.toFixed(decimals)}{suffix}
+        </span>
+      )}
 
       {popover}
     </span>

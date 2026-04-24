@@ -5,9 +5,9 @@ import {
   resolveThreeDEffectorsEnabled,
   resolveThreeDEffectorAxis,
 } from '../../src/utils/threeDEffectors';
-import type { SplatEffectorRuntimeData } from '../../src/engine/three/types';
+import type { SceneSplatEffectorRuntimeData } from '../../src/engine/scene/types';
 
-function createEffector(overrides: Partial<SplatEffectorRuntimeData> = {}): SplatEffectorRuntimeData {
+function createEffector(overrides: Partial<SceneSplatEffectorRuntimeData> = {}): SceneSplatEffectorRuntimeData {
   return {
     clipId: 'effector-1',
     position: { x: 0, y: 0, z: 0 },

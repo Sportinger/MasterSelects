@@ -81,7 +81,7 @@ describe('splatRuntimeCache', () => {
       .mockRejectedValueOnce(new Error('first load failed'))
       .mockResolvedValueOnce(createAsset(file));
 
-    const { resolvePreparedSplatRuntime } = await import('../../src/engine/three/splatRuntimeCache');
+    const { resolvePreparedSplatRuntime } = await import('../../src/engine/scene/runtime/SharedSplatRuntimeCache');
     const options = {
       cacheKey: 'sequence/frame0000000.ply',
       file,
@@ -129,7 +129,7 @@ describe('splatRuntimeCache', () => {
       });
     });
 
-    const { waitForBasePreparedSplatRuntime } = await import('../../src/engine/three/splatRuntimeCache');
+    const { waitForBasePreparedSplatRuntime } = await import('../../src/engine/scene/runtime/SharedSplatRuntimeCache');
     const runtime = await waitForBasePreparedSplatRuntime({
       cacheKey: 'Raw/frame0000001.ply',
       file: frameB,

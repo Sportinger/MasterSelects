@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
+import { useEngineStore } from '../../../stores/engineStore';
 import { DEFAULT_TEXT_3D_PROPERTIES } from '../../../stores/timeline/constants';
 import { TextTab } from '../TextTab';
 
@@ -93,6 +94,16 @@ export function PropertiesPanel() {
 
     ensureSlotClipSettings(selectedSlotComposition.id, selectedSlotComposition.duration);
   }, [ensureSlotClipSettings, selectedSlotComposition, selectedSlotIndex]);
+
+  useEffect(() => {
+    const nextSceneNavClipId = selectedClip?.source?.type === 'camera'
+      ? selectedClip.id
+      : null;
+    const engineState = useEngineStore.getState();
+    if (engineState.sceneNavClipId !== nextSceneNavClipId) {
+      engineState.setSceneNavClipId(nextSceneNavClipId);
+    }
+  }, [selectedClip?.id, selectedClip?.source?.type]);
 
   useEffect(() => {
     if (isSlotMode && activeTab !== 'slot-clip') {

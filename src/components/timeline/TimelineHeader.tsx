@@ -23,8 +23,7 @@ type KeyframeTrackClip = {
 
 const usesCameraPropertyModel = (clip: KeyframeTrackClip | null | undefined): boolean => {
   if (!clip?.source) return false;
-  if (clip.source.type === 'camera') return true;
-  return clip.source.type === 'gaussian-splat' && clip.source.gaussianSplatSettings?.render?.useNativeRenderer === true;
+  return clip.source.type === 'camera';
 };
 
 const shouldHide3DOnlyProperties = (clip: KeyframeTrackClip | null | undefined): boolean => {

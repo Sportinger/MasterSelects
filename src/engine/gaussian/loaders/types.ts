@@ -1,6 +1,6 @@
 // Gaussian Splat Loader type contracts
 
-export type GaussianSplatFormat = 'ply' | 'splat' | 'ksplat' | 'gsplat-zip';
+export type GaussianSplatFormat = 'ply' | 'splat' | 'ksplat' | 'gsplat-zip' | 'spz' | 'sog' | 'lcc';
 
 export interface GaussianSplatMetadata {
   format: GaussianSplatFormat;

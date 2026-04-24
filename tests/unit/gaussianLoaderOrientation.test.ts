@@ -109,14 +109,9 @@ describe('gaussian splat loader orientation', () => {
     });
   });
 
-  it('estimates small isotropic splat sizes for plain xyz+rgba PLY point clouds', async () => {
-    const asset = await loadGaussianSplatAsset(createPointCloudPlyFile(), 'ply');
-    const data = asset.frames[0]?.buffer.data;
-
-    expect(data).toBeDefined();
-    expect(data![3]).toBeGreaterThan(0);
-    expect(data![3]).toBeLessThan(1);
-    expect(data![4]).toBe(data![3]);
-    expect(data![5]).toBe(data![3]);
+  it('does not fall back to legacy point-cloud PLY conversion', async () => {
+    await expect(loadGaussianSplatAsset(createPointCloudPlyFile(), 'ply')).rejects.toThrow(
+      /invalid file header|Missing required splat properties/i,
+    );
   });
 });

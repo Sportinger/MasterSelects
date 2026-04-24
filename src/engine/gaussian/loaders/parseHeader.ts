@@ -12,8 +12,14 @@ const log = Logger.create('GaussianParseHeader');
 
 /** Known file extensions for format detection */
 const FORMAT_BY_EXTENSION: Record<string, GaussianSplatFormat> = {
+  '.compressed.ply': 'ply',
   '.ply': 'ply',
   '.splat': 'splat',
+  '.ksplat': 'ksplat',
+  '.spz': 'spz',
+  '.sog': 'sog',
+  '.lcc': 'lcc',
+  '.zip': 'gsplat-zip',
 };
 
 /**
@@ -51,7 +57,7 @@ export async function parseGaussianSplatHeader(
 
   if (!resolvedFormat) {
     throw new Error(`Cannot detect gaussian splat format for file "${file.name}". ` +
-      'Supported extensions: .ply, .splat');
+      'Supported extensions: .ply, .compressed.ply, .splat, .ksplat, .spz, .sog, .lcc, .zip');
   }
 
   let metadata: GaussianSplatMetadata;
@@ -67,6 +73,9 @@ export async function parseGaussianSplatHeader(
 
     case 'ksplat':
     case 'gsplat-zip':
+    case 'spz':
+    case 'sog':
+    case 'lcc':
       // Future format support — return a placeholder for now
       log.warn(`Format "${resolvedFormat}" header parsing not yet implemented, returning estimate`);
       metadata = {
@@ -81,7 +90,9 @@ export async function parseGaussianSplatHeader(
         perSplatByteStride: 0,
         hasSphericalHarmonics: false,
         shDegree: 0,
-        compressionType: 'none',
+        compressionType: resolvedFormat === 'ksplat' || resolvedFormat === 'spz' || resolvedFormat === 'sog' || resolvedFormat === 'lcc'
+          ? 'quantized'
+          : 'none',
       };
       break;
 

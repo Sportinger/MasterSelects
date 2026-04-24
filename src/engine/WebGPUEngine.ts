@@ -655,20 +655,22 @@ export class WebGPUEngine {
     this.renderDispatcher?.setRenderTimeOverride(time);
   }
 
-  async ensureGaussianSplatSceneLoaded(
-    clipId: string,
-    url: string | undefined,
-    fileName: string,
-  ): Promise<boolean> {
-    return this.renderDispatcher?.ensureGaussianSplatSceneLoaded(clipId, url, fileName) ?? false;
+  async ensureGaussianSplatSceneLoaded(options: {
+    sceneKey: string;
+    clipId?: string;
+    url?: string;
+    fileName: string;
+    file?: File;
+  }): Promise<boolean> {
+    return this.renderDispatcher?.ensureGaussianSplatSceneLoaded(options) ?? false;
   }
 
-  async ensureThreeSceneRendererInitialized(width: number, height: number): Promise<boolean> {
-    return this.renderDispatcher?.ensureThreeSceneRendererInitialized(width, height) ?? false;
+  async ensureSceneRendererInitialized(width: number, height: number): Promise<boolean> {
+    return this.renderDispatcher?.ensureSceneRendererInitialized(width, height) ?? false;
   }
 
-  async preloadThreeModelAsset(url: string, fileName: string): Promise<boolean> {
-    return this.renderDispatcher?.preloadThreeModelAsset(url, fileName) ?? false;
+  async preloadSceneModelAsset(url: string, fileName: string): Promise<boolean> {
+    return this.renderDispatcher?.preloadSceneModelAsset(url, fileName) ?? false;
   }
 
   async ensureExportLayersReady(layers: Layer[]): Promise<void> {

@@ -59,7 +59,7 @@ export function CameraTab({ clipId }: CameraTabProps) {
       </div>
 
       <div style={{ marginBottom: '8px', color: '#8d99a6', lineHeight: 1.45 }}>
-        This camera drives the shared Three.js scene for splats and other 3D objects.
+        This camera drives the common 3D scene for splats, planes, meshes, text, and models.
       </div>
 
       <div style={{ color: '#888', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>

@@ -1,5 +1,6 @@
 // Pre-renders nested compositions to offscreen textures
 
+import type { TimelineClip, TimelineTrack } from '../../types';
 import type { Layer, LayerRenderData } from '../core/types';
 import type { CompositorPipeline } from '../pipeline/CompositorPipeline';
 import type { EffectsPipeline } from '../../effects/EffectsPipeline';
@@ -18,9 +19,10 @@ import { wcPipelineMonitor } from '../../services/wcPipelineMonitor';
 import { useTimelineStore } from '../../stores/timeline';
 import { getCopiedHtmlVideoPreviewFrame } from './htmlVideoPreviewFallback';
 import { splitLayerEffects } from './layerEffectStack';
-import { getThreeSceneRenderer } from '../three/ThreeSceneRenderer';
-import { DEFAULT_CAMERA_CONFIG } from '../three/types';
-import type { Layer3DData } from '../three/types';
+import { collectActiveSceneSplatEffectors } from '../scene/SceneEffectorUtils';
+import { collectScene3DLayers } from '../scene/SceneLayerCollector';
+import { resolveSharedSceneCamera } from '../scene/SceneCameraUtils';
+import { getNativeSceneRenderer } from '../native3d/NativeSceneRenderer';
 
 const log = Logger.create('NestedCompRenderer');
 const ENABLE_VISUAL_HTML_VIDEO_FALLBACK = false;
@@ -75,35 +77,6 @@ export class NestedCompRenderer {
 
   private getTargetVideoTime(layer: Layer, video: HTMLVideoElement): number {
     return layer.source?.mediaTime ?? video.currentTime;
-  }
-
-  private resolveStable3DSourceDimensions(
-    data: LayerRenderData,
-    width: number,
-    height: number,
-  ): { sourceWidth: number; sourceHeight: number } {
-    const fallbackWidth =
-      typeof data.sourceWidth === 'number' && Number.isFinite(data.sourceWidth) && data.sourceWidth > 0
-        ? data.sourceWidth
-        : width;
-    const fallbackHeight =
-      typeof data.sourceHeight === 'number' && Number.isFinite(data.sourceHeight) && data.sourceHeight > 0
-        ? data.sourceHeight
-        : height;
-
-    const intrinsicWidth = data.layer.source?.intrinsicWidth;
-    const intrinsicHeight = data.layer.source?.intrinsicHeight;
-
-    return {
-      sourceWidth:
-        typeof intrinsicWidth === 'number' && Number.isFinite(intrinsicWidth) && intrinsicWidth > 0
-          ? intrinsicWidth
-          : fallbackWidth,
-      sourceHeight:
-        typeof intrinsicHeight === 'number' && Number.isFinite(intrinsicHeight) && intrinsicHeight > 0
-          ? intrinsicHeight
-          : fallbackHeight,
-    };
   }
 
   private getFrameTimestampSeconds(timestamp: unknown, fallback?: number): number | undefined {
@@ -311,6 +284,8 @@ export class NestedCompRenderer {
     commandEncoder: GPUCommandEncoder,
     sampler: GPUSampler,
     currentTime?: number,
+    sceneClips?: TimelineClip[],
+    sceneTracks?: TimelineTrack[],
     depth: number = 0,
     skipEffects = false
   ): GPUTextureView | null {
@@ -360,9 +335,17 @@ export class NestedCompRenderer {
       // Collect layer data (including sub-nested compositions)
       const nestedLayerData = this.collectNestedLayerData(nestedLayers, commandEncoder, sampler, depth, skipEffects);
 
-      // Process 3D layers via Three.js (same logic as RenderDispatcher.process3DLayers)
+      // Process 3D layers through the shared scene renderer.
       if (flags.use3DLayers) {
-        this.process3DLayersForNested(nestedLayerData, width, height);
+        this.process3DLayersForNested(
+          nestedLayerData,
+          width,
+          height,
+          currentTime,
+          compositionId,
+          sceneClips,
+          sceneTracks,
+        );
       }
 
       // Handle empty composition
@@ -559,10 +542,17 @@ export class NestedCompRenderer {
   }
 
   /**
-   * Process 3D layers inside nested compositions via Three.js.
-   * Same approach as RenderDispatcher.process3DLayers but operates on the nested layerData.
+   * Process 3D layers inside nested compositions via the shared scene renderer.
    */
-  private process3DLayersForNested(layerData: LayerRenderData[], width: number, height: number): void {
+  private process3DLayersForNested(
+    layerData: LayerRenderData[],
+    width: number,
+    height: number,
+    currentTime?: number,
+    compositionId?: string,
+    sceneClips?: TimelineClip[],
+    sceneTracks?: TimelineTrack[],
+  ): void {
     const indices3D: number[] = [];
     for (let i = 0; i < layerData.length; i++) {
       if (layerData[i].layer.is3D && layerData[i].layer.source?.type !== 'gaussian-avatar') {
@@ -582,89 +572,70 @@ export class NestedCompRenderer {
     }
     log.debug('Processing 3D layers in nested comp', { count: indices3D.length });
 
-    const renderer = getThreeSceneRenderer();
+    const renderer = getNativeSceneRenderer();
     if (!renderer.isInitialized) {
       // Trigger lazy initialization (same as RenderDispatcher)
       renderer.initialize(width, height).then((ok) => {
-        if (ok) log.info('Three.js initialized from nested comp');
+        if (ok) log.info('Shared scene renderer initialized from nested comp');
       });
       // Remove 3D layers for this frame — next frame will render them
       for (let i = indices3D.length - 1; i >= 0; i--) layerData.splice(indices3D[i], 1);
       return;
     }
 
-    // Build Layer3DData
-    const preciseSplatSorting = useTimelineStore.getState().isExporting === true;
-    const layers3D: Layer3DData[] = [];
-    for (const idx of indices3D) {
-      const data = layerData[idx];
-      const layer = data.layer;
-      const src = layer.source;
-      const stableSourceSize = this.resolveStable3DSourceDimensions(data, width, height);
-      const rot = typeof layer.rotation === 'number' ? { x: 0, y: 0, z: layer.rotation } : layer.rotation;
-      const radToDeg = 180 / Math.PI;
-      layers3D.push({
-        layerId: layer.id,
-        clipId: layer.sourceClipId || layer.id,
-        position: layer.position,
-        rotation: {
-          x: rot.x * radToDeg,
-          y: rot.y * radToDeg,
-          z: rot.z * radToDeg,
-        },
-        scale: { x: layer.scale.x, y: layer.scale.y, z: layer.scale.z ?? 1 },
-        opacity: layer.opacity,
-        blendMode: layer.blendMode,
-        sourceWidth: stableSourceSize.sourceWidth,
-        sourceHeight: stableSourceSize.sourceHeight,
-        videoElement: src?.videoElement ?? undefined,
-        imageElement: src?.imageElement ?? undefined,
-        canvas: src?.textCanvas ?? undefined,
-        modelUrl: src?.modelUrl ?? undefined,
-        modelFileName: layer.name,
-        meshType: src?.meshType ?? undefined,
-        text3DProperties: src?.text3DProperties ?? undefined,
-        wireframe: layer.wireframe,
-        gaussianSplatFile: src?.file ?? undefined,
-        gaussianSplatUrl: src?.gaussianSplatUrl ?? undefined,
-        gaussianSplatFileName: src?.gaussianSplatFileName ?? undefined,
-        gaussianSplatFileHash: src?.gaussianSplatFileHash ?? undefined,
-        gaussianSplatIsSequence: !!src?.gaussianSplatSequence,
-        gaussianSplatMediaFileId: src?.mediaFileId ?? undefined,
-        gaussianSplatSettings: src?.gaussianSplatSettings ?? undefined,
-        preciseSplatSorting,
-      });
-    }
+    const timelineStore = useTimelineStore.getState();
+    const preciseSplatSorting = timelineStore.isExporting === true;
+    const isRealtimePlayback = timelineStore.isPlaying && timelineStore.isExporting !== true;
+    const includedLayers = new Set(indices3D.map((index) => layerData[index]));
+    const layers3D = collectScene3DLayers(layerData, {
+      width,
+      height,
+      preciseVideoSampling: !isRealtimePlayback,
+      preciseSplatSorting,
+      includeLayer: (data) => includedLayers.has(data),
+    });
+    const sceneContext = sceneClips && sceneTracks
+      ? {
+          clips: sceneClips,
+          tracks: sceneTracks,
+          clipKeyframes: timelineStore.clipKeyframes,
+          compositionId,
+          sceneNavClipId: null,
+        }
+      : (compositionId ? { compositionId } : undefined);
+    const activeSplatEffectors = sceneClips && sceneTracks
+      ? collectActiveSceneSplatEffectors(
+          width,
+          height,
+          currentTime ?? 0,
+          {
+            clips: sceneClips,
+            tracks: sceneTracks,
+            clipKeyframes: timelineStore.clipKeyframes,
+            compositionId,
+            sceneNavClipId: null,
+          },
+        )
+      : [];
 
-    const canvas = renderer.renderScene(layers3D, DEFAULT_CAMERA_CONFIG, width, height, []);
-    if (!canvas) {
+    const textureView = renderer.renderScene(
+      this.device,
+      layers3D,
+      resolveSharedSceneCamera({ width, height }, currentTime ?? 0, sceneContext),
+      activeSplatEffectors,
+      isRealtimePlayback,
+    );
+    if (!textureView) {
       for (let i = indices3D.length - 1; i >= 0; i--) layerData.splice(indices3D[i], 1);
       return;
     }
-
-    // Import canvas to GPU texture
-    if (!this.threeNestedTexture || this.threeNestedTexture.width !== width || this.threeNestedTexture.height !== height) {
-      this.threeNestedTexture?.destroy();
-      this.threeNestedTexture = this.device.createTexture({
-        size: { width, height },
-        format: 'rgba8unorm',
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
-      });
-      this.threeNestedView = this.threeNestedTexture.createView();
-    }
-
-    this.device.queue.copyExternalImageToTexture(
-      { source: canvas },
-      { texture: this.threeNestedTexture },
-      { width, height },
-    );
 
     // Create synthetic layer and replace 3D layers
     const insertIdx = indices3D[0];
     const firstLayer = layerData[indices3D[0]].layer;
     const isSingle = indices3D.length === 1;
     const syntheticLayer: Layer = {
-      id: '__three_nested__',
+      id: '__scene_3d_nested__',
       name: '3D Scene (Nested)',
       visible: true,
       opacity: isSingle ? firstLayer.opacity : 1,
@@ -681,15 +652,11 @@ export class NestedCompRenderer {
       layer: syntheticLayer,
       isVideo: false,
       externalTexture: null,
-      textureView: this.threeNestedView,
+      textureView,
       sourceWidth: width,
       sourceHeight: height,
     });
   }
-
-  // Texture for nested 3D scene rendering
-  private threeNestedTexture: GPUTexture | null = null;
-  private threeNestedView: GPUTextureView | null = null;
 
   private collectNestedLayerData(
     layers: Layer[],
@@ -715,6 +682,8 @@ export class NestedCompRenderer {
           commandEncoder,
           sampler,
           nc.currentTime,
+          nc.sceneClips,
+          nc.sceneTracks,
           depth + 1,
           skipEffects
         );
@@ -731,8 +700,8 @@ export class NestedCompRenderer {
         continue;
       }
 
-      // 3D Model layers — no GPU texture needed, handled by ThreeSceneRenderer
-      if (layer.source.type === 'model') {
+      // Shared-scene native 3D layers do not contribute a 2D source texture of their own.
+      if (layer.source.type === 'model' || layer.source.type === 'gaussian-splat') {
         result.push({
           layer,
           isVideo: false,

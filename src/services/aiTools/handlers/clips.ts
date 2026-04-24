@@ -10,6 +10,7 @@ import { isAIExecutionActive, consumeStaggerDelay } from '../executionState';
 import { activateDockPanel } from '../aiFeedback';
 import { Logger } from '../../../services/logger';
 import { getGaussianSplatGpuRenderer } from '../../../engine/gaussian/core/GaussianSplatGpuRenderer';
+import { resolveSharedSplatSceneKey } from '../../../engine/scene/runtime/SharedSplatRuntimeUtils';
 import { ensureRenderForDiagnostics } from './renderOnce';
 
 const log = Logger.create('AITool:Clips');
@@ -262,13 +263,23 @@ export async function handleGetClipDetails(
   const gaussianRenderer = clip.source?.type === 'gaussian-splat'
     ? getGaussianSplatGpuRenderer()
     : null;
+  const gaussianSceneKey = clip.source?.type === 'gaussian-splat'
+    ? resolveSharedSplatSceneKey({
+        clipId: clip.id,
+        runtimeKey: clip.source.gaussianSplatRuntimeKey,
+      })
+    : null;
   const renderDiagnostics = gaussianRenderer
     ? await ensureRenderForDiagnostics()
     : undefined;
-  const gaussianSceneLoaded = gaussianRenderer?.hasScene(clip.id);
-  const gaussianRenderDebug = gaussianRenderer?.getLastRenderDebug(clip.id) ?? undefined;
-  const gaussianTargetSummary = args.includeGaussianTargetSummary === true && gaussianRenderer
-    ? await gaussianRenderer.readLastRenderTargetSummary(clip.id)
+  const gaussianSceneLoaded = gaussianSceneKey
+    ? gaussianRenderer?.hasScene(gaussianSceneKey)
+    : undefined;
+  const gaussianRenderDebug = gaussianSceneKey
+    ? gaussianRenderer?.getLastRenderDebug(gaussianSceneKey) ?? undefined
+    : undefined;
+  const gaussianTargetSummary = args.includeGaussianTargetSummary === true && gaussianRenderer && gaussianSceneKey
+    ? await gaussianRenderer.readLastRenderTargetSummary(gaussianSceneKey)
     : undefined;
 
   return {
@@ -280,10 +291,12 @@ export async function handleGetClipDetails(
             type: clip.source.type,
             mediaFileId: clip.source.mediaFileId,
             gaussianSplatUrl: clip.source.type === 'gaussian-splat' ? clip.source.gaussianSplatUrl : undefined,
+            gaussianSplatRuntimeKey: clip.source.type === 'gaussian-splat' ? clip.source.gaussianSplatRuntimeKey : undefined,
             gaussianSplatSettings: clip.source.type === 'gaussian-splat' ? clip.source.gaussianSplatSettings : undefined,
           }
         : null,
       isLoading: clip.isLoading ?? false,
+      gaussianSceneKey,
       gaussianSceneLoaded,
       renderDiagnostics,
       gaussianRenderDebug,

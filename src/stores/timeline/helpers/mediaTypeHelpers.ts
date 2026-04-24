@@ -6,7 +6,7 @@ import { readLottieJsonFile } from '../../../services/vectorAnimation/lottieJson
 export const AUDIO_EXTENSIONS = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'] as const;
 export const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'wmv', 'm4v', 'flv'] as const;
 export const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'] as const;
-export const MODEL_EXTENSIONS = ['obj', 'gltf', 'glb', 'fbx'] as const;
+export const MODEL_EXTENSIONS = ['obj', 'gltf', 'glb'] as const;
 export const VECTOR_ANIMATION_EXTENSIONS = ['lottie', 'riv'] as const;
 
 export type MediaType = 'video' | 'audio' | 'image' | 'model' | 'gaussian-splat' | 'lottie' | 'rive' | 'unknown';
@@ -107,7 +107,7 @@ export function getFileExtension(file: File | string): string {
   return name.split('.').pop()?.toLowerCase() || '';
 }
 
-export const GAUSSIAN_SPLAT_EXTENSIONS = ['ply', 'splat'] as const;
+export const GAUSSIAN_SPLAT_EXTENSIONS = ['ply', 'splat', 'ksplat', 'spz', 'sog', 'lcc', 'zip'] as const;
 
 /**
  * Check if a file or filename is a gaussian splat file.

@@ -12,11 +12,12 @@
 
 struct SortUniforms {
   viewMatrix: mat4x4f,
-  splatCount: u32,
+  worldMatrix: mat4x4f,
+  visibleCount: u32,
+  sortCount: u32,
   // Bitonic step params
   blockSize: u32,    // k in bitonic sort (doubles each outer step)
   subBlockSize: u32, // j in bitonic sort (halves each inner step)
-  _pad: u32,
 }
 
 // ── Kernel 1: Compute depth keys ─────────────────────────────────────────────
@@ -49,7 +50,14 @@ fn floatToSortKey(f: f32) -> u32 {
 @compute @workgroup_size(256)
 fn computeDepthKeys(@builtin(global_invocation_id) gid: vec3u) {
   let idx = gid.x;
-  if (idx >= params.splatCount) {
+  if (idx >= params.sortCount) {
+    return;
+  }
+
+  if (idx >= params.visibleCount) {
+    // Pad the tail so non-power-of-two scenes still sort correctly.
+    keys[idx] = 0xFFFFFFFFu;
+    indices[idx] = 0u;
     return;
   }
 
@@ -60,10 +68,12 @@ fn computeDepthKeys(@builtin(global_invocation_id) gid: vec3u) {
   // Read splat position
   let pos = vec3f(splatData[base + 0u], splatData[base + 1u], splatData[base + 2u]);
 
-  // Transform to view space — we only need the z component (depth)
-  let worldPos = vec4f(pos, 1.0);
+  // Transform to shared-scene world space first, then into view space.
+  let worldPos = params.worldMatrix * vec4f(pos, 1.0);
   let viewPos = params.viewMatrix * worldPos;
-  let depth = viewPos.z; // In a right-handed view, z is negative for visible objects
+  // Visible points in our right-handed view have negative z.
+  // Negate it so farther splats produce larger positive depths and sort first.
+  let depth = -viewPos.z;
 
   // Convert to sortable key (back-to-front: far splats get smaller keys)
   keys[idx] = floatToSortKey(depth);
@@ -77,7 +87,7 @@ fn computeDepthKeys(@builtin(global_invocation_id) gid: vec3u) {
 @compute @workgroup_size(256)
 fn bitonicStep(@builtin(global_invocation_id) gid: vec3u) {
   let idx = gid.x;
-  if (idx >= params.splatCount) {
+  if (idx >= params.sortCount) {
     return;
   }
 
@@ -91,7 +101,7 @@ fn bitonicStep(@builtin(global_invocation_id) gid: vec3u) {
   if (partner <= idx) {
     return;
   }
-  if (partner >= params.splatCount) {
+  if (partner >= params.sortCount) {
     return;
   }
 
