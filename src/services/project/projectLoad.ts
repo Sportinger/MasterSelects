@@ -489,7 +489,7 @@ function convertProjectCompositionToStore(
       inPoint: viewState?.inPoint ?? null,
       outPoint: viewState?.outPoint ?? null,
       loopPlayback: false,
-      markers: pc.markers.map((marker) => ({
+      markers: (pc.markers || []).map((marker) => ({
         id: marker.id,
         time: marker.time,
         label: marker.name || '',

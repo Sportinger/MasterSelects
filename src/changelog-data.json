@@ -1,5 +1,67 @@
 [
   {
+    "date": "2026-04-24",
+    "type": "new",
+    "title": "Native Shared 3D Scene Rendering Added for Splats, Models, Planes, and Text",
+    "description": "Scene cameras now drive one native WebGPU 3D space where Gaussian splats, 3D planes, meshes, models, and text can be arranged together instead of composited as isolated layers.",
+    "section": "3D / Native Scene",
+    "commits": [
+      "f16d8536"
+    ]
+  },
+  {
+    "date": "2026-04-24",
+    "type": "improve",
+    "title": "Gaussian Splats Render with Better Quality, Sorting, and Multi-Splat Depth",
+    "description": "PLY splats now use the native splat renderer with GPU sorting, per-clip transforms, independent splat settings, shared-scene depth integration, and a separate depth mask pass that avoids the thin or flickering look during camera movement.",
+    "section": "3D / Gaussian Splats",
+    "commits": [
+      "9ffd2336",
+      "f03c9361"
+    ]
+  },
+  {
+    "date": "2026-04-24",
+    "type": "improve",
+    "title": "Scene Camera Navigation Gets FPS Speed Control",
+    "description": "FPS camera mode now has discrete movement-speed steps from 0.1x to 8x, and scrolling while moving or looking adjusts speed instead of zooming the camera.",
+    "section": "3D / Camera Controls",
+    "commits": [
+      "752212d0",
+      "f03c9361"
+    ]
+  },
+  {
+    "date": "2026-04-24",
+    "type": "improve",
+    "title": "Property Stopwatches Can Be Dragged Across Controls",
+    "description": "Transform and effect keyframe stopwatches now share a drag interaction so multiple related properties can be enabled or disabled faster from the Properties panel.",
+    "section": "Properties / Keyframes",
+    "commits": [
+      "f03c9361"
+    ]
+  },
+  {
+    "date": "2026-04-23",
+    "type": "new",
+    "title": "Browser MIDI Control Added with Learn Mode and a Dedicated Mapping Panel",
+    "description": "MasterSelects now supports direct browser MIDI input over Web MIDI with a dedicated Settings tab, transport bindings, a dockable MIDI Mapping panel, note learn mode, manual reassignment, and project-persistent marker plus transport mappings.",
+    "section": "MIDI / Workflow",
+    "commits": [
+      "8e2701c3"
+    ]
+  },
+  {
+    "date": "2026-04-23",
+    "type": "improve",
+    "title": "Timeline Markers Can Now Trigger Playback and Auto-Stop the Playhead",
+    "description": "Markers now expose right-click MIDI actions for Jump, Play From Marker, and Jump To Marker And Stop, and any marker can be turned into a Stop Marker so playback halts automatically when the playhead crosses it.",
+    "section": "Timeline / Markers",
+    "commits": [
+      "8e2701c3"
+    ]
+  },
+  {
     "date": "2026-04-18",
     "type": "new",
     "title": "MasterSelects Now Opens Through a Dedicated Landing Page",
