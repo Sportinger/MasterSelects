@@ -30,17 +30,14 @@ type CameraVector3 = { x: number; y: number; z: number };
 type CameraQuaternion = { x: number; y: number; z: number; w: number };
 
 const CAMERA_ROTATION_PROPERTIES = new Set(['rotation.x', 'rotation.y', 'rotation.z']);
-const CAMERA_POSE_TRIGGER_PROPERTIES = new Set([
+const CAMERA_POSE_PROPERTIES = new Set([
   'position.x',
   'position.y',
   'position.z',
-  'scale.z',
-]);
-const CAMERA_POSE_PROPERTIES = new Set([
-  ...CAMERA_ROTATION_PROPERTIES,
-  ...CAMERA_POSE_TRIGGER_PROPERTIES,
   'scale.x',
   'scale.y',
+  'scale.z',
+  ...CAMERA_ROTATION_PROPERTIES,
 ]);
 
 function lerpNumber(a: number, b: number, t: number): number {
@@ -55,16 +52,8 @@ function lerpVector(a: CameraVector3, b: CameraVector3, t: number): CameraVector
   };
 }
 
-function addVector(a: CameraVector3, b: CameraVector3): CameraVector3 {
-  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
-}
-
 function scaleVector(v: CameraVector3, scale: number): CameraVector3 {
   return { x: v.x * scale, y: v.y * scale, z: v.z * scale };
-}
-
-function distanceBetween(a: CameraVector3, b: CameraVector3): number {
-  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
 function normalizeQuaternion(q: CameraQuaternion): CameraQuaternion {
@@ -182,9 +171,7 @@ function rotateVectorByQuaternion(v: CameraVector3, q: CameraQuaternion): Camera
 }
 
 function hasCameraPoseInterpolationKeyframes(keyframes: Keyframe[]): boolean {
-  const hasRotation = keyframes.some((keyframe) => CAMERA_ROTATION_PROPERTIES.has(keyframe.property));
-  const hasPoseTrigger = keyframes.some((keyframe) => CAMERA_POSE_TRIGGER_PROPERTIES.has(keyframe.property));
-  return hasRotation && hasPoseTrigger;
+  return getCameraPoseKeyframeTimes(keyframes).length >= 2;
 }
 
 function getCameraPoseKeyframeTimes(keyframes: Keyframe[]): number[] {
@@ -375,20 +362,12 @@ function buildPoseInterpolatedCameraConfigFromClip(
   const endOrientation = quaternionFromCameraBasis(endFrame.right, endFrame.cameraUp, endFrame.forward);
   const orientation = slerpQuaternion(startOrientation, endOrientation, t);
   const eye = lerpVector(startFrame.eye, endFrame.eye, t);
-  const forward = rotateVectorByQuaternion({ x: 0, y: 0, z: -1 }, orientation);
+  const target = lerpVector(startFrame.target, endFrame.target, t);
   const up = rotateVectorByQuaternion({ x: 0, y: 1, z: 0 }, orientation);
-  const focusDistance = Math.max(
-    0.001,
-    lerpNumber(
-      distanceBetween(startFrame.eye, startFrame.target),
-      distanceBetween(endFrame.eye, endFrame.target),
-      t,
-    ),
-  );
 
   return {
     position: eye,
-    target: addVector(eye, scaleVector(forward, focusDistance)),
+    target,
     up,
     fov: cameraSettings.fov,
     near: cameraSettings.near,
