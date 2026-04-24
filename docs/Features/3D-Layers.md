@@ -43,6 +43,8 @@ Prepared splat runtime metadata, native splat rasterization, preview, nested com
 
 - Any video or image clip can be toggled to 3D from the Transform panel.
 - 3D layers become textured planes in the common 3D scene.
+- Video and image clips that still use the default `position.z = 0` start slightly behind the scene target when first toggled to 3D, so a full-frame plane does not depth-mask splats or meshes.
+- While scrubbing, 3D video planes keep their last uploaded texture if the browser video element is briefly between decoded frames, avoiding full shared-scene flicker.
 - Turning 3D off resets the 3D-specific transform state back to 2D defaults.
 
 ### 3D Model Import

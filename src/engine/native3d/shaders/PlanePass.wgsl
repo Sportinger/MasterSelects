@@ -1,7 +1,8 @@
 struct PlaneUniforms {
   mvp: mat4x4f,
   opacity: f32,
-  _pad: vec3f,
+  forceOpaqueAlpha: f32,
+  _pad: vec2f,
 }
 
 struct VertexOutput {
@@ -42,7 +43,8 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 @fragment
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let color = textureSample(inputTexture, texSampler, input.uv);
-  let alpha = color.a * plane.opacity;
+  let sourceAlpha = select(color.a, 1.0, plane.forceOpaqueAlpha > 0.5);
+  let alpha = sourceAlpha * plane.opacity;
   if (alpha < 1.0 / 255.0) {
     discard;
   }

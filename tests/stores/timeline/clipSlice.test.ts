@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createTestTimelineStore } from '../../helpers/storeFactory';
-import { createMockClip, createMockTrack, resetIdCounter } from '../../helpers/mockData';
+import { createMockClip, createMockTrack, createMockTransform, resetIdCounter } from '../../helpers/mockData';
 
 describe('clipSlice', () => {
   let store: ReturnType<typeof createTestTimelineStore>;
@@ -521,6 +521,79 @@ describe('clipSlice', () => {
 
       expect(updated.transform.scale.x).toBe(2);
       expect(updated.transform.scale.y).toBe(1); // preserved
+    });
+  });
+
+  // ========== toggle3D ==========
+
+  describe('toggle3D', () => {
+    it('offsets video planes behind the scene target when enabling 3D from default Z', () => {
+      const clip = createMockClip({
+        id: 'clip-1',
+        trackId: 'video-1',
+        source: { type: 'video' } as any,
+      });
+      store = createTestTimelineStore({ clips: [clip] } as any);
+
+      store.getState().toggle3D('clip-1');
+      const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
+
+      expect(updated.is3D).toBe(true);
+      expect(updated.transform.position).toEqual({ x: 0, y: 0, z: -0.5 });
+      expect(updated.transform.scale).toEqual({ x: 1, y: 1 });
+      expect(updated.transform.rotation).toEqual({ x: 0, y: 0, z: 0 });
+    });
+
+    it('preserves an explicit video plane Z value when enabling 3D', () => {
+      const clip = createMockClip({
+        id: 'clip-1',
+        trackId: 'video-1',
+        source: { type: 'video' } as any,
+        transform: createMockTransform({ position: { x: 0.1, y: -0.2, z: 1.25 } }),
+      });
+      store = createTestTimelineStore({ clips: [clip] } as any);
+
+      store.getState().toggle3D('clip-1');
+      const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
+
+      expect(updated.is3D).toBe(true);
+      expect(updated.transform.position).toEqual({ x: 0.1, y: -0.2, z: 1.25 });
+    });
+
+    it('keeps model transforms unchanged when toggled through the store action', () => {
+      const clip = createMockClip({
+        id: 'clip-1',
+        trackId: 'video-1',
+        source: { type: 'model', modelUrl: 'blob:model' } as any,
+      });
+      store = createTestTimelineStore({ clips: [clip] } as any);
+
+      store.getState().toggle3D('clip-1');
+      const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
+
+      expect(updated.is3D).toBe(true);
+      expect(updated.transform.position.z).toBe(0);
+    });
+
+    it('resets 3D-only transform fields when disabling 3D', () => {
+      const clip = createMockClip({
+        id: 'clip-1',
+        trackId: 'video-1',
+        is3D: true,
+        source: { type: 'video' } as any,
+        transform: createMockTransform({
+          position: { x: 0.25, y: -0.25, z: -0.5 },
+          rotation: { x: 20, y: -15, z: 45 },
+        }),
+      });
+      store = createTestTimelineStore({ clips: [clip] } as any);
+
+      store.getState().toggle3D('clip-1');
+      const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
+
+      expect(updated.is3D).toBe(false);
+      expect(updated.transform.position).toEqual({ x: 0.25, y: -0.25, z: 0 });
+      expect(updated.transform.rotation).toEqual({ x: 0, y: 0, z: 45 });
     });
   });
 

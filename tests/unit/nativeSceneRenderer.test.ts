@@ -197,6 +197,14 @@ function makePlaneLayer(layerId: string, opacity: number): ScenePlaneLayer {
   };
 }
 
+function readUniformWrite(call: unknown[]): Float32Array {
+  return new Float32Array(
+    call[2] as ArrayBuffer,
+    call[3] as number,
+    (call[4] as number) / 4,
+  );
+}
+
 function makePrimitiveLayer(layerId: string, meshType: ScenePrimitiveLayer['meshType'], opacity = 1): ScenePrimitiveLayer {
   return {
     kind: 'primitive',
@@ -392,6 +400,9 @@ describe('NativeSceneRenderer shared depth contract', () => {
       'native-scene-clear-pass',
       'native-scene-plane-opaque-pass',
     ]);
+    const planeUniform = readUniformWrite(device.queue.writeBuffer.mock.calls[0]);
+    expect(planeUniform[16]).toBeCloseTo(1);
+    expect(planeUniform[17]).toBe(1);
 
     const colorOptions = mockGaussianRenderer.renderToTexture.mock.calls[0]?.[4];
     const depthMaskOptions = mockGaussianRenderer.renderToTexture.mock.calls[1]?.[4];
@@ -404,6 +415,94 @@ describe('NativeSceneRenderer shared depth contract', () => {
     expect(depthMaskOptions.depthWrite).toBe(true);
     expect(depthMaskOptions.colorWrite).toBe(false);
     expect(depthMaskOptions.depthAlphaCutoff).toBeGreaterThan(0.05);
+  });
+
+  it('keeps source alpha for non-opaque video planes', async () => {
+    const renderer = await createInitializedRenderer();
+
+    const { device, renderPasses } = createFakeDevice();
+    const result = renderer.renderScene(
+      device,
+      [{
+        ...makePlaneLayer('transparent-video-plane', 0.6),
+        alphaMode: 'straight',
+        castsDepth: false,
+      }],
+      makeCamera(),
+      [],
+      false,
+    );
+
+    expect(result).toEqual((renderer as any).sceneView);
+    expect(renderPasses.map((entry) => entry.descriptor.label)).toEqual([
+      'native-scene-clear-pass',
+      'native-scene-plane-transparent-pass',
+    ]);
+    const planeUniform = readUniformWrite(device.queue.writeBuffer.mock.calls[0]);
+    expect(planeUniform[16]).toBeCloseTo(0.6);
+    expect(planeUniform[17]).toBe(0);
+  });
+
+  it('reuses the cached video plane texture while a scrubbed video frame is not ready', async () => {
+    const renderer = await createInitializedRenderer();
+
+    const { device } = createFakeDevice();
+    const readyPlane = makePlaneLayer('video-plane', 1);
+    const initialResult = renderer.renderScene(
+      device,
+      [readyPlane],
+      makeCamera(),
+      [],
+      false,
+    );
+
+    expect(initialResult).toBeTruthy();
+    expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledTimes(1);
+
+    const notReadyResult = renderer.renderScene(
+      device,
+      [{
+        ...readyPlane,
+        videoElement: {
+          ...(readyPlane.videoElement as object),
+          readyState: 1,
+        } as unknown as HTMLVideoElement,
+      }],
+      makeCamera(),
+      [],
+      false,
+    );
+
+    expect(notReadyResult).toBeTruthy();
+    expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the cached video plane texture after a transient upload failure', async () => {
+    const renderer = await createInitializedRenderer();
+
+    const { device } = createFakeDevice();
+    const plane = makePlaneLayer('video-plane', 1);
+    renderer.renderScene(
+      device,
+      [plane],
+      makeCamera(),
+      [],
+      false,
+    );
+    device.queue.copyExternalImageToTexture.mockImplementationOnce(() => {
+      throw new Error('transient upload failure');
+    });
+
+    const result = renderer.renderScene(
+      device,
+      [plane],
+      makeCamera(),
+      [],
+      false,
+    );
+
+    expect(result).toBeTruthy();
+    expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledTimes(2);
   });
 
   it('forwards shared-scene effectors only to native splat layers', async () => {

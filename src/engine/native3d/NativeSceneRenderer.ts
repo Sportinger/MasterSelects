@@ -632,7 +632,11 @@ export class NativeSceneRenderer {
         label: `native-scene-plane-uniform-${layer.layerId}`,
       });
       temporaryBuffers.push(uniformBuffer);
-      const uniformData = this.buildPlaneUniformData(this.buildPlaneMvp(layer, camera), layer.opacity);
+      const uniformData = this.buildPlaneUniformData(
+        this.buildPlaneMvp(layer, camera),
+        layer.opacity,
+        !transparent && layer.alphaMode === 'opaque',
+      );
       device.queue.writeBuffer(
         uniformBuffer,
         0,
@@ -665,8 +669,13 @@ export class NativeSceneRenderer {
     const current = this.planeTextures.get(layer.layerId);
     const sourceState = this.resolvePlaneTextureSource(layer, current);
     if (!sourceState) {
-      return null;
+      return layer.videoElement ? current?.view ?? null : null;
     }
+    const canReuseCurrent =
+      !!current &&
+      current.source === sourceState.source &&
+      current.width === sourceState.width &&
+      current.height === sourceState.height;
 
     let cached = current;
     if (
@@ -702,10 +711,10 @@ export class NativeSceneRenderer {
         { width: sourceState.width, height: sourceState.height },
       );
     } catch (error) {
-      log.warn('Failed to upload native plane texture', {
-        layerId: layer.layerId,
-        error,
-      });
+      if (canReuseCurrent) {
+        return cached.view;
+      }
+      log.warn('Failed to upload native plane texture', { layerId: layer.layerId, error });
       return null;
     }
 
@@ -805,10 +814,15 @@ export class NativeSceneRenderer {
     return null;
   }
 
-  private buildPlaneUniformData(mvp: Float32Array, opacity: number): Float32Array {
+  private buildPlaneUniformData(
+    mvp: Float32Array,
+    opacity: number,
+    forceOpaqueAlpha: boolean,
+  ): Float32Array {
     const data = new Float32Array(PLANE_UNIFORM_SIZE / 4);
     data.set(mvp, 0);
     data[16] = opacity;
+    data[17] = forceOpaqueAlpha ? 1 : 0;
     return data;
   }
 
