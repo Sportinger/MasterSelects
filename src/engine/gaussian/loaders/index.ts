@@ -9,6 +9,7 @@ import type {
   GaussianSplatFormat,
   GaussianSplatAsset,
   GaussianSplatMetadata,
+  GaussianSplatLoadOptions,
 } from './types.ts';
 import { detectFormat } from './parseHeader.ts';
 import { parseGaussianSplatHeader as parseHeader } from './parseHeader.ts';
@@ -69,6 +70,7 @@ function applyAssetBasisCorrection(asset: GaussianSplatAsset): GaussianSplatAsse
 export async function loadGaussianSplatAsset(
   file: File,
   format?: GaussianSplatFormat,
+  options?: GaussianSplatLoadOptions,
 ): Promise<GaussianSplatAsset> {
   const resolvedFormat = format ?? detectFormat(file);
 
@@ -91,7 +93,7 @@ export async function loadGaussianSplatAsset(
     if (!canLoadWithSplatTransform(file, resolvedFormat)) {
       throw new Error(`Format "${resolvedFormat}" is not supported by the splat-transform loader.`);
     }
-    asset = await loadWithSplatTransform(file, resolvedFormat);
+    asset = await loadWithSplatTransform(file, resolvedFormat, options);
   } catch (err) {
     log.error('Failed to load gaussian splat asset', {
       name: file.name,
@@ -101,6 +103,13 @@ export async function loadGaussianSplatAsset(
     throw err;
   }
 
+  options?.onProgress?.({
+    phase: 'normalizing',
+    loadedBytes: file.size,
+    totalBytes: file.size,
+    percent: 0.96,
+    message: 'Normalizing scene basis',
+  });
   asset = applyAssetBasisCorrection(asset);
 
   log.info('Gaussian splat asset loaded', {
@@ -125,6 +134,7 @@ export async function loadGaussianSplatAssetCached(
   mediaFileId: string,
   file: File,
   format?: GaussianSplatFormat,
+  options?: GaussianSplatLoadOptions,
 ): Promise<GaussianSplatAsset> {
   const cache = getSplatCache();
 
@@ -132,11 +142,18 @@ export async function loadGaussianSplatAssetCached(
   const cached = cache.get(mediaFileId);
   if (cached && cached.frames[0]?.buffer.data.length > 0) {
     log.debug('Cache hit', { mediaFileId, splatCount: cached.metadata.splatCount });
+    options?.onProgress?.({
+      phase: 'normalizing',
+      loadedBytes: file.size,
+      totalBytes: file.size,
+      percent: 1,
+      message: 'Using cached splat data',
+    });
     return cached;
   }
 
   // Cache miss — load from file
-  const asset = await loadGaussianSplatAsset(file, format);
+  const asset = await loadGaussianSplatAsset(file, format, options);
 
   // Store in cache
   cache.put(mediaFileId, asset);
@@ -162,6 +179,9 @@ export type {
   GaussianSplatBuffer,
   GaussianSplatFrame,
   GaussianSplatAsset,
+  GaussianSplatLoadOptions,
+  GaussianSplatLoadProgress,
+  GaussianSplatLoadProgressCallback,
 } from './types.ts';
 
 // Re-export cache

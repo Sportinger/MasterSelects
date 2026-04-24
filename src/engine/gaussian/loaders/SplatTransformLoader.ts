@@ -18,11 +18,14 @@ import type {
   GaussianSplatAsset,
   GaussianSplatBuffer,
   GaussianSplatFormat,
+  GaussianSplatLoadOptions,
+  GaussianSplatLoadProgressCallback,
 } from './types.ts';
 import { FLOATS_PER_SPLAT, SH_C0 } from './types.ts';
 import { buildMetadata, computeBoundingBox, normalizeQuaternion, sigmoid } from './normalize.ts';
 
 const BLOB_CHUNK_SIZE = 4 * 1024 * 1024;
+type BlobReadProgressReporter = (loadedBytes: number, totalBytes: number) => void;
 
 const DEFAULT_OPTIONS: SplatTransformOptions = {
   iterations: 10,
@@ -44,16 +47,19 @@ const SUPPORTED_INPUT_FORMATS = new Set<InputFormat>([
 class BlobReadStream extends ReadStream {
   private readonly blob: Blob;
   private readonly end: number;
+  private readonly onReadProgress?: BlobReadProgressReporter;
   private offset: number;
 
   constructor(
     blob: Blob,
     start: number,
     end: number,
+    onReadProgress?: BlobReadProgressReporter,
   ) {
     super(end - start);
     this.blob = blob;
     this.end = end;
+    this.onReadProgress = onReadProgress;
     this.offset = start;
   }
 
@@ -87,6 +93,7 @@ class BlobReadStream extends ReadStream {
     target.set(bytes);
     this.offset += bytesToRead;
     this.bytesRead += bytesToRead;
+    this.onReadProgress?.(this.offset, this.blob.size);
     return bytesToRead;
   }
 }
@@ -96,10 +103,29 @@ class BlobReadSource implements ReadSource {
   readonly seekable = true;
   private closed = false;
   private readonly blob: Blob;
+  private readonly onProgress?: GaussianSplatLoadProgressCallback;
+  private maxReadOffset = 0;
 
-  constructor(blob: Blob) {
+  constructor(blob: Blob, onProgress?: GaussianSplatLoadProgressCallback) {
     this.blob = blob;
     this.size = blob.size;
+    this.onProgress = onProgress;
+  }
+
+  private reportReadProgress(loadedBytes: number, totalBytes: number): void {
+    const nextLoadedBytes = Math.max(this.maxReadOffset, loadedBytes);
+    if (nextLoadedBytes === this.maxReadOffset && this.maxReadOffset > 0) {
+      return;
+    }
+
+    this.maxReadOffset = nextLoadedBytes;
+    this.onProgress?.({
+      phase: 'reading',
+      loadedBytes: nextLoadedBytes,
+      totalBytes,
+      percent: totalBytes > 0 ? nextLoadedBytes / totalBytes : 0,
+      message: 'Reading splat file',
+    });
   }
 
   read(start = 0, end = this.size): ReadStream {
@@ -110,7 +136,12 @@ class BlobReadSource implements ReadSource {
     const clampedStart = Math.max(0, Math.min(start, this.size));
     const clampedEnd = Math.max(clampedStart, Math.min(end, this.size));
     return new BufferedReadStream(
-      new BlobReadStream(this.blob, clampedStart, clampedEnd),
+      new BlobReadStream(
+        this.blob,
+        clampedStart,
+        clampedEnd,
+        (loadedBytes, totalBytes) => this.reportReadProgress(loadedBytes, totalBytes),
+      ),
       BLOB_CHUNK_SIZE,
     );
   }
@@ -122,6 +153,11 @@ class BlobReadSource implements ReadSource {
 
 class BlobReadFileSystem implements ReadFileSystem {
   private readonly files = new Map<string, Blob>();
+  private readonly onProgress?: GaussianSplatLoadProgressCallback;
+
+  constructor(onProgress?: GaussianSplatLoadProgressCallback) {
+    this.onProgress = onProgress;
+  }
 
   set(name: string, blob: Blob): void {
     this.files.set(name.toLowerCase(), blob);
@@ -132,7 +168,7 @@ class BlobReadFileSystem implements ReadFileSystem {
     if (!blob) {
       throw new Error(`File not found: ${filename}`);
     }
-    return new BlobReadSource(blob);
+    return new BlobReadSource(blob, this.onProgress);
   }
 }
 
@@ -313,13 +349,22 @@ export function canLoadWithSplatTransform(file: File, format?: GaussianSplatForm
 export async function loadWithSplatTransform(
   file: File,
   format?: GaussianSplatFormat,
+  options?: GaussianSplatLoadOptions,
 ): Promise<GaussianSplatAsset> {
   const inputFormat = detectSplatTransformInputFormat(file, format);
   if (!inputFormat) {
     throw new Error(`Unsupported splat-transform input format for ${file.name}`);
   }
 
-  const fileSystem = new BlobReadFileSystem();
+  options?.onProgress?.({
+    phase: 'reading',
+    loadedBytes: 0,
+    totalBytes: file.size,
+    percent: 0,
+    message: 'Reading splat file',
+  });
+
+  const fileSystem = new BlobReadFileSystem(options?.onProgress);
   fileSystem.set(file.name, file);
 
   let tables: DataTable[];
@@ -350,6 +395,14 @@ export async function loadWithSplatTransform(
     });
   }
 
+  options?.onProgress?.({
+    phase: 'parsing',
+    loadedBytes: file.size,
+    totalBytes: file.size,
+    percent: 0.76,
+    message: 'Converting splat tables',
+  });
+
   const table = tables[0];
   if (!table) {
     throw new Error(`No splat data tables found in ${file.name}`);
@@ -357,8 +410,23 @@ export async function loadWithSplatTransform(
 
   const alreadyMortonOrdered = inputFormat === 'sog' || lowerName.endsWith('.compressed.ply');
   if (!alreadyMortonOrdered) {
+    options?.onProgress?.({
+      phase: 'parsing',
+      loadedBytes: file.size,
+      totalBytes: file.size,
+      percent: 0.84,
+      message: 'Sorting splats',
+    });
     sortTableByMortonOrder(table);
   }
+
+  options?.onProgress?.({
+    phase: 'parsing',
+    loadedBytes: file.size,
+    totalBytes: file.size,
+    percent: 0.92,
+    message: 'Building splat buffers',
+  });
 
   return convertTableToAsset(table, file, inputFormat);
 }

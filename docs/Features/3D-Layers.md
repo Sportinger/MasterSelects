@@ -86,7 +86,9 @@ Camera clips expose their own Properties tab with:
 - Near plane
 - Far plane
 
-The Transform tab becomes scene-navigation controls for the active camera clip. In FPS mode, the preview accepts WASD/QE navigation plus mouse look. Free scene navigation now belongs to camera clips rather than gaussian-splat clips.
+The Transform tab becomes scene-navigation controls for the active camera clip. In FPS mode, the preview accepts WASD/QE navigation plus uncapped mouse look. Free scene navigation now belongs to camera clips rather than gaussian-splat clips.
+
+Camera rotation keyframes interpolate through the shortest angular path so timeline flights do not spin the long way around when yaw, pitch, or roll crosses a 360-degree wrap. FPS-look camera segments with keyed position/forward travel render through world-pose interpolation, keeping vertical-look roll moves from drifting away between keyframes.
 
 ## Gaussian Splats
 
@@ -98,6 +100,7 @@ Gaussian splat clips are imported through the SuperSplat-compatible `@playcanvas
 - Realtime splat rendering uses a worker-backed back-to-front order buffer based on the SuperSplat/PlayCanvas sorter approach. Precise export can still fall back to the existing GPU sort path.
 - Sequence splats follow the same shared runtime contract and are no longer treated as a permanent legacy-only scene path.
 - The Transform tab now exposes normal object transforms for gaussian splats. Scene navigation lives on camera clips.
+- Large gaussian splats show viewport loading progress during project restore, URL fetch, parser work, normalization, and GPU upload.
 
 Some gaussian-splat settings exist in the data model and export pipeline but are not yet surfaced as a full dedicated UI:
 

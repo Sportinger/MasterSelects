@@ -5,7 +5,10 @@ import {
   resolveSharedSceneCamera,
   resolveSharedSceneCameraConfig,
 } from '../../src/engine/scene/SceneCameraUtils';
-import { resolveOrbitCameraPose } from '../../src/engine/gaussian/core/SplatCameraUtils';
+import {
+  resolveOrbitCameraPose,
+  resolveOrbitCameraTranslationForFixedEye,
+} from '../../src/engine/gaussian/core/SplatCameraUtils';
 import { useEngineStore } from '../../src/stores/engineStore';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
@@ -268,5 +271,93 @@ describe('SceneCameraUtils', () => {
       far: expected.far,
       applyDefaultDistance: false,
     });
+  });
+
+  it('interpolates FPS look camera keyframes as world poses near vertical pitch', () => {
+    const viewport = { width: 1920, height: 1080 };
+    const settings = {
+      nearPlane: 0.1,
+      farPlane: 1000,
+      fov: 60,
+      minimumDistance: getSharedSceneDefaultCameraDistance(60),
+    };
+    const startTransform = {
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 0 },
+      rotation: { x: 89.5, y: 0, z: 0 },
+    };
+    const endRotation = { x: 89.5, y: 180, z: 0 };
+    const endTranslation = resolveOrbitCameraTranslationForFixedEye(
+      startTransform,
+      endRotation,
+      settings,
+      viewport,
+    );
+    const endTransform = {
+      position: {
+        x: endTranslation.positionX,
+        y: endTranslation.positionY,
+        z: 0,
+      },
+      scale: {
+        x: 1,
+        y: 1,
+        z: endTranslation.forwardOffset,
+      },
+      rotation: endRotation,
+    };
+    const startPose = resolveOrbitCameraPose(startTransform, settings, viewport);
+    const endPose = resolveOrbitCameraPose(endTransform, settings, viewport);
+    const cameraClip = {
+      id: 'vertical-fps-camera',
+      trackId: 'camera-track',
+      startTime: 0,
+      duration: 2,
+      transform: {
+        ...startTransform,
+        opacity: 1,
+        blendMode: 'normal',
+      },
+      source: {
+        type: 'camera',
+        cameraSettings: {
+          fov: 60,
+          near: 0.1,
+          far: 1000,
+        },
+      },
+    };
+
+    const config = resolveSharedSceneCameraConfig(viewport, 1, {
+      sceneNavClipId: 'vertical-fps-camera',
+      tracks: [{
+        id: 'camera-track',
+        type: 'video',
+        visible: true,
+      }],
+      clips: [cameraClip as any],
+      clipKeyframes: new Map([[
+        'vertical-fps-camera',
+        [
+          { id: 'px0', clipId: 'vertical-fps-camera', property: 'position.x', time: 0, value: startTransform.position.x, easing: 'linear' },
+          { id: 'px1', clipId: 'vertical-fps-camera', property: 'position.x', time: 2, value: endTransform.position.x, easing: 'linear' },
+          { id: 'py0', clipId: 'vertical-fps-camera', property: 'position.y', time: 0, value: startTransform.position.y, easing: 'linear' },
+          { id: 'py1', clipId: 'vertical-fps-camera', property: 'position.y', time: 2, value: endTransform.position.y, easing: 'linear' },
+          { id: 'sz0', clipId: 'vertical-fps-camera', property: 'scale.z', time: 0, value: startTransform.scale.z, easing: 'linear' },
+          { id: 'sz1', clipId: 'vertical-fps-camera', property: 'scale.z', time: 2, value: endTransform.scale.z, easing: 'linear' },
+          { id: 'rx0', clipId: 'vertical-fps-camera', property: 'rotation.x', time: 0, value: startTransform.rotation.x, easing: 'linear' },
+          { id: 'rx1', clipId: 'vertical-fps-camera', property: 'rotation.x', time: 2, value: endTransform.rotation.x, easing: 'linear' },
+          { id: 'ry0', clipId: 'vertical-fps-camera', property: 'rotation.y', time: 0, value: startTransform.rotation.y, easing: 'linear' },
+          { id: 'ry1', clipId: 'vertical-fps-camera', property: 'rotation.y', time: 2, value: endTransform.rotation.y, easing: 'linear' },
+        ],
+      ]]),
+    });
+
+    expect(endPose.eye.x).toBeCloseTo(startPose.eye.x, 5);
+    expect(endPose.eye.y).toBeCloseTo(startPose.eye.y, 5);
+    expect(endPose.eye.z).toBeCloseTo(startPose.eye.z, 5);
+    expect(config.position.x).toBeCloseTo(startPose.eye.x, 5);
+    expect(config.position.y).toBeCloseTo(startPose.eye.y, 5);
+    expect(config.position.z).toBeCloseTo(startPose.eye.z, 5);
   });
 });

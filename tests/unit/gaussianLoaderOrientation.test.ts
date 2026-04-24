@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { applyCanonicalBasisCorrection } from '../../src/engine/gaussian/loaders/normalize';
-import { loadGaussianSplatAsset } from '../../src/engine/gaussian/loaders';
+import { loadGaussianSplatAsset, type GaussianSplatLoadProgress } from '../../src/engine/gaussian/loaders';
 
 function createSplatFile(): File {
   const buffer = new ArrayBuffer(32);
@@ -107,6 +107,19 @@ describe('gaussian splat loader orientation', () => {
       min: [1, -2, -3],
       max: [1, -2, -3],
     });
+  });
+
+  it('reports progress while loading splat assets', async () => {
+    const events: GaussianSplatLoadProgress[] = [];
+
+    await loadGaussianSplatAsset(createSplatFile(), 'splat', {
+      onProgress: (progress) => events.push(progress),
+    });
+
+    expect(events.some((event) => event.phase === 'reading')).toBe(true);
+    expect(events.some((event) => event.phase === 'parsing')).toBe(true);
+    expect(events.some((event) => event.phase === 'normalizing')).toBe(true);
+    expect(Math.max(...events.map((event) => event.percent ?? 0))).toBeGreaterThanOrEqual(0.96);
   });
 
   it('does not fall back to legacy point-cloud PLY conversion', async () => {

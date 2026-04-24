@@ -18,6 +18,9 @@ export type {
   GaussianSplatBuffer,
   GaussianSplatFrame,
   GaussianSplatAsset,
+  GaussianSplatLoadOptions,
+  GaussianSplatLoadProgress,
+  GaussianSplatLoadProgressCallback,
   SplatCache,
 } from './loaders';
 

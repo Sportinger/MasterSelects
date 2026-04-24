@@ -43,7 +43,9 @@ export function resolveSceneClipTransform(
   const baseTransform = buildBaseTransform(clip);
   const ownTransform = keyframes.length === 0
     ? baseTransform
-    : getInterpolatedClipTransform(keyframes, clipLocalTime, baseTransform);
+    : getInterpolatedClipTransform(keyframes, clipLocalTime, baseTransform, {
+        rotationMode: clip.source?.type === 'camera' ? 'shortest' : 'linear',
+      });
 
   if (!clip.parentClipId) {
     return ownTransform;

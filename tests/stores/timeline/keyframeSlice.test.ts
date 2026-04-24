@@ -598,6 +598,27 @@ describe('keyframeSlice', () => {
     expect(t.opacity).toBeCloseTo(0.5, 1);
   });
 
+  it('getInterpolatedTransform: uses shortest-path rotation for camera clips', () => {
+    const cameraClip = createMockClip({
+      id: 'camera-1',
+      trackId: 'video-1',
+      startTime: 0,
+      duration: 10,
+      source: {
+        type: 'camera',
+        naturalDuration: Number.MAX_SAFE_INTEGER,
+        cameraSettings: { fov: 60, near: 0.1, far: 1000 },
+      },
+    });
+    store = createTestTimelineStore({ clips: [cameraClip] } as any);
+
+    store.getState().addKeyframe('camera-1', 'rotation.y', 350, 0);
+    store.getState().addKeyframe('camera-1', 'rotation.y', 10, 10);
+
+    const t = store.getState().getInterpolatedTransform('camera-1', 5);
+    expect(t.rotation.y).toBeCloseTo(360, 5);
+  });
+
   // ─── getInterpolatedEffects ────────────────────────────────────────
 
   it('getInterpolatedEffects: returns empty array for unknown clip', () => {

@@ -3,6 +3,7 @@ import {
   easingFunctions,
   PRESET_BEZIER,
   solveCubicBezierForX,
+  getShortestAngleDeltaDegrees,
   interpolateBezier,
   interpolateKeyframes,
   getInterpolatedClipTransform,
@@ -149,6 +150,17 @@ describe('interpolateKeyframes', () => {
     expect(interpolateKeyframes(kfs, 'opacity', 1, 0)).toBeCloseTo(0.5, 5);
   });
 
+  it('can interpolate angles across the shortest path', () => {
+    const kfs = [
+      createMockKeyframe({ property: 'rotation.y', time: 0, value: 350, easing: 'linear' }),
+      createMockKeyframe({ property: 'rotation.y', time: 2, value: 10 }),
+    ];
+
+    expect(getShortestAngleDeltaDegrees(350, 10)).toBe(20);
+    expect(interpolateKeyframes(kfs, 'rotation.y', 1, 0, { angleMode: 'shortest' })).toBeCloseTo(360, 5);
+    expect(interpolateKeyframes(kfs, 'rotation.y', 2, 0, { angleMode: 'shortest' })).toBe(10);
+  });
+
   it('ease-in interpolation: midpoint < 0.5 of range', () => {
     const kfs = [
       createMockKeyframe({ property: 'opacity', time: 0, value: 0, easing: 'ease-in' }),
@@ -266,6 +278,17 @@ describe('getInterpolatedClipTransform', () => {
     expect(result.rotation.x).toBeCloseTo(45, 5);
     expect(result.rotation.y).toBeCloseTo(90, 5);
     expect(result.rotation.z).toBeCloseTo(180, 5);
+  });
+
+  it('keeps normal rotation interpolation by default but supports shortest rotation mode', () => {
+    const base = createMockTransform();
+    const kfs: Keyframe[] = [
+      createMockKeyframe({ property: 'rotation.y', time: 0, value: 350, easing: 'linear' }),
+      createMockKeyframe({ property: 'rotation.y', time: 2, value: 10 }),
+    ];
+
+    expect(getInterpolatedClipTransform(kfs, 1, base).rotation.y).toBeCloseTo(180, 5);
+    expect(getInterpolatedClipTransform(kfs, 1, base, { rotationMode: 'shortest' }).rotation.y).toBeCloseTo(360, 5);
   });
 
   it('blendMode is always from baseTransform (not animatable)', () => {

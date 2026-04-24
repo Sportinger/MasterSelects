@@ -1,6 +1,27 @@
 [
   {
     "date": "2026-04-24",
+    "type": "fix",
+    "title": "3D Video Planes Now Render Through the Active Scene Camera",
+    "description": "Video clips converted into 3D layers now share the same renderable scene camera path as splats and nested compositions, so the 3D viewport no longer disappears or breaks when video planes are added.",
+    "section": "3D / Native Scene"
+  },
+  {
+    "date": "2026-04-24",
+    "type": "improve",
+    "title": "Gaussian Splat Loading Shows Viewport Progress",
+    "description": "Large splats now report fetch, read, parse, and upload progress directly in the preview viewport during import, refresh, and timeline restore.",
+    "section": "3D / Gaussian Splats"
+  },
+  {
+    "date": "2026-04-24",
+    "type": "fix",
+    "title": "FPS Camera Rotation Tweens as a Real World Pose",
+    "description": "FPS camera look is no longer pitch-capped, and camera keyframes now interpolate the recorded world pose so vertical look and roll-style moves avoid unwanted fly-out arcs between keyframes.",
+    "section": "3D / Camera Controls"
+  },
+  {
+    "date": "2026-04-24",
     "type": "new",
     "title": "Native Shared 3D Scene Rendering Added for Splats, Models, Planes, and Text",
     "description": "Scene cameras now drive one native WebGPU 3D space where Gaussian splats, 3D planes, meshes, models, and text can be arranged together instead of composited as isolated layers.",

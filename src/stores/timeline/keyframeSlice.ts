@@ -151,7 +151,9 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     const keyframes = clipKeyframes.get(clipId) || [];
     const ownTransform = keyframes.length === 0
       ? baseTransform
-      : getInterpolatedClipTransform(keyframes, clipLocalTime, baseTransform);
+      : getInterpolatedClipTransform(keyframes, clipLocalTime, baseTransform, {
+          rotationMode: clip.source?.type === 'camera' ? 'shortest' : 'linear',
+        });
 
     // If clip has a parent, compose with parent's transform
     if (clip.parentClipId) {

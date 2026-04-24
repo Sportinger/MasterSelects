@@ -10041,6 +10041,63 @@ input[type="checkbox"] {
   pointer-events: none;
 }
 
+.preview-splat-progress-overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 42px;
+  width: min(460px, calc(100% - 32px));
+  transform: translateX(-50%);
+  padding: 10px 12px;
+  color: var(--text-primary);
+  background: rgba(10, 12, 16, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(8px);
+  z-index: 24;
+  pointer-events: none;
+}
+
+.preview-splat-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.preview-splat-progress-name {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-splat-progress-track {
+  height: 5px;
+  margin-top: 8px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+
+.preview-splat-progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width 0.16s ease-out;
+}
+
+.preview-splat-progress-overlay.error .preview-splat-progress-fill {
+  background: var(--danger);
+}
+
 .preview-canvas-wrapper {
   transform-origin: center center;
   transition: transform 0.1s ease-out;

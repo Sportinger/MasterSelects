@@ -636,7 +636,9 @@ function buildNestedBaseLayer(nestedClip: TimelineClip, nestedClipLocalTime: num
 
   // Interpolate transform using keyframes (supports opacity fades, position animations, etc.)
   const transform = keyframes.length > 0
-    ? getInterpolatedClipTransform(keyframes, nestedClipLocalTime, baseTransform)
+    ? getInterpolatedClipTransform(keyframes, nestedClipLocalTime, baseTransform, {
+        rotationMode: nestedClip.source?.type === 'camera' ? 'shortest' : 'linear',
+      })
     : baseTransform;
 
   // Interpolate effect parameters if there are effect keyframes
