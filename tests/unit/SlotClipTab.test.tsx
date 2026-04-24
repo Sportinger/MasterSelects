@@ -153,7 +153,7 @@ describe('SlotClipTab', () => {
     expect(mockedLayerPlaybackManager.activateLayer).toHaveBeenCalledWith(
       0,
       'comp-1',
-      undefined,
+      10,
       { slotIndex: 0 }
     );
   });
@@ -163,6 +163,11 @@ describe('SlotClipTab', () => {
     fireEvent.click(screen.getByText('Launch'));
 
     expect(mediaState.activateOnLayer).toHaveBeenCalledWith('comp-1', 0);
-    expect(mockedLayerPlaybackManager.activateLayer).not.toHaveBeenCalled();
+    expect(mockedLayerPlaybackManager.activateLayer).toHaveBeenCalledWith(
+      0,
+      'comp-1',
+      10,
+      { slotIndex: 0 }
+    );
   });
 });

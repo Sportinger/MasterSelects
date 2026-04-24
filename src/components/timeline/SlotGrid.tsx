@@ -241,8 +241,18 @@ export function SlotGrid({ opacity }: SlotGridProps) {
   }, []);
 
   const openSlotInEditor = useCallback((compId: string) => {
-    openCompositionTab(compId, { skipAnimation: true, playFromStart: true });
-  }, [openCompositionTab]);
+    const mediaState = useMediaStore.getState();
+    const comp = mediaState.compositions.find(c => c.id === compId);
+    const duration = Math.max(comp?.duration || comp?.timelineData?.duration || 0, 0.05);
+    ensureSlotClipSettings?.(compId, duration);
+
+    const playFromTime = useMediaStore.getState().slotClipSettings?.[compId]?.trimIn ?? 0;
+    openCompositionTab(compId, {
+      skipAnimation: true,
+      playFromStart: true,
+      playFromTime,
+    });
+  }, [ensureSlotClipSettings, openCompositionTab]);
 
   // Click = select slot, open Slot Clip tab, and keep layer activation local to slot view.
   const handleSlotClick = useCallback((comp: Composition, slotIndex: number) => {

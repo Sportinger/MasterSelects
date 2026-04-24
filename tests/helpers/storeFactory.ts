@@ -23,6 +23,7 @@ import { createClipEffectSlice } from '../../src/stores/timeline/clipEffectSlice
 import { createLinkedGroupSlice } from '../../src/stores/timeline/linkedGroupSlice';
 import { createDownloadClipSlice } from '../../src/stores/timeline/downloadClipSlice';
 import { createPositioningUtils } from '../../src/stores/timeline/positioningUtils';
+import { resolvePlaybackStartPosition } from '../../src/stores/timeline/playbackRange';
 
 // Minimal initial state sufficient for testing slices
 function getInitialState(): Partial<TimelineStore> {
@@ -111,7 +112,17 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
         set({ playheadPosition: Math.max(0, Math.min(position, duration)) } as any);
       },
       setDraggingPlayhead: (dragging: boolean) => set({ isDraggingPlayhead: dragging } as any),
-      play: async () => set({ isPlaying: true } as any),
+      play: async () => {
+        const { playheadPosition, inPoint, outPoint, duration, playbackSpeed } = get();
+        const playbackStartPosition = resolvePlaybackStartPosition(
+          playheadPosition,
+          inPoint,
+          outPoint,
+          duration,
+          playbackSpeed,
+        );
+        set({ isPlaying: true, playheadPosition: playbackStartPosition } as any);
+      },
       pause: () => set({ isPlaying: false, playbackSpeed: 1 } as any),
       stop: () => set({ isPlaying: false, playheadPosition: 0 } as any),
       setZoom: (zoom: number) => set({ zoom: Math.max(0.1, Math.min(200, zoom)) } as any),

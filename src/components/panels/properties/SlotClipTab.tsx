@@ -251,13 +251,18 @@ export function SlotClipTab({ composition, slotIndex }: SlotClipTabProps) {
   }, [draggingEdge, updateTrimFromPointer]);
 
   const handleLaunch = useCallback(() => {
+    const launchTime = settings.trimIn;
+
     if (!isLayerActive) {
       activateOnLayer(composition.id, layerIndex);
-      return;
     }
 
-    layerPlaybackManager.activateLayer(layerIndex, composition.id, undefined, { slotIndex });
-  }, [activateOnLayer, composition.id, isLayerActive, layerIndex, slotIndex]);
+    layerPlaybackManager.activateLayer(layerIndex, composition.id, launchTime, { slotIndex });
+    setPlayback({
+      currentTime: launchTime,
+      playbackState: 'playing',
+    });
+  }, [activateOnLayer, composition.id, isLayerActive, layerIndex, settings.trimIn, slotIndex]);
 
   const handlePause = useCallback(() => {
     if (!isLayerActive) {

@@ -119,6 +119,8 @@ function createTestMediaStore(overrides?: Partial<MediaState>) {
       activeCompositionId: 'comp-1',
       openCompositionIds: ['comp-1'],
       slotAssignments: {},
+      slotClipSettings: {},
+      slotDeckStates: {},
       previewCompositionId: null,
       activeLayerSlots: {},
       layerOpacities: {},
@@ -817,6 +819,35 @@ describe('compositionSlice', () => {
     const comp2 = store.getState().createComposition('ToOpen');
     store.getState().openCompositionTab(comp2.id, { skipAnimation: true });
     expect(store.getState().activeCompositionId).toBe(comp2.id);
+  });
+
+  it('openCompositionTab: restarts active playback from requested playFromTime', async () => {
+    useTimelineStore.setState({ playheadPosition: 25, isPlaying: true } as any);
+
+    store.getState().openCompositionTab('comp-1', {
+      playFromStart: true,
+      playFromTime: 14,
+    });
+    await Promise.resolve();
+
+    expect(useTimelineStore.getState().playheadPosition).toBe(14);
+    expect(useTimelineStore.getState().isPlaying).toBe(true);
+  });
+
+  it('openCompositionTab: starts newly opened playback from requested playFromTime', async () => {
+    const comp2 = store.getState().createComposition('SlotStart', {
+      timelineData: makeTimelineData([], { playheadPosition: 30 }),
+    });
+
+    store.getState().openCompositionTab(comp2.id, {
+      skipAnimation: true,
+      playFromStart: true,
+      playFromTime: 12,
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(useTimelineStore.getState().playheadPosition).toBe(12);
+    expect(useTimelineStore.getState().isPlaying).toBe(true);
   });
 
   // ─── closeCompositionTab ────────────────────────────────────────

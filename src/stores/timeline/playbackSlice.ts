@@ -6,6 +6,7 @@ import { useMediaStore } from '../mediaStore';
 import { engine } from '../../engine/WebGPUEngine';
 import { getRuntimeFrameProvider } from '../../services/mediaRuntime/runtimePlayback';
 import { playheadState, sanitizePlayheadPosition } from '../../services/layerBuilder/PlayheadState';
+import { resolvePlaybackStartPosition } from './playbackRange';
 
 // Playback actions only (RAM preview and proxy cache in separate slices)
 export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => ({
@@ -33,11 +34,24 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
   },
 
   play: async () => {
-    const { clips } = get();
+    const { clips, inPoint, outPoint, duration, playbackSpeed } = get();
     const playheadPosition = sanitizePlayheadPosition(
       get().playheadPosition,
       sanitizePlayheadPosition(playheadState.position, 0)
     );
+    const playbackStartPosition = resolvePlaybackStartPosition(
+      playheadPosition,
+      inPoint,
+      outPoint,
+      duration,
+      playbackSpeed,
+    );
+
+    if (playbackStartPosition !== playheadPosition) {
+      set({ playheadPosition: playbackStartPosition });
+      playheadState.position = playbackStartPosition;
+    }
+
     const needsHtmlPlaybackReadiness = (
       source: (typeof clips)[number]['source'] | undefined
     ): source is NonNullable<(typeof clips)[number]['source']> & {
@@ -60,8 +74,8 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
 
     // Find all video clips at current playhead position that need to be ready
     const clipsAtPlayhead = clips.filter(clip => {
-      const isAtPlayhead = playheadPosition >= clip.startTime &&
-                           playheadPosition < clip.startTime + clip.duration;
+      const isAtPlayhead = playbackStartPosition >= clip.startTime &&
+                           playbackStartPosition < clip.startTime + clip.duration;
       const hasVideo = needsHtmlPlaybackReadiness(clip.source);
       return isAtPlayhead && hasVideo;
     });
@@ -70,10 +84,10 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
     const nestedVideos: HTMLVideoElement[] = [];
     for (const clip of clips) {
       if (clip.isComposition && clip.nestedClips) {
-        const isAtPlayhead = playheadPosition >= clip.startTime &&
-                             playheadPosition < clip.startTime + clip.duration;
+        const isAtPlayhead = playbackStartPosition >= clip.startTime &&
+                             playbackStartPosition < clip.startTime + clip.duration;
         if (isAtPlayhead) {
-          const compTime = playheadPosition - clip.startTime + clip.inPoint;
+          const compTime = playbackStartPosition - clip.startTime + clip.inPoint;
           for (const nestedClip of clip.nestedClips) {
             if (needsHtmlPlaybackReadiness(nestedClip.source)) {
               const isNestedAtTime = compTime >= nestedClip.startTime &&
