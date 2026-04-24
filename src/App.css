@@ -3516,74 +3516,92 @@ input, textarea {
 
 /* Multi-value inline row (X Y Z side by side) */
 .multi-value-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
   flex: 1;
-  gap: 3px;
+  column-gap: 12px;
+  row-gap: 3px;
   min-width: 0;
 }
 
 /* Labeled value cell: [label ... value] left/right aligned */
 .labeled-value {
-  flex: 1;
   min-width: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: 32px max-content;
   align-items: center;
-  justify-content: space-between;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
+  justify-content: start;
+  column-gap: 10px;
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  overflow: hidden;
-  transition: border-color var(--transition-normal);
-  cursor: ew-resize;
+  overflow: visible;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+  cursor: default;
 }
 
 .labeled-value:hover {
-  border-color: #2d5a8e;
+  border-color: transparent;
 }
 
 .labeled-value-label {
   font-size: var(--font-2xs);
   color: var(--text-secondary);
-  padding: 3px 0 3px 6px;
-  flex-shrink: 0;
+  padding: 3px 0;
+  width: 32px;
   user-select: none;
-  opacity: 0.6;
+  opacity: 0.75;
+  text-align: left;
+}
+
+.labeled-value .draggable-number-anchor {
+  flex: 0 0 auto;
+  min-width: 0;
+  justify-content: flex-end;
 }
 
 /* Override draggable-number style when inside labeled-value */
 .labeled-value .draggable-number {
   display: block;
-  flex-shrink: 0;
+  width: max-content;
   min-width: 0;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
-  border-radius: 0;
-  padding: 3px 6px 3px 0;
+  border-radius: 2px;
+  padding: 3px 4px;
   text-align: right;
   color: #5b8abf;
 }
 
 .labeled-value .draggable-number:hover {
-  background: transparent;
-  border-color: transparent;
+  background: rgba(45, 140, 235, 0.08);
+  border-color: rgba(45, 140, 235, 0.28);
   color: #7aabe0;
 }
 
 .labeled-value:active .draggable-number,
 .labeled-value .draggable-number:active {
   color: #9cc4f0;
-  background: transparent;
+  background: rgba(45, 140, 235, 0.12);
+}
+
+.labeled-value .draggable-number-input {
+  min-width: 0;
+  background: var(--bg-primary);
+  border-color: var(--accent);
+  color: #d7e7fb;
 }
 
 /* AE-style rotation: "2x +30.0°" */
 .rotation-value-ae {
-  gap: 2px;
+  grid-template-columns: 32px max-content max-content;
+  column-gap: 6px;
 }
 
 .rotation-value-ae .draggable-number:first-of-type {
-  opacity: 0.6;
-  font-size: var(--font-2xs);
-  min-width: 20px;
+  opacity: 1;
+  font-size: 11px;
+  min-width: 28px;
   flex-shrink: 0;
 }
 
@@ -3592,11 +3610,33 @@ input, textarea {
 }
 
 .rotation-row {
+  grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
   flex-wrap: wrap;
 }
 
 .properties-section .control-row input[type="range"] {
   flex: 1;
+}
+
+.scene-nav-speed-control {
+  display: inline-grid;
+  grid-template-columns: minmax(76px, 112px) 34px;
+  align-items: center;
+  gap: 6px;
+  min-width: 120px;
+}
+
+.scene-nav-speed-control input[type="range"] {
+  width: 100%;
+  min-width: 0;
+}
+
+.scene-nav-speed-control span {
+  color: #7aabe0;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .properties-section .control-row .value {
@@ -8993,6 +9033,7 @@ input[type="checkbox"] {
   border-radius: 3px;
   color: #5b8abf;
   font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
   cursor: ew-resize;
   user-select: none;

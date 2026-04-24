@@ -15,6 +15,7 @@ interface EngineState {
   linuxVulkanWarning: boolean;
   sceneNavClipId: string | null;
   sceneNavFpsMode: boolean;
+  sceneNavFpsMoveSpeed: number;
 
   // Actions
   setEngineReady: (ready: boolean) => void;
@@ -25,6 +26,7 @@ interface EngineState {
   dismissLinuxVulkanWarning: () => void;
   setSceneNavClipId: (clipId: string | null) => void;
   setSceneNavFpsMode: (enabled: boolean) => void;
+  setSceneNavFpsMoveSpeed: (speed: number) => void;
 }
 
 export function selectSceneNavClipId(
@@ -37,6 +39,12 @@ export function selectSceneNavFpsMode(
   state: Pick<EngineState, 'sceneNavFpsMode'>,
 ): boolean {
   return state.sceneNavFpsMode ?? false;
+}
+
+export function selectSceneNavFpsMoveSpeed(
+  state: Pick<EngineState, 'sceneNavFpsMoveSpeed'>,
+): number {
+  return state.sceneNavFpsMoveSpeed ?? 1;
 }
 
 // Check if Linux Vulkan warning was already dismissed
@@ -52,6 +60,7 @@ export const useEngineStore = create<EngineState>()(
     linuxVulkanWarning: false,
     sceneNavClipId: null,
     sceneNavFpsMode: false,
+    sceneNavFpsMoveSpeed: 1,
     engineStats: {
       fps: 0,
       frameTime: 0,
@@ -101,6 +110,13 @@ export const useEngineStore = create<EngineState>()(
 
     setSceneNavFpsMode: (enabled: boolean) => {
       set({ sceneNavFpsMode: enabled });
+    },
+
+    setSceneNavFpsMoveSpeed: (speed: number) => {
+      const nextSpeed = Number.isFinite(speed)
+        ? Math.max(0.1, Math.min(8, speed))
+        : 1;
+      set({ sceneNavFpsMoveSpeed: nextSpeed });
     },
   }))
 );

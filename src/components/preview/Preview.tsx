@@ -7,7 +7,7 @@ import { Logger } from '../../services/logger';
 const log = Logger.create('Preview');
 import { useEngine } from '../../hooks/useEngine';
 import { useShortcut } from '../../hooks/useShortcut';
-import { selectSceneNavClipId, selectSceneNavFpsMode, useEngineStore } from '../../stores/engineStore';
+import { selectSceneNavClipId, selectSceneNavFpsMode, selectSceneNavFpsMoveSpeed, useEngineStore } from '../../stores/engineStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore, DEFAULT_SCENE_CAMERA_SETTINGS } from '../../stores/mediaStore';
 import { useDockStore } from '../../stores/dockStore';
@@ -68,6 +68,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const engineStats = useEngineStore(s => s.engineStats);
   const sceneNavClipId = useEngineStore(selectSceneNavClipId);
   const sceneNavFpsMode = useEngineStore(selectSceneNavFpsMode);
+  const sceneNavFpsMoveSpeed = useEngineStore(selectSceneNavFpsMoveSpeed);
   const { clips, selectedClipIds, primarySelectedClipId, selectClip, updateClipTransform, maskEditMode, layers, selectedLayerId, selectLayer, updateLayer, tracks } = useTimelineStore(useShallow(s => ({
     clips: s.clips,
     selectedClipIds: s.selectedClipIds,
@@ -560,8 +561,9 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     const minimumDistance = getSharedSceneDefaultCameraDistance(fovDegrees);
     const baseDistance = freshTransform.position.z !== 0 ? Math.abs(freshTransform.position.z) : minimumDistance;
     const currentDistance = baseDistance / zoom;
-    const panStep = 0.9 * zoomDamping * dt;
-    const forwardStep = Math.max(0.15, currentDistance * 0.85) * dt;
+    const keyboardMoveSpeed = sceneNavFpsMode ? sceneNavFpsMoveSpeed : 1;
+    const panStep = 0.9 * zoomDamping * dt * keyboardMoveSpeed;
+    const forwardStep = Math.max(0.15, currentDistance * 0.85) * dt * keyboardMoveSpeed;
 
     applySceneCameraValues(selectedSceneNavClip.id, {
       ...(rightInput !== 0 ? { positionX: freshTransform.position.x + rightInput * panStep } : {}),
@@ -576,6 +578,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     applySceneCameraValues,
     finishGaussianKeyboardBatch,
     sceneNavEnabled,
+    sceneNavFpsMode,
+    sceneNavFpsMoveSpeed,
     getFreshSceneNavTransform,
     selectedSceneNavClip,
     stopGaussianKeyboardLoop,

@@ -2,7 +2,7 @@
 import { useCallback } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
-import { selectSceneNavClipId, selectSceneNavFpsMode, useEngineStore } from '../../../stores/engineStore';
+import { selectSceneNavFpsMode, selectSceneNavFpsMoveSpeed, useEngineStore } from '../../../stores/engineStore';
 import { startBatch, endBatch } from '../../../stores/historyStore';
 import type { BlendMode, AnimatableProperty } from '../../../types';
 import {
@@ -81,10 +81,10 @@ function RotationValue({ label, degrees, onChange, onDragStart, onDragEnd }: {
 
 export function TransformTab({ clipId, transform, speed = 1, is3D = false }: TransformTabProps) {
   const { setPropertyValue, updateClipTransform, toggle3D, updateClip } = useTimelineStore.getState();
-  const sceneNavClipId = useEngineStore(selectSceneNavClipId);
   const sceneNavFpsMode = useEngineStore(selectSceneNavFpsMode);
-  const setSceneNavClipId = useEngineStore((s) => s.setSceneNavClipId);
+  const sceneNavFpsMoveSpeed = useEngineStore(selectSceneNavFpsMoveSpeed);
   const setSceneNavFpsMode = useEngineStore((s) => s.setSceneNavFpsMode);
+  const setSceneNavFpsMoveSpeed = useEngineStore((s) => s.setSceneNavFpsMoveSpeed);
   const clip = useTimelineStore((s) => s.clips.find((c) => c.id === clipId));
   const wireframe = clip?.wireframe ?? false;
   const sourceType = clip?.source?.type;
@@ -99,7 +99,6 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
   const usesCameraControls = isCameraClip;
   const isLocked3D = isModel || isGaussianSplat || isSplatEffector;
   const isEffectively3D = isCameraClip || isLocked3D || is3D;
-  const sceneNavEnabled = usesCameraControls && sceneNavClipId === clipId;
 
   const handleBatchStart = useCallback(() => startBatch('Adjust transform'), []);
   const handleBatchEnd = useCallback(() => endBatch(), []);
@@ -169,8 +168,6 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
   }, [clip, clipId, threeDEffectorsEnabled, updateClip]);
 
   const cameraControlsHint = 'Scene cameras drive the common 3D scene for splats, planes, meshes, text, and models.';
-  const showCameraPositionValues = usesCameraControls && sceneNavFpsMode;
-  const cameraPositionLabel = showCameraPositionValues ? 'Position' : usesCameraControls ? 'Camera' : 'Position';
 
   return (
     <div className="properties-tab-content transform-tab-compact">
@@ -182,14 +179,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
         )}
         {usesCameraControls && (
           <div className="control-row">
-            <label className="prop-label">Free Nav</label>
-            <button
-              className={`btn btn-xs ${sceneNavEnabled ? 'btn-active' : ''}`}
-              onClick={() => setSceneNavClipId(sceneNavEnabled ? null : clipId)}
-              title={sceneNavEnabled ? 'Disable preview scene navigation' : 'Enable preview scene navigation'}
-            >
-              {sceneNavEnabled ? 'On' : 'Off'}
-            </button>
+            <label className="prop-label">Nav Mode</label>
             <button
               className={`btn btn-xs ${sceneNavFpsMode ? 'btn-active' : ''}`}
               onClick={() => setSceneNavFpsMode(!sceneNavFpsMode)}
@@ -197,6 +187,19 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
             >
               FPS
             </button>
+            {sceneNavFpsMode && (
+              <div className="scene-nav-speed-control" title="FPS movement speed">
+                <input
+                  type="range"
+                  min={0.1}
+                  max={8}
+                  step={0.1}
+                  value={sceneNavFpsMoveSpeed}
+                  onChange={(event) => setSceneNavFpsMoveSpeed(Number(event.target.value))}
+                />
+                <span>{sceneNavFpsMoveSpeed.toFixed(1)}x</span>
+              </div>
+            )}
             <span style={{ color: '#8d99a6', fontSize: '11px' }}>
               {sceneNavFpsMode
                 ? 'Click preview, hold LMB to look, WASD move, Q/E up-down, MMB/RMB/Shift+LMB pan, wheel zoom. Dist = orbit distance.'
@@ -301,15 +304,15 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
 
       <div className="properties-section">
         <div className="control-row">
-          {showCameraPositionValues ? (
+          {usesCameraControls ? (
             <CameraPositionKeyframeToggle clipId={clipId} x={cameraMoveX} y={cameraMoveY} z={cameraMoveZ} />
           ) : (
             <PositionKeyframeToggle clipId={clipId} x={transform.position.x} y={transform.position.y} z={transform.position.z} />
           )}
-          <label className="prop-label">{cameraPositionLabel}</label>
+          <label className="prop-label">Position</label>
           <div className="multi-value-row">
             <LabeledValue
-              label={usesCameraControls ? (showCameraPositionValues ? 'X' : 'Pan X') : 'X'}
+              label="X"
               value={usesCameraControls ? cameraMoveX : posXPx}
               onChange={usesCameraControls ? handleCameraMoveXChange : handlePosXChange}
               defaultValue={0}
@@ -319,7 +322,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
               onDragEnd={handleBatchEnd}
             />
             <LabeledValue
-              label={usesCameraControls ? (showCameraPositionValues ? 'Y' : 'Pan Y') : 'Y'}
+              label="Y"
               value={usesCameraControls ? cameraMoveY : posYPx}
               onChange={usesCameraControls ? handleCameraMoveYChange : handlePosYChange}
               defaultValue={0}
@@ -330,9 +333,9 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
             />
             {isEffectively3D && (
               <LabeledValue
-                label={usesCameraControls ? (showCameraPositionValues ? 'Z' : 'Dist') : 'Z'}
-                value={usesCameraControls ? (showCameraPositionValues ? cameraMoveZ : cameraDist) : posZPx}
-                onChange={usesCameraControls ? (showCameraPositionValues ? handleCameraMoveZChange : handleCameraDistChange) : handlePosZChange}
+                label="Z"
+                value={usesCameraControls ? cameraMoveZ : posZPx}
+                onChange={usesCameraControls ? handleCameraMoveZChange : handlePosZChange}
                 defaultValue={0}
                 decimals={usesCameraControls ? 3 : 1}
                 sensitivity={usesCameraControls ? 0.02 : 0.5}
@@ -344,7 +347,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
         </div>
       </div>
 
-      {showCameraPositionValues && (
+      {usesCameraControls && (
         <div className="properties-section">
           <div className="control-row">
             <KeyframeToggle clipId={clipId} property="position.z" value={cameraDist} />

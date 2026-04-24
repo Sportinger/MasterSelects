@@ -6,6 +6,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import type { BlendMode, AnimatableProperty, MaskMode, ClipMask } from '../../types';
 import { BLEND_MODE_GROUPS, formatBlendModeName, KeyframeToggle } from './properties/shared';
+import { EditableDraggableNumber as DraggableNumber } from '../common/EditableDraggableNumber';
 
 // Precision slider with modifier key support
 // Shift = half speed, Ctrl = super slow (10x slower)
@@ -102,84 +103,6 @@ function PrecisionSlider({ min, max, step, value, onChange, defaultValue }: Prec
         />
       </div>
     </div>
-  );
-}
-
-// Draggable number input - no caps, supports negative values
-// Drag left/right to change value, right-click to reset
-interface DraggableNumberProps {
-  value: number;
-  onChange: (value: number) => void;
-  defaultValue?: number;
-  sensitivity?: number; // How many pixels per unit (default: 2)
-  decimals?: number; // Number of decimal places to display (default: 2)
-  suffix?: string; // Optional suffix like "px" or "%"
-}
-
-function DraggableNumber({ value, onChange, defaultValue, sensitivity = 2, decimals = 2, suffix = '' }: DraggableNumberProps) {
-  const inputRef = useRef<HTMLSpanElement>(null);
-  const accumulatedDelta = useRef(0);
-  const startValue = useRef(0);
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return; // Only handle left click
-    e.preventDefault();
-    accumulatedDelta.current = 0;
-    startValue.current = value;
-
-    // Request pointer lock for infinite dragging
-    const element = inputRef.current;
-    if (element) {
-      element.requestPointerLock();
-    }
-
-    const handleMouseMove = (e: MouseEvent) => {
-      // Calculate speed multiplier based on modifier keys
-      let speedMultiplier = 1;
-      if (e.ctrlKey) {
-        speedMultiplier = 0.01; // Ultra fine (1%)
-      } else if (e.shiftKey) {
-        speedMultiplier = 0.1; // Slow (10%)
-      }
-
-      // Use movementX for pointer lock (raw delta, not position)
-      accumulatedDelta.current += e.movementX * speedMultiplier;
-      const deltaValue = accumulatedDelta.current / sensitivity;
-      const newValue = startValue.current + deltaValue;
-
-      // Round to avoid float errors
-      const preciseValue = Math.round(newValue * Math.pow(10, decimals + 2)) / Math.pow(10, decimals + 2);
-      onChange(preciseValue);
-    };
-
-    const handleMouseUp = () => {
-      document.exitPointerLock();
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  }, [value, sensitivity, decimals, onChange]);
-
-  // Handle right-click to reset to default
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    if (defaultValue !== undefined) {
-      onChange(defaultValue);
-    }
-  }, [defaultValue, onChange]);
-
-  return (
-    <span
-      ref={inputRef}
-      className="draggable-number"
-      onMouseDown={handleMouseDown}
-      onContextMenu={handleContextMenu}
-      title={defaultValue !== undefined ? "Drag to change, right-click to reset" : "Drag to change"}
-    >
-      {value.toFixed(decimals)}{suffix}
-    </span>
   );
 }
 
