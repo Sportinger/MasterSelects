@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   SCENE_NAV_FPS_MOVE_SPEED_STEPS,
   getSceneNavFpsMoveSpeedStepIndex,
+  selectActiveGaussianSplatLoadProgress,
   snapSceneNavFpsMoveSpeed,
   stepSceneNavFpsMoveSpeed,
   useEngineStore,
@@ -41,5 +42,31 @@ describe('scene nav FPS movement speed', () => {
   it('snaps store updates to the speed ladder', () => {
     useEngineStore.getState().setSceneNavFpsMoveSpeed(1.35);
     expect(useEngineStore.getState().sceneNavFpsMoveSpeed).toBe(1.5);
+  });
+
+  it('tracks gaussian splat loading progress monotonically until cleared', () => {
+    useEngineStore.getState().setGaussianSplatLoadProgress({
+      sceneKey: 'large-splat-scene',
+      fileName: 'large.splat',
+      phase: 'reading',
+      percent: 0.45,
+    });
+    useEngineStore.getState().setGaussianSplatLoadProgress({
+      sceneKey: 'large-splat-scene',
+      fileName: 'large.splat',
+      phase: 'parsing',
+      percent: 0.2,
+    });
+
+    const activeProgress = selectActiveGaussianSplatLoadProgress(useEngineStore.getState());
+    expect(activeProgress).toMatchObject({
+      sceneKey: 'large-splat-scene',
+      fileName: 'large.splat',
+      phase: 'parsing',
+      percent: 0.45,
+    });
+
+    useEngineStore.getState().clearGaussianSplatLoadProgress('large-splat-scene');
+    expect(selectActiveGaussianSplatLoadProgress(useEngineStore.getState())).toBeNull();
   });
 });

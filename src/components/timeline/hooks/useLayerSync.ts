@@ -168,7 +168,9 @@ export function useLayerSync({
 
         // Interpolate transform using keyframes (supports opacity fades, position animations, etc.)
         const transform = keyframes.length > 0
-          ? getInterpolatedClipTransform(keyframes, nestedLocalTime, baseTransform)
+          ? getInterpolatedClipTransform(keyframes, nestedLocalTime, baseTransform, {
+              rotationMode: nestedClip.source?.type === 'camera' ? 'shortest' : 'linear',
+            })
           : baseTransform;
 
         // Interpolate effect parameters if there are effect keyframes

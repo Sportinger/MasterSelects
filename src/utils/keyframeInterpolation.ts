@@ -17,6 +17,27 @@ export const PRESET_BEZIER: Record<Exclude<EasingType, 'bezier'>, { p1: [number,
   'ease-in-out': { p1: [0.42, 0], p2: [0.58, 1] },
 };
 
+export interface KeyframeInterpolationOptions {
+  angleMode?: 'linear' | 'shortest';
+}
+
+export interface ClipTransformInterpolationOptions {
+  rotationMode?: 'linear' | 'shortest';
+}
+
+export function getShortestAngleDeltaDegrees(from: number, to: number): number {
+  const rawDelta = to - from;
+  let delta = (((rawDelta % 360) + 540) % 360) - 180;
+  if (delta === -180 && rawDelta > 0) {
+    delta = 180;
+  }
+  return delta;
+}
+
+export function interpolateAngleDegrees(from: number, to: number, t: number): number {
+  return from + getShortestAngleDeltaDegrees(from, to) * t;
+}
+
 /**
  * Solve cubic bezier for Y given X (time) using Newton-Raphson iteration.
  * Uses standard CSS cubic-bezier format where X controls timing and Y controls output.
@@ -136,7 +157,8 @@ export function interpolateKeyframes(
   keyframes: Keyframe[],
   property: AnimatableProperty,
   time: number,
-  defaultValue: number
+  defaultValue: number,
+  options?: KeyframeInterpolationOptions
 ): number {
   // Filter keyframes for this property and sort by time
   const propKeyframes = keyframes
@@ -175,24 +197,33 @@ export function interpolateKeyframes(
 
   // Use bezier interpolation if easing is 'bezier' or if keyframe has custom handles
   const easing = normalizeEasingType(prevKey.easing, 'linear');
+  const nextValue = options?.angleMode === 'shortest'
+    ? prevKey.value + getShortestAngleDeltaDegrees(prevKey.value, nextKey.value)
+    : nextKey.value;
+  const valueDelta = nextValue - prevKey.value;
 
   if (easing === 'bezier' || prevKey.handleOut || nextKey.handleIn) {
-    return interpolateBezier(prevKey, nextKey, t);
+    return interpolateBezier(prevKey, { ...nextKey, value: nextValue }, t);
   }
 
   // Apply preset easing from the previous keyframe
   const easedT = easingFunctions[easing](t);
 
   // Linear interpolation between values
-  return prevKey.value + (nextKey.value - prevKey.value) * easedT;
+  return prevKey.value + valueDelta * easedT;
 }
 
 // Get full interpolated transform at a given time
 export function getInterpolatedClipTransform(
   keyframes: Keyframe[],
   time: number,
-  baseTransform: ClipTransform
+  baseTransform: ClipTransform,
+  options?: ClipTransformInterpolationOptions
 ): ClipTransform {
+  const rotationOptions: KeyframeInterpolationOptions | undefined = options?.rotationMode === 'shortest'
+    ? { angleMode: 'shortest' }
+    : undefined;
+
   return {
     opacity: interpolateKeyframes(keyframes, 'opacity', time, baseTransform.opacity),
     blendMode: baseTransform.blendMode, // Not animatable
@@ -209,9 +240,9 @@ export function getInterpolatedClipTransform(
         : {}),
     },
     rotation: {
-      x: interpolateKeyframes(keyframes, 'rotation.x', time, baseTransform.rotation.x),
-      y: interpolateKeyframes(keyframes, 'rotation.y', time, baseTransform.rotation.y),
-      z: interpolateKeyframes(keyframes, 'rotation.z', time, baseTransform.rotation.z),
+      x: interpolateKeyframes(keyframes, 'rotation.x', time, baseTransform.rotation.x, rotationOptions),
+      y: interpolateKeyframes(keyframes, 'rotation.y', time, baseTransform.rotation.y, rotationOptions),
+      z: interpolateKeyframes(keyframes, 'rotation.z', time, baseTransform.rotation.z, rotationOptions),
     },
   };
 }

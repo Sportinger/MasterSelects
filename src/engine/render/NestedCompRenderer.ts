@@ -21,7 +21,7 @@ import { getCopiedHtmlVideoPreviewFrame } from './htmlVideoPreviewFallback';
 import { splitLayerEffects } from './layerEffectStack';
 import { collectActiveSceneSplatEffectors } from '../scene/SceneEffectorUtils';
 import { collectScene3DLayers } from '../scene/SceneLayerCollector';
-import { resolveSharedSceneCamera } from '../scene/SceneCameraUtils';
+import { resolveRenderableSharedSceneCamera } from '../scene/SceneCameraUtils';
 import { getNativeSceneRenderer } from '../native3d/NativeSceneRenderer';
 
 const log = Logger.create('NestedCompRenderer');
@@ -621,7 +621,7 @@ export class NestedCompRenderer {
     const textureView = renderer.renderScene(
       this.device,
       layers3D,
-      resolveSharedSceneCamera({ width, height }, currentTime ?? 0, sceneContext),
+      resolveRenderableSharedSceneCamera({ width, height }, currentTime ?? 0, sceneContext),
       activeSplatEffectors,
       isRealtimePlayback,
     );

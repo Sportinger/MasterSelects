@@ -27,11 +27,12 @@ import { flags } from '../featureFlags';
 import type { NativeSceneRenderer } from '../native3d/NativeSceneRenderer';
 import { collectActiveSceneSplatEffectors } from '../scene/SceneEffectorUtils';
 import { collectScene3DLayers } from '../scene/SceneLayerCollector';
-import { resolveRenderableSharedSceneCamera, resolveSharedSceneCamera } from '../scene/SceneCameraUtils';
+import { resolveRenderableSharedSceneCamera } from '../scene/SceneCameraUtils';
 import type { SceneSplatEffectorRuntimeData, SceneSplatLayer } from '../scene/types';
 import { useMediaStore } from '../../stores/mediaStore';
+import { useEngineStore, type GaussianSplatLoadPhase } from '../../stores/engineStore';
 import { getGaussianSplatGpuRenderer } from '../gaussian/core/GaussianSplatGpuRenderer';
-import { loadGaussianSplatAssetCached } from '../gaussian/loaders';
+import { loadGaussianSplatAssetCached, type GaussianSplatLoadProgress } from '../gaussian/loaders';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../gaussian/types';
 import {
   buildSharedSplatRuntimeRequest,
@@ -41,6 +42,21 @@ import {
 const log = Logger.create('RenderDispatcher');
 const GAUSSIAN_PLAYBACK_SORT_FREQUENCY = 6;
 const MAX_EXPORT_LAYER_NESTING_DEPTH = 8;
+
+type GaussianSplatSceneLoadRequest = {
+  sceneKey: string;
+  clipId?: string;
+  url?: string;
+  fileName: string;
+  file?: File;
+};
+
+function clampUnitInterval(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(1, value));
+}
 
 /**
  * Mutable deps bag — the engine updates these references as they change
@@ -140,13 +156,7 @@ export class RenderDispatcher {
     );
   }
 
-  async ensureGaussianSplatSceneLoaded(options: {
-    sceneKey: string;
-    clipId?: string;
-    url?: string;
-    fileName: string;
-    file?: File;
-  }): Promise<boolean> {
+  async ensureGaussianSplatSceneLoaded(options: GaussianSplatSceneLoadRequest): Promise<boolean> {
     if (!options.url && !options.file) return false;
 
     const device = this.deps.getDevice();
@@ -158,6 +168,7 @@ export class RenderDispatcher {
     }
 
     if (renderer.hasScene(options.sceneKey)) {
+      useEngineStore.getState().clearGaussianSplatLoadProgress(options.sceneKey);
       return true;
     }
 
@@ -787,7 +798,7 @@ export class RenderDispatcher {
       includeLayer: (data) => includedLayers.has(data),
     });
 
-    const camera = resolveSharedSceneCamera(
+    const camera = resolveRenderableSharedSceneCamera(
       { width, height },
       this.getEffectiveTimelineTime(),
     );
@@ -1169,15 +1180,119 @@ export class RenderDispatcher {
     return summary;
   }
 
+  private setGaussianSplatLoadProgress(
+    request: GaussianSplatSceneLoadRequest,
+    progress: {
+      phase: GaussianSplatLoadPhase;
+      percent?: number;
+      loadedBytes?: number;
+      totalBytes?: number;
+      message?: string;
+    },
+  ): void {
+    useEngineStore.getState().setGaussianSplatLoadProgress({
+      sceneKey: request.sceneKey,
+      clipId: request.clipId,
+      fileName: request.file?.name || request.fileName || 'splat.ply',
+      ...progress,
+    });
+  }
+
+  private clearGaussianSplatLoadProgressSoon(sceneKey: string, delayMs: number): void {
+    globalThis.setTimeout(() => {
+      useEngineStore.getState().clearGaussianSplatLoadProgress(sceneKey);
+    }, delayMs);
+  }
+
+  private mapGaussianAssetLoadProgress(
+    progress: GaussianSplatLoadProgress,
+    startPercent: number,
+    endPercent: number,
+  ): number {
+    const bytePercent = progress.totalBytes && progress.totalBytes > 0
+      ? (progress.loadedBytes ?? 0) / progress.totalBytes
+      : 0;
+    const rawPercent = clampUnitInterval(progress.percent ?? bytePercent);
+    return startPercent + (endPercent - startPercent) * rawPercent;
+  }
+
+  private async fetchGaussianSplatFile(request: GaussianSplatSceneLoadRequest): Promise<File> {
+    if (!request.url) {
+      throw new Error('Cannot fetch gaussian splat without a URL.');
+    }
+
+    this.setGaussianSplatLoadProgress(request, {
+      phase: 'fetching',
+      percent: 0.02,
+      loadedBytes: 0,
+      message: 'Fetching splat file',
+    });
+
+    const response = await fetch(request.url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch gaussian splat: ${response.status} ${response.statusText}`);
+    }
+
+    const contentLengthHeader = response.headers.get('content-length');
+    const parsedTotalBytes = contentLengthHeader ? Number.parseInt(contentLengthHeader, 10) : Number.NaN;
+    const totalBytes = Number.isFinite(parsedTotalBytes) && parsedTotalBytes > 0
+      ? parsedTotalBytes
+      : undefined;
+
+    if (!response.body) {
+      const arrayBuffer = await response.arrayBuffer();
+      this.setGaussianSplatLoadProgress(request, {
+        phase: 'fetching',
+        percent: 0.35,
+        loadedBytes: arrayBuffer.byteLength,
+        totalBytes: totalBytes ?? arrayBuffer.byteLength,
+        message: 'Fetched splat file',
+      });
+      return new File([arrayBuffer], request.fileName || 'splat.ply');
+    }
+
+    const reader = response.body.getReader();
+    const chunks: BlobPart[] = [];
+    let loadedBytes = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (!value) {
+        continue;
+      }
+
+      chunks.push(value.slice());
+      loadedBytes += value.byteLength;
+      const rawPercent = totalBytes
+        ? loadedBytes / totalBytes
+        : Math.min(0.95, loadedBytes / (64 * 1024 * 1024));
+
+      this.setGaussianSplatLoadProgress(request, {
+        phase: 'fetching',
+        percent: 0.02 + clampUnitInterval(rawPercent) * 0.33,
+        loadedBytes,
+        totalBytes,
+        message: 'Fetching splat file',
+      });
+    }
+
+    this.setGaussianSplatLoadProgress(request, {
+      phase: 'fetching',
+      percent: 0.35,
+      loadedBytes,
+      totalBytes: totalBytes ?? loadedBytes,
+      message: 'Fetched splat file',
+    });
+
+    return new File(chunks, request.fileName || 'splat.ply');
+  }
+
   /** Async helper: fetch splat file, parse, and upload to GPU renderer */
   private async loadAndUploadSplatScene(
-    request: {
-      sceneKey: string;
-      clipId?: string;
-      url?: string;
-      fileName: string;
-      file?: File;
-    },
+    request: GaussianSplatSceneLoadRequest,
     renderer: ReturnType<typeof getGaussianSplatGpuRenderer>,
   ): Promise<void> {
     if (this.splatLoadingClips.has(request.sceneKey)) return;
@@ -1185,15 +1300,35 @@ export class RenderDispatcher {
 
     try {
       let file = request.file;
+      let loadStartPercent = 0.02;
       if (!file) {
         if (!request.url) {
           return;
         }
-        const response = await fetch(request.url);
-        const arrayBuffer = await response.arrayBuffer();
-        file = new File([arrayBuffer], request.fileName || 'splat.ply');
+        file = await this.fetchGaussianSplatFile(request);
+        loadStartPercent = 0.35;
+      } else {
+        this.setGaussianSplatLoadProgress(request, {
+          phase: 'reading',
+          percent: loadStartPercent,
+          loadedBytes: 0,
+          totalBytes: file.size,
+          message: 'Reading splat file',
+        });
       }
-      const asset = await loadGaussianSplatAssetCached(request.sceneKey, file);
+
+      const loadFile = file;
+      const asset = await loadGaussianSplatAssetCached(request.sceneKey, loadFile, undefined, {
+        onProgress: (progress) => {
+          this.setGaussianSplatLoadProgress(request, {
+            phase: progress.phase,
+            percent: this.mapGaussianAssetLoadProgress(progress, loadStartPercent, 0.9),
+            loadedBytes: progress.loadedBytes,
+            totalBytes: progress.totalBytes ?? loadFile.size,
+            message: progress.message,
+          });
+        },
+      });
 
       if (asset?.frames[0]?.buffer) {
         if (asset.metadata?.boundingBox) {
@@ -1202,10 +1337,25 @@ export class RenderDispatcher {
             this.splatSceneBounds.set(request.clipId, asset.metadata.boundingBox);
           }
         }
+        this.setGaussianSplatLoadProgress(request, {
+          phase: 'uploading',
+          percent: 0.94,
+          loadedBytes: loadFile.size,
+          totalBytes: loadFile.size,
+          message: 'Uploading splat scene',
+        });
         renderer.uploadScene(request.sceneKey, {
           splatCount: asset.frames[0].buffer.splatCount,
           data: asset.frames[0].buffer.data,
         });
+        this.setGaussianSplatLoadProgress(request, {
+          phase: 'complete',
+          percent: 1,
+          loadedBytes: loadFile.size,
+          totalBytes: loadFile.size,
+          message: 'Splat scene loaded',
+        });
+        this.clearGaussianSplatLoadProgressSoon(request.sceneKey, 350);
         log.info('Gaussian splat scene uploaded', {
           clipId: request.clipId ?? request.sceneKey,
           sceneKey: request.sceneKey,
@@ -1219,6 +1369,12 @@ export class RenderDispatcher {
         sceneKey: request.sceneKey,
         err,
       });
+      this.setGaussianSplatLoadProgress(request, {
+        phase: 'error',
+        percent: 1,
+        message: err instanceof Error ? err.message : 'Failed to load gaussian splat scene',
+      });
+      this.clearGaussianSplatLoadProgressSoon(request.sceneKey, 1500);
     } finally {
       this.splatLoadingClips.delete(request.sceneKey);
     }

@@ -5,6 +5,34 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import type { EngineStats } from '../types';
 
+export type GaussianSplatLoadPhase =
+  | 'fetching'
+  | 'reading'
+  | 'parsing'
+  | 'normalizing'
+  | 'uploading'
+  | 'complete'
+  | 'error';
+
+export interface GaussianSplatLoadProgressEntry {
+  sceneKey: string;
+  clipId?: string;
+  fileName: string;
+  phase: GaussianSplatLoadPhase;
+  percent: number;
+  loadedBytes?: number;
+  totalBytes?: number;
+  message?: string;
+  updatedAt: number;
+}
+
+export type GaussianSplatLoadProgressUpdate = Omit<
+  GaussianSplatLoadProgressEntry,
+  'updatedAt' | 'percent'
+> & {
+  percent?: number;
+};
+
 interface EngineState {
   // Engine status
   isEngineReady: boolean;
@@ -16,6 +44,7 @@ interface EngineState {
   sceneNavClipId: string | null;
   sceneNavFpsMode: boolean;
   sceneNavFpsMoveSpeed: number;
+  gaussianSplatLoadProgress: Record<string, GaussianSplatLoadProgressEntry>;
 
   // Actions
   setEngineReady: (ready: boolean) => void;
@@ -27,6 +56,8 @@ interface EngineState {
   setSceneNavClipId: (clipId: string | null) => void;
   setSceneNavFpsMode: (enabled: boolean) => void;
   setSceneNavFpsMoveSpeed: (speed: number) => void;
+  setGaussianSplatLoadProgress: (progress: GaussianSplatLoadProgressUpdate) => void;
+  clearGaussianSplatLoadProgress: (sceneKey: string) => void;
 }
 
 export const SCENE_NAV_FPS_MOVE_SPEED_STEPS = [
@@ -64,6 +95,13 @@ export function stepSceneNavFpsMoveSpeed(speed: number, direction: -1 | 1): numb
   return SCENE_NAV_FPS_MOVE_SPEED_STEPS[nextIndex] ?? 1;
 }
 
+function clampProgressPercent(percent: number | undefined): number {
+  if (typeof percent !== 'number' || !Number.isFinite(percent)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(1, percent));
+}
+
 export function selectSceneNavClipId(
   state: Pick<EngineState, 'sceneNavClipId'>,
 ): string | null {
@@ -82,6 +120,17 @@ export function selectSceneNavFpsMoveSpeed(
   return state.sceneNavFpsMoveSpeed ?? 1;
 }
 
+export function selectActiveGaussianSplatLoadProgress(
+  state: Pick<EngineState, 'gaussianSplatLoadProgress'>,
+): GaussianSplatLoadProgressEntry | null {
+  const entries = Object.values(state.gaussianSplatLoadProgress ?? {});
+  if (entries.length === 0) {
+    return null;
+  }
+
+  return entries.toSorted((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
+}
+
 // Check if Linux Vulkan warning was already dismissed
 const LINUX_VULKAN_DISMISSED_KEY = 'linux-vulkan-warning-dismissed';
 
@@ -96,6 +145,7 @@ export const useEngineStore = create<EngineState>()(
     sceneNavClipId: null,
     sceneNavFpsMode: false,
     sceneNavFpsMoveSpeed: 1,
+    gaussianSplatLoadProgress: {},
     engineStats: {
       fps: 0,
       frameTime: 0,
@@ -149,6 +199,38 @@ export const useEngineStore = create<EngineState>()(
 
     setSceneNavFpsMoveSpeed: (speed: number) => {
       set({ sceneNavFpsMoveSpeed: snapSceneNavFpsMoveSpeed(speed) });
+    },
+
+    setGaussianSplatLoadProgress: (progress: GaussianSplatLoadProgressUpdate) => {
+      set((state) => {
+        const previous = state.gaussianSplatLoadProgress[progress.sceneKey];
+        const nextPercent = Math.max(
+          previous?.percent ?? 0,
+          clampProgressPercent(progress.percent),
+        );
+        return {
+          gaussianSplatLoadProgress: {
+            ...state.gaussianSplatLoadProgress,
+            [progress.sceneKey]: {
+              ...previous,
+              ...progress,
+              percent: nextPercent,
+              updatedAt: Date.now(),
+            },
+          },
+        };
+      });
+    },
+
+    clearGaussianSplatLoadProgress: (sceneKey: string) => {
+      set((state) => {
+        if (!state.gaussianSplatLoadProgress[sceneKey]) {
+          return {};
+        }
+        const remaining = { ...state.gaussianSplatLoadProgress };
+        delete remaining[sceneKey];
+        return { gaussianSplatLoadProgress: remaining };
+      });
     },
   }))
 );

@@ -8,6 +8,7 @@ const log = Logger.create('Preview');
 import { useEngine } from '../../hooks/useEngine';
 import { useShortcut } from '../../hooks/useShortcut';
 import {
+  selectActiveGaussianSplatLoadProgress,
   selectSceneNavClipId,
   selectSceneNavFpsMode,
   selectSceneNavFpsMoveSpeed,
@@ -56,7 +57,34 @@ function getSharedSceneDefaultCameraDistance(fovDegrees: number): number {
 }
 
 const CAMERA_NAV_FPS_LOOK_SPEED = 0.18;
-const CAMERA_NAV_FPS_PITCH_LIMIT = 89.5;
+
+function formatSplatLoadPercent(percent: number): number {
+  if (!Number.isFinite(percent)) {
+    return 0;
+  }
+  return Math.round(Math.max(0, Math.min(1, percent)) * 100);
+}
+
+function getSplatLoadPhaseLabel(phase: string): string {
+  switch (phase) {
+    case 'fetching':
+      return 'Fetching splat';
+    case 'reading':
+      return 'Reading splat';
+    case 'parsing':
+      return 'Parsing splat';
+    case 'normalizing':
+      return 'Preparing splat';
+    case 'uploading':
+      return 'Uploading splat';
+    case 'complete':
+      return 'Splat loaded';
+    case 'error':
+      return 'Splat load failed';
+    default:
+      return 'Loading splat';
+  }
+}
 
 interface PreviewProps {
   panelId: string;
@@ -75,6 +103,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const sceneNavClipId = useEngineStore(selectSceneNavClipId);
   const sceneNavFpsMode = useEngineStore(selectSceneNavFpsMode);
   const sceneNavFpsMoveSpeed = useEngineStore(selectSceneNavFpsMoveSpeed);
+  const activeSplatLoadProgress = useEngineStore(selectActiveGaussianSplatLoadProgress);
   const setSceneNavFpsMoveSpeed = useEngineStore((s) => s.setSceneNavFpsMoveSpeed);
   const { clips, selectedClipIds, primarySelectedClipId, selectClip, updateClipTransform, maskEditMode, layers, selectedLayerId, selectLayer, updateLayer, tracks } = useTimelineStore(useShallow(s => ({
     clips: s.clips,
@@ -738,10 +767,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
       if (deltaX === 0 && deltaY === 0) return;
 
-      const nextPitch = Math.max(
-        -CAMERA_NAV_FPS_PITCH_LIMIT,
-        Math.min(CAMERA_NAV_FPS_PITCH_LIMIT, freshTransform.rotation.x + deltaY * CAMERA_NAV_FPS_LOOK_SPEED),
-      );
+      const nextPitch = freshTransform.rotation.x + deltaY * CAMERA_NAV_FPS_LOOK_SPEED;
       const nextYaw = freshTransform.rotation.y - deltaX * CAMERA_NAV_FPS_LOOK_SPEED;
       const nextTranslation = resolveOrbitCameraTranslationForFixedEye(
         freshTransform,
@@ -1131,6 +1157,12 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const viewTransform = editMode ? {
     transform: `scale(${viewZoom}) translate(${viewPan.x / viewZoom}px, ${viewPan.y / viewZoom}px)`,
   } : {};
+  const splatLoadPercent = activeSplatLoadProgress
+    ? formatSplatLoadPercent(activeSplatLoadProgress.percent)
+    : 0;
+  const splatLoadPhaseLabel = activeSplatLoadProgress
+    ? getSplatLoadPhaseLabel(activeSplatLoadProgress.phase)
+    : '';
 
   return (
     <div
@@ -1247,6 +1279,28 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
             </>
           )}
         </div>
+
+        {activeSplatLoadProgress && (
+          <div
+            className={`preview-splat-progress-overlay ${activeSplatLoadProgress.phase === 'error' ? 'error' : ''}`}
+            role="status"
+            aria-live="polite"
+          >
+            <div className="preview-splat-progress-header">
+              <span>{splatLoadPhaseLabel}</span>
+              <span>{splatLoadPercent}%</span>
+            </div>
+            <div className="preview-splat-progress-name">
+              {activeSplatLoadProgress.fileName}
+            </div>
+            <div className="preview-splat-progress-track">
+              <div
+                className="preview-splat-progress-fill"
+                style={{ width: `${splatLoadPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Edit mode overlay - covers full container for pasteboard support */}
         {editMode && isEngineReady && (

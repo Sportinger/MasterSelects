@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { LayerRenderData } from '../../src/engine/core/types';
 import { NestedCompRenderer } from '../../src/engine/render/NestedCompRenderer';
-import { resolveSharedSceneCamera } from '../../src/engine/scene/SceneCameraUtils';
+import {
+  getSharedSceneDefaultCameraDistance,
+  resolveRenderableSharedSceneCamera,
+} from '../../src/engine/scene/SceneCameraUtils';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 
@@ -200,7 +203,7 @@ describe('NestedCompRenderer shared-scene integration', () => {
       sourceWidth: 1920,
       sourceHeight: 1080,
     }];
-    const expectedCamera = resolveSharedSceneCamera(
+    const expectedCamera = resolveRenderableSharedSceneCamera(
       { width: 1280, height: 720 },
       2,
       {
@@ -259,5 +262,73 @@ describe('NestedCompRenderer shared-scene integration', () => {
       opacity: 0.8,
       blendMode: 'screen',
     });
+  });
+
+  it('uses a renderable default camera for nested 3D video planes without a scene camera', () => {
+    const renderer = createRenderer();
+    useMediaStore.setState({
+      activeCompositionId: null,
+      compositions: [],
+    } as any);
+    useTimelineStore.setState({
+      isPlaying: false,
+      isExporting: false,
+      clipKeyframes: new Map(),
+      tracks: [],
+      clips: [],
+    } as any);
+
+    const layerData: LayerRenderData[] = [{
+      layer: {
+        id: 'nested-video-plane',
+        name: 'Nested Video Plane',
+        sourceClipId: 'nested-video-plane-clip',
+        visible: true,
+        opacity: 1,
+        blendMode: 'normal',
+        effects: [],
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+        is3D: true,
+        source: {
+          type: 'video',
+          videoElement: {
+            readyState: 4,
+            videoWidth: 1920,
+            videoHeight: 1080,
+          },
+        },
+      } as any,
+      isVideo: true,
+      externalTexture: null,
+      textureView: { label: 'nested-plane-view' } as any,
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+    }];
+
+    (renderer as any).process3DLayersForNested(
+      layerData,
+      1280,
+      720,
+      0,
+      'nested-comp',
+      [],
+      [],
+    );
+
+    expect(mockNativeSceneRenderer.renderScene).toHaveBeenCalledTimes(1);
+    const [, layers3D, camera] = mockNativeSceneRenderer.renderScene.mock.calls[0];
+    const defaultDistance = getSharedSceneDefaultCameraDistance(50);
+    expect(layers3D).toHaveLength(1);
+    expect(layers3D[0]).toMatchObject({
+      kind: 'plane',
+      layerId: 'nested-video-plane',
+      clipId: 'nested-video-plane-clip',
+    });
+    expect(camera.cameraPosition).toEqual({ x: 0, y: 0, z: defaultDistance });
+    expect(camera.cameraTarget).toEqual({ x: 0, y: 0, z: 0 });
+    expect(camera.viewMatrix[14]).toBeCloseTo(-defaultDistance);
+    expect(layerData[0]?.textureView).toEqual({ label: 'nested-shared-scene-view' });
   });
 });

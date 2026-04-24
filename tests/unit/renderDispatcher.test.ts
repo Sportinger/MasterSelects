@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RenderDispatcher } from '../../src/engine/render/RenderDispatcher';
+import { getSharedSceneDefaultCameraDistance } from '../../src/engine/scene/SceneCameraUtils';
 import { useEngineStore } from '../../src/stores/engineStore';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
@@ -318,9 +319,11 @@ describe('RenderDispatcher empty playback hold', () => {
     expect(layers3D[0].worldMatrix[12]).toBeCloseTo(0.25);
     expect(layers3D[0].worldMatrix[13]).toBeCloseTo(-0.5);
     expect(layers3D[0].worldMatrix[14]).toBeCloseTo(3);
+    const defaultDistance = getSharedSceneDefaultCameraDistance(50);
     expect(camera.cameraPosition.x).toBeCloseTo(0);
     expect(camera.cameraPosition.y).toBeCloseTo(0);
-    expect(camera.cameraPosition.z).toBeCloseTo(0);
+    expect(camera.cameraPosition.z).toBeCloseTo(defaultDistance);
+    expect(camera.viewMatrix[14]).toBeCloseTo(-defaultDistance);
     expect(effectors).toHaveLength(1);
     expect(effectors[0]).toMatchObject({
       clipId: 'effector-1',
@@ -498,6 +501,60 @@ describe('RenderDispatcher empty playback hold', () => {
     expect(layerData[0]?.layer.id).toBe('__scene_3d__');
     expect(layerData[0]?.layer.opacity).toBe(1);
     expect(layerData[0]?.layer.blendMode).toBe('normal');
+  });
+
+  it('uses a renderable default camera for 3D video planes', () => {
+    const { dispatcher, deps } = createDispatcher(false);
+    deps.sceneRenderer = {
+      isInitialized: true,
+      renderScene: vi.fn(() => ({ label: 'shared-scene-video-view' })),
+    };
+
+    const layerData = [
+      {
+        layer: {
+          id: 'video-plane',
+          sourceClipId: 'video-plane-clip',
+          name: 'Video Plane',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal',
+          is3D: true,
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1, z: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+          source: {
+            type: 'video',
+            videoElement: {
+              readyState: 4,
+              videoWidth: 1920,
+              videoHeight: 1080,
+            },
+          },
+        },
+        isVideo: true,
+        externalTexture: null,
+        textureView: { label: 'plane-layer-view' },
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+      },
+    ] as any;
+
+    (dispatcher as any).process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+
+    expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
+    const [, layers3D, camera] = deps.sceneRenderer.renderScene.mock.calls[0];
+    const defaultDistance = getSharedSceneDefaultCameraDistance(50);
+    expect(layers3D).toHaveLength(1);
+    expect(layers3D[0]).toMatchObject({
+      kind: 'plane',
+      layerId: 'video-plane',
+      clipId: 'video-plane-clip',
+    });
+    expect(camera.cameraPosition).toEqual({ x: 0, y: 0, z: defaultDistance });
+    expect(camera.cameraTarget).toEqual({ x: 0, y: 0, z: 0 });
+    expect(camera.viewMatrix[14]).toBeCloseTo(-defaultDistance);
+    expect(layerData[0]?.textureView).toEqual({ label: 'shared-scene-video-view' });
   });
 
   it('routes 3D text plus native gaussian-splat scenes through the shared scene renderer once native assets are ready', () => {

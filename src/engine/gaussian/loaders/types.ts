@@ -2,6 +2,22 @@
 
 export type GaussianSplatFormat = 'ply' | 'splat' | 'ksplat' | 'gsplat-zip' | 'spz' | 'sog' | 'lcc';
 
+export type GaussianSplatLoadProgressPhase = 'reading' | 'parsing' | 'normalizing';
+
+export interface GaussianSplatLoadProgress {
+  phase: GaussianSplatLoadProgressPhase;
+  percent?: number;
+  loadedBytes?: number;
+  totalBytes?: number;
+  message?: string;
+}
+
+export type GaussianSplatLoadProgressCallback = (progress: GaussianSplatLoadProgress) => void;
+
+export interface GaussianSplatLoadOptions {
+  onProgress?: GaussianSplatLoadProgressCallback;
+}
+
 export interface GaussianSplatMetadata {
   format: GaussianSplatFormat;
   splatCount: number;
