@@ -2,6 +2,26 @@
   {
     "date": "2026-04-24",
     "type": "fix",
+    "title": "Slot Clip In/Out Ranges Now Drive Playback Start",
+    "description": "Slot Clip launch, restart, and editor-open playback now start from the configured slot In point, while normal timeline playback also respects active In/Out ranges before playback begins.",
+    "section": "Slot Grid / Playback",
+    "commits": [
+      "66b92542"
+    ]
+  },
+  {
+    "date": "2026-04-24",
+    "type": "improve",
+    "title": "Slot Grid MIDI Mapping and Slot Clip Controls Improved",
+    "description": "Slot MIDI mapping now has clearer summaries and conflict handling, and the Slot Clip properties view includes a transport-aware range editor for per-slot playback control.",
+    "section": "Slot Grid / MIDI",
+    "commits": [
+      "c842fce9"
+    ]
+  },
+  {
+    "date": "2026-04-24",
+    "type": "fix",
     "title": "3D Video Planes Now Render Through the Active Scene Camera",
     "description": "Video clips converted into 3D layers now share the same renderable scene camera path as splats and nested compositions, so the 3D viewport no longer disappears or breaks when video planes are added.",
     "section": "3D / Native Scene"
