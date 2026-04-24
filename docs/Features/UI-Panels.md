@@ -33,7 +33,6 @@ Dockable desktop panel system with an After Effects-style menu bar, unified clip
 | **Edit** | Copy, Paste, Settings |
 | **View** | Panels submenu, Layouts submenu |
 | **Output** | New Output Window, Open Output Manager, Active Outputs |
-| **Window** | MIDI Control |
 | **Info** | Where are you coming from?, Tutorials, Quick Tour, Timeline Tour, Changelog, About, Imprint, Privacy Policy, Contact |
 
 ### Keyboard Shortcuts
@@ -106,7 +105,7 @@ All docked panels can be:
 
 ## Available Panels
 
-MasterSelects currently exposes 16 dockable panel types, plus the Slot Grid overlay that sits on top of the Timeline.
+MasterSelects currently exposes 17 dockable panel types, plus the Slot Grid overlay that sits on top of the Timeline.
 
 | Panel | Type ID | Surface |
 |-------|---------|---------|
@@ -116,6 +115,7 @@ MasterSelects currently exposes 16 dockable panel types, plus the Slot Grid over
 | **Media** | `media` | Media browser, folders, and project items |
 | **Properties** | `clip-properties` | Unified clip inspector |
 | **Export** | `export` | Render and export controls |
+| **MIDI Mapping** | `midi-mapping` | Editable list of assigned MIDI notes and trigger previews |
 | **AI Chat** | `ai-chat` | Editing assistant chat |
 | **AI Video** | `ai-video` | Classic generator plus FlashBoard workspace |
 | **AI Segment** | `ai-segment` | Local SAM2 segmentation tools |
@@ -174,6 +174,18 @@ MasterSelects currently exposes 16 dockable panel types, plus the Slot Grid over
 - In/Out export and FCPXML export
 - Stacked alpha export
 - Progress with phase display
+
+### MIDI Mapping Panel
+
+- Open from `View -> Panels -> MIDI Mapping`
+- Shows all currently assigned MIDI notes in one list
+- Includes both global transport bindings and per-marker bindings
+- Each row shows the note, target, and resulting command behavior
+- Click any mapping card to trigger the assigned action and preview what the MIDI note does
+- `Edit` opens inline controls for manual channel/note changes and marker reassignment
+- `Learn` and `Clear` remain available directly from the panel
+- Marker bindings support `Jump To Marker`, `Play From Marker`, and `Jump To Marker And Stop`
+- Transport and marker learning still happen in Settings and the marker context menu
 
 ### AI Chat Panel
 
@@ -384,7 +396,7 @@ Multi Preview is available from the View menu and can be floated or docked, but 
 
 ### Enabling MIDI
 
-Window menu -> MIDI Control
+Edit menu -> Settings -> MIDI
 
 ### Requirements
 
@@ -397,6 +409,13 @@ Window menu -> MIDI Control
 ```
 MIDI Control (N devices)
 ```
+
+### Mapping Overview
+
+- `View -> Panels -> MIDI Mapping` opens the dedicated mapping panel
+- The panel lists all assigned transport and marker bindings
+- Clicking a binding previews the exact trigger path without needing a physical MIDI note
+- Empty-state guidance points back to Settings and the marker right-click menu
 
 ---
 
@@ -441,6 +460,7 @@ Edit menu -> Settings
 |----------|----------|
 | **Appearance** | Theme selection and custom theme controls |
 | **General** | Save mode, autosave interval/enable state, import copy behavior, and mobile/desktop view mode |
+| **MIDI** | Browser MIDI permission state, transport learning, and device list |
 | **Previews** | Preview resolution quality and transparency grid info |
 | **Import** | Copy media to project folder toggle |
 | **Transcription** | Provider selection and pricing |

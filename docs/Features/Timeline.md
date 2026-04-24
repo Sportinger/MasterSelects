@@ -192,6 +192,9 @@ The toolbar and wheel gestures still drive playback and navigation:
 - `I` and `O` set in/out points.
 - `X` clears in/out.
 - `M` adds a marker at the playhead.
+- Right-clicking a marker opens marker transport and MIDI actions.
+- Markers can be turned into `Stop Marker`s that automatically pause playback when crossed.
+- Marker MIDI bindings support `Jump To Marker`, `Play From Marker`, and `Jump To Marker And Stop`.
 - Left/Right arrows step frame by frame.
 - `Alt+Scroll` or `Ctrl+Scroll` zooms the timeline around the playhead.
 - `Shift+Scroll` pans horizontally.

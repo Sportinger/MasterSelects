@@ -489,7 +489,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
   importGaussianAvatar: async (file: File, parentId?: string | null) => {
     void parentId;
     log.warn(`Blocked legacy gaussian-avatar import: ${file.name}`);
-    throw new Error('Legacy gaussian-avatar import is disabled. Import .ply or .splat instead.');
+    throw new Error('Legacy gaussian-avatar import is disabled. Import a gaussian-splat scene file instead.');
     /*
 
     // Deduplication: check if file with same name + size already exists

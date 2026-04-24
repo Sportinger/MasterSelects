@@ -1,117 +1,162 @@
-// MIDI input hook - simplified version (VJ layer control removed)
+import { useCallback, useEffect, useState } from 'react';
+import { useMIDIStore } from '../stores/midiStore';
+import type {
+  MIDILearnTarget,
+  MIDINoteBinding,
+  MIDIPermissionState,
+  MIDITransportAction,
+  MarkerMIDIAction,
+} from '../types/midi';
 
-import { useEffect, useState, useCallback } from 'react';
-import { Logger } from '../services/logger';
+type MIDIPermissionDescriptor = PermissionDescriptor & {
+  name: 'midi';
+  sysex?: boolean;
+};
 
-const log = Logger.create('MIDI');
+async function queryMIDIPermissionState(): Promise<MIDIPermissionState> {
+  if (!navigator.requestMIDIAccess) {
+    return 'unsupported';
+  }
 
-interface MIDIDevice {
-  id: string;
-  name: string;
-  manufacturer: string;
+  if (!navigator.permissions?.query) {
+    return 'unknown';
+  }
+
+  try {
+    const status = await navigator.permissions.query({
+      name: 'midi',
+      sysex: false,
+    } as MIDIPermissionDescriptor);
+    return status.state;
+  } catch {
+    return 'unknown';
+  }
 }
 
 export function useMIDI() {
-  const [midiAccess, setMidiAccess] = useState<MIDIAccess | null>(null);
-  const [devices, setDevices] = useState<MIDIDevice[]>([]);
-  const [isSupported, setIsSupported] = useState(false);
-  const [isEnabled, setIsEnabled] = useState(false);
-  const [lastMessage, setLastMessage] = useState<{
-    channel: number;
-    control: number;
-    value: number;
-  } | null>(null);
+  const {
+    isSupported,
+    isEnabled,
+    connectionStatus,
+    connectionError,
+    devices,
+    lastMessage,
+    learnTarget,
+    transportBindings,
+    setSupported,
+    setEnabled,
+    setConnectionStatus,
+    setTransportBinding,
+    startLearning,
+    cancelLearning,
+  } = useMIDIStore();
+  const [permissionState, setPermissionState] = useState<MIDIPermissionState | null>(null);
 
-  // Check MIDI support and request access
   useEffect(() => {
-    if (!navigator.requestMIDIAccess) {
-      setIsSupported(false);
-      return;
-    }
+    let cancelled = false;
 
-    setIsSupported(true);
-
-    if (!isEnabled) return;
-
-    navigator.requestMIDIAccess().then(
-      (access) => {
-        setMidiAccess(access);
-
-        // Get input devices
-        const inputDevices: MIDIDevice[] = [];
-        access.inputs.forEach((input) => {
-          inputDevices.push({
-            id: input.id,
-            name: input.name || 'Unknown',
-            manufacturer: input.manufacturer || 'Unknown',
-          });
-        });
-        setDevices(inputDevices);
-
-        // Listen for device changes
-        access.onstatechange = () => {
-          const newDevices: MIDIDevice[] = [];
-          access.inputs.forEach((input) => {
-            newDevices.push({
-              id: input.id,
-              name: input.name || 'Unknown',
-              manufacturer: input.manufacturer || 'Unknown',
-            });
-          });
-          setDevices(newDevices);
-        };
-      },
-      (error) => {
-        log.error('MIDI access denied', error);
-        setIsSupported(false);
+    const loadPermissionState = async () => {
+      const nextState = await queryMIDIPermissionState();
+      if (!cancelled) {
+        setPermissionState(nextState);
       }
-    );
-  }, [isEnabled]);
-
-  // Handle MIDI messages (just log them for now - can be extended later)
-  useEffect(() => {
-    if (!midiAccess || !isEnabled) return;
-
-    const handleMIDIMessage = (event: MIDIMessageEvent) => {
-      const [status, control, value] = event.data as Uint8Array;
-      const channel = status & 0x0f;
-      const messageType = status & 0xf0;
-
-      // Only handle Control Change messages (0xB0)
-      if (messageType !== 0xb0) return;
-
-      setLastMessage({ channel, control, value });
-      // MIDI mappings can be implemented here in the future
     };
 
-    // Attach listeners to all inputs
-    midiAccess.inputs.forEach((input) => {
-      input.onmidimessage = handleMIDIMessage;
-    });
+    void loadPermissionState();
 
     return () => {
-      midiAccess.inputs.forEach((input) => {
-        input.onmidimessage = null;
-      });
+      cancelled = true;
     };
-  }, [midiAccess, isEnabled]);
+  }, [connectionStatus, isEnabled]);
 
-  const enableMIDI = useCallback(() => {
-    setIsEnabled(true);
-  }, []);
+  const enableMIDI = useCallback(async () => {
+    if (!navigator.requestMIDIAccess) {
+      setPermissionState('unsupported');
+      setSupported(false);
+      setEnabled(false);
+      setConnectionStatus('error', 'Web MIDI API is not supported in this browser.');
+      return false;
+    }
+
+    const currentPermissionState = await queryMIDIPermissionState();
+    setPermissionState(currentPermissionState);
+    setSupported(true);
+
+    if (currentPermissionState === 'denied') {
+      setEnabled(false);
+      setConnectionStatus('error', 'Browser MIDI permission is blocked for this site.');
+      return false;
+    }
+
+    setConnectionStatus('requesting');
+
+    try {
+      await navigator.requestMIDIAccess();
+      setPermissionState(await queryMIDIPermissionState());
+      setEnabled(true);
+      return true;
+    } catch (error) {
+      const nextPermissionState = await queryMIDIPermissionState();
+      setPermissionState(nextPermissionState);
+      setEnabled(false);
+      setConnectionStatus(
+        'error',
+        nextPermissionState === 'denied'
+          ? 'Browser MIDI permission is blocked for this site.'
+          : error instanceof Error
+            ? error.message
+            : 'Failed to access MIDI devices.'
+      );
+      return false;
+    }
+  }, [setConnectionStatus, setEnabled, setSupported]);
 
   const disableMIDI = useCallback(() => {
-    setIsEnabled(false);
-    setMidiAccess(null);
-    setDevices([]);
-  }, []);
+    setEnabled(false);
+    cancelLearning();
+  }, [cancelLearning, setEnabled]);
+
+  const startLearningTransportBinding = useCallback((action: MIDITransportAction) => {
+    startLearning({
+      kind: 'transport',
+      action,
+    });
+  }, [startLearning]);
+
+  const startLearningMarkerBinding = useCallback((
+    markerId: string,
+    markerLabel: string,
+    action: MarkerMIDIAction,
+    sourceMarkerId?: string
+  ) => {
+    startLearning({
+      kind: 'marker',
+      markerId,
+      markerLabel,
+      action,
+      sourceMarkerId,
+    });
+  }, [startLearning]);
+
+  const clearTransportBinding = useCallback((action: MIDITransportAction) => {
+    setTransportBinding(action, null);
+  }, [setTransportBinding]);
 
   return {
     isSupported,
     isEnabled,
+    connectionStatus,
+    connectionError,
+    permissionState,
     devices,
     lastMessage,
+    learnTarget: learnTarget as MIDILearnTarget | null,
+    transportBindings: transportBindings as Record<MIDITransportAction, MIDINoteBinding | null>,
     enableMIDI,
     disableMIDI,
+    startLearningTransportBinding,
+    startLearningMarkerBinding,
+    clearTransportBinding,
+    cancelLearning,
   };
 }

@@ -20,6 +20,7 @@ import { TimelineRuler } from './TimelineRuler';
 import { TimelineControls } from './TimelineControls';
 import { TimelineHeader } from './TimelineHeader';
 import { TrackContextMenu, type TrackContextMenuState } from './TrackContextMenu';
+import { MarkerContextMenu, type MarkerContextMenuState } from './MarkerContextMenu';
 import { TimelineTrack } from './TimelineTrack';
 import { TimelineClip } from './TimelineClip';
 import { TimelineKeyframes } from './TimelineKeyframes';
@@ -140,7 +141,7 @@ export function Timeline() {
   const { setToolMode, toggleCutTool, toggleThumbnailsEnabled, toggleWaveformsEnabled } = store;
 
   // Marker actions
-  const { addMarker, moveMarker, removeMarker } = store;
+  const { addMarker, moveMarker, removeMarker, updateMarker } = store;
 
   // Clipboard actions
   const { copyClips, pasteClips, copyKeyframes, pasteKeyframes } = store;
@@ -337,6 +338,9 @@ export function Timeline() {
 
   // Context menu state for track header right-click
   const [trackContextMenu, setTrackContextMenu] = useState<TrackContextMenuState | null>(null);
+
+  // Context menu state for marker right-click
+  const [markerContextMenu, setMarkerContextMenu] = useState<MarkerContextMenuState | null>(null);
 
   // Transcript markers visibility toggle (from store for persistence)
   const showTranscriptMarkers = useTimelineStore(s => s.showTranscriptMarkers);
@@ -1293,20 +1297,24 @@ export function Timeline() {
           {markers.map(marker => (
             <div
               key={marker.id}
-              className={`timeline-marker ${timelineMarkerDrag?.markerId === marker.id ? 'dragging' : ''} ${aiAnimatedMarkers.get(marker.id) === 'add' ? 'ai-marker-added' : aiAnimatedMarkers.get(marker.id) === 'remove' ? 'ai-marker-removed' : ''}`}
+              className={`timeline-marker ${marker.stopPlayback ? 'is-stop-marker' : ''} ${timelineMarkerDrag?.markerId === marker.id ? 'dragging' : ''} ${aiAnimatedMarkers.get(marker.id) === 'add' ? 'ai-marker-added' : aiAnimatedMarkers.get(marker.id) === 'remove' ? 'ai-marker-removed' : ''}`}
               style={{
                 left: timeToPixel(marker.time) - scrollX + 150,
                 '--marker-color': marker.color,
               } as React.CSSProperties}
-              title={`${marker.label || 'Marker'}: ${formatTime(marker.time)} (drag to move, right-click to delete)`}
+              title={`${marker.stopPlayback ? 'Stop Marker' : (marker.label || 'Marker')}: ${formatTime(marker.time)} (drag to move, right-click for MIDI and transport actions)${marker.stopPlayback ? ' - playback stops automatically here' : ''}`}
               onMouseDown={(e) => handleTimelineMarkerMouseDown(e, marker.id)}
               onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                removeMarker(marker.id);
+                setMarkerContextMenu({
+                  x: e.clientX,
+                  y: e.clientY,
+                  markerId: marker.id,
+                });
               }}
             >
-              <div className="timeline-marker-head">M</div>
+              <div className="timeline-marker-head">{marker.stopPlayback ? 'S' : 'M'}</div>
               <div className="timeline-marker-line" />
             </div>
           ))}
@@ -1371,6 +1379,14 @@ export function Timeline() {
       <TrackContextMenu
         menu={trackContextMenu}
         onClose={() => setTrackContextMenu(null)}
+      />
+
+      <MarkerContextMenu
+        menu={markerContextMenu}
+        markers={markers}
+        updateMarker={updateMarker}
+        removeMarker={removeMarker}
+        onClose={() => setMarkerContextMenu(null)}
       />
 
       {/* Multicam Dialog */}

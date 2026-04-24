@@ -107,7 +107,7 @@ export function getFileExtension(file: File | string): string {
   return name.split('.').pop()?.toLowerCase() || '';
 }
 
-export const GAUSSIAN_SPLAT_EXTENSIONS = ['ply', 'splat'] as const;
+export const GAUSSIAN_SPLAT_EXTENSIONS = ['ply', 'splat', 'ksplat', 'spz', 'sog', 'lcc', 'zip'] as const;
 
 /**
  * Check if a file or filename is a gaussian splat file.

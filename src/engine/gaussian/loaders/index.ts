@@ -12,8 +12,7 @@ import type {
 } from './types.ts';
 import { detectFormat } from './parseHeader.ts';
 import { parseGaussianSplatHeader as parseHeader } from './parseHeader.ts';
-import { loadPly } from './PlyLoader.ts';
-import { loadSplat } from './SplatLoader.ts';
+import { canLoadWithSplatTransform, loadWithSplatTransform } from './SplatTransformLoader.ts';
 import { getSplatCache } from './splatCache.ts';
 import { applyCanonicalBasisCorrection, computeBoundingBox } from './normalize.ts';
 
@@ -76,7 +75,7 @@ export async function loadGaussianSplatAsset(
   if (!resolvedFormat) {
     throw new Error(
       `Cannot detect gaussian splat format for file "${file.name}". ` +
-      'Supported extensions: .ply, .splat'
+      'Supported extensions: .ply, .compressed.ply, .splat, .ksplat, .spz, .sog, .lcc, .zip'
     );
   }
 
@@ -89,24 +88,10 @@ export async function loadGaussianSplatAsset(
   let asset: GaussianSplatAsset;
 
   try {
-    switch (resolvedFormat) {
-      case 'ply':
-        asset = await loadPly(file);
-        break;
-
-      case 'splat':
-        asset = await loadSplat(file);
-        break;
-
-      case 'ksplat':
-      case 'gsplat-zip':
-        throw new Error(`Format "${resolvedFormat}" is not yet supported. Use .ply or .splat files.`);
-
-      default: {
-        const _exhaustive: never = resolvedFormat;
-        throw new Error(`Unhandled format: ${_exhaustive}`);
-      }
+    if (!canLoadWithSplatTransform(file, resolvedFormat)) {
+      throw new Error(`Format "${resolvedFormat}" is not supported by the splat-transform loader.`);
     }
+    asset = await loadWithSplatTransform(file, resolvedFormat);
   } catch (err) {
     log.error('Failed to load gaussian splat asset', {
       name: file.name,

@@ -5,6 +5,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useDraggableDialog } from './settings/useDraggableDialog';
 import { AppearanceSettings } from './settings/AppearanceSettings';
 import { GeneralSettings } from './settings/GeneralSettings';
+import { MidiSettings } from './settings/MidiSettings';
 import { TranscriptionSettings } from './settings/TranscriptionSettings';
 import { ApiKeysSettings } from './settings/ApiKeysSettings';
 import { NativeHelperSettings } from './settings/NativeHelperSettings';
@@ -17,6 +18,7 @@ interface SettingsDialogProps {
 
 type SettingsCategory =
   | 'general'
+  | 'midi'
   | 'shortcuts'
   | 'appearance'
   | 'transcription'
@@ -31,6 +33,7 @@ interface CategoryConfig {
 
 const categories: CategoryConfig[] = [
   { id: 'general', label: 'General', icon: '\u2699' },
+  { id: 'midi', label: 'MIDI', icon: '\u266B' },
   { id: 'shortcuts', label: 'Shortcuts', icon: '\u2328' },
   { id: 'appearance', label: 'Appearance', icon: '\uD83C\uDFA8' },
   { id: 'transcription', label: 'Transcription', icon: '\uD83C\uDFA4' },
@@ -62,6 +65,7 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
   const renderCategoryContent = () => {
     switch (activeCategory) {
       case 'general': return <GeneralSettings />;
+      case 'midi': return <MidiSettings />;
       case 'shortcuts': return <ShortcutsSettings />;
       case 'appearance': return <AppearanceSettings />;
       case 'transcription': return <TranscriptionSettings localKeys={localKeys} />;

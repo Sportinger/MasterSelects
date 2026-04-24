@@ -212,7 +212,7 @@ export const mediaToolDefinitions: ToolDefinition[] = [
           },
           extensions: {
             type: 'string',
-            description: 'Comma-separated file extensions to filter (e.g. ".mp4,.webm,.mov,.obj,.ply,.splat"). Default: all currently supported import extensions.',
+            description: 'Comma-separated file extensions to filter (e.g. ".mp4,.webm,.mov,.obj,.ply,.splat,.spz"). Default: all currently supported import extensions.',
           },
         },
         required: ['directory'],

@@ -16,6 +16,7 @@ const MultiCamPanel = lazy(() => import('../panels/MultiCamPanel').then(m => ({ 
 const AIChatPanel = lazy(() => import('../panels/AIChatPanel').then(m => ({ default: m.AIChatPanel })));
 const AIVideoPanel = lazy(() => import('../panels/AIVideoPanel').then(m => ({ default: m.AIVideoPanel })));
 const DownloadPanel = lazy(() => import('../panels/DownloadPanel').then(m => ({ default: m.DownloadPanel })));
+const MIDIMappingPanel = lazy(() => import('../panels/MIDIMappingPanel').then(m => ({ default: m.MIDIMappingPanel })));
 const TransitionsPanel = lazy(() => import('../panels/TransitionsPanel').then(m => ({ default: m.TransitionsPanel })));
 const SAM2Panel = lazy(() => import('../panels/SAM2Panel').then(m => ({ default: m.SAM2Panel })));
 const SceneDescriptionPanel = lazy(() => import('../panels/SceneDescriptionPanel').then(m => ({ default: m.SceneDescriptionPanel })));
@@ -62,6 +63,8 @@ export function DockPanelContent({ panel }: DockPanelContentProps) {
       return <Timeline />;
     case 'media':
       return <MediaPanel />;
+    case 'midi-mapping':
+      return <Suspense fallback={<PanelLoading />}><MIDIMappingPanel /></Suspense>;
     case 'multicam':
       return <Suspense fallback={<PanelLoading />}><MultiCamPanel /></Suspense>;
     case 'ai-chat':

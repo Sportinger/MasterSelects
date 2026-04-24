@@ -103,6 +103,10 @@ function resolveGaussianSplatFormat(fileName?: string, url?: string): GaussianSp
   if (candidate.endsWith('.ply')) return 'ply';
   if (candidate.endsWith('.splat')) return 'splat';
   if (candidate.endsWith('.ksplat')) return 'ksplat';
+  if (candidate.endsWith('.spz')) return 'spz';
+  if (candidate.endsWith('.sog')) return 'sog';
+  if (candidate.endsWith('.lcc')) return 'lcc';
+  if (candidate.endsWith('.zip')) return 'gsplat-zip';
   return undefined;
 }
 

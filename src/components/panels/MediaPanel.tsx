@@ -649,7 +649,7 @@ export function MediaPanel() {
   const handleImportGaussianSplat = useCallback(() => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.ply,.splat';
+    input.accept = '.ply,.compressed.ply,.splat,.ksplat,.spz,.sog,.lcc,.zip';
     input.onchange = async (e) => {
       const fileList = (e.target as HTMLInputElement).files;
       if (fileList && fileList.length > 0) {
@@ -1486,7 +1486,7 @@ export function MediaPanel() {
         ref={fileInputRef}
         type="file"
         multiple
-        accept="video/*,audio/*,image/*,.obj,.gltf,.glb,.ply,.splat"
+        accept="video/*,audio/*,image/*,.obj,.gltf,.glb,.ply,.compressed.ply,.splat,.ksplat,.spz,.sog,.lcc,.zip"
         style={{ display: 'none' }}
         onChange={handleFileChange}
       />

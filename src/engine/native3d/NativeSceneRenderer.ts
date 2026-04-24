@@ -18,7 +18,6 @@ import planeShaderSource from './shaders/PlanePass.wgsl?raw';
 import compositeShaderSource from './shaders/SceneTextureComposite.wgsl?raw';
 
 const log = Logger.create('NativeSceneRenderer');
-const COMPOSITE_UNIFORM_SIZE = 16;
 const PLANE_UNIFORM_SIZE = 80;
 const SCENE_DEPTH_FORMAT: GPUTextureFormat = 'depth24plus';
 const WORLD_HEIGHT = 2.0;
@@ -240,7 +239,6 @@ export class NativeSceneRenderer {
       this.getSceneLayerDepth(a.worldMatrix, camera.viewMatrix) -
       this.getSceneLayerDepth(b.worldMatrix, camera.viewMatrix),
     );
-    const layerViews: Array<{ layer: SceneSplatLayer; view: GPUTextureView }> = [];
     const temporaryBuffers: GPUBuffer[] = [];
     const opaqueMeshes = nativeMeshLayers.filter((layer) => !this.meshPass.isTransparent(layer, this.modelRuntimeCache));
     const transparentMeshes = nativeMeshLayers
@@ -268,7 +266,7 @@ export class NativeSceneRenderer {
 
     // Shared native scene pass graph, phase 1:
     //   1. Opaque depth-writing geometry -> scene color + shared depth
-    //   2. Splats -> offscreen color, depth-test against shared depth, no depth writes
+    //   2. Splats -> scene color + shared depth, depth-test and depth-write
     //   3. Transparent planes/materials -> scene color after splats
     const clearPass = commandEncoder.beginRenderPass({
       colorAttachments: [
@@ -318,17 +316,23 @@ export class NativeSceneRenderer {
         commandEncoder,
         {
           clipLocalTime: layer.mediaTime,
-          backgroundColor: sortedLayers.length === 1 ? renderSettings.backgroundColor : 'transparent',
-          colorLoadOp: 'clear',
+          backgroundColor: 'transparent',
+          outputView: this.sceneView,
+          colorLoadOp: 'load',
           depthView: this.sceneDepthView,
           depthLoadOp: 'load',
           depthStoreOp: 'store',
+          depthWrite: true,
+          layerOpacity: layer.opacity,
           effectors: this.effectorCompute.resolveEffectorsForLayer(layer, effectors),
           worldMatrix: layer.worldMatrix,
           maxSplats: renderSettings.maxSplats,
           particleSettings: layer.gaussianSplatSettings?.particle,
-          precise: !realtimePlayback || layer.preciseSplatSorting === true,
-          sortFrequency: realtimePlayback
+          // Paused preview must use the same worker depth order as playback.
+          // The GPU "precise" sort path is reserved for export/explicit precise
+          // rendering; using it for pause caused a different visual result.
+          precise: layer.preciseSplatSorting === true,
+          sortFrequency: realtimePlayback && layer.preciseSplatSorting !== true
             ? renderSettings.sortFrequency
             : 1,
           temporalSettings: layer.gaussianSplatSettings?.temporal,
@@ -338,50 +342,6 @@ export class NativeSceneRenderer {
       if (!textureView) {
         return null;
       }
-      layerViews.push({ layer, view: textureView });
-    }
-
-    if (layerViews.length > 0) {
-      const compositePass = commandEncoder.beginRenderPass({
-        colorAttachments: [
-          {
-            view: this.sceneView,
-            clearValue: { r: 0, g: 0, b: 0, a: 0 },
-            loadOp: 'load',
-            storeOp: 'store',
-          },
-        ],
-        label: 'native-scene-splat-composite',
-      });
-      compositePass.setPipeline(this.compositePipeline);
-
-      for (const { layer, view } of layerViews) {
-        const opacityUniform = device.createBuffer({
-          size: COMPOSITE_UNIFORM_SIZE,
-          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-          label: `native-scene-layer-opacity-${layer.layerId}`,
-        });
-        temporaryBuffers.push(opacityUniform);
-        device.queue.writeBuffer(opacityUniform, 0, new Float32Array([
-          layer.opacity,
-          0,
-          0,
-          0,
-        ]));
-        const bindGroup = device.createBindGroup({
-          layout: this.compositeBindGroupLayout,
-          entries: [
-            { binding: 0, resource: this.compositeSampler },
-            { binding: 1, resource: view },
-            { binding: 2, resource: { buffer: opacityUniform } },
-          ],
-          label: `native-scene-splat-bind-group-${layer.layerId}`,
-        });
-        compositePass.setBindGroup(0, bindGroup);
-        compositePass.draw(6);
-      }
-
-      compositePass.end();
     }
 
     if (!this.meshPass.renderPrimitivePass(

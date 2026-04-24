@@ -258,6 +258,33 @@
   border-color: var(--text-secondary);
 }
 
+.settings-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.midi-binding-value {
+  min-width: 150px;
+  text-align: right;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.midi-learn-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(77, 159, 255, 0.35);
+  border-radius: 4px;
+  background: rgba(77, 159, 255, 0.08);
+  color: var(--text-primary);
+  font-size: 11px;
+}
+
 /* Preset buttons */
 .preset-buttons {
   display: flex;

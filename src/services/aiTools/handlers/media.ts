@@ -20,7 +20,7 @@ const DEFAULT_LOCAL_FILE_EXTENSIONS = [
   '.mp3', '.wav', '.aac', '.ogg', '.m4a',
   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg',
   '.obj', '.gltf', '.glb',
-  '.ply', '.splat',
+  '.ply', '.splat', '.ksplat', '.spz', '.sog', '.lcc', '.zip',
 ] as const;
 
 const LOCAL_FILE_MIME_TYPES: Record<string, string> = {
@@ -46,6 +46,11 @@ const LOCAL_FILE_MIME_TYPES: Record<string, string> = {
   '.glb': 'model/gltf-binary',
   '.ply': 'application/octet-stream',
   '.splat': 'application/octet-stream',
+  '.ksplat': 'application/octet-stream',
+  '.spz': 'application/octet-stream',
+  '.sog': 'application/octet-stream',
+  '.lcc': 'application/octet-stream',
+  '.zip': 'application/zip',
 };
 
 function normalizeLocalPath(filePath: string): string {

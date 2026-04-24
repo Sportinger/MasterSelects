@@ -3,6 +3,7 @@
 export type {
   ProjectFile,
   ProjectSettings,
+  ProjectMIDIState,
   ProjectYouTubeVideo,
   ProjectYouTubeState,
 } from './project.types';

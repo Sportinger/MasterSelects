@@ -255,7 +255,9 @@ function localFileServer(): Plugin {
           '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
           '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp', '.svg': 'image/svg+xml',
           '.obj': 'model/obj', '.gltf': 'model/gltf+json', '.glb': 'model/gltf-binary', '.fbx': 'application/octet-stream',
-          '.ply': 'application/octet-stream', '.splat': 'application/octet-stream',
+          '.ply': 'application/octet-stream', '.splat': 'application/octet-stream', '.ksplat': 'application/octet-stream',
+          '.spz': 'application/octet-stream', '.sog': 'application/octet-stream', '.lcc': 'application/octet-stream',
+          '.zip': 'application/zip',
         };
         res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
 
@@ -290,7 +292,7 @@ function localFileServer(): Plugin {
         const url = new URL(req.url!, `http://${req.headers.host}`);
         const dirPath = url.searchParams.get('dir');
         const extFilter = url.searchParams.get('ext')?.split(',') ||
-          ['.mp4', '.webm', '.mov', '.mkv', '.avi', '.mp3', '.wav', '.aac', '.ogg', '.m4a', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.obj', '.gltf', '.glb', '.fbx', '.ply', '.splat'];
+          ['.mp4', '.webm', '.mov', '.mkv', '.avi', '.mp3', '.wav', '.aac', '.ogg', '.m4a', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.obj', '.gltf', '.glb', '.fbx', '.ply', '.splat', '.ksplat', '.spz', '.sog', '.lcc', '.zip'];
 
         if (!dirPath) {
           res.statusCode = 400;

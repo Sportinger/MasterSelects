@@ -322,34 +322,35 @@ describe('NativeSceneRenderer shared depth contract', () => {
     );
     expect(depthTextureCall).toBeTruthy();
 
-    expect(renderPasses).toHaveLength(2);
+    expect(renderPasses).toHaveLength(1);
     expect(renderPasses[0]?.descriptor.label).toBe('native-scene-clear-pass');
     expect(renderPasses[0]?.descriptor.depthStencilAttachment).toMatchObject({
       depthClearValue: 1,
       depthLoadOp: 'clear',
       depthStoreOp: 'store',
     });
-    expect(renderPasses[1]?.descriptor.label).toBe('native-scene-splat-composite');
-    expect(renderPasses[1]?.descriptor.colorAttachments[0]).toMatchObject({
-      loadOp: 'load',
-      storeOp: 'store',
-    });
 
     const firstOptions = mockGaussianRenderer.renderToTexture.mock.calls[0]?.[4];
     const secondOptions = mockGaussianRenderer.renderToTexture.mock.calls[1]?.[4];
     expect(firstOptions.depthView).toBeTruthy();
     expect(secondOptions.depthView).toBe(firstOptions.depthView);
+    expect(firstOptions.outputView).toEqual((renderer as any).sceneView);
+    expect(secondOptions.outputView).toEqual((renderer as any).sceneView);
     expect(firstOptions.depthLoadOp).toBe('load');
     expect(firstOptions.depthStoreOp).toBe('store');
+    expect(firstOptions.depthWrite).toBe(true);
+    expect(firstOptions.layerOpacity).toBeCloseTo(0.9);
     expect(secondOptions.depthLoadOp).toBe('load');
     expect(secondOptions.depthStoreOp).toBe('store');
+    expect(secondOptions.depthWrite).toBe(true);
+    expect(secondOptions.layerOpacity).toBeCloseTo(0.6);
 
     expect(device.queue.submit).toHaveBeenCalledWith([
       { label: 'native-scene-command-buffer' },
     ]);
   });
 
-  it('renders opaque planes before splat compositing in the shared native scene', async () => {
+  it('renders opaque planes before direct splat depth rendering in the shared native scene', async () => {
     const renderer = await createInitializedRenderer();
 
     const { device, renderPasses } = createFakeDevice();
@@ -370,13 +371,15 @@ describe('NativeSceneRenderer shared depth contract', () => {
     expect(renderPasses.map((entry) => entry.descriptor.label)).toEqual([
       'native-scene-clear-pass',
       'native-scene-plane-opaque-pass',
-      'native-scene-splat-composite',
     ]);
 
     const splatOptions = mockGaussianRenderer.renderToTexture.mock.calls[0]?.[4];
     expect(splatOptions.depthView).toBeTruthy();
+    expect(splatOptions.outputView).toEqual((renderer as any).sceneView);
     expect(splatOptions.depthLoadOp).toBe('load');
     expect(splatOptions.depthStoreOp).toBe('store');
+    expect(splatOptions.depthWrite).toBe(true);
+    expect(splatOptions.layerOpacity).toBeCloseTo(0.8);
   });
 
   it('forwards shared-scene effectors only to native splat layers', async () => {
@@ -414,6 +417,42 @@ describe('NativeSceneRenderer shared depth contract', () => {
     });
   });
 
+  it('keeps paused preview on worker sorting and reserves precise sorting for explicit precise renders', async () => {
+    const renderer = await createInitializedRenderer();
+
+    const { device } = createFakeDevice();
+    renderer.renderScene(
+      device,
+      [makeSplatLayer('paused-preview-splat', 2, 1)],
+      makeCamera(),
+      [],
+      false,
+    );
+
+    expect(mockGaussianRenderer.renderToTexture.mock.calls[0]?.[4]).toMatchObject({
+      precise: false,
+      sortFrequency: 1,
+    });
+
+    vi.clearAllMocks();
+    const preciseLayer = {
+      ...makeSplatLayer('export-splat', 2, 1),
+      preciseSplatSorting: true,
+    };
+    renderer.renderScene(
+      device,
+      [preciseLayer],
+      makeCamera(),
+      [],
+      false,
+    );
+
+    expect(mockGaussianRenderer.renderToTexture.mock.calls[0]?.[4]).toMatchObject({
+      precise: true,
+      sortFrequency: 1,
+    });
+  });
+
   it('uses gaussian splat runtime keys as native scene identities for sequence layers', async () => {
     const renderer = await createInitializedRenderer();
 
@@ -446,7 +485,7 @@ describe('NativeSceneRenderer shared depth contract', () => {
     );
   });
 
-  it('renders opaque primitive meshes before splat compositing in the shared native scene', async () => {
+  it('renders opaque primitive meshes before direct splat depth rendering in the shared native scene', async () => {
     const renderer = await createInitializedRenderer();
 
     const { device, renderPasses } = createFakeDevice();
@@ -466,7 +505,6 @@ describe('NativeSceneRenderer shared depth contract', () => {
     expect(renderPasses.map((entry) => entry.descriptor.label)).toEqual([
       'native-scene-clear-pass',
       'native-scene-mesh-opaque-pass',
-      'native-scene-splat-composite',
     ]);
 
     const meshPass = renderPasses[1]?.pass;
@@ -475,7 +513,7 @@ describe('NativeSceneRenderer shared depth contract', () => {
     expect(meshPass?.drawIndexed).toHaveBeenCalledTimes(1);
   });
 
-  it('renders native 3D text inside the shared native scene before splat compositing', async () => {
+  it('renders native 3D text inside the shared native scene before direct splat depth rendering', async () => {
     const renderer = await createInitializedRenderer();
 
     const { device, renderPasses } = createFakeDevice();
@@ -495,7 +533,6 @@ describe('NativeSceneRenderer shared depth contract', () => {
     expect(renderPasses.map((entry) => entry.descriptor.label)).toEqual([
       'native-scene-clear-pass',
       'native-scene-mesh-opaque-pass',
-      'native-scene-splat-composite',
     ]);
 
     const meshPass = renderPasses[1]?.pass;
@@ -505,7 +542,7 @@ describe('NativeSceneRenderer shared depth contract', () => {
     expect(device.queue.writeBuffer).toHaveBeenCalled();
   });
 
-  it('renders imported models inside the shared native scene before splat compositing', async () => {
+  it('renders imported models inside the shared native scene before direct splat depth rendering', async () => {
     const renderer = await createInitializedRenderer();
     (renderer as any).modelRuntimeCache.runtimes.set('blob:model-native', {
       url: 'blob:model-native',
@@ -539,7 +576,6 @@ describe('NativeSceneRenderer shared depth contract', () => {
     expect(renderPasses.map((entry) => entry.descriptor.label)).toEqual([
       'native-scene-clear-pass',
       'native-scene-mesh-opaque-pass',
-      'native-scene-splat-composite',
     ]);
 
     const meshPass = renderPasses[1]?.pass;

@@ -30,6 +30,14 @@ export interface ProjectSettings {
   sampleRate: number;
 }
 
+export interface ProjectMIDIState {
+  isEnabled?: boolean;
+  transportBindings?: {
+    playPause?: import('../../../types/midi').MIDINoteBinding | null;
+    stop?: import('../../../types/midi').MIDINoteBinding | null;
+  };
+}
+
 // UI state that gets persisted with the project
 export interface ProjectUIState {
   // Dock/panel layout
@@ -54,6 +62,7 @@ export interface ProjectUIState {
   showTranscriptMarkers?: boolean;
   showChangelogOnStartup?: boolean;
   lastSeenChangelogVersion?: string | null;
+  midi?: ProjectMIDIState;
   exportState?: ExportStoreData;
 }
 

@@ -670,6 +670,8 @@ export interface SerializableMarker {
   time: number;
   label: string;
   color: string;
+  stopPlayback?: boolean;
+  midiBindings?: import('./midi').MarkerMIDIBinding[];
 }
 
 // Serializable timeline data for composition storage

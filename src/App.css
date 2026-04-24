@@ -7623,6 +7623,12 @@ input[type="checkbox"] {
   box-shadow: 0 0 8px var(--marker-color);
 }
 
+.timeline-marker.is-stop-marker .timeline-marker-head {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--warning-light) 45%, transparent),
+    0 0 10px color-mix(in srgb, var(--warning-light) 20%, transparent);
+}
+
 .timeline-marker .timeline-marker-line {
   width: 2px;
   min-height: calc(100vh - 50px);
@@ -7630,6 +7636,15 @@ input[type="checkbox"] {
   background: var(--marker-color);
   margin-top: -2px;
   opacity: 0.7;
+}
+
+.timeline-marker.is-stop-marker .timeline-marker-line {
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      var(--marker-color) 0 10px,
+      color-mix(in srgb, var(--warning-light) 42%, var(--marker-color)) 10px 16px
+    );
 }
 
 .timeline-marker:hover .timeline-marker-line,

@@ -90,11 +90,12 @@ The Transform tab becomes scene-navigation controls for the active camera clip. 
 
 ## Gaussian Splats
 
-Gaussian splat clips are imported from `.ply` and `.splat` files.
+Gaussian splat clips are imported through the SuperSplat-compatible `@playcanvas/splat-transform` reader path. Supported scene formats include `.ply`, `.compressed.ply`, `.splat`, `.ksplat`, `.spz`, `.sog`, `.lcc`, and zipped SOG-style `.zip` payloads.
 
 - Clips are created as `is3D: true`.
 - The Gaussian tab exposes the native renderer status together with `maxSplats`, `sortFrequency`, `splatScale`, `orientationPreset`, `nearPlane`, and `farPlane`.
 - Gaussian splats participate in scene cameras, object transforms, object-level effectors, preview, nested compositions, export, preload, and readiness checks through the same native shared-scene path.
+- Realtime splat rendering uses a worker-backed back-to-front order buffer based on the SuperSplat/PlayCanvas sorter approach. Precise export can still fall back to the existing GPU sort path.
 - Sequence splats follow the same shared runtime contract and are no longer treated as a permanent legacy-only scene path.
 - The Transform tab now exposes normal object transforms for gaussian splats. Scene navigation lives on camera clips.
 
@@ -167,6 +168,8 @@ The Transform tab is context-sensitive:
 | `src/engine/scene/SceneCameraUtils.ts` | Shared scene camera resolution |
 | `src/engine/scene/SceneEffectorUtils.ts` | Renderer-neutral object-level effector math |
 | `src/engine/scene/runtime/SharedSplatRuntimeUtils.ts` | Shared splat runtime request and readiness helpers |
+| `src/engine/gaussian/loaders/SplatTransformLoader.ts` | SuperSplat-compatible splat-transform loader adapter |
+| `src/engine/gaussian/core/SplatOrderSorter.ts` | Worker-backed realtime splat order buffer |
 | `src/engine/render/RenderDispatcher.ts` | Shared scene routing plus splat runtime/readiness integration |
 | `src/engine/native3d/passes/EffectorCompute.ts` | Native gaussian-splat effector deformation pass |
 | `src/services/layerBuilder/LayerBuilderService.ts` | Scene-layer construction for preview and nested rendering |
@@ -185,10 +188,12 @@ The Transform tab is context-sensitive:
 | `.gltf` | Supported | Imported as a 3D model clip in the shared scene contract. |
 | `.glb` | Supported | Imported as a 3D model clip in the shared scene contract. |
 | `.fbx` | Not supported | Do not rely on FBX import; no native FBX loader ships today. |
-| `.ply` | Supported | Gaussian splat import. |
+| `.ply` / `.compressed.ply` | Supported | Gaussian splat import with Morton ordering where needed. |
 | `.splat` | Supported | Gaussian splat import. |
-| `.ksplat` | Not yet supported | Parser stubs exist, but the file is rejected today. |
-| `.gsplat-zip` | Not yet supported | Parser stubs exist, but the file is rejected today. |
+| `.ksplat` | Supported | Loaded through `@playcanvas/splat-transform`. |
+| `.spz` | Supported | Loaded through `@playcanvas/splat-transform`. |
+| `.sog` / `.zip` | Supported | Loaded through the bundled SOG/zip reader path. |
+| `.lcc` | Supported | The first returned LOD table is used. |
 | Gaussian avatar `.zip` | Legacy only | Import is blocked in the current product surface. |
 
 ## Limitations
@@ -196,4 +201,4 @@ The Transform tab is context-sensitive:
 - Temporal and particle splat controls are still only partially surfaced in the UI.
 - Composition-level camera settings still remain available alongside camera clips.
 - Legacy gaussian-avatar import is disabled.
-- `ksplat` and `gsplat-zip` are not supported yet, even though loader code knows about them.
+- Higher-order spherical harmonics are preserved during import, but the current native shader still renders the DC color path only.
