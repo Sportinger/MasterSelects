@@ -4,6 +4,13 @@ import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { engine } from '../../src/engine/WebGPUEngine';
 
+type MediaStorePatch = Parameters<typeof useMediaStore.setState>[0];
+type TimelineStorePatch = Parameters<typeof useTimelineStore.setState>[0];
+type MediaStoreState = ReturnType<typeof useMediaStore.getState>;
+
+const asTimelinePatch = (state: unknown): TimelineStorePatch => state as TimelineStorePatch;
+const asMediaState = (state: unknown): MediaStoreState => state as MediaStoreState;
+
 vi.mock('../../src/services/logger', () => ({
   Logger: {
     create: vi.fn(() => ({
@@ -29,7 +36,7 @@ describe('export asset preload helpers', () => {
     useMediaStore.setState({
       files: [],
       compositions: [],
-    } as any);
+    } as MediaStorePatch);
     useTimelineStore.setState({
       tracks: [
         {
@@ -40,11 +47,11 @@ describe('export asset preload helpers', () => {
         },
       ],
       clips: [],
-    } as any);
+    } as TimelineStorePatch);
   });
 
   it('preloads native gaussian splats that overlap the export range', async () => {
-    useTimelineStore.setState({
+    useTimelineStore.setState(asTimelinePatch({
       clips: [
         {
           id: 'splat-in-range',
@@ -81,7 +88,7 @@ describe('export asset preload helpers', () => {
           },
         },
       ],
-    } as any);
+    }));
 
     await preloadGaussianSplatsForExport({ startTime: 0, endTime: 5 });
 
@@ -97,7 +104,7 @@ describe('export asset preload helpers', () => {
   });
 
   it('preloads gaussian splats through the native scene loader even for legacy false clips', async () => {
-    useTimelineStore.setState({
+    useTimelineStore.setState(asTimelinePatch({
       clips: [
         {
           id: 'splat-three',
@@ -118,7 +125,7 @@ describe('export asset preload helpers', () => {
           },
         },
       ],
-    } as any);
+    }));
 
     await preloadGaussianSplatsForExport({ startTime: 0, endTime: 5 });
 
@@ -134,7 +141,7 @@ describe('export asset preload helpers', () => {
   });
 
   it('preloads gaussian splat sequences through the native scene loader without a Three fallback', async () => {
-    useTimelineStore.setState({
+    useTimelineStore.setState(asTimelinePatch({
       clips: [
         {
           id: 'splat-sequence',
@@ -164,7 +171,7 @@ describe('export asset preload helpers', () => {
           },
         },
       ],
-    } as any);
+    }));
 
     await preloadGaussianSplatsForExport({ startTime: 0, endTime: 5 });
 
@@ -180,7 +187,7 @@ describe('export asset preload helpers', () => {
   });
 
   it('preloads native gaussian splat sequence scenes by per-frame runtime key', async () => {
-    useTimelineStore.setState({
+    useTimelineStore.setState(asTimelinePatch({
       clips: [
         {
           id: 'splat-sequence-native',
@@ -207,7 +214,7 @@ describe('export asset preload helpers', () => {
           },
         },
       ],
-    } as any);
+    }));
 
     await preloadGaussianSplatsForExport({ startTime: 0, endTime: 5 });
 
@@ -222,7 +229,7 @@ describe('export asset preload helpers', () => {
   });
 
   it('initializes the 3D renderer and preloads overlapping model assets', async () => {
-    useTimelineStore.setState({
+    useTimelineStore.setState(asTimelinePatch({
       clips: [
         {
           id: 'model-in-range',
@@ -262,7 +269,7 @@ describe('export asset preload helpers', () => {
           },
         },
       ],
-    } as any);
+    }));
 
     await preload3DAssetsForExport({
       startTime: 0,
@@ -281,7 +288,7 @@ describe('export asset preload helpers', () => {
   });
 
   it('recursively preloads nested export assets and ignores zero-byte placeholder splat files', async () => {
-    useTimelineStore.setState({
+    useTimelineStore.setState(asTimelinePatch({
       tracks: [
         {
           id: 'track-1',
@@ -353,7 +360,7 @@ describe('export asset preload helpers', () => {
           },
         },
       ],
-    } as any);
+    }));
 
     await preloadGaussianSplatsForExport({ startTime: 0, endTime: 5 });
     await preload3DAssetsForExport({
@@ -379,8 +386,8 @@ describe('export asset preload helpers', () => {
   });
 
   it('uses media file hashes for export splat preloading when clip source metadata is incomplete', async () => {
-    const mediaStateSpy = vi.spyOn(useMediaStore, 'getState').mockReturnValue({
-      ...(useMediaStore.getState() as any),
+    const mediaStateSpy = vi.spyOn(useMediaStore, 'getState').mockReturnValue(asMediaState({
+      ...useMediaStore.getState(),
       files: [
         {
           id: 'media-splat-1',
@@ -393,9 +400,9 @@ describe('export asset preload helpers', () => {
           createdAt: Date.now(),
         },
       ],
-    } as any);
+    }));
 
-    useTimelineStore.setState({
+    useTimelineStore.setState(asTimelinePatch({
       clips: [
         {
           id: 'splat-media-backed',
@@ -417,7 +424,7 @@ describe('export asset preload helpers', () => {
           },
         },
       ],
-    } as any);
+    }));
 
     try {
       await preloadGaussianSplatsForExport({ startTime: 0, endTime: 4 });

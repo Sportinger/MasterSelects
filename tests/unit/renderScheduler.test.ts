@@ -1,23 +1,43 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { RenderSource } from '../../src/types/renderTarget';
+
+type MockTimelineState = {
+  playheadPosition: number;
+  clips: unknown[];
+};
+
+type MockMediaState = {
+  activeCompositionId: string | null;
+  compositions: unknown[];
+};
+
+type MockRenderTargetState = {
+  targets: Map<string, {
+    id: string;
+    source: RenderSource;
+    enabled: boolean;
+  }>;
+  resolveSourceToCompId: (source: RenderSource) => string | null;
+};
 
 const hoisted = vi.hoisted(() => ({
   timelineState: {
     playheadPosition: 0,
     clips: [],
-  } as any,
+  } as MockTimelineState,
   mediaState: {
     activeCompositionId: null,
     compositions: [],
-  } as any,
+  } as MockMediaState,
   renderTargetState: {
     targets: new Map(),
-    resolveSourceToCompId: (source: any) => {
+    resolveSourceToCompId: (source: RenderSource) => {
       if (source.type === 'composition') {
         return source.compositionId;
       }
       return null;
     },
-  } as any,
+  } as MockRenderTargetState,
   evaluateAtTime: vi.fn(() => []),
   prepareComposition: vi.fn(async () => true),
   copyNestedCompTextureToPreview: vi.fn(() => false),
@@ -76,6 +96,15 @@ vi.mock('../../src/utils/renderTargetVisibility', () => ({
 import { renderScheduler } from '../../src/services/renderScheduler';
 import { playheadState } from '../../src/services/layerBuilder/PlayheadState';
 
+type RenderSchedulerTestAccess = typeof renderScheduler & {
+  registeredTargets: Set<string>;
+  preparedCompositions: Set<string>;
+  preparingCompositions: Set<string>;
+  nestedCompCache: Map<string, unknown>;
+  nestedCompCacheTime: number;
+  activeCompLayers: unknown[] | null;
+};
+
 describe('renderScheduler playback timing', () => {
   beforeEach(() => {
     hoisted.evaluateAtTime.mockClear();
@@ -102,7 +131,7 @@ describe('renderScheduler playback timing', () => {
           enabled: true,
         }],
       ]),
-      resolveSourceToCompId: (source: any) => {
+      resolveSourceToCompId: (source: RenderSource) => {
         if (source.type === 'composition') {
           return source.compositionId;
         }
@@ -113,7 +142,7 @@ describe('renderScheduler playback timing', () => {
     playheadState.position = 0;
     playheadState.isUsingInternalPosition = false;
 
-    const scheduler = renderScheduler as any;
+    const scheduler = renderScheduler as unknown as RenderSchedulerTestAccess;
     scheduler.registeredTargets.clear();
     scheduler.preparedCompositions.clear();
     scheduler.preparingCompositions.clear();
@@ -141,7 +170,7 @@ describe('renderScheduler playback timing', () => {
     playheadState.position = 8;
     playheadState.isUsingInternalPosition = true;
 
-    (renderScheduler as any).registeredTargets.add('preview-comp-2');
+    (renderScheduler as unknown as RenderSchedulerTestAccess).registeredTargets.add('preview-comp-2');
     renderScheduler.forceRender();
 
     expect(hoisted.evaluateAtTime).toHaveBeenCalledWith('comp-2', 5);

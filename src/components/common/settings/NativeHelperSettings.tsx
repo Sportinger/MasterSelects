@@ -118,7 +118,7 @@ export function NativeHelperSettings() {
   const helperEnabled = turboModeEnabled;
   const platform = useMemo(() => detectPlatform(), []);
   const installInfo = useMemo(() => getInstallSteps(platform), [platform]);
-  const helperInfo = info as ExtendedSystemInfo | null;
+  const helperInfo = status === 'connected' ? (info as ExtendedSystemInfo | null) : null;
 
   const checkConnection = useCallback(async () => {
     if (!helperEnabled) {
@@ -139,7 +139,7 @@ export function NativeHelperSettings() {
   }, [helperEnabled, setNativeHelperConnected]);
 
   useEffect(() => {
-    void checkConnection();
+    queueMicrotask(() => void checkConnection());
     const unsub = NativeHelperClient.onStatusChange((s) => {
       setStatus(s);
       setNativeHelperConnected(s === 'connected');
@@ -150,8 +150,6 @@ export function NativeHelperSettings() {
   useEffect(() => {
     if (status === 'connected') {
       NativeHelperClient.getInfo().then(setInfo).catch(() => setInfo(null));
-    } else {
-      setInfo(null);
     }
   }, [status]);
 

@@ -38,8 +38,6 @@ function TimelineKeyframesComponent({
   selectedKeyframeIds,
   clipKeyframes,
   clipDrag,
-  scrollX,
-  timelineRef,
   onSelectKeyframe,
   onMoveKeyframe,
   onUpdateKeyframe,
@@ -188,14 +186,8 @@ function TimelineKeyframesComponent({
   // Calculate effective start time for a clip (handles drag preview)
   // This is called during render to always use latest clipDrag state
   const getEffectiveClipStartTime = (clip: KeyframeDisplay['clip']): number => {
-    if (clipDrag && clipDrag.clipId === clip.id && timelineRef.current) {
-      if (clipDrag.snappedTime !== null) {
-        return clipDrag.snappedTime;
-      } else {
-        const rect = timelineRef.current.getBoundingClientRect();
-        const x = clipDrag.currentX - rect.left + scrollX - clipDrag.grabOffsetX;
-        return pixelToTime(Math.max(0, x));
-      }
+    if (clipDrag && clipDrag.clipId === clip.id && clipDrag.snappedTime !== null) {
+      return clipDrag.snappedTime;
     }
     return clip.startTime;
   };

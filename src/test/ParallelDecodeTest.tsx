@@ -231,9 +231,11 @@ export function ParallelDecodeTest() {
       decoderRef.current = null;
       log('Cleanup complete', 'success');
 
-    } catch (e: any) {
-      log(`ERROR: ${e.message}`, 'error');
-      log(e.stack || '', 'error');
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      const stack = e instanceof Error ? e.stack : '';
+      log(`ERROR: ${message}`, 'error');
+      log(stack || '', 'error');
     }
 
     setIsRunning(false);

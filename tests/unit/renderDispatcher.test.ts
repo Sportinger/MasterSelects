@@ -4,6 +4,20 @@ import { getSharedSceneDefaultCameraDistance } from '../../src/engine/scene/Scen
 import { useEngineStore } from '../../src/stores/engineStore';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
+import type { RenderDeps } from '../../src/engine/render/RenderDispatcher';
+import type { Layer, LayerRenderData } from '../../src/engine/core/types';
+
+type RenderDispatcherTestAccess = {
+  ensureExportLayersReady: RenderDispatcher['ensureExportLayersReady'];
+  lastRenderHadContent: boolean;
+  lastPreviewTargetTimeMs?: number;
+  render: RenderDispatcher['render'];
+  collectActiveSplatEffectors: (width: number, height: number) => unknown[];
+  process3DLayers: (layerData: LayerRenderData[], device: GPUDevice, width: number, height: number) => void;
+  renderEmptyFrame: RenderDispatcher['renderEmptyFrame'];
+  setRenderTimeOverride: RenderDispatcher['setRenderTimeOverride'];
+  recordMainPreviewFrame: () => void;
+};
 
 vi.mock('../../src/services/logger', () => ({
   Logger: {
@@ -65,14 +79,14 @@ function createDispatcher(isPlaying = true) {
       getIsPlaying: vi.fn(() => isPlaying),
       setHasActiveVideo: vi.fn(),
     },
-  } as any;
+  } as unknown as RenderDeps;
 
-  const dispatcher = new RenderDispatcher(deps);
+  const dispatcher = new RenderDispatcher(deps) as unknown as RenderDispatcherTestAccess;
   const renderEmptyFrame = vi
     .spyOn(dispatcher, 'renderEmptyFrame')
     .mockImplementation(() => {});
   const recordMainPreviewFrame = vi
-    .spyOn(dispatcher as any, 'recordMainPreviewFrame')
+    .spyOn(dispatcher, 'recordMainPreviewFrame')
     .mockImplementation(() => {});
 
   return {
@@ -90,12 +104,12 @@ describe('RenderDispatcher empty playback hold', () => {
     useEngineStore.setState({
       sceneNavClipId: null,
       sceneNavFpsMode: false,
-    } as any);
+    });
     useMediaStore.setState({
       files: [],
       activeCompositionId: null,
       compositions: [],
-    } as any);
+    });
     useTimelineStore.setState({
       isDraggingPlayhead: false,
       playheadPosition: 0,
@@ -108,14 +122,14 @@ describe('RenderDispatcher empty playback hold', () => {
         opacity: 1,
         blendMode: 'normal',
       }),
-    } as any);
+    });
   });
 
   it('keeps the last frame on small playback stalls with an empty layer set', () => {
     const { dispatcher, deps, renderEmptyFrame, recordMainPreviewFrame } = createDispatcher(true);
 
     dispatcher.lastRenderHadContent = true;
-    (dispatcher as any).lastPreviewTargetTimeMs = 17_667;
+    dispatcher.lastPreviewTargetTimeMs = 17_667;
 
     dispatcher.render([{
       id: 'layer-1',
@@ -126,7 +140,7 @@ describe('RenderDispatcher empty playback hold', () => {
         type: 'video',
         mediaTime: 17.75,
       },
-    } as any]);
+    } as unknown as Layer]);
 
     expect(renderEmptyFrame).not.toHaveBeenCalled();
     expect(recordMainPreviewFrame).not.toHaveBeenCalled();
@@ -138,7 +152,7 @@ describe('RenderDispatcher empty playback hold', () => {
     const { dispatcher, deps, renderEmptyFrame, recordMainPreviewFrame } = createDispatcher(true);
 
     dispatcher.lastRenderHadContent = true;
-    (dispatcher as any).lastPreviewTargetTimeMs = 17_667;
+    dispatcher.lastPreviewTargetTimeMs = 17_667;
 
     dispatcher.render([{
       id: 'layer-1',
@@ -149,7 +163,7 @@ describe('RenderDispatcher empty playback hold', () => {
         type: 'video',
         mediaTime: 8.02,
       },
-    } as any]);
+    } as unknown as Layer]);
 
     expect(renderEmptyFrame).toHaveBeenCalledTimes(1);
     expect(recordMainPreviewFrame).toHaveBeenCalledWith('empty', undefined, {
@@ -193,12 +207,12 @@ describe('RenderDispatcher empty playback hold', () => {
           },
         },
       }],
-    } as any);
+    });
 
-    expect((dispatcher as any).collectActiveSplatEffectors(1920, 1080)).toHaveLength(0);
+    expect(dispatcher.collectActiveSplatEffectors(1920, 1080)).toHaveLength(0);
 
     dispatcher.setRenderTimeOverride(5.5);
-    const effectors = (dispatcher as any).collectActiveSplatEffectors(1920, 1080);
+    const effectors = dispatcher.collectActiveSplatEffectors(1920, 1080);
 
     expect(effectors).toHaveLength(1);
     expect(effectors[0]).toMatchObject({
@@ -265,7 +279,7 @@ describe('RenderDispatcher empty playback hold', () => {
           },
         },
       }],
-    } as any);
+    });
 
     const layerData = [
       {
@@ -301,9 +315,9 @@ describe('RenderDispatcher empty playback hold', () => {
         sourceWidth: 1920,
         sourceHeight: 1080,
       },
-    ] as any;
+    ] as unknown as LayerRenderData[];
 
-    (dispatcher as any).process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+    dispatcher.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
 
     expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
     const [deviceArg, layers3D, camera, effectors, isRealtimePlayback] =
@@ -378,9 +392,9 @@ describe('RenderDispatcher empty playback hold', () => {
         sourceWidth: 1920,
         sourceHeight: 1080,
       },
-    ] as any;
+    ] as unknown as LayerRenderData[];
 
-    (dispatcher as any).process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+    dispatcher.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
 
     expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
     const [deviceArg, layers3D] = deps.sceneRenderer.renderScene.mock.calls[0];
@@ -487,14 +501,14 @@ describe('RenderDispatcher empty playback hold', () => {
         sourceWidth: 1920,
         sourceHeight: 1080,
       },
-    ] as any;
+    ] as unknown as LayerRenderData[];
 
-    (dispatcher as any).process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+    dispatcher.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
 
     expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
     const [, layers3D] = deps.sceneRenderer.renderScene.mock.calls[0];
     expect(layers3D).toHaveLength(3);
-    expect(layers3D.map((layer: any) => layer.kind)).toEqual(['plane', 'primitive', 'splat']);
+    expect(layers3D.map((layer: { kind: string }) => layer.kind)).toEqual(['plane', 'primitive', 'splat']);
 
     expect(layerData).toHaveLength(1);
     expect(layerData[0]?.textureView).toEqual({ label: 'shared-scene-mixed-view' });
@@ -538,9 +552,9 @@ describe('RenderDispatcher empty playback hold', () => {
         sourceWidth: 1920,
         sourceHeight: 1080,
       },
-    ] as any;
+    ] as unknown as LayerRenderData[];
 
-    (dispatcher as any).process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+    dispatcher.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
 
     expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
     const [, layers3D, camera] = deps.sceneRenderer.renderScene.mock.calls[0];
@@ -634,14 +648,14 @@ describe('RenderDispatcher empty playback hold', () => {
         sourceWidth: 1920,
         sourceHeight: 1080,
       },
-    ] as any;
+    ] as unknown as LayerRenderData[];
 
-    (dispatcher as any).process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+    dispatcher.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
 
     expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
     const [, layers3D] = deps.sceneRenderer.renderScene.mock.calls[0];
     expect(layers3D).toHaveLength(2);
-    expect(layers3D.map((layer: any) => layer.kind)).toEqual(['text3d', 'splat']);
+    expect(layers3D.map((layer: { kind: string }) => layer.kind)).toEqual(['text3d', 'splat']);
 
     expect(layerData).toHaveLength(1);
     expect(layerData[0]?.textureView).toEqual({ label: 'shared-scene-text-view' });
@@ -710,14 +724,14 @@ describe('RenderDispatcher empty playback hold', () => {
         sourceWidth: 1920,
         sourceHeight: 1080,
       },
-    ] as any;
+    ] as unknown as LayerRenderData[];
 
-    (dispatcher as any).process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+    dispatcher.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
 
     expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
     const [, layers3D] = deps.sceneRenderer.renderScene.mock.calls[0];
     expect(layers3D).toHaveLength(2);
-    expect(layers3D.map((layer: any) => layer.kind)).toEqual(['model', 'splat']);
+    expect(layers3D.map((layer: { kind: string }) => layer.kind)).toEqual(['model', 'splat']);
     expect(layers3D[0]).toMatchObject({
       kind: 'model',
       modelUrl: 'blob:hero-model',
@@ -801,7 +815,7 @@ describe('RenderDispatcher empty playback hold', () => {
           },
         },
       },
-    ] as any);
+    ] as unknown as Layer[]);
 
     expect(dispatcher.ensureSceneRendererInitialized).toHaveBeenCalledWith(1920, 1080);
     expect(dispatcher.preloadSceneModelAsset).toHaveBeenCalledWith('blob:model-1', 'Hero Model');
@@ -858,7 +872,7 @@ describe('RenderDispatcher empty playback hold', () => {
           },
         },
       },
-    ] as any);
+    ] as unknown as Layer[]);
 
     expect(dispatcher.ensureGaussianSplatSceneLoaded).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -902,7 +916,7 @@ describe('RenderDispatcher empty playback hold', () => {
           },
         },
       },
-    ] as any);
+    ] as unknown as Layer[]);
 
     expect(dispatcher.ensureSceneRendererInitialized).toHaveBeenCalledWith(1920, 1080);
     expect(dispatcher.ensureGaussianSplatSceneLoaded).toHaveBeenCalledWith(
@@ -947,8 +961,8 @@ describe('RenderDispatcher empty playback hold', () => {
       },
     });
 
-    await dispatcher.ensureExportLayersReady([makeLayer('sequence/frame-0001', 'blob:sequence-frame-1')] as any);
-    await dispatcher.ensureExportLayersReady([makeLayer('sequence/frame-0002', 'blob:sequence-frame-2')] as any);
+    await dispatcher.ensureExportLayersReady([makeLayer('sequence/frame-0001', 'blob:sequence-frame-1')] as unknown as Layer[]);
+    await dispatcher.ensureExportLayersReady([makeLayer('sequence/frame-0002', 'blob:sequence-frame-2')] as unknown as Layer[]);
 
     expect(dispatcher.ensureGaussianSplatSceneLoaded).toHaveBeenCalledTimes(2);
     expect(dispatcher.ensureGaussianSplatSceneLoaded).toHaveBeenNthCalledWith(
@@ -987,7 +1001,7 @@ describe('RenderDispatcher empty playback hold', () => {
           modelUrl: 'blob:broken-model',
         },
       },
-    ] as any)).rejects.toThrow('Precise export asset wait failed: 3D model "Broken Model" was not ready in time');
+    ] as unknown as Layer[])).rejects.toThrow('Precise export asset wait failed: 3D model "Broken Model" was not ready in time');
   });
 
   it('reuses export readiness cache for repeated frames with the same assets', async () => {
@@ -1046,7 +1060,7 @@ describe('RenderDispatcher empty playback hold', () => {
           },
         },
       },
-    ] as any;
+    ] as unknown as LayerRenderData[];
 
     await dispatcher.ensureExportLayersReady(layers);
     await dispatcher.ensureExportLayersReady(layers);

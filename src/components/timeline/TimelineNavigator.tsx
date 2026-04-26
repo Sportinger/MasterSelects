@@ -34,10 +34,24 @@ export function TimelineNavigator({
   const [dragStartZoom, setDragStartZoom] = useState(0);
   const [, setDragStartThumbLeft] = useState(0);
   const [dragStartThumbWidth, setDragStartThumbWidth] = useState(0);
+  const [trackWidth, setTrackWidth] = useState(200);
+
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+
+    const updateTrackWidth = () => {
+      setTrackWidth(track.clientWidth || 200);
+    };
+
+    updateTrackWidth();
+    const observer = new ResizeObserver(updateTrackWidth);
+    observer.observe(track);
+    return () => observer.disconnect();
+  }, []);
 
   // Calculate thumb position and size
   const totalContentWidth = duration * zoom;
-  const trackWidth = trackRef.current?.clientWidth ?? 200;
 
   // Thumb width represents the viewport as a fraction of total content
   const thumbWidthRatio = Math.min(1, viewportWidth / Math.max(1, totalContentWidth));

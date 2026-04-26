@@ -1,11 +1,12 @@
 // Label color picker popup
 import { LABEL_COLORS } from './labelColors';
+import type { LabelColor } from '../../../stores/mediaStore/types';
 
 interface LabelColorPickerProps {
   position: { x: number; y: number };
   selectedIds: string[];
   labelPickerItemId: string;
-  onSelect: (ids: string[], colorKey: string) => void;
+  onSelect: (ids: string[], colorKey: LabelColor) => void;
   onClose: () => void;
 }
 

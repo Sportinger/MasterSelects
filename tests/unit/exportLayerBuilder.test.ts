@@ -8,15 +8,16 @@ import type { ExportClipState, FrameContext } from '../../src/engine/export/type
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { lottieRuntimeManager } from '../../src/services/vectorAnimation/LottieRuntimeManager';
+import type { TimelineClip, TimelineTrack } from '../../src/stores/timeline/types';
 
 describe('ExportLayerBuilder', () => {
   beforeEach(() => {
     useMediaStore.setState({
       compositions: [],
-    } as any);
+    });
     useTimelineStore.setState({
       clipKeyframes: new Map(),
-    } as any);
+    });
   });
 
   afterEach(() => {
@@ -29,7 +30,7 @@ describe('ExportLayerBuilder', () => {
       type: 'video',
       visible: true,
       solo: false,
-    } as any;
+    } as unknown as TimelineTrack;
 
     const videoElement = document.createElement('video');
     const currentFrame = {
@@ -50,14 +51,14 @@ describe('ExportLayerBuilder', () => {
         videoElement,
       },
       transform: {},
-    } as any;
+    } as unknown as TimelineClip;
 
     const clipStates = new Map<string, ExportClipState>([
       ['clip-1', {
         clipId: 'clip-1',
         webCodecsPlayer: {
           getCurrentFrame: () => currentFrame,
-        } as any,
+        } as unknown as TimelineClip,
         lastSampleIndex: 0,
         isSequential: true,
         preciseVideoElement: videoElement,
@@ -98,7 +99,7 @@ describe('ExportLayerBuilder', () => {
       type: 'video',
       visible: true,
       solo: false,
-    } as any;
+    } as unknown as TimelineTrack;
 
     const clip = {
       id: 'clip-splat',
@@ -137,7 +138,7 @@ describe('ExportLayerBuilder', () => {
       file: { name: 'hero.splat' },
       transform: {},
       is3D: true,
-    } as any;
+    } as unknown as TimelineClip;
 
     const ctx: FrameContext = {
       time: 1,
@@ -176,7 +177,7 @@ describe('ExportLayerBuilder', () => {
       type: 'video',
       visible: true,
       solo: false,
-    } as any;
+    } as unknown as TimelineTrack;
 
     const clip = {
       id: 'clip-splat-rotation',
@@ -195,7 +196,7 @@ describe('ExportLayerBuilder', () => {
       },
       transform: {},
       is3D: true,
-    } as any;
+    } as unknown as TimelineClip;
 
     const ctx: FrameContext = {
       time: 1,
@@ -234,7 +235,7 @@ describe('ExportLayerBuilder', () => {
       type: 'video',
       visible: true,
       solo: false,
-    } as any;
+    } as unknown as TimelineTrack;
 
     const clip = {
       id: 'clip-text3d',
@@ -264,7 +265,7 @@ describe('ExportLayerBuilder', () => {
       },
       transform: {},
       is3D: true,
-    } as any;
+    } as unknown as TimelineClip;
 
     const ctx: FrameContext = {
       time: 1,
@@ -300,7 +301,7 @@ describe('ExportLayerBuilder', () => {
       type: 'video',
       visible: true,
       solo: false,
-    } as any;
+    } as unknown as TimelineTrack;
 
     useMediaStore.setState({
       files: [{
@@ -321,7 +322,7 @@ describe('ExportLayerBuilder', () => {
         },
       }],
       compositions: [],
-    } as any);
+    });
 
     const clip = {
       id: 'clip-model-seq-1',
@@ -349,7 +350,7 @@ describe('ExportLayerBuilder', () => {
       },
       transform: {},
       is3D: true,
-    } as any;
+    } as unknown as TimelineClip;
 
     const ctx: FrameContext = {
       time: 0.5,
@@ -386,7 +387,7 @@ describe('ExportLayerBuilder', () => {
       type: 'video',
       visible: true,
       solo: false,
-    } as any;
+    } as unknown as TimelineTrack;
     const frameFiles = [
       new File(['0'], 'scan000000.ply', { type: 'application/octet-stream' }),
       new File(['1'], 'scan000001.ply', { type: 'application/octet-stream' }),
@@ -412,7 +413,7 @@ describe('ExportLayerBuilder', () => {
         },
       }],
       compositions: [],
-    } as any);
+    });
 
     const clip = {
       id: 'clip-splat-seq-1',
@@ -464,7 +465,7 @@ describe('ExportLayerBuilder', () => {
       },
       transform: {},
       is3D: true,
-    } as any;
+    } as unknown as TimelineClip;
 
     const ctx: FrameContext = {
       time: 0.5,
@@ -507,7 +508,7 @@ describe('ExportLayerBuilder', () => {
       type: 'video',
       visible: true,
       solo: false,
-    } as any;
+    } as unknown as TimelineTrack;
 
     useMediaStore.setState({
       compositions: [
@@ -517,7 +518,7 @@ describe('ExportLayerBuilder', () => {
           height: 720,
         },
       ],
-    } as any);
+    });
 
     const compositionClip = {
       id: 'comp-clip',
@@ -619,7 +620,7 @@ describe('ExportLayerBuilder', () => {
       },
       transform: {},
       effects: [],
-    } as any;
+    } as unknown as TimelineClip;
 
     const ctx: FrameContext = {
       time: 1,
@@ -663,7 +664,7 @@ describe('ExportLayerBuilder', () => {
       type: 'video',
       visible: true,
       solo: false,
-    } as any;
+    } as unknown as TimelineTrack;
 
     const clip = {
       id: 'clip-native-sequence-rotation',
@@ -688,7 +689,7 @@ describe('ExportLayerBuilder', () => {
       },
       transform: {},
       is3D: true,
-    } as any;
+    } as unknown as TimelineClip;
 
     const ctx: FrameContext = {
       time: 1,
@@ -727,7 +728,7 @@ describe('ExportLayerBuilder', () => {
       type: 'video',
       visible: true,
       solo: false,
-    } as any;
+    } as unknown as TimelineTrack;
     const canvas = document.createElement('canvas');
     const renderSpy = vi.spyOn(lottieRuntimeManager, 'renderClipAtTime').mockReturnValue(canvas);
 
@@ -747,7 +748,7 @@ describe('ExportLayerBuilder', () => {
       transform: {},
       effects: [],
       file: new File(['lottie'], 'anim.lottie', { type: 'application/zip' }),
-    } as any;
+    } as unknown as TimelineClip;
 
     const ctx: FrameContext = {
       time: 1,

@@ -46,7 +46,10 @@ export function useTimelineZoom({
 }: UseTimelineZoomProps): UseTimelineZoomReturn {
   // Ref to avoid stale closure for scrollY in wheel handler
   const scrollYRef = useRef(scrollY);
-  scrollYRef.current = scrollY;
+
+  useEffect(() => {
+    scrollYRef.current = scrollY;
+  }, [scrollY]);
 
   // Fit composition to window - calculate zoom to show entire duration
   const handleFitToWindow = useCallback(() => {

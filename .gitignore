@@ -47,6 +47,7 @@ Thumbs.db
 tmp
 temp
 *.tmp
+tmp_*.png
 
 # FFmpeg WASM build outputs (build artifacts, not the final WASM)
 ffmpeg-wasm-build/build/

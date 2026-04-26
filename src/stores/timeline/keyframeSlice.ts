@@ -82,9 +82,10 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
   updateKeyframe: (keyframeId, updates) => {
     const { clipKeyframes, invalidateCache } = get();
     const newMap = new Map<string, Keyframe[]>();
-    const normalizedUpdates = updates.easing
-      ? { ...updates, easing: normalizeEasingType(updates.easing, 'linear') }
-      : updates;
+    const { easing, ...restUpdates } = updates;
+    const normalizedUpdates = easing !== undefined
+      ? { ...restUpdates, easing: normalizeEasingType(easing, 'linear') }
+      : restUpdates;
 
     clipKeyframes.forEach((keyframes, clipId) => {
       newMap.set(clipId, keyframes.map(k =>

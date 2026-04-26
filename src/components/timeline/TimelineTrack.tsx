@@ -78,7 +78,7 @@ function TrackPropertyTracks({
       props.delete('scale.z');
     }
     return props;
-  }, [clipId, clipKeyframes, selectedClip?.is3D]);
+  }, [clipId, clipKeyframes, selectedClip]);
 
   // Track container ref for getting width
   const containerRef = useRef<HTMLDivElement>(null);

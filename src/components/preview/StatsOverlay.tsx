@@ -32,7 +32,7 @@ export function StatsOverlay({ stats, resolution, expanded, onToggle }: StatsOve
       return 'GPU Render';
     }
     return 'GPU Submit';
-  }, [stats.timing]);
+  }, [stats]);
 
   const playbackBottleneck = useMemo(() => {
     const playback = stats.playback;

@@ -3,7 +3,8 @@ import { flags } from '../../src/engine/featureFlags';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { slotDeckManager } from '../../src/services/slotDeckManager';
 import { mediaRuntimeRegistry } from '../../src/services/mediaRuntime/registry';
-import type { SlotDeckState } from '../../src/stores/mediaStore/types';
+import type { Composition, SlotDeckState } from '../../src/stores/mediaStore/types';
+import type { TimelineClip, TimelineTrack } from '../../src/types';
 
 vi.mock('../../src/services/mediaRuntime/clipBindings', () => ({
   bindSourceRuntimeForOwner: vi.fn(({ ownerId, source }) => ({
@@ -37,7 +38,7 @@ type MockMediaState = {
     height?: number;
     fps?: number;
   }>;
-  compositions: Array<any>;
+  compositions: Composition[];
   slotAssignments: Record<string, number>;
   slotDeckStates: Record<number, SlotDeckState>;
   setSlotDeckState: (slotIndex: number, next: SlotDeckState) => void;
@@ -45,7 +46,10 @@ type MockMediaState = {
 
 const mockedUseMediaStore = useMediaStore as unknown as MockMediaStore;
 
-function createComposition(id: string, options?: { clips?: any[]; tracks?: any[]; duration?: number }) {
+function createComposition(
+  id: string,
+  options?: { clips?: TimelineClip[]; tracks?: TimelineTrack[]; duration?: number },
+): Composition {
   return {
     id,
     name: id,
@@ -92,7 +96,9 @@ describe('slotDeckManager', () => {
       },
     };
 
-    mockedUseMediaStore.getState.mockImplementation(() => mediaState as any);
+    mockedUseMediaStore.getState.mockImplementation(
+      () => mediaState as unknown as ReturnType<typeof useMediaStore.getState>,
+    );
   });
 
   afterEach(() => {

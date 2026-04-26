@@ -208,7 +208,7 @@ describe('interpolateKeyframes', () => {
 
   it('normalizes legacy camelCase easing names instead of crashing', () => {
     const kfs = [
-      createMockKeyframe({ property: 'opacity', time: 0, value: 0, easing: 'easeOut' as any }),
+      createMockKeyframe({ property: 'opacity', time: 0, value: 0, easing: 'easeOut' as unknown as Keyframe['easing'] }),
       createMockKeyframe({ property: 'opacity', time: 2, value: 1 }),
     ];
     expect(interpolateKeyframes(kfs, 'opacity', 1, 0)).toBeGreaterThan(0.5);

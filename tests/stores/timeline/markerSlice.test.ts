@@ -87,7 +87,7 @@ describe('markerSlice', () => {
   });
 
   it('addMarker: respects custom duration via store overrides', () => {
-    const customStore = createTestTimelineStore({ duration: 120 } as any);
+    const customStore = createTestTimelineStore({ duration: 120 });
     customStore.getState().addMarker(100);
     expect(customStore.getState().markers[0].time).toBe(100);
 
@@ -403,7 +403,7 @@ describe('markerSlice', () => {
   });
 
   it('integration: add markers with custom duration store', () => {
-    const shortStore = createTestTimelineStore({ duration: 10 } as any);
+    const shortStore = createTestTimelineStore({ duration: 10 });
     shortStore.getState().addMarker(5, 'Inside');
     shortStore.getState().addMarker(15, 'Over'); // should clamp to 10
     shortStore.getState().addMarker(-3, 'Under'); // should clamp to 0

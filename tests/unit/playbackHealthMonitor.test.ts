@@ -2,12 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { engine } from '../../src/engine/WebGPUEngine';
 import { layerBuilder } from '../../src/services/layerBuilder';
 import { PlaybackHealthMonitor } from '../../src/services/playbackHealthMonitor';
+import type { TimelineClip } from '../../src/types';
 
 const hoisted = vi.hoisted(() => ({
   timelineState: {
     isPlaying: false,
     playheadPosition: 0,
-    clips: [] as any[],
+    clips: [] as TimelineClip[],
   },
   logInfo: vi.fn(),
   logWarn: vi.fn(),
@@ -45,7 +46,28 @@ function createVideo(overrides: Partial<HTMLVideoElement> = {}): HTMLVideoElemen
   } as unknown as HTMLVideoElement;
 }
 
-function createClip(video: HTMLVideoElement, webCodecsPlayer?: { isFullMode?: () => boolean }) {
+type EngineHealthTestAccess = typeof engine & {
+  getLayerCollector: () => { isVideoGpuReady: (video: HTMLVideoElement) => boolean; resetVideoGpuReady: (video: HTMLVideoElement) => void };
+  getRenderLoop: () => { getLastSuccessfulRenderTime: () => number };
+  getStats: () => { drops: { lastSecond: number } };
+  requestRender: ReturnType<typeof vi.fn>;
+};
+type LayerBuilderHealthTestAccess = typeof layerBuilder & {
+  getVideoSyncManager: () => {
+    isVideoWarmingUp: (video: HTMLVideoElement) => boolean;
+    clearWarmupState: (video: HTMLVideoElement) => void;
+    getActiveRvfcClipIds: () => string[];
+    cancelRvfcHandle: (clipId: string) => void;
+  };
+};
+type PlaybackHealthMonitorTestAccess = PlaybackHealthMonitor & {
+  checkHealth: () => void;
+};
+
+const testEngine = engine as EngineHealthTestAccess;
+const testLayerBuilder = layerBuilder as LayerBuilderHealthTestAccess;
+
+function createClip(video: HTMLVideoElement, webCodecsPlayer?: { isFullMode?: () => boolean }): TimelineClip {
   return {
     id: 'clip-1',
     startTime: 0,
@@ -55,7 +77,7 @@ function createClip(video: HTMLVideoElement, webCodecsPlayer?: { isFullMode?: ()
       videoElement: video,
       webCodecsPlayer,
     },
-  } as any;
+  } as unknown as TimelineClip;
 }
 
 describe('PlaybackHealthMonitor', () => {
@@ -100,16 +122,16 @@ describe('PlaybackHealthMonitor', () => {
     renderLoop.getLastSuccessfulRenderTime.mockReset();
     renderLoop.getLastSuccessfulRenderTime.mockReturnValue(0);
 
-    (layerBuilder as any).getVideoSyncManager = vi.fn(() => videoSyncManager);
+    testLayerBuilder.getVideoSyncManager = vi.fn(() => videoSyncManager);
 
-    (engine as any).getLayerCollector = vi.fn(() => layerCollector);
-    (engine as any).getRenderLoop = vi.fn(() => renderLoop);
-    (engine as any).getStats = vi.fn(() => ({
+    testEngine.getLayerCollector = vi.fn(() => layerCollector);
+    testEngine.getRenderLoop = vi.fn(() => renderLoop);
+    testEngine.getStats = vi.fn(() => ({
       drops: {
         lastSecond: 0,
       },
     }));
-    (engine as any).requestRender.mockReset();
+    testEngine.requestRender.mockReset();
 
     vi.spyOn(performance, 'now').mockImplementation(() => now);
   });
@@ -125,8 +147,8 @@ describe('PlaybackHealthMonitor', () => {
     hoisted.timelineState.clips = [createClip(video)];
     layerCollector.isVideoGpuReady.mockReturnValue(false);
 
-    const monitor = new PlaybackHealthMonitor();
-    (monitor as any).checkHealth();
+    const monitor = new PlaybackHealthMonitor() as PlaybackHealthMonitorTestAccess;
+    monitor.checkHealth();
 
     expect(monitor.anomalies('GPU_SURFACE_COLD')).toHaveLength(1);
     expect(layerCollector.resetVideoGpuReady).toHaveBeenCalledWith(video);
@@ -147,36 +169,36 @@ describe('PlaybackHealthMonitor', () => {
     hoisted.timelineState.clips = [createClip(video, fullModeProvider)];
     layerCollector.isVideoGpuReady.mockReturnValue(false);
 
-    const monitor = new PlaybackHealthMonitor();
-    (monitor as any).checkHealth();
+    const monitor = new PlaybackHealthMonitor() as PlaybackHealthMonitorTestAccess;
+    monitor.checkHealth();
     now += 500;
-    (monitor as any).checkHealth();
+    monitor.checkHealth();
     now += 500;
-    (monitor as any).checkHealth();
+    monitor.checkHealth();
     now += 500;
-    (monitor as any).checkHealth();
+    monitor.checkHealth();
 
     expect(monitor.anomalies('GPU_SURFACE_COLD')).toHaveLength(0);
     expect(monitor.anomalies('READYSTATE_DROP')).toHaveLength(0);
     expect(monitor.anomalies('FRAME_STALL')).toHaveLength(0);
     expect(layerCollector.resetVideoGpuReady).not.toHaveBeenCalled();
-    expect((engine as any).requestRender).not.toHaveBeenCalled();
+    expect(testEngine.requestRender).not.toHaveBeenCalled();
   });
 
   it('records high drop rate with the anomaly cooldown applied', () => {
-    (engine as any).getStats = vi.fn(() => ({
+    testEngine.getStats = vi.fn(() => ({
       drops: {
         lastSecond: 25,
       },
     }));
 
-    const monitor = new PlaybackHealthMonitor();
+    const monitor = new PlaybackHealthMonitor() as PlaybackHealthMonitorTestAccess;
 
-    (monitor as any).checkHealth();
+    monitor.checkHealth();
     now += 1000;
-    (monitor as any).checkHealth();
+    monitor.checkHealth();
     now += 5001;
-    (monitor as any).checkHealth();
+    monitor.checkHealth();
 
     expect(monitor.anomalies('HIGH_DROP_RATE')).toHaveLength(2);
     expect(hoisted.logWarn).toHaveBeenCalledTimes(2);

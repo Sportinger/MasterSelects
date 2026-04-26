@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 
 const hoisted = vi.hoisted(() => ({
-  timelineState: null as any,
+  timelineState: null as unknown,
   mediaState: {
     files: [],
     compositions: [],

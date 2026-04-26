@@ -1,6 +1,6 @@
 // Mobile App - Root component for mobile UI
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { MobilePreview } from './MobilePreview';
 import { MobileTimeline } from './MobileTimeline';
 import { MobileToolbar } from './MobileToolbar';
@@ -36,6 +36,7 @@ export function MobileApp() {
 
   // Precision mode for playhead
   const [precisionMode, setPrecisionMode] = useState(false);
+  const twoFingerStartXRef = useRef<number | null>(null);
 
   // Timeline store for cut action
   const splitClipAtPlayhead = useTimelineStore((s) => s.splitClipAtPlayhead);
@@ -125,18 +126,18 @@ export function MobileApp() {
         // Track two-finger swipes
         if (e.touches.length === 2) {
           const startX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-          (e.currentTarget as any)._twoFingerStartX = startX;
+          twoFingerStartXRef.current = startX;
         }
       }}
       onTouchEnd={(e) => {
-        const startX = (e.currentTarget as any)._twoFingerStartX;
-        if (startX !== undefined && e.changedTouches.length > 0) {
+        const startX = twoFingerStartXRef.current;
+        if (startX !== null && e.changedTouches.length > 0) {
           const endX = e.changedTouches[0].clientX;
           const delta = endX - startX;
           if (Math.abs(delta) > 50) {
             handleTwoFingerSwipe(delta < 0 ? 'left' : 'right');
           }
-          delete (e.currentTarget as any)._twoFingerStartX;
+          twoFingerStartXRef.current = null;
         }
       }}
     >

@@ -26,9 +26,25 @@ import {
   type ProjectFolder,
 } from '../projectFileService';
 import { toProjectTransform } from './transformSerialization';
+import type {
+  SerializableClip,
+  SerializableMarker,
+  TimelineClip,
+} from '../../types';
 
 const log = Logger.create('ProjectSync');
 let projectStoreSyncInProgress = false;
+
+type ProjectSaveClip = SerializableClip & {
+  source?: TimelineClip['source'];
+  mediaId?: string;
+  volume?: number;
+  audioEnabled?: boolean;
+  disabled?: boolean;
+};
+type ProjectSaveTrack = NonNullable<Composition['timelineData']>['tracks'][number] & {
+  locked?: boolean;
+};
 
 export function isProjectStoreSyncInProgress(): boolean {
   return projectStoreSyncInProgress;
@@ -118,7 +134,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
     const timelineData = comp.timelineData;
 
     // Convert tracks
-    const tracks: ProjectTrack[] = (timelineData?.tracks || []).map((t: any) => ({
+    const tracks: ProjectTrack[] = ((timelineData?.tracks || []) as ProjectSaveTrack[]).map((t) => ({
       id: t.id,
       name: t.name,
       type: t.type,
@@ -130,7 +146,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
     }));
 
     // Convert clips
-    const clips: ProjectClip[] = (timelineData?.clips || []).map((c: any) => ({
+    const clips: ProjectClip[] = ((timelineData?.clips || []) as ProjectSaveClip[]).map((c) => ({
       id: c.id,
       trackId: c.trackId,
       name: c.name || '',
@@ -156,14 +172,14 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       inPoint: c.inPoint || 0,
       outPoint: c.outPoint || c.duration,
       transform: toProjectTransform(c.transform),
-      effects: (c.effects || []).map((e: any) => ({
+      effects: (c.effects || []).map((e) => ({
         id: e.id,
         type: e.type,
         name: e.name || e.type,
         enabled: e.enabled !== false,
         params: e.params || {},
       })),
-      masks: (c.masks || []).map((m: any) => ({
+      masks: (c.masks || []).map((m) => ({
         id: m.id,
         name: m.name || 'Mask',
         mode: m.mode || 'add',
@@ -173,7 +189,12 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
         featherQuality: m.featherQuality || 8,
         visible: m.visible !== false,
         closed: m.closed !== false,
-        vertices: m.vertices || [],
+        vertices: (m.vertices || []).map((vertex) => ({
+          x: vertex.x,
+          y: vertex.y,
+          inTangent: vertex.handleIn ?? { x: 0, y: 0 },
+          outTangent: vertex.handleOut ?? { x: 0, y: 0 },
+        })),
         position: m.position || { x: 0, y: 0 },
       })),
       keyframes: c.keyframes || [],
@@ -202,7 +223,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       sceneDescriptionStatus: c.sceneDescriptionStatus || undefined,
     }));
 
-    const markers: ProjectMarker[] = (timelineData?.markers || []).map((marker: any) => ({
+    const markers: ProjectMarker[] = ((timelineData?.markers || []) as SerializableMarker[]).map((marker) => ({
       id: marker.id,
       time: marker.time,
       name: marker.label || '',
@@ -403,11 +424,11 @@ export async function syncStoresToProject(): Promise<void> {
       };
 
       // Save generated media items
-      (projectData as any).textItems = freshState.textItems;
-      (projectData as any).solidItems = freshState.solidItems;
-      (projectData as any).meshItems = freshState.meshItems;
-      (projectData as any).cameraItems = freshState.cameraItems;
-      (projectData as any).splatEffectorItems = freshState.splatEffectorItems;
+      projectData.textItems = freshState.textItems;
+      projectData.solidItems = freshState.solidItems;
+      projectData.meshItems = freshState.meshItems;
+      projectData.cameraItems = freshState.cameraItems;
+      projectData.splatEffectorItems = freshState.splatEffectorItems;
 
       const flashBoardState = useFlashBoardStore.getState();
       const hasBoardsToPersist = flashBoardState.boards.some((board) => board.nodes.length > 0);

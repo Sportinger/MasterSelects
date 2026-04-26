@@ -2,6 +2,26 @@ import { describe, expect, it, vi } from 'vitest';
 import { GaussianSplatGpuRenderer } from '../../src/engine/gaussian/core/GaussianSplatGpuRenderer';
 import type { SplatCameraParams } from '../../src/engine/gaussian/core/GaussianSplatGpuRenderer';
 
+type GaussianSplatGpuRendererTestAccess = GaussianSplatGpuRenderer & {
+  device: GPUDevice;
+  pipeline: GPURenderPipeline | null;
+  pipelineWithDepth: GPURenderPipeline | null;
+  splatDataBindGroupLayout: GPUBindGroupLayout;
+  cameraBindGroupLayout: GPUBindGroupLayout;
+  renderTargetPool: {
+    resetFrame: () => void;
+    acquire: (width: number, height: number) => { texture: unknown; view: GPUTextureView };
+  };
+  sceneCache: Map<string, unknown>;
+  _initialized: boolean;
+  createPipeline(): void;
+};
+
+type GPUShaderStageValues = {
+  VERTEX: number;
+  FRAGMENT: number;
+};
+
 vi.mock('../../src/services/logger', () => ({
   Logger: {
     create: vi.fn(() => ({
@@ -79,7 +99,7 @@ describe('GaussianSplatGpuRenderer camera uniforms', () => {
       createPipelineLayout: vi.fn(() => ({ label: 'pipeline-layout' })),
       createRenderPipeline: vi.fn(() => ({ label: 'pipeline' })),
     };
-    const renderer = new GaussianSplatGpuRenderer() as any;
+    const renderer = new GaussianSplatGpuRenderer() as unknown as GaussianSplatGpuRendererTestAccess;
     renderer.device = device;
 
     renderer.createPipeline();
@@ -87,8 +107,9 @@ describe('GaussianSplatGpuRenderer camera uniforms', () => {
     const cameraLayout = createBindGroupLayout.mock.calls.find(
       ([descriptor]) => descriptor.label === 'splat-camera-bind-group-layout',
     )?.[0];
+    const shaderStage = globalThis.GPUShaderStage as unknown as GPUShaderStageValues;
     expect(cameraLayout?.entries[0]?.visibility).toBe(
-      (globalThis.GPUShaderStage as any).VERTEX | (globalThis.GPUShaderStage as any).FRAGMENT,
+      shaderStage.VERTEX | shaderStage.FRAGMENT,
     );
   });
 
@@ -119,7 +140,7 @@ describe('GaussianSplatGpuRenderer camera uniforms', () => {
         return pass;
       }),
     };
-    const renderer = new GaussianSplatGpuRenderer() as any;
+    const renderer = new GaussianSplatGpuRenderer() as unknown as GaussianSplatGpuRendererTestAccess;
     renderer.device = device;
     renderer.pipeline = { label: 'pipeline' };
     renderer.pipelineWithDepth = null;

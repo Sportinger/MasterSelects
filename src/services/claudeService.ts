@@ -13,6 +13,14 @@ import { apiKeyManager } from './apiKeyManager';
 
 const log = Logger.create('ClaudeService');
 
+type ParsedEDLItem = {
+  start?: unknown;
+  end?: unknown;
+  cameraId?: unknown;
+  reason?: unknown;
+  confidence?: unknown;
+};
+
 // Style presets with editing instructions
 const STYLE_PRESETS: Record<EditStyle, string> = {
   podcast: `Edit Style: Podcast
@@ -216,23 +224,28 @@ function parseEDLResponse(response: string, cameras: MultiCamSource[]): EditDeci
     }
 
     // Validate and convert to EditDecision
-    return parsed.map((item: any, index: number) => {
+    return parsed.map((item: ParsedEDLItem, index: number) => {
       // Validate required fields
       if (typeof item.start !== 'number' || typeof item.end !== 'number') {
         throw new Error(`Invalid timestamps in decision ${index}`);
       }
 
       // Validate camera ID exists
-      const validCameraId = cameras.some(c => c.id === item.cameraId);
-      const cameraId = validCameraId ? item.cameraId : cameras[0]?.id;
+      const requestedCameraId = typeof item.cameraId === 'string' ? item.cameraId : undefined;
+      const cameraId = requestedCameraId && cameras.some(c => c.id === requestedCameraId)
+        ? requestedCameraId
+        : cameras[0]?.id;
+      if (!cameraId) {
+        throw new Error(`No camera available for decision ${index}`);
+      }
 
       return {
         id: `edl-${index}`,
         start: item.start,
         end: item.end,
         cameraId,
-        reason: item.reason || undefined,
-        confidence: item.confidence,
+        reason: typeof item.reason === 'string' ? item.reason : undefined,
+        confidence: typeof item.confidence === 'number' ? item.confidence : undefined,
       };
     });
   } catch (error) {

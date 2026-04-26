@@ -296,7 +296,7 @@ export function useLayerSync({
 
       return layers;
     },
-    [isPlaying]
+    []
   );
 
   // Cleanup pending RAF on unmount

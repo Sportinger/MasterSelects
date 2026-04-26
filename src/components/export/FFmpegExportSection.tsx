@@ -221,7 +221,7 @@ export function FFmpegExportSection({
   }, [
     codec, container, width, height, fps, startTime, endTime,
     quality, bitrate, useQuality, proresProfile, dnxhrProfile,
-    isFFmpegReady, loadFFmpeg, onRenderFrames, filename,
+    isExporting, isFFmpegReady, loadFFmpeg, onRenderFrames, filename,
   ]);
 
   // Cancel export

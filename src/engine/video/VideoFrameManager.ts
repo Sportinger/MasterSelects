@@ -1,5 +1,14 @@
 // Video frame capture and tracking
 
+type VideoFrameCallbackVideo = HTMLVideoElement & {
+  requestVideoFrameCallback: (callback: () => void) => number;
+  cancelVideoFrameCallback: (handle: number) => void;
+};
+
+function hasVideoFrameCallback(video: HTMLVideoElement): video is VideoFrameCallbackVideo {
+  return 'requestVideoFrameCallback' in video;
+}
+
 export class VideoFrameManager {
   // Track video frame readiness - only import texture when new frame is available
   private videoFrameReady: Map<HTMLVideoElement, boolean> = new Map();
@@ -39,7 +48,7 @@ export class VideoFrameManager {
   }
 
   private startVideoFrameCallback(video: HTMLVideoElement): void {
-    if (!('requestVideoFrameCallback' in video)) return;
+    if (!hasVideoFrameCallback(video)) return;
     if (this.videoCallbackActive.get(video)) return;
 
     this.videoCallbackActive.set(video, true);
@@ -47,12 +56,12 @@ export class VideoFrameManager {
     const onFrame = () => {
       this.videoFrameReady.set(video, true);
       if (!video.paused) {
-        (video as any).requestVideoFrameCallback(onFrame);
+        video.requestVideoFrameCallback(onFrame);
       } else {
         this.videoCallbackActive.set(video, false);
       }
     };
-    (video as any).requestVideoFrameCallback(onFrame);
+    video.requestVideoFrameCallback(onFrame);
   }
 
   // Check if a new frame is available (for non-rVFC browsers, check currentTime)
@@ -71,7 +80,7 @@ export class VideoFrameManager {
     }
 
     // Video is playing - use requestVideoFrameCallback if available
-    if ('requestVideoFrameCallback' in video) {
+    if (hasVideoFrameCallback(video)) {
       const ready = this.videoFrameReady.get(video) ?? false;
       if (ready) {
         this.videoFrameReady.set(video, false);
@@ -93,8 +102,8 @@ export class VideoFrameManager {
   setActiveVideo(video: HTMLVideoElement | null): void {
     // Clean up old callback
     if (this.activeVideo && this.videoFrameCallbackId !== null) {
-      if ('cancelVideoFrameCallback' in this.activeVideo) {
-        (this.activeVideo as any).cancelVideoFrameCallback(this.videoFrameCallbackId);
+      if (hasVideoFrameCallback(this.activeVideo)) {
+        this.activeVideo.cancelVideoFrameCallback(this.videoFrameCallbackId);
       }
       this.videoFrameCallbackId = null;
     }

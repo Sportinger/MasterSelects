@@ -1,9 +1,117 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useHistoryStore, initHistoryStoreRefs, setHistoryCallbacks, captureSnapshot as captureSnapshotFn, undo as undoFn, redo as redoFn, startBatch as startBatchFn, endBatch as endBatchFn } from '../../src/stores/historyStore';
+import type { Layer, TimelineClip } from '../../src/types';
+import { createMockClip } from '../helpers/mockData';
+
+type HistoryStoreRefs = Parameters<typeof initHistoryStoreRefs>[0];
+type TimelineMockState = ReturnType<HistoryStoreRefs['timeline']['getState']>;
+type MediaMockState = ReturnType<HistoryStoreRefs['media']['getState']>;
+type DockMockState = ReturnType<HistoryStoreRefs['dock']['getState']>;
+type LegacyClip = TimelineClip & {
+  startFrame?: number;
+  endFrame?: number;
+  mediaId?: string;
+};
+
+function mockClip(overrides: Partial<LegacyClip>): LegacyClip {
+  return {
+    ...createMockClip({
+      id: overrides.id ?? 'clip-1',
+      trackId: overrides.trackId ?? 'v1',
+    }),
+    ...overrides,
+  };
+}
+
+function mockLayer(overrides: Partial<Layer>): Layer {
+  return {
+    id: overrides.id ?? 'L1',
+    name: overrides.name ?? 'Layer 1',
+    visible: true,
+    opacity: 1,
+    blendMode: 'normal',
+    source: null,
+    effects: [],
+    position: { x: 0, y: 0, z: 0 },
+    scale: { x: 1, y: 1 },
+    rotation: 0,
+    ...overrides,
+  };
+}
+
+function mockMediaFile(overrides: Partial<MediaMockState['files'][number]>): MediaMockState['files'][number] {
+  return {
+    id: overrides.id ?? 'file-1',
+    name: overrides.name ?? 'file.mp4',
+    type: overrides.type ?? 'video',
+    parentId: null,
+    createdAt: 0,
+    url: '',
+    ...overrides,
+  };
+}
+
+function mockComposition(overrides: Partial<MediaMockState['compositions'][number]>): MediaMockState['compositions'][number] {
+  return {
+    id: overrides.id ?? 'comp-1',
+    name: overrides.name ?? 'Composition',
+    type: 'composition',
+    parentId: null,
+    createdAt: 0,
+    width: 1920,
+    height: 1080,
+    frameRate: 30,
+    duration: 10,
+    backgroundColor: '#000000',
+    ...overrides,
+  };
+}
+
+function mockFolder(overrides: Partial<MediaMockState['folders'][number]>): MediaMockState['folders'][number] {
+  return {
+    id: overrides.id ?? 'folder-1',
+    name: overrides.name ?? 'Folder',
+    parentId: null,
+    isExpanded: false,
+    createdAt: 0,
+    ...overrides,
+  };
+}
+
+function mockTextItem(overrides: Partial<MediaMockState['textItems'][number]>): MediaMockState['textItems'][number] {
+  return {
+    id: overrides.id ?? 'text-1',
+    name: overrides.name ?? 'Text',
+    type: 'text',
+    parentId: null,
+    createdAt: 0,
+    text: '',
+    fontFamily: 'Inter',
+    fontSize: 48,
+    color: '#ffffff',
+    duration: 5,
+    ...overrides,
+  };
+}
+
+function mockSolidItem(overrides: Partial<MediaMockState['solidItems'][number]>): MediaMockState['solidItems'][number] {
+  return {
+    id: overrides.id ?? 'solid-1',
+    name: overrides.name ?? 'Solid',
+    type: 'solid',
+    parentId: null,
+    createdAt: 0,
+    color: '#ffffff',
+    width: 1920,
+    height: 1080,
+    duration: 5,
+    ...overrides,
+  };
+}
 
 // Mock the external store references the history store reads from
 function createMockStores() {
-  let timelineState = {
+  let timelineState: TimelineMockState = {
     clips: [],
     tracks: [{ id: 'v1', name: 'V1', type: 'video' as const, height: 60, muted: false, visible: true, solo: false }],
     selectedClipIds: new Set<string>(),
@@ -11,10 +119,10 @@ function createMockStores() {
     scrollX: 0,
     layers: [],
     selectedLayerId: null,
-    clipKeyframes: new Map<string, any[]>(),
+    clipKeyframes: new Map(),
     markers: [],
   };
-  let mediaState = {
+  let mediaState: MediaMockState = {
     files: [],
     compositions: [],
     folders: [],
@@ -23,24 +131,24 @@ function createMockStores() {
     textItems: [],
     solidItems: [],
   };
-  let dockState = { layout: null };
+  let dockState: DockMockState = { layout: null };
 
   return {
     timeline: {
       getState: () => timelineState,
-      setState: (s: any) => { timelineState = { ...timelineState, ...s }; },
+      setState: (s: Partial<TimelineMockState>) => { timelineState = { ...timelineState, ...s }; },
     },
     media: {
       getState: () => mediaState,
-      setState: (s: any) => { mediaState = { ...mediaState, ...s }; },
+      setState: (s: Partial<MediaMockState>) => { mediaState = { ...mediaState, ...s }; },
     },
     dock: {
       getState: () => dockState,
-      setState: (s: any) => { dockState = { ...dockState, ...s }; },
+      setState: (s: Partial<DockMockState>) => { dockState = { ...dockState, ...s }; },
     },
     // Helpers to simulate changes
-    setTimelineState: (s: any) => { timelineState = { ...timelineState, ...s }; },
-    setMediaState: (s: any) => { mediaState = { ...mediaState, ...s }; },
+    setTimelineState: (s: Partial<TimelineMockState>) => { timelineState = { ...timelineState, ...s }; },
+    setMediaState: (s: Partial<MediaMockState>) => { mediaState = { ...mediaState, ...s }; },
   };
 }
 
@@ -514,7 +622,7 @@ describe('historyStore', () => {
   // ─── Media state undo/redo ─────────────────────────────────────────
 
   it('undo/redo restores media state (files)', () => {
-    mocks.setMediaState({ files: [{ id: 'f1', name: 'file1.mp4' }] as any });
+    mocks.setMediaState({ files: [mockMediaFile({ id: 'f1', name: 'file1.mp4' })] });
     useHistoryStore.getState().captureSnapshot('add file');
 
     mocks.setMediaState({ files: [] });
@@ -524,7 +632,7 @@ describe('historyStore', () => {
 
     useHistoryStore.getState().undo();
     expect(mocks.media.getState().files.length).toBe(1);
-    expect((mocks.media.getState().files[0] as any).id).toBe('f1');
+    expect(mocks.media.getState().files[0].id).toBe('f1');
 
     useHistoryStore.getState().redo();
     expect(mocks.media.getState().files.length).toBe(0);
@@ -532,25 +640,25 @@ describe('historyStore', () => {
 
   it('undo/redo restores media state (compositions)', () => {
     mocks.setMediaState({
-      compositions: [{ id: 'comp1', name: 'Main' }] as any,
+      compositions: [mockComposition({ id: 'comp1', name: 'Main' })],
     });
     useHistoryStore.getState().captureSnapshot('add comp');
 
     mocks.setMediaState({
       compositions: [
-        { id: 'comp1', name: 'Main' },
-        { id: 'comp2', name: 'Secondary' },
-      ] as any,
+        mockComposition({ id: 'comp1', name: 'Main' }),
+        mockComposition({ id: 'comp2', name: 'Secondary' }),
+      ],
     });
     useHistoryStore.getState().captureSnapshot('add comp2');
 
     useHistoryStore.getState().undo();
     expect(mocks.media.getState().compositions.length).toBe(1);
-    expect((mocks.media.getState().compositions[0] as any).name).toBe('Main');
+    expect(mocks.media.getState().compositions[0].name).toBe('Main');
   });
 
   it('undo/redo restores media state (folders)', () => {
-    mocks.setMediaState({ folders: [{ id: 'folder1', name: 'Clips' }] as any });
+    mocks.setMediaState({ folders: [mockFolder({ id: 'folder1', name: 'Clips' })] });
     useHistoryStore.getState().captureSnapshot('add folder');
 
     mocks.setMediaState({ folders: [] });
@@ -574,8 +682,8 @@ describe('historyStore', () => {
 
   it('undo/redo restores textItems and solidItems', () => {
     mocks.setMediaState({
-      textItems: [{ id: 't1', text: 'Hello' }] as any,
-      solidItems: [{ id: 's1', color: '#ff0000' }] as any,
+      textItems: [mockTextItem({ id: 't1', text: 'Hello' })],
+      solidItems: [mockSolidItem({ id: 's1', color: '#ff0000' })],
     });
     useHistoryStore.getState().captureSnapshot('add items');
 
@@ -621,11 +729,11 @@ describe('historyStore', () => {
   });
 
   it('undo/redo restores clips', () => {
-    const clip1 = { id: 'c1', trackId: 'v1', startFrame: 0, endFrame: 100, mediaId: 'm1' };
+    const clip1 = mockClip({ id: 'c1', trackId: 'v1', startFrame: 0, endFrame: 100, mediaId: 'm1' });
     mocks.setTimelineState({ clips: [] });
     useHistoryStore.getState().captureSnapshot('no clips');
 
-    mocks.setTimelineState({ clips: [clip1] as any });
+    mocks.setTimelineState({ clips: [clip1] });
     useHistoryStore.getState().captureSnapshot('one clip');
 
     useHistoryStore.getState().undo();
@@ -633,14 +741,14 @@ describe('historyStore', () => {
 
     useHistoryStore.getState().redo();
     expect(mocks.timeline.getState().clips.length).toBe(1);
-    expect((mocks.timeline.getState().clips[0] as any).id).toBe('c1');
+    expect(mocks.timeline.getState().clips[0].id).toBe('c1');
   });
 
   it('undo/redo restores markers', () => {
     mocks.setTimelineState({ markers: [] });
     useHistoryStore.getState().captureSnapshot('no markers');
 
-    mocks.setTimelineState({ markers: [{ id: 'm1', time: 100, color: 'red', label: 'mark1' }] as any });
+    mocks.setTimelineState({ markers: [{ id: 'm1', time: 100, color: 'red', label: 'mark1' }] });
     useHistoryStore.getState().captureSnapshot('one marker');
 
     useHistoryStore.getState().undo();
@@ -651,7 +759,7 @@ describe('historyStore', () => {
   });
 
   it('undo/redo restores layers', () => {
-    mocks.setTimelineState({ layers: [{ id: 'L1', name: 'Layer 1' }] as any });
+    mocks.setTimelineState({ layers: [mockLayer({ id: 'L1', name: 'Layer 1' })] });
     useHistoryStore.getState().captureSnapshot('one layer');
 
     mocks.setTimelineState({ layers: [] });
@@ -660,7 +768,7 @@ describe('historyStore', () => {
     useHistoryStore.getState().undo();
     const restoredLayers = mocks.timeline.getState().layers;
     expect(restoredLayers.length).toBe(1);
-    expect((restoredLayers[0] as any).id).toBe('L1');
+    expect(restoredLayers[0].id).toBe('L1');
   });
 
   it('undo/redo restores selectedLayerId', () => {
@@ -688,8 +796,8 @@ describe('historyStore', () => {
   // ─── Snapshot deep clone isolation ─────────────────────────────────
 
   it('snapshots are deep cloned: mutating source does not affect snapshot', () => {
-    const clips = [{ id: 'c1', trackId: 'v1', startFrame: 0, endFrame: 100 }];
-    mocks.setTimelineState({ clips: clips as any });
+    const clips = [mockClip({ id: 'c1', trackId: 'v1', startFrame: 0, endFrame: 100 })];
+    mocks.setTimelineState({ clips });
     useHistoryStore.getState().captureSnapshot('with clips');
 
     // Mutate the original array
@@ -699,19 +807,19 @@ describe('historyStore', () => {
     const snapshot = useHistoryStore.getState().currentSnapshot!;
     // Snapshot should not be affected
     expect(snapshot.timeline.clips.length).toBe(1);
-    expect((snapshot.timeline.clips[0] as any).endFrame).toBe(100);
+    expect((snapshot.timeline.clips[0] as LegacyClip).endFrame).toBe(100);
   });
 
   it('snapshots are deep cloned: mutating snapshot does not affect subsequent undo', () => {
-    mocks.setTimelineState({ clips: [{ id: 'c1', startFrame: 0, endFrame: 100 }] as any });
+    mocks.setTimelineState({ clips: [mockClip({ id: 'c1', startFrame: 0, endFrame: 100 })] });
     useHistoryStore.getState().captureSnapshot('initial');
 
-    mocks.setTimelineState({ clips: [{ id: 'c1', startFrame: 0, endFrame: 200 }] as any });
+    mocks.setTimelineState({ clips: [mockClip({ id: 'c1', startFrame: 0, endFrame: 200 })] });
     useHistoryStore.getState().captureSnapshot('modified');
 
     // Mutate the undo stack snapshot directly (should not matter for undo)
     const undoSnapshot = useHistoryStore.getState().undoStack[0];
-    (undoSnapshot.timeline.clips[0] as any).endFrame = 9999;
+    (undoSnapshot.timeline.clips[0] as LegacyClip).endFrame = 9999;
 
     // Undo - the applySnapshot deep clones again, so the mutation above
     // means the applied state will have the mutated value.
@@ -834,12 +942,12 @@ describe('historyStore', () => {
   it('full round-trip: undo restores all three stores atomically', () => {
     // Set up initial state across all stores
     mocks.setTimelineState({ zoom: 50, clips: [], tracks: [{ id: 'v1', name: 'V1', type: 'video', height: 60, muted: false, visible: true, solo: false }] });
-    mocks.setMediaState({ files: [{ id: 'f1', name: 'vid.mp4' }] as any, selectedIds: ['f1'] });
+    mocks.setMediaState({ files: [mockMediaFile({ id: 'f1', name: 'vid.mp4' })], selectedIds: ['f1'] });
     mocks.dock.setState({ layout: { type: 'row' } });
     useHistoryStore.getState().captureSnapshot('initial-state');
 
     // Change all stores simultaneously
-    mocks.setTimelineState({ zoom: 150, clips: [{ id: 'c1' }] as any });
+    mocks.setTimelineState({ zoom: 150, clips: [mockClip({ id: 'c1' })] });
     mocks.setMediaState({ files: [], selectedIds: [] });
     mocks.dock.setState({ layout: { type: 'col' } });
     useHistoryStore.getState().captureSnapshot('changed-state');
@@ -861,7 +969,7 @@ describe('historyStore', () => {
     useHistoryStore.getState().captureSnapshot('before');
 
     mocks.setTimelineState({ zoom: 200 });
-    mocks.setMediaState({ files: [{ id: 'f2', name: 'pic.jpg' }] as any });
+    mocks.setMediaState({ files: [mockMediaFile({ id: 'f2', name: 'pic.jpg' })] });
     mocks.dock.setState({ layout: { type: 'tabs' } });
     useHistoryStore.getState().captureSnapshot('after');
 
@@ -949,15 +1057,15 @@ describe('historyStore', () => {
   // ─── Layer source preservation ─────────────────────────────────────
 
   it('undo preserves existing layer source references', () => {
-    const fakeSource = { type: 'video', element: 'mock-element' };
+    const fakeSource = { type: 'video', element: 'mock-element' } as unknown as Layer['source'];
     mocks.setTimelineState({
-      layers: [{ id: 'L1', name: 'Layer 1', source: fakeSource }] as any,
+      layers: [mockLayer({ id: 'L1', name: 'Layer 1', source: fakeSource })],
     });
     useHistoryStore.getState().captureSnapshot('with source');
 
     // Change layers
     mocks.setTimelineState({
-      layers: [{ id: 'L1', name: 'Layer 1 modified', source: fakeSource }] as any,
+      layers: [mockLayer({ id: 'L1', name: 'Layer 1 modified', source: fakeSource })],
     });
     useHistoryStore.getState().captureSnapshot('modified');
 
@@ -965,6 +1073,6 @@ describe('historyStore', () => {
     useHistoryStore.getState().undo();
     const restored = mocks.timeline.getState().layers;
     expect(restored.length).toBe(1);
-    expect((restored[0] as any).source).toBe(fakeSource);
+    expect(restored[0].source).toBe(fakeSource);
   });
 });

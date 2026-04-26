@@ -11,12 +11,13 @@ interface UsePickWhipDragProps {
 export function usePickWhipDrag({ setClipParent, setTrackParent }: UsePickWhipDragProps) {
   // Pick whip disabled
   const noop = useCallback(() => {}, []);
+  const noopDragStart = useCallback((_id: string, _startX: number, _startY: number) => {}, []);
   return {
     pickWhipDrag: null,
-    handlePickWhipDragStart: noop as any,
+    handlePickWhipDragStart: noopDragStart,
     handlePickWhipDragEnd: noop,
     trackPickWhipDrag: null,
-    handleTrackPickWhipDragStart: noop as any,
+    handleTrackPickWhipDragStart: noopDragStart,
     handleTrackPickWhipDragEnd: noop,
   };
 

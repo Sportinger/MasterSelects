@@ -1,7 +1,7 @@
 // Hook to detect mobile devices
 // Only triggers on actual mobile devices, NOT on small desktop windows
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 /** Check if the device is actually mobile (phone/tablet), not just a small window */
 function checkIsMobileDevice(): boolean {
@@ -26,12 +26,11 @@ export function useIsMobile(): boolean {
 
 // Force mobile mode via URL param for testing: ?mobile=true
 export function useForceMobile(): boolean {
-  const [forceMobile, setForceMobile] = useState(false);
-
-  useEffect(() => {
+  const [forceMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search);
-    setForceMobile(params.get('mobile') === 'true');
-  }, []);
+    return params.get('mobile') === 'true';
+  });
 
   return forceMobile;
 }

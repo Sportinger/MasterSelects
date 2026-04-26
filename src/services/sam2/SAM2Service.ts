@@ -13,7 +13,7 @@ const log = Logger.create('SAM2Service');
 export class SAM2Service {
   private worker: Worker | null = null;
   private modelManager = getSAM2ModelManager();
-  private pendingCallbacks: Map<string, (data: any) => void> = new Map();
+  private pendingCallbacks: Map<string, (data: SAM2WorkerResponse) => void> = new Map();
 
   /** Download models to OPFS (with progress updates to store) */
   async downloadModel(): Promise<void> {
@@ -306,9 +306,9 @@ export class SAM2Service {
   }
 
   /** Send a message to the worker and wait for a specific response type */
-  private sendAndWait<T = any>(
-    responseType: string,
-    message: any,
+  private sendAndWait<T = SAM2WorkerResponse>(
+    responseType: SAM2WorkerResponse['type'],
+    message: import('./types').SAM2WorkerRequest,
     transfer?: Transferable[]
   ): Promise<T> {
     return new Promise((resolve, reject) => {
@@ -317,7 +317,7 @@ export class SAM2Service {
         reject(new Error(`Timeout waiting for ${responseType}`));
       }, 60_000); // 60s timeout
 
-      this.pendingCallbacks.set(responseType, (data: any) => {
+      this.pendingCallbacks.set(responseType, (data: SAM2WorkerResponse) => {
         clearTimeout(timeout);
         if (data.type === 'error') {
           reject(new Error(data.error));

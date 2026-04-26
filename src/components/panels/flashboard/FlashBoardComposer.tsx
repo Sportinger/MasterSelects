@@ -352,46 +352,64 @@ export function FlashBoardComposer({
         return serviceMatches && providerMatches;
       }) ?? visibleCatalog[0];
 
-    setService(preferredEntry.service);
-    setProviderId(preferredEntry.providerId);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
 
-    const nextVersion =
-      initialVersion && preferredEntry.versions.includes(initialVersion)
-        ? initialVersion
-        : preferredEntry.versions[0] ?? '';
-    setVersion(nextVersion);
+      setService(preferredEntry.service);
+      setProviderId(preferredEntry.providerId);
 
-    if (!preferredEntry.modes.includes(mode)) {
-      setMode(preferredEntry.modes[0] ?? 'std');
-    }
-    if (!preferredEntry.durations.includes(duration)) {
-      setDuration(preferredEntry.durations[0] ?? 5);
-    }
-    if (!preferredEntry.aspectRatios.includes(aspectRatio)) {
-      setAspectRatio(preferredEntry.aspectRatios[0] ?? '16:9');
-    }
-    if (preferredEntry.imageSizes?.length) {
-      setImageSize((current) => (
-        preferredEntry.imageSizes?.includes(current)
-          ? current
-          : preferredEntry.imageSizes?.[0] ?? '1K'
-      ));
-    }
-  }, [visibleCatalog, serviceScope, initialService, initialProviderId, initialVersion]);
+      const nextVersion =
+        initialVersion && preferredEntry.versions.includes(initialVersion)
+          ? initialVersion
+          : preferredEntry.versions[0] ?? '';
+      setVersion(nextVersion);
+
+      if (!preferredEntry.modes.includes(mode)) {
+        setMode(preferredEntry.modes[0] ?? 'std');
+      }
+      if (!preferredEntry.durations.includes(duration)) {
+        setDuration(preferredEntry.durations[0] ?? 5);
+      }
+      if (!preferredEntry.aspectRatios.includes(aspectRatio)) {
+        setAspectRatio(preferredEntry.aspectRatios[0] ?? '16:9');
+      }
+      if (preferredEntry.imageSizes?.length) {
+        setImageSize((current) => (
+          preferredEntry.imageSizes?.includes(current)
+            ? current
+            : preferredEntry.imageSizes?.[0] ?? '1K'
+        ));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [aspectRatio, duration, initialProviderId, initialService, initialVersion, mode, service, serviceScope, visibleCatalog]);
 
   useEffect(() => {
     if (!selectedEntry) {
       return;
     }
 
-    if ((!supportsAudio || selectedEntry.outputType === 'image') && generateAudio) {
-      setGenerateAudio(false);
-    }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
 
-    if ((!supportsMultiShot || selectedEntry.outputType === 'image') && multiShots) {
-      setMultiShots(false);
-      setMultiPrompt([]);
-    }
+      if ((!supportsAudio || selectedEntry.outputType === 'image') && generateAudio) {
+        setGenerateAudio(false);
+      }
+
+      if ((!supportsMultiShot || selectedEntry.outputType === 'image') && multiShots) {
+        setMultiShots(false);
+        setMultiPrompt([]);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [generateAudio, multiShots, selectedEntry, supportsAudio, supportsMultiShot]);
 
   useEffect(() => {
@@ -399,15 +417,24 @@ export function FlashBoardComposer({
       return;
     }
 
-    if (!generateAudio) {
-      setGenerateAudio(true);
-    }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
 
-    setMultiPrompt((current) => (
-      current.length > 0
-        ? rebalanceMultiPrompts(current, duration)
-        : createDefaultMultiPrompts(duration)
-    ));
+      if (!generateAudio) {
+        setGenerateAudio(true);
+      }
+
+      setMultiPrompt((current) => (
+        current.length > 0
+          ? rebalanceMultiPrompts(current, duration)
+          : createDefaultMultiPrompts(duration)
+      ));
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [duration, generateAudio, multiShots]);
 
   useEffect(() => {
@@ -459,6 +486,7 @@ export function FlashBoardComposer({
     composer.multiShots,
     composer.outputType,
     composer.providerId,
+    composer.referenceMediaFileIds,
     composer.service,
     composer.startMediaFileId,
     composer.version,

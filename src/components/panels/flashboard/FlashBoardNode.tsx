@@ -269,7 +269,7 @@ function FlashBoardNodeComponent({
       return;
     }
 
-    setNow(Date.now());
+    queueMicrotask(() => setNow(Date.now()));
     const timer = window.setInterval(() => {
       setNow(Date.now());
     }, 1000);
@@ -388,7 +388,7 @@ function FlashBoardNodeComponent({
         y: selectedNode.y + deltaY,
       });
     });
-  }, [activeBoardId, moveNode, node.id]);
+  }, [activeBoardId, moveNode]);
 
   const startDragAutoPan = useCallback(() => {
     if (dragAutoPanFrameRef.current !== null) {

@@ -26,7 +26,7 @@ function formatTimestamp(seconds: number): string {
 export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress, clipStartTime, inPoint, outPoint, sceneDescriptions, sceneDescriptionStatus, sceneDescriptionProgress, sceneDescriptionMessage }: AnalysisTabProps) {
   const descStatus = sceneDescriptionStatus ?? 'none';
   const descProgress = sceneDescriptionProgress ?? 0;
-  const segments = sceneDescriptions ?? [];
+  const segments = useMemo(() => sceneDescriptions ?? [], [sceneDescriptions]);
 
   // Reactive data - subscribe to specific value only
   const playheadPosition = useTimelineStore(state => state.playheadPosition);

@@ -18,8 +18,6 @@ export function ParentChildLinksOverlay({
   clips,
   tracks,
   clipDrag,
-  timelineRef,
-  scrollX,
   zoom,
   getExpandedTrackHeight,
 }: ParentChildLinksOverlayProps) {
@@ -44,24 +42,14 @@ export function ParentChildLinksOverlay({
         let adjustedChildClip = childClip;
         let adjustedParentClip = parentClip;
 
-        if (clipDrag) {
-          const rawPixelX = clipDrag.currentX
-            ? clipDrag.currentX -
-              (timelineRef.current?.getBoundingClientRect().left || 0) +
-              scrollX -
-              clipDrag.grabOffsetX
-            : 0;
-          const tempStartTime =
-            clipDrag.snappedTime ??
-            (clipDrag.currentX ? Math.max(0, rawPixelX / zoom) : null);
+        if (clipDrag?.snappedTime !== null && clipDrag?.snappedTime !== undefined) {
+          const tempStartTime = clipDrag.snappedTime;
 
-          if (tempStartTime !== null) {
-            if (clipDrag.clipId === childClip.id) {
-              adjustedChildClip = { ...childClip, startTime: tempStartTime, trackId: clipDrag.currentTrackId };
-            }
-            if (clipDrag.clipId === parentClip.id) {
-              adjustedParentClip = { ...parentClip, startTime: tempStartTime, trackId: clipDrag.currentTrackId };
-            }
+          if (clipDrag.clipId === childClip.id) {
+            adjustedChildClip = { ...childClip, startTime: tempStartTime, trackId: clipDrag.currentTrackId };
+          }
+          if (clipDrag.clipId === parentClip.id) {
+            adjustedParentClip = { ...parentClip, startTime: tempStartTime, trackId: clipDrag.currentTrackId };
           }
         }
 

@@ -41,6 +41,12 @@ vi.mock('../../../src/services/compositionRenderer', () => ({
 }));
 
 type TestMediaStore = MediaState & CompositionActions & SlotActions & MultiLayerActions;
+type SlotDeckManagerTestGlobal = typeof globalThis & {
+  __slotDeckManager?: {
+    prepareSlot: (slotIndex: number, compositionId: string) => void;
+    disposeSlot: (slotIndex: number) => void;
+  };
+};
 
 const initialTimelineState = useTimelineStore.getState();
 const defaultTransform = {
@@ -105,9 +111,11 @@ function createTestMediaStore(overrides?: Partial<MediaState>) {
   };
 
   return createStore<TestMediaStore>()((set, get) => {
-    const compositionActions = createCompositionSlice(set as any, get as any);
-    const slotActions = createSlotSlice(set as any, get as any);
-    const multiLayerActions = createMultiLayerSlice(set as any, get as any);
+    const setMedia: Parameters<typeof createCompositionSlice>[0] = (partial) => set(partial);
+    const getMedia: Parameters<typeof createCompositionSlice>[1] = () => get();
+    const compositionActions = createCompositionSlice(setMedia, getMedia);
+    const slotActions = createSlotSlice(setMedia, getMedia);
+    const multiLayerActions = createMultiLayerSlice(setMedia, getMedia);
 
     return {
       // Minimal initial state
@@ -423,9 +431,9 @@ describe('compositionSlice', () => {
       ],
       duration: 60,
       durationLocked: false,
-      refreshCompClipNestedData: refreshCompClipNestedData as any,
-      generateWaveformForClip: generateWaveformForClip as any,
-    } as any);
+      refreshCompClipNestedData,
+      generateWaveformForClip,
+    });
 
     store.getState().updateComposition('comp-1', { duration: 80 });
 
@@ -547,7 +555,7 @@ describe('compositionSlice', () => {
     flags.useWarmSlotDecks = true;
     const prepareSlot = vi.fn();
     const disposeSlot = vi.fn();
-    (globalThis as any).__slotDeckManager = {
+    (globalThis as SlotDeckManagerTestGlobal).__slotDeckManager = {
       prepareSlot,
       disposeSlot,
       disposeAll: vi.fn(),
@@ -568,7 +576,7 @@ describe('compositionSlice', () => {
       expect(store.getState().slotDeckStates?.[0]?.status).toBe('warming');
       expect(store.getState().slotDeckStates?.[3]?.status).toBe('warming');
     } finally {
-      delete (globalThis as any).__slotDeckManager;
+      delete (globalThis as SlotDeckManagerTestGlobal).__slotDeckManager;
     }
   });
 
@@ -822,7 +830,7 @@ describe('compositionSlice', () => {
   });
 
   it('openCompositionTab: restarts active playback from requested playFromTime', async () => {
-    useTimelineStore.setState({ playheadPosition: 25, isPlaying: true } as any);
+    useTimelineStore.setState({ playheadPosition: 25, isPlaying: true });
 
     store.getState().openCompositionTab('comp-1', {
       playFromStart: true,
@@ -1242,33 +1250,33 @@ describe('compositionSlice', () => {
   // ─── setLayerOpacity ────────────────────────────────────────────
 
   it('setLayerOpacity: sets opacity for a layer', () => {
-    (store.getState() as any).setLayerOpacity(0, 0.5);
+    store.getState().setLayerOpacity(0, 0.5);
     expect(store.getState().layerOpacities[0]).toBe(0.5);
   });
 
   it('setLayerOpacity: clamps opacity to min 0', () => {
-    (store.getState() as any).setLayerOpacity(1, -0.5);
+    store.getState().setLayerOpacity(1, -0.5);
     expect(store.getState().layerOpacities[1]).toBe(0);
   });
 
   it('setLayerOpacity: clamps opacity to max 1', () => {
-    (store.getState() as any).setLayerOpacity(2, 1.5);
+    store.getState().setLayerOpacity(2, 1.5);
     expect(store.getState().layerOpacities[2]).toBe(1);
   });
 
   it('setLayerOpacity: sets full opacity (1.0)', () => {
-    (store.getState() as any).setLayerOpacity(0, 1);
+    store.getState().setLayerOpacity(0, 1);
     expect(store.getState().layerOpacities[0]).toBe(1);
   });
 
   it('setLayerOpacity: sets zero opacity (0.0)', () => {
-    (store.getState() as any).setLayerOpacity(0, 0);
+    store.getState().setLayerOpacity(0, 0);
     expect(store.getState().layerOpacities[0]).toBe(0);
   });
 
   it('setLayerOpacity: does not affect other layer opacities', () => {
-    (store.getState() as any).setLayerOpacity(0, 0.3);
-    (store.getState() as any).setLayerOpacity(1, 0.7);
+    store.getState().setLayerOpacity(0, 0.3);
+    store.getState().setLayerOpacity(1, 0.7);
     expect(store.getState().layerOpacities[0]).toBe(0.3);
     expect(store.getState().layerOpacities[1]).toBe(0.7);
   });

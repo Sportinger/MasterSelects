@@ -15,7 +15,7 @@ describe('clipSlice', () => {
   describe('updateClip', () => {
     it('updates an existing clip with partial data', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0, duration: 5 });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().updateClip('clip-1', { name: 'Renamed Clip', startTime: 2 });
       const updated = store.getState().clips.find(c => c.id === 'clip-1');
@@ -30,7 +30,7 @@ describe('clipSlice', () => {
 
     it('does nothing when clip id does not exist', () => {
       const clip = createMockClip({ id: 'clip-1' });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().updateClip('nonexistent', { name: 'Ghost' });
       const state = store.getState();
@@ -45,7 +45,7 @@ describe('clipSlice', () => {
   describe('removeClip', () => {
     it('removes a single clip from the timeline', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().removeClip('clip-1');
       expect(store.getState().clips.length).toBe(0);
@@ -56,7 +56,7 @@ describe('clipSlice', () => {
       store = createTestTimelineStore({
         clips: [clip],
         selectedClipIds: new Set(['clip-1']),
-      } as any);
+      });
 
       store.getState().removeClip('clip-1');
       expect(store.getState().selectedClipIds.has('clip-1')).toBe(false);
@@ -68,7 +68,7 @@ describe('clipSlice', () => {
       store = createTestTimelineStore({
         clips: [videoClip, audioClip],
         selectedClipIds: new Set(['clip-v', 'clip-a']),
-      } as any);
+      });
 
       store.getState().removeClip('clip-v');
       expect(store.getState().clips.length).toBe(0);
@@ -80,7 +80,7 @@ describe('clipSlice', () => {
       store = createTestTimelineStore({
         clips: [videoClip, audioClip],
         selectedClipIds: new Set(['clip-v']),
-      } as any);
+      });
 
       store.getState().removeClip('clip-v');
       const state = store.getState();
@@ -92,7 +92,7 @@ describe('clipSlice', () => {
 
     it('does nothing when clip does not exist', () => {
       const clip = createMockClip({ id: 'clip-1' });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().removeClip('nonexistent');
       expect(store.getState().clips.length).toBe(1);
@@ -104,7 +104,7 @@ describe('clipSlice', () => {
   describe('trimClip', () => {
     it('updates inPoint, outPoint, and duration correctly', () => {
       const clip = createMockClip({ id: 'clip-1', startTime: 0, duration: 10, inPoint: 0, outPoint: 10 });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().trimClip('clip-1', 2, 8);
       const trimmed = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -116,7 +116,7 @@ describe('clipSlice', () => {
 
     it('preserves other clip properties when trimming', () => {
       const clip = createMockClip({ id: 'clip-1', name: 'My Clip', startTime: 5, duration: 10, inPoint: 0, outPoint: 10 });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().trimClip('clip-1', 1, 7);
       const trimmed = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -138,7 +138,7 @@ describe('clipSlice', () => {
         inPoint: 0,
         outPoint: 10,
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().splitClip('clip-1', 4);
       const state = store.getState();
@@ -170,7 +170,7 @@ describe('clipSlice', () => {
         inPoint: 0,
         outPoint: 10,
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().splitClip('clip-1', 5);
       const state = store.getState();
@@ -183,7 +183,7 @@ describe('clipSlice', () => {
 
     it('does not split at the clip start edge', () => {
       const clip = createMockClip({ id: 'clip-1', startTime: 2, duration: 8, inPoint: 0, outPoint: 8 });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().splitClip('clip-1', 2); // splitTime == startTime
       expect(store.getState().clips.length).toBe(1);
@@ -192,7 +192,7 @@ describe('clipSlice', () => {
 
     it('does not split at the clip end edge', () => {
       const clip = createMockClip({ id: 'clip-1', startTime: 2, duration: 8, inPoint: 0, outPoint: 8 });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().splitClip('clip-1', 10); // splitTime == startTime + duration
       expect(store.getState().clips.length).toBe(1);
@@ -200,7 +200,7 @@ describe('clipSlice', () => {
 
     it('does not split outside clip range', () => {
       const clip = createMockClip({ id: 'clip-1', startTime: 2, duration: 8, inPoint: 0, outPoint: 8 });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().splitClip('clip-1', 20); // way outside
       expect(store.getState().clips.length).toBe(1);
@@ -225,7 +225,7 @@ describe('clipSlice', () => {
         outPoint: 10,
         linkedClipId: 'clip-v',
       });
-      store = createTestTimelineStore({ clips: [videoClip, audioClip] } as any);
+      store = createTestTimelineStore({ clips: [videoClip, audioClip] });
 
       store.getState().splitClip('clip-v', 5);
       const state = store.getState();
@@ -262,7 +262,7 @@ describe('clipSlice', () => {
         inPoint: 0,
         outPoint: 10,
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().splitClip('clip-1', 3);
       const state = store.getState();
@@ -289,7 +289,7 @@ describe('clipSlice', () => {
       store = createTestTimelineStore({
         clips: [clip],
         playheadPosition: 5,
-      } as any);
+      });
 
       store.getState().splitClipAtPlayhead();
       const state = store.getState();
@@ -315,7 +315,7 @@ describe('clipSlice', () => {
       store = createTestTimelineStore({
         clips: [clip],
         playheadPosition: 10, // past the clip
-      } as any);
+      });
 
       store.getState().splitClipAtPlayhead();
       expect(store.getState().clips.length).toBe(1);
@@ -343,7 +343,7 @@ describe('clipSlice', () => {
         clips: [clip1, clip2],
         playheadPosition: 5,
         selectedClipIds: new Set(['clip-1']), // only clip-1 selected
-      } as any);
+      });
 
       store.getState().splitClipAtPlayhead();
       const state = store.getState();
@@ -363,7 +363,7 @@ describe('clipSlice', () => {
       store = createTestTimelineStore({
         clips: [clip],
         snappingEnabled: false,
-      } as any);
+      });
 
       store.getState().moveClip('clip-1', 10);
       const moved = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -377,7 +377,7 @@ describe('clipSlice', () => {
       store = createTestTimelineStore({
         clips: [clip],
         snappingEnabled: false,
-      } as any);
+      });
 
       store.getState().moveClip('clip-1', -10);
       const moved = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -392,7 +392,7 @@ describe('clipSlice', () => {
         trackId: 'video-1',
         startTime: 0,
         duration: 5,
-        source: { type: 'video', naturalDuration: 5 } as any,
+        source: { type: 'video', naturalDuration: 5 },
       });
       store = createTestTimelineStore({
         tracks: [
@@ -402,7 +402,7 @@ describe('clipSlice', () => {
         ],
         clips: [clip],
         snappingEnabled: false,
-      } as any);
+      });
 
       store.getState().moveClip('clip-1', 0, 'video-2');
       const moved = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -416,9 +416,9 @@ describe('clipSlice', () => {
         trackId: 'video-1',
         startTime: 0,
         duration: 5,
-        source: { type: 'video', naturalDuration: 5 } as any,
+        source: { type: 'video', naturalDuration: 5 },
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().moveClip('clip-1', 0, 'audio-1');
       const moved = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -445,7 +445,7 @@ describe('clipSlice', () => {
       store = createTestTimelineStore({
         clips: [videoClip, audioClip],
         snappingEnabled: false,
-      } as any);
+      });
 
       store.getState().moveClip('clip-v', 10);
       const state = store.getState();
@@ -475,7 +475,7 @@ describe('clipSlice', () => {
       store = createTestTimelineStore({
         clips: [videoClip, audioClip],
         snappingEnabled: false,
-      } as any);
+      });
 
       store.getState().moveClip('clip-v', 10, undefined, true); // skipLinked
       const state = store.getState();
@@ -490,7 +490,7 @@ describe('clipSlice', () => {
   describe('updateClipTransform', () => {
     it('updates clip transform with partial data', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().updateClipTransform('clip-1', { opacity: 0.5 });
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -502,9 +502,9 @@ describe('clipSlice', () => {
 
     it('deeply merges position updates', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
-      store.getState().updateClipTransform('clip-1', { position: { x: 100 } } as any);
+      store.getState().updateClipTransform('clip-1', { position: { x: 100 } });
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
 
       expect(updated.transform.position.x).toBe(100);
@@ -514,9 +514,9 @@ describe('clipSlice', () => {
 
     it('deeply merges scale updates', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
-      store.getState().updateClipTransform('clip-1', { scale: { x: 2 } } as any);
+      store.getState().updateClipTransform('clip-1', { scale: { x: 2 } });
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
 
       expect(updated.transform.scale.x).toBe(2);
@@ -531,9 +531,9 @@ describe('clipSlice', () => {
       const clip = createMockClip({
         id: 'clip-1',
         trackId: 'video-1',
-        source: { type: 'video' } as any,
+        source: { type: 'video' },
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().toggle3D('clip-1');
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -548,10 +548,10 @@ describe('clipSlice', () => {
       const clip = createMockClip({
         id: 'clip-1',
         trackId: 'video-1',
-        source: { type: 'video' } as any,
+        source: { type: 'video' },
         transform: createMockTransform({ position: { x: 0.1, y: -0.2, z: 1.25 } }),
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().toggle3D('clip-1');
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -564,9 +564,9 @@ describe('clipSlice', () => {
       const clip = createMockClip({
         id: 'clip-1',
         trackId: 'video-1',
-        source: { type: 'model', modelUrl: 'blob:model' } as any,
+        source: { type: 'model', modelUrl: 'blob:model' },
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().toggle3D('clip-1');
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -580,13 +580,13 @@ describe('clipSlice', () => {
         id: 'clip-1',
         trackId: 'video-1',
         is3D: true,
-        source: { type: 'video' } as any,
+        source: { type: 'video' },
         transform: createMockTransform({
           position: { x: 0.25, y: -0.25, z: -0.5 },
           rotation: { x: 20, y: -15, z: 45 },
         }),
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().toggle3D('clip-1');
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -602,7 +602,7 @@ describe('clipSlice', () => {
   describe('toggleClipReverse', () => {
     it('toggles reversed flag from undefined to true', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().toggleClipReverse('clip-1');
       expect(store.getState().clips.find(c => c.id === 'clip-1')!.reversed).toBe(true);
@@ -610,7 +610,7 @@ describe('clipSlice', () => {
 
     it('toggles reversed flag from true to false', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', reversed: true });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().toggleClipReverse('clip-1');
       expect(store.getState().clips.find(c => c.id === 'clip-1')!.reversed).toBe(false);
@@ -622,7 +622,7 @@ describe('clipSlice', () => {
         trackId: 'video-1',
         thumbnails: ['thumb-a', 'thumb-b', 'thumb-c'],
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().toggleClipReverse('clip-1');
       // thumbnails stay in original order; the reversed flag drives display order
@@ -637,7 +637,7 @@ describe('clipSlice', () => {
   describe('addClipEffect', () => {
     it('adds an effect to a clip', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', effects: [] });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().addClipEffect('clip-1', 'blur');
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -651,7 +651,7 @@ describe('clipSlice', () => {
 
     it('adds multiple effects to the same clip', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', effects: [] });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().addClipEffect('clip-1', 'blur');
       store.getState().addClipEffect('clip-1', 'hue-shift');
@@ -669,11 +669,11 @@ describe('clipSlice', () => {
         id: 'clip-1',
         trackId: 'video-1',
         effects: [
-          { id: 'fx-1', name: 'blur', type: 'blur' as any, enabled: true, params: {} },
-          { id: 'fx-2', name: 'invert', type: 'invert' as any, enabled: true, params: {} },
+          { id: 'fx-1', name: 'blur', type: 'blur', enabled: true, params: {} },
+          { id: 'fx-2', name: 'invert', type: 'invert', enabled: true, params: {} },
         ],
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().removeClipEffect('clip-1', 'fx-1');
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -689,10 +689,10 @@ describe('clipSlice', () => {
         id: 'clip-1',
         trackId: 'video-1',
         effects: [
-          { id: 'fx-1', name: 'blur', type: 'blur' as any, enabled: true, params: { radius: 5, quality: 1 } },
+          { id: 'fx-1', name: 'blur', type: 'blur', enabled: true, params: { radius: 5, quality: 1 } },
         ],
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().updateClipEffect('clip-1', 'fx-1', { radius: 10 });
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -708,10 +708,10 @@ describe('clipSlice', () => {
         id: 'clip-1',
         trackId: 'video-1',
         effects: [
-          { id: 'fx-1', name: 'blur', type: 'blur' as any, enabled: true, params: {} },
+          { id: 'fx-1', name: 'blur', type: 'blur', enabled: true, params: {} },
         ],
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().setClipEffectEnabled('clip-1', 'fx-1', false);
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -724,10 +724,10 @@ describe('clipSlice', () => {
         id: 'clip-1',
         trackId: 'video-1',
         effects: [
-          { id: 'fx-1', name: 'blur', type: 'blur' as any, enabled: false, params: {} },
+          { id: 'fx-1', name: 'blur', type: 'blur', enabled: false, params: {} },
         ],
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().setClipEffectEnabled('clip-1', 'fx-1', true);
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -742,7 +742,7 @@ describe('clipSlice', () => {
     it('creates a linked group for multiple clips', () => {
       const clip1 = createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0, duration: 5 });
       const clip2 = createMockClip({ id: 'clip-2', trackId: 'video-1', startTime: 10, duration: 5 });
-      store = createTestTimelineStore({ clips: [clip1, clip2] } as any);
+      store = createTestTimelineStore({ clips: [clip1, clip2] });
 
       const offsets = new Map<string, number>();
       offsets.set('clip-1', 0);
@@ -764,7 +764,7 @@ describe('clipSlice', () => {
       const clip1 = createMockClip({ id: 'clip-1', trackId: 'video-1', linkedGroupId: 'group-1' });
       const clip2 = createMockClip({ id: 'clip-2', trackId: 'video-1', linkedGroupId: 'group-1' });
       const clip3 = createMockClip({ id: 'clip-3', trackId: 'video-1', linkedGroupId: 'group-2' });
-      store = createTestTimelineStore({ clips: [clip1, clip2, clip3] } as any);
+      store = createTestTimelineStore({ clips: [clip1, clip2, clip3] });
 
       store.getState().unlinkGroup('clip-1');
       const state = store.getState();
@@ -777,7 +777,7 @@ describe('clipSlice', () => {
 
     it('does nothing when clip has no linkedGroupId', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().unlinkGroup('clip-1');
       expect(store.getState().clips.find(c => c.id === 'clip-1')!.linkedGroupId).toBeUndefined();
@@ -790,7 +790,7 @@ describe('clipSlice', () => {
     it('sets a parent clip for a child clip', () => {
       const parent = createMockClip({ id: 'clip-parent', trackId: 'video-1' });
       const child = createMockClip({ id: 'clip-child', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [parent, child] } as any);
+      store = createTestTimelineStore({ clips: [parent, child] });
 
       store.getState().setClipParent('clip-child', 'clip-parent');
       expect(store.getState().clips.find(c => c.id === 'clip-child')!.parentClipId).toBe('clip-parent');
@@ -798,7 +798,7 @@ describe('clipSlice', () => {
 
     it('prevents self-parenting', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().setClipParent('clip-1', 'clip-1');
       expect(store.getState().clips.find(c => c.id === 'clip-1')!.parentClipId).toBeUndefined();
@@ -807,7 +807,7 @@ describe('clipSlice', () => {
     it('prevents circular parent references', () => {
       const clipA = createMockClip({ id: 'clip-a', trackId: 'video-1', parentClipId: 'clip-b' });
       const clipB = createMockClip({ id: 'clip-b', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clipA, clipB] } as any);
+      store = createTestTimelineStore({ clips: [clipA, clipB] });
 
       // Try to parent clip-b to clip-a (which already parents to clip-b => cycle)
       store.getState().setClipParent('clip-b', 'clip-a');
@@ -816,7 +816,7 @@ describe('clipSlice', () => {
 
     it('clears parent when set to null', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', parentClipId: 'clip-parent' });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().setClipParent('clip-1', null);
       expect(store.getState().clips.find(c => c.id === 'clip-1')!.parentClipId).toBeUndefined();
@@ -829,7 +829,7 @@ describe('clipSlice', () => {
       const child1 = createMockClip({ id: 'clip-child1', trackId: 'video-1', parentClipId: 'clip-parent' });
       const child2 = createMockClip({ id: 'clip-child2', trackId: 'video-1', parentClipId: 'clip-parent' });
       const unrelated = createMockClip({ id: 'clip-other', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [parent, child1, child2, unrelated] } as any);
+      store = createTestTimelineStore({ clips: [parent, child1, child2, unrelated] });
 
       const children = store.getState().getClipChildren('clip-parent');
 
@@ -839,7 +839,7 @@ describe('clipSlice', () => {
 
     it('returns empty array when no children exist', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       expect(store.getState().getClipChildren('clip-1')).toEqual([]);
     });
@@ -850,7 +850,7 @@ describe('clipSlice', () => {
   describe('setClipPreservesPitch', () => {
     it('sets preservesPitch flag on a clip', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().setClipPreservesPitch('clip-1', true);
       expect(store.getState().clips.find(c => c.id === 'clip-1')!.preservesPitch).toBe(true);
@@ -858,7 +858,7 @@ describe('clipSlice', () => {
 
     it('can set preservesPitch to false', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', preservesPitch: true });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().setClipPreservesPitch('clip-1', false);
       expect(store.getState().clips.find(c => c.id === 'clip-1')!.preservesPitch).toBe(false);
@@ -870,7 +870,7 @@ describe('clipSlice', () => {
   describe('updateDownloadProgress', () => {
     it('updates download progress on a pending clip', () => {
       const clip = createMockClip({ id: 'yt-clip-1', trackId: 'video-1', isPendingDownload: true, downloadProgress: 0 });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().updateDownloadProgress('yt-clip-1', 55);
       expect(store.getState().clips.find(c => c.id === 'yt-clip-1')!.downloadProgress).toBe(55);
@@ -878,14 +878,14 @@ describe('clipSlice', () => {
 
     it('updates progress to 100 percent', () => {
       const clip = createMockClip({ id: 'yt-clip-1', trackId: 'video-1', isPendingDownload: true, downloadProgress: 50 });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().updateDownloadProgress('yt-clip-1', 100);
       expect(store.getState().clips.find(c => c.id === 'yt-clip-1')!.downloadProgress).toBe(100);
     });
 
     it('does not crash when clip does not exist', () => {
-      store = createTestTimelineStore({ clips: [] } as any);
+      store = createTestTimelineStore({ clips: [] });
       // Should not throw
       store.getState().updateDownloadProgress('nonexistent', 50);
       expect(store.getState().clips.length).toBe(0);
@@ -895,7 +895,7 @@ describe('clipSlice', () => {
   describe('setDownloadError', () => {
     it('sets error and clears pending state', () => {
       const clip = createMockClip({ id: 'yt-clip-1', trackId: 'video-1', isPendingDownload: true });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().setDownloadError('yt-clip-1', 'Network error');
       const updated = store.getState().clips.find(c => c.id === 'yt-clip-1')!;
@@ -905,7 +905,7 @@ describe('clipSlice', () => {
     });
 
     it('does not crash when clip does not exist', () => {
-      store = createTestTimelineStore({ clips: [] } as any);
+      store = createTestTimelineStore({ clips: [] });
       // Should not throw
       store.getState().setDownloadError('nonexistent', 'Error');
       expect(store.getState().clips.length).toBe(0);
@@ -917,7 +917,7 @@ describe('clipSlice', () => {
   describe('updateClip (additional)', () => {
     it('updates multiple properties at once', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0, duration: 5, name: 'Original' });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().updateClip('clip-1', { name: 'Updated', startTime: 3, duration: 10 });
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -930,7 +930,7 @@ describe('clipSlice', () => {
     it('does not affect other clips when updating one', () => {
       const clip1 = createMockClip({ id: 'clip-1', trackId: 'video-1', name: 'Clip 1' });
       const clip2 = createMockClip({ id: 'clip-2', trackId: 'video-1', name: 'Clip 2' });
-      store = createTestTimelineStore({ clips: [clip1, clip2] } as any);
+      store = createTestTimelineStore({ clips: [clip1, clip2] });
 
       store.getState().updateClip('clip-1', { name: 'Modified' });
 
@@ -946,7 +946,7 @@ describe('clipSlice', () => {
       const clip1 = createMockClip({ id: 'clip-1', trackId: 'video-1' });
       const clip2 = createMockClip({ id: 'clip-2', trackId: 'video-1' });
       const clip3 = createMockClip({ id: 'clip-3', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clip1, clip2, clip3] } as any);
+      store = createTestTimelineStore({ clips: [clip1, clip2, clip3] });
 
       store.getState().removeClip('clip-2');
       const state = store.getState();
@@ -961,7 +961,7 @@ describe('clipSlice', () => {
       store = createTestTimelineStore({
         clips: [videoClip, audioClip],
         selectedClipIds: new Set(['clip-v', 'clip-a']),
-      } as any);
+      });
 
       store.getState().removeClip('clip-v');
       const state = store.getState();
@@ -977,7 +977,7 @@ describe('clipSlice', () => {
       store = createTestTimelineStore({
         clips: [videoClip, audioClip],
         selectedClipIds: new Set(['clip-a']),
-      } as any);
+      });
 
       // Remove audio clip only (video not selected)
       store.getState().removeClip('clip-a');
@@ -995,7 +995,7 @@ describe('clipSlice', () => {
     it('does not affect other clips when trimming one', () => {
       const clip1 = createMockClip({ id: 'clip-1', startTime: 0, duration: 10, inPoint: 0, outPoint: 10 });
       const clip2 = createMockClip({ id: 'clip-2', startTime: 10, duration: 10, inPoint: 0, outPoint: 10 });
-      store = createTestTimelineStore({ clips: [clip1, clip2] } as any);
+      store = createTestTimelineStore({ clips: [clip1, clip2] });
 
       store.getState().trimClip('clip-1', 2, 6);
 
@@ -1010,7 +1010,7 @@ describe('clipSlice', () => {
 
     it('allows trimming to a very small duration', () => {
       const clip = createMockClip({ id: 'clip-1', startTime: 0, duration: 10, inPoint: 0, outPoint: 10 });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().trimClip('clip-1', 4.99, 5.01);
       const trimmed = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -1026,7 +1026,7 @@ describe('clipSlice', () => {
   describe('splitClip (additional)', () => {
     it('does nothing when clip does not exist', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0, duration: 10, inPoint: 0, outPoint: 10 });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().splitClip('nonexistent', 5);
       expect(store.getState().clips.length).toBe(1);
@@ -1035,7 +1035,7 @@ describe('clipSlice', () => {
 
     it('does not split before the clip range', () => {
       const clip = createMockClip({ id: 'clip-1', startTime: 5, duration: 5, inPoint: 0, outPoint: 5 });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().splitClip('clip-1', 2); // before clip start
       expect(store.getState().clips.length).toBe(1);
@@ -1050,7 +1050,7 @@ describe('clipSlice', () => {
         inPoint: 2,
         outPoint: 8,
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().splitClip('clip-1', 3); // 3 seconds into the clip
       const state = store.getState();
@@ -1081,10 +1081,10 @@ describe('clipSlice', () => {
         inPoint: 0,
         outPoint: 10,
         effects: [
-          { id: 'fx-1', name: 'blur', type: 'blur' as any, enabled: true, params: { radius: 5 } },
+          { id: 'fx-1', name: 'blur', type: 'blur', enabled: true, params: { radius: 5 } },
         ],
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().splitClip('clip-1', 5);
       const state = store.getState();
@@ -1105,10 +1105,10 @@ describe('clipSlice', () => {
         inPoint: 0,
         outPoint: 10,
         effects: [
-          { id: 'fx-1', name: 'blur', type: 'blur' as any, enabled: true, params: { radius: 5 } },
+          { id: 'fx-1', name: 'blur', type: 'blur', enabled: true, params: { radius: 5 } },
         ],
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().splitClip('clip-1', 5);
       const state = store.getState();
@@ -1128,13 +1128,13 @@ describe('clipSlice', () => {
         outPoint: 10,
         transform: {
           opacity: 0.5,
-          blendMode: 'multiply' as any,
+          blendMode: 'multiply',
           position: { x: 100, y: 200, z: 0 },
           scale: { x: 2, y: 2 },
           rotation: { x: 0, y: 0, z: 45 },
         },
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().splitClip('clip-1', 5);
       const state = store.getState();
@@ -1155,7 +1155,7 @@ describe('clipSlice', () => {
       const clip2 = createMockClip({
         id: 'clip-2', trackId: 'video-1', startTime: 20, duration: 5, inPoint: 0, outPoint: 5,
       });
-      store = createTestTimelineStore({ clips: [clip1, clip2] } as any);
+      store = createTestTimelineStore({ clips: [clip1, clip2] });
 
       store.getState().splitClip('clip-1', 5);
       const state = store.getState();
@@ -1175,10 +1175,10 @@ describe('clipSlice', () => {
         duration: 10,
         inPoint: 0,
         outPoint: 10,
-        transitionIn: { type: 'fade', duration: 0.5 } as any,
-        transitionOut: { type: 'fade', duration: 0.5 } as any,
+        transitionIn: { id: 'transition-in', type: 'fade', duration: 0.5, linkedClipId: 'clip-before' },
+        transitionOut: { id: 'transition-out', type: 'fade', duration: 0.5, linkedClipId: 'clip-after' },
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().splitClip('clip-1', 5);
       const state = store.getState();
@@ -1205,7 +1205,7 @@ describe('clipSlice', () => {
         clips: [clip1, clip2],
         playheadPosition: 5,
         selectedClipIds: new Set(), // no selection
-      } as any);
+      });
 
       store.getState().splitClipAtPlayhead();
       const state = store.getState();
@@ -1223,7 +1223,7 @@ describe('clipSlice', () => {
       store = createTestTimelineStore({
         clips: [clip],
         playheadPosition: 5, // exactly at clip start
-      } as any);
+      });
 
       store.getState().splitClipAtPlayhead();
       // playhead is NOT strictly inside clip (condition is > startTime, not >=)
@@ -1237,7 +1237,7 @@ describe('clipSlice', () => {
       store = createTestTimelineStore({
         clips: [clip],
         playheadPosition: 5, // exactly at clip end
-      } as any);
+      });
 
       store.getState().splitClipAtPlayhead();
       // playhead is NOT strictly inside clip (condition is < startTime + duration, not <=)
@@ -1257,7 +1257,7 @@ describe('clipSlice', () => {
         clips: [videoClip, audioClip],
         playheadPosition: 5,
         selectedClipIds: new Set(['clip-v']), // only video selected
-      } as any);
+      });
 
       store.getState().splitClipAtPlayhead();
       const state = store.getState();
@@ -1284,7 +1284,7 @@ describe('clipSlice', () => {
         clips: [clip1, clip2],
         playheadPosition: 5,
         selectedClipIds: new Set(['clip-2']), // clip-2 is NOT at playhead
-      } as any);
+      });
 
       store.getState().splitClipAtPlayhead();
       const state = store.getState();
@@ -1300,7 +1300,7 @@ describe('clipSlice', () => {
   describe('moveClip (additional)', () => {
     it('does nothing when clip does not exist', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0, duration: 5 });
-      store = createTestTimelineStore({ clips: [clip], snappingEnabled: false } as any);
+      store = createTestTimelineStore({ clips: [clip], snappingEnabled: false });
 
       store.getState().moveClip('nonexistent', 10);
 
@@ -1310,7 +1310,7 @@ describe('clipSlice', () => {
 
     it('preserves clip duration when moving', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0, duration: 7 });
-      store = createTestTimelineStore({ clips: [clip], snappingEnabled: false } as any);
+      store = createTestTimelineStore({ clips: [clip], snappingEnabled: false });
 
       store.getState().moveClip('clip-1', 15);
       const moved = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -1325,9 +1325,9 @@ describe('clipSlice', () => {
         trackId: 'audio-1',
         startTime: 0,
         duration: 5,
-        source: { type: 'audio', naturalDuration: 5 } as any,
+        source: { type: 'audio', naturalDuration: 5 },
       });
-      store = createTestTimelineStore({ clips: [clip], snappingEnabled: false } as any);
+      store = createTestTimelineStore({ clips: [clip], snappingEnabled: false });
 
       store.getState().moveClip('clip-1', 0, 'video-1');
       const moved = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -1345,7 +1345,7 @@ describe('clipSlice', () => {
       store = createTestTimelineStore({
         clips: [clip1, clip2],
         snappingEnabled: false,
-      } as any);
+      });
 
       store.getState().moveClip('clip-1', 10, undefined, false, false);
       const state = store.getState();
@@ -1366,7 +1366,7 @@ describe('clipSlice', () => {
       store = createTestTimelineStore({
         clips: [clip1, clip2],
         snappingEnabled: false,
-      } as any);
+      });
 
       store.getState().moveClip('clip-1', 10, undefined, false, true); // skipGroup = true
       const state = store.getState();
@@ -1381,9 +1381,9 @@ describe('clipSlice', () => {
         trackId: 'video-1',
         startTime: 0,
         duration: 5,
-        source: { type: 'image', naturalDuration: 5 } as any,
+        source: { type: 'image', naturalDuration: 5 },
       });
-      store = createTestTimelineStore({ clips: [clip], snappingEnabled: false } as any);
+      store = createTestTimelineStore({ clips: [clip], snappingEnabled: false });
 
       store.getState().moveClip('clip-1', 0, 'audio-1');
       const moved = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -1397,9 +1397,9 @@ describe('clipSlice', () => {
         trackId: 'video-1',
         startTime: 0,
         duration: 5,
-        source: { type: 'lottie', naturalDuration: 5 } as any,
+        source: { type: 'lottie', naturalDuration: 5 },
       });
-      store = createTestTimelineStore({ clips: [clip], snappingEnabled: false } as any);
+      store = createTestTimelineStore({ clips: [clip], snappingEnabled: false });
 
       store.getState().moveClip('clip-1', 0, 'audio-1');
       const moved = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -1413,9 +1413,9 @@ describe('clipSlice', () => {
   describe('updateClipTransform (additional)', () => {
     it('deeply merges rotation updates', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
-      store.getState().updateClipTransform('clip-1', { rotation: { z: 90 } } as any);
+      store.getState().updateClipTransform('clip-1', { rotation: { z: 90 } });
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
 
       expect(updated.transform.rotation.z).toBe(90);
@@ -1435,9 +1435,9 @@ describe('clipSlice', () => {
           rotation: { x: 0, y: 0, z: 0 },
         },
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
-      store.getState().updateClipTransform('clip-1', { blendMode: 'multiply' } as any);
+      store.getState().updateClipTransform('clip-1', { blendMode: 'multiply' });
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
 
       expect(updated.transform.blendMode).toBe('multiply');
@@ -1448,11 +1448,11 @@ describe('clipSlice', () => {
 
     it('handles multiple sequential transform updates', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().updateClipTransform('clip-1', { opacity: 0.5 });
-      store.getState().updateClipTransform('clip-1', { position: { x: 50 } } as any);
-      store.getState().updateClipTransform('clip-1', { scale: { y: 3 } } as any);
+      store.getState().updateClipTransform('clip-1', { position: { x: 50 } });
+      store.getState().updateClipTransform('clip-1', { scale: { y: 3 } });
 
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
 
@@ -1466,7 +1466,7 @@ describe('clipSlice', () => {
     it('does not affect other clips', () => {
       const clip1 = createMockClip({ id: 'clip-1', trackId: 'video-1' });
       const clip2 = createMockClip({ id: 'clip-2', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clip1, clip2] } as any);
+      store = createTestTimelineStore({ clips: [clip1, clip2] });
 
       store.getState().updateClipTransform('clip-1', { opacity: 0.3 });
 
@@ -1481,7 +1481,7 @@ describe('clipSlice', () => {
     it('preserves undefined thumbnails when toggling reverse', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1' });
       // thumbnails should be undefined by default
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().toggleClipReverse('clip-1');
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -1495,7 +1495,7 @@ describe('clipSlice', () => {
         id: 'clip-1', trackId: 'video-1',
         thumbnails: ['a', 'b', 'c'],
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().toggleClipReverse('clip-1');
       store.getState().toggleClipReverse('clip-1');
@@ -1511,7 +1511,7 @@ describe('clipSlice', () => {
   describe('addClipEffect (additional)', () => {
     it('generates unique effect ids for each added effect', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', effects: [] });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().addClipEffect('clip-1', 'blur');
       store.getState().addClipEffect('clip-1', 'blur');
@@ -1526,10 +1526,10 @@ describe('clipSlice', () => {
         id: 'clip-1',
         trackId: 'video-1',
         effects: [
-          { id: 'fx-existing', name: 'invert', type: 'invert' as any, enabled: true, params: {} },
+          { id: 'fx-existing', name: 'invert', type: 'invert', enabled: true, params: {} },
         ],
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().addClipEffect('clip-1', 'blur');
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -1546,10 +1546,10 @@ describe('clipSlice', () => {
         id: 'clip-1',
         trackId: 'video-1',
         effects: [
-          { id: 'fx-1', name: 'blur', type: 'blur' as any, enabled: true, params: {} },
+          { id: 'fx-1', name: 'blur', type: 'blur', enabled: true, params: {} },
         ],
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().removeClipEffect('clip-1', 'nonexistent-fx');
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -1563,10 +1563,10 @@ describe('clipSlice', () => {
         id: 'clip-1',
         trackId: 'video-1',
         effects: [
-          { id: 'fx-1', name: 'blur', type: 'blur' as any, enabled: true, params: {} },
+          { id: 'fx-1', name: 'blur', type: 'blur', enabled: true, params: {} },
         ],
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().removeClipEffect('clip-1', 'fx-1');
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -1581,11 +1581,11 @@ describe('clipSlice', () => {
         id: 'clip-1',
         trackId: 'video-1',
         effects: [
-          { id: 'fx-1', name: 'blur', type: 'blur' as any, enabled: true, params: { radius: 5 } },
-          { id: 'fx-2', name: 'hue-shift', type: 'hue-shift' as any, enabled: true, params: { amount: 180 } },
+          { id: 'fx-1', name: 'blur', type: 'blur', enabled: true, params: { radius: 5 } },
+          { id: 'fx-2', name: 'hue-shift', type: 'hue-shift', enabled: true, params: { amount: 180 } },
         ],
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().updateClipEffect('clip-1', 'fx-1', { radius: 20 });
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -1601,11 +1601,11 @@ describe('clipSlice', () => {
         id: 'clip-1',
         trackId: 'video-1',
         effects: [
-          { id: 'fx-1', name: 'blur', type: 'blur' as any, enabled: true, params: {} },
-          { id: 'fx-2', name: 'invert', type: 'invert' as any, enabled: true, params: {} },
+          { id: 'fx-1', name: 'blur', type: 'blur', enabled: true, params: {} },
+          { id: 'fx-2', name: 'invert', type: 'invert', enabled: true, params: {} },
         ],
       });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().setClipEffectEnabled('clip-1', 'fx-1', false);
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
@@ -1620,7 +1620,7 @@ describe('clipSlice', () => {
   describe('createLinkedGroup (additional)', () => {
     it('does nothing when clipIds array is empty', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().createLinkedGroup([], new Map());
       expect(store.getState().clips.find(c => c.id === 'clip-1')!.linkedGroupId).toBeUndefined();
@@ -1628,7 +1628,7 @@ describe('clipSlice', () => {
 
     it('does nothing when no clips match the provided ids', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       const offsets = new Map<string, number>();
       offsets.set('nonexistent', 0);
@@ -1640,7 +1640,7 @@ describe('clipSlice', () => {
     it('adjusts startTime based on master clip offset', () => {
       const clip1 = createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0, duration: 5 });
       const clip2 = createMockClip({ id: 'clip-2', trackId: 'video-1', startTime: 10, duration: 5 });
-      store = createTestTimelineStore({ clips: [clip1, clip2] } as any);
+      store = createTestTimelineStore({ clips: [clip1, clip2] });
 
       const offsets = new Map<string, number>();
       offsets.set('clip-1', 0); // master clip (offset 0)
@@ -1664,7 +1664,7 @@ describe('clipSlice', () => {
     it('does not affect clips not in the group', () => {
       const clip1 = createMockClip({ id: 'clip-1', trackId: 'video-1', linkedGroupId: 'group-1' });
       const clip2 = createMockClip({ id: 'clip-2', trackId: 'video-1' }); // no group
-      store = createTestTimelineStore({ clips: [clip1, clip2] } as any);
+      store = createTestTimelineStore({ clips: [clip1, clip2] });
 
       store.getState().unlinkGroup('clip-1');
       const state = store.getState();
@@ -1675,7 +1675,7 @@ describe('clipSlice', () => {
 
     it('does nothing when clip does not exist', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', linkedGroupId: 'group-1' });
-      store = createTestTimelineStore({ clips: [clip] } as any);
+      store = createTestTimelineStore({ clips: [clip] });
 
       store.getState().unlinkGroup('nonexistent');
       // Nothing should change
@@ -1690,7 +1690,7 @@ describe('clipSlice', () => {
       const clipA = createMockClip({ id: 'clip-a', trackId: 'video-1', parentClipId: 'clip-b' });
       const clipB = createMockClip({ id: 'clip-b', trackId: 'video-1', parentClipId: 'clip-c' });
       const clipC = createMockClip({ id: 'clip-c', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clipA, clipB, clipC] } as any);
+      store = createTestTimelineStore({ clips: [clipA, clipB, clipC] });
 
       // Try C -> A, which would create a cycle: C -> A -> B -> C
       store.getState().setClipParent('clip-c', 'clip-a');
@@ -1701,7 +1701,7 @@ describe('clipSlice', () => {
       const clipA = createMockClip({ id: 'clip-a', trackId: 'video-1' });
       const clipB = createMockClip({ id: 'clip-b', trackId: 'video-1' });
       const clipC = createMockClip({ id: 'clip-c', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clipA, clipB, clipC] } as any);
+      store = createTestTimelineStore({ clips: [clipA, clipB, clipC] });
 
       store.getState().setClipParent('clip-b', 'clip-a');
       store.getState().setClipParent('clip-c', 'clip-b');
@@ -1714,7 +1714,7 @@ describe('clipSlice', () => {
       const clipA = createMockClip({ id: 'clip-a', trackId: 'video-1' });
       const clipB = createMockClip({ id: 'clip-b', trackId: 'video-1' });
       const child = createMockClip({ id: 'clip-child', trackId: 'video-1', parentClipId: 'clip-a' });
-      store = createTestTimelineStore({ clips: [clipA, clipB, child] } as any);
+      store = createTestTimelineStore({ clips: [clipA, clipB, child] });
 
       store.getState().setClipParent('clip-child', 'clip-b');
       expect(store.getState().clips.find(c => c.id === 'clip-child')!.parentClipId).toBe('clip-b');
@@ -1727,7 +1727,7 @@ describe('clipSlice', () => {
     it('does not affect other clips', () => {
       const clip1 = createMockClip({ id: 'clip-1', trackId: 'video-1' });
       const clip2 = createMockClip({ id: 'clip-2', trackId: 'video-1' });
-      store = createTestTimelineStore({ clips: [clip1, clip2] } as any);
+      store = createTestTimelineStore({ clips: [clip1, clip2] });
 
       store.getState().setClipPreservesPitch('clip-1', true);
 
@@ -1740,7 +1740,7 @@ describe('clipSlice', () => {
 
   describe('addPendingDownloadClip', () => {
     it('creates a pending download clip on a video track', () => {
-      store = createTestTimelineStore({ clips: [] } as any);
+      store = createTestTimelineStore({ clips: [] });
 
       const clipId = store.getState().addPendingDownloadClip('video-1', 0, 'yt-123', 'Test Video', 'http://example.com/thumb.jpg', 30);
 
@@ -1761,21 +1761,21 @@ describe('clipSlice', () => {
     });
 
     it('returns empty string when track does not exist', () => {
-      store = createTestTimelineStore({ clips: [] } as any);
+      store = createTestTimelineStore({ clips: [] });
 
       const clipId = store.getState().addPendingDownloadClip('nonexistent', 0, 'yt-123', 'Test', 'thumb.jpg');
       expect(clipId).toBe('');
     });
 
     it('returns empty string when track is audio type', () => {
-      store = createTestTimelineStore({ clips: [] } as any);
+      store = createTestTimelineStore({ clips: [] });
 
       const clipId = store.getState().addPendingDownloadClip('audio-1', 0, 'yt-123', 'Test', 'thumb.jpg');
       expect(clipId).toBe('');
     });
 
     it('uses default estimated duration of 30 when not provided', () => {
-      store = createTestTimelineStore({ clips: [] } as any);
+      store = createTestTimelineStore({ clips: [] });
 
       const clipId = store.getState().addPendingDownloadClip('video-1', 0, 'yt-123', 'Test', 'thumb.jpg');
 

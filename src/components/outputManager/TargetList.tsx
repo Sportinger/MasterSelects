@@ -27,11 +27,10 @@ function InlineEdit({ value, onCommit, className }: { value: string; onCommit: (
 
   useEffect(() => {
     if (editing) {
-      setDraft(value);
       // Focus + select all after mount
       requestAnimationFrame(() => inputRef.current?.select());
     }
-  }, [editing, value]);
+  }, [editing]);
 
   const commit = useCallback(() => {
     const trimmed = draft.trim();
@@ -42,10 +41,16 @@ function InlineEdit({ value, onCommit, className }: { value: string; onCommit: (
   }, [draft, value, onCommit]);
 
   if (!editing) {
+    const startEditing = (event: React.MouseEvent) => {
+      event.stopPropagation();
+      setDraft(value);
+      setEditing(true);
+    };
+
     return (
       <span
         className={className}
-        onDoubleClick={(e) => { e.stopPropagation(); setEditing(true); }}
+        onDoubleClick={startEditing}
         title="Double-click to rename"
       >
         {value}
@@ -87,6 +92,7 @@ export function TargetList({ selectedTargetId, onSelect }: TargetListProps) {
   // Drag-drop state
   const dragIndexRef = useRef<number | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const [dragTargetId, setDragTargetId] = useState<string | null>(null);
   const dragTargetIdRef = useRef<string | null>(null);
 
   const outputTargets = useMemo(() => {
@@ -148,6 +154,7 @@ export function TargetList({ selectedTargetId, onSelect }: TargetListProps) {
   const handleDragStart = (targetId: string, index: number) => {
     dragIndexRef.current = index;
     dragTargetIdRef.current = targetId;
+    setDragTargetId(targetId);
   };
 
   const handleDragOver = (e: React.DragEvent, index: number) => {
@@ -166,12 +173,14 @@ export function TargetList({ selectedTargetId, onSelect }: TargetListProps) {
     }
     dragIndexRef.current = null;
     dragTargetIdRef.current = null;
+    setDragTargetId(null);
     setDropTargetIndex(null);
   };
 
   const handleDragEnd = () => {
     dragIndexRef.current = null;
     dragTargetIdRef.current = null;
+    setDragTargetId(null);
     setDropTargetIndex(null);
   };
 
@@ -283,7 +292,7 @@ export function TargetList({ selectedTargetId, onSelect }: TargetListProps) {
                     return (
                       <div
                         key={slice.id}
-                        className={`om-slice-item ${selectedSliceId === slice.id ? 'selected' : ''} ${!slice.enabled ? 'disabled' : ''} ${isMask ? 'om-mask-item' : ''} ${dropTargetIndex === idx && dragTargetIdRef.current === target.id ? 'om-drop-target' : ''}`}
+                        className={`om-slice-item ${selectedSliceId === slice.id ? 'selected' : ''} ${!slice.enabled ? 'disabled' : ''} ${isMask ? 'om-mask-item' : ''} ${dropTargetIndex === idx && dragTargetId === target.id ? 'om-drop-target' : ''}`}
                         draggable
                         onDragStart={() => handleDragStart(target.id, idx)}
                         onDragOver={(e) => handleDragOver(e, idx)}

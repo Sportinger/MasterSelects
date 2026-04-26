@@ -235,7 +235,8 @@ export class TextureManager {
     } else if (source instanceof VideoFrame) {
       // Guard against closed VideoFrames — passing a closed frame to
       // importExternalTexture crashes the GPU process (STATUS_BREAKPOINT).
-      if ((source as any).closed || source.codedWidth === 0 || source.codedHeight === 0) {
+      const frame = source as VideoFrame & { closed?: boolean };
+      if (frame.closed || source.codedWidth === 0 || source.codedHeight === 0) {
         return null;
       }
     } else {

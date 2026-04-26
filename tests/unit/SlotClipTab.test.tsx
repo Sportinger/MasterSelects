@@ -4,6 +4,7 @@ import { SlotClipTab } from '../../src/components/panels/properties/SlotClipTab'
 import { layerPlaybackManager } from '../../src/services/layerPlaybackManager';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import type { Composition, SlotClipSettings } from '../../src/stores/mediaStore';
+import type { ClipTransform } from '../../src/types';
 
 vi.mock('../../src/services/layerPlaybackManager', () => ({
   layerPlaybackManager: {
@@ -39,6 +40,16 @@ const mockedLayerPlaybackManager = layerPlaybackManager as unknown as {
   getLayerPlaybackInfo: MockFn;
 };
 
+function createTransform(): ClipTransform {
+  return {
+    position: { x: 0, y: 0, z: 0 },
+    scale: { x: 1, y: 1, z: 1 },
+    rotation: { x: 0, y: 0, z: 0 },
+    opacity: 1,
+    blendMode: 'normal',
+  };
+}
+
 function createComposition(): Composition {
   return {
     id: 'comp-1',
@@ -67,7 +78,7 @@ function createComposition(): Composition {
           inPoint: 0,
           outPoint: 20,
           sourceType: 'video',
-          transform: {} as any,
+          transform: createTransform(),
           effects: [],
         },
         {
@@ -80,7 +91,7 @@ function createComposition(): Composition {
           inPoint: 0,
           outPoint: 20,
           sourceType: 'audio',
-          transform: {} as any,
+          transform: createTransform(),
           effects: [],
         },
       ],

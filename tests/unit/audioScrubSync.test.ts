@@ -3,38 +3,54 @@ import { AudioSyncHandler } from '../../src/services/layerBuilder/AudioSyncHandl
 import { AudioTrackSyncManager } from '../../src/services/layerBuilder/AudioTrackSyncManager';
 import { audioRoutingManager } from '../../src/services/audioRoutingManager';
 import { proxyFrameCache } from '../../src/services/proxyFrameCache';
+import type { FrameContext, AudioSyncState } from '../../src/services/layerBuilder/types';
+import type { TimelineClip } from '../../src/types';
+import { createMockClip } from '../helpers/mockData';
 
-function makeClip(overrides: Record<string, unknown> = {}) {
-  return {
+type ProxyFrameCacheTestAccess = typeof proxyFrameCache & {
+  playScrubAudio: typeof proxyFrameCache.playScrubAudio;
+  hasAudioBuffer: typeof proxyFrameCache.hasAudioBuffer;
+  getCachedAudioProxy: typeof proxyFrameCache.getCachedAudioProxy;
+  preloadAudioProxy: typeof proxyFrameCache.preloadAudioProxy;
+  getAudioBuffer: typeof proxyFrameCache.getAudioBuffer;
+  stopScrubAudio: typeof proxyFrameCache.stopScrubAudio;
+};
+type AudioTrackSyncManagerTestAccess = {
+  audioSyncHandler: Pick<AudioSyncHandler, 'syncAudioElement' | 'stopScrubAudio'>;
+  syncAudioTrackClips: (ctx: FrameContext, state: AudioSyncState) => void;
+  syncVideoClipAudio: (ctx: FrameContext, state: AudioSyncState) => void;
+};
+
+const testProxyFrameCache = proxyFrameCache as ProxyFrameCacheTestAccess;
+
+function makeClip(overrides: Partial<TimelineClip> = {}): TimelineClip {
+  return createMockClip({
     id: 'clip-1',
     trackId: 'track-1',
     name: 'clip',
-    startTime: 0,
     duration: 10,
-    inPoint: 0,
     outPoint: 10,
-    effects: [],
     preservesPitch: true,
     ...overrides,
-  } as any;
+  });
 }
 
 function makeFrameContext(overrides: Record<string, unknown> = {}) {
-  const clips = (overrides.clips as any[]) ?? [];
-  const clipsAtTime = (overrides.clipsAtTime as any[]) ?? clips;
-  const mediaFiles = (overrides.mediaFiles as any[]) ?? [];
+  const clips = (overrides.clips as TimelineClip[] | undefined) ?? [];
+  const clipsAtTime = (overrides.clipsAtTime as TimelineClip[] | undefined) ?? clips;
+  const mediaFiles = (overrides.mediaFiles as Array<{ id: string; name?: string }> | undefined) ?? [];
 
   return {
     clips,
     clipsAtTime,
     tracks: [],
-    videoTracks: (overrides.videoTracks as any[]) ?? [],
-    audioTracks: (overrides.audioTracks as any[]) ?? [],
+    videoTracks: (overrides.videoTracks as unknown[]) ?? [],
+    audioTracks: (overrides.audioTracks as unknown[]) ?? [],
     visibleVideoTrackIds: (overrides.visibleVideoTrackIds as Set<string>) ?? new Set(),
     unmutedAudioTrackIds: (overrides.unmutedAudioTrackIds as Set<string>) ?? new Set(),
-    clipsByTrackId: new Map(clipsAtTime.map((clip: any) => [clip.trackId, clip])),
+    clipsByTrackId: new Map(clipsAtTime.map((clip) => [clip.trackId, clip])),
     mediaFiles,
-    mediaFileById: new Map(mediaFiles.map((file: any) => [file.id, file])),
+    mediaFileById: new Map(mediaFiles.map((file) => [file.id, file])),
     mediaFileByName: new Map(),
     compositionById: new Map(),
     isPlaying: false,
@@ -51,16 +67,16 @@ function makeFrameContext(overrides: Record<string, unknown> = {}) {
     getSourceTimeForClip: (_clipId: string, clipLocalTime: number) => clipLocalTime,
     hasKeyframes: () => false,
     ...overrides,
-  } as any;
+  } as unknown as FrameContext;
 }
 
 function stubProxyFrameCache(overrides: { hasAudioBuffer?: boolean } = {}) {
-  const originalPlayScrubAudio = (proxyFrameCache as any).playScrubAudio;
-  const originalHasAudioBuffer = (proxyFrameCache as any).hasAudioBuffer;
-  const originalGetCachedAudioProxy = (proxyFrameCache as any).getCachedAudioProxy;
-  const originalPreloadAudioProxy = (proxyFrameCache as any).preloadAudioProxy;
-  const originalGetAudioBuffer = (proxyFrameCache as any).getAudioBuffer;
-  const originalStopScrubAudio = (proxyFrameCache as any).stopScrubAudio;
+  const originalPlayScrubAudio = testProxyFrameCache.playScrubAudio;
+  const originalHasAudioBuffer = testProxyFrameCache.hasAudioBuffer;
+  const originalGetCachedAudioProxy = testProxyFrameCache.getCachedAudioProxy;
+  const originalPreloadAudioProxy = testProxyFrameCache.preloadAudioProxy;
+  const originalGetAudioBuffer = testProxyFrameCache.getAudioBuffer;
+  const originalStopScrubAudio = testProxyFrameCache.stopScrubAudio;
   const playScrubAudio = vi.fn();
   const hasAudioBuffer = vi.fn(() => overrides.hasAudioBuffer ?? true);
   const getCachedAudioProxy = vi.fn(() => null);
@@ -68,12 +84,12 @@ function stubProxyFrameCache(overrides: { hasAudioBuffer?: boolean } = {}) {
   const getAudioBuffer = vi.fn();
   const stopScrubAudio = vi.fn();
 
-  (proxyFrameCache as any).playScrubAudio = playScrubAudio;
-  (proxyFrameCache as any).hasAudioBuffer = hasAudioBuffer;
-  (proxyFrameCache as any).getCachedAudioProxy = getCachedAudioProxy;
-  (proxyFrameCache as any).preloadAudioProxy = preloadAudioProxy;
-  (proxyFrameCache as any).getAudioBuffer = getAudioBuffer;
-  (proxyFrameCache as any).stopScrubAudio = stopScrubAudio;
+  testProxyFrameCache.playScrubAudio = playScrubAudio;
+  testProxyFrameCache.hasAudioBuffer = hasAudioBuffer;
+  testProxyFrameCache.getCachedAudioProxy = getCachedAudioProxy;
+  testProxyFrameCache.preloadAudioProxy = preloadAudioProxy;
+  testProxyFrameCache.getAudioBuffer = getAudioBuffer;
+  testProxyFrameCache.stopScrubAudio = stopScrubAudio;
 
   return {
     playScrubAudio,
@@ -83,12 +99,12 @@ function stubProxyFrameCache(overrides: { hasAudioBuffer?: boolean } = {}) {
     getAudioBuffer,
     stopScrubAudio,
     restore: () => {
-      (proxyFrameCache as any).playScrubAudio = originalPlayScrubAudio;
-      (proxyFrameCache as any).hasAudioBuffer = originalHasAudioBuffer;
-      (proxyFrameCache as any).getCachedAudioProxy = originalGetCachedAudioProxy;
-      (proxyFrameCache as any).preloadAudioProxy = originalPreloadAudioProxy;
-      (proxyFrameCache as any).getAudioBuffer = originalGetAudioBuffer;
-      (proxyFrameCache as any).stopScrubAudio = originalStopScrubAudio;
+      testProxyFrameCache.playScrubAudio = originalPlayScrubAudio;
+      testProxyFrameCache.hasAudioBuffer = originalHasAudioBuffer;
+      testProxyFrameCache.getCachedAudioProxy = originalGetCachedAudioProxy;
+      testProxyFrameCache.preloadAudioProxy = originalPreloadAudioProxy;
+      testProxyFrameCache.getAudioBuffer = originalGetAudioBuffer;
+      testProxyFrameCache.stopScrubAudio = originalStopScrubAudio;
     },
   };
 }
@@ -115,7 +131,7 @@ describe('scrub audio sync', () => {
       paused: true,
       play,
       pause: vi.fn(),
-    } as any;
+    } as unknown as HTMLVideoElement;
 
     handler.syncAudioElement(
       {
@@ -148,7 +164,7 @@ describe('scrub audio sync', () => {
       paused: true,
       play: vi.fn().mockResolvedValue(undefined),
       pause: vi.fn(),
-    } as any;
+    } as unknown as HTMLAudioElement;
 
     handler.syncAudioElement(
       {
@@ -170,7 +186,7 @@ describe('scrub audio sync', () => {
   });
 
   it('uses linked audio clip settings for varispeed scrub audio and skips proxy fallback duplication', () => {
-    const manager = new AudioTrackSyncManager() as any;
+    const manager = new AudioTrackSyncManager() as unknown as AudioTrackSyncManagerTestAccess;
     const syncAudioElement = vi.fn();
     manager.audioSyncHandler = { syncAudioElement, stopScrubAudio: vi.fn() };
 
@@ -180,21 +196,21 @@ describe('scrub audio sync', () => {
       muted: false,
       currentSrc: 'blob:video-src',
       src: 'blob:video-src',
-    } as any;
+    } as unknown as HTMLAudioElement;
 
     const videoClip = makeClip({
       id: 'video-1',
       trackId: 'video-track',
       linkedClipId: 'audio-1',
       mediaFileId: 'media-1',
-      source: { type: 'video', videoElement },
+      source: { type: 'video', videoElement: videoElement as unknown as HTMLVideoElement },
     });
 
     const linkedAudioClip = makeClip({
       id: 'audio-1',
       trackId: 'audio-track',
       linkedClipId: 'video-1',
-      source: { type: 'audio', audioElement: { paused: true, src: 'blob:audio-src', readyState: 4 } },
+      source: { type: 'audio', audioElement: { paused: true, src: 'blob:audio-src', readyState: 4 } as unknown as HTMLAudioElement },
     });
 
     const ctx = makeFrameContext({
@@ -236,7 +252,7 @@ describe('scrub audio sync', () => {
   });
 
   it('suppresses linked audio clip scrub fallback once varispeed scrub audio is ready', () => {
-    const manager = new AudioTrackSyncManager() as any;
+    const manager = new AudioTrackSyncManager() as unknown as AudioTrackSyncManagerTestAccess;
     const syncAudioElement = vi.fn();
     manager.audioSyncHandler = { syncAudioElement, stopScrubAudio: vi.fn() };
 
@@ -247,7 +263,7 @@ describe('scrub audio sync', () => {
       trackId: 'video-track',
       linkedClipId: 'audio-1',
       mediaFileId: 'media-1',
-      source: { type: 'video', videoElement: { muted: false } },
+      source: { type: 'video', videoElement: { muted: false } as unknown as HTMLVideoElement },
     });
 
     const audioElement = {
@@ -255,13 +271,13 @@ describe('scrub audio sync', () => {
       pause: vi.fn(),
       src: 'blob:audio-src',
       readyState: 4,
-    } as any;
+    } as unknown as HTMLAudioElement;
 
     const linkedAudioClip = makeClip({
       id: 'audio-1',
       trackId: 'audio-track',
       linkedClipId: 'video-1',
-      source: { type: 'audio', audioElement },
+      source: { type: 'audio', audioElement: audioElement as unknown as HTMLAudioElement },
     });
 
     const ctx = makeFrameContext({

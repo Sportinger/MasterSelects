@@ -7,6 +7,14 @@ import { updateRuntimePlaybackTime } from '../../services/mediaRuntime/runtimePl
 const log = Logger.create('VideoSeeker');
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 
+type VideoFrameCallbackVideo = HTMLVideoElement & {
+  requestVideoFrameCallback: (callback: () => void) => number;
+};
+
+function hasVideoFrameCallback(video: HTMLVideoElement): video is VideoFrameCallbackVideo {
+  return 'requestVideoFrameCallback' in video;
+}
+
 /**
  * Seek all clips to the specified time for frame export.
  * Uses FrameContext for O(1) lookups instead of repeated getState() calls.
@@ -163,7 +171,7 @@ function waitForVideoCondition(
 }
 
 async function waitForVideoFrame(video: HTMLVideoElement): Promise<void> {
-  if (typeof (video as any).requestVideoFrameCallback === 'function') {
+  if (hasVideoFrameCallback(video)) {
     await new Promise<void>((resolve) => {
       let resolved = false;
       const timeoutId = setTimeout(() => {
@@ -172,7 +180,7 @@ async function waitForVideoFrame(video: HTMLVideoElement): Promise<void> {
         resolve();
       }, 120);
 
-      (video as any).requestVideoFrameCallback(() => {
+      video.requestVideoFrameCallback(() => {
         if (resolved) return;
         resolved = true;
         clearTimeout(timeoutId);

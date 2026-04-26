@@ -9,7 +9,7 @@ declare module 'mp4box' {
     number: number;
     track_id: number;
     description_index: number;
-    description: any;
+    description: unknown;
     data: ArrayBuffer;
     size: number;
     cts: number;
@@ -55,7 +55,7 @@ declare module 'mp4box' {
 
   export interface MP4File {
     onReady: (info: MP4Info) => void;
-    onSamples: (trackId: number, ref: any, samples: Sample[]) => void;
+    onSamples: (trackId: number, ref: unknown, samples: Sample[]) => void;
     onError: (error: string) => void;
     appendBuffer: (buffer: MP4ArrayBuffer) => number;
     start: () => void;
@@ -63,7 +63,7 @@ declare module 'mp4box' {
     flush: () => void;
     setExtractionOptions: (
       trackId: number,
-      user?: any,
+      user?: unknown,
       options?: { nbSamples?: number; rapAlignement?: boolean }
     ) => void;
   }

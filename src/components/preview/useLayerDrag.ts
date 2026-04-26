@@ -145,7 +145,7 @@ export function useLayerDrag({
     return () => {
       if (animId !== null) cancelAnimationFrame(animId);
     };
-  }, [editMode, layers, selectedLayerId, selectedClipId, clips, canvasSize, canvasInContainer, viewZoom, calculateLayerBounds, isDragging, dragLayerId]);
+  }, [editMode, layers, selectedLayerId, selectedClipId, clips, canvasSize, canvasInContainer, viewZoom, calculateLayerBounds, isDragging, dragLayerId, overlayRef]);
 
   // Handle mouse down on overlay
   const handleOverlayMouseDown = useCallback((e: React.MouseEvent) => {
@@ -201,7 +201,7 @@ export function useLayerDrag({
       selectClip(null);
       selectLayer(null);
     }
-  }, [editMode, findLayerAtPosition, findHandleAtPosition, clips, layers, selectedLayerId, selectClip, selectLayer]);
+  }, [editMode, findLayerAtPosition, findHandleAtPosition, clips, layers, selectedLayerId, selectClip, selectLayer, overlayRef]);
 
   // Handle mouse move on overlay — detect handle hover
   const handleOverlayMouseMove = useCallback((e: React.MouseEvent) => {
@@ -218,7 +218,7 @@ export function useLayerDrag({
     } else {
       setHoverHandle(null);
     }
-  }, [isDragging, selectedLayerId, layers, findHandleAtPosition]);
+  }, [isDragging, selectedLayerId, layers, findHandleAtPosition, overlayRef]);
 
   // Handle mouse up
   const handleOverlayMouseUp = useCallback(() => {

@@ -17,21 +17,23 @@ export function useContextMenuPosition(
 } {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [adjustedPosition, setAdjustedPosition] = useState<Position | null>(initialPosition);
+  const initialX = initialPosition?.x;
+  const initialY = initialPosition?.y;
 
   useEffect(() => {
-    if (!initialPosition) {
-      setAdjustedPosition(null);
-      return;
-    }
-
-    // Start with initial position
-    let { x, y } = initialPosition;
-
     // Wait for next frame so the menu is rendered and we can measure it
     const rafId = requestAnimationFrame(() => {
+      if (initialX === undefined || initialY === undefined) {
+        setAdjustedPosition(null);
+        return;
+      }
+
+      // Start with initial position
+      let x = initialX;
+      let y = initialY;
       const menu = menuRef.current;
       if (!menu) {
-        setAdjustedPosition(initialPosition);
+        setAdjustedPosition({ x, y });
         return;
       }
 
@@ -54,7 +56,7 @@ export function useContextMenuPosition(
     });
 
     return () => cancelAnimationFrame(rafId);
-  }, [initialPosition?.x, initialPosition?.y]);
+  }, [initialX, initialY]);
 
   return { menuRef, adjustedPosition };
 }

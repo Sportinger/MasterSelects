@@ -92,26 +92,26 @@ function getInitialState(): Partial<TimelineStore> {
  */
 export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
   return createStore<TimelineStore>()((set, get) => {
-    const selectionActions = createSelectionSlice(set as any, get as any);
-    const trackActions = createTrackSlice(set as any, get as any);
-    const keyframeActions = createKeyframeSlice(set as any, get as any);
-    const markerActions = createMarkerSlice(set as any, get as any);
-    const maskActions = createMaskSlice(set as any, get as any);
-    const clipActions = createClipSlice(set as any, get as any);
-    const textClipActions = createTextClipSlice(set as any, get as any);
-    const solidClipActions = createSolidClipSlice(set as any, get as any);
-    const clipEffectActions = createClipEffectSlice(set as any, get as any);
-    const linkedGroupActions = createLinkedGroupSlice(set as any, get as any);
-    const downloadClipActions = createDownloadClipSlice(set as any, get as any);
-    const positioningUtils = createPositioningUtils(set as any, get as any);
+    const selectionActions = createSelectionSlice(set, get);
+    const trackActions = createTrackSlice(set, get);
+    const keyframeActions = createKeyframeSlice(set, get);
+    const markerActions = createMarkerSlice(set, get);
+    const maskActions = createMaskSlice(set, get);
+    const clipActions = createClipSlice(set, get);
+    const textClipActions = createTextClipSlice(set, get);
+    const solidClipActions = createSolidClipSlice(set, get);
+    const clipEffectActions = createClipEffectSlice(set, get);
+    const linkedGroupActions = createLinkedGroupSlice(set, get);
+    const downloadClipActions = createDownloadClipSlice(set, get);
+    const positioningUtils = createPositioningUtils(set, get);
 
     // Simple playback actions (inlined to avoid importing playbackSlice which pulls in engine)
     const playbackActions = {
       setPlayheadPosition: (position: number) => {
         const { duration } = get();
-        set({ playheadPosition: Math.max(0, Math.min(position, duration)) } as any);
+        set({ playheadPosition: Math.max(0, Math.min(position, duration)) });
       },
-      setDraggingPlayhead: (dragging: boolean) => set({ isDraggingPlayhead: dragging } as any),
+      setDraggingPlayhead: (dragging: boolean) => set({ isDraggingPlayhead: dragging }),
       play: async () => {
         const { playheadPosition, inPoint, outPoint, duration, playbackSpeed } = get();
         const playbackStartPosition = resolvePlaybackStartPosition(
@@ -121,111 +121,111 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
           duration,
           playbackSpeed,
         );
-        set({ isPlaying: true, playheadPosition: playbackStartPosition } as any);
+        set({ isPlaying: true, playheadPosition: playbackStartPosition });
       },
-      pause: () => set({ isPlaying: false, playbackSpeed: 1 } as any),
-      stop: () => set({ isPlaying: false, playheadPosition: 0 } as any),
-      setZoom: (zoom: number) => set({ zoom: Math.max(0.1, Math.min(200, zoom)) } as any),
-      toggleSnapping: () => set((state: any) => ({ snappingEnabled: !state.snappingEnabled })),
-      setScrollX: (scrollX: number) => set({ scrollX: Math.max(0, scrollX) } as any),
+      pause: () => set({ isPlaying: false, playbackSpeed: 1 }),
+      stop: () => set({ isPlaying: false, playheadPosition: 0 }),
+      setZoom: (zoom: number) => set({ zoom: Math.max(0.1, Math.min(200, zoom)) }),
+      toggleSnapping: () => set((state) => ({ snappingEnabled: !state.snappingEnabled })),
+      setScrollX: (scrollX: number) => set({ scrollX: Math.max(0, scrollX) }),
       setInPoint: (time: number | null) => {
-        if (time === null) { set({ inPoint: null } as any); return; }
+        if (time === null) { set({ inPoint: null }); return; }
         const { outPoint, duration } = get();
-        set({ inPoint: Math.max(0, Math.min(time, outPoint ?? duration)) } as any);
+        set({ inPoint: Math.max(0, Math.min(time, outPoint ?? duration)) });
       },
       setOutPoint: (time: number | null) => {
-        if (time === null) { set({ outPoint: null } as any); return; }
+        if (time === null) { set({ outPoint: null }); return; }
         const { inPoint, duration } = get();
-        set({ outPoint: Math.max(inPoint ?? 0, Math.min(time, duration)) } as any);
+        set({ outPoint: Math.max(inPoint ?? 0, Math.min(time, duration)) });
       },
-      clearInOut: () => set({ inPoint: null, outPoint: null } as any),
+      clearInOut: () => set({ inPoint: null, outPoint: null }),
       setInPointAtPlayhead: () => {
         const { playheadPosition } = get();
-        (get() as any).setInPoint(playheadPosition);
+        get().setInPoint(playheadPosition);
       },
       setOutPointAtPlayhead: () => {
         const { playheadPosition } = get();
-        (get() as any).setOutPoint(playheadPosition);
+        get().setOutPoint(playheadPosition);
       },
-      setLoopPlayback: (loop: boolean) => set({ loopPlayback: loop } as any),
-      toggleLoopPlayback: () => set({ loopPlayback: !get().loopPlayback } as any),
-      setPlaybackSpeed: (speed: number) => set({ playbackSpeed: speed } as any),
-      setToolMode: (mode: string) => set({ toolMode: mode } as any),
+      setLoopPlayback: (loop: boolean) => set({ loopPlayback: loop }),
+      toggleLoopPlayback: () => set({ loopPlayback: !get().loopPlayback }),
+      setPlaybackSpeed: (speed: number) => set({ playbackSpeed: speed }),
+      setToolMode: (mode: TimelineStore['toolMode']) => set({ toolMode: mode }),
       toggleCutTool: () => {
         const { toolMode } = get();
-        set({ toolMode: toolMode === 'cut' ? 'select' : 'cut' } as any);
+        set({ toolMode: toolMode === 'cut' ? 'select' : 'cut' });
       },
-      setClipAnimationPhase: (phase: string) => set({ clipAnimationPhase: phase } as any),
-      setSlotGridProgress: (progress: number) => set({ slotGridProgress: Math.max(0, Math.min(1, progress)) } as any),
+      setClipAnimationPhase: (phase: TimelineStore['clipAnimationPhase']) => set({ clipAnimationPhase: phase }),
+      setSlotGridProgress: (progress: number) => set({ slotGridProgress: Math.max(0, Math.min(1, progress)) }),
       playForward: () => {
-        const { isPlaying, playbackSpeed, play } = get() as any;
+        const { isPlaying, playbackSpeed, play } = get();
         if (!isPlaying) {
-          set({ playbackSpeed: 1 } as any);
+          set({ playbackSpeed: 1 });
           play();
         } else if (playbackSpeed < 0) {
-          set({ playbackSpeed: 1 } as any);
+          set({ playbackSpeed: 1 });
         } else {
           const newSpeed = playbackSpeed >= 8 ? 8 : playbackSpeed * 2;
-          set({ playbackSpeed: newSpeed } as any);
+          set({ playbackSpeed: newSpeed });
         }
       },
       playReverse: () => {
-        const { isPlaying, playbackSpeed, play } = get() as any;
+        const { isPlaying, playbackSpeed, play } = get();
         if (!isPlaying) {
-          set({ playbackSpeed: -1 } as any);
+          set({ playbackSpeed: -1 });
           play();
         } else if (playbackSpeed > 0) {
-          set({ playbackSpeed: -1 } as any);
+          set({ playbackSpeed: -1 });
         } else {
           const newSpeed = playbackSpeed <= -8 ? -8 : playbackSpeed * 2;
-          set({ playbackSpeed: newSpeed } as any);
+          set({ playbackSpeed: newSpeed });
         }
       },
       setDuration: (duration: number) => {
         const clampedDuration = Math.max(1, duration);
-        set({ duration: clampedDuration, durationLocked: true } as any);
+        set({ duration: clampedDuration, durationLocked: true });
         // Clamp playhead if beyond new duration
         const { playheadPosition, inPoint, outPoint } = get();
         if (playheadPosition > clampedDuration) {
-          set({ playheadPosition: clampedDuration } as any);
+          set({ playheadPosition: clampedDuration });
         }
         if (inPoint !== null && inPoint > clampedDuration) {
-          set({ inPoint: clampedDuration } as any);
+          set({ inPoint: clampedDuration });
         }
         if (outPoint !== null && outPoint > clampedDuration) {
-          set({ outPoint: clampedDuration } as any);
+          set({ outPoint: clampedDuration });
         }
       },
       // Performance toggles
-      toggleThumbnailsEnabled: () => set({ thumbnailsEnabled: !(get() as any).thumbnailsEnabled } as any),
-      toggleWaveformsEnabled: () => set({ waveformsEnabled: !(get() as any).waveformsEnabled } as any),
-      setThumbnailsEnabled: (enabled: boolean) => set({ thumbnailsEnabled: enabled } as any),
-      setWaveformsEnabled: (enabled: boolean) => set({ waveformsEnabled: enabled } as any),
-      toggleTranscriptMarkers: () => set({ showTranscriptMarkers: !(get() as any).showTranscriptMarkers } as any),
-      setShowTranscriptMarkers: (enabled: boolean) => set({ showTranscriptMarkers: enabled } as any),
+      toggleThumbnailsEnabled: () => set({ thumbnailsEnabled: !get().thumbnailsEnabled }),
+      toggleWaveformsEnabled: () => set({ waveformsEnabled: !get().waveformsEnabled }),
+      setThumbnailsEnabled: (enabled: boolean) => set({ thumbnailsEnabled: enabled }),
+      setWaveformsEnabled: (enabled: boolean) => set({ waveformsEnabled: enabled }),
+      toggleTranscriptMarkers: () => set({ showTranscriptMarkers: !get().showTranscriptMarkers }),
+      setShowTranscriptMarkers: (enabled: boolean) => set({ showTranscriptMarkers: enabled }),
       // RAM preview actions (simplified for testing)
       toggleRamPreviewEnabled: () => {
-        const { ramPreviewEnabled } = get() as any;
+        const { ramPreviewEnabled } = get();
         if (ramPreviewEnabled) {
-          set({ ramPreviewEnabled: false, isRamPreviewing: false, ramPreviewProgress: null, ramPreviewRange: null, cachedFrameTimes: new Set() } as any);
+          set({ ramPreviewEnabled: false, isRamPreviewing: false, ramPreviewProgress: null, ramPreviewRange: null, cachedFrameTimes: new Set() });
         } else {
-          set({ ramPreviewEnabled: true } as any);
+          set({ ramPreviewEnabled: true });
         }
       },
       cancelRamPreview: () => {
-        set({ isRamPreviewing: false, ramPreviewProgress: null } as any);
+        set({ isRamPreviewing: false, ramPreviewProgress: null });
       },
       addCachedFrame: (time: number) => {
         const quantized = Math.round(time * 30) / 30;
-        const { cachedFrameTimes } = get() as any;
+        const { cachedFrameTimes } = get();
         if (!cachedFrameTimes.has(quantized)) {
           const newSet = new Set(cachedFrameTimes);
           newSet.add(quantized);
-          set({ cachedFrameTimes: newSet } as any);
+          set({ cachedFrameTimes: newSet });
         }
       },
       getCachedRanges: () => {
-        const { cachedFrameTimes } = get() as any;
+        const { cachedFrameTimes } = get();
         if (cachedFrameTimes.size === 0) return [];
         const times = Array.from(cachedFrameTimes as Set<number>).sort((a: number, b: number) => a - b);
         const ranges: Array<{ start: number; end: number }> = [];

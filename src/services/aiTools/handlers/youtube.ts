@@ -11,6 +11,37 @@ import type { ToolResult } from '../types';
 
 const log = Logger.create('AITool:YouTube');
 
+interface YouTubeSearchItem {
+  id: { videoId: string };
+  snippet: {
+    title: string;
+    thumbnails: {
+      default?: { url: string };
+      medium?: { url: string };
+    };
+    channelTitle: string;
+    publishedAt: string;
+  };
+}
+
+interface YouTubeSearchResponse {
+  items: YouTubeSearchItem[];
+}
+
+interface YouTubeDetailsItem {
+  id: string;
+  contentDetails?: { duration?: string };
+  statistics?: { viewCount?: string };
+}
+
+interface YouTubeDetailsResponse {
+  items?: YouTubeDetailsItem[];
+}
+
+interface YouTubeErrorResponse {
+  error?: { message?: string };
+}
+
 // --- Helpers (replicated from DownloadPanel) ---
 
 function parseISO8601Duration(duration: string): number {
@@ -58,30 +89,32 @@ export async function handleSearchYouTube(args: Record<string, unknown>): Promis
     );
 
     if (!searchResponse.ok) {
-      const errorData = await searchResponse.json();
+      const errorData = await searchResponse.json() as YouTubeErrorResponse;
       throw new Error(errorData.error?.message || 'YouTube API error');
     }
 
-    const searchData = await searchResponse.json();
-    const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
+    const searchData = await searchResponse.json() as YouTubeSearchResponse;
+    const videoIds = searchData.items.map((item) => item.id.videoId).join(',');
 
     // Get video details (duration, views)
     const detailsResponse = await fetch(
       `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,statistics&id=${videoIds}&key=${youtubeApiKey}`
     );
 
-    const detailsData = await detailsResponse.json();
-    const detailsMap = new Map(detailsData.items?.map((item: any) => [item.id, item]) || []);
+    const detailsData = await detailsResponse.json() as YouTubeDetailsResponse;
+    const detailsMap = new Map<string, YouTubeDetailsItem>(
+      detailsData.items?.map((item) => [item.id, item]) || []
+    );
 
-    const videos = searchData.items.map((item: any) => {
-      const details = detailsMap.get(item.id.videoId) as any;
+    const videos = searchData.items.map((item) => {
+      const details = detailsMap.get(item.id.videoId);
       const durationSeconds = details?.contentDetails?.duration
         ? parseISO8601Duration(details.contentDetails.duration)
         : 0;
       return {
         id: item.id.videoId,
         title: item.snippet.title,
-        thumbnail: item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.default?.url,
+        thumbnail: item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.default?.url || '',
         channelTitle: item.snippet.channelTitle,
         publishedAt: item.snippet.publishedAt,
         durationSeconds,

@@ -5,7 +5,7 @@ import type { TimelineClipProps } from './types';
 import { THUMB_WIDTH } from './constants';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
-import { getLabelHex } from '../panels/MediaPanel';
+import { getLabelHex } from '../panels/media/labelColors';
 // PickWhip disabled
 import { Logger } from '../../services/logger';
 import { shouldLoopVectorAnimation } from '../../types/vectorAnimation';
@@ -118,7 +118,6 @@ function TimelineClipComponent({
   clipFade: _clipFade,
   zoom,
   scrollX,
-  timelineRef,
   proxyEnabled,
   proxyStatus,
   proxyProgress,
@@ -200,7 +199,7 @@ function TimelineClipComponent({
   // Animation phase for enter/exit transitions
   const clipAnimationPhase = useTimelineStore(s => s.clipAnimationPhase);
   const clipEntranceKey = useTimelineStore(s => s.clipEntranceAnimationKey);
-  const mountKeyRef = useRef(clipEntranceKey);
+  const [mountEntranceKey] = useState(clipEntranceKey);
 
   // Only compute stagger order during composition entrance animation. Doing a
   // full clips sort inside every TimelineClip render gets very expensive once
@@ -221,7 +220,7 @@ function TimelineClipComponent({
   // - 'exiting': apply exit animation
   // - 'entering' + new clips: apply entrance animation (only during composition switch)
   // - Otherwise: no animation
-  const isNewClip = mountKeyRef.current === clipEntranceKey && clipEntranceKey > 0;
+  const isNewClip = mountEntranceKey === clipEntranceKey && clipEntranceKey > 0;
   const animationClass = clipAnimationPhase === 'exiting'
     ? 'exit-animate'
     : (clipAnimationPhase === 'entering' && isNewClip)
@@ -232,12 +231,14 @@ function TimelineClipComponent({
   const aiMove = useTimelineStore(s => s.aiMovingClips.get(clip.id));
   const [aiMovePhase, setAiMovePhase] = useState<'idle' | 'initial' | 'animating'>('idle');
   const aiMoveRef = useRef<number | null>(null);
+  const aiMoveStartedAt = aiMove?.startedAt;
+  const aiMoveDuration = aiMove?.animationDuration ?? 200;
 
   useEffect(() => {
-    if (aiMove) {
-      setAiMovePhase('initial');
+    if (aiMoveStartedAt !== undefined) {
       // Double-rAF to ensure the initial transform is painted before starting transition
       const raf1 = requestAnimationFrame(() => {
+        setAiMovePhase('initial');
         const raf2 = requestAnimationFrame(() => {
           setAiMovePhase('animating');
         });
@@ -245,16 +246,17 @@ function TimelineClipComponent({
       });
       const timer = setTimeout(() => {
         setAiMovePhase('idle');
-      }, (aiMove.animationDuration || 200) + 50);
+      }, aiMoveDuration + 50);
       return () => {
         cancelAnimationFrame(raf1);
         if (aiMoveRef.current) cancelAnimationFrame(aiMoveRef.current);
         clearTimeout(timer);
       };
     } else {
-      setAiMovePhase('idle');
+      const frame = requestAnimationFrame(() => setAiMovePhase('idle'));
+      return () => cancelAnimationFrame(frame);
     }
-  }, [aiMove?.startedAt]);
+  }, [aiMoveDuration, aiMoveStartedAt]);
 
   // Check if this clip should show cut indicator (either directly hovered or linked to hovered clip)
   const isDirectlyHovered = cutHoverInfo?.clipId === clip.id;
@@ -370,28 +372,18 @@ function TimelineClipComponent({
 
   // Calculate position - if dragging, use the computed position (with snapping/resistance)
   let left = timeToPixel(displayStartTime);
-  if (isDragging && clipDrag && timelineRef.current) {
+  if (isDragging && clipDrag) {
     // Always use snappedTime when available - it contains the position with snapping and resistance applied
     if (clipDrag.snappedTime !== null) {
       left = timeToPixel(clipDrag.snappedTime);
-    } else {
-      const rect = timelineRef.current.getBoundingClientRect();
-      const x = clipDrag.currentX - rect.left + scrollX - clipDrag.grabOffsetX;
-      left = Math.max(0, x);
     }
-  } else if (isLinkedToDragging && clipDrag && timelineRef.current && draggedClip) {
+  } else if (isLinkedToDragging && clipDrag && draggedClip) {
     // Move linked clip in sync - use computed position (snapped + resistance) if available
-    let newDragTime: number;
     if (clipDrag.snappedTime !== null) {
-      newDragTime = clipDrag.snappedTime;
-    } else {
-      const rect = timelineRef.current.getBoundingClientRect();
-      const dragX =
-        clipDrag.currentX - rect.left + scrollX - clipDrag.grabOffsetX;
-      newDragTime = pixelToTime(Math.max(0, dragX));
+      const newDragTime = clipDrag.snappedTime;
+      const timeDelta = newDragTime - draggedClip.startTime;
+      left = timeToPixel(Math.max(0, clip.startTime + timeDelta));
     }
-    const timeDelta = newDragTime - draggedClip.startTime;
-    left = timeToPixel(Math.max(0, clip.startTime + timeDelta));
   } else if (clipDrag?.multiSelectClipIds?.includes(clip.id) && clipDrag.multiSelectTimeDelta !== undefined) {
     // This clip is part of multi-select drag (but not the primary dragged clip)
     left = timeToPixel(Math.max(0, clip.startTime + clipDrag.multiSelectTimeDelta));
@@ -709,7 +701,7 @@ function TimelineClipComponent({
         // Use transcribedRanges from MediaFile for coverage (silence still counts as transcribed)
         const mediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
         const mediaFile = mediaFileId ? useMediaStore.getState().files.find(f => f.id === mediaFileId) : null;
-        const ranges: [number, number][] = (mediaFile as any)?.transcribedRanges || [];
+        const ranges = mediaFile?.transcribedRanges ?? [];
         let pct = 0;
         if (ranges.length > 0) {
           // Intersect transcribed ranges with clip's [inPoint, outPoint]
@@ -750,7 +742,7 @@ function TimelineClipComponent({
         if (clip.analysis?.frames?.length) {
           const frames = clip.analysis.frames;
           const interval = (clip.analysis.sampleInterval || 500) / 1000;
-          const framesInRange = frames.filter((f: any) => f.timestamp >= clipIn && f.timestamp < clipOut);
+          const framesInRange = frames.filter((f) => f.timestamp >= clipIn && f.timestamp < clipOut);
           const coveredTime = framesInRange.length * interval;
           pct = Math.min(100, Math.round((coveredTime / clipDur) * 100));
         }

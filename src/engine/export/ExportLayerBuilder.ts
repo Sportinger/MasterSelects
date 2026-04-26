@@ -1,7 +1,7 @@
 // Layer building for export rendering
 
 import { Logger } from '../../services/logger';
-import type { Layer, NestedCompositionData, BlendMode, ClipTransform } from '../../types';
+import type { Layer, NestedCompositionData, BlendMode, ClipTransform, Effect } from '../../types';
 
 const log = Logger.create('ExportLayerBuilder');
 import type { TimelineClip, TimelineTrack } from '../../stores/timeline/types';
@@ -307,7 +307,7 @@ function buildBaseLayerProps(
   }
 
   // Get effects safely
-  let effects: any[] = [];
+  let effects: Effect[] = [];
   try {
     effects = getInterpolatedEffects(clip.id, clipLocalTime);
   } catch (e) {

@@ -50,14 +50,36 @@ interface MP4VideoTrack {
   video: { width: number; height: number };
 }
 
+interface CodecConfigurationBox {
+  write: (stream: { buffer: ArrayBuffer; position?: number }) => void;
+}
+
+interface MP4TrackDetails {
+  mdia?: {
+    minf?: {
+      stbl?: {
+        stsd?: {
+          entries?: Array<{
+            avcC?: CodecConfigurationBox;
+            hvcC?: CodecConfigurationBox;
+            vpcC?: CodecConfigurationBox;
+            av1C?: CodecConfigurationBox;
+          }>;
+        };
+      };
+    };
+  };
+}
+
 interface MP4File {
   onReady: (info: { videoTracks: MP4VideoTrack[] }) => void;
-  onSamples: (trackId: number, ref: any, samples: Sample[]) => void;
+  onSamples: (trackId: number, ref: unknown, samples: Sample[]) => void;
   onError: (error: string) => void;
   appendBuffer: (buffer: MP4ArrayBuffer) => number;
   start: () => void;
   flush: () => void;
-  setExtractionOptions: (trackId: number, user: any, options: { nbSamples: number }) => void;
+  setExtractionOptions: (trackId: number, user: unknown, options: { nbSamples: number }) => void;
+  getTrackById: (id: number) => MP4TrackDetails | undefined;
 }
 
 interface ClipInfo {
@@ -236,7 +258,7 @@ export class ParallelDecodeManager {
         let description: ArrayBuffer | undefined;
 
         try {
-          const trak = (mp4File as any).getTrackById(videoTrack.id);
+          const trak = mp4File.getTrackById(videoTrack.id);
           if (trak?.mdia?.minf?.stbl?.stsd?.entries?.[0]) {
             const entry = trak.mdia.minf.stbl.stsd.entries[0];
             const configBox = entry.avcC || entry.hvcC || entry.vpcC || entry.av1C;

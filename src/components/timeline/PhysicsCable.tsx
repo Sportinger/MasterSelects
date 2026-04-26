@@ -37,10 +37,14 @@ export function PhysicsCable({
 }: PhysicsCableProps) {
   const physicsRef = useRef<PhysicsState | null>(null);
   const animationRef = useRef<number | null>(null);
-  const [controlPoint, setControlPoint] = useState({ x: 0, y: 0 });
+  const [controlPoint, setControlPoint] = useState(() => {
+    const midX = (startX + endX) / 2;
+    const midY = (startY + endY) / 2;
+    return { x: midX, y: midY + 20 };
+  });
 
   // Initialize physics state
-  if (!physicsRef.current) {
+  if (physicsRef.current == null) {
     const midX = (startX + endX) / 2;
     const midY = (startY + endY) / 2;
     physicsRef.current = {
@@ -53,7 +57,6 @@ export function PhysicsCable({
       prevEndX: endX,
       prevEndY: endY,
     };
-    setControlPoint({ x: midX, y: midY + 20 });
   }
 
   useEffect(() => {

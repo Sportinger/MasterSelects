@@ -1,7 +1,7 @@
 // Export-related types and interfaces
 
 import type { TimelineClip, TimelineTrack } from '../../stores/timeline/types';
-import type { BlendMode } from '../../types';
+import type { BlendMode, ClipTransform, Effect } from '../../types';
 import type { WebCodecsPlayer } from '../WebCodecsPlayer';
 
 // ============ VIDEO CODECS ============
@@ -106,7 +106,7 @@ export interface BaseLayerProps {
   visible: boolean;
   opacity: number;
   blendMode: BlendMode;
-  effects: any[];
+  effects: Effect[];
   position: { x: number; y: number; z: number };
   scale: { x: number; y: number };
   rotation: { x: number; y: number; z: number };
@@ -125,8 +125,8 @@ export interface FrameContext {
   clipsAtTime: TimelineClip[];
   trackMap: Map<string, TimelineTrack>;
   clipsByTrack: Map<string, TimelineClip>;
-  getInterpolatedTransform: (clipId: string, localTime: number) => any;
-  getInterpolatedEffects: (clipId: string, localTime: number) => any[];
+  getInterpolatedTransform: (clipId: string, localTime: number) => ClipTransform;
+  getInterpolatedEffects: (clipId: string, localTime: number) => Effect[];
   getSourceTimeForClip: (clipId: string, localTime: number) => number;
   getInterpolatedSpeed: (clipId: string, localTime: number) => number;
 }

@@ -11,6 +11,15 @@ interface FileSystemHandlePermissionDescriptor {
   mode?: 'read' | 'readwrite';
 }
 
+type FilePickerWindow = Window & typeof globalThis & {
+  showOpenFilePicker: (options?: object) => Promise<FileSystemFileHandle[]>;
+  showDirectoryPicker: (options?: object) => Promise<FileSystemDirectoryHandle>;
+};
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
 // Extend the FileSystemHandle interface
 declare global {
   interface FileSystemHandle {
@@ -83,7 +92,7 @@ export async function pickFiles(options?: {
   }
 
   try {
-    const handles = await (window as any).showOpenFilePicker({
+    const handles = await (window as FilePickerWindow).showOpenFilePicker({
       multiple: options?.multiple ?? true,
       types: options?.types ?? [
         {
@@ -104,8 +113,8 @@ export async function pickFiles(options?: {
     }
 
     return results;
-  } catch (e: any) {
-    if (e.name === 'AbortError') {
+  } catch (e) {
+    if (isAbortError(e)) {
       // User cancelled
       return null;
     }
@@ -131,7 +140,7 @@ export async function pickProxyFolder(): Promise<FileSystemDirectoryHandle | nul
   }
 
   try {
-    const handle = await (window as any).showDirectoryPicker({
+    const handle = await (window as FilePickerWindow).showDirectoryPicker({
       mode: 'readwrite',
       startIn: 'documents',
     });
@@ -143,8 +152,8 @@ export async function pickProxyFolder(): Promise<FileSystemDirectoryHandle | nul
     log.info('Proxy folder set:', handle.name);
 
     return handle;
-  } catch (e: any) {
-    if (e.name === 'AbortError') {
+  } catch (e) {
+    if (isAbortError(e)) {
       return null;
     }
     log.error('Failed to pick proxy folder', e);

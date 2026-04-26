@@ -27,10 +27,10 @@ export interface MP4ArrayBuffer extends ArrayBuffer {
 
 export interface MP4File {
   onReady: (info: { videoTracks: MP4VideoTrack[] }) => void;
-  onSamples: (trackId: number, ref: any, samples: Sample[]) => void;
+  onSamples: (trackId: number, ref: unknown, samples: Sample[]) => void;
   onError: (error: string) => void;
   appendBuffer: (buffer: MP4ArrayBuffer) => number;
   start: () => void;
   flush: () => void;
-  setExtractionOptions: (trackId: number, user: any, options: { nbSamples: number }) => void;
+  setExtractionOptions: (trackId: number, user: unknown, options: { nbSamples: number }) => void;
 }

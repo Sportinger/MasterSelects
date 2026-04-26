@@ -1,7 +1,7 @@
 // React hook for accessing source-based thumbnail cache
 // Clips use this instead of clip.thumbnails for filmstrip display
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { thumbnailCacheService } from '../services/thumbnailCacheService';
 
 /**
@@ -16,15 +16,13 @@ export function useThumbnailCache(
   reversed?: boolean
 ): (string | null)[] {
   const [cacheVersion, setCacheVersion] = useState(0);
-  const mediaFileIdRef = useRef(mediaFileId);
-  mediaFileIdRef.current = mediaFileId;
 
   // Subscribe to thumbnail cache status changes
   useEffect(() => {
     if (!mediaFileId) return;
 
     const unsubscribe = thumbnailCacheService.subscribe((changedId) => {
-      if (changedId === mediaFileIdRef.current) {
+      if (changedId === mediaFileId) {
         setCacheVersion(n => n + 1);
       }
     });
@@ -34,6 +32,7 @@ export function useThumbnailCache(
 
   // Compute thumbnails for the requested range
   return useMemo(() => {
+    void cacheVersion;
     if (!mediaFileId || visibleCount <= 0) {
       return [];
     }

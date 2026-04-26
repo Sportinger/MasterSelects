@@ -32,6 +32,7 @@ import { getModelSequenceFrameUrl, resolveModelSequenceData } from '../../utils/
 import { resolveSceneEffectorsEnabled } from '../../engine/scene/SceneEffectorUtils';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
+import type { MediaFile } from '../../stores/mediaStore/types';
 import { DEFAULT_TRANSFORM, MAX_NESTING_DEPTH } from '../../stores/timeline/constants';
 import { prewarmGaussianSplatRuntime } from '../../engine/scene/runtime/SharedSplatRuntimeCache';
 import { resolveSharedSplatUseNativeRenderer } from '../../engine/scene/runtime/SharedSplatRuntimeUtils';
@@ -734,7 +735,7 @@ export class LayerBuilderService {
     clip: TimelineClip,
     layerIndex: number,
     clipTime: number,
-    mediaFile: any,
+    mediaFile: MediaFile,
     ctx: FrameContext,
     opacityOverride?: number
   ): Layer | null {
@@ -1229,13 +1230,13 @@ export class LayerBuilderService {
       });
     }
 
-    const baseLayer = {
+    const baseLayer: Omit<Layer, 'source'> = {
       id: `nested-layer-${nestedClip.id}`,
       name: nestedClip.name,
       sourceClipId: nestedClip.id,
       visible: true,
       opacity: transform.opacity ?? 1,
-      blendMode: transform.blendMode || 'normal',
+      blendMode: (transform.blendMode || 'normal') as BlendMode,
       effects,
       position: {
         x: transform.position?.x || 0,
@@ -1255,8 +1256,8 @@ export class LayerBuilderService {
 
     // Add mask properties
     if (nestedClip.masks && nestedClip.masks.length > 0) {
-      (baseLayer as any).maskClipId = nestedClip.id;
-      (baseLayer as any).maskInvert = nestedClip.masks.some(m => m.inverted);
+      baseLayer.maskClipId = nestedClip.id;
+      baseLayer.maskInvert = nestedClip.masks.some(m => m.inverted);
     }
 
     // Handle sub-nested composition clips (Level 3+)

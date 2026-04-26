@@ -3,6 +3,25 @@
 import type { ToolResult } from '../types';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
+import type { MediaFile } from '../../../stores/mediaStore/types';
+
+type GaussianRendererDebugAccess = {
+  currentAvatarUrl?: string | null;
+  module?: unknown;
+  renderer?: unknown;
+  blendshapes?: Record<string, number>;
+};
+
+type GaussianSplatModule = Record<string, unknown> & {
+  GaussianSplatRenderer?: {
+    getInstance?: unknown;
+  };
+};
+
+type GaussianImportMediaStore = ReturnType<typeof useMediaStore.getState> & {
+  importGaussianAvatar: (file: File, parentId?: string | null) => Promise<MediaFile>;
+};
+
 /**
  * getGaussianStatus — full snapshot of the renderer singleton
  */
@@ -21,6 +40,7 @@ export async function handleGetGaussianStatus(): Promise<ToolResult> {
 
     // Check if the hidden container is in the DOM
     const containers = document.querySelectorAll('div[style*="-9999px"]');
+    const debugRenderer = renderer as unknown as GaussianRendererDebugAccess;
 
     return {
       success: true,
@@ -38,10 +58,10 @@ export async function handleGetGaussianStatus(): Promise<ToolResult> {
         } : { exists: false },
         hiddenContainerCount: containers.length,
         // Access private fields via indexing for debug
-        currentAvatarUrl: (renderer as any).currentAvatarUrl ?? null,
-        moduleLoaded: !!(renderer as any).module,
-        rendererInstance: !!(renderer as any).renderer,
-        blendshapes: (renderer as any).blendshapes ?? {},
+        currentAvatarUrl: debugRenderer.currentAvatarUrl ?? null,
+        moduleLoaded: !!debugRenderer.module,
+        rendererInstance: !!debugRenderer.renderer,
+        blendshapes: debugRenderer.blendshapes ?? {},
       },
     };
   } catch (err) {
@@ -82,7 +102,7 @@ export async function handleGetGaussianClips(): Promise<ToolResult> {
             type: mediaFile.type,
             url: mediaFile.url,
             fileSize: mediaFile.fileSize,
-            isImporting: (mediaFile as any).isImporting,
+            isImporting: mediaFile.isImporting,
           } : null,
         };
       });
@@ -190,9 +210,9 @@ export async function handleTestGaussianModule(): Promise<ToolResult> {
 
     // Step 3: Dynamic import
     const importStart = performance.now();
-    let mod: any;
+    let mod: GaussianSplatModule;
     try {
-      mod = await import(/* @vite-ignore */ blobUrl);
+      mod = await import(/* @vite-ignore */ blobUrl) as GaussianSplatModule;
       const exportNames = Object.keys(mod);
       steps.push({
         step: 'dynamic_import',
@@ -213,9 +233,10 @@ export async function handleTestGaussianModule(): Promise<ToolResult> {
     URL.revokeObjectURL(blobUrl);
 
     // Step 4: Check for GaussianSplatRenderer class
-    const hasClass = !!mod.GaussianSplatRenderer;
-    const classType = typeof mod.GaussianSplatRenderer;
-    const hasGetInstance = hasClass && typeof mod.GaussianSplatRenderer.getInstance === 'function';
+    const GaussianSplatRenderer = mod.GaussianSplatRenderer;
+    const hasClass = !!GaussianSplatRenderer;
+    const classType = typeof GaussianSplatRenderer;
+    const hasGetInstance = typeof GaussianSplatRenderer?.getInstance === 'function';
     steps.push({
       step: 'check_class',
       ok: hasClass && hasGetInstance,
@@ -415,8 +436,8 @@ export async function handleTestGaussianImportPipeline(): Promise<ToolResult> {
 
     // Step 2: Import into media store
     const importStart = performance.now();
-    const mediaStore = useMediaStore.getState();
-    let mediaFile: any;
+    const mediaStore = useMediaStore.getState() as GaussianImportMediaStore;
+    let mediaFile: MediaFile;
     try {
       mediaFile = await mediaStore.importGaussianAvatar(avatarFile);
       steps.push({
@@ -439,7 +460,7 @@ export async function handleTestGaussianImportPipeline(): Promise<ToolResult> {
       step: 'verify_in_store',
       ok: !!inStore,
       detail: inStore
-        ? `Found in store: type=${inStore.type}, isImporting=${(inStore as any).isImporting}`
+        ? `Found in store: type=${inStore.type}, isImporting=${inStore.isImporting}`
         : 'NOT found in store after import!',
     });
 

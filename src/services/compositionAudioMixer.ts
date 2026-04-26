@@ -129,7 +129,7 @@ class CompositionAudioMixerService {
         file = clip.file;
       } else {
         // Look up in media files
-        const mediaFile = files.find(f => f.name === clip.name || f.id === (clip as any).mediaFileId);
+        const mediaFile = files.find(f => f.name === clip.name || f.id === clip.mediaFileId);
         if (mediaFile?.file) {
           file = mediaFile.file;
         }

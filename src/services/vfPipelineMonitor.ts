@@ -394,9 +394,26 @@ class VfPipelineMonitor {
 // Singleton
 export const vfPipelineMonitor = new VfPipelineMonitor();
 
+type VfPipelineConsoleApi = {
+  events: (n?: number) => ReturnType<VfPipelineMonitor['events']>;
+  stalls: () => ReturnType<VfPipelineMonitor['stalls']>;
+  stallContext: () => ReturnType<VfPipelineMonitor['stallContext']>;
+  seeks: () => ReturnType<VfPipelineMonitor['seeks']>;
+  stats: () => ReturnType<VfPipelineMonitor['stats']>;
+  reset: () => void;
+  timeline: (ms?: number) => ReturnType<VfPipelineMonitor['timeline']>;
+  audioEvents: (n?: number) => ReturnType<VfPipelineMonitor['audioEvents']>;
+  audioDrifts: () => ReturnType<VfPipelineMonitor['audioDrifts']>;
+  audioTimeline: (ms?: number) => ReturnType<VfPipelineMonitor['audioTimeline']>;
+};
+
+type VfPipelineWindow = Window & {
+  __VF_PIPELINE__?: VfPipelineConsoleApi;
+};
+
 // Expose on window for console access
 if (typeof window !== 'undefined') {
-  (window as any).__VF_PIPELINE__ = {
+  (window as VfPipelineWindow).__VF_PIPELINE__ = {
     events: (n?: number) => vfPipelineMonitor.events(n),
     stalls: () => vfPipelineMonitor.stalls(),
     stallContext: () => vfPipelineMonitor.stallContext(),

@@ -23,13 +23,20 @@ export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
   const [duration, setDuration] = useState(file.duration || 0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isScrubbing, setIsScrubbing] = useState(false);
+  const currentTimeRef = useRef(currentTime);
 
   useEffect(() => {
-    setBackendError(null);
-    setBackendReady(false);
-    setCurrentTime(0);
-    setDuration(file.duration || 0);
-    setIsPlaying(false);
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      setBackendError(null);
+      setBackendReady(false);
+      setCurrentTime(0);
+      setDuration(file.duration || 0);
+      setIsPlaying(false);
+    });
   }, [file.id, file.duration]);
 
   // HTML video event listeners
@@ -45,8 +52,9 @@ export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
     const onLoadedMetadata = () => {
       setDuration(video.duration);
       setBackendReady(true);
-      if (currentTime > 0.01) {
-        video.currentTime = Math.min(currentTime, video.duration || currentTime);
+      const restoreTime = currentTimeRef.current;
+      if (restoreTime > 0.01) {
+        video.currentTime = Math.min(restoreTime, video.duration || restoreTime);
       }
     };
     const onPlay = () => setIsPlaying(true);
@@ -78,8 +86,8 @@ export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
 
   // Cleanup on unmount
   useEffect(() => {
+    const video = videoRef.current;
     return () => {
-      const video = videoRef.current;
       if (video) {
         video.pause();
         video.src = '';

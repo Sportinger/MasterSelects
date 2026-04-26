@@ -53,7 +53,7 @@ export function useMaskShapeDraw(
     });
 
     e.preventDefault();
-  }, [selectedClip, maskEditMode]);
+  }, [selectedClip, maskEditMode, svgRef]);
 
   const handleShapeMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
     if (!shapeDrawState.isDrawing) return;
@@ -70,7 +70,7 @@ export function useMaskShapeDraw(
       currentX: x,
       currentY: y,
     }));
-  }, [shapeDrawState.isDrawing]);
+  }, [shapeDrawState.isDrawing, svgRef]);
 
   const handleShapeMouseUp = useCallback((e?: React.MouseEvent) => {
     if (!shapeDrawState.isDrawing || !selectedClip) {
@@ -144,7 +144,7 @@ export function useMaskShapeDraw(
     });
 
     justFinishedDrawing.current = true;
-  }, [shapeDrawState, selectedClip, maskEditMode, addMask, setMaskEditMode]);
+  }, [shapeDrawState, selectedClip, maskEditMode, addMask, setActiveMask, setMaskEditMode]);
 
   return {
     shapeDrawState,

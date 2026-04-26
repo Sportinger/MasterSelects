@@ -20,9 +20,23 @@ export function VerticalScrollbar({
   const [isDragging, setIsDragging] = useState<'thumb' | 'top' | 'bottom' | null>(null);
   const [dragStartY, setDragStartY] = useState(0);
   const [dragStartScrollY, setDragStartScrollY] = useState(0);
+  const [trackHeight, setTrackHeight] = useState(200);
+
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+
+    const updateTrackHeight = () => {
+      setTrackHeight(track.clientHeight || 200);
+    };
+
+    updateTrackHeight();
+    const observer = new ResizeObserver(updateTrackHeight);
+    observer.observe(track);
+    return () => observer.disconnect();
+  }, []);
 
   // Calculate thumb position and size
-  const trackHeight = trackRef.current?.clientHeight ?? 200;
 
   // Thumb height represents the viewport as a fraction of total content
   const thumbHeightRatio = Math.min(1, viewportHeight / Math.max(1, contentHeight));

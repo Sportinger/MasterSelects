@@ -71,7 +71,7 @@ export function SceneDescriptionPanel() {
     return clips.find(c => c.sceneDescriptions && c.sceneDescriptions.length > 0);
   }, [clips, selectedClipId]);
 
-  const segments = selectedClip?.sceneDescriptions ?? [];
+  const segments = useMemo(() => selectedClip?.sceneDescriptions ?? [], [selectedClip]);
   const descStatus = selectedClip?.sceneDescriptionStatus ?? 'none';
   const descProgress = selectedClip?.sceneDescriptionProgress ?? 0;
   const descMessage = selectedClip?.sceneDescriptionMessage;

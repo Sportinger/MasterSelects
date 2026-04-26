@@ -37,7 +37,8 @@ import { animateSlotGrid } from './slotGridAnimation';
 import { useTimelineKeyboard } from './hooks/useTimelineKeyboard';
 import { useTimelineZoom } from './hooks/useTimelineZoom';
 import { usePlayheadDrag } from './hooks/usePlayheadDrag';
-import { TimelineContextMenu, useClipContextMenu } from './TimelineContextMenu';
+import { TimelineContextMenu } from './TimelineContextMenu';
+import { useClipContextMenu } from './useClipContextMenu';
 import { useMarqueeSelection } from './hooks/useMarqueeSelection';
 import { useClipTrim } from './hooks/useClipTrim';
 import { useClipDrag } from './hooks/useClipDrag';
@@ -805,7 +806,6 @@ export function Timeline() {
       getFadeOutDuration,
       getClipKeyframes,
       moveKeyframes,
-      clipKeyframes,
       timeToPixel,
       pixelToTime,
       formatTime,

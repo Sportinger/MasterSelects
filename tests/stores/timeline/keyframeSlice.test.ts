@@ -7,7 +7,7 @@ describe('keyframeSlice', () => {
   const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0, duration: 10 });
 
   beforeEach(() => {
-    store = createTestTimelineStore({ clips: [clip] } as any);
+    store = createTestTimelineStore({ clips: [clip] });
   });
 
   // ─── addKeyframe ───────────────────────────────────────────────────
@@ -60,7 +60,7 @@ describe('keyframeSlice', () => {
 
   it('addKeyframe: uses playhead position when time is omitted', () => {
     // Set playhead to 3s (clip starts at 0, so local time = 3)
-    store.setState({ playheadPosition: 3 } as any);
+    store.setState({ playheadPosition: 3 });
     store.getState().addKeyframe('clip-1', 'opacity', 0.7);
     const kfs = store.getState().clipKeyframes.get('clip-1')!;
     expect(kfs[0].time).toBe(3);
@@ -68,7 +68,7 @@ describe('keyframeSlice', () => {
 
   it('addKeyframe: playhead-based time accounts for clip startTime', () => {
     const offsetClip = createMockClip({ id: 'clip-offset', trackId: 'video-1', startTime: 5, duration: 10 });
-    store = createTestTimelineStore({ clips: [offsetClip], playheadPosition: 8 } as any);
+    store = createTestTimelineStore({ clips: [offsetClip], playheadPosition: 8 });
     store.getState().addKeyframe('clip-offset', 'opacity', 0.5);
     const kfs = store.getState().clipKeyframes.get('clip-offset')!;
     // playhead=8, startTime=5 => local time = 3
@@ -82,7 +82,7 @@ describe('keyframeSlice', () => {
   });
 
   it('addKeyframe: normalizes legacy AI easing aliases', () => {
-    store.getState().addKeyframe('clip-1', 'opacity', 0.5, 1, 'easeOut' as any);
+    store.getState().addKeyframe('clip-1', 'opacity', 0.5, 1, 'easeOut');
     const kfs = store.getState().clipKeyframes.get('clip-1')!;
     expect(kfs[0].easing).toBe('ease-out');
   });
@@ -180,7 +180,7 @@ describe('keyframeSlice', () => {
   it('updateKeyframe: normalizes legacy easing aliases', () => {
     store.getState().addKeyframe('clip-1', 'opacity', 0.5, 1);
     const kfId = store.getState().clipKeyframes.get('clip-1')![0].id;
-    store.getState().updateKeyframe(kfId, { easing: 'easeInOut' as any });
+    store.getState().updateKeyframe(kfId, { easing: 'easeInOut' });
     const kf = store.getState().clipKeyframes.get('clip-1')![0];
     expect(kf.easing).toBe('ease-in-out');
   });
@@ -341,7 +341,7 @@ describe('keyframeSlice', () => {
 
   it('toggleKeyframeRecording: independent per clip', () => {
     const clip2 = createMockClip({ id: 'clip-2', trackId: 'video-1', startTime: 10, duration: 5 });
-    store = createTestTimelineStore({ clips: [clip, clip2] } as any);
+    store = createTestTimelineStore({ clips: [clip, clip2] });
     store.getState().toggleKeyframeRecording('clip-1', 'opacity');
     expect(store.getState().isRecording('clip-1', 'opacity')).toBe(true);
     expect(store.getState().isRecording('clip-2', 'opacity')).toBe(false);
@@ -507,7 +507,7 @@ describe('keyframeSlice', () => {
 
   it('trackHasKeyframes: checks multiple clips on track', () => {
     const clip2 = createMockClip({ id: 'clip-2', trackId: 'video-1', startTime: 15, duration: 5 });
-    store = createTestTimelineStore({ clips: [clip, clip2] } as any);
+    store = createTestTimelineStore({ clips: [clip, clip2] });
     // Only clip-2 has keyframes
     store.getState().addKeyframe('clip-2', 'opacity', 0.5, 1);
     expect(store.getState().trackHasKeyframes('video-1')).toBe(true);
@@ -635,7 +635,7 @@ describe('keyframeSlice', () => {
         cameraSettings: { fov: 60, near: 0.1, far: 1000 },
       },
     });
-    store = createTestTimelineStore({ clips: [cameraClip] } as any);
+    store = createTestTimelineStore({ clips: [cameraClip] });
 
     store.getState().addKeyframe('camera-1', 'rotation.y', 350, 0);
     store.getState().addKeyframe('camera-1', 'rotation.y', 10, 10);
@@ -659,7 +659,7 @@ describe('keyframeSlice', () => {
       duration: 10,
       effects: [{ id: 'fx-1', type: 'brightness', enabled: true, params: { brightness: 1.5 } }],
     });
-    store = createTestTimelineStore({ clips: [effectClip] } as any);
+    store = createTestTimelineStore({ clips: [effectClip] });
     const effects = store.getState().getInterpolatedEffects('clip-fx', 0);
     expect(effects.length).toBe(1);
     expect(effects[0].params.brightness).toBe(1.5);
@@ -673,9 +673,9 @@ describe('keyframeSlice', () => {
       duration: 10,
       effects: [{ id: 'fx-1', type: 'brightness', enabled: true, params: { brightness: 1.0 } }],
     });
-    store = createTestTimelineStore({ clips: [effectClip] } as any);
-    store.getState().addKeyframe('clip-fx', 'effect.fx-1.brightness' as any, 0.5, 0);
-    store.getState().addKeyframe('clip-fx', 'effect.fx-1.brightness' as any, 2.0, 10);
+    store = createTestTimelineStore({ clips: [effectClip] });
+    store.getState().addKeyframe('clip-fx', 'effect.fx-1.brightness', 0.5, 0);
+    store.getState().addKeyframe('clip-fx', 'effect.fx-1.brightness', 2.0, 10);
     const effects = store.getState().getInterpolatedEffects('clip-fx', 5);
     expect(effects[0].params.brightness).toBeCloseTo(1.25, 1);
   });
@@ -694,7 +694,7 @@ describe('keyframeSlice', () => {
       duration: 10,
       speed: 2,
     });
-    store = createTestTimelineStore({ clips: [speedClip] } as any);
+    store = createTestTimelineStore({ clips: [speedClip] });
     expect(store.getState().getInterpolatedSpeed('clip-speed', 5)).toBe(2);
   });
 
@@ -711,7 +711,7 @@ describe('keyframeSlice', () => {
   // ─── setPropertyValue ──────────────────────────────────────────────
 
   it('setPropertyValue: creates keyframe when recording is enabled', () => {
-    store.setState({ playheadPosition: 3 } as any);
+    store.setState({ playheadPosition: 3 });
     store.getState().toggleKeyframeRecording('clip-1', 'opacity');
     store.getState().setPropertyValue('clip-1', 'opacity', 0.7);
     const kfs = store.getState().clipKeyframes.get('clip-1');
@@ -732,7 +732,7 @@ describe('keyframeSlice', () => {
     // Add initial keyframe
     store.getState().addKeyframe('clip-1', 'opacity', 1.0, 0);
     // setPropertyValue should add keyframe since property already has keyframes
-    store.setState({ playheadPosition: 5 } as any);
+    store.setState({ playheadPosition: 5 });
     store.getState().setPropertyValue('clip-1', 'opacity', 0.3);
     const kfs = store.getState().clipKeyframes.get('clip-1')!;
     expect(kfs.length).toBe(2);
@@ -812,7 +812,7 @@ describe('keyframeSlice', () => {
 
   it('keyframes are isolated between clips', () => {
     const clip2 = createMockClip({ id: 'clip-2', trackId: 'video-1', startTime: 15, duration: 5 });
-    store = createTestTimelineStore({ clips: [clip, clip2] } as any);
+    store = createTestTimelineStore({ clips: [clip, clip2] });
     store.getState().addKeyframe('clip-1', 'opacity', 0.5, 1);
     store.getState().addKeyframe('clip-2', 'opacity', 0.8, 2);
     expect(store.getState().clipKeyframes.get('clip-1')!.length).toBe(1);
@@ -823,7 +823,7 @@ describe('keyframeSlice', () => {
 
   it('removing keyframe from one clip does not affect another', () => {
     const clip2 = createMockClip({ id: 'clip-2', trackId: 'video-1', startTime: 15, duration: 5 });
-    store = createTestTimelineStore({ clips: [clip, clip2] } as any);
+    store = createTestTimelineStore({ clips: [clip, clip2] });
     store.getState().addKeyframe('clip-1', 'opacity', 0.5, 1);
     store.getState().addKeyframe('clip-2', 'opacity', 0.8, 2);
     const kfId = store.getState().clipKeyframes.get('clip-1')![0].id;
@@ -866,8 +866,8 @@ describe('keyframeSlice', () => {
       duration: 10,
       effects: [{ id: 'fx-1', type: 'brightness', enabled: true, params: { brightness: 1.0 } }],
     });
-    store = createTestTimelineStore({ clips: [effectClip] } as any);
-    store.getState().addKeyframe('clip-fx', 'effect.fx-1.brightness' as any, 2.0, 5);
+    store = createTestTimelineStore({ clips: [effectClip] });
+    store.getState().addKeyframe('clip-fx', 'effect.fx-1.brightness', 2.0, 5);
     const kfs = store.getState().clipKeyframes.get('clip-fx')!;
     expect(kfs[0].property).toBe('effect.fx-1.brightness');
     expect(kfs[0].value).toBe(2.0);

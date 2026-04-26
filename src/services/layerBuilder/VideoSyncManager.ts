@@ -28,6 +28,19 @@ import { Logger } from '../logger';
 
 const log = Logger.create('CutTransition');
 
+type VideoFrameCallbackVideo = HTMLVideoElement & {
+  requestVideoFrameCallback: (callback: () => void) => number;
+  cancelVideoFrameCallback: (handle: number) => void;
+};
+
+type PitchPreservingVideo = HTMLVideoElement & {
+  preservesPitch: boolean;
+};
+
+function hasVideoFrameCallback(video: HTMLVideoElement): video is VideoFrameCallbackVideo {
+  return 'requestVideoFrameCallback' in video;
+}
+
 export class VideoSyncManager {
   // Native decoder state
   private nativeDecoderState = new Map<string, NativeDecoderState>();
@@ -1942,9 +1955,8 @@ export class VideoSyncManager {
       if (!this.isWarmupAttemptCurrent(video, attemptId)) {
         return;
       }
-      const rvfc = (video as any).requestVideoFrameCallback;
-      if (typeof rvfc === 'function') {
-        rvfc.call(video, () => {
+      if (hasVideoFrameCallback(video)) {
+        video.requestVideoFrameCallback(() => {
           finishWarmup(false);
         });
       } else {
@@ -2119,8 +2131,9 @@ export class VideoSyncManager {
         }
         // Set preservesPitch based on clip setting (default true)
         const shouldPreservePitch = clip.preservesPitch !== false;
-        if ((video as any).preservesPitch !== shouldPreservePitch) {
-          (video as any).preservesPitch = shouldPreservePitch;
+        const pitchVideo = video as PitchPreservingVideo;
+        if (pitchVideo.preservesPitch !== shouldPreservePitch) {
+          pitchVideo.preservesPitch = shouldPreservePitch;
         }
       } else if (video.playbackRate !== 1) {
         // Reset playbackRate when clip speed returns to 1x
@@ -2481,13 +2494,12 @@ export class VideoSyncManager {
   }
 
   private registerRVFC(clipId: string, video: HTMLVideoElement): void {
-    const rvfc = (video as any).requestVideoFrameCallback;
-    if (typeof rvfc === 'function') {
+    if (hasVideoFrameCallback(video)) {
       const prevHandle = this.rvfcHandles[clipId];
       if (prevHandle !== undefined) {
-        (video as any).cancelVideoFrameCallback(prevHandle);
+        video.cancelVideoFrameCallback(prevHandle);
       }
-      this.rvfcHandles[clipId] = rvfc.call(video, () => {
+      this.rvfcHandles[clipId] = video.requestVideoFrameCallback(() => {
         const presentedTime = video.currentTime;
         delete this.rvfcHandles[clipId];
         delete this.pendingSeekTargets[clipId];
@@ -2727,7 +2739,7 @@ export class VideoSyncManager {
   cancelRvfcHandle(clipId: string, video?: HTMLVideoElement): void {
     const handle = this.rvfcHandles[clipId];
     if (handle !== undefined) {
-      if (video) (video as any).cancelVideoFrameCallback?.(handle);
+      if (video && hasVideoFrameCallback(video)) video.cancelVideoFrameCallback(handle);
       delete this.rvfcHandles[clipId];
     }
   }

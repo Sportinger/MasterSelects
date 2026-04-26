@@ -130,7 +130,7 @@ export function TextTab({ clipId, textProperties }: TextTabProps) {
 
   // Sync local text with props
   useEffect(() => {
-    setLocalText(textProperties.text);
+    queueMicrotask(() => setLocalText(textProperties.text));
   }, [textProperties.text]);
 
   // Debounced text update - 50ms for near-instant preview

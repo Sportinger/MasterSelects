@@ -91,7 +91,7 @@ export function useMaskEdgeDrag(
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-  }, [activeMask, selectedClip, canvasWidth, canvasHeight, setMaskDragging]);
+  }, [activeMask, selectedClip, canvasWidth, canvasHeight, setMaskDragging, svgRef]);
 
   return { handleEdgeMouseDown };
 }

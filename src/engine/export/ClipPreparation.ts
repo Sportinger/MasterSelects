@@ -16,6 +16,7 @@ import { mediaRuntimeRegistry } from '../../services/mediaRuntime/registry';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 import type { WebCodecsPlayer } from '../WebCodecsPlayer';
 import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
+import type { MediaFile } from '../../stores/mediaStore/types';
 
 const log = Logger.create('ClipPreparation');
 const FAST_EXPORT_SINGLE_FILE_LIMIT_BYTES = 1536 * 1024 * 1024; // 1.5 GB
@@ -27,6 +28,8 @@ export interface ClipPreparationResult {
   useParallelDecode: boolean;
   exportMode: ExportMode;
 }
+
+type ParallelClipInfo = Parameters<ParallelDecodeManager['initialize']>[0][number];
 
 function getExportRuntimeOwnerId(clipId: string): string {
   return `export:${clipId}`;
@@ -160,7 +163,7 @@ async function primePreciseExportVideoElement(video: HTMLVideoElement): Promise<
   }
 }
 
-async function resolveClipExportFile(clip: TimelineClip, mediaFile: any): Promise<File | null> {
+async function resolveClipExportFile(clip: TimelineClip, mediaFile?: MediaFile | null): Promise<File | null> {
   const mediaFileId = clip.mediaFileId || clip.source?.mediaFileId || '';
   const projectHandle = await getStoredProjectFileHandle(mediaFileId);
   if (projectHandle) {
@@ -213,7 +216,7 @@ async function resolveClipExportFile(clip: TimelineClip, mediaFile: any): Promis
 
 async function createPreciseExportVideoElement(
   clip: TimelineClip,
-  mediaFile: any
+  mediaFile?: MediaFile | null
 ): Promise<{ videoElement: HTMLVideoElement; objectUrl?: string } | null> {
   const resolvedFile = await resolveClipExportFile(clip, mediaFile);
   const fallbackSrc =
@@ -362,7 +365,7 @@ export async function prepareClipsForExport(
 async function initializePreciseMode(
   videoClips: TimelineClip[],
   clipStates: Map<string, ExportClipState>,
-  mediaFiles: any[]
+  mediaFiles: MediaFile[]
 ): Promise<ClipPreparationResult> {
   const registerPreciseClip = async (clip: TimelineClip) => {
     const runtimeOwnerId = getExportRuntimeOwnerId(clip.id);
@@ -427,7 +430,7 @@ async function initializePreciseMode(
 
 async function initializeFastMode(
   videoClips: TimelineClip[],
-  mediaFiles: any[],
+  mediaFiles: MediaFile[],
   startTime: number,
   clipStates: Map<string, ExportClipState>,
   fps: number,
@@ -543,7 +546,7 @@ async function initializeFastMode(
 
 async function initializeParallelDecoding(
   clips: TimelineClip[],
-  mediaFiles: any[],
+  mediaFiles: MediaFile[],
   _startTime: number,
   nestedClips: Array<{ clip: TimelineClip; parentClip: TimelineClip }>,
   clipStates: Map<string, ExportClipState>,
@@ -554,7 +557,7 @@ async function initializeParallelDecoding(
 
   // Load all clip file data in parallel
   const endLoadAll = log.time('loadAllClipFileData');
-  const loadPromises = clips.map(async (clip) => {
+  const loadPromises: Promise<ParallelClipInfo>[] = clips.map(async (clip) => {
     const mediaFileId = clip.source!.mediaFileId;
     const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
     const fileData = await loadClipFileData(clip, mediaFile);
@@ -577,7 +580,7 @@ async function initializeParallelDecoding(
   });
 
   // Load nested clips
-  const nestedLoadPromises = nestedClips.map(async ({ clip, parentClip }) => {
+  const nestedLoadPromises: Promise<ParallelClipInfo | null>[] = nestedClips.map(async ({ clip, parentClip }) => {
     const mediaFileId = clip.source!.mediaFileId;
     const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
     const fileData = await loadClipFileData(clip, mediaFile);
@@ -605,10 +608,12 @@ async function initializeParallelDecoding(
   });
 
   const loadedClips = await Promise.all(loadPromises);
-  const loadedNestedClips = (await Promise.all(nestedLoadPromises)).filter(c => c !== null);
+  const loadedNestedClips = (await Promise.all(nestedLoadPromises)).filter(
+    (clipInfo): clipInfo is ParallelClipInfo => clipInfo !== null
+  );
   endLoadAll();
 
-  const clipInfos = [...loadedClips, ...loadedNestedClips as any[]];
+  const clipInfos: ParallelClipInfo[] = [...loadedClips, ...loadedNestedClips];
 
   log.info(`Loaded ${loadedClips.length} regular + ${loadedNestedClips.length} nested clips for parallel decoding`);
 
@@ -747,7 +752,7 @@ async function initializeParallelDecoding(
 /**
  * Load file data for a clip from various sources.
  */
-export async function loadClipFileData(clip: TimelineClip, mediaFile: any): Promise<ArrayBuffer | null> {
+export async function loadClipFileData(clip: TimelineClip, mediaFile?: MediaFile | null): Promise<ArrayBuffer | null> {
   let fileData: ArrayBuffer | null = null;
 
   const resolvedFile = await resolveClipExportFile(clip, mediaFile);

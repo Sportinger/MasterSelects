@@ -5,9 +5,39 @@ import { Logger } from '../../services/logger';
 
 const log = Logger.create('GaussianSplatSceneRenderer');
 
+interface GaussianSplatRendererInstance {
+  dispose?: () => void;
+}
+
+interface GaussianSplatRendererModule {
+  GaussianSplatRenderer: {
+    _canvas?: HTMLCanvasElement;
+    instance?: unknown;
+    getInstance: (
+      container: HTMLDivElement | null,
+      url: string,
+      options: {
+        getChatState: () => string;
+        getExpressionData: () => Record<string, number>;
+        backgroundColor: string;
+        alpha: number;
+        useBuiltInControls: boolean;
+      },
+    ) => Promise<GaussianSplatRendererInstance | null | undefined>;
+  };
+}
+
+type WindowWithNProgress = Window & typeof globalThis & {
+  NProgress?: {
+    start: () => void;
+    done: () => void;
+    set: (value: number) => void;
+  };
+};
+
 export class GaussianSplatSceneRenderer {
-  private module: any = null;
-  private renderer: any = null; // GaussianSplatRenderer instance
+  private module: GaussianSplatRendererModule | null = null;
+  private renderer: GaussianSplatRendererInstance | null = null;
   private container: HTMLDivElement | null = null;
   private canvas: HTMLCanvasElement | null = null;
   private currentAvatarUrl: string | null = null;
@@ -33,8 +63,9 @@ export class GaussianSplatSceneRenderer {
 
     try {
       // Shim NProgress on window (renderer expects it)
-      if (!(window as any).NProgress) {
-        (window as any).NProgress = { start: () => {}, done: () => {}, set: () => {} };
+      const progressWindow = window as WindowWithNProgress;
+      if (!progressWindow.NProgress) {
+        progressWindow.NProgress = { start: () => {}, done: () => {}, set: () => {} };
       }
 
       // Load the 5MB module from public/ via fetch → blob URL → import()
@@ -44,7 +75,7 @@ export class GaussianSplatSceneRenderer {
       const text = await response.text();
       const blob = new Blob([text], { type: 'application/javascript' });
       const blobUrl = URL.createObjectURL(blob);
-      this.module = await import(/* @vite-ignore */ blobUrl);
+      this.module = await import(/* @vite-ignore */ blobUrl) as GaussianSplatRendererModule;
       URL.revokeObjectURL(blobUrl);
       log.info('Gaussian Splat renderer module loaded');
 
@@ -129,7 +160,7 @@ export class GaussianSplatSceneRenderer {
 
       log.info('Loading avatar', { url: resolvedUrl });
 
-      this.renderer = await this.module.GaussianSplatRenderer.getInstance(
+      this.renderer = (await this.module.GaussianSplatRenderer.getInstance(
         this.container,
         resolvedUrl,
         {
@@ -139,7 +170,7 @@ export class GaussianSplatSceneRenderer {
           alpha: 0, // transparent background for compositing
           useBuiltInControls: false, // no orbit controls in editor
         },
-      );
+      )) ?? null;
 
       // Validate the renderer was actually created
       if (!this.renderer) {
@@ -150,7 +181,7 @@ export class GaussianSplatSceneRenderer {
 
       // Store canvas ref — try static property first, then query container
       this.canvas =
-        (this.module.GaussianSplatRenderer as any)._canvas ||
+        this.module.GaussianSplatRenderer._canvas ||
         this.container?.querySelector('canvas') ||
         null;
 
@@ -235,7 +266,7 @@ export class GaussianSplatSceneRenderer {
     // Try to clear the static singleton
     if (this.module?.GaussianSplatRenderer) {
       try {
-        delete (this.module.GaussianSplatRenderer as any).instance;
+        delete this.module.GaussianSplatRenderer.instance;
       } catch {
         // ignore
       }

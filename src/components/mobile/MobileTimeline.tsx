@@ -15,6 +15,8 @@ export function MobileTimeline({ precisionMode }: MobileTimelineProps) {
   const [draggedClipId, setDraggedClipId] = useState<string | null>(null);
   const [trimMode, setTrimMode] = useState<'start' | 'end' | null>(null);
   const lastTapRef = useRef<{ time: number; clipId: string | null }>({ time: 0, clipId: null });
+  const pinchDistanceRef = useRef<number | null>(null);
+  const lastTouchXRef = useRef<number | null>(null);
 
   // Timeline state
   const clips = useTimelineStore((s) => s.clips);
@@ -103,12 +105,12 @@ export function MobileTimeline({ precisionMode }: MobileTimelineProps) {
         touch2.clientY - touch1.clientY
       );
 
-      const prevDistance = (containerRef.current as any)?._pinchDistance;
+      const prevDistance = pinchDistanceRef.current;
       if (prevDistance) {
         const scale = distance / prevDistance;
         setZoom(Math.max(0.1, Math.min(10, zoom * scale)));
       }
-      (containerRef.current as any)._pinchDistance = distance;
+      pinchDistanceRef.current = distance;
       return;
     }
 
@@ -123,10 +125,10 @@ export function MobileTimeline({ precisionMode }: MobileTimelineProps) {
 
     // Precision mode - slower movement
     if (precisionMode && isDraggingPlayhead) {
-      const lastX = (containerRef.current as any)?._lastTouchX || x;
+      const lastX = lastTouchXRef.current ?? x;
       const delta = (x - lastX) * 0.2; // 5x slower
       time = playheadPosition + delta / pixelsPerSecond;
-      (containerRef.current as any)._lastTouchX = x;
+      lastTouchXRef.current = x;
     }
 
     if (isDraggingPlayhead) {
@@ -161,8 +163,8 @@ export function MobileTimeline({ precisionMode }: MobileTimelineProps) {
     setIsDraggingClip(false);
     setDraggedClipId(null);
     setTrimMode(null);
-    delete (containerRef.current as any)?._pinchDistance;
-    delete (containerRef.current as any)?._lastTouchX;
+    pinchDistanceRef.current = null;
+    lastTouchXRef.current = null;
   }, []);
 
   // Render track with clips

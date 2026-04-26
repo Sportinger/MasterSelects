@@ -3,7 +3,8 @@ import { useEffect } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { createEffectProperty } from '../../../types';
 import { EQ_FREQUENCIES } from '../../../services/audioManager';
-import { DraggableNumber, EffectKeyframeToggle, EQKeyframeToggle, EQ_BAND_PARAMS } from './shared';
+import { DraggableNumber, EffectKeyframeToggle, EQKeyframeToggle } from './shared';
+import { EQ_BAND_PARAMS } from './sharedConstants';
 
 // dB conversion helpers (internal gain 0–2 ↔ display dB)
 const SILENCE_THRESHOLD_DB = -60;

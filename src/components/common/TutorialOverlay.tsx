@@ -33,14 +33,18 @@ function ClippyMascot({ isClosing }: { isClosing: boolean }) {
 
   // Switch to outro when tutorial is closing
   useEffect(() => {
-    if (isClosing && phase !== 'outro') {
+    if (!isClosing || phase === 'outro') return;
+
+    const frame = requestAnimationFrame(() => {
       setPhase('outro');
       const outro = outroRef.current;
       if (outro) {
         outro.currentTime = 0;
         outro.play().catch(() => {});
       }
-    }
+    });
+
+    return () => cancelAnimationFrame(frame);
   }, [isClosing, phase]);
 
   if (useWebP) {

@@ -75,14 +75,7 @@ export function SAM2Panel() {
     if (sam2Status === 'not-downloaded') {
       getSAM2Service().checkAndAutoLoad();
     }
-  }, []);
-
-  // Initialize paint canvas when painting starts
-  useEffect(() => {
-    if (isPainting && !paintCanvasRef.current) {
-      initPaintCanvas();
-    }
-  }, [isPainting]);
+  }, [sam2Status]);
 
   const isMatReady = matStatus === 'ready';
   const isMatInstalled = matStatus === 'installed' || matStatus === 'ready' || matStatus === 'starting';
@@ -119,22 +112,12 @@ export function SAM2Panel() {
     }
   }, []);
 
-  const handlePaintToggle = useCallback(() => {
-    if (isPainting) {
-      setIsPainting(false);
-      // Remove paint overlay from preview
-      const overlay = document.getElementById('mask-paint-overlay');
-      overlay?.remove();
-    } else {
-      setIsPainting(true);
-      // Deactivate SAM2 if active
-      if (sam2Active) {
-        useSAM2Store.getState().setActive(false);
-      }
-      // Add paint overlay to preview canvas
-      setTimeout(() => addPaintOverlay(), 50);
+  // Initialize paint canvas when painting starts
+  useEffect(() => {
+    if (isPainting && !paintCanvasRef.current) {
+      initPaintCanvas();
     }
-  }, [isPainting, sam2Active]);
+  }, [initPaintCanvas, isPainting]);
 
   const addPaintOverlay = useCallback(() => {
     // Find the preview canvas wrapper (contains the WebGPU canvas)
@@ -213,6 +196,23 @@ export function SAM2Panel() {
     overlay.addEventListener('mouseup', () => { drawing = false; });
     overlay.addEventListener('mouseleave', () => { drawing = false; });
   }, [brushSize, isEraser]);
+
+  const handlePaintToggle = useCallback(() => {
+    if (isPainting) {
+      setIsPainting(false);
+      // Remove paint overlay from preview
+      const overlay = document.getElementById('mask-paint-overlay');
+      overlay?.remove();
+    } else {
+      setIsPainting(true);
+      // Deactivate SAM2 if active
+      if (sam2Active) {
+        useSAM2Store.getState().setActive(false);
+      }
+      // Add paint overlay to preview canvas
+      setTimeout(() => addPaintOverlay(), 50);
+    }
+  }, [addPaintOverlay, isPainting, sam2Active]);
 
   const handleClearPaint = useCallback(() => {
     const canvas = paintCanvasRef.current;

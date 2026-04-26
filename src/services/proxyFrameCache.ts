@@ -639,17 +639,19 @@ class ProxyFrameCache {
       log.debug(`Decoded ${mediaFileId}: ${audioBuffer.duration.toFixed(1)}s, ${audioBuffer.numberOfChannels}ch`);
 
       return audioBuffer;
-    } catch (e: any) {
+    } catch (e) {
       this.audioBufferLoading.delete(mediaFileId);
+      const errorName = e instanceof Error ? e.name : undefined;
+      const errorMessage = e instanceof Error ? e.message : String(e);
       // Only permanently blacklist for actual "no audio track" decode errors (EncodingError).
       // Context-related errors (InvalidStateError from closed context) should use retry cooldown
       // so the buffer can be decoded on a new/resumed context.
-      if (e?.name === 'EncodingError') {
+      if (errorName === 'EncodingError') {
         this.audioBufferFailed.add(mediaFileId);
         log.debug(`No audio track in ${mediaFileId}`);
       } else {
         this.audioBufferRetryTime.set(mediaFileId, performance.now());
-        log.debug(`Audio decode error for ${mediaFileId} (will retry): ${e?.message || e}`);
+        log.debug(`Audio decode error for ${mediaFileId} (will retry): ${errorMessage}`);
       }
       return null;
     }

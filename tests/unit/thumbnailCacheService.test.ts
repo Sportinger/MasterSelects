@@ -4,6 +4,17 @@ import {
   thumbnailCacheService,
 } from '../../src/services/thumbnailCacheService';
 
+type ThumbnailCacheServiceTestAccess = typeof thumbnailCacheService & {
+  loadFromDB(mediaFileId: string, fileHash?: string): Promise<boolean>;
+  generateThumbnails(
+    mediaFileId: string,
+    video: HTMLVideoElement,
+    duration: number,
+    fileHash: string | undefined,
+    signal: AbortSignal,
+  ): Promise<void>;
+};
+
 describe('thumbnailCacheService', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -18,7 +29,7 @@ describe('thumbnailCacheService', () => {
       crossOrigin: '',
       load: vi.fn(),
     } as unknown as HTMLVideoElement;
-    const createElementSpy = vi.spyOn(document, 'createElement').mockReturnValue(clonedVideo as any);
+    const createElementSpy = vi.spyOn(document, 'createElement').mockReturnValue(clonedVideo);
 
     const sourceVideo = {
       src: 'blob:source-video',
@@ -60,10 +71,11 @@ describe('thumbnailCacheService', () => {
       play: vi.fn().mockResolvedValue(undefined),
     } as unknown as HTMLVideoElement;
 
-    vi.spyOn(document, 'createElement').mockReturnValue(isolatedVideo as any);
-    vi.spyOn(thumbnailCacheService as any, 'loadFromDB').mockResolvedValue(false);
+    vi.spyOn(document, 'createElement').mockReturnValue(isolatedVideo);
+    const service = thumbnailCacheService as unknown as ThumbnailCacheServiceTestAccess;
+    vi.spyOn(service, 'loadFromDB').mockResolvedValue(false);
     const generateSpy = vi
-      .spyOn(thumbnailCacheService as any, 'generateThumbnails')
+      .spyOn(service, 'generateThumbnails')
       .mockResolvedValue(undefined);
 
     await thumbnailCacheService.generateForSource(

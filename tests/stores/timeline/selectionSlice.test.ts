@@ -11,7 +11,7 @@ describe('selectionSlice', () => {
     const clip2 = createMockClip({ id: 'clip-2', trackId: 'video-1', startTime: 5 });
     const clip3 = createMockClip({ id: 'clip-3', trackId: 'video-1', startTime: 10, linkedClipId: 'clip-4' });
     const clip4 = createMockClip({ id: 'clip-4', trackId: 'audio-1', startTime: 10 });
-    store = createTestTimelineStore({ clips: [clip1, clip2, clip3, clip4] } as any);
+    store = createTestTimelineStore({ clips: [clip1, clip2, clip3, clip4] });
   });
 
   // ─── Helper to create a store with curve editor open on a track ──────
@@ -27,7 +27,7 @@ describe('selectionSlice', () => {
       expandedCurveProperties: curveProps,
       selectedClipIds: new Set(['clip-1']),
       primarySelectedClipId: 'clip-1',
-    } as any);
+    });
   }
 
   // ─── selectClip: basic ───────────────────────────────────────────────
@@ -341,7 +341,7 @@ describe('selectionSlice', () => {
       expandedCurveProperties: curveProps,
       selectedClipIds: new Set(['clip-1', 'clip-4']),
       primarySelectedClipId: 'clip-1',
-    } as any);
+    });
 
     // Removing clip-4 (on audio-1, no curve editor) should work
     s.getState().removeClipFromSelection('clip-4');
@@ -371,7 +371,7 @@ describe('selectionSlice', () => {
       // Only clip-1 (on video-1) is selected, curve editor is on audio-1
       selectedClipIds: new Set(['clip-1']),
       primarySelectedClipId: 'clip-1',
-    } as any);
+    });
 
     s.getState().clearClipSelection();
     const state = s.getState();
@@ -401,7 +401,7 @@ describe('selectionSlice', () => {
       expandedCurveProperties: curveProps,
       selectedClipIds: new Set(['clip-1']),
       primarySelectedClipId: 'clip-1',
-    } as any);
+    });
 
     s.getState().selectClip(null);
     expect(s.getState().selectedClipIds.size).toBe(0);
@@ -467,7 +467,7 @@ describe('selectionSlice', () => {
       clips: [createMockClip({ id: 'clip-1' })],
       clipKeyframes: keyframeMap,
       selectedKeyframeIds: new Set(['kf-1']),
-    } as any);
+    });
 
     store.getState().deleteSelectedKeyframes();
     const state = store.getState();
@@ -485,7 +485,7 @@ describe('selectionSlice', () => {
       clips: [createMockClip({ id: 'clip-1' })],
       clipKeyframes: keyframeMap,
       selectedKeyframeIds: new Set(),
-    } as any);
+    });
 
     store.getState().deleteSelectedKeyframes();
     const state = store.getState();
@@ -501,7 +501,7 @@ describe('selectionSlice', () => {
       clips: [createMockClip({ id: 'clip-1' })],
       clipKeyframes: keyframeMap,
       selectedKeyframeIds: new Set(['kf-1']),
-    } as any);
+    });
 
     store.getState().deleteSelectedKeyframes();
     const state = store.getState();
@@ -523,7 +523,7 @@ describe('selectionSlice', () => {
       clips: [createMockClip({ id: 'clip-1' }), createMockClip({ id: 'clip-2', startTime: 5 })],
       clipKeyframes: keyframeMap,
       selectedKeyframeIds: new Set(['kf-1', 'kf-3']),
-    } as any);
+    });
 
     store.getState().deleteSelectedKeyframes();
     const state = store.getState();
@@ -548,7 +548,7 @@ describe('selectionSlice', () => {
       clips: [createMockClip({ id: 'clip-1' }), createMockClip({ id: 'clip-2', startTime: 5 })],
       clipKeyframes: keyframeMap,
       selectedKeyframeIds: new Set(['kf-1', 'kf-3', 'kf-4']),
-    } as any);
+    });
 
     store.getState().deleteSelectedKeyframes();
     const state = store.getState();

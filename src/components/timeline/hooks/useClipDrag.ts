@@ -1,7 +1,7 @@
 // useClipDrag - Premiere-style clip dragging with snapping
 // Extracted from Timeline.tsx for better maintainability
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { TimelineClip, TimelineTrack } from '../../../types';
 import type { ClipDragState } from '../types';
 import { Logger } from '../../../services/logger';
@@ -57,13 +57,22 @@ export function useClipDrag({
 }: UseClipDragProps): UseClipDragReturn {
   const [clipDrag, setClipDrag] = useState<ClipDragState | null>(null);
   const clipDragRef = useRef<ClipDragState | null>(clipDrag);
-  clipDragRef.current = clipDrag;
 
   // Keep refs to current values for use in event handlers (avoid stale closures)
   const selectedClipIdsRef = useRef<Set<string>>(selectedClipIds);
-  selectedClipIdsRef.current = selectedClipIds;
   const clipMapRef = useRef<Map<string, TimelineClip>>(clipMap);
-  clipMapRef.current = clipMap;
+
+  useEffect(() => {
+    clipDragRef.current = clipDrag;
+  }, [clipDrag]);
+
+  useEffect(() => {
+    selectedClipIdsRef.current = selectedClipIds;
+  }, [selectedClipIds]);
+
+  useEffect(() => {
+    clipMapRef.current = clipMap;
+  }, [clipMap]);
 
   // Premiere-style clip drag
   const handleClipMouseDown = useCallback(
@@ -114,7 +123,7 @@ export function useClipDrag({
         grabY,
         currentX: e.clientX,
         currentTrackId: clip.trackId,
-        snappedTime: null,
+        snappedTime: clip.startTime,
         snapIndicatorTime: null,
         isSnapping: false,
         trackChangeGuideTime: null,
@@ -459,7 +468,7 @@ export function useClipDrag({
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [trackLanesRef, timelineRef, clipMap, tracks, scrollX, snappingEnabled, pixelToTime, selectClip, selectedClipIds, getSnappedPosition, getPositionWithResistance, moveClip]
+    [trackLanesRef, timelineRef, clipMap, tracks, scrollX, snappingEnabled, pixelToTime, selectClip, getSnappedPosition, getPositionWithResistance, moveClip]
   );
 
   // Handle double-click on clip - open composition if it's a nested comp

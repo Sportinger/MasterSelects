@@ -171,7 +171,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     if (activeCompositionId && sourceMonitorFileId) {
       useMediaStore.getState().setSourceMonitorFile(null);
     }
-  }, [activeCompositionId]);
+  }, [activeCompositionId, sourceMonitorFileId]);
 
   // Determine which composition this preview is showing
   const slotPreviewActive = source.type === 'activeComp' && previewCompositionId !== null;
@@ -183,17 +183,28 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     ),
     [source, slotPreviewActive, previewCompositionId],
   );
-  const renderSourceKey = useMemo(() => {
+  const renderSourceCompositionId =
+    renderSource.type === 'composition' || renderSource.type === 'layer-index'
+      ? renderSource.compositionId
+      : null;
+  const renderSourceLayerIndex =
+    renderSource.type === 'layer-index'
+      ? renderSource.layerIndex
+      : null;
+  const stableRenderSource = useMemo<PreviewPanelSource>(() => {
     switch (renderSource.type) {
       case 'activeComp':
-        return 'activeComp';
+        return { type: 'activeComp' };
       case 'composition':
-        return `composition:${renderSource.compositionId}`;
+        return { type: 'composition', compositionId: renderSourceCompositionId ?? activeCompositionId ?? '' };
       case 'layer-index':
-        return `layer-index:${renderSource.compositionId ?? 'active'}:${renderSource.layerIndex}`;
+        return {
+          type: 'layer-index',
+          compositionId: renderSourceCompositionId,
+          layerIndex: renderSourceLayerIndex ?? 0,
+        };
     }
-  }, [renderSource.type, renderSource.type === 'composition' ? renderSource.compositionId : null, renderSource.type === 'layer-index' ? renderSource.compositionId : null, renderSource.type === 'layer-index' ? renderSource.layerIndex : null]);
-  const stableRenderSource = useMemo(() => renderSource, [renderSourceKey]);
+  }, [activeCompositionId, renderSource.type, renderSourceCompositionId, renderSourceLayerIndex]);
   const displayedCompId = resolvePreviewSourceCompositionId(renderSource, activeCompositionId);
   const displayedComp = compositions.find(c => c.id === displayedCompId);
   const isEditableSource =

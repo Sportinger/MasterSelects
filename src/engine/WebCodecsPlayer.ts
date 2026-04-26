@@ -24,6 +24,48 @@ import type { Sample, MP4VideoTrack, MP4ArrayBuffer, MP4File } from './webCodecs
 import { WebCodecsExportMode } from './WebCodecsExportMode';
 import type { ExportModePlayer } from './WebCodecsExportMode';
 
+type MediaStreamTrackProcessorConstructor = new (init: { track: MediaStreamTrack }) => {
+  readable: ReadableStream<VideoFrame>;
+};
+
+type WebCodecsWindow = Window & typeof globalThis & {
+  MediaStreamTrackProcessor?: MediaStreamTrackProcessorConstructor;
+};
+
+interface CodecConfigurationBox {
+  write: (stream: { buffer: ArrayBuffer; position?: number }) => void;
+}
+
+interface MP4TrackDetails {
+  mdia?: {
+    minf?: {
+      stbl?: {
+        stsd?: {
+          entries?: Array<{
+            avcC?: CodecConfigurationBox;
+            hvcC?: CodecConfigurationBox;
+            vpcC?: CodecConfigurationBox;
+            av1C?: CodecConfigurationBox;
+          }>;
+        };
+      };
+    };
+  };
+}
+
+type MP4FileWithTrackLookup = MP4File & {
+  getTrackById: (id: number) => MP4TrackDetails | undefined;
+};
+
+type VideoFrameCallbackVideo = HTMLVideoElement & {
+  requestVideoFrameCallback: (callback: () => void) => number;
+  cancelVideoFrameCallback: (handle: number) => void;
+};
+
+function hasVideoFrameCallback(video: HTMLVideoElement): video is VideoFrameCallbackVideo {
+  return 'requestVideoFrameCallback' in video;
+}
+
 export interface WebCodecsPlayerOptions {
   loop?: boolean;
   onFrame?: (frame: VideoFrame) => void;
@@ -189,7 +231,11 @@ export class WebCodecsPlayer implements ExportModePlayer {
     }
 
     // Create processor to get VideoFrames
-    const processor = new (window as any).MediaStreamTrackProcessor({ track: videoTrack });
+    const Processor = (window as WebCodecsWindow).MediaStreamTrackProcessor;
+    if (!Processor) {
+      throw new Error('MediaStreamTrackProcessor not supported');
+    }
+    const processor = new Processor({ track: videoTrack });
     this.streamReader = processor.readable.getReader();
 
     this.ready = true;
@@ -439,7 +485,7 @@ export class WebCodecsPlayer implements ExportModePlayer {
 
         // Get the track structure from mp4File to access codec config boxes
         try {
-          const trak = (mp4File as any).getTrackById(videoTrack.id);
+          const trak = (mp4File as MP4FileWithTrackLookup).getTrackById(videoTrack.id);
           if (trak?.mdia?.minf?.stbl?.stsd?.entries?.[0]) {
             const entry = trak.mdia.minf.stbl.stsd.entries[0];
 
@@ -1028,8 +1074,8 @@ export class WebCodecsPlayer implements ExportModePlayer {
   }
 
   private stopSimpleFrameCapture(): void {
-    if (this.videoFrameCallbackId !== null && this.videoElement && 'cancelVideoFrameCallback' in this.videoElement) {
-      (this.videoElement as any).cancelVideoFrameCallback(this.videoFrameCallbackId);
+    if (this.videoFrameCallbackId !== null && this.videoElement && hasVideoFrameCallback(this.videoElement)) {
+      this.videoElement.cancelVideoFrameCallback(this.videoFrameCallbackId);
       this.videoFrameCallbackId = null;
     }
     if (this.animationId !== null) {
@@ -2162,8 +2208,9 @@ export class WebCodecsPlayer implements ExportModePlayer {
   fastSeek(timeSeconds: number): void {
     if (this.useSimpleMode && this.videoElement) {
       const vid = this.videoElement;
-      if (typeof (vid as any).fastSeek === 'function') {
-        (vid as any).fastSeek(timeSeconds);
+      const fastSeek = (vid as { fastSeek?: (timeSeconds: number) => void }).fastSeek;
+      if (typeof fastSeek === 'function') {
+        fastSeek.call(vid, timeSeconds);
         vfPipelineMonitor.record('vf_seek_fast', {
           target: Math.round(timeSeconds * 1000) / 1000,
         });
@@ -2285,8 +2332,8 @@ export class WebCodecsPlayer implements ExportModePlayer {
           // First ensure video has data, then wait for frame callback
           waitForReady(() => {
             // Use requestVideoFrameCallback if available for precise frame timing
-            if ('requestVideoFrameCallback' in video) {
-              (video as any).requestVideoFrameCallback(() => {
+            if (hasVideoFrameCallback(video)) {
+              video.requestVideoFrameCallback(() => {
                 clearTimeout(timeout);
                 doResolve();
               });
