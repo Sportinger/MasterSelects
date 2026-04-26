@@ -130,6 +130,7 @@ export type BlendMode =
 export interface LayerSource {
   type: 'video' | 'image' | 'camera' | 'color' | 'text' | 'solid' | 'model' | 'gaussian-avatar' | 'gaussian-splat';
   modelUrl?: string;  // Blob URL to 3D model file (OBJ/glTF/GLB)
+  modelFileName?: string;
   modelSequence?: ModelSequenceData;
   gaussianSplatSequence?: GaussianSplatSequenceData;
   threeDEffectorsEnabled?: boolean;  // Whether shared-scene 3D effectors can affect this layer
@@ -381,6 +382,16 @@ export interface EngineStats {
     previewPathCounts?: Record<string, number>;
     scrubPathCounts?: Record<string, number>;
   };
+  // Render dispatcher debug snapshot, including non-video visual cadence.
+  renderDispatcher?: {
+    splatSequence?: {
+      targetSceneKey?: string;
+      renderedSceneKey?: string;
+      mode: 'target' | 'held' | 'missing';
+      visualFrameChangesLastSecond: number;
+      backgroundLoads: number;
+    };
+  };
   // Main-thread frame phase breakdown
   mainThread?: {
     windowMs: number;
@@ -488,6 +499,7 @@ export interface TimelineClip {
   source: {
     type: TimelineSourceType;
     modelUrl?: string;  // Blob URL to 3D model file
+    modelFileName?: string;
     modelSequence?: ModelSequenceData;
     gaussianSplatSequence?: GaussianSplatSequenceData;
     threeDEffectorsEnabled?: boolean;  // Whether shared-scene 3D effectors can affect this clip

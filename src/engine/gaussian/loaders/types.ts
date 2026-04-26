@@ -16,6 +16,7 @@ export type GaussianSplatLoadProgressCallback = (progress: GaussianSplatLoadProg
 
 export interface GaussianSplatLoadOptions {
   onProgress?: GaussianSplatLoadProgressCallback;
+  maxSplats?: number;
 }
 
 export interface GaussianSplatMetadata {

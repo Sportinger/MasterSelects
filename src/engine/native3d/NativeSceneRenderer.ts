@@ -5,6 +5,7 @@ import { resolveSharedSplatSceneKey } from '../scene/runtime/SharedSplatRuntimeU
 import type {
   SceneCamera,
   SceneLayer3DData,
+  SceneModelLayer,
   ScenePlaneLayer,
   SceneSplatEffectorRuntimeData,
   SceneSplatLayer,
@@ -99,8 +100,13 @@ export class NativeSceneRenderer {
       }
       this.modelRuntimeCache.touch(layer.modelUrl, layer.modelFileName);
       if (!this.modelRuntimeCache.isLoaded(layer.modelUrl)) {
-        void this.modelRuntimeCache.preload(layer.modelUrl, layer.modelFileName);
+        void this.modelRuntimeCache.preload(
+          layer.modelUrl,
+          layer.modelFileName,
+          this.getModelPreloadOptions(layer),
+        );
       }
+      this.preloadNearbyModelSequenceFrames(layer, realtimePlayback);
     }
 
     if (!this.canRenderNativeScene(layers, planeLayers, nativeMeshLayers, splatLayers)) {
@@ -719,6 +725,53 @@ export class NativeSceneRenderer {
     }
 
     return cached.view;
+  }
+
+  private getModelPreloadOptions(layer: SceneModelLayer) {
+    const sequence = layer.modelSequence;
+    if (!sequence || sequence.frames.length <= 1) {
+      return undefined;
+    }
+
+    const anchorFrame = sequence.frames.find((frame) => !!frame.modelUrl);
+    if (!anchorFrame?.modelUrl) {
+      return undefined;
+    }
+
+    const sequenceKey = [
+      sequence.sequenceName ?? 'model-sequence',
+      sequence.frameCount,
+      sequence.fps,
+      anchorFrame.name,
+      anchorFrame.modelUrl,
+    ].join('|');
+
+    return {
+      normalizationKey: sequenceKey,
+      anchorUrl: anchorFrame.modelUrl,
+      anchorFileName: anchorFrame.name,
+    };
+  }
+
+  private preloadNearbyModelSequenceFrames(layer: SceneModelLayer, realtimePlayback: boolean): void {
+    const sequence = layer.modelSequence;
+    if (!realtimePlayback || !sequence || sequence.frames.length <= 1 || !layer.modelUrl) {
+      return;
+    }
+
+    const currentIndex = sequence.frames.findIndex((frame) => frame.modelUrl === layer.modelUrl);
+    if (currentIndex < 0) {
+      return;
+    }
+
+    const options = this.getModelPreloadOptions(layer);
+    for (const offset of [1, 2, -1]) {
+      const frame = sequence.frames[currentIndex + offset];
+      if (!frame?.modelUrl || this.modelRuntimeCache.isLoaded(frame.modelUrl)) {
+        continue;
+      }
+      void this.modelRuntimeCache.preload(frame.modelUrl, frame.name, options);
+    }
   }
 
   private resolvePlaneTextureSource(

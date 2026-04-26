@@ -19,6 +19,8 @@ interface PreviewControlsProps {
   editMode: boolean;
   canEdit: boolean;
   setEditMode: (v: boolean) => void;
+  sceneObjectOverlayEnabled: boolean;
+  setSceneObjectOverlayEnabled: (v: boolean) => void;
   viewZoom: number;
   resetView: () => void;
   // Source selector
@@ -45,6 +47,8 @@ export function PreviewControls({
   editMode,
   canEdit,
   setEditMode,
+  sceneObjectOverlayEnabled,
+  setSceneObjectOverlayEnabled,
   viewZoom,
   resetView,
   source,
@@ -116,6 +120,23 @@ export function PreviewControls({
           >
             {editMode ? 'Edit On' : 'Edit'} <span className="menu-wip-badge">bug</span>
           </button>
+          {canEdit && (
+            <button
+              type="button"
+              className={`preview-scene-toggle-btn ${sceneObjectOverlayEnabled ? 'active' : ''}`}
+              onClick={() => setSceneObjectOverlayEnabled(!sceneObjectOverlayEnabled)}
+              title={sceneObjectOverlayEnabled ? 'Hide scene handles' : 'Show scene handles'}
+              aria-label={sceneObjectOverlayEnabled ? 'Hide scene handles' : 'Show scene handles'}
+              aria-pressed={sceneObjectOverlayEnabled}
+            >
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M8 8h5" />
+                <path d="M8 8V3" />
+                <path d="M8 8l-3.5 3.5" />
+                <circle cx="8" cy="8" r="1.7" fill="currentColor" stroke="none" />
+              </svg>
+            </button>
+          )}
           {editMode && canEdit && (
             <>
               <span className="preview-zoom-label">{Math.round(viewZoom * 100)}%</span>

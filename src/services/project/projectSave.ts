@@ -31,6 +31,10 @@ import type {
   SerializableMarker,
   TimelineClip,
 } from '../../types';
+import type {
+  ProjectMediaBoardOrder,
+  ProjectMediaBoardViewport,
+} from './types/project.types';
 
 const log = Logger.create('ProjectSync');
 let projectStoreSyncInProgress = false;
@@ -313,6 +317,24 @@ function serializeFlashBoardState(state: FlashBoardStoreState): ProjectFlashBoar
   };
 }
 
+function parseLocalStorageJson<T>(key: string): T | undefined {
+  const raw = localStorage.getItem(key);
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+function readMediaPanelViewMode(): 'classic' | 'icons' | 'board' | undefined {
+  const raw = localStorage.getItem('media-panel-view-mode');
+  if (raw === 'classic' || raw === 'icons' || raw === 'board') return raw;
+  if (raw === 'grid') return 'icons';
+  if (raw === 'list') return 'classic';
+  return undefined;
+}
+
 // ============================================
 // SYNC & SAVE
 // ============================================
@@ -397,6 +419,9 @@ export async function syncStoresToProject(): Promise<void> {
       // Capture per-project UI settings from localStorage
       const mediaPanelColumns = localStorage.getItem('media-panel-column-order');
       const mediaPanelNameWidth = localStorage.getItem('media-panel-name-width');
+      const mediaPanelViewMode = readMediaPanelViewMode();
+      const mediaPanelBoardViewport = parseLocalStorageJson<ProjectMediaBoardViewport>('media-panel-board-viewport');
+      const mediaPanelBoardOrder = parseLocalStorageJson<ProjectMediaBoardOrder>('media-panel-board-order');
       const transcriptLanguage = localStorage.getItem('transcriptLanguage');
       const settingsState = useSettingsStore.getState();
       const midiState = useMIDIStore.getState();
@@ -404,8 +429,11 @@ export async function syncStoresToProject(): Promise<void> {
       projectData.uiState = {
         dockLayout,
         compositionViewState,
-        mediaPanelColumns: mediaPanelColumns ? JSON.parse(mediaPanelColumns) : undefined,
+        mediaPanelColumns: mediaPanelColumns ? parseLocalStorageJson<string[]>('media-panel-column-order') : undefined,
         mediaPanelNameWidth: mediaPanelNameWidth ? parseInt(mediaPanelNameWidth, 10) : undefined,
+        mediaPanelViewMode,
+        mediaPanelBoardViewport,
+        mediaPanelBoardOrder,
         transcriptLanguage: transcriptLanguage || undefined,
         thumbnailsEnabled: timelineState.thumbnailsEnabled,
         waveformsEnabled: timelineState.waveformsEnabled,

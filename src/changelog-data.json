@@ -1,6 +1,46 @@
 [
   {
     "date": "2026-04-26",
+    "type": "fix",
+    "title": "PLY Splat Sequences Play Smoothly",
+    "description": "PLY frame sequences now preload ahead during playback, keep exact frames instead of nearest-frame fallbacks, avoid per-frame load progress overlays, and report the real visual splat update rate in the preview stats.",
+    "section": "3D / Gaussian Splats",
+    "commits": [
+      "6f67b2ab"
+    ]
+  },
+  {
+    "date": "2026-04-26",
+    "type": "fix",
+    "title": "3D Sequence Textures and Transforms Stay Stable",
+    "description": "GLB sequences keep their materials and textures through frame changes, 3D and splat transform controls can be edited again, and media sequence metadata is preserved when projects are saved and restored.",
+    "section": "3D / Sequence Playback",
+    "commits": [
+      "6f67b2ab"
+    ]
+  },
+  {
+    "date": "2026-04-26",
+    "type": "new",
+    "title": "Scene Gizmo Overlay Added",
+    "description": "The preview now includes a scene object gizmo overlay for manipulating 3D items directly, with additional splat effector stability fixes in the native renderer.",
+    "section": "3D / Native Scene",
+    "commits": [
+      "f67bbc47"
+    ]
+  },
+  {
+    "date": "2026-04-26",
+    "type": "new",
+    "title": "Media Panel Board View Added",
+    "description": "The Media panel now supports a board-style view with persisted layout metadata, making large media sets easier to organize and restore across project sessions.",
+    "section": "Media Panel",
+    "commits": [
+      "a9336e8f"
+    ]
+  },
+  {
+    "date": "2026-04-26",
     "type": "new",
     "title": "Clip Keyframe Markers Can Be Dragged on the Timeline",
     "description": "Keyframe markers on clips can now be adjusted directly in the timeline, so timing changes do not require jumping back into the Properties panel.",

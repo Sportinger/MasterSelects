@@ -52,7 +52,10 @@ Prepared splat runtime metadata, native splat rasterization, preview, nested com
 - Supported import formats are `.obj`, `.gltf`, and `.glb`.
 - Model clips are automatically marked `is3D: true` and cannot be switched back to 2D.
 - Models are auto-centered and normalized to fit the viewport.
-- Default lighting is Ambient plus Directional lighting.
+- glTF / GLB base color textures are loaded from data URIs, external image URIs, or embedded bufferViews when `baseColorTexture` and `TEXCOORD_0` are present.
+- Textured glTF / GLB materials render unlit in the native pass, matching scan/photogrammetry assets better than the simple fallback directional light.
+- GLB sequences normalize every frame against the first renderable frame's bounds and preload nearby playback frames, avoiding per-frame center/scale jumps and visible current-frame loading flicker.
+- Untextured models use ambient plus directional fallback lighting.
 - The Transform panel exposes a wireframe debug toggle for model clips.
 - Imported models use a native runtime/cache path.
 
@@ -94,13 +97,13 @@ Camera rotation keyframes interpolate through the shortest angular path so timel
 
 ## Gaussian Splats
 
-Gaussian splat clips are imported through the SuperSplat-compatible `@playcanvas/splat-transform` reader path. Supported scene formats include `.ply`, `.compressed.ply`, `.splat`, `.ksplat`, `.spz`, `.sog`, `.lcc`, and zipped SOG-style `.zip` payloads.
+Gaussian splat clips are imported through the SuperSplat-compatible `@playcanvas/splat-transform` reader path. Supported scene formats include `.ply`, `.compressed.ply`, `.splat`, `.ksplat`, `.spz`, `.sog`, `.lcc`, and zipped SOG-style `.zip` payloads. Plain point-cloud PLY files without gaussian scale properties fall back to the local point-cloud conversion path.
 
 - Clips are created as `is3D: true`.
 - The Gaussian tab exposes the native renderer status together with `maxSplats`, `sortFrequency`, `splatScale`, `orientationPreset`, `nearPlane`, and `farPlane`.
 - Gaussian splats participate in scene cameras, object transforms, object-level effectors, preview, nested compositions, export, preload, and readiness checks through the same native shared-scene path.
 - Realtime splat rendering uses a worker-backed back-to-front order buffer based on the SuperSplat/PlayCanvas sorter approach. Precise export can still fall back to the existing GPU sort path.
-- Sequence splats follow the same shared runtime contract and are no longer treated as a permanent legacy-only scene path.
+- Sequence splats follow the same shared runtime contract and preload nearby frames without replacing foreground playback with repeated loading overlays.
 - The Transform tab now exposes normal object transforms for gaussian splats. Scene navigation lives on camera clips.
 - Large gaussian splats show viewport loading progress during project restore, URL fetch, parser work, normalization, and GPU upload.
 
@@ -149,6 +152,7 @@ If you see avatar-specific code paths in the renderer or AI tooling, treat them 
 The Transform tab is context-sensitive:
 
 - For normal 3D layers, it shows position, scale, rotation, opacity, blend mode, and 3D toggles.
+- 3D object position fields use scene units. Regular 2D clips still display composition pixel units.
 - For camera clips, it becomes scene-navigation controls.
 - For gaussian splats, it now behaves like a normal 3D object transform surface plus 3D effector toggle.
 - The `Speed` field is explicitly marked WIP in the UI.

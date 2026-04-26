@@ -48,6 +48,11 @@ interface SplatSceneGpuResources {
   sortedBindGroup: GPUBindGroup | null;
   workerSorter: SplatOrderSorter | null;
   workerSortedBindGroup: GPUBindGroup | null;
+  activeWorkerSortedBindGroup: {
+    dataBuffer: GPUBuffer;
+    orderBuffer: GPUBuffer;
+    bindGroup: GPUBindGroup;
+  } | null;
 }
 
 interface CameraUniformResource {
@@ -289,6 +294,7 @@ export class GaussianSplatGpuRenderer {
         sortedBindGroup: null,
         workerSorter,
         workerSortedBindGroup,
+        activeWorkerSortedBindGroup: null,
       });
 
       // Initialize sort pass for this scene's capacity (lazy init)
@@ -428,7 +434,6 @@ export class GaussianSplatGpuRenderer {
       let hasValidatedCullResult = false;
       const canUseWorkerSort = !precise &&
         sortFrequency !== 0 &&
-        activeSplatBuffer === scene.splatBuffer &&
         scene.workerSorter !== null &&
         scene.workerSortedBindGroup !== null;
       let usedWorkerSort = false;
@@ -542,8 +547,10 @@ export class GaussianSplatGpuRenderer {
       let renderBindGroup = scene.bindGroup; // default: identity indices + original data
 
       // Build the appropriate bind group based on which passes ran
-      if (canUseWorkerSort && scene.workerSortedBindGroup) {
-        renderBindGroup = scene.workerSortedBindGroup;
+      if (canUseWorkerSort && scene.workerSorter && scene.workerSortedBindGroup) {
+        renderBindGroup = activeSplatBuffer === scene.splatBuffer
+          ? scene.workerSortedBindGroup
+          : this.getActiveWorkerSortedBindGroup(scene, clipId, activeSplatBuffer, scene.workerSorter.orderBuffer);
       } else if (sortedIndexBuffer || cullIndexBuffer || activeSplatBuffer !== scene.splatBuffer) {
         const indexBuf = sortedIndexBuffer ?? cullIndexBuffer ?? scene.identityIndexBuffer;
         renderBindGroup = this.device.createBindGroup({
@@ -753,6 +760,29 @@ export class GaussianSplatGpuRenderer {
     const entry = { buffer, splatCount };
     this.effectorOutputBuffers.set(clipId, entry);
     return entry;
+  }
+
+  private getActiveWorkerSortedBindGroup(
+    scene: SplatSceneGpuResources,
+    clipId: string,
+    dataBuffer: GPUBuffer,
+    orderBuffer: GPUBuffer,
+  ): GPUBindGroup {
+    const cached = scene.activeWorkerSortedBindGroup;
+    if (cached && cached.dataBuffer === dataBuffer && cached.orderBuffer === orderBuffer) {
+      return cached.bindGroup;
+    }
+
+    const bindGroup = this.device!.createBindGroup({
+      layout: this.splatDataBindGroupLayout!,
+      entries: [
+        { binding: 0, resource: { buffer: dataBuffer } },
+        { binding: 1, resource: { buffer: orderBuffer } },
+      ],
+      label: `splat-worker-sorted-active-bind-group-${clipId}`,
+    });
+    scene.activeWorkerSortedBindGroup = { dataBuffer, orderBuffer, bindGroup };
+    return bindGroup;
   }
 
   /** Release effector buffer for a specific clip */

@@ -273,7 +273,8 @@ export function collectScene3DLayers(
       ...base,
       kind: 'model',
       modelUrl: source?.modelUrl ?? undefined,
-      modelFileName: source?.file?.name ?? layer.name,
+      modelFileName: source?.modelFileName ?? source?.file?.name ?? layer.name,
+      modelSequence: source?.modelSequence ?? undefined,
       wireframe: layer.wireframe,
     });
   }

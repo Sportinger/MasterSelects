@@ -826,7 +826,9 @@ export class WebGPUEngine {
   // === STATS ===
 
   getStats(): EngineStats {
-    return this.performanceStats.getStats(this.getIsIdle());
+    const stats = this.performanceStats.getStats(this.getIsIdle());
+    const renderDispatcher = this.getRenderDispatcherDebugSnapshot();
+    return renderDispatcher ? { ...stats, renderDispatcher } : stats;
   }
 
   // === ACCESSORS ===

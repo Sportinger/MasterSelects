@@ -692,9 +692,9 @@ describe('NativeSceneRenderer shared depth contract', () => {
       format: 'glb',
       primitives: [{
         vertices: new Float32Array([
-          -0.5, -0.5, 0, 0, 0, 1,
-           0.5, -0.5, 0, 0, 0, 1,
-           0.0,  0.5, 0, 0, 0, 1,
+          -0.5, -0.5, 0, 0, 0, 1, 0, 0,
+           0.5, -0.5, 0, 0, 0, 1, 0, 0,
+           0.0,  0.5, 0, 0, 0, 1, 0, 0,
         ]),
         indices: new Uint32Array([0, 1, 2]),
         baseColor: [0.2, 0.4, 0.8, 1] as const,

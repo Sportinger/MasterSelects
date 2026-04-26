@@ -8,7 +8,7 @@ import type {
   SceneModelLayer,
   SceneWorldTransform,
 } from '../../scene/types';
-import { ModelRuntimeCache } from '../assets/ModelRuntimeCache';
+import { ModelRuntimeCache, type ModelRuntimeTexture } from '../assets/ModelRuntimeCache';
 import { TextMeshCache } from '../assets/TextMeshCache';
 import shaderSource from '../shaders/MeshPass.wgsl?raw';
 
@@ -28,9 +28,12 @@ interface PrimitiveGpuResources {
   edgeIndexBuffer: GPUBuffer;
   edgeIndexCount: number;
   baseColor?: readonly [number, number, number, number];
+  unlit?: boolean;
+  texture?: GPUTexture;
+  textureView?: GPUTextureView;
 }
 
-const MESH_UNIFORM_SIZE = 144;
+const MESH_UNIFORM_SIZE = 160;
 const DEFAULT_MESH_COLOR = [0.6667, 0.6667, 0.6667, 1] as const;
 const WIREFRAME_COLOR = [0.2667, 0.5333, 1, 1] as const;
 
@@ -42,6 +45,9 @@ export class MeshPass {
   private primitiveCache = new Map<ScenePrimitiveLayer['meshType'], PrimitiveGpuResources>();
   private textCache = new Map<string, PrimitiveGpuResources>();
   private modelCache = new Map<string, PrimitiveGpuResources[]>();
+  private meshSampler: GPUSampler | null = null;
+  private defaultTexture: GPUTexture | null = null;
+  private defaultTextureView: GPUTextureView | null = null;
   private readonly textMeshCache = new TextMeshCache();
 
   supports(layer: SceneLayer3DData): layer is SceneMeshLayer {
@@ -90,9 +96,28 @@ export class MeshPass {
           visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
           buffer: { type: 'uniform' },
         },
+        {
+          binding: 1,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: {},
+        },
+        {
+          binding: 2,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: {},
+        },
       ],
       label: 'native-scene-mesh-bind-group-layout',
     });
+    this.meshSampler = device.createSampler({
+      magFilter: 'linear',
+      minFilter: 'linear',
+      mipmapFilter: 'linear',
+      addressModeU: 'repeat',
+      addressModeV: 'repeat',
+      label: 'native-scene-mesh-sampler',
+    });
+    this.ensureDefaultTexture(device);
 
     const shaderModule = device.createShaderModule({
       code: shaderSource,
@@ -109,10 +134,11 @@ export class MeshPass {
       entryPoint: 'vertexMain',
       buffers: [
         {
-          arrayStride: 24,
+          arrayStride: 32,
           attributes: [
             { shaderLocation: 0, offset: 0, format: 'float32x3' },
             { shaderLocation: 1, offset: 12, format: 'float32x3' },
+            { shaderLocation: 2, offset: 24, format: 'float32x2' },
           ],
         },
       ],
@@ -230,7 +256,9 @@ export class MeshPass {
       !this.meshPipelineOpaque ||
       !this.meshPipelineTransparent ||
       !this.meshPipelineWireframe ||
-      !this.meshBindGroupLayout
+      !this.meshBindGroupLayout ||
+      !this.meshSampler ||
+      !this.defaultTextureView
     ) {
       return false;
     }
@@ -275,7 +303,13 @@ export class MeshPass {
           label: `native-scene-mesh-uniform-${layer.layerId}-${resourceIndex}`,
         });
         temporaryBuffers.push(uniformBuffer);
-        const uniformData = this.buildUniformData(mvp, modelMatrix, color, layer.opacity);
+        const uniformData = this.buildUniformData(
+          mvp,
+          modelMatrix,
+          color,
+          layer.opacity,
+          resources.unlit === true,
+        );
         device.queue.writeBuffer(
           uniformBuffer,
           0,
@@ -286,7 +320,11 @@ export class MeshPass {
 
         const bindGroup = device.createBindGroup({
           layout: this.meshBindGroupLayout,
-          entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
+          entries: [
+            { binding: 0, resource: { buffer: uniformBuffer } },
+            { binding: 1, resource: this.meshSampler },
+            { binding: 2, resource: resources.textureView ?? this.defaultTextureView },
+          ],
           label: `native-scene-mesh-bind-group-${layer.layerId}-${resourceIndex}`,
         });
 
@@ -317,26 +355,24 @@ export class MeshPass {
     this.meshPipelineTransparent = null;
     this.meshPipelineWireframe = null;
     this.meshBindGroupLayout = null;
+    this.meshSampler = null;
     for (const resources of this.primitiveCache.values()) {
-      resources.vertexBuffer.destroy();
-      resources.indexBuffer.destroy();
-      resources.edgeIndexBuffer.destroy();
+      this.destroyResources(resources);
     }
     this.primitiveCache.clear();
     for (const resources of this.textCache.values()) {
-      resources.vertexBuffer.destroy();
-      resources.indexBuffer.destroy();
-      resources.edgeIndexBuffer.destroy();
+      this.destroyResources(resources);
     }
     this.textCache.clear();
     for (const resourcesList of this.modelCache.values()) {
       for (const resources of resourcesList) {
-        resources.vertexBuffer.destroy();
-        resources.indexBuffer.destroy();
-        resources.edgeIndexBuffer.destroy();
+        this.destroyResources(resources);
       }
     }
     this.modelCache.clear();
+    this.defaultTexture?.destroy();
+    this.defaultTexture = null;
+    this.defaultTextureView = null;
     this.textMeshCache.clear();
   }
 
@@ -346,9 +382,7 @@ export class MeshPass {
         continue;
       }
       for (const resources of resourcesList) {
-        resources.vertexBuffer.destroy();
-        resources.indexBuffer.destroy();
-        resources.edgeIndexBuffer.destroy();
+        this.destroyResources(resources);
       }
       this.modelCache.delete(modelUrl);
     }
@@ -411,6 +445,8 @@ export class MeshPass {
       },
       `native-scene-model-${layer.layerId}-${primitiveIndex}`,
       primitive.baseColor,
+      primitive.baseColorTexture,
+      primitive.unlit,
     ));
     this.modelCache.set(layer.modelUrl, resourcesList);
     return resourcesList;
@@ -421,6 +457,8 @@ export class MeshPass {
     geometry: PrimitiveGeometryData,
     label: string,
     baseColor?: readonly [number, number, number, number],
+    baseColorTexture?: ModelRuntimeTexture,
+    unlit = false,
   ): PrimitiveGpuResources {
     const vertexBuffer = device.createBuffer({
       size: geometry.vertices.byteLength,
@@ -461,6 +499,10 @@ export class MeshPass {
       geometry.edgeIndices.byteLength,
     );
 
+    const texture = baseColorTexture
+      ? this.createTextureResource(device, baseColorTexture, label)
+      : null;
+
     return {
       vertexBuffer,
       indexBuffer,
@@ -468,7 +510,60 @@ export class MeshPass {
       edgeIndexBuffer,
       edgeIndexCount: geometry.edgeIndices.length,
       ...(baseColor ? { baseColor } : {}),
+      ...(unlit ? { unlit: true } : {}),
+      ...(texture ? { texture, textureView: texture.createView() } : {}),
     };
+  }
+
+  private createTextureResource(
+    device: GPUDevice,
+    texture: ModelRuntimeTexture,
+    label: string,
+  ): GPUTexture | null {
+    if (texture.width <= 0 || texture.height <= 0) {
+      return null;
+    }
+
+    const gpuTexture = device.createTexture({
+      size: { width: texture.width, height: texture.height },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+      label: `${label}-base-color-texture`,
+    });
+    device.queue.copyExternalImageToTexture(
+      { source: texture.image },
+      { texture: gpuTexture },
+      { width: texture.width, height: texture.height },
+    );
+    return gpuTexture;
+  }
+
+  private ensureDefaultTexture(device: GPUDevice): void {
+    if (this.defaultTexture && this.defaultTextureView) {
+      return;
+    }
+
+    this.defaultTexture?.destroy();
+    this.defaultTexture = device.createTexture({
+      size: { width: 1, height: 1 },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+      label: 'native-scene-mesh-default-texture',
+    });
+    device.queue.writeTexture?.(
+      { texture: this.defaultTexture },
+      new Uint8Array([255, 255, 255, 255]),
+      { bytesPerRow: 4 },
+      { width: 1, height: 1 },
+    );
+    this.defaultTextureView = this.defaultTexture.createView();
+  }
+
+  private destroyResources(resources: PrimitiveGpuResources): void {
+    resources.vertexBuffer.destroy();
+    resources.indexBuffer.destroy();
+    resources.edgeIndexBuffer.destroy();
+    resources.texture?.destroy();
   }
 
   private resolveModelMatrix(
@@ -552,6 +647,7 @@ export class MeshPass {
     world: Float32Array,
     color: readonly [number, number, number, number],
     opacity: number,
+    unlit: boolean,
   ): Float32Array {
     const data = new Float32Array(MESH_UNIFORM_SIZE / 4);
     data.set(mvp, 0);
@@ -560,6 +656,7 @@ export class MeshPass {
     data[33] = color[1];
     data[34] = color[2];
     data[35] = color[3] * opacity;
+    data[36] = unlit ? 1 : 0;
     return data;
   }
 
@@ -785,9 +882,9 @@ export class MeshPass {
     normals: number[][],
     indices: Uint32Array,
   ): PrimitiveGeometryData {
-    const vertices = new Float32Array(positions.length * 6);
+    const vertices = new Float32Array(positions.length * 8);
     for (let i = 0; i < positions.length; i += 1) {
-      const vertexOffset = i * 6;
+      const vertexOffset = i * 8;
       const position = positions[i];
       const normal = normals[i];
       vertices[vertexOffset + 0] = position?.[0] ?? 0;
@@ -796,6 +893,8 @@ export class MeshPass {
       vertices[vertexOffset + 3] = normal?.[0] ?? 0;
       vertices[vertexOffset + 4] = normal?.[1] ?? 0;
       vertices[vertexOffset + 5] = normal?.[2] ?? 1;
+      vertices[vertexOffset + 6] = 0;
+      vertices[vertexOffset + 7] = 0;
     }
 
     const edgeIndices = this.buildEdgeIndices(indices);

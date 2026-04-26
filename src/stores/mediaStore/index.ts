@@ -67,6 +67,7 @@ type MediaStoreState = MediaState &
     getFileByName: (name: string) => MediaFile | undefined;
     getOrCreateTextFolder: () => string;
     createTextItem: (name?: string, parentId?: string | null) => string;
+    updateTextItem: (id: string, updates: Partial<import('./types').TextItem>) => void;
     removeTextItem: (id: string) => void;
     getOrCreateSolidFolder: () => string;
     createSolidItem: (name?: string, color?: string, parentId?: string | null) => string;
@@ -163,13 +164,14 @@ export const useMediaStore = create<MediaStoreState>()(
     createTextItem: (name?: string, parentId?: string | null) => {
       const { textItems } = get();
       const id = `text-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const label = name?.trim() || `Text ${textItems.length + 1}`;
       const newText = {
         id,
-        name: name || `Text ${textItems.length + 1}`,
+        name: label,
         type: 'text' as const,
         parentId: parentId !== undefined ? parentId : null,
         createdAt: Date.now(),
-        text: 'New Text',
+        text: label,
         fontFamily: 'Arial',
         fontSize: 48,
         color: '#ffffff',
@@ -177,6 +179,21 @@ export const useMediaStore = create<MediaStoreState>()(
       };
       set({ textItems: [...textItems, newText] });
       return id;
+    },
+
+    updateTextItem: (id: string, updates: Partial<import('./types').TextItem>) => {
+      set({
+        textItems: get().textItems.map(t =>
+          t.id === id
+            ? {
+                ...t,
+                ...updates,
+                id: t.id,
+                type: 'text' as const,
+              }
+            : t
+        ),
+      });
     },
 
     removeTextItem: (id: string) => {

@@ -714,8 +714,9 @@ function splatTransformWebpWasmPathFix(): Plugin {
 }
 
 // https://vite.dev/config/
-export default defineConfig(({ command }) => {
+export default defineConfig(({ command, mode }) => {
   const isDevServer = command === 'serve';
+  const enableDevBridge = isDevServer && mode !== 'test';
   const hostedApiProxyTarget = 'http://127.0.0.1:8788';
   const hostedApiProxyRoutes = [
     '/api/me',
@@ -742,7 +743,7 @@ export default defineConfig(({ command }) => {
       localFileServer(),
       blobStoreServer(),
       browserLogBridge(),
-      aiToolsBridge(),
+      ...(enableDevBridge ? [aiToolsBridge()] : []),
       splatTransformWebpWasmPathFix(),
       // Replace __APP_VERSION__ in index.html during build
       {

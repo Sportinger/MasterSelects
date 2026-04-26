@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { GaussianSplatGpuRenderer } from '../../src/engine/gaussian/core/GaussianSplatGpuRenderer';
 import type { SplatCameraParams } from '../../src/engine/gaussian/core/GaussianSplatGpuRenderer';
+import type { LocalSplatEffectorData } from '../../src/engine/native3d/passes/EffectorCompute';
 
 type GaussianSplatGpuRendererTestAccess = GaussianSplatGpuRenderer & {
   device: GPUDevice;
@@ -13,6 +14,11 @@ type GaussianSplatGpuRendererTestAccess = GaussianSplatGpuRenderer & {
     acquire: (width: number, height: number) => { texture: unknown; view: GPUTextureView };
   };
   sceneCache: Map<string, unknown>;
+  effectorCompute: {
+    isInitialized: boolean;
+    prepareLocalSplatEffectors: ReturnType<typeof vi.fn>;
+    execute: ReturnType<typeof vi.fn>;
+  };
   _initialized: boolean;
   createPipeline(): void;
 };
@@ -189,5 +195,141 @@ describe('GaussianSplatGpuRenderer camera uniforms', () => {
     expect(firstCameraBindGroup).toEqual({ label: 'splat-camera-bind-group-0' });
     expect(secondCameraBindGroup).toEqual({ label: 'splat-camera-bind-group-1' });
     expect(firstCameraBindGroup).not.toBe(secondCameraBindGroup);
+  });
+
+  it('keeps worker sort ordering when effectors render through an active splat buffer', () => {
+    const renderPasses: Array<{ setBindGroup: ReturnType<typeof vi.fn> }> = [];
+    const workerOrderBuffer = { label: 'worker-order-buffer' };
+    const workerSorter = {
+      orderBuffer: workerOrderBuffer,
+      hasSortedOrder: true,
+      requestSort: vi.fn(),
+      applyPending: vi.fn(() => 1),
+    };
+    const device = {
+      createBuffer: vi.fn((descriptor: { label?: string }) => ({
+        label: descriptor.label,
+        destroy: vi.fn(),
+      })),
+      createBindGroup: vi.fn((descriptor: { label?: string }) => ({
+        label: descriptor.label,
+      })),
+      queue: {
+        writeBuffer: vi.fn(),
+      },
+    };
+    const commandEncoder = {
+      beginRenderPass: vi.fn(() => {
+        const pass = {
+          setPipeline: vi.fn(),
+          setBindGroup: vi.fn(),
+          draw: vi.fn(),
+          end: vi.fn(),
+        };
+        renderPasses.push(pass);
+        return pass;
+      }),
+    };
+    const renderer = new GaussianSplatGpuRenderer() as unknown as GaussianSplatGpuRendererTestAccess;
+    const localEffectors: LocalSplatEffectorData[] = [{
+      position: { x: 0, y: 0, z: 0 },
+      axis: { x: 0, y: 0, z: 1 },
+      radius: 1,
+      strength: 0.2,
+      falloff: 1,
+      speed: 1,
+      seed: 0,
+      time: 0,
+      mode: 0,
+    }];
+    renderer.device = device;
+    renderer.pipeline = { label: 'pipeline' };
+    renderer.pipelineWithDepth = null;
+    renderer.splatDataBindGroupLayout = { label: 'splat-layout' };
+    renderer.cameraBindGroupLayout = { label: 'camera-layout' };
+    renderer.renderTargetPool = {
+      resetFrame: vi.fn(),
+      acquire: vi.fn(() => ({ texture: { label: 'target' }, view: { label: 'target-view' } })),
+    };
+    renderer.effectorCompute = {
+      isInitialized: true,
+      prepareLocalSplatEffectors: vi.fn(() => localEffectors),
+      execute: vi.fn(),
+    };
+    renderer._initialized = true;
+    renderer.sceneCache.set('splat-a', {
+      ...makeScene({ label: 'identity-bind-group' }),
+      splatCount: 4,
+      workerSorter,
+      workerSortedBindGroup: { label: 'base-worker-sorted-bind-group' },
+    });
+
+    renderer.renderToTexture(
+      'splat-a',
+      makeCamera(),
+      { width: 1280, height: 720 },
+      commandEncoder,
+      {
+        worldMatrix: makeWorldMatrix(1),
+        effectors: [{
+          clipId: 'effector-1',
+          position: { x: 0, y: 0, z: 0 },
+          rotation: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1, z: 1 },
+          radius: 1,
+          mode: 'repel',
+          strength: 20,
+          falloff: 1,
+          speed: 1,
+          seed: 0,
+          time: 0,
+        }],
+      },
+    );
+    renderer.renderToTexture(
+      'splat-a',
+      makeCamera(),
+      { width: 1280, height: 720 },
+      commandEncoder,
+      {
+        worldMatrix: makeWorldMatrix(1),
+        effectors: [{
+          clipId: 'effector-1',
+          position: { x: 0, y: 0, z: 0 },
+          rotation: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1, z: 1 },
+          radius: 1,
+          mode: 'repel',
+          strength: 20,
+          falloff: 1,
+          speed: 1,
+          seed: 0,
+          time: 0,
+        }],
+      },
+    );
+
+    const activeWorkerBindGroupCalls = device.createBindGroup.mock.calls.filter(
+      ([descriptor]) => descriptor.label === 'splat-worker-sorted-active-bind-group-splat-a',
+    );
+    expect(activeWorkerBindGroupCalls).toHaveLength(1);
+    const activeWorkerBindGroupDescriptor = activeWorkerBindGroupCalls[0]?.[0];
+    expect(activeWorkerBindGroupDescriptor).toMatchObject({
+      entries: [
+        { binding: 0, resource: { buffer: { label: 'effector-output-splat-a' } } },
+        { binding: 1, resource: { buffer: workerOrderBuffer } },
+      ],
+    });
+    expect(workerSorter.requestSort).toHaveBeenCalled();
+    expect(workerSorter.applyPending).toHaveBeenCalledWith(device.queue);
+
+    const splatDataBindGroup = renderPasses[0]?.setBindGroup.mock.calls.find(
+      ([slot]) => slot === 0,
+    )?.[1];
+    expect(splatDataBindGroup).toEqual({ label: 'splat-worker-sorted-active-bind-group-splat-a' });
+    const reusedSplatDataBindGroup = renderPasses[1]?.setBindGroup.mock.calls.find(
+      ([slot]) => slot === 0,
+    )?.[1];
+    expect(reusedSplatDataBindGroup).toBe(splatDataBindGroup);
   });
 });

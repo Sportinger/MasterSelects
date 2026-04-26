@@ -9,10 +9,30 @@ const GLB_BIN_CHUNK = 0x004e4942;
 
 type ModelColor = readonly [number, number, number, number];
 
+export interface ModelRuntimeTexture {
+  image: ImageBitmap;
+  width: number;
+  height: number;
+  mimeType?: string;
+}
+
+export interface ModelRuntimeBounds {
+  min: readonly [number, number, number];
+  max: readonly [number, number, number];
+}
+
+export interface ModelRuntimePreloadOptions {
+  normalizationKey?: string;
+  anchorUrl?: string;
+  anchorFileName?: string;
+}
+
 export interface ModelRuntimePrimitive {
   vertices: Float32Array;
   indices: Uint32Array;
   baseColor: ModelColor;
+  baseColorTexture?: ModelRuntimeTexture;
+  unlit?: boolean;
 }
 
 export interface ModelRuntimeData {
@@ -20,6 +40,8 @@ export interface ModelRuntimeData {
   fileName?: string;
   format: 'obj' | 'gltf' | 'glb';
   primitives: ModelRuntimePrimitive[];
+  sourceBounds?: ModelRuntimeBounds;
+  normalizationKey?: string;
 }
 
 export interface ModelRuntimeRequest {
@@ -30,8 +52,11 @@ export interface ModelRuntimeRequest {
 interface PendingPrimitive {
   positions: Float32Array;
   normals: Float32Array;
+  texcoords?: Float32Array;
   indices: Uint32Array;
   baseColor: ModelColor;
+  baseColorTexture?: ModelRuntimeTexture;
+  unlit?: boolean;
 }
 
 interface GltfBuffer {
@@ -56,7 +81,7 @@ interface GltfAccessor {
 }
 
 interface GltfPrimitive {
-  attributes: Partial<Record<'POSITION' | 'NORMAL', number>>;
+  attributes: Partial<Record<'POSITION' | 'NORMAL' | 'TEXCOORD_0', number>>;
   indices?: number;
   material?: number;
   mode?: number;
@@ -80,9 +105,25 @@ interface GltfScene {
 }
 
 interface GltfMaterial {
+  extensions?: {
+    KHR_materials_unlit?: unknown;
+  };
   pbrMetallicRoughness?: {
     baseColorFactor?: number[];
+    baseColorTexture?: {
+      index?: number;
+    };
   };
+}
+
+interface GltfImage {
+  uri?: string;
+  mimeType?: string;
+  bufferView?: number;
+}
+
+interface GltfTexture {
+  source?: number;
 }
 
 interface GltfAsset {
@@ -94,6 +135,8 @@ interface GltfAsset {
   scenes?: GltfScene[];
   scene?: number;
   materials?: GltfMaterial[];
+  images?: GltfImage[];
+  textures?: GltfTexture[];
 }
 
 function normalizeVector3(x: number, y: number, z: number): [number, number, number] {
@@ -283,23 +326,30 @@ function computeNormals(positions: Float32Array, indices: Uint32Array): Float32A
   return normals;
 }
 
-function interleaveVertices(positions: Float32Array, normals: Float32Array): Float32Array {
+function interleaveVertices(
+  positions: Float32Array,
+  normals: Float32Array,
+  texcoords?: Float32Array,
+): Float32Array {
   const count = Math.floor(positions.length / 3);
-  const vertices = new Float32Array(count * 6);
+  const vertices = new Float32Array(count * 8);
   for (let i = 0; i < count; i += 1) {
     const positionOffset = i * 3;
-    const vertexOffset = i * 6;
+    const uvOffset = i * 2;
+    const vertexOffset = i * 8;
     vertices[vertexOffset] = positions[positionOffset] ?? 0;
     vertices[vertexOffset + 1] = positions[positionOffset + 1] ?? 0;
     vertices[vertexOffset + 2] = positions[positionOffset + 2] ?? 0;
     vertices[vertexOffset + 3] = normals[positionOffset] ?? 0;
     vertices[vertexOffset + 4] = normals[positionOffset + 1] ?? 0;
     vertices[vertexOffset + 5] = normals[positionOffset + 2] ?? 1;
+    vertices[vertexOffset + 6] = texcoords?.[uvOffset] ?? 0;
+    vertices[vertexOffset + 7] = texcoords?.[uvOffset + 1] ?? 0;
   }
   return vertices;
 }
 
-function normalizeModelPrimitives(primitives: PendingPrimitive[]): ModelRuntimePrimitive[] {
+function computeModelBounds(primitives: PendingPrimitive[]): ModelRuntimeBounds | null {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
   let minZ = Number.POSITIVE_INFINITY;
@@ -322,13 +372,31 @@ function normalizeModelPrimitives(primitives: PendingPrimitive[]): ModelRuntimeP
   }
 
   if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(minZ)) {
+    return null;
+  }
+
+  return {
+    min: [minX, minY, minZ],
+    max: [maxX, maxY, maxZ],
+  };
+}
+
+function normalizeModelPrimitives(
+  primitives: PendingPrimitive[],
+  bounds: ModelRuntimeBounds | null = computeModelBounds(primitives),
+): ModelRuntimePrimitive[] {
+  if (!bounds) {
     return [];
   }
 
-  const centerX = (minX + maxX) * 0.5;
-  const centerY = (minY + maxY) * 0.5;
-  const centerZ = (minZ + maxZ) * 0.5;
-  const maxDim = Math.max(maxX - minX, maxY - minY, maxZ - minZ) || 1;
+  const centerX = (bounds.min[0] + bounds.max[0]) * 0.5;
+  const centerY = (bounds.min[1] + bounds.max[1]) * 0.5;
+  const centerZ = (bounds.min[2] + bounds.max[2]) * 0.5;
+  const maxDim = Math.max(
+    bounds.max[0] - bounds.min[0],
+    bounds.max[1] - bounds.min[1],
+    bounds.max[2] - bounds.min[2],
+  ) || 1;
   const scale = 1 / maxDim;
 
   return primitives.map((primitive) => {
@@ -340,9 +408,11 @@ function normalizeModelPrimitives(primitives: PendingPrimitive[]): ModelRuntimeP
     }
 
     return {
-      vertices: interleaveVertices(normalizedPositions, primitive.normals),
+      vertices: interleaveVertices(normalizedPositions, primitive.normals, primitive.texcoords),
       indices: primitive.indices,
       baseColor: primitive.baseColor,
+      ...(primitive.baseColorTexture ? { baseColorTexture: primitive.baseColorTexture } : {}),
+      ...(primitive.unlit ? { unlit: true } : {}),
     };
   });
 }
@@ -377,6 +447,33 @@ function decodeDataUri(uri: string): ArrayBuffer | null {
 
   const text = decodeURIComponent(payload);
   return new TextEncoder().encode(text).buffer;
+}
+
+function sliceBuffer(buffer: ArrayBuffer, byteOffset: number, byteLength: number): ArrayBuffer {
+  return buffer.slice(byteOffset, byteOffset + byteLength);
+}
+
+async function createTextureFromBytes(
+  bytes: ArrayBuffer,
+  mimeType?: string,
+): Promise<ModelRuntimeTexture | null> {
+  if (typeof createImageBitmap !== 'function' || typeof Blob === 'undefined') {
+    return null;
+  }
+
+  try {
+    const blob = new Blob([bytes], { type: mimeType || 'image/png' });
+    const image = await createImageBitmap(blob);
+    return {
+      image,
+      width: image.width,
+      height: image.height,
+      mimeType,
+    };
+  } catch (error) {
+    log.warn('Failed to decode model texture', { mimeType, error });
+    return null;
+  }
 }
 
 function getComponentSize(componentType: number): number {
@@ -637,7 +734,92 @@ async function resolveGltfBuffers(gltf: GltfAsset, sourceUrl: string, embeddedGl
   return resolved;
 }
 
-function parseGltfPrimitives(gltf: GltfAsset, buffers: ArrayBuffer[]): PendingPrimitive[] {
+async function resolveGltfTextures(
+  gltf: GltfAsset,
+  buffers: ArrayBuffer[],
+  sourceUrl: string,
+): Promise<Array<ModelRuntimeTexture | null>> {
+  const images = gltf.images ?? [];
+  const imageTextures: Array<ModelRuntimeTexture | null> = [];
+
+  for (let index = 0; index < images.length; index += 1) {
+    const image = images[index]!;
+
+    if (image.uri?.startsWith('data:')) {
+      const decoded = decodeDataUri(image.uri);
+      imageTextures[index] = decoded ? await createTextureFromBytes(decoded, image.mimeType) : null;
+      continue;
+    }
+
+    if (image.uri) {
+      try {
+        const imageUrl = new URL(image.uri, sourceUrl).toString();
+        const response = await fetch(imageUrl);
+        imageTextures[index] = response.ok
+          ? await createTextureFromBytes(await response.arrayBuffer(), image.mimeType ?? response.headers.get('content-type') ?? undefined)
+          : null;
+      } catch (error) {
+        log.warn('Failed to fetch model texture', { uri: image.uri, error });
+        imageTextures[index] = null;
+      }
+      continue;
+    }
+
+    if (image.bufferView != null) {
+      const bufferView = gltf.bufferViews?.[image.bufferView];
+      const buffer = bufferView ? buffers[bufferView.buffer] : undefined;
+      imageTextures[index] = buffer
+        ? await createTextureFromBytes(
+            sliceBuffer(buffer, bufferView?.byteOffset ?? 0, bufferView?.byteLength ?? 0),
+            image.mimeType,
+          )
+        : null;
+      continue;
+    }
+
+    imageTextures[index] = null;
+  }
+
+  return (gltf.textures ?? []).map((texture) =>
+    texture.source == null ? null : imageTextures[texture.source] ?? null,
+  );
+}
+
+function readMaterialBaseColorTexture(
+  gltf: GltfAsset,
+  textureRuntimes: Array<ModelRuntimeTexture | null>,
+  materialIndex: number | undefined,
+): ModelRuntimeTexture | undefined {
+  if (materialIndex == null) {
+    return undefined;
+  }
+
+  const textureIndex = gltf.materials?.[materialIndex]?.pbrMetallicRoughness?.baseColorTexture?.index;
+  if (textureIndex == null) {
+    return undefined;
+  }
+
+  return textureRuntimes[textureIndex] ?? undefined;
+}
+
+function readMaterialUnlit(
+  gltf: GltfAsset,
+  materialIndex: number | undefined,
+  baseColorTexture: ModelRuntimeTexture | undefined,
+): boolean {
+  if (materialIndex == null) {
+    return false;
+  }
+
+  const material = gltf.materials?.[materialIndex];
+  return !!material?.extensions?.KHR_materials_unlit || !!baseColorTexture;
+}
+
+function parseGltfPrimitives(
+  gltf: GltfAsset,
+  buffers: ArrayBuffer[],
+  textureRuntimes: Array<ModelRuntimeTexture | null>,
+): PendingPrimitive[] {
   const primitives: PendingPrimitive[] = [];
   const sceneIndex = gltf.scene ?? 0;
   const scene = gltf.scenes?.[sceneIndex] ?? gltf.scenes?.[0];
@@ -677,6 +859,9 @@ function parseGltfPrimitives(gltf: GltfAsset, buffers: ArrayBuffer[]): PendingPr
         const sourceNormals = primitive.attributes.NORMAL != null
           ? readAccessorFloats(gltf, buffers, primitive.attributes.NORMAL)
           : null;
+        const sourceTexcoords = primitive.attributes.TEXCOORD_0 != null
+          ? readAccessorFloats(gltf, buffers, primitive.attributes.TEXCOORD_0)
+          : null;
 
         const transformedPositions = new Float32Array(positions.length);
         for (let i = 0; i < vertexCount; i += 1) {
@@ -709,11 +894,19 @@ function parseGltfPrimitives(gltf: GltfAsset, buffers: ArrayBuffer[]): PendingPr
           transformedNormals = computeNormals(transformedPositions, indices);
         }
 
+        const baseColorTexture = readMaterialBaseColorTexture(gltf, textureRuntimes, primitive.material);
+        const unlit = readMaterialUnlit(gltf, primitive.material, baseColorTexture);
+
         primitives.push({
           positions: transformedPositions,
           normals: transformedNormals,
+          ...(sourceTexcoords && sourceTexcoords.length >= vertexCount * 2
+            ? { texcoords: sourceTexcoords }
+            : {}),
           indices,
           baseColor: readMaterialColor(gltf, primitive.material),
+          ...(baseColorTexture ? { baseColorTexture } : {}),
+          ...(unlit ? { unlit: true } : {}),
         });
       }
     }
@@ -845,6 +1038,7 @@ export class ModelRuntimeCache {
   private requests = new Map<string, ModelRuntimeRequest>();
   private runtimes = new Map<string, ModelRuntimeData>();
   private loading = new Map<string, Promise<ModelRuntimeData | null>>();
+  private normalizationBounds = new Map<string, ModelRuntimeBounds>();
 
   touch(url: string, fileName?: string): void {
     if (!url) {
@@ -869,13 +1063,21 @@ export class ModelRuntimeCache {
     return [...this.requests.values()];
   }
 
-  async preload(url: string, fileName?: string): Promise<boolean> {
+  async preload(
+    url: string,
+    fileName?: string,
+    options: ModelRuntimePreloadOptions = {},
+  ): Promise<boolean> {
     if (!url) {
       return false;
     }
     this.touch(url, fileName);
-    if (this.runtimes.has(url)) {
+    const cached = this.runtimes.get(url);
+    if (cached && (!options.normalizationKey || cached.normalizationKey === options.normalizationKey)) {
       return true;
+    }
+    if (cached && options.normalizationKey && cached.normalizationKey !== options.normalizationKey) {
+      this.runtimes.delete(url);
     }
 
     const pending = this.loading.get(url);
@@ -883,10 +1085,16 @@ export class ModelRuntimeCache {
       return !!(await pending);
     }
 
-    const loadPromise = this.loadRuntime(url, fileName)
+    const loadPromise = this.resolveNormalizationBounds(url, fileName, options)
+      .then((normalizationBounds) =>
+        this.loadRuntime(url, fileName, normalizationBounds, options.normalizationKey),
+      )
       .then((runtime) => {
         if (runtime) {
           this.runtimes.set(url, runtime);
+          if (options.normalizationKey && runtime.sourceBounds && !this.normalizationBounds.has(options.normalizationKey)) {
+            this.normalizationBounds.set(options.normalizationKey, runtime.sourceBounds);
+          }
         }
         return runtime;
       })
@@ -910,9 +1118,43 @@ export class ModelRuntimeCache {
     this.requests.clear();
     this.runtimes.clear();
     this.loading.clear();
+    this.normalizationBounds.clear();
   }
 
-  private async loadRuntime(url: string, fileName?: string): Promise<ModelRuntimeData | null> {
+  private async resolveNormalizationBounds(
+    url: string,
+    fileName: string | undefined,
+    options: ModelRuntimePreloadOptions,
+  ): Promise<ModelRuntimeBounds | undefined> {
+    const key = options.normalizationKey;
+    if (!key) {
+      return undefined;
+    }
+
+    const existing = this.normalizationBounds.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    const anchorUrl = options.anchorUrl;
+    if (!anchorUrl || anchorUrl === url) {
+      return undefined;
+    }
+
+    await this.preload(anchorUrl, options.anchorFileName ?? fileName, {
+      normalizationKey: key,
+      anchorUrl,
+      anchorFileName: options.anchorFileName ?? fileName,
+    });
+    return this.normalizationBounds.get(key);
+  }
+
+  private async loadRuntime(
+    url: string,
+    fileName?: string,
+    normalizationBounds?: ModelRuntimeBounds,
+    normalizationKey?: string,
+  ): Promise<ModelRuntimeData | null> {
     const resolvedFileName = fileName ?? this.requests.get(url)?.fileName ?? url;
     const extension = resolvedFileName.split('.').pop()?.toLowerCase() ?? '';
     const response = await fetch(url);
@@ -921,13 +1163,17 @@ export class ModelRuntimeCache {
     }
 
     if (extension === 'obj') {
-      const primitives = normalizeModelPrimitives(parseObj(await response.text()));
+      const parsedPrimitives = parseObj(await response.text());
+      const sourceBounds = computeModelBounds(parsedPrimitives) ?? undefined;
+      const primitives = normalizeModelPrimitives(parsedPrimitives, normalizationBounds ?? sourceBounds ?? null);
       return primitives.length > 0
         ? {
             url,
             fileName: resolvedFileName,
             format: 'obj',
             primitives,
+            ...(sourceBounds ? { sourceBounds } : {}),
+            ...(normalizationKey ? { normalizationKey } : {}),
           }
         : null;
     }
@@ -956,7 +1202,10 @@ export class ModelRuntimeCache {
       return null;
     }
 
-    const primitives = normalizeModelPrimitives(parseGltfPrimitives(gltf, buffers));
+    const textureRuntimes = await resolveGltfTextures(gltf, buffers, url);
+    const parsedPrimitives = parseGltfPrimitives(gltf, buffers, textureRuntimes);
+    const sourceBounds = computeModelBounds(parsedPrimitives) ?? undefined;
+    const primitives = normalizeModelPrimitives(parsedPrimitives, normalizationBounds ?? sourceBounds ?? null);
     if (primitives.length === 0) {
       return null;
     }
@@ -966,6 +1215,8 @@ export class ModelRuntimeCache {
       fileName: resolvedFileName,
       format,
       primitives,
+      ...(sourceBounds ? { sourceBounds } : {}),
+      ...(normalizationKey ? { normalizationKey } : {}),
     };
   }
 }
