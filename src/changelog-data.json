@@ -1,5 +1,35 @@
 [
   {
+    "date": "2026-04-26",
+    "type": "new",
+    "title": "Clip Keyframe Markers Can Be Dragged on the Timeline",
+    "description": "Keyframe markers on clips can now be adjusted directly in the timeline, so timing changes do not require jumping back into the Properties panel.",
+    "section": "Timeline / Keyframes",
+    "commits": [
+      "b3589a1d"
+    ]
+  },
+  {
+    "date": "2026-04-26",
+    "type": "fix",
+    "title": "3D Video Planes Render Correctly in Native Scenes",
+    "description": "Video clips converted into 3D planes now render through the native 3D path with the expected camera, transform, and shader behavior.",
+    "section": "3D / Native Scene",
+    "commits": [
+      "e8e2352b"
+    ]
+  },
+  {
+    "date": "2026-04-26",
+    "type": "improve",
+    "title": "Editor Warnings and Debug Artifacts Cleaned Up",
+    "description": "Timeline, preview, export, project storage, native helper, and test paths now avoid more noisy warnings and stale debug output during normal editing.",
+    "section": "Stability / Cleanup",
+    "commits": [
+      "3025e971"
+    ]
+  },
+  {
     "date": "2026-04-24",
     "type": "fix",
     "title": "Slot Clip In/Out Ranges Now Drive Playback Start",
