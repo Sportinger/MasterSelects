@@ -152,6 +152,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const sourceMonitorFile = useMediaStore(state =>
     state.sourceMonitorFileId ? state.files.find(f => f.id === state.sourceMonitorFileId) ?? null : null
   );
+  const previousActiveCompositionIdRef = useRef(activeCompositionId);
   const activeCompositionVideoTracks = useMemo(
     () => tracks.filter((track) => track.type === 'video'),
     [tracks],
@@ -170,8 +171,12 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
   // Clear source monitor when active composition changes
   useEffect(() => {
-    if (activeCompositionId && sourceMonitorFileId) {
-      useMediaStore.getState().setSourceMonitorFile(null);
+    const previousActiveCompositionId = previousActiveCompositionIdRef.current;
+    if (previousActiveCompositionId !== activeCompositionId) {
+      previousActiveCompositionIdRef.current = activeCompositionId;
+      if (sourceMonitorFileId) {
+        useMediaStore.getState().setSourceMonitorFile(null);
+      }
     }
   }, [activeCompositionId, sourceMonitorFileId]);
 

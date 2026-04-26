@@ -32,6 +32,7 @@ import type {
   TimelineClip,
 } from '../../types';
 import type {
+  ProjectMediaBoardGroupOffsets,
   ProjectMediaBoardOrder,
   ProjectMediaBoardViewport,
 } from './types/project.types';
@@ -83,6 +84,10 @@ function serializeGaussianSplatSequence(
           projectPath: frame.projectPath,
           sourcePath: frame.sourcePath,
           absolutePath: frame.absolutePath,
+          splatCount: frame.splatCount,
+          fileSize: frame.fileSize,
+          container: frame.container,
+          codec: frame.codec,
         })),
       }
     : undefined;
@@ -102,12 +107,15 @@ function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
     width: file.width,
     height: file.height,
     frameRate: file.fps,
-    codec: file.codec,
+    codec: file.codec ?? file.gaussianSplatSequence?.codec,
     audioCodec: file.audioCodec,
-    container: file.container,
+    container: file.container ?? (file.gaussianSplatSequence?.container ? `${file.gaussianSplatSequence.container} Seq` : undefined),
     bitrate: file.bitrate,
-    fileSize: file.fileSize,
+    fileSize: file.fileSize ?? file.gaussianSplatSequence?.totalFileSize,
     hasAudio: file.hasAudio,
+    splatCount: file.splatCount ?? file.gaussianSplatSequence?.frames[0]?.splatCount,
+    totalSplatCount: file.totalSplatCount ?? file.gaussianSplatSequence?.totalSplatCount,
+    splatFrameCount: file.splatFrameCount ?? file.gaussianSplatSequence?.frameCount,
     hasProxy: file.proxyStatus === 'ready',
     vectorAnimation: file.vectorAnimation,
     modelSequence: serializeModelSequence(file.modelSequence),
@@ -422,6 +430,7 @@ export async function syncStoresToProject(): Promise<void> {
       const mediaPanelViewMode = readMediaPanelViewMode();
       const mediaPanelBoardViewport = parseLocalStorageJson<ProjectMediaBoardViewport>('media-panel-board-viewport');
       const mediaPanelBoardOrder = parseLocalStorageJson<ProjectMediaBoardOrder>('media-panel-board-order');
+      const mediaPanelBoardGroupOffsets = parseLocalStorageJson<ProjectMediaBoardGroupOffsets>('media-panel-board-group-offsets');
       const transcriptLanguage = localStorage.getItem('transcriptLanguage');
       const settingsState = useSettingsStore.getState();
       const midiState = useMIDIStore.getState();
@@ -434,6 +443,7 @@ export async function syncStoresToProject(): Promise<void> {
         mediaPanelViewMode,
         mediaPanelBoardViewport,
         mediaPanelBoardOrder,
+        mediaPanelBoardGroupOffsets,
         transcriptLanguage: transcriptLanguage || undefined,
         thumbnailsEnabled: timelineState.thumbnailsEnabled,
         waveformsEnabled: timelineState.waveformsEnabled,

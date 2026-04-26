@@ -25,6 +25,9 @@ export interface ProjectMediaFile {
   bitrate?: number;
   fileSize?: number;
   hasAudio?: boolean;
+  splatCount?: number;
+  totalSplatCount?: number;
+  splatFrameCount?: number;
 
   // Proxy status
   hasProxy: boolean;

@@ -44,6 +44,10 @@ export interface GaussianSplatSequenceFrame {
   absolutePath?: string;
   file?: File;
   splatUrl?: string;
+  splatCount?: number;
+  fileSize?: number;
+  container?: string;
+  codec?: string;
 }
 
 export interface GaussianSplatBounds {
@@ -57,6 +61,12 @@ export interface GaussianSplatSequenceData {
   playbackMode?: ModelSequencePlaybackMode;
   sequenceName?: string;
   sharedBounds?: GaussianSplatBounds;
+  totalSplatCount?: number;
+  minSplatCount?: number;
+  maxSplatCount?: number;
+  totalFileSize?: number;
+  container?: string;
+  codec?: string;
   frames: GaussianSplatSequenceFrame[];
 }
 

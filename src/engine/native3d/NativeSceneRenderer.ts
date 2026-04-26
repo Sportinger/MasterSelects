@@ -4,6 +4,7 @@ import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../gaussian/types';
 import { resolveSharedSplatSceneKey } from '../scene/runtime/SharedSplatRuntimeUtils';
 import type {
   SceneCamera,
+  SceneGizmoRenderOptions,
   SceneLayer3DData,
   SceneModelLayer,
   ScenePlaneLayer,
@@ -12,6 +13,7 @@ import type {
 } from '../scene/types';
 import { ModelRuntimeCache } from './assets/ModelRuntimeCache';
 import { EffectorCompute } from './passes/EffectorCompute';
+import { GizmoPass } from './passes/GizmoPass';
 import { MeshPass, type SceneNativeMeshLayer } from './passes/MeshPass';
 import { PlanePass } from './passes/PlanePass';
 import { SplatPass } from './passes/SplatPass';
@@ -49,6 +51,7 @@ export class NativeSceneRenderer {
   private planeTextures = new Map<string, CachedPlaneTexture>();
   private readonly planePass = new PlanePass();
   private readonly meshPass = new MeshPass();
+  private readonly gizmoPass = new GizmoPass();
   private readonly splatPass = new SplatPass();
   private readonly effectorCompute = new EffectorCompute();
   private readonly modelRuntimeCache = new ModelRuntimeCache();
@@ -84,6 +87,7 @@ export class NativeSceneRenderer {
     camera: SceneCamera,
     effectors: SceneSplatEffectorRuntimeData[],
     realtimePlayback: boolean,
+    gizmo?: SceneGizmoRenderOptions | null,
   ): GPUTextureView | null {
     if (!this.initialized) {
       return null;
@@ -121,6 +125,7 @@ export class NativeSceneRenderer {
       camera,
       effectors,
       realtimePlayback,
+      gizmo,
     );
     if (!nativeSceneView) {
       return null;
@@ -151,6 +156,7 @@ export class NativeSceneRenderer {
     this.planeSampler = null;
     this.initialized = false;
     this.meshPass.dispose();
+    this.gizmoPass.dispose();
     for (const entry of this.planeTextures.values()) {
       entry.texture.destroy();
     }
@@ -208,6 +214,7 @@ export class NativeSceneRenderer {
     camera: SceneCamera,
     effectors: SceneSplatEffectorRuntimeData[],
     realtimePlayback: boolean,
+    gizmo?: SceneGizmoRenderOptions | null,
   ): GPUTextureView | null {
     const renderer = getGaussianSplatGpuRenderer();
     if (layers.length > 0 && !renderer.isInitialized) {
@@ -222,6 +229,7 @@ export class NativeSceneRenderer {
     this.ensureCompositeResources(device);
     this.ensurePlaneResources(device);
     this.meshPass.initialize(device, SCENE_DEPTH_FORMAT);
+    this.gizmoPass.initialize(device, 'rgba8unorm');
     if (
       !this.sceneTexture ||
       !this.sceneView ||
@@ -401,6 +409,21 @@ export class NativeSceneRenderer {
     }
 
     if (!this.renderPlanePass(device, commandEncoder, transparentPlanes, camera, true, temporaryBuffers)) {
+      return null;
+    }
+    const gizmoLayer = gizmo
+      ? [...planeLayers, ...nativeMeshLayers, ...layers].find((layer) => layer.clipId === gizmo.clipId) ?? null
+      : null;
+    if (gizmoLayer && !this.gizmoPass.render(
+      device,
+      commandEncoder,
+      this.sceneView,
+      gizmoLayer,
+      camera,
+      gizmo!.mode,
+      gizmo!.hoveredAxis,
+      temporaryBuffers,
+    )) {
       return null;
     }
     device.queue.submit([commandEncoder.finish()]);
