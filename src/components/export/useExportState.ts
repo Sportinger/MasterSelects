@@ -198,7 +198,7 @@ export function useExportState(_composition: Composition | undefined) {
     }
 
     setSettings(patch);
-  }, [setSettings, settings]);
+  }, [setSettings]);
 
   const handleFFmpegContainerChange = useCallback((newContainer: FFmpegContainer) => {
     const patch: Partial<typeof settings> = {
@@ -218,7 +218,7 @@ export function useExportState(_composition: Composition | undefined) {
     }
 
     setSettings(patch);
-  }, [ffmpegCodec, setSettings, settings]);
+  }, [ffmpegCodec, setSettings]);
 
   const handleFFmpegCodecChange = useCallback((newCodec: FFmpegVideoCodec) => {
     const patch: Partial<typeof settings> = {
@@ -232,7 +232,7 @@ export function useExportState(_composition: Composition | undefined) {
     }
 
     setSettings(patch);
-  }, [ffmpegContainer, setSettings, settings]);
+  }, [ffmpegContainer, setSettings]);
 
   return {
     encoder,

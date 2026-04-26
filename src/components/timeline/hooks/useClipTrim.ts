@@ -1,7 +1,7 @@
 // useClipTrim - Clip edge trimming (in/out point adjustment)
 // Extracted from Timeline.tsx for better maintainability
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { TimelineClip } from '../../../types';
 import { shouldLoopVectorAnimation } from '../../../types/vectorAnimation';
 import type { ClipTrimState } from '../types';
@@ -39,7 +39,10 @@ export function useClipTrim({
 }: UseClipTrimProps): UseClipTrimReturn {
   const [clipTrim, setClipTrim] = useState<ClipTrimState | null>(null);
   const clipTrimRef = useRef<ClipTrimState | null>(clipTrim);
-  clipTrimRef.current = clipTrim;
+
+  useEffect(() => {
+    clipTrimRef.current = clipTrim;
+  }, [clipTrim]);
 
   const handleTrimStart = useCallback(
     (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => {

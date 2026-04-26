@@ -19,6 +19,11 @@ import {
 } from '../../src/services/mediaRuntime/runtimePlayback';
 import { WebCodecsPlayer } from '../../src/engine/WebCodecsPlayer';
 import type { TimelineClip } from '../../src/types';
+import type { RuntimeFrameProvider } from '../../src/services/mediaRuntime/types';
+
+type WebCodecsPlayerSlot = NonNullable<TimelineClip['source']>['webCodecsPlayer'];
+const asWebCodecsPlayer = (player: unknown): WebCodecsPlayerSlot => player as WebCodecsPlayerSlot;
+const asRuntimeProvider = (provider: unknown): RuntimeFrameProvider => provider as RuntimeFrameProvider;
 
 function makeTransform() {
   return {
@@ -271,7 +276,7 @@ describe('media runtime bindings', () => {
         type: 'video',
         naturalDuration: 6,
         mediaFileId: 'media-session',
-        webCodecsPlayer: player as any,
+        webCodecsPlayer: asWebCodecsPlayer(player),
       },
       file,
       mediaFileId: 'media-session',
@@ -318,7 +323,7 @@ describe('media runtime bindings', () => {
         type: 'video',
         naturalDuration: 9,
         mediaFileId: 'media-frame',
-        webCodecsPlayer: player as any,
+        webCodecsPlayer: asWebCodecsPlayer(player),
       },
       file,
       mediaFileId: 'media-frame',
@@ -370,7 +375,7 @@ describe('media runtime bindings', () => {
         type: 'video',
         naturalDuration: 10,
         mediaFileId: 'media-sequence',
-        webCodecsPlayer: playerA as any,
+        webCodecsPlayer: asWebCodecsPlayer(playerA),
       },
       file,
       mediaFileId: 'media-sequence',
@@ -381,7 +386,7 @@ describe('media runtime bindings', () => {
         type: 'video',
         naturalDuration: 10,
         mediaFileId: 'media-sequence',
-        webCodecsPlayer: playerB as any,
+        webCodecsPlayer: asWebCodecsPlayer(playerB),
       },
       file,
       mediaFileId: 'media-sequence',
@@ -455,7 +460,7 @@ describe('media runtime bindings', () => {
         type: 'video',
         naturalDuration: 10,
         mediaFileId: 'media-nested-scope',
-        webCodecsPlayer: playerA as any,
+        webCodecsPlayer: asWebCodecsPlayer(playerA),
       },
       file,
       mediaFileId: 'media-nested-scope',
@@ -466,7 +471,7 @@ describe('media runtime bindings', () => {
         type: 'video',
         naturalDuration: 10,
         mediaFileId: 'media-nested-scope',
-        webCodecsPlayer: playerB as any,
+        webCodecsPlayer: asWebCodecsPlayer(playerB),
       },
       file,
       mediaFileId: 'media-nested-scope',
@@ -575,7 +580,7 @@ describe('media runtime bindings', () => {
       'clip-export-session'
     );
 
-    setRuntimeFrameProvider(exportSource, player as any, 'export');
+    setRuntimeFrameProvider(exportSource, asRuntimeProvider(player), 'export');
 
     expect(getRuntimeFrameProvider(exportSource, 'export')).toBe(player);
 
@@ -627,7 +632,7 @@ describe('media runtime bindings', () => {
         type: 'video',
         naturalDuration: 8,
         mediaFileId: 'media-preview-export',
-        webCodecsPlayer: previewPlayer as any,
+        webCodecsPlayer: asWebCodecsPlayer(previewPlayer),
       },
       file,
       mediaFileId: 'media-preview-export',
@@ -638,7 +643,7 @@ describe('media runtime bindings', () => {
       'clip-preview-export'
     );
 
-    setRuntimeFrameProvider(exportSource, exportPlayer as any, 'export');
+    setRuntimeFrameProvider(exportSource, asRuntimeProvider(exportPlayer), 'export');
 
     updateRuntimePlaybackTime(source, 1.25);
     updateRuntimePlaybackTime(exportSource, 4.5, 'export');
@@ -696,7 +701,7 @@ describe('media runtime bindings', () => {
         type: 'video',
         naturalDuration: 10,
         mediaFileId: 'media-overlap',
-        webCodecsPlayer: player as any,
+        webCodecsPlayer: asWebCodecsPlayer(player),
       },
       file,
       mediaFileId: 'media-overlap',
@@ -749,8 +754,8 @@ describe('media runtime bindings', () => {
     };
 
     vi.mocked(WebCodecsPlayer).mockImplementation(function MockWebCodecsPlayer() {
-      return scrubPlayer as any;
-    } as any);
+      return scrubPlayer as unknown as WebCodecsPlayer;
+    });
 
     const source = bindSourceRuntimeToClip({
       clipId: 'clip-scrub-separate',
@@ -758,7 +763,7 @@ describe('media runtime bindings', () => {
         type: 'video',
         naturalDuration: 9,
         mediaFileId: 'media-scrub-separate',
-        webCodecsPlayer: previewPlayer as any,
+        webCodecsPlayer: asWebCodecsPlayer(previewPlayer),
       },
       file,
       mediaFileId: 'media-scrub-separate',
@@ -825,7 +830,7 @@ describe('media runtime bindings', () => {
         type: 'video',
         naturalDuration: 12,
         mediaFileId: 'media-simul',
-        webCodecsPlayer: playerA as any,
+        webCodecsPlayer: asWebCodecsPlayer(playerA),
       },
       file,
       mediaFileId: 'media-simul',
@@ -836,7 +841,7 @@ describe('media runtime bindings', () => {
         type: 'video',
         naturalDuration: 12,
         mediaFileId: 'media-simul',
-        webCodecsPlayer: playerB as any,
+        webCodecsPlayer: asWebCodecsPlayer(playerB),
       },
       file,
       mediaFileId: 'media-simul',
@@ -893,7 +898,7 @@ describe('media runtime bindings', () => {
         type: 'video',
         naturalDuration: 12,
         mediaFileId: 'media-simul-drift',
-        webCodecsPlayer: playerA as any,
+        webCodecsPlayer: asWebCodecsPlayer(playerA),
       },
       file,
       mediaFileId: 'media-simul-drift',
@@ -904,7 +909,7 @@ describe('media runtime bindings', () => {
         type: 'video',
         naturalDuration: 12,
         mediaFileId: 'media-simul-drift',
-        webCodecsPlayer: playerB as any,
+        webCodecsPlayer: asWebCodecsPlayer(playerB),
       },
       file,
       mediaFileId: 'media-simul-drift',
@@ -953,7 +958,7 @@ describe('media runtime bindings', () => {
         type: 'video',
         naturalDuration: 20,
         mediaFileId: 'media-cache',
-        webCodecsPlayer: player as any,
+        webCodecsPlayer: asWebCodecsPlayer(player),
       },
       file,
       mediaFileId: 'media-cache',
@@ -1004,7 +1009,7 @@ describe('media runtime bindings', () => {
         type: 'video',
         naturalDuration: 120,
         mediaFileId: 'media-stale-provider',
-        webCodecsPlayer: player as any,
+        webCodecsPlayer: asWebCodecsPlayer(player),
       },
       file,
       mediaFileId: 'media-stale-provider',
@@ -1049,7 +1054,7 @@ describe('media runtime bindings', () => {
         type: 'video',
         naturalDuration: 120,
         mediaFileId: 'media-stale-cache',
-        webCodecsPlayer: player as any,
+        webCodecsPlayer: asWebCodecsPlayer(player),
       },
       file,
       mediaFileId: 'media-stale-cache',

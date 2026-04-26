@@ -42,13 +42,13 @@ describe('getCodecString', () => {
   });
 
   it('returns fallback for unknown codec', () => {
-    expect(getCodecString('unknown' as any)).toBe('avc1.640028');
+    expect(getCodecString('unknown')).toBe('avc1.640028');
   });
 
   it('fallback codec string differs from h264 codec string', () => {
     // h264 returns Main Profile (4d0028), fallback returns High Profile (640028)
     const h264Codec = getCodecString('h264');
-    const fallback = getCodecString('notACodec' as any);
+    const fallback = getCodecString('notACodec');
     expect(h264Codec).not.toBe(fallback);
   });
 
@@ -81,7 +81,7 @@ describe('getMp4MuxerCodec', () => {
   });
 
   it('defaults to avc for unknown codec', () => {
-    expect(getMp4MuxerCodec('bogus' as any)).toBe('avc');
+    expect(getMp4MuxerCodec('bogus')).toBe('avc');
   });
 
   it('returns unique muxer codec for each video codec', () => {
@@ -117,7 +117,7 @@ describe('getWebmMuxerCodec', () => {
   });
 
   it('falls back to V_VP9 for unknown codecs', () => {
-    expect(getWebmMuxerCodec('unknown' as any)).toBe('V_VP9');
+    expect(getWebmMuxerCodec('unknown')).toBe('V_VP9');
   });
 });
 
@@ -523,7 +523,7 @@ describe('exportToFCPXML', () => {
       duration: 5,
       inPoint: 0,
       outPoint: 5,
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 10 } as any,
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 10 },
     });
 
     const xml = exportToFCPXML([clip], [track], 10, { frameRate: 30 });
@@ -541,7 +541,7 @@ describe('exportToFCPXML', () => {
       duration: 3,
       inPoint: 0,
       outPoint: 3,
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 10 } as any,
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 10 },
     });
 
     const xml = exportToFCPXML([clip], [track], 10, { frameRate: 30 });
@@ -559,7 +559,7 @@ describe('exportToFCPXML', () => {
       duration: 10,
       inPoint: 0,
       outPoint: 10,
-      source: { type: 'audio', audioElement: {} as any, naturalDuration: 60 } as any,
+      source: { type: 'audio', audioElement: document.createElement('audio'), naturalDuration: 60 },
     });
 
     const xml = exportToFCPXML([audioClip], [videoTrack, audioTrack], 10, {
@@ -580,7 +580,7 @@ describe('exportToFCPXML', () => {
       duration: 10,
       inPoint: 0,
       outPoint: 10,
-      source: { type: 'audio', audioElement: {} as any, naturalDuration: 60 } as any,
+      source: { type: 'audio', audioElement: document.createElement('audio'), naturalDuration: 60 },
     });
 
     const xml = exportToFCPXML([audioClip], [audioTrack], 10, {
@@ -679,7 +679,7 @@ describe('exportToFCPXML', () => {
       duration: 5,
       inPoint: 0,
       outPoint: 5,
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 10 } as any,
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 10 },
     });
 
     const xml = exportToFCPXML([clip], [track], 10, { frameRate: 30 });
@@ -701,7 +701,7 @@ describe('exportToFCPXML', () => {
       duration: 3,
       inPoint: 5,
       outPoint: 8,
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 20 } as any,
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 20 },
     });
 
     const xml = exportToFCPXML([clip], [track], 10, { frameRate: 30 });
@@ -723,7 +723,7 @@ describe('exportToFCPXML', () => {
       duration: 3,
       inPoint: 0,
       outPoint: 3,
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 10 } as any,
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 10 },
     });
     const clip2 = createMockClip({
       id: 'c2',
@@ -733,7 +733,7 @@ describe('exportToFCPXML', () => {
       duration: 3,
       inPoint: 0,
       outPoint: 3,
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 10 } as any,
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 10 },
     });
 
     // Pass clips in reverse order to verify sorting
@@ -757,7 +757,7 @@ describe('exportToFCPXML', () => {
       duration: 2,
       inPoint: 0,
       outPoint: 2,
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 10 } as any,
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 10 },
     });
     const clip2 = createMockClip({
       id: 'c2',
@@ -767,7 +767,7 @@ describe('exportToFCPXML', () => {
       duration: 3,
       inPoint: 0,
       outPoint: 3,
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 10 } as any,
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 10 },
     });
 
     const xml = exportToFCPXML([clip1, clip2], [track], 10, { frameRate: 30 });
@@ -787,7 +787,7 @@ describe('exportToFCPXML', () => {
       duration: 5,
       inPoint: 0,
       outPoint: 5,
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 10 } as any,
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 10 },
     });
     const clip2 = createMockClip({
       id: 'c2',
@@ -797,7 +797,7 @@ describe('exportToFCPXML', () => {
       duration: 5,
       inPoint: 0,
       outPoint: 5,
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 10 } as any,
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 10 },
     });
 
     const xml = exportToFCPXML([clip1, clip2], [track], 10, { frameRate: 30 });
@@ -815,8 +815,8 @@ describe('exportToFCPXML', () => {
       inPoint: 0,
       outPoint: 5,
       isComposition: true,
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 10 } as any,
-    } as any);
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 10 },
+    });
 
     const xml = exportToFCPXML([compClip], [track], 10, { frameRate: 30 });
     expect(xml).not.toContain('name="CompositionClip"');
@@ -833,7 +833,7 @@ describe('exportToFCPXML', () => {
       duration: 5,
       inPoint: 0,
       outPoint: 5,
-      source: { type: 'text' } as any,
+      source: { type: 'text' },
     });
 
     const xml = exportToFCPXML([textClip], [track], 10, { frameRate: 30 });
@@ -851,7 +851,7 @@ describe('exportToFCPXML', () => {
       duration: 5,
       inPoint: 0,
       outPoint: 5,
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 10 } as any,
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 10 },
     });
 
     const xml = exportToFCPXML([clip], [track], 10, { frameRate: 30 });
@@ -872,7 +872,7 @@ describe('exportToFCPXML', () => {
       duration: 5,
       inPoint: 0,
       outPoint: 5,
-      source: { type: 'audio', audioElement: {} as any, naturalDuration: 10 } as any,
+      source: { type: 'audio', audioElement: document.createElement('audio'), naturalDuration: 10 },
     });
 
     const xml = exportToFCPXML([audioClip], [videoTrack, audioTrack], 10, {
@@ -895,8 +895,8 @@ describe('exportToFCPXML', () => {
       duration: 3,
       inPoint: 0,
       outPoint: 3,
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 10 } as any,
-    } as any);
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 10 },
+    });
     const clip2 = createMockClip({
       id: 'c2',
       trackId: 'v1',
@@ -906,8 +906,8 @@ describe('exportToFCPXML', () => {
       duration: 3,
       inPoint: 3,
       outPoint: 6,
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 10 } as any,
-    } as any);
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 10 },
+    });
 
     const xml = exportToFCPXML([clip1, clip2], [track], 10, { frameRate: 30 });
     // Both clips reference the same asset, so only one asset resource should exist
@@ -929,7 +929,7 @@ describe('exportToFCPXML', () => {
       inPoint: 0,
       outPoint: 5,
       file: new File([], 'my-video.mp4'),
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 10 } as any,
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 10 },
     });
 
     const xml = exportToFCPXML([clip], [track], 10, { frameRate: 30 });
@@ -949,7 +949,7 @@ describe('exportToFCPXML', () => {
       duration: 5,
       inPoint: 0,
       outPoint: 5,
-      source: { type: 'audio', audioElement: {} as any, naturalDuration: 10 } as any,
+      source: { type: 'audio', audioElement: document.createElement('audio'), naturalDuration: 10 },
     });
 
     const xml = exportToFCPXML([audioClip], [videoTrack, audioTrack], 10, {
@@ -971,8 +971,8 @@ describe('exportToFCPXML', () => {
       inPoint: 0,
       outPoint: 5,
       linkedClipId: 'ac1',
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 10 } as any,
-    } as any);
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 10 },
+    });
     const audioClip = createMockClip({
       id: 'ac1',
       trackId: 'a1',
@@ -981,7 +981,7 @@ describe('exportToFCPXML', () => {
       duration: 5,
       inPoint: 0,
       outPoint: 5,
-      source: { type: 'audio', audioElement: {} as any, naturalDuration: 10 } as any,
+      source: { type: 'audio', audioElement: document.createElement('audio'), naturalDuration: 10 },
     });
 
     const xml = exportToFCPXML([videoClip, audioClip], [videoTrack, audioTrack], 10, {
@@ -1005,8 +1005,8 @@ describe('exportToFCPXML', () => {
       inPoint: 0,
       outPoint: 5,
       linkedClipId: 'ac1',
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 10 } as any,
-    } as any);
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 10 },
+    });
     const audioClip = createMockClip({
       id: 'ac1',
       trackId: 'a1',
@@ -1015,7 +1015,7 @@ describe('exportToFCPXML', () => {
       duration: 5,
       inPoint: 0,
       outPoint: 5,
-      source: { type: 'audio', audioElement: {} as any, naturalDuration: 10 } as any,
+      source: { type: 'audio', audioElement: document.createElement('audio'), naturalDuration: 10 },
     });
 
     const xml = exportToFCPXML([videoClip, audioClip], [videoTrack, audioTrack], 10, {
@@ -1057,7 +1057,7 @@ describe('exportToFCPXML', () => {
       duration: 5,
       inPoint: 0,
       outPoint: 5,
-      source: { type: 'audio', audioElement: {} as any, naturalDuration: 10 } as any,
+      source: { type: 'audio', audioElement: document.createElement('audio'), naturalDuration: 10 },
     });
 
     // Do not specify includeAudio; it should default to true
@@ -1078,7 +1078,7 @@ describe('exportToFCPXML', () => {
       duration: 5,
       inPoint: 0,
       outPoint: 5,
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 10 } as any,
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 10 },
     });
 
     const xml = exportToFCPXML([clip], [track], 10, { frameRate: 30 });
@@ -1096,7 +1096,7 @@ describe('exportToFCPXML', () => {
       duration: 5,
       inPoint: 2,
       outPoint: 7,
-      source: { type: 'video', videoElement: {} as any, naturalDuration: 30 } as any,
+      source: { type: 'video', videoElement: document.createElement('video'), naturalDuration: 30 },
     });
 
     const xml = exportToFCPXML([clip], [track], 10, { frameRate: 30 });

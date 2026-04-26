@@ -20,6 +20,15 @@ const MP4_CONTAINERS = ['mp4', 'm4v', 'mov', '3gp', 'mp4v'];
 // WebM/Matroska containers
 const WEBM_CONTAINERS = ['webm', 'mkv'];
 
+type DisposableMediaInput = {
+  dispose(): void;
+};
+
+interface VideoWithAudioMetadata extends HTMLVideoElement {
+  audioTracks?: { length: number };
+  webkitAudioDecodedByteCount?: number;
+}
+
 /**
  * Detect if a video file has audio tracks.
  * Uses multiple detection methods depending on container format.
@@ -68,8 +77,7 @@ export async function detectVideoAudio(file: File): Promise<boolean> {
  * Returns null if detection fails.
  */
 async function detectAudioMP4Box(file: File): Promise<boolean | null> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cleanup: { input: any } = { input: null };
+  const cleanup: { input: DisposableMediaInput | null } = { input: null };
   try {
     const mb = await getMediaBunny();
 
@@ -134,8 +142,9 @@ async function detectAudioVideoElement(file: File): Promise<boolean | null> {
 
     video.onloadedmetadata = () => {
       // Method A: audioTracks API (Chrome/Safari)
-      if ('audioTracks' in video) {
-        const audioTracks = (video as any).audioTracks;
+      const videoWithAudioMetadata = video as VideoWithAudioMetadata;
+      if ('audioTracks' in videoWithAudioMetadata) {
+        const audioTracks = videoWithAudioMetadata.audioTracks;
         if (audioTracks && typeof audioTracks.length === 'number') {
           cleanup();
           resolve(audioTracks.length > 0);
@@ -149,7 +158,7 @@ async function detectAudioVideoElement(file: File): Promise<boolean | null> {
       video.play().then(() => {
         setTimeout(() => {
           video.pause();
-          const audioBytes = (video as any).webkitAudioDecodedByteCount;
+          const audioBytes = videoWithAudioMetadata.webkitAudioDecodedByteCount;
           if (typeof audioBytes === 'number') {
             cleanup();
             resolve(audioBytes > 0);

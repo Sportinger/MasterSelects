@@ -20,16 +20,20 @@ export async function handleSetTransform(
   const compHeight = activeComp?.height ?? 1080;
 
   const updates: Record<string, unknown> = {};
-  const hasPosition = args.x !== undefined || args.y !== undefined;
-  const hasScale = args.scaleX !== undefined || args.scaleY !== undefined;
-  const hasRotation = args.rotation !== undefined;
+  const hasPosition = args.x !== undefined || args.y !== undefined || args.z !== undefined;
+  const hasScale = args.scaleX !== undefined || args.scaleY !== undefined || args.scaleZ !== undefined;
+  const hasRotation =
+    args.rotation !== undefined ||
+    args.rotationX !== undefined ||
+    args.rotationY !== undefined ||
+    args.rotationZ !== undefined;
 
   if (hasPosition) {
     const currentPos = clip.transform?.position || { x: 0, y: 0, z: 0 };
     updates.position = {
       x: args.x !== undefined ? (args.x as number) / compWidth : currentPos.x,
       y: args.y !== undefined ? (args.y as number) / compHeight : currentPos.y,
-      z: currentPos.z,
+      z: args.z !== undefined ? args.z as number : currentPos.z,
     };
   }
   if (hasScale) {
@@ -37,11 +41,22 @@ export async function handleSetTransform(
     updates.scale = {
       x: args.scaleX !== undefined ? args.scaleX as number : currentScale.x,
       y: args.scaleY !== undefined ? args.scaleY as number : currentScale.y,
+      ...(args.scaleZ !== undefined || currentScale.z !== undefined
+        ? { z: args.scaleZ !== undefined ? args.scaleZ as number : currentScale.z }
+        : {}),
     };
   }
   if (hasRotation) {
     const currentRot = clip.transform?.rotation || { x: 0, y: 0, z: 0 };
-    updates.rotation = { ...currentRot, z: args.rotation as number };
+    updates.rotation = {
+      x: args.rotationX !== undefined ? args.rotationX as number : currentRot.x,
+      y: args.rotationY !== undefined ? args.rotationY as number : currentRot.y,
+      z: args.rotationZ !== undefined
+        ? args.rotationZ as number
+        : args.rotation !== undefined
+          ? args.rotation as number
+          : currentRot.z,
+    };
   }
   if (args.opacity !== undefined) updates.opacity = args.opacity as number;
   if (args.blendMode !== undefined) updates.blendMode = args.blendMode as string;

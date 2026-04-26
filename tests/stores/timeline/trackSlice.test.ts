@@ -57,7 +57,7 @@ describe('trackSlice', () => {
         createMockTrack({ id: 'a1', name: 'Audio 1', type: 'audio', height: 40 }),
         createMockTrack({ id: 'a2', name: 'Audio 2', type: 'audio', height: 40 }),
       ],
-    } as any);
+    });
 
     // Adding another video track should be "Video 4" (3 existing + 1)
     const newVideo = store.getState().addTrack('video');
@@ -126,7 +126,7 @@ describe('trackSlice', () => {
 
   it('removeTrack: removes track and associated clips', () => {
     const clip = createMockClip({ id: 'clip-1', trackId: 'video-1' });
-    store = createTestTimelineStore({ clips: [clip] } as any);
+    store = createTestTimelineStore({ clips: [clip] });
 
     store.getState().removeTrack('video-1');
     const state = store.getState();
@@ -138,7 +138,7 @@ describe('trackSlice', () => {
     const clip1 = createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0 });
     const clip2 = createMockClip({ id: 'clip-2', trackId: 'video-1', startTime: 5 });
     const clip3 = createMockClip({ id: 'clip-3', trackId: 'video-1', startTime: 10 });
-    store = createTestTimelineStore({ clips: [clip1, clip2, clip3] } as any);
+    store = createTestTimelineStore({ clips: [clip1, clip2, clip3] });
 
     store.getState().removeTrack('video-1');
     const state = store.getState();
@@ -148,7 +148,7 @@ describe('trackSlice', () => {
   it('removeTrack: does not affect clips on other tracks', () => {
     const clipOnVideo = createMockClip({ id: 'clip-v', trackId: 'video-1' });
     const clipOnAudio = createMockClip({ id: 'clip-a', trackId: 'audio-1' });
-    store = createTestTimelineStore({ clips: [clipOnVideo, clipOnAudio] } as any);
+    store = createTestTimelineStore({ clips: [clipOnVideo, clipOnAudio] });
 
     store.getState().removeTrack('video-1');
     const state = store.getState();
@@ -229,14 +229,14 @@ describe('trackSlice', () => {
 
   it('setTrackVisible: calls invalidateCache for video tracks', () => {
     const invalidateSpy = vi.fn();
-    store = createTestTimelineStore({ invalidateCache: invalidateSpy } as any);
+    store = createTestTimelineStore({ invalidateCache: invalidateSpy });
     store.getState().setTrackVisible('video-1', false);
     expect(invalidateSpy).toHaveBeenCalled();
   });
 
   it('setTrackVisible: does not call invalidateCache for audio tracks', () => {
     const invalidateSpy = vi.fn();
-    store = createTestTimelineStore({ invalidateCache: invalidateSpy } as any);
+    store = createTestTimelineStore({ invalidateCache: invalidateSpy });
     store.getState().setTrackVisible('audio-1', false);
     expect(invalidateSpy).not.toHaveBeenCalled();
   });
@@ -263,7 +263,7 @@ describe('trackSlice', () => {
         createMockTrack({ id: 'v1', name: 'Video 1', type: 'video' }),
         createMockTrack({ id: 'v2', name: 'Video 2', type: 'video' }),
       ],
-    } as any);
+    });
     store.getState().setTrackSolo('v1', true);
     store.getState().setTrackSolo('v2', true);
     expect(store.getState().tracks.find(t => t.id === 'v1')!.solo).toBe(true);
@@ -272,14 +272,14 @@ describe('trackSlice', () => {
 
   it('setTrackSolo: calls invalidateCache for video tracks', () => {
     const invalidateSpy = vi.fn();
-    store = createTestTimelineStore({ invalidateCache: invalidateSpy } as any);
+    store = createTestTimelineStore({ invalidateCache: invalidateSpy });
     store.getState().setTrackSolo('video-1', true);
     expect(invalidateSpy).toHaveBeenCalled();
   });
 
   it('setTrackSolo: does not call invalidateCache for audio tracks', () => {
     const invalidateSpy = vi.fn();
-    store = createTestTimelineStore({ invalidateCache: invalidateSpy } as any);
+    store = createTestTimelineStore({ invalidateCache: invalidateSpy });
     store.getState().setTrackSolo('audio-1', true);
     expect(invalidateSpy).not.toHaveBeenCalled();
   });
@@ -339,7 +339,7 @@ describe('trackSlice', () => {
         createMockTrack({ id: 'v2', name: 'Video 2', type: 'video', height: 60 }),
         createMockTrack({ id: 'a1', name: 'Audio 1', type: 'audio', height: 40 }),
       ],
-    } as any);
+    });
     store.getState().scaleTracksOfType('video', 20);
     const videoTracks = store.getState().tracks.filter(t => t.type === 'video');
     for (const t of videoTracks) {
@@ -354,7 +354,7 @@ describe('trackSlice', () => {
         createMockTrack({ id: 'v2', name: 'Video 2', type: 'video', height: 60 }),
         createMockTrack({ id: 'a1', name: 'Audio 1', type: 'audio', height: 40 }),
       ],
-    } as any);
+    });
     store.getState().scaleTracksOfType('video', -20);
     const videoTracks = store.getState().tracks.filter(t => t.type === 'video');
     for (const t of videoTracks) {
@@ -386,7 +386,7 @@ describe('trackSlice', () => {
         createMockTrack({ id: 'v2', name: 'Video 2', type: 'video', height: 40 }),
         createMockTrack({ id: 'a1', name: 'Audio 1', type: 'audio', height: 40 }),
       ],
-    } as any);
+    });
 
     // First call with non-zero delta should sync all to max (80)
     store.getState().scaleTracksOfType('video', 10);
@@ -403,7 +403,7 @@ describe('trackSlice', () => {
         createMockTrack({ id: 'v2', name: 'Video 2', type: 'video', height: 40 }),
         createMockTrack({ id: 'a1', name: 'Audio 1', type: 'audio', height: 40 }),
       ],
-    } as any);
+    });
 
     // First call syncs to max (80)
     store.getState().scaleTracksOfType('video', 10);
@@ -441,7 +441,7 @@ describe('trackSlice', () => {
         createMockTrack({ id: 'a1', name: 'Audio 1', type: 'audio', height: 40 }),
         createMockTrack({ id: 'a2', name: 'Audio 2', type: 'audio', height: 40 }),
       ],
-    } as any);
+    });
     store.getState().scaleTracksOfType('audio', 15);
     const audioTracks = store.getState().tracks.filter(t => t.type === 'audio');
     for (const t of audioTracks) {
@@ -456,7 +456,7 @@ describe('trackSlice', () => {
         createMockTrack({ id: 'v2', name: 'Video 2', type: 'video', height: 50 }),
         createMockTrack({ id: 'a1', name: 'Audio 1', type: 'audio', height: 40 }),
       ],
-    } as any);
+    });
 
     // delta=0 but tracks differ: code goes to else branch (since delta === 0, !allSameHeight && delta !== 0 is false)
     // So it scales uniformly: newHeight = max(100) + 0 = 100
@@ -496,7 +496,7 @@ describe('trackSlice', () => {
         createMockTrack({ id: 'trackA', name: 'Track A', type: 'video' }),
         createMockTrack({ id: 'trackB', name: 'Track B', type: 'video' }),
       ],
-    } as any);
+    });
     // A is child of B
     store.getState().setTrackParent('trackA', 'trackB');
     expect(store.getState().tracks.find(t => t.id === 'trackA')!.parentTrackId).toBe('trackB');
@@ -512,7 +512,7 @@ describe('trackSlice', () => {
         createMockTrack({ id: 'trackB', name: 'Track B', type: 'video' }),
         createMockTrack({ id: 'trackC', name: 'Track C', type: 'video' }),
       ],
-    } as any);
+    });
     // Build chain: A -> B -> C
     store.getState().setTrackParent('trackA', 'trackB');
     store.getState().setTrackParent('trackB', 'trackC');
@@ -528,7 +528,7 @@ describe('trackSlice', () => {
         createMockTrack({ id: 'parent1', name: 'Parent 1', type: 'video' }),
         createMockTrack({ id: 'parent2', name: 'Parent 2', type: 'video' }),
       ],
-    } as any);
+    });
     store.getState().setTrackParent('child', 'parent1');
     expect(store.getState().tracks.find(t => t.id === 'child')!.parentTrackId).toBe('parent1');
     store.getState().setTrackParent('child', 'parent2');
@@ -542,7 +542,7 @@ describe('trackSlice', () => {
         createMockTrack({ id: 'trackB', name: 'Track B', type: 'video' }),
         createMockTrack({ id: 'trackC', name: 'Track C', type: 'video' }),
       ],
-    } as any);
+    });
     store.getState().setTrackParent('trackA', 'trackB');
     store.getState().setTrackParent('trackB', 'trackC');
     expect(store.getState().tracks.find(t => t.id === 'trackA')!.parentTrackId).toBe('trackB');
@@ -575,7 +575,7 @@ describe('trackSlice', () => {
         createMockTrack({ id: 'child2', name: 'Child 2', type: 'video', parentTrackId: 'parent' }),
         createMockTrack({ id: 'child3', name: 'Child 3', type: 'video', parentTrackId: 'parent' }),
       ],
-    } as any);
+    });
     const children = store.getState().getTrackChildren('parent');
     expect(children.length).toBe(3);
     const childIds = children.map(c => c.id);
@@ -591,7 +591,7 @@ describe('trackSlice', () => {
         createMockTrack({ id: 'child', name: 'Child', type: 'video', parentTrackId: 'grandparent' }),
         createMockTrack({ id: 'grandchild', name: 'Grandchild', type: 'video', parentTrackId: 'child' }),
       ],
-    } as any);
+    });
     const children = store.getState().getTrackChildren('grandparent');
     expect(children.length).toBe(1);
     expect(children[0].id).toBe('child');
@@ -634,7 +634,7 @@ describe('trackSlice', () => {
         createMockTrack({ id: 'child', name: 'Child', type: 'video', parentTrackId: 'parent' }),
         createMockTrack({ id: 'a1', name: 'Audio 1', type: 'audio', height: 40 }),
       ],
-    } as any);
+    });
     store.getState().removeTrack('parent');
     // The child still has parentTrackId pointing to removed track
     // (it becomes an orphan - this is the current behavior)

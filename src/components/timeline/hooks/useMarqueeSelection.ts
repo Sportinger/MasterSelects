@@ -62,7 +62,10 @@ export function useMarqueeSelection({
 }: UseMarqueeSelectionProps): UseMarqueeSelectionReturn {
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
   const marqueeRef = useRef(marquee);
-  marqueeRef.current = marquee;
+
+  useEffect(() => {
+    marqueeRef.current = marquee;
+  }, [marquee]);
 
   // Helper: Calculate which clips intersect with a rectangle
   const getClipsInRect = useCallback(

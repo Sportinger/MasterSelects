@@ -44,6 +44,15 @@ vi.mock('../../src/services/logger', () => ({
 }));
 
 import { VideoSyncManager } from '../../src/services/layerBuilder/VideoSyncManager';
+import type { FrameContext } from '../../src/services/layerBuilder/types';
+import type { TimelineClip } from '../../src/types';
+
+type VideoSyncManagerTestAccess = VideoSyncManager & {
+  syncClipVideo(clip: TimelineClip, ctx: FrameContext): void;
+  warmupUpcomingClips(ctx: FrameContext): void;
+  preBufferUpcomingVideoAudio(ctx: FrameContext): void;
+  updateLastTrackState(ctx: FrameContext): void;
+};
 
 describe('VideoSyncManager same-frame sync gate', () => {
   beforeEach(() => {
@@ -52,7 +61,7 @@ describe('VideoSyncManager same-frame sync gate', () => {
   });
 
   it('does not skip a same-frame playback sync when clip references changed asynchronously', () => {
-    const manager = new VideoSyncManager() as any;
+    const manager = new VideoSyncManager() as unknown as VideoSyncManagerTestAccess;
     const syncClipVideo = vi.spyOn(manager, 'syncClipVideo').mockImplementation(() => {});
     vi.spyOn(manager, 'warmupUpcomingClips').mockImplementation(() => {});
     vi.spyOn(manager, 'preBufferUpcomingVideoAudio').mockImplementation(() => {});

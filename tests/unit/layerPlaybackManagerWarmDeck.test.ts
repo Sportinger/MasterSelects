@@ -3,6 +3,7 @@ import { flags } from '../../src/engine/featureFlags';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { layerPlaybackManager } from '../../src/services/layerPlaybackManager';
 import { slotDeckManager } from '../../src/services/slotDeckManager';
+import type { Composition } from '../../src/stores/mediaStore/types';
 
 vi.mock('../../src/services/slotDeckManager', () => ({
   slotDeckManager: {
@@ -29,7 +30,7 @@ const mockedSlotDeckManager = slotDeckManager as unknown as {
   releaseLayerPin: MockFn;
 };
 
-function createComposition(id: string) {
+function createComposition(id: string): Composition {
   return {
     id,
     name: id,
@@ -100,7 +101,7 @@ describe('layerPlaybackManager warm deck adoption', () => {
 
     expect(mockedSlotDeckManager.getPreparedDeck).toHaveBeenCalledWith(0, 'comp-1');
     expect(mockedSlotDeckManager.adoptDeckToLayer).toHaveBeenCalledWith(0, 0, 2);
-    expect((layerPlaybackManager.getLayerState(0) as any)).toMatchObject({
+    expect(layerPlaybackManager.getLayerState(0)).toMatchObject({
       compositionId: 'comp-1',
       resourceOwnership: 'slot-deck',
       slotIndex: 0,
@@ -120,7 +121,7 @@ describe('layerPlaybackManager warm deck adoption', () => {
     layerPlaybackManager.activateLayer(1, 'comp-1', 0, { slotIndex: 3 });
 
     expect(mockedSlotDeckManager.adoptDeckToLayer).not.toHaveBeenCalled();
-    expect((layerPlaybackManager.getLayerState(1) as any)).toMatchObject({
+    expect(layerPlaybackManager.getLayerState(1)).toMatchObject({
       compositionId: 'comp-1',
       resourceOwnership: 'layer',
       slotIndex: null,

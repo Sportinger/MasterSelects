@@ -12,6 +12,22 @@ import type { ProjectFile, ProjectMediaFile, ProjectComposition, ProjectFolder }
 
 const KEYS_FILE_NAME = '.keys.enc';
 
+type DirectoryPickerWindow = Window & typeof globalThis & {
+  showDirectoryPicker: (options?: {
+    mode?: 'read' | 'readwrite';
+    startIn?: 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos';
+  }) => Promise<FileSystemDirectoryHandle>;
+};
+
+type FileSystemEntryHandle = FileSystemFileHandle | FileSystemDirectoryHandle;
+type IterableDirectoryHandle = FileSystemDirectoryHandle & {
+  values: () => AsyncIterableIterator<FileSystemEntryHandle>;
+};
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
 export class ProjectCoreService {
   private projectHandle: FileSystemDirectoryHandle | null = null;
   private projectData: ProjectFile | null = null;
@@ -95,7 +111,7 @@ export class ProjectCoreService {
     }
 
     try {
-      const handle = await (window as any).showDirectoryPicker({
+      const handle = await (window as DirectoryPickerWindow).showDirectoryPicker({
         mode: 'readwrite',
         startIn: 'documents',
       });
@@ -103,8 +119,8 @@ export class ProjectCoreService {
       await projectDB.storeHandle('projectsFolder', handle);
       const projectFolder = await handle.getDirectoryHandle(name, { create: true });
       return await this.initializeProject(projectFolder, name);
-    } catch (e: any) {
-      if (e.name === 'AbortError') return false;
+    } catch (e) {
+      if (isAbortError(e)) return false;
       log.error('Failed to create project:', e);
       return false;
     }
@@ -120,7 +136,7 @@ export class ProjectCoreService {
       await projectDB.storeHandle('projectsFolder', handle);
       const projectFolder = await handle.getDirectoryHandle(name, { create: true });
       return await this.initializeProject(projectFolder, name);
-    } catch (e: any) {
+    } catch (e) {
       log.error('Failed to create project in folder:', e);
       return false;
     }
@@ -193,14 +209,14 @@ export class ProjectCoreService {
     }
 
     try {
-      const handle = await (window as any).showDirectoryPicker({
+      const handle = await (window as DirectoryPickerWindow).showDirectoryPicker({
         mode: 'readwrite',
         startIn: 'documents',
       });
 
       return await this.loadProject(handle);
-    } catch (e: any) {
-      if (e.name === 'AbortError') return false;
+    } catch (e) {
+      if (isAbortError(e)) return false;
       log.error('Failed to open project:', e);
       return false;
     }
@@ -319,7 +335,7 @@ export class ProjectCoreService {
     try {
       const backups: { name: string; file: File }[] = [];
 
-      for await (const entry of (backupsFolder as any).values()) {
+      for await (const entry of (backupsFolder as IterableDirectoryHandle).values()) {
         if (entry.kind === 'file' && entry.name.startsWith('project_') && entry.name.endsWith('.json')) {
           const file = await entry.getFile();
           backups.push({ name: entry.name, file });
@@ -463,7 +479,7 @@ export class ProjectCoreService {
     source: FileSystemDirectoryHandle,
     target: FileSystemDirectoryHandle
   ): Promise<void> {
-    for await (const entry of (source as any).values()) {
+    for await (const entry of (source as IterableDirectoryHandle).values()) {
       if (entry.kind === 'file') {
         const sourceFile = await entry.getFile();
         const targetFile = await target.getFileHandle(entry.name, { create: true });

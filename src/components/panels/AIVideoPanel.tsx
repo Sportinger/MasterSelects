@@ -27,7 +27,8 @@ import {
 } from '../../services/kieAiService';
 import { getFlashBoardPriceEstimate } from '../../services/flashboard/FlashBoardPricing';
 import { captureCurrentPreviewFrameDataUrl } from '../../services/previewFrameCapture';
-import { ImageCropper, exportCroppedImage, type CropData } from './ImageCropper';
+import { ImageCropper, type CropData } from './ImageCropper';
+import { exportCroppedImage } from './imageCropperUtils';
 import './AIVideoPanel.css';
 
 type GenerationType = 'text-to-video' | 'image-to-video';

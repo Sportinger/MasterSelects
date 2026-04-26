@@ -197,7 +197,7 @@ export function useMaskVertexDrag(
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-  }, [activeMask, selectedClip, selectVertex, canvasWidth, canvasHeight, setMaskDragging, throttledUpdateVertex]);
+  }, [activeMask, selectedClip, selectVertex, canvasWidth, canvasHeight, setMaskDragging, throttledUpdateVertex, svgRef]);
 
   return { handleVertexMouseDown };
 }

@@ -193,7 +193,7 @@ export async function handleFindSilentSections(
         timePosition: section.timelineStart,
         width: section.duration,
         duration: 2000,
-      } as any);
+      });
     }
   }
 
@@ -325,7 +325,7 @@ export async function handleFindLowQualitySections(
         timePosition: section.timelineStart,
         width: section.duration,
         duration: 2000,
-      } as any);
+      });
     }
   }
 

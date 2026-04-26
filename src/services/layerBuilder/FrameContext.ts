@@ -7,6 +7,7 @@ import { LAYER_BUILDER_CONSTANTS } from './types';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { getPlayheadPosition } from './PlayheadState';
+import type { Composition, MediaFile } from '../../stores/mediaStore/types';
 
 function getClipsAtTime(clips: TimelineClip[], playheadPosition: number): TimelineClip[] {
   const EPSILON = 1e-6;
@@ -106,9 +107,9 @@ export function createFrameContext(): FrameContext {
   let _anyAudioSolo: boolean | null = null;
   let _clipsAtTime: TimelineClip[] | null = null;
   let _clipsByTrackId: Map<string, TimelineClip> | null = null;
-  let _mediaFileById: Map<string, any> | null = null;
-  let _mediaFileByName: Map<string, any> | null = null;
-  let _compositionById: Map<string, any> | null = null;
+  let _mediaFileById: Map<string, MediaFile> | null = null;
+  let _mediaFileByName: Map<string, MediaFile> | null = null;
+  let _compositionById: Map<string, Composition> | null = null;
 
   const context: FrameContext = {
     // Raw data
@@ -208,7 +209,7 @@ export function createFrameContext(): FrameContext {
       return _clipsByTrackId;
     },
 
-    get mediaFileById(): Map<string, any> {
+    get mediaFileById(): Map<string, MediaFile> {
       if (_mediaFileById === null) {
         _mediaFileById = new Map();
         for (const file of mediaState.files) {
@@ -218,7 +219,7 @@ export function createFrameContext(): FrameContext {
       return _mediaFileById;
     },
 
-    get mediaFileByName(): Map<string, any> {
+    get mediaFileByName(): Map<string, MediaFile> {
       if (_mediaFileByName === null) {
         _mediaFileByName = new Map();
         for (const file of mediaState.files) {
@@ -230,7 +231,7 @@ export function createFrameContext(): FrameContext {
       return _mediaFileByName;
     },
 
-    get compositionById(): Map<string, any> {
+    get compositionById(): Map<string, Composition> {
       if (_compositionById === null) {
         _compositionById = new Map();
         for (const comp of mediaState.compositions) {
@@ -247,7 +248,7 @@ export function createFrameContext(): FrameContext {
 /**
  * Get media file for a clip - O(1) lookup
  */
-export function getMediaFileForClip(ctx: FrameContext, clip: TimelineClip): any | undefined {
+export function getMediaFileForClip(ctx: FrameContext, clip: TimelineClip): MediaFile | undefined {
   // Try by ID first
   if (clip.mediaFileId) {
     const byId = ctx.mediaFileById.get(clip.mediaFileId);

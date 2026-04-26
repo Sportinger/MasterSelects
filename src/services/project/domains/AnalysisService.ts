@@ -17,6 +17,14 @@ interface StoredAnalysisFile {
   };
 }
 
+function getFrameTimestamp(frame: unknown): number {
+  if (typeof frame !== 'object' || frame === null || !('timestamp' in frame)) {
+    return 0;
+  }
+  const timestamp = (frame as { timestamp?: unknown }).timestamp;
+  return typeof timestamp === 'number' ? timestamp : 0;
+}
+
 export class AnalysisService {
   private fileStorage: FileStorageService;
 
@@ -139,7 +147,7 @@ export class AnalysisService {
     if (entries.length === 0) return null;
 
     // Merge all frames, sorted by timestamp, deduplicated
-    const allFrames: any[] = [];
+    const allFrames: unknown[] = [];
     let sampleInterval = entries[0].sampleInterval;
     for (const entry of entries) {
       for (const frame of entry.frames) {
@@ -152,10 +160,10 @@ export class AnalysisService {
     }
 
     // Sort by timestamp and deduplicate
-    allFrames.sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
+    allFrames.sort((a, b) => getFrameTimestamp(a) - getFrameTimestamp(b));
     const seen = new Set<number>();
     const dedupedFrames = allFrames.filter(f => {
-      const ts = Math.round((f.timestamp ?? 0) * 1000);
+      const ts = Math.round(getFrameTimestamp(f) * 1000);
       if (seen.has(ts)) return false;
       seen.add(ts);
       return true;

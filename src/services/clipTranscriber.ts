@@ -11,6 +11,40 @@ import { projectFileService } from './project/ProjectFileService';
 
 const log = Logger.create('ClipTranscriber');
 
+type MediaFileWithTranscriptRanges = MediaFile & {
+  transcribedRanges?: [number, number][];
+};
+
+interface OpenAITranscriptionResponse {
+  words?: Array<{ word: string; start: number; end: number }>;
+}
+
+interface TranscriptApiWord {
+  word?: string;
+  text?: string;
+  start?: number;
+  end?: number;
+  confidence?: number;
+  speaker?: number | string;
+}
+
+interface AssemblyTranscriptResponse {
+  id?: string;
+  status?: string;
+  error?: string;
+  words?: TranscriptApiWord[];
+}
+
+interface DeepgramResponse {
+  results?: {
+    channels?: Array<{
+      alternatives?: Array<{
+        words?: TranscriptApiWord[];
+      }>;
+    }>;
+  };
+}
+
 /**
  * Calculate coverage ratio from a set of time ranges vs total duration.
  * Merges overlapping ranges and returns 0-1.
@@ -399,13 +433,13 @@ function propagateTranscriptToMediaFile(mediaFileId: string, words: TranscriptWo
     let transcriptCoverage = 0;
     if (file.duration && file.duration > 0) {
       // Merge existing transcribed ranges with new ones
-      const existingRanges = (file as any).transcribedRanges || [];
+      const existingRanges = (file as MediaFileWithTranscriptRanges).transcribedRanges || [];
       const allRanges = [...existingRanges, ...(newRanges || [])];
       transcriptCoverage = allRanges.length > 0 ? calcCoverage(allRanges, file.duration) : 0;
     }
 
     // Merge transcribed ranges for storage
-    const existingRanges: [number, number][] = (file as any).transcribedRanges || [];
+    const existingRanges: [number, number][] = (file as MediaFileWithTranscriptRanges).transcribedRanges || [];
     const mergedRanges = mergeRanges([...existingRanges, ...(newRanges || [])]);
 
     useMediaStore.setState({
@@ -641,7 +675,7 @@ async function openAISingleRequest(
     throw new Error(`OpenAI API error: ${response.status}: ${error.error?.message || response.statusText}`);
   }
 
-  const result = await response.json();
+  const result = await response.json() as OpenAITranscriptionResponse;
   return result.words || [];
 }
 
@@ -702,7 +736,7 @@ async function transcribeWithOpenAI(
 
     updateClipTranscript(clipId, { progress: 80, message: 'Processing response...' });
 
-    return rawWords.map((word: any, index: number) => ({
+    return rawWords.map((word, index) => ({
       id: `word-${index}`,
       text: word.word,
       start: (word.start || 0) + inPointOffset,
@@ -838,10 +872,10 @@ async function transcribeWithAssemblyAI(
     throw new Error(`AssemblyAI transcription request failed: ${transcriptResponse.statusText}`);
   }
 
-  const { id: transcriptId } = await transcriptResponse.json();
+  const { id: transcriptId } = await transcriptResponse.json() as { id: string };
 
   // Step 3: Poll for completion
-  let result: any;
+  let result: AssemblyTranscriptResponse | null = null;
   let attempts = 0;
   const maxAttempts = 120; // 2 minutes max
 
@@ -853,7 +887,7 @@ async function transcribeWithAssemblyAI(
       headers: { Authorization: apiKey },
     });
 
-    result = await pollResponse.json();
+    result = await pollResponse.json() as AssemblyTranscriptResponse;
 
     if (result.status === 'completed') {
       break;
@@ -879,14 +913,18 @@ async function transcribeWithAssemblyAI(
   });
 
   // Convert AssemblyAI response to TranscriptWord[]
-  const words: TranscriptWord[] = (result.words || []).map((word: any, index: number) => ({
-    id: `word-${index}`,
-    text: word.text,
-    start: (word.start / 1000) + inPointOffset, // AssemblyAI uses milliseconds
-    end: (word.end / 1000) + inPointOffset,
-    confidence: word.confidence || 1,
-    speaker: word.speaker || 'Speaker 1',
-  }));
+  const words: TranscriptWord[] = (result.words || []).map((word, index) => {
+    const startMs = typeof word.start === 'number' ? word.start : 0;
+    const endMs = typeof word.end === 'number' ? word.end : startMs + 100;
+    return {
+      id: `word-${index}`,
+      text: word.text ?? word.word ?? '',
+      start: (startMs / 1000) + inPointOffset, // AssemblyAI uses milliseconds
+      end: (endMs / 1000) + inPointOffset,
+      confidence: word.confidence || 1,
+      speaker: word.speaker ? String(word.speaker) : 'Speaker 1',
+    };
+  });
 
   return words;
 }
@@ -938,7 +976,7 @@ async function transcribeWithDeepgram(
     message: 'Processing response...',
   });
 
-  const result = await response.json();
+  const result = await response.json() as DeepgramResponse;
   const channel = result.results?.channels?.[0];
   const alternative = channel?.alternatives?.[0];
 
@@ -947,14 +985,21 @@ async function transcribeWithDeepgram(
   }
 
   // Convert Deepgram response to TranscriptWord[]
-  const words: TranscriptWord[] = (alternative.words || []).map((word: any, index: number) => ({
-    id: `word-${index}`,
-    text: word.word,
-    start: (word.start || 0) + inPointOffset,
-    end: (word.end || word.start + 0.1) + inPointOffset,
-    confidence: word.confidence || 1,
-    speaker: word.speaker !== undefined ? `Speaker ${word.speaker + 1}` : 'Speaker 1',
-  }));
+  const words: TranscriptWord[] = (alternative.words || []).map((word, index) => {
+    const start = typeof word.start === 'number' ? word.start : 0;
+    const end = typeof word.end === 'number' ? word.end : start + 0.1;
+    const speaker = typeof word.speaker === 'number'
+      ? `Speaker ${word.speaker + 1}`
+      : word.speaker ?? 'Speaker 1';
+    return {
+      id: `word-${index}`,
+      text: word.word ?? word.text ?? '',
+      start: start + inPointOffset,
+      end: end + inPointOffset,
+      confidence: word.confidence || 1,
+      speaker,
+    };
+  });
 
   return words;
 }

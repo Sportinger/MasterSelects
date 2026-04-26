@@ -1,6 +1,14 @@
 import '@testing-library/jest-dom'
 import { afterEach, vi } from 'vitest'
 
+const jsdomStorage = (globalThis as typeof globalThis & { jsdom?: { window: Window } }).jsdom?.window.localStorage
+
+Object.defineProperty(globalThis, 'localStorage', {
+  value: jsdomStorage,
+  writable: true,
+  configurable: true,
+})
+
 // Mock modules that have side effects requiring browser APIs (WebGPU, HMR, etc.)
 // These must be vi.mock() calls at the top level so they're hoisted before imports
 

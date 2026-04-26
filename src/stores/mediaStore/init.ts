@@ -4,7 +4,7 @@
 
 import { useTimelineStore } from '../timeline';
 import { fileSystemService } from '../../services/fileSystemService';
-import type { Composition, MediaState } from './types';
+import type { Composition, MediaFile, MediaState } from './types';
 import { Logger } from '../../services/logger';
 import { audioManager } from '../../services/audioManager';
 import { audioRoutingManager } from '../../services/audioRoutingManager';
@@ -15,8 +15,10 @@ import { audioExtractor } from '../../engine/audio/AudioExtractor';
 
 const log = Logger.create('MediaStore');
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type MediaStore = any;
+type MediaStore = typeof import('./index').useMediaStore;
+type MediaStoreGlobal = typeof globalThis & {
+  __mediaStoreModule?: { useMediaStore: MediaStore };
+};
 
 // Cached store reference - populated after first access
 let cachedMediaStore: MediaStore | null = null;
@@ -29,7 +31,7 @@ const getMediaStore = (): MediaStore | null => {
   try {
     // Use dynamic import workaround for ESM
     // The store is accessed through the global module cache
-    const module = (globalThis as any).__mediaStoreModule;
+    const module = (globalThis as MediaStoreGlobal).__mediaStoreModule;
     if (module?.useMediaStore) {
       cachedMediaStore = module.useMediaStore;
       return cachedMediaStore;
@@ -179,7 +181,7 @@ function syncStatusFromClips(useMediaStore: MediaStore): void {
   }
 
   useMediaStore.setState((state: MediaState) => ({
-    files: state.files.map((f: { id: string; duration?: number; analysisStatus?: string; transcriptStatus?: string; transcriptCoverage?: number; analysisCoverage?: number }) => {
+    files: state.files.map((f: MediaFile): MediaFile => {
       const transcript = transcriptMap.get(f.id);
       const tRanges = transcribedRangesMap.get(f.id);
       const aRanges = analysisRanges.get(f.id);

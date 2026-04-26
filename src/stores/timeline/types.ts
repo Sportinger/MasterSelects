@@ -238,6 +238,12 @@ export interface DownloadClipActions {
   setDownloadError: (clipId: string, error: string) => void;
 }
 
+export type ClipTransformUpdate = Omit<Partial<ClipTransform>, 'position' | 'scale' | 'rotation'> & {
+  position?: Partial<ClipTransform['position']>;
+  scale?: Partial<ClipTransform['scale']>;
+  rotation?: Partial<ClipTransform['rotation']>;
+};
+
 // Core clip actions (remain in clipSlice)
 export interface CoreClipActions {
   addClip: (trackId: string, file: File, startTime: number, estimatedDuration?: number, mediaFileId?: string, mediaTypeOverride?: string) => Promise<void>;
@@ -248,7 +254,7 @@ export interface CoreClipActions {
   trimClip: (id: string, inPoint: number, outPoint: number) => void;
   splitClip: (clipId: string, splitTime: number) => void;
   splitClipAtPlayhead: () => void;
-  updateClipTransform: (id: string, transform: Partial<ClipTransform>) => void;
+  updateClipTransform: (id: string, transform: ClipTransformUpdate) => void;
   toggleClipReverse: (id: string) => void;
   generateWaveformForClip: (clipId: string) => Promise<void>;
   setClipParent: (clipId: string, parentClipId: string | null) => void;
@@ -340,10 +346,11 @@ export interface SelectionActions {
 
 // Keyframe actions interface
 export interface KeyframeActions {
-  addKeyframe: (clipId: string, property: AnimatableProperty, value: number, time?: number, easing?: EasingType) => void;
+  addKeyframe: (clipId: string, property: AnimatableProperty, value: number, time?: number, easing?: string | null) => void;
   removeKeyframe: (keyframeId: string) => void;
-  updateKeyframe: (keyframeId: string, updates: Partial<Omit<Keyframe, 'id' | 'clipId'>>) => void;
+  updateKeyframe: (keyframeId: string, updates: Partial<Omit<Keyframe, 'id' | 'clipId' | 'easing'>> & { easing?: string | null }) => void;
   moveKeyframe: (keyframeId: string, newTime: number) => void;
+  moveKeyframes: (keyframeIds: string[], newTime: number) => void;
   getClipKeyframes: (clipId: string) => Keyframe[];
   getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
   getInterpolatedEffects: (clipId: string, clipLocalTime: number) => Effect[];

@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   mediaState: {
-    files: [] as any[],
-    compositions: [] as any[],
-    folders: [] as any[],
-    textItems: [] as any[],
-    solidItems: [] as any[],
+    files: [] as unknown[],
+    compositions: [] as unknown[],
+    folders: [] as unknown[],
+    textItems: [] as unknown[],
+    solidItems: [] as unknown[],
     activeCompositionId: null as string | null,
     openCompositionIds: [] as string[],
     expandedFolderIds: [] as string[],
@@ -34,7 +34,7 @@ const mocks = vi.hoisted(() => ({
     clearTimeline: vi.fn(),
     loadState: vi.fn(async () => undefined),
     getSerializableState: vi.fn(() => ({ tracks: [], clips: [] })),
-    clips: [] as any[],
+    clips: [] as unknown[],
     playheadPosition: 0,
     zoom: 1,
     scrollX: 0,
@@ -190,7 +190,7 @@ describe('project media persistence', () => {
       slotAssignments: {},
       uiState: {},
     });
-    mocks.mediaSetState.mockImplementation((partial: Record<string, unknown> | ((state: any) => Record<string, unknown>)) => {
+    mocks.mediaSetState.mockImplementation((partial: Record<string, unknown> | ((state: typeof mocks.mediaState) => Record<string, unknown>)) => {
       const nextPartial = typeof partial === 'function'
         ? partial(mocks.mediaState)
         : partial;

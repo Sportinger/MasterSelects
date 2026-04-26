@@ -23,9 +23,6 @@ import {
   setExternalDragPayload,
 } from '../timeline/utils/externalDragSession';
 
-// Re-export for backward compatibility
-export { LABEL_COLORS, getLabelHex } from './media/labelColors';
-
 // Column definitions
 type ColumnId = 'label' | 'name' | 'duration' | 'resolution' | 'fps' | 'container' | 'codec' | 'audio' | 'bitrate' | 'size';
 
@@ -1921,7 +1918,7 @@ export function MediaPanel() {
           selectedIds={selectedIds}
           labelPickerItemId={labelPickerItemId}
           onSelect={(ids, colorKey) => {
-            setLabelColor(ids, colorKey as any);
+            setLabelColor(ids, colorKey);
             setLabelPickerItemId(null);
             setLabelPickerPos(null);
           }}

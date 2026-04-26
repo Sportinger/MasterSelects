@@ -50,6 +50,17 @@ function getStorageKey(): string {
   return `Outputmanager_${safe}`;
 }
 
+function getBrowserLocalStorage(): Storage | null {
+  try {
+    const storage = typeof window !== 'undefined' ? window.localStorage : null;
+    return storage && typeof storage.getItem === 'function' && typeof storage.setItem === 'function'
+      ? storage
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Serialize configs Map to a JSON-safe object */
 function serializeConfigs(configs: Map<string, TargetSliceConfig>): Record<string, TargetSliceConfig> {
   const obj: Record<string, TargetSliceConfig> = {};
@@ -302,12 +313,15 @@ export const useSliceStore = create<SliceState & SliceActions>()((set, get) => (
   },
 
   saveToLocalStorage: () => {
+    const storage = getBrowserLocalStorage();
+    if (!storage) return;
+
     const { configs } = get();
     const key = getStorageKey();
     try {
       // Save slice configs
       const data = JSON.stringify(serializeConfigs(configs));
-      localStorage.setItem(key, data);
+      storage.setItem(key, data);
 
       // Also save output target metadata for reconnection after refresh
       // Only overwrite if there are actual window/tab targets registered
@@ -345,7 +359,7 @@ export const useSliceStore = create<SliceState & SliceActions>()((set, get) => (
         }
       }
       if (targetMeta.length > 0) {
-        localStorage.setItem(key + '_targets', JSON.stringify(targetMeta));
+        storage.setItem(key + '_targets', JSON.stringify(targetMeta));
       }
     } catch (e) {
       console.error('Failed to save Output Manager config:', e);
@@ -353,9 +367,12 @@ export const useSliceStore = create<SliceState & SliceActions>()((set, get) => (
   },
 
   loadFromLocalStorage: () => {
+    const storage = getBrowserLocalStorage();
+    if (!storage) return;
+
     const key = getStorageKey();
     try {
-      const raw = localStorage.getItem(key);
+      const raw = storage.getItem(key);
       if (!raw) return;
       const parsed = JSON.parse(raw) as Record<string, TargetSliceConfig>;
       // Migrate legacy slices that used inputRect
@@ -404,9 +421,12 @@ export interface SavedTargetMeta {
 
 /** Get saved target metadata from localStorage (for reconnection) */
 export function getSavedTargetMeta(): SavedTargetMeta[] {
+  const storage = getBrowserLocalStorage();
+  if (!storage) return [];
+
   const key = getStorageKey();
   try {
-    const raw = localStorage.getItem(key + '_targets');
+    const raw = storage.getItem(key + '_targets');
     if (!raw) return [];
     return JSON.parse(raw) as SavedTargetMeta[];
   } catch {

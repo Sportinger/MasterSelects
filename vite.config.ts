@@ -695,6 +695,24 @@ function aiToolsBridge(): Plugin {
   };
 }
 
+function splatTransformWebpWasmPathFix(): Plugin {
+  return {
+    name: 'splat-transform-webp-wasm-path-fix',
+    enforce: 'pre',
+    transform(code, id) {
+      const normalizedId = id.replace(/\\/g, '/');
+      if (!normalizedId.endsWith('/node_modules/@playcanvas/splat-transform/dist/index.mjs')) {
+        return null;
+      }
+
+      return code.replace(
+        /new URL\("webp\.wasm",\s*import\.meta\.url\)\.href/g,
+        'new URL("../lib/webp.wasm", import.meta.url).href',
+      );
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ command }) => {
   const isDevServer = command === 'serve';
@@ -725,6 +743,7 @@ export default defineConfig(({ command }) => {
       blobStoreServer(),
       browserLogBridge(),
       aiToolsBridge(),
+      splatTransformWebpWasmPathFix(),
       // Replace __APP_VERSION__ in index.html during build
       {
         name: 'html-version-replace',
@@ -733,6 +752,11 @@ export default defineConfig(({ command }) => {
         },
       },
     ],
+    resolve: {
+      alias: {
+        module: path.resolve(__dirname, 'src/shims/nodeModule.ts'),
+      },
+    },
     define: {
       __APP_VERSION__: JSON.stringify(APP_VERSION),
       // Show changelog in the app by default; tests override this separately.

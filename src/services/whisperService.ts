@@ -18,8 +18,26 @@ interface WhisperOutput {
   }>;
 }
 
+type WhisperPipeline = (
+  audioData: Float32Array,
+  options: Record<string, unknown>,
+) => Promise<WhisperOutput>;
+
+interface ModelProgress {
+  status?: string;
+  progress?: number;
+}
+
+type TransformersModule = {
+  pipeline: (
+    task: string,
+    model: string,
+    options: Record<string, unknown>,
+  ) => Promise<WhisperPipeline>;
+};
+
 class WhisperService {
-  private pipeline: any = null;
+  private pipeline: WhisperPipeline | null = null;
   private isLoading = false;
 
   /**
@@ -39,7 +57,7 @@ class WhisperService {
 
     try {
       // Dynamically import transformers.js
-      const { pipeline } = await import('@huggingface/transformers');
+      const { pipeline } = await import('@huggingface/transformers') as unknown as TransformersModule;
 
       log.info('Loading Whisper model...');
 
@@ -49,8 +67,8 @@ class WhisperService {
         'automatic-speech-recognition',
         'Xenova/whisper-tiny',
         {
-          progress_callback: (data: any) => {
-            if (data.status === 'progress' && onProgress) {
+          progress_callback: (data: ModelProgress) => {
+            if (data.status === 'progress' && typeof data.progress === 'number' && onProgress) {
               onProgress(Math.round(data.progress));
             }
           },
@@ -140,7 +158,11 @@ class WhisperService {
     onProgress?.(55);
 
     // Run transcription
-    const result: WhisperOutput = await this.pipeline(audioData, {
+    if (!this.pipeline) {
+      throw new Error('Whisper model is not loaded');
+    }
+
+    const result = await this.pipeline(audioData, {
       return_timestamps: true,
       chunk_length_s: 30,
       stride_length_s: 5,

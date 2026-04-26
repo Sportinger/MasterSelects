@@ -181,7 +181,7 @@ function PropertyRow({
     // Transform properties use getInterpolatedTransform
     const transform = getInterpolatedTransform(clipId, clipLocalTime);
     return getValueFromTransform(transform, prop);
-  }, [clipId, clipLocalTime, isWithinClip, getInterpolatedTransform, getInterpolatedEffects, prop, keyframes]);
+  }, [clipId, clipLocalTime, isWithinClip, getInterpolatedTransform, getInterpolatedEffects, prop]);
 
   // Find prev/next keyframes relative to playhead
   const prevKeyframe = useMemo(() => {
@@ -374,7 +374,10 @@ function TrackPropertyLabels({
   onToggleCurveExpanded: (trackId: string, property: AnimatableProperty) => void;
 }) {
   const clipId = selectedClip?.id;
-  const keyframes = clipId ? clipKeyframes.get(clipId) || [] : [];
+  const keyframes = useMemo(
+    () => (clipId ? clipKeyframes.get(clipId) || [] : []),
+    [clipId, clipKeyframes],
+  );
 
   // Get keyframes for this clip - use clipKeyframes map to trigger re-render when keyframes change
   const keyframeProperties = useMemo(() => {
@@ -388,7 +391,7 @@ function TrackPropertyLabels({
       props.delete('scale.z');
     }
     return props;
-  }, [keyframes, selectedClip?.is3D]);
+  }, [keyframes, selectedClip]);
 
   // If no clip is selected in this track, show nothing
   if (!selectedClip || keyframeProperties.size === 0) {

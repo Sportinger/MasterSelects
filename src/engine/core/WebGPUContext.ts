@@ -8,6 +8,16 @@ export type DeviceLostCallback = (reason: string) => void;
 export type DeviceRestoredCallback = () => void;
 export type GPUPowerPreference = 'high-performance' | 'low-power';
 
+interface GPUAdapterInfoLike {
+  vendor?: string;
+  architecture?: string;
+  device?: string;
+  description?: string;
+}
+
+type GPUAdapterWithInfo = GPUAdapter & { info?: GPUAdapterInfoLike };
+type GPUDeviceWithAdapterInfo = GPUDevice & { adapterInfo?: GPUAdapterInfoLike };
+
 export class WebGPUContext {
   private device: GPUDevice | null = null;
   private adapter: GPUAdapter | null = null;
@@ -178,7 +188,9 @@ export class WebGPUContext {
       this.isInitialized = true;
 
       // Log detailed GPU adapter info to help debug iGPU vs dGPU selection
-      const adapterInfo = (this.adapter as any).info || (this.device as any).adapterInfo;
+      const adapterInfo =
+        (this.adapter as GPUAdapterWithInfo).info ||
+        (this.device as GPUDeviceWithAdapterInfo).adapterInfo;
       if (adapterInfo) {
         const isIntegrated = adapterInfo.description?.toLowerCase().includes('intel') ||
                             adapterInfo.description?.toLowerCase().includes('integrated') ||
@@ -237,7 +249,7 @@ export class WebGPUContext {
     if (!this.adapter) return null;
 
     // adapter.info is available in Chrome 114+
-    const info = (this.adapter as any).info;
+    const info = (this.adapter as GPUAdapterWithInfo).info;
     if (info) {
       return {
         vendor: info.vendor || 'Unknown',

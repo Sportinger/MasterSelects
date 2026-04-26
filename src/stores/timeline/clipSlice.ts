@@ -9,6 +9,12 @@ import { generateWaveform, generateWaveformFromBuffer } from './helpers/waveform
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('ClipSlice');
+// Shared-scene planes at z=0 fill the camera target and can depth-mask splats/meshes.
+const DEFAULT_3D_PLANE_INITIAL_Z = -0.5;
+
+function shouldOffsetPlaneWhenEnabling3D(clip: TimelineClip): boolean {
+  return clip.source?.type === 'video' || clip.source?.type === 'image';
+}
 
 /** Deep clone properties that must not be shared between split clips */
 function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
@@ -976,7 +982,24 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       clips: clips.map(c => {
         if (c.id !== clipId) return c;
         if (nowIs3D) {
-          // Turning on 3D — keep existing values
+          if (shouldOffsetPlaneWhenEnabling3D(c)) {
+            const t = c.transform || DEFAULT_TRANSFORM;
+            const currentZ = t.position?.z ?? DEFAULT_TRANSFORM.position.z;
+            return {
+              ...c,
+              is3D: true,
+              transform: {
+                ...t,
+                position: {
+                  ...(t.position || DEFAULT_TRANSFORM.position),
+                  z: currentZ === 0 ? DEFAULT_3D_PLANE_INITIAL_Z : currentZ,
+                },
+                rotation: { ...(t.rotation || DEFAULT_TRANSFORM.rotation) },
+                scale: { ...(t.scale || DEFAULT_TRANSFORM.scale) },
+              },
+            };
+          }
+          // Turning on 3D for existing scene-native clips keeps existing values.
           return { ...c, is3D: true };
         }
         // Turning off 3D — reset 3D-specific values to 0

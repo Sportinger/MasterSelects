@@ -1,8 +1,39 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { WebCodecsPlayer } from '../../src/engine/WebCodecsPlayer';
+import type { MP4VideoTrack, Sample } from '../../src/engine/webCodecsTypes';
 
 vi.mock('mp4box', () => ({ default: {} }));
 
 type WebCodecsPlayerModule = typeof import('../../src/engine/WebCodecsPlayer');
+type MockVideoDecoder = ReturnType<typeof makeDecoder>;
+type TestVideoFrame = {
+  timestamp: number;
+  close: ReturnType<typeof vi.fn>;
+};
+type WebCodecsPlayerTestAccess = WebCodecsPlayer & {
+  useSimpleMode: boolean;
+  ready: boolean;
+  decoder: MockVideoDecoder;
+  codecConfig: VideoDecoderConfig;
+  videoTrack: Pick<MP4VideoTrack, 'timescale'>;
+  samples: Sample[];
+  frameRate: number;
+  frameBuffer: TestVideoFrame[];
+  sampleIndex: number;
+  feedIndex: number;
+  currentFrame: TestVideoFrame | null;
+  currentFrameTimestampUs: number | null;
+  pendingAdvanceSeekTargetIdx: number | null;
+  pendingSeekFeedEndIndex: number | null;
+  pendingSeekKind: 'seek' | 'advance' | null;
+  pendingSeekStartedAtMs: number | null;
+  pendingSeekTargetDebugUs: number | null;
+  trackedDecodeQueueSize: number;
+  ctsSortedSampleCount: number;
+  ctsSorted: Array<{ idx: number; cts: number }>;
+  _isPlaying: boolean;
+  onFrame?: (frame: TestVideoFrame) => void;
+};
 
 class MockEncodedVideoChunk {
   constructor(public readonly init: Record<string, unknown>) {}
@@ -38,7 +69,7 @@ async function makePlayerHarness() {
   const module = await vi.importActual<WebCodecsPlayerModule>(
     '../../src/engine/WebCodecsPlayer'
   );
-  const player = new module.WebCodecsPlayer() as unknown as Record<string, any>;
+  const player = new module.WebCodecsPlayer() as unknown as WebCodecsPlayerTestAccess;
   const decoder = makeDecoder();
 
   player.useSimpleMode = false;

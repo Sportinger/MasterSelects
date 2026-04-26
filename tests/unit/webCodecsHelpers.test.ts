@@ -3,6 +3,12 @@ import { WebCodecsPlayer } from '../../src/engine/WebCodecsPlayer';
 import { engine } from '../../src/engine/WebGPUEngine';
 import { flags } from '../../src/engine/featureFlags';
 import { initWebCodecsPlayer } from '../../src/stores/timeline/helpers/webCodecsHelpers';
+import type { WebCodecsPlayerOptions } from '../../src/engine/WebCodecsPlayer';
+
+type WebCodecsTestGlobal = {
+  VideoDecoder?: unknown;
+  VideoFrame?: unknown;
+};
 
 describe('initWebCodecsPlayer', () => {
   beforeEach(() => {
@@ -11,30 +17,34 @@ describe('initWebCodecsPlayer', () => {
     vi.mocked(engine.requestNewFrameRender).mockReset();
     vi.mocked(engine.requestRender).mockReset();
     flags.useFullWebCodecsPlayback = true;
-    (window as any).VideoDecoder = vi.fn();
-    (window as any).VideoFrame = vi.fn();
+    const testWindow = window as unknown as WebCodecsTestGlobal;
+    testWindow.VideoDecoder = vi.fn();
+    testWindow.VideoFrame = vi.fn();
   });
 
   it('wakes the renderer when a normal full WebCodecs player emits a frame', async () => {
     const loadFile = vi.fn().mockResolvedValue(undefined);
-    vi.mocked(WebCodecsPlayer).mockImplementation(function MockWebCodecsPlayer(options: any) {
-      (this as any).loadFile = loadFile;
-      (this as any).attachToVideoElement = vi.fn();
-      (this as any).ready = true;
-      (this as any).isFullMode = () => true;
-      (this as any).__options = options;
-      return this as any;
-    } as any);
+    vi.mocked(WebCodecsPlayer).mockImplementation(function MockWebCodecsPlayer(
+      options: WebCodecsPlayerOptions = {}
+    ) {
+      return {
+        loadFile,
+        attachToVideoElement: vi.fn(),
+        ready: true,
+        isFullMode: () => true,
+        __options: options,
+      } as unknown as WebCodecsPlayer;
+    });
 
     const video = document.createElement('video');
     const file = new File(['video'], 'clip.mp4', { type: 'video/mp4' });
     const player = await initWebCodecsPlayer(video, file.name, file);
 
     expect(player).toBeTruthy();
-    const options = vi.mocked(WebCodecsPlayer).mock.calls[0]?.[0] as any;
-    expect(typeof options.onFrame).toBe('function');
+    const options = vi.mocked(WebCodecsPlayer).mock.calls[0]?.[0];
+    expect(typeof options?.onFrame).toBe('function');
 
-    options.onFrame();
+    options?.onFrame?.({} as VideoFrame);
 
     expect(engine.requestNewFrameRender).toHaveBeenCalledTimes(1);
   });
@@ -45,17 +55,19 @@ describe('initWebCodecsPlayer', () => {
     const loadFile = vi.fn().mockResolvedValue(undefined);
     let ready = false;
     vi.mocked(WebCodecsPlayer).mockImplementation(function MockWebCodecsPlayer() {
-      (this as any).loadFile = loadFile;
-      (this as any).attachToVideoElement = vi.fn();
-      Object.defineProperty(this, 'ready', {
+      const player = {
+        loadFile,
+        attachToVideoElement: vi.fn(),
+      };
+      Object.defineProperty(player, 'ready', {
         configurable: true,
         get: () => ready,
         set: (value: boolean) => {
           ready = value;
         },
       });
-      return this as any;
-    } as any);
+      return player as unknown as WebCodecsPlayer;
+    });
 
     const video = document.createElement('video');
     const file = new File(['video'], 'delayed-ready.mp4', { type: 'video/mp4' });

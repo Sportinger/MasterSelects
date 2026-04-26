@@ -24,9 +24,9 @@ export const useFlashBoardStore = create<FlashBoardStore>()(
     },
     hoveredComposerReference: null,
 
-    ...createBoardSlice(set as any, get as any),
-    ...createNodeSlice(set as any, get as any),
-    ...createUiSlice(set as any),
+    ...createBoardSlice(set, get),
+    ...createNodeSlice(set, get),
+    ...createUiSlice(set),
   }))
 );
 

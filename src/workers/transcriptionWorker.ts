@@ -1,19 +1,40 @@
 // Transcription Web Worker
 // Runs Whisper model in background thread to avoid UI blocking
 
-import { pipeline, env } from '@huggingface/transformers';
+import { pipeline as transformersPipeline, env } from '@huggingface/transformers';
 
 // Configure environment
 env.allowLocalModels = false;
 env.useBrowserCache = true;
 
-let transcriber: any = null;
-let loadedModel: string | null = null;
-
 interface TranscriptChunk {
   text: string;
   timestamp: [number, number | null];
 }
+
+interface WhisperResult {
+  text?: string;
+  chunks?: TranscriptChunk[];
+}
+
+type WhisperTranscriber = (
+  audioData: Float32Array,
+  options: Record<string, unknown>,
+) => Promise<WhisperResult>;
+
+interface ModelProgress {
+  status?: string;
+  progress?: number;
+}
+
+const pipeline = transformersPipeline as unknown as (
+  task: string,
+  model: string,
+  options: Record<string, unknown>,
+) => Promise<WhisperTranscriber>;
+
+let transcriber: WhisperTranscriber | null = null;
+let loadedModel: string | null = null;
 
 interface TranscriptWord {
   id: string;
@@ -74,7 +95,7 @@ function isRepetitiveText(text: string): boolean {
 async function loadModel(
   language: string,
   onProgress: (progress: number, message: string) => void
-): Promise<any> {
+): Promise<WhisperTranscriber> {
   const modelName = getModelName(language);
 
   if (transcriber && loadedModel === modelName) {
@@ -92,8 +113,8 @@ async function loadModel(
       'automatic-speech-recognition',
       modelName,
       {
-        progress_callback: (data: any) => {
-          if (data.status === 'progress' && data.progress) {
+        progress_callback: (data: ModelProgress) => {
+          if (data.status === 'progress' && typeof data.progress === 'number') {
             onProgress(data.progress, `Model loading: ${Math.round(data.progress)}%`);
           }
         },

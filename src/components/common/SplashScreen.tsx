@@ -12,12 +12,12 @@ import {
   type NativeHelperPublishedRelease,
 } from '../../services/nativeHelper/releases';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { NoticeCard } from './WhatsNewDialog';
 import {
   loadYouTubeIframeApi,
-  NoticeCard,
   getHelperBuildNotice,
   type YouTubePlayerInstance,
-} from './WhatsNewDialog';
+} from './whatsNewHelpers';
 
 interface SplashScreenProps {
   onClose: () => void;

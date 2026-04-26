@@ -21,8 +21,8 @@ export interface CompleteDownloadParams {
   findAvailableAudioTrack: (startTime: number, duration: number) => string | null;
   updateDuration: () => void;
   invalidateCache: () => void;
-  set: (state: any) => void;
-  get: () => any;
+  set: (state: { clips: TimelineClip[] }) => void;
+  get: () => { clips: TimelineClip[] };
 }
 
 /**
@@ -183,8 +183,8 @@ export async function completeDownload(params: CompleteDownloadParams): Promise<
 async function generateWaveformAsync(
   audioClipId: string,
   file: File,
-  get: () => any,
-  set: (state: any) => void
+  get: () => { clips: TimelineClip[] },
+  set: (state: { clips: TimelineClip[] }) => void
 ): Promise<void> {
   set({ clips: updateClipById(get().clips, audioClipId, { waveformGenerating: true, waveformProgress: 0 }) });
 

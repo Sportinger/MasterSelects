@@ -24,6 +24,8 @@ import { Logger } from '../../../services/logger';
 
 const log = Logger.create('AddVideoClip');
 
+type FileWithPath = File & { path?: string };
+
 export interface AddVideoClipParams {
   trackId: string;
   file: File;
@@ -149,7 +151,7 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
       const mediaFile = mediaFileId
         ? useMediaStore.getState().files.find(f => f.id === mediaFileId)
         : null;
-      let filePath = mediaFile?.absolutePath || (file as any).path;
+      let filePath = mediaFile?.absolutePath || (file as FileWithPath).path;
 
       // Check if we have a valid absolute path (Unix: /... , Windows: C:\...)
       const isAbsolute = filePath && (filePath.startsWith('/') || /^[A-Za-z]:[/\\]/.test(filePath));
@@ -167,6 +169,9 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
       }
 
       log.debug('Opening with Native Helper', { file: file.name });
+      if (!filePath) {
+        throw new Error(`Could not resolve file path for "${file.name}"`);
+      }
       nativeDecoder = await NativeDecoder.open(filePath);
       naturalDuration = nativeDecoder.duration;
 

@@ -15,6 +15,8 @@ const SERVER_URL = 'http://localhost:5555';
 let isDescribing = false;
 let shouldCancel = false;
 
+type FileWithPath = File & { path?: string };
+
 /**
  * Check if the Qwen3-VL Python server is available and model loaded
  */
@@ -62,8 +64,8 @@ function getVideoPath(clip: { source?: { mediaFileId?: string; filePath?: string
     return sourceFilePath;
   }
 
-  // 3. File object .path (set by drop handler: (file as any).path = filePath)
-  const filePath = (clip.file as any)?.path;
+  // 3. File object .path (set by drop handler on Electron-like file objects)
+  const filePath = (clip.file as FileWithPath | null | undefined)?.path;
   if (filePath && typeof filePath === 'string' && (filePath.includes('/') || filePath.includes('\\'))) {
     return filePath;
   }

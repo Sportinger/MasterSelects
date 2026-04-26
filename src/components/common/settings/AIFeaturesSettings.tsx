@@ -2,6 +2,10 @@ import { useState, useCallback } from 'react';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useMatAnyoneStore, type MatAnyoneSetupStatus } from '../../../stores/matanyoneStore';
 
+type DirectoryPickerWindow = Window & {
+  showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>;
+};
+
 function getStatusLabel(status: MatAnyoneSetupStatus): string {
   switch (status) {
     case 'not-checked':
@@ -87,8 +91,9 @@ export function AIFeaturesSettings({ embedded }: AIFeaturesSettingsProps = {}) {
   const handleBrowsePython = useCallback(async () => {
     try {
       // Use the native file picker if available (showDirectoryPicker API)
-      if ('showDirectoryPicker' in window) {
-        const dirHandle = await (window as any).showDirectoryPicker();
+      const pickerWindow = window as DirectoryPickerWindow;
+      if (pickerWindow.showDirectoryPicker) {
+        const dirHandle = await pickerWindow.showDirectoryPicker();
         setMatAnyonePythonPath(dirHandle.name);
       }
     } catch {

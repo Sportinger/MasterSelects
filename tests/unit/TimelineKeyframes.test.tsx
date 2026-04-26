@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { RefObject } from 'react';
 import { TimelineKeyframes } from '../../src/components/timeline/TimelineKeyframes';
+import type { TimelineKeyframesProps } from '../../src/components/timeline/types';
 import { createMockClip, createMockKeyframe } from '../helpers/mockData';
 
 describe('TimelineKeyframes', () => {
@@ -35,7 +36,7 @@ describe('TimelineKeyframes', () => {
       value: 0.75,
       easing: 'ease-in',
     });
-    const clipKeyframes = new Map([[clip.id, [leftKeyframe, rightKeyframe]]]);
+    const clipKeyframes: TimelineKeyframesProps['clipKeyframes'] = new Map([[clip.id, [leftKeyframe, rightKeyframe]]]);
     const onUpdateKeyframe = vi.fn();
 
     const renderResult = render(
@@ -44,7 +45,7 @@ describe('TimelineKeyframes', () => {
         property="opacity"
         clips={[clip]}
         selectedKeyframeIds={new Set()}
-        clipKeyframes={clipKeyframes as any}
+        clipKeyframes={clipKeyframes}
         clipDrag={null}
         scrollX={0}
         timelineRef={{ current: timelineEl } as RefObject<HTMLDivElement | null>}

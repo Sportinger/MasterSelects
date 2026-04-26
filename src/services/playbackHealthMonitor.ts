@@ -581,7 +581,20 @@ export class PlaybackHealthMonitor {
   }
 
   private exposeConsoleAPI(): void {
-    (window as any).__PLAYBACK_HEALTH__ = {
+    (window as Window & {
+      __PLAYBACK_HEALTH__?: {
+        snapshot: () => ReturnType<PlaybackHealthMonitor['snapshot']>;
+        anomalies: (type?: AnomalyType) => ReturnType<PlaybackHealthMonitor['anomalies']>;
+        videos: () => ReturnType<PlaybackHealthMonitor['videos']>;
+        recover: {
+          softReset: () => void;
+          forceDecodeAll: () => void;
+          clearWarmups: () => void;
+          clearOrphans: () => void;
+        };
+        reset: () => void;
+      };
+    }).__PLAYBACK_HEALTH__ = {
       snapshot: () => this.snapshot(),
       anomalies: (type?: AnomalyType) => this.anomalies(type),
       videos: () => this.videos(),

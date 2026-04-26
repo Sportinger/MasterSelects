@@ -11,6 +11,8 @@ import { Logger } from '../../../services/logger';
 
 const log = Logger.create('NativeUpgrade');
 
+type FileWithPath = File & { path?: string };
+
 let upgradeInProgress = false;
 // Track clips that failed to upgrade (no path found) — don't retry endlessly
 const failedClipIds = new Set<string>();
@@ -169,7 +171,7 @@ async function resolveFilePath(
   }
 
   // 3. From File object (Electron/browser path property)
-  const fromFile = (clip.file as any)?.path as string | undefined;
+  const fromFile = (clip.file as FileWithPath).path;
   if (fromFile && isAbsolutePath(fromFile)) {
     log.info(`[${clip.name}] path from File.path: ${fromFile}`);
     return fromFile;

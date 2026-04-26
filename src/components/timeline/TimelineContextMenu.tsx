@@ -1,7 +1,7 @@
 // TimelineContextMenu - Right-click context menu for timeline clips
 // Extracted from Timeline.tsx for better maintainability
 
-import React, { useEffect, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import { handleSubmenuHover, handleSubmenuLeave } from '../panels/media/submenuPosition';
 import type { TimelineClip } from '../../types';
 import type { MediaFile } from '../../stores/mediaStore';
@@ -424,28 +424,5 @@ export function TimelineContextMenu({
         Delete Clip
       </div>
     </div>
-  );
-}
-
-// Export the handler creator for use in parent
-export function useClipContextMenu(
-  selectedClipIds: Set<string>,
-  selectClip: (clipId: string) => void,
-  setContextMenu: (menu: ContextMenuState | null) => void
-) {
-  return useCallback(
-    (e: React.MouseEvent, clipId: string) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!selectedClipIds.has(clipId)) {
-        selectClip(clipId);
-      }
-      setContextMenu({
-        x: e.clientX,
-        y: e.clientY,
-        clipId,
-      });
-    },
-    [selectClip, selectedClipIds, setContextMenu]
   );
 }

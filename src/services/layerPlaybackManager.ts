@@ -2,7 +2,7 @@
 // Each slot grid layer (A-D) can have an active composition; this service loads their media elements
 // and provides layers for rendering. The primary (editor) composition is handled by the timeline store.
 
-import type { TimelineClip, TimelineTrack, Layer, NestedCompositionData } from '../types';
+import type { TimelineClip, TimelineTrack, Layer, NestedCompositionData, BlendMode } from '../types';
 import { engine } from '../engine/WebGPUEngine';
 import type { Composition, SlotClipEndBehavior } from '../stores/mediaStore/types';
 import { useMediaStore } from '../stores/mediaStore';
@@ -128,7 +128,7 @@ class LayerPlaybackManager {
         id: serializedClip.id,
         trackId: serializedClip.trackId,
         name: serializedClip.name,
-        file: (mediaFile?.file ?? null) as any,
+        file: mediaFile?.file ?? new File([], serializedClip.name),
         startTime: serializedClip.startTime,
         duration: serializedClip.duration,
         inPoint: serializedClip.inPoint,
@@ -568,7 +568,7 @@ class LayerPlaybackManager {
       name: clip.name,
       visible: true,
       opacity: transform.opacity ?? 1,
-      blendMode: (transform.blendMode || 'normal') as any,
+      blendMode: (transform.blendMode || 'normal') as BlendMode,
       effects: clip.effects || [],
       position: {
         x: transform.position?.x || 0,

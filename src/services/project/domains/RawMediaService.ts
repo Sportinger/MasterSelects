@@ -7,6 +7,10 @@ const log = Logger.create('RawMedia');
 import { FileStorageService } from '../core/FileStorageService';
 import type { ProjectMediaFile } from '../types';
 
+type IterableDirectoryHandle = FileSystemDirectoryHandle & {
+  values(): AsyncIterableIterator<FileSystemDirectoryHandle | FileSystemFileHandle>;
+};
+
 export class RawMediaService {
   private fileStorage: FileStorageService;
 
@@ -138,7 +142,7 @@ export class RawMediaService {
     try {
       const rawFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.RAW);
 
-      for await (const entry of (rawFolder as any).values()) {
+      for await (const entry of (rawFolder as IterableDirectoryHandle).values()) {
         if (entry.kind === 'file') {
           foundFiles.set(entry.name.toLowerCase(), entry);
         }

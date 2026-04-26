@@ -18,9 +18,8 @@ import {
   CameraPositionKeyframeToggle,
   RotationKeyframeToggle,
   DraggableNumber,
-  BLEND_MODE_GROUPS,
-  formatBlendModeName,
 } from './shared';
+import { BLEND_MODE_GROUPS, formatBlendModeName } from './sharedConstants';
 
 interface TransformTabProps {
   clipId: string;

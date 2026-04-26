@@ -162,7 +162,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight }: MaskOverlayProps) {
     } else if (maskEditMode === 'editing' && activeMask) {
       deselectAllVertices();
     }
-  }, [selectedClip, activeMask, maskEditMode, addVertex, addMask, deselectAllVertices, setMaskEditMode]);
+  }, [selectedClip, activeMask, maskEditMode, addVertex, addMask, deselectAllVertices, setActiveMask, setMaskEditMode, justFinishedDrawingRef]);
 
   // Handle clicking on first vertex to close path
   const handleFirstVertexClick = useCallback((e: React.MouseEvent) => {

@@ -53,10 +53,14 @@ export function ParentChildLink({
   // Physics state
   const physicsRef = useRef<PhysicsState | null>(null);
   const animationRef = useRef<number | null>(null);
-  const [controlPoint, setControlPoint] = useState({ x: 0, y: 0 });
+  const [controlPoint, setControlPoint] = useState(() => {
+    const midX = (childX + parentX) / 2;
+    const midY = (childY + parentY) / 2;
+    return { x: midX, y: midY + 20 };
+  });
 
   // Initialize physics state
-  if (!physicsRef.current) {
+  if (physicsRef.current == null) {
     const midX = (childX + parentX) / 2;
     const midY = (childY + parentY) / 2;
     physicsRef.current = {
@@ -69,7 +73,6 @@ export function ParentChildLink({
       prevParentX: parentX,
       prevParentY: parentY,
     };
-    setControlPoint({ x: midX, y: midY + 20 });
   }
 
   // Physics simulation

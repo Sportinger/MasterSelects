@@ -32,6 +32,9 @@ import { LayerCollector } from '../../src/engine/render/LayerCollector';
 import { flags } from '../../src/engine/featureFlags';
 import { scrubSettleState } from '../../src/services/scrubSettleState';
 import { useTimelineStore } from '../../src/stores/timeline';
+import type { TextureManager } from '../../src/engine/texture/TextureManager';
+import type { ScrubbingCache } from '../../src/engine/texture/ScrubbingCache';
+import type { Layer } from '../../src/types';
 
 const defaultUserAgent = navigator.userAgent;
 
@@ -110,11 +113,11 @@ describe('LayerCollector', () => {
         runtimeSourceId: 'media:test',
         runtimeSessionKey: 'interactive-scrub:track-1:media:test',
       },
-    } as any;
+    } as unknown as Layer;
 
     const collector = new LayerCollector();
     const result = collector.collect([layer], {
-      textureManager: textureManager as any,
+      textureManager: textureManager as unknown as TextureManager,
       scrubbingCache: null,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
@@ -174,11 +177,11 @@ describe('LayerCollector', () => {
         type: 'video',
         webCodecsPlayer: provider,
       },
-    } as any;
+    } as unknown as Layer;
 
     const collector = new LayerCollector();
     const deps = {
-      textureManager: textureManager as any,
+      textureManager: textureManager as unknown as TextureManager,
       scrubbingCache: null,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
@@ -237,7 +240,7 @@ describe('LayerCollector', () => {
 
     const collector = new LayerCollector();
     const deps = {
-      textureManager: textureManager as any,
+      textureManager: textureManager as unknown as TextureManager,
       scrubbingCache: null,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
@@ -259,7 +262,7 @@ describe('LayerCollector', () => {
         type: 'video',
         webCodecsPlayer: oldProvider,
       },
-    } as any], deps);
+    } as unknown as Layer], deps);
 
     const result = collector.collect([{
       id: 'layer-1',
@@ -275,7 +278,7 @@ describe('LayerCollector', () => {
         type: 'video',
         webCodecsPlayer: newProvider,
       },
-    } as any], deps);
+    } as unknown as Layer], deps);
 
     expect(result).toHaveLength(0);
     expect(newProvider.getCurrentFrame).not.toHaveBeenCalled();
@@ -308,7 +311,7 @@ describe('LayerCollector', () => {
 
     const collector = new LayerCollector();
     const deps = {
-      textureManager: textureManager as any,
+      textureManager: textureManager as unknown as TextureManager,
       scrubbingCache: null,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
@@ -333,7 +336,7 @@ describe('LayerCollector', () => {
         runtimeSourceId: 'media:test',
         runtimeSessionKey: 'interactive-track:track-1:media:test',
       },
-    } as any], deps);
+    } as unknown as Layer], deps);
 
     sharedProvider.getPendingSeekTime.mockReturnValue(2.4);
 
@@ -354,7 +357,7 @@ describe('LayerCollector', () => {
         runtimeSourceId: 'media:test',
         runtimeSessionKey: 'interactive-track:track-1:media:test',
       },
-    } as any], deps);
+    } as unknown as Layer], deps);
 
     expect(result).toHaveLength(0);
     expect(sharedProvider.getCurrentFrame).toHaveBeenCalledTimes(1);
@@ -415,8 +418,8 @@ describe('LayerCollector', () => {
         runtimeSourceId: 'media:test',
         runtimeSessionKey: 'interactive-scrub:track-1:media:test',
       },
-    } as any], {
-      textureManager: textureManager as any,
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
       scrubbingCache: null,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
@@ -497,8 +500,8 @@ describe('LayerCollector', () => {
         runtimeSourceId: 'media:test',
         runtimeSessionKey: 'interactive-track:track-1:media:test',
       },
-    } as any], {
-      textureManager: textureManager as any,
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
       scrubbingCache: null,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
@@ -555,8 +558,8 @@ describe('LayerCollector', () => {
         type: 'video',
         webCodecsPlayer: provider,
       },
-    } as any], {
-      textureManager: textureManager as any,
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
       scrubbingCache: null,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
@@ -612,8 +615,8 @@ describe('LayerCollector', () => {
         mediaTime: 7.623,
         webCodecsPlayer: provider,
       },
-    } as any], {
-      textureManager: textureManager as any,
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
       scrubbingCache: null,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
@@ -671,8 +674,8 @@ describe('LayerCollector', () => {
         mediaTime: 8.02,
         webCodecsPlayer: provider,
       },
-    } as any], {
-      textureManager: textureManager as any,
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
       scrubbingCache: null,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
@@ -731,10 +734,10 @@ describe('LayerCollector', () => {
         mediaTime: 17.818,
         webCodecsPlayer: provider,
       },
-    } as any;
+    } as unknown as Layer;
 
     const initialResult = collector.collect([baseLayer], {
-      textureManager: textureManager as any,
+      textureManager: textureManager as unknown as TextureManager,
       scrubbingCache: null,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
@@ -754,7 +757,7 @@ describe('LayerCollector', () => {
         mediaTime: 8.02,
       },
     }], {
-      textureManager: textureManager as any,
+      textureManager: textureManager as unknown as TextureManager,
       scrubbingCache: null,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
@@ -813,10 +816,10 @@ describe('LayerCollector', () => {
         mediaTime: 17.818,
         webCodecsPlayer: provider,
       },
-    } as any;
+    } as unknown as Layer;
 
     const initialResult = collector.collect([baseLayer], {
-      textureManager: textureManager as any,
+      textureManager: textureManager as unknown as TextureManager,
       scrubbingCache: null,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
@@ -835,7 +838,7 @@ describe('LayerCollector', () => {
         mediaTime: 8.02,
       },
     }], {
-      textureManager: textureManager as any,
+      textureManager: textureManager as unknown as TextureManager,
       scrubbingCache: null,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
@@ -894,10 +897,10 @@ describe('LayerCollector', () => {
         mediaTime: 17.818,
         webCodecsPlayer: provider,
       },
-    } as any;
+    } as unknown as Layer;
 
     const initialResult = collector.collect([baseLayer], {
-      textureManager: textureManager as any,
+      textureManager: textureManager as unknown as TextureManager,
       scrubbingCache: null,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
@@ -916,7 +919,7 @@ describe('LayerCollector', () => {
         mediaTime: 8.02,
       },
     }], {
-      textureManager: textureManager as any,
+      textureManager: textureManager as unknown as TextureManager,
       scrubbingCache: null,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
@@ -940,7 +943,7 @@ describe('LayerCollector', () => {
       paused: false,
       videoWidth: 1920,
       videoHeight: 1080,
-    } as any;
+    } as unknown as HTMLVideoElement;
 
     const webCodecsPlayer = {
       isFullMode: () => true,
@@ -974,8 +977,8 @@ describe('LayerCollector', () => {
         videoElement: video,
         webCodecsPlayer,
       },
-    } as any], {
-      textureManager: textureManager as any,
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
       scrubbingCache: null,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
@@ -998,7 +1001,7 @@ describe('LayerCollector', () => {
       paused: true,
       videoWidth: 1920,
       videoHeight: 1080,
-    } as any;
+    } as unknown as HTMLVideoElement;
 
     hoisted.getRuntimeFrameProvider.mockReturnValue(null);
     hoisted.readRuntimeFrameForSource.mockReturnValue(null);
@@ -1025,8 +1028,8 @@ describe('LayerCollector', () => {
         mediaTime: 2.5,
         videoElement: video,
       },
-    } as any], {
-      textureManager: textureManager as any,
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
       scrubbingCache: null,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
@@ -1059,7 +1062,7 @@ describe('LayerCollector', () => {
       paused: true,
       videoWidth: 1920,
       videoHeight: 1080,
-    } as any;
+    } as unknown as HTMLVideoElement;
 
     const webCodecsPlayer = {
       currentTime: 1.25,
@@ -1097,8 +1100,8 @@ describe('LayerCollector', () => {
         videoElement: video,
         webCodecsPlayer,
       },
-    } as any], {
-      textureManager: textureManager as any,
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
       scrubbingCache: null,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
@@ -1124,7 +1127,7 @@ describe('LayerCollector', () => {
       paused: false,
       videoWidth: 1920,
       videoHeight: 1080,
-    } as any;
+    } as unknown as HTMLVideoElement;
     const secondVideo = {
       src: sharedSrc,
       currentTime: 1.25,
@@ -1133,7 +1136,7 @@ describe('LayerCollector', () => {
       paused: false,
       videoWidth: 1920,
       videoHeight: 1080,
-    } as any;
+    } as unknown as HTMLVideoElement;
 
     const textureManager = {
       importVideoTexture: vi.fn((video: HTMLVideoElement) => ({ label: `tex-${video === firstVideo ? 'first' : 'second'}` })),
@@ -1152,8 +1155,8 @@ describe('LayerCollector', () => {
     };
     const lastVideoTimes = new Map<string, number>();
     const deps = {
-      textureManager: textureManager as any,
-      scrubbingCache: scrubbingCache as any,
+      textureManager: textureManager as unknown as TextureManager,
+      scrubbingCache: scrubbingCache as unknown as ScrubbingCache,
       getLastVideoTime: (key: string) => lastVideoTimes.get(key),
       setLastVideoTime: (key: string, time: number) => {
         lastVideoTimes.set(key, time);
@@ -1178,7 +1181,7 @@ describe('LayerCollector', () => {
         type: 'video',
         videoElement: firstVideo,
       },
-    } as any], deps);
+    } as unknown as Layer], deps);
 
     const result = collector.collect([{
       id: 'layer-second',
@@ -1194,7 +1197,7 @@ describe('LayerCollector', () => {
         type: 'video',
         videoElement: secondVideo,
       },
-    } as any], deps);
+    } as unknown as Layer], deps);
 
     expect(result).toHaveLength(1);
     expect(textureManager.importVideoTexture).toHaveBeenCalledTimes(2);
@@ -1213,7 +1216,7 @@ describe('LayerCollector', () => {
       paused: false,
       videoWidth: 1920,
       videoHeight: 1080,
-    } as any;
+    } as unknown as HTMLVideoElement;
 
     const textureManager = {
       importVideoTexture: vi.fn(() => ({ label: 'html-video-texture' })),
@@ -1248,9 +1251,9 @@ describe('LayerCollector', () => {
         type: 'video',
         videoElement: video,
       },
-    } as any], {
-      textureManager: textureManager as any,
-      scrubbingCache: scrubbingCache as any,
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
+      scrubbingCache: scrubbingCache as unknown as ScrubbingCache,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
       isExporting: false,
@@ -1282,7 +1285,7 @@ describe('LayerCollector', () => {
       paused: false,
       videoWidth: 1920,
       videoHeight: 1080,
-    } as any;
+    } as unknown as HTMLVideoElement;
 
     const copiedFrame = { view: { label: 'copied-frame' }, width: 1920, height: 1080 };
     const textureManager = {
@@ -1315,9 +1318,9 @@ describe('LayerCollector', () => {
         type: 'video',
         videoElement: video,
       },
-    } as any], {
-      textureManager: textureManager as any,
-      scrubbingCache: scrubbingCache as any,
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
+      scrubbingCache: scrubbingCache as unknown as ScrubbingCache,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
       isExporting: false,
@@ -1350,7 +1353,7 @@ describe('LayerCollector', () => {
       paused: true,
       videoWidth: 1920,
       videoHeight: 1080,
-    } as any;
+    } as unknown as HTMLVideoElement;
 
     const heldFrame = {
       view: { label: 'held-same-clip-frame' },
@@ -1392,9 +1395,9 @@ describe('LayerCollector', () => {
         mediaTime: 18,
         videoElement: video,
       },
-    } as any], {
-      textureManager: textureManager as any,
-      scrubbingCache: scrubbingCache as any,
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
+      scrubbingCache: scrubbingCache as unknown as ScrubbingCache,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
       isExporting: false,
@@ -1426,7 +1429,7 @@ describe('LayerCollector', () => {
       paused: false,
       videoWidth: 1920,
       videoHeight: 1080,
-    } as any;
+    } as unknown as HTMLVideoElement;
 
     const heldFrame = {
       view: { label: 'held-playback-warmup-frame' },
@@ -1468,9 +1471,9 @@ describe('LayerCollector', () => {
         mediaTime: 18,
         videoElement: video,
       },
-    } as any], {
-      textureManager: textureManager as any,
-      scrubbingCache: scrubbingCache as any,
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
+      scrubbingCache: scrubbingCache as unknown as ScrubbingCache,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
       isExporting: false,
@@ -1502,7 +1505,7 @@ describe('LayerCollector', () => {
       paused: false,
       videoWidth: 1920,
       videoHeight: 1080,
-    } as any;
+    } as unknown as HTMLVideoElement;
 
     const heldFrame = {
       view: { label: 'ownerless-precache-frame' },
@@ -1545,9 +1548,9 @@ describe('LayerCollector', () => {
         mediaTime: 0,
         videoElement: video,
       },
-    } as any], {
-      textureManager: textureManager as any,
-      scrubbingCache: scrubbingCache as any,
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
+      scrubbingCache: scrubbingCache as unknown as ScrubbingCache,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
       isExporting: false,
@@ -1579,7 +1582,7 @@ describe('LayerCollector', () => {
       paused: true,
       videoWidth: 1920,
       videoHeight: 1080,
-    } as any;
+    } as unknown as HTMLVideoElement;
 
     const heldFrame = {
       view: { label: 'held-seeking-frame' },
@@ -1621,9 +1624,9 @@ describe('LayerCollector', () => {
         mediaTime: 25,
         videoElement: video,
       },
-    } as any], {
-      textureManager: textureManager as any,
-      scrubbingCache: scrubbingCache as any,
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
+      scrubbingCache: scrubbingCache as unknown as ScrubbingCache,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
       isExporting: false,
@@ -1657,7 +1660,7 @@ describe('LayerCollector', () => {
       paused: true,
       videoWidth: 1920,
       videoHeight: 1080,
-    } as any;
+    } as unknown as HTMLVideoElement;
 
     const heldFrame = {
       view: { label: 'held-frame' },
@@ -1683,8 +1686,8 @@ describe('LayerCollector', () => {
       captureVideoFrameIfCloser: vi.fn(),
     };
     const deps = {
-      textureManager: textureManager as any,
-      scrubbingCache: scrubbingCache as any,
+      textureManager: textureManager as unknown as TextureManager,
+      scrubbingCache: scrubbingCache as unknown as ScrubbingCache,
       getLastVideoTime: () => undefined,
       setLastVideoTime: () => {},
       isExporting: false,
@@ -1708,7 +1711,7 @@ describe('LayerCollector', () => {
         mediaTime: 12,
         videoElement: video,
       },
-    } as any;
+    } as unknown as Layer;
 
     const first = collector.collect([layer], deps);
     expect(first).toHaveLength(1);

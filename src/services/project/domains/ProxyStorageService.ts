@@ -5,6 +5,10 @@ import { PROJECT_FOLDERS } from '../core/constants';
 
 const log = Logger.create('ProxyStorage');
 
+type IterableDirectoryHandle = FileSystemDirectoryHandle & {
+  values(): AsyncIterableIterator<FileSystemDirectoryHandle | FileSystemFileHandle>;
+};
+
 export class ProxyStorageService {
   // ============================================
   // VIDEO PROXY OPERATIONS
@@ -89,7 +93,7 @@ export class ProxyStorageService {
 
       // Count .webp files in the folder
       let count = 0;
-      for await (const entry of (mediaFolder as any).values()) {
+      for await (const entry of (mediaFolder as IterableDirectoryHandle).values()) {
         if (entry.kind === 'file' && entry.name.endsWith('.webp')) {
           count++;
         }
@@ -113,7 +117,7 @@ export class ProxyStorageService {
       const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
       const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
 
-      for await (const entry of (mediaFolder as any).values()) {
+      for await (const entry of (mediaFolder as IterableDirectoryHandle).values()) {
         if (entry.kind === 'file' && entry.name.endsWith('.webp')) {
           const match = entry.name.match(/^frame_(\d+)\.webp$/);
           if (match) {

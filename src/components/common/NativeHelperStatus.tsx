@@ -177,7 +177,7 @@ export function NativeHelperStatus({ variant = 'toolbar' }: NativeHelperStatusPr
   }, [nativeDecodeEnabled, setNativeDecodeEnabled]);
 
   useEffect(() => {
-    void checkConnection();
+    queueMicrotask(() => void checkConnection());
 
     const unsubscribe = NativeHelperClient.onStatusChange((newStatus) => {
       setStatus(newStatus);
@@ -266,13 +266,11 @@ function NativeHelperDialog({
   const helperEnabled = turboModeEnabled;
   const platform = useMemo(() => detectPlatform(), []);
   const installGuide = useMemo(() => getInstallGuide(platform), [platform]);
-  const helperInfo = info as ExtendedSystemInfo | null;
+  const helperInfo = status === 'connected' ? (info as ExtendedSystemInfo | null) : null;
 
   useEffect(() => {
     if (status === 'connected') {
       NativeHelperClient.getInfo().then(setInfo).catch(() => setInfo(null));
-    } else {
-      setInfo(null);
     }
   }, [status]);
 
@@ -311,7 +309,7 @@ function NativeHelperDialog({
 
   useEffect(() => {
     if (helperEnabled && status !== 'connected') {
-      void handleRetry();
+      queueMicrotask(() => void handleRetry());
     }
   }, [handleRetry, helperEnabled, status]);
 

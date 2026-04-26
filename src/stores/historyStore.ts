@@ -8,7 +8,7 @@ import { flashBoardMediaBridge } from '../services/flashboard/FlashBoardMediaBri
 import type { TimelineClip, TimelineTrack, Layer, Keyframe } from '../types';
 import type { MediaFile, Composition, MediaFolder, TextItem, SolidItem } from './mediaStore/types';
 import type { TimelineMarker } from './timeline/types';
-import type { DockNode } from '../types/dock';
+import type { DockLayout } from '../types/dock';
 import type {
   FlashBoard,
   FlashBoardComposerState,
@@ -50,7 +50,7 @@ interface StateSnapshot {
 
   // Dock layout state
   dock: {
-    layout: DockNode | null;
+    layout: DockLayout | null;
   };
 
   // FlashBoard state (boards + active board + composer config + generated-media metadata)
@@ -121,6 +121,10 @@ interface MediaStoreState {
   solidItems: SolidItem[];
 }
 
+interface DockStoreSnapshot {
+  layout: DockLayout;
+}
+
 interface FlashBoardStoreSnapshot {
   activeBoardId: string | null;
   boards: FlashBoard[];
@@ -147,8 +151,8 @@ let getTimelineState: (() => TimelineStoreState) | undefined;
 let setTimelineState: ((state: Partial<TimelineStoreState>) => void) | undefined;
 let getMediaState: (() => MediaStoreState) | undefined;
 let setMediaState: ((state: Partial<MediaStoreState>) => void) | undefined;
-let getDockState: (() => any) | undefined;
-let setDockState: ((state: any) => void) | undefined;
+let getDockState: (() => DockStoreSnapshot) | undefined;
+let setDockState: ((state: Partial<DockStoreSnapshot>) => void) | undefined;
 let getFlashBoardState: (() => FlashBoardStoreSnapshot) | undefined;
 let setFlashBoardState: ((state: Partial<FlashBoardStoreSnapshot>) => void) | undefined;
 let getExportState: (() => ExportStoreSnapshot) | undefined;
@@ -158,7 +162,7 @@ let setExportState: ((state: Partial<ExportStoreSnapshot>) => void) | undefined;
 export function initHistoryStoreRefs(stores: {
   timeline: { getState: () => TimelineStoreState; setState: (state: Partial<TimelineStoreState>) => void };
   media: { getState: () => MediaStoreState; setState: (state: Partial<MediaStoreState>) => void };
-  dock: { getState: () => any; setState: (state: any) => void };
+  dock: { getState: () => DockStoreSnapshot; setState: (state: Partial<DockStoreSnapshot>) => void };
   flashboard?: { getState: () => FlashBoardStoreSnapshot; setState: (state: Partial<FlashBoardStoreSnapshot>) => void };
   export?: { getState: () => ExportStoreSnapshot; setState: (state: Partial<ExportStoreSnapshot>) => void };
 }) {
@@ -231,9 +235,9 @@ function createDefaultFlashBoardComposer(): FlashBoardComposerState {
 
 // Create snapshot from current state
 function createSnapshot(label: string): StateSnapshot {
-  const timeline = getTimelineState?.() || ({} as any);
-  const media = getMediaState?.() || ({} as any);
-  const dock = getDockState?.() || ({} as any);
+  const timeline = getTimelineState?.() || null;
+  const media = getMediaState?.() || null;
+  const dock = getDockState?.();
   const flashboard = getFlashBoardState?.() || {
     activeBoardId: null,
     boards: [],
@@ -243,7 +247,7 @@ function createSnapshot(label: string): StateSnapshot {
 
   // Convert Map<string, Keyframe[]> to plain object for cloning
   const keyframesObj: Record<string, Keyframe[]> = {};
-  if (timeline.clipKeyframes instanceof Map) {
+  if (timeline?.clipKeyframes instanceof Map) {
     timeline.clipKeyframes.forEach((kfs: Keyframe[], clipId: string) => {
       keyframesObj[clipId] = deepClone(kfs);
     });
@@ -253,27 +257,27 @@ function createSnapshot(label: string): StateSnapshot {
     timestamp: Date.now(),
     label,
     timeline: {
-      clips: deepClone(timeline.clips || []),
-      tracks: deepClone(timeline.tracks || []),
-      selectedClipIds: timeline.selectedClipIds ? [...timeline.selectedClipIds] : [],
-      zoom: timeline.zoom || 50,
-      scrollX: timeline.scrollX || 0,
-      layers: deepClone((timeline.layers || []).filter(Boolean)),
-      selectedLayerId: timeline.selectedLayerId || null,
+      clips: deepClone(timeline?.clips || []),
+      tracks: deepClone(timeline?.tracks || []),
+      selectedClipIds: timeline?.selectedClipIds ? [...timeline.selectedClipIds] : [],
+      zoom: timeline?.zoom || 50,
+      scrollX: timeline?.scrollX || 0,
+      layers: deepClone((timeline?.layers || []).filter(Boolean)),
+      selectedLayerId: timeline?.selectedLayerId || null,
       clipKeyframes: keyframesObj,
-      markers: deepClone(timeline.markers || []),
+      markers: deepClone(timeline?.markers || []),
     },
     media: {
-      files: deepClone(media.files || []),
-      compositions: deepClone(media.compositions || []),
-      folders: deepClone(media.folders || []),
-      selectedIds: [...(media.selectedIds || [])],
-      expandedFolderIds: [...(media.expandedFolderIds || [])],
-      textItems: deepClone(media.textItems || []),
-      solidItems: deepClone(media.solidItems || []),
+      files: deepClone(media?.files || []),
+      compositions: deepClone(media?.compositions || []),
+      folders: deepClone(media?.folders || []),
+      selectedIds: [...(media?.selectedIds || [])],
+      expandedFolderIds: [...(media?.expandedFolderIds || [])],
+      textItems: deepClone(media?.textItems || []),
+      solidItems: deepClone(media?.solidItems || []),
     },
     dock: {
-      layout: deepClone(dock.layout || {}),
+      layout: deepClone(dock?.layout ?? null),
     },
     flashboard: {
       activeBoardId: flashboard.activeBoardId ?? null,
@@ -345,7 +349,7 @@ function applySnapshot(snapshot: StateSnapshot) {
   }
 
   // Apply dock state
-  if (setDockState) {
+  if (setDockState && snapshot.dock.layout) {
     setDockState({
       layout: deepClone(snapshot.dock.layout),
     });

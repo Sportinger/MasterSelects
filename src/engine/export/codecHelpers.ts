@@ -14,7 +14,7 @@ import type {
 /**
  * Get WebCodecs codec string for VideoEncoder configuration.
  */
-export function getCodecString(codec: VideoCodec): string {
+export function getCodecString(codec: string): string {
   switch (codec) {
     case 'h264':
       return 'avc1.4d0028'; // Main Profile, Level 4.0 (better VLC compatibility)
@@ -32,7 +32,7 @@ export function getCodecString(codec: VideoCodec): string {
 /**
  * Get mp4-muxer codec identifier.
  */
-export function getMp4MuxerCodec(codec: VideoCodec): 'avc' | 'hevc' | 'vp9' | 'av1' {
+export function getMp4MuxerCodec(codec: string): 'avc' | 'hevc' | 'vp9' | 'av1' {
   switch (codec) {
     case 'h264':
       return 'avc';
@@ -50,7 +50,7 @@ export function getMp4MuxerCodec(codec: VideoCodec): 'avc' | 'hevc' | 'vp9' | 'a
 /**
  * Get WebM muxer video codec identifier.
  */
-export function getWebmMuxerCodec(codec: VideoCodec): 'V_VP9' | 'V_AV1' {
+export function getWebmMuxerCodec(codec: string): 'V_VP9' | 'V_AV1' {
   return codec === 'av1' ? 'V_AV1' : 'V_VP9';
 }
 

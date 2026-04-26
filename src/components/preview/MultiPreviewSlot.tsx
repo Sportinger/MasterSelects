@@ -45,6 +45,8 @@ export function MultiPreviewSlot({
   // Determine which composition to display
   const displayedCompId = compositionId ?? activeCompositionId;
   const displayedComp = compositions.find((c) => c.id === displayedCompId);
+  const autoSourceCompositionId = autoSource?.compositionId;
+  const autoSourceLayerIndex = autoSource?.layerIndex;
 
   const effectiveResolution = displayedComp
     ? { width: displayedComp.width, height: displayedComp.height }
@@ -55,8 +57,8 @@ export function MultiPreviewSlot({
     if (!isEngineReady || !canvasRef.current) return;
 
     // Determine source: auto mode (layer-index) vs custom mode (composition/activeComp)
-    const source = autoSource
-      ? { type: 'layer-index' as const, compositionId: autoSource.compositionId, layerIndex: autoSource.layerIndex }
+    const source = autoSourceCompositionId !== undefined && autoSourceLayerIndex !== undefined
+      ? { type: 'layer-index' as const, compositionId: autoSourceCompositionId, layerIndex: autoSourceLayerIndex }
       : compositionId
         ? { type: 'composition' as const, compositionId }
         : { type: 'activeComp' as const };
@@ -90,7 +92,7 @@ export function MultiPreviewSlot({
       useRenderTargetStore.getState().unregisterTarget(targetId);
       engine.unregisterTargetCanvas(targetId);
     };
-  }, [isEngineReady, targetId, compositionId, slotIndex, showTransparencyGrid, autoSource?.compositionId, autoSource?.layerIndex]);
+  }, [isEngineReady, targetId, compositionId, slotIndex, showTransparencyGrid, autoSourceCompositionId, autoSourceLayerIndex]);
 
   // Sync transparency grid flag without full re-registration
   useEffect(() => {

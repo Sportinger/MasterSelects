@@ -2,6 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { LayerRenderData } from '../../src/engine/core/types';
 import { NestedCompRenderer } from '../../src/engine/render/NestedCompRenderer';
+import type { CompositorPipeline } from '../../src/engine/pipeline/CompositorPipeline';
+import type { EffectsPipeline } from '../../src/effects/EffectsPipeline';
+import type { TextureManager } from '../../src/engine/texture/TextureManager';
+import type { MaskTextureManager } from '../../src/engine/texture/MaskTextureManager';
+import type { TimelineClip, TimelineTrack } from '../../src/types';
 import {
   getSharedSceneDefaultCameraDistance,
   resolveRenderableSharedSceneCamera,
@@ -34,21 +39,32 @@ vi.mock('../../src/engine/native3d/NativeSceneRenderer', () => ({
 
 const initialMediaState = useMediaStore.getState();
 const initialTimelineState = useTimelineStore.getState();
+type NestedCompRendererTestAccess = NestedCompRenderer & {
+  collectNestedLayerData: (layers: TimelineClip[]) => LayerRenderData[];
+  process3DLayersForNested: (
+    layerData: LayerRenderData[],
+    width: number,
+    height: number,
+    compId: string,
+    clips: TimelineClip[],
+    tracks: TimelineTrack[],
+  ) => void;
+};
 
 function createRenderer() {
   return new NestedCompRenderer(
     {} as GPUDevice,
-    {} as any,
-    {} as any,
-    {} as any,
+    {} as unknown as CompositorPipeline,
+    {} as unknown as EffectsPipeline,
+    {} as unknown as TextureManager,
     {
       getMaskInfo: vi.fn(() => ({
         hasMask: false,
         view: null,
       })),
-    } as any,
+    } as unknown as MaskTextureManager,
     null,
-  );
+  ) as unknown as NestedCompRendererTestAccess;
 }
 
 describe('NestedCompRenderer shared-scene integration', () => {
@@ -63,7 +79,7 @@ describe('NestedCompRenderer shared-scene integration', () => {
   it('collects nested gaussian splats as shared-scene placeholders', () => {
     const renderer = createRenderer();
 
-    const nestedLayerData = (renderer as any).collectNestedLayerData([{
+    const nestedLayerData = renderer.collectNestedLayerData([{
       id: 'nested-splat-layer',
       name: 'Nested Splat',
       sourceClipId: 'nested-splat-clip',
@@ -85,7 +101,7 @@ describe('NestedCompRenderer shared-scene integration', () => {
           },
         },
       },
-    }] as any);
+    }] as unknown as TimelineClip[]);
 
     expect(nestedLayerData).toHaveLength(1);
     expect(nestedLayerData[0]).toMatchObject({
@@ -115,14 +131,14 @@ describe('NestedCompRenderer shared-scene integration', () => {
           far: 240,
         },
       }],
-    } as any);
+    });
     useTimelineStore.setState({
       isPlaying: false,
       isExporting: false,
       clipKeyframes: new Map(),
       tracks: [],
       clips: [],
-    } as any);
+    });
 
     const sceneTracks = [{
       id: 'nested-track',
@@ -180,7 +196,7 @@ describe('NestedCompRenderer shared-scene integration', () => {
         visible: true,
         opacity: 0.8,
         blendMode: 'screen',
-        effects: [{ id: 'fx-1' } as any],
+        effects: [{ id: 'fx-1' } as unknown as LayerRenderData['layer']['effects'][number]],
         position: { x: 0.25, y: -0.5, z: 2 },
         scale: { x: 1.5, y: 1.25, z: 0.75 },
         rotation: { x: 0, y: 0, z: 0 },
@@ -196,7 +212,7 @@ describe('NestedCompRenderer shared-scene integration', () => {
           },
           mediaTime: 1.5,
         },
-      } as any,
+      } as unknown as LayerRenderData,
       isVideo: false,
       externalTexture: null,
       textureView: null,
@@ -207,22 +223,22 @@ describe('NestedCompRenderer shared-scene integration', () => {
       { width: 1280, height: 720 },
       2,
       {
-        clips: sceneClips as any,
-        tracks: sceneTracks as any,
+        clips: sceneClips as unknown as TimelineClip[],
+        tracks: sceneTracks as unknown as TimelineTrack[],
         clipKeyframes: new Map(),
         compositionId: 'nested-comp',
         sceneNavClipId: null,
       },
     );
 
-    (renderer as any).process3DLayersForNested(
+    renderer.process3DLayersForNested(
       layerData,
       1280,
       720,
       2,
       'nested-comp',
-      sceneClips as any,
-      sceneTracks as any,
+      sceneClips as unknown as TimelineClip[],
+      sceneTracks as unknown as TimelineTrack[],
     );
 
     expect(mockNativeSceneRenderer.renderScene).toHaveBeenCalledTimes(1);
@@ -269,14 +285,14 @@ describe('NestedCompRenderer shared-scene integration', () => {
     useMediaStore.setState({
       activeCompositionId: null,
       compositions: [],
-    } as any);
+    });
     useTimelineStore.setState({
       isPlaying: false,
       isExporting: false,
       clipKeyframes: new Map(),
       tracks: [],
       clips: [],
-    } as any);
+    });
 
     const layerData: LayerRenderData[] = [{
       layer: {
@@ -299,15 +315,15 @@ describe('NestedCompRenderer shared-scene integration', () => {
             videoHeight: 1080,
           },
         },
-      } as any,
+      } as unknown as LayerRenderData,
       isVideo: true,
       externalTexture: null,
-      textureView: { label: 'nested-plane-view' } as any,
+      textureView: { label: 'nested-plane-view' } as unknown as LayerRenderData,
       sourceWidth: 1920,
       sourceHeight: 1080,
     }];
 
-    (renderer as any).process3DLayersForNested(
+    renderer.process3DLayersForNested(
       layerData,
       1280,
       720,

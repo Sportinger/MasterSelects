@@ -5,7 +5,7 @@ import type { TimelineClipProps } from './types';
 import { THUMB_WIDTH } from './constants';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
-import { getLabelHex } from '../panels/MediaPanel';
+import { getLabelHex } from '../panels/media/labelColors';
 // PickWhip disabled
 import { Logger } from '../../services/logger';
 import { shouldLoopVectorAnimation } from '../../types/vectorAnimation';
@@ -22,6 +22,14 @@ function canLoopExtendVectorClip(clip: TimelineClipProps['clip']): boolean {
 }
 
 type StaticClipIconKind = 'camera' | 'gaussian-splat' | 'model';
+type ClipKeyframeTickGroup = NonNullable<TimelineClipProps['keyframeTimeGroups']>[number];
+type KeyframeGroupDragState = {
+  keyframeIds: string[];
+  startX: number;
+  startTime: number;
+  clipWidth: number;
+  clipDuration: number;
+};
 
 function StaticClipIcon({
   kind,
@@ -110,7 +118,6 @@ function TimelineClipComponent({
   clipFade: _clipFade,
   zoom,
   scrollX,
-  timelineRef,
   proxyEnabled,
   proxyStatus,
   proxyProgress,
@@ -130,6 +137,8 @@ function TimelineClipComponent({
   fadeOutDuration,
   opacityKeyframes,
   allKeyframeTimes,
+  keyframeTimeGroups,
+  onMoveKeyframeGroup,
   timeToPixel,
   pixelToTime,
   formatTime,
@@ -190,7 +199,7 @@ function TimelineClipComponent({
   // Animation phase for enter/exit transitions
   const clipAnimationPhase = useTimelineStore(s => s.clipAnimationPhase);
   const clipEntranceKey = useTimelineStore(s => s.clipEntranceAnimationKey);
-  const mountKeyRef = useRef(clipEntranceKey);
+  const [mountEntranceKey] = useState(clipEntranceKey);
 
   // Only compute stagger order during composition entrance animation. Doing a
   // full clips sort inside every TimelineClip render gets very expensive once
@@ -211,7 +220,7 @@ function TimelineClipComponent({
   // - 'exiting': apply exit animation
   // - 'entering' + new clips: apply entrance animation (only during composition switch)
   // - Otherwise: no animation
-  const isNewClip = mountKeyRef.current === clipEntranceKey && clipEntranceKey > 0;
+  const isNewClip = mountEntranceKey === clipEntranceKey && clipEntranceKey > 0;
   const animationClass = clipAnimationPhase === 'exiting'
     ? 'exit-animate'
     : (clipAnimationPhase === 'entering' && isNewClip)
@@ -222,12 +231,14 @@ function TimelineClipComponent({
   const aiMove = useTimelineStore(s => s.aiMovingClips.get(clip.id));
   const [aiMovePhase, setAiMovePhase] = useState<'idle' | 'initial' | 'animating'>('idle');
   const aiMoveRef = useRef<number | null>(null);
+  const aiMoveStartedAt = aiMove?.startedAt;
+  const aiMoveDuration = aiMove?.animationDuration ?? 200;
 
   useEffect(() => {
-    if (aiMove) {
-      setAiMovePhase('initial');
+    if (aiMoveStartedAt !== undefined) {
       // Double-rAF to ensure the initial transform is painted before starting transition
       const raf1 = requestAnimationFrame(() => {
+        setAiMovePhase('initial');
         const raf2 = requestAnimationFrame(() => {
           setAiMovePhase('animating');
         });
@@ -235,16 +246,17 @@ function TimelineClipComponent({
       });
       const timer = setTimeout(() => {
         setAiMovePhase('idle');
-      }, (aiMove.animationDuration || 200) + 50);
+      }, aiMoveDuration + 50);
       return () => {
         cancelAnimationFrame(raf1);
         if (aiMoveRef.current) cancelAnimationFrame(aiMoveRef.current);
         clearTimeout(timer);
       };
     } else {
-      setAiMovePhase('idle');
+      const frame = requestAnimationFrame(() => setAiMovePhase('idle'));
+      return () => cancelAnimationFrame(frame);
     }
-  }, [aiMove?.startedAt]);
+  }, [aiMoveDuration, aiMoveStartedAt]);
 
   // Check if this clip should show cut indicator (either directly hovered or linked to hovered clip)
   const isDirectlyHovered = cutHoverInfo?.clipId === clip.id;
@@ -360,28 +372,18 @@ function TimelineClipComponent({
 
   // Calculate position - if dragging, use the computed position (with snapping/resistance)
   let left = timeToPixel(displayStartTime);
-  if (isDragging && clipDrag && timelineRef.current) {
+  if (isDragging && clipDrag) {
     // Always use snappedTime when available - it contains the position with snapping and resistance applied
     if (clipDrag.snappedTime !== null) {
       left = timeToPixel(clipDrag.snappedTime);
-    } else {
-      const rect = timelineRef.current.getBoundingClientRect();
-      const x = clipDrag.currentX - rect.left + scrollX - clipDrag.grabOffsetX;
-      left = Math.max(0, x);
     }
-  } else if (isLinkedToDragging && clipDrag && timelineRef.current && draggedClip) {
+  } else if (isLinkedToDragging && clipDrag && draggedClip) {
     // Move linked clip in sync - use computed position (snapped + resistance) if available
-    let newDragTime: number;
     if (clipDrag.snappedTime !== null) {
-      newDragTime = clipDrag.snappedTime;
-    } else {
-      const rect = timelineRef.current.getBoundingClientRect();
-      const dragX =
-        clipDrag.currentX - rect.left + scrollX - clipDrag.grabOffsetX;
-      newDragTime = pixelToTime(Math.max(0, dragX));
+      const newDragTime = clipDrag.snappedTime;
+      const timeDelta = newDragTime - draggedClip.startTime;
+      left = timeToPixel(Math.max(0, clip.startTime + timeDelta));
     }
-    const timeDelta = newDragTime - draggedClip.startTime;
-    left = timeToPixel(Math.max(0, clip.startTime + timeDelta));
   } else if (clipDrag?.multiSelectClipIds?.includes(clip.id) && clipDrag.multiSelectTimeDelta !== undefined) {
     // This clip is part of multi-select drag (but not the primary dragged clip)
     left = timeToPixel(Math.max(0, clip.startTime + clipDrag.multiSelectTimeDelta));
@@ -420,6 +422,59 @@ function TimelineClipComponent({
     !showsStaticClipArtwork &&
     !isCompositionWithSegments &&
     (useSourceCache ? cachedThumbnails.some(Boolean) : legacyThumbnails.length > 0);
+
+  const keyframeTickGroups: ClipKeyframeTickGroup[] = keyframeTimeGroups ?? allKeyframeTimes.map(time => ({
+    time,
+    keyframeIds: [],
+  }));
+  const [keyframeGroupDrag, setKeyframeGroupDrag] = useState<KeyframeGroupDragState | null>(null);
+
+  const handleKeyframeTickMouseDown = (
+    e: React.MouseEvent<HTMLButtonElement>,
+    group: ClipKeyframeTickGroup
+  ) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (!onMoveKeyframeGroup || group.keyframeIds.length === 0) return;
+
+    setKeyframeGroupDrag({
+      keyframeIds: group.keyframeIds,
+      startX: e.clientX,
+      startTime: group.time,
+      clipWidth: Math.max(1, width),
+      clipDuration: Math.max(0.001, displayDuration),
+    });
+  };
+
+  useEffect(() => {
+    if (!keyframeGroupDrag || !onMoveKeyframeGroup) return;
+
+    const handleDocumentMouseMove = (e: MouseEvent) => {
+      e.preventDefault();
+      const sensitivity = e.shiftKey ? 0.1 : 1;
+      const deltaX = (e.clientX - keyframeGroupDrag.startX) * sensitivity;
+      const deltaTime = (deltaX / keyframeGroupDrag.clipWidth) * keyframeGroupDrag.clipDuration;
+      const newTime = Math.max(
+        0,
+        Math.min(keyframeGroupDrag.clipDuration, keyframeGroupDrag.startTime + deltaTime)
+      );
+
+      onMoveKeyframeGroup(keyframeGroupDrag.keyframeIds, newTime);
+    };
+
+    const handleDocumentMouseUp = () => {
+      setKeyframeGroupDrag(null);
+    };
+
+    document.addEventListener('mousemove', handleDocumentMouseMove);
+    document.addEventListener('mouseup', handleDocumentMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleDocumentMouseMove);
+      document.removeEventListener('mouseup', handleDocumentMouseUp);
+    };
+  }, [keyframeGroupDrag, onMoveKeyframeGroup]);
 
   // Track filtering
   if (isDragging && clipDrag && clipDrag.currentTrackId !== trackId) {
@@ -646,7 +701,7 @@ function TimelineClipComponent({
         // Use transcribedRanges from MediaFile for coverage (silence still counts as transcribed)
         const mediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
         const mediaFile = mediaFileId ? useMediaStore.getState().files.find(f => f.id === mediaFileId) : null;
-        const ranges: [number, number][] = (mediaFile as any)?.transcribedRanges || [];
+        const ranges = mediaFile?.transcribedRanges ?? [];
         let pct = 0;
         if (ranges.length > 0) {
           // Intersect transcribed ranges with clip's [inPoint, outPoint]
@@ -687,7 +742,7 @@ function TimelineClipComponent({
         if (clip.analysis?.frames?.length) {
           const frames = clip.analysis.frames;
           const interval = (clip.analysis.sampleInterval || 500) / 1000;
-          const framesInRange = frames.filter((f: any) => f.timestamp >= clipIn && f.timestamp < clipOut);
+          const framesInRange = frames.filter((f) => f.timestamp >= clipIn && f.timestamp < clipOut);
           const coveredTime = framesInRange.length * interval;
           pct = Math.min(100, Math.round((coveredTime / clipDur) * 100));
         }
@@ -953,16 +1008,25 @@ function TimelineClipComponent({
         </div>
       )}
       {/* Keyframe tick marks on clip bar */}
-      {allKeyframeTimes.length > 0 && (
+      {keyframeTickGroups.length > 0 && (
         <div className="clip-keyframe-ticks">
-          {allKeyframeTimes.map((time, i) => {
-            const xPercent = (time / displayDuration) * 100;
+          {keyframeTickGroups.map((group, i) => {
+            const xPercent = (group.time / displayDuration) * 100;
             if (xPercent < 0 || xPercent > 100) return null;
+            const isDraggingKeyframeGroup = keyframeGroupDrag
+              ? group.keyframeIds.some(id => keyframeGroupDrag.keyframeIds.includes(id))
+              : false;
+            const keyframeCount = group.keyframeIds.length || 1;
             return (
-              <div
-                key={i}
-                className="keyframe-tick"
+              <button
+                type="button"
+                key={`${group.time}:${group.keyframeIds.join('|') || i}`}
+                className={`keyframe-tick${isDraggingKeyframeGroup ? ' dragging' : ''}`}
                 style={{ left: `${xPercent}%` }}
+                onMouseDown={(e) => handleKeyframeTickMouseDown(e, group)}
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Move ${keyframeCount} keyframe${keyframeCount === 1 ? '' : 's'} at ${formatTime(group.time)}`}
+                title={`Drag to move ${keyframeCount} keyframe${keyframeCount === 1 ? '' : 's'} at ${formatTime(group.time)}`}
               />
             );
           })}

@@ -4,6 +4,7 @@
 
 import { Logger } from './logger';
 import * as MP4BoxModule from 'mp4box';
+import type { MP4ArrayBuffer, MP4VideoTrack, Sample } from '../engine/webCodecsTypes';
 
 const MP4Box = MP4BoxModule as unknown as {
   createFile: typeof MP4BoxModule.createFile;
@@ -25,41 +26,36 @@ const JPEG_QUALITY = 0.82;
 const CANVAS_POOL_SIZE = 8;       // Parallel encoding canvases
 const DECODE_BATCH_SIZE = 30;     // Feed 30 samples at a time before yielding
 
-// MP4Box types
-interface MP4ArrayBuffer extends ArrayBuffer {
-  fileStart: number;
+interface AVCConfigurationBox {
+  AVCProfileIndication: number;
+  profile_compatibility: number;
+  AVCLevelIndication: number;
+  write: (stream: { buffer: ArrayBuffer; position?: number }) => void;
 }
 
-interface Sample {
-  number: number;
-  track_id: number;
-  data: ArrayBuffer;
-  size: number;
-  cts: number;
-  dts: number;
-  duration: number;
-  is_sync: boolean;
-  timescale: number;
-}
-
-interface MP4VideoTrack {
-  id: number;
-  codec: string;
-  duration: number;
-  timescale: number;
-  nb_samples: number;
-  video: { width: number; height: number };
+interface MP4TrackDetails {
+  mdia?: {
+    minf?: {
+      stbl?: {
+        stsd?: {
+          entries?: Array<{
+            avcC?: AVCConfigurationBox;
+          }>;
+        };
+      };
+    };
+  };
 }
 
 interface MP4File {
   onReady: (info: { videoTracks: MP4VideoTrack[] }) => void;
-  onSamples: (trackId: number, ref: any, samples: Sample[]) => void;
+  onSamples: (trackId: number, ref: unknown, samples: Sample[]) => void;
   onError: (error: string) => void;
   appendBuffer: (buffer: MP4ArrayBuffer) => number;
   start: () => void;
   flush: () => void;
-  setExtractionOptions: (trackId: number, user: any, options: { nbSamples: number }) => void;
-  getTrackById: (id: number) => any;
+  setExtractionOptions: (trackId: number, user: unknown, options: { nbSamples: number }) => void;
+  getTrackById: (id: number) => MP4TrackDetails | undefined;
 }
 
 interface CanvasSlot {
@@ -256,7 +252,7 @@ class ProxyGeneratorWebCodecs {
         if (codecString.startsWith('avc1')) {
           const avcC = trak?.mdia?.minf?.stbl?.stsd?.entries?.[0]?.avcC;
           if (avcC) {
-            const stream = new (MP4Box as any).DataStream(undefined, 0, (MP4Box as any).DataStream.BIG_ENDIAN);
+            const stream = new MP4Box.DataStream(undefined, 0, MP4Box.DataStream.BIG_ENDIAN);
             avcC.write(stream);
             const totalWritten = stream.position || stream.buffer.byteLength;
             if (totalWritten > 8) {
@@ -281,7 +277,7 @@ class ProxyGeneratorWebCodecs {
         checkComplete();
       };
 
-      mp4File.onSamples = (_trackId: number, _ref: any, samples: Sample[]) => {
+      mp4File.onSamples = (_trackId: number, _ref: unknown, samples: Sample[]) => {
         this.samples.push(...samples);
         if (this.samples.length >= expectedSamples) {
           samplesReady = true;
@@ -350,7 +346,7 @@ class ProxyGeneratorWebCodecs {
     });
   }
 
-  private getCodecString(codec: string, trak: any): string {
+  private getCodecString(codec: string, trak: MP4TrackDetails | undefined): string {
     if (codec.startsWith('avc1')) {
       const avcC = trak?.mdia?.minf?.stbl?.stsd?.entries?.[0]?.avcC;
       if (avcC) {

@@ -9,6 +9,14 @@ import { layerBuilder } from '../../../services/layerBuilder';
 
 const log = Logger.create('WebCodecsHelpers');
 
+type VideoFrameCallbackVideo = HTMLVideoElement & {
+  requestVideoFrameCallback: (callback: () => void) => number;
+};
+
+function hasVideoFrameCallback(video: HTMLVideoElement): video is VideoFrameCallbackVideo {
+  return 'requestVideoFrameCallback' in video;
+}
+
 async function waitForFullWebCodecsReady(
   webCodecsPlayer: WebCodecsPlayer,
   fileName: string,
@@ -126,10 +134,10 @@ export function warmUpVideoDecoder(video: HTMLVideoElement): Promise<void> {
 
     // Use requestVideoFrameCallback if available (modern browsers)
     // This efficiently waits for the decoder to produce a frame
-    if ('requestVideoFrameCallback' in video) {
+    if (hasVideoFrameCallback(video)) {
       const warmUp = () => {
         video.currentTime = 0.001; // Seek to first frame (not exactly 0 to trigger decode)
-        (video as any).requestVideoFrameCallback(() => {
+        video.requestVideoFrameCallback(() => {
           // Decoder has now processed at least one frame
           video.pause();
           resolve();

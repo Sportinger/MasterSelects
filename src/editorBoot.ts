@@ -4,7 +4,13 @@ import { AI_TOOLS, executeAITool, getQuickTimelineSummary } from './services/aiT
 // Expose AI tools API for browser console, Claude skills, and external agents
 // Only available in development mode to prevent production exposure
 if (import.meta.env.DEV) {
-  (window as any).aiTools = {
+  (window as Window & {
+    aiTools?: {
+      execute: (tool: string, args: Record<string, unknown>) => ReturnType<typeof executeAITool>;
+      list: () => typeof AI_TOOLS;
+      status: typeof getQuickTimelineSummary;
+    };
+  }).aiTools = {
     execute: (tool: string, args: Record<string, unknown>) => executeAITool(tool, args, 'console'),
     list: () => AI_TOOLS,
     status: getQuickTimelineSummary,

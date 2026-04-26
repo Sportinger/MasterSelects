@@ -7,6 +7,25 @@ import {
   AudioEffectRenderer,
 } from '../../src/engine/audio/AudioEffectRenderer';
 import { TimeStretchProcessor } from '../../src/engine/audio/TimeStretchProcessor';
+import type { Effect, Keyframe } from '../../src/types';
+
+type AudioEffectRendererTestAccess = AudioEffectRenderer & {
+  bezierInterpolate(prevKf: Keyframe, kf: Keyframe, t: number): number;
+  interpolateValue(keyframes: Keyframe[], time: number, defaultValue: number): number;
+  hasEffectKeyframes(keyframes: Keyframe[], effectId: string): boolean;
+  hasNonDefaultEQ(eqEffect: Effect): boolean;
+};
+
+type AudioMixerTestAccess = AudioMixer & {
+  getActiveTracks(tracks: AudioTrackData[]): AudioTrackData[];
+};
+
+const asEffectRendererTestAccess = (
+  renderer: AudioEffectRenderer,
+): AudioEffectRendererTestAccess => renderer as unknown as AudioEffectRendererTestAccess;
+
+const asMixerTestAccess = (mixer: AudioMixer): AudioMixerTestAccess =>
+  mixer as unknown as AudioMixerTestAccess;
 
 // ─── Helper: create a minimal AudioBuffer-like object for pure logic tests ─
 
@@ -223,7 +242,7 @@ describe('AudioEffectRenderer interpolation logic', () => {
 
   describe('hasNonDefaultEQ detection', () => {
     // Access via prototype to test pure logic
-    const hasNonDefaultEQ = (renderer as any).hasNonDefaultEQ.bind(renderer);
+    const hasNonDefaultEQ = asEffectRendererTestAccess(renderer).hasNonDefaultEQ.bind(renderer);
 
     it('returns false when all EQ bands are zero', () => {
       const effect = {
@@ -263,7 +282,7 @@ describe('AudioEffectRenderer interpolation logic', () => {
   });
 
   describe('hasEffectKeyframes detection', () => {
-    const hasEffectKeyframes = (renderer as any).hasEffectKeyframes.bind(renderer);
+    const hasEffectKeyframes = asEffectRendererTestAccess(renderer).hasEffectKeyframes.bind(renderer);
 
     it('returns true when keyframes exist for the given effect', () => {
       const keyframes = [
@@ -285,7 +304,7 @@ describe('AudioEffectRenderer interpolation logic', () => {
   });
 
   describe('interpolateValue (pure math)', () => {
-    const interpolateValue = (renderer as any).interpolateValue.bind(renderer);
+    const interpolateValue = asEffectRendererTestAccess(renderer).interpolateValue.bind(renderer);
 
     it('returns default value for empty keyframes', () => {
       expect(interpolateValue([], 1.0, 0.75)).toBe(0.75);
@@ -325,7 +344,7 @@ describe('AudioEffectRenderer interpolation logic', () => {
   });
 
   describe('bezierInterpolate (pure math)', () => {
-    const bezierInterpolate = (renderer as any).bezierInterpolate.bind(renderer);
+    const bezierInterpolate = asEffectRendererTestAccess(renderer).bezierInterpolate.bind(renderer);
 
     it('linear interpolation when no handles are provided', () => {
       const prevKf = { time: 0, value: 0 };
@@ -478,7 +497,7 @@ describe('Volume and gain calculations', () => {
 describe('AudioMixer mute/solo filtering', () => {
   // Access private getActiveTracks via casting for direct logic testing
   const mixer = new AudioMixer();
-  const getActiveTracks = (mixer as any).getActiveTracks.bind(mixer);
+  const getActiveTracks = asMixerTestAccess(mixer).getActiveTracks.bind(mixer);
 
   function makeTrack(overrides: Partial<AudioTrackData>): AudioTrackData {
     return {
@@ -556,7 +575,7 @@ describe('AudioMixer mute/solo filtering', () => {
   it('excludes tracks with null buffer', () => {
     const tracks = [
       makeTrack({ clipId: 'a' }),
-      { ...makeTrack({ clipId: 'b' }), buffer: null as any },
+      { ...makeTrack({ clipId: 'b' }), buffer: null as unknown as AudioBuffer },
     ];
     const active = getActiveTracks(tracks);
     expect(active).toHaveLength(1);
@@ -866,7 +885,7 @@ describe('EQ Configuration extended', () => {
 
 describe('AudioEffectRenderer hasNonDefaultEQ extended', () => {
   const renderer = new AudioEffectRenderer();
-  const hasNonDefaultEQ = (renderer as any).hasNonDefaultEQ.bind(renderer);
+  const hasNonDefaultEQ = asEffectRendererTestAccess(renderer).hasNonDefaultEQ.bind(renderer);
 
   it('returns true for negative EQ gain values', () => {
     const effect = {
@@ -955,7 +974,7 @@ describe('AudioEffectRenderer hasNonDefaultEQ extended', () => {
 
 describe('AudioEffectRenderer hasEffectKeyframes extended', () => {
   const renderer = new AudioEffectRenderer();
-  const hasEffectKeyframes = (renderer as any).hasEffectKeyframes.bind(renderer);
+  const hasEffectKeyframes = asEffectRendererTestAccess(renderer).hasEffectKeyframes.bind(renderer);
 
   it('detects keyframes across multiple params of the same effect', () => {
     const keyframes = [
@@ -989,7 +1008,7 @@ describe('AudioEffectRenderer hasEffectKeyframes extended', () => {
 
 describe('AudioEffectRenderer interpolateValue extended', () => {
   const renderer = new AudioEffectRenderer();
-  const interpolateValue = (renderer as any).interpolateValue.bind(renderer);
+  const interpolateValue = asEffectRendererTestAccess(renderer).interpolateValue.bind(renderer);
 
   it('returns exact value at first keyframe time', () => {
     const kfs = [
@@ -1051,7 +1070,7 @@ describe('AudioEffectRenderer interpolateValue extended', () => {
 
 describe('AudioEffectRenderer bezierInterpolate extended', () => {
   const renderer = new AudioEffectRenderer();
-  const bezierInterpolate = (renderer as any).bezierInterpolate.bind(renderer);
+  const bezierInterpolate = asEffectRendererTestAccess(renderer).bezierInterpolate.bind(renderer);
 
   it('handles only handleOut on previous keyframe', () => {
     const prevKf = { time: 0, value: 0, handleOut: { x: 0.33, y: 0.5 } };

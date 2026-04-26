@@ -23,6 +23,17 @@ import { Logger } from '../../../services/logger';
 
 const log = Logger.create('useExternalDrop');
 
+type FileWithPath = File & { path?: string };
+type FileSystemDataTransferItem = DataTransferItem & {
+  getAsFileSystemHandle: () => Promise<FileSystemFileHandle | FileSystemDirectoryHandle | null>;
+};
+
+function setDroppedFilePath(file: File, filePath?: string): void {
+  if (filePath) {
+    (file as FileWithPath).path = filePath;
+  }
+}
+
 interface UseExternalDropProps {
   timelineRef: React.RefObject<HTMLDivElement | null>;
   scrollX: number;
@@ -934,7 +945,7 @@ export function useExternalDrop({
         */
       }
     },
-    [tracks, externalDrag, getDesiredStartTime, buildTrackPreviewState, resolveImmediateDragPreview]
+    [tracks, getDesiredStartTime, buildTrackPreviewState, resolveImmediateDragPreview]
   );
 
   // Handle external file drag leave
@@ -994,7 +1005,7 @@ export function useExternalDrop({
         }));
       }
     },
-    [externalDrag, timelineRef, getDesiredStartTime, resolveImmediateDragPreview]
+    [timelineRef, getDesiredStartTime, resolveImmediateDragPreview]
   );
 
   // Handle drop on "new track" zone - creates new track and adds clip
@@ -1140,10 +1151,10 @@ export function useExternalDrop({
           // Try to get file handle (File System Access API)
           if ('getAsFileSystemHandle' in item) {
             try {
-              const handle = await (item as any).getAsFileSystemHandle();
+              const handle = await (item as FileSystemDataTransferItem).getAsFileSystemHandle();
               if (handle && handle.kind === 'file') {
                 const file = await handle.getFile();
-                if (filePath) (file as any).path = filePath;
+                setDroppedFilePath(file, filePath);
                 if (isMediaFile(file)) {
                   const typeOverride = await classifyMediaType(file);
                   if (typeOverride === 'unknown') {
@@ -1164,7 +1175,7 @@ export function useExternalDrop({
 
           // Fallback to regular file (no handle)
           const file = item.getAsFile();
-          if (file && filePath) (file as any).path = filePath;
+          if (file) setDroppedFilePath(file, filePath);
           if (file && isMediaFile(file)) {
             const typeOverride = await classifyMediaType(file);
             if (typeOverride === 'unknown') {
@@ -1303,13 +1314,11 @@ export function useExternalDrop({
           // Try to get file handle (File System Access API)
           if ('getAsFileSystemHandle' in item) {
             try {
-              const handle = await (item as any).getAsFileSystemHandle();
+              const handle = await (item as FileSystemDataTransferItem).getAsFileSystemHandle();
               if (handle && handle.kind === 'file') {
                 const file = await handle.getFile();
                 // Attach file path if we got it from URI list
-                if (filePath) {
-                  (file as any).path = filePath;
-                }
+                setDroppedFilePath(file, filePath);
                 log.debug('File from handle:', { name: file.name, type: file.type, size: file.size, path: filePath });
                 if (isMediaFile(file)) {
                   const typeOverride = await classifyMediaType(file);
@@ -1338,9 +1347,7 @@ export function useExternalDrop({
 
           // Fallback to regular file (no handle)
           const file = item.getAsFile();
-          if (file && filePath) {
-            (file as any).path = filePath;
-          }
+          if (file) setDroppedFilePath(file, filePath);
           log.debug('Fallback file:', { name: file?.name, type: file?.type, path: filePath });
           if (file && isMediaFile(file)) {
             const typeOverride = await classifyMediaType(file);

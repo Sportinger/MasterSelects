@@ -6,6 +6,10 @@ import { PROJECT_FOLDERS, PROJECT_FOLDER_PATHS, type ProjectFolderKey } from './
 
 const log = Logger.create('FileStorage');
 
+type IterableDirectoryHandle = FileSystemDirectoryHandle & {
+  values(): AsyncIterableIterator<FileSystemDirectoryHandle | FileSystemFileHandle>;
+};
+
 export class FileStorageService {
   /**
    * Navigate to a subfolder within a base directory, optionally creating it
@@ -132,7 +136,7 @@ export class FileStorageService {
       if (!folder) return [];
 
       const files: string[] = [];
-      for await (const entry of (folder as any).values()) {
+      for await (const entry of (folder as IterableDirectoryHandle).values()) {
         if (entry.kind === 'file') {
           files.push(entry.name);
         }

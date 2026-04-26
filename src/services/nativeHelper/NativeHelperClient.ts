@@ -10,6 +10,7 @@ import { APP_VERSION } from '../../version';
 import type {
   Command,
   Response,
+  OkResponse,
   FileMetadata,
   SystemInfo,
   EncodeOutput,
@@ -53,6 +54,32 @@ export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'er
 
 type ResponseCallback = (response: Response) => void;
 type FrameCallback = (frame: DecodedFrame) => void;
+type JsonObject = Record<string, unknown>;
+type NativeHelperJsonMessage = JsonObject & {
+  id?: string;
+  type?: string;
+  request_id?: string;
+  tool?: string;
+  args?: Record<string, unknown>;
+};
+type ProgressLikeResponse = Response & {
+  type?: string;
+  percent?: number;
+  speed?: string;
+  eta?: string;
+  step?: string;
+  message?: string;
+  current_frame?: number;
+  total_frames?: number;
+};
+
+function getErrorMessage(response: Response, fallback: string): string {
+  return response.ok === false ? response.error.message : fallback;
+}
+
+function okField<T>(response: Response, key: string): T | undefined {
+  return response.ok === true ? (response as OkResponse)[key] as T | undefined : undefined;
+}
 
 /**
  * Singleton client for communicating with the Native Helper
@@ -161,7 +188,7 @@ class NativeHelperClientImpl {
           if (this.config.token) {
             try {
               const authResp = await this.send({ cmd: 'auth', id: this.nextId(), token: this.config.token });
-              if (!(authResp as any)?.authenticated) {
+              if (okField<boolean>(authResp, 'authenticated') !== true) {
                 log.warn('Auth response did not confirm authentication');
               }
             } catch {
@@ -254,7 +281,7 @@ class NativeHelperClientImpl {
     const response = await this.send({ cmd: 'open', id, path });
 
     if (!response.ok) {
-      throw new Error((response as any).error?.message || 'Failed to open file');
+      throw new Error(getErrorMessage(response, 'Failed to open file'));
     }
 
     return response as unknown as FileMetadata;
@@ -300,7 +327,7 @@ class NativeHelperClientImpl {
       // Also register in pendingRequests (for JSON error responses)
       this.pendingRequests.set(id, (response) => {
         cleanup();
-        const err = (response as any).error;
+        const err = response.ok === false ? response.error : null;
         reject(new Error(err?.message || 'Decode failed'));
       });
 
@@ -348,7 +375,7 @@ class NativeHelperClientImpl {
     const response = await this.send({ cmd: 'start_encode', id, output, frame_count: frameCount });
 
     if (!response.ok) {
-      throw new Error((response as any).error?.message || 'Failed to start encode');
+      throw new Error(getErrorMessage(response, 'Failed to start encode'));
     }
 
     return id;
@@ -378,10 +405,10 @@ class NativeHelperClientImpl {
     const response = await this.send({ cmd: 'finish_encode', id: encodeId });
 
     if (!response.ok) {
-      throw new Error((response as any).error?.message || 'Failed to finish encode');
+      throw new Error(getErrorMessage(response, 'Failed to finish encode'));
     }
 
-    return (response as any).output_path;
+    return okField<string>(response, 'output_path') ?? '';
   }
 
   /**
@@ -407,7 +434,7 @@ class NativeHelperClientImpl {
     const response = await this.send({ cmd: 'info', id });
 
     if (!response.ok) {
-      throw new Error((response as any).error?.message || 'Failed to get info');
+      throw new Error(getErrorMessage(response, 'Failed to get info'));
     }
 
     return response as unknown as SystemInfo;
@@ -438,17 +465,17 @@ class NativeHelperClientImpl {
         resolve(null);
       }, 30000);
 
-      this.pendingRequests.set(id, (response: any) => {
+      this.pendingRequests.set(id, (response) => {
         clearTimeout(timeout);
         if (response.ok) {
           resolve({
-            title: response.title,
-            thumbnail: response.thumbnail,
-            duration: response.duration,
-            uploader: response.uploader,
-            platform: response.platform,
-            recommendations: response.recommendations,
-            allFormats: response.allFormats,
+            title: okField<string>(response, 'title') ?? '',
+            thumbnail: okField<string>(response, 'thumbnail') ?? '',
+            duration: okField<number>(response, 'duration') ?? 0,
+            uploader: okField<string>(response, 'uploader') ?? '',
+            platform: okField<string>(response, 'platform'),
+            recommendations: okField<VideoInfo['recommendations']>(response, 'recommendations') ?? [],
+            allFormats: okField<VideoInfo['allFormats']>(response, 'allFormats') ?? [],
           });
         } else {
           resolve(null);
@@ -493,7 +520,7 @@ class NativeHelperClientImpl {
       }
 
       // Register completion callback
-      this.pendingRequests.set(id, (response: any) => {
+      this.pendingRequests.set(id, (response: ProgressLikeResponse) => {
         // Check if this is a progress message
         if (response.type === 'progress' && response.percent !== undefined) {
           // Don't resolve yet - this is just progress
@@ -510,18 +537,18 @@ class NativeHelperClientImpl {
         if (response.ok) {
           resolve({
             success: true,
-            path: response.path,
+            path: okField<string>(response, 'path'),
           });
         } else {
           resolve({
             success: false,
-            error: response.error?.message || 'Download failed',
+            error: getErrorMessage(response, 'Download failed'),
           });
         }
       });
 
       // Send download command
-      const cmd: any = {
+      const cmd: Command = {
         cmd: 'download_youtube',
         id,
         url,
@@ -561,7 +588,7 @@ class NativeHelperClientImpl {
         this.progressCallbacks.set(id, onProgress);
       }
 
-      this.pendingRequests.set(id, (response: any) => {
+      this.pendingRequests.set(id, (response: ProgressLikeResponse) => {
         if (response.type === 'progress' && response.percent !== undefined) {
           const progressCb = this.progressCallbacks.get(id);
           if (progressCb) {
@@ -575,17 +602,17 @@ class NativeHelperClientImpl {
         if (response.ok) {
           resolve({
             success: true,
-            path: response.path,
+            path: okField<string>(response, 'path'),
           });
         } else {
           resolve({
             success: false,
-            error: response.error?.message || 'Download failed',
+            error: getErrorMessage(response, 'Download failed'),
           });
         }
       });
 
-      const cmd: any = {
+      const cmd: Command = {
         cmd: 'download',
         id,
         url,
@@ -610,15 +637,16 @@ class NativeHelperClientImpl {
    */
   async locateFile(filename: string, searchDirs?: string[]): Promise<string | null> {
     const id = this.nextId();
-    const cmd: any = { cmd: 'locate', id, filename };
+    const cmd: Command = { cmd: 'locate', id, filename };
     if (searchDirs?.length) {
       cmd.search_dirs = searchDirs;
     }
     const response = await this.send(cmd);
     if (!response.ok) return null;
-    const data = response as any;
-    if (data.found && data.path) {
-      return data.path as string;
+    const found = okField<boolean>(response, 'found');
+    const path = okField<string>(response, 'path');
+    if (found && path) {
+      return path;
     }
     return null;
   }
@@ -646,7 +674,7 @@ class NativeHelperClientImpl {
       // Fallback to info command
       try {
         const info = await this.getInfo();
-        return (info as any).project_root || null;
+        return info.project_root || null;
       } catch {
         return null;
       }
@@ -660,7 +688,7 @@ class NativeHelperClientImpl {
   async hasFsCommands(): Promise<boolean> {
     try {
       const info = await this.getInfo();
-      return (info as any).fs_commands === true;
+      return info.fs_commands === true;
     } catch {
       return false;
     }
@@ -755,7 +783,7 @@ class NativeHelperClientImpl {
     try {
       const response = await this.send({ cmd: 'list_dir', id, path });
       if (response.ok) {
-        return (response as any).entries || [];
+        return okField<DirEntry[]>(response, 'entries') ?? [];
       }
     } catch (e) {
       log.error('listDir failed', e);
@@ -786,8 +814,8 @@ class NativeHelperClientImpl {
       const response = await this.send({ cmd: 'exists', id, path });
       if (response.ok) {
         return {
-          exists: (response as any).exists ?? false,
-          kind: (response as any).kind ?? 'none',
+          exists: okField<boolean>(response, 'exists') ?? false,
+          kind: okField<'file' | 'directory' | 'none'>(response, 'kind') ?? 'none',
         };
       }
     } catch (e) {
@@ -817,12 +845,13 @@ class NativeHelperClientImpl {
   async pickFolder(title?: string, defaultPath?: string): Promise<string | null> {
     const id = this.nextId();
     try {
-      const cmd: any = { cmd: 'pick_folder', id };
+      const cmd = { cmd: 'pick_folder', id, title, default_path: defaultPath } satisfies JsonObject;
       if (title) cmd.title = title;
       if (defaultPath) cmd.default_path = defaultPath;
-      const response = await this.send(cmd);
-      if (response.ok && (response as any).path) {
-        return (response as any).path as string;
+      const response = await this.send(cmd as unknown as Command);
+      const path = okField<string>(response, 'path');
+      if (response.ok && path) {
+        return path;
       }
       return null; // cancelled
     } catch (e) {
@@ -867,12 +896,13 @@ class NativeHelperClientImpl {
       }, 120000); // 120 seconds for large files via WebSocket
 
       // For file requests, we expect base64 data in the response
-      this.pendingRequests.set(id, async (response: any) => {
+      this.pendingRequests.set(id, async (response) => {
         clearTimeout(timeout);
-        if (response.ok && response.data) {
+        const data = okField<string>(response, 'data');
+        if (response.ok && data) {
           // Decode base64 to ArrayBuffer using fetch (much faster than manual loop)
           try {
-            const dataUrl = `data:application/octet-stream;base64,${response.data}`;
+            const dataUrl = `data:application/octet-stream;base64,${data}`;
             const fetchResponse = await fetch(dataUrl);
             const buffer = await fetchResponse.arrayBuffer();
             resolve(buffer);
@@ -917,7 +947,7 @@ class NativeHelperClientImpl {
         clearTimeout(timeout);
         this.pendingRequests.delete(id);
         if (!response.ok) {
-          reject(new Error((response as any).error?.message || 'Failed to get MatAnyone2 status'));
+          reject(new Error(getErrorMessage(response, 'Failed to get MatAnyone2 status')));
         } else {
           resolve(response as unknown as MatAnyoneStatusResponse);
         }
@@ -946,10 +976,10 @@ class NativeHelperClientImpl {
         reject(new Error('MatAnyone2 setup timeout'));
       }, 600000); // 10 minutes
 
-      this.pendingRequests.set(id, (response: any) => {
+      this.pendingRequests.set(id, (response: ProgressLikeResponse) => {
         if (response.type === 'progress') {
           if (onProgress) {
-            onProgress(response.step, response.percent, response.message);
+            onProgress(response.step ?? '', response.percent ?? 0, response.message ?? '');
           }
           return;
         }
@@ -960,12 +990,12 @@ class NativeHelperClientImpl {
         } else {
           resolve({
             success: false,
-            error: response.error?.message || 'Setup failed',
+            error: getErrorMessage(response, 'Setup failed'),
           });
         }
       });
 
-      const cmd: any = { cmd: 'mat_anyone_setup', id };
+      const cmd: Command = { cmd: 'mat_anyone_setup', id };
       if (pythonPath) {
         cmd.python_path = pythonPath;
       }
@@ -992,10 +1022,10 @@ class NativeHelperClientImpl {
         reject(new Error('Model download timeout'));
       }, 600000); // 10 minutes
 
-      this.pendingRequests.set(id, (response: any) => {
+      this.pendingRequests.set(id, (response: ProgressLikeResponse) => {
         if (response.type === 'progress') {
           if (onProgress) {
-            onProgress(response.percent, response.speed, response.eta);
+            onProgress(response.percent ?? 0, response.speed, response.eta);
           }
           return;
         }
@@ -1006,7 +1036,7 @@ class NativeHelperClientImpl {
         } else {
           resolve({
             success: false,
-            error: response.error?.message || 'Model download failed',
+            error: getErrorMessage(response, 'Model download failed'),
           });
         }
       });
@@ -1030,7 +1060,7 @@ class NativeHelperClientImpl {
       return { success: false };
     }
 
-    return { success: true, port: (response as any).port };
+    return { success: true, port: okField<number>(response, 'port') };
   }
 
   /**
@@ -1060,10 +1090,10 @@ class NativeHelperClientImpl {
         reject(new Error('Matting timeout'));
       }, 600000); // 10 minutes
 
-      this.pendingRequests.set(id, (response: any) => {
+      this.pendingRequests.set(id, (response: ProgressLikeResponse) => {
         if (response.type === 'progress') {
           if (onProgress) {
-            onProgress(response.current_frame, response.total_frames, response.percent);
+            onProgress(response.current_frame ?? 0, response.total_frames ?? 0, response.percent ?? 0);
           }
           return;
         }
@@ -1071,16 +1101,16 @@ class NativeHelperClientImpl {
         clearTimeout(timeout);
         if (response.ok) {
           resolve({
-            foreground_path: response.foreground_path,
-            alpha_path: response.alpha_path,
-            job_id: response.job_id,
+            foreground_path: okField<string>(response, 'foreground_path') ?? '',
+            alpha_path: okField<string>(response, 'alpha_path') ?? '',
+            job_id: okField<string>(response, 'job_id') ?? '',
           });
         } else {
-          reject(new Error(response.error?.message || 'Matting failed'));
+          reject(new Error(getErrorMessage(response, 'Matting failed')));
         }
       });
 
-      const cmd: any = {
+      const cmd: Command = {
         cmd: 'mat_anyone_matte',
         id,
         video_path: videoPath,
@@ -1175,19 +1205,28 @@ class NativeHelperClientImpl {
     if (typeof data === 'string') {
       // JSON response
       try {
-        const response: any = JSON.parse(data);
-        if (response?.type === 'ai_tool_request') {
-          await this.handleAiToolRequest(response);
+        const message = JSON.parse(data) as NativeHelperJsonMessage;
+        if (message.type === 'ai_tool_request') {
+          await this.handleAiToolRequest({
+            request_id: message.request_id,
+            tool: message.tool,
+            args: message.args,
+          });
           return;
         }
 
-        const isProgress = response.type === 'progress';
-        const callback = this.pendingRequests.get(response.id);
+        if (!message.id) {
+          return;
+        }
+
+        const response = message as Response;
+        const isProgress = message.type === 'progress';
+        const callback = this.pendingRequests.get(message.id);
 
         if (callback) {
           // Check if this is a progress message - don't delete callback yet
           if (!isProgress) {
-            this.pendingRequests.delete(response.id);
+            this.pendingRequests.delete(message.id);
           }
           callback(response);
         }
@@ -1290,7 +1329,7 @@ class NativeHelperClientImpl {
     }
 
     return new Promise((resolve, reject) => {
-      const id = (cmd as any).id;
+      const id = 'id' in cmd ? cmd.id : '';
 
       // Set timeout
       const timeout = setTimeout(() => {
@@ -1300,7 +1339,7 @@ class NativeHelperClientImpl {
 
       // Register callback
       this.pendingRequests.set(id, (response) => {
-        if ((response as any)?.type === 'progress') {
+        if ((response as ProgressLikeResponse).type === 'progress') {
           return;
         }
         clearTimeout(timeout);

@@ -305,9 +305,23 @@ class WcPipelineMonitor {
 // Singleton
 export const wcPipelineMonitor = new WcPipelineMonitor();
 
+type WcPipelineConsoleApi = {
+  events: (n?: number) => ReturnType<WcPipelineMonitor['events']>;
+  stalls: () => ReturnType<WcPipelineMonitor['stalls']>;
+  stallContext: () => ReturnType<WcPipelineMonitor['stallContext']>;
+  seeks: () => ReturnType<WcPipelineMonitor['seeks']>;
+  stats: () => ReturnType<WcPipelineMonitor['stats']>;
+  reset: () => void;
+  timeline: (ms?: number) => ReturnType<WcPipelineMonitor['timeline']>;
+};
+
+type WcPipelineWindow = Window & {
+  __WC_PIPELINE__?: WcPipelineConsoleApi;
+};
+
 // Expose on window for console access
 if (typeof window !== 'undefined') {
-  (window as any).__WC_PIPELINE__ = {
+  (window as WcPipelineWindow).__WC_PIPELINE__ = {
     events: (n?: number) => wcPipelineMonitor.events(n),
     stalls: () => wcPipelineMonitor.stalls(),
     stallContext: () => wcPipelineMonitor.stallContext(),

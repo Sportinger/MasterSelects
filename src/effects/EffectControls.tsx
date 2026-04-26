@@ -160,42 +160,4 @@ function EffectParamControl({
   }
 }
 
-/**
- * Get available effects for the "Add Effect" dropdown
- * Groups by category
- */
-export function getAvailableEffects(): { category: string; effects: { id: string; name: string }[] }[] {
-  const categories: Record<string, { id: string; name: string }[]> = {};
-
-  for (const effect of EFFECT_REGISTRY.values()) {
-    if (!categories[effect.category]) {
-      categories[effect.category] = [];
-    }
-    categories[effect.category].push({
-      id: effect.id,
-      name: effect.name,
-    });
-  }
-
-  // Sort categories and return
-  const categoryOrder = ['color', 'blur', 'distort', 'stylize', 'generate', 'keying', 'time', 'transition'];
-  const categoryNames: Record<string, string> = {
-    color: 'Color Correction',
-    blur: 'Blur & Sharpen',
-    distort: 'Distort',
-    stylize: 'Stylize',
-    generate: 'Generate',
-    keying: 'Keying',
-    time: 'Time',
-    transition: 'Transition',
-  };
-
-  return categoryOrder
-    .filter(cat => categories[cat]?.length > 0)
-    .map(cat => ({
-      category: categoryNames[cat] || cat,
-      effects: categories[cat],
-    }));
-}
-
 export default EffectControls;

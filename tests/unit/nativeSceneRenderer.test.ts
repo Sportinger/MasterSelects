@@ -9,6 +9,17 @@ import type {
   SceneText3DLayer,
 } from '../../src/engine/scene/types';
 
+type RenderPassEntry = {
+  descriptor: GPURenderPassDescriptor & { label?: string };
+  pass: ReturnType<typeof makeRenderPass>;
+};
+type NativeSceneRendererTestAccess = NativeSceneRenderer & {
+  sceneView: GPUTextureView;
+  modelRuntimeCache: {
+    runtimes: Map<string, unknown>;
+  };
+};
+
 const mockGaussianRenderer = {
   isInitialized: true,
   initialize: vi.fn(),
@@ -64,9 +75,9 @@ function makeRenderPass() {
 }
 
 function createFakeDevice() {
-  const renderPasses: Array<{ descriptor: any; pass: ReturnType<typeof makeRenderPass> }> = [];
+  const renderPasses: RenderPassEntry[] = [];
   const commandEncoder = {
-    beginRenderPass: vi.fn((descriptor: any) => {
+    beginRenderPass: vi.fn((descriptor: GPURenderPassDescriptor & { label?: string }) => {
       const pass = makeRenderPass();
       renderPasses.push({ descriptor, pass });
       return pass;
@@ -75,7 +86,7 @@ function createFakeDevice() {
   };
 
   const device = {
-    createTexture: vi.fn((descriptor: any) => {
+    createTexture: vi.fn((descriptor: GPUTextureDescriptor) => {
       const width = descriptor.size.width ?? descriptor.size[0] ?? 1;
       const height = descriptor.size.height ?? descriptor.size[1] ?? 1;
       return {
@@ -108,7 +119,7 @@ function createFakeDevice() {
   };
 
   return {
-    device: device as any,
+    device: device as unknown as GPUDevice,
     commandEncoder,
     renderPasses,
   };
@@ -167,7 +178,7 @@ function makeSplatLayer(layerId: string, z: number, opacity: number): SceneSplat
         maxSplats: 0,
         sortFrequency: 1,
       },
-    } as any,
+    } as unknown as ScenePlaneLayer,
   };
 }
 
@@ -193,8 +204,16 @@ function makePlaneLayer(layerId: string, opacity: number): ScenePlaneLayer {
       readyState: 4,
       videoWidth: 1920,
       videoHeight: 1080,
-    } as any,
+    } as unknown as ScenePlaneLayer,
   };
+}
+
+function readUniformWrite(call: unknown[]): Float32Array {
+  return new Float32Array(
+    call[2] as ArrayBuffer,
+    call[3] as number,
+    (call[4] as number) / 4,
+  );
 }
 
 function makePrimitiveLayer(layerId: string, meshType: ScenePrimitiveLayer['meshType'], opacity = 1): ScenePrimitiveLayer {
@@ -313,12 +332,12 @@ describe('NativeSceneRenderer shared depth contract', () => {
       false,
     );
 
-    expect(result).toEqual((renderer as any).sceneView);
+    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
     expect(mockGaussianRenderer.beginFrame).toHaveBeenCalledTimes(1);
     expect(mockGaussianRenderer.renderToTexture).toHaveBeenCalledTimes(4);
 
     const depthTextureCall = device.createTexture.mock.calls.find(
-      ([descriptor]: any[]) => descriptor.format === 'depth24plus',
+      ([descriptor]: [GPUTextureDescriptor]) => descriptor.format === 'depth24plus',
     );
     expect(depthTextureCall).toBeTruthy();
 
@@ -345,7 +364,7 @@ describe('NativeSceneRenderer shared depth contract', () => {
       secondColorOptions,
       secondDepthMaskOptions,
     ]) {
-      expect(options.outputView).toEqual((renderer as any).sceneView);
+      expect(options.outputView).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
       expect(options.depthLoadOp).toBe('load');
       expect(options.depthStoreOp).toBe('store');
     }
@@ -385,18 +404,21 @@ describe('NativeSceneRenderer shared depth contract', () => {
       false,
     );
 
-    expect(result).toEqual((renderer as any).sceneView);
+    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
     expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledTimes(1);
     expect(mockGaussianRenderer.renderToTexture).toHaveBeenCalledTimes(2);
     expect(renderPasses.map((entry) => entry.descriptor.label)).toEqual([
       'native-scene-clear-pass',
       'native-scene-plane-opaque-pass',
     ]);
+    const planeUniform = readUniformWrite(device.queue.writeBuffer.mock.calls[0]);
+    expect(planeUniform[16]).toBeCloseTo(1);
+    expect(planeUniform[17]).toBe(1);
 
     const colorOptions = mockGaussianRenderer.renderToTexture.mock.calls[0]?.[4];
     const depthMaskOptions = mockGaussianRenderer.renderToTexture.mock.calls[1]?.[4];
     expect(colorOptions.depthView).toBeTruthy();
-    expect(colorOptions.outputView).toEqual((renderer as any).sceneView);
+    expect(colorOptions.outputView).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
     expect(colorOptions.depthLoadOp).toBe('load');
     expect(colorOptions.depthStoreOp).toBe('store');
     expect(colorOptions.depthWrite).toBe(false);
@@ -404,6 +426,94 @@ describe('NativeSceneRenderer shared depth contract', () => {
     expect(depthMaskOptions.depthWrite).toBe(true);
     expect(depthMaskOptions.colorWrite).toBe(false);
     expect(depthMaskOptions.depthAlphaCutoff).toBeGreaterThan(0.05);
+  });
+
+  it('keeps source alpha for non-opaque video planes', async () => {
+    const renderer = await createInitializedRenderer();
+
+    const { device, renderPasses } = createFakeDevice();
+    const result = renderer.renderScene(
+      device,
+      [{
+        ...makePlaneLayer('transparent-video-plane', 0.6),
+        alphaMode: 'straight',
+        castsDepth: false,
+      }],
+      makeCamera(),
+      [],
+      false,
+    );
+
+    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
+    expect(renderPasses.map((entry) => entry.descriptor.label)).toEqual([
+      'native-scene-clear-pass',
+      'native-scene-plane-transparent-pass',
+    ]);
+    const planeUniform = readUniformWrite(device.queue.writeBuffer.mock.calls[0]);
+    expect(planeUniform[16]).toBeCloseTo(0.6);
+    expect(planeUniform[17]).toBe(0);
+  });
+
+  it('reuses the cached video plane texture while a scrubbed video frame is not ready', async () => {
+    const renderer = await createInitializedRenderer();
+
+    const { device } = createFakeDevice();
+    const readyPlane = makePlaneLayer('video-plane', 1);
+    const initialResult = renderer.renderScene(
+      device,
+      [readyPlane],
+      makeCamera(),
+      [],
+      false,
+    );
+
+    expect(initialResult).toBeTruthy();
+    expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledTimes(1);
+
+    const notReadyResult = renderer.renderScene(
+      device,
+      [{
+        ...readyPlane,
+        videoElement: {
+          ...(readyPlane.videoElement as object),
+          readyState: 1,
+        } as unknown as HTMLVideoElement,
+      }],
+      makeCamera(),
+      [],
+      false,
+    );
+
+    expect(notReadyResult).toBeTruthy();
+    expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the cached video plane texture after a transient upload failure', async () => {
+    const renderer = await createInitializedRenderer();
+
+    const { device } = createFakeDevice();
+    const plane = makePlaneLayer('video-plane', 1);
+    renderer.renderScene(
+      device,
+      [plane],
+      makeCamera(),
+      [],
+      false,
+    );
+    device.queue.copyExternalImageToTexture.mockImplementationOnce(() => {
+      throw new Error('transient upload failure');
+    });
+
+    const result = renderer.renderScene(
+      device,
+      [plane],
+      makeCamera(),
+      [],
+      false,
+    );
+
+    expect(result).toBeTruthy();
+    expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledTimes(2);
   });
 
   it('forwards shared-scene effectors only to native splat layers', async () => {
@@ -532,7 +642,7 @@ describe('NativeSceneRenderer shared depth contract', () => {
       false,
     );
 
-    expect(result).toEqual((renderer as any).sceneView);
+    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
     expect(mockGaussianRenderer.renderToTexture).toHaveBeenCalledTimes(2);
     expect(renderPasses.map((entry) => entry.descriptor.label)).toEqual([
       'native-scene-clear-pass',
@@ -560,7 +670,7 @@ describe('NativeSceneRenderer shared depth contract', () => {
       false,
     );
 
-    expect(result).toEqual((renderer as any).sceneView);
+    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
     expect(mockGaussianRenderer.renderToTexture).toHaveBeenCalledTimes(2);
     expect(renderPasses.map((entry) => entry.descriptor.label)).toEqual([
       'native-scene-clear-pass',
@@ -576,7 +686,7 @@ describe('NativeSceneRenderer shared depth contract', () => {
 
   it('renders imported models inside the shared native scene before soft splat depth masking', async () => {
     const renderer = await createInitializedRenderer();
-    (renderer as any).modelRuntimeCache.runtimes.set('blob:model-native', {
+    (renderer as NativeSceneRendererTestAccess).modelRuntimeCache.runtimes.set('blob:model-native', {
       url: 'blob:model-native',
       fileName: 'hero.glb',
       format: 'glb',
@@ -603,7 +713,7 @@ describe('NativeSceneRenderer shared depth contract', () => {
       false,
     );
 
-    expect(result).toEqual((renderer as any).sceneView);
+    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
     expect(mockGaussianRenderer.renderToTexture).toHaveBeenCalledTimes(2);
     expect(renderPasses.map((entry) => entry.descriptor.label)).toEqual([
       'native-scene-clear-pass',

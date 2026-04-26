@@ -124,7 +124,7 @@ async function dbGet<T>(id: string): Promise<T | null> {
 /**
  * Set a value in IndexedDB
  */
-async function dbSet(id: string, value: any): Promise<void> {
+async function dbSet(id: string, value: unknown): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE_NAME, 'readwrite');

@@ -38,7 +38,7 @@ async function loadModel(encoderBuffer: ArrayBuffer, decoderBuffer: ArrayBuffer)
 
     // Try WebGPU first
     try {
-      if (typeof (self as any).navigator?.gpu !== 'undefined') {
+      if (typeof self.navigator.gpu !== 'undefined') {
         executionProviders.push('webgpu');
       }
     } catch {
@@ -385,6 +385,6 @@ self.onmessage = async (event: MessageEvent<SAM2WorkerRequest>) => {
       break;
 
     default:
-      post({ type: 'error', error: `Unknown message type: ${(msg as any).type}` });
+      post({ type: 'error', error: `Unknown message type: ${(msg as { type?: unknown }).type}` });
   }
 };

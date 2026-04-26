@@ -13,9 +13,26 @@ import {
 import { mediaRuntimeRegistry } from '../../src/services/mediaRuntime/registry';
 import { scrubSettleState } from '../../src/services/scrubSettleState';
 import { lottieRuntimeManager } from '../../src/services/vectorAnimation/LottieRuntimeManager';
+import type { RuntimeFrameProvider } from '../../src/services/mediaRuntime/types';
+import type { TimelineClip } from '../../src/types';
 
 const initialTimelineState = useTimelineStore.getState();
 const initialMediaState = useMediaStore.getState();
+type WebCodecsPlayerSlot = NonNullable<TimelineClip['source']>['webCodecsPlayer'];
+type LayerBuilderServiceTestAccess = {
+  buildLayersFromStore: LayerBuilderService['buildLayersFromStore'];
+  getPausedVisualProvider: (...args: unknown[]) => unknown;
+  hasRenderableVideoSource: (...args: unknown[]) => boolean;
+};
+type NestedCompositionSource = {
+  nestedComposition?: {
+    layers?: unknown[];
+  };
+};
+
+const createService = (): LayerBuilderServiceTestAccess => new LayerBuilderService() as unknown as LayerBuilderServiceTestAccess;
+const asRuntimeProvider = (provider: unknown): RuntimeFrameProvider => provider as RuntimeFrameProvider;
+const asWebCodecsPlayer = (player: unknown): WebCodecsPlayerSlot => player as WebCodecsPlayerSlot;
 
 describe('LayerBuilderService paused visual provider selection', () => {
   beforeEach(() => {
@@ -28,7 +45,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
   });
 
   it('treats a full WebCodecs source as renderable even before the video element is attached', () => {
-    const service = new LayerBuilderService() as any;
+    const service = createService();
 
     expect(
       service.hasRenderableVideoSource({
@@ -40,7 +57,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
   });
 
   it('does not treat a source without video element or full WebCodecs player as renderable video', () => {
-    const service = new LayerBuilderService() as any;
+    const service = createService();
 
     expect(
       service.hasRenderableVideoSource({
@@ -52,7 +69,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
   });
 
   it('keeps the clip player when the scrub runtime is near the target but has no frame', () => {
-    const service = new LayerBuilderService() as any;
+    const service = createService();
     const clipPlayer = {
       isFullMode: () => true,
       hasFrame: () => true,
@@ -68,8 +85,8 @@ describe('LayerBuilderService paused visual provider selection', () => {
     };
 
     const provider = service.getPausedVisualProvider(
-      { webCodecsPlayer: clipPlayer } as any,
-      runtimeProvider as any,
+      { webCodecsPlayer: asWebCodecsPlayer(clipPlayer) },
+      asRuntimeProvider(runtimeProvider),
       1.01
     );
 
@@ -77,7 +94,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
   });
 
   it('uses the scrub runtime once it has a frame near the target', () => {
-    const service = new LayerBuilderService() as any;
+    const service = createService();
     const clipPlayer = {
       isFullMode: () => true,
       hasFrame: () => true,
@@ -93,8 +110,8 @@ describe('LayerBuilderService paused visual provider selection', () => {
     };
 
     const provider = service.getPausedVisualProvider(
-      { webCodecsPlayer: clipPlayer } as any,
-      runtimeProvider as any,
+      { webCodecsPlayer: asWebCodecsPlayer(clipPlayer) },
+      asRuntimeProvider(runtimeProvider),
       1.01
     );
 
@@ -102,7 +119,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
   });
 
   it('prefers the provider whose frame is closer to the paused target', () => {
-    const service = new LayerBuilderService() as any;
+    const service = createService();
     const clipPlayer = {
       isFullMode: () => true,
       hasFrame: () => true,
@@ -118,8 +135,8 @@ describe('LayerBuilderService paused visual provider selection', () => {
     };
 
     const provider = service.getPausedVisualProvider(
-      { webCodecsPlayer: clipPlayer } as any,
-      runtimeProvider as any,
+      { webCodecsPlayer: asWebCodecsPlayer(clipPlayer) },
+      asRuntimeProvider(runtimeProvider),
       8.68
     );
 
@@ -148,7 +165,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       files: [],
       compositions: [],
       proxyEnabled: false,
-    } as any);
+    });
 
     useTimelineStore.setState({
       tracks: [
@@ -184,7 +201,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       isPlaying: false,
       isDraggingPlayhead: false,
       playbackSpeed: 1,
-    } as any);
+    });
 
     const layers = service.buildLayersFromStore();
 
@@ -204,7 +221,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       files: [],
       compositions: [],
       proxyEnabled: false,
-    } as any);
+    });
 
     useTimelineStore.setState({
       tracks: [
@@ -241,7 +258,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       isPlaying: false,
       isDraggingPlayhead: false,
       playbackSpeed: 1,
-    } as any);
+    });
 
     const layers = service.buildLayersFromStore();
 
@@ -279,7 +296,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       }],
       compositions: [],
       proxyEnabled: false,
-    } as any);
+    });
 
     useTimelineStore.setState({
       tracks: [
@@ -327,7 +344,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       isPlaying: false,
       isDraggingPlayhead: false,
       playbackSpeed: 1,
-    } as any);
+    });
 
     const layers = service.buildLayersFromStore();
 
@@ -367,7 +384,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       }],
       compositions: [],
       proxyEnabled: false,
-    } as any);
+    });
 
     useTimelineStore.setState({
       tracks: [
@@ -439,7 +456,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       isPlaying: false,
       isDraggingPlayhead: false,
       playbackSpeed: 1,
-    } as any);
+    });
 
     const layers = service.buildLayersFromStore();
 
@@ -476,7 +493,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       files: [],
       compositions: [],
       proxyEnabled: false,
-    } as any);
+    });
 
     useTimelineStore.setState({
       tracks: [
@@ -515,7 +532,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       isPlaying: false,
       isDraggingPlayhead: true,
       playbackSpeed: 1,
-    } as any);
+    });
 
     const layers = service.buildLayersFromStore();
 
@@ -547,7 +564,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       files: [],
       compositions: [],
       proxyEnabled: false,
-    } as any);
+    });
 
     useTimelineStore.setState({
       tracks: [
@@ -585,7 +602,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       isPlaying: false,
       isDraggingPlayhead: false,
       playbackSpeed: 1,
-    } as any);
+    });
 
     const layers = service.buildLayersFromStore();
 
@@ -627,14 +644,14 @@ describe('LayerBuilderService paused visual provider selection', () => {
         type: 'video',
         naturalDuration: 30,
         mediaFileId: 'media-clip-1',
-        webCodecsPlayer: clipPlayer as any,
+        webCodecsPlayer: asWebCodecsPlayer(clipPlayer),
       },
       file,
       mediaFileId: 'media-clip-1',
     });
     const previewRuntimeSource = getScrubRuntimeSource(source, 'track-v1', true);
 
-    setRuntimeFrameProvider(previewRuntimeSource, runtimeProvider as any);
+    setRuntimeFrameProvider(previewRuntimeSource, asRuntimeProvider(runtimeProvider));
     scrubSettleState.begin('clip-1', 8.7, 500, 'scrub-stop');
 
     useMediaStore.setState({
@@ -644,7 +661,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       files: [{ id: 'media-clip-1', file, name: 'clip.mp4', duration: 30 }],
       compositions: [],
       proxyEnabled: false,
-    } as any);
+    });
 
     useTimelineStore.setState({
       tracks: [
@@ -677,7 +694,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       isPlaying: false,
       isDraggingPlayhead: false,
       playbackSpeed: 1,
-    } as any);
+    });
 
     const layers = service.buildLayersFromStore();
 
@@ -718,14 +735,14 @@ describe('LayerBuilderService paused visual provider selection', () => {
         type: 'video',
         naturalDuration: 10,
         mediaFileId: 'media-clip-1',
-        webCodecsPlayer: clipPlayer as any,
+        webCodecsPlayer: asWebCodecsPlayer(clipPlayer),
       },
       file,
       mediaFileId: 'media-clip-1',
     });
     const previewRuntimeSource = getPreviewRuntimeSource(source, 'track-v1', true);
 
-    setRuntimeFrameProvider(previewRuntimeSource, runtimeProvider as any);
+    setRuntimeFrameProvider(previewRuntimeSource, asRuntimeProvider(runtimeProvider));
 
     useMediaStore.setState({
       activeCompositionId: null,
@@ -734,7 +751,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       files: [{ id: 'media-clip-1', file, name: 'clip.mp4', duration: 10 }],
       compositions: [],
       proxyEnabled: false,
-    } as any);
+    });
 
     useTimelineStore.setState({
       tracks: [
@@ -767,7 +784,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       isPlaying: true,
       isDraggingPlayhead: false,
       playbackSpeed: 1,
-    } as any);
+    });
 
     const layers = service.buildLayersFromStore();
 
@@ -821,7 +838,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
         type: 'video',
         naturalDuration: 40,
         mediaFileId: 'media-clip-1',
-        webCodecsPlayer: clipPlayer as any,
+        webCodecsPlayer: asWebCodecsPlayer(clipPlayer),
       },
       file,
       mediaFileId: 'media-clip-1',
@@ -829,8 +846,8 @@ describe('LayerBuilderService paused visual provider selection', () => {
     const previewRuntimeSource = getPreviewRuntimeSource(source, 'track-v1', true);
     const scrubRuntimeSource = getScrubRuntimeSource(source, 'track-v1', true);
 
-    setRuntimeFrameProvider(previewRuntimeSource, playbackRuntimeProvider as any);
-    setRuntimeFrameProvider(scrubRuntimeSource, scrubRuntimeProvider as any);
+    setRuntimeFrameProvider(previewRuntimeSource, asRuntimeProvider(playbackRuntimeProvider));
+    setRuntimeFrameProvider(scrubRuntimeSource, asRuntimeProvider(scrubRuntimeProvider));
     scrubSettleState.begin('clip-1', 30, 500, 'scrub-stop');
 
     useMediaStore.setState({
@@ -840,7 +857,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       files: [{ id: 'media-clip-1', file, name: 'clip.mp4', duration: 40 }],
       compositions: [],
       proxyEnabled: false,
-    } as any);
+    });
 
     useTimelineStore.setState({
       tracks: [
@@ -873,7 +890,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       isPlaying: true,
       isDraggingPlayhead: false,
       playbackSpeed: 1,
-    } as any);
+    });
 
     const layers = service.buildLayersFromStore();
 
@@ -915,14 +932,14 @@ describe('LayerBuilderService paused visual provider selection', () => {
         type: 'video',
         naturalDuration: 10,
         mediaFileId: 'media-nested-1',
-        webCodecsPlayer: clipPlayer as any,
+        webCodecsPlayer: asWebCodecsPlayer(clipPlayer),
       },
       file,
       mediaFileId: 'media-nested-1',
     });
     const previewRuntimeSource = getPreviewRuntimeSource(nestedSource, 'nested-track-v1', true);
 
-    setRuntimeFrameProvider(previewRuntimeSource, runtimeProvider as any);
+    setRuntimeFrameProvider(previewRuntimeSource, asRuntimeProvider(runtimeProvider));
 
     useMediaStore.setState({
       activeCompositionId: null,
@@ -931,7 +948,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       files: [{ id: 'media-nested-1', file, name: 'nested.mp4', duration: 10 }],
       compositions: [{ id: 'comp-1', width: 1920, height: 1080 }],
       proxyEnabled: false,
-    } as any);
+    });
 
     useTimelineStore.setState({
       tracks: [
@@ -990,10 +1007,10 @@ describe('LayerBuilderService paused visual provider selection', () => {
       isPlaying: true,
       isDraggingPlayhead: false,
       playbackSpeed: 1,
-    } as any);
+    });
 
     const layers = service.buildLayersFromStore();
-    const nestedLayers = (layers[0]?.source as any)?.nestedComposition?.layers;
+    const nestedLayers = (layers[0]?.source as NestedCompositionSource | undefined)?.nestedComposition?.layers;
 
     expect(layers).toHaveLength(1);
     expect(nestedLayers).toHaveLength(1);
@@ -1037,7 +1054,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       files: [],
       compositions: [],
       proxyEnabled: false,
-    } as any);
+    });
 
     useTimelineStore.setState({
       tracks: [
@@ -1090,7 +1107,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       isPlaying: false,
       isDraggingPlayhead: false,
       playbackSpeed: 1,
-    } as any);
+    });
 
     const firstLayers = service.buildLayersFromStore();
     expect(firstLayers).toHaveLength(1);
@@ -1099,7 +1116,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
 
     useTimelineStore.setState({
       playheadPosition: 11,
-    } as any);
+    });
 
     const secondLayers = service.buildLayersFromStore();
     expect(secondLayers).toHaveLength(1);
@@ -1125,7 +1142,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
       ],
       compositions: [{ id: 'comp-1', width: 1920, height: 1080 }],
       proxyEnabled: false,
-    } as any);
+    });
 
     useTimelineStore.setState({
       tracks: [
@@ -1195,10 +1212,10 @@ describe('LayerBuilderService paused visual provider selection', () => {
       isPlaying: false,
       isDraggingPlayhead: false,
       playbackSpeed: 1,
-    } as any);
+    });
 
     const layers = service.buildLayersFromStore();
-    const nestedLayers = (layers[0]?.source as any)?.nestedComposition?.layers;
+    const nestedLayers = (layers[0]?.source as NestedCompositionSource | undefined)?.nestedComposition?.layers;
 
     expect(nestedLayers).toHaveLength(1);
     expect(nestedLayers[0]).toMatchObject({

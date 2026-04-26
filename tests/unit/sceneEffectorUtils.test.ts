@@ -10,6 +10,7 @@ import type { SceneSplatEffectorRuntimeData } from '../../src/engine/scene/types
 import { useTimelineStore } from '../../src/stores/timeline';
 
 const initialTimelineState = useTimelineStore.getState();
+type TimelineStatePatch = Parameters<typeof useTimelineStore.setState>[0];
 
 function createEffector(overrides: Partial<SceneSplatEffectorRuntimeData> = {}): SceneSplatEffectorRuntimeData {
   return {
@@ -70,7 +71,7 @@ describe('SceneEffectorUtils', () => {
       tracks: [],
       clips: [],
       clipKeyframes: new Map(),
-    } as any);
+    } as TimelineStatePatch);
 
     const effectors = collectActiveSceneSplatEffectors(1920, 1080, 2, {
       tracks: [{

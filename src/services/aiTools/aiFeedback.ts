@@ -4,14 +4,20 @@
 // - Preview canvas flash (capture shutter, undo/redo flash)
 // - Timeline marker animations (via CSS class toggling)
 
+import { PANEL_CONFIGS, type PanelType } from '../../types/dock';
 import { isAIExecutionActive } from './executionState';
+
+function isPanelType(value: string): value is PanelType {
+  return value in PANEL_CONFIGS;
+}
 
 /** Activate a dock panel tab (makes it visible + focused) */
 export function activateDockPanel(panelType: string): void {
   if (!isAIExecutionActive()) return;
+  if (!isPanelType(panelType)) return;
   // Lazy import to avoid circular deps — no guard inside .then() since we checked above
   import('../../stores/dockStore').then(({ useDockStore }) => {
-    useDockStore.getState().activatePanelType(panelType as any);
+    useDockStore.getState().activatePanelType(panelType);
   });
 }
 

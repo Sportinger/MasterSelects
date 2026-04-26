@@ -309,7 +309,7 @@ export function ExportPanel() {
     setExportPhase('idle');
     // End export progress in timeline
     endExport();
-  }, [exporter, encoder, endExport]);
+  }, [exporter, encoder, endExport, setExporter, setExportPhase, setIsExporting]);
 
   // Handle FFmpeg export
   const handleFFmpegExport = useCallback(async () => {
@@ -579,6 +579,7 @@ export function ExportPanel() {
     ffmpegQuality, proresProfile, dnxhrProfile, filename,
     includeAudio, audioSampleRate, audioBitrate, normalizeAudio,
     startExport, setExportProgress, endExport,
+    setError, setExportPhase, setFfmpegProgress, setIsExporting,
   ]);
 
   // Handle audio-only export
@@ -644,7 +645,7 @@ export function ExportPanel() {
     } finally {
       setIsExporting(false);
     }
-  }, [startTime, endTime, filename, isExporting, audioSampleRate, audioBitrate, normalizeAudio]);
+  }, [startTime, endTime, filename, isExporting, audioSampleRate, audioBitrate, normalizeAudio, setError, setIsExporting, setProgress]);
 
   // Handle FCPXML export
   const handleExportFCPXML = useCallback(() => {
@@ -729,6 +730,7 @@ export function ExportPanel() {
     width, height, customWidth, customHeight, useCustomResolution,
     fps, customFps, useCustomFps,
     filename, playheadPosition, imageFormat, imageQuality, isExporting,
+    setError,
   ]);
 
   // Format time as MM:SS.ff

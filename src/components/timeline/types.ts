@@ -225,6 +225,11 @@ export interface PickWhipDragState {
   currentY: number;
 }
 
+export interface ClipKeyframeTimeGroup {
+  time: number;
+  keyframeIds: string[];
+}
+
 // Props for TimelineClip component
 export interface TimelineClipProps {
   clip: TimelineClip;
@@ -271,6 +276,8 @@ export interface TimelineClipProps {
     handleOut?: { x: number; y: number };
   }>;  // Opacity keyframes for fade curve visualization
   allKeyframeTimes: number[];  // Unique keyframe times for tick marks on clip bar
+  keyframeTimeGroups?: ClipKeyframeTimeGroup[];  // Keyframe IDs grouped by clip-local time for global clip-bar handles
+  onMoveKeyframeGroup?: (keyframeIds: string[], newTime: number) => void;
   timeToPixel: (time: number) => number;
   pixelToTime: (pixel: number) => number;
   formatTime: (seconds: number) => string;

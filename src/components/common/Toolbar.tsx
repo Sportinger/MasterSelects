@@ -589,7 +589,7 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
                 onClick={async () => {
                   if (confirm('This will clear ALL cached data and reload. Continue?')) {
                     // Set flag to prevent beforeunload from saving data back
-                    (window as any).__CLEARING_CACHE__ = true;
+                    (window as Window & { __CLEARING_CACHE__?: boolean }).__CLEARING_CACHE__ = true;
 
                     // Clear all localStorage
                     localStorage.clear();

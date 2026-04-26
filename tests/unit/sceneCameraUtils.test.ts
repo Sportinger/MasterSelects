@@ -13,6 +13,7 @@ import {
 import { useEngineStore } from '../../src/stores/engineStore';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
+import type { TimelineClip } from '../../src/types';
 
 const initialEngineState = useEngineStore.getState();
 const initialMediaState = useMediaStore.getState();
@@ -28,11 +29,11 @@ describe('SceneCameraUtils', () => {
   it('resolves the selected scene-nav camera clip through the generic compatibility selector', () => {
     useEngineStore.setState({
       sceneNavClipId: 'camera-nav-1',
-    } as any);
+    });
     useMediaStore.setState({
       activeCompositionId: null,
       compositions: [],
-    } as any);
+    });
     useTimelineStore.setState({
       playheadPosition: 4,
       tracks: [
@@ -65,7 +66,7 @@ describe('SceneCameraUtils', () => {
           },
         },
       ],
-    } as any);
+    });
 
     const viewport = { width: 1920, height: 1080 };
     const config = resolveSharedSceneCameraConfig(viewport, 4);
@@ -98,16 +99,16 @@ describe('SceneCameraUtils', () => {
   it('builds the default shared scene camera contract when no scene-specific camera is active', () => {
     useEngineStore.setState({
       sceneNavClipId: null,
-    } as any);
+    });
     useMediaStore.setState({
       activeCompositionId: null,
       compositions: [],
-    } as any);
+    });
     useTimelineStore.setState({
       playheadPosition: 0,
       tracks: [],
       clips: [],
-    } as any);
+    });
 
     const camera = resolveSharedSceneCamera({ width: 1280, height: 720 }, 0);
 
@@ -125,16 +126,16 @@ describe('SceneCameraUtils', () => {
   it('builds a renderable shared scene camera with default distance applied to the eye position', () => {
     useEngineStore.setState({
       sceneNavClipId: null,
-    } as any);
+    });
     useMediaStore.setState({
       activeCompositionId: null,
       compositions: [],
-    } as any);
+    });
     useTimelineStore.setState({
       playheadPosition: 0,
       tracks: [],
       clips: [],
-    } as any);
+    });
 
     const camera = resolveRenderableSharedSceneCamera({ width: 1280, height: 720 }, 0);
     const expectedDistance = getSharedSceneDefaultCameraDistance(50);
@@ -148,7 +149,7 @@ describe('SceneCameraUtils', () => {
   it('resolves nested scene cameras from explicit scene context instead of the active timeline state', () => {
     useEngineStore.setState({
       sceneNavClipId: 'global-camera',
-    } as any);
+    });
     useMediaStore.setState({
       activeCompositionId: 'main-comp',
       compositions: [{
@@ -163,7 +164,7 @@ describe('SceneCameraUtils', () => {
           far: 240,
         },
       }],
-    } as any);
+    });
     useTimelineStore.setState({
       playheadPosition: 2,
       tracks: [{
@@ -193,7 +194,7 @@ describe('SceneCameraUtils', () => {
         opacity: 1,
         blendMode: 'normal',
       }),
-    } as any);
+    });
 
     const viewport = { width: 1920, height: 1080 };
     const context = {
@@ -340,7 +341,7 @@ describe('SceneCameraUtils', () => {
         type: 'video',
         visible: true,
       }],
-      clips: [cameraClip as any],
+      clips: [cameraClip as unknown as TimelineClip],
       clipKeyframes: new Map([[
         'vertical-fps-camera',
         [
@@ -412,7 +413,7 @@ describe('SceneCameraUtils', () => {
         type: 'video',
         visible: true,
       }],
-      clips: [cameraClip as any],
+      clips: [cameraClip as unknown as TimelineClip],
       clipKeyframes: new Map([[
         'zoom-camera',
         [
@@ -480,7 +481,7 @@ describe('SceneCameraUtils', () => {
         type: 'video',
         visible: true,
       }],
-      clips: [cameraClip as any],
+      clips: [cameraClip as unknown as TimelineClip],
       clipKeyframes: new Map([[
         'target-camera',
         [

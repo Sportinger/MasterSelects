@@ -74,7 +74,7 @@ export function TranscriptTab({ clipId, transcript, transcriptStatus, transcript
     const clip = useTimelineStore.getState().clips.find(c => c.id === clipId);
     const mediaFileId = clip?.source?.mediaFileId || clip?.mediaFileId;
     const mediaFile = mediaFileId ? useMediaStore.getState().files.find(f => f.id === mediaFileId) : null;
-    const ranges: [number, number][] = (mediaFile as any)?.transcribedRanges || [];
+    const ranges = mediaFile?.transcribedRanges ?? [];
     if (ranges.length > 0) {
       let covered = 0;
       for (const [rs, re] of ranges) {

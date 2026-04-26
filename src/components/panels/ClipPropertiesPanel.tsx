@@ -5,7 +5,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import type { BlendMode, AnimatableProperty, MaskMode, ClipMask } from '../../types';
-import { BLEND_MODE_GROUPS, formatBlendModeName, KeyframeToggle } from './properties/shared';
+import { KeyframeToggle } from './properties/shared';
+import { BLEND_MODE_GROUPS, formatBlendModeName } from './properties/sharedConstants';
 import { EditableDraggableNumber as DraggableNumber } from '../common/EditableDraggableNumber';
 
 // Precision slider with modifier key support
@@ -20,7 +21,7 @@ interface PrecisionSliderProps {
   defaultValue?: number;
 }
 
-function PrecisionSlider({ min, max, step, value, onChange, defaultValue }: PrecisionSliderProps) {
+function PrecisionSlider({ min, max, step: _step, value, onChange, defaultValue }: PrecisionSliderProps) {
   const sliderRef = useRef<HTMLDivElement>(null);
   const accumulatedDelta = useRef(0);
   const startValue = useRef(0);
@@ -71,7 +72,7 @@ function PrecisionSlider({ min, max, step, value, onChange, defaultValue }: Prec
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-  }, [value, min, max, step, onChange]);
+  }, [value, min, max, onChange]);
 
   // Handle right-click to reset to default
   const handleContextMenu = useCallback((e: React.MouseEvent) => {

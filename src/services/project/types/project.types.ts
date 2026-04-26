@@ -6,6 +6,13 @@ import type { ProjectFolder } from './folder.types';
 import type { DockLayout } from '../../../types/dock';
 import type { ProjectFlashBoardState } from '../../../stores/flashboardStore/types';
 import type { ExportStoreData } from '../../../stores/exportStore';
+import type {
+  CameraItem,
+  MeshItem,
+  SolidItem,
+  SplatEffectorItem,
+  TextItem,
+} from '../../../stores/mediaStore/types';
 
 export interface ProjectYouTubeVideo {
   id: string;
@@ -108,4 +115,11 @@ export interface ProjectFile {
 
   // FlashBoard AI workspace state
   flashboard?: ProjectFlashBoardState;
+
+  // Generated media items
+  textItems?: TextItem[];
+  solidItems?: SolidItem[];
+  meshItems?: MeshItem[];
+  cameraItems?: CameraItem[];
+  splatEffectorItems?: SplatEffectorItem[];
 }

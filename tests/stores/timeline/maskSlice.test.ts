@@ -8,7 +8,7 @@ describe('maskSlice', () => {
 
   beforeEach(() => {
     resetIdCounter();
-    store = createTestTimelineStore({ clips: [clip] } as any);
+    store = createTestTimelineStore({ clips: [clip] });
   });
 
   // ─── addMask ──────────────────────────────────────────────────────
@@ -110,7 +110,7 @@ describe('maskSlice', () => {
 
   it('addMask: does not affect other clips', () => {
     const clip2 = createMockClip({ id: 'clip-2', trackId: 'video-1', startTime: 10, duration: 5 });
-    store = createTestTimelineStore({ clips: [clip, clip2] } as any);
+    store = createTestTimelineStore({ clips: [clip, clip2] });
     store.getState().addMask('clip-1');
     const clip2Masks = store.getState().clips.find(c => c.id === 'clip-2')?.masks;
     // clip-2 should remain unaffected (no masks array or empty)
@@ -239,7 +239,7 @@ describe('maskSlice', () => {
 
   it('supports masks on different clips independently', () => {
     const clip2 = createMockClip({ id: 'clip-2', trackId: 'video-1', startTime: 10, duration: 5 });
-    store = createTestTimelineStore({ clips: [clip, clip2] } as any);
+    store = createTestTimelineStore({ clips: [clip, clip2] });
     store.getState().addMask('clip-1', { name: 'Mask on clip-1' });
     store.getState().addMask('clip-2', { name: 'Mask on clip-2' });
     expect(store.getState().getClipMasks('clip-1').length).toBe(1);

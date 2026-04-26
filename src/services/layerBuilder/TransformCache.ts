@@ -1,6 +1,7 @@
 // TransformCache - Reuse transform objects to reduce GC pressure
 // Only creates new objects when transform values actually change
 
+import type { ClipTransform } from '../../types';
 import type { CachedTransform } from './types';
 import { LAYER_BUILDER_CONSTANTS } from './types';
 
@@ -27,7 +28,7 @@ export class TransformCache {
    * @param transform The source transform data from interpolation
    * @returns Transform objects suitable for Layer, possibly reused
    */
-  getTransform(layerId: string, transform: any): LayerTransform {
+  getTransform(layerId: string, transform: ClipTransform): LayerTransform {
     const cached = this.cache.get(layerId);
 
     // If we have a cached transform and source reference matches, reuse objects

@@ -15,5 +15,5 @@ export const flags = {
 
 // Expose for runtime toggling from devtools
 if (typeof window !== 'undefined') {
-  (window as any).__ENGINE_FLAGS__ = flags;
+  (window as Window & { __ENGINE_FLAGS__?: typeof flags }).__ENGINE_FLAGS__ = flags;
 }

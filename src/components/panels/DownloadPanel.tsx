@@ -1,7 +1,7 @@
 // YouTube Search Panel
 // Supports YouTube Data API (with key) and direct URL paste (no key)
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
@@ -23,6 +23,36 @@ interface YouTubeVideo {
   views?: string;
   platform?: string;
   sourceUrl?: string;
+}
+
+interface YouTubeSearchItem {
+  id: { videoId: string };
+  snippet: {
+    title: string;
+    thumbnails: {
+      default?: { url: string };
+      medium?: { url: string };
+    };
+    channelTitle: string;
+  };
+}
+
+interface YouTubeSearchResponse {
+  items: YouTubeSearchItem[];
+}
+
+interface YouTubeDetailsItem {
+  id: string;
+  contentDetails?: { duration?: string };
+  statistics?: { viewCount?: string };
+}
+
+interface YouTubeDetailsResponse {
+  items?: YouTubeDetailsItem[];
+}
+
+interface YouTubeErrorResponse {
+  error?: { message?: string };
 }
 
 // Convert store video to panel format
@@ -274,30 +304,32 @@ export function DownloadPanel() {
     );
 
     if (!searchResponse.ok) {
-      const errorData = await searchResponse.json();
+      const errorData = await searchResponse.json() as YouTubeErrorResponse;
       throw new Error(errorData.error?.message || 'YouTube API error');
     }
 
-    const searchData = await searchResponse.json();
-    const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
+    const searchData = await searchResponse.json() as YouTubeSearchResponse;
+    const videoIds = searchData.items.map((item) => item.id.videoId).join(',');
 
     // Get video details (duration, views)
     const detailsResponse = await fetch(
       `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,statistics&id=${videoIds}&key=${youtubeApiKey}`
     );
 
-    const detailsData = await detailsResponse.json();
-    const detailsMap = new Map(detailsData.items?.map((item: any) => [item.id, item]) || []);
+    const detailsData = await detailsResponse.json() as YouTubeDetailsResponse;
+    const detailsMap = new Map<string, YouTubeDetailsItem>(
+      detailsData.items?.map((item) => [item.id, item]) || []
+    );
 
-    return searchData.items.map((item: any) => {
-      const details = detailsMap.get(item.id.videoId) as any;
+    return searchData.items.map((item) => {
+      const details = detailsMap.get(item.id.videoId);
       const durationSeconds = details?.contentDetails?.duration
         ? parseISO8601Duration(details.contentDetails.duration)
         : 0;
       return {
         id: item.id.videoId,
         title: item.snippet.title,
-        thumbnail: item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.default?.url,
+        thumbnail: item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.default?.url || '',
         channel: item.snippet.channelTitle,
         durationSeconds,
         duration: formatDuration(durationSeconds),
@@ -309,7 +341,7 @@ export function DownloadPanel() {
   };
 
   // Main search/add handler
-  const handleSearch = useCallback(async (overrideQuery?: string) => {
+  const handleSearch = async (overrideQuery?: string) => {
     const input = (overrideQuery ?? query).trim();
     if (!input) return;
 
@@ -380,7 +412,7 @@ export function DownloadPanel() {
     } finally {
       setLoading(false);
     }
-  }, [query, youtubeApiKey, autoDownload, helperConnected]);
+  };
 
   // Handle Enter key
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -437,7 +469,7 @@ export function DownloadPanel() {
       }
     })();
     return () => { cancelled = true; };
-  }, [downloadedVideos, results]);
+  }, [downloadedVideos, importFile, results]);
 
   // Drag handlers — downloaded videos can be dragged directly to timeline
   const handleDragStart = (e: React.DragEvent, video: YouTubeVideo) => {

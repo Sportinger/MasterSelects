@@ -7426,15 +7426,46 @@ input[type="checkbox"] {
 
 .keyframe-tick {
   position: absolute;
-  bottom: 1px;
+  bottom: -4px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  appearance: none;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  cursor: grab;
+  z-index: 1;
+}
+
+.keyframe-tick::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 5px;
   width: 4px;
   height: 4px;
   background: var(--warning);
   transform: translateX(-50%) rotate(45deg);
   opacity: 0.7;
+  transition: opacity 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
 }
 
-.timeline-clip.selected .keyframe-tick {
+.keyframe-tick:hover::after,
+.keyframe-tick:focus-visible::after,
+.keyframe-tick.dragging::after {
+  transform: translateX(-50%) rotate(45deg) scale(2.15);
+  opacity: 1;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.keyframe-tick:active,
+.keyframe-tick.dragging {
+  cursor: grabbing;
+}
+
+.timeline-clip.selected .keyframe-tick::after {
   opacity: 1;
 }
 

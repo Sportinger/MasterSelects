@@ -42,7 +42,7 @@ export function MobilePreview() {
     canvas.style.height = `${height}px`;
     canvas.width = activeComp.width;
     canvas.height = activeComp.height;
-  }, [activeComp]);
+  }, [activeComp, canvasRef]);
 
   return (
     <div className="mobile-preview">

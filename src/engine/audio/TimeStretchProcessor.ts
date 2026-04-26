@@ -361,7 +361,7 @@ export class TimeStretchProcessor {
    * Get interpolated speed at a specific time
    */
   private getSpeedAtTime(keyframes: Keyframe[], time: number, defaultSpeed: number): number {
-    return interpolateKeyframes(keyframes, 'speed' as any, time, defaultSpeed);
+    return interpolateKeyframes(keyframes, 'speed', time, defaultSpeed);
   }
 
   /**

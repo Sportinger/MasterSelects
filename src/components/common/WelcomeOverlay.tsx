@@ -14,6 +14,13 @@ import { loadProjectToStores } from '../../services/project/projectLoad';
 import { syncStoresToProject } from '../../services/project/projectSave';
 
 type NativeStatus = 'checking' | 'available' | 'outdated' | 'unavailable';
+type DirectoryPickerWindow = Window & typeof globalThis & {
+  showDirectoryPicker: (options?: object) => Promise<FileSystemDirectoryHandle>;
+};
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
 
 // Detect browser name and if it supports WebGPU
 // isChromium kept for legacy compat but now means "has WebGPU support"
@@ -242,7 +249,7 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
 
     try {
       // Let user pick where to store projects
-      const handle = await (window as any).showDirectoryPicker({
+      const handle = await (window as DirectoryPickerWindow).showDirectoryPicker({
         mode: 'readwrite',
         startIn: 'documents',
       });
@@ -263,8 +270,8 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
           setError('Failed to create project. Please try again.');
         }
       }
-    } catch (e: any) {
-      if (e.name === 'AbortError') {
+    } catch (e) {
+      if (isAbortError(e)) {
         // User cancelled - not an error
         return;
       }
@@ -298,8 +305,8 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
         // User cancelled or folder has no project.json
         setError('No valid project found. Select a folder containing project.json');
       }
-    } catch (e: any) {
-      if (e.name === 'AbortError') {
+    } catch (e) {
+      if (isAbortError(e)) {
         // User cancelled - not an error
         return;
       }
@@ -348,7 +355,7 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
       } else {
         setError('Failed to create project.');
       }
-    } catch (e: any) {
+    } catch (e) {
       log.error('Native project creation failed', e);
       setError('Failed to create project.');
     } finally {
@@ -387,7 +394,7 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
       } else {
         setError('No valid project found. Select a folder containing project.json');
       }
-    } catch (e: any) {
+    } catch (e) {
       log.error('Native project open failed', e);
       setError('Failed to open project.');
     } finally {

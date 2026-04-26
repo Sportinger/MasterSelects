@@ -2,7 +2,7 @@
 // Creates opacity keyframes (video) or volume keyframes (audio) as the user drags
 // Preserves existing bezier handles when adjusting fade duration
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { TimelineClip, TimelineTrack, AnimatableProperty, EasingType } from '../../../types';
 import { createEffectProperty } from '../../../types';
 import type { ClipFadeState } from '../types';
@@ -56,7 +56,10 @@ export function useClipFade({
 }: UseClipFadeProps): UseClipFadeReturn {
   const [clipFade, setClipFade] = useState<ClipFadeState | null>(null);
   const clipFadeRef = useRef<ClipFadeState | null>(clipFade);
-  clipFadeRef.current = clipFade;
+
+  useEffect(() => {
+    clipFadeRef.current = clipFade;
+  }, [clipFade]);
 
   // Store the keyframe IDs we're working with during a drag
   const fadeKeyframeIdsRef = useRef<{

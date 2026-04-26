@@ -5,6 +5,7 @@ import {
   readFile,
   ReadStream,
   sortMortonOrder,
+  WebPCodec,
   ZipReadFileSystem,
   type ColumnType,
   type DataTable,
@@ -13,6 +14,7 @@ import {
   type ReadFileSystem,
   type ReadSource,
 } from '@playcanvas/splat-transform';
+import webpWasmUrl from '@playcanvas/splat-transform/lib/webp.wasm?url';
 
 import type {
   GaussianSplatAsset,
@@ -34,6 +36,8 @@ const DEFAULT_OPTIONS: SplatTransformOptions = {
   lodChunkCount: 512,
   lodChunkExtent: 16,
 };
+
+WebPCodec.wasmUrl = webpWasmUrl;
 
 const SUPPORTED_INPUT_FORMATS = new Set<InputFormat>([
   'ply',

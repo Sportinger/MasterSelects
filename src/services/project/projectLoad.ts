@@ -40,6 +40,14 @@ import type {
   GaussianSplatSequenceFrame,
   ModelSequenceData,
   ModelSequenceFrame,
+  ClipMask,
+  CompositionTimelineData,
+  Effect,
+  Keyframe,
+  AnalysisStatus,
+  SceneDescriptionStatus,
+  TimelineClip,
+  TranscriptStatus,
 } from '../../types';
 
 const log = Logger.create('ProjectSync');
@@ -416,7 +424,7 @@ function convertProjectCompositionToStore(
     const viewState = compositionViewState?.[pc.id];
 
     // Convert back to timelineData format
-    const timelineData = {
+    const timelineData: CompositionTimelineData = {
       tracks: pc.tracks.map((t) => ({
         id: t.id,
         name: t.name,
@@ -451,9 +459,47 @@ function convertProjectCompositionToStore(
         inPoint: c.inPoint,
         outPoint: c.outPoint,
         transform: fromProjectTransform(c.transform),
-        effects: c.effects,
-        masks: c.masks,
-        keyframes: c.keyframes || [],
+        effects: c.effects.map((effect): Effect => ({
+          id: effect.id,
+          name: effect.name,
+          type: effect.type as Effect['type'],
+          enabled: effect.enabled,
+          params: effect.params,
+        })),
+        masks: c.masks.map((mask): ClipMask => ({
+          id: mask.id,
+          name: mask.name,
+          mode: mask.mode,
+          inverted: mask.inverted,
+          opacity: mask.opacity,
+          feather: mask.feather,
+          featherQuality: mask.featherQuality,
+          visible: mask.visible,
+          closed: mask.closed,
+          expanded: false,
+          position: mask.position,
+          vertices: mask.vertices.map((vertex, index) => ({
+            id: `${mask.id}-v-${index}`,
+            x: vertex.x,
+            y: vertex.y,
+            handleIn: vertex.inTangent,
+            handleOut: vertex.outTangent,
+          })),
+        })),
+        keyframes: (c.keyframes || []).map((keyframe): Keyframe => ({
+          id: keyframe.id,
+          clipId: c.id,
+          property: keyframe.property as Keyframe['property'],
+          time: keyframe.time,
+          value: keyframe.value,
+          easing: keyframe.easing as Keyframe['easing'],
+          handleIn: keyframe.bezierHandles
+            ? { x: keyframe.bezierHandles.x1, y: keyframe.bezierHandles.y1 }
+            : undefined,
+          handleOut: keyframe.bezierHandles
+            ? { x: keyframe.bezierHandles.x2, y: keyframe.bezierHandles.y2 }
+            : undefined,
+        })),
         volume: c.volume,
         audioEnabled: c.audioEnabled,
         reversed: c.reversed,
@@ -473,13 +519,13 @@ function convertProjectCompositionToStore(
         is3D: c.is3D,
         // Transcript data
         transcript: c.transcript,
-        transcriptStatus: c.transcriptStatus,
+        transcriptStatus: c.transcriptStatus as TranscriptStatus | undefined,
         // Analysis data
         analysis: c.analysis,
-        analysisStatus: c.analysisStatus,
+        analysisStatus: c.analysisStatus as AnalysisStatus | undefined,
         // AI scene description data
         sceneDescriptions: c.sceneDescriptions,
-        sceneDescriptionStatus: c.sceneDescriptionStatus,
+        sceneDescriptionStatus: c.sceneDescriptionStatus as SceneDescriptionStatus | undefined,
       })),
       // Restore view state from saved uiState, or use defaults
       playheadPosition: viewState?.playheadPosition ?? 0,
@@ -511,7 +557,7 @@ function convertProjectCompositionToStore(
       frameRate: pc.frameRate,
       duration: pc.duration,
       backgroundColor: pc.backgroundColor,
-      timelineData: timelineData as any, // Type assertion for complex nested types
+      timelineData,
     };
     return comp;
   });
@@ -609,11 +655,11 @@ export async function loadProjectToStores(): Promise<void> {
   timelineStore.clearTimeline();
 
   // Restore generated media items
-  const textItems = (projectData as any).textItems || [];
-  const solidItems = (projectData as any).solidItems || [];
-  const meshItems = (projectData as any).meshItems || [];
-  const cameraItems = (projectData as any).cameraItems || [];
-  const splatEffectorItems = (projectData as any).splatEffectorItems || [];
+  const textItems = projectData.textItems || [];
+  const solidItems = projectData.solidItems || [];
+  const meshItems = projectData.meshItems || [];
+  const cameraItems = projectData.cameraItems || [];
+  const splatEffectorItems = projectData.splatEffectorItems || [];
 
   // Update media store
   useMediaStore.setState({
@@ -1046,14 +1092,14 @@ async function reloadNestedCompositionClips(): Promise<void> {
     const composition = mediaStore.compositions.find(c => c.id === compClip.compositionId);
     if (!composition?.timelineData) continue;
 
-    const nestedClips: any[] = [];
+    const nestedClips: TimelineClip[] = [];
     const nestedTracks = composition.timelineData.tracks;
 
     for (const nestedSerializedClip of composition.timelineData.clips) {
       const nestedMediaFile = mediaStore.files.find(f => f.id === nestedSerializedClip.mediaFileId);
       if (!nestedMediaFile?.file) continue;
 
-      const nestedClip: any = {
+      const nestedClip: TimelineClip = {
         id: `nested-${compClip.id}-${nestedSerializedClip.id}`,
         trackId: nestedSerializedClip.trackId,
         name: nestedSerializedClip.name,

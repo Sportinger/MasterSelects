@@ -154,7 +154,7 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
 
   const height = useTimelineStore(s => s.curveEditorHeight);
   const setCurveEditorHeight = useTimelineStore(s => s.setCurveEditorHeight);
-  const padding = { top: 20, right: 10, bottom: 20, left: 10 };
+  const padding = useMemo(() => ({ top: 20, right: 10, bottom: 20, left: 10 }), []);
 
   // Sort keyframes by time
   const sortedKeyframes = useMemo(() =>

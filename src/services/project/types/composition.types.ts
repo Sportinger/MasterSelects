@@ -4,7 +4,15 @@ import type { ProjectKeyframe, ProjectMarker, ProjectEffect, ProjectMask, Projec
 import type { MeshPrimitiveType, SceneCameraSettings } from '../../../stores/mediaStore/types';
 import type { GaussianSplatSettings } from '../../../engine/gaussian/types';
 import type { SplatEffectorSettings } from '../../../types/splatEffector';
-import type { GaussianSplatSequenceData, ModelSequenceData, Text3DProperties } from '../../../types';
+import type {
+  ClipAnalysis,
+  GaussianSplatSequenceData,
+  ModelSequenceData,
+  SceneSegment,
+  Text3DProperties,
+  TextClipProperties,
+  TranscriptWord,
+} from '../../../types';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
 
 export interface ProjectTrack {
@@ -78,7 +86,7 @@ export interface ProjectClip {
   threeDEffectorsEnabled?: boolean;
 
   // Text clip support
-  textProperties?: any;
+  textProperties?: TextClipProperties;
   text3DProperties?: Text3DProperties;
 
   // Solid clip support
@@ -87,15 +95,15 @@ export interface ProjectClip {
   vectorAnimationSettings?: VectorAnimationClipSettings;
 
   // Transcript data
-  transcript?: any[];
+  transcript?: TranscriptWord[];
   transcriptStatus?: string;
 
   // Analysis data
-  analysis?: any;
+  analysis?: ClipAnalysis;
   analysisStatus?: string;
 
   // AI scene description data
-  sceneDescriptions?: any[];
+  sceneDescriptions?: SceneSegment[];
   sceneDescriptionStatus?: string;
 }
 

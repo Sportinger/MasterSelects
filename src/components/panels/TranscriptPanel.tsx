@@ -143,7 +143,7 @@ export function TranscriptPanel() {
   }, [clips, selectedClipId]);
 
   // Get transcript from selected clip
-  const transcript = selectedClip?.transcript ?? [];
+  const transcript = useMemo(() => selectedClip?.transcript ?? [], [selectedClip]);
   const transcriptStatus = selectedClip?.transcriptStatus ?? 'none';
   const transcriptProgress = selectedClip?.transcriptProgress ?? 0;
   const transcriptMessage = selectedClip?.transcriptMessage;

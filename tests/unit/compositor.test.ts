@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Compositor } from '../../src/engine/render/Compositor';
+import type { LayerRenderData } from '../../src/engine/core/types';
+import type { CompositorPipeline } from '../../src/engine/pipeline/CompositorPipeline';
+import type { EffectsPipeline } from '../../src/effects/EffectsPipeline';
+import type { MaskTextureManager } from '../../src/engine/texture/MaskTextureManager';
 
 function makeRenderPass() {
   return {
@@ -10,7 +14,7 @@ function makeRenderPass() {
   };
 }
 
-function makeLayerData() {
+function makeLayerData(): LayerRenderData[] {
   return [{
     layer: {
       id: 'layer-1',
@@ -37,7 +41,7 @@ function makeLayerData() {
     textureView: { label: 'source-view' },
     sourceWidth: 1920,
     sourceHeight: 1080,
-  }] as any;
+  }] as unknown as LayerRenderData[];
 }
 
 describe('Compositor scrub fast path', () => {
@@ -57,28 +61,28 @@ describe('Compositor scrub fast path', () => {
         getExternalCompositePipeline: vi.fn(),
         createExternalCompositeBindGroup: vi.fn(),
         invalidateBindGroupCache: vi.fn(),
-      } as any,
-      { applyEffects } as any,
+      } as unknown as CompositorPipeline,
+      { applyEffects } as unknown as EffectsPipeline,
       {
         getMaskInfo: vi.fn(() => ({ hasMask: false, view: { label: 'mask' } })),
         logMaskState: vi.fn(),
-      } as any
+      } as unknown as MaskTextureManager
     );
 
     const commandEncoder = {
       beginRenderPass: vi.fn(() => makeRenderPass()),
-    } as any;
+    } as unknown as GPUCommandEncoder;
 
     compositor.composite(makeLayerData(), commandEncoder, {
-      device: {} as any,
-      sampler: {} as any,
-      pingView: { label: 'ping' } as any,
-      pongView: { label: 'pong' } as any,
+      device: {} as unknown as GPUDevice,
+      sampler: {} as unknown as GPUSampler,
+      pingView: { label: 'ping' } as unknown as GPUTextureView,
+      pongView: { label: 'pong' } as unknown as GPUTextureView,
       outputWidth: 1920,
       outputHeight: 1080,
       skipEffects: true,
-      effectTempView: { label: 'tmp-a' } as any,
-      effectTempView2: { label: 'tmp-b' } as any,
+      effectTempView: { label: 'tmp-a' } as unknown as GPUTextureView,
+      effectTempView2: { label: 'tmp-b' } as unknown as GPUTextureView,
     });
 
     expect(updateLayerUniforms.mock.calls[0][5]).toEqual({
@@ -106,28 +110,28 @@ describe('Compositor scrub fast path', () => {
         getExternalCompositePipeline: vi.fn(),
         createExternalCompositeBindGroup: vi.fn(),
         invalidateBindGroupCache: vi.fn(),
-      } as any,
-      { applyEffects } as any,
+      } as unknown as CompositorPipeline,
+      { applyEffects } as unknown as EffectsPipeline,
       {
         getMaskInfo: vi.fn(() => ({ hasMask: false, view: { label: 'mask' } })),
         logMaskState: vi.fn(),
-      } as any
+      } as unknown as MaskTextureManager
     );
 
     const commandEncoder = {
       beginRenderPass: vi.fn(() => makeRenderPass()),
-    } as any;
+    } as unknown as GPUCommandEncoder;
 
     compositor.composite(makeLayerData(), commandEncoder, {
-      device: {} as any,
-      sampler: {} as any,
-      pingView: { label: 'ping' } as any,
-      pongView: { label: 'pong' } as any,
+      device: {} as unknown as GPUDevice,
+      sampler: {} as unknown as GPUSampler,
+      pingView: { label: 'ping' } as unknown as GPUTextureView,
+      pongView: { label: 'pong' } as unknown as GPUTextureView,
       outputWidth: 1920,
       outputHeight: 1080,
       skipEffects: false,
-      effectTempView: { label: 'tmp-a' } as any,
-      effectTempView2: { label: 'tmp-b' } as any,
+      effectTempView: { label: 'tmp-a' } as unknown as GPUTextureView,
+      effectTempView2: { label: 'tmp-b' } as unknown as GPUTextureView,
     });
 
     expect(updateLayerUniforms.mock.calls[0][5]).toEqual({

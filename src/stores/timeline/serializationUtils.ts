@@ -1,7 +1,7 @@
 // Timeline serialization utilities - save, load, clear
 // Extracted from index.ts for maintainability
 
-import type { SliceCreator, TimelineClip, TimelineUtils, Keyframe, CompositionTimelineData } from './types';
+import type { SliceCreator, TimelineClip, TimelineTrack, TimelineUtils, Keyframe, CompositionTimelineData } from './types';
 import type {
   SerializableClip,
   ClipAnalysis,
@@ -493,7 +493,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
             const loadNestedCompositionClips = (
               parentClipId: string,
               serializedClips: SerializableClip[],
-              _parentTracks: any[],
+              _parentTracks: TimelineTrack[],
               depth: number
             ): TimelineClip[] => {
               if (depth >= MAX_NESTING_DEPTH) {

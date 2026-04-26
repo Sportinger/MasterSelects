@@ -1,5 +1,5 @@
 // Blendshapes Tab - ARKit 52 blendshape sliders for Gaussian Avatar clips
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { ARKIT_BLENDSHAPE_NAMES, BLENDSHAPE_GROUPS, EMOTION_PRESETS } from '../../../engine/gaussian/types';
 import { DraggableNumber } from './shared';
@@ -23,7 +23,7 @@ function formatBlendshapeName(name: string): string {
 export function BlendshapesTab({ clipId }: BlendshapesTabProps) {
   const { updateClip } = useTimelineStore.getState();
   const source = useTimelineStore(s => s.clips.find(c => c.id === clipId)?.source);
-  const blendshapes = source?.gaussianBlendshapes ?? {};
+  const blendshapes = useMemo(() => source?.gaussianBlendshapes ?? {}, [source]);
 
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 

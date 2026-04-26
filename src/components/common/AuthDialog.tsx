@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAccountStore } from '../../stores/accountStore';
 import type { BillingPlanId } from '../../services/cloudApi';
 import './authBillingDialogs.css';
@@ -26,13 +26,13 @@ export function AuthDialog({ onClose }: AuthDialogProps) {
   const [isClosing, setIsClosing] = useState(false);
   const { devLogin, error, isLoading, login, notice } = useAccountStore();
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     if (isClosing) return;
     setIsClosing(true);
     setTimeout(() => {
       onClose();
     }, 200);
-  };
+  }, [isClosing, onClose]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -43,7 +43,7 @@ export function AuthDialog({ onClose }: AuthDialogProps) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, isClosing]);
+  }, [handleClose]);
 
   const handleBackdropClick = (event: React.MouseEvent) => {
     if (event.target === event.currentTarget) {

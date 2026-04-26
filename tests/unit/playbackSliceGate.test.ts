@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { createPlaybackSlice } from '../../src/stores/timeline/playbackSlice';
 import { playheadState } from '../../src/services/layerBuilder/PlayheadState';
+import type { TimelineStore } from '../../src/stores/timeline/types';
 
 const getRuntimeFrameProvider = vi.fn();
 const requestNewFrameRender = vi.fn();
@@ -24,6 +25,19 @@ vi.mock('../../src/engine/WebGPUEngine', () => ({
   },
 }));
 
+type PlaybackTestStore = Partial<TimelineStore> & ReturnType<typeof createPlaybackSlice>;
+
+function createPlaybackTestStore(initialState: Partial<TimelineStore>): PlaybackTestStore {
+  const state = { ...initialState } as PlaybackTestStore;
+  const set: Parameters<typeof createPlaybackSlice>[0] = (partial) => {
+    const next = typeof partial === 'function' ? partial(state as TimelineStore) : partial;
+    Object.assign(state, next);
+  };
+  const get: Parameters<typeof createPlaybackSlice>[1] = () => state as TimelineStore;
+  Object.assign(state, createPlaybackSlice(set, get));
+  return state;
+}
+
 describe('playbackSlice HTML readiness gate', () => {
   beforeEach(() => {
     getRuntimeFrameProvider.mockReset();
@@ -45,7 +59,7 @@ describe('playbackSlice HTML readiness gate', () => {
 
     getRuntimeFrameProvider.mockReturnValue(fullModeProvider);
 
-    const state: Record<string, any> = {
+    const state = createPlaybackTestStore({
       clips: [
         {
           id: 'clip-1',
@@ -60,15 +74,7 @@ describe('playbackSlice HTML readiness gate', () => {
       playheadPosition: 1,
       duration: 60,
       isPlaying: false,
-    };
-
-    const set = (partial: any) => {
-      const next = typeof partial === 'function' ? partial(state) : partial;
-      Object.assign(state, next);
-    };
-    const get = () => state as any;
-
-    Object.assign(state, createPlaybackSlice(set as any, get as any));
+    } as Partial<TimelineStore>);
 
     await state.play();
 
@@ -78,23 +84,15 @@ describe('playbackSlice HTML readiness gate', () => {
   });
 
   it('keeps the internal playhead in sync when moving the playhead while paused', () => {
-    const state: Record<string, any> = {
+    const state = createPlaybackTestStore({
       clips: [],
       playheadPosition: null,
       duration: 60,
       isPlaying: false,
-    };
-
-    const set = (partial: any) => {
-      const next = typeof partial === 'function' ? partial(state) : partial;
-      Object.assign(state, next);
-    };
-    const get = () => state as any;
+    } as Partial<TimelineStore>);
 
     playheadState.position = 4.1;
     playheadState.isUsingInternalPosition = true;
-
-    Object.assign(state, createPlaybackSlice(set as any, get as any));
 
     state.setPlayheadPosition(20);
 
@@ -103,21 +101,13 @@ describe('playbackSlice HTML readiness gate', () => {
   });
 
   it('requests a fresh render when moving the paused playhead without dragging', () => {
-    const state: Record<string, any> = {
+    const state = createPlaybackTestStore({
       clips: [],
       playheadPosition: 0,
       duration: 60,
       isPlaying: false,
       isDraggingPlayhead: false,
-    };
-
-    const set = (partial: any) => {
-      const next = typeof partial === 'function' ? partial(state) : partial;
-      Object.assign(state, next);
-    };
-    const get = () => state as any;
-
-    Object.assign(state, createPlaybackSlice(set as any, get as any));
+    } as Partial<TimelineStore>);
 
     state.setPlayheadPosition(1 / 30);
 

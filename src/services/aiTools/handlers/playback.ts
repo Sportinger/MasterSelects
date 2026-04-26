@@ -794,7 +794,7 @@ export async function handleSetClipSpeed(
     if (speed <= 0) return { success: false, error: 'Speed must be positive. Use "reverse: true" for reverse playback.' };
 
     // Use keyframe system for speed
-    store.setPropertyValue(clipId, 'speed' as any, speed);
+    store.setPropertyValue(clipId, 'speed', speed);
   }
 
   if (args.reverse !== undefined) {

@@ -23,6 +23,20 @@ interface FileStatus {
   newHandle?: FileSystemFileHandle;
 }
 
+type FileSystemEntryHandle = FileSystemFileHandle | FileSystemDirectoryHandle;
+type IterableDirectoryHandle = FileSystemDirectoryHandle & {
+  values: () => AsyncIterableIterator<FileSystemEntryHandle>;
+};
+
+type RelinkPickerWindow = Window & typeof globalThis & {
+  showDirectoryPicker: (options?: object) => Promise<FileSystemDirectoryHandle>;
+  showOpenFilePicker: (options?: object) => Promise<FileSystemFileHandle[]>;
+};
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
 export function RelinkDialog({ onClose }: RelinkDialogProps) {
   const { files } = useMediaStore();
   const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([]);
@@ -90,7 +104,7 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
 
     const scanDirectory = async (dir: FileSystemDirectoryHandle) => {
       try {
-        for await (const entry of (dir as any).values()) {
+        for await (const entry of (dir as IterableDirectoryHandle).values()) {
           if (entry.kind === 'file') {
             const fileName = entry.name.toLowerCase();
             foundFiles.set(fileName, entry);
@@ -136,7 +150,7 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
   // Handle browse button
   const handleBrowse = useCallback(async () => {
     try {
-      const dirHandle = await (window as any).showDirectoryPicker({
+      const dirHandle = await (window as RelinkPickerWindow).showDirectoryPicker({
         mode: 'read',
         startIn: 'videos',
       });
@@ -144,8 +158,8 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
       if (dirHandle) {
         await scanFolder(dirHandle);
       }
-    } catch (e: any) {
-      if (e.name !== 'AbortError') {
+    } catch (e) {
+      if (!isAbortError(e)) {
         log.error('Browse error', e);
       }
     }
@@ -158,7 +172,7 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
     const allowMultiple = missingFiles.length > 1;
 
     try {
-      const handles = await (window as any).showOpenFilePicker({
+      const handles = await (window as RelinkPickerWindow).showOpenFilePicker({
         multiple: allowMultiple, // Allow multiple selection if there are multiple missing files
         types: [{
           description: allowMultiple
@@ -208,7 +222,7 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
         if (stillMissing.length > 0 && handles.length > 0) {
           // Automatically open folder picker starting from the selected file's location
           try {
-            const dirHandle = await (window as any).showDirectoryPicker({
+            const dirHandle = await (window as RelinkPickerWindow).showDirectoryPicker({
               mode: 'read',
               startIn: handles[0], // Start in same folder as selected file
             });
@@ -216,16 +230,16 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
               log.debug('Scanning folder for remaining files...');
               await scanFolder(dirHandle);
             }
-          } catch (e: any) {
+          } catch (e) {
             // User cancelled - that's fine, we still have the manually selected files
-            if (e.name !== 'AbortError') {
+            if (!isAbortError(e)) {
               log.debug('Folder access declined, using manually selected files only');
             }
           }
         }
       }
-    } catch (e: any) {
-      if (e.name !== 'AbortError') {
+    } catch (e) {
+      if (!isAbortError(e)) {
         log.error('Pick file error', e);
       }
     }
