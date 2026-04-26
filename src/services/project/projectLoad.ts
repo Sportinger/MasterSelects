@@ -51,6 +51,16 @@ import type {
 } from '../../types';
 
 const log = Logger.create('ProjectSync');
+const MEDIA_PANEL_PROJECT_UI_LOADED_EVENT = 'media-panel-project-ui-loaded';
+
+function removeLocalStorageKey(key: string): void {
+  const storage = localStorage as Storage & { removeItem?: (name: string) => void };
+  if (typeof storage.removeItem === 'function') {
+    storage.removeItem(key);
+    return;
+  }
+  storage.setItem(key, '');
+}
 
 /**
  * Calculate coverage ratio from time ranges vs total duration (0-1).
@@ -742,6 +752,20 @@ export async function loadProjectToStores(): Promise<void> {
   if (projectData.uiState?.mediaPanelNameWidth !== undefined) {
     localStorage.setItem('media-panel-name-width', String(projectData.uiState.mediaPanelNameWidth));
   }
+  if (projectData.uiState?.mediaPanelViewMode) {
+    localStorage.setItem('media-panel-view-mode', projectData.uiState.mediaPanelViewMode);
+  }
+  if (projectData.uiState?.mediaPanelBoardViewport) {
+    localStorage.setItem('media-panel-board-viewport', JSON.stringify(projectData.uiState.mediaPanelBoardViewport));
+  } else {
+    removeLocalStorageKey('media-panel-board-viewport');
+  }
+  if (projectData.uiState?.mediaPanelBoardLayouts) {
+    localStorage.setItem('media-panel-board-layout', JSON.stringify(projectData.uiState.mediaPanelBoardLayouts));
+  } else {
+    removeLocalStorageKey('media-panel-board-layout');
+  }
+  window.dispatchEvent(new CustomEvent(MEDIA_PANEL_PROJECT_UI_LOADED_EVENT));
   if (projectData.uiState?.transcriptLanguage) {
     localStorage.setItem('transcriptLanguage', projectData.uiState.transcriptLanguage);
   }

@@ -2,7 +2,7 @@
 
 [← Back to Index](./README.md)
 
-Import, organize, and manage media assets with folder structure, proxy generation, and dual view modes.
+Import, organize, and manage media assets with folder structure, proxy generation, and three view modes.
 
 ---
 
@@ -122,15 +122,15 @@ When supported (Chrome/Edge):
 
 ## View Modes
 
-The panel supports two view modes through a single header toggle button that swaps between list and grid icons. The selected mode is persisted in `localStorage`.
+The panel supports three view modes through the header mode control. The selected mode is persisted in `localStorage`.
 
-### List View (default)
+### Classic View (default)
 - Table layout with sortable, reorderable columns
 - Nested folder tree with expand/collapse arrows
 - Column headers for sorting and drag-to-reorder
 - Resizable name column (120px - 500px range, saved to localStorage)
 
-### Grid View
+### Icons View
 - Thumbnail grid with file names below each item
 - Folder navigation via breadcrumb bar
 - Double-click folders to navigate into them
@@ -138,6 +138,21 @@ The panel supports two view modes through a single header toggle button that swa
 - Hover tooltip shows detailed metadata (resolution, duration, codec, bitrate, file size)
 - Duration badge overlay on video and composition thumbnails
 - Item count badge on folder thumbnails
+
+### Board View
+- Freeform board canvas grouped by Media Panel folders
+- Mouse wheel zooms around the cursor; left-dragging the board or a node pans the board
+- Right-dragging nodes moves the selected board nodes; right-clicking opens the context menu
+- Ctrl/right-drag starts a marquee selection and skips background cards
+- Media, compositions, text, solids, meshes, cameras, and splat effectors appear as movable board nodes
+- Node positions and the board viewport are saved into the project UI state, with `localStorage` as the live-session fallback
+- Drag files or folders from the OS onto a group to import directly into that folder
+- Drag existing Media Panel items onto groups to move them between folders
+- Use the small handle on a node to drag that item to the timeline with the same drag payloads as Classic and Icons view
+- The board toolbar and compact workspace context menu can create Text and Background items directly on the board
+- The **AI** board action opens the existing AI Video panel; generated results still import through the normal Media Store path
+
+Board pan and node movement preview with imperative CSS transforms and commit final positions only on mouse-up. This avoids re-rendering the Media Panel and writing `localStorage` on every pointer move, which keeps board interaction responsive while heavy preview scenes or splat renders are active.
 
 ---
 
@@ -285,7 +300,7 @@ Toggle proxy playback mode via `proxyEnabled` / `toggleProxyEnabled()`:
 - Click and drag on empty space in the item list to draw a selection rectangle
 - 4px movement threshold before marquee activates
 - Hold **Ctrl/Cmd** while marquee selecting to add to existing selection
-- Works in both list and grid view modes
+- Works in Classic and Icons view modes
 
 ### Label Colors
 16 AE-style label colors assignable to any item (files, folders, compositions, text, solids):
@@ -330,7 +345,7 @@ Right-click on items or empty space for context options.
 
 ## Media Properties
 
-### Column Display (List View)
+### Column Display (Classic View)
 The media list displays items in a table with the following columns:
 
 | Column | Description | Example |
@@ -466,6 +481,7 @@ Media references are saved with the project file, while IndexedDB keeps the hand
 - File metadata (name, type, dimensions, duration, codec, etc.)
 - File handles (for reload on next session)
 - Folder structure
+- Media Panel view mode, Board viewport, and Board node positions
 - Composition state with timeline data
 - Text items and solid items (via localStorage)
 - When present, `projectPath` points at the copied `Raw/<name>` file and is used for automatic relinking

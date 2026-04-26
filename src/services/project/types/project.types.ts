@@ -45,6 +45,19 @@ export interface ProjectMIDIState {
   };
 }
 
+export interface ProjectMediaBoardViewport {
+  zoom: number;
+  panX: number;
+  panY: number;
+}
+
+export interface ProjectMediaBoardNodeLayout {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 // UI state that gets persisted with the project
 export interface ProjectUIState {
   // Dock/panel layout
@@ -60,6 +73,9 @@ export interface ProjectUIState {
   // Media panel settings
   mediaPanelColumns?: string[];
   mediaPanelNameWidth?: number;
+  mediaPanelViewMode?: 'classic' | 'icons' | 'board';
+  mediaPanelBoardViewport?: ProjectMediaBoardViewport;
+  mediaPanelBoardLayouts?: Record<string, ProjectMediaBoardNodeLayout>;
   // Transcript settings
   transcriptLanguage?: string;
   // View toggles
