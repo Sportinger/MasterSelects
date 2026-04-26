@@ -140,19 +140,20 @@ The panel supports three view modes through the header mode control. The selecte
 - Item count badge on folder thumbnails
 
 ### Board View
-- Freeform board canvas grouped by Media Panel folders
+- Board canvas grouped by Media Panel folders; every folder appears as a group, including empty folders
 - Mouse wheel zooms around the cursor; left-dragging the board or a node pans the board
-- Right-dragging nodes moves the selected board nodes; right-clicking opens the context menu
-- Ctrl/right-drag starts a marquee selection and skips background cards
-- Media, compositions, text, solids, meshes, cameras, and splat effectors appear as movable board nodes
-- Node positions and the board viewport are saved into the project UI state, with `localStorage` as the live-session fallback
+- Items inside each folder snap to a fixed slot grid
+- Right-dragging nodes reorders the selected items in the target folder grid; dropping onto another folder group moves them there
+- Ctrl/right-drag starts a marquee selection; right-clicking opens the normal Media Panel context menu
+- Media, compositions, text, solids, meshes, cameras, and splat effectors appear as board nodes
+- Board order and viewport are saved into the project UI state, with `localStorage` as the live-session fallback
 - Drag files or folders from the OS onto a group to import directly into that folder
 - Drag existing Media Panel items onto groups to move them between folders
 - Use the small handle on a node to drag that item to the timeline with the same drag payloads as Classic and Icons view
-- The board toolbar and compact workspace context menu can create Text and Background items directly on the board
+- The board uses the same Add dropdown and context menu as Classic view; new folders appear immediately in Classic, Icons, and Board view
 - The **AI** board action opens the existing AI Video panel; generated results still import through the normal Media Store path
 
-Board pan and node movement preview with imperative CSS transforms and commit final positions only on mouse-up. This avoids re-rendering the Media Panel and writing `localStorage` on every pointer move, which keeps board interaction responsive while heavy preview scenes or splat renders are active.
+Board pan and reorder previews use imperative CSS transforms and commit final order only on mouse-up/drop. This avoids re-rendering the Media Panel and writing `localStorage` on every pointer move, which keeps board interaction responsive while heavy preview scenes or splat renders are active.
 
 ---
 
@@ -481,7 +482,7 @@ Media references are saved with the project file, while IndexedDB keeps the hand
 - File metadata (name, type, dimensions, duration, codec, etc.)
 - File handles (for reload on next session)
 - Folder structure
-- Media Panel view mode, Board viewport, and Board node positions
+- Media Panel view mode, Board viewport, and Board slot order
 - Composition state with timeline data
 - Text items and solid items (via localStorage)
 - When present, `projectPath` points at the copied `Raw/<name>` file and is used for automatic relinking

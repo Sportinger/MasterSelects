@@ -760,11 +760,12 @@ export async function loadProjectToStores(): Promise<void> {
   } else {
     removeLocalStorageKey('media-panel-board-viewport');
   }
-  if (projectData.uiState?.mediaPanelBoardLayouts) {
-    localStorage.setItem('media-panel-board-layout', JSON.stringify(projectData.uiState.mediaPanelBoardLayouts));
+  if (projectData.uiState?.mediaPanelBoardOrder) {
+    localStorage.setItem('media-panel-board-order', JSON.stringify(projectData.uiState.mediaPanelBoardOrder));
   } else {
-    removeLocalStorageKey('media-panel-board-layout');
+    removeLocalStorageKey('media-panel-board-order');
   }
+  removeLocalStorageKey('media-panel-board-layout');
   window.dispatchEvent(new CustomEvent(MEDIA_PANEL_PROJECT_UI_LOADED_EVENT));
   if (projectData.uiState?.transcriptLanguage) {
     localStorage.setItem('transcriptLanguage', projectData.uiState.transcriptLanguage);

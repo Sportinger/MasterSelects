@@ -56,6 +56,7 @@ interface MediaBoardNodePlacement {
   layout: MediaBoardNodeLayout;
   defaultLayout: MediaBoardNodeLayout;
   groupId: string | null;
+  slotIndex: number;
 }
 
 interface MediaBoardMarquee {
@@ -69,7 +70,7 @@ type MediaPanelContextMenu = {
   x: number;
   y: number;
   itemId?: string;
-  mode?: 'default' | 'board-workspace';
+  parentId?: string | null;
 };
 
 const COLUMN_LABELS_MAP: Record<ColumnId, string> = {
@@ -89,8 +90,9 @@ const DEFAULT_COLUMN_ORDER: ColumnId[] = ['name', 'label', 'duration', 'resoluti
 const STORAGE_KEY = 'media-panel-column-order';
 const VIEW_MODE_STORAGE_KEY = 'media-panel-view-mode';
 const BOARD_VIEWPORT_STORAGE_KEY = 'media-panel-board-viewport';
-const BOARD_LAYOUT_STORAGE_KEY = 'media-panel-board-layout';
+const BOARD_ORDER_STORAGE_KEY = 'media-panel-board-order';
 const MEDIA_PANEL_PROJECT_UI_LOADED_EVENT = 'media-panel-project-ui-loaded';
+const MEDIA_BOARD_ROOT_ORDER_KEY = '__root__';
 
 const DEFAULT_BOARD_VIEWPORT: MediaBoardViewport = { zoom: 0.82, panX: 32, panY: 28 };
 const MEDIA_BOARD_NODE_WIDTH = 156;
@@ -104,9 +106,6 @@ const MEDIA_BOARD_COLUMNS_PER_GROUP = 4;
 const MEDIA_BOARD_PAN_ZOOM_MIN = 0.18;
 const MEDIA_BOARD_PAN_ZOOM_MAX = 2.4;
 const MEDIA_BOARD_DRAG_START_DISTANCE = 4;
-const MEDIA_BOARD_BACKGROUND_COLOR = '#24313f';
-const MEDIA_BOARD_BACKGROUND_LAYOUT = { width: 680, height: 380 };
-const MEDIA_BOARD_TEXT_LAYOUT = { width: 280, height: 150 };
 
 // Load column order from localStorage
 function loadColumnOrder(): ColumnId[] {
@@ -161,25 +160,18 @@ function loadMediaBoardViewport(): MediaBoardViewport {
   }
 }
 
-function loadMediaBoardLayout(): Record<string, MediaBoardNodeLayout> {
+function loadMediaBoardOrder(): Record<string, string[]> {
   try {
-    const stored = localStorage.getItem(BOARD_LAYOUT_STORAGE_KEY);
+    const stored = localStorage.getItem(BOARD_ORDER_STORAGE_KEY);
     if (!stored) return {};
-    const parsed = JSON.parse(stored) as Record<string, MediaBoardNodeLayout>;
+    const parsed = JSON.parse(stored) as Record<string, string[]>;
     if (!parsed || typeof parsed !== 'object') return {};
-    const valid: Record<string, MediaBoardNodeLayout> = {};
-    Object.entries(parsed).forEach(([id, layout]) => {
-      const x = Number(layout?.x);
-      const y = Number(layout?.y);
-      const width = Number(layout?.width);
-      const height = Number(layout?.height);
-      if (id && Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(width) && Number.isFinite(height)) {
-        valid[id] = {
-          x,
-          y,
-          width: Math.max(96, Math.min(1400, width)),
-          height: Math.max(84, Math.min(900, height)),
-        };
+    const valid: Record<string, string[]> = {};
+    Object.entries(parsed).forEach(([folderKey, ids]) => {
+      if (!folderKey || !Array.isArray(ids)) return;
+      const uniqueIds = ids.filter((id, index) => typeof id === 'string' && id.length > 0 && ids.indexOf(id) === index);
+      if (uniqueIds.length > 0) {
+        valid[folderKey] = uniqueIds;
       }
     });
     return valid;
@@ -213,14 +205,13 @@ function getMediaBoardTypeLabel(item: MediaBoardItem): string {
   if (item.type === 'composition') return 'Composition';
   if (item.type === 'gaussian-splat') return 'Splat';
   if (item.type === 'splat-effector') return 'Effector';
-  if (isMediaBoardBackgroundItem(item)) return 'Background';
   if (item.type === 'solid') return 'Solid';
   if (item.type === 'model') return 'Model';
   return item.type.charAt(0).toUpperCase() + item.type.slice(1);
 }
 
-function isMediaBoardBackgroundItem(item: MediaBoardItem): boolean {
-  return item.type === 'solid' && /^background\b/i.test(item.name.trim());
+function getMediaBoardOrderKey(folderId: string | null): string {
+  return folderId ?? MEDIA_BOARD_ROOT_ORDER_KEY;
 }
 
 export function MediaPanel() {
@@ -264,7 +255,6 @@ export function MediaPanel() {
     showInExplorer,
     moveToFolder,
     createTextItem,
-    updateTextItem,
     getOrCreateTextFolder,
     removeTextItem,
     createSolidItem,
@@ -310,7 +300,7 @@ export function MediaPanel() {
   // Grid view: current open folder (null = root)
   const [gridFolderId, setGridFolderId] = useState<string | null>(null);
   const [mediaBoardViewport, setMediaBoardViewport] = useState<MediaBoardViewport>(loadMediaBoardViewport);
-  const [mediaBoardLayouts, setMediaBoardLayouts] = useState<Record<string, MediaBoardNodeLayout>>(loadMediaBoardLayout);
+  const [mediaBoardOrder, setMediaBoardOrder] = useState<Record<string, string[]>>(loadMediaBoardOrder);
   const [mediaBoardMarquee, setMediaBoardMarquee] = useState<MediaBoardMarquee | null>(null);
   const suppressMediaBoardContextMenuRef = useRef(false);
   const suppressMediaBoardContextMenuTimerRef = useRef<number | null>(null);
@@ -338,8 +328,8 @@ export function MediaPanel() {
   }, [mediaBoardViewport]);
 
   useEffect(() => {
-    localStorage.setItem(BOARD_LAYOUT_STORAGE_KEY, JSON.stringify(mediaBoardLayouts));
-  }, [mediaBoardLayouts]);
+    localStorage.setItem(BOARD_ORDER_STORAGE_KEY, JSON.stringify(mediaBoardOrder));
+  }, [mediaBoardOrder]);
 
   useEffect(() => () => {
     if (boardInteractionFrameRef.current !== null) {
@@ -666,7 +656,7 @@ export function MediaPanel() {
   }, [toggleFolderExpanded, openCompositionTab, reloadFile, viewMode]);
 
   // Context menu
-  const handleContextMenu = useCallback((e: React.MouseEvent, itemId?: string) => {
+  const handleContextMenu = useCallback((e: React.MouseEvent, itemId?: string, parentId?: string | null) => {
     e.preventDefault();
     if (itemId && !selectedIds.includes(itemId)) {
       // If right-clicking an unselected item, select only it (unless Ctrl held)
@@ -676,7 +666,7 @@ export function MediaPanel() {
         setSelection([itemId]);
       }
     }
-    setContextMenu({ x: e.clientX, y: e.clientY, itemId });
+    setContextMenu({ x: e.clientX, y: e.clientY, itemId, parentId });
   }, [selectedIds, setSelection, addToSelection]);
 
   const suppressNextMediaBoardContextMenu = useCallback(() => {
@@ -699,12 +689,6 @@ export function MediaPanel() {
     }
     return true;
   }, []);
-
-  const handleMediaBoardWorkspaceContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    if (consumeSuppressedMediaBoardContextMenu()) return;
-    setContextMenu({ x: e.clientX, y: e.clientY, mode: 'board-workspace' });
-  }, [consumeSuppressedMediaBoardContextMenu]);
 
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
@@ -784,6 +768,7 @@ export function MediaPanel() {
 
   // Get the active parent folder (icons view: current open folder, classic/board view: selected folder or null)
   const getActiveParentId = useCallback((): string | null => {
+    if (contextMenu && contextMenu.parentId !== undefined) return contextMenu.parentId;
     if (viewMode === 'icons' && gridFolderId) return gridFolderId;
     // In classic/board view, if a single folder is selected, create inside it
     if (selectedIds.length === 1) {
@@ -791,7 +776,7 @@ export function MediaPanel() {
       if (sel) return sel.id;
     }
     return null;
-  }, [viewMode, gridFolderId, selectedIds, folders]);
+  }, [contextMenu, viewMode, gridFolderId, selectedIds, folders]);
 
   // New composition
   const handleNewComposition = useCallback(() => {
@@ -1186,7 +1171,7 @@ export function MediaPanel() {
       setColumnOrder(loadColumnOrder());
       setViewMode(loadMediaPanelViewMode());
       setMediaBoardViewport(loadMediaBoardViewport());
-      setMediaBoardLayouts(loadMediaBoardLayout());
+      setMediaBoardOrder(loadMediaBoardOrder());
       const storedNameWidth = localStorage.getItem('media-panel-name-width');
       setNameColumnWidth(storedNameWidth ? parseInt(storedNameWidth, 10) : 250);
       setGridFolderId(null);
@@ -1579,19 +1564,32 @@ export function MediaPanel() {
   const mediaBoardItemIds = useMemo(() => new Set(mediaBoardItems.map((item) => item.id)), [mediaBoardItems]);
 
   useEffect(() => {
-    setMediaBoardLayouts((current) => {
+    setMediaBoardOrder((current) => {
       let changed = false;
-      const next: Record<string, MediaBoardNodeLayout> = {};
-      Object.entries(current).forEach(([id, layout]) => {
-        if (mediaBoardItemIds.has(id)) {
-          next[id] = layout;
-        } else {
+      const validFolderKeys = new Set([
+        MEDIA_BOARD_ROOT_ORDER_KEY,
+        ...folders.map((folder) => folder.id),
+      ]);
+      const next: Record<string, string[]> = {};
+
+      Object.entries(current).forEach(([folderKey, ids]) => {
+        if (!validFolderKeys.has(folderKey)) {
+          changed = true;
+          return;
+        }
+
+        const filteredIds = ids.filter((id, index) => mediaBoardItemIds.has(id) && ids.indexOf(id) === index);
+        if (filteredIds.length !== ids.length) {
           changed = true;
         }
+        if (filteredIds.length > 0) {
+          next[folderKey] = filteredIds;
+        }
       });
+
       return changed ? next : current;
     });
-  }, [mediaBoardItemIds]);
+  }, [folders, mediaBoardItemIds]);
 
   const mediaBoardLayout = useMemo(() => {
     const groupsByParent = new Map<string | null, MediaBoardItem[]>();
@@ -1615,19 +1613,30 @@ export function MediaPanel() {
         ),
     ].filter((groupId, index, ids) => ids.indexOf(groupId) === index);
 
-    const visibleGroupIds = orderedGroupIds.filter((groupId) => {
-      const items = groupsByParent.get(groupId) ?? [];
-      return groupId === null || items.length > 0;
-    });
-
     const groups: MediaBoardGroupLayout[] = [];
     const placements: MediaBoardNodePlacement[] = [];
     let rowY = 0;
     let rowMaxHeight = 0;
     let column = 0;
 
-    visibleGroupIds.forEach((groupId) => {
-      const items = sortItems([...(groupsByParent.get(groupId) ?? [])]) as MediaBoardItem[];
+    const orderItemsForGroup = (groupId: string | null, items: MediaBoardItem[]): MediaBoardItem[] => {
+      const sortedItems = sortItems([...items]) as MediaBoardItem[];
+      const savedOrder = mediaBoardOrder[getMediaBoardOrderKey(groupId)] ?? [];
+      if (savedOrder.length === 0) return sortedItems;
+
+      const byId = new Map(sortedItems.map((item) => [item.id, item]));
+      const orderedItems = savedOrder
+        .map((id) => byId.get(id))
+        .filter((item): item is MediaBoardItem => Boolean(item));
+      const orderedIds = new Set(orderedItems.map((item) => item.id));
+      return [
+        ...orderedItems,
+        ...sortedItems.filter((item) => !orderedIds.has(item.id)),
+      ];
+    };
+
+    orderedGroupIds.forEach((groupId) => {
+      const items = orderItemsForGroup(groupId, groupsByParent.get(groupId) ?? []);
       const rows = Math.max(1, Math.ceil(items.length / MEDIA_BOARD_COLUMNS_PER_GROUP));
       const height = MEDIA_BOARD_GROUP_HEADER_HEIGHT
         + (MEDIA_BOARD_GROUP_PADDING * 2)
@@ -1659,7 +1668,8 @@ export function MediaPanel() {
           item,
           defaultLayout,
           groupId,
-          layout: mediaBoardLayouts[item.id] ?? defaultLayout,
+          layout: defaultLayout,
+          slotIndex: index,
         });
       });
 
@@ -1673,7 +1683,7 @@ export function MediaPanel() {
     });
 
     return { groups, placements };
-  }, [folders, mediaBoardItems, mediaBoardLayouts, sortItems]);
+  }, [folders, mediaBoardItems, mediaBoardOrder, sortItems]);
 
   const mediaBoardPlacementsById = useMemo(() => {
     return new Map(mediaBoardLayout.placements.map((placement) => [placement.item.id, placement]));
@@ -1688,51 +1698,10 @@ export function MediaPanel() {
     };
   }, [mediaBoardViewport.panX, mediaBoardViewport.panY, mediaBoardViewport.zoom]);
 
-  const getMediaBoardViewportCenter = useCallback(() => {
-    const rect = boardCanvasRef.current?.getBoundingClientRect();
-    if (!rect) {
-      return screenToMediaBoard(window.innerWidth / 2, window.innerHeight / 2);
-    }
-    return screenToMediaBoard(rect.left + rect.width / 2, rect.top + rect.height / 2);
-  }, [screenToMediaBoard]);
-
-  const placeMediaBoardItemAtCenter = useCallback((itemId: string, size: { width: number; height: number }) => {
-    const center = getMediaBoardViewportCenter();
-    setMediaBoardLayouts((current) => ({
-      ...current,
-      [itemId]: {
-        x: Math.round(center.x - size.width / 2),
-        y: Math.round(center.y - size.height / 2),
-        width: size.width,
-        height: size.height,
-      },
-    }));
-  }, [getMediaBoardViewportCenter]);
-
   const openBoardAI = useCallback(() => {
     useDockStore.getState().activatePanelType('ai-video');
     closeContextMenu();
   }, [closeContextMenu]);
-
-  const handleNewBoardText = useCallback(() => {
-    const requestedText = window.prompt('Text eingeben', 'New Text');
-    if (requestedText == null) return;
-
-    const text = requestedText.trim() || 'Text';
-    const itemId = createTextItem(text, getActiveParentId());
-    updateTextItem(itemId, { name: text, text });
-    placeMediaBoardItemAtCenter(itemId, MEDIA_BOARD_TEXT_LAYOUT);
-    setSelection([itemId]);
-    closeContextMenu();
-  }, [closeContextMenu, createTextItem, getActiveParentId, placeMediaBoardItemAtCenter, setSelection, updateTextItem]);
-
-  const handleNewBoardBackground = useCallback(() => {
-    const name = `Background ${solidItems.length + 1}`;
-    const itemId = createSolidItem(name, MEDIA_BOARD_BACKGROUND_COLOR, getActiveParentId());
-    placeMediaBoardItemAtCenter(itemId, MEDIA_BOARD_BACKGROUND_LAYOUT);
-    setSelection([itemId]);
-    closeContextMenu();
-  }, [closeContextMenu, createSolidItem, getActiveParentId, placeMediaBoardItemAtCenter, setSelection, solidItems.length]);
 
   const setMediaBoardPerformanceMode = useCallback((enabled: boolean) => {
     boardWrapperRef.current?.classList.toggle('board-interacting', enabled);
@@ -1800,18 +1769,16 @@ export function MediaPanel() {
     window.addEventListener('blur', handleMouseUp);
   }, [closeContextMenu, mediaBoardViewport, setMediaBoardPerformanceMode, setSelection]);
 
-  const startMediaBoardMarqueeGesture = useCallback((e: React.MouseEvent, options?: { excludeBackgrounds?: boolean }) => {
+  const startMediaBoardMarqueeGesture = useCallback((e: React.MouseEvent) => {
     const startPoint = screenToMediaBoard(e.clientX, e.clientY);
     const startClientX = e.clientX;
     const startClientY = e.clientY;
     const initialSelection = e.ctrlKey || e.metaKey ? selectedIds : [];
-    const excludeBackgrounds = Boolean(options?.excludeBackgrounds);
     let didSelect = false;
 
     const updateSelectionForRect = (rect: { left: number; right: number; top: number; bottom: number }) => {
       const hitIds = mediaBoardLayout.placements
-        .filter(({ item, layout }) => {
-          if (excludeBackgrounds && isMediaBoardBackgroundItem(item)) return false;
+        .filter(({ layout }) => {
           const right = layout.x + layout.width;
           const bottom = layout.y + layout.height;
           return right > rect.left && layout.x < rect.right && bottom > rect.top && layout.y < rect.bottom;
@@ -1857,15 +1824,110 @@ export function MediaPanel() {
     window.addEventListener('blur', handleMouseUp);
   }, [closeContextMenu, mediaBoardLayout.placements, screenToMediaBoard, selectedIds, setSelection, suppressNextMediaBoardContextMenu]);
 
+  const getMediaBoardGroupAtPoint = useCallback((point: { x: number; y: number }) => {
+    return mediaBoardLayout.groups.find((group) => (
+      point.x >= group.x
+      && point.x <= group.x + group.width
+      && point.y >= group.y
+      && point.y <= group.y + group.height
+    )) ?? null;
+  }, [mediaBoardLayout.groups]);
+
+  const handleMediaBoardWorkspaceContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    if (consumeSuppressedMediaBoardContextMenu()) return;
+    const point = screenToMediaBoard(e.clientX, e.clientY);
+    const targetGroup = getMediaBoardGroupAtPoint(point);
+    handleContextMenu(e, undefined, targetGroup?.id ?? null);
+  }, [consumeSuppressedMediaBoardContextMenu, getMediaBoardGroupAtPoint, handleContextMenu, screenToMediaBoard]);
+
+  const getMediaBoardInsertTarget = useCallback((point: { x: number; y: number }, movingIds: string[]) => {
+    const targetGroup = getMediaBoardGroupAtPoint(point);
+    if (!targetGroup) return null;
+
+    const movingIdSet = new Set(movingIds);
+    const targetPlacements = mediaBoardLayout.placements
+      .filter((placement) => placement.groupId === targetGroup.id && !movingIdSet.has(placement.item.id))
+      .sort((a, b) => a.slotIndex - b.slotIndex);
+
+    let targetIndex = targetPlacements.length;
+    for (let index = 0; index < targetPlacements.length; index += 1) {
+      const { layout } = targetPlacements[index];
+      const centerX = layout.x + layout.width / 2;
+      const centerY = layout.y + layout.height / 2;
+      if (point.y < centerY || (point.y < layout.y + layout.height && point.x < centerX)) {
+        targetIndex = index;
+        break;
+      }
+    }
+
+    return { groupId: targetGroup.id, index: targetIndex };
+  }, [getMediaBoardGroupAtPoint, mediaBoardLayout.placements]);
+
+  const getMediaBoardAppendIndex = useCallback((groupId: string | null, movingIds: string[]) => {
+    const movingIdSet = new Set(movingIds);
+    return mediaBoardLayout.placements.filter((placement) => (
+      placement.groupId === groupId && !movingIdSet.has(placement.item.id)
+    )).length;
+  }, [mediaBoardLayout.placements]);
+
+  const commitMediaBoardOrderChange = useCallback((movingIds: string[], targetGroupId: string | null, targetIndex: number) => {
+    if (movingIds.length === 0) return;
+    const movingIdSet = new Set(movingIds);
+    const targetGroupKey = getMediaBoardOrderKey(targetGroupId);
+    const groupIds = [
+      MEDIA_BOARD_ROOT_ORDER_KEY,
+      ...folders.map((folder) => folder.id),
+    ];
+
+    setMediaBoardOrder((current) => {
+      const next: Record<string, string[]> = { ...current };
+
+      groupIds.forEach((groupKey) => {
+        const existingOrder = next[groupKey]
+          ?? mediaBoardLayout.placements
+            .filter((placement) => getMediaBoardOrderKey(placement.groupId) === groupKey)
+            .sort((a, b) => a.slotIndex - b.slotIndex)
+            .map((placement) => placement.item.id);
+        const filteredOrder = existingOrder.filter((id) => !movingIdSet.has(id));
+        if (filteredOrder.length > 0) {
+          next[groupKey] = filteredOrder;
+        } else {
+          delete next[groupKey];
+        }
+      });
+
+      const targetOrder = [
+        ...(next[targetGroupKey]
+          ?? mediaBoardLayout.placements
+            .filter((placement) => placement.groupId === targetGroupId && !movingIdSet.has(placement.item.id))
+            .sort((a, b) => a.slotIndex - b.slotIndex)
+            .map((placement) => placement.item.id)),
+      ];
+      const insertIndex = Math.max(0, Math.min(targetIndex, targetOrder.length));
+      targetOrder.splice(insertIndex, 0, ...movingIds);
+      next[targetGroupKey] = targetOrder;
+
+      return next;
+    });
+
+    moveToFolder(movingIds, targetGroupId);
+  }, [folders, mediaBoardLayout.placements, moveToFolder]);
+
   const startMediaBoardNodeMoveGesture = useCallback((e: React.MouseEvent, item: MediaBoardItem) => {
     const selectedMoveIds = selectedIds.includes(item.id)
       ? selectedIds.filter((id) => mediaBoardItemIds.has(id))
       : [item.id];
-    const startLayouts = selectedMoveIds.map((id) => {
+    const boardOrderedMoveIds = mediaBoardLayout.placements
+      .filter((placement) => selectedMoveIds.includes(placement.item.id))
+      .sort((a, b) => a.slotIndex - b.slotIndex)
+      .map((placement) => placement.item.id);
+    const moveIds = boardOrderedMoveIds.length > 0 ? boardOrderedMoveIds : selectedMoveIds;
+    const startLayouts = moveIds.map((id) => {
       const placement = mediaBoardPlacementsById.get(id);
       return {
         id,
-        layout: mediaBoardLayouts[id] ?? placement?.defaultLayout ?? placement?.layout,
+        layout: placement?.defaultLayout ?? placement?.layout,
       };
     }).filter((entry): entry is { id: string; layout: MediaBoardNodeLayout } => !!entry.layout);
 
@@ -1876,6 +1938,8 @@ export function MediaPanel() {
     let didDrag = false;
     let previewDx = 0;
     let previewDy = 0;
+    let latestClientX = startX;
+    let latestClientY = startY;
 
     const clearPreview = () => {
       startLayouts.forEach(({ id }) => {
@@ -1900,6 +1964,8 @@ export function MediaPanel() {
     };
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
+      latestClientX = moveEvent.clientX;
+      latestClientY = moveEvent.clientY;
       const distance = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
       if (!didDrag && distance < MEDIA_BOARD_DRAG_START_DISTANCE) return;
 
@@ -1924,17 +1990,11 @@ export function MediaPanel() {
       setMediaBoardPerformanceMode(false);
 
       if (didDrag) {
-        setMediaBoardLayouts((current) => {
-          const next = { ...current };
-          startLayouts.forEach(({ id, layout }) => {
-            next[id] = {
-              ...layout,
-              x: Math.round(layout.x + previewDx),
-              y: Math.round(layout.y + previewDy),
-            };
-          });
-          return next;
-        });
+        const point = screenToMediaBoard(latestClientX, latestClientY);
+        const target = getMediaBoardInsertTarget(point, moveIds);
+        if (target) {
+          commitMediaBoardOrderChange(moveIds, target.groupId, target.index);
+        }
       }
 
       window.removeEventListener('mousemove', handleMouseMove);
@@ -1947,11 +2007,14 @@ export function MediaPanel() {
     window.addEventListener('blur', handleMouseUp);
   }, [
     closeContextMenu,
+    commitMediaBoardOrderChange,
+    getMediaBoardInsertTarget,
     mediaBoardItemIds,
-    mediaBoardLayouts,
+    mediaBoardLayout.placements,
     mediaBoardPlacementsById,
     mediaBoardViewport.zoom,
     selectedIds,
+    screenToMediaBoard,
     setMediaBoardPerformanceMode,
     suppressNextMediaBoardContextMenu,
   ]);
@@ -1982,7 +2045,7 @@ export function MediaPanel() {
     if (target.closest('.media-board-node, button, input, .context-menu')) return;
 
     if (e.button === 2) {
-      startMediaBoardMarqueeGesture(e, { excludeBackgrounds: Boolean(e.ctrlKey || e.metaKey) });
+      startMediaBoardMarqueeGesture(e);
       return;
     }
 
@@ -1997,7 +2060,7 @@ export function MediaPanel() {
     if (e.button === 2) {
       e.stopPropagation();
       if (e.ctrlKey || e.metaKey) {
-        startMediaBoardMarqueeGesture(e, { excludeBackgrounds: true });
+        startMediaBoardMarqueeGesture(e);
         return;
       }
       if (!selectedIds.includes(item.id)) {
@@ -2033,7 +2096,16 @@ export function MediaPanel() {
       const itemId = e.dataTransfer.getData('application/x-media-panel-item');
       if (itemId) {
         const itemsToMove = selectedIds.includes(itemId) ? selectedIds : [itemId];
-        moveToFolder(itemsToMove, null);
+        const isFolderMove = itemsToMove.some((id) => folders.some((folder) => folder.id === id));
+        if (isFolderMove) {
+          moveToFolder(itemsToMove, null);
+        } else {
+          const point = screenToMediaBoard(e.clientX, e.clientY);
+          const target = getMediaBoardInsertTarget(point, itemsToMove);
+          const groupId = target?.groupId ?? null;
+          const index = target?.index ?? getMediaBoardAppendIndex(groupId, itemsToMove);
+          commitMediaBoardOrderChange(itemsToMove, groupId, index);
+        }
       }
       setDragOverFolderId(null);
       setInternalDragId(null);
@@ -2048,7 +2120,7 @@ export function MediaPanel() {
       && point.y <= group.y + group.height
     ));
     await handleExternalDropImport(e.dataTransfer, targetGroup?.id ?? null);
-  }, [handleExternalDropImport, mediaBoardLayout.groups, moveToFolder, screenToMediaBoard, selectedIds]);
+  }, [commitMediaBoardOrderChange, folders, getMediaBoardAppendIndex, getMediaBoardInsertTarget, handleExternalDropImport, mediaBoardLayout.groups, moveToFolder, screenToMediaBoard, selectedIds]);
 
   const handleMediaBoardGroupDrop = useCallback(async (e: React.DragEvent, groupId: string | null) => {
     e.preventDefault();
@@ -2072,7 +2144,16 @@ export function MediaPanel() {
           }
         }
         const itemsToMove = selectedIds.includes(itemId) ? selectedIds : [itemId];
-        moveToFolder(itemsToMove, groupId);
+        const isFolderMove = itemsToMove.some((id) => folders.some((folder) => folder.id === id));
+        if (isFolderMove) {
+          moveToFolder(itemsToMove, groupId);
+        } else {
+          const point = screenToMediaBoard(e.clientX, e.clientY);
+          const target = getMediaBoardInsertTarget(point, itemsToMove);
+          const targetGroupId = target?.groupId ?? groupId;
+          const targetIndex = target?.index ?? getMediaBoardAppendIndex(targetGroupId, itemsToMove);
+          commitMediaBoardOrderChange(itemsToMove, targetGroupId, targetIndex);
+        }
       }
       setDragOverFolderId(null);
       setInternalDragId(null);
@@ -2081,7 +2162,7 @@ export function MediaPanel() {
 
     await handleExternalDropImport(e.dataTransfer, groupId);
     setIsExternalDragOver(false);
-  }, [folders, handleExternalDropImport, moveToFolder, selectedIds]);
+  }, [commitMediaBoardOrderChange, folders, getMediaBoardAppendIndex, getMediaBoardInsertTarget, handleExternalDropImport, moveToFolder, screenToMediaBoard, selectedIds]);
 
   const handleMediaBoardGroupDragOver = useCallback((e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes('application/x-media-panel-item') && !e.dataTransfer.types.includes('Files')) return;
@@ -2091,7 +2172,7 @@ export function MediaPanel() {
   }, []);
 
   const resetMediaBoardLayout = useCallback(() => {
-    setMediaBoardLayouts({});
+    setMediaBoardOrder({});
     setMediaBoardViewport(DEFAULT_BOARD_VIEWPORT);
   }, []);
 
@@ -2106,7 +2187,6 @@ export function MediaPanel() {
     const textItem = isTextItem ? (item as TextItem) : null;
     const isSolidItem = item.type === 'solid';
     const solidItem = isSolidItem ? (item as SolidItem) : null;
-    const isBackgroundItem = isMediaBoardBackgroundItem(item);
     const thumbUrl = mediaFile?.thumbnailUrl;
     const duration = mediaFile?.duration || comp?.duration;
     const importProgress = getItemImportProgress(item);
@@ -2122,7 +2202,7 @@ export function MediaPanel() {
       <div
         key={item.id}
         data-item-id={item.id}
-        className={`media-board-node ${isSelected ? 'selected' : ''} ${isMediaFile && !mediaFile?.file ? 'no-file' : ''} ${importProgress !== null ? 'importing' : ''} ${isTextItem ? 'text' : ''} ${isBackgroundItem ? 'background' : ''}`}
+        className={`media-board-node ${isSelected ? 'selected' : ''} ${isMediaFile && !mediaFile?.file ? 'no-file' : ''} ${importProgress !== null ? 'importing' : ''} ${isTextItem ? 'text' : ''}`}
         style={{
           left: layout.x,
           top: layout.y,
@@ -2142,9 +2222,7 @@ export function MediaPanel() {
         }}
       >
         <div className="media-board-node-thumb">
-          {isBackgroundItem && solidItem ? (
-            <div className="media-board-background-preview" style={{ backgroundColor: solidItem.color }} />
-          ) : isSolidItem && solidItem ? (
+          {isSolidItem && solidItem ? (
             <div className="media-board-solid-preview" style={{ backgroundColor: solidItem.color }} />
           ) : textItem ? (
             <div className="media-board-text-preview" style={{ color: textItem.color, fontFamily: textItem.fontFamily }}>
@@ -2197,12 +2275,6 @@ export function MediaPanel() {
           <span>{mediaBoardItems.length} assets in {mediaBoardLayout.groups.length} groups</span>
         </div>
         <div className="media-board-toolbar-actions">
-          <button className="btn btn-sm" onClick={handleNewBoardText} title="Add text item to board">
-            Text
-          </button>
-          <button className="btn btn-sm" onClick={handleNewBoardBackground} title="Add background card to board">
-            Background
-          </button>
           <button
             className="btn btn-sm"
             onClick={openBoardAI}
@@ -2574,39 +2646,6 @@ export function MediaPanel() {
 
       {/* Context Menu */}
       {contextMenu && (() => {
-        if (contextMenu.mode === 'board-workspace') {
-          return (
-            <div
-              ref={contextMenuRef}
-              className="media-context-menu media-context-menu-compact"
-              style={{
-                position: 'fixed',
-                left: contextMenuPosition?.x ?? contextMenu.x,
-                top: contextMenuPosition?.y ?? contextMenu.y,
-                zIndex: 10000,
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="context-menu-item" onClick={handleNewBoardText}>
-                <span className="context-menu-icon"><FileTypeIcon type="text" /></span>
-                Text
-              </div>
-              <div className="context-menu-item" onClick={handleNewBoardBackground}>
-                <span className="context-menu-icon"><FileTypeIcon type="solid" /></span>
-                Background
-              </div>
-              <div className="context-menu-item" onClick={openBoardAI}>
-                <span className="context-menu-icon"><FileTypeIcon type="image" /></span>
-                AI Generate
-              </div>
-              <div className="context-menu-separator" />
-              <div className="context-menu-item" onClick={() => { resetMediaBoardLayout(); closeContextMenu(); }}>
-                Reset View
-              </div>
-            </div>
-          );
-        }
-
         const multiSelect = selectedIds.length > 1;
         const selectedItem = contextMenu.itemId
           ? files.find(f => f.id === contextMenu.itemId) ||

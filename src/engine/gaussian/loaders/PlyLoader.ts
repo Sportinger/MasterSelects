@@ -8,6 +8,7 @@ import type {
   GaussianSplatBuffer,
   GaussianSplatAsset,
   GaussianSplatMetadata,
+  GaussianSplatLoadOptions,
   PlyHeaderInfo,
   PlyPropertyLayout,
 } from './types.ts';
@@ -232,14 +233,25 @@ function estimatePointCloudScale(
   );
 }
 
+function normalizeMaxSplats(maxSplats: number | undefined, sourceSplatCount: number): number {
+  if (sourceSplatCount <= 0) {
+    return 0;
+  }
+  const normalized = Math.floor(maxSplats ?? 0);
+  if (!Number.isFinite(normalized) || normalized <= 0) {
+    return sourceSplatCount;
+  }
+  return Math.max(1, Math.min(sourceSplatCount, normalized));
+}
+
 // ── Full loader ──────────────────────────────────────────────────────────────
 
 /**
  * Parse a complete PLY file into a GaussianSplatAsset.
  */
-export async function loadPly(file: File): Promise<GaussianSplatAsset> {
+export async function loadPly(file: File, options: GaussianSplatLoadOptions = {}): Promise<GaussianSplatAsset> {
   const startTime = performance.now();
-  log.info('Loading PLY file', { name: file.name, size: file.size });
+  log.info('Loading PLY file', { name: file.name, size: file.size, maxSplats: options.maxSplats ?? 0 });
 
   const arrayBuffer = await file.arrayBuffer();
   const bytes = new Uint8Array(arrayBuffer);
@@ -288,7 +300,9 @@ export async function loadPly(file: File): Promise<GaussianSplatAsset> {
     throw new Error('PLY: missing required position properties (x/y/z or px/py/pz)');
   }
 
-  const splatCount = header.vertexCount;
+  const sourceSplatCount = header.vertexCount;
+  const splatCount = normalizeMaxSplats(options.maxSplats, sourceSplatCount);
+  const sampleStride = splatCount > 0 ? Math.max(1, Math.ceil(sourceSplatCount / splatCount)) : 1;
   const data = new Float32Array(splatCount * FLOATS_PER_SPLAT);
   const dataView = new DataView(arrayBuffer, header.headerByteLength);
   const stride = header.perVertexByteStride;
@@ -299,7 +313,8 @@ export async function loadPly(file: File): Promise<GaussianSplatAsset> {
   const colorIsDirect = propDc0 !== null && (propDc0.type === 'uchar' || propDc0.type === 'uint8');
 
   for (let i = 0; i < splatCount; i++) {
-    const vertexOffset = i * stride;
+    const sourceIndex = Math.min(sourceSplatCount - 1, i * sampleStride);
+    const vertexOffset = sourceIndex * stride;
     const outBase = i * FLOATS_PER_SPLAT;
 
     // Position
@@ -387,7 +402,8 @@ export async function loadPly(file: File): Promise<GaussianSplatAsset> {
       shData = new Float32Array(splatCount * shCoeffsPerSplat);
 
       for (let i = 0; i < splatCount; i++) {
-        const vertexOffset = i * stride;
+        const sourceIndex = Math.min(sourceSplatCount - 1, i * sampleStride);
+        const vertexOffset = sourceIndex * stride;
         for (let j = 0; j < shCoeffsPerSplat; j++) {
           const prop = shRestProps[j];
           const resolved: ResolvedPropertyIndex = { offset: prop.offset, size: prop.size, type: prop.type };
@@ -432,6 +448,8 @@ export async function loadPly(file: File): Promise<GaussianSplatAsset> {
   const elapsed = performance.now() - startTime;
   log.info('PLY loaded', {
     splatCount,
+    sourceSplatCount,
+    sampleStride,
     shDegree: header.shDegree,
     bufferMB: (data.byteLength / (1024 * 1024)).toFixed(1),
     elapsedMs: elapsed.toFixed(0),

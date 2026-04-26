@@ -14,6 +14,7 @@ import type {
 import { detectFormat } from './parseHeader.ts';
 import { parseGaussianSplatHeader as parseHeader } from './parseHeader.ts';
 import { canLoadWithSplatTransform, loadWithSplatTransform } from './SplatTransformLoader.ts';
+import { loadPly } from './PlyLoader.ts';
 import { getSplatCache } from './splatCache.ts';
 import { applyCanonicalBasisCorrection, computeBoundingBox } from './normalize.ts';
 
@@ -55,6 +56,18 @@ function applyAssetBasisCorrection(asset: GaussianSplatAsset): GaussianSplatAsse
   return asset;
 }
 
+function shouldUsePointCloudPlyFallback(
+  format: GaussianSplatFormat,
+  error: unknown,
+): boolean {
+  if (format !== 'ply') {
+    return false;
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  return /Missing required splat properties|scale_0|sx|invalid file header/i.test(message);
+}
+
 /**
  * Load and parse a gaussian splat file into a full GaussianSplatAsset.
  *
@@ -90,17 +103,37 @@ export async function loadGaussianSplatAsset(
   let asset: GaussianSplatAsset;
 
   try {
-    if (!canLoadWithSplatTransform(file, resolvedFormat)) {
-      throw new Error(`Format "${resolvedFormat}" is not supported by the splat-transform loader.`);
+    if (resolvedFormat === 'ply' && options?.maxSplats && options.maxSplats > 0) {
+      asset = await loadPly(file, options);
+    } else {
+      if (!canLoadWithSplatTransform(file, resolvedFormat)) {
+        throw new Error(`Format "${resolvedFormat}" is not supported by the splat-transform loader.`);
+      }
+      asset = await loadWithSplatTransform(file, resolvedFormat, options);
     }
-    asset = await loadWithSplatTransform(file, resolvedFormat, options);
   } catch (err) {
-    log.error('Failed to load gaussian splat asset', {
-      name: file.name,
-      format: resolvedFormat,
-      error: err instanceof Error ? err.message : String(err),
-    });
-    throw err;
+    if (shouldUsePointCloudPlyFallback(resolvedFormat, err)) {
+      log.debug('Falling back to point-cloud PLY loader', {
+        name: file.name,
+        format: resolvedFormat,
+        reason: err instanceof Error ? err.message : String(err),
+      });
+      options?.onProgress?.({
+        phase: 'parsing',
+        loadedBytes: file.size,
+        totalBytes: file.size,
+        percent: 0.9,
+        message: 'Parsing point-cloud PLY',
+      });
+      asset = await loadPly(file, options);
+    } else {
+      log.error('Failed to load gaussian splat asset', {
+        name: file.name,
+        format: resolvedFormat,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
+    }
   }
 
   options?.onProgress?.({

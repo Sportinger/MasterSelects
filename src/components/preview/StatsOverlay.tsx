@@ -13,7 +13,17 @@ interface StatsOverlayProps {
 
 export function StatsOverlay({ stats, resolution, expanded, onToggle }: StatsOverlayProps) {
   const gpuInfo = useEngineStore(s => s.gpuInfo);
+  const splatSequence = stats.renderDispatcher?.splatSequence;
+  const splatVisualFps = splatSequence?.visualFrameChangesLastSecond;
   const fpsColor = stats.fps >= 55 ? '#4f4' : stats.fps >= 30 ? '#ff4' : '#f44';
+  const splatFpsColor =
+    splatVisualFps === undefined
+      ? '#888'
+      : splatVisualFps >= 24
+        ? '#4f4'
+        : splatVisualFps >= 12
+          ? '#ff4'
+          : '#f44';
   const dropColor = stats.drops.lastSecond > 0 ? '#f44' : '#4f4';
   const decoderColor = stats.decoder === 'NativeHelper' ? '#4af' : stats.decoder === 'WebCodecs' ? '#4f4' : stats.decoder === 'ParallelDecode' ? '#a4f' : stats.decoder.startsWith('HTMLVideo') ? '#fa4' : '#888';
   const playbackStatusColor = stats.playback?.status === 'bad' ? '#f44' : stats.playback?.status === 'warn' ? '#ff4' : '#4f4';
@@ -45,6 +55,13 @@ export function StatsOverlay({ stats, resolution, expanded, onToggle }: StatsOve
     return null;
   }, [stats.playback]);
 
+  const formatSceneFrame = (sceneKey: string | undefined): string => {
+    if (!sceneKey) return '-';
+    const match = sceneKey.match(/_(\d{6})_frame/);
+    if (match?.[1]) return match[1];
+    return sceneKey.split(/[\\/]/).pop() ?? sceneKey;
+  };
+
   if (!expanded) {
     return (
       <div
@@ -72,6 +89,14 @@ export function StatsOverlay({ stats, resolution, expanded, onToggle }: StatsOve
         {stats.decoder !== 'none' && !stats.isIdle && (
           <span style={{ color: decoderColor, marginLeft: 6, fontSize: 9 }}>[{stats.decoder === 'WebCodecs' ? 'WC' : stats.decoder === 'HTMLVideo(VF)' ? 'VF' : stats.decoder === 'NativeHelper' ? 'NH' : stats.decoder === 'ParallelDecode' ? 'PD' : 'HTML'}]</span>
         )}
+        {splatSequence && !stats.isIdle && (
+          <span
+            style={{ color: splatFpsColor, marginLeft: 6, fontSize: 10, fontWeight: 'bold' }}
+            title={`Splat visible frame updates. Mode: ${splatSequence.mode}`}
+          >
+            Splat {splatVisualFps} FPS
+          </span>
+        )}
         {stats.drops.lastSecond > 0 && (
           <span style={{ color: '#f44', marginLeft: 6 }}>▼{stats.drops.lastSecond}</span>
         )}
@@ -97,6 +122,11 @@ export function StatsOverlay({ stats, resolution, expanded, onToggle }: StatsOve
       <div className="stats-header">
         <span style={{ color: fpsColor, fontWeight: 'bold', fontSize: 18 }}>{stats.fps}</span>
         <span style={{ opacity: 0.7 }}> / {stats.targetFps} FPS</span>
+        {splatSequence && (
+          <span style={{ color: splatFpsColor, marginLeft: 8, fontSize: 12, fontWeight: 'bold' }}>
+            Splat {splatVisualFps} FPS
+          </span>
+        )}
         {stats.isIdle && (
           <span style={{ color: '#888', marginLeft: 8, fontSize: 11 }}>[IDLE]</span>
         )}
@@ -192,6 +222,30 @@ export function StatsOverlay({ stats, resolution, expanded, onToggle }: StatsOve
             <span>Playback Bottleneck</span>
             <span style={{ color: '#ff4' }}>{playbackBottleneck}</span>
           </div>
+        )}
+        {splatSequence && (
+          <>
+            <div className="stats-row">
+              <span>Splat Visual FPS</span>
+              <span style={{ color: splatFpsColor }}>{splatVisualFps}</span>
+            </div>
+            <div className="stats-row">
+              <span>Splat Mode</span>
+              <span style={{ color: splatSequence.mode === 'target' ? '#4f4' : splatSequence.mode === 'held' ? '#ff4' : '#f44' }}>
+                {splatSequence.mode}
+              </span>
+            </div>
+            <div className="stats-row">
+              <span>Splat Target/Rendered</span>
+              <span style={{ color: splatSequence.mode === 'target' ? '#aaa' : '#ff4' }}>
+                {formatSceneFrame(splatSequence.targetSceneKey)} / {formatSceneFrame(splatSequence.renderedSceneKey)}
+              </span>
+            </div>
+            <div className="stats-row">
+              <span>Splat Background Loads</span>
+              <span>{splatSequence.backgroundLoads}</span>
+            </div>
+          </>
         )}
       </div>
 

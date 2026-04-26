@@ -58,6 +58,8 @@ export interface ProjectMediaBoardNodeLayout {
   height: number;
 }
 
+export type ProjectMediaBoardOrder = Record<string, string[]>;
+
 // UI state that gets persisted with the project
 export interface ProjectUIState {
   // Dock/panel layout
@@ -75,6 +77,8 @@ export interface ProjectUIState {
   mediaPanelNameWidth?: number;
   mediaPanelViewMode?: 'classic' | 'icons' | 'board';
   mediaPanelBoardViewport?: ProjectMediaBoardViewport;
+  mediaPanelBoardOrder?: ProjectMediaBoardOrder;
+  /** @deprecated Board nodes now snap to folder slot grids; retained only to ignore older project files safely. */
   mediaPanelBoardLayouts?: Record<string, ProjectMediaBoardNodeLayout>;
   // Transcript settings
   transcriptLanguage?: string;

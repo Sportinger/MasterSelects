@@ -1,4 +1,4 @@
-import type { BlendMode, GaussianSplatSequenceData, Text3DProperties } from '../../types';
+import type { BlendMode, GaussianSplatSequenceData, ModelSequenceData, Text3DProperties } from '../../types';
 import type { GaussianSplatSettings } from '../gaussian/types';
 import type { MeshPrimitiveType } from '../../stores/mediaStore/types';
 import type { SplatEffectorMode } from '../../types/splatEffector';
@@ -62,6 +62,7 @@ export interface SceneModelLayer extends SceneLayerBase {
   kind: 'model';
   modelUrl?: string;
   modelFileName?: string;
+  modelSequence?: ModelSequenceData;
   wireframe?: boolean;
 }
 

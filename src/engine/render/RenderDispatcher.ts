@@ -34,6 +34,7 @@ import { useEngineStore, type GaussianSplatLoadPhase } from '../../stores/engine
 import { getGaussianSplatGpuRenderer } from '../gaussian/core/GaussianSplatGpuRenderer';
 import { loadGaussianSplatAssetCached, type GaussianSplatLoadProgress } from '../gaussian/loaders';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../gaussian/types';
+import { getGaussianSplatSequenceFrameIndex } from '../../utils/gaussianSplatSequence';
 import {
   buildSharedSplatRuntimeRequest,
   resolveSharedSplatSceneKey,
@@ -49,7 +50,15 @@ type GaussianSplatSceneLoadRequest = {
   url?: string;
   fileName: string;
   file?: File;
+  showProgress?: boolean;
+  maxSplats?: number;
 };
+
+const SPLAT_SEQUENCE_PREVIEW_MAX_SPLATS = 65536;
+const SPLAT_SEQUENCE_MAX_BACKGROUND_LOADS = 3;
+const SPLAT_SEQUENCE_PLAYBACK_PRELOAD_FRAMES = 72;
+const SPLAT_SEQUENCE_PLAYBACK_RETAIN_BEHIND_FRAMES = 12;
+const SPLAT_SEQUENCE_PLAYBACK_RETAIN_AHEAD_FRAMES = 72;
 
 function clampUnitInterval(value: number): number {
   if (!Number.isFinite(value)) {
@@ -94,6 +103,13 @@ export interface RenderDispatcherDebugSnapshot {
   gaussianMissingUrl: number;
   gaussianNoTextureView: number;
   finalLayerData: number;
+  splatSequence?: {
+    targetSceneKey?: string;
+    renderedSceneKey?: string;
+    mode: 'target' | 'held' | 'missing';
+    visualFrameChangesLastSecond: number;
+    backgroundLoads: number;
+  };
 }
 
 export class RenderDispatcher {
@@ -109,11 +125,20 @@ export class RenderDispatcher {
   private sceneRendererInitializing = false;
   // Native Gaussian Splat rendering state (new WebGPU path)
   private splatLoadingClips = new Set<string>();
+  private backgroundSplatSequenceLoads = new Set<string>();
   private splatSceneBounds = new Map<string, { min: [number, number, number]; max: [number, number, number] }>();
   private exportReadySceneRendererResolutions = new Set<string>();
   private exportReadyNativeSplatSceneKeys = new Set<string>();
   private exportReadyModelUrls = new Set<string>();
   private lastSceneRenderDebugKey = '';
+  private lastSharedSplatSequenceFrame: {
+    textureView: GPUTextureView;
+    sceneKey: string;
+    width: number;
+    height: number;
+  } | null = null;
+  private lastRenderedSplatSequenceSceneKey: string | null = null;
+  private splatSequenceVisualFrameChanges: number[] = [];
 
   constructor(deps: RenderDeps) {
     this.deps = deps;
@@ -146,6 +171,194 @@ export class RenderDispatcher {
       clipId,
       runtimeKey,
     });
+  }
+
+  private getGaussianSplatFrameRuntimeKey(
+    frame: NonNullable<SceneSplatLayer['gaussianSplatSequence']>['frames'][number] | undefined,
+    fallbackKey: string,
+  ): string {
+    return frame?.projectPath || frame?.absolutePath || frame?.sourcePath || frame?.name || fallbackKey;
+  }
+
+  private getSplatSequencePreviewMaxSplats(layer: SceneSplatLayer): number | undefined {
+    if (layer.gaussianSplatIsSequence !== true) {
+      return undefined;
+    }
+
+    const requestedMaxSplats = Math.floor(layer.gaussianSplatSettings?.render?.maxSplats ?? 0);
+    if (Number.isFinite(requestedMaxSplats) && requestedMaxSplats > 0) {
+      return Math.min(requestedMaxSplats, SPLAT_SEQUENCE_PREVIEW_MAX_SPLATS);
+    }
+    return SPLAT_SEQUENCE_PREVIEW_MAX_SPLATS;
+  }
+
+  private getGaussianSplatSequenceRuntimeKey(runtimeKey: string | undefined, maxSplats?: number): string | undefined {
+    if (!runtimeKey || !maxSplats || maxSplats <= 0) {
+      return runtimeKey;
+    }
+    return `${runtimeKey}|preview-lod-${maxSplats}`;
+  }
+
+  private getGaussianSplatSequenceFrameSceneKey(
+    layer: SceneSplatLayer,
+    frameIndex: number,
+    maxSplats?: number,
+  ): { sceneKey: string; runtimeKey: string; frame?: NonNullable<SceneSplatLayer['gaussianSplatSequence']>['frames'][number] } | null {
+    const sequence = layer.gaussianSplatSequence;
+    const frame = sequence?.frames[frameIndex];
+    if (!sequence || !frame) {
+      return null;
+    }
+
+    const fallbackKey = `${layer.clipId}:sequence:${frameIndex}`;
+    const runtimeKey = this.getGaussianSplatSequenceRuntimeKey(
+      this.getGaussianSplatFrameRuntimeKey(frame, fallbackKey),
+      maxSplats,
+    ) ?? fallbackKey;
+
+    return {
+      sceneKey: this.getNativeGaussianSplatSceneKey(layer.clipId, runtimeKey),
+      runtimeKey,
+      frame,
+    };
+  }
+
+  private recordSplatSequenceVisualFrame(sceneKey: string | undefined, countAsChange: boolean): number {
+    const now = performance.now();
+    if (sceneKey && sceneKey !== this.lastRenderedSplatSequenceSceneKey) {
+      if (countAsChange && this.lastRenderedSplatSequenceSceneKey !== null) {
+        this.splatSequenceVisualFrameChanges.push(now);
+      }
+      this.lastRenderedSplatSequenceSceneKey = sceneKey;
+    }
+
+    const cutoff = now - 1000;
+    this.splatSequenceVisualFrameChanges = this.splatSequenceVisualFrameChanges
+      .filter((timestamp) => timestamp >= cutoff);
+    return this.splatSequenceVisualFrameChanges.length;
+  }
+
+  private setSplatSequenceDebugSnapshot(
+    snapshot: NonNullable<RenderDispatcherDebugSnapshot['splatSequence']>,
+  ): void {
+    if (this.lastRenderDebugSnapshot) {
+      this.lastRenderDebugSnapshot.splatSequence = snapshot;
+    }
+  }
+
+  private preloadNearbyGaussianSplatSequenceFrames(
+    layer: SceneSplatLayer,
+    renderer: ReturnType<typeof getGaussianSplatGpuRenderer>,
+    realtimePlayback: boolean,
+    draggingPlayhead: boolean,
+    maxSplats?: number,
+  ): void {
+    const sequence = layer.gaussianSplatSequence;
+    if (!sequence || sequence.frames.length <= 1 || layer.mediaTime == null) {
+      return;
+    }
+    if (draggingPlayhead && !realtimePlayback) {
+      return;
+    }
+
+    const currentIndex = getGaussianSplatSequenceFrameIndex(sequence, layer.mediaTime);
+    const usePlaybackPreloadWindow = realtimePlayback || !draggingPlayhead;
+    const offsets = usePlaybackPreloadWindow
+      ? Array.from({ length: SPLAT_SEQUENCE_PLAYBACK_PRELOAD_FRAMES + 1 }, (_, index) => index)
+      : [0, -1, 1, -2, 2];
+    let scheduled = 0;
+    const maxSchedulePerPass = usePlaybackPreloadWindow ? SPLAT_SEQUENCE_MAX_BACKGROUND_LOADS : 1;
+
+    for (const offset of offsets) {
+      if (
+        scheduled >= maxSchedulePerPass ||
+        this.backgroundSplatSequenceLoads.size >= SPLAT_SEQUENCE_MAX_BACKGROUND_LOADS
+      ) {
+        continue;
+      }
+
+      const frameIndex = currentIndex + offset;
+      if (frameIndex < 0 || frameIndex >= sequence.frames.length) {
+        continue;
+      }
+
+      const frameInfo = this.getGaussianSplatSequenceFrameSceneKey(layer, frameIndex, maxSplats);
+      if (!frameInfo) {
+        continue;
+      }
+      const frame = frameInfo.frame;
+      if (!frame?.file && !frame?.splatUrl) {
+        continue;
+      }
+
+      const sceneKey = frameInfo.sceneKey;
+      if (renderer.hasScene(sceneKey) || this.splatLoadingClips.has(sceneKey)) {
+        continue;
+      }
+
+      scheduled += 1;
+      this.scheduleBackgroundGaussianSplatSequenceLoad({
+        sceneKey,
+        clipId: layer.clipId,
+        url: frame.splatUrl,
+        fileName: frame.name || layer.gaussianSplatFileName || layer.layerId,
+        file: frame.file,
+        showProgress: false,
+        maxSplats,
+      });
+    }
+  }
+
+  private scheduleBackgroundGaussianSplatSequenceLoad(
+    request: GaussianSplatSceneLoadRequest,
+    priority = false,
+  ): void {
+    if (
+      this.backgroundSplatSequenceLoads.has(request.sceneKey) ||
+      this.splatLoadingClips.has(request.sceneKey) ||
+      (!priority && this.backgroundSplatSequenceLoads.size >= SPLAT_SEQUENCE_MAX_BACKGROUND_LOADS)
+    ) {
+      return;
+    }
+
+    this.backgroundSplatSequenceLoads.add(request.sceneKey);
+    void this.ensureGaussianSplatSceneLoaded({
+      ...request,
+      showProgress: false,
+    }).finally(() => {
+      this.backgroundSplatSequenceLoads.delete(request.sceneKey);
+    });
+  }
+
+  private pruneGaussianSplatSequencePreviewScenes(
+    layer: SceneSplatLayer,
+    renderer: ReturnType<typeof getGaussianSplatGpuRenderer>,
+    maxSplats: number | undefined,
+  ): void {
+    const sequence = layer.gaussianSplatSequence;
+    if (!sequence || !maxSplats || maxSplats <= 0 || layer.mediaTime == null) {
+      return;
+    }
+
+    const currentIndex = getGaussianSplatSequenceFrameIndex(sequence, layer.mediaTime);
+    const retainStart = Math.max(0, currentIndex - SPLAT_SEQUENCE_PLAYBACK_RETAIN_BEHIND_FRAMES);
+    const retainEnd = Math.min(sequence.frames.length - 1, currentIndex + SPLAT_SEQUENCE_PLAYBACK_RETAIN_AHEAD_FRAMES);
+
+    for (let frameIndex = 0; frameIndex < sequence.frames.length; frameIndex += 1) {
+      if (frameIndex >= retainStart && frameIndex <= retainEnd) {
+        continue;
+      }
+
+      const frameInfo = this.getGaussianSplatSequenceFrameSceneKey(layer, frameIndex, maxSplats);
+      if (!frameInfo || this.backgroundSplatSequenceLoads.has(frameInfo.sceneKey)) {
+        continue;
+      }
+      if (this.lastSharedSplatSequenceFrame?.sceneKey === frameInfo.sceneKey) {
+        continue;
+      }
+
+      renderer.releaseScene(frameInfo.sceneKey);
+    }
   }
 
   private collectActiveSplatEffectors(width: number, height: number): SceneSplatEffectorRuntimeData[] {
@@ -579,7 +792,7 @@ export class RenderDispatcher {
     const sceneRenderDebugKey = JSON.stringify(sceneRenderDebugPayload);
     if (sceneRenderDebugKey !== this.lastSceneRenderDebugKey) {
       this.lastSceneRenderDebugKey = sceneRenderDebugKey;
-      log.warn('Shared scene render input changed', sceneRenderDebugPayload);
+      log.debug('Shared scene render input changed', sceneRenderDebugPayload);
     }
 
     // Update stats
@@ -803,30 +1016,144 @@ export class RenderDispatcher {
       this.getEffectiveTimelineTime(),
     );
     const activeSplatEffectors = this.collectActiveSplatEffectors(width, height);
-    const nativeSplatLayers = layers3D.filter((layer): layer is SceneSplatLayer =>
+    const renderLayers3D = layers3D.map((layer) => {
+      if (layer.kind !== 'splat' || layer.gaussianSplatIsSequence !== true) {
+        return layer;
+      }
+      const previewMaxSplats = preciseSplatSorting ? undefined : this.getSplatSequencePreviewMaxSplats(layer);
+      if (!previewMaxSplats) {
+        return layer;
+      }
+      return {
+        ...layer,
+        gaussianSplatRuntimeKey: this.getGaussianSplatSequenceRuntimeKey(
+          layer.gaussianSplatRuntimeKey,
+          previewMaxSplats,
+        ),
+        gaussianSplatSettings: {
+          ...(layer.gaussianSplatSettings ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS),
+          render: {
+            ...(layer.gaussianSplatSettings?.render ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render),
+            maxSplats: previewMaxSplats,
+          },
+        },
+      };
+    });
+    const nativeSplatLayers = renderLayers3D.filter((layer): layer is SceneSplatLayer =>
       layer.kind === 'splat',
     );
+    const nativeRenderer = getGaussianSplatGpuRenderer();
+    const timelineState = useTimelineStore.getState();
+    const isDraggingPlayhead = timelineState.isDraggingPlayhead;
     for (const layer of nativeSplatLayers) {
+      const previewMaxSplats = preciseSplatSorting ? undefined : this.getSplatSequencePreviewMaxSplats(layer);
       const sceneKey = this.getNativeGaussianSplatSceneKey(layer.clipId, layer.gaussianSplatRuntimeKey);
-      const nativeRenderer = getGaussianSplatGpuRenderer();
+      const canHoldSequenceFrame = layer.gaussianSplatIsSequence === true && this.lastSharedSplatSequenceFrame !== null;
       if (!nativeRenderer.hasScene(sceneKey) && !this.splatLoadingClips.has(sceneKey)) {
-        void this.ensureGaussianSplatSceneLoaded({
-          sceneKey,
-          clipId: layer.clipId,
-          url: layer.gaussianSplatUrl,
-          fileName: layer.gaussianSplatFileName ?? layer.layerId,
-          file: layer.gaussianSplatFile,
-        });
+        const canDeferDragLoad =
+          layer.gaussianSplatIsSequence === true &&
+          isDraggingPlayhead &&
+          !isRealtimePlayback &&
+          canHoldSequenceFrame;
+        if (!canDeferDragLoad) {
+          const request = {
+            sceneKey,
+            clipId: layer.clipId,
+            url: layer.gaussianSplatUrl,
+            fileName: layer.gaussianSplatFileName ?? layer.layerId,
+            file: layer.gaussianSplatFile,
+            showProgress: layer.gaussianSplatIsSequence === true && previewMaxSplats ? false : undefined,
+            maxSplats: previewMaxSplats,
+          };
+          if (layer.gaussianSplatIsSequence === true && canHoldSequenceFrame) {
+            this.scheduleBackgroundGaussianSplatSequenceLoad(request, true);
+          } else {
+            void this.ensureGaussianSplatSceneLoaded(request);
+          }
+        }
+      }
+      if (!preciseSplatSorting) {
+        this.preloadNearbyGaussianSplatSequenceFrames(
+          layer,
+          nativeRenderer,
+          isRealtimePlayback,
+          isDraggingPlayhead,
+          previewMaxSplats,
+        );
+        this.pruneGaussianSplatSequencePreviewScenes(layer, nativeRenderer, previewMaxSplats);
       }
     }
 
-    const textureView = renderer.renderScene(
+    const sequenceTargetLayer = nativeSplatLayers.find((layer) => layer.gaussianSplatIsSequence === true);
+    const sequenceTargetSceneKey = sequenceTargetLayer
+      ? this.getNativeGaussianSplatSceneKey(sequenceTargetLayer.clipId, sequenceTargetLayer.gaussianSplatRuntimeKey)
+      : undefined;
+    const sequenceRenderedSceneKey = sequenceTargetSceneKey && nativeRenderer.hasScene(sequenceTargetSceneKey)
+      ? sequenceTargetSceneKey
+      : undefined;
+
+    let textureView = renderer.renderScene(
       device,
-      layers3D,
+      renderLayers3D,
       camera,
       activeSplatEffectors,
       isRealtimePlayback,
     );
+    const hasSplatSequence = nativeSplatLayers.some((layer) => layer.gaussianSplatIsSequence === true);
+    if (textureView && hasSplatSequence) {
+      this.lastSharedSplatSequenceFrame = {
+        textureView,
+        sceneKey: sequenceRenderedSceneKey ?? sequenceTargetSceneKey ?? '',
+        width,
+        height,
+      };
+    }
+    if (!textureView) {
+      const canHoldLastSplatSequenceFrame =
+        hasSplatSequence &&
+        this.lastSharedSplatSequenceFrame !== null &&
+        this.lastSharedSplatSequenceFrame.width === width &&
+        this.lastSharedSplatSequenceFrame.height === height;
+      if (canHoldLastSplatSequenceFrame) {
+        textureView = this.lastSharedSplatSequenceFrame!.textureView;
+        this.setSplatSequenceDebugSnapshot({
+          targetSceneKey: sequenceTargetSceneKey,
+          renderedSceneKey: this.lastSharedSplatSequenceFrame!.sceneKey || undefined,
+          mode: 'held',
+          visualFrameChangesLastSecond: this.recordSplatSequenceVisualFrame(
+            this.lastSharedSplatSequenceFrame!.sceneKey || undefined,
+            false,
+          ),
+          backgroundLoads: this.backgroundSplatSequenceLoads.size,
+        });
+      } else {
+        if (!hasSplatSequence) {
+          this.lastSharedSplatSequenceFrame = null;
+        }
+        if (hasSplatSequence) {
+          this.setSplatSequenceDebugSnapshot({
+            targetSceneKey: sequenceTargetSceneKey,
+            renderedSceneKey: undefined,
+            mode: 'missing',
+            visualFrameChangesLastSecond: this.recordSplatSequenceVisualFrame(undefined, false),
+            backgroundLoads: this.backgroundSplatSequenceLoads.size,
+          });
+        }
+        for (let i = indices3D.length - 1; i >= 0; i--) {
+          layerData.splice(indices3D[i], 1);
+        }
+        return;
+      }
+    } else if (hasSplatSequence) {
+      this.setSplatSequenceDebugSnapshot({
+        targetSceneKey: sequenceTargetSceneKey,
+        renderedSceneKey: sequenceRenderedSceneKey,
+        mode: 'target',
+        visualFrameChangesLastSecond: this.recordSplatSequenceVisualFrame(sequenceRenderedSceneKey, true),
+        backgroundLoads: this.backgroundSplatSequenceLoads.size,
+      });
+    }
+
     if (!textureView) {
       for (let i = indices3D.length - 1; i >= 0; i--) {
         layerData.splice(indices3D[i], 1);
@@ -1190,6 +1517,10 @@ export class RenderDispatcher {
       message?: string;
     },
   ): void {
+    if (request.showProgress === false) {
+      return;
+    }
+
     useEngineStore.getState().setGaussianSplatLoadProgress({
       sceneKey: request.sceneKey,
       clipId: request.clipId,
@@ -1319,6 +1650,7 @@ export class RenderDispatcher {
 
       const loadFile = file;
       const asset = await loadGaussianSplatAssetCached(request.sceneKey, loadFile, undefined, {
+        maxSplats: request.maxSplats,
         onProgress: (progress) => {
           this.setGaussianSplatLoadProgress(request, {
             phase: progress.phase,

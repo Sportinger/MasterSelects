@@ -122,9 +122,18 @@ describe('gaussian splat loader orientation', () => {
     expect(Math.max(...events.map((event) => event.percent ?? 0))).toBeGreaterThanOrEqual(0.96);
   });
 
-  it('does not fall back to legacy point-cloud PLY conversion', async () => {
-    await expect(loadGaussianSplatAsset(createPointCloudPlyFile(), 'ply')).rejects.toThrow(
-      /invalid file header|Missing required splat properties/i,
-    );
+  it('falls back to point-cloud PLY conversion when gaussian scale properties are missing', async () => {
+    const asset = await loadGaussianSplatAsset(createPointCloudPlyFile(), 'ply');
+    const data = asset.frames[0]?.buffer.data;
+
+    expect(asset.metadata.format).toBe('ply');
+    expect(asset.metadata.splatCount).toBe(4);
+    expect(data).toBeDefined();
+    expect(data?.length).toBe(4 * 14);
+    expect(Math.abs(data![0] ?? 1)).toBeLessThan(1e-6);
+    expect(Math.abs(data![1] ?? 1)).toBeLessThan(1e-6);
+    expect(Math.abs(data![2] ?? 1)).toBeLessThan(1e-6);
+    expect(data![3]).toBeGreaterThan(0);
+    expect(Array.from(data!.slice(10, 14))).toEqual([1, 0, 0, 1]);
   });
 });

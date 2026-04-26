@@ -28,7 +28,7 @@ import {
   getGaussianSplatSequenceFrameUrl,
   resolveGaussianSplatSequenceData,
 } from '../../utils/gaussianSplatSequence';
-import { getModelSequenceFrameUrl, resolveModelSequenceData } from '../../utils/modelSequence';
+import { getModelSequenceFrame, getModelSequenceFrameUrl, resolveModelSequenceData } from '../../utils/modelSequence';
 import { resolveSceneEffectorsEnabled } from '../../engine/scene/SceneEffectorUtils';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
@@ -906,7 +906,9 @@ export class LayerBuilderService {
     const text3DProperties = meshType === 'text3d'
       ? (clip.text3DProperties ?? clip.source?.text3DProperties ?? DEFAULT_TEXT_3D_PROPERTIES)
       : (clip.text3DProperties ?? clip.source?.text3DProperties);
-    const modelUrl = this.resolveClipModelUrl(clip, timeInfo.clipTime);
+    const modelSequence = this.getClipModelSequence(clip);
+    const modelFrame = getModelSequenceFrame(modelSequence, timeInfo.clipTime);
+    const modelUrl = getModelSequenceFrameUrl(modelSequence, timeInfo.clipTime, clip.source?.modelUrl);
 
     const finalOpacity = opacityOverride !== undefined
       ? transform.opacity * opacityOverride
@@ -922,6 +924,8 @@ export class LayerBuilderService {
       source: {
         type: 'model',
         modelUrl,
+        modelFileName: modelFrame?.name ?? clip.source?.modelFileName ?? clip.file?.name ?? clip.name,
+        ...(modelSequence ? { modelSequence } : {}),
         file: clip.file,
         threeDEffectorsEnabled: resolveSceneEffectorsEnabled(clip.source?.threeDEffectorsEnabled),
         meshType,

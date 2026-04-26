@@ -32,7 +32,7 @@ import type {
   TimelineClip,
 } from '../../types';
 import type {
-  ProjectMediaBoardNodeLayout,
+  ProjectMediaBoardOrder,
   ProjectMediaBoardViewport,
 } from './types/project.types';
 
@@ -421,7 +421,7 @@ export async function syncStoresToProject(): Promise<void> {
       const mediaPanelNameWidth = localStorage.getItem('media-panel-name-width');
       const mediaPanelViewMode = readMediaPanelViewMode();
       const mediaPanelBoardViewport = parseLocalStorageJson<ProjectMediaBoardViewport>('media-panel-board-viewport');
-      const mediaPanelBoardLayouts = parseLocalStorageJson<Record<string, ProjectMediaBoardNodeLayout>>('media-panel-board-layout');
+      const mediaPanelBoardOrder = parseLocalStorageJson<ProjectMediaBoardOrder>('media-panel-board-order');
       const transcriptLanguage = localStorage.getItem('transcriptLanguage');
       const settingsState = useSettingsStore.getState();
       const midiState = useMIDIStore.getState();
@@ -433,7 +433,7 @@ export async function syncStoresToProject(): Promise<void> {
         mediaPanelNameWidth: mediaPanelNameWidth ? parseInt(mediaPanelNameWidth, 10) : undefined,
         mediaPanelViewMode,
         mediaPanelBoardViewport,
-        mediaPanelBoardLayouts,
+        mediaPanelBoardOrder,
         transcriptLanguage: transcriptLanguage || undefined,
         thumbnailsEnabled: timelineState.thumbnailsEnabled,
         waveformsEnabled: timelineState.waveformsEnabled,
