@@ -10038,6 +10038,34 @@ input[type="checkbox"] {
   color: var(--text-inverse);
 }
 
+.preview-scene-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  background: var(--preview-overlay-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  backdrop-filter: blur(4px);
+}
+
+.preview-scene-toggle-btn:hover {
+  background: var(--preview-overlay-bg-hover);
+  color: var(--text-primary);
+  border-color: var(--gray-300);
+}
+
+.preview-scene-toggle-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-inverse);
+}
+
 .preview-zoom-label {
   font-size: 11px;
   color: var(--text-secondary);
@@ -10290,6 +10318,176 @@ input[type="checkbox"] {
 
 .preview-splat-progress-overlay.error .preview-splat-progress-fill {
   background: var(--danger);
+}
+
+.preview-scene-object-overlay {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 14;
+  pointer-events: none;
+}
+
+.preview-scene-object-handle {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  color: #f6f8fb;
+  background: rgba(12, 15, 20, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 50%;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.42);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.preview-scene-object-handle:hover,
+.preview-scene-object-handle.selected {
+  border-color: #ffffff;
+  background: #2563eb;
+}
+
+.preview-scene-object-handle.kind-effector {
+  background: #7c2d12;
+}
+
+.preview-scene-object-handle.kind-splat {
+  background: #166534;
+}
+
+.preview-scene-object-handle.kind-model,
+.preview-scene-object-handle.kind-plane {
+  background: #581c87;
+}
+
+.preview-scene-object-handle.selected {
+  background: #2563eb;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.92), 0 8px 20px rgba(0, 0, 0, 0.45);
+}
+
+.preview-scene-gizmo-axis-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.preview-scene-gizmo-axis {
+  position: absolute;
+  height: 22px;
+  margin: -11px 0 0 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: grab;
+  pointer-events: auto;
+  transform-origin: 0 50%;
+}
+
+.preview-scene-gizmo-axis:active {
+  cursor: grabbing;
+}
+
+.preview-scene-gizmo-axis-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: translateY(-50%);
+}
+
+.preview-scene-gizmo-axis.mode-rotate .preview-scene-gizmo-axis-line {
+  background: repeating-linear-gradient(
+    90deg,
+    currentColor 0,
+    currentColor 7px,
+    transparent 7px,
+    transparent 12px
+  );
+}
+
+.preview-scene-gizmo-axis.mode-scale .preview-scene-gizmo-axis-line {
+  height: 4px;
+}
+
+.preview-scene-gizmo-end {
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  background: #10141c;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  transform: translateY(-50%);
+}
+
+.preview-scene-gizmo-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: 11px;
+  font-weight: 800;
+  pointer-events: none;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.9),
+    0 -1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.preview-scene-gizmo-axis.axis-x,
+.preview-scene-gizmo-label.axis-x {
+  color: #ef4444;
+}
+
+.preview-scene-gizmo-axis.axis-y,
+.preview-scene-gizmo-label.axis-y {
+  color: #22c55e;
+}
+
+.preview-scene-gizmo-axis.axis-z,
+.preview-scene-gizmo-label.axis-z {
+  color: #3b82f6;
+}
+
+.preview-scene-gizmo-toolbar {
+  position: absolute;
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: rgba(8, 11, 16, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 5px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.36);
+  pointer-events: auto;
+}
+
+.preview-scene-gizmo-toolbar button {
+  min-width: 44px;
+  height: 22px;
+  padding: 0 7px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.preview-scene-gizmo-toolbar button:hover,
+.preview-scene-gizmo-toolbar button.active {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .preview-canvas-wrapper {

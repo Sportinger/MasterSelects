@@ -27,6 +27,7 @@ import { SourceMonitor } from './SourceMonitor';
 import { StatsOverlay } from './StatsOverlay';
 import { PreviewControls } from './PreviewControls';
 import { PreviewBottomControls } from './PreviewBottomControls';
+import { SceneObjectOverlay } from './SceneObjectOverlay';
 import { useEditModeOverlay } from './useEditModeOverlay';
 import { useLayerDrag } from './useLayerDrag';
 import { useSAM2Store } from '../../stores/sam2Store';
@@ -105,7 +106,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const sceneNavFpsMoveSpeed = useEngineStore(selectSceneNavFpsMoveSpeed);
   const activeSplatLoadProgress = useEngineStore(selectActiveGaussianSplatLoadProgress);
   const setSceneNavFpsMoveSpeed = useEngineStore((s) => s.setSceneNavFpsMoveSpeed);
-  const { clips, selectedClipIds, primarySelectedClipId, selectClip, updateClipTransform, maskEditMode, layers, selectedLayerId, selectLayer, updateLayer, tracks } = useTimelineStore(useShallow(s => ({
+  const { clips, selectedClipIds, primarySelectedClipId, selectClip, updateClipTransform, maskEditMode, layers, selectedLayerId, selectLayer, updateLayer, tracks, isPlaying } = useTimelineStore(useShallow(s => ({
     clips: s.clips,
     selectedClipIds: s.selectedClipIds,
     primarySelectedClipId: s.primarySelectedClipId,
@@ -117,6 +118,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     selectLayer: s.selectLayer,
     updateLayer: s.updateLayer,
     tracks: s.tracks,
+    isPlaying: s.isPlaying,
   })));
   const { compositions, activeCompositionId } = useMediaStore(useShallow(s => ({
     compositions: s.compositions,
@@ -335,6 +337,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
   // Edit mode state
   const [editMode, setEditMode] = useState(false);
+  const [sceneObjectOverlayEnabled, setSceneObjectOverlayEnabled] = useState(true);
   const [viewZoom, setViewZoom] = useState(1);
   const [viewPan, setViewPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
@@ -1174,6 +1177,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const splatLoadPhaseLabel = activeSplatLoadProgress
     ? getSplatLoadPhaseLabel(activeSplatLoadProgress.phase)
     : '';
+  const showSceneObjectOverlay = sceneObjectOverlayEnabled && isEditableSource && !isPlaying;
 
   return (
     <div
@@ -1212,6 +1216,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         editMode={editMode}
         canEdit={isEditableSource}
         setEditMode={setEditMode}
+        sceneObjectOverlayEnabled={sceneObjectOverlayEnabled}
+        setSceneObjectOverlayEnabled={setSceneObjectOverlayEnabled}
         viewZoom={viewZoom}
         resetView={resetView}
         source={source}
@@ -1285,6 +1291,19 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
                 <SAM2Overlay
                   canvasWidth={effectiveResolution.width}
                   canvasHeight={effectiveResolution.height}
+                />
+              )}
+              {showSceneObjectOverlay && (
+                <SceneObjectOverlay
+                  clips={clips}
+                  tracks={tracks}
+                  selectedClipId={selectedClipId}
+                  selectClip={selectClip}
+                  canvasSize={canvasSize}
+                  viewport={effectiveResolution}
+                  compositionId={displayedCompId}
+                  sceneNavClipId={sceneNavClipId}
+                  enabled
                 />
               )}
             </>
