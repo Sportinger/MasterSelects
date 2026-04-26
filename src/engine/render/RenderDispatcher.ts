@@ -1044,7 +1044,21 @@ export class RenderDispatcher {
     );
     const nativeRenderer = getGaussianSplatGpuRenderer();
     const timelineState = useTimelineStore.getState();
+    const engineState = useEngineStore.getState();
     const isDraggingPlayhead = timelineState.isDraggingPlayhead;
+    const primarySelectedClipId = timelineState.primarySelectedClipId && timelineState.selectedClipIds.has(timelineState.primarySelectedClipId)
+      ? timelineState.primarySelectedClipId
+      : timelineState.selectedClipIds.values().next().value as string | undefined;
+    const sceneGizmo = primarySelectedClipId &&
+      timelineState.isExporting !== true &&
+      timelineState.isPlaying !== true &&
+      renderLayers3D.some((layer) => layer.clipId === primarySelectedClipId)
+      ? {
+          clipId: primarySelectedClipId,
+          mode: engineState.sceneGizmoMode,
+          hoveredAxis: engineState.sceneGizmoHoveredAxis,
+        }
+      : null;
     for (const layer of nativeSplatLayers) {
       const previewMaxSplats = preciseSplatSorting ? undefined : this.getSplatSequencePreviewMaxSplats(layer);
       const sceneKey = this.getNativeGaussianSplatSceneKey(layer.clipId, layer.gaussianSplatRuntimeKey);
@@ -1098,6 +1112,7 @@ export class RenderDispatcher {
       camera,
       activeSplatEffectors,
       isRealtimePlayback,
+      sceneGizmo,
     );
     const hasSplatSequence = nativeSplatLayers.some((layer) => layer.gaussianSplatIsSequence === true);
     if (textureView && hasSplatSequence) {

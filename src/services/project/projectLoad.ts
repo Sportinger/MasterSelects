@@ -251,6 +251,10 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
           absolutePath: frame.absolutePath,
           file: frameFile,
           splatUrl,
+          splatCount: frame.splatCount,
+          fileSize: frame.fileSize,
+          container: frame.container,
+          codec: frame.codec,
         });
       }
 
@@ -390,12 +394,15 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
       width: pm.width,
       height: pm.height,
       fps: pm.frameRate,
-      codec: pm.codec,
+      codec: pm.codec ?? gaussianSplatSequence?.codec,
       audioCodec: pm.audioCodec,
-      container: pm.container,
+      container: pm.container ?? (gaussianSplatSequence?.container ? `${gaussianSplatSequence.container} Seq` : undefined),
       bitrate: pm.bitrate,
-      fileSize: pm.fileSize,
+      fileSize: pm.fileSize ?? gaussianSplatSequence?.totalFileSize,
       hasAudio: pm.hasAudio,
+      splatCount: pm.splatCount ?? gaussianSplatSequence?.frames[0]?.splatCount,
+      totalSplatCount: pm.totalSplatCount ?? gaussianSplatSequence?.totalSplatCount,
+      splatFrameCount: pm.splatFrameCount ?? gaussianSplatSequence?.frameCount,
       modelSequence,
       gaussianSplatSequence,
       proxyStatus: pm.hasProxy ? 'ready' : 'none',
@@ -764,6 +771,11 @@ export async function loadProjectToStores(): Promise<void> {
     localStorage.setItem('media-panel-board-order', JSON.stringify(projectData.uiState.mediaPanelBoardOrder));
   } else {
     removeLocalStorageKey('media-panel-board-order');
+  }
+  if (projectData.uiState?.mediaPanelBoardGroupOffsets) {
+    localStorage.setItem('media-panel-board-group-offsets', JSON.stringify(projectData.uiState.mediaPanelBoardGroupOffsets));
+  } else {
+    removeLocalStorageKey('media-panel-board-group-offsets');
   }
   removeLocalStorageKey('media-panel-board-layout');
   window.dispatchEvent(new CustomEvent(MEDIA_PANEL_PROJECT_UI_LOADED_EVENT));

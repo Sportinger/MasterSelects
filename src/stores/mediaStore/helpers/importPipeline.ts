@@ -13,6 +13,7 @@ import { useSettingsStore } from '../../settingsStore';
 import { Logger } from '../../../services/logger';
 import { prewarmGaussianSplatRuntime } from '../../../engine/scene/runtime/SharedSplatRuntimeCache';
 import { prepareLottieAsset } from '../../../services/vectorAnimation/lottieMetadata';
+import { readGaussianSplatFileStats } from './gaussianSplatStats';
 
 const log = Logger.create('Import');
 
@@ -125,6 +126,10 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
     }
   }
 
+  const gaussianSplatStats = type === 'gaussian-splat'
+    ? await readGaussianSplatFileStats(canonicalFile)
+    : undefined;
+
   // Build MediaFile
   const mediaFile: MediaFile = {
     id,
@@ -142,6 +147,7 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
     projectPath: copyResult?.relativePath,
     ...info,
     ...proxyInfo,
+    ...gaussianSplatStats,
   };
 
   if (type === 'gaussian-splat') {

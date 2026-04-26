@@ -76,6 +76,7 @@ Imports use a two-phase approach:
 1. **Phase 1 (instant):** A placeholder entry appears immediately in the panel with `isImporting: true`, showing file name and size
 2. **Phase 2 (background):** Full processing runs in the background:
    - Media info extraction (dimensions, duration, FPS, codec, bitrate, audio detection)
+   - Gaussian-splat stats extraction (container, file size, per-file splat count, and sequence totals)
    - Thumbnail generation (for video and image files)
    - File hash calculation (for deduplication and proxy matching)
    - Copy to project RAW folder when `copyMediaToProject` is enabled, or when the import is forced
@@ -141,15 +142,22 @@ The panel supports three view modes through the header mode control. The selecte
 
 ### Board View
 - Board canvas grouped by Media Panel folders; every folder appears as a group, including empty folders
-- Mouse wheel zooms around the cursor; left-dragging the board or a node pans the board
-- Items inside each folder snap to a fixed slot grid
-- Right-dragging nodes reorders the selected items in the target folder grid; dropping onto another folder group moves them there
+- The root area contains top-level folders instead of rendering them beside root as separate peers
+- Mouse wheel zooms around the cursor; left-dragging the board, a node, or a folder group pans the board, with the background grid moving at a subtle parallax offset
+- Folder groups grow and shrink dynamically with their contents
+- Growing folder groups push sibling groups out of the way so board groups do not overlap
+- Double-clicking a folder group name starts inline rename for that folder
+- Items inside each folder wrap into dynamic rows sized from the media aspect ratio instead of fixed slots
+- Right-dragging nodes reorders the selected items in the target folder; nearby items make space during drag hover to preview the exact insertion point
+- Right-dragging a folder group moves the group and its contents as a spatial unit; nested folder groups move along with their parent folder
+- Folder groups accept dropped items and folders from the other Media Panel views, while drops outside the root area are ignored
 - Ctrl/right-drag starts a marquee selection; right-clicking opens the normal Media Panel context menu
-- Media, compositions, text, solids, meshes, cameras, and splat effectors appear as board nodes
-- Board order and viewport are saved into the project UI state, with `localStorage` as the live-session fallback
+- Media, compositions, text, solids, meshes, cameras, and splat effectors appear as board nodes with hover-only name and metadata overlays
+- Board order, folder group offsets, and viewport are saved into the project UI state, with `localStorage` as the live-session fallback
 - Drag files or folders from the OS onto a group to import directly into that folder
 - Drag existing Media Panel items onto groups to move them between folders
 - Use the small handle on a node to drag that item to the timeline with the same drag payloads as Classic and Icons view
+- Switching to or from Board view morphs folder groups from/to their Classic rows or Icons thumbnails using the same 500ms view transition as media items
 - The board uses the same Add dropdown and context menu as Classic view; new folders appear immediately in Classic, Icons, and Board view
 - The **AI** board action opens the existing AI Video panel; generated results still import through the normal Media Store path
 
@@ -354,10 +362,10 @@ The media list displays items in a table with the following columns:
 | **Name** | File name with AE-style file type icon | Video.mp4 |
 | **Label** | Colored dot indicator (clickable) | colored circle |
 | **Duration** | Clip length (m:ss) | 4:02 |
-| **Resolution** | Width x Height | 1920x1080 |
+| **Resolution** | Width x Height, or splat count / sequence total for gaussian splats | 1920x1080, 3f / 12.4M splats |
 | **FPS** | Frame rate (video) or composition frame rate | 25 |
-| **Container** | File container format | MP4, MKV, WebM |
-| **Codec** | Video codec | H.264, VP9, AV1 |
+| **Container** | File container format | MP4, MKV, WebM, PLY Seq |
+| **Codec** | Video codec or splat runtime family | H.264, VP9, Splat Seq |
 | **Audio** | Has audio track? | Yes / No |
 | **Bitrate** | Data rate | 12.5 Mbps |
 | **Size** | File size | 125.4 MB |
@@ -411,6 +419,9 @@ interface MediaFile {
   fileSize?: number;         // File size in bytes
   bitrate?: number;          // Bits per second
   hasAudio?: boolean;        // Whether video has audio tracks
+  splatCount?: number;       // First/only gaussian-splat frame count
+  totalSplatCount?: number;  // Sequence total, abbreviated in UI as K/M/B
+  splatFrameCount?: number;  // Gaussian-splat sequence frame count
   thumbnailUrl?: string;
   fileHash?: string;         // For dedup and proxy matching
   labelColor?: LabelColor;   // 16-color label system
@@ -482,7 +493,7 @@ Media references are saved with the project file, while IndexedDB keeps the hand
 - File metadata (name, type, dimensions, duration, codec, etc.)
 - File handles (for reload on next session)
 - Folder structure
-- Media Panel view mode, Board viewport, and Board slot order
+- Media Panel view mode, Board viewport, Board folder group offsets, and Board slot order
 - Composition state with timeline data
 - Text items and solid items (via localStorage)
 - When present, `projectPath` points at the copied `Raw/<name>` file and is used for automatic relinking

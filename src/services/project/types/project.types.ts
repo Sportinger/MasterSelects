@@ -59,6 +59,7 @@ export interface ProjectMediaBoardNodeLayout {
 }
 
 export type ProjectMediaBoardOrder = Record<string, string[]>;
+export type ProjectMediaBoardGroupOffsets = Record<string, { x: number; y: number }>;
 
 // UI state that gets persisted with the project
 export interface ProjectUIState {
@@ -78,6 +79,7 @@ export interface ProjectUIState {
   mediaPanelViewMode?: 'classic' | 'icons' | 'board';
   mediaPanelBoardViewport?: ProjectMediaBoardViewport;
   mediaPanelBoardOrder?: ProjectMediaBoardOrder;
+  mediaPanelBoardGroupOffsets?: ProjectMediaBoardGroupOffsets;
   /** @deprecated Board nodes now snap to folder slot grids; retained only to ignore older project files safely. */
   mediaPanelBoardLayouts?: Record<string, ProjectMediaBoardNodeLayout>;
   // Transcript settings

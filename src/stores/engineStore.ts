@@ -4,6 +4,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import type { EngineStats } from '../types';
+import type { SceneGizmoAxis, SceneGizmoMode } from '../engine/scene/types';
 
 export type GaussianSplatLoadPhase =
   | 'fetching'
@@ -44,6 +45,8 @@ interface EngineState {
   sceneNavClipId: string | null;
   sceneNavFpsMode: boolean;
   sceneNavFpsMoveSpeed: number;
+  sceneGizmoMode: SceneGizmoMode;
+  sceneGizmoHoveredAxis: SceneGizmoAxis | null;
   gaussianSplatLoadProgress: Record<string, GaussianSplatLoadProgressEntry>;
 
   // Actions
@@ -56,6 +59,8 @@ interface EngineState {
   setSceneNavClipId: (clipId: string | null) => void;
   setSceneNavFpsMode: (enabled: boolean) => void;
   setSceneNavFpsMoveSpeed: (speed: number) => void;
+  setSceneGizmoMode: (mode: SceneGizmoMode) => void;
+  setSceneGizmoHoveredAxis: (axis: SceneGizmoAxis | null) => void;
   setGaussianSplatLoadProgress: (progress: GaussianSplatLoadProgressUpdate) => void;
   clearGaussianSplatLoadProgress: (sceneKey: string) => void;
 }
@@ -145,6 +150,8 @@ export const useEngineStore = create<EngineState>()(
     sceneNavClipId: null,
     sceneNavFpsMode: false,
     sceneNavFpsMoveSpeed: 1,
+    sceneGizmoMode: 'move',
+    sceneGizmoHoveredAxis: null,
     gaussianSplatLoadProgress: {},
     engineStats: {
       fps: 0,
@@ -199,6 +206,14 @@ export const useEngineStore = create<EngineState>()(
 
     setSceneNavFpsMoveSpeed: (speed: number) => {
       set({ sceneNavFpsMoveSpeed: snapSceneNavFpsMoveSpeed(speed) });
+    },
+
+    setSceneGizmoMode: (mode: SceneGizmoMode) => {
+      set({ sceneGizmoMode: mode });
+    },
+
+    setSceneGizmoHoveredAxis: (axis: SceneGizmoAxis | null) => {
+      set({ sceneGizmoHoveredAxis: axis });
     },
 
     setGaussianSplatLoadProgress: (progress: GaussianSplatLoadProgressUpdate) => {

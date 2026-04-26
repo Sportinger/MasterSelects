@@ -1,6 +1,6 @@
 // Media Panel - Project browser like After Effects
 
-import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useRef, useState, useEffect, useLayoutEffect } from 'react';
 import { Logger } from '../../services/logger';
 import { FileTypeIcon } from './media/FileTypeIcon';
 import { LABEL_COLORS, getLabelHex } from './media/labelColors';
@@ -34,6 +34,11 @@ interface MediaBoardViewport {
   panY: number;
 }
 
+interface MediaBoardGroupOffset {
+  x: number;
+  y: number;
+}
+
 interface MediaBoardNodeLayout {
   x: number;
   y: number;
@@ -43,18 +48,28 @@ interface MediaBoardNodeLayout {
 
 interface MediaBoardGroupLayout {
   id: string | null;
+  parentId: string | null;
   name: string;
   x: number;
   y: number;
   width: number;
   height: number;
   itemCount: number;
+  depth: number;
 }
 
 interface MediaBoardNodePlacement {
   item: MediaBoardItem;
   layout: MediaBoardNodeLayout;
   defaultLayout: MediaBoardNodeLayout;
+  groupId: string | null;
+  slotIndex: number;
+  isDraggingPreview?: boolean;
+}
+
+interface MediaBoardInsertGapPlacement {
+  id: string;
+  layout: MediaBoardNodeLayout;
   groupId: string | null;
   slotIndex: number;
 }
@@ -64,6 +79,13 @@ interface MediaBoardMarquee {
   startY: number;
   currentX: number;
   currentY: number;
+}
+
+interface MediaBoardInsertionPreview {
+  movingIds: string[];
+  targetGroupId: string | null;
+  targetIndex: number;
+  sourceLayouts: Record<string, MediaBoardNodeLayout>;
 }
 
 type MediaPanelContextMenu = {
@@ -91,21 +113,59 @@ const STORAGE_KEY = 'media-panel-column-order';
 const VIEW_MODE_STORAGE_KEY = 'media-panel-view-mode';
 const BOARD_VIEWPORT_STORAGE_KEY = 'media-panel-board-viewport';
 const BOARD_ORDER_STORAGE_KEY = 'media-panel-board-order';
+const BOARD_GROUP_OFFSETS_STORAGE_KEY = 'media-panel-board-group-offsets';
 const MEDIA_PANEL_PROJECT_UI_LOADED_EVENT = 'media-panel-project-ui-loaded';
 const MEDIA_BOARD_ROOT_ORDER_KEY = '__root__';
 
 const DEFAULT_BOARD_VIEWPORT: MediaBoardViewport = { zoom: 0.82, panX: 32, panY: 28 };
-const MEDIA_BOARD_NODE_WIDTH = 156;
-const MEDIA_BOARD_NODE_HEIGHT = 132;
+const MEDIA_BOARD_NODE_TARGET_AREA = 20500;
+const MEDIA_BOARD_NODE_MIN_WIDTH = 86;
+const MEDIA_BOARD_NODE_MAX_WIDTH = 212;
+const MEDIA_BOARD_NODE_MIN_HEIGHT = 72;
+const MEDIA_BOARD_NODE_MAX_HEIGHT = 190;
+const MEDIA_BOARD_NODE_ASPECT_MIN = 0.45;
+const MEDIA_BOARD_NODE_ASPECT_MAX = 2.75;
 const MEDIA_BOARD_NODE_GAP = 14;
-const MEDIA_BOARD_GROUP_WIDTH = 732;
 const MEDIA_BOARD_GROUP_HEADER_HEIGHT = 42;
 const MEDIA_BOARD_GROUP_PADDING = 18;
-const MEDIA_BOARD_GROUP_GAP = 72;
-const MEDIA_BOARD_COLUMNS_PER_GROUP = 4;
+const MEDIA_BOARD_FOLDER_GAP = 28;
+const MEDIA_BOARD_GROUP_MIN_WIDTH = 260;
+const MEDIA_BOARD_GROUP_MAX_BODY_WIDTH = 700;
+const MEDIA_BOARD_FOLDER_ROW_MAX_WIDTH = 1480;
 const MEDIA_BOARD_PAN_ZOOM_MIN = 0.18;
 const MEDIA_BOARD_PAN_ZOOM_MAX = 2.4;
 const MEDIA_BOARD_DRAG_START_DISTANCE = 4;
+const MEDIA_BOARD_GRID_PARALLAX = 0.18;
+const MEDIA_PANEL_VIEW_TRANSITION_MS = 500;
+
+interface MediaPanelTransitionBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+interface MediaPanelTransitionCapture {
+  box: MediaPanelTransitionBox;
+  clone: HTMLElement;
+  baseWidth: number;
+  baseHeight: number;
+  scaleX: number;
+  scaleY: number;
+}
+
+interface PendingMediaPanelViewTransition {
+  captures: Map<string, MediaPanelTransitionCapture>;
+  overlay: HTMLDivElement;
+  panelBox: MediaPanelTransitionBox;
+}
+
+interface ActiveMediaPanelViewTransition {
+  animations: Animation[];
+  hiddenTargets: HTMLElement[];
+  overlay: HTMLDivElement;
+  timeoutId: number;
+}
 
 // Load column order from localStorage
 function loadColumnOrder(): ColumnId[] {
@@ -180,6 +240,28 @@ function loadMediaBoardOrder(): Record<string, string[]> {
   }
 }
 
+function loadMediaBoardGroupOffsets(): Record<string, MediaBoardGroupOffset> {
+  try {
+    const stored = localStorage.getItem(BOARD_GROUP_OFFSETS_STORAGE_KEY);
+    if (!stored) return {};
+    const parsed = JSON.parse(stored) as Record<string, Partial<MediaBoardGroupOffset>>;
+    if (!parsed || typeof parsed !== 'object') return {};
+
+    const valid: Record<string, MediaBoardGroupOffset> = {};
+    Object.entries(parsed).forEach(([folderId, offset]) => {
+      if (!folderId || folderId === MEDIA_BOARD_ROOT_ORDER_KEY || !offset || typeof offset !== 'object') return;
+      const x = Number(offset.x);
+      const y = Number(offset.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      if (Math.abs(x) < 0.5 && Math.abs(y) < 0.5) return;
+      valid[folderId] = { x, y };
+    });
+    return valid;
+  } catch {
+    return {};
+  }
+}
+
 function getProjectItemIconType(item: ProjectItem | undefined): string | undefined {
   if (!item || !('type' in item)) return undefined;
   if (item.type === 'model') {
@@ -188,6 +270,93 @@ function getProjectItemIconType(item: ProjectItem | undefined): string | undefin
       : 'mesh';
   }
   return item.type;
+}
+
+function formatCompactCount(value: number | undefined): string | null {
+  if (!value || !Number.isFinite(value) || value <= 0) return null;
+  if (value < 1000) return String(Math.round(value));
+  if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)}K`;
+  if (value < 1_000_000_000) return `${(value / 1_000_000).toFixed(value < 10_000_000 ? 1 : 0)}M`;
+  return `${(value / 1_000_000_000).toFixed(1)}B`;
+}
+
+function getGaussianSplatFrameCount(mediaFile: MediaFile): number | undefined {
+  return mediaFile.splatFrameCount ?? mediaFile.gaussianSplatSequence?.frameCount;
+}
+
+function getGaussianSplatTotalCount(mediaFile: MediaFile): number | undefined {
+  return mediaFile.totalSplatCount ?? mediaFile.gaussianSplatSequence?.totalSplatCount ?? mediaFile.splatCount;
+}
+
+function getGaussianSplatFirstFrameCount(mediaFile: MediaFile): number | undefined {
+  return mediaFile.splatCount ?? mediaFile.gaussianSplatSequence?.frames[0]?.splatCount;
+}
+
+function getGaussianSplatResolutionLabel(item: ProjectItem): string | null {
+  if (!isImportedMediaFileItem(item) || item.type !== 'gaussian-splat') return null;
+
+  const frameCount = getGaussianSplatFrameCount(item);
+  const totalCount = getGaussianSplatTotalCount(item);
+  const firstFrameCount = getGaussianSplatFirstFrameCount(item);
+  const totalLabel = formatCompactCount(totalCount);
+  const firstFrameLabel = formatCompactCount(firstFrameCount);
+
+  if (frameCount && frameCount > 1) {
+    return totalLabel ? `${frameCount}f / ${totalLabel} splats` : `${frameCount}f`;
+  }
+
+  return firstFrameLabel ? `${firstFrameLabel} splats` : null;
+}
+
+function getGaussianSplatDetailLines(mediaFile: MediaFile): string[] {
+  if (mediaFile.type !== 'gaussian-splat') return [];
+
+  const frameCount = getGaussianSplatFrameCount(mediaFile);
+  const totalCount = getGaussianSplatTotalCount(mediaFile);
+  const firstFrameCount = getGaussianSplatFirstFrameCount(mediaFile);
+  const minCount = mediaFile.gaussianSplatSequence?.minSplatCount;
+  const maxCount = mediaFile.gaussianSplatSequence?.maxSplatCount;
+  const lines: string[] = [];
+
+  if (frameCount && frameCount > 1) {
+    lines.push(`${frameCount} frames`);
+    const totalLabel = formatCompactCount(totalCount);
+    if (totalLabel) lines.push(`${totalLabel} splats total`);
+    const minLabel = formatCompactCount(minCount);
+    const maxLabel = formatCompactCount(maxCount);
+    if (minLabel && maxLabel && minLabel !== maxLabel) {
+      lines.push(`${minLabel}-${maxLabel} splats/frame`);
+    }
+  } else {
+    const firstFrameLabel = formatCompactCount(firstFrameCount);
+    if (firstFrameLabel) lines.push(`${firstFrameLabel} splats`);
+  }
+
+  return lines;
+}
+
+function getMediaFileContainerLabel(mediaFile: MediaFile | null): string | undefined {
+  if (!mediaFile) return undefined;
+  if (mediaFile.container) return mediaFile.container;
+  if (mediaFile.type === 'gaussian-splat' && mediaFile.gaussianSplatSequence?.container) {
+    const frameCount = getGaussianSplatFrameCount(mediaFile);
+    return frameCount && frameCount > 1
+      ? `${mediaFile.gaussianSplatSequence.container} Seq`
+      : mediaFile.gaussianSplatSequence.container;
+  }
+  return undefined;
+}
+
+function getMediaFileCodecLabel(mediaFile: MediaFile | null): string | undefined {
+  if (!mediaFile) return undefined;
+  if (mediaFile.codec) return mediaFile.codec;
+  if (mediaFile.type === 'gaussian-splat') {
+    const frameCount = getGaussianSplatFrameCount(mediaFile);
+    return frameCount && frameCount > 1
+      ? 'Splat Seq'
+      : 'Splat';
+  }
+  return undefined;
 }
 
 function getMediaBoardGroupName(folderId: string | null, folders: Array<{ id: string; name: string; parentId: string | null }>): string {
@@ -203,7 +372,11 @@ function getMediaBoardGroupName(folderId: string | null, folders: Array<{ id: st
 
 function getMediaBoardTypeLabel(item: MediaBoardItem): string {
   if (item.type === 'composition') return 'Composition';
-  if (item.type === 'gaussian-splat') return 'Splat';
+  if (item.type === 'gaussian-splat') {
+    return isImportedMediaFileItem(item) && (getGaussianSplatFrameCount(item) ?? 1) > 1
+      ? 'Splat Seq'
+      : 'Splat';
+  }
   if (item.type === 'splat-effector') return 'Effector';
   if (item.type === 'solid') return 'Solid';
   if (item.type === 'model') return 'Model';
@@ -212,6 +385,81 @@ function getMediaBoardTypeLabel(item: MediaBoardItem): string {
 
 function getMediaBoardOrderKey(folderId: string | null): string {
   return folderId ?? MEDIA_BOARD_ROOT_ORDER_KEY;
+}
+
+function clampMediaBoardNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getMediaBoardItemAspectRatio(item: MediaBoardItem): number {
+  const width = 'width' in item ? Number(item.width) : undefined;
+  const height = 'height' in item ? Number(item.height) : undefined;
+  if (width && height && Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+    return clampMediaBoardNumber(width / height, MEDIA_BOARD_NODE_ASPECT_MIN, MEDIA_BOARD_NODE_ASPECT_MAX);
+  }
+
+  if (item.type === 'camera' || item.type === 'model' || item.type === 'splat-effector') {
+    return 1;
+  }
+
+  return 16 / 9;
+}
+
+function getMediaBoardNodeSize(item: MediaBoardItem): { width: number; height: number } {
+  const aspectRatio = getMediaBoardItemAspectRatio(item);
+  let width = Math.sqrt(MEDIA_BOARD_NODE_TARGET_AREA * aspectRatio);
+  let height = width / aspectRatio;
+  const maxScale = Math.min(
+    MEDIA_BOARD_NODE_MAX_WIDTH / width,
+    MEDIA_BOARD_NODE_MAX_HEIGHT / height,
+    1,
+  );
+  width *= maxScale;
+  height *= maxScale;
+
+  if (width < MEDIA_BOARD_NODE_MIN_WIDTH) {
+    width = MEDIA_BOARD_NODE_MIN_WIDTH;
+    height = width / aspectRatio;
+  }
+  if (height < MEDIA_BOARD_NODE_MIN_HEIGHT) {
+    height = MEDIA_BOARD_NODE_MIN_HEIGHT;
+    width = height * aspectRatio;
+  }
+  if (width > MEDIA_BOARD_NODE_MAX_WIDTH) {
+    width = MEDIA_BOARD_NODE_MAX_WIDTH;
+    height = width / aspectRatio;
+  }
+  if (height > MEDIA_BOARD_NODE_MAX_HEIGHT) {
+    height = MEDIA_BOARD_NODE_MAX_HEIGHT;
+    width = height * aspectRatio;
+  }
+
+  return {
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+}
+
+function rectToTransitionBox(rect: DOMRect): MediaPanelTransitionBox {
+  return {
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
+  };
+}
+
+function boxesIntersect(a: MediaPanelTransitionBox, b: MediaPanelTransitionBox): boolean {
+  return (
+    a.left < b.left + b.width
+    && a.left + a.width > b.left
+    && a.top < b.top + b.height
+    && a.top + a.height > b.top
+  );
+}
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }
 
 export function MediaPanel() {
@@ -275,10 +523,13 @@ export function MediaPanel() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const itemListRef = useRef<HTMLDivElement>(null);
+  const mediaPanelContentRef = useRef<HTMLDivElement>(null);
   const boardWrapperRef = useRef<HTMLDivElement>(null);
   const boardCanvasRef = useRef<HTMLDivElement>(null);
   const boardCanvasInnerRef = useRef<HTMLDivElement>(null);
   const boardInteractionFrameRef = useRef<number | null>(null);
+  const pendingViewTransitionRef = useRef<PendingMediaPanelViewTransition | null>(null);
+  const activeViewTransitionRef = useRef<ActiveMediaPanelViewTransition | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameTimerRef = useRef<number | null>(null);
@@ -301,7 +552,9 @@ export function MediaPanel() {
   const [gridFolderId, setGridFolderId] = useState<string | null>(null);
   const [mediaBoardViewport, setMediaBoardViewport] = useState<MediaBoardViewport>(loadMediaBoardViewport);
   const [mediaBoardOrder, setMediaBoardOrder] = useState<Record<string, string[]>>(loadMediaBoardOrder);
+  const [mediaBoardGroupOffsets, setMediaBoardGroupOffsets] = useState<Record<string, MediaBoardGroupOffset>>(loadMediaBoardGroupOffsets);
   const [mediaBoardMarquee, setMediaBoardMarquee] = useState<MediaBoardMarquee | null>(null);
+  const [mediaBoardInsertionPreview, setMediaBoardInsertionPreview] = useState<MediaBoardInsertionPreview | null>(null);
   const suppressMediaBoardContextMenuRef = useRef(false);
   const suppressMediaBoardContextMenuTimerRef = useRef<number | null>(null);
 
@@ -331,6 +584,10 @@ export function MediaPanel() {
     localStorage.setItem(BOARD_ORDER_STORAGE_KEY, JSON.stringify(mediaBoardOrder));
   }, [mediaBoardOrder]);
 
+  useEffect(() => {
+    localStorage.setItem(BOARD_GROUP_OFFSETS_STORAGE_KEY, JSON.stringify(mediaBoardGroupOffsets));
+  }, [mediaBoardGroupOffsets]);
+
   useEffect(() => () => {
     if (boardInteractionFrameRef.current !== null) {
       window.cancelAnimationFrame(boardInteractionFrameRef.current);
@@ -339,6 +596,289 @@ export function MediaPanel() {
       window.clearTimeout(suppressMediaBoardContextMenuTimerRef.current);
     }
   }, []);
+
+  const cleanupActiveMediaPanelViewTransition = useCallback(() => {
+    const active = activeViewTransitionRef.current;
+    if (!active) return;
+
+    activeViewTransitionRef.current = null;
+    window.clearTimeout(active.timeoutId);
+    active.animations.forEach((animation) => animation.cancel());
+    active.hiddenTargets.forEach((target) => {
+      target.classList.remove('media-panel-view-transition-hidden');
+    });
+    active.overlay.remove();
+  }, []);
+
+  const cleanupPendingMediaPanelViewTransition = useCallback(() => {
+    const pending = pendingViewTransitionRef.current;
+    if (!pending) return;
+
+    pendingViewTransitionRef.current = null;
+    pending.overlay.remove();
+  }, []);
+
+  const prepareMediaPanelViewTransition = useCallback(() => {
+    cleanupActiveMediaPanelViewTransition();
+    cleanupPendingMediaPanelViewTransition();
+
+    if (prefersReducedMotion()) return;
+
+    const content = mediaPanelContentRef.current;
+    if (!content) return;
+
+    const panelBox = rectToTransitionBox(content.getBoundingClientRect());
+    if (panelBox.width < 1 || panelBox.height < 1) return;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'media-panel-view-transition-layer';
+    overlay.style.left = `${panelBox.left}px`;
+    overlay.style.top = `${panelBox.top}px`;
+    overlay.style.width = `${panelBox.width}px`;
+    overlay.style.height = `${panelBox.height}px`;
+
+    const captures = new Map<string, MediaPanelTransitionCapture>();
+    const nodes = content.querySelectorAll<HTMLElement>('[data-media-panel-anim-id]');
+    nodes.forEach((node) => {
+      const id = node.dataset.mediaPanelAnimId;
+      if (!id || node.matches(':focus-within')) return;
+
+      const box = rectToTransitionBox(node.getBoundingClientRect());
+      if (box.width < 1 || box.height < 1 || !boxesIntersect(box, panelBox)) return;
+
+      const clone = node.cloneNode(true) as HTMLElement;
+      const baseWidth = node.offsetWidth || box.width;
+      const baseHeight = node.offsetHeight || box.height;
+      const scaleX = box.width / Math.max(baseWidth, 1);
+      const scaleY = box.height / Math.max(baseHeight, 1);
+      clone.classList.add('media-panel-view-transition-clone');
+      clone.setAttribute('aria-hidden', 'true');
+      clone.setAttribute('draggable', 'false');
+      clone.querySelectorAll<HTMLElement>('[draggable]').forEach((draggableChild) => {
+        draggableChild.setAttribute('draggable', 'false');
+      });
+      clone.style.left = `${box.left - panelBox.left}px`;
+      clone.style.top = `${box.top - panelBox.top}px`;
+      clone.style.width = `${baseWidth}px`;
+      clone.style.height = `${baseHeight}px`;
+      clone.style.transform = `scale(${scaleX}, ${scaleY})`;
+
+      captures.set(id, { box, clone, baseWidth, baseHeight, scaleX, scaleY });
+      overlay.appendChild(clone);
+    });
+
+    if (captures.size === 0) {
+      overlay.remove();
+      return;
+    }
+
+    document.body.appendChild(overlay);
+    pendingViewTransitionRef.current = { captures, overlay, panelBox };
+  }, [cleanupActiveMediaPanelViewTransition, cleanupPendingMediaPanelViewTransition]);
+
+  useLayoutEffect(() => {
+    const pending = pendingViewTransitionRef.current;
+    if (!pending) return;
+
+    pendingViewTransitionRef.current = null;
+
+    const content = mediaPanelContentRef.current;
+    if (!content || prefersReducedMotion()) {
+      pending.overlay.remove();
+      return;
+    }
+
+    const nextPanelBox = rectToTransitionBox(content.getBoundingClientRect());
+    const hiddenTargets: HTMLElement[] = [];
+    const animations: Animation[] = [];
+
+    const animateCloneOut = ({ clone, scaleX, scaleY }: MediaPanelTransitionCapture) => {
+      animations.push(clone.animate(
+        [
+          { opacity: 1, transform: `scale(${scaleX}, ${scaleY}) translate3d(0, 0, 0)` },
+          { opacity: 0, transform: `scale(${scaleX}, ${scaleY}) translate3d(0, -4px, 0)` },
+        ],
+        {
+          duration: 180,
+          easing: 'ease-out',
+          fill: 'forwards',
+        }
+      ));
+    };
+
+    pending.captures.forEach((capture, id) => {
+      const { box, clone, baseWidth, baseHeight, scaleX, scaleY } = capture;
+      const target = content.querySelector<HTMLElement>(`[data-media-panel-anim-id="${CSS.escape(id)}"]`);
+      if (!target) {
+        animateCloneOut(capture);
+        return;
+      }
+
+      const targetBox = rectToTransitionBox(target.getBoundingClientRect());
+      if (targetBox.width < 1 || targetBox.height < 1 || !boxesIntersect(targetBox, nextPanelBox)) {
+        animateCloneOut(capture);
+        return;
+      }
+
+      const sourceLeft = box.left - pending.panelBox.left;
+      const sourceTop = box.top - pending.panelBox.top;
+      const targetLeft = targetBox.left - pending.panelBox.left;
+      const targetTop = targetBox.top - pending.panelBox.top;
+      const targetBaseWidth = target.offsetWidth || targetBox.width;
+      const targetBaseHeight = target.offsetHeight || targetBox.height;
+      const targetScaleX = targetBox.width / Math.max(targetBaseWidth, 1);
+      const targetScaleY = targetBox.height / Math.max(targetBaseHeight, 1);
+      const targetInitialWidth = box.width / Math.max(targetScaleX, 0.001);
+      const targetInitialHeight = box.height / Math.max(targetScaleY, 0.001);
+      const targetScaleTransform = `scale(${targetScaleX}, ${targetScaleY})`;
+
+      const targetClone = target.cloneNode(true) as HTMLElement;
+      targetClone.classList.add('media-panel-view-transition-clone', 'media-panel-view-transition-target-clone');
+      targetClone.setAttribute('aria-hidden', 'true');
+      targetClone.setAttribute('draggable', 'false');
+      targetClone.querySelectorAll<HTMLElement>('[draggable]').forEach((draggableChild) => {
+        draggableChild.setAttribute('draggable', 'false');
+      });
+      targetClone.style.left = `${sourceLeft}px`;
+      targetClone.style.top = `${sourceTop}px`;
+      targetClone.style.width = `${targetInitialWidth}px`;
+      targetClone.style.height = `${targetInitialHeight}px`;
+      targetClone.style.opacity = '0';
+      targetClone.style.transform = targetScaleTransform;
+      pending.overlay.appendChild(targetClone);
+
+      target.classList.add('media-panel-view-transition-hidden');
+      hiddenTargets.push(target);
+
+      animations.push(clone.animate(
+        [
+          {
+            left: `${sourceLeft}px`,
+            top: `${sourceTop}px`,
+            width: `${baseWidth}px`,
+            height: `${baseHeight}px`,
+            transform: `scale(${scaleX}, ${scaleY})`,
+            opacity: 1,
+          },
+          {
+            left: `${targetLeft}px`,
+            top: `${targetTop}px`,
+            width: `${targetBaseWidth}px`,
+            height: `${targetBaseHeight}px`,
+            transform: targetScaleTransform,
+            opacity: 0,
+          },
+        ],
+        {
+          duration: 260,
+          easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+          fill: 'forwards',
+        }
+      ));
+      animations.push(targetClone.animate(
+        [
+          {
+            left: `${sourceLeft}px`,
+            top: `${sourceTop}px`,
+            width: `${targetInitialWidth}px`,
+            height: `${targetInitialHeight}px`,
+            transform: targetScaleTransform,
+            opacity: 0,
+            offset: 0,
+          },
+          {
+            left: `${sourceLeft + ((targetLeft - sourceLeft) * 0.35)}px`,
+            top: `${sourceTop + ((targetTop - sourceTop) * 0.35)}px`,
+            width: `${targetInitialWidth + ((targetBaseWidth - targetInitialWidth) * 0.35)}px`,
+            height: `${targetInitialHeight + ((targetBaseHeight - targetInitialHeight) * 0.35)}px`,
+            transform: targetScaleTransform,
+            opacity: 0,
+            offset: 0.18,
+          },
+          {
+            left: `${targetLeft}px`,
+            top: `${targetTop}px`,
+            width: `${targetBaseWidth}px`,
+            height: `${targetBaseHeight}px`,
+            transform: targetScaleTransform,
+            opacity: 1,
+            offset: 1,
+          },
+        ],
+        {
+          duration: MEDIA_PANEL_VIEW_TRANSITION_MS,
+          easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+          fill: 'forwards',
+        }
+      ));
+    });
+
+    content.querySelectorAll<HTMLElement>('[data-media-panel-anim-id]').forEach((target) => {
+      const id = target.dataset.mediaPanelAnimId;
+      if (!id || pending.captures.has(id)) return;
+
+      const targetBox = rectToTransitionBox(target.getBoundingClientRect());
+      if (targetBox.width < 1 || targetBox.height < 1 || !boxesIntersect(targetBox, nextPanelBox)) return;
+
+      animations.push(target.animate(
+        [
+          { opacity: 0 },
+          { opacity: 1 },
+        ],
+        {
+          duration: 180,
+          delay: 160,
+          easing: 'ease-out',
+        }
+      ));
+    });
+
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+
+      const active = activeViewTransitionRef.current;
+      if (active?.overlay === pending.overlay) {
+        activeViewTransitionRef.current = null;
+      }
+      window.clearTimeout(timeoutId);
+      hiddenTargets.forEach((target) => {
+        target.classList.remove('media-panel-view-transition-hidden');
+      });
+      pending.overlay.remove();
+    };
+
+    const timeoutId = window.setTimeout(finish, MEDIA_PANEL_VIEW_TRANSITION_MS + 100);
+    activeViewTransitionRef.current = {
+      animations,
+      hiddenTargets,
+      overlay: pending.overlay,
+      timeoutId,
+    };
+
+    if (animations.length === 0) {
+      finish();
+      return;
+    }
+
+    void Promise.allSettled(animations.map((animation) => animation.finished)).then(finish);
+  });
+
+  useEffect(() => () => {
+    cleanupActiveMediaPanelViewTransition();
+    cleanupPendingMediaPanelViewTransition();
+  }, [cleanupActiveMediaPanelViewTransition, cleanupPendingMediaPanelViewTransition]);
+
+  const handleViewModeChange = useCallback((nextViewMode: MediaPanelViewMode) => {
+    if (nextViewMode === viewMode) return;
+
+    prepareMediaPanelViewTransition();
+    setViewMode(nextViewMode);
+    if (nextViewMode !== 'icons') {
+      setGridFolderId(null);
+    }
+  }, [prepareMediaPanelViewTransition, viewMode]);
 
   // Column drag handlers
   const handleColumnDragStart = useCallback((e: React.DragEvent, columnId: ColumnId) => {
@@ -410,10 +950,14 @@ export function MediaPanel() {
         return idx >= 0 ? idx : 999;
       }
       case 'duration': return 'duration' in item && item.duration ? item.duration : 0;
-      case 'resolution': return 'width' in item && 'height' in item && item.width && item.height ? item.width * item.height : 0;
+      case 'resolution':
+        if (mediaFile?.type === 'gaussian-splat') {
+          return getGaussianSplatTotalCount(mediaFile) ?? getGaussianSplatFirstFrameCount(mediaFile) ?? 0;
+        }
+        return 'width' in item && 'height' in item && item.width && item.height ? item.width * item.height : 0;
       case 'fps': return mediaFile?.fps || ('type' in item && item.type === 'composition' ? (item as Composition).frameRate : 0);
-      case 'container': return mediaFile?.container?.toLowerCase() || '';
-      case 'codec': return mediaFile?.codec?.toLowerCase() || '';
+      case 'container': return getMediaFileContainerLabel(mediaFile)?.toLowerCase() || '';
+      case 'codec': return getMediaFileCodecLabel(mediaFile)?.toLowerCase() || '';
       case 'audio': return mediaFile?.hasAudio ? 1 : 0;
       case 'bitrate': return mediaFile?.bitrate || 0;
       case 'size': return mediaFile?.fileSize || 0;
@@ -587,7 +1131,7 @@ export function MediaPanel() {
         const elLeft = elRect.left - r.left + container.scrollLeft;
         const elRight = elLeft + elRect.width;
         if (elRight > mLeft && elLeft < mRight && elBottom > mTop && elTop < mBottom) {
-          const itemId = el.parentElement?.getAttribute('data-item-id');
+          const itemId = (el as HTMLElement).dataset.mediaPanelAnimId ?? el.parentElement?.getAttribute('data-item-id');
           if (itemId) hitIds.push(itemId);
         }
       });
@@ -1053,6 +1597,7 @@ export function MediaPanel() {
   const handleDragEnd = useCallback(() => {
     setInternalDragId(null);
     setDragOverFolderId(null);
+    setMediaBoardInsertionPreview(null);
     clearExternalDragPayload();
   }, []);
 
@@ -1172,6 +1717,7 @@ export function MediaPanel() {
       setViewMode(loadMediaPanelViewMode());
       setMediaBoardViewport(loadMediaBoardViewport());
       setMediaBoardOrder(loadMediaBoardOrder());
+      setMediaBoardGroupOffsets(loadMediaBoardGroupOffsets());
       const storedNameWidth = localStorage.getItem('media-panel-name-width');
       setNameColumnWidth(storedNameWidth ? parseInt(storedNameWidth, 10) : 250);
       setGridFolderId(null);
@@ -1377,8 +1923,9 @@ export function MediaPanel() {
       }
       case 'resolution':
         return (
-          <div className="media-col media-col-resolution">
-            {'width' in item && 'height' in item && item.width && item.height ? `${item.width}×${item.height}` : '–'}
+          <div className="media-col media-col-resolution" title={getGaussianSplatResolutionLabel(item) ?? undefined}>
+            {getGaussianSplatResolutionLabel(item) ??
+              ('width' in item && 'height' in item && item.width && item.height ? `${item.width}×${item.height}` : '–')}
           </div>
         );
       case 'fps':
@@ -1388,9 +1935,9 @@ export function MediaPanel() {
           </div>
         );
       case 'container':
-        return <div className="media-col media-col-container">{mediaFile?.container || '–'}</div>;
+        return <div className="media-col media-col-container">{getMediaFileContainerLabel(mediaFile) || '–'}</div>;
       case 'codec':
-        return <div className="media-col media-col-codec">{mediaFile?.codec || '–'}</div>;
+        return <div className="media-col media-col-codec">{getMediaFileCodecLabel(mediaFile) || '–'}</div>;
       case 'audio':
         return <div className="media-col media-col-audio">
           {mediaFile?.type === 'audio' ? 'Yes' :
@@ -1423,6 +1970,7 @@ export function MediaPanel() {
     return (
       <div key={item.id} data-item-id={item.id}>
         <div
+          data-media-panel-anim-id={item.id}
           className={`media-item ${isSelected ? 'selected' : ''} ${isFolder ? 'folder' : ''} ${isMediaFile && !hasFile ? 'no-file' : ''} ${isImporting ? 'importing' : ''} ${isDragTarget ? 'drag-target' : ''} ${isBeingDragged ? 'dragging' : ''}`}
           draggable={!isImporting}
           onDragStart={(e) => handleDragStart(e, item)}
@@ -1463,9 +2011,16 @@ export function MediaPanel() {
       if (comp.duration) parts.push(formatDuration(comp.duration));
     } else if ('type' in item) {
       const mf = item as MediaFile;
-      if (mf.width && mf.height) parts.push(`${mf.width}×${mf.height}`);
+      if (mf.type === 'gaussian-splat') {
+        parts.push(...getGaussianSplatDetailLines(mf));
+        const container = getMediaFileContainerLabel(mf);
+        if (container) parts.push(container);
+      } else if (mf.width && mf.height) {
+        parts.push(`${mf.width}×${mf.height}`);
+      }
       if (mf.duration) parts.push(formatDuration(mf.duration));
-      if (mf.codec) parts.push(mf.codec);
+      const codec = getMediaFileCodecLabel(mf);
+      if (codec) parts.push(codec);
       if (mf.audioCodec) parts.push(mf.audioCodec);
       if (mf.fps) parts.push(`${mf.fps} fps`);
       if (mf.fileSize) parts.push(formatFileSize(mf.fileSize));
@@ -1497,6 +2052,7 @@ export function MediaPanel() {
     return (
       <div key={item.id} data-item-id={item.id}>
         <div
+          data-media-panel-anim-id={item.id}
           className={`media-grid-item ${isSelected ? 'selected' : ''} ${isFolder ? 'folder' : ''} ${isDragTarget ? 'drag-target' : ''} ${isImporting ? 'importing' : ''}`}
           draggable={!isImporting}
           onDragStart={(e) => handleDragStart(e, item)}
@@ -1591,10 +2147,39 @@ export function MediaPanel() {
     });
   }, [folders, mediaBoardItemIds]);
 
+  useEffect(() => {
+    setMediaBoardGroupOffsets((current) => {
+      const validFolderIds = new Set(folders.map((folder) => folder.id));
+      let changed = false;
+      const next: Record<string, MediaBoardGroupOffset> = {};
+
+      Object.entries(current).forEach(([folderId, offset]) => {
+        if (!validFolderIds.has(folderId)) {
+          changed = true;
+          return;
+        }
+        next[folderId] = offset;
+      });
+
+      return changed ? next : current;
+    });
+  }, [folders]);
+
   const mediaBoardLayout = useMemo(() => {
     const groupsByParent = new Map<string | null, MediaBoardItem[]>();
     groupsByParent.set(null, []);
     folders.forEach((folder) => groupsByParent.set(folder.id, []));
+    const foldersByParent = new Map<string | null, MediaFolder[]>();
+    foldersByParent.set(null, []);
+    folders.forEach((folder) => {
+      const parentId = folder.parentId ?? null;
+      if (!foldersByParent.has(parentId)) {
+        foldersByParent.set(parentId, []);
+      }
+      foldersByParent.get(parentId)!.push(folder);
+    });
+    const itemsById = new Map(mediaBoardItems.map((item) => [item.id, item]));
+    const movingIdSet = new Set(mediaBoardInsertionPreview?.movingIds ?? []);
 
     mediaBoardItems.forEach((item) => {
       const parentId = item.parentId ?? null;
@@ -1604,20 +2189,9 @@ export function MediaPanel() {
       groupsByParent.get(parentId)!.push(item);
     });
 
-    const orderedGroupIds: Array<string | null> = [
-      null,
-      ...folders
-        .map((folder) => folder.id)
-        .sort((leftId, rightId) =>
-          getMediaBoardGroupName(leftId, folders).localeCompare(getMediaBoardGroupName(rightId, folders))
-        ),
-    ].filter((groupId, index, ids) => ids.indexOf(groupId) === index);
-
     const groups: MediaBoardGroupLayout[] = [];
     const placements: MediaBoardNodePlacement[] = [];
-    let rowY = 0;
-    let rowMaxHeight = 0;
-    let column = 0;
+    const insertGaps: MediaBoardInsertGapPlacement[] = [];
 
     const orderItemsForGroup = (groupId: string | null, items: MediaBoardItem[]): MediaBoardItem[] => {
       const sortedItems = sortItems([...items]) as MediaBoardItem[];
@@ -1635,55 +2209,314 @@ export function MediaPanel() {
       ];
     };
 
-    orderedGroupIds.forEach((groupId) => {
-      const items = orderItemsForGroup(groupId, groupsByParent.get(groupId) ?? []);
-      const rows = Math.max(1, Math.ceil(items.length / MEDIA_BOARD_COLUMNS_PER_GROUP));
-      const height = MEDIA_BOARD_GROUP_HEADER_HEIGHT
-        + (MEDIA_BOARD_GROUP_PADDING * 2)
-        + (rows * MEDIA_BOARD_NODE_HEIGHT)
-        + ((rows - 1) * MEDIA_BOARD_NODE_GAP);
-      const x = column * (MEDIA_BOARD_GROUP_WIDTH + MEDIA_BOARD_GROUP_GAP);
-      const y = rowY;
+    type MediaBoardLayoutEntry = {
+      id: string;
+      item?: MediaBoardItem;
+      width: number;
+      height: number;
+      isInsertGap: boolean;
+    };
+
+    type MediaBoardLayoutRow = {
+      entries: MediaBoardLayoutEntry[];
+      width: number;
+      height: number;
+    };
+
+    type MediaBoardFolderBlock = {
+      folder: MediaFolder;
+      width: number;
+      height: number;
+      desiredX: number;
+      desiredY: number;
+    };
+
+    type MediaBoardGroupMeasure = {
+      width: number;
+      height: number;
+      itemRows: MediaBoardLayoutRow[];
+      folderRows: Array<{ entries: MediaBoardFolderBlock[]; width: number; height: number }>;
+      itemCount: number;
+      bodyHeight: number;
+    };
+
+    const getEntriesForGroup = (groupId: string | null): MediaBoardLayoutEntry[] => {
+      const entries = orderItemsForGroup(groupId, groupsByParent.get(groupId) ?? [])
+        .filter((item) => !movingIdSet.has(item.id))
+        .map((item) => ({
+          id: item.id,
+          item,
+          ...getMediaBoardNodeSize(item),
+          isInsertGap: false,
+        }));
+
+      if (!mediaBoardInsertionPreview || mediaBoardInsertionPreview.targetGroupId !== groupId) {
+        return entries;
+      }
+
+      const gapEntries = mediaBoardInsertionPreview.movingIds
+        .map((id, index) => {
+          const item = itemsById.get(id);
+          if (!item) return null;
+          return {
+            id: `insert-gap-${id}-${index}`,
+            ...getMediaBoardNodeSize(item),
+            isInsertGap: true,
+          };
+        })
+        .filter((entry): entry is MediaBoardLayoutEntry => Boolean(entry));
+
+      if (gapEntries.length === 0) {
+        return entries;
+      }
+
+      const insertIndex = Math.max(0, Math.min(mediaBoardInsertionPreview.targetIndex, entries.length));
+      return [
+        ...entries.slice(0, insertIndex),
+        ...gapEntries,
+        ...entries.slice(insertIndex),
+      ];
+    };
+
+    function wrapEntriesIntoRows<T extends { width: number; height: number }>(
+      entries: T[],
+      maxRowWidth: number,
+    ): Array<{ entries: T[]; width: number; height: number }> {
+      const rows: Array<{ entries: T[]; width: number; height: number }> = [];
+      let currentEntries: T[] = [];
+      let currentWidth = 0;
+      let currentHeight = 0;
+
+      const flushRow = () => {
+        if (currentEntries.length === 0) return;
+        rows.push({
+          entries: currentEntries,
+          width: currentWidth,
+          height: currentHeight,
+        });
+        currentEntries = [];
+        currentWidth = 0;
+        currentHeight = 0;
+      };
+
+      entries.forEach((entry) => {
+        const nextWidth = currentEntries.length === 0
+          ? entry.width
+          : currentWidth + MEDIA_BOARD_NODE_GAP + entry.width;
+        if (currentEntries.length > 0 && nextWidth > maxRowWidth) {
+          flushRow();
+        }
+
+        currentWidth = currentEntries.length === 0
+          ? entry.width
+          : currentWidth + MEDIA_BOARD_NODE_GAP + entry.width;
+        currentHeight = Math.max(currentHeight, entry.height);
+        currentEntries.push(entry);
+      });
+
+      flushRow();
+      return rows;
+    }
+
+    const getRowsHeight = (rows: Array<{ height: number }>, gap: number): number => {
+      return rows.reduce((height, row, index) => height + row.height + (index > 0 ? gap : 0), 0);
+    };
+
+    const getChildFolders = (parentId: string | null): MediaFolder[] => {
+      return [...(foldersByParent.get(parentId) ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+    };
+
+    const measureCache = new Map<string, MediaBoardGroupMeasure>();
+    const measureGroup = (groupId: string | null, stack: Set<string> = new Set()): MediaBoardGroupMeasure => {
+      const cacheKey = getMediaBoardOrderKey(groupId);
+      const cached = measureCache.get(cacheKey);
+      if (cached) return cached;
+
+      if (groupId && stack.has(groupId)) {
+        return {
+          width: MEDIA_BOARD_GROUP_MIN_WIDTH,
+          height: MEDIA_BOARD_GROUP_HEADER_HEIGHT + (MEDIA_BOARD_GROUP_PADDING * 2) + MEDIA_BOARD_NODE_MIN_HEIGHT,
+          itemRows: [],
+          folderRows: [],
+          itemCount: 0,
+          bodyHeight: MEDIA_BOARD_NODE_MIN_HEIGHT,
+        };
+      }
+
+      const nextStack = new Set(stack);
+      if (groupId) {
+        nextStack.add(groupId);
+      }
+
+      const itemRows = wrapEntriesIntoRows(getEntriesForGroup(groupId), MEDIA_BOARD_GROUP_MAX_BODY_WIDTH) as MediaBoardLayoutRow[];
+      const childFolderBlocks = getChildFolders(groupId)
+        .map((folder, index) => {
+          const childMeasure = measureGroup(folder.id, nextStack);
+          const offset = mediaBoardGroupOffsets[folder.id] ?? { x: 0, y: 0 };
+          return {
+            folder,
+            width: childMeasure.width,
+            height: childMeasure.height,
+            desiredX: Math.max(0, (index * (MEDIA_BOARD_GROUP_MIN_WIDTH + MEDIA_BOARD_FOLDER_GAP)) + offset.x),
+            desiredY: Math.max(0, offset.y),
+          };
+        })
+        .sort((a, b) => (a.desiredY - b.desiredY) || (a.desiredX - b.desiredX) || a.folder.name.localeCompare(b.folder.name));
+      const folderRows = wrapEntriesIntoRows(childFolderBlocks, MEDIA_BOARD_FOLDER_ROW_MAX_WIDTH);
+      const itemRowsHeight = getRowsHeight(itemRows, MEDIA_BOARD_NODE_GAP);
+      const folderRowsHeight = getRowsHeight(folderRows, MEDIA_BOARD_FOLDER_GAP);
+      const hasItems = itemRows.length > 0;
+      const hasFolders = folderRows.length > 0;
+      const bodyWidth = Math.max(
+        0,
+        ...itemRows.map((row) => row.width),
+        ...folderRows.map((row) => row.width),
+      );
+      const bodyHeight = hasItems || hasFolders
+        ? itemRowsHeight + folderRowsHeight + (hasItems && hasFolders ? MEDIA_BOARD_FOLDER_GAP : 0)
+        : MEDIA_BOARD_NODE_MIN_HEIGHT;
+      const measure: MediaBoardGroupMeasure = {
+        width: Math.max(MEDIA_BOARD_GROUP_MIN_WIDTH, Math.ceil(bodyWidth + (MEDIA_BOARD_GROUP_PADDING * 2))),
+        height: MEDIA_BOARD_GROUP_HEADER_HEIGHT + (MEDIA_BOARD_GROUP_PADDING * 2) + bodyHeight,
+        itemRows,
+        folderRows,
+        itemCount: (groupsByParent.get(groupId)?.length ?? 0) + (foldersByParent.get(groupId)?.length ?? 0),
+        bodyHeight,
+      };
+      measureCache.set(cacheKey, measure);
+      return measure;
+    };
+
+    const placeGroup = (groupId: string | null, x: number, y: number, depth: number, parentId: string | null) => {
+      const measure = measureGroup(groupId);
       const group: MediaBoardGroupLayout = {
         id: groupId,
+        parentId,
         name: getMediaBoardGroupName(groupId, folders),
         x,
         y,
-        width: MEDIA_BOARD_GROUP_WIDTH,
-        height,
-        itemCount: items.length,
+        width: measure.width,
+        height: measure.height,
+        itemCount: measure.itemCount,
+        depth,
       };
       groups.push(group);
 
-      items.forEach((item, index) => {
-        const col = index % MEDIA_BOARD_COLUMNS_PER_GROUP;
-        const row = Math.floor(index / MEDIA_BOARD_COLUMNS_PER_GROUP);
-        const defaultLayout: MediaBoardNodeLayout = {
-          x: x + MEDIA_BOARD_GROUP_PADDING + (col * (MEDIA_BOARD_NODE_WIDTH + MEDIA_BOARD_NODE_GAP)),
-          y: y + MEDIA_BOARD_GROUP_HEADER_HEIGHT + MEDIA_BOARD_GROUP_PADDING + (row * (MEDIA_BOARD_NODE_HEIGHT + MEDIA_BOARD_NODE_GAP)),
-          width: MEDIA_BOARD_NODE_WIDTH,
-          height: MEDIA_BOARD_NODE_HEIGHT,
-        };
+      let entryTop = y + MEDIA_BOARD_GROUP_HEADER_HEIGHT + MEDIA_BOARD_GROUP_PADDING;
+      let entrySlotIndex = 0;
+      measure.itemRows.forEach((layoutRow, rowIndex) => {
+        let entryLeft = x + MEDIA_BOARD_GROUP_PADDING;
+        if (rowIndex > 0) {
+          entryTop += MEDIA_BOARD_NODE_GAP;
+        }
+
+        layoutRow.entries.forEach((entry, entryIndex) => {
+          if (entryIndex > 0) {
+            entryLeft += MEDIA_BOARD_NODE_GAP;
+          }
+          const layout: MediaBoardNodeLayout = {
+            x: entryLeft,
+            y: entryTop + ((layoutRow.height - entry.height) / 2),
+            width: entry.width,
+            height: entry.height,
+          };
+
+          if (entry.isInsertGap) {
+            insertGaps.push({
+              id: entry.id,
+              layout,
+              groupId,
+              slotIndex: entrySlotIndex,
+            });
+          } else if (entry.item) {
+            placements.push({
+              item: entry.item,
+              defaultLayout: layout,
+              groupId,
+              layout,
+              slotIndex: entrySlotIndex,
+            });
+          }
+
+          entryLeft += entry.width;
+          entrySlotIndex += 1;
+        });
+        entryTop += layoutRow.height;
+      });
+
+      if (measure.itemRows.length > 0 && measure.folderRows.length > 0) {
+        entryTop += MEDIA_BOARD_FOLDER_GAP;
+      }
+
+      measure.folderRows.forEach((folderRow, rowIndex) => {
+        let rowCursorX = x + MEDIA_BOARD_GROUP_PADDING;
+        let rowMaxBottom = entryTop;
+        if (rowIndex > 0) {
+          entryTop += MEDIA_BOARD_FOLDER_GAP;
+          rowCursorX = x + MEDIA_BOARD_GROUP_PADDING;
+          rowMaxBottom = entryTop;
+        }
+
+        folderRow.entries.forEach((block) => {
+          const desiredX = x + MEDIA_BOARD_GROUP_PADDING + block.desiredX;
+          const desiredY = entryTop + block.desiredY;
+          const childX = Math.max(rowCursorX, desiredX);
+          const childY = Math.max(
+            y + MEDIA_BOARD_GROUP_HEADER_HEIGHT + MEDIA_BOARD_GROUP_PADDING,
+            desiredY,
+          );
+          placeGroup(
+            block.folder.id,
+            childX,
+            childY,
+            depth + 1,
+            groupId,
+          );
+          rowCursorX = childX + block.width + MEDIA_BOARD_FOLDER_GAP;
+          rowMaxBottom = Math.max(rowMaxBottom, childY + block.height);
+        });
+        entryTop = Math.max(entryTop + folderRow.height, rowMaxBottom);
+      });
+    };
+
+    placeGroup(null, 0, 0, 0, null);
+
+    const groupsByKey = new Map(groups.map((group) => [getMediaBoardOrderKey(group.id), group]));
+    [...groups]
+      .sort((a, b) => b.depth - a.depth)
+      .forEach((group) => {
+        if (group.parentId === null && group.id !== null) {
+          const parent = groupsByKey.get(MEDIA_BOARD_ROOT_ORDER_KEY);
+          if (!parent) return;
+          parent.width = Math.max(parent.width, Math.ceil(group.x + group.width - parent.x + MEDIA_BOARD_GROUP_PADDING));
+          parent.height = Math.max(parent.height, Math.ceil(group.y + group.height - parent.y + MEDIA_BOARD_GROUP_PADDING));
+          return;
+        }
+        if (!group.parentId) return;
+        const parent = groupsByKey.get(group.parentId);
+        if (!parent) return;
+        parent.width = Math.max(parent.width, Math.ceil(group.x + group.width - parent.x + MEDIA_BOARD_GROUP_PADDING));
+        parent.height = Math.max(parent.height, Math.ceil(group.y + group.height - parent.y + MEDIA_BOARD_GROUP_PADDING));
+      });
+
+    if (mediaBoardInsertionPreview) {
+      mediaBoardInsertionPreview.movingIds.forEach((id, index) => {
+        const item = itemsById.get(id);
+        const sourceLayout = mediaBoardInsertionPreview.sourceLayouts[id];
+        if (!item || !sourceLayout) return;
         placements.push({
           item,
-          defaultLayout,
-          groupId,
-          layout: defaultLayout,
+          defaultLayout: sourceLayout,
+          groupId: item.parentId ?? null,
+          isDraggingPreview: true,
+          layout: sourceLayout,
           slotIndex: index,
         });
       });
+    }
 
-      rowMaxHeight = Math.max(rowMaxHeight, height);
-      column += 1;
-      if (column >= 2) {
-        rowY += rowMaxHeight + MEDIA_BOARD_GROUP_GAP;
-        rowMaxHeight = 0;
-        column = 0;
-      }
-    });
-
-    return { groups, placements };
-  }, [folders, mediaBoardItems, mediaBoardOrder, sortItems]);
+    return { groups, placements, insertGaps };
+  }, [folders, mediaBoardGroupOffsets, mediaBoardInsertionPreview, mediaBoardItems, mediaBoardOrder, sortItems]);
 
   const mediaBoardPlacementsById = useMemo(() => {
     return new Map(mediaBoardLayout.placements.map((placement) => [placement.item.id, placement]));
@@ -1708,7 +2541,9 @@ export function MediaPanel() {
   }, []);
 
   const startMediaBoardPanGesture = useCallback((e: React.MouseEvent, options?: { clearSelectionOnTap?: boolean }) => {
-    e.preventDefault();
+    if (e.button === 1) {
+      e.preventDefault();
+    }
     closeContextMenu();
 
     const startX = e.clientX;
@@ -1724,6 +2559,8 @@ export function MediaPanel() {
         const inner = boardCanvasInnerRef.current;
         if (!inner) return;
         inner.style.transform = `translate(${pendingViewport.panX}px, ${pendingViewport.panY}px) scale(${pendingViewport.zoom})`;
+        boardWrapperRef.current?.style.setProperty('--media-board-grid-x', `${pendingViewport.panX * MEDIA_BOARD_GRID_PARALLAX}px`);
+        boardWrapperRef.current?.style.setProperty('--media-board-grid-y', `${pendingViewport.panY * MEDIA_BOARD_GRID_PARALLAX}px`);
       });
     };
 
@@ -1735,9 +2572,11 @@ export function MediaPanel() {
 
       if (!didPan) {
         didPan = true;
+        moveEvent.preventDefault();
         setMediaBoardPerformanceMode(true);
       }
 
+      moveEvent.preventDefault();
       pendingViewport = {
         ...startViewport,
         panX: startViewport.panX + dx,
@@ -1824,14 +2663,149 @@ export function MediaPanel() {
     window.addEventListener('blur', handleMouseUp);
   }, [closeContextMenu, mediaBoardLayout.placements, screenToMediaBoard, selectedIds, setSelection, suppressNextMediaBoardContextMenu]);
 
+  const startMediaBoardGroupMoveGesture = useCallback((e: React.MouseEvent, group: MediaBoardGroupLayout) => {
+    if (!group.id) return;
+
+    e.stopPropagation();
+
+    const movingGroupIds = new Set<string>([group.id]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      folders.forEach((folder) => {
+        if (folder.parentId && movingGroupIds.has(folder.parentId) && !movingGroupIds.has(folder.id)) {
+          movingGroupIds.add(folder.id);
+          changed = true;
+        }
+      });
+    }
+
+    const groupElements = [...movingGroupIds]
+      .map((folderId) => boardCanvasRef.current?.querySelector<HTMLElement>(`.media-board-group[data-board-group-key="${CSS.escape(folderId)}"]`) ?? null)
+      .filter((element): element is HTMLElement => Boolean(element));
+    const nodeElements = mediaBoardLayout.placements
+      .filter((placement) => placement.groupId !== null && movingGroupIds.has(placement.groupId))
+      .map((placement) => boardCanvasRef.current?.querySelector<HTMLElement>(`.media-board-node[data-item-id="${CSS.escape(placement.item.id)}"]`) ?? null)
+      .filter((element): element is HTMLElement => Boolean(element));
+    const movingElements = [...groupElements, ...nodeElements];
+    if (movingElements.length === 0) return;
+
+    const movingFolderIds = [group.id];
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let didDrag = false;
+    let previewDx = 0;
+    let previewDy = 0;
+
+    const clearPreview = () => {
+      movingElements.forEach((element) => {
+        element.style.transform = '';
+        element.classList.remove('drag-preview');
+      });
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    const schedulePreview = () => {
+      if (boardInteractionFrameRef.current !== null) return;
+      boardInteractionFrameRef.current = window.requestAnimationFrame(() => {
+        boardInteractionFrameRef.current = null;
+        movingElements.forEach((element) => {
+          element.style.transform = `translate3d(${previewDx}px, ${previewDy}px, 0)`;
+          element.classList.add('drag-preview');
+        });
+      });
+    };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const distance = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
+      if (!didDrag && distance < MEDIA_BOARD_DRAG_START_DISTANCE) return;
+
+      if (!didDrag) {
+        didDrag = true;
+        closeContextMenu();
+        setMediaBoardPerformanceMode(true);
+        document.body.style.cursor = 'grabbing';
+        document.body.style.userSelect = 'none';
+      }
+
+      moveEvent.preventDefault();
+      previewDx = (moveEvent.clientX - startX) / mediaBoardViewport.zoom;
+      previewDy = (moveEvent.clientY - startY) / mediaBoardViewport.zoom;
+      schedulePreview();
+    };
+
+    const handleMouseUp = () => {
+      if (boardInteractionFrameRef.current !== null) {
+        window.cancelAnimationFrame(boardInteractionFrameRef.current);
+        boardInteractionFrameRef.current = null;
+      }
+      clearPreview();
+      setMediaBoardPerformanceMode(false);
+
+      if (didDrag) {
+        suppressNextMediaBoardContextMenu();
+        setMediaBoardGroupOffsets((current) => {
+          const next: Record<string, MediaBoardGroupOffset> = { ...current };
+          movingFolderIds.forEach((folderId) => {
+            const currentOffset = next[folderId] ?? { x: 0, y: 0 };
+            const x = currentOffset.x + previewDx;
+            const y = currentOffset.y + previewDy;
+            if (Math.abs(x) < 0.5 && Math.abs(y) < 0.5) {
+              delete next[folderId];
+            } else {
+              next[folderId] = { x, y };
+            }
+          });
+          return next;
+        });
+      }
+
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('blur', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('blur', handleMouseUp);
+  }, [
+    closeContextMenu,
+    folders,
+    mediaBoardLayout.placements,
+    mediaBoardViewport.zoom,
+    setMediaBoardPerformanceMode,
+    suppressNextMediaBoardContextMenu,
+  ]);
+
   const getMediaBoardGroupAtPoint = useCallback((point: { x: number; y: number }) => {
-    return mediaBoardLayout.groups.find((group) => (
-      point.x >= group.x
-      && point.x <= group.x + group.width
-      && point.y >= group.y
-      && point.y <= group.y + group.height
-    )) ?? null;
+    return mediaBoardLayout.groups
+      .filter((group) => (
+        point.x >= group.x
+        && point.x <= group.x + group.width
+        && point.y >= group.y
+        && point.y <= group.y + group.height
+      ))
+      .sort((a, b) => b.depth - a.depth)[0] ?? null;
   }, [mediaBoardLayout.groups]);
+
+  const canMoveItemsToMediaBoardGroup = useCallback((itemIds: string[], targetGroupId: string | null) => {
+    if (!targetGroupId) return true;
+
+    return itemIds.every((itemId) => {
+      const draggedFolder = folders.find((folder) => folder.id === itemId);
+      if (!draggedFolder) return true;
+
+      let parent = folders.find((folder) => folder.id === targetGroupId);
+      while (parent) {
+        if (parent.id === itemId) {
+          return false;
+        }
+        parent = parent.parentId ? folders.find((folder) => folder.id === parent!.parentId) : undefined;
+      }
+      return true;
+    });
+  }, [folders]);
 
   const handleMediaBoardWorkspaceContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -1863,6 +2837,37 @@ export function MediaPanel() {
 
     return { groupId: targetGroup.id, index: targetIndex };
   }, [getMediaBoardGroupAtPoint, mediaBoardLayout.placements]);
+
+  const updateMediaBoardInsertionPreview = useCallback((
+    point: { x: number; y: number },
+    movingIds: string[],
+    sourceLayouts: Record<string, MediaBoardNodeLayout>,
+  ) => {
+    const target = getMediaBoardInsertTarget(point, movingIds);
+    if (!target) {
+      setMediaBoardInsertionPreview(null);
+      return null;
+    }
+
+    const movingKey = movingIds.join('\u0000');
+    setMediaBoardInsertionPreview((current) => {
+      if (
+        current
+        && current.targetGroupId === target.groupId
+        && current.targetIndex === target.index
+        && current.movingIds.join('\u0000') === movingKey
+      ) {
+        return current;
+      }
+      return {
+        movingIds,
+        sourceLayouts,
+        targetGroupId: target.groupId,
+        targetIndex: target.index,
+      };
+    });
+    return target;
+  }, [getMediaBoardInsertTarget]);
 
   const getMediaBoardAppendIndex = useCallback((groupId: string | null, movingIds: string[]) => {
     const movingIdSet = new Set(movingIds);
@@ -1933,6 +2938,10 @@ export function MediaPanel() {
 
     if (startLayouts.length === 0) return;
 
+    const sourceLayouts = startLayouts.reduce<Record<string, MediaBoardNodeLayout>>((layouts, entry) => {
+      layouts[entry.id] = entry.layout;
+      return layouts;
+    }, {});
     const startX = e.clientX;
     const startY = e.clientY;
     let didDrag = false;
@@ -1940,6 +2949,7 @@ export function MediaPanel() {
     let previewDy = 0;
     let latestClientX = startX;
     let latestClientY = startY;
+    let latestInsertTarget: { groupId: string | null; index: number } | null = null;
 
     const clearPreview = () => {
       startLayouts.forEach(({ id }) => {
@@ -1978,6 +2988,11 @@ export function MediaPanel() {
 
       previewDx = (moveEvent.clientX - startX) / mediaBoardViewport.zoom;
       previewDy = (moveEvent.clientY - startY) / mediaBoardViewport.zoom;
+      latestInsertTarget = updateMediaBoardInsertionPreview(
+        screenToMediaBoard(moveEvent.clientX, moveEvent.clientY),
+        moveIds,
+        sourceLayouts,
+      );
       schedulePreview();
     };
 
@@ -1988,10 +3003,10 @@ export function MediaPanel() {
       }
       clearPreview();
       setMediaBoardPerformanceMode(false);
+      setMediaBoardInsertionPreview(null);
 
       if (didDrag) {
-        const point = screenToMediaBoard(latestClientX, latestClientY);
-        const target = getMediaBoardInsertTarget(point, moveIds);
+        const target = latestInsertTarget ?? getMediaBoardInsertTarget(screenToMediaBoard(latestClientX, latestClientY), moveIds);
         if (target) {
           commitMediaBoardOrderChange(moveIds, target.groupId, target.index);
         }
@@ -2017,6 +3032,7 @@ export function MediaPanel() {
     screenToMediaBoard,
     setMediaBoardPerformanceMode,
     suppressNextMediaBoardContextMenu,
+    updateMediaBoardInsertionPreview,
   ]);
 
   const handleMediaBoardWheel = useCallback((e: React.WheelEvent) => {
@@ -2042,7 +3058,7 @@ export function MediaPanel() {
 
   const handleMediaBoardMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    if (target.closest('.media-board-node, button, input, .context-menu')) return;
+    if (target.closest('.media-board-node, .media-board-group.folder-group, button, input, .context-menu')) return;
 
     if (e.button === 2) {
       startMediaBoardMarqueeGesture(e);
@@ -2073,6 +3089,8 @@ export function MediaPanel() {
     if (e.button !== 0) return;
 
     e.stopPropagation();
+    if (e.detail >= 2) return;
+
     handleItemClick(item.id, e);
 
     if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
@@ -2087,10 +3105,55 @@ export function MediaPanel() {
     startMediaBoardPanGesture,
   ]);
 
+  const updateMediaBoardInsertionFromNativeDrag = useCallback((e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('application/x-media-panel-item')) {
+      setMediaBoardInsertionPreview(null);
+      return false;
+    }
+
+    const itemId = e.dataTransfer.getData('application/x-media-panel-item') || internalDragId || '';
+    if (!itemId) {
+      setMediaBoardInsertionPreview(null);
+      return false;
+    }
+
+    const itemIds = selectedIds.includes(itemId) ? selectedIds : [itemId];
+    if (itemIds.some((id) => folders.some((folder) => folder.id === id))) {
+      setMediaBoardInsertionPreview(null);
+      return false;
+    }
+
+    const movingIds = itemIds.filter((id) => mediaBoardItemIds.has(id));
+    if (movingIds.length === 0) {
+      setMediaBoardInsertionPreview(null);
+      return false;
+    }
+
+    const sourceLayouts = movingIds.reduce<Record<string, MediaBoardNodeLayout>>((layouts, id) => {
+      const placement = mediaBoardPlacementsById.get(id);
+      if (placement) {
+        layouts[id] = placement.defaultLayout;
+      }
+      return layouts;
+    }, {});
+
+    updateMediaBoardInsertionPreview(screenToMediaBoard(e.clientX, e.clientY), movingIds, sourceLayouts);
+    return true;
+  }, [
+    folders,
+    internalDragId,
+    mediaBoardItemIds,
+    mediaBoardPlacementsById,
+    screenToMediaBoard,
+    selectedIds,
+    updateMediaBoardInsertionPreview,
+  ]);
+
   const handleMediaBoardDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsExternalDragOver(false);
+    setMediaBoardInsertionPreview(null);
 
     if (e.dataTransfer.types.includes('application/x-media-panel-item')) {
       const itemId = e.dataTransfer.getData('application/x-media-panel-item');
@@ -2098,7 +3161,11 @@ export function MediaPanel() {
         const itemsToMove = selectedIds.includes(itemId) ? selectedIds : [itemId];
         const isFolderMove = itemsToMove.some((id) => folders.some((folder) => folder.id === id));
         if (isFolderMove) {
-          moveToFolder(itemsToMove, null);
+          const point = screenToMediaBoard(e.clientX, e.clientY);
+          const targetGroup = getMediaBoardGroupAtPoint(point);
+          if (targetGroup && canMoveItemsToMediaBoardGroup(itemsToMove, targetGroup.id)) {
+            moveToFolder(itemsToMove, targetGroup.id);
+          }
         } else {
           const point = screenToMediaBoard(e.clientX, e.clientY);
           const target = getMediaBoardInsertTarget(point, itemsToMove);
@@ -2113,37 +3180,24 @@ export function MediaPanel() {
     }
 
     const point = screenToMediaBoard(e.clientX, e.clientY);
-    const targetGroup = mediaBoardLayout.groups.find((group) => (
-      point.x >= group.x
-      && point.x <= group.x + group.width
-      && point.y >= group.y
-      && point.y <= group.y + group.height
-    ));
+    const targetGroup = getMediaBoardGroupAtPoint(point);
     await handleExternalDropImport(e.dataTransfer, targetGroup?.id ?? null);
-  }, [commitMediaBoardOrderChange, folders, getMediaBoardAppendIndex, getMediaBoardInsertTarget, handleExternalDropImport, mediaBoardLayout.groups, moveToFolder, screenToMediaBoard, selectedIds]);
+  }, [canMoveItemsToMediaBoardGroup, commitMediaBoardOrderChange, folders, getMediaBoardAppendIndex, getMediaBoardGroupAtPoint, getMediaBoardInsertTarget, handleExternalDropImport, moveToFolder, screenToMediaBoard, selectedIds]);
 
   const handleMediaBoardGroupDrop = useCallback(async (e: React.DragEvent, groupId: string | null) => {
     e.preventDefault();
     e.stopPropagation();
+    setMediaBoardInsertionPreview(null);
 
     if (e.dataTransfer.types.includes('application/x-media-panel-item')) {
       const itemId = e.dataTransfer.getData('application/x-media-panel-item');
       if (itemId) {
-        if (groupId) {
-          const draggedFolder = folders.find((folder) => folder.id === itemId);
-          if (draggedFolder) {
-            let parent = folders.find((folder) => folder.id === groupId);
-            while (parent) {
-              if (parent.id === itemId) {
-                setDragOverFolderId(null);
-                setInternalDragId(null);
-                return;
-              }
-              parent = parent.parentId ? folders.find((folder) => folder.id === parent!.parentId) : undefined;
-            }
-          }
-        }
         const itemsToMove = selectedIds.includes(itemId) ? selectedIds : [itemId];
+        if (!canMoveItemsToMediaBoardGroup(itemsToMove, groupId)) {
+          setDragOverFolderId(null);
+          setInternalDragId(null);
+          return;
+        }
         const isFolderMove = itemsToMove.some((id) => folders.some((folder) => folder.id === id));
         if (isFolderMove) {
           moveToFolder(itemsToMove, groupId);
@@ -2162,17 +3216,19 @@ export function MediaPanel() {
 
     await handleExternalDropImport(e.dataTransfer, groupId);
     setIsExternalDragOver(false);
-  }, [commitMediaBoardOrderChange, folders, getMediaBoardAppendIndex, getMediaBoardInsertTarget, handleExternalDropImport, moveToFolder, screenToMediaBoard, selectedIds]);
+  }, [canMoveItemsToMediaBoardGroup, commitMediaBoardOrderChange, folders, getMediaBoardAppendIndex, getMediaBoardInsertTarget, handleExternalDropImport, moveToFolder, screenToMediaBoard, selectedIds]);
 
   const handleMediaBoardGroupDragOver = useCallback((e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes('application/x-media-panel-item') && !e.dataTransfer.types.includes('Files')) return;
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = e.dataTransfer.types.includes('application/x-media-panel-item') ? 'move' : 'copy';
-  }, []);
+    updateMediaBoardInsertionFromNativeDrag(e);
+  }, [updateMediaBoardInsertionFromNativeDrag]);
 
   const resetMediaBoardLayout = useCallback(() => {
     setMediaBoardOrder({});
+    setMediaBoardGroupOffsets({});
     setMediaBoardViewport(DEFAULT_BOARD_VIEWPORT);
   }, []);
 
@@ -2192,17 +3248,26 @@ export function MediaPanel() {
     const importProgress = getItemImportProgress(item);
     const labelHex = 'labelColor' in item ? getLabelHex(item.labelColor) : 'transparent';
     const title = buildGridTooltip(item, false, isComp);
-    const resolutionLabel = 'width' in item && 'height' in item && item.width && item.height
-      ? `${item.width}x${item.height}`
-      : comp
-        ? `${comp.width}x${comp.height}`
-        : null;
+    const splatStatsLabel = mediaFile?.type === 'gaussian-splat'
+      ? getGaussianSplatResolutionLabel(mediaFile)
+      : null;
+    const resolutionLabel = splatStatsLabel ??
+      ('width' in item && 'height' in item && item.width && item.height
+        ? `${item.width}x${item.height}`
+        : comp
+          ? `${comp.width}x${comp.height}`
+          : null);
+    const boardCodecLabel = mediaFile?.type === 'gaussian-splat'
+      ? getMediaFileContainerLabel(mediaFile)
+      : getMediaFileCodecLabel(mediaFile);
 
     return (
       <div
         key={item.id}
         data-item-id={item.id}
-        className={`media-board-node ${isSelected ? 'selected' : ''} ${isMediaFile && !mediaFile?.file ? 'no-file' : ''} ${importProgress !== null ? 'importing' : ''} ${isTextItem ? 'text' : ''}`}
+        data-board-group-key={getMediaBoardOrderKey(placement.groupId)}
+        data-media-panel-anim-id={item.id}
+        className={`media-board-node ${isSelected ? 'selected' : ''} ${isMediaFile && !mediaFile?.file ? 'no-file' : ''} ${importProgress !== null ? 'importing' : ''} ${isTextItem ? 'text' : ''} ${placement.isDraggingPreview ? 'drag-source-preview' : ''}`}
         style={{
           left: layout.x,
           top: layout.y,
@@ -2260,7 +3325,7 @@ export function MediaPanel() {
           <div className="media-board-node-meta">
             <span>{getMediaBoardTypeLabel(item)}</span>
             {resolutionLabel ? <span>{resolutionLabel}</span> : null}
-            {mediaFile?.codec ? <span>{mediaFile.codec}</span> : null}
+            {boardCodecLabel ? <span>{boardCodecLabel}</span> : null}
           </div>
         </div>
       </div>
@@ -2268,7 +3333,14 @@ export function MediaPanel() {
   };
 
   const renderMediaBoardView = () => (
-    <div className="media-board-wrapper" ref={boardWrapperRef}>
+    <div
+      className="media-board-wrapper"
+      ref={boardWrapperRef}
+      style={{
+        '--media-board-grid-x': `${mediaBoardViewport.panX * MEDIA_BOARD_GRID_PARALLAX}px`,
+        '--media-board-grid-y': `${mediaBoardViewport.panY * MEDIA_BOARD_GRID_PARALLAX}px`,
+      } as React.CSSProperties}
+    >
       <div className="media-board-toolbar">
         <div className="media-board-toolbar-title">
           <span>Board</span>
@@ -2302,6 +3374,12 @@ export function MediaPanel() {
           }
           e.preventDefault();
           e.dataTransfer.dropEffect = e.dataTransfer.types.includes('application/x-media-panel-item') ? 'move' : 'copy';
+          updateMediaBoardInsertionFromNativeDrag(e);
+        }}
+        onDragLeave={(e) => {
+          if (e.currentTarget === e.target) {
+            setMediaBoardInsertionPreview(null);
+          }
         }}
         onDrop={handleMediaBoardDrop}
       >
@@ -2312,24 +3390,81 @@ export function MediaPanel() {
             transform: `translate(${mediaBoardViewport.panX}px, ${mediaBoardViewport.panY}px) scale(${mediaBoardViewport.zoom})`,
           }}
         >
-          {mediaBoardLayout.groups.map((group) => (
-            <div
-              key={group.id ?? 'root'}
-              className="media-board-group"
-              style={{
-                left: group.x,
-                top: group.y,
-                width: group.width,
-                height: group.height,
-              }}
-              onDragOver={handleMediaBoardGroupDragOver}
-              onDrop={(e) => handleMediaBoardGroupDrop(e, group.id)}
-            >
-              <div className="media-board-group-header">
-                <span>{group.name}</span>
-                <span>{group.itemCount}</span>
+          {mediaBoardLayout.groups.map((group) => {
+            const folder = group.id ? folders.find((candidate) => candidate.id === group.id) : null;
+            const isRenamingGroup = group.id !== null && renamingId === group.id;
+            return (
+              <div
+                key={group.id ?? 'root'}
+                className={`media-board-group ${group.id ? 'folder-group' : 'root-group'} depth-${Math.min(group.depth, 3)}`}
+                data-board-group-key={getMediaBoardOrderKey(group.id)}
+                data-media-panel-anim-id={group.id ?? undefined}
+                draggable={false}
+                style={{
+                  left: group.x,
+                  top: group.y,
+                  width: group.width,
+                  height: group.height,
+                }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  if (e.button === 2 && group.id) {
+                    startMediaBoardGroupMoveGesture(e, group);
+                    return;
+                  }
+                  if (e.button === 0 || e.button === 1) {
+                    startMediaBoardPanGesture(e);
+                  }
+                }}
+                onDragOver={handleMediaBoardGroupDragOver}
+                onDrop={(e) => handleMediaBoardGroupDrop(e, group.id)}
+              >
+                <div className="media-board-group-header">
+                  {isRenamingGroup ? (
+                    <input
+                      className="media-board-group-rename"
+                      value={renameValue}
+                      size={Math.max(1, renameValue.length)}
+                      style={{ width: `${Math.max(4, renameValue.length + 1)}ch` }}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onBlur={finishRename}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') finishRename();
+                        if (e.key === 'Escape') setRenamingId(null);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      autoFocus
+                    />
+                  ) : (
+                    <span
+                      title={group.name}
+                      onDoubleClick={(e) => {
+                        if (!group.id) return;
+                        e.stopPropagation();
+                        startRename(group.id, folder?.name ?? group.name);
+                      }}
+                    >
+                      {group.name}
+                    </span>
+                  )}
+                  <span>{group.itemCount}</span>
+                </div>
               </div>
-            </div>
+            );
+          })}
+          {mediaBoardLayout.insertGaps.map((gap) => (
+            <div
+              key={gap.id}
+              className="media-board-insert-gap"
+              style={{
+                left: gap.layout.x,
+                top: gap.layout.y,
+                width: gap.layout.width,
+                height: gap.layout.height,
+              }}
+            />
           ))}
           {mediaBoardLayout.placements.map(renderMediaBoardNode)}
           {mediaBoardMarquee && (() => {
@@ -2388,10 +3523,7 @@ export function MediaPanel() {
           <div className="media-view-segment" role="tablist" aria-label="Media view mode">
             <button
               className={`btn btn-sm btn-icon media-view-toggle ${viewMode === 'classic' ? 'active' : ''}`}
-              onClick={() => {
-                setViewMode('classic');
-                setGridFolderId(null);
-              }}
+              onClick={() => handleViewModeChange('classic')}
               title="Classic list view"
               aria-label="Classic list view"
             >
@@ -2399,7 +3531,7 @@ export function MediaPanel() {
             </button>
             <button
               className={`btn btn-sm btn-icon media-view-toggle ${viewMode === 'icons' ? 'active' : ''}`}
-              onClick={() => setViewMode('icons')}
+              onClick={() => handleViewModeChange('icons')}
               title="Large icon view"
               aria-label="Large icon view"
             >
@@ -2407,10 +3539,7 @@ export function MediaPanel() {
             </button>
             <button
               className={`btn btn-sm btn-icon media-view-toggle ${viewMode === 'board' ? 'active' : ''}`}
-              onClick={() => {
-                setViewMode('board');
-                setGridFolderId(null);
-              }}
+              onClick={() => handleViewModeChange('board')}
               title="Board view"
               aria-label="Board view"
             >
@@ -2507,7 +3636,7 @@ export function MediaPanel() {
       />
 
       {/* Item list with column headers */}
-      <div className="media-panel-content">
+      <div className="media-panel-content" ref={mediaPanelContentRef}>
         {totalItems === 0 ? (
           <div className="media-panel-empty" onContextMenu={(e) => handleContextMenu(e)}>
             <div className="drop-icon">

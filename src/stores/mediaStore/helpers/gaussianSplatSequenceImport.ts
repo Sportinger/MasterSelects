@@ -13,6 +13,7 @@ import {
 } from '../../../utils/gaussianSplatSequence';
 import { useSettingsStore } from '../../settingsStore';
 import type { MediaFile } from '../types';
+import { readGaussianSplatFileStats, summarizeGaussianSplatSequenceStats } from './gaussianSplatStats';
 
 const log = Logger.create('GaussianSplatSequenceImport');
 
@@ -142,6 +143,7 @@ export async function processGaussianSplatSequenceImport<T extends GaussianSplat
   const frames: GaussianSplatSequenceFrame[] = [];
   for (let index = 0; index < sequence.entries.length; index += 1) {
     const entry = sequence.entries[index];
+    const frameStats = await readGaussianSplatFileStats(entry.file);
     if (entry.handle) {
       const frameHandleKey = getSequenceFrameHandleCacheKey(id, index);
       fileSystemService.storeFileHandle(frameHandleKey, entry.handle);
@@ -154,17 +156,31 @@ export async function processGaussianSplatSequenceImport<T extends GaussianSplat
       absolutePath: entry.absolutePath,
       file: entry.file,
       splatUrl: URL.createObjectURL(entry.file),
+      splatCount: frameStats.splatCount,
+      fileSize: frameStats.fileSize,
+      container: frameStats.container,
+      codec: frameStats.codec,
     });
     advanceProgress();
   }
 
   const sharedBounds = await resolveSequenceSharedBounds(firstEntry);
-  const gaussianSplatSequence: GaussianSplatSequenceData = buildGaussianSplatSequenceData(frames, {
+  const sequenceStats = summarizeGaussianSplatSequenceStats(frames);
+  const baseGaussianSplatSequence = buildGaussianSplatSequenceData(frames, {
     fps: 30,
     playbackMode: 'clamp',
     sequenceName: sequence.sequenceName,
     sharedBounds,
   });
+  const gaussianSplatSequence: GaussianSplatSequenceData = {
+    ...baseGaussianSplatSequence,
+    totalSplatCount: sequenceStats.totalSplatCount,
+    minSplatCount: sequenceStats.minSplatCount,
+    maxSplatCount: sequenceStats.maxSplatCount,
+    totalFileSize: sequenceStats.fileSize,
+    container: sequenceStats.container,
+    codec: sequenceStats.codec,
+  };
 
   const duration = getGaussianSplatSequenceDuration(gaussianSplatSequence);
   const totalSize = sequence.entries.reduce((sum, entry) => sum + (entry.file.size || 0), 0);
@@ -180,7 +196,12 @@ export async function processGaussianSplatSequenceImport<T extends GaussianSplat
     gaussianSplatSequence,
     duration,
     fps: gaussianSplatSequence.fps,
-    fileSize: totalSize,
+    container: sequenceStats.container ? `${sequenceStats.container} Seq` : undefined,
+    codec: sequenceStats.codec,
+    fileSize: sequenceStats.fileSize || totalSize,
+    splatCount: sequenceStats.splatCount,
+    totalSplatCount: sequenceStats.totalSplatCount,
+    splatFrameCount: gaussianSplatSequence.frameCount,
     hasFileHandle: !!firstEntry.handle || !!firstProjectHandle,
     filePath: firstEntry.absolutePath ?? firstEntry.handle?.name ?? firstEntry.file.name,
     absolutePath: firstEntry.absolutePath,

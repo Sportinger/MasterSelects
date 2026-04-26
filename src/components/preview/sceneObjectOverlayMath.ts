@@ -1,12 +1,16 @@
 import type { Keyframe, TimelineClip, TimelineTrack } from '../../types';
-import type { SceneCamera, SceneViewport, SceneVector3 } from '../../engine/scene/types';
+import type {
+  SceneCamera,
+  SceneGizmoAxis,
+  SceneVector3,
+  SceneViewport,
+} from '../../engine/scene/types';
 import { resolveRenderableSharedSceneCamera } from '../../engine/scene/SceneCameraUtils';
 import { resolveSceneClipTransform } from '../../engine/scene/SceneTimelineUtils';
 
 export type SceneObjectKind = 'effector' | 'splat' | 'model' | 'plane';
 export type SceneObjectTransformSpace = 'world' | 'effector';
-export type SceneGizmoAxis = 'x' | 'y' | 'z';
-export type SceneGizmoMode = 'move' | 'rotate' | 'scale';
+export type { SceneGizmoAxis, SceneGizmoMode } from '../../engine/scene/types';
 
 export interface PreviewSceneObject {
   clipId: string;
@@ -14,6 +18,7 @@ export interface PreviewSceneObject {
   kind: SceneObjectKind;
   transformSpace: SceneObjectTransformSpace;
   worldPosition: SceneVector3;
+  axisBasis: Record<SceneGizmoAxis, SceneVector3>;
   screen: {
     x: number;
     y: number;
@@ -24,10 +29,12 @@ export interface PreviewSceneObject {
 
 export interface SceneAxisScreenHandle {
   axis: SceneGizmoAxis;
+  axisVector: SceneVector3;
   start: { x: number; y: number };
   end: { x: number; y: number };
   direction: { x: number; y: number };
   pixelsPerUnit: number;
+  projectedLength: number;
 }
 
 interface CollectPreviewSceneObjectsParams {
@@ -109,34 +116,53 @@ function normalizeScreenVector(vector: { x: number; y: number }, fallback: { x: 
   };
 }
 
+function normalizeSceneVector(vector: SceneVector3): SceneVector3 {
+  const length = Math.hypot(vector.x, vector.y, vector.z) || 1;
+  return {
+    x: vector.x / length,
+    y: vector.y / length,
+    z: vector.z / length,
+  };
+}
+
 export function resolveAxisScreenHandle(
   axis: SceneGizmoAxis,
   worldPosition: SceneVector3,
   camera: SceneCamera,
   canvasSize: { width: number; height: number },
+  basisVector?: SceneVector3,
 ): SceneAxisScreenHandle {
   const start = projectWorldToCanvas(worldPosition, camera, canvasSize);
+  const axisVector = normalizeSceneVector(basisVector ?? {
+    x: axis === 'x' ? 1 : 0,
+    y: axis === 'y' ? 1 : 0,
+    z: axis === 'z' ? 1 : 0,
+  });
   const axisEndWorld = {
-    x: worldPosition.x + (axis === 'x' ? 1 : 0),
-    y: worldPosition.y + (axis === 'y' ? 1 : 0),
-    z: worldPosition.z + (axis === 'z' ? 1 : 0),
+    x: worldPosition.x + axisVector.x,
+    y: worldPosition.y + axisVector.y,
+    z: worldPosition.z + axisVector.z,
   };
   const projectedEnd = projectWorldToCanvas(axisEndWorld, camera, canvasSize);
+  const projectedVector = { x: projectedEnd.x - start.x, y: projectedEnd.y - start.y };
+  const projectedLength = Math.hypot(projectedVector.x, projectedVector.y);
   const normalized = normalizeScreenVector(
-    { x: projectedEnd.x - start.x, y: projectedEnd.y - start.y },
+    projectedVector,
     AXIS_FALLBACKS[axis],
   );
-  const visualLength = Math.max(42, Math.min(78, normalized.length));
+  const visualLength = Math.max(66, Math.min(124, normalized.length));
 
   return {
     axis,
+    axisVector,
     start: { x: start.x, y: start.y },
     end: {
       x: start.x + normalized.x * visualLength,
       y: start.y + normalized.y * visualLength,
     },
     direction: { x: normalized.x, y: normalized.y },
-    pixelsPerUnit: Math.max(42, normalized.length),
+    pixelsPerUnit: Math.max(66, normalized.length),
+    projectedLength,
   };
 }
 
@@ -165,6 +191,40 @@ function resolveClipWorldPosition(
       x: transform.position.x,
       y: transform.position.y,
       z: transform.position.z,
+    },
+  };
+}
+
+function resolveClipAxisBasis(transform: TimelineClip['transform']): Record<SceneGizmoAxis, SceneVector3> {
+  const x = (transform.rotation.x * Math.PI) / 180;
+  const y = (transform.rotation.y * Math.PI) / 180;
+  const z = (transform.rotation.z * Math.PI) / 180;
+  const a = Math.cos(x);
+  const b = Math.sin(x);
+  const c = Math.cos(y);
+  const d = Math.sin(y);
+  const e = Math.cos(z);
+  const f = Math.sin(z);
+  const ae = a * e;
+  const af = a * f;
+  const be = b * e;
+  const bf = b * f;
+
+  return {
+    x: {
+      x: c * e,
+      y: af + be * d,
+      z: bf - ae * d,
+    },
+    y: {
+      x: -c * f,
+      y: ae - bf * d,
+      z: be + af * d,
+    },
+    z: {
+      x: d,
+      y: -b * c,
+      z: a * c,
     },
   };
 }
@@ -204,6 +264,7 @@ export function collectPreviewSceneObjects({
         { clips, clipKeyframes },
       );
       const { position, transformSpace } = resolveClipWorldPosition(kind, transform, viewport);
+      const axisBasis = resolveClipAxisBasis(transform);
       const screen = projectWorldToCanvas(position, camera, canvasSize);
 
       return {
@@ -212,6 +273,7 @@ export function collectPreviewSceneObjects({
         kind,
         transformSpace,
         worldPosition: position,
+        axisBasis,
         screen,
       };
     })

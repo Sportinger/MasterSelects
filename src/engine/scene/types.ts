@@ -111,6 +111,15 @@ export interface SceneCamera {
   applyDefaultDistance?: boolean;
 }
 
+export type SceneGizmoAxis = 'x' | 'y' | 'z';
+export type SceneGizmoMode = 'move' | 'rotate' | 'scale';
+
+export interface SceneGizmoRenderOptions {
+  clipId: string;
+  mode: SceneGizmoMode;
+  hoveredAxis?: SceneGizmoAxis | null;
+}
+
 export interface SceneSplatEffectorRuntimeData {
   clipId: string;
   position: SceneVector3;

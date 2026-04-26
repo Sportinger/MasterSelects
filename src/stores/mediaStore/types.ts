@@ -95,6 +95,9 @@ export interface MediaFile extends MediaItem {
   hasAudio?: boolean;    // Does video have audio tracks?
   fileHash?: string;
   thumbnailUrl?: string;
+  splatCount?: number;
+  totalSplatCount?: number;
+  splatFrameCount?: number;
   // Proxy support
   proxyStatus?: ProxyStatus;
   proxyProgress?: number;

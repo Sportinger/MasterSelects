@@ -1,5 +1,26 @@
 [
   {
+    "date": "2026-04-27",
+    "type": "improve",
+    "title": "Viewport Gizmos Feel Like Real Scene Objects",
+    "description": "Move, rotate, and scale gizmos now render through the native 3D path with local-axis orientation, larger stable rotate rings, hover highlighting, center-hub group actions, and double-click reset behavior.",
+    "section": "3D / Native Scene"
+  },
+  {
+    "date": "2026-04-27",
+    "type": "improve",
+    "title": "Gaussian Splat Assets Show Real Media Stats",
+    "description": "Imported splats and numbered splat sequences now store container, file size, per-frame splat count, and total sequence splat count so the Media Panel list, tooltips, and board cards show useful K/M-style stats.",
+    "section": "Media Panel"
+  },
+  {
+    "date": "2026-04-27",
+    "type": "fix",
+    "title": "Source Monitor Stays Open Until the Composition Changes",
+    "description": "Opening a source asset from the Media Panel no longer immediately clears the source monitor, while switching active compositions still closes it as expected.",
+    "section": "Preview"
+  },
+  {
     "date": "2026-04-26",
     "type": "fix",
     "title": "PLY Splat Sequences Play Smoothly",

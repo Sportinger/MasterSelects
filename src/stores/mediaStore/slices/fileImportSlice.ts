@@ -17,6 +17,7 @@ import {
   type GroupedModelSequence,
   type ModelSequenceImportEntry,
 } from '../../../utils/modelSequence';
+import { getGaussianSplatContainerLabelFromFileName } from '../helpers/gaussianSplatStats';
 
 const log = Logger.create('Import');
 
@@ -63,6 +64,12 @@ function createPlaceholder(file: File, id: string, type: ImportableMediaType, pa
     url: '',
     fileSize: file.size,
     isImporting: true,
+    ...(type === 'gaussian-splat'
+      ? {
+          container: getGaussianSplatContainerLabelFromFileName(file.name),
+          codec: 'Splat',
+        }
+      : {}),
   };
 }
 
@@ -83,6 +90,9 @@ function createSequencePlaceholder(
     fileSize: sequence.entries.reduce((sum, entry) => sum + entry.file.size, 0),
     duration: sequence.frameCount / 30,
     fps: 30,
+    container: `${getGaussianSplatContainerLabelFromFileName(sequence.entries[0]?.file.name ?? '')} Seq`,
+    codec: 'Splat Seq',
+    splatFrameCount: sequence.frameCount,
     importProgress: 0,
     isImporting: true,
   };
@@ -514,6 +524,8 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
       file,
       url: '',
       fileSize: file.size,
+      container: getGaussianSplatContainerLabelFromFileName(file.name),
+      codec: 'Splat',
       isImporting: true,
     };
     set((state) => ({

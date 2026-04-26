@@ -78,6 +78,16 @@ Create mesh clips from the Media Panel via `+ Add > Mesh` or the context menu:
 - All transform properties and keyframe animation are supported.
 - Primitive meshes and 3D text render through the native shared scene contract.
 
+### Preview Scene Gizmo
+
+- Selected scene objects expose a viewport transform gizmo for Move, Rotate, and Scale.
+- Move, Rotate, and Scale visuals are drawn by the native WebGPU scene gizmo pass from the selected object's local transform basis. The React overlay only supplies hit targets and the mode toolbar.
+  - Move and Scale use larger Unreal-style colored local-axis handles with dark outlines and a white center hub. Hovering an axis brightens and thickens that native gizmo handle. Dragging the center hub moves freely in the preview plane for Move and applies proportional uniform scale for Scale.
+- Rotate mode draws larger screen-space stable colored rings from the X, Y, and Z local rotation planes, so the ring orientation changes with object rotation and the scene view without the rings visually growing or shrinking. The invisible SVG hit targets are generated from the same projected 3D ring points, and hover/drag chooses the nearest ring instead of whichever SVG stroke is visually on top.
+- Rotation dragging follows the selected projected local ring and applies the delta as a local-axis rotation before converting back to Euler transform values. This keeps red, green, and blue controls aligned with the visual local gizmo even after the object is already rotated.
+- Double-clicking an axis resets that single component, while double-clicking the white center hub resets the active transform group.
+- The W/E/R hotkeys switch between Move, Rotate, and Scale while the preview overlay is active.
+
 ### Scene Camera
 
 There are two camera concepts in the product:
@@ -104,6 +114,7 @@ Gaussian splat clips are imported through the SuperSplat-compatible `@playcanvas
 - Gaussian splats participate in scene cameras, object transforms, object-level effectors, preview, nested compositions, export, preload, and readiness checks through the same native shared-scene path.
 - Realtime splat rendering uses a worker-backed back-to-front order buffer based on the SuperSplat/PlayCanvas sorter approach. Precise export can still fall back to the existing GPU sort path.
 - Sequence splats follow the same shared runtime contract and preload nearby frames without replacing foreground playback with repeated loading overlays.
+- Imported splats and numbered splat sequences store media-panel stats: container label, file size, per-frame splat count, and total sequence splat count.
 - The Transform tab now exposes normal object transforms for gaussian splats. Scene navigation lives on camera clips.
 - Large gaussian splats show viewport loading progress during project restore, URL fetch, parser work, normalization, and GPU upload.
 
