@@ -13,7 +13,7 @@ import {
   selectPreviewExportState,
   selectKeyframeState,
 } from '../../stores/timeline/selectors';
-import type { AnimatableProperty, TimelineClip as TimelineClipType } from '../../types';
+import type { AnimatableProperty, Keyframe, TimelineClip as TimelineClipType } from '../../types';
 import { useMediaStore } from '../../stores/mediaStore';
 
 import { TimelineRuler } from './TimelineRuler';
@@ -52,7 +52,27 @@ import { useTimelineHelpers } from './hooks/useTimelineHelpers';
 import { usePlayheadSnap } from './hooks/usePlayheadSnap';
 import { useMarkerDrag } from './hooks/useMarkerDrag';
 import { MIN_ZOOM, MAX_ZOOM } from '../../stores/timeline/constants';
-import type { ContextMenuState } from './types';
+import type { ClipKeyframeTimeGroup, ContextMenuState } from './types';
+
+const KEYFRAME_TIME_GROUP_PRECISION = 1000;
+
+function getClipKeyframeTimeGroups(
+  keyframes: Array<Pick<Keyframe, 'id' | 'time'>>
+): ClipKeyframeTimeGroup[] {
+  const groups = new Map<number, ClipKeyframeTimeGroup>();
+
+  keyframes.forEach((keyframe) => {
+    const bucket = Math.round(keyframe.time * KEYFRAME_TIME_GROUP_PRECISION) / KEYFRAME_TIME_GROUP_PRECISION;
+    const group = groups.get(bucket);
+    if (group) {
+      group.keyframeIds.push(keyframe.id);
+    } else {
+      groups.set(bucket, { time: keyframe.time, keyframeIds: [keyframe.id] });
+    }
+  });
+
+  return [...groups.values()].sort((a, b) => a.time - b.time);
+}
 
 export function Timeline() {
   // ===========================================
@@ -121,7 +141,7 @@ export function Timeline() {
   // Keyframe actions
   const {
     getClipKeyframes, selectKeyframe, deselectAllKeyframes, hasKeyframes,
-    addKeyframe, moveKeyframe, updateKeyframe, removeKeyframe,
+    addKeyframe, moveKeyframe, moveKeyframes, updateKeyframe, removeKeyframe,
     setPropertyValue, toggleCurveExpanded, updateBezierHandle,
   } = store;
 
@@ -703,6 +723,8 @@ export function Timeline() {
           f.name === clip.name ||
           f.name === clip.name.replace(' (Audio)', '')
       );
+      const clipKeyframeList = getClipKeyframes(clip.id);
+      const keyframeTimeGroups = getClipKeyframeTimeGroups(clipKeyframeList);
 
       return (
         <TimelineClip
@@ -742,8 +764,10 @@ export function Timeline() {
           hasKeyframes={hasKeyframes}
           fadeInDuration={getFadeInDuration(clip.id)}
           fadeOutDuration={getFadeOutDuration(clip.id)}
-          opacityKeyframes={getClipKeyframes(clip.id).filter(k => k.property === 'opacity')}
-          allKeyframeTimes={[...new Set(getClipKeyframes(clip.id).map(k => k.time))]}
+          opacityKeyframes={clipKeyframeList.filter(k => k.property === 'opacity')}
+          allKeyframeTimes={keyframeTimeGroups.map(group => group.time)}
+          keyframeTimeGroups={keyframeTimeGroups}
+          onMoveKeyframeGroup={moveKeyframes}
           timeToPixel={timeToPixel}
           pixelToTime={pixelToTime}
           formatTime={formatTime}
@@ -780,6 +804,7 @@ export function Timeline() {
       getFadeInDuration,
       getFadeOutDuration,
       getClipKeyframes,
+      moveKeyframes,
       clipKeyframes,
       timeToPixel,
       pixelToTime,

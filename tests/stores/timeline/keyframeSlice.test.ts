@@ -252,6 +252,31 @@ describe('keyframeSlice', () => {
     expect(kf.property).toBe('opacity');
   });
 
+  it('moveKeyframes: moves multiple keyframes to the same time in one action', () => {
+    store.getState().addKeyframe('clip-1', 'opacity', 0.5, 2);
+    store.getState().addKeyframe('clip-1', 'scale.x', 2, 2);
+    store.getState().addKeyframe('clip-1', 'rotation.z', 45, 6);
+
+    const [opacityKf, scaleKf, rotationKf] = store.getState().clipKeyframes.get('clip-1')!;
+    store.getState().moveKeyframes([opacityKf.id, scaleKf.id], 4);
+
+    const keyframes = store.getState().clipKeyframes.get('clip-1')!;
+    expect(keyframes.find(k => k.id === opacityKf.id)?.time).toBe(4);
+    expect(keyframes.find(k => k.id === scaleKf.id)?.time).toBe(4);
+    expect(keyframes.find(k => k.id === rotationKf.id)?.time).toBe(6);
+  });
+
+  it('moveKeyframes: clamps grouped moves to the owning clip duration', () => {
+    store.getState().addKeyframe('clip-1', 'opacity', 0.5, 2);
+    store.getState().addKeyframe('clip-1', 'scale.x', 2, 2);
+
+    const ids = store.getState().clipKeyframes.get('clip-1')!.map(k => k.id);
+    store.getState().moveKeyframes(ids, 100);
+
+    const keyframes = store.getState().clipKeyframes.get('clip-1')!;
+    expect(keyframes.every(k => k.time === 10)).toBe(true);
+  });
+
   // ─── getClipKeyframes ─────────────────────────────────────────────
 
   it('getClipKeyframes: returns keyframes for clip', () => {

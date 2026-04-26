@@ -344,6 +344,7 @@ export interface KeyframeActions {
   removeKeyframe: (keyframeId: string) => void;
   updateKeyframe: (keyframeId: string, updates: Partial<Omit<Keyframe, 'id' | 'clipId'>>) => void;
   moveKeyframe: (keyframeId: string, newTime: number) => void;
+  moveKeyframes: (keyframeIds: string[], newTime: number) => void;
   getClipKeyframes: (clipId: string) => Keyframe[];
   getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
   getInterpolatedEffects: (clipId: string, clipLocalTime: number) => Effect[];

@@ -84,6 +84,7 @@ When recording is enabled:
 - Drag left or right to move in time.
 - `Shift+drag` on a timeline diamond makes the drag 10x slower for fine control.
 - Dragging a selected keyframe moves the whole selection by the same delta.
+- Clip bars show a compact global keyframe marker for each clip-local time that has keyframes. Hovering the marker enlarges it, and dragging it moves all keyframes at that same clip-local time together.
 
 ### Curve Editor
 

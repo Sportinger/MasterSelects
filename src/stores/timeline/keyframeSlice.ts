@@ -114,6 +114,42 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     invalidateCache();
   },
 
+  moveKeyframes: (keyframeIds, newTime) => {
+    if (keyframeIds.length === 0) return;
+
+    const { clipKeyframes, clips, invalidateCache } = get();
+    const targetIds = new Set(keyframeIds);
+    const newMap = new Map<string, Keyframe[]>();
+    let changed = false;
+
+    clipKeyframes.forEach((keyframes, clipId) => {
+      const clip = clips.find(c => c.id === clipId);
+      const maxTime = clip?.duration ?? 999;
+      const clampedTime = Math.max(0, Math.min(newTime, maxTime));
+      let clipChanged = false;
+
+      const nextKeyframes = keyframes.map(k => {
+        if (!targetIds.has(k.id)) return k;
+        if (k.time === clampedTime) return k;
+        clipChanged = true;
+        changed = true;
+        return { ...k, time: clampedTime };
+      });
+
+      newMap.set(
+        clipId,
+        clipChanged
+          ? nextKeyframes.sort((a, b) => a.time - b.time)
+          : keyframes
+      );
+    });
+
+    if (!changed) return;
+
+    set({ clipKeyframes: newMap });
+    invalidateCache();
+  },
+
   getClipKeyframes: (clipId) => {
     const { clipKeyframes } = get();
     return clipKeyframes.get(clipId) || [];

@@ -22,6 +22,14 @@ function canLoopExtendVectorClip(clip: TimelineClipProps['clip']): boolean {
 }
 
 type StaticClipIconKind = 'camera' | 'gaussian-splat' | 'model';
+type ClipKeyframeTickGroup = NonNullable<TimelineClipProps['keyframeTimeGroups']>[number];
+type KeyframeGroupDragState = {
+  keyframeIds: string[];
+  startX: number;
+  startTime: number;
+  clipWidth: number;
+  clipDuration: number;
+};
 
 function StaticClipIcon({
   kind,
@@ -130,6 +138,8 @@ function TimelineClipComponent({
   fadeOutDuration,
   opacityKeyframes,
   allKeyframeTimes,
+  keyframeTimeGroups,
+  onMoveKeyframeGroup,
   timeToPixel,
   pixelToTime,
   formatTime,
@@ -420,6 +430,59 @@ function TimelineClipComponent({
     !showsStaticClipArtwork &&
     !isCompositionWithSegments &&
     (useSourceCache ? cachedThumbnails.some(Boolean) : legacyThumbnails.length > 0);
+
+  const keyframeTickGroups: ClipKeyframeTickGroup[] = keyframeTimeGroups ?? allKeyframeTimes.map(time => ({
+    time,
+    keyframeIds: [],
+  }));
+  const [keyframeGroupDrag, setKeyframeGroupDrag] = useState<KeyframeGroupDragState | null>(null);
+
+  const handleKeyframeTickMouseDown = (
+    e: React.MouseEvent<HTMLButtonElement>,
+    group: ClipKeyframeTickGroup
+  ) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (!onMoveKeyframeGroup || group.keyframeIds.length === 0) return;
+
+    setKeyframeGroupDrag({
+      keyframeIds: group.keyframeIds,
+      startX: e.clientX,
+      startTime: group.time,
+      clipWidth: Math.max(1, width),
+      clipDuration: Math.max(0.001, displayDuration),
+    });
+  };
+
+  useEffect(() => {
+    if (!keyframeGroupDrag || !onMoveKeyframeGroup) return;
+
+    const handleDocumentMouseMove = (e: MouseEvent) => {
+      e.preventDefault();
+      const sensitivity = e.shiftKey ? 0.1 : 1;
+      const deltaX = (e.clientX - keyframeGroupDrag.startX) * sensitivity;
+      const deltaTime = (deltaX / keyframeGroupDrag.clipWidth) * keyframeGroupDrag.clipDuration;
+      const newTime = Math.max(
+        0,
+        Math.min(keyframeGroupDrag.clipDuration, keyframeGroupDrag.startTime + deltaTime)
+      );
+
+      onMoveKeyframeGroup(keyframeGroupDrag.keyframeIds, newTime);
+    };
+
+    const handleDocumentMouseUp = () => {
+      setKeyframeGroupDrag(null);
+    };
+
+    document.addEventListener('mousemove', handleDocumentMouseMove);
+    document.addEventListener('mouseup', handleDocumentMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleDocumentMouseMove);
+      document.removeEventListener('mouseup', handleDocumentMouseUp);
+    };
+  }, [keyframeGroupDrag, onMoveKeyframeGroup]);
 
   // Track filtering
   if (isDragging && clipDrag && clipDrag.currentTrackId !== trackId) {
@@ -953,16 +1016,25 @@ function TimelineClipComponent({
         </div>
       )}
       {/* Keyframe tick marks on clip bar */}
-      {allKeyframeTimes.length > 0 && (
+      {keyframeTickGroups.length > 0 && (
         <div className="clip-keyframe-ticks">
-          {allKeyframeTimes.map((time, i) => {
-            const xPercent = (time / displayDuration) * 100;
+          {keyframeTickGroups.map((group, i) => {
+            const xPercent = (group.time / displayDuration) * 100;
             if (xPercent < 0 || xPercent > 100) return null;
+            const isDraggingKeyframeGroup = keyframeGroupDrag
+              ? group.keyframeIds.some(id => keyframeGroupDrag.keyframeIds.includes(id))
+              : false;
+            const keyframeCount = group.keyframeIds.length || 1;
             return (
-              <div
-                key={i}
-                className="keyframe-tick"
+              <button
+                type="button"
+                key={`${group.time}:${group.keyframeIds.join('|') || i}`}
+                className={`keyframe-tick${isDraggingKeyframeGroup ? ' dragging' : ''}`}
                 style={{ left: `${xPercent}%` }}
+                onMouseDown={(e) => handleKeyframeTickMouseDown(e, group)}
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Move ${keyframeCount} keyframe${keyframeCount === 1 ? '' : 's'} at ${formatTime(group.time)}`}
+                title={`Drag to move ${keyframeCount} keyframe${keyframeCount === 1 ? '' : 's'} at ${formatTime(group.time)}`}
               />
             );
           })}

@@ -191,6 +191,7 @@ export const selectKeyframeActions = (state: TimelineStore) => ({
   hasKeyframes: state.hasKeyframes,
   addKeyframe: state.addKeyframe,
   moveKeyframe: state.moveKeyframe,
+  moveKeyframes: state.moveKeyframes,
   updateKeyframe: state.updateKeyframe,
   removeKeyframe: state.removeKeyframe,
   setPropertyValue: state.setPropertyValue,
