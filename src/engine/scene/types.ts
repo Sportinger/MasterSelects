@@ -96,6 +96,8 @@ export interface SceneCameraConfig {
   near: number;
   far: number;
   applyDefaultDistance?: boolean;
+  projection?: 'perspective' | 'orthographic';
+  orthographicScale?: number;
 }
 
 export interface SceneCamera {
@@ -109,6 +111,8 @@ export interface SceneCamera {
   far: number;
   viewport: SceneViewport;
   applyDefaultDistance?: boolean;
+  projection: 'perspective' | 'orthographic';
+  orthographicScale?: number;
 }
 
 export type SceneGizmoAxis = 'x' | 'y' | 'z';

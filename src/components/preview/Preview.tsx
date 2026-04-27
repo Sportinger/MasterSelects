@@ -38,7 +38,7 @@ import {
   resolveOrbitCameraTranslationForFixedEye,
 } from '../../engine/gaussian/core/SplatCameraUtils';
 import { resolveSharedSceneCameraConfig } from '../../engine/scene/SceneCameraUtils';
-import type { SceneCameraConfig, SceneViewport } from '../../engine/scene/types';
+import type { SceneCameraConfig, SceneVector3, SceneViewport } from '../../engine/scene/types';
 import type { ClipTransform, TimelineClip, TimelineTrack } from '../../types';
 import type { PreviewPanelSource } from '../../types/dock';
 import {
@@ -66,6 +66,35 @@ function getSharedSceneDefaultCameraDistance(fovDegrees: number): number {
 const CAMERA_NAV_FPS_LOOK_SPEED = 0.18;
 const EDIT_CAMERA_BLEND_MS = 320;
 const TIMELINE_TIME_EPSILON = 1e-4;
+const EDIT_CAMERA_ORTHO_MIN_SCALE = 0.05;
+const EDIT_CAMERA_ORTHO_MAX_SCALE = 10000;
+
+type EditCameraViewMode = 'camera' | 'front' | 'side' | 'top';
+type EditCameraOrthoViewMode = Exclude<EditCameraViewMode, 'camera'>;
+
+interface EditCameraOrthoFrame {
+  clipId: string;
+  mode: EditCameraOrthoViewMode;
+  center: SceneVector3;
+  scale: number;
+}
+
+const EDIT_CAMERA_VIEW_LABELS: Record<EditCameraViewMode, string> = {
+  camera: 'Camera',
+  front: 'Front',
+  side: 'Side',
+  top: 'Top',
+};
+const PREVIEW_CONTAINER_SELECTOR = '.preview-container[data-preview-panel-id]';
+
+function getPreviewPanelIdFromElement(element: Element | null): string | null {
+  return element?.closest<HTMLElement>(PREVIEW_CONTAINER_SELECTOR)?.dataset.previewPanelId ?? null;
+}
+
+function getFirstEditablePreviewPanelId(): string | null {
+  if (typeof document === 'undefined') return null;
+  return document.querySelector<HTMLElement>('.preview-container[data-preview-editable="true"]')?.dataset.previewPanelId ?? null;
+}
 
 function cloneClipTransform(transform: ClipTransform): ClipTransform {
   return {
@@ -96,7 +125,120 @@ function lerpNumber(from: number, to: number, t: number): number {
   return from + (to - from) * t;
 }
 
+function cloneSceneVector(vector: SceneVector3): SceneVector3 {
+  return { x: vector.x, y: vector.y, z: vector.z };
+}
+
+function addSceneVectors(a: SceneVector3, b: SceneVector3): SceneVector3 {
+  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
+}
+
+function scaleSceneVector(vector: SceneVector3, scale: number): SceneVector3 {
+  return { x: vector.x * scale, y: vector.y * scale, z: vector.z * scale };
+}
+
+function clampEditCameraOrthoScale(scale: number): number {
+  if (!Number.isFinite(scale)) return 2;
+  return Math.max(EDIT_CAMERA_ORTHO_MIN_SCALE, Math.min(EDIT_CAMERA_ORTHO_MAX_SCALE, scale));
+}
+
+function getEditCameraViewModeFromKey(event: Pick<KeyboardEvent, 'code' | 'key'>): EditCameraViewMode | null {
+  if (event.code === 'Digit1' || event.code === 'Numpad1' || event.key === '1') return 'front';
+  if (event.code === 'Digit2' || event.code === 'Numpad2' || event.key === '2') return 'side';
+  if (event.code === 'Digit3' || event.code === 'Numpad3' || event.key === '3') return 'top';
+  if (event.code === 'Digit4' || event.code === 'Numpad4' || event.key === '4') return 'camera';
+  return null;
+}
+
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    target.isContentEditable
+  );
+}
+
+function getEditCameraOrthoBasis(mode: EditCameraOrthoViewMode): {
+  eyeDirection: SceneVector3;
+  right: SceneVector3;
+  up: SceneVector3;
+} {
+  switch (mode) {
+    case 'side':
+      return {
+        eyeDirection: { x: 1, y: 0, z: 0 },
+        right: { x: 0, y: 0, z: -1 },
+        up: { x: 0, y: 1, z: 0 },
+      };
+    case 'top':
+      return {
+        eyeDirection: { x: 0, y: 1, z: 0 },
+        right: { x: 1, y: 0, z: 0 },
+        up: { x: 0, y: 0, z: -1 },
+      };
+    case 'front':
+    default:
+      return {
+        eyeDirection: { x: 0, y: 0, z: 1 },
+        right: { x: 1, y: 0, z: 0 },
+        up: { x: 0, y: 1, z: 0 },
+      };
+  }
+}
+
+function getSceneCameraDistance(config: SceneCameraConfig): number {
+  return Math.max(
+    0.001,
+    Math.hypot(
+      config.position.x - config.target.x,
+      config.position.y - config.target.y,
+      config.position.z - config.target.z,
+    ),
+  );
+}
+
+function createDefaultEditCameraOrthoFrame(
+  mode: EditCameraOrthoViewMode,
+  clipId: string,
+  cameraConfig: SceneCameraConfig,
+): EditCameraOrthoFrame {
+  const distance = getSceneCameraDistance(cameraConfig);
+  const perspectiveHeight = 2 * Math.tan((Math.max(1, cameraConfig.fov) * Math.PI / 180) * 0.5) * distance;
+  return {
+    clipId,
+    mode,
+    center: cloneSceneVector(cameraConfig.target),
+    scale: clampEditCameraOrthoScale(Math.max(2, perspectiveHeight, distance * 1.35)),
+  };
+}
+
+function buildEditCameraOrthographicConfig(
+  mode: EditCameraOrthoViewMode,
+  frame: EditCameraOrthoFrame,
+  cameraConfig: SceneCameraConfig,
+): SceneCameraConfig {
+  const basis = getEditCameraOrthoBasis(mode);
+  const viewDistance = Math.max(
+    10,
+    Math.min(Math.max(cameraConfig.far * 0.25, frame.scale * 4), EDIT_CAMERA_ORTHO_MAX_SCALE),
+  );
+  return {
+    position: addSceneVectors(frame.center, scaleSceneVector(basis.eyeDirection, viewDistance)),
+    target: cloneSceneVector(frame.center),
+    up: cloneSceneVector(basis.up),
+    fov: cameraConfig.fov,
+    near: cameraConfig.near,
+    far: cameraConfig.far,
+    applyDefaultDistance: false,
+    projection: 'orthographic',
+    orthographicScale: frame.scale,
+  };
+}
+
 function lerpSceneCameraConfig(from: SceneCameraConfig, to: SceneCameraConfig, t: number): SceneCameraConfig {
+  const projection = to.projection ?? 'perspective';
   return {
     position: {
       x: lerpNumber(from.position.x, to.position.x, t),
@@ -117,6 +259,16 @@ function lerpSceneCameraConfig(from: SceneCameraConfig, to: SceneCameraConfig, t
     near: lerpNumber(from.near, to.near, t),
     far: lerpNumber(from.far, to.far, t),
     applyDefaultDistance: false,
+    projection,
+    ...(projection === 'orthographic'
+      ? {
+          orthographicScale: lerpNumber(
+            from.orthographicScale ?? to.orthographicScale ?? 2,
+            to.orthographicScale ?? from.orthographicScale ?? 2,
+            t,
+          ),
+        }
+      : {}),
   };
 }
 
@@ -468,6 +620,9 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
   // Edit mode state
   const [editMode, setEditMode] = useState(false);
+  const [editCameraViewMode, setEditCameraViewMode] = useState<EditCameraViewMode>('camera');
+  const [editCameraOrthoFrame, setEditCameraOrthoFrame] = useState<EditCameraOrthoFrame | null>(null);
+  const [isEditCameraOrthoPanning, setIsEditCameraOrthoPanning] = useState(false);
   const [sceneObjectOverlayEnabled, setSceneObjectOverlayEnabled] = useState(true);
   const [viewZoom, setViewZoom] = useState(1);
   const [viewPan, setViewPan] = useState({ x: 0, y: 0 });
@@ -503,10 +658,18 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const gaussianKeyboardFrameRef = useRef<number | null>(null);
   const gaussianKeyboardLastTimeRef = useRef<number | null>(null);
   const gaussianKeyboardBatchActiveRef = useRef(false);
+  const editCameraOrthoPanStart = useRef({
+    x: 0,
+    y: 0,
+    center: { x: 0, y: 0, z: 0 } as SceneVector3,
+    scale: 1,
+    mode: 'front' as EditCameraOrthoViewMode,
+  });
   const sceneNavHistoryBatchActiveRef = useRef(false);
   const editCameraTransformRef = useRef<ClipTransform | null>(null);
   const editCameraClipIdRef = useRef<string | null>(null);
   const editCameraAnimationRef = useRef<number | null>(null);
+  const editCameraViewTransitionRef = useRef(false);
   const editCameraModeActiveRef = useRef(false);
 
   useEffect(() => {
@@ -533,6 +696,9 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     editMode &&
     activeCameraClipAtPlayhead,
   );
+  const editCameraOrthoMode: EditCameraOrthoViewMode | null =
+    editCameraViewMode === 'camera' ? null : editCameraViewMode;
+  const editCameraOrthoViewActive = editCameraModeActive && editCameraOrthoMode !== null;
   const navigationSceneNavClip = editCameraModeActive
     ? activeCameraClipAtPlayhead
     : selectedSceneNavClip;
@@ -552,7 +718,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     isEditableSource &&
     navigationSceneNavClip &&
     (
-      editCameraModeActive ||
+      (editCameraModeActive && !editCameraOrthoViewActive) ||
       (!editMode && sceneNavClipId === navigationSceneNavClip.id)
     ),
   );
@@ -563,14 +729,39 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     activeCameraClipAtPlayhead &&
     selectedClipIds.has(activeCameraClipAtPlayhead.id),
   );
+  const activeEditCameraOrthoFrame =
+    editCameraOrthoMode &&
+    activeCameraClipAtPlayhead &&
+    editCameraOrthoFrame?.clipId === activeCameraClipAtPlayhead.id &&
+    editCameraOrthoFrame.mode === editCameraOrthoMode
+      ? editCameraOrthoFrame
+      : null;
 
   useEffect(() => {
-    const overrideClipId = editCameraClipSelected ? activeCameraClipAtPlayhead?.id ?? null : null;
+    let overrideClipId: string | null = null;
+    if (editCameraModeActive && selectedClipId && selectedClipId !== activeCameraClipAtPlayhead?.id) {
+      overrideClipId = selectedClipId;
+    } else if (editCameraClipSelected) {
+      overrideClipId = activeCameraClipAtPlayhead?.id ?? null;
+    }
     setSceneGizmoClipIdOverride(overrideClipId);
     return () => {
       setSceneGizmoClipIdOverride(null);
     };
-  }, [activeCameraClipAtPlayhead?.id, editCameraClipSelected, setSceneGizmoClipIdOverride]);
+  }, [
+    activeCameraClipAtPlayhead?.id,
+    editCameraClipSelected,
+    editCameraModeActive,
+    selectedClipId,
+    setSceneGizmoClipIdOverride,
+  ]);
+
+  const activeEditCameraClipId = editCameraModeActive ? activeCameraClipAtPlayhead?.id ?? null : null;
+  useEffect(() => {
+    setEditCameraViewMode('camera');
+    setEditCameraOrthoFrame(null);
+    setIsEditCameraOrthoPanning(false);
+  }, [activeEditCameraClipId]);
 
   const getSceneNavPointerLockTarget = useCallback(() => {
     return canvasWrapperRef.current ?? containerRef.current;
@@ -583,6 +774,18 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       canvasWrapperRef.current?.contains(target),
     );
   }, []);
+
+  const isPreviewShortcutTarget = useCallback(() => {
+    if (typeof document === 'undefined') return true;
+    const activeElement = document.activeElement;
+    const focusedPanelId = activeElement instanceof Element
+      ? getPreviewPanelIdFromElement(activeElement)
+      : null;
+    if (focusedPanelId) {
+      return focusedPanelId === panelId;
+    }
+    return getFirstEditablePreviewPanelId() === panelId;
+  }, [panelId]);
 
   const startSceneNavHistoryBatch = useCallback((label: string) => {
     if (editCameraModeActiveRef.current || sceneNavHistoryBatchActiveRef.current) return;
@@ -700,12 +903,27 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
   const getEditSceneCameraConfig = useCallback((clip: TimelineClip | null = activeCameraClipAtPlayhead): SceneCameraConfig | null => {
     if (!clip || !editCameraTransformRef.current) return null;
-    return buildPreviewCameraConfigFromTransform(
+    const cameraConfig = buildPreviewCameraConfigFromTransform(
       clip,
       editCameraTransformRef.current,
       { width: effectiveResolution.width, height: effectiveResolution.height },
     );
-  }, [activeCameraClipAtPlayhead, effectiveResolution.height, effectiveResolution.width]);
+    if (!cameraConfig) return null;
+    if (
+      editCameraOrthoMode &&
+      editCameraOrthoFrame?.clipId === clip.id &&
+      editCameraOrthoFrame.mode === editCameraOrthoMode
+    ) {
+      return buildEditCameraOrthographicConfig(editCameraOrthoMode, editCameraOrthoFrame, cameraConfig);
+    }
+    return cameraConfig;
+  }, [
+    activeCameraClipAtPlayhead,
+    editCameraOrthoFrame,
+    editCameraOrthoMode,
+    effectiveResolution.height,
+    effectiveResolution.width,
+  ]);
 
   const stopEditCameraAnimation = useCallback(() => {
     if (editCameraAnimationRef.current === null) return;
@@ -743,6 +961,46 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     engine.requestRender();
     editCameraAnimationRef.current = window.requestAnimationFrame(tick);
   }, [setPreviewCameraOverride, stopEditCameraAnimation]);
+
+  const setEditCameraView = useCallback((mode: EditCameraViewMode) => {
+    if (!activeCameraClipAtPlayhead || !editCameraTransformRef.current) return;
+    if (mode === editCameraViewMode) return;
+
+    const cameraConfig = buildPreviewCameraConfigFromTransform(
+      activeCameraClipAtPlayhead,
+      editCameraTransformRef.current,
+      { width: effectiveResolution.width, height: effectiveResolution.height },
+    );
+    if (!cameraConfig) return;
+
+    const fromConfig = useEngineStore.getState().previewCameraOverride ?? getEditSceneCameraConfig(activeCameraClipAtPlayhead);
+    if (!fromConfig) return;
+
+    let toConfig = cameraConfig;
+    let nextFrame: EditCameraOrthoFrame | null = null;
+    if (mode !== 'camera') {
+      nextFrame = editCameraOrthoFrame?.clipId === activeCameraClipAtPlayhead.id
+        ? {
+            ...editCameraOrthoFrame,
+            mode,
+          }
+        : createDefaultEditCameraOrthoFrame(mode, activeCameraClipAtPlayhead.id, cameraConfig);
+      toConfig = buildEditCameraOrthographicConfig(mode, nextFrame, cameraConfig);
+    }
+
+    editCameraViewTransitionRef.current = true;
+    setEditCameraViewMode(mode);
+    setEditCameraOrthoFrame(nextFrame);
+    animatePreviewCameraOverride(fromConfig, toConfig, false);
+  }, [
+    activeCameraClipAtPlayhead,
+    animatePreviewCameraOverride,
+    editCameraOrthoFrame,
+    editCameraViewMode,
+    effectiveResolution.height,
+    effectiveResolution.width,
+    getEditSceneCameraConfig,
+  ]);
 
   const applyNavigationCameraValues = useCallback((clip: TimelineClip, values: {
     positionX?: number;
@@ -816,6 +1074,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       if (!wasEditCameraModeActive || clipChanged) {
         const fromConfig = useEngineStore.getState().previewCameraOverride ?? getActualSceneCameraConfig();
         animatePreviewCameraOverride(fromConfig, editCameraConfig, false);
+      } else if (editCameraViewTransitionRef.current) {
+        editCameraViewTransitionRef.current = false;
       } else {
         setPreviewCameraOverride(editCameraConfig);
         engine.requestRender();
@@ -1018,7 +1278,37 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const handleSceneNavBlur = useCallback(() => {
     stopGaussianFpsLook();
     stopGaussianKeyboardMovement();
+    setIsEditCameraOrthoPanning(false);
   }, [stopGaussianFpsLook, stopGaussianKeyboardMovement]);
+
+  useEffect(() => {
+    if (!editCameraModeActive) return;
+
+    const handleEditCameraViewShortcut = (event: KeyboardEvent) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (isTextEntryTarget(event.target)) return;
+
+      const mode = getEditCameraViewModeFromKey(event);
+      if (!mode) return;
+      if (!isPreviewShortcutTarget()) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      stopGaussianFpsLook();
+      stopGaussianKeyboardMovement();
+      setEditCameraView(mode);
+      containerRef.current?.focus({ preventScroll: true });
+    };
+
+    window.addEventListener('keydown', handleEditCameraViewShortcut, { capture: true });
+    return () => window.removeEventListener('keydown', handleEditCameraViewShortcut, { capture: true });
+  }, [
+    editCameraModeActive,
+    isPreviewShortcutTarget,
+    setEditCameraView,
+    stopGaussianFpsLook,
+    stopGaussianKeyboardMovement,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -1284,8 +1574,92 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     return () => resizeObserver.disconnect();
   }, [effectiveResolution.width, effectiveResolution.height]);
 
+  const zoomEditCameraOrthoView = useCallback((e: React.WheelEvent): boolean => {
+    if (!editCameraOrthoViewActive || !activeEditCameraOrthoFrame || !editCameraOrthoMode) return false;
+    if (!isCanvasInteractionTarget(e.target)) return false;
+
+    const canvasRect = canvasRef.current?.getBoundingClientRect();
+    if (!canvasRect || canvasRect.width <= 0 || canvasRect.height <= 0) return false;
+
+    e.preventDefault();
+    const current = activeEditCameraOrthoFrame;
+    const basis = getEditCameraOrthoBasis(editCameraOrthoMode);
+    const aspect = Math.max(0.001, canvasSize.width / Math.max(1, canvasSize.height));
+    const mouseX = Math.max(0, Math.min(canvasRect.width, e.clientX - canvasRect.left));
+    const mouseY = Math.max(0, Math.min(canvasRect.height, e.clientY - canvasRect.top));
+    const zoomFactor = Math.exp(e.deltaY * 0.0025);
+    const nextScale = clampEditCameraOrthoScale(current.scale * zoomFactor);
+    const currentRightOffset = (mouseX / canvasRect.width - 0.5) * current.scale * aspect;
+    const currentUpOffset = (0.5 - mouseY / canvasRect.height) * current.scale;
+    const nextRightOffset = (mouseX / canvasRect.width - 0.5) * nextScale * aspect;
+    const nextUpOffset = (0.5 - mouseY / canvasRect.height) * nextScale;
+    const worldUnderPointer = addSceneVectors(
+      addSceneVectors(current.center, scaleSceneVector(basis.right, currentRightOffset)),
+      scaleSceneVector(basis.up, currentUpOffset),
+    );
+    const nextCenter = addSceneVectors(
+      addSceneVectors(worldUnderPointer, scaleSceneVector(basis.right, -nextRightOffset)),
+      scaleSceneVector(basis.up, -nextUpOffset),
+    );
+
+    setEditCameraOrthoFrame({
+      ...current,
+      center: nextCenter,
+      scale: nextScale,
+    });
+    engine.requestRender();
+    return true;
+  }, [
+    activeEditCameraOrthoFrame,
+    canvasSize.height,
+    canvasSize.width,
+    editCameraOrthoMode,
+    editCameraOrthoViewActive,
+    isCanvasInteractionTarget,
+  ]);
+
+  useEffect(() => {
+    if (!isEditCameraOrthoPanning) return;
+
+    const handleWindowMouseMove = (event: MouseEvent) => {
+      event.preventDefault();
+      const { x, y, center, scale, mode } = editCameraOrthoPanStart.current;
+      const basis = getEditCameraOrthoBasis(mode);
+      const worldPerPixel = scale / Math.max(1, canvasSize.height);
+      const dx = event.clientX - x;
+      const dy = event.clientY - y;
+      const nextCenter = addSceneVectors(
+        addSceneVectors(center, scaleSceneVector(basis.right, -dx * worldPerPixel)),
+        scaleSceneVector(basis.up, dy * worldPerPixel),
+      );
+
+      setEditCameraOrthoFrame((current) => (
+        current?.mode === mode
+          ? { ...current, center: nextCenter }
+          : current
+      ));
+      engine.requestRender();
+    };
+
+    const handleWindowMouseUp = (event: MouseEvent) => {
+      event.preventDefault();
+      setIsEditCameraOrthoPanning(false);
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [canvasSize.height, isEditCameraOrthoPanning]);
+
   // Handle zoom with scroll wheel in edit mode
   const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (zoomEditCameraOrthoView(e)) {
+      return;
+    }
+
     if (sceneNavEnabled && navigationSceneNavClip && isCanvasInteractionTarget(e.target)) {
       const shouldAdjustFpsSpeed = effectiveSceneNavFpsMode && (
         gaussianKeyboardMoveCodesRef.current.size > 0 ||
@@ -1361,17 +1735,46 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     navigationSceneNavClip,
     viewPan,
     viewZoom,
+    zoomEditCameraOrthoView,
   ]);
 
-  // Tab key to toggle edit mode (via shortcut registry)
-  useShortcut('preview.editMode', () => {
+  const toggleEditModeFromShortcut = useCallback(() => {
+    if (!isPreviewShortcutTarget()) return;
+    containerRef.current?.focus({ preventScroll: true });
     setEditMode(prev => !prev);
-  }, { enabled: isEditableSource });
+  }, [isPreviewShortcutTarget]);
+
+  // Tab key to toggle edit mode (via shortcut registry)
+  useShortcut('preview.editMode', toggleEditModeFromShortcut, { enabled: isEditableSource });
 
   // Handle scene navigation and edit-mode panning
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (sceneNavEnabled && navigationSceneNavClip && isCanvasInteractionTarget(e.target)) {
+    if (isCanvasInteractionTarget(e.target)) {
       containerRef.current?.focus({ preventScroll: true });
+    }
+
+    if (
+      editCameraOrthoViewActive &&
+      activeEditCameraOrthoFrame &&
+      editCameraOrthoMode &&
+      isCanvasInteractionTarget(e.target) &&
+      (e.button === 1 || e.button === 2 || (e.button === 0 && e.shiftKey))
+    ) {
+      e.preventDefault();
+      stopGaussianFpsLook();
+      stopGaussianKeyboardMovement();
+      editCameraOrthoPanStart.current = {
+        x: e.clientX,
+        y: e.clientY,
+        center: cloneSceneVector(activeEditCameraOrthoFrame.center),
+        scale: activeEditCameraOrthoFrame.scale,
+        mode: editCameraOrthoMode,
+      };
+      setIsEditCameraOrthoPanning(true);
+      return;
+    }
+
+    if (sceneNavEnabled && navigationSceneNavClip && isCanvasInteractionTarget(e.target)) {
       const freshTransform = getFreshSceneNavTransform(navigationSceneNavClip);
       if (!freshTransform) return;
 
@@ -1449,6 +1852,9 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       };
     }
   }, [
+    activeEditCameraOrthoFrame,
+    editCameraOrthoMode,
+    editCameraOrthoViewActive,
     layerEditMode,
     endGaussianWheelBatch,
     sceneNavEnabled,
@@ -1458,6 +1864,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     isCanvasInteractionTarget,
     navigationSceneNavClip,
     startSceneNavHistoryBatch,
+    stopGaussianFpsLook,
+    stopGaussianKeyboardMovement,
     viewPan,
   ]);
 
@@ -1474,24 +1882,30 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
   const handleMouseUp = useCallback(() => {
     setIsPanning(false);
+    setIsEditCameraOrthoPanning(false);
   }, []);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    if (sceneNavEnabled && isCanvasInteractionTarget(e.target)) {
+    if ((sceneNavEnabled || editCameraOrthoViewActive) && isCanvasInteractionTarget(e.target)) {
       e.preventDefault();
     }
-  }, [sceneNavEnabled, isCanvasInteractionTarget]);
+  }, [editCameraOrthoViewActive, sceneNavEnabled, isCanvasInteractionTarget]);
 
   const handleAuxClick = useCallback((e: React.MouseEvent) => {
-    if (sceneNavEnabled && isCanvasInteractionTarget(e.target)) {
+    if ((sceneNavEnabled || editCameraOrthoViewActive) && isCanvasInteractionTarget(e.target)) {
       e.preventDefault();
     }
-  }, [sceneNavEnabled, isCanvasInteractionTarget]);
+  }, [editCameraOrthoViewActive, sceneNavEnabled, isCanvasInteractionTarget]);
 
   // Reset view
   const resetView = useCallback(() => {
     setViewZoom(1);
     setViewPan({ x: 0, y: 0 });
+  }, []);
+
+  const setPanelEditMode = useCallback((value: boolean) => {
+    containerRef.current?.focus({ preventScroll: true });
+    setEditMode(value);
   }, []);
 
   // Calculate canvas position within container (for full-container overlay)
@@ -1533,12 +1947,13 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const splatLoadPhaseLabel = activeSplatLoadProgress
     ? getSplatLoadPhaseLabel(activeSplatLoadProgress.phase)
     : '';
-  const showSceneObjectOverlay = sceneObjectOverlayEnabled && isEditableSource && !isPlaying && (!editMode || editCameraModeActive);
-  const sceneObjectOverlaySelectedClipId = editCameraModeActive
-    ? editCameraClipSelected
-      ? activeCameraClipAtPlayhead?.id ?? null
-      : null
-    : selectedClipId;
+  const showSceneObjectOverlay = sceneObjectOverlayEnabled && isEditableSource && !isPlaying;
+  const sceneObjectOverlaySelectedClipId =
+    editCameraModeActive &&
+    editCameraOrthoViewActive &&
+    selectedClipId === activeCameraClipAtPlayhead?.id
+      ? null
+      : selectedClipId;
   const editCameraGizmoTransform = editCameraModeActive && activeCameraClipAtPlayhead
     ? resolveCameraClipTransformAtPlayhead(activeCameraClipAtPlayhead)
     : null;
@@ -1547,6 +1962,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     <div
       className="preview-container"
       ref={containerRef}
+      data-preview-panel-id={panelId}
+      data-preview-editable={isEditableSource ? 'true' : 'false'}
       onWheelCapture={handleWheel}
       onMouseDownCapture={handleMouseDown}
       onMouseMove={handleMouseMove}
@@ -1563,8 +1980,12 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
           ? 'grabbing'
           : isGaussianFpsLooking
             ? 'crosshair'
+          : isEditCameraOrthoPanning
+            ? 'grabbing'
           : isPanning
             ? 'grabbing'
+          : editCameraOrthoViewActive
+            ? 'default'
             : sceneNavEnabled
               ? (effectiveSceneNavFpsMode ? 'crosshair' : 'grab')
               : layerEditMode
@@ -1579,7 +2000,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         closeSourceMonitor={closeSourceMonitor}
         editMode={editMode}
         canEdit={isEditableSource}
-        setEditMode={setEditMode}
+        setEditMode={setPanelEditMode}
         showEditViewControls={layerEditMode}
         sceneObjectOverlayEnabled={sceneObjectOverlayEnabled}
         setSceneObjectOverlayEnabled={setSceneObjectOverlayEnabled}
@@ -1680,8 +2101,16 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
                   sceneNavClipId={sceneNavClipId}
                   previewCameraOverride={previewCameraOverride}
                   editCameraClip={editCameraModeActive ? activeCameraClipAtPlayhead : null}
-                  editCameraTransform={editCameraGizmoTransform}
-                  showOnlyEditCamera={editCameraModeActive}
+                  editCameraTransform={editCameraModeActive ? editCameraGizmoTransform : null}
+                  showOnlyEditCamera={false}
+                  showWorldGrid={editMode}
+                  worldGridPlane={
+                    editCameraModeActive && editCameraViewMode === 'front'
+                      ? 'xy'
+                      : editCameraModeActive && editCameraViewMode === 'side'
+                        ? 'yz'
+                        : 'xz'
+                  }
                   toolbarPortalTarget={sceneGizmoToolbarTarget}
                   enabled
                 />
@@ -1742,11 +2171,16 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
             Drag: Move | Handles: Scale (Shift: Lock Ratio) | Scroll: Zoom | Alt+Drag: Pan
           </div>
         )}
+        {editCameraOrthoViewActive && activeEditCameraOrthoFrame && (
+          <div className="preview-edit-hint">
+            {EDIT_CAMERA_VIEW_LABELS[activeEditCameraOrthoFrame.mode]} Ortho | 1 Front | 2 Side | 3 Top | 4 Camera | Wheel Zoom | Shift+Drag/MMB Pan
+          </div>
+        )}
         {sceneNavEnabled && (
           <div className="preview-edit-hint">
             {effectiveSceneNavFpsMode
-              ? 'Scene Nav: click preview, hold LMB to look, WASD/QE move, MMB/RMB/Shift+LMB pan, wheel speed while moving/looking, wheel zoom otherwise'
-              : 'Scene Nav: click preview, WASD move, Q/E up-down, LMB orbit, MMB/RMB/Shift+LMB pan, wheel zoom'}
+              ? 'Scene Nav: 1 Front | 2 Side | 3 Top | 4 Camera | click preview, hold LMB to look, WASD/QE move, MMB/RMB/Shift+LMB pan'
+              : 'Scene Nav: 1 Front | 2 Side | 3 Top | 4 Camera | WASD move, Q/E up-down, LMB orbit, MMB/RMB/Shift+LMB pan, wheel zoom'}
           </div>
         )}
 

@@ -323,9 +323,10 @@ export function buildCameraWireframeLines(
       origin.z - camera.cameraPosition.z,
     ),
   );
-  const worldPerPixel =
-    (2 * distance * Math.tan((camera.fov * Math.PI / 180) * 0.5)) /
-    Math.max(1, camera.viewport.height);
+  const worldPerPixel = camera.projection === 'orthographic'
+    ? (camera.orthographicScale ?? 2) / Math.max(1, camera.viewport.height)
+    : (2 * distance * Math.tan((camera.fov * Math.PI / 180) * 0.5)) /
+      Math.max(1, camera.viewport.height);
   const bodyWidth = worldPerPixel * 38;
   const bodyHeight = worldPerPixel * 24;
   const bodyDepth = worldPerPixel * 22;
