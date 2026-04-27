@@ -4,6 +4,7 @@ import { useHistoryStore } from '../../../stores/historyStore';
 import { DraggableNumber } from './shared';
 import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../../types/splatEffector';
 import type { SplatEffectorMode, SplatEffectorSettings } from '../../../types/splatEffector';
+import { MIDIParameterLabel } from './MIDIParameterLabel';
 
 interface SplatEffectorTabProps {
   clipId: string;
@@ -88,7 +89,20 @@ export function SplatEffectorTab({ clipId }: SplatEffectorTabProps) {
       </div>
 
       <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
-        <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Strength</label>
+        <MIDIParameterLabel
+          as="label"
+          style={{ width: '80px', color: '#999', flexShrink: 0 }}
+          target={{
+            clipId,
+            property: 'splatEffector.strength',
+            label: `${clip.name} / Effector Strength`,
+            currentValue: settings.strength,
+            min: 0,
+            max: 400,
+          }}
+        >
+          Strength
+        </MIDIParameterLabel>
         <DraggableNumber
           value={settings.strength}
           onChange={(v) => updateSetting('strength', Math.max(0, v))}
@@ -104,7 +118,20 @@ export function SplatEffectorTab({ clipId }: SplatEffectorTabProps) {
       </div>
 
       <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
-        <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Falloff</label>
+        <MIDIParameterLabel
+          as="label"
+          style={{ width: '80px', color: '#999', flexShrink: 0 }}
+          target={{
+            clipId,
+            property: 'splatEffector.falloff',
+            label: `${clip.name} / Effector Falloff`,
+            currentValue: settings.falloff,
+            min: 0.1,
+            max: 8,
+          }}
+        >
+          Falloff
+        </MIDIParameterLabel>
         <DraggableNumber
           value={settings.falloff}
           onChange={(v) => updateSetting('falloff', Math.max(0.1, v))}
@@ -119,7 +146,20 @@ export function SplatEffectorTab({ clipId }: SplatEffectorTabProps) {
       </div>
 
       <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
-        <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Speed</label>
+        <MIDIParameterLabel
+          as="label"
+          style={{ width: '80px', color: '#999', flexShrink: 0 }}
+          target={{
+            clipId,
+            property: 'splatEffector.speed',
+            label: `${clip.name} / Effector Speed`,
+            currentValue: settings.speed,
+            min: 0,
+            max: 20,
+          }}
+        >
+          Speed
+        </MIDIParameterLabel>
         <DraggableNumber
           value={settings.speed}
           onChange={(v) => updateSetting('speed', Math.max(0, v))}
@@ -134,7 +174,20 @@ export function SplatEffectorTab({ clipId }: SplatEffectorTabProps) {
       </div>
 
       <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
-        <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Seed</label>
+        <MIDIParameterLabel
+          as="label"
+          style={{ width: '80px', color: '#999', flexShrink: 0 }}
+          target={{
+            clipId,
+            property: 'splatEffector.seed',
+            label: `${clip.name} / Effector Seed`,
+            currentValue: settings.seed,
+            min: -10000,
+            max: 10000,
+          }}
+        >
+          Seed
+        </MIDIParameterLabel>
         <DraggableNumber
           value={settings.seed}
           onChange={(v) => updateSetting('seed', v)}

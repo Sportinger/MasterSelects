@@ -4,17 +4,20 @@ import { useMIDIStore } from '../stores/midiStore';
 import {
   getMIDINoteName,
   midiBindingsMatch,
+  midiParameterMessagesMatch,
   type MIDIDeviceInfo,
   type MIDINoteBinding,
 } from '../types/midi';
 import {
   triggerMarkerMIDIBinding,
+  triggerMIDIParameterBinding,
   triggerMIDITransportAction,
   triggerSlotMIDIAction,
 } from '../services/midi/midiCommands';
 import {
   moveMarkerMIDIBinding,
   setMarkerMIDIBinding,
+  setParameterMIDIBinding,
   setSlotMIDIBinding,
   setTransportMIDIBinding,
 } from '../services/midi/midiBindingMutations';
@@ -93,7 +96,23 @@ export function useMIDIRuntime() {
                 );
               }
             } else {
-              setSlotMIDIBinding(learnTarget.slotIndex, learnedBinding);
+              if (learnTarget.kind === 'slot') {
+                setSlotMIDIBinding(learnTarget.slotIndex, learnedBinding);
+              } else {
+                setParameterMIDIBinding({
+                  clipId: learnTarget.clipId,
+                  property: learnTarget.property,
+                  properties: learnTarget.properties,
+                  label: learnTarget.label,
+                  min: learnTarget.min,
+                  max: learnTarget.max,
+                  currentValue: learnTarget.currentValue,
+                }, {
+                  type: 'note',
+                  channel,
+                  note: data1,
+                });
+              }
             }
             midiStore.cancelLearning();
             return;
@@ -123,6 +142,18 @@ export function useMIDIRuntime() {
 
           if (slotBindingEntry) {
             void triggerSlotMIDIAction(Number(slotBindingEntry[0]));
+            return;
+          }
+
+          const parameterBinding = Object.values(midiStore.parameterBindings)
+            .find((binding) => midiParameterMessagesMatch(binding.message, {
+              type: 'note',
+              channel,
+              note: data1,
+            }));
+
+          if (parameterBinding) {
+            void triggerMIDIParameterBinding(parameterBinding, data2);
           }
           return;
         }
@@ -139,12 +170,43 @@ export function useMIDIRuntime() {
         }
 
         if (messageType === 0xb0) {
-          useMIDIStore.getState().setLastMessage({
+          const midiStore = useMIDIStore.getState();
+          midiStore.setLastMessage({
             channel,
             type: 'control-change',
             control: data1,
             value: data2,
           });
+
+          const learnTarget = midiStore.learnTarget;
+          if (learnTarget?.kind === 'parameter') {
+            setParameterMIDIBinding({
+              clipId: learnTarget.clipId,
+              property: learnTarget.property,
+              properties: learnTarget.properties,
+              label: learnTarget.label,
+              min: learnTarget.min,
+              max: learnTarget.max,
+              currentValue: learnTarget.currentValue,
+            }, {
+              type: 'control-change',
+              channel,
+              control: data1,
+            });
+            midiStore.cancelLearning();
+            return;
+          }
+
+          const parameterBinding = Object.values(midiStore.parameterBindings)
+            .find((binding) => midiParameterMessagesMatch(binding.message, {
+              type: 'control-change',
+              channel,
+              control: data1,
+            }));
+
+          if (parameterBinding) {
+            void triggerMIDIParameterBinding(parameterBinding, data2);
+          }
         }
       };
 

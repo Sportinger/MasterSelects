@@ -6,6 +6,7 @@ import { useHistoryStore } from '../../../stores/historyStore';
 import { DraggableNumber } from './shared';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../../../engine/gaussian/types';
 import type { GaussianSplatSettings, GaussianSplatRenderSettings } from '../../../engine/gaussian/types';
+import { MIDIParameterLabel } from './MIDIParameterLabel';
 
 interface GaussianSplatTabProps {
   clipId: string;
@@ -86,7 +87,20 @@ export function GaussianSplatTab({ clipId }: GaussianSplatTabProps) {
         </div>
 
         <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
-          <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Splat Scale</label>
+          <MIDIParameterLabel
+            as="label"
+            style={{ width: '80px', color: '#999', flexShrink: 0 }}
+            target={{
+              clipId,
+              property: 'gaussian.render.splatScale',
+              label: `${clip.name} / Splat Scale`,
+              currentValue: render.splatScale,
+              min: 0.01,
+              max: 20,
+            }}
+          >
+            Splat Scale
+          </MIDIParameterLabel>
           <DraggableNumber
             value={render.splatScale}
             onChange={(value) => updateRenderSetting('splatScale', Math.max(0.01, value))}
@@ -120,7 +134,20 @@ export function GaussianSplatTab({ clipId }: GaussianSplatTabProps) {
         </div>
 
         <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
-          <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Max Splats</label>
+          <MIDIParameterLabel
+            as="label"
+            style={{ width: '80px', color: '#999', flexShrink: 0 }}
+            target={{
+              clipId,
+              property: 'gaussian.render.maxSplats',
+              label: `${clip.name} / Max Splats`,
+              currentValue: render.maxSplats,
+              min: 0,
+              max: 10000000,
+            }}
+          >
+            Max Splats
+          </MIDIParameterLabel>
           <DraggableNumber
             value={render.maxSplats}
             onChange={(value) => updateRenderSetting('maxSplats', Math.max(0, Math.round(value)))}
@@ -137,7 +164,20 @@ export function GaussianSplatTab({ clipId }: GaussianSplatTabProps) {
         </div>
 
         <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
-          <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Sort Every</label>
+          <MIDIParameterLabel
+            as="label"
+            style={{ width: '80px', color: '#999', flexShrink: 0 }}
+            target={{
+              clipId,
+              property: 'gaussian.render.sortFrequency',
+              label: `${clip.name} / Sort Every`,
+              currentValue: render.sortFrequency,
+              min: 0,
+              max: 240,
+            }}
+          >
+            Sort Every
+          </MIDIParameterLabel>
           <DraggableNumber
             value={render.sortFrequency}
             onChange={(value) => updateRenderSetting('sortFrequency', Math.max(0, Math.round(value)))}
@@ -154,7 +194,20 @@ export function GaussianSplatTab({ clipId }: GaussianSplatTabProps) {
         </div>
 
         <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
-          <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Near Plane</label>
+          <MIDIParameterLabel
+            as="label"
+            style={{ width: '80px', color: '#999', flexShrink: 0 }}
+            target={{
+              clipId,
+              property: 'gaussian.render.nearPlane',
+              label: `${clip.name} / Near Plane`,
+              currentValue: render.nearPlane,
+              min: 0.01,
+              max: 10,
+            }}
+          >
+            Near Plane
+          </MIDIParameterLabel>
           <DraggableNumber
             value={render.nearPlane}
             onChange={(value) => updateRenderSetting('nearPlane', value)}
@@ -170,7 +223,20 @@ export function GaussianSplatTab({ clipId }: GaussianSplatTabProps) {
         </div>
 
         <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
-          <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Far Plane</label>
+          <MIDIParameterLabel
+            as="label"
+            style={{ width: '80px', color: '#999', flexShrink: 0 }}
+            target={{
+              clipId,
+              property: 'gaussian.render.farPlane',
+              label: `${clip.name} / Far Plane`,
+              currentValue: render.farPlane,
+              min: 10,
+              max: 10000,
+            }}
+          >
+            Far Plane
+          </MIDIParameterLabel>
           <DraggableNumber
             value={render.farPlane}
             onChange={(value) => updateRenderSetting('farPlane', value)}

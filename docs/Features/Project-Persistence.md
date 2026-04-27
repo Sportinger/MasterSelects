@@ -93,6 +93,7 @@ Projects are stored in a local folder you choose:
 ```
 MyProject/
 +-- project.json           # Main project file
++-- project.autosave.json  # Fallback when browser FSA cannot update project.json
 +-- .keys.enc              # Encrypted API keys (auto-saved with project)
 +-- Raw/                   # Auto-copied media files (portable)
 |   +-- Interview_01.mp4
@@ -169,6 +170,8 @@ There are two save modes in the current branch:
 
 1. **Continuous save** (default): `projectLifecycle.ts` subscribes to the media, timeline, FlashBoard, dock, and download-related stores, marks the project dirty, and writes the project after a short debounce. Keyframe changes flush more aggressively.
 2. **Interval save**: `Toolbar.tsx` can still run a timer-based autosave loop. In this mode, the timer creates a backup first and then saves the project.
+
+Project JSON writes are serialized so continuous save, interval save, manual save, and page-unload flushes do not open overlapping writers for the same file. If Chromium's File System Access API cannot create the temporary swap file for `project.json`, the current state is written to `project.autosave.json`; project load prefers that file when it is newer than `project.json`.
 
 ### Autosave Configuration
 Access via **Settings -> General** for save mode, plus **File -> Autosave** for the interval controls:
@@ -324,10 +327,12 @@ interface ProjectFile {
 - Composition view state per composition (playhead, zoom, scroll, in/out points)
 - Media panel column order and name width
 - Transcript language preference
-- Global MIDI state: enabled flag and transport bindings (`Play / Pause`, `Stop`)
+- Global MIDI state: enabled flag, transport bindings (`Play / Pause`, `Stop`), parameter mappings, mapping ranges, and invert flags
 - View toggles: thumbnails, waveforms, proxy, transcript markers
 - Changelog preferences (`showChangelogOnStartup`, `lastSeenChangelogVersion`)
 - Export panel state: live export settings, named export presets, and the selected preset
+
+Temporary camera `NO KF` live offsets are intentionally not saved. They only affect the current preview session while the stored camera keyframes remain the project source of truth.
 
 ### Other Persisted Panels
 - YouTube panel state is saved in `project.json`
@@ -337,6 +342,7 @@ interface ProjectFile {
 | Location | Contents |
 |----------|----------|
 | `project.json` | Main project data |
+| `project.autosave.json` | FSA fallback copy used when `project.json` cannot be updated directly |
 | `.keys.enc` | Encrypted API keys |
 | `Backups/` | Auto-backup files |
 | `Raw/` | Copied media files |

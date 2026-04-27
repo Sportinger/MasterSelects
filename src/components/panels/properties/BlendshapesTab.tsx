@@ -4,6 +4,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { ARKIT_BLENDSHAPE_NAMES, BLENDSHAPE_GROUPS, EMOTION_PRESETS } from '../../../engine/gaussian/types';
 import { DraggableNumber } from './shared';
 import { startBatch, endBatch } from '../../../stores/historyStore';
+import { MIDIParameterLabel } from './MIDIParameterLabel';
 
 interface BlendshapesTabProps {
   clipId: string;
@@ -117,9 +118,21 @@ export function BlendshapesTab({ clipId }: BlendshapesTabProps) {
                   const value = blendshapes[name] ?? 0;
                   return (
                     <div key={name} className="control-row blendshape-row">
-                      <label className="prop-label blendshape-label" title={name}>
+                      <MIDIParameterLabel
+                        as="label"
+                        className="prop-label blendshape-label"
+                        title={name}
+                        target={{
+                          clipId,
+                          property: `blendshape.${name}`,
+                          label: `${formatBlendshapeName(name)} Blendshape`,
+                          currentValue: value,
+                          min: 0,
+                          max: 1,
+                        }}
+                      >
                         {formatBlendshapeName(name)}
-                      </label>
+                      </MIDIParameterLabel>
                       <input
                         type="range"
                         min={0}

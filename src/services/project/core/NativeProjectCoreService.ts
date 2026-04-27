@@ -12,11 +12,15 @@ const log = Logger.create('NativeProjectCore');
 
 const KEYS_FILE_NAME = '.keys.enc';
 const LAST_PROJECT_KEY = 'ms-native-last-project-path';
+const PROJECT_FILE_NAME = 'project.json';
+const PROJECT_AUTOSAVE_FILE_NAME = 'project.autosave.json';
 
 export class NativeProjectCoreService {
   private projectPath: string | null = null;
   private projectData: ProjectFile | null = null;
   private isDirty = false;
+  private dirtyRevision = 0;
+  private saveQueue: Promise<void> = Promise.resolve();
   private autoSaveInterval: number | null = null;
   private client = NativeHelperClient;
 
@@ -51,6 +55,7 @@ export class NativeProjectCoreService {
 
   markDirty(): void {
     this.isDirty = true;
+    this.dirtyRevision += 1;
   }
 
   /** Not needed for native mode — no permission prompts */
@@ -193,15 +198,12 @@ export class NativeProjectCoreService {
 
   async loadProject(projectPath: string): Promise<boolean> {
     try {
-      const jsonPath = this.joinPath(projectPath, 'project.json');
-      const content = await this.client.readFileText(jsonPath);
+      const projectData = await this.readLatestProjectData(projectPath);
 
-      if (!content) {
-        log.error('Cannot read project.json at', projectPath);
+      if (!projectData) {
+        log.error('Cannot read project data at', projectPath);
         return false;
       }
-
-      const projectData = JSON.parse(content) as ProjectFile;
 
       if (projectData.version !== 1) {
         log.error('Unsupported project version:', projectData.version);
@@ -240,22 +242,35 @@ export class NativeProjectCoreService {
   }
 
   async saveProject(): Promise<boolean> {
+    const queuedSave = this.saveQueue.then(
+      () => this.performSaveProject(),
+      () => this.performSaveProject(),
+    );
+    this.saveQueue = queuedSave.then(() => undefined, () => undefined);
+    return queuedSave;
+  }
+
+  private async performSaveProject(): Promise<boolean> {
     if (!this.projectPath || !this.projectData) {
       log.error('No project open');
       return false;
     }
 
     try {
+      const savedRevision = this.dirtyRevision;
       this.projectData.updatedAt = new Date().toISOString();
-      const jsonPath = this.joinPath(this.projectPath, 'project.json');
+      const jsonPath = this.joinPath(this.projectPath, PROJECT_FILE_NAME);
 
       if (!await this.client.writeFile(jsonPath, JSON.stringify(this.projectData, null, 2))) {
         log.error('Failed to write project.json');
         return false;
       }
 
-      this.isDirty = false;
       await this.saveKeysFile();
+
+      if (this.dirtyRevision === savedRevision) {
+        this.isDirty = false;
+      }
 
       log.debug('Project saved');
       return true;
@@ -270,6 +285,7 @@ export class NativeProjectCoreService {
     this.projectPath = null;
     this.projectData = null;
     this.isDirty = false;
+    this.dirtyRevision += 1;
     log.info('Project closed');
   }
 
@@ -529,6 +545,32 @@ export class NativeProjectCoreService {
     } catch (e) {
       log.warn('Failed to store last project path:', e);
     }
+  }
+
+  private async readProjectFile(projectPath: string, fileName: string): Promise<ProjectFile | null> {
+    try {
+      const content = await this.client.readFileText(this.joinPath(projectPath, fileName));
+      if (!content) return null;
+      return JSON.parse(content) as ProjectFile;
+    } catch {
+      return null;
+    }
+  }
+
+  private async readLatestProjectData(projectPath: string): Promise<ProjectFile | null> {
+    const projectData = await this.readProjectFile(projectPath, PROJECT_FILE_NAME);
+    if (!projectData) return null;
+
+    const autosaveData = await this.readProjectFile(projectPath, PROJECT_AUTOSAVE_FILE_NAME);
+    const projectUpdatedAt = Date.parse(projectData.updatedAt);
+    const autosaveUpdatedAt = autosaveData ? Date.parse(autosaveData.updatedAt) : NaN;
+
+    if (autosaveData && autosaveUpdatedAt > projectUpdatedAt) {
+      log.warn('Loaded newer project.autosave.json because project.json was older');
+      return autosaveData;
+    }
+
+    return projectData;
   }
 
   // ============================================

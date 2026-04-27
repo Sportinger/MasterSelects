@@ -58,8 +58,10 @@ vi.mock('../../src/stores/engineStore', () => {
   const engineState = {
     sceneNavFpsMode: false,
     sceneNavFpsMoveSpeed: 1,
+    sceneNavNoKeyframes: false,
     setSceneNavFpsMode: vi.fn(),
     setSceneNavFpsMoveSpeed: vi.fn(),
+    setSceneNavNoKeyframes: vi.fn(),
   };
 
   return {
@@ -67,6 +69,7 @@ vi.mock('../../src/stores/engineStore', () => {
     getSceneNavFpsMoveSpeedStepIndex: () => 2,
     selectSceneNavFpsMode: (state: typeof engineState) => state.sceneNavFpsMode,
     selectSceneNavFpsMoveSpeed: (state: typeof engineState) => state.sceneNavFpsMoveSpeed,
+    selectSceneNavNoKeyframes: (state: typeof engineState) => state.sceneNavNoKeyframes,
     useEngineStore: vi.fn((selector: (state: typeof engineState) => unknown) => selector(engineState)),
   };
 });

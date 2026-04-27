@@ -67,6 +67,8 @@ const mocks = vi.hoisted(() => ({
       playPause: null as { channel: number; note: number } | null,
       stop: null as { channel: number; note: number } | null,
     },
+    slotBindings: {} as Record<number, { channel: number; note: number } | null>,
+    parameterBindings: {} as Record<string, unknown>,
   },
   mediaSetState: vi.fn(),
   midiSetState: vi.fn(),
@@ -178,6 +180,8 @@ describe('project media persistence', () => {
       playPause: null,
       stop: null,
     };
+    mocks.midiState.slotBindings = {};
+    mocks.midiState.parameterBindings = {};
     mocks.timelineState.clips = [];
     mocks.getProjectData.mockReturnValue({
       media: [],
@@ -331,13 +335,60 @@ describe('project media persistence', () => {
     await syncStoresToProject();
 
     expect(projectData.uiState).toEqual(expect.objectContaining({
-      midi: {
+      midi: expect.objectContaining({
         isEnabled: true,
         transportBindings: {
           playPause: { channel: 1, note: 48 },
           stop: { channel: 1, note: 49 },
         },
+      }),
+    }));
+  });
+
+  it('persists slot and parameter MIDI bindings in project uiState when syncing stores to the project file', async () => {
+    const projectData = {
+      media: [],
+      compositions: [],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: null,
+      openCompositionIds: [],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+    };
+    mocks.getProjectData.mockReturnValue(projectData);
+    mocks.midiState.slotBindings = {
+      3: { channel: 2, note: 64 },
+    };
+    mocks.midiState.parameterBindings = {
+      'parameter:clip-1:opacity': {
+        id: 'parameter:clip-1:opacity',
+        clipId: 'clip-1',
+        property: 'opacity',
+        label: 'Opacity',
+        min: 0,
+        max: 1,
+        message: { type: 'control-change', channel: 2, control: 7 },
       },
+    };
+
+    const { syncStoresToProject } = await import('../../src/services/project/projectSave');
+    await syncStoresToProject();
+
+    expect(projectData.uiState).toEqual(expect.objectContaining({
+      midi: expect.objectContaining({
+        slotBindings: {
+          3: { channel: 2, note: 64 },
+        },
+        parameterBindings: {
+          'parameter:clip-1:opacity': expect.objectContaining({
+            clipId: 'clip-1',
+            property: 'opacity',
+            message: { type: 'control-change', channel: 2, control: 7 },
+          }),
+        },
+      }),
     }));
   });
 
@@ -952,6 +1003,86 @@ describe('project media persistence', () => {
         playPause: { channel: 3, note: 50 },
         stop: { channel: 3, note: 51 },
       },
+    }));
+  });
+
+  it('restores slot and parameter MIDI bindings from project uiState', async () => {
+    mocks.getProjectData.mockReturnValue({
+      media: [],
+      compositions: [],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: null,
+      openCompositionIds: [],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {
+        midi: {
+          slotBindings: {
+            4: { channel: 4, note: 52 },
+          },
+          parameterBindings: {
+            'parameter:clip-1:opacity': {
+              id: 'parameter:clip-1:opacity',
+              clipId: 'clip-1',
+              property: 'opacity',
+              label: 'Opacity',
+              min: 0,
+              max: 1,
+              message: { type: 'control-change', channel: 4, control: 9 },
+            },
+          },
+        },
+      },
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    expect(mocks.midiSetState).toHaveBeenCalledWith(expect.objectContaining({
+      isEnabled: false,
+      transportBindings: {
+        playPause: null,
+        stop: null,
+      },
+      slotBindings: {
+        4: { channel: 4, note: 52 },
+      },
+      parameterBindings: {
+        'parameter:clip-1:opacity': expect.objectContaining({
+          clipId: 'clip-1',
+          property: 'opacity',
+          message: { type: 'control-change', channel: 4, control: 9 },
+        }),
+      },
+      learnTarget: null,
+    }));
+  });
+
+  it('clears project MIDI bindings when loading a project without MIDI state', async () => {
+    mocks.getProjectData.mockReturnValue({
+      media: [],
+      compositions: [],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: null,
+      openCompositionIds: [],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    expect(mocks.midiSetState).toHaveBeenCalledWith(expect.objectContaining({
+      transportBindings: {
+        playPause: null,
+        stop: null,
+      },
+      slotBindings: {},
+      parameterBindings: {},
+      learnTarget: null,
     }));
   });
 

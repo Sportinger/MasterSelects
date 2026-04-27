@@ -2,8 +2,13 @@
 
 import { memo, useMemo, useState, useRef, useEffect } from 'react';
 import type { TimelineHeaderProps } from './types';
-import type { AnimatableProperty, ClipTransform, Keyframe } from '../../types';
+import type { AnimatableProperty, ClipTransform, Keyframe, TimelineClip } from '../../types';
 import { CurveEditorHeader } from './CurveEditorHeader';
+import { useMediaStore } from '../../stores/mediaStore';
+import {
+  getCameraLookRotationAxis,
+  resolveCameraLookAtFixedEyeUpdates,
+} from '../../engine/scene/CameraClipControlUtils';
 
 type KeyframeTrackClip = {
   id: string;
@@ -229,11 +234,44 @@ function PropertyRow({
     return 0;
   };
 
+  const applyPropertyValue = (value: number) => {
+    if (!isWithinClip) return;
+
+    const cameraLookAxis = usesCameraPropertyModel(clip)
+      ? getCameraLookRotationAxis(prop)
+      : null;
+    if (!cameraLookAxis) {
+      setPropertyValue(clipId, prop as AnimatableProperty, value);
+      return;
+    }
+
+    const activeComp = useMediaStore.getState().getActiveComposition?.();
+    const transform = getInterpolatedTransform(clipId, clipLocalTime);
+    const updates = resolveCameraLookAtFixedEyeUpdates(
+      clip as TimelineClip,
+      transform,
+      { [cameraLookAxis]: value },
+      {
+        width: activeComp?.width ?? 1920,
+        height: activeComp?.height ?? 1080,
+      },
+    );
+
+    if (!updates) {
+      setPropertyValue(clipId, prop as AnimatableProperty, value);
+      return;
+    }
+
+    updates.forEach(({ property, value: updateValue }) => {
+      addKeyframe(clipId, property, updateValue);
+    });
+  };
+
   // Reset to default value (right-click)
   const handleRightClick = (e: React.MouseEvent) => {
     e.preventDefault();
     if (!isWithinClip) return;
-    setPropertyValue(clipId, prop as AnimatableProperty, getDefaultValue());
+    applyPropertyValue(getDefaultValue());
   };
 
   // Handle value scrubbing (left-click drag)
@@ -251,7 +289,7 @@ function PropertyRow({
       else if (moveEvent.shiftKey) sensitivity *= 10; // Fast mode
 
       const newValue = dragStart.current.value + deltaY * sensitivity;
-      setPropertyValue(clipId, prop as AnimatableProperty, newValue);
+      applyPropertyValue(newValue);
     };
 
     const handleMouseUp = () => {

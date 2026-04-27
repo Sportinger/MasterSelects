@@ -3574,6 +3574,18 @@ input, textarea {
   text-align: left;
 }
 
+.midi-parameter-label {
+  cursor: context-menu;
+}
+
+.midi-parameter-label:hover {
+  color: var(--text-primary);
+}
+
+.midi-parameter-menu {
+  min-width: 210px;
+}
+
 .labeled-value .draggable-number-anchor {
   flex: 0 0 auto;
   min-width: 0;

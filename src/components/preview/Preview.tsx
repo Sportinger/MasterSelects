@@ -12,9 +12,11 @@ import {
   selectSceneNavClipId,
   selectSceneNavFpsMode,
   selectSceneNavFpsMoveSpeed,
+  selectSceneNavNoKeyframes,
   stepSceneNavFpsMoveSpeed,
   useEngineStore,
 } from '../../stores/engineStore';
+import type { SceneCameraLiveOverride } from '../../stores/engineStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore, DEFAULT_SCENE_CAMERA_SETTINGS } from '../../stores/mediaStore';
 import { useDockStore } from '../../stores/dockStore';
@@ -103,6 +105,36 @@ function cloneClipTransform(transform: ClipTransform): ClipTransform {
     position: { ...transform.position },
     scale: { ...transform.scale },
     rotation: { ...transform.rotation },
+  };
+}
+
+function applySceneCameraLiveOverrideToTransform(
+  transform: ClipTransform,
+  override: SceneCameraLiveOverride | null | undefined,
+): ClipTransform {
+  if (!override) {
+    return transform;
+  }
+
+  return {
+    ...transform,
+    position: {
+      x: transform.position.x + (override.position?.x ?? 0),
+      y: transform.position.y + (override.position?.y ?? 0),
+      z: transform.position.z + (override.position?.z ?? 0),
+    },
+    scale: {
+      x: transform.scale.x + (override.scale?.x ?? 0),
+      y: transform.scale.y + (override.scale?.y ?? override.scale?.x ?? 0),
+      ...(transform.scale.z !== undefined || override.scale?.z !== undefined
+        ? { z: (transform.scale.z ?? 0) + (override.scale?.z ?? 0) }
+        : {}),
+    },
+    rotation: {
+      x: transform.rotation.x + (override.rotation?.x ?? 0),
+      y: transform.rotation.y + (override.rotation?.y ?? 0),
+      z: transform.rotation.z + (override.rotation?.z ?? 0),
+    },
   };
 }
 
@@ -369,13 +401,14 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const { isEngineReady } = useEngine();
   // NOTE: these are store actions (stable references) — safe to destructure once.
   // For state-reading functions (getInterpolatedTransform), call getState() at usage site.
-  const { setPropertyValue, hasKeyframes, isRecording } = useTimelineStore.getState();
+  const { addKeyframe, hasKeyframes, isRecording } = useTimelineStore.getState();
   const engineInitFailed = useEngineStore((s) => s.engineInitFailed);
   const engineInitError = useEngineStore((s) => s.engineInitError);
   const engineStats = useEngineStore(s => s.engineStats);
   const sceneNavClipId = useEngineStore(selectSceneNavClipId);
   const sceneNavFpsMode = useEngineStore(selectSceneNavFpsMode);
   const sceneNavFpsMoveSpeed = useEngineStore(selectSceneNavFpsMoveSpeed);
+  const sceneNavNoKeyframes = useEngineStore(selectSceneNavNoKeyframes);
   const previewCameraOverride = useEngineStore((s) => s.previewCameraOverride);
   const setPreviewCameraOverride = useEngineStore((s) => s.setPreviewCameraOverride);
   const setSceneGizmoClipIdOverride = useEngineStore((s) => s.setSceneGizmoClipIdOverride);
@@ -711,8 +744,16 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     }
     const { playheadPosition: ph, getInterpolatedTransform } = useTimelineStore.getState();
     const clipLocalTime = ph - clip.startTime;
-    return getInterpolatedTransform(clip.id, clipLocalTime);
-  }, [editCameraModeActive]);
+    const transform = getInterpolatedTransform(clip.id, clipLocalTime);
+    if (!sceneNavNoKeyframes) {
+      return transform;
+    }
+
+    return applySceneCameraLiveOverrideToTransform(
+      transform,
+      useEngineStore.getState().sceneCameraLiveOverrides[clip.id],
+    );
+  }, [editCameraModeActive, sceneNavNoKeyframes]);
 
   const sceneNavEnabled = Boolean(
     isEditableSource &&
@@ -814,6 +855,49 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     rotationX?: number;
     rotationY?: number;
   }) => {
+    const engineState = useEngineStore.getState();
+    const timelineState = useTimelineStore.getState();
+    const clip = timelineState.clips.find((candidate) => candidate.id === clipId);
+    if (engineState.sceneNavNoKeyframes && clip?.source?.type === 'camera') {
+      const clipLocalTime = timelineState.playheadPosition - clip.startTime;
+      const baseTransform = timelineState.getInterpolatedTransform(clipId, clipLocalTime);
+      engineState.setSceneCameraLiveOverride(clipId, {
+        ...(values.positionX !== undefined || values.positionY !== undefined
+          ? {
+              position: {
+                ...(values.positionX !== undefined ? { x: values.positionX - baseTransform.position.x } : {}),
+                ...(values.positionY !== undefined ? { y: values.positionY - baseTransform.position.y } : {}),
+              },
+            }
+          : {}),
+        ...(values.scale !== undefined || values.forwardOffset !== undefined
+          ? {
+              scale: {
+                ...(values.scale !== undefined
+                  ? {
+                      x: values.scale - baseTransform.scale.x,
+                      y: values.scale - baseTransform.scale.y,
+                    }
+                  : {}),
+                ...(values.forwardOffset !== undefined
+                  ? { z: values.forwardOffset - getCameraNavForwardOffset(baseTransform.scale.z) }
+                  : {}),
+              },
+            }
+          : {}),
+        ...(values.rotationX !== undefined || values.rotationY !== undefined
+          ? {
+              rotation: {
+                ...(values.rotationX !== undefined ? { x: values.rotationX - baseTransform.rotation.x } : {}),
+                ...(values.rotationY !== undefined ? { y: values.rotationY - baseTransform.rotation.y } : {}),
+              },
+            }
+          : {}),
+      });
+      engine.requestRender();
+      return;
+    }
+
     const propertyUpdates: Array<readonly [property: 'position.x' | 'position.y' | 'scale.x' | 'scale.y' | 'scale.z' | 'rotation.x' | 'rotation.y', value: number]> = [];
 
     if (values.positionX !== undefined) {
@@ -841,7 +925,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
     if (needsKeyframePath) {
       for (const [property, value] of propertyUpdates) {
-        setPropertyValue(clipId, property, value);
+        addKeyframe(clipId, property, value);
       }
     } else {
       const currentClip = useTimelineStore.getState().clips.find((clip) => clip.id === clipId);
@@ -879,7 +963,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     }
 
     engine.requestRender();
-  }, [hasKeyframes, isRecording, setPropertyValue, updateClipTransform]);
+  }, [addKeyframe, hasKeyframes, isRecording, updateClipTransform]);
 
   const resolveCameraClipTransformAtPlayhead = useCallback((clip: TimelineClip): ClipTransform => {
     const { playheadPosition: ph, getInterpolatedTransform } = useTimelineStore.getState();

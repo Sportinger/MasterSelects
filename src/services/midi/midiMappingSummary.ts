@@ -1,24 +1,32 @@
 import type { TimelineMarker } from '../../stores/timeline/types';
 import {
+  formatMIDIParameterMessageBinding,
   formatMIDINoteBinding,
   type MarkerMIDIAction,
   type MIDISlotAction,
   type MIDINoteBinding,
+  type MIDIParameterBindings,
+  type MIDIParameterBinding,
+  type MIDIParameterMessageBinding,
+  type MIDIParameterTarget,
   type MIDITransportAction,
 } from '../../types/midi';
 
 export interface MIDIMappingSummaryEntry {
   id: string;
-  scope: 'transport' | 'marker' | 'slot';
-  action: MIDITransportAction | MarkerMIDIAction | MIDISlotAction;
+  scope: 'transport' | 'marker' | 'slot' | 'parameter';
+  action: MIDITransportAction | MarkerMIDIAction | MIDISlotAction | 'setParameter';
   actionLabel: string;
   targetLabel: string;
   behaviorLabel: string;
-  binding: MIDINoteBinding;
+  binding: MIDINoteBinding | MIDIParameterMessageBinding;
   bindingLabel: string;
   markerId?: string;
   markerTime?: number;
   slotIndex?: number;
+  parameterBindingId?: string;
+  parameterTarget?: MIDIParameterTarget;
+  parameterBinding?: MIDIParameterBinding;
 }
 
 type MIDITransportBindings = Record<MIDITransportAction, MIDINoteBinding | null>;
@@ -90,6 +98,34 @@ function getSlotTargetLabel(slotIndex: number, slotTargets: MIDISlotTarget[]): s
   return target?.compositionName ? `${label} - ${target.compositionName}` : label;
 }
 
+function getParameterBehaviorLabel(target: MIDIParameterTarget): string {
+  const propertyCount = target.properties?.length ?? 1;
+  const rangeLabel =
+    typeof target.min === 'number' &&
+    typeof target.max === 'number' &&
+    Number.isFinite(target.min) &&
+    Number.isFinite(target.max)
+      ? ` over ${target.min} to ${target.max}`
+      : '';
+
+  return propertyCount > 1
+    ? `Set ${propertyCount} linked parameters${rangeLabel}`
+    : `Set parameter value${rangeLabel}`;
+}
+
+function getParameterBindingBehaviorLabel(binding: MIDIParameterBinding): string {
+  const label = getParameterBehaviorLabel(binding);
+  return binding.invert ? `${label} (inverted)` : label;
+}
+
+function getBindingSortValue(binding: MIDINoteBinding | MIDIParameterMessageBinding): number {
+  if ('control' in binding) {
+    return binding.control;
+  }
+
+  return binding.note;
+}
+
 export function getMarkerTargetLabel(marker: TimelineMarker): string {
   const label = marker.label.trim() || 'Marker';
   return `${label} at ${formatMarkerTime(marker.time)}`;
@@ -99,7 +135,8 @@ export function collectMIDIMappingSummary(
   transportBindings: MIDITransportBindings,
   markers: TimelineMarker[],
   slotBindings: MIDISlotBindings = {},
-  slotTargets: MIDISlotTarget[] = []
+  slotTargets: MIDISlotTarget[] = [],
+  parameterBindings: MIDIParameterBindings = {}
 ): MIDIMappingSummaryEntry[] {
   const transportEntries: MIDIMappingSummaryEntry[] = (Object.entries(transportBindings) as Array<[
     MIDITransportAction,
@@ -151,13 +188,38 @@ export function collectMIDIMappingSummary(
       }];
     });
 
-  return [...transportEntries, ...markerEntries, ...slotEntries].sort((left, right) => {
+  const parameterEntries: MIDIMappingSummaryEntry[] = Object.values(parameterBindings)
+    .map((binding) => ({
+      id: binding.id,
+      scope: 'parameter' as const,
+      action: 'setParameter' as const,
+      actionLabel: 'Set Parameter',
+      targetLabel: binding.label,
+      behaviorLabel: getParameterBindingBehaviorLabel(binding),
+      binding: binding.message,
+      bindingLabel: formatMIDIParameterMessageBinding(binding.message),
+      parameterBindingId: binding.id,
+      parameterBinding: binding,
+      parameterTarget: {
+        clipId: binding.clipId,
+        property: binding.property,
+        properties: binding.properties,
+        label: binding.label,
+        min: binding.min,
+        max: binding.max,
+        currentValue: binding.currentValue,
+      },
+    }));
+
+  return [...transportEntries, ...markerEntries, ...slotEntries, ...parameterEntries].sort((left, right) => {
     if (left.binding.channel !== right.binding.channel) {
       return left.binding.channel - right.binding.channel;
     }
 
-    if (left.binding.note !== right.binding.note) {
-      return left.binding.note - right.binding.note;
+    const leftSortValue = getBindingSortValue(left.binding);
+    const rightSortValue = getBindingSortValue(right.binding);
+    if (leftSortValue !== rightSortValue) {
+      return leftSortValue - rightSortValue;
     }
 
     if (left.scope !== right.scope) {
