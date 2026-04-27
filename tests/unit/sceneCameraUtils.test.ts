@@ -96,6 +96,114 @@ describe('SceneCameraUtils', () => {
     });
   });
 
+  it('keeps camera keyframes active while applying no-keyframe live look overrides', () => {
+    const cameraClip = {
+      id: 'live-camera',
+      trackId: 'track-camera',
+      startTime: 0,
+      duration: 10,
+      transform: {
+        position: { x: 0.1, y: -0.2, z: 4 },
+        scale: { x: 1, y: 1, z: 0.25 },
+        rotation: { x: 5, y: 12, z: 0 },
+        opacity: 1,
+        blendMode: 'normal',
+      },
+      source: {
+        type: 'camera',
+        cameraSettings: {
+          fov: 60,
+          near: 0.1,
+          far: 1000,
+        },
+      },
+    } as TimelineClip;
+
+    useEngineStore.setState({
+      sceneNavClipId: 'live-camera',
+      sceneNavNoKeyframes: false,
+      sceneCameraLiveOverrides: {},
+    });
+    useMediaStore.setState({
+      activeCompositionId: null,
+      compositions: [],
+    });
+    useTimelineStore.setState({
+      playheadPosition: 3,
+      tracks: [
+        {
+          id: 'track-camera',
+          type: 'video',
+          visible: true,
+        },
+      ],
+      clips: [cameraClip],
+      clipKeyframes: new Map([
+        ['live-camera', [
+          {
+            id: 'live-camera-px-0',
+            clipId: 'live-camera',
+            property: 'position.x',
+            time: 0,
+            value: 0.1,
+            easing: 'linear',
+          },
+          {
+            id: 'live-camera-px-6',
+            clipId: 'live-camera',
+            property: 'position.x',
+            time: 6,
+            value: 0.7,
+            easing: 'linear',
+          },
+        ]],
+      ]),
+    });
+
+    const viewport = { width: 1920, height: 1080 };
+    const base = resolveSharedSceneCameraConfig(viewport, 3);
+    const expectedKeyframedBase = resolveOrbitCameraPose(
+      {
+        position: { x: 0.4, y: -0.2, z: 4 },
+        scale: { x: 1, y: 1, z: 0.25 },
+        rotation: { x: 5, y: 12, z: 0 },
+      },
+      {
+        nearPlane: 0.1,
+        farPlane: 1000,
+        fov: 60,
+        minimumDistance: getSharedSceneDefaultCameraDistance(60),
+      },
+      viewport,
+    );
+    expect(base.position.x).toBeCloseTo(expectedKeyframedBase.eye.x, 5);
+    expect(base.target.x).toBeCloseTo(expectedKeyframedBase.target.x, 5);
+
+    useEngineStore.setState({
+      sceneNavNoKeyframes: true,
+      sceneCameraLiveOverrides: {
+        'live-camera': {
+          rotation: { y: 30 },
+        },
+      },
+    });
+    const live = resolveSharedSceneCameraConfig(viewport, 3);
+
+    expect(live.position.x).toBeCloseTo(base.position.x, 5);
+    expect(live.position.y).toBeCloseTo(base.position.y, 5);
+    expect(live.position.z).toBeCloseTo(base.position.z, 5);
+    expect(live.target.x).not.toBeCloseTo(base.target.x, 3);
+    expect(live.target.z).not.toBeCloseTo(base.target.z, 3);
+
+    useTimelineStore.setState({
+      isExporting: true,
+    });
+    const exported = resolveSharedSceneCameraConfig(viewport, 3);
+    expect(exported.position.x).toBeCloseTo(base.position.x, 5);
+    expect(exported.target.x).toBeCloseTo(base.target.x, 5);
+    expect(exported.target.z).toBeCloseTo(base.target.z, 5);
+  });
+
   it('builds the default shared scene camera contract when no scene-specific camera is active', () => {
     useEngineStore.setState({
       sceneNavClipId: null,

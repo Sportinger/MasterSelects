@@ -5,8 +5,10 @@ import { useTimelineStore } from '../../src/stores/timeline';
 import {
   moveMarkerMIDIBinding,
   setMarkerMIDIBinding,
+  setParameterMIDIBinding,
   setSlotMIDIBinding,
   setTransportMIDIBinding,
+  startLearningParameterMIDIBinding,
 } from '../../src/services/midi/midiBindingMutations';
 
 describe('midiBindingMutations', () => {
@@ -32,6 +34,7 @@ describe('midiBindingMutations', () => {
         stop: null,
       },
       slotBindings: {},
+      parameterBindings: {},
     });
 
     useTimelineStore.setState({
@@ -111,5 +114,102 @@ describe('midiBindingMutations', () => {
     expect(useTimelineStore.getState().markers[1]?.midiBindings).toBeUndefined();
     expect(useMIDIStore.getState().slotBindings[5]).toEqual({ channel: 1, note: 64 });
     expect(useMIDIStore.getState().slotBindings[6]).toEqual({ channel: 1, note: 65 });
+  });
+
+  it('starts learn mode for a timeline parameter', () => {
+    startLearningParameterMIDIBinding({
+      clipId: 'clip-param',
+      property: 'opacity',
+      label: 'Opacity',
+      min: 0,
+      max: 1,
+      currentValue: 0.5,
+    });
+
+    expect(useMIDIStore.getState().learnTarget).toEqual({
+      kind: 'parameter',
+      clipId: 'clip-param',
+      property: 'opacity',
+      label: 'Opacity',
+      min: 0,
+      max: 1,
+      currentValue: 0.5,
+    });
+  });
+
+  it('clears conflicting note bindings when assigning a parameter note', () => {
+    setTransportMIDIBinding('playPause', { channel: 1, note: 64 });
+    setMarkerMIDIBinding('marker-b', 'playFromMarker', { channel: 1, note: 65 });
+
+    setParameterMIDIBinding({
+      clipId: 'clip-param',
+      property: 'opacity',
+      label: 'Opacity',
+      min: 0,
+      max: 1,
+    }, {
+      type: 'note',
+      channel: 1,
+      note: 64,
+    });
+
+    setParameterMIDIBinding({
+      clipId: 'clip-param',
+      property: 'scale.x',
+      label: 'Scale X',
+      min: 0,
+      max: 2,
+    }, {
+      type: 'note',
+      channel: 1,
+      note: 65,
+    });
+
+    expect(useMIDIStore.getState().transportBindings.playPause).toBeNull();
+    expect(useTimelineStore.getState().markers[1]?.midiBindings).toBeUndefined();
+    expect(useMIDIStore.getState().parameterBindings['parameter:clip-param:opacity']?.message).toEqual({
+      type: 'note',
+      channel: 1,
+      note: 64,
+    });
+    expect(useMIDIStore.getState().parameterBindings['parameter:clip-param:scale.x']?.message).toEqual({
+      type: 'note',
+      channel: 1,
+      note: 65,
+    });
+  });
+
+  it('keeps CC assignments unique across parameter bindings', () => {
+    setParameterMIDIBinding({
+      clipId: 'clip-param',
+      property: 'opacity',
+      label: 'Opacity',
+      min: 0,
+      max: 1,
+    }, {
+      type: 'control-change',
+      channel: 1,
+      control: 7,
+    });
+
+    setParameterMIDIBinding({
+      clipId: 'clip-param',
+      property: 'scale.x',
+      label: 'Scale X',
+      min: 0,
+      max: 2,
+    }, {
+      type: 'control-change',
+      channel: 1,
+      control: 7,
+    });
+
+    const state = useMIDIStore.getState();
+    expect(state.parameterBindings['parameter:clip-param:opacity']).toBeUndefined();
+    expect(state.parameterBindings['parameter:clip-param:scale.x']?.message).toEqual({
+      type: 'control-change',
+      channel: 1,
+      control: 7,
+    });
   });
 });

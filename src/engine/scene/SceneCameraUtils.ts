@@ -1,5 +1,6 @@
 import { useMediaStore, DEFAULT_SCENE_CAMERA_SETTINGS } from '../../stores/mediaStore';
 import { selectSceneNavClipId, useEngineStore } from '../../stores/engineStore';
+import type { SceneCameraLiveOverride } from '../../stores/engineStore';
 import { useTimelineStore } from '../../stores/timeline';
 import type { Keyframe, TimelineClip } from '../../stores/timeline/types';
 import { resolveOrbitCameraFrame, resolveOrbitCameraPose } from '../gaussian/core/SplatCameraUtils';
@@ -8,7 +9,10 @@ import { easingFunctions } from '../../utils/keyframeInterpolation';
 import type { SceneCamera, SceneCameraConfig, SceneViewport } from './types';
 import { resolveSceneClipTransform, type SceneTimelineContext } from './SceneTimelineUtils';
 
-export type SceneCameraResolutionContext = Partial<SceneTimelineContext>;
+export type SceneCameraResolutionContext = Partial<SceneTimelineContext> & {
+  sceneNavNoKeyframes?: boolean;
+  sceneCameraLiveOverrides?: Record<string, SceneCameraLiveOverride> | null;
+};
 
 export const DEFAULT_SCENE_CAMERA_CONFIG: SceneCameraConfig = {
   position: { x: 0, y: 0, z: 0 },
@@ -63,6 +67,58 @@ function lerpVector(a: CameraVector3, b: CameraVector3, t: number): CameraVector
 
 function scaleVector(v: CameraVector3, scale: number): CameraVector3 {
   return { x: v.x * scale, y: v.y * scale, z: v.z * scale };
+}
+
+function addVector(a: CameraVector3, b: CameraVector3): CameraVector3 {
+  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
+}
+
+function subtractVector(a: CameraVector3, b: CameraVector3): CameraVector3 {
+  return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
+}
+
+function crossVector(a: CameraVector3, b: CameraVector3): CameraVector3 {
+  return {
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x,
+  };
+}
+
+function dotVector(a: CameraVector3, b: CameraVector3): number {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+function normalizeVector(v: CameraVector3, fallback: CameraVector3): CameraVector3 {
+  const length = Math.hypot(v.x, v.y, v.z);
+  if (length <= 1e-8) {
+    return { ...fallback };
+  }
+
+  return {
+    x: v.x / length,
+    y: v.y / length,
+    z: v.z / length,
+  };
+}
+
+function rotateVectorAroundAxis(v: CameraVector3, axis: CameraVector3, degrees: number): CameraVector3 {
+  if (!Number.isFinite(degrees) || Math.abs(degrees) <= 1e-8) {
+    return { ...v };
+  }
+
+  const rad = (degrees * Math.PI) / 180;
+  const unitAxis = normalizeVector(axis, { x: 0, y: 1, z: 0 });
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const cross = crossVector(unitAxis, v);
+  const dot = dotVector(unitAxis, v);
+
+  return {
+    x: v.x * cos + cross.x * sin + unitAxis.x * dot * (1 - cos),
+    y: v.y * cos + cross.y * sin + unitAxis.y * dot * (1 - cos),
+    z: v.z * cos + cross.z * sin + unitAxis.z * dot * (1 - cos),
+  };
 }
 
 function normalizeQuaternion(q: CameraQuaternion): CameraQuaternion {
@@ -409,6 +465,7 @@ function buildCameraConfigFromClip(
   timelineTime: number,
   viewport: SceneViewport,
   context: Pick<SceneTimelineContext, 'clips' | 'clipKeyframes'>,
+  liveOverride?: SceneCameraLiveOverride | null,
 ): SceneCameraConfig | null {
   if (cameraClip.source?.type !== 'camera') {
     return null;
@@ -422,7 +479,7 @@ function buildCameraConfigFromClip(
     context,
   );
   if (poseInterpolatedConfig) {
-    return poseInterpolatedConfig;
+    return applySceneCameraLiveOverride(poseInterpolatedConfig, liveOverride, viewport);
   }
 
   const transform = resolveSceneClipTransform(cameraClip, clipLocalTime, timelineTime, context);
@@ -443,7 +500,7 @@ function buildCameraConfigFromClip(
     viewport,
   );
 
-  return {
+  return applySceneCameraLiveOverride({
     position: pose.eye,
     target: pose.target,
     up: pose.up,
@@ -451,6 +508,84 @@ function buildCameraConfigFromClip(
     near: pose.near,
     far: pose.far,
     applyDefaultDistance: false,
+  }, liveOverride, viewport);
+}
+
+function hasLiveOverrideVector(vector: SceneCameraLiveOverride[keyof SceneCameraLiveOverride]): boolean {
+  return Object.values(vector ?? {}).some((value) =>
+    typeof value === 'number' && Number.isFinite(value) && Math.abs(value) > 1e-8,
+  );
+}
+
+function applySceneCameraLiveOverride(
+  config: SceneCameraConfig,
+  override: SceneCameraLiveOverride | null | undefined,
+  viewport: SceneViewport,
+): SceneCameraConfig {
+  if (
+    !override ||
+    (!hasLiveOverrideVector(override.position) &&
+      !hasLiveOverrideVector(override.scale) &&
+      !hasLiveOverrideVector(override.rotation))
+  ) {
+    return config;
+  }
+
+  let position = { ...config.position };
+  let target = { ...config.target };
+  let up = normalizeVector(config.up, { x: 0, y: 1, z: 0 });
+  let forward = normalizeVector(subtractVector(target, position), { x: 0, y: 0, z: -1 });
+  let distance = Math.max(1e-6, Math.hypot(target.x - position.x, target.y - position.y, target.z - position.z));
+  let right = normalizeVector(crossVector(forward, up), { x: 1, y: 0, z: 0 });
+  up = normalizeVector(crossVector(right, forward), { x: 0, y: 1, z: 0 });
+
+  const fovRadians = (Math.max(config.fov, 1) * Math.PI) / 180;
+  const halfHeight = Math.tan(fovRadians * 0.5) * distance;
+  const halfWidth = halfHeight * (viewport.width / Math.max(1, viewport.height));
+  const panX = override.position?.x ?? 0;
+  const panY = override.position?.y ?? 0;
+  const forwardOffset = override.scale?.z ?? 0;
+  const shift = addVector(
+    addVector(scaleVector(right, panX * halfWidth), scaleVector(up, panY * halfHeight)),
+    scaleVector(forward, forwardOffset),
+  );
+
+  if (hasLiveOverrideVector({ x: panX, y: panY }) || Math.abs(forwardOffset) > 1e-8) {
+    position = addVector(position, shift);
+    target = addVector(target, shift);
+  }
+
+  const liveZoom = Math.max(0.01, 1 + (override.scale?.x ?? 0));
+  if (Math.abs(liveZoom - 1) > 1e-8) {
+    distance = distance / liveZoom;
+    position = addVector(target, scaleVector(forward, -distance));
+  }
+
+  const pitch = override.rotation?.x ?? 0;
+  const yaw = override.rotation?.y ?? 0;
+  const roll = override.rotation?.z ?? 0;
+  if (Math.abs(yaw) > 1e-8) {
+    forward = normalizeVector(rotateVectorAroundAxis(forward, up, yaw), forward);
+    right = normalizeVector(crossVector(forward, up), right);
+    up = normalizeVector(crossVector(right, forward), up);
+  }
+  if (Math.abs(pitch) > 1e-8) {
+    forward = normalizeVector(rotateVectorAroundAxis(forward, right, pitch), forward);
+    up = normalizeVector(crossVector(right, forward), up);
+  }
+  if (Math.abs(roll) > 1e-8) {
+    up = normalizeVector(rotateVectorAroundAxis(up, forward, roll), up);
+  }
+
+  if (hasLiveOverrideVector(override.rotation)) {
+    target = addVector(position, scaleVector(forward, distance));
+  }
+
+  return {
+    ...config,
+    position,
+    target,
+    up,
   };
 }
 
@@ -470,15 +605,25 @@ export function resolveSharedSceneCameraConfig(
   const clips = context?.clips ?? timelineStore.clips;
   const tracks = context?.tracks ?? timelineStore.tracks;
   const clipKeyframes = context?.clipKeyframes ?? timelineStore.clipKeyframes;
+  const engineState = useEngineStore.getState();
+  const sceneCameraLiveOverrides = context && 'sceneCameraLiveOverrides' in context
+    ? (context.sceneCameraLiveOverrides ?? {})
+    : (context ? {} : engineState.sceneNavNoKeyframes && timelineStore.isExporting !== true ? engineState.sceneCameraLiveOverrides : {});
   const navClipId = context && 'sceneNavClipId' in context
     ? (context.sceneNavClipId ?? null)
-    : selectSceneNavClipId(useEngineStore.getState());
+    : selectSceneNavClipId(engineState);
   const sceneContext = { clips, clipKeyframes };
   const navCameraClip = navClipId
     ? clips.find((clip) => clip.id === navClipId && clip.source?.type === 'camera')
     : undefined;
   const navCameraConfig = navCameraClip
-    ? buildCameraConfigFromClip(navCameraClip, timelineTime, viewport, sceneContext)
+    ? buildCameraConfigFromClip(
+        navCameraClip,
+        timelineTime,
+        viewport,
+        sceneContext,
+        sceneCameraLiveOverrides[navCameraClip.id],
+      )
     : null;
   if (navCameraConfig) {
     return navCameraConfig;
@@ -504,7 +649,13 @@ export function resolveSharedSceneCameraConfig(
       timelineTime < clip.startTime + clip.duration,
     );
     const activeCameraConfig = activeCameraClip
-      ? buildCameraConfigFromClip(activeCameraClip, timelineTime, viewport, sceneContext)
+      ? buildCameraConfigFromClip(
+          activeCameraClip,
+          timelineTime,
+          viewport,
+          sceneContext,
+          sceneCameraLiveOverrides[activeCameraClip.id],
+        )
       : null;
     if (activeCameraConfig) {
       return activeCameraConfig;

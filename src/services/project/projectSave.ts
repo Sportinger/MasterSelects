@@ -457,6 +457,8 @@ export async function syncStoresToProject(): Promise<void> {
             playPause: midiState.transportBindings.playPause,
             stop: midiState.transportBindings.stop,
           },
+          slotBindings: midiState.slotBindings,
+          parameterBindings: midiState.parameterBindings,
         },
         exportState: getExportStoreData(useExportStore.getState()),
       };

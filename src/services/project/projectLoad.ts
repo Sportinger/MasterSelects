@@ -806,25 +806,19 @@ export async function loadProjectToStores(): Promise<void> {
       useSettingsStore.setState(changelogSettings);
     }
 
-    if (ui.midi) {
-      const midiState: Partial<ReturnType<typeof useMIDIStore.getState>> = {};
-
-      if (ui.midi.isEnabled !== undefined) {
-        midiState.isEnabled = ui.midi.isEnabled;
-      }
-
-      if (ui.midi.transportBindings) {
-        midiState.transportBindings = {
-          playPause: ui.midi.transportBindings.playPause ?? null,
-          stop: ui.midi.transportBindings.stop ?? null,
-        };
-      }
-
-      if (Object.keys(midiState).length > 0) {
-        useMIDIStore.setState(midiState);
-      }
-    }
   }
+
+  const projectMIDIState = projectData.uiState?.midi;
+  useMIDIStore.setState({
+    isEnabled: projectMIDIState?.isEnabled ?? false,
+    transportBindings: {
+      playPause: projectMIDIState?.transportBindings?.playPause ?? null,
+      stop: projectMIDIState?.transportBindings?.stop ?? null,
+    },
+    slotBindings: projectMIDIState?.slotBindings ?? {},
+    parameterBindings: projectMIDIState?.parameterBindings ?? {},
+    learnTarget: null,
+  });
 
   useExportStore.getState().hydrateFromProject(projectData.uiState?.exportState);
 

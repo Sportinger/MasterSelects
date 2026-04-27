@@ -43,6 +43,8 @@ export interface ProjectMIDIState {
     playPause?: import('../../../types/midi').MIDINoteBinding | null;
     stop?: import('../../../types/midi').MIDINoteBinding | null;
   };
+  slotBindings?: Record<number, import('../../../types/midi').MIDINoteBinding | null>;
+  parameterBindings?: import('../../../types/midi').MIDIParameterBindings;
 }
 
 export interface ProjectMediaBoardViewport {

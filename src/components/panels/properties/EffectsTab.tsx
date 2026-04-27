@@ -3,10 +3,11 @@ import { useState, useMemo, useCallback } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { startBatch, endBatch } from '../../../stores/historyStore';
 import type { AnimatableProperty, EffectType } from '../../../types';
-import { isAudioEffect } from '../../../types';
+import { createEffectProperty, isAudioEffect } from '../../../types';
 import { EFFECT_REGISTRY, getDefaultParams, getCategoriesWithEffects } from '../../../effects';
 import { EffectKeyframeToggle, DraggableNumber } from './shared';
 import { VolumeTab } from './VolumeTab';
+import { MIDIParameterLabel } from './MIDIParameterLabel';
 
 // Single parameter control renderer
 function renderParamControl(
@@ -39,10 +40,20 @@ function renderParamControl(
       const max = noMaxLimit ? (paramDef.max ?? 1) * 10 : (paramDef.max ?? 1);
       const range = max - min;
       const decimals = paramDef.step && paramDef.step >= 1 ? 0 : paramDef.step && paramDef.step >= 0.1 ? 1 : 2;
+      const midiTarget = clipId ? {
+        clipId,
+        property: createEffectProperty(effect.id, paramName),
+        label: paramDef.label,
+        currentValue: value as number,
+        min,
+        max,
+      } : null;
       return (
         <div className="control-row" key={paramName} onContextMenu={handleContextMenu}>
           {paramDef.animatable && renderKfToggle(value as number)}
-          <label>{paramDef.label}</label>
+          <MIDIParameterLabel as="label" target={midiTarget}>
+            {paramDef.label}
+          </MIDIParameterLabel>
           <input
             type="range"
             min={min}

@@ -1,6 +1,27 @@
 [
   {
     "date": "2026-04-27",
+    "type": "new",
+    "title": "Camera NO KF Live Override Mode",
+    "description": "Camera clips now expose a NO KF toggle next to FPS navigation. Existing camera keyframes keep driving playback while MIDI and preview navigation write temporary live offsets on top instead of creating new camera keyframes.",
+    "section": "Preview / Camera"
+  },
+  {
+    "date": "2026-04-27",
+    "type": "improve",
+    "title": "MIDI Parameter Mapping Gets Ranges and Invert",
+    "description": "Property labels can open MIDI learn with right-click while values still reset with right-click. Parameter mappings are now shown in the MIDI Mapping panel with editable min/max ranges and an invert toggle.",
+    "section": "MIDI"
+  },
+  {
+    "date": "2026-04-27",
+    "type": "fix",
+    "title": "MIDI and Marker State Persist Reliably",
+    "description": "Project saves now include MIDI enabled state, marker bindings, parameter mappings, mapping ranges, and invert settings so live-control setups restore with the project.",
+    "section": "Project Persistence"
+  },
+  {
+    "date": "2026-04-27",
     "type": "improve",
     "title": "Camera Edit Views Gain Orthographic Shortcuts and Adaptive Grids",
     "description": "Camera edit mode now supports animated 1/2/3/4 switching between Front, Side, Top, and Camera views, keeps 3D object handles and native gizmos available, and draws view-matched XY/YZ/XZ grids for orientation.",

@@ -4,6 +4,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { startBatch, endBatch } from '../../../stores/historyStore';
 import type { MaskMode, ClipMask } from '../../../types';
 import { DraggableNumber } from './shared';
+import { MIDIParameterLabel } from './MIDIParameterLabel';
 
 const MASK_MODES: { value: MaskMode; label: string }[] = [
   { value: 'add', label: 'Add' },
@@ -69,23 +70,73 @@ function MaskItem({ clipId, mask, isActive, onSelect }: MaskItemProps) {
       </div>
       {mask.expanded && (
         <div className="mask-item-properties">
-          <div className="control-row"><label>Opacity</label>
+          <div className="control-row"><MIDIParameterLabel
+            as="label"
+            target={{
+              clipId,
+              property: `mask.${mask.id}.opacity`,
+              label: `${mask.name} / Opacity`,
+              currentValue: mask.opacity,
+              min: 0,
+              max: 1,
+            }}
+          >Opacity</MIDIParameterLabel>
             <DraggableNumber value={mask.opacity * 100} onChange={(v) => updateMask(clipId, mask.id, { opacity: v / 100 })}
               defaultValue={100} sensitivity={1} decimals={0} suffix="%"
               onDragStart={handleBatchStart} onDragEnd={handleBatchEnd} /></div>
-          <div className="control-row"><label>Feather</label>
+          <div className="control-row"><MIDIParameterLabel
+            as="label"
+            target={{
+              clipId,
+              property: `mask.${mask.id}.feather`,
+              label: `${mask.name} / Feather`,
+              currentValue: mask.feather,
+              min: 0,
+              max: 500,
+            }}
+          >Feather</MIDIParameterLabel>
             <DraggableNumber value={mask.feather} onChange={(v) => updateMask(clipId, mask.id, { feather: v })}
               defaultValue={0} sensitivity={1} decimals={1} suffix="px"
               onDragStart={handleBatchStart} onDragEnd={handleBatchEnd} /></div>
-          <div className="control-row"><label>Quality</label>
+          <div className="control-row"><MIDIParameterLabel
+            as="label"
+            target={{
+              clipId,
+              property: `mask.${mask.id}.featherQuality`,
+              label: `${mask.name} / Quality`,
+              currentValue: mask.featherQuality ?? 50,
+              min: 1,
+              max: 100,
+            }}
+          >Quality</MIDIParameterLabel>
             <DraggableNumber value={mask.featherQuality ?? 50} onChange={(v) => updateMask(clipId, mask.id, { featherQuality: Math.min(100, Math.max(1, Math.round(v))) })}
               defaultValue={50} min={1} max={100} sensitivity={1} decimals={0}
               onDragStart={handleBatchStart} onDragEnd={handleBatchEnd} /></div>
-          <div className="control-row"><label>Position X</label>
+          <div className="control-row"><MIDIParameterLabel
+            as="label"
+            target={{
+              clipId,
+              property: `mask.${mask.id}.position.x`,
+              label: `${mask.name} / Position X`,
+              currentValue: mask.position.x,
+              min: -1,
+              max: 1,
+            }}
+          >Position X</MIDIParameterLabel>
             <DraggableNumber value={mask.position.x} onChange={(v) => updateMask(clipId, mask.id, { position: { ...mask.position, x: v } })}
               defaultValue={0} sensitivity={100} decimals={3}
               onDragStart={handleBatchStart} onDragEnd={handleBatchEnd} /></div>
-          <div className="control-row"><label>Position Y</label>
+          <div className="control-row"><MIDIParameterLabel
+            as="label"
+            target={{
+              clipId,
+              property: `mask.${mask.id}.position.y`,
+              label: `${mask.name} / Position Y`,
+              currentValue: mask.position.y,
+              min: -1,
+              max: 1,
+            }}
+          >Position Y</MIDIParameterLabel>
             <DraggableNumber value={mask.position.y} onChange={(v) => updateMask(clipId, mask.id, { position: { ...mask.position, y: v } })}
               defaultValue={0} sensitivity={100} decimals={3}
               onDragStart={handleBatchStart} onDragEnd={handleBatchEnd} /></div>

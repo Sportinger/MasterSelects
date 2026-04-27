@@ -19,8 +19,11 @@ import {
 import {
   moveMarkerMIDIBinding,
   setMarkerMIDIBinding,
+  setParameterMIDIBinding,
   setSlotMIDIBinding,
   setTransportMIDIBinding,
+  startLearningParameterMIDIBinding,
+  updateParameterMIDIBinding,
 } from '../../services/midi/midiBindingMutations';
 import {
   triggerMIDITransportAction,
@@ -31,6 +34,7 @@ import {
   describeMIDILearnTarget,
   getMIDINoteName,
   type MarkerMIDIAction,
+  type MIDIParameterBinding,
   type MIDITransportAction,
 } from '../../types/midi';
 import './MIDIMappingPanel.css';
@@ -40,7 +44,7 @@ function MIDIMappingEmptyState({ isEnabled }: { isEnabled: boolean }) {
     <div className="midi-mapping-empty">
       <p>No MIDI mappings assigned yet.</p>
       <p>
-        Add transport bindings in Settings / MIDI, marker bindings from the timeline marker menu, or slot bindings from the Slot Grid menu.
+        Add transport bindings in Settings / MIDI, marker bindings from the timeline marker menu, slot bindings from the Slot Grid menu, or parameter bindings from property labels.
       </p>
       {!isEnabled && (
         <p className="midi-mapping-empty-muted">
@@ -58,6 +62,11 @@ interface MIDIMappingDraft {
   markerId?: string;
 }
 
+interface MIDIParameterRangeDraft {
+  min: string;
+  max: string;
+}
+
 function clampInteger(value: string, fallback: number, min: number, max: number): number {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) {
@@ -65,6 +74,39 @@ function clampInteger(value: string, fallback: number, min: number, max: number)
   }
 
   return Math.max(min, Math.min(max, parsed));
+}
+
+function formatParameterRangeInput(value: number): string {
+  if (!Number.isFinite(value)) {
+    return '0';
+  }
+
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+
+  return Number(value.toFixed(6)).toString();
+}
+
+function resolveParameterRange(binding: MIDIParameterBinding): { min: number; max: number } {
+  if (
+    typeof binding.min === 'number' &&
+    typeof binding.max === 'number' &&
+    Number.isFinite(binding.min) &&
+    Number.isFinite(binding.max) &&
+    binding.max > binding.min
+  ) {
+    return { min: binding.min, max: binding.max };
+  }
+
+  const center = typeof binding.currentValue === 'number' && Number.isFinite(binding.currentValue)
+    ? binding.currentValue
+    : 0;
+  const range = Math.max(Math.abs(center), 1) * 4;
+  return {
+    min: center - range / 2,
+    max: center + range / 2,
+  };
 }
 
 export function MIDIMappingPanel() {
@@ -79,11 +121,13 @@ export function MIDIMappingPanel() {
     startLearningSlotBinding,
     cancelLearning,
     slotBindings,
+    parameterBindings,
   } = useMIDI();
   const markers = useTimelineStore((state) => state.markers);
   const compositions = useMediaStore((state) => state.compositions);
   const slotAssignments = useMediaStore((state) => state.slotAssignments);
   const [draft, setDraft] = useState<MIDIMappingDraft | null>(null);
+  const [parameterRangeDrafts, setParameterRangeDrafts] = useState<Record<string, MIDIParameterRangeDraft>>({});
   const [previewingMappingId, setPreviewingMappingId] = useState<string | null>(null);
   const previewResetTimeoutRef = useRef<number | null>(null);
 
@@ -117,8 +161,8 @@ export function MIDIMappingPanel() {
   }, [compositions, slotAssignments, slotBindings]);
 
   const mappings = useMemo(
-    () => collectMIDIMappingSummary(transportBindings, markers, slotBindings, slotTargets),
-    [markers, slotBindings, slotTargets, transportBindings]
+    () => collectMIDIMappingSummary(transportBindings, markers, slotBindings, slotTargets, parameterBindings),
+    [markers, parameterBindings, slotBindings, slotTargets, transportBindings]
   );
   const learnDescription = describeMIDILearnTarget(learnTarget);
   const pendingSlotLearnTarget = learnTarget?.kind === 'slot' ? learnTarget : null;
@@ -162,6 +206,10 @@ export function MIDIMappingPanel() {
   };
 
   const previewMapping = (mapping: MIDIMappingSummaryEntry) => {
+    if (mapping.scope === 'parameter') {
+      return;
+    }
+
     flashPreviewState(mapping.id);
 
     if (mapping.scope === 'transport') {
@@ -195,6 +243,10 @@ export function MIDIMappingPanel() {
   };
 
   const openEditor = (mapping: MIDIMappingSummaryEntry) => {
+    if (mapping.scope === 'parameter' || !('note' in mapping.binding)) {
+      return;
+    }
+
     setDraft({
       mappingId: mapping.id,
       channel: String(mapping.binding.channel),
@@ -207,11 +259,88 @@ export function MIDIMappingPanel() {
     setDraft(null);
   };
 
+  const getParameterRangeDraft = (binding: MIDIParameterBinding): MIDIParameterRangeDraft => {
+    const draftRange = parameterRangeDrafts[binding.id];
+    if (draftRange) {
+      return draftRange;
+    }
+
+    const range = resolveParameterRange(binding);
+    return {
+      min: formatParameterRangeInput(range.min),
+      max: formatParameterRangeInput(range.max),
+    };
+  };
+
+  const updateParameterRangeDraft = (
+    binding: MIDIParameterBinding,
+    field: keyof MIDIParameterRangeDraft,
+    value: string
+  ) => {
+    const range = resolveParameterRange(binding);
+    setParameterRangeDrafts((currentDrafts) => ({
+      ...currentDrafts,
+      [binding.id]: {
+        min: currentDrafts[binding.id]?.min ?? formatParameterRangeInput(range.min),
+        max: currentDrafts[binding.id]?.max ?? formatParameterRangeInput(range.max),
+        [field]: value,
+      },
+    }));
+  };
+
+  const resetParameterRangeDraft = (bindingId: string) => {
+    setParameterRangeDrafts((currentDrafts) => {
+      if (!currentDrafts[bindingId]) {
+        return currentDrafts;
+      }
+
+      const nextDrafts = { ...currentDrafts };
+      delete nextDrafts[bindingId];
+      return nextDrafts;
+    });
+  };
+
+  const commitParameterRangeDraft = (binding: MIDIParameterBinding) => {
+    const draftRange = parameterRangeDrafts[binding.id];
+    if (!draftRange) {
+      return;
+    }
+
+    const min = Number(draftRange.min);
+    const max = Number(draftRange.max);
+    if (Number.isFinite(min) && Number.isFinite(max) && max > min) {
+      updateParameterMIDIBinding(binding.id, { min, max });
+    }
+
+    resetParameterRangeDraft(binding.id);
+  };
+
+  const handleParameterRangeKeyDown = (
+    event: ReactKeyboardEvent<HTMLInputElement>,
+    binding: MIDIParameterBinding
+  ) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      commitParameterRangeDraft(binding);
+      event.currentTarget.blur();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      resetParameterRangeDraft(binding.id);
+      event.currentTarget.blur();
+    }
+  };
+
+  const toggleParameterInvert = (binding: MIDIParameterBinding) => {
+    updateParameterMIDIBinding(binding.id, { invert: !binding.invert });
+  };
+
   const clearMapping = (mapping: MIDIMappingSummaryEntry) => {
     if (mapping.scope === 'transport') {
       setTransportMIDIBinding(mapping.action as MIDITransportAction, null);
     } else if (mapping.scope === 'slot' && mapping.slotIndex !== undefined) {
       setSlotMIDIBinding(mapping.slotIndex, null);
+    } else if (mapping.scope === 'parameter' && mapping.parameterTarget) {
+      setParameterMIDIBinding(mapping.parameterTarget, null);
     } else if (mapping.markerId) {
       setMarkerMIDIBinding(mapping.markerId, mapping.action as MarkerMIDIAction, null);
     }
@@ -234,6 +363,13 @@ export function MIDIMappingPanel() {
         && mapping.scope === 'marker'
         && learnTarget.action === mapping.action
         && sourceMarkerId === mapping.markerId
+      )
+      || (
+        learnTarget?.kind === 'parameter'
+        && mapping.scope === 'parameter'
+        && mapping.parameterTarget
+        && learnTarget.clipId === mapping.parameterTarget.clipId
+        && learnTarget.property === mapping.parameterTarget.property
       );
 
     if (isLearningCurrentMapping) {
@@ -247,6 +383,11 @@ export function MIDIMappingPanel() {
 
   const saveDraft = (mapping: MIDIMappingSummaryEntry) => {
     if (!draft || draft.mappingId !== mapping.id) {
+      return;
+    }
+
+    if (mapping.scope === 'parameter' || !('note' in mapping.binding)) {
+      closeEditor();
       return;
     }
 
@@ -289,6 +430,13 @@ export function MIDIMappingPanel() {
   };
 
   const startLearningForMapping = (mapping: MIDIMappingSummaryEntry) => {
+    if (mapping.scope === 'parameter') {
+      if (mapping.parameterTarget) {
+        startLearningParameterMIDIBinding(mapping.parameterTarget);
+      }
+      return;
+    }
+
     if (mapping.scope === 'transport') {
       startLearningTransportBinding(mapping.action as MIDITransportAction);
       return;
@@ -379,13 +527,21 @@ export function MIDIMappingPanel() {
           )}
           {mappings.map((mapping) => {
             const isEditing = draft?.mappingId === mapping.id;
+            const isParameterMapping = mapping.scope === 'parameter';
             const channelValue = isEditing ? draft.channel : String(mapping.binding.channel);
-            const noteValue = isEditing ? draft.note : String(mapping.binding.note);
+            const noteValue = isEditing && !isParameterMapping
+              ? draft.note
+              : 'note' in mapping.binding
+                ? String(mapping.binding.note)
+                : '';
             const selectedMarkerId = isEditing ? draft.markerId ?? mapping.markerId : mapping.markerId;
             const isPreviewable = mapping.scope === 'transport' || mapping.scope === 'slot' || mapping.markerTime !== undefined;
-            const notePreview = getMIDINoteName(
-              clampInteger(noteValue, mapping.binding.note, 0, 127)
-            );
+            const notePreview = 'note' in mapping.binding
+              ? getMIDINoteName(clampInteger(noteValue, mapping.binding.note, 0, 127))
+              : '';
+            const parameterRangeDraft = mapping.parameterBinding
+              ? getParameterRangeDraft(mapping.parameterBinding)
+              : null;
             const sourceMarkerId =
               learnTarget?.kind === 'marker'
                 ? learnTarget.sourceMarkerId ?? learnTarget.markerId
@@ -404,6 +560,13 @@ export function MIDIMappingPanel() {
                 && mapping.scope === 'marker'
                 && learnTarget.action === mapping.action
                 && sourceMarkerId === mapping.markerId
+              )
+              || (
+                learnTarget?.kind === 'parameter'
+                && mapping.scope === 'parameter'
+                && mapping.parameterTarget
+                && learnTarget.clipId === mapping.parameterTarget.clipId
+                && learnTarget.property === mapping.parameterTarget.property
               );
 
             return (
@@ -419,7 +582,13 @@ export function MIDIMappingPanel() {
                 <div className="midi-mapping-card-top">
                   <span className="midi-mapping-binding">{mapping.bindingLabel}</span>
                   <span className={`midi-mapping-scope midi-mapping-scope-${mapping.scope}`}>
-                    {mapping.scope === 'transport' ? 'Transport' : mapping.scope === 'slot' ? 'Slot' : 'Marker'}
+                    {mapping.scope === 'transport'
+                      ? 'Transport'
+                      : mapping.scope === 'slot'
+                        ? 'Slot'
+                        : mapping.scope === 'parameter'
+                          ? 'Parameter'
+                          : 'Marker'}
                   </span>
                 </div>
                 <div className="midi-mapping-card-main">
@@ -434,9 +603,11 @@ export function MIDIMappingPanel() {
                       onClick={stopEventPropagation}
                       onKeyDown={stopEventPropagation}
                     >
-                      <button className="settings-button" onClick={() => openEditor(mapping)}>
-                        Edit
-                      </button>
+                      {!isParameterMapping && (
+                        <button className="settings-button" onClick={() => openEditor(mapping)}>
+                          Edit
+                        </button>
+                      )}
                       <button className="settings-button" onClick={() => startLearningForMapping(mapping)}>
                         {isLearningCurrentMapping ? 'Listening...' : 'Learn'}
                       </button>
@@ -446,6 +617,43 @@ export function MIDIMappingPanel() {
                     </div>
                   )}
                 </div>
+
+                {isParameterMapping && mapping.parameterBinding && parameterRangeDraft && (
+                  <div
+                    className="midi-mapping-parameter-controls"
+                    onClick={stopEventPropagation}
+                    onKeyDown={stopEventPropagation}
+                  >
+                    <label className="midi-mapping-field midi-mapping-range-field">
+                      <span>Min</span>
+                      <input
+                        type="number"
+                        value={parameterRangeDraft.min}
+                        onChange={(event) => updateParameterRangeDraft(mapping.parameterBinding!, 'min', event.target.value)}
+                        onBlur={() => commitParameterRangeDraft(mapping.parameterBinding!)}
+                        onKeyDown={(event) => handleParameterRangeKeyDown(event, mapping.parameterBinding!)}
+                      />
+                    </label>
+                    <label className="midi-mapping-field midi-mapping-range-field">
+                      <span>Max</span>
+                      <input
+                        type="number"
+                        value={parameterRangeDraft.max}
+                        onChange={(event) => updateParameterRangeDraft(mapping.parameterBinding!, 'max', event.target.value)}
+                        onBlur={() => commitParameterRangeDraft(mapping.parameterBinding!)}
+                        onKeyDown={(event) => handleParameterRangeKeyDown(event, mapping.parameterBinding!)}
+                      />
+                    </label>
+                    <button
+                      className={`settings-button midi-mapping-invert-button${mapping.parameterBinding.invert ? ' is-active' : ''}`}
+                      onClick={() => toggleParameterInvert(mapping.parameterBinding!)}
+                      title="Invert MIDI value"
+                      type="button"
+                    >
+                      Invert
+                    </button>
+                  </div>
+                )}
 
                 {isEditing && (
                   <div

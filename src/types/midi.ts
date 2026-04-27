@@ -4,6 +4,18 @@ export type MarkerMIDIAction = 'playFromMarker' | 'jumpToMarker' | 'jumpToMarker
 
 export type MIDISlotAction = 'triggerSlot';
 
+export type MIDIParameterMessageBinding =
+  | {
+      type: 'note';
+      channel: number;
+      note: number;
+    }
+  | {
+      type: 'control-change';
+      channel: number;
+      control: number;
+    };
+
 export interface MIDIDeviceInfo {
   id: string;
   name: string;
@@ -22,6 +34,22 @@ export interface MarkerMIDIBinding extends MIDINoteBinding {
 export interface SlotMIDIBinding extends MIDINoteBinding {
   action: MIDISlotAction;
   slotIndex: number;
+}
+
+export interface MIDIParameterTarget {
+  clipId: string;
+  property: string;
+  properties?: string[];
+  label: string;
+  min?: number;
+  max?: number;
+  currentValue?: number;
+}
+
+export interface MIDIParameterBinding extends MIDIParameterTarget {
+  id: string;
+  message: MIDIParameterMessageBinding;
+  invert?: boolean;
 }
 
 export interface MIDILastMessage {
@@ -52,7 +80,43 @@ export type MIDILearnTarget =
       slotLabel: string;
       compositionId?: string;
       compositionName?: string;
-    };
+    }
+  | ({
+      kind: 'parameter';
+    } & MIDIParameterTarget);
+
+export type MIDIParameterBindings = Record<string, MIDIParameterBinding>;
+
+export function createMIDIParameterBindingId(target: Pick<MIDIParameterTarget, 'clipId' | 'property'>): string {
+  return `parameter:${target.clipId}:${target.property}`;
+}
+
+export function formatMIDIParameterMessageBinding(binding: MIDIParameterMessageBinding): string {
+  if (binding.type === 'note') {
+    return `Ch ${binding.channel} / ${getMIDINoteName(binding.note)} (${binding.note})`;
+  }
+
+  return `Ch ${binding.channel} / CC ${binding.control}`;
+}
+
+export function midiParameterMessagesMatch(
+  a: MIDIParameterMessageBinding,
+  b: MIDIParameterMessageBinding
+): boolean {
+  if (a.type !== b.type || a.channel !== b.channel) {
+    return false;
+  }
+
+  if (a.type === 'note' && b.type === 'note') {
+    return a.note === b.note;
+  }
+
+  if (a.type === 'control-change' && b.type === 'control-change') {
+    return a.control === b.control;
+  }
+
+  return false;
+}
 
 export type MIDIPermissionState = PermissionState | 'unknown' | 'unsupported';
 
@@ -91,6 +155,10 @@ export function describeMIDILearnTarget(target: MIDILearnTarget | null): string 
   if (target.kind === 'slot') {
     const compositionSuffix = target.compositionName ? ` (${target.compositionName})` : '';
     return `Waiting for a note for ${target.slotLabel}${compositionSuffix} -> Trigger Slot`;
+  }
+
+  if (target.kind === 'parameter') {
+    return `Waiting for MIDI for ${target.label}`;
   }
 
   const markerLabel = target.markerLabel || 'Marker';

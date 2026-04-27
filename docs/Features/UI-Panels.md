@@ -179,11 +179,12 @@ MasterSelects currently exposes 17 dockable panel types, plus the Slot Grid over
 ### MIDI Mapping Panel
 
 - Open from `View -> Panels -> MIDI Mapping`
-- Shows all currently assigned MIDI notes in one list
-- Includes global transport bindings, per-marker bindings, and Slot Grid trigger bindings
+- Shows all currently assigned MIDI notes and control-change bindings in one list
+- Includes global transport bindings, per-marker bindings, Slot Grid trigger bindings, and property parameter bindings
 - Each row shows the note, target, and resulting command behavior
-- Click any mapping card to trigger the assigned action and preview what the MIDI note does
+- Click any transport, marker, or slot mapping card to trigger the assigned action and preview what the MIDI note does
 - `Edit` opens inline controls for manual channel/note changes and marker reassignment
+- Parameter mappings expose inline `Min` / `Max` range inputs plus an `Invert` toggle
 - `Learn` and `Clear` remain available directly from the panel
 - Marker bindings support `Jump To Marker`, `Play From Marker`, and `Jump To Marker And Stop`
 - Slot bindings can be created from the Slot Grid filled-slot context menu, which opens this panel with a pending `Listening...` mapping
@@ -347,6 +348,14 @@ The unified Properties panel adapts its tabs to the selected clip type and to sl
 | **Splat effector** | Transform, Effector |
 | **Slot Grid clip** | Slot Clip |
 
+### Camera Transform Controls
+
+- Camera clips expose `Nav Mode` controls at the top of the Transform tab.
+- `FPS` switches preview navigation between orbit-style look and FPS-style look.
+- `NO KF` keeps existing camera keyframes active during playback, but routes preview navigation and MIDI camera-look input into temporary live offsets instead of writing new camera keyframes.
+- Live `NO KF` offsets are added on top of the keyframed camera pose for preview control and are cleared when `NO KF` is turned off.
+- Live `NO KF` offsets are not saved to the project and are ignored for export renders, so the stored camera animation remains the source of truth.
+
 ### Solid Clip Behavior
 
 - Solid clips show a color picker bar above the tabs
@@ -415,9 +424,11 @@ MIDI Control (N devices)
 ### Mapping Overview
 
 - `View -> Panels -> MIDI Mapping` opens the dedicated mapping panel
-- The panel lists all assigned transport and marker bindings
+- The panel lists all assigned transport, marker, slot, and parameter bindings
 - Clicking a binding previews the exact trigger path without needing a physical MIDI note
+- Parameter bindings can be range-adjusted and inverted directly in the mapping panel
 - Empty-state guidance points back to Settings and the marker right-click menu
+- Right-click a numeric parameter name in the Properties panel to open its MIDI menu and learn or clear a MIDI note/CC binding. Right-clicking the numeric value itself still resets the value to its default. Learned CC values map across the parameter's configured range and then use the same edit path as manual changes.
 
 ---
 

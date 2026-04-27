@@ -8,6 +8,7 @@ import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useFlashBoardStore } from '../../stores/flashboardStore';
 import { useExportStore } from '../../stores/exportStore';
+import { useMIDIStore } from '../../stores/midiStore';
 import { projectFileService } from '../projectFileService';
 import { isProjectStoreSyncInProgress, syncStoresToProject, saveCurrentProject } from './projectSave';
 import { loadProjectToStores } from './projectLoad';
@@ -19,8 +20,16 @@ let continuousSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let isContinuousSaving = false;
 let scheduledContinuousSaveDelayMs: number | null = null;
 let queuedContinuousSaveDelayMs: number | null = null;
+let autoSyncDisposers: Array<() => void> = [];
+let beforeUnloadHandler: (() => void) | null = null;
 
 const DEFAULT_CONTINUOUS_SAVE_DELAY_MS = 1000;
+
+function registerAutoSyncDisposer(disposer: unknown): void {
+  if (typeof disposer === 'function') {
+    autoSyncDisposers.push(disposer as () => void);
+  }
+}
 
 function clearScheduledContinuousSave(): void {
   if (continuousSaveTimer) {
@@ -70,8 +79,12 @@ async function executeContinuousSave(): Promise<void> {
 
   isContinuousSaving = true;
   try {
-    await saveCurrentProject();
-    log.info('Continuous save completed');
+    const saved = await saveCurrentProject();
+    if (saved) {
+      log.info('Continuous save completed');
+    } else {
+      log.warn('Continuous save did not complete');
+    }
   } catch (err) {
     log.error('Continuous save failed:', err);
   } finally {
@@ -168,18 +181,24 @@ export function closeCurrentProject(): void {
  * In continuous save mode, also triggers a debounced save to disk.
  */
 export function setupAutoSync(): void {
+  teardownAutoSync();
+
+  const markProjectDirtyAndMaybeSave = (options?: { immediate?: boolean; delayMs?: number }) => {
+    if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
+      projectFileService.markDirty();
+      triggerContinuousSaveIfEnabled(options);
+    }
+  };
+
   // Subscribe to store changes and mark project dirty
-  useMediaStore.subscribe(
+  registerAutoSyncDisposer(useMediaStore.subscribe(
     (state) => [state.files, state.compositions, state.folders, state.slotAssignments, state.slotClipSettings],
     () => {
-      if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
-        projectFileService.markDirty();
-        triggerContinuousSaveIfEnabled();
-      }
+      markProjectDirtyAndMaybeSave();
     }
-  );
+  ));
 
-  useTimelineStore.subscribe(
+  registerAutoSyncDisposer(useTimelineStore.subscribe(
     (state) => [
       state.clips,
       state.tracks,
@@ -190,74 +209,87 @@ export function setupAutoSync(): void {
       state.durationLocked,
     ],
     () => {
-      if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
-        projectFileService.markDirty();
-        triggerContinuousSaveIfEnabled();
-      }
+      markProjectDirtyAndMaybeSave();
     }
-  );
+  ));
 
-  useTimelineStore.subscribe(
+  registerAutoSyncDisposer(useTimelineStore.subscribe(
     (state) => state.clipKeyframes,
     () => {
-      if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
-        projectFileService.markDirty();
-        triggerContinuousSaveIfEnabled({ immediate: true });
-      }
+      markProjectDirtyAndMaybeSave({ immediate: true });
     }
-  );
+  ));
 
-  useFlashBoardStore.subscribe(
+  const handleMIDIProjectStateChange = () => {
+    markProjectDirtyAndMaybeSave();
+  };
+
+  registerAutoSyncDisposer(useMIDIStore.subscribe((state) => state.isEnabled, handleMIDIProjectStateChange));
+  registerAutoSyncDisposer(useMIDIStore.subscribe((state) => state.transportBindings, handleMIDIProjectStateChange));
+  registerAutoSyncDisposer(useMIDIStore.subscribe((state) => state.slotBindings, handleMIDIProjectStateChange));
+  registerAutoSyncDisposer(useMIDIStore.subscribe((state) => state.parameterBindings, handleMIDIProjectStateChange));
+
+  registerAutoSyncDisposer(useFlashBoardStore.subscribe(
     (state) => [state.boards, state.activeBoardId],
     () => {
-      if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
-        projectFileService.markDirty();
-        triggerContinuousSaveIfEnabled();
-      }
+      markProjectDirtyAndMaybeSave();
     }
-  );
+  ));
 
-  useExportStore.subscribe(
+  registerAutoSyncDisposer(useExportStore.subscribe(
     (state) => [state.settings, state.presets, state.selectedPresetId],
     () => {
-      if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
-        projectFileService.markDirty();
-        triggerContinuousSaveIfEnabled();
-      }
+      markProjectDirtyAndMaybeSave();
     }
-  );
+  ));
 
   // Subscribe to YouTube store changes
   let prevYouTubeVideos = useYouTubeStore.getState().videos;
-  useYouTubeStore.subscribe((state) => {
+  registerAutoSyncDisposer(useYouTubeStore.subscribe((state) => {
     if (state.videos !== prevYouTubeVideos) {
       prevYouTubeVideos = state.videos;
-      if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
-        projectFileService.markDirty();
-        triggerContinuousSaveIfEnabled();
-      }
+      markProjectDirtyAndMaybeSave();
     }
-  });
+  }));
 
   // Subscribe to dock layout changes
   let prevDockLayout = useDockStore.getState().layout;
-  useDockStore.subscribe((state) => {
+  registerAutoSyncDisposer(useDockStore.subscribe((state) => {
     if (state.layout !== prevDockLayout) {
       prevDockLayout = state.layout;
-      if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
-        projectFileService.markDirty();
-        triggerContinuousSaveIfEnabled();
-      }
+      markProjectDirtyAndMaybeSave();
     }
-  });
+  }));
 
   // In continuous mode, flush pending save on page unload
-  window.addEventListener('beforeunload', () => {
+  beforeUnloadHandler = () => {
     const { saveMode } = useSettingsStore.getState();
     if (saveMode === 'continuous') {
       flushContinuousSave();
     }
-  });
+  };
+  window.addEventListener('beforeunload', beforeUnloadHandler);
 
   log.info(`Auto-sync setup complete (saveMode: ${useSettingsStore.getState().saveMode})`);
+}
+
+export function teardownAutoSync(): void {
+  clearScheduledContinuousSave();
+  queuedContinuousSaveDelayMs = null;
+
+  for (const dispose of autoSyncDisposers) {
+    dispose();
+  }
+  autoSyncDisposers = [];
+
+  if (beforeUnloadHandler) {
+    window.removeEventListener('beforeunload', beforeUnloadHandler);
+    beforeUnloadHandler = null;
+  }
+}
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    teardownAutoSync();
+  });
 }

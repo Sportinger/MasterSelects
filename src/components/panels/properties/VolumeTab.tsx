@@ -5,6 +5,7 @@ import { createEffectProperty } from '../../../types';
 import { EQ_FREQUENCIES } from '../../../services/audioManager';
 import { DraggableNumber, EffectKeyframeToggle, EQKeyframeToggle } from './shared';
 import { EQ_BAND_PARAMS } from './sharedConstants';
+import { MIDIParameterLabel } from './MIDIParameterLabel';
 
 // dB conversion helpers (internal gain 0–2 ↔ display dB)
 const SILENCE_THRESHOLD_DB = -60;
@@ -40,6 +41,14 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
   const eqEffect = interpolatedEffects.find(e => e.type === 'audio-eq');
   const volume = (volumeEffect?.params?.volume as number) ?? 1;
   const eqBands = EQ_BAND_PARAMS.map(param => (eqEffect?.params?.[param] as number) ?? 0);
+  const volumeMIDITarget = volumeEffect ? {
+    clipId,
+    property: createEffectProperty(volumeEffect.id, 'volume'),
+    label: 'Volume',
+    currentValue: volume,
+    min: dbToGain(SILENCE_THRESHOLD_DB),
+    max: dbToGain(6),
+  } : null;
 
   const formatFreq = (freq: number) => freq >= 1000 ? `${freq / 1000}k` : `${freq}`;
 
@@ -68,7 +77,11 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
       {/* Volume Section */}
       <div className="properties-section">
         <div className="section-header-row">
-          <h4>Volume</h4>
+          <h4>
+            <MIDIParameterLabel target={volumeMIDITarget}>
+              Volume
+            </MIDIParameterLabel>
+          </h4>
         </div>
         <div className="control-row">
           {volumeEffect && (
@@ -123,8 +136,26 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
               </div>
               <input type="range" className="eq-slider" min="-12" max="12" step="0.5"
                 value={eqBands[index]} onChange={(e) => handleEQChange(index, parseFloat(e.target.value))}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleEQChange(index, 0);
+                }}
                 title={`${formatFreq(freq)}Hz: ${eqBands[index].toFixed(1)}dB`} />
-              <div className="eq-band-label">{formatFreq(freq)}</div>
+              <MIDIParameterLabel
+                as="div"
+                className="eq-band-label"
+                target={eqEffect ? {
+                  clipId,
+                  property: createEffectProperty(eqEffect.id, EQ_BAND_PARAMS[index]),
+                  label: `${formatFreq(freq)}Hz EQ`,
+                  currentValue: eqBands[index],
+                  min: -12,
+                  max: 12,
+                } : null}
+              >
+                {formatFreq(freq)}
+              </MIDIParameterLabel>
             </div>
           ))}
         </div>

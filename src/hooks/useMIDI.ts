@@ -3,6 +3,7 @@ import { useMIDIStore } from '../stores/midiStore';
 import type {
   MIDILearnTarget,
   MIDINoteBinding,
+  MIDIParameterBindings,
   MIDIPermissionState,
   MIDITransportAction,
   MarkerMIDIAction,
@@ -44,6 +45,7 @@ export function useMIDI() {
     learnTarget,
     transportBindings,
     slotBindings,
+    parameterBindings,
     setSupported,
     setEnabled,
     setConnectionStatus,
@@ -169,6 +171,7 @@ export function useMIDI() {
     learnTarget: learnTarget as MIDILearnTarget | null,
     transportBindings: transportBindings as Record<MIDITransportAction, MIDINoteBinding | null>,
     slotBindings: slotBindings as Record<number, MIDINoteBinding | null>,
+    parameterBindings: parameterBindings as MIDIParameterBindings,
     enableMIDI,
     disableMIDI,
     startLearningTransportBinding,

@@ -3,6 +3,8 @@ import type { Text3DProperties } from '../../../types';
 import { useTimelineStore } from '../../../stores/timeline';
 import { startBatch, endBatch } from '../../../stores/historyStore';
 import { DraggableNumber } from './shared';
+import type { MIDIParameterTarget } from '../../../types/midi';
+import { MIDIParameterLabel } from './MIDIParameterLabel';
 
 interface ThreeDTextTabProps {
   clipId: string;
@@ -24,6 +26,7 @@ function LabeledNumber({
   suffix = '',
   min,
   max,
+  midiTarget,
 }: {
   label: string;
   value: number;
@@ -33,10 +36,13 @@ function LabeledNumber({
   suffix?: string;
   min?: number;
   max?: number;
+  midiTarget?: MIDIParameterTarget | null;
 }) {
   return (
     <div className="labeled-value">
-      <span className="labeled-value-label">{label}</span>
+      <MIDIParameterLabel as="span" className="labeled-value-label" target={midiTarget}>
+        {label}
+      </MIDIParameterLabel>
       <DraggableNumber
         value={value}
         onChange={onChange}
@@ -93,6 +99,21 @@ export function ThreeDTextTab({ clipId, text3DProperties }: ThreeDTextTabProps) 
     });
   }, [clip?.transform.scale, clipId, updateClipTransform]);
 
+  const createText3DMIDITarget = useCallback((
+    property: string,
+    label: string,
+    currentValue: number,
+    min?: number,
+    max?: number,
+  ): MIDIParameterTarget => ({
+    clipId,
+    property,
+    label: `${clip?.name ?? '3D Text'} / ${label}`,
+    currentValue,
+    min,
+    max,
+  }), [clip?.name, clipId]);
+
   return (
     <div className="properties-tab-content transform-tab-compact">
       <div className="properties-section">
@@ -146,17 +167,17 @@ export function ThreeDTextTab({ clipId, text3DProperties }: ThreeDTextTabProps) 
         <div className="control-row">
           <label className="prop-label">Geometry</label>
           <div className="multi-value-row">
-            <LabeledNumber label="Size" value={text3DProperties.size} onChange={(value) => updateProp('size', value)} defaultValue={0.42} decimals={2} min={0.05} />
-            <LabeledNumber label="Depth" value={text3DProperties.depth} onChange={(value) => updateProp('depth', value)} defaultValue={0.14} decimals={2} min={0.01} />
-            <LabeledNumber label="Segs" value={text3DProperties.curveSegments} onChange={(value) => updateProp('curveSegments', Math.max(1, Math.round(value)))} defaultValue={10} decimals={0} min={1} max={32} />
+            <LabeledNumber label="Size" value={text3DProperties.size} onChange={(value) => updateProp('size', value)} defaultValue={0.42} decimals={2} min={0.05} midiTarget={createText3DMIDITarget('text3d.size', '3D Text Size', text3DProperties.size, 0.05, 4)} />
+            <LabeledNumber label="Depth" value={text3DProperties.depth} onChange={(value) => updateProp('depth', value)} defaultValue={0.14} decimals={2} min={0.01} midiTarget={createText3DMIDITarget('text3d.depth', '3D Text Depth', text3DProperties.depth, 0.01, 2)} />
+            <LabeledNumber label="Segs" value={text3DProperties.curveSegments} onChange={(value) => updateProp('curveSegments', Math.max(1, Math.round(value)))} defaultValue={10} decimals={0} min={1} max={32} midiTarget={createText3DMIDITarget('text3d.curveSegments', '3D Text Segments', text3DProperties.curveSegments, 1, 32)} />
           </div>
         </div>
 
         <div className="control-row">
           <label className="prop-label">Spacing</label>
           <div className="multi-value-row">
-            <LabeledNumber label="Letters" value={text3DProperties.letterSpacing} onChange={(value) => updateProp('letterSpacing', value)} defaultValue={0.02} decimals={2} />
-            <LabeledNumber label="Lines" value={text3DProperties.lineHeight} onChange={(value) => updateProp('lineHeight', value)} defaultValue={1.15} decimals={2} min={0.5} max={3} />
+            <LabeledNumber label="Letters" value={text3DProperties.letterSpacing} onChange={(value) => updateProp('letterSpacing', value)} defaultValue={0.02} decimals={2} midiTarget={createText3DMIDITarget('text3d.letterSpacing', '3D Text Letter Spacing', text3DProperties.letterSpacing, -0.5, 0.5)} />
+            <LabeledNumber label="Lines" value={text3DProperties.lineHeight} onChange={(value) => updateProp('lineHeight', value)} defaultValue={1.15} decimals={2} min={0.5} max={3} midiTarget={createText3DMIDITarget('text3d.lineHeight', '3D Text Line Height', text3DProperties.lineHeight, 0.5, 3)} />
           </div>
         </div>
       </div>
@@ -165,9 +186,9 @@ export function ThreeDTextTab({ clipId, text3DProperties }: ThreeDTextTabProps) 
         <div className="control-row">
           <label className="prop-label">Scale</label>
           <div className="multi-value-row">
-            <LabeledNumber label="X" value={scale.x * 100} onChange={(value) => updateScaleAxis('x', value / 100)} defaultValue={100} decimals={1} suffix="%" min={1} />
-            <LabeledNumber label="Y" value={scale.y * 100} onChange={(value) => updateScaleAxis('y', value / 100)} defaultValue={100} decimals={1} suffix="%" min={1} />
-            <LabeledNumber label="Z" value={scale.z * 100} onChange={(value) => updateScaleAxis('z', value / 100)} defaultValue={100} decimals={1} suffix="%" min={1} />
+            <LabeledNumber label="X" value={scale.x * 100} onChange={(value) => updateScaleAxis('x', value / 100)} defaultValue={100} decimals={1} suffix="%" min={1} midiTarget={createText3DMIDITarget('scale.x', '3D Text Scale X', scale.x, 0.01, 4)} />
+            <LabeledNumber label="Y" value={scale.y * 100} onChange={(value) => updateScaleAxis('y', value / 100)} defaultValue={100} decimals={1} suffix="%" min={1} midiTarget={createText3DMIDITarget('scale.y', '3D Text Scale Y', scale.y, 0.01, 4)} />
+            <LabeledNumber label="Z" value={scale.z * 100} onChange={(value) => updateScaleAxis('z', value / 100)} defaultValue={100} decimals={1} suffix="%" min={1} midiTarget={createText3DMIDITarget('scale.z', '3D Text Scale Z', scale.z, 0.01, 4)} />
           </div>
         </div>
       </div>
@@ -192,9 +213,9 @@ export function ThreeDTextTab({ clipId, text3DProperties }: ThreeDTextTabProps) 
           </button>
           {text3DProperties.bevelEnabled && (
             <div className="multi-value-row">
-              <LabeledNumber label="Size" value={text3DProperties.bevelSize} onChange={(value) => updateProp('bevelSize', value)} defaultValue={0.01} decimals={2} min={0} />
-              <LabeledNumber label="Depth" value={text3DProperties.bevelThickness} onChange={(value) => updateProp('bevelThickness', value)} defaultValue={0.02} decimals={2} min={0} />
-              <LabeledNumber label="Segs" value={text3DProperties.bevelSegments} onChange={(value) => updateProp('bevelSegments', Math.max(1, Math.round(value)))} defaultValue={4} decimals={0} min={1} max={16} />
+              <LabeledNumber label="Size" value={text3DProperties.bevelSize} onChange={(value) => updateProp('bevelSize', value)} defaultValue={0.01} decimals={2} min={0} midiTarget={createText3DMIDITarget('text3d.bevelSize', '3D Text Bevel Size', text3DProperties.bevelSize, 0, 0.5)} />
+              <LabeledNumber label="Depth" value={text3DProperties.bevelThickness} onChange={(value) => updateProp('bevelThickness', value)} defaultValue={0.02} decimals={2} min={0} midiTarget={createText3DMIDITarget('text3d.bevelThickness', '3D Text Bevel Depth', text3DProperties.bevelThickness, 0, 0.5)} />
+              <LabeledNumber label="Segs" value={text3DProperties.bevelSegments} onChange={(value) => updateProp('bevelSegments', Math.max(1, Math.round(value)))} defaultValue={4} decimals={0} min={1} max={16} midiTarget={createText3DMIDITarget('text3d.bevelSegments', '3D Text Bevel Segments', text3DProperties.bevelSegments, 1, 16)} />
             </div>
           )}
         </div>

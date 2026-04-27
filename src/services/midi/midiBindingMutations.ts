@@ -4,9 +4,16 @@ import type {
   MarkerMIDIBinding,
   MarkerMIDIAction,
   MIDINoteBinding,
+  MIDIParameterMessageBinding,
+  MIDIParameterBinding,
+  MIDIParameterTarget,
   MIDITransportAction,
 } from '../../types/midi';
-import { midiBindingsMatch } from '../../types/midi';
+import {
+  createMIDIParameterBindingId,
+  midiBindingsMatch,
+  midiParameterMessagesMatch,
+} from '../../types/midi';
 
 interface ConflictOptions {
   transportAction?: MIDITransportAction;
@@ -18,6 +25,20 @@ interface ConflictOptions {
 function updateMarkerBindings(markerId: string, bindings: MarkerMIDIBinding[]): void {
   useTimelineStore.getState().updateMarker(markerId, {
     midiBindings: bindings.length > 0 ? bindings : undefined,
+  });
+}
+
+function removeConflictingMIDIParameterMessageBinding(
+  message: MIDIParameterMessageBinding,
+  options?: { parameterBindingId?: string }
+): void {
+  const midiStore = useMIDIStore.getState();
+
+  Object.values(midiStore.parameterBindings).forEach((existingBinding) => {
+    const isSameTarget = options?.parameterBindingId === existingBinding.id;
+    if (!isSameTarget && midiParameterMessagesMatch(existingBinding.message, message)) {
+      midiStore.removeParameterBinding(existingBinding.id);
+    }
   });
 }
 
@@ -64,6 +85,12 @@ export function removeConflictingMIDIBinding(
     if (nextBindings.length !== marker.midiBindings.length) {
       updateMarkerBindings(marker.id, nextBindings);
     }
+  });
+
+  removeConflictingMIDIParameterMessageBinding({
+    type: 'note',
+    channel: binding.channel,
+    note: binding.note,
   });
 }
 
@@ -131,6 +158,63 @@ export function setSlotMIDIBinding(
 
   removeConflictingMIDIBinding(binding, { slotIndex });
   midiStore.setSlotBinding(slotIndex, binding);
+}
+
+export function startLearningParameterMIDIBinding(target: MIDIParameterTarget): void {
+  useMIDIStore.getState().startLearning({
+    kind: 'parameter',
+    ...target,
+  });
+}
+
+export function setParameterMIDIBinding(
+  target: MIDIParameterTarget,
+  message: MIDIParameterMessageBinding | null
+): void {
+  const midiStore = useMIDIStore.getState();
+  const bindingId = createMIDIParameterBindingId(target);
+  const existingBinding = midiStore.parameterBindings[bindingId];
+
+  if (!message) {
+    midiStore.removeParameterBinding(bindingId);
+    return;
+  }
+
+  if (message.type === 'note') {
+    removeConflictingMIDIBinding({
+      channel: message.channel,
+      note: message.note,
+    });
+  } else {
+    removeConflictingMIDIParameterMessageBinding(message, {
+      parameterBindingId: bindingId,
+    });
+  }
+
+  midiStore.setParameterBinding({
+    ...target,
+    id: bindingId,
+    message,
+    min: existingBinding?.min ?? target.min,
+    max: existingBinding?.max ?? target.max,
+    invert: existingBinding?.invert,
+  });
+}
+
+export function updateParameterMIDIBinding(
+  bindingId: string,
+  updates: Partial<Pick<MIDIParameterBinding, 'min' | 'max' | 'invert'>>
+): void {
+  const midiStore = useMIDIStore.getState();
+  const binding = midiStore.parameterBindings[bindingId];
+  if (!binding) {
+    return;
+  }
+
+  midiStore.setParameterBinding({
+    ...binding,
+    ...updates,
+  });
 }
 
 export function moveMarkerMIDIBinding(params: {

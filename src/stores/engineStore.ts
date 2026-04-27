@@ -6,6 +6,12 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import type { EngineStats } from '../types';
 import type { SceneCameraConfig, SceneGizmoAxis, SceneGizmoMode } from '../engine/scene/types';
 
+export interface SceneCameraLiveOverride {
+  position?: Partial<{ x: number; y: number; z: number }>;
+  scale?: Partial<{ x: number; y: number; z: number }>;
+  rotation?: Partial<{ x: number; y: number; z: number }>;
+}
+
 export type GaussianSplatLoadPhase =
   | 'fetching'
   | 'reading'
@@ -45,6 +51,8 @@ interface EngineState {
   sceneNavClipId: string | null;
   sceneNavFpsMode: boolean;
   sceneNavFpsMoveSpeed: number;
+  sceneNavNoKeyframes: boolean;
+  sceneCameraLiveOverrides: Record<string, SceneCameraLiveOverride>;
   previewCameraOverride: SceneCameraConfig | null;
   sceneGizmoMode: SceneGizmoMode;
   sceneGizmoHoveredAxis: SceneGizmoAxis | null;
@@ -61,6 +69,10 @@ interface EngineState {
   setSceneNavClipId: (clipId: string | null) => void;
   setSceneNavFpsMode: (enabled: boolean) => void;
   setSceneNavFpsMoveSpeed: (speed: number) => void;
+  setSceneNavNoKeyframes: (enabled: boolean) => void;
+  setSceneCameraLiveOverride: (clipId: string, override: SceneCameraLiveOverride) => void;
+  clearSceneCameraLiveOverride: (clipId: string) => void;
+  clearSceneCameraLiveOverrides: () => void;
   setPreviewCameraOverride: (camera: SceneCameraConfig | null) => void;
   setSceneGizmoMode: (mode: SceneGizmoMode) => void;
   setSceneGizmoHoveredAxis: (axis: SceneGizmoAxis | null) => void;
@@ -129,6 +141,12 @@ export function selectSceneNavFpsMoveSpeed(
   return state.sceneNavFpsMoveSpeed ?? 1;
 }
 
+export function selectSceneNavNoKeyframes(
+  state: Pick<EngineState, 'sceneNavNoKeyframes'>,
+): boolean {
+  return state.sceneNavNoKeyframes ?? false;
+}
+
 export function selectActiveGaussianSplatLoadProgress(
   state: Pick<EngineState, 'gaussianSplatLoadProgress'>,
 ): GaussianSplatLoadProgressEntry | null {
@@ -154,6 +172,8 @@ export const useEngineStore = create<EngineState>()(
     sceneNavClipId: null,
     sceneNavFpsMode: false,
     sceneNavFpsMoveSpeed: 1,
+    sceneNavNoKeyframes: false,
+    sceneCameraLiveOverrides: {},
     previewCameraOverride: null,
     sceneGizmoMode: 'move',
     sceneGizmoHoveredAxis: null,
@@ -212,6 +232,51 @@ export const useEngineStore = create<EngineState>()(
 
     setSceneNavFpsMoveSpeed: (speed: number) => {
       set({ sceneNavFpsMoveSpeed: snapSceneNavFpsMoveSpeed(speed) });
+    },
+
+    setSceneNavNoKeyframes: (enabled: boolean) => {
+      set({
+        sceneNavNoKeyframes: enabled,
+        ...(!enabled ? { sceneCameraLiveOverrides: {} } : {}),
+      });
+    },
+
+    setSceneCameraLiveOverride: (clipId: string, override: SceneCameraLiveOverride) => {
+      set((state) => ({
+        sceneCameraLiveOverrides: {
+          ...state.sceneCameraLiveOverrides,
+          [clipId]: {
+            position: {
+              ...(state.sceneCameraLiveOverrides[clipId]?.position ?? {}),
+              ...(override.position ?? {}),
+            },
+            scale: {
+              ...(state.sceneCameraLiveOverrides[clipId]?.scale ?? {}),
+              ...(override.scale ?? {}),
+            },
+            rotation: {
+              ...(state.sceneCameraLiveOverrides[clipId]?.rotation ?? {}),
+              ...(override.rotation ?? {}),
+            },
+          },
+        },
+      }));
+    },
+
+    clearSceneCameraLiveOverride: (clipId: string) => {
+      set((state) => {
+        if (!state.sceneCameraLiveOverrides[clipId]) {
+          return {};
+        }
+
+        const nextOverrides = { ...state.sceneCameraLiveOverrides };
+        delete nextOverrides[clipId];
+        return { sceneCameraLiveOverrides: nextOverrides };
+      });
+    },
+
+    clearSceneCameraLiveOverrides: () => {
+      set({ sceneCameraLiveOverrides: {} });
     },
 
     setPreviewCameraOverride: (camera: SceneCameraConfig | null) => {

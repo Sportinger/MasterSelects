@@ -11,6 +11,8 @@ import { MAX_BACKUPS, PROJECT_FOLDERS } from './constants';
 import type { ProjectFile, ProjectMediaFile, ProjectComposition, ProjectFolder } from '../types';
 
 const KEYS_FILE_NAME = '.keys.enc';
+const PROJECT_FILE_NAME = 'project.json';
+const PROJECT_AUTOSAVE_FILE_NAME = 'project.autosave.json';
 
 type DirectoryPickerWindow = Window & typeof globalThis & {
   showDirectoryPicker: (options?: {
@@ -28,10 +30,26 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
 
+function isSwapFileAbortError(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && 'name' in error
+    && 'message' in error
+    && error.name === 'AbortError'
+    && typeof error.message === 'string'
+    && error.message.includes('Failed to create swap file');
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export class ProjectCoreService {
   private projectHandle: FileSystemDirectoryHandle | null = null;
   private projectData: ProjectFile | null = null;
   private isDirty = false;
+  private dirtyRevision = 0;
+  private saveQueue: Promise<void> = Promise.resolve();
   private autoSaveInterval: number | null = null;
   private pendingHandle: FileSystemDirectoryHandle | null = null;
   private permissionNeeded = false;
@@ -67,6 +85,7 @@ export class ProjectCoreService {
 
   markDirty(): void {
     this.isDirty = true;
+    this.dirtyRevision += 1;
   }
 
   needsPermission(): boolean {
@@ -182,7 +201,7 @@ export class ProjectCoreService {
         expandedFolderIds: [],
       };
 
-      await this.writeProjectJson(projectFolder, initialProject);
+      await this.writeProjectFile(projectFolder, PROJECT_FILE_NAME, initialProject);
 
       this.projectHandle = projectFolder;
       this.projectData = initialProject;
@@ -224,10 +243,7 @@ export class ProjectCoreService {
 
   async loadProject(handle: FileSystemDirectoryHandle): Promise<boolean> {
     try {
-      const projectFile = await handle.getFileHandle('project.json');
-      const file = await projectFile.getFile();
-      const content = await file.text();
-      const projectData = JSON.parse(content) as ProjectFile;
+      const projectData = await this.readLatestProjectData(handle);
 
       if (projectData.version !== 1) {
         log.error('Unsupported project version:', projectData.version);
@@ -263,18 +279,31 @@ export class ProjectCoreService {
   }
 
   async saveProject(): Promise<boolean> {
+    const queuedSave = this.saveQueue.then(
+      () => this.performSaveProject(),
+      () => this.performSaveProject(),
+    );
+    this.saveQueue = queuedSave.then(() => undefined, () => undefined);
+    return queuedSave;
+  }
+
+  private async performSaveProject(): Promise<boolean> {
     if (!this.projectHandle || !this.projectData) {
       log.error('No project open');
       return false;
     }
 
     try {
+      const savedRevision = this.dirtyRevision;
       this.projectData.updatedAt = new Date().toISOString();
-      await this.writeProjectJson(this.projectHandle, this.projectData);
-      this.isDirty = false;
+      await this.writeProjectJsonWithAutosaveFallback(this.projectHandle, this.projectData);
 
       // Also update the keys file
       await this.saveKeysFile();
+
+      if (this.dirtyRevision === savedRevision) {
+        this.isDirty = false;
+      }
 
       log.debug('Project saved');
       return true;
@@ -289,6 +318,7 @@ export class ProjectCoreService {
     this.projectHandle = null;
     this.projectData = null;
     this.isDirty = false;
+    this.dirtyRevision += 1;
     log.info('Project closed');
   }
 
@@ -384,7 +414,7 @@ export class ProjectCoreService {
         log.info(`No parent folder handle, updating display name only to "${trimmedName}"`);
         this.projectData.name = trimmedName;
         this.projectData.updatedAt = new Date().toISOString();
-        await this.writeProjectJson(this.projectHandle, this.projectData);
+        await this.writeProjectFile(this.projectHandle, PROJECT_FILE_NAME, this.projectData);
         this.isDirty = false;
         return true;
       }
@@ -398,7 +428,7 @@ export class ProjectCoreService {
         log.info(`No write permission on parent folder, updating display name only to "${trimmedName}"`);
         this.projectData.name = trimmedName;
         this.projectData.updatedAt = new Date().toISOString();
-        await this.writeProjectJson(this.projectHandle, this.projectData);
+        await this.writeProjectFile(this.projectHandle, PROJECT_FILE_NAME, this.projectData);
         this.isDirty = false;
         return true;
       }
@@ -409,7 +439,7 @@ export class ProjectCoreService {
       if (trimmedName === oldName) {
         this.projectData.name = trimmedName;
         this.projectData.updatedAt = new Date().toISOString();
-        await this.writeProjectJson(this.projectHandle, this.projectData);
+        await this.writeProjectFile(this.projectHandle, PROJECT_FILE_NAME, this.projectData);
         this.isDirty = false;
         log.info(`Project display name updated to "${trimmedName}"`);
         return true;
@@ -453,7 +483,7 @@ export class ProjectCoreService {
 
       this.projectData.name = trimmedName;
       this.projectData.updatedAt = new Date().toISOString();
-      await this.writeProjectJson(newFolder, this.projectData);
+      await this.writeProjectFile(newFolder, PROJECT_FILE_NAME, this.projectData);
 
       this.projectHandle = newFolder;
 
@@ -662,11 +692,79 @@ export class ProjectCoreService {
   // HELPERS
   // ============================================
 
-  private async writeProjectJson(handle: FileSystemDirectoryHandle, data: ProjectFile): Promise<void> {
-    const fileHandle = await handle.getFileHandle('project.json', { create: true });
-    const writable = await fileHandle.createWritable();
-    await writable.write(JSON.stringify(data, null, 2));
-    await writable.close();
+  private async readProjectFile(handle: FileSystemDirectoryHandle, fileName: string): Promise<ProjectFile | null> {
+    try {
+      const projectFile = await handle.getFileHandle(fileName);
+      const file = await projectFile.getFile();
+      const content = await file.text();
+      return JSON.parse(content) as ProjectFile;
+    } catch (error) {
+      if (fileName !== PROJECT_AUTOSAVE_FILE_NAME) {
+        throw error;
+      }
+      return null;
+    }
+  }
+
+  private async readLatestProjectData(handle: FileSystemDirectoryHandle): Promise<ProjectFile> {
+    const projectData = await this.readProjectFile(handle, PROJECT_FILE_NAME);
+    if (!projectData) {
+      throw new Error('Project file missing');
+    }
+
+    const autosaveData = await this.readProjectFile(handle, PROJECT_AUTOSAVE_FILE_NAME);
+    const projectUpdatedAt = Date.parse(projectData.updatedAt);
+    const autosaveUpdatedAt = autosaveData ? Date.parse(autosaveData.updatedAt) : NaN;
+
+    if (autosaveData && autosaveUpdatedAt > projectUpdatedAt) {
+      log.warn('Loaded newer project.autosave.json because project.json was older');
+      return autosaveData;
+    }
+
+    return projectData;
+  }
+
+  private async writeProjectJsonWithAutosaveFallback(
+    handle: FileSystemDirectoryHandle,
+    data: ProjectFile,
+  ): Promise<void> {
+    try {
+      await this.writeProjectFile(handle, PROJECT_FILE_NAME, data);
+    } catch (error) {
+      if (!isSwapFileAbortError(error)) {
+        throw error;
+      }
+
+      await this.writeProjectFile(handle, PROJECT_AUTOSAVE_FILE_NAME, data);
+      log.warn('project.json write failed; persisted latest state to project.autosave.json', error);
+    }
+  }
+
+  private async writeProjectFile(
+    handle: FileSystemDirectoryHandle,
+    fileName: string,
+    data: ProjectFile,
+  ): Promise<void> {
+    const fileHandle = await handle.getFileHandle(fileName, { create: true });
+    const content = JSON.stringify(data, null, 2);
+    let lastError: unknown = null;
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const writable = await fileHandle.createWritable();
+        await writable.write(content);
+        await writable.close();
+        return;
+      } catch (error) {
+        lastError = error;
+        if (!isSwapFileAbortError(error) || attempt === 2) {
+          break;
+        }
+        await wait(150 * (attempt + 1));
+      }
+    }
+
+    throw lastError;
   }
 
   private async storeLastProject(handle: FileSystemDirectoryHandle): Promise<void> {

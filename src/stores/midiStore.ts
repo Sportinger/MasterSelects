@@ -5,6 +5,8 @@ import type {
   MIDILastMessage,
   MIDILearnTarget,
   MIDINoteBinding,
+  MIDIParameterBinding,
+  MIDIParameterBindings,
   MIDITransportAction,
 } from '../types/midi';
 
@@ -23,6 +25,7 @@ interface MIDIStoreState {
   learnTarget: MIDILearnTarget | null;
   transportBindings: MIDITransportBindings;
   slotBindings: MIDISlotBindings;
+  parameterBindings: MIDIParameterBindings;
   setSupported: (supported: boolean) => void;
   setEnabled: (enabled: boolean) => void;
   setConnectionStatus: (status: MIDIConnectionStatus, error?: string | null) => void;
@@ -30,6 +33,8 @@ interface MIDIStoreState {
   setLastMessage: (message: MIDILastMessage | null) => void;
   setTransportBinding: (action: MIDITransportAction, binding: MIDINoteBinding | null) => void;
   setSlotBinding: (slotIndex: number, binding: MIDINoteBinding | null) => void;
+  setParameterBinding: (binding: MIDIParameterBinding) => void;
+  removeParameterBinding: (bindingId: string) => void;
   startLearning: (target: MIDILearnTarget) => void;
   cancelLearning: () => void;
   resetRuntimeState: () => void;
@@ -53,6 +58,7 @@ export const useMIDIStore = create<MIDIStoreState>()(
         learnTarget: null,
         transportBindings: initialTransportBindings,
         slotBindings: {},
+        parameterBindings: {},
         setSupported: (isSupported) => set({ isSupported }),
         setEnabled: (isEnabled) => set({ isEnabled }),
         setConnectionStatus: (connectionStatus, connectionError = null) =>
@@ -76,6 +82,22 @@ export const useMIDIStore = create<MIDIStoreState>()(
             }
             return { slotBindings: nextBindings };
           }),
+        setParameterBinding: (binding) =>
+          set((state) => ({
+            parameterBindings: {
+              ...state.parameterBindings,
+              [binding.id]: binding,
+            },
+          })),
+        removeParameterBinding: (bindingId) =>
+          set((state) => {
+            if (!state.parameterBindings[bindingId]) {
+              return {};
+            }
+            const nextBindings = { ...state.parameterBindings };
+            delete nextBindings[bindingId];
+            return { parameterBindings: nextBindings };
+          }),
         startLearning: (learnTarget) => set({ learnTarget }),
         cancelLearning: () => set({ learnTarget: null }),
         resetRuntimeState: () =>
@@ -93,6 +115,7 @@ export const useMIDIStore = create<MIDIStoreState>()(
           isEnabled: state.isEnabled,
           transportBindings: state.transportBindings,
           slotBindings: state.slotBindings,
+          parameterBindings: state.parameterBindings,
         }),
       }
     )

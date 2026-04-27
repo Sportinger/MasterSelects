@@ -4,6 +4,7 @@ import { useHistoryStore } from '../../../stores/historyStore';
 import { DraggableNumber } from './shared';
 import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../../../stores/mediaStore';
 import type { SceneCameraSettings } from '../../../stores/mediaStore';
+import { MIDIParameterLabel } from './MIDIParameterLabel';
 
 interface CameraTabProps {
   clipId: string;
@@ -67,7 +68,20 @@ export function CameraTab({ clipId }: CameraTabProps) {
       </div>
 
       <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
-        <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>FOV</label>
+        <MIDIParameterLabel
+          as="label"
+          style={{ width: '80px', color: '#999', flexShrink: 0 }}
+          target={{
+            clipId,
+            property: 'camera.fov',
+            label: `${clip.name} / Camera FOV`,
+            currentValue: cameraSettings.fov,
+            min: 10,
+            max: 140,
+          }}
+        >
+          FOV
+        </MIDIParameterLabel>
         <DraggableNumber
           value={cameraSettings.fov}
           onChange={(v) => updateCameraSetting('fov', Math.max(10, Math.min(140, v)))}
@@ -84,7 +98,20 @@ export function CameraTab({ clipId }: CameraTabProps) {
       </div>
 
       <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
-        <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Near</label>
+        <MIDIParameterLabel
+          as="label"
+          style={{ width: '80px', color: '#999', flexShrink: 0 }}
+          target={{
+            clipId,
+            property: 'camera.near',
+            label: `${clip.name} / Camera Near`,
+            currentValue: cameraSettings.near,
+            min: 0.001,
+            max: 100,
+          }}
+        >
+          Near
+        </MIDIParameterLabel>
         <DraggableNumber
           value={cameraSettings.near}
           onChange={(v) => updateCameraSetting('near', Math.max(0.001, v))}
@@ -100,7 +127,20 @@ export function CameraTab({ clipId }: CameraTabProps) {
       </div>
 
       <div className="prop-row" style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', gap: '6px' }}>
-        <label style={{ width: '80px', color: '#999', flexShrink: 0 }}>Far</label>
+        <MIDIParameterLabel
+          as="label"
+          style={{ width: '80px', color: '#999', flexShrink: 0 }}
+          target={{
+            clipId,
+            property: 'camera.far',
+            label: `${clip.name} / Camera Far`,
+            currentValue: cameraSettings.far,
+            min: 1,
+            max: 100000,
+          }}
+        >
+          Far
+        </MIDIParameterLabel>
         <DraggableNumber
           value={cameraSettings.far}
           onChange={(v) => updateCameraSetting('far', Math.max(cameraSettings.near + 0.1, v))}
