@@ -10991,6 +10991,7 @@ input[type="checkbox"] {
 }
 
 .preview-camera-wireframe-line {
+  fill: none;
   stroke: rgba(20, 184, 166, 0.78);
   stroke-width: 1.5;
   stroke-linecap: round;
@@ -11014,6 +11015,42 @@ input[type="checkbox"] {
   filter:
     drop-shadow(0 1px 1px rgba(0, 0, 0, 0.95))
     drop-shadow(0 0 5px rgba(45, 212, 191, 0.58));
+}
+
+.preview-scene-world-grid {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.preview-scene-world-grid-line {
+  fill: none;
+  stroke: rgba(148, 163, 184, 0.22);
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.7));
+}
+
+.preview-scene-world-grid-line.major {
+  stroke: rgba(148, 163, 184, 0.36);
+}
+
+.preview-scene-world-grid-line.axis-x {
+  stroke: rgba(239, 68, 68, 0.58);
+  stroke-width: 1.6;
+}
+
+.preview-scene-world-grid-line.axis-y {
+  stroke: rgba(34, 197, 94, 0.58);
+  stroke-width: 1.6;
+}
+
+.preview-scene-world-grid-line.axis-z {
+  stroke: rgba(59, 130, 246, 0.58);
+  stroke-width: 1.6;
 }
 
 .preview-scene-object-handle.selected {

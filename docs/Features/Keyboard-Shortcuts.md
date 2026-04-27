@@ -103,7 +103,7 @@ On Mac, `Ctrl` maps to `Cmd` and `Alt` maps to `Option`.
 
 ### Preview
 
-- `Tab` toggles preview edit mode on the active editable preview source.
+- `Tab` toggles preview edit mode on the focused editable preview, or on the first editable preview when no preview has focus.
 - `1`, `2`, `3`, and `4` highlight the matching slot in the multi-preview panel.
 
 ### Panels
@@ -123,6 +123,7 @@ On Mac, `Ctrl` maps to `Cmd` and `Alt` maps to `Option`.
 
 - `Tab` only works when the preview source is editable.
 - The preview panel ignores the shortcut when showing a non-editable source monitor.
+- In camera edit mode, `1`, `2`, `3`, and `4` animate only the focused/first edit preview between Front, Side, Top, and Camera view.
 
 ### Docking
 

@@ -443,6 +443,10 @@ function projectWorld(viewProjection: Float32Array, point: Vec3): Vec4 | null {
 }
 
 function resolveWorldPerPixel(origin: SceneVector3, camera: SceneCamera): number {
+  if (camera.projection === 'orthographic') {
+    return (camera.orthographicScale ?? 2) / Math.max(1, camera.viewport.height);
+  }
+
   const distance = Math.max(
     0.01,
     Math.hypot(

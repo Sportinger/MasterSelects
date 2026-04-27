@@ -35,6 +35,7 @@ Current preview-related overlays and modes include:
 - Non-active compositions are rendered as independent targets.
 - `renderScheduler` drives those targets without depending on the main editor preview loop.
 - Each target can toggle its own transparency grid state.
+- Edit mode is panel-local: the Edit button only affects that preview, and the global `Tab` shortcut targets the focused preview or, with no focused preview, the first editable preview.
 
 ### Output Windows
 
@@ -138,6 +139,9 @@ Edit mode is a canvas overlay for layer transforms.
 - Shows bounding boxes and drag handles for the selected layer.
 - Supports zoom, pan, and transform gestures.
 - Uses a full-container overlay canvas so pasteboard space outside the composition remains interactive.
+- Multiple preview panels can mix edit and non-edit views at the same time.
+- 3D object handles remain visible across preview modes; selecting one activates the native 3D scene gizmo for that clip.
+- Edit views can render a projected world grid that follows camera-view animation instead of snapping as a screen overlay. The grid plane matches the edit view: Front uses XY at `z=0`, Side uses YZ at `x=0`, and Top/free camera uses XZ at `y=0`.
 
 ### Limitation
 

@@ -22,7 +22,6 @@ import {
   collectPreviewSceneObjects,
   projectWorldToCanvas,
   resolveAxisScreenHandle,
-  type PreviewCameraWireframeLine,
   type PreviewSceneObject,
   type SceneAxisScreenHandle,
   type SceneGizmoAxis,
@@ -42,15 +41,28 @@ interface SceneObjectOverlayProps {
   editCameraClip?: TimelineClip | null;
   editCameraTransform?: ClipTransform | null;
   showOnlyEditCamera?: boolean;
+  showWorldGrid?: boolean;
+  worldGridPlane?: WorldGridPlane;
   toolbarPortalTarget?: HTMLElement | null;
   enabled: boolean;
 }
 
 type SceneGizmoDragAxis = SceneGizmoAxis | 'all';
 
-type DisplayCameraWireframeLine = PreviewCameraWireframeLine & {
+type DisplayCameraWireframePath = {
+  key: string;
+  d: string;
+  role: 'body' | 'frustum' | 'direction';
   selected: boolean;
 };
+
+type DisplayWorldGridPath = {
+  key: string;
+  d: string;
+  kind: 'minor' | 'major' | 'axis-x' | 'axis-y' | 'axis-z';
+};
+
+type WorldGridPlane = 'xy' | 'yz' | 'xz';
 
 interface DragState {
   clipId: string;
@@ -121,6 +133,9 @@ const ROTATE_RING_CENTER = ROTATE_RING_VIEWBOX_SIZE / 2;
 const ROTATE_RING_SCREEN_RADIUS = SCENE_GIZMO_ROTATE_RING_SCREEN_RADIUS;
 const ROTATE_RING_SEGMENTS = 96;
 const ROTATE_RING_HIT_THRESHOLD = 28;
+const WORLD_GRID_EXTENT = 40;
+const WORLD_GRID_STEP = 1;
+const WORLD_GRID_MAJOR_STEP = 5;
 
 const AXIS_LABELS: Record<SceneGizmoAxis, string> = {
   x: 'X',
@@ -236,6 +251,10 @@ function resolveWorldPerPixel(
   origin: PreviewSceneObject['worldPosition'],
   camera: ReturnType<typeof collectPreviewSceneObjects>['camera'],
 ): number {
+  if (camera.projection === 'orthographic') {
+    return (camera.orthographicScale ?? 2) / Math.max(1, camera.viewport.height);
+  }
+
   const distance = Math.max(
     0.01,
     Math.hypot(
@@ -448,6 +467,21 @@ function resolveScreenRay(
   }
   const up = normalizeVector(crossVector(backward, right));
   const aspect = camera.viewport.width / Math.max(1, camera.viewport.height);
+  if (camera.projection === 'orthographic') {
+    const height = Math.max(0.001, camera.orthographicScale ?? 2);
+    const width = height * aspect;
+    return {
+      origin: addVector(
+        camera.cameraPosition,
+        addVector(
+          scaleVector(right, ndcX * width * 0.5),
+          scaleVector(up, ndcY * height * 0.5),
+        ),
+      ),
+      direction: normalizeVector(scaleVector(backward, -1)),
+    };
+  }
+
   const fovRadians = (camera.fov * Math.PI) / 180;
   const tanHalfFov = Math.tan(fovRadians * 0.5);
   const direction = normalizeVector(addVector(
@@ -1005,6 +1039,178 @@ function applyDragTransform(
   applyTransform(drag.clipId, { position });
 }
 
+function linesToSvgPath(lines: Array<{ from: { x: number; y: number }; to: { x: number; y: number } }>): string {
+  return lines
+    .map((line) => `M ${line.from.x.toFixed(2)} ${line.from.y.toFixed(2)} L ${line.to.x.toFixed(2)} ${line.to.y.toFixed(2)}`)
+    .join(' ');
+}
+
+type ClipVector4 = [number, number, number, number];
+
+function multiplyMat4Vec4(matrix: Float32Array, vector: ClipVector4): ClipVector4 {
+  const [x, y, z, w] = vector;
+  return [
+    matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12] * w,
+    matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13] * w,
+    matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14] * w,
+    matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15] * w,
+  ];
+}
+
+function projectWorldToClip(point: SceneVector3, camera: SceneCamera): ClipVector4 {
+  const viewPoint = multiplyMat4Vec4(camera.viewMatrix, [point.x, point.y, point.z, 1]);
+  return multiplyMat4Vec4(camera.projectionMatrix, viewPoint);
+}
+
+function interpolateClipVector(a: ClipVector4, b: ClipVector4, t: number): ClipVector4 {
+  return [
+    a[0] + (b[0] - a[0]) * t,
+    a[1] + (b[1] - a[1]) * t,
+    a[2] + (b[2] - a[2]) * t,
+    a[3] + (b[3] - a[3]) * t,
+  ];
+}
+
+function clipLineSegmentToView(from: ClipVector4, to: ClipVector4): [ClipVector4, ClipVector4] | null {
+  let clippedFrom = from;
+  let clippedTo = to;
+  const planes: Array<[number, number, number, number]> = [
+    [1, 0, 0, 1],
+    [-1, 0, 0, 1],
+    [0, 1, 0, 1],
+    [0, -1, 0, 1],
+    [0, 0, 1, 0.02],
+    [0, 0, -1, 1],
+    [0, 0, 0, 1],
+  ];
+
+  for (const [a, b, c, d] of planes) {
+    const fromDistance = a * clippedFrom[0] + b * clippedFrom[1] + c * clippedFrom[2] + d * clippedFrom[3];
+    const toDistance = a * clippedTo[0] + b * clippedTo[1] + c * clippedTo[2] + d * clippedTo[3];
+    if (fromDistance < 0 && toDistance < 0) return null;
+    if (fromDistance < 0 || toDistance < 0) {
+      const t = fromDistance / (fromDistance - toDistance);
+      const intersection = interpolateClipVector(clippedFrom, clippedTo, t);
+      if (fromDistance < 0) {
+        clippedFrom = intersection;
+      } else {
+        clippedTo = intersection;
+      }
+    }
+  }
+
+  return [clippedFrom, clippedTo];
+}
+
+function clipToCanvasPath(from: ClipVector4, to: ClipVector4, canvasSize: { width: number; height: number }): string | null {
+  if (Math.abs(from[3]) < 0.000001 || Math.abs(to[3]) < 0.000001) return null;
+  const fromX = (from[0] / from[3] * 0.5 + 0.5) * canvasSize.width;
+  const fromY = (0.5 - from[1] / from[3] * 0.5) * canvasSize.height;
+  const toX = (to[0] / to[3] * 0.5 + 0.5) * canvasSize.width;
+  const toY = (0.5 - to[1] / to[3] * 0.5) * canvasSize.height;
+  if (![fromX, fromY, toX, toY].every(Number.isFinite)) return null;
+  return `M ${fromX.toFixed(2)} ${fromY.toFixed(2)} L ${toX.toFixed(2)} ${toY.toFixed(2)}`;
+}
+
+function projectGridLine(
+  from: SceneVector3,
+  to: SceneVector3,
+  camera: SceneCamera,
+  canvasSize: { width: number; height: number },
+): string | null {
+  const clipped = clipLineSegmentToView(
+    projectWorldToClip(from, camera),
+    projectWorldToClip(to, camera),
+  );
+  if (!clipped) return null;
+  return clipToCanvasPath(clipped[0], clipped[1], canvasSize);
+}
+
+function getWorldGridLine(
+  plane: WorldGridPlane,
+  axis: SceneGizmoAxis,
+  coord: number,
+): { from: SceneVector3; to: SceneVector3 } {
+  switch (plane) {
+    case 'xy':
+      if (axis === 'x') {
+        return {
+          from: { x: -WORLD_GRID_EXTENT, y: coord, z: 0 },
+          to: { x: WORLD_GRID_EXTENT, y: coord, z: 0 },
+        };
+      }
+      return {
+        from: { x: coord, y: -WORLD_GRID_EXTENT, z: 0 },
+        to: { x: coord, y: WORLD_GRID_EXTENT, z: 0 },
+      };
+    case 'yz':
+      if (axis === 'y') {
+        return {
+          from: { x: 0, y: -WORLD_GRID_EXTENT, z: coord },
+          to: { x: 0, y: WORLD_GRID_EXTENT, z: coord },
+        };
+      }
+      return {
+        from: { x: 0, y: coord, z: -WORLD_GRID_EXTENT },
+        to: { x: 0, y: coord, z: WORLD_GRID_EXTENT },
+      };
+    case 'xz':
+    default:
+      if (axis === 'x') {
+        return {
+          from: { x: -WORLD_GRID_EXTENT, y: 0, z: coord },
+          to: { x: WORLD_GRID_EXTENT, y: 0, z: coord },
+        };
+      }
+      return {
+        from: { x: coord, y: 0, z: -WORLD_GRID_EXTENT },
+        to: { x: coord, y: 0, z: WORLD_GRID_EXTENT },
+      };
+  }
+}
+
+function buildWorldGridPaths(
+  camera: SceneCamera,
+  canvasSize: { width: number; height: number },
+  plane: WorldGridPlane,
+): DisplayWorldGridPath[] {
+  const pathGroups: Record<DisplayWorldGridPath['kind'], string[]> = {
+    minor: [],
+    major: [],
+    'axis-x': [],
+    'axis-y': [],
+    'axis-z': [],
+  };
+  const planeAxes: Record<WorldGridPlane, [SceneGizmoAxis, SceneGizmoAxis]> = {
+    xy: ['x', 'y'],
+    yz: ['y', 'z'],
+    xz: ['x', 'z'],
+  };
+  const steps = Math.floor(WORLD_GRID_EXTENT / WORLD_GRID_STEP);
+
+  for (let index = -steps; index <= steps; index += 1) {
+    const coord = index * WORLD_GRID_STEP;
+    for (const axis of planeAxes[plane]) {
+      const line = getWorldGridLine(plane, axis, coord);
+      const path = projectGridLine(line.from, line.to, camera, canvasSize);
+      if (!path) continue;
+
+      const kind = index === 0
+        ? (`axis-${axis}` as const)
+        : index % WORLD_GRID_MAJOR_STEP === 0 ? 'major' : 'minor';
+      pathGroups[kind].push(path);
+    }
+  }
+
+  return (['minor', 'major', 'axis-x', 'axis-y', 'axis-z'] as const)
+    .filter((kind) => pathGroups[kind].length > 0)
+    .map((kind) => ({
+      key: kind,
+      d: pathGroups[kind].join(' '),
+      kind,
+    }));
+}
+
 export function SceneObjectOverlay({
   clips,
   tracks,
@@ -1018,6 +1224,8 @@ export function SceneObjectOverlay({
   editCameraClip,
   editCameraTransform,
   showOnlyEditCamera = false,
+  showWorldGrid = false,
+  worldGridPlane = 'xz',
   toolbarPortalTarget,
   enabled,
 }: SceneObjectOverlayProps) {
@@ -1182,12 +1390,27 @@ export function SceneObjectOverlay({
     () => resolveDisplayObjects(objects, canvasSize),
     [canvasSize, objects],
   );
-  const cameraWireframeLines = useMemo<DisplayCameraWireframeLine[]>(
-    () => objects.flatMap((object) => (
-      buildCameraWireframeLines(object, camera, canvasSize)
-        .map((line) => ({ ...line, selected: object.clipId === selectedClipId }))
-    )),
+  const cameraWireframePaths = useMemo<DisplayCameraWireframePath[]>(
+    () => objects.flatMap((object) => {
+      const lines = buildCameraWireframeLines(object, camera, canvasSize);
+      if (lines.length === 0) return [];
+
+      return (['body', 'frustum', 'direction'] as const).flatMap((role) => {
+        const roleLines = lines.filter((line) => line.role === role);
+        if (roleLines.length === 0) return [];
+        return [{
+          key: `${object.clipId}-${role}`,
+          d: linesToSvgPath(roleLines),
+          role,
+          selected: object.clipId === selectedClipId,
+        }];
+      });
+    }),
     [camera, canvasSize, objects, selectedClipId],
+  );
+  const worldGridPaths = useMemo<DisplayWorldGridPath[]>(
+    () => (showWorldGrid ? buildWorldGridPaths(camera, canvasSize, worldGridPlane) : []),
+    [camera, canvasSize, showWorldGrid, worldGridPlane],
   );
 
   const axisHandles = useMemo<SceneAxisScreenHandle[]>(() => {
@@ -1560,7 +1783,11 @@ export function SceneObjectOverlay({
     );
   }, [clips, getObjectTransform, mode, resetObjectTransform, selectedClipId]);
 
-  if (!enabled || canvasSize.width <= 0 || canvasSize.height <= 0 || objects.length === 0) {
+  if (!enabled || canvasSize.width <= 0 || canvasSize.height <= 0) {
+    return null;
+  }
+
+  if (objects.length === 0 && worldGridPaths.length === 0) {
     return null;
   }
 
@@ -1589,7 +1816,24 @@ export function SceneObjectOverlay({
       className="preview-scene-object-overlay"
       style={{ width: canvasSize.width, height: canvasSize.height }}
     >
-      {cameraWireframeLines.length > 0 && (
+      {worldGridPaths.length > 0 && (
+        <svg
+          className="preview-scene-world-grid"
+          width={canvasSize.width}
+          height={canvasSize.height}
+          viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`}
+          aria-hidden="true"
+        >
+          {worldGridPaths.map((path) => (
+            <path
+              key={path.key}
+              className={`preview-scene-world-grid-line ${path.kind}`}
+              d={path.d}
+            />
+          ))}
+        </svg>
+      )}
+      {cameraWireframePaths.length > 0 && (
         <svg
           className="preview-camera-wireframe"
           width={canvasSize.width}
@@ -1597,14 +1841,11 @@ export function SceneObjectOverlay({
           viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`}
           aria-hidden="true"
         >
-          {cameraWireframeLines.map((line) => (
-            <line
-              key={`${line.clipId}-${line.role}-${line.from.x.toFixed(1)}-${line.from.y.toFixed(1)}-${line.to.x.toFixed(1)}-${line.to.y.toFixed(1)}`}
-              className={`preview-camera-wireframe-line role-${line.role} ${line.selected ? 'selected' : ''}`}
-              x1={line.from.x}
-              y1={line.from.y}
-              x2={line.to.x}
-              y2={line.to.y}
+          {cameraWireframePaths.map((path) => (
+            <path
+              key={path.key}
+              className={`preview-camera-wireframe-line role-${path.role} ${path.selected ? 'selected' : ''}`}
+              d={path.d}
             />
           ))}
         </svg>

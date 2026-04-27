@@ -2,6 +2,16 @@
   {
     "date": "2026-04-27",
     "type": "improve",
+    "title": "Camera Edit Views Gain Orthographic Shortcuts and Adaptive Grids",
+    "description": "Camera edit mode now supports animated 1/2/3/4 switching between Front, Side, Top, and Camera views, keeps 3D object handles and native gizmos available, and draws view-matched XY/YZ/XZ grids for orientation.",
+    "section": "Preview / Camera",
+    "commits": [
+      "61691bbe"
+    ]
+  },
+  {
+    "date": "2026-04-27",
+    "type": "improve",
     "title": "Camera Clip Edit View Shows the Real Timeline Camera",
     "description": "Edit mode over a camera clip now switches to a temporary orbitable view while showing the real timeline camera as a wireframe with view direction. The full camera gizmo appears only when the camera clip is selected and writes through the normal transform/keyframe path.",
     "section": "Preview / Camera"

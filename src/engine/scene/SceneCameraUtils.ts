@@ -301,6 +301,25 @@ function perspective(fovYRadians: number, aspect: number, near: number, far: num
   return matrix;
 }
 
+function orthographic(
+  left: number,
+  right: number,
+  bottom: number,
+  top: number,
+  near: number,
+  far: number,
+): Float32Array {
+  const matrix = new Float32Array(16);
+  matrix[0] = 2 / (right - left);
+  matrix[5] = 2 / (top - bottom);
+  matrix[10] = 1 / (near - far);
+  matrix[12] = (left + right) / (left - right);
+  matrix[13] = (bottom + top) / (bottom - top);
+  matrix[14] = near / (near - far);
+  matrix[15] = 1;
+  return matrix;
+}
+
 function buildPoseInterpolatedCameraConfigFromClip(
   cameraClip: TimelineClip,
   clipLocalTime: number,
@@ -524,10 +543,26 @@ function buildSceneCameraFromConfig(
   const aspect = viewport.width / Math.max(1, viewport.height);
   const fovRadians = (config.fov * Math.PI) / 180;
   const cameraPosition = { ...config.position };
+  const projection = config.projection ?? 'perspective';
 
   if (applyDefaultDistanceToEye && config.applyDefaultDistance !== false) {
     cameraPosition.z += getSharedSceneDefaultCameraDistance(config.fov);
   }
+
+  const projectionMatrix = projection === 'orthographic'
+    ? (() => {
+        const height = Math.max(0.001, config.orthographicScale ?? 2);
+        const width = height * aspect;
+        return orthographic(
+          -width * 0.5,
+          width * 0.5,
+          -height * 0.5,
+          height * 0.5,
+          config.near,
+          config.far,
+        );
+      })()
+    : perspective(fovRadians, aspect, config.near, config.far);
 
   return {
     viewMatrix: lookAt(
@@ -541,7 +576,7 @@ function buildSceneCameraFromConfig(
       config.up.y,
       config.up.z,
     ),
-    projectionMatrix: perspective(fovRadians, aspect, config.near, config.far),
+    projectionMatrix,
     cameraPosition,
     cameraTarget: { ...config.target },
     cameraUp: { ...config.up },
@@ -550,6 +585,8 @@ function buildSceneCameraFromConfig(
     far: config.far,
     viewport,
     applyDefaultDistance: applyDefaultDistanceToEye ? false : config.applyDefaultDistance,
+    projection,
+    ...(projection === 'orthographic' ? { orthographicScale: config.orthographicScale ?? 2 } : {}),
   };
 }
 
