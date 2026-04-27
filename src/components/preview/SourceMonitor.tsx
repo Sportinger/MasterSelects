@@ -7,18 +7,17 @@ import type { MediaFile } from '../../stores/mediaStore';
 
 interface SourceMonitorProps {
   file: MediaFile;
+  autoplayRequestId?: number;
   onClose: () => void;
 }
 
-export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
+export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMonitorProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const scrubRef = useRef<HTMLDivElement>(null);
 
   const isVideo = file.type === 'video';
   const fps = file.fps || 30;
 
-  const [backendReady, setBackendReady] = useState(false);
-  const [backendError, setBackendError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(file.duration || 0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -30,19 +29,24 @@ export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
   }, [currentTime]);
 
   useEffect(() => {
+    let cancelled = false;
     queueMicrotask(() => {
-      setBackendError(null);
-      setBackendReady(false);
+      if (cancelled) return;
+      currentTimeRef.current = 0;
       setCurrentTime(0);
       setDuration(file.duration || 0);
       setIsPlaying(false);
     });
+    return () => {
+      cancelled = true;
+    };
   }, [file.id, file.duration]);
 
   // HTML video event listeners
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !isVideo) return;
+    let disposed = false;
 
     const onTimeUpdate = () => {
       if (!isScrubbing) {
@@ -51,7 +55,6 @@ export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
     };
     const onLoadedMetadata = () => {
       setDuration(video.duration);
-      setBackendReady(true);
       const restoreTime = currentTimeRef.current;
       if (restoreTime > 0.01) {
         video.currentTime = Math.min(restoreTime, video.duration || restoreTime);
@@ -60,27 +63,26 @@ export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
     const onEnded = () => setIsPlaying(false);
-    const onError = () => setBackendError('HTML preview failed to load');
 
     video.addEventListener('timeupdate', onTimeUpdate);
     video.addEventListener('loadedmetadata', onLoadedMetadata);
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
     video.addEventListener('ended', onEnded);
-    video.addEventListener('error', onError);
-
-    setBackendReady(video.readyState >= 1);
     if (video.readyState >= 1) {
-      setDuration(video.duration || file.duration || 0);
+      queueMicrotask(() => {
+        if (disposed) return;
+        setDuration(video.duration || file.duration || 0);
+      });
     }
 
     return () => {
+      disposed = true;
       video.removeEventListener('timeupdate', onTimeUpdate);
       video.removeEventListener('loadedmetadata', onLoadedMetadata);
       video.removeEventListener('play', onPlay);
       video.removeEventListener('pause', onPause);
       video.removeEventListener('ended', onEnded);
-      video.removeEventListener('error', onError);
     };
   }, [file.duration, isScrubbing, isVideo]);
 
@@ -96,16 +98,65 @@ export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
     };
   }, []);
 
-  const togglePlayback = useCallback(() => {
+  const playSource = useCallback(() => {
     if (!isVideo) return;
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused) {
-      void video.play();
-    } else {
-      video.pause();
+    if (video.ended || (video.duration > 0 && video.currentTime >= video.duration)) {
+      video.currentTime = 0;
     }
+    void video.play();
   }, [isVideo]);
+
+  const pauseSource = useCallback(() => {
+    if (!isVideo) return;
+    videoRef.current?.pause();
+  }, [isVideo]);
+
+  const stopSource = useCallback(() => {
+    if (!isVideo) return;
+    const video = videoRef.current;
+    if (!video) return;
+    video.pause();
+    video.currentTime = 0;
+    currentTimeRef.current = 0;
+    setCurrentTime(0);
+  }, [isVideo]);
+
+  const togglePlayback = useCallback(() => {
+    const video = videoRef.current;
+    if (!isVideo || !video) return;
+    if (video.paused) {
+      playSource();
+    } else {
+      pauseSource();
+    }
+  }, [isVideo, pauseSource, playSource]);
+
+  useEffect(() => {
+    if (!isVideo) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    let cancelled = false;
+    const playWhenReady = () => {
+      if (cancelled) return;
+      void video.play().catch(() => {
+        // Browser policies can still block autoplay; the explicit Play button remains available.
+      });
+    };
+
+    if (video.readyState >= 2) {
+      playWhenReady();
+    } else {
+      video.addEventListener('canplay', playWhenReady, { once: true });
+    }
+
+    return () => {
+      cancelled = true;
+      video.removeEventListener('canplay', playWhenReady);
+    };
+  }, [autoplayRequestId, file.id, isVideo]);
 
   // Keyboard handler: Space = play/pause, Escape = close
   // Uses capture phase + stopImmediatePropagation so timeline doesn't also play
@@ -139,21 +190,6 @@ export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
     if (!video) return;
     video.currentTime = clampedTime;
   }, [duration]);
-
-  // Frame step
-  const stepFrame = useCallback((direction: 1 | -1) => {
-    const frameDuration = 1 / fps;
-    seekSourceMonitor(currentTime + direction * frameDuration, true);
-  }, [currentTime, fps, seekSourceMonitor]);
-
-  // Go to start / end
-  const goToStart = useCallback(() => {
-    seekSourceMonitor(0, true);
-  }, [seekSourceMonitor]);
-
-  const goToEnd = useCallback(() => {
-    seekSourceMonitor(duration, true);
-  }, [duration, seekSourceMonitor]);
 
   // Scrub bar interaction
   const seekToPosition = useCallback((clientX: number, precise: boolean) => {
@@ -196,6 +232,7 @@ export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
             src={file.url}
             className="source-monitor-video"
             onClick={togglePlayback}
+            autoPlay
             playsInline
           />
         ) : (
@@ -210,24 +247,22 @@ export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
       {isVideo && (
         <div className="source-monitor-toolbar">
           <div className="source-monitor-transport">
-            <button className="btn btn-sm" onClick={goToStart} title="Go to start">
-              Start
-            </button>
-            <button className="btn btn-sm" onClick={() => stepFrame(-1)} title="Previous frame">
-              Prev
-            </button>
             <button
               className={`btn btn-sm ${isPlaying ? 'btn-active' : ''}`}
-              onClick={togglePlayback}
-              title={isPlaying ? 'Pause [Space]' : 'Play [Space]'}
+              onClick={playSource}
+              title="Play [Space]"
             >
-              {isPlaying ? 'Pause' : 'Play'}
+              Play
             </button>
-            <button className="btn btn-sm" onClick={() => stepFrame(1)} title="Next frame">
-              Next
+            <button className="btn btn-sm" onClick={stopSource} title="Stop">
+              Stop
             </button>
-            <button className="btn btn-sm" onClick={goToEnd} title="Go to end">
-              End
+            <button
+              className={`btn btn-sm ${!isPlaying && currentTime > 0 ? 'btn-active' : ''}`}
+              onClick={pauseSource}
+              title="Pause [Space]"
+            >
+              Pause
             </button>
           </div>
 
@@ -242,11 +277,6 @@ export function SourceMonitor({ file, onClose }: SourceMonitorProps) {
               <div className="source-monitor-scrub-fill" style={{ width: `${progress}%` }} />
               <div className="source-monitor-scrub-handle" style={{ left: `${progress}%` }} />
             </div>
-          </div>
-
-          <div className="source-monitor-status">
-            {backendReady ? 'ready' : 'loading'}
-            {backendError ? ` - ${backendError}` : ''}
           </div>
         </div>
       )}

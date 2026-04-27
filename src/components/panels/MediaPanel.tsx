@@ -20,7 +20,9 @@ import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { RelinkDialog } from '../common/RelinkDialog';
 import {
   clearExternalDragPayload,
+  dispatchExternalDragBridgeEvent,
   setExternalDragPayload,
+  type ExternalDragPayload,
 } from '../timeline/utils/externalDragSession';
 
 // Column definitions
@@ -136,6 +138,9 @@ const MEDIA_BOARD_PAN_ZOOM_MIN = 0.18;
 const MEDIA_BOARD_PAN_ZOOM_MAX = 2.4;
 const MEDIA_BOARD_DRAG_START_DISTANCE = 4;
 const MEDIA_BOARD_GRID_PARALLAX = 0.18;
+const MEDIA_BOARD_AUTOPAN_EDGE_PX = 72;
+const MEDIA_BOARD_AUTOPAN_MAX_SPEED = 620;
+const MEDIA_BOARD_TIMELINE_HANDOFF_DISTANCE_PX = 96;
 const MEDIA_PANEL_VIEW_TRANSITION_MS = 500;
 
 interface MediaPanelTransitionBox {
@@ -528,6 +533,7 @@ export function MediaPanel() {
   const boardCanvasRef = useRef<HTMLDivElement>(null);
   const boardCanvasInnerRef = useRef<HTMLDivElement>(null);
   const boardInteractionFrameRef = useRef<number | null>(null);
+  const boardAutoPanFrameRef = useRef<number | null>(null);
   const pendingViewTransitionRef = useRef<PendingMediaPanelViewTransition | null>(null);
   const activeViewTransitionRef = useRef<ActiveMediaPanelViewTransition | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -591,6 +597,9 @@ export function MediaPanel() {
   useEffect(() => () => {
     if (boardInteractionFrameRef.current !== null) {
       window.cancelAnimationFrame(boardInteractionFrameRef.current);
+    }
+    if (boardAutoPanFrameRef.current !== null) {
+      window.cancelAnimationFrame(boardAutoPanFrameRef.current);
     }
     if (suppressMediaBoardContextMenuTimerRef.current !== null) {
       window.clearTimeout(suppressMediaBoardContextMenuTimerRef.current);
@@ -2919,7 +2928,100 @@ export function MediaPanel() {
     moveToFolder(movingIds, targetGroupId);
   }, [folders, mediaBoardLayout.placements, moveToFolder]);
 
+  const getMediaBoardExternalDragPayload = useCallback((item: MediaBoardItem): ExternalDragPayload | null => {
+    if (item.type === 'composition') {
+      const comp = item as Composition;
+      const inSlotView = useTimelineStore.getState().slotGridProgress > 0.5;
+      if (comp.id === activeCompositionId && !inSlotView) return null;
+      return {
+        kind: 'composition',
+        id: comp.id,
+        duration: comp.timelineData?.duration ?? comp.duration ?? 5,
+        hasAudio: true,
+        isAudio: false,
+        isVideo: true,
+      };
+    }
+
+    if (item.type === 'text') {
+      return {
+        kind: 'text',
+        id: item.id,
+        duration: item.duration,
+        hasAudio: false,
+        isAudio: false,
+        isVideo: true,
+      };
+    }
+
+    if (item.type === 'solid') {
+      return {
+        kind: 'solid',
+        id: item.id,
+        duration: item.duration,
+        hasAudio: false,
+        isAudio: false,
+        isVideo: true,
+      };
+    }
+
+    if (item.type === 'model' && 'meshType' in item) {
+      return {
+        kind: 'mesh',
+        id: item.id,
+        duration: item.duration,
+        hasAudio: false,
+        isAudio: false,
+        isVideo: true,
+        meshType: item.meshType,
+      };
+    }
+
+    if (item.type === 'camera') {
+      return {
+        kind: 'camera',
+        id: item.id,
+        duration: item.duration,
+        hasAudio: false,
+        isAudio: false,
+        isVideo: true,
+      };
+    }
+
+    if (item.type === 'splat-effector') {
+      return {
+        kind: 'splat-effector',
+        id: item.id,
+        duration: item.duration,
+        hasAudio: false,
+        isAudio: false,
+        isVideo: true,
+      };
+    }
+
+    if (isImportedMediaFileItem(item) && item.file && !item.isImporting) {
+      const isAudioOnly =
+        item.file.type.startsWith('audio/') ||
+        /\.(mp3|wav|ogg|aac|m4a|flac|wma|aiff|alac|opus)$/i.test(item.file.name);
+      return {
+        kind: 'media-file',
+        id: item.id,
+        duration: item.duration,
+        hasAudio: item.type === 'image' ? false : isAudioOnly ? true : item.hasAudio,
+        isAudio: isAudioOnly,
+        isVideo: !isAudioOnly,
+        file: item.file,
+      };
+    }
+
+    return null;
+  }, [activeCompositionId]);
+
   const startMediaBoardNodeMoveGesture = useCallback((e: React.MouseEvent, item: MediaBoardItem) => {
+    if (e.button === 2) {
+      e.preventDefault();
+    }
+
     const selectedMoveIds = selectedIds.includes(item.id)
       ? selectedIds.filter((id) => mediaBoardItemIds.has(id))
       : [item.id];
@@ -2938,18 +3040,114 @@ export function MediaPanel() {
 
     if (startLayouts.length === 0) return;
 
+    const timelineDragPayload = getMediaBoardExternalDragPayload(item);
     const sourceLayouts = startLayouts.reduce<Record<string, MediaBoardNodeLayout>>((layouts, entry) => {
       layouts[entry.id] = entry.layout;
       return layouts;
     }, {});
     const startX = e.clientX;
     const startY = e.clientY;
+    const startViewport = { ...mediaBoardViewport };
+    let liveViewport = { ...mediaBoardViewport };
     let didDrag = false;
     let previewDx = 0;
     let previewDy = 0;
     let latestClientX = startX;
     let latestClientY = startY;
+    let latestTimelineHandoffActive = false;
+    let timelineBridgeActive = false;
     let latestInsertTarget: { groupId: string | null; index: number } | null = null;
+    let autoPanVelocity = { x: 0, y: 0 };
+    let lastAutoPanTime: number | null = null;
+
+    const pointToBoard = (clientX: number, clientY: number, viewport = liveViewport) => {
+      const rect = boardCanvasRef.current?.getBoundingClientRect();
+      if (!rect) return { x: 0, y: 0 };
+      return {
+        x: (clientX - rect.left - viewport.panX) / viewport.zoom,
+        y: (clientY - rect.top - viewport.panY) / viewport.zoom,
+      };
+    };
+
+    const applyLiveViewportPreview = () => {
+      const inner = boardCanvasInnerRef.current;
+      if (!inner) return;
+      inner.style.transform = `translate(${liveViewport.panX}px, ${liveViewport.panY}px) scale(${liveViewport.zoom})`;
+      boardWrapperRef.current?.style.setProperty('--media-board-grid-x', `${liveViewport.panX * MEDIA_BOARD_GRID_PARALLAX}px`);
+      boardWrapperRef.current?.style.setProperty('--media-board-grid-y', `${liveViewport.panY * MEDIA_BOARD_GRID_PARALLAX}px`);
+    };
+
+    const isTimelineHandoffTarget = () => {
+      const rect = boardCanvasRef.current?.getBoundingClientRect();
+      if (!rect || !timelineDragPayload) return false;
+      const outsideX = latestClientX < rect.left
+        ? rect.left - latestClientX
+        : latestClientX > rect.right
+          ? latestClientX - rect.right
+          : 0;
+      const outsideY = latestClientY < rect.top
+        ? rect.top - latestClientY
+        : latestClientY > rect.bottom
+          ? latestClientY - rect.bottom
+          : 0;
+      const outsideDistance = Math.max(outsideX, outsideY);
+      if (outsideDistance < MEDIA_BOARD_TIMELINE_HANDOFF_DISTANCE_PX) return false;
+
+      const elementAtPoint = document.elementFromPoint(latestClientX, latestClientY);
+      const targetElement = elementAtPoint instanceof HTMLElement ? elementAtPoint : null;
+      return Boolean(targetElement?.closest('.track-lane[data-track-id], .new-track-drop-zone'));
+    };
+
+    const syncTimelineBridge = (phase: 'move' | 'drop' | 'cancel' = 'move') => {
+      if (!timelineDragPayload) {
+        latestTimelineHandoffActive = false;
+        return;
+      }
+
+      if (phase === 'cancel') {
+        if (timelineBridgeActive) {
+          dispatchExternalDragBridgeEvent({ phase: 'cancel', clientX: latestClientX, clientY: latestClientY });
+        }
+        timelineBridgeActive = false;
+        latestTimelineHandoffActive = false;
+        clearExternalDragPayload();
+        return;
+      }
+
+      latestTimelineHandoffActive = isTimelineHandoffTarget();
+      if (!latestTimelineHandoffActive) {
+        if (timelineBridgeActive) {
+          dispatchExternalDragBridgeEvent({ phase: 'cancel', clientX: latestClientX, clientY: latestClientY });
+        }
+        timelineBridgeActive = false;
+        clearExternalDragPayload();
+        document.body.style.cursor = 'grabbing';
+        return;
+      }
+
+      setExternalDragPayload(timelineDragPayload);
+      timelineBridgeActive = true;
+      document.body.style.cursor = 'copy';
+      dispatchExternalDragBridgeEvent({ phase, clientX: latestClientX, clientY: latestClientY });
+    };
+
+    const updateInsertionPreview = () => {
+      if (latestTimelineHandoffActive) {
+        latestInsertTarget = null;
+        setMediaBoardInsertionPreview(null);
+        return;
+      }
+      latestInsertTarget = updateMediaBoardInsertionPreview(
+        pointToBoard(latestClientX, latestClientY),
+        moveIds,
+        sourceLayouts,
+      );
+    };
+
+    const updatePreviewDelta = () => {
+      previewDx = (latestClientX - startX - (liveViewport.panX - startViewport.panX)) / liveViewport.zoom;
+      previewDy = (latestClientY - startY - (liveViewport.panY - startViewport.panY)) / liveViewport.zoom;
+    };
 
     const clearPreview = () => {
       startLayouts.forEach(({ id }) => {
@@ -2964,6 +3162,7 @@ export function MediaPanel() {
       if (boardInteractionFrameRef.current !== null) return;
       boardInteractionFrameRef.current = window.requestAnimationFrame(() => {
         boardInteractionFrameRef.current = null;
+        applyLiveViewportPreview();
         startLayouts.forEach(({ id }) => {
           const node = boardCanvasRef.current?.querySelector<HTMLElement>(`.media-board-node[data-item-id="${CSS.escape(id)}"]`);
           if (!node) return;
@@ -2971,6 +3170,68 @@ export function MediaPanel() {
           node.classList.add('drag-preview');
         });
       });
+    };
+
+    const stopAutoPan = () => {
+      autoPanVelocity = { x: 0, y: 0 };
+      lastAutoPanTime = null;
+      if (boardAutoPanFrameRef.current !== null) {
+        window.cancelAnimationFrame(boardAutoPanFrameRef.current);
+        boardAutoPanFrameRef.current = null;
+      }
+    };
+
+    const tickAutoPan = (timestamp: number) => {
+      boardAutoPanFrameRef.current = null;
+      if (!didDrag || latestTimelineHandoffActive || (autoPanVelocity.x === 0 && autoPanVelocity.y === 0)) {
+        lastAutoPanTime = null;
+        return;
+      }
+
+      const dt = lastAutoPanTime === null ? 1 / 60 : Math.min(0.05, (timestamp - lastAutoPanTime) / 1000);
+      lastAutoPanTime = timestamp;
+      liveViewport = {
+        ...liveViewport,
+        panX: liveViewport.panX + autoPanVelocity.x * dt,
+        panY: liveViewport.panY + autoPanVelocity.y * dt,
+      };
+      syncTimelineBridge('move');
+      updatePreviewDelta();
+      updateInsertionPreview();
+      schedulePreview();
+
+      boardAutoPanFrameRef.current = window.requestAnimationFrame(tickAutoPan);
+    };
+
+    const updateAutoPanVelocity = () => {
+      const rect = boardCanvasRef.current?.getBoundingClientRect();
+      if (!rect || latestTimelineHandoffActive) {
+        stopAutoPan();
+        return;
+      }
+
+      const resolveAxisVelocity = (distanceToStart: number, distanceToEnd: number) => {
+        if (distanceToStart < MEDIA_BOARD_AUTOPAN_EDGE_PX) {
+          const t = 1 - Math.max(0, distanceToStart) / MEDIA_BOARD_AUTOPAN_EDGE_PX;
+          return MEDIA_BOARD_AUTOPAN_MAX_SPEED * t * t;
+        }
+        if (distanceToEnd < MEDIA_BOARD_AUTOPAN_EDGE_PX) {
+          const t = 1 - Math.max(0, distanceToEnd) / MEDIA_BOARD_AUTOPAN_EDGE_PX;
+          return -MEDIA_BOARD_AUTOPAN_MAX_SPEED * t * t;
+        }
+        return 0;
+      };
+
+      autoPanVelocity = {
+        x: resolveAxisVelocity(latestClientX - rect.left, rect.right - latestClientX),
+        y: resolveAxisVelocity(latestClientY - rect.top, rect.bottom - latestClientY),
+      };
+
+      if ((autoPanVelocity.x !== 0 || autoPanVelocity.y !== 0) && boardAutoPanFrameRef.current === null) {
+        boardAutoPanFrameRef.current = window.requestAnimationFrame(tickAutoPan);
+      } else if (autoPanVelocity.x === 0 && autoPanVelocity.y === 0) {
+        stopAutoPan();
+      }
     };
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
@@ -2984,15 +3245,14 @@ export function MediaPanel() {
         suppressNextMediaBoardContextMenu();
         closeContextMenu();
         setMediaBoardPerformanceMode(true);
+        document.body.style.userSelect = 'none';
+        document.body.style.cursor = 'grabbing';
       }
 
-      previewDx = (moveEvent.clientX - startX) / mediaBoardViewport.zoom;
-      previewDy = (moveEvent.clientY - startY) / mediaBoardViewport.zoom;
-      latestInsertTarget = updateMediaBoardInsertionPreview(
-        screenToMediaBoard(moveEvent.clientX, moveEvent.clientY),
-        moveIds,
-        sourceLayouts,
-      );
+      syncTimelineBridge('move');
+      updatePreviewDelta();
+      updateInsertionPreview();
+      updateAutoPanVelocity();
       schedulePreview();
     };
 
@@ -3001,35 +3261,64 @@ export function MediaPanel() {
         window.cancelAnimationFrame(boardInteractionFrameRef.current);
         boardInteractionFrameRef.current = null;
       }
+      stopAutoPan();
       clearPreview();
       setMediaBoardPerformanceMode(false);
       setMediaBoardInsertionPreview(null);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
 
       if (didDrag) {
-        const target = latestInsertTarget ?? getMediaBoardInsertTarget(screenToMediaBoard(latestClientX, latestClientY), moveIds);
-        if (target) {
-          commitMediaBoardOrderChange(moveIds, target.groupId, target.index);
+        suppressNextMediaBoardContextMenu();
+        setMediaBoardViewport(liveViewport);
+
+        if (latestTimelineHandoffActive && timelineDragPayload) {
+          syncTimelineBridge('drop');
+          timelineBridgeActive = false;
+          clearExternalDragPayload();
+        } else {
+          syncTimelineBridge('cancel');
+          const target = latestInsertTarget ?? getMediaBoardInsertTarget(pointToBoard(latestClientX, latestClientY), moveIds);
+          if (target) {
+            commitMediaBoardOrderChange(moveIds, target.groupId, target.index);
+          }
         }
+      } else {
+        syncTimelineBridge('cancel');
       }
 
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('blur', handleMouseUp);
+      if (didDrag) {
+        window.setTimeout(() => {
+          window.removeEventListener('contextmenu', handleWindowContextMenu, true);
+        }, 350);
+      } else {
+        window.removeEventListener('contextmenu', handleWindowContextMenu, true);
+      }
+    };
+
+    const handleWindowContextMenu = (contextEvent: MouseEvent) => {
+      if (!didDrag) return;
+      contextEvent.preventDefault();
+      contextEvent.stopPropagation();
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('blur', handleMouseUp);
+    window.addEventListener('contextmenu', handleWindowContextMenu, true);
   }, [
     closeContextMenu,
     commitMediaBoardOrderChange,
+    getMediaBoardExternalDragPayload,
     getMediaBoardInsertTarget,
     mediaBoardItemIds,
     mediaBoardLayout.placements,
     mediaBoardPlacementsById,
-    mediaBoardViewport.zoom,
+    mediaBoardViewport,
     selectedIds,
-    screenToMediaBoard,
     setMediaBoardPerformanceMode,
     suppressNextMediaBoardContextMenu,
     updateMediaBoardInsertionPreview,
@@ -3074,6 +3363,7 @@ export function MediaPanel() {
     if (target.closest('.media-board-node-timeline-drag, button, input')) return;
 
     if (e.button === 2) {
+      e.preventDefault();
       e.stopPropagation();
       if (e.ctrlKey || e.metaKey) {
         startMediaBoardMarqueeGesture(e);

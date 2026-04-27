@@ -33,7 +33,13 @@ import { useLayerDrag } from './useLayerDrag';
 import { useSAM2Store } from '../../stores/sam2Store';
 import { renderScheduler } from '../../services/renderScheduler';
 import { engine } from '../../engine/WebGPUEngine';
-import { resolveOrbitCameraTranslationForFixedEye } from '../../engine/gaussian/core/SplatCameraUtils';
+import {
+  resolveOrbitCameraPose,
+  resolveOrbitCameraTranslationForFixedEye,
+} from '../../engine/gaussian/core/SplatCameraUtils';
+import { resolveSharedSceneCameraConfig } from '../../engine/scene/SceneCameraUtils';
+import type { SceneCameraConfig, SceneViewport } from '../../engine/scene/types';
+import type { ClipTransform, TimelineClip, TimelineTrack } from '../../types';
 import type { PreviewPanelSource } from '../../types/dock';
 import {
   createPreviewPanelDataPatch,
@@ -58,6 +64,120 @@ function getSharedSceneDefaultCameraDistance(fovDegrees: number): number {
 }
 
 const CAMERA_NAV_FPS_LOOK_SPEED = 0.18;
+const EDIT_CAMERA_BLEND_MS = 320;
+const TIMELINE_TIME_EPSILON = 1e-4;
+
+function cloneClipTransform(transform: ClipTransform): ClipTransform {
+  return {
+    opacity: transform.opacity,
+    blendMode: transform.blendMode,
+    position: { ...transform.position },
+    scale: { ...transform.scale },
+    rotation: { ...transform.rotation },
+  };
+}
+
+function cloneSceneCameraConfig(config: SceneCameraConfig): SceneCameraConfig {
+  return {
+    ...config,
+    position: { ...config.position },
+    target: { ...config.target },
+    up: { ...config.up },
+  };
+}
+
+function easeInOutCubic(t: number): number {
+  return t < 0.5
+    ? 4 * t * t * t
+    : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function lerpNumber(from: number, to: number, t: number): number {
+  return from + (to - from) * t;
+}
+
+function lerpSceneCameraConfig(from: SceneCameraConfig, to: SceneCameraConfig, t: number): SceneCameraConfig {
+  return {
+    position: {
+      x: lerpNumber(from.position.x, to.position.x, t),
+      y: lerpNumber(from.position.y, to.position.y, t),
+      z: lerpNumber(from.position.z, to.position.z, t),
+    },
+    target: {
+      x: lerpNumber(from.target.x, to.target.x, t),
+      y: lerpNumber(from.target.y, to.target.y, t),
+      z: lerpNumber(from.target.z, to.target.z, t),
+    },
+    up: {
+      x: lerpNumber(from.up.x, to.up.x, t),
+      y: lerpNumber(from.up.y, to.up.y, t),
+      z: lerpNumber(from.up.z, to.up.z, t),
+    },
+    fov: lerpNumber(from.fov, to.fov, t),
+    near: lerpNumber(from.near, to.near, t),
+    far: lerpNumber(from.far, to.far, t),
+    applyDefaultDistance: false,
+  };
+}
+
+function findActiveCameraClipAtTime(
+  clips: TimelineClip[],
+  tracks: TimelineTrack[],
+  timelineTime: number,
+): TimelineClip | null {
+  const trackById = new Map(tracks.map((track, index) => [track.id, { track, index }]));
+  const activeCameraClips = clips
+    .filter((clip) => {
+      const trackInfo = trackById.get(clip.trackId);
+      if (trackInfo?.track.type === 'audio') return false;
+      return (
+        clip.source?.type === 'camera' &&
+        timelineTime >= clip.startTime - TIMELINE_TIME_EPSILON &&
+        timelineTime < clip.startTime + clip.duration + TIMELINE_TIME_EPSILON
+      );
+    })
+    .toSorted((a, b) => (trackById.get(b.trackId)?.index ?? -1) - (trackById.get(a.trackId)?.index ?? -1));
+
+  return (
+    activeCameraClips.find((clip) => trackById.get(clip.trackId)?.track.visible !== false) ??
+    activeCameraClips[0] ??
+    null
+  );
+}
+
+function buildPreviewCameraConfigFromTransform(
+  clip: TimelineClip,
+  transform: ClipTransform,
+  viewport: SceneViewport,
+): SceneCameraConfig | null {
+  if (clip.source?.type !== 'camera') return null;
+
+  const cameraSettings = clip.source.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS;
+  const pose = resolveOrbitCameraPose(
+    {
+      position: transform.position,
+      scale: transform.scale,
+      rotation: transform.rotation,
+    },
+    {
+      nearPlane: cameraSettings.near,
+      farPlane: cameraSettings.far,
+      fov: cameraSettings.fov,
+      minimumDistance: getSharedSceneDefaultCameraDistance(cameraSettings.fov),
+    },
+    viewport,
+  );
+
+  return {
+    position: pose.eye,
+    target: pose.target,
+    up: pose.up,
+    fov: pose.fovDegrees,
+    near: pose.near,
+    far: pose.far,
+    applyDefaultDistance: false,
+  };
+}
 
 function formatSplatLoadPercent(percent: number): number {
   if (!Number.isFinite(percent)) {
@@ -104,9 +224,12 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const sceneNavClipId = useEngineStore(selectSceneNavClipId);
   const sceneNavFpsMode = useEngineStore(selectSceneNavFpsMode);
   const sceneNavFpsMoveSpeed = useEngineStore(selectSceneNavFpsMoveSpeed);
+  const previewCameraOverride = useEngineStore((s) => s.previewCameraOverride);
+  const setPreviewCameraOverride = useEngineStore((s) => s.setPreviewCameraOverride);
+  const setSceneGizmoClipIdOverride = useEngineStore((s) => s.setSceneGizmoClipIdOverride);
   const activeSplatLoadProgress = useEngineStore(selectActiveGaussianSplatLoadProgress);
   const setSceneNavFpsMoveSpeed = useEngineStore((s) => s.setSceneNavFpsMoveSpeed);
-  const { clips, selectedClipIds, primarySelectedClipId, selectClip, updateClipTransform, maskEditMode, layers, selectedLayerId, selectLayer, updateLayer, tracks, isPlaying } = useTimelineStore(useShallow(s => ({
+  const { clips, selectedClipIds, primarySelectedClipId, selectClip, updateClipTransform, maskEditMode, layers, selectedLayerId, selectLayer, updateLayer, tracks, isPlaying, playheadPosition } = useTimelineStore(useShallow(s => ({
     clips: s.clips,
     selectedClipIds: s.selectedClipIds,
     primarySelectedClipId: s.primarySelectedClipId,
@@ -119,6 +242,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     updateLayer: s.updateLayer,
     tracks: s.tracks,
     isPlaying: s.isPlaying,
+    playheadPosition: s.playheadPosition,
   })));
   const { compositions, activeCompositionId } = useMediaStore(useShallow(s => ({
     compositions: s.compositions,
@@ -149,6 +273,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
   const previewCompositionId = useMediaStore(state => state.previewCompositionId);
   const sourceMonitorFileId = useMediaStore(state => state.sourceMonitorFileId);
+  const sourceMonitorPlaybackRequestId = useMediaStore(state => state.sourceMonitorPlaybackRequestId);
   const sourceMonitorFile = useMediaStore(state =>
     state.sourceMonitorFileId ? state.files.find(f => f.id === state.sourceMonitorFileId) ?? null : null
   );
@@ -339,6 +464,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
   // Stats overlay state
   const [statsExpanded, setStatsExpanded] = useState(false);
+  const [sceneGizmoToolbarTarget, setSceneGizmoToolbarTarget] = useState<HTMLDivElement | null>(null);
 
   // Edit mode state
   const [editMode, setEditMode] = useState(false);
@@ -377,6 +503,11 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const gaussianKeyboardFrameRef = useRef<number | null>(null);
   const gaussianKeyboardLastTimeRef = useRef<number | null>(null);
   const gaussianKeyboardBatchActiveRef = useRef(false);
+  const sceneNavHistoryBatchActiveRef = useRef(false);
+  const editCameraTransformRef = useRef<ClipTransform | null>(null);
+  const editCameraClipIdRef = useRef<string | null>(null);
+  const editCameraAnimationRef = useRef<number | null>(null);
+  const editCameraModeActiveRef = useRef(false);
 
   useEffect(() => {
     if (!isEditableSource) {
@@ -393,21 +524,53 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     () => (selectedClip?.source?.type === 'camera' ? selectedClip : null),
     [selectedClip],
   );
+  const activeCameraClipAtPlayhead = useMemo(
+    () => findActiveCameraClipAtTime(clips, tracks, playheadPosition),
+    [clips, playheadPosition, tracks],
+  );
+  const editCameraModeActive = Boolean(
+    isEditableSource &&
+    editMode &&
+    activeCameraClipAtPlayhead,
+  );
+  const navigationSceneNavClip = editCameraModeActive
+    ? activeCameraClipAtPlayhead
+    : selectedSceneNavClip;
 
   // Read fresh scene-nav transform at call-site to avoid stale closure after keyframe edits.
-  const getFreshSceneNavTransform = useCallback((clip: typeof selectedSceneNavClip) => {
+  const getFreshSceneNavTransform = useCallback((clip: TimelineClip | null) => {
     if (!clip) return null;
+    if (editCameraModeActive && editCameraTransformRef.current && clip.id === editCameraClipIdRef.current) {
+      return cloneClipTransform(editCameraTransformRef.current);
+    }
     const { playheadPosition: ph, getInterpolatedTransform } = useTimelineStore.getState();
     const clipLocalTime = ph - clip.startTime;
     return getInterpolatedTransform(clip.id, clipLocalTime);
-  }, []);
+  }, [editCameraModeActive]);
 
   const sceneNavEnabled = Boolean(
     isEditableSource &&
-    !editMode &&
-    selectedSceneNavClip &&
-    sceneNavClipId === selectedSceneNavClip.id,
+    navigationSceneNavClip &&
+    (
+      editCameraModeActive ||
+      (!editMode && sceneNavClipId === navigationSceneNavClip.id)
+    ),
   );
+  const layerEditMode = editMode && !editCameraModeActive;
+  const effectiveSceneNavFpsMode = sceneNavFpsMode && !editCameraModeActive;
+  const editCameraClipSelected = Boolean(
+    editCameraModeActive &&
+    activeCameraClipAtPlayhead &&
+    selectedClipIds.has(activeCameraClipAtPlayhead.id),
+  );
+
+  useEffect(() => {
+    const overrideClipId = editCameraClipSelected ? activeCameraClipAtPlayhead?.id ?? null : null;
+    setSceneGizmoClipIdOverride(overrideClipId);
+    return () => {
+      setSceneGizmoClipIdOverride(null);
+    };
+  }, [activeCameraClipAtPlayhead?.id, editCameraClipSelected, setSceneGizmoClipIdOverride]);
 
   const getSceneNavPointerLockTarget = useCallback(() => {
     return canvasWrapperRef.current ?? containerRef.current;
@@ -421,12 +584,24 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     );
   }, []);
 
+  const startSceneNavHistoryBatch = useCallback((label: string) => {
+    if (editCameraModeActiveRef.current || sceneNavHistoryBatchActiveRef.current) return;
+    startBatch(label);
+    sceneNavHistoryBatchActiveRef.current = true;
+  }, []);
+
+  const endSceneNavHistoryBatch = useCallback(() => {
+    if (!sceneNavHistoryBatchActiveRef.current) return;
+    sceneNavHistoryBatchActiveRef.current = false;
+    endBatch();
+  }, []);
+
   const endGaussianWheelBatch = useCallback(() => {
     if (gaussianWheelBatchTimerRef.current === null) return;
     window.clearTimeout(gaussianWheelBatchTimerRef.current);
     gaussianWheelBatchTimerRef.current = null;
-    endBatch();
-  }, []);
+    endSceneNavHistoryBatch();
+  }, [endSceneNavHistoryBatch]);
 
   const applySceneCameraValues = useCallback((clipId: string, values: {
     positionX?: number;
@@ -503,19 +678,185 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     engine.requestRender();
   }, [hasKeyframes, isRecording, setPropertyValue, updateClipTransform]);
 
+  const resolveCameraClipTransformAtPlayhead = useCallback((clip: TimelineClip): ClipTransform => {
+    const { playheadPosition: ph, getInterpolatedTransform } = useTimelineStore.getState();
+    return cloneClipTransform(getInterpolatedTransform(clip.id, ph - clip.startTime));
+  }, []);
+
+  const getActualSceneCameraConfig = useCallback((): SceneCameraConfig => {
+    return resolveSharedSceneCameraConfig(
+      { width: effectiveResolution.width, height: effectiveResolution.height },
+      useTimelineStore.getState().playheadPosition,
+      {
+        clips: useTimelineStore.getState().clips,
+        tracks: useTimelineStore.getState().tracks,
+        clipKeyframes: useTimelineStore.getState().clipKeyframes,
+        compositionId: displayedCompId,
+        sceneNavClipId: null,
+        previewCameraOverride: null,
+      },
+    );
+  }, [displayedCompId, effectiveResolution.height, effectiveResolution.width]);
+
+  const getEditSceneCameraConfig = useCallback((clip: TimelineClip | null = activeCameraClipAtPlayhead): SceneCameraConfig | null => {
+    if (!clip || !editCameraTransformRef.current) return null;
+    return buildPreviewCameraConfigFromTransform(
+      clip,
+      editCameraTransformRef.current,
+      { width: effectiveResolution.width, height: effectiveResolution.height },
+    );
+  }, [activeCameraClipAtPlayhead, effectiveResolution.height, effectiveResolution.width]);
+
+  const stopEditCameraAnimation = useCallback(() => {
+    if (editCameraAnimationRef.current === null) return;
+    window.cancelAnimationFrame(editCameraAnimationRef.current);
+    editCameraAnimationRef.current = null;
+  }, []);
+
+  const animatePreviewCameraOverride = useCallback((
+    fromConfig: SceneCameraConfig,
+    toConfig: SceneCameraConfig,
+    clearAtEnd: boolean,
+  ) => {
+    stopEditCameraAnimation();
+    const from = cloneSceneCameraConfig(fromConfig);
+    const to = cloneSceneCameraConfig(toConfig);
+    const startedAt = performance.now();
+
+    const tick = (now: number) => {
+      const rawT = Math.min(1, (now - startedAt) / EDIT_CAMERA_BLEND_MS);
+      const easedT = easeInOutCubic(rawT);
+      setPreviewCameraOverride(lerpSceneCameraConfig(from, to, easedT));
+      engine.requestRender();
+
+      if (rawT < 1) {
+        editCameraAnimationRef.current = window.requestAnimationFrame(tick);
+        return;
+      }
+
+      editCameraAnimationRef.current = null;
+      setPreviewCameraOverride(clearAtEnd ? null : cloneSceneCameraConfig(to));
+      engine.requestRender();
+    };
+
+    setPreviewCameraOverride(cloneSceneCameraConfig(from));
+    engine.requestRender();
+    editCameraAnimationRef.current = window.requestAnimationFrame(tick);
+  }, [setPreviewCameraOverride, stopEditCameraAnimation]);
+
+  const applyNavigationCameraValues = useCallback((clip: TimelineClip, values: {
+    positionX?: number;
+    positionY?: number;
+    scale?: number;
+    forwardOffset?: number;
+    rotationX?: number;
+    rotationY?: number;
+  }) => {
+    if (!editCameraModeActive || clip.id !== editCameraClipIdRef.current || !editCameraTransformRef.current) {
+      applySceneCameraValues(clip.id, values);
+      return;
+    }
+
+    stopEditCameraAnimation();
+    const current = editCameraTransformRef.current;
+    const next: ClipTransform = {
+      ...current,
+      position: {
+        x: values.positionX ?? current.position.x,
+        y: values.positionY ?? current.position.y,
+        z: current.position.z,
+      },
+      scale: {
+        x: values.scale ?? current.scale.x,
+        y: values.scale ?? current.scale.y,
+        ...(values.forwardOffset !== undefined || current.scale.z !== undefined
+          ? { z: values.forwardOffset ?? current.scale.z ?? 0 }
+          : {}),
+      },
+      rotation: {
+        x: values.rotationX ?? current.rotation.x,
+        y: values.rotationY ?? current.rotation.y,
+        z: current.rotation.z,
+      },
+    };
+
+    editCameraTransformRef.current = next;
+    const nextCameraConfig = buildPreviewCameraConfigFromTransform(
+      clip,
+      next,
+      { width: effectiveResolution.width, height: effectiveResolution.height },
+    );
+    if (nextCameraConfig) {
+      setPreviewCameraOverride(nextCameraConfig);
+      engine.requestRender();
+    }
+  }, [
+    applySceneCameraValues,
+    editCameraModeActive,
+    effectiveResolution.height,
+    effectiveResolution.width,
+    setPreviewCameraOverride,
+    stopEditCameraAnimation,
+  ]);
+
+  useEffect(() => {
+    const wasEditCameraModeActive = editCameraModeActiveRef.current;
+
+    if (editCameraModeActive && activeCameraClipAtPlayhead) {
+      const clipChanged = editCameraClipIdRef.current !== activeCameraClipAtPlayhead.id;
+      if (clipChanged || !editCameraTransformRef.current) {
+        editCameraClipIdRef.current = activeCameraClipAtPlayhead.id;
+        editCameraTransformRef.current = resolveCameraClipTransformAtPlayhead(activeCameraClipAtPlayhead);
+      }
+
+      const editCameraConfig = getEditSceneCameraConfig(activeCameraClipAtPlayhead);
+      if (!editCameraConfig) return;
+
+      editCameraModeActiveRef.current = true;
+      if (!wasEditCameraModeActive || clipChanged) {
+        const fromConfig = useEngineStore.getState().previewCameraOverride ?? getActualSceneCameraConfig();
+        animatePreviewCameraOverride(fromConfig, editCameraConfig, false);
+      } else {
+        setPreviewCameraOverride(editCameraConfig);
+        engine.requestRender();
+      }
+      return;
+    }
+
+    editCameraModeActiveRef.current = false;
+    if (wasEditCameraModeActive) {
+      const fromConfig = useEngineStore.getState().previewCameraOverride ?? getActualSceneCameraConfig();
+      animatePreviewCameraOverride(fromConfig, getActualSceneCameraConfig(), true);
+    }
+  }, [
+    activeCameraClipAtPlayhead,
+    animatePreviewCameraOverride,
+    editCameraModeActive,
+    getActualSceneCameraConfig,
+    getEditSceneCameraConfig,
+    resolveCameraClipTransformAtPlayhead,
+    setPreviewCameraOverride,
+  ]);
+
+  useEffect(() => () => {
+    stopEditCameraAnimation();
+    setPreviewCameraOverride(null);
+    engine.requestRender();
+  }, [setPreviewCameraOverride, stopEditCameraAnimation]);
+
   const scheduleGaussianWheelBatchEnd = useCallback(() => {
     if (gaussianWheelBatchTimerRef.current === null) {
-      startBatch('Scene zoom');
+      startSceneNavHistoryBatch('Scene zoom');
     } else {
       window.clearTimeout(gaussianWheelBatchTimerRef.current);
     }
     gaussianWheelBatchTimerRef.current = window.setTimeout(() => {
       gaussianWheelBatchTimerRef.current = null;
-      endBatch();
+      endSceneNavHistoryBatch();
     }, 180);
-  }, []);
+  }, [endSceneNavHistoryBatch, startSceneNavHistoryBatch]);
 
-  const getSceneNavSolveSettings = useCallback((clip: typeof selectedSceneNavClip) => {
+  const getSceneNavSolveSettings = useCallback((clip: TimelineClip | null) => {
     if (clip?.source?.type !== 'camera') return null;
 
     const cameraSettings = clip.source.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS;
@@ -533,8 +874,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const finishGaussianKeyboardBatch = useCallback(() => {
     if (!gaussianKeyboardBatchActiveRef.current) return;
     gaussianKeyboardBatchActiveRef.current = false;
-    endBatch();
-  }, []);
+    endSceneNavHistoryBatch();
+  }, [endSceneNavHistoryBatch]);
 
   const stopGaussianKeyboardLoop = useCallback(() => {
     if (gaussianKeyboardFrameRef.current !== null) {
@@ -565,14 +906,14 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     }
 
     if (activeClipId) {
-      endBatch();
+      endSceneNavHistoryBatch();
     }
-  }, [getSceneNavPointerLockTarget]);
+  }, [endSceneNavHistoryBatch, getSceneNavPointerLockTarget]);
 
   const tickGaussianKeyboardMovement = useCallback((timestamp: number) => {
     gaussianKeyboardFrameRef.current = null;
 
-    if (!sceneNavEnabled || !selectedSceneNavClip || document.activeElement !== containerRef.current) {
+    if (!sceneNavEnabled || !navigationSceneNavClip || document.activeElement !== containerRef.current) {
       stopGaussianKeyboardMovement();
       return;
     }
@@ -589,7 +930,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       : Math.min(0.05, (timestamp - gaussianKeyboardLastTimeRef.current) / 1000);
     gaussianKeyboardLastTimeRef.current = timestamp;
 
-    const freshTransform = getFreshSceneNavTransform(selectedSceneNavClip);
+    const freshTransform = getFreshSceneNavTransform(navigationSceneNavClip);
     if (!freshTransform) {
       stopGaussianKeyboardMovement();
       return;
@@ -607,7 +948,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
     const zoom = Math.max(0.01, freshTransform.scale.x || 1);
     const zoomDamping = 1 / Math.sqrt(Math.max(0.35, zoom));
-    const clipSource = selectedSceneNavClip.source;
+    const clipSource = navigationSceneNavClip.source;
     if (!clipSource || clipSource.type !== 'camera') {
       stopGaussianKeyboardMovement();
       return;
@@ -616,11 +957,11 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     const minimumDistance = getSharedSceneDefaultCameraDistance(fovDegrees);
     const baseDistance = freshTransform.position.z !== 0 ? Math.abs(freshTransform.position.z) : minimumDistance;
     const currentDistance = baseDistance / zoom;
-    const keyboardMoveSpeed = sceneNavFpsMode ? sceneNavFpsMoveSpeed : 1;
+    const keyboardMoveSpeed = effectiveSceneNavFpsMode ? sceneNavFpsMoveSpeed : 1;
     const panStep = 0.9 * zoomDamping * dt * keyboardMoveSpeed;
     const forwardStep = Math.max(0.15, currentDistance * 0.85) * dt * keyboardMoveSpeed;
 
-    applySceneCameraValues(selectedSceneNavClip.id, {
+    applyNavigationCameraValues(navigationSceneNavClip, {
       ...(rightInput !== 0 ? { positionX: freshTransform.position.x + rightInput * panStep } : {}),
       ...(upInput !== 0 ? { positionY: freshTransform.position.y + upInput * panStep } : {}),
       ...(forwardInput !== 0
@@ -630,13 +971,13 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
     gaussianKeyboardFrameRef.current = window.requestAnimationFrame(tickGaussianKeyboardMovement);
   }, [
-    applySceneCameraValues,
+    applyNavigationCameraValues,
     finishGaussianKeyboardBatch,
     sceneNavEnabled,
-    sceneNavFpsMode,
+    effectiveSceneNavFpsMode,
     sceneNavFpsMoveSpeed,
     getFreshSceneNavTransform,
-    selectedSceneNavClip,
+    navigationSceneNavClip,
     stopGaussianKeyboardLoop,
     stopGaussianKeyboardMovement,
   ]);
@@ -647,20 +988,20 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   }, [tickGaussianKeyboardMovement]);
 
   const handleSceneNavKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!sceneNavEnabled || !selectedSceneNavClip) return;
+    if (!sceneNavEnabled || !navigationSceneNavClip) return;
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     if (!isCameraNavMoveCode(e.code)) return;
 
     e.preventDefault();
 
     if (!gaussianKeyboardBatchActiveRef.current) {
-      startBatch('Scene move');
+      startSceneNavHistoryBatch('Scene move');
       gaussianKeyboardBatchActiveRef.current = true;
     }
 
     gaussianKeyboardMoveCodesRef.current.add(e.code);
     startGaussianKeyboardMovement();
-  }, [sceneNavEnabled, selectedSceneNavClip, startGaussianKeyboardMovement]);
+  }, [navigationSceneNavClip, sceneNavEnabled, startGaussianKeyboardMovement, startSceneNavHistoryBatch]);
 
   const handleSceneNavKeyUp = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (!isCameraNavMoveCode(e.code)) return;
@@ -684,20 +1025,20 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       if (gaussianWheelBatchTimerRef.current !== null) {
         window.clearTimeout(gaussianWheelBatchTimerRef.current);
         gaussianWheelBatchTimerRef.current = null;
-        endBatch();
+        endSceneNavHistoryBatch();
       }
       if (gaussianOrbitStart.current.clipId) {
         gaussianOrbitStart.current.clipId = null;
-        endBatch();
+        endSceneNavHistoryBatch();
       }
       if (gaussianPanStart.current.clipId) {
         gaussianPanStart.current.clipId = null;
-        endBatch();
+        endSceneNavHistoryBatch();
       }
       stopGaussianFpsLook();
       stopGaussianKeyboardMovement();
     };
-  }, [stopGaussianFpsLook, stopGaussianKeyboardMovement]);
+  }, [endSceneNavHistoryBatch, stopGaussianFpsLook, stopGaussianKeyboardMovement]);
 
   useEffect(() => {
     if (sceneNavEnabled) return;
@@ -706,21 +1047,21 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     if (isGaussianOrbiting) {
       gaussianOrbitStart.current.clipId = null;
       setIsGaussianOrbiting(false);
-      endBatch();
+      endSceneNavHistoryBatch();
     }
     if (isGaussianPanning) {
       gaussianPanStart.current.clipId = null;
       setIsGaussianPanning(false);
-      endBatch();
+      endSceneNavHistoryBatch();
     }
-  }, [sceneNavEnabled, isGaussianOrbiting, isGaussianPanning, stopGaussianFpsLook, stopGaussianKeyboardMovement]);
+  }, [endSceneNavHistoryBatch, sceneNavEnabled, isGaussianOrbiting, isGaussianPanning, stopGaussianFpsLook, stopGaussianKeyboardMovement]);
 
   useEffect(() => {
-    if (sceneNavFpsMode) {
+    if (effectiveSceneNavFpsMode) {
       if (isGaussianOrbiting) {
         gaussianOrbitStart.current.clipId = null;
         setIsGaussianOrbiting(false);
-        endBatch();
+        endSceneNavHistoryBatch();
       }
       return;
     }
@@ -728,7 +1069,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     if (isGaussianFpsLooking) {
       stopGaussianFpsLook();
     }
-  }, [sceneNavFpsMode, isGaussianFpsLooking, isGaussianOrbiting, stopGaussianFpsLook]);
+  }, [effectiveSceneNavFpsMode, endSceneNavHistoryBatch, isGaussianFpsLooking, isGaussianOrbiting, stopGaussianFpsLook]);
 
   useEffect(() => {
     if (!isGaussianOrbiting) return;
@@ -736,13 +1077,14 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     const handleWindowMouseMove = (e: MouseEvent) => {
       const { clipId, x, y, pitch, yaw } = gaussianOrbitStart.current;
       if (!clipId) return;
+      if (!navigationSceneNavClip || navigationSceneNavClip.id !== clipId) return;
 
       const dx = e.clientX - x;
       const dy = e.clientY - y;
       const nextPitch = pitch + dy * 0.25;
       const nextYaw = yaw - dx * 0.25;
 
-      applySceneCameraValues(clipId, {
+      applyNavigationCameraValues(navigationSceneNavClip, {
         rotationX: nextPitch,
         rotationY: nextYaw,
       });
@@ -751,7 +1093,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     const finishGaussianOrbit = () => {
       gaussianOrbitStart.current.clipId = null;
       setIsGaussianOrbiting(false);
-      endBatch();
+      endSceneNavHistoryBatch();
     };
 
     window.addEventListener('mousemove', handleWindowMouseMove);
@@ -761,17 +1103,17 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', finishGaussianOrbit);
     };
-  }, [applySceneCameraValues, isGaussianOrbiting]);
+  }, [applyNavigationCameraValues, endSceneNavHistoryBatch, isGaussianOrbiting, navigationSceneNavClip]);
 
   useEffect(() => {
-    if (!isGaussianFpsLooking || !selectedSceneNavClip) return;
+    if (!isGaussianFpsLooking || !navigationSceneNavClip) return;
 
     const handleWindowMouseMove = (e: MouseEvent) => {
       const { clipId, x, y } = gaussianFpsLookStart.current;
       if (!clipId) return;
 
-      const freshTransform = getFreshSceneNavTransform(selectedSceneNavClip);
-      const solveSettings = getSceneNavSolveSettings(selectedSceneNavClip);
+      const freshTransform = getFreshSceneNavTransform(navigationSceneNavClip);
+      const solveSettings = getSceneNavSolveSettings(navigationSceneNavClip);
       if (!freshTransform || !solveSettings) return;
 
       const pointerLockTarget = getSceneNavPointerLockTarget();
@@ -800,7 +1142,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         solveSettings.sceneBounds,
       );
 
-      applySceneCameraValues(clipId, {
+      applyNavigationCameraValues(navigationSceneNavClip, {
         positionX: nextTranslation.positionX,
         positionY: nextTranslation.positionY,
         forwardOffset: nextTranslation.forwardOffset,
@@ -831,14 +1173,14 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       document.removeEventListener('pointerlockchange', handlePointerLockChange);
     };
   }, [
-    applySceneCameraValues,
+    applyNavigationCameraValues,
     effectiveResolution.height,
     effectiveResolution.width,
     getSceneNavSolveSettings,
     getFreshSceneNavTransform,
     getSceneNavPointerLockTarget,
     isGaussianFpsLooking,
-    selectedSceneNavClip,
+    navigationSceneNavClip,
     stopGaussianFpsLook,
   ]);
 
@@ -848,6 +1190,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     const handleWindowMouseMove = (e: MouseEvent) => {
       const { clipId, x, y, panX, panY, zoom } = gaussianPanStart.current;
       if (!clipId) return;
+      if (!navigationSceneNavClip || navigationSceneNavClip.id !== clipId) return;
 
       const dx = e.clientX - x;
       const dy = e.clientY - y;
@@ -857,7 +1200,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       const nextPanX = panX - dx * panScaleX;
       const nextPanY = panY + dy * panScaleY;
 
-      applySceneCameraValues(clipId, {
+      applyNavigationCameraValues(navigationSceneNavClip, {
         positionX: nextPanX,
         positionY: nextPanY,
       });
@@ -866,7 +1209,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     const finishGaussianPan = () => {
       gaussianPanStart.current.clipId = null;
       setIsGaussianPanning(false);
-      endBatch();
+      endSceneNavHistoryBatch();
     };
 
     window.addEventListener('mousemove', handleWindowMouseMove);
@@ -876,11 +1219,18 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', finishGaussianPan);
     };
-  }, [applySceneCameraValues, effectiveResolution.height, effectiveResolution.width, isGaussianPanning]);
+  }, [
+    applyNavigationCameraValues,
+    endSceneNavHistoryBatch,
+    effectiveResolution.height,
+    effectiveResolution.width,
+    isGaussianPanning,
+    navigationSceneNavClip,
+  ]);
 
   // Sync layer selection when clip is selected in timeline (for edit mode)
   useEffect(() => {
-    if (!selectedClipId || !editMode) return;
+    if (!selectedClipId || !layerEditMode) return;
 
     const clip = clips.find(c => c.id === selectedClipId);
     if (clip) {
@@ -889,7 +1239,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         selectLayer(layer.id);
       }
     }
-  }, [selectedClipId, editMode, clips, layers, selectedLayerId, selectLayer]);
+  }, [selectedClipId, layerEditMode, clips, layers, selectedLayerId, selectLayer]);
 
   // Calculate canvas size to fit container while maintaining aspect ratio
   useEffect(() => {
@@ -936,8 +1286,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
   // Handle zoom with scroll wheel in edit mode
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (sceneNavEnabled && selectedSceneNavClip && isCanvasInteractionTarget(e.target)) {
-      const shouldAdjustFpsSpeed = sceneNavFpsMode && (
+    if (sceneNavEnabled && navigationSceneNavClip && isCanvasInteractionTarget(e.target)) {
+      const shouldAdjustFpsSpeed = effectiveSceneNavFpsMode && (
         gaussianKeyboardMoveCodesRef.current.size > 0 ||
         gaussianFpsLookStart.current.clipId !== null
       );
@@ -953,7 +1303,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         return;
       }
 
-      const freshTransform = getFreshSceneNavTransform(selectedSceneNavClip);
+      const freshTransform = getFreshSceneNavTransform(navigationSceneNavClip);
       if (!freshTransform) return;
 
       e.preventDefault();
@@ -963,13 +1313,13 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       const zoomFactor = Math.exp(-e.deltaY * 0.0025);
       const nextZoom = Math.max(0.05, Math.min(40, currentZoom * zoomFactor));
 
-      applySceneCameraValues(selectedSceneNavClip.id, {
+      applyNavigationCameraValues(navigationSceneNavClip, {
         scale: nextZoom,
       });
       return;
     }
 
-    if (!editMode || !containerRef.current) return;
+    if (!layerEditMode || !containerRef.current) return;
 
     e.preventDefault();
 
@@ -1000,15 +1350,15 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     }
   }, [
     containerSize,
-    editMode,
+    layerEditMode,
     sceneNavEnabled,
-    sceneNavFpsMode,
+    effectiveSceneNavFpsMode,
     getFreshSceneNavTransform,
     isCanvasInteractionTarget,
     scheduleGaussianWheelBatchEnd,
-    applySceneCameraValues,
+    applyNavigationCameraValues,
     setSceneNavFpsMoveSpeed,
-    selectedSceneNavClip,
+    navigationSceneNavClip,
     viewPan,
     viewZoom,
   ]);
@@ -1020,18 +1370,18 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
   // Handle scene navigation and edit-mode panning
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (sceneNavEnabled && selectedSceneNavClip && isCanvasInteractionTarget(e.target)) {
+    if (sceneNavEnabled && navigationSceneNavClip && isCanvasInteractionTarget(e.target)) {
       containerRef.current?.focus({ preventScroll: true });
-      const freshTransform = getFreshSceneNavTransform(selectedSceneNavClip);
+      const freshTransform = getFreshSceneNavTransform(navigationSceneNavClip);
       if (!freshTransform) return;
 
       if (e.button === 0) {
         if (e.shiftKey) {
           e.preventDefault();
           endGaussianWheelBatch();
-          startBatch('Scene pan');
+          startSceneNavHistoryBatch('Scene pan');
           gaussianPanStart.current = {
-            clipId: selectedSceneNavClip.id,
+            clipId: navigationSceneNavClip.id,
             x: e.clientX,
             y: e.clientY,
             panX: freshTransform.position.x,
@@ -1044,19 +1394,19 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         }
         e.preventDefault();
         endGaussianWheelBatch();
-        if (sceneNavFpsMode) {
-          startBatch('Scene look');
+        if (effectiveSceneNavFpsMode) {
+          startSceneNavHistoryBatch('Scene look');
           gaussianFpsLookStart.current = {
-            clipId: selectedSceneNavClip.id,
+            clipId: navigationSceneNavClip.id,
             x: e.clientX,
             y: e.clientY,
           };
           getSceneNavPointerLockTarget()?.requestPointerLock?.();
           setIsGaussianFpsLooking(true);
         } else {
-          startBatch('Scene orbit');
+          startSceneNavHistoryBatch('Scene orbit');
           gaussianOrbitStart.current = {
-            clipId: selectedSceneNavClip.id,
+            clipId: navigationSceneNavClip.id,
             x: e.clientX,
             y: e.clientY,
             pitch: freshTransform.rotation.x,
@@ -1071,9 +1421,9 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       if (e.button === 1 || e.button === 2) {
         e.preventDefault();
         endGaussianWheelBatch();
-        startBatch('Scene pan');
+        startSceneNavHistoryBatch('Scene pan');
         gaussianPanStart.current = {
-          clipId: selectedSceneNavClip.id,
+          clipId: navigationSceneNavClip.id,
           x: e.clientX,
           y: e.clientY,
           panX: freshTransform.position.x,
@@ -1086,7 +1436,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       }
     }
 
-    if (!editMode) return;
+    if (!layerEditMode) return;
 
     if (e.button === 1 || (e.button === 0 && e.altKey)) {
       e.preventDefault();
@@ -1099,14 +1449,15 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       };
     }
   }, [
-    editMode,
+    layerEditMode,
     endGaussianWheelBatch,
     sceneNavEnabled,
-    sceneNavFpsMode,
+    effectiveSceneNavFpsMode,
     getFreshSceneNavTransform,
     getSceneNavPointerLockTarget,
     isCanvasInteractionTarget,
-    selectedSceneNavClip,
+    navigationSceneNavClip,
+    startSceneNavHistoryBatch,
     viewPan,
   ]);
 
@@ -1166,14 +1517,14 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   // Layer drag logic (move/scale, overlay drawing, document-level listeners)
   const { isDragging, dragMode, dragHandle, hoverHandle, handleOverlayMouseDown, handleOverlayMouseMove, handleOverlayMouseUp } =
     useLayerDrag({
-      editMode, overlayRef, canvasSize, canvasInContainer, viewZoom,
+      editMode: layerEditMode, overlayRef, canvasSize, canvasInContainer, viewZoom,
       layers, clips, selectedLayerId, selectedClipId,
       selectClip, selectLayer, updateClipTransform, updateLayer,
       calculateLayerBounds, findLayerAtPosition, findHandleAtPosition,
     });
 
   // Calculate transform for zoomed/panned view
-  const viewTransform = editMode ? {
+  const viewTransform = layerEditMode ? {
     transform: `scale(${viewZoom}) translate(${viewPan.x / viewZoom}px, ${viewPan.y / viewZoom}px)`,
   } : {};
   const splatLoadPercent = activeSplatLoadProgress
@@ -1182,7 +1533,15 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const splatLoadPhaseLabel = activeSplatLoadProgress
     ? getSplatLoadPhaseLabel(activeSplatLoadProgress.phase)
     : '';
-  const showSceneObjectOverlay = sceneObjectOverlayEnabled && isEditableSource && !isPlaying;
+  const showSceneObjectOverlay = sceneObjectOverlayEnabled && isEditableSource && !isPlaying && (!editMode || editCameraModeActive);
+  const sceneObjectOverlaySelectedClipId = editCameraModeActive
+    ? editCameraClipSelected
+      ? activeCameraClipAtPlayhead?.id ?? null
+      : null
+    : selectedClipId;
+  const editCameraGizmoTransform = editCameraModeActive && activeCameraClipAtPlayhead
+    ? resolveCameraClipTransformAtPlayhead(activeCameraClipAtPlayhead)
+    : null;
 
   return (
     <div
@@ -1207,8 +1566,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
           : isPanning
             ? 'grabbing'
             : sceneNavEnabled
-              ? (sceneNavFpsMode ? 'crosshair' : 'grab')
-              : editMode
+              ? (effectiveSceneNavFpsMode ? 'crosshair' : 'grab')
+              : layerEditMode
                 ? 'crosshair'
                 : 'default',
       }}
@@ -1221,6 +1580,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         editMode={editMode}
         canEdit={isEditableSource}
         setEditMode={setEditMode}
+        showEditViewControls={layerEditMode}
         sceneObjectOverlayEnabled={sceneObjectOverlayEnabled}
         setSceneObjectOverlayEnabled={setSceneObjectOverlayEnabled}
         viewZoom={viewZoom}
@@ -1242,17 +1602,27 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
       {/* Source monitor overlay - shown on top when active */}
       {sourceMonitorActive && (
-        <SourceMonitor file={sourceMonitorFile!} onClose={closeSourceMonitor} />
+        <SourceMonitor
+          file={sourceMonitorFile!}
+          autoplayRequestId={sourceMonitorPlaybackRequestId}
+          onClose={closeSourceMonitor}
+        />
       )}
 
       {/* Engine canvas + overlays - always in DOM to keep WebGPU registration alive */}
       <div style={{ display: sourceMonitorActive ? 'none' : 'contents' }}>
-        <StatsOverlay
-          stats={engineStats}
-          resolution={effectiveResolution}
-          expanded={statsExpanded}
-          onToggle={() => setStatsExpanded(!statsExpanded)}
-        />
+        <div className="preview-top-right-overlays">
+          <div
+            ref={setSceneGizmoToolbarTarget}
+            className="preview-scene-gizmo-toolbar-slot"
+          />
+          <StatsOverlay
+            stats={engineStats}
+            resolution={effectiveResolution}
+            expanded={statsExpanded}
+            onToggle={() => setStatsExpanded(!statsExpanded)}
+          />
+        </div>
 
         <div
           ref={canvasWrapperRef}
@@ -1302,12 +1672,17 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
                 <SceneObjectOverlay
                   clips={clips}
                   tracks={tracks}
-                  selectedClipId={selectedClipId}
+                  selectedClipId={sceneObjectOverlaySelectedClipId}
                   selectClip={selectClip}
                   canvasSize={canvasSize}
                   viewport={effectiveResolution}
                   compositionId={displayedCompId}
                   sceneNavClipId={sceneNavClipId}
+                  previewCameraOverride={previewCameraOverride}
+                  editCameraClip={editCameraModeActive ? activeCameraClipAtPlayhead : null}
+                  editCameraTransform={editCameraGizmoTransform}
+                  showOnlyEditCamera={editCameraModeActive}
+                  toolbarPortalTarget={sceneGizmoToolbarTarget}
                   enabled
                 />
               )}
@@ -1338,7 +1713,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         )}
 
         {/* Edit mode overlay - covers full container for pasteboard support */}
-        {editMode && isEngineReady && (
+        {layerEditMode && isEngineReady && (
           <canvas
             ref={overlayRef}
             width={containerSize.width || 100}
@@ -1362,14 +1737,14 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
           />
         )}
 
-        {editMode && isEditableSource && (
+        {layerEditMode && isEditableSource && (
           <div className="preview-edit-hint">
             Drag: Move | Handles: Scale (Shift: Lock Ratio) | Scroll: Zoom | Alt+Drag: Pan
           </div>
         )}
         {sceneNavEnabled && (
           <div className="preview-edit-hint">
-            {sceneNavFpsMode
+            {effectiveSceneNavFpsMode
               ? 'Scene Nav: click preview, hold LMB to look, WASD/QE move, MMB/RMB/Shift+LMB pan, wheel speed while moving/looking, wheel zoom otherwise'
               : 'Scene Nav: click preview, WASD move, Q/E up-down, LMB orbit, MMB/RMB/Shift+LMB pan, wheel zoom'}
           </div>

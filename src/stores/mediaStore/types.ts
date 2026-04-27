@@ -250,6 +250,7 @@ export interface MediaState {
   selectedSlotCompositionId: string | null;
   previewCompositionId: string | null;
   sourceMonitorFileId: string | null;
+  sourceMonitorPlaybackRequestId: number;
 
   // Multi-layer playback (Resolume-style)
   activeLayerSlots: Record<number, string | null>;  // layerIndex (0=A..3=D) → compositionId

@@ -8,16 +8,21 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import { createPortal } from 'react-dom';
 import type { AnimatableProperty, ClipTransform, TimelineClip, TimelineTrack } from '../../types';
 import { engine } from '../../engine/WebGPUEngine';
 import { endBatch, startBatch } from '../../stores/historyStore';
 import { useEngineStore } from '../../stores/engineStore';
 import { useTimelineStore } from '../../stores/timeline';
-import type { SceneViewport } from '../../engine/scene/types';
+import type { SceneCamera, SceneCameraConfig, SceneVector3, SceneViewport } from '../../engine/scene/types';
+import { SCENE_GIZMO_ROTATE_RING_SCREEN_RADIUS } from '../../engine/scene/SceneGizmoConstants';
 import {
+  buildCameraPreviewSceneObject,
+  buildCameraWireframeLines,
   collectPreviewSceneObjects,
   projectWorldToCanvas,
   resolveAxisScreenHandle,
+  type PreviewCameraWireframeLine,
   type PreviewSceneObject,
   type SceneAxisScreenHandle,
   type SceneGizmoAxis,
@@ -33,10 +38,19 @@ interface SceneObjectOverlayProps {
   viewport: SceneViewport;
   compositionId?: string | null;
   sceneNavClipId?: string | null;
+  previewCameraOverride?: SceneCameraConfig | null;
+  editCameraClip?: TimelineClip | null;
+  editCameraTransform?: ClipTransform | null;
+  showOnlyEditCamera?: boolean;
+  toolbarPortalTarget?: HTMLElement | null;
   enabled: boolean;
 }
 
 type SceneGizmoDragAxis = SceneGizmoAxis | 'all';
+
+type DisplayCameraWireframeLine = PreviewCameraWireframeLine & {
+  selected: boolean;
+};
 
 interface DragState {
   clipId: string;
@@ -45,16 +59,26 @@ interface DragState {
   kind: PreviewSceneObject['kind'];
   transformSpace: PreviewSceneObject['transformSpace'];
   startTransform: ClipTransform;
+  transient: boolean;
   direction: { x: number; y: number };
   axisVector: { x: number; y: number; z: number };
   pixelsPerUnit: number;
   freePixelsPerUnit: { x: number; y: number };
+  axisPlaneDrag?: AxisPlaneDrag;
   rotationCenterClient?: { x: number; y: number };
   rotationStartPointerClient?: { x: number; y: number };
   rotationRingClientRect?: { left: number; top: number; width: number; height: number };
   rotationRingPoints?: ProjectedRotateRingPoint[];
   rotationStartRingAngle?: number;
   viewport: SceneViewport;
+}
+
+interface AxisPlaneDrag {
+  camera: SceneCamera;
+  canvasRect: { left: number; top: number; width: number; height: number };
+  planePoint: { x: number; y: number; z: number };
+  planeNormal: { x: number; y: number; z: number };
+  startPoint: { x: number; y: number; z: number };
 }
 
 interface DragRuntime {
@@ -64,6 +88,10 @@ interface DragRuntime {
   accumulatedY: number;
   lastClientX: number;
   lastClientY: number;
+  rotationRingLastAngle: number | null;
+  rotationRingAccumulatedRadians: number;
+  rotationAngularLastAngle: number | null;
+  rotationAngularAccumulatedRadians: number;
 }
 
 interface DisplaySceneObject extends PreviewSceneObject {
@@ -90,7 +118,7 @@ const CENTER_DRAG_FALLBACK_PIXELS_PER_UNIT = 72;
 const CENTER_SCALE_DIRECTION = { x: Math.SQRT1_2, y: -Math.SQRT1_2 };
 const ROTATE_RING_VIEWBOX_SIZE = 320;
 const ROTATE_RING_CENTER = ROTATE_RING_VIEWBOX_SIZE / 2;
-const ROTATE_RING_SCREEN_RADIUS = 112;
+const ROTATE_RING_SCREEN_RADIUS = SCENE_GIZMO_ROTATE_RING_SCREEN_RADIUS;
 const ROTATE_RING_SEGMENTS = 96;
 const ROTATE_RING_HIT_THRESHOLD = 28;
 
@@ -114,6 +142,8 @@ const ROTATE_RING_PLANE_AXES: Record<SceneGizmoAxis, [SceneGizmoAxis, SceneGizmo
 
 function getObjectBadge(kind: PreviewSceneObject['kind']): string {
   switch (kind) {
+    case 'camera':
+      return 'C';
     case 'effector':
       return 'E';
     case 'splat':
@@ -364,6 +394,170 @@ function getDragSpeedMultiplier(event: MouseEvent): number {
   return 1;
 }
 
+function dotVector(a: SceneVector3, b: SceneVector3): number {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+function addVector(a: SceneVector3, b: SceneVector3): SceneVector3 {
+  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
+}
+
+function subtractVector(a: SceneVector3, b: SceneVector3): SceneVector3 {
+  return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
+}
+
+function scaleVector(vector: SceneVector3, scalar: number): SceneVector3 {
+  return { x: vector.x * scalar, y: vector.y * scalar, z: vector.z * scalar };
+}
+
+function crossVector(a: SceneVector3, b: SceneVector3): SceneVector3 {
+  return {
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x,
+  };
+}
+
+function normalizeVector(vector: SceneVector3): SceneVector3 {
+  const length = Math.hypot(vector.x, vector.y, vector.z);
+  if (length < 0.000001) {
+    return { x: 0, y: 0, z: 0 };
+  }
+  return {
+    x: vector.x / length,
+    y: vector.y / length,
+    z: vector.z / length,
+  };
+}
+
+function rejectVector(vector: SceneVector3, axis: SceneVector3): SceneVector3 {
+  return subtractVector(vector, scaleVector(axis, dotVector(vector, axis)));
+}
+
+function resolveScreenRay(
+  client: { x: number; y: number },
+  camera: SceneCamera,
+  canvasRect: AxisPlaneDrag['canvasRect'],
+): { origin: SceneVector3; direction: SceneVector3 } {
+  const ndcX = ((client.x - canvasRect.left) / Math.max(1, canvasRect.width)) * 2 - 1;
+  const ndcY = 1 - ((client.y - canvasRect.top) / Math.max(1, canvasRect.height)) * 2;
+  const backward = normalizeVector(subtractVector(camera.cameraPosition, camera.cameraTarget));
+  let right = normalizeVector(crossVector(camera.cameraUp, backward));
+  if (Math.hypot(right.x, right.y, right.z) < 0.000001) {
+    right = { x: 1, y: 0, z: 0 };
+  }
+  const up = normalizeVector(crossVector(backward, right));
+  const aspect = camera.viewport.width / Math.max(1, camera.viewport.height);
+  const fovRadians = (camera.fov * Math.PI) / 180;
+  const tanHalfFov = Math.tan(fovRadians * 0.5);
+  const direction = normalizeVector(addVector(
+    scaleVector(backward, -1),
+    addVector(
+      scaleVector(right, ndcX * tanHalfFov * aspect),
+      scaleVector(up, ndcY * tanHalfFov),
+    ),
+  ));
+
+  return {
+    origin: camera.cameraPosition,
+    direction,
+  };
+}
+
+function intersectRayWithPlane(
+  ray: { origin: SceneVector3; direction: SceneVector3 },
+  planePoint: SceneVector3,
+  planeNormal: SceneVector3,
+): SceneVector3 | null {
+  const denominator = dotVector(ray.direction, planeNormal);
+  if (Math.abs(denominator) < 0.00001) {
+    return null;
+  }
+
+  const t = dotVector(subtractVector(planePoint, ray.origin), planeNormal) / denominator;
+  if (!Number.isFinite(t)) {
+    return null;
+  }
+
+  return addVector(ray.origin, scaleVector(ray.direction, t));
+}
+
+function resolveAxisDragPlaneNormal(axisVector: SceneVector3, camera: SceneCamera): SceneVector3 | null {
+  const axis = normalizeVector(axisVector);
+  if (Math.hypot(axis.x, axis.y, axis.z) < 0.000001) {
+    return null;
+  }
+
+  const cameraForward = normalizeVector(subtractVector(camera.cameraTarget, camera.cameraPosition));
+  let normal = normalizeVector(rejectVector(cameraForward, axis));
+  if (Math.hypot(normal.x, normal.y, normal.z) >= 0.000001) {
+    return normal;
+  }
+
+  normal = normalizeVector(rejectVector(camera.cameraUp, axis));
+  if (Math.hypot(normal.x, normal.y, normal.z) >= 0.000001) {
+    return normal;
+  }
+
+  normal = normalizeVector(crossVector(axis, { x: 0, y: 1, z: 0 }));
+  if (Math.hypot(normal.x, normal.y, normal.z) >= 0.000001) {
+    return normal;
+  }
+
+  return normalizeVector(crossVector(axis, { x: 1, y: 0, z: 0 }));
+}
+
+function createAxisPlaneDrag(params: {
+  client: { x: number; y: number };
+  camera: SceneCamera;
+  canvasRect: AxisPlaneDrag['canvasRect'];
+  worldPosition: SceneVector3;
+  axisVector: SceneVector3;
+}): AxisPlaneDrag | undefined {
+  const planeNormal = resolveAxisDragPlaneNormal(params.axisVector, params.camera);
+  if (!planeNormal) return undefined;
+
+  const startPoint = intersectRayWithPlane(
+    resolveScreenRay(params.client, params.camera, params.canvasRect),
+    params.worldPosition,
+    planeNormal,
+  );
+  if (!startPoint) return undefined;
+
+  return {
+    camera: params.camera,
+    canvasRect: params.canvasRect,
+    planePoint: params.worldPosition,
+    planeNormal,
+    startPoint,
+  };
+}
+
+function resolveAxisPlaneDragUnits(
+  drag: DragState,
+  screenDelta: { x: number; y: number },
+): number | null {
+  if (!drag.axisPlaneDrag || !drag.rotationStartPointerClient || drag.axis === 'all') {
+    return null;
+  }
+
+  const currentClient = {
+    x: drag.rotationStartPointerClient.x + screenDelta.x,
+    y: drag.rotationStartPointerClient.y + screenDelta.y,
+  };
+  const currentPoint = intersectRayWithPlane(
+    resolveScreenRay(currentClient, drag.axisPlaneDrag.camera, drag.axisPlaneDrag.canvasRect),
+    drag.axisPlaneDrag.planePoint,
+    drag.axisPlaneDrag.planeNormal,
+  );
+  if (!currentPoint) return null;
+
+  return dotVector(
+    subtractVector(currentPoint, drag.axisPlaneDrag.startPoint),
+    drag.axisVector,
+  );
+}
+
 function applySceneObjectTransform(clipId: string, transform: Partial<ClipTransform>): void {
   const store = useTimelineStore.getState();
   const updates = resolveTransformPropertyUpdates(transform);
@@ -400,6 +594,7 @@ function buildScaleUpdate(
 function buildAxisResetTransform(
   mode: SceneGizmoMode,
   axis: SceneGizmoAxis,
+  object: PreviewSceneObject,
   start: ClipTransform,
 ): Partial<ClipTransform> {
   if (mode === 'rotate') {
@@ -412,6 +607,12 @@ function buildAxisResetTransform(
   }
 
   if (mode === 'scale') {
+    if (object.kind === 'camera') {
+      return {
+        scale: { x: 1, y: 1, z: 0 },
+      };
+    }
+
     return {
       scale: buildScaleUpdate(start.scale, {
         x: axis === 'x' ? 1 : start.scale.x,
@@ -445,6 +646,12 @@ function buildCenterResetTransform(
   }
 
   if (mode === 'scale') {
+    if (object.kind === 'camera') {
+      return {
+        scale: { x: 1, y: 1, z: 0 },
+      };
+    }
+
     return {
       scale: buildScaleUpdate(start.scale, {
         x: 1,
@@ -567,6 +774,13 @@ function matrixToRotationDegrees(matrix: number[]): ClipTransform['rotation'] {
   };
 }
 
+function unwrapDegreesNear(value: number, target: number): number {
+  let unwrapped = value;
+  while (unwrapped - target > 180) unwrapped -= 360;
+  while (target - unwrapped > 180) unwrapped += 360;
+  return unwrapped;
+}
+
 function applyLocalAxisRotation(
   startRotation: ClipTransform['rotation'],
   axis: SceneGizmoAxis,
@@ -574,12 +788,18 @@ function applyLocalAxisRotation(
 ): ClipTransform['rotation'] {
   const startMatrix = buildRotationMatrixFromDegrees(startRotation);
   const localDelta = buildLocalAxisRotationMatrix(axis, degrees);
-  return matrixToRotationDegrees(multiplyMat3(startMatrix, localDelta));
+  const rotation = matrixToRotationDegrees(multiplyMat3(startMatrix, localDelta));
+  const targetAxisDegrees = startRotation[axis] + degrees;
+  return {
+    ...rotation,
+    [axis]: unwrapDegreesNear(rotation[axis], targetAxisDegrees),
+  };
 }
 
 function resolveAngularDragDegrees(
   drag: DragState,
   screenDelta: { x: number; y: number },
+  runtime?: DragRuntime,
 ): number | null {
   if (!drag.rotationCenterClient || !drag.rotationStartPointerClient) {
     return null;
@@ -599,12 +819,20 @@ function resolveAngularDragDegrees(
 
   const startAngle = Math.atan2(startVector.y, startVector.x);
   const currentAngle = Math.atan2(currentVector.y, currentVector.x);
+  if (runtime) {
+    const previousAngle = runtime.rotationAngularLastAngle ?? startAngle;
+    runtime.rotationAngularAccumulatedRadians += normalizeAngleRadians(currentAngle - previousAngle);
+    runtime.rotationAngularLastAngle = currentAngle;
+    return (runtime.rotationAngularAccumulatedRadians * 180) / Math.PI;
+  }
+
   return (normalizeAngleRadians(currentAngle - startAngle) * 180) / Math.PI;
 }
 
 function resolveProjectedRingDragDegrees(
   drag: DragState,
   screenDelta: { x: number; y: number },
+  runtime?: DragRuntime,
 ): number | null {
   if (
     !drag.rotationStartPointerClient ||
@@ -630,31 +858,71 @@ function resolveProjectedRingDragDegrees(
     return null;
   }
 
+  if (runtime) {
+    const previousAngle = runtime.rotationRingLastAngle ?? drag.rotationStartRingAngle;
+    runtime.rotationRingAccumulatedRadians += normalizeAngleRadians(currentAngle - previousAngle);
+    runtime.rotationRingLastAngle = currentAngle;
+    return (runtime.rotationRingAccumulatedRadians * 180) / Math.PI;
+  }
+
   return (normalizeAngleRadians(currentAngle - drag.rotationStartRingAngle) * 180) / Math.PI;
 }
 
-function applyDragTransform(drag: DragState, screenDistance: number, screenDelta: { x: number; y: number }): void {
-  const units = screenDistance / drag.pixelsPerUnit;
+function applyDragTransform(
+  drag: DragState,
+  screenDistance: number,
+  screenDelta: { x: number; y: number },
+  runtime?: DragRuntime,
+  applyTransform: (clipId: string, transform: Partial<ClipTransform>) => void = applySceneObjectTransform,
+): void {
   const start = drag.startTransform;
   const axis = drag.axis;
 
   if (drag.mode === 'rotate') {
     if (axis === 'all') return;
     const degrees =
-      resolveProjectedRingDragDegrees(drag, screenDelta) ??
-      resolveAngularDragDegrees(drag, screenDelta) ??
+      resolveProjectedRingDragDegrees(drag, screenDelta, runtime) ??
+      resolveAngularDragDegrees(drag, screenDelta, runtime) ??
       screenDistance * 0.6;
-    applySceneObjectTransform(drag.clipId, {
+    applyTransform(drag.clipId, {
       rotation: applyLocalAxisRotation(start.rotation, axis, degrees),
     });
     return;
   }
 
   if (drag.mode === 'scale') {
+    if (drag.kind === 'camera') {
+      const scaleDelta = screenDistance / 90;
+      if (axis === 'z') {
+        applyTransform(drag.clipId, {
+          scale: {
+            ...start.scale,
+            z: (start.scale.z ?? 0) + scaleDelta,
+          },
+        });
+        return;
+      }
+
+      const factor = axis === 'all'
+        ? Math.max(0.01, 1 + screenDistance / 160)
+        : Math.max(0.01, (start.scale.x || 1) + scaleDelta);
+      const nextZoom = axis === 'all'
+        ? Math.max(0.01, (start.scale.x || 1) * factor)
+        : factor;
+      applyTransform(drag.clipId, {
+        scale: {
+          ...start.scale,
+          x: nextZoom,
+          y: nextZoom,
+        },
+      });
+      return;
+    }
+
     if (axis === 'all') {
       const factor = Math.max(0.001, 1 + screenDistance / 160);
       const includeZ = drag.kind !== 'plane' || start.scale.z !== undefined;
-      applySceneObjectTransform(drag.clipId, {
+      applyTransform(drag.clipId, {
         scale: buildScaleUpdate(start.scale, {
           x: start.scale.x * factor,
           y: start.scale.y * factor,
@@ -667,19 +935,38 @@ function applyDragTransform(drag: DragState, screenDistance: number, screenDelta
     const scaleDelta = screenDistance / 90;
     if (drag.transformSpace === 'effector') {
       const next = Math.max(0.001, Math.max(start.scale.x, start.scale.y, start.scale.z ?? 1) + scaleDelta);
-      applySceneObjectTransform(drag.clipId, {
+      applyTransform(drag.clipId, {
         scale: { x: next, y: next, z: next },
       });
       return;
     }
 
-    applySceneObjectTransform(drag.clipId, {
+    applyTransform(drag.clipId, {
       scale: buildScaleUpdate(start.scale, {
         x: start.scale.x + (axis === 'x' ? scaleDelta : 0),
         y: start.scale.y + (axis === 'y' ? scaleDelta : 0),
         ...(axis === 'z' ? { z: (start.scale.z ?? 1) + scaleDelta } : {}),
       }),
     });
+    return;
+  }
+
+  const units = drag.mode === 'move' && axis !== 'all'
+    ? resolveAxisPlaneDragUnits(drag, screenDelta) ?? screenDistance / drag.pixelsPerUnit
+    : screenDistance / drag.pixelsPerUnit;
+  if (drag.kind === 'camera') {
+    const position = { ...start.position };
+    if (axis === 'all') {
+      position.x += screenDelta.x / drag.freePixelsPerUnit.x;
+      position.y -= screenDelta.y / drag.freePixelsPerUnit.y;
+    } else if (axis === 'x') {
+      position.x += units;
+    } else if (axis === 'y') {
+      position.y += units;
+    } else {
+      position.z = Math.max(0.01, Math.abs(position.z) + units);
+    }
+    applyTransform(drag.clipId, { position });
     return;
   }
 
@@ -696,7 +983,7 @@ function applyDragTransform(drag: DragState, screenDistance: number, screenDelta
       position.y -= unitsY;
     }
 
-    applySceneObjectTransform(drag.clipId, { position });
+    applyTransform(drag.clipId, { position });
     return;
   }
 
@@ -715,7 +1002,7 @@ function applyDragTransform(drag: DragState, screenDistance: number, screenDelta
     position.z += delta.z;
   }
 
-  applySceneObjectTransform(drag.clipId, { position });
+  applyTransform(drag.clipId, { position });
 }
 
 export function SceneObjectOverlay({
@@ -727,6 +1014,11 @@ export function SceneObjectOverlay({
   viewport,
   compositionId,
   sceneNavClipId,
+  previewCameraOverride,
+  editCameraClip,
+  editCameraTransform,
+  showOnlyEditCamera = false,
+  toolbarPortalTarget,
   enabled,
 }: SceneObjectOverlayProps) {
   const [mode, setMode] = useState<SceneGizmoMode>('move');
@@ -745,6 +1037,10 @@ export function SceneObjectOverlay({
     accumulatedY: 0,
     lastClientX: 0,
     lastClientY: 0,
+    rotationRingLastAngle: null,
+    rotationRingAccumulatedRadians: 0,
+    rotationAngularLastAngle: null,
+    rotationAngularAccumulatedRadians: 0,
   });
 
   const releasePointerLock = useCallback(() => {
@@ -836,7 +1132,7 @@ export function SceneObjectOverlay({
     () => {
       void timelineSnapshotTick;
       const { clipKeyframes, playheadPosition } = useTimelineStore.getState();
-      return collectPreviewSceneObjects({
+      const collected = collectPreviewSceneObjects({
         clips,
         tracks,
         clipKeyframes,
@@ -845,9 +1141,37 @@ export function SceneObjectOverlay({
         canvasSize,
         compositionId,
         sceneNavClipId,
+        previewCameraOverride,
       });
+      const editCameraObject = editCameraClip && editCameraTransform
+        ? buildCameraPreviewSceneObject(editCameraClip, editCameraTransform, collected.camera, viewport, canvasSize)
+        : null;
+      let mergedObjects: PreviewSceneObject[];
+      if (showOnlyEditCamera) {
+        mergedObjects = editCameraObject ? [editCameraObject] : [];
+      } else if (editCameraObject) {
+        mergedObjects = [
+          editCameraObject,
+          ...collected.objects.filter((object) => object.clipId !== editCameraObject.clipId),
+        ];
+      } else {
+        mergedObjects = collected.objects;
+      }
+      return { camera: collected.camera, objects: mergedObjects };
     },
-    [canvasSize, clips, compositionId, sceneNavClipId, timelineSnapshotTick, tracks, viewport],
+    [
+      canvasSize,
+      clips,
+      compositionId,
+      editCameraClip,
+      editCameraTransform,
+      previewCameraOverride,
+      sceneNavClipId,
+      showOnlyEditCamera,
+      timelineSnapshotTick,
+      tracks,
+      viewport,
+    ],
   );
 
   const selectedObject = useMemo(
@@ -857,6 +1181,13 @@ export function SceneObjectOverlay({
   const displayObjects = useMemo(
     () => resolveDisplayObjects(objects, canvasSize),
     [canvasSize, objects],
+  );
+  const cameraWireframeLines = useMemo<DisplayCameraWireframeLine[]>(
+    () => objects.flatMap((object) => (
+      buildCameraWireframeLines(object, camera, canvasSize)
+        .map((line) => ({ ...line, selected: object.clipId === selectedClipId }))
+    )),
+    [camera, canvasSize, objects, selectedClipId],
   );
 
   const axisHandles = useMemo<SceneAxisScreenHandle[]>(() => {
@@ -876,10 +1207,29 @@ export function SceneObjectOverlay({
       .filter((ring): ring is ProjectedRotateRing => ring !== null);
   }, [axisHandles, camera, canvasSize, selectedObject]);
 
+  const getObjectTransform = useCallback((object: PreviewSceneObject, clip: TimelineClip): ClipTransform => {
+    if (object.kind === 'camera' && editCameraClip?.id === object.clipId && editCameraTransform) {
+      return cloneTransform(editCameraTransform);
+    }
+    return cloneTransform(clip.transform);
+  }, [editCameraClip?.id, editCameraTransform]);
+
+  const applyObjectTransform = useCallback((clipId: string, transform: Partial<ClipTransform>) => {
+    applySceneObjectTransform(clipId, transform);
+  }, []);
+
+  const resetObjectTransform = useCallback((
+    clipId: string,
+    modeToReset: SceneGizmoMode,
+    transform: Partial<ClipTransform>,
+  ) => {
+    resetSceneObjectTransform(clipId, modeToReset, transform);
+  }, []);
+
   const endDrag = useCallback(() => {
     if (!dragState) return;
     releasePointerLock();
-    if (!endedDragRef.current) {
+    if (!dragState.transient && !endedDragRef.current) {
       endedDragRef.current = true;
       endBatch();
     }
@@ -928,7 +1278,7 @@ export function SceneObjectOverlay({
       applyDragTransform(dragState, screenDistance, {
         x: runtime.accumulatedX,
         y: runtime.accumulatedY,
-      });
+      }, runtime, applyObjectTransform);
     };
 
     const handleMouseUp = (event: MouseEvent) => {
@@ -947,7 +1297,7 @@ export function SceneObjectOverlay({
       window.removeEventListener('mouseup', handleMouseUp);
       releasePointerLock();
     };
-  }, [dragState, endDrag, releasePointerLock]);
+  }, [applyObjectTransform, dragState, endDrag, releasePointerLock]);
 
   useEffect(() => {
     if (!enabled || !selectedObject) return;
@@ -997,9 +1347,24 @@ export function SceneObjectOverlay({
     const clip = clips.find((candidate) => candidate.id === params.object.clipId);
     if (!clip) return;
 
+    const transient = false;
     const lockTarget = overlayRef.current ?? document.body;
     const overlayRect = overlayRef.current?.getBoundingClientRect();
     const fallbackTarget = params.currentTarget instanceof HTMLElement ? params.currentTarget : undefined;
+    const axisPlaneDrag = mode === 'move' && params.axis !== 'all' && overlayRect
+      ? createAxisPlaneDrag({
+          client: { x: params.clientX, y: params.clientY },
+          camera,
+          canvasRect: {
+            left: overlayRect.left,
+            top: overlayRect.top,
+            width: overlayRect.width,
+            height: overlayRect.height,
+          },
+          worldPosition: params.object.worldPosition,
+          axisVector: params.axisVector,
+        })
+      : undefined;
     endedDragRef.current = false;
     dragRuntimeRef.current = {
       target: lockTarget,
@@ -1008,9 +1373,15 @@ export function SceneObjectOverlay({
       accumulatedY: 0,
       lastClientX: params.clientX,
       lastClientY: params.clientY,
+      rotationRingLastAngle: params.rotationStartRingAngle ?? null,
+      rotationRingAccumulatedRadians: 0,
+      rotationAngularLastAngle: null,
+      rotationAngularAccumulatedRadians: 0,
     };
     requestPointerLock(lockTarget, fallbackTarget);
-    startBatch(`Scene ${mode}`);
+    if (!transient) {
+      startBatch(`Scene ${mode}`);
+    }
     updateHoveredAxis(params.axis === 'all' ? null : params.axis);
     setDragState({
       clipId: params.object.clipId,
@@ -1018,11 +1389,13 @@ export function SceneObjectOverlay({
       axis: params.axis,
       kind: params.object.kind,
       transformSpace: params.object.transformSpace,
-      startTransform: cloneTransform(clip.transform),
+      startTransform: getObjectTransform(params.object, clip),
+      transient,
       direction: params.direction,
       axisVector: params.axisVector,
       pixelsPerUnit: params.pixelsPerUnit,
       freePixelsPerUnit: params.freePixelsPerUnit,
+      ...(axisPlaneDrag ? { axisPlaneDrag } : {}),
       ...(params.rotationRingClientRect && params.rotationRingPoints && params.rotationStartRingAngle !== undefined
         ? {
             rotationRingClientRect: params.rotationRingClientRect,
@@ -1044,7 +1417,7 @@ export function SceneObjectOverlay({
         : {}),
       viewport,
     });
-  }, [clips, mode, requestPointerLock, updateHoveredAxis, viewport]);
+  }, [camera, clips, getObjectTransform, mode, requestPointerLock, updateHoveredAxis, viewport]);
 
   const handleAxisMouseDown = useCallback((event: ReactMouseEvent<Element>, handle: SceneAxisScreenHandle) => {
     if (event.button !== 0) return;
@@ -1074,12 +1447,12 @@ export function SceneObjectOverlay({
 
     event.preventDefault();
     event.stopPropagation();
-    resetSceneObjectTransform(
+    resetObjectTransform(
       selectedObject.clipId,
       mode,
-      buildAxisResetTransform(mode, handle.axis, clip.transform),
+      buildAxisResetTransform(mode, handle.axis, selectedObject, getObjectTransform(selectedObject, clip)),
     );
-  }, [clips, mode, selectedObject]);
+  }, [clips, getObjectTransform, mode, resetObjectTransform, selectedObject]);
 
   const resolveRotateRingFromEvent = useCallback((event: ReactMouseEvent<SVGSVGElement>) => (
     resolveNearestRotateRing(getRotateRingEventPoint(event), rotateRings)
@@ -1180,18 +1553,35 @@ export function SceneObjectOverlay({
 
     event.preventDefault();
     event.stopPropagation();
-    resetSceneObjectTransform(
+    resetObjectTransform(
       object.clipId,
       mode,
-      buildCenterResetTransform(mode, object, clip.transform),
+      buildCenterResetTransform(mode, object, getObjectTransform(object, clip)),
     );
-  }, [clips, mode, selectedClipId]);
+  }, [clips, getObjectTransform, mode, resetObjectTransform, selectedClipId]);
 
   if (!enabled || canvasSize.width <= 0 || canvasSize.height <= 0 || objects.length === 0) {
     return null;
   }
 
-  const toolbarOffsetX = mode === 'rotate' ? ROTATE_RING_SCREEN_RADIUS + 28 : 18;
+  const toolbar = selectedObject && selectedObject.screen.visible ? (
+    <div className="preview-scene-gizmo-toolbar">
+      {(['move', 'rotate', 'scale'] as SceneGizmoMode[]).map((nextMode) => (
+        <button
+          key={nextMode}
+          type="button"
+          className={nextMode === mode ? 'active' : ''}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setMode(nextMode);
+          }}
+        >
+          {MODE_LABELS[nextMode]}
+        </button>
+      ))}
+    </div>
+  ) : null;
 
   return (
     <div
@@ -1199,6 +1589,26 @@ export function SceneObjectOverlay({
       className="preview-scene-object-overlay"
       style={{ width: canvasSize.width, height: canvasSize.height }}
     >
+      {cameraWireframeLines.length > 0 && (
+        <svg
+          className="preview-camera-wireframe"
+          width={canvasSize.width}
+          height={canvasSize.height}
+          viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`}
+          aria-hidden="true"
+        >
+          {cameraWireframeLines.map((line) => (
+            <line
+              key={`${line.clipId}-${line.role}-${line.from.x.toFixed(1)}-${line.from.y.toFixed(1)}-${line.to.x.toFixed(1)}-${line.to.y.toFixed(1)}`}
+              className={`preview-camera-wireframe-line role-${line.role} ${line.selected ? 'selected' : ''}`}
+              x1={line.from.x}
+              y1={line.from.y}
+              x2={line.to.x}
+              y2={line.to.y}
+            />
+          ))}
+        </svg>
+      )}
       {selectedObject && selectedObject.screen.visible && (
         <>
           {mode === 'rotate' ? (
@@ -1261,34 +1671,13 @@ export function SceneObjectOverlay({
               </div>
             ))
           )}
-          <div
-            className="preview-scene-gizmo-toolbar"
-            style={{
-              left: Math.min(canvasSize.width - 180, Math.max(8, selectedObject.screen.x + toolbarOffsetX)),
-              top: Math.min(canvasSize.height - 34, Math.max(8, selectedObject.screen.y - 50)),
-            }}
-          >
-            {(['move', 'rotate', 'scale'] as SceneGizmoMode[]).map((nextMode) => (
-              <button
-                key={nextMode}
-                type="button"
-                className={nextMode === mode ? 'active' : ''}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setMode(nextMode);
-                }}
-              >
-                {MODE_LABELS[nextMode]}
-              </button>
-            ))}
-          </div>
         </>
       )}
 
       {displayObjects.map((object) => {
         if (!object.screen.visible) return null;
         const selected = object.clipId === selectedClipId;
+        if (object.kind === 'camera' && !selected) return null;
         const centerDraggable = selected && (mode === 'move' || mode === 'scale');
         const label = centerDraggable ? getCenterHandleLabel(mode) : object.name;
         return (
@@ -1309,6 +1698,7 @@ export function SceneObjectOverlay({
           </button>
         );
       })}
+      {toolbarPortalTarget && toolbar ? createPortal(toolbar, toolbarPortalTarget) : null}
     </div>
   );
 }

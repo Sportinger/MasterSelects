@@ -118,6 +118,8 @@ export interface SceneGizmoRenderOptions {
   clipId: string;
   mode: SceneGizmoMode;
   hoveredAxis?: SceneGizmoAxis | null;
+  worldMatrix?: Float32Array;
+  worldTransform?: SceneWorldTransform;
 }
 
 export interface SceneSplatEffectorRuntimeData {

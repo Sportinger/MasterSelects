@@ -568,7 +568,12 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
   },
 
   setSourceMonitorFile: (id: string | null) => {
-    set({ sourceMonitorFileId: id });
+    set((state) => ({
+      sourceMonitorFileId: id,
+      sourceMonitorPlaybackRequestId: id === null
+        ? state.sourceMonitorPlaybackRequestId
+        : state.sourceMonitorPlaybackRequestId + 1,
+    }));
   },
 
 });

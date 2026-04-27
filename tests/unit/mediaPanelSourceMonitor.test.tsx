@@ -69,6 +69,7 @@ function createMediaState(): MockMediaState {
     proxyFolderName: null,
     activeCompositionId: null,
     sourceMonitorFileId: null,
+    sourceMonitorPlaybackRequestId: 0,
     importFiles: vi.fn(),
     importFilesWithPicker: vi.fn(),
     createComposition: vi.fn(),
@@ -112,6 +113,9 @@ function createMediaState(): MockMediaState {
     refreshFileUrls: vi.fn(),
     setSourceMonitorFile: vi.fn((id: string | null) => {
       state.sourceMonitorFileId = id;
+      if (id !== null) {
+        state.sourceMonitorPlaybackRequestId = (state.sourceMonitorPlaybackRequestId as number) + 1;
+      }
     }),
   };
   return state;

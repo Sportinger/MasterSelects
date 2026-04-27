@@ -103,6 +103,8 @@ Camera clips expose their own Properties tab with:
 
 The Transform tab becomes scene-navigation controls for the active camera clip. In FPS mode, the preview accepts WASD/QE navigation plus uncapped mouse look. Free scene navigation now belongs to camera clips rather than gaussian-splat clips.
 
+When Edit mode is enabled while the playhead is over a camera clip, the preview switches to a temporary edit-view camera. Orbiting, panning, and zooming this view does not write transform changes back to the real camera clip; entering and leaving Edit mode blends between the edit-view camera and the timeline camera. In that edit-view, the real timeline camera is drawn as a small projected camera wireframe with a direction/frustum indicator. The full viewport gizmo appears only when that camera clip is selected, and explicit gizmo drags still edit the camera clip through the normal transform/keyframe path. Camera clips do not show a viewport gizmo in the normal view. The 2D layer bounding-box editor is only active in Edit mode when no camera clip is active at the playhead.
+
 Camera rotation keyframes interpolate through the shortest angular path so timeline flights do not spin the long way around when yaw, pitch, or roll crosses a 360-degree wrap. Camera transform keyframes for pan, distance, zoom, forward travel, and rotation render through world-pose interpolation: the camera eye and target are interpolated between keyed world poses, keeping FPS-look moves, zoom-outs, and vertical-look roll moves from drifting away between keyframes.
 
 ## Gaussian Splats

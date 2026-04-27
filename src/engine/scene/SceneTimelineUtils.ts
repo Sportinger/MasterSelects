@@ -1,4 +1,5 @@
 import type { ClipTransform, Keyframe, TimelineClip, TimelineTrack } from '../../types';
+import type { SceneCameraConfig } from './types';
 import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
 import { composeTransforms } from '../../utils/transformComposition';
@@ -9,6 +10,7 @@ export interface SceneTimelineContext {
   clipKeyframes?: Map<string, Keyframe[]>;
   compositionId?: string | null;
   sceneNavClipId?: string | null;
+  previewCameraOverride?: SceneCameraConfig | null;
 }
 
 function buildBaseTransform(clip: TimelineClip): ClipTransform {

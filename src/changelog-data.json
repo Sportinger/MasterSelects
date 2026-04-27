@@ -2,6 +2,27 @@
   {
     "date": "2026-04-27",
     "type": "improve",
+    "title": "Camera Clip Edit View Shows the Real Timeline Camera",
+    "description": "Edit mode over a camera clip now switches to a temporary orbitable view while showing the real timeline camera as a wireframe with view direction. The full camera gizmo appears only when the camera clip is selected and writes through the normal transform/keyframe path.",
+    "section": "Preview / Camera"
+  },
+  {
+    "date": "2026-04-27",
+    "type": "improve",
+    "title": "Board View Dragging Hands Off to the Timeline",
+    "description": "Right-dragging media cards in Board view now auto-pans smoothly near edges and hands off to the timeline drag preview when dragged out far enough, using the same placement logic as list-view timeline drops.",
+    "section": "Media Panel"
+  },
+  {
+    "date": "2026-04-27",
+    "type": "fix",
+    "title": "Preview Edit Button Copy Cleaned Up",
+    "description": "The Preview edit mode button now reads simply Edit while camera-clip edit mode keeps layer editing separate from temporary camera navigation.",
+    "section": "Preview"
+  },
+  {
+    "date": "2026-04-27",
+    "type": "improve",
     "title": "Viewport Gizmos Feel Like Real Scene Objects",
     "description": "Move, rotate, and scale gizmos now render through the native 3D path with local-axis orientation, larger stable rotate rings, hover highlighting, center-hub group actions, and double-click reset behavior.",
     "section": "3D / Native Scene"

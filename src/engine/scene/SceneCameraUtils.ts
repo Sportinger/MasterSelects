@@ -20,6 +20,15 @@ export const DEFAULT_SCENE_CAMERA_CONFIG: SceneCameraConfig = {
   applyDefaultDistance: true,
 };
 
+function cloneSceneCameraConfig(config: SceneCameraConfig): SceneCameraConfig {
+  return {
+    ...config,
+    position: { ...config.position },
+    target: { ...config.target },
+    up: { ...config.up },
+  };
+}
+
 export function getSharedSceneDefaultCameraDistance(fovDegrees: number): number {
   const worldHeight = 2.0;
   const fovRadians = (Math.max(fovDegrees, 1) * Math.PI) / 180;
@@ -432,6 +441,13 @@ export function resolveSharedSceneCameraConfig(
   context?: SceneCameraResolutionContext,
 ): SceneCameraConfig {
   const timelineStore = useTimelineStore.getState();
+  const previewCameraOverride = context && 'previewCameraOverride' in context
+    ? (context.previewCameraOverride ?? null)
+    : (context ? null : useEngineStore.getState().previewCameraOverride);
+  if (previewCameraOverride && timelineStore.isExporting !== true) {
+    return cloneSceneCameraConfig(previewCameraOverride);
+  }
+
   const clips = context?.clips ?? timelineStore.clips;
   const tracks = context?.tracks ?? timelineStore.tracks;
   const clipKeyframes = context?.clipKeyframes ?? timelineStore.clipKeyframes;

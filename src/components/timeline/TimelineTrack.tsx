@@ -202,6 +202,7 @@ function TimelineTrackComponent({
       } ${isDragTarget ? 'drag-target' : ''} ${
         isExternalDragTarget ? 'external-drag-target' : ''
       }`}
+      data-track-id={track.id}
       style={{ height: dynamicHeight }}
       onDrop={onDrop}
       onDragOver={onDragOver}

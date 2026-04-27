@@ -19,6 +19,7 @@ interface PreviewControlsProps {
   editMode: boolean;
   canEdit: boolean;
   setEditMode: (v: boolean) => void;
+  showEditViewControls: boolean;
   sceneObjectOverlayEnabled: boolean;
   setSceneObjectOverlayEnabled: (v: boolean) => void;
   viewZoom: number;
@@ -47,6 +48,7 @@ export function PreviewControls({
   editMode,
   canEdit,
   setEditMode,
+  showEditViewControls,
   sceneObjectOverlayEnabled,
   setSceneObjectOverlayEnabled,
   viewZoom,
@@ -118,7 +120,7 @@ export function PreviewControls({
             title={canEdit ? 'Toggle Edit Mode [Tab]' : 'Edit mode only works on the full active composition'}
             disabled={!canEdit}
           >
-            {editMode ? 'Edit On' : 'Edit'} <span className="menu-wip-badge">bug</span>
+            Edit
           </button>
           {canEdit && (
             <button
@@ -137,7 +139,7 @@ export function PreviewControls({
               </svg>
             </button>
           )}
-          {editMode && canEdit && (
+          {showEditViewControls && canEdit && (
             <>
               <span className="preview-zoom-label">{Math.round(viewZoom * 100)}%</span>
               <button

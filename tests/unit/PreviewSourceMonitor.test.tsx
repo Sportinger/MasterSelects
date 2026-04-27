@@ -53,7 +53,10 @@ const engineState = {
   sceneNavClipId: null,
   sceneNavFpsMode: false,
   sceneNavFpsMoveSpeed: 1,
+  previewCameraOverride: null,
   activeGaussianSplatLoadProgress: null,
+  setPreviewCameraOverride: vi.fn(),
+  setSceneGizmoClipIdOverride: vi.fn(),
   setSceneNavFpsMoveSpeed: vi.fn(),
 };
 
@@ -173,6 +176,7 @@ type MockMediaState = {
   activeCompositionId: string | null;
   previewCompositionId: string | null;
   sourceMonitorFileId: string | null;
+  sourceMonitorPlaybackRequestId: number;
   setSourceMonitorFile: ReturnType<typeof vi.fn>;
 };
 
@@ -224,8 +228,12 @@ describe('Preview source monitor lifecycle', () => {
       activeCompositionId: 'comp-1',
       previewCompositionId: null,
       sourceMonitorFileId: 'file-1',
+      sourceMonitorPlaybackRequestId: 1,
       setSourceMonitorFile: vi.fn((id: string | null) => {
         mediaState.sourceMonitorFileId = id;
+        if (id !== null) {
+          mediaState.sourceMonitorPlaybackRequestId += 1;
+        }
       }),
     };
 

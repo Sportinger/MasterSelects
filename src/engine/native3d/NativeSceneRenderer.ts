@@ -412,7 +412,14 @@ export class NativeSceneRenderer {
       return null;
     }
     const gizmoLayer = gizmo
-      ? [...planeLayers, ...nativeMeshLayers, ...layers].find((layer) => layer.clipId === gizmo.clipId) ?? null
+      ? [...planeLayers, ...nativeMeshLayers, ...layers].find((layer) => layer.clipId === gizmo.clipId) ??
+        (gizmo.worldMatrix && gizmo.worldTransform
+          ? {
+              clipId: gizmo.clipId,
+              worldMatrix: gizmo.worldMatrix,
+              worldTransform: gizmo.worldTransform,
+            }
+          : null)
       : null;
     if (gizmoLayer && !this.gizmoPass.render(
       device,

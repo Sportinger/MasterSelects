@@ -2,6 +2,7 @@
 // Handles: render(), renderEmptyFrame(), renderToPreviewCanvas(), renderCachedFrame()
 
 import type { Layer, LayerRenderData } from '../core/types';
+import type { TimelineClip } from '../../types';
 import type { TextureManager } from '../texture/TextureManager';
 import type { MaskTextureManager } from '../texture/MaskTextureManager';
 import type { CacheManager } from '../managers/CacheManager';
@@ -27,11 +28,20 @@ import { flags } from '../featureFlags';
 import type { NativeSceneRenderer } from '../native3d/NativeSceneRenderer';
 import { collectActiveSceneSplatEffectors } from '../scene/SceneEffectorUtils';
 import { collectScene3DLayers } from '../scene/SceneLayerCollector';
-import { resolveRenderableSharedSceneCamera } from '../scene/SceneCameraUtils';
-import type { SceneSplatEffectorRuntimeData, SceneSplatLayer } from '../scene/types';
-import { useMediaStore } from '../../stores/mediaStore';
+import { getSharedSceneDefaultCameraDistance, resolveRenderableSharedSceneCamera } from '../scene/SceneCameraUtils';
+import { resolveSceneClipTransform, type SceneTimelineContext } from '../scene/SceneTimelineUtils';
+import type {
+  SceneGizmoRenderOptions,
+  SceneSplatEffectorRuntimeData,
+  SceneSplatLayer,
+  SceneVector3,
+  SceneViewport,
+  SceneWorldTransform,
+} from '../scene/types';
+import { DEFAULT_SCENE_CAMERA_SETTINGS, useMediaStore } from '../../stores/mediaStore';
 import { useEngineStore, type GaussianSplatLoadPhase } from '../../stores/engineStore';
 import { getGaussianSplatGpuRenderer } from '../gaussian/core/GaussianSplatGpuRenderer';
+import { resolveOrbitCameraFrame } from '../gaussian/core/SplatCameraUtils';
 import { loadGaussianSplatAssetCached, type GaussianSplatLoadProgress } from '../gaussian/loaders';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../gaussian/types';
 import { getGaussianSplatSequenceFrameIndex } from '../../utils/gaussianSplatSequence';
@@ -65,6 +75,74 @@ function clampUnitInterval(value: number): number {
     return 0;
   }
   return Math.max(0, Math.min(1, value));
+}
+
+function degreesToRadians(value: number): number {
+  return value * (Math.PI / 180);
+}
+
+function buildBasisWorldMatrix(
+  position: SceneVector3,
+  basis: { right: SceneVector3; up: SceneVector3; forward: SceneVector3 },
+): Float32Array {
+  return new Float32Array([
+    basis.right.x, basis.right.y, basis.right.z, 0,
+    basis.up.x, basis.up.y, basis.up.z, 0,
+    basis.forward.x, basis.forward.y, basis.forward.z, 0,
+    position.x, position.y, position.z, 1,
+  ]);
+}
+
+function buildCameraGizmoTransform(
+  cameraClip: TimelineClip,
+  timelineTime: number,
+  viewport: SceneViewport,
+  context: Pick<SceneTimelineContext, 'clips' | 'clipKeyframes'>,
+): Pick<SceneGizmoRenderOptions, 'worldMatrix' | 'worldTransform'> | null {
+  if (cameraClip.source?.type !== 'camera') {
+    return null;
+  }
+
+  const transform = resolveSceneClipTransform(
+    cameraClip,
+    timelineTime - cameraClip.startTime,
+    timelineTime,
+    context,
+  );
+  const cameraSettings = cameraClip.source.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS;
+  const frame = resolveOrbitCameraFrame(
+    {
+      position: transform.position,
+      scale: transform.scale,
+      rotation: transform.rotation,
+    },
+    {
+      nearPlane: cameraSettings.near,
+      farPlane: cameraSettings.far,
+      fov: cameraSettings.fov,
+      minimumDistance: getSharedSceneDefaultCameraDistance(cameraSettings.fov),
+    },
+    viewport,
+  );
+  const worldTransform: SceneWorldTransform = {
+    position: frame.eye,
+    rotationRadians: {
+      x: degreesToRadians(transform.rotation.x),
+      y: degreesToRadians(transform.rotation.y),
+      z: degreesToRadians(transform.rotation.z),
+    },
+    rotationDegrees: { ...transform.rotation },
+    scale: { x: 1, y: 1, z: 1 },
+  };
+
+  return {
+    worldMatrix: buildBasisWorldMatrix(frame.eye, {
+      right: frame.right,
+      up: frame.cameraUp,
+      forward: frame.forward,
+    }),
+    worldTransform,
+  };
 }
 
 /**
@@ -1049,14 +1127,34 @@ export class RenderDispatcher {
     const primarySelectedClipId = timelineState.primarySelectedClipId && timelineState.selectedClipIds.has(timelineState.primarySelectedClipId)
       ? timelineState.primarySelectedClipId
       : timelineState.selectedClipIds.values().next().value as string | undefined;
-    const sceneGizmo = primarySelectedClipId &&
+    const sceneGizmoClipId = engineState.sceneGizmoClipIdOverride ??
+      (engineState.previewCameraOverride ? null : primarySelectedClipId ?? null);
+    const sceneGizmoClip = sceneGizmoClipId
+      ? timelineState.clips.find((clip) => clip.id === sceneGizmoClipId) ?? null
+      : null;
+    const sceneGizmoCameraTransform = engineState.sceneGizmoClipIdOverride && sceneGizmoClip
+      ? buildCameraGizmoTransform(
+          sceneGizmoClip,
+          timelineState.playheadPosition,
+          { width, height },
+          {
+            clips: timelineState.clips,
+            clipKeyframes: timelineState.clipKeyframes,
+          },
+        )
+      : null;
+    const sceneGizmoHasRenderableLayer = sceneGizmoClipId
+      ? renderLayers3D.some((layer) => layer.clipId === sceneGizmoClipId)
+      : false;
+    const sceneGizmo: SceneGizmoRenderOptions | null = sceneGizmoClipId &&
       timelineState.isExporting !== true &&
       timelineState.isPlaying !== true &&
-      renderLayers3D.some((layer) => layer.clipId === primarySelectedClipId)
+      (sceneGizmoHasRenderableLayer || sceneGizmoCameraTransform)
       ? {
-          clipId: primarySelectedClipId,
+          clipId: sceneGizmoClipId,
           mode: engineState.sceneGizmoMode,
           hoveredAxis: engineState.sceneGizmoHoveredAxis,
+          ...(sceneGizmoCameraTransform ?? {}),
         }
       : null;
     for (const layer of nativeSplatLayers) {

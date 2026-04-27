@@ -1586,6 +1586,26 @@ input, textarea {
   background: var(--preview-overlay-bg-hover);
 }
 
+.preview-top-right-overlays {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 22;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.preview-top-right-overlays > * {
+  pointer-events: auto;
+}
+
+.preview-top-right-overlays .preview-stats {
+  position: static;
+}
+
 .preview-stats-compact {
   min-width: 80px;
 }
@@ -10954,9 +10974,46 @@ input[type="checkbox"] {
   background: #166534;
 }
 
+.preview-scene-object-handle.kind-camera {
+  background: #0f766e;
+}
+
 .preview-scene-object-handle.kind-model,
 .preview-scene-object-handle.kind-plane {
   background: #581c87;
+}
+
+.preview-camera-wireframe {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.preview-camera-wireframe-line {
+  stroke: rgba(20, 184, 166, 0.78);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.95));
+}
+
+.preview-camera-wireframe-line.role-body {
+  stroke: rgba(45, 212, 191, 0.9);
+  stroke-width: 1.9;
+}
+
+.preview-camera-wireframe-line.role-direction {
+  stroke: rgba(96, 165, 250, 0.92);
+  stroke-width: 2.2;
+}
+
+.preview-camera-wireframe-line.selected {
+  stroke-opacity: 1;
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.95))
+    drop-shadow(0 0 5px rgba(45, 212, 191, 0.58));
 }
 
 .preview-scene-object-handle.selected {
@@ -10965,14 +11022,14 @@ input[type="checkbox"] {
 }
 
 .preview-scene-object-handle.gizmo-center {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   z-index: 5;
-  color: #0f172a;
-  background: #f8fafc;
-  border: 2px solid rgba(15, 23, 42, 0.78);
+  color: #f8fafc;
+  background: rgba(8, 11, 16, 0.18);
+  border: 2px solid rgba(248, 250, 252, 0.88);
   box-shadow:
-    0 0 0 2px rgba(255, 255, 255, 0.9),
+    0 0 0 1px rgba(8, 11, 16, 0.86),
     0 0 14px rgba(59, 130, 246, 0.28),
     0 8px 20px rgba(0, 0, 0, 0.52);
 }
@@ -10987,8 +11044,8 @@ input[type="checkbox"] {
 
 .preview-scene-object-handle.gizmo-center span {
   display: block;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   color: transparent;
   background: #2563eb;
   border-radius: 999px;
@@ -11170,7 +11227,6 @@ input[type="checkbox"] {
 }
 
 .preview-scene-gizmo-toolbar {
-  position: absolute;
   display: flex;
   gap: 3px;
   padding: 3px;
@@ -11179,6 +11235,10 @@ input[type="checkbox"] {
   border-radius: 5px;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.36);
   pointer-events: auto;
+}
+
+.preview-scene-gizmo-toolbar-slot:empty {
+  display: none;
 }
 
 .preview-scene-gizmo-toolbar button {

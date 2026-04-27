@@ -5,6 +5,10 @@ import type {
   SceneLayer3DData,
   SceneVector3,
 } from '../../scene/types';
+import {
+  SCENE_GIZMO_AXIS_SCREEN_LENGTH,
+  SCENE_GIZMO_ROTATE_RING_SCREEN_RADIUS,
+} from '../../scene/SceneGizmoConstants';
 import shaderSource from '../shaders/GizmoPass.wgsl?raw';
 
 type SceneGizmoLayer = Pick<SceneLayer3DData, 'clipId' | 'worldMatrix' | 'worldTransform'>;
@@ -23,13 +27,18 @@ const AXIS_COLORS: Record<SceneGizmoAxis, readonly [number, number, number, numb
 };
 const OUTLINE_COLOR = [0.015, 0.02, 0.03, 0.78] as const;
 const RING_SEGMENTS = 96;
-const AXIS_SCREEN_LENGTH = 122;
-const RING_SCREEN_RADIUS = 112;
 const AXIS_THICKNESS = 6.4;
 const RING_THICKNESS = 5.1;
 const OUTLINE_EXTRA_THICKNESS = 4.4;
 const HOVER_THICKNESS_BOOST = 3.2;
 const HOVER_OUTLINE_EXTRA_THICKNESS = 6.8;
+const ORIENTATION_TICK_COLOR = [0.005, 0.007, 0.01, 0.92] as const;
+const AXIS_TICK_OFFSETS = [0.34, 0.55, 0.76] as const;
+const AXIS_TICK_LENGTH = 12;
+const AXIS_TICK_THICKNESS = 2.3;
+const RING_TICK_COUNT = 12;
+const RING_TICK_LENGTH = 12;
+const RING_TICK_THICKNESS = 2.2;
 
 export class GizmoPass {
   private pipeline: GPURenderPipeline | null = null;
@@ -157,7 +166,7 @@ export class GizmoPass {
     mode: SceneGizmoMode,
     hoveredAxis: SceneGizmoAxis | null,
   ): void {
-    const length = worldPerPixel * AXIS_SCREEN_LENGTH;
+    const length = worldPerPixel * SCENE_GIZMO_AXIS_SCREEN_LENGTH;
     const arrowLength = worldPerPixel * 24;
     const arrowSpread = worldPerPixel * 12;
     const cameraForward = normalize({
@@ -172,10 +181,11 @@ export class GizmoPass {
       const thickness = resolveAxisThickness(AXIS_THICKNESS, axis, hoveredAxis);
       const color = resolveAxisColor(axis, hoveredAxis);
       const outlineExtra = resolveOutlineExtra(axis, hoveredAxis);
+      const tickSide = resolveArrowSide(axisVector, cameraForward);
       addStyledSegment(vertices, viewProjection, camera.viewport, origin, end, thickness, color, outlineExtra);
 
       if (mode === 'move') {
-        const side = resolveArrowSide(axisVector, cameraForward);
+        const side = tickSide;
         const base = add(end, scale(axisVector, -arrowLength));
         addStyledSegment(vertices, viewProjection, camera.viewport, add(base, scale(side, arrowSpread)), end, thickness, color, outlineExtra);
         addStyledSegment(vertices, viewProjection, camera.viewport, add(base, scale(side, -arrowSpread)), end, thickness, color, outlineExtra);
@@ -193,6 +203,16 @@ export class GizmoPass {
         addStyledSegment(vertices, viewProjection, camera.viewport, p3, p4, thickness, color, outlineExtra);
         addStyledSegment(vertices, viewProjection, camera.viewport, p4, p1, thickness, color, outlineExtra);
       }
+      appendAxisOrientationTicks(
+        vertices,
+        viewProjection,
+        camera.viewport,
+        origin,
+        axisVector,
+        tickSide,
+        length,
+        worldPerPixel,
+      );
     }
   }
 
@@ -205,7 +225,7 @@ export class GizmoPass {
     worldPerPixel: number,
     hoveredAxis: SceneGizmoAxis | null,
   ): void {
-    const radius = worldPerPixel * RING_SCREEN_RADIUS;
+    const radius = worldPerPixel * SCENE_GIZMO_ROTATE_RING_SCREEN_RADIUS;
     const ringPlanes: Record<SceneGizmoAxis, [SceneGizmoAxis, SceneGizmoAxis]> = {
       x: ['y', 'z'],
       y: ['z', 'x'],
@@ -231,7 +251,63 @@ export class GizmoPass {
         }
         previous = point;
       }
+      appendRingOrientationTicks(vertices, viewProjection, viewport, origin, first, second, radius, worldPerPixel);
     }
+  }
+}
+
+function appendAxisOrientationTicks(
+  vertices: number[],
+  viewProjection: Float32Array,
+  viewport: { width: number; height: number },
+  origin: Vec3,
+  axisVector: Vec3,
+  side: Vec3,
+  axisLength: number,
+  worldPerPixel: number,
+): void {
+  const halfTickLength = worldPerPixel * AXIS_TICK_LENGTH * 0.5;
+  for (const offset of AXIS_TICK_OFFSETS) {
+    const center = add(origin, scale(axisVector, axisLength * offset));
+    addThickSegment(
+      vertices,
+      viewProjection,
+      viewport,
+      add(center, scale(side, -halfTickLength)),
+      add(center, scale(side, halfTickLength)),
+      AXIS_TICK_THICKNESS,
+      ORIENTATION_TICK_COLOR,
+    );
+  }
+}
+
+function appendRingOrientationTicks(
+  vertices: number[],
+  viewProjection: Float32Array,
+  viewport: { width: number; height: number },
+  origin: Vec3,
+  first: Vec3,
+  second: Vec3,
+  radius: number,
+  worldPerPixel: number,
+): void {
+  const halfTickLength = worldPerPixel * RING_TICK_LENGTH * 0.5;
+  for (let i = 0; i < RING_TICK_COUNT; i += 1) {
+    const angle = (i / RING_TICK_COUNT) * Math.PI * 2;
+    const radial = normalize(add(
+      scale(first, Math.cos(angle)),
+      scale(second, Math.sin(angle)),
+    ));
+    const center = add(origin, scale(radial, radius));
+    addThickSegment(
+      vertices,
+      viewProjection,
+      viewport,
+      add(center, scale(radial, -halfTickLength)),
+      add(center, scale(radial, halfTickLength)),
+      RING_TICK_THICKNESS,
+      ORIENTATION_TICK_COLOR,
+    );
   }
 }
 

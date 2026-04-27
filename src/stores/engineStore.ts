@@ -4,7 +4,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import type { EngineStats } from '../types';
-import type { SceneGizmoAxis, SceneGizmoMode } from '../engine/scene/types';
+import type { SceneCameraConfig, SceneGizmoAxis, SceneGizmoMode } from '../engine/scene/types';
 
 export type GaussianSplatLoadPhase =
   | 'fetching'
@@ -45,8 +45,10 @@ interface EngineState {
   sceneNavClipId: string | null;
   sceneNavFpsMode: boolean;
   sceneNavFpsMoveSpeed: number;
+  previewCameraOverride: SceneCameraConfig | null;
   sceneGizmoMode: SceneGizmoMode;
   sceneGizmoHoveredAxis: SceneGizmoAxis | null;
+  sceneGizmoClipIdOverride: string | null;
   gaussianSplatLoadProgress: Record<string, GaussianSplatLoadProgressEntry>;
 
   // Actions
@@ -59,8 +61,10 @@ interface EngineState {
   setSceneNavClipId: (clipId: string | null) => void;
   setSceneNavFpsMode: (enabled: boolean) => void;
   setSceneNavFpsMoveSpeed: (speed: number) => void;
+  setPreviewCameraOverride: (camera: SceneCameraConfig | null) => void;
   setSceneGizmoMode: (mode: SceneGizmoMode) => void;
   setSceneGizmoHoveredAxis: (axis: SceneGizmoAxis | null) => void;
+  setSceneGizmoClipIdOverride: (clipId: string | null) => void;
   setGaussianSplatLoadProgress: (progress: GaussianSplatLoadProgressUpdate) => void;
   clearGaussianSplatLoadProgress: (sceneKey: string) => void;
 }
@@ -150,8 +154,10 @@ export const useEngineStore = create<EngineState>()(
     sceneNavClipId: null,
     sceneNavFpsMode: false,
     sceneNavFpsMoveSpeed: 1,
+    previewCameraOverride: null,
     sceneGizmoMode: 'move',
     sceneGizmoHoveredAxis: null,
+    sceneGizmoClipIdOverride: null,
     gaussianSplatLoadProgress: {},
     engineStats: {
       fps: 0,
@@ -208,12 +214,20 @@ export const useEngineStore = create<EngineState>()(
       set({ sceneNavFpsMoveSpeed: snapSceneNavFpsMoveSpeed(speed) });
     },
 
+    setPreviewCameraOverride: (camera: SceneCameraConfig | null) => {
+      set({ previewCameraOverride: camera });
+    },
+
     setSceneGizmoMode: (mode: SceneGizmoMode) => {
       set({ sceneGizmoMode: mode });
     },
 
     setSceneGizmoHoveredAxis: (axis: SceneGizmoAxis | null) => {
       set({ sceneGizmoHoveredAxis: axis });
+    },
+
+    setSceneGizmoClipIdOverride: (clipId: string | null) => {
+      set({ sceneGizmoClipIdOverride: clipId });
     },
 
     setGaussianSplatLoadProgress: (progress: GaussianSplatLoadProgressUpdate) => {

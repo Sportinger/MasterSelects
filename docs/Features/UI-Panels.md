@@ -165,6 +165,7 @@ MasterSelects currently exposes 17 dockable panel types, plus the Slot Grid over
 - Dragging files or folders from the OS recreates the folder structure inside the project
 - Drag-to-timeline support
 - Type-specific project items for text, solids, meshes, cameras, and splat effectors
+- Board mode right-drag supports smooth edge autopan; dragging far out onto a timeline lane hands off to the same timeline drag preview/drop path as list-view media drags, then restores the item at its original board position
 
 ### Export Panel
 

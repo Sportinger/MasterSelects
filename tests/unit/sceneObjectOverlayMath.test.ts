@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { TimelineClip, TimelineTrack } from '../../src/types';
-import { collectPreviewSceneObjects, projectWorldToCanvas } from '../../src/components/preview/sceneObjectOverlayMath';
+import {
+  buildCameraPreviewSceneObject,
+  collectPreviewSceneObjects,
+  projectWorldToCanvas,
+  resolveAxisScreenHandle,
+} from '../../src/components/preview/sceneObjectOverlayMath';
+import {
+  SCENE_GIZMO_AXIS_HIT_START_OFFSET,
+  SCENE_GIZMO_AXIS_SCREEN_LENGTH,
+} from '../../src/engine/scene/SceneGizmoConstants';
 import { resolveRenderableSharedSceneCamera } from '../../src/engine/scene/SceneCameraUtils';
 
 function makeClip(partial: Partial<TimelineClip>): TimelineClip {
@@ -47,7 +56,7 @@ describe('sceneObjectOverlayMath', () => {
     expect(screen.y).toBeCloseTo(270, 0);
   });
 
-  it('collects active scene objects only from visible video tracks and skips cameras', () => {
+  it('collects active scene objects only from visible video tracks and skips cameras in the normal view', () => {
     const clips = [
       makeClip({ id: 'active-splat', name: 'Splat' }),
       makeClip({ id: 'future-splat', startTime: 20 }),
@@ -68,6 +77,58 @@ describe('sceneObjectOverlayMath', () => {
     });
 
     expect(objects.map((object) => object.clipId).toSorted()).toEqual(['active-splat']);
+  });
+
+  it('builds the camera preview object explicitly for camera edit view', () => {
+    const viewport = { width: 1920, height: 1080 };
+    const canvasSize = { width: 960, height: 540 };
+    const renderCamera = resolveRenderableSharedSceneCamera(viewport, 0);
+    const cameraClip = makeClip({
+      id: 'timeline-camera',
+      name: 'Timeline Camera',
+      source: { type: 'camera', cameraSettings: { fov: 50, near: 0.1, far: 1000 } },
+      transform: {
+        opacity: 1,
+        blendMode: 'normal',
+        position: { x: 0.2, y: 0.1, z: 4 },
+        scale: { x: 1, y: 1, z: 0 },
+        rotation: { x: 12, y: 30, z: 0 },
+      },
+    });
+
+    const object = buildCameraPreviewSceneObject(
+      cameraClip,
+      cameraClip.transform,
+      renderCamera,
+      viewport,
+      canvasSize,
+    );
+
+    expect(object?.clipId).toBe('timeline-camera');
+    expect(object?.kind).toBe('camera');
+    expect(object?.transformSpace).toBe('world');
+    expect(Number.isFinite(object?.screen.x)).toBe(true);
+    expect(Number.isFinite(object?.screen.y)).toBe(true);
+  });
+
+  it('keeps axis hitboxes aligned with the GPU gizmo length while leaving the center grip free', () => {
+    const camera = resolveRenderableSharedSceneCamera({ width: 1920, height: 1080 }, 0);
+    const canvasSize = { width: 960, height: 540 };
+    const origin = { x: 0, y: 0, z: 0 };
+    const screenOrigin = projectWorldToCanvas(origin, camera, canvasSize);
+    const handle = resolveAxisScreenHandle('x', origin, camera, canvasSize);
+
+    const startDistance = Math.hypot(
+      handle.start.x - screenOrigin.x,
+      handle.start.y - screenOrigin.y,
+    );
+    const endDistance = Math.hypot(
+      handle.end.x - screenOrigin.x,
+      handle.end.y - screenOrigin.y,
+    );
+
+    expect(startDistance).toBeCloseTo(SCENE_GIZMO_AXIS_HIT_START_OFFSET, 5);
+    expect(endDistance).toBeCloseTo(SCENE_GIZMO_AXIS_SCREEN_LENGTH, 5);
   });
 
   it('maps effector transform into shared scene space', () => {

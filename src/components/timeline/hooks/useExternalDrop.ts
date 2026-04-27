@@ -1,6 +1,6 @@
 // External file drag & drop handling for timeline
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useMediaStore } from '../../../stores/mediaStore';
 import {
   isVideoFile,
@@ -15,7 +15,12 @@ import {
   findClosestNonOverlappingStartTime,
   findFirstTrackWithoutOverlap,
 } from '../utils/externalDragPlacement';
-import { getExternalDragPayload } from '../utils/externalDragSession';
+import {
+  EXTERNAL_DRAG_BRIDGE_EVENT,
+  getExternalDragPayload,
+  type ExternalDragBridgeEventDetail,
+  type ExternalDragPayload,
+} from '../utils/externalDragSession';
 import type { ExternalDragState } from '../types';
 import type { TimelineTrack, TimelineClip } from '../../../types';
 import type { Composition } from '../../../stores/mediaStore';
@@ -61,6 +66,87 @@ interface UseExternalDropReturn {
   handleNewTrackDragOver: (e: React.DragEvent, trackType: 'video' | 'audio') => void;
   handleNewTrackDrop: (e: React.DragEvent, trackType: 'video' | 'audio') => Promise<void>;
   handleContainerDragLeave: (e: React.DragEvent) => void;
+}
+
+type CustomExternalDragTarget =
+  | { kind: 'track'; trackId: string }
+  | { kind: 'new-track'; trackType: 'video' | 'audio' };
+
+function getPayloadMimeTypes(payload: ExternalDragPayload): string[] {
+  switch (payload.kind) {
+    case 'composition':
+      return ['application/x-composition-id'];
+    case 'text':
+      return ['application/x-text-item-id'];
+    case 'solid':
+      return ['application/x-solid-item-id'];
+    case 'mesh':
+      return ['application/x-mesh-item-id'];
+    case 'camera':
+      return ['application/x-camera-item-id'];
+    case 'splat-effector':
+      return ['application/x-splat-effector-item-id'];
+    case 'media-file':
+      return payload.isAudio
+        ? ['application/x-media-file-id', 'application/x-media-is-audio']
+        : ['application/x-media-file-id'];
+  }
+}
+
+function getPayloadMimeData(payload: ExternalDragPayload, mimeType: string): string {
+  if (mimeType === 'application/x-composition-id' && payload.kind === 'composition') return payload.id;
+  if (mimeType === 'application/x-text-item-id' && payload.kind === 'text') return payload.id;
+  if (mimeType === 'application/x-solid-item-id' && payload.kind === 'solid') return payload.id;
+  if (mimeType === 'application/x-mesh-item-id' && payload.kind === 'mesh') return payload.id;
+  if (mimeType === 'application/x-camera-item-id' && payload.kind === 'camera') return payload.id;
+  if (mimeType === 'application/x-splat-effector-item-id' && payload.kind === 'splat-effector') return payload.id;
+  if (mimeType === 'application/x-media-file-id' && payload.kind === 'media-file') return payload.id;
+  if (mimeType === 'application/x-media-is-audio' && payload.kind === 'media-file' && payload.isAudio) return 'true';
+  return '';
+}
+
+function createPayloadDragEvent(
+  detail: ExternalDragBridgeEventDetail,
+  payload: ExternalDragPayload,
+): React.DragEvent {
+  const types = getPayloadMimeTypes(payload);
+  const dataTransfer = {
+    types,
+    dropEffect: 'copy',
+    effectAllowed: 'copyMove',
+    files: { length: 0, item: () => null },
+    items: { length: 0, item: () => null },
+    getData: (mimeType: string) => getPayloadMimeData(payload, mimeType),
+    setData: () => undefined,
+    clearData: () => undefined,
+    setDragImage: () => undefined,
+  } as unknown as DataTransfer;
+
+  return {
+    clientX: detail.clientX,
+    clientY: detail.clientY,
+    dataTransfer,
+    preventDefault: () => undefined,
+    stopPropagation: () => undefined,
+  } as React.DragEvent;
+}
+
+function resolveCustomExternalDragTarget(clientX: number, clientY: number): CustomExternalDragTarget | null {
+  const elementAtPoint = document.elementFromPoint(clientX, clientY);
+  const targetElement = elementAtPoint instanceof HTMLElement ? elementAtPoint : null;
+  if (!targetElement) return null;
+
+  const newTrackZone = targetElement.closest<HTMLElement>('.new-track-drop-zone');
+  if (newTrackZone?.classList.contains('video')) {
+    return { kind: 'new-track', trackType: 'video' };
+  }
+  if (newTrackZone?.classList.contains('audio')) {
+    return { kind: 'new-track', trackType: 'audio' };
+  }
+
+  const trackLane = targetElement.closest<HTMLElement>('.track-lane[data-track-id]');
+  const trackId = trackLane?.dataset.trackId;
+  return trackId ? { kind: 'track', trackId } : null;
 }
 
 /**
@@ -1371,6 +1457,71 @@ export function useExternalDrop({
     },
     [addCompClip, addClip, addTextClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, externalDrag, tracks, getDesiredStartTime, resolveTrackStartTime]
   );
+
+  useEffect(() => {
+    const handleBridgeDrag = (event: Event) => {
+      const detail = (event as CustomEvent<ExternalDragBridgeEventDetail>).detail;
+      if (!detail) return;
+
+      if (detail.phase === 'cancel') {
+        dragCounterRef.current = 0;
+        setExternalDrag(null);
+        return;
+      }
+
+      const payload = getExternalDragPayload();
+      if (!payload) {
+        dragCounterRef.current = 0;
+        setExternalDrag(null);
+        return;
+      }
+
+      const target = resolveCustomExternalDragTarget(detail.clientX, detail.clientY);
+      if (!target) {
+        if (detail.phase === 'drop') {
+          dragCounterRef.current = 0;
+          setExternalDrag(null);
+        } else {
+          setExternalDrag((prev) => prev ? {
+            ...prev,
+            x: detail.clientX,
+            y: detail.clientY,
+            trackId: '',
+            audioTrackId: undefined,
+            videoTrackId: undefined,
+            newTrackType: null,
+          } : null);
+        }
+        return;
+      }
+
+      const dragEvent = createPayloadDragEvent(detail, payload);
+      dragCounterRef.current = Math.max(1, dragCounterRef.current);
+
+      if (target.kind === 'track') {
+        if (detail.phase === 'drop') {
+          void handleTrackDrop(dragEvent, target.trackId);
+        } else {
+          handleTrackDragOver(dragEvent, target.trackId);
+        }
+        return;
+      }
+
+      if (detail.phase === 'drop') {
+        void handleNewTrackDrop(dragEvent, target.trackType);
+      } else {
+        handleNewTrackDragOver(dragEvent, target.trackType);
+      }
+    };
+
+    window.addEventListener(EXTERNAL_DRAG_BRIDGE_EVENT, handleBridgeDrag);
+    return () => window.removeEventListener(EXTERNAL_DRAG_BRIDGE_EVENT, handleBridgeDrag);
+  }, [
+    handleNewTrackDragOver,
+    handleNewTrackDrop,
+    handleTrackDragOver,
+    handleTrackDrop,
+  ]);
 
   // Container-level drag leave: fully clear externalDrag when cursor leaves the timeline area
   const handleContainerDragLeave = useCallback((e: React.DragEvent) => {
