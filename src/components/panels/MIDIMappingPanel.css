@@ -106,6 +106,14 @@
     0 0 20px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
+.midi-mapping-card.is-active {
+  border-color: color-mix(in srgb, var(--success-light) 70%, var(--border-color));
+  background: color-mix(in srgb, var(--success-light) 10%, var(--bg-tertiary));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--success-light) 38%, transparent),
+    0 0 18px color-mix(in srgb, var(--success-light) 16%, transparent);
+}
+
 .midi-mapping-card.is-learning {
   border-color: color-mix(in srgb, var(--accent) 60%, var(--border-color));
   background: color-mix(in srgb, var(--accent-subtle) 45%, var(--bg-tertiary));
@@ -190,7 +198,7 @@
   padding-top: var(--sp-2);
   border-top: 1px solid var(--border-color);
   display: grid;
-  grid-template-columns: minmax(80px, 1fr) minmax(80px, 1fr) auto;
+  grid-template-columns: minmax(80px, 1fr) minmax(80px, 1fr) auto auto;
   align-items: end;
   gap: var(--sp-2);
 }
@@ -210,6 +218,29 @@
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border-color));
   background: color-mix(in srgb, var(--accent-subtle) 70%, var(--bg-primary));
   color: var(--accent);
+}
+
+.midi-mapping-checkbox {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  white-space: nowrap;
+}
+
+.midi-mapping-checkbox input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+
+.midi-mapping-checkbox span {
+  color: inherit;
+  font-size: inherit;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .midi-mapping-editor {

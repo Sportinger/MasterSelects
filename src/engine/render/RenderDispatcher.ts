@@ -2,7 +2,7 @@
 // Handles: render(), renderEmptyFrame(), renderToPreviewCanvas(), renderCachedFrame()
 
 import type { Layer, LayerRenderData } from '../core/types';
-import type { TimelineClip } from '../../types';
+import type { ModelSequenceData, TimelineClip } from '../../types';
 import type { TextureManager } from '../texture/TextureManager';
 import type { MaskTextureManager } from '../texture/MaskTextureManager';
 import type { CacheManager } from '../managers/CacheManager';
@@ -335,10 +335,6 @@ export class RenderDispatcher {
     if (!sequence || sequence.frames.length <= 1 || layer.mediaTime == null) {
       return;
     }
-    if (draggingPlayhead && !realtimePlayback) {
-      return;
-    }
-
     const currentIndex = getGaussianSplatSequenceFrameIndex(sequence, layer.mediaTime);
     const usePlaybackPreloadWindow = realtimePlayback || !draggingPlayhead;
     const offsets = usePlaybackPreloadWindow
@@ -481,7 +477,7 @@ export class RenderDispatcher {
     return initialized;
   }
 
-  async preloadSceneModelAsset(url: string, fileName: string): Promise<boolean> {
+  async preloadSceneModelAsset(url: string, fileName: string, modelSequence?: ModelSequenceData): Promise<boolean> {
     if (!url) return false;
 
     const existingRenderer = this.deps.sceneRenderer;
@@ -499,7 +495,7 @@ export class RenderDispatcher {
       return false;
     }
 
-    return renderer.preloadModel(url, fileName);
+    return renderer.preloadModel(url, fileName, modelSequence);
   }
 
   clearExportReadinessCache(): void {
@@ -515,7 +511,7 @@ export class RenderDispatcher {
     }
 
     const nativeSplats = new Map<string, ReturnType<typeof buildSharedSplatRuntimeRequest>>();
-    const modelAssets = new Map<string, { url: string; fileName: string }>();
+    const modelAssets = new Map<string, { url: string; fileName: string; modelSequence?: ModelSequenceData }>();
     let needsSceneRenderer = false;
 
     for (const layer of visibleLayers) {
@@ -532,9 +528,13 @@ export class RenderDispatcher {
       }
 
       if (source.type === 'model' && source.modelUrl) {
-        modelAssets.set(source.modelUrl, {
+        const modelAssetKey = source.modelSequence
+          ? `${source.modelUrl}|sequence|${source.modelSequence.sequenceName ?? ''}|${source.modelSequence.frameCount}|${source.modelSequence.fps}`
+          : source.modelUrl;
+        modelAssets.set(modelAssetKey, {
           url: source.modelUrl,
           fileName: source.file?.name ?? layer.name,
+          ...(source.modelSequence ? { modelSequence: source.modelSequence } : {}),
         });
       }
 
@@ -604,21 +604,24 @@ export class RenderDispatcher {
           url: request.url,
           fileName: request.fileName,
           file: request.file,
+          showProgress: false,
         });
         if (!ready) {
           throw new Error(`Native gaussian splat "${request.fileName}" was not ready in time`);
         }
         this.exportReadyNativeSplatSceneKeys.add(request.sceneKey);
       }),
-      ...[...modelAssets.values()].map(async ({ url, fileName }) => {
-        if (this.exportReadyModelUrls.has(url)) {
+      ...[...modelAssets.entries()].map(async ([assetKey, { url, fileName, modelSequence }]) => {
+        if (this.exportReadyModelUrls.has(assetKey)) {
           return;
         }
-        const ready = await this.preloadSceneModelAsset(url, fileName);
+        const ready = modelSequence
+          ? await this.preloadSceneModelAsset(url, fileName, modelSequence)
+          : await this.preloadSceneModelAsset(url, fileName);
         if (!ready) {
           throw new Error(`3D model "${fileName}" was not ready in time`);
         }
-        this.exportReadyModelUrls.add(url);
+        this.exportReadyModelUrls.add(assetKey);
       }),
     ];
 
@@ -1174,7 +1177,9 @@ export class RenderDispatcher {
             url: layer.gaussianSplatUrl,
             fileName: layer.gaussianSplatFileName ?? layer.layerId,
             file: layer.gaussianSplatFile,
-            showProgress: layer.gaussianSplatIsSequence === true && previewMaxSplats ? false : undefined,
+            showProgress: timelineState.isExporting === true || (layer.gaussianSplatIsSequence === true && previewMaxSplats)
+              ? false
+              : undefined,
             maxSplats: previewMaxSplats,
           };
           if (layer.gaussianSplatIsSequence === true && canHoldSequenceFrame) {

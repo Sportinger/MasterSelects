@@ -32,6 +32,22 @@ export interface MIDIMappingSummaryEntry {
 type MIDITransportBindings = Record<MIDITransportAction, MIDINoteBinding | null>;
 type MIDISlotBindings = Record<number, MIDINoteBinding | null>;
 
+export function createMIDITransportMappingId(action: MIDITransportAction, binding: MIDINoteBinding): string {
+  return `transport-${action}-${binding.channel}-${binding.note}`;
+}
+
+export function createMIDIMarkerMappingId(
+  markerId: string,
+  action: MarkerMIDIAction,
+  binding: MIDINoteBinding
+): string {
+  return `marker-${markerId}-${action}-${binding.channel}-${binding.note}`;
+}
+
+export function createMIDISlotMappingId(slotIndex: number, binding: MIDINoteBinding): string {
+  return `slot-${slotIndex}-${binding.channel}-${binding.note}`;
+}
+
 export interface MIDISlotTarget {
   slotIndex: number;
   label: string;
@@ -115,7 +131,12 @@ function getParameterBehaviorLabel(target: MIDIParameterTarget): string {
 
 function getParameterBindingBehaviorLabel(binding: MIDIParameterBinding): string {
   const label = getParameterBehaviorLabel(binding);
-  return binding.invert ? `${label} (inverted)` : label;
+  const modifiers = [
+    binding.invert ? 'inverted' : null,
+    binding.damping ? 'damped' : null,
+  ].filter(Boolean);
+
+  return modifiers.length > 0 ? `${label} (${modifiers.join(', ')})` : label;
 }
 
 function getBindingSortValue(binding: MIDINoteBinding | MIDIParameterMessageBinding): number {
@@ -143,7 +164,7 @@ export function collectMIDIMappingSummary(
     MIDINoteBinding | null,
   ]>)
     .flatMap(([action, binding]) => (binding ? [{
-      id: `transport-${action}-${binding.channel}-${binding.note}`,
+      id: createMIDITransportMappingId(action, binding),
       scope: 'transport',
       action,
       actionLabel: getTransportActionLabel(action),
@@ -155,7 +176,7 @@ export function collectMIDIMappingSummary(
 
   const markerEntries: MIDIMappingSummaryEntry[] = markers.flatMap((marker) => (
     (marker.midiBindings ?? []).map((binding) => ({
-      id: `marker-${marker.id}-${binding.action}-${binding.channel}-${binding.note}`,
+      id: createMIDIMarkerMappingId(marker.id, binding.action, binding),
       scope: 'marker' as const,
       action: binding.action,
       actionLabel: getMarkerActionLabel(binding.action),
@@ -176,7 +197,7 @@ export function collectMIDIMappingSummary(
 
       const slotIndex = Number(slotKey);
       return [{
-        id: `slot-${slotIndex}-${binding.channel}-${binding.note}`,
+        id: createMIDISlotMappingId(slotIndex, binding),
         scope: 'slot' as const,
         action: 'triggerSlot' as const,
         actionLabel: 'Trigger Slot',

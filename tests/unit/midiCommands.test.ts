@@ -11,10 +11,12 @@ import {
   triggerMIDIParameterBinding,
   triggerSlotMIDIAction,
   triggerSlotMIDIBinding,
+  resetDampedMIDIParameterBindings,
 } from '../../src/services/midi/midiCommands';
 
 describe('midiCommands', () => {
   const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
 
   beforeEach(() => {
     globalThis.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
@@ -24,11 +26,19 @@ describe('midiCommands', () => {
   });
 
   afterEach(() => {
+    resetDampedMIDIParameterBindings();
     globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
     useMediaStore.setState({ slotAssignments: {} });
     useEngineStore.setState({
       sceneNavNoKeyframes: false,
       sceneCameraLiveOverrides: {},
+    });
+    useTimelineStore.setState({
+      clips: [],
+      clipKeyframes: new Map(),
+      keyframeRecordingEnabled: new Set(),
+      playheadPosition: 0,
     });
     vi.restoreAllMocks();
   });
@@ -218,6 +228,115 @@ describe('midiCommands', () => {
     }, 0);
 
     expect(setPropertyValue).toHaveBeenCalledWith('clip-midi-param-range', 'scale.x', 2);
+  });
+
+  it('damps MIDI parameter bindings over animation frames', async () => {
+    const frameCallbacks: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    });
+    globalThis.cancelAnimationFrame = vi.fn();
+    const setPropertyValue = vi.fn();
+
+    useTimelineStore.setState({
+      clips: [{
+        id: 'clip-midi-param-damped',
+        transform: {
+          opacity: 0,
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1, z: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+          blendMode: 'normal',
+        },
+      }],
+      setPropertyValue,
+    } as Partial<ReturnType<typeof useTimelineStore.getState>>);
+
+    await triggerMIDIParameterBinding({
+      id: 'parameter:clip-midi-param-damped:opacity',
+      clipId: 'clip-midi-param-damped',
+      property: 'opacity',
+      label: 'Opacity',
+      min: 0,
+      max: 1,
+      damping: true,
+      message: {
+        type: 'control-change',
+        channel: 1,
+        control: 7,
+      },
+    }, 127);
+
+    expect(setPropertyValue).not.toHaveBeenCalled();
+
+    for (let i = 0; i < 20 && frameCallbacks.length > 0; i += 1) {
+      const callback = frameCallbacks.shift();
+      callback?.(i * 50);
+    }
+
+    expect(setPropertyValue).toHaveBeenCalled();
+    const firstValue = setPropertyValue.mock.calls[0]?.[2];
+    const lastValue = setPropertyValue.mock.calls.at(-1)?.[2];
+    expect(firstValue).toBeGreaterThan(0);
+    expect(firstValue).toBeLessThan(1);
+    expect(lastValue).toBeCloseTo(1, 4);
+  });
+
+  it('starts damped keyframed transform changes from the interpolated playhead value', async () => {
+    const frameCallbacks: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    });
+    globalThis.cancelAnimationFrame = vi.fn();
+    const setPropertyValue = vi.fn();
+
+    useTimelineStore.setState({
+      playheadPosition: 5,
+      clips: [{
+        id: 'clip-midi-keyframed-damped',
+        startTime: 0,
+        duration: 10,
+        transform: {
+          opacity: 1,
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1, z: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+          blendMode: 'normal',
+        },
+      }],
+      clipKeyframes: new Map([[
+        'clip-midi-keyframed-damped',
+        [
+          { id: 'op-0', clipId: 'clip-midi-keyframed-damped', property: 'opacity', time: 0, value: 0.4, easing: 'linear' },
+          { id: 'op-1', clipId: 'clip-midi-keyframed-damped', property: 'opacity', time: 10, value: 0.6, easing: 'linear' },
+        ],
+      ]]),
+      keyframeRecordingEnabled: new Set(),
+      setPropertyValue,
+    } as Partial<ReturnType<typeof useTimelineStore.getState>>);
+
+    await triggerMIDIParameterBinding({
+      id: 'parameter:clip-midi-keyframed-damped:opacity',
+      clipId: 'clip-midi-keyframed-damped',
+      property: 'opacity',
+      label: 'Opacity',
+      min: 0,
+      max: 1,
+      damping: true,
+      message: {
+        type: 'control-change',
+        channel: 1,
+        control: 7,
+      },
+    }, 66);
+
+    frameCallbacks.shift()?.(0);
+
+    const firstValue = setPropertyValue.mock.calls[0]?.[2];
+    expect(firstValue).toBeGreaterThan(0.5);
+    expect(firstValue).toBeLessThan(0.51);
   });
 
   it('can drive grouped MIDI parameter bindings', async () => {

@@ -2,6 +2,7 @@
 // Orchestrates: PerformanceStats, RenderTargetManager, OutputWindowManager,
 //               RenderLoop, LayerCollector, Compositor, NestedCompRenderer
 
+import type { ModelSequenceData } from '../types';
 import type { Layer, EngineStats } from './core/types';
 // OutputWindow type no longer needed — state lives in renderTargetStore
 import { WebGPUContext, type GPUPowerPreference } from './core/WebGPUContext';
@@ -661,6 +662,8 @@ export class WebGPUEngine {
     url?: string;
     fileName: string;
     file?: File;
+    showProgress?: boolean;
+    maxSplats?: number;
   }): Promise<boolean> {
     return this.renderDispatcher?.ensureGaussianSplatSceneLoaded(options) ?? false;
   }
@@ -669,8 +672,8 @@ export class WebGPUEngine {
     return this.renderDispatcher?.ensureSceneRendererInitialized(width, height) ?? false;
   }
 
-  async preloadSceneModelAsset(url: string, fileName: string): Promise<boolean> {
-    return this.renderDispatcher?.preloadSceneModelAsset(url, fileName) ?? false;
+  async preloadSceneModelAsset(url: string, fileName: string, modelSequence?: ModelSequenceData): Promise<boolean> {
+    return this.renderDispatcher?.preloadSceneModelAsset(url, fileName, modelSequence) ?? false;
   }
 
   async ensureExportLayersReady(layers: Layer[]): Promise<void> {

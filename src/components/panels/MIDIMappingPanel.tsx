@@ -122,6 +122,7 @@ export function MIDIMappingPanel() {
     cancelLearning,
     slotBindings,
     parameterBindings,
+    activeMappingIds,
   } = useMIDI();
   const markers = useTimelineStore((state) => state.markers);
   const compositions = useMediaStore((state) => state.compositions);
@@ -334,6 +335,10 @@ export function MIDIMappingPanel() {
     updateParameterMIDIBinding(binding.id, { invert: !binding.invert });
   };
 
+  const toggleParameterDamping = (binding: MIDIParameterBinding) => {
+    updateParameterMIDIBinding(binding.id, { damping: !binding.damping });
+  };
+
   const clearMapping = (mapping: MIDIMappingSummaryEntry) => {
     if (mapping.scope === 'transport') {
       setTransportMIDIBinding(mapping.action as MIDITransportAction, null);
@@ -528,6 +533,7 @@ export function MIDIMappingPanel() {
           {mappings.map((mapping) => {
             const isEditing = draft?.mappingId === mapping.id;
             const isParameterMapping = mapping.scope === 'parameter';
+            const isActiveMapping = activeMappingIds[mapping.id] !== undefined;
             const channelValue = isEditing ? draft.channel : String(mapping.binding.channel);
             const noteValue = isEditing && !isParameterMapping
               ? draft.note
@@ -572,7 +578,7 @@ export function MIDIMappingPanel() {
             return (
               <div
                 key={mapping.id}
-                className={`midi-mapping-card${isPreviewable && !isEditing ? ' is-clickable' : ''}${previewingMappingId === mapping.id ? ' is-previewing' : ''}`}
+                className={`midi-mapping-card${isPreviewable && !isEditing ? ' is-clickable' : ''}${previewingMappingId === mapping.id ? ' is-previewing' : ''}${isActiveMapping ? ' is-active' : ''}`}
                 role={isPreviewable && !isEditing ? 'button' : undefined}
                 tabIndex={isPreviewable && !isEditing ? 0 : undefined}
                 onClick={isPreviewable && !isEditing ? () => previewMapping(mapping) : undefined}
@@ -652,6 +658,17 @@ export function MIDIMappingPanel() {
                     >
                       Invert
                     </button>
+                    <label
+                      className="midi-mapping-checkbox"
+                      title="Smooth MIDI parameter changes"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!mapping.parameterBinding.damping}
+                        onChange={() => toggleParameterDamping(mapping.parameterBinding!)}
+                      />
+                      <span>Damp</span>
+                    </label>
                   </div>
                 )}
 

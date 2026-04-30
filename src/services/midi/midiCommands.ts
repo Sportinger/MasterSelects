@@ -3,9 +3,10 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { useEngineStore } from '../../stores/engineStore';
 import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../../stores/mediaStore/types';
 import { engine } from '../../engine/WebGPUEngine';
-import { DEFAULT_TEXT_3D_PROPERTIES } from '../../stores/timeline/constants';
+import { DEFAULT_TEXT_3D_PROPERTIES, DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../../engine/gaussian/types';
 import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
+import { getInterpolatedClipTransform, interpolateKeyframes } from '../../utils/keyframeInterpolation';
 import {
   CAMERA_POSE_TRANSFORM_PROPERTIES,
   buildCameraTransformPatchFromUpdates,
@@ -19,9 +20,28 @@ import type {
   SlotMIDIBinding,
   MIDITransportAction,
 } from '../../types/midi';
-import type { AnimatableProperty, Text3DProperties, TimelineClip } from '../../types';
+import type { AnimatableProperty, ClipTransform, Text3DProperties, TimelineClip } from '../../types';
 
 type ClipSource = NonNullable<TimelineClip['source']>;
+
+const MIDI_PARAMETER_DAMPING_TIME_CONSTANT_MS = 90;
+const MIDI_PARAMETER_DAMPING_MIN_EPSILON = 0.0001;
+const MIDI_PARAMETER_DAMPING_FALLBACK_DELTA_MS = 1000 / 60;
+const MIDI_PARAMETER_DAMPING_MAX_DELTA_MS = 50;
+
+interface MIDIParameterDampingState {
+  binding: MIDIParameterBinding;
+  currentValue: number;
+  targetValue: number;
+  lastTimestamp: number | null;
+  frameId: number | null;
+}
+
+const dampedMIDIParameterStates = new Map<string, MIDIParameterDampingState>();
+
+function getFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
 
 function waitForAnimationFrame(): Promise<number> {
   return new Promise((resolve) => requestAnimationFrame(resolve));
@@ -179,6 +199,44 @@ function mapMIDIValueToParameter(binding: MIDIParameterBinding, midiValue: numbe
   const { min, max } = resolveParameterRange(binding);
   const normalizedValue = binding.invert ? 127 - safeMIDIValue : safeMIDIValue;
   return min + (normalizedValue / 127) * (max - min);
+}
+
+function resolveDampingEpsilon(binding: MIDIParameterBinding): number {
+  const { min, max } = resolveParameterRange(binding);
+  return Math.max(Math.abs(max - min) * 0.0005, MIDI_PARAMETER_DAMPING_MIN_EPSILON);
+}
+
+function getDampingStepFactor(deltaMs: number): number {
+  const safeDeltaMs = !Number.isFinite(deltaMs) || deltaMs <= 0
+    ? MIDI_PARAMETER_DAMPING_FALLBACK_DELTA_MS
+    : Math.min(deltaMs, MIDI_PARAMETER_DAMPING_MAX_DELTA_MS);
+
+  return Math.min(1, 1 - Math.exp(-safeDeltaMs / MIDI_PARAMETER_DAMPING_TIME_CONSTANT_MS));
+}
+
+function cancelAnimationFrameIfAvailable(frameId: number | null): void {
+  if (frameId === null || typeof globalThis.cancelAnimationFrame !== 'function') {
+    return;
+  }
+
+  globalThis.cancelAnimationFrame(frameId);
+}
+
+export function cancelDampedMIDIParameterBinding(bindingId: string): void {
+  const state = dampedMIDIParameterStates.get(bindingId);
+  if (!state) {
+    return;
+  }
+
+  cancelAnimationFrameIfAvailable(state.frameId);
+  dampedMIDIParameterStates.delete(bindingId);
+}
+
+export function resetDampedMIDIParameterBindings(): void {
+  dampedMIDIParameterStates.forEach((state) => {
+    cancelAnimationFrameIfAvailable(state.frameId);
+  });
+  dampedMIDIParameterStates.clear();
 }
 
 function roundIntegerParameter(property: string, value: number): number {
@@ -475,6 +533,241 @@ function applyMaskParameter(clipId: string, property: string, value: number): bo
   return false;
 }
 
+function getClipBaseTransform(clip: TimelineClip): ClipTransform {
+  return {
+    opacity: clip.transform?.opacity ?? DEFAULT_TRANSFORM.opacity,
+    blendMode: clip.transform?.blendMode ?? DEFAULT_TRANSFORM.blendMode,
+    position: {
+      x: clip.transform?.position?.x ?? DEFAULT_TRANSFORM.position.x,
+      y: clip.transform?.position?.y ?? DEFAULT_TRANSFORM.position.y,
+      z: clip.transform?.position?.z ?? DEFAULT_TRANSFORM.position.z,
+    },
+    scale: {
+      x: clip.transform?.scale?.x ?? DEFAULT_TRANSFORM.scale.x,
+      y: clip.transform?.scale?.y ?? DEFAULT_TRANSFORM.scale.y,
+      ...(clip.transform?.scale?.z !== undefined ? { z: clip.transform.scale.z } : {}),
+    },
+    rotation: {
+      x: clip.transform?.rotation?.x ?? DEFAULT_TRANSFORM.rotation.x,
+      y: clip.transform?.rotation?.y ?? DEFAULT_TRANSFORM.rotation.y,
+      z: clip.transform?.rotation?.z ?? DEFAULT_TRANSFORM.rotation.z,
+    },
+  };
+}
+
+function getTransformParameterValue(transform: ClipTransform, property: string): number | null {
+  if (property === 'opacity') {
+    return getFiniteNumber(transform.opacity);
+  }
+
+  if (property.startsWith('position.')) {
+    const axis = property.split('.')[1] as 'x' | 'y' | 'z';
+    return getFiniteNumber(transform.position?.[axis]);
+  }
+
+  if (property.startsWith('scale.')) {
+    const axis = property.split('.')[1] as 'x' | 'y' | 'z';
+    return getFiniteNumber(transform.scale?.[axis]);
+  }
+
+  if (property.startsWith('rotation.')) {
+    const axis = property.split('.')[1] as 'x' | 'y' | 'z';
+    return getFiniteNumber(transform.rotation?.[axis]);
+  }
+
+  return null;
+}
+
+function resolveTransformParameterValue(clip: TimelineClip, property: string): number | null {
+  const timelineStore = useTimelineStore.getState();
+
+  if (property.startsWith('rotation.') && clip.source?.type === 'camera' && useEngineStore.getState().sceneNavNoKeyframes) {
+    const axis = property.split('.')[1] as 'x' | 'y' | 'z';
+    const liveOverride = useEngineStore.getState().sceneCameraLiveOverrides[clip.id]?.rotation?.[axis];
+    const liveValue = getFiniteNumber(liveOverride);
+    if (liveValue !== null) {
+      return liveValue;
+    }
+  }
+
+  if (
+    property === 'opacity' ||
+    property.startsWith('position.') ||
+    property.startsWith('scale.') ||
+    property.startsWith('rotation.')
+  ) {
+    const animatableProperty = property as AnimatableProperty;
+    if (
+      timelineStore.hasKeyframes(clip.id, animatableProperty) ||
+      timelineStore.isRecording(clip.id, animatableProperty)
+    ) {
+      const keyframes = timelineStore.clipKeyframes.get(clip.id) ?? [];
+      const clipLocalTime = timelineStore.playheadPosition - (clip.startTime ?? 0);
+      const baseTransform = getClipBaseTransform(clip);
+      const interpolatedTransform = getInterpolatedClipTransform(
+        keyframes,
+        clipLocalTime,
+        baseTransform,
+        {
+          rotationMode: clip.source?.type === 'camera' ? 'shortest' : 'linear',
+        },
+      );
+
+      return getTransformParameterValue(interpolatedTransform, property);
+    }
+  }
+
+  if (property === 'opacity') {
+    return getFiniteNumber(clip.transform?.opacity);
+  }
+
+  if (property.startsWith('position.')) {
+    const axis = property.split('.')[1] as 'x' | 'y' | 'z';
+    return getFiniteNumber(clip.transform?.position?.[axis]);
+  }
+
+  if (property.startsWith('scale.')) {
+    const axis = property.split('.')[1] as 'x' | 'y' | 'z';
+    return getFiniteNumber(clip.transform?.scale?.[axis]);
+  }
+
+  if (property.startsWith('rotation.')) {
+    const axis = property.split('.')[1] as 'x' | 'y' | 'z';
+    if (clip.source?.type === 'camera' && useEngineStore.getState().sceneNavNoKeyframes) {
+      const liveOverride = useEngineStore.getState().sceneCameraLiveOverrides[clip.id]?.rotation?.[axis];
+      const liveValue = getFiniteNumber(liveOverride);
+      if (liveValue !== null) {
+        return liveValue;
+      }
+    }
+
+    return getFiniteNumber(clip.transform?.rotation?.[axis]);
+  }
+
+  return null;
+}
+
+function resolveEffectParameterValue(clip: TimelineClip, property: string): number | null {
+  if (!property.startsWith('effect.')) {
+    return null;
+  }
+
+  const [, effectId, paramName] = property.split('.');
+  if (!effectId || !paramName) {
+    return null;
+  }
+
+  const effect = clip.effects?.find((candidate) => candidate.id === effectId);
+  const baseValue = getFiniteNumber(effect?.params?.[paramName]);
+  if (baseValue === null) {
+    return null;
+  }
+
+  const timelineStore = useTimelineStore.getState();
+  const animatableProperty = property as AnimatableProperty;
+  if (
+    timelineStore.hasKeyframes(clip.id, animatableProperty) ||
+    timelineStore.isRecording(clip.id, animatableProperty)
+  ) {
+    const keyframes = timelineStore.clipKeyframes.get(clip.id) ?? [];
+    const clipLocalTime = timelineStore.playheadPosition - (clip.startTime ?? 0);
+    return interpolateKeyframes(keyframes, animatableProperty, clipLocalTime, baseValue);
+  }
+
+  return baseValue;
+}
+
+function resolveCustomMIDIParameterValue(clip: TimelineClip, property: string): number | null {
+  if (property === 'speed') {
+    const timelineStore = useTimelineStore.getState();
+    if (
+      timelineStore.hasKeyframes(clip.id, 'speed') ||
+      timelineStore.isRecording(clip.id, 'speed')
+    ) {
+      return timelineStore.getInterpolatedSpeed(clip.id, timelineStore.playheadPosition - (clip.startTime ?? 0));
+    }
+
+    return getFiniteNumber(clip.speed);
+  }
+
+  if (property.startsWith('camera.') && clip.source?.type === 'camera') {
+    const key = property.slice('camera.'.length);
+    if (key === 'fov' || key === 'near' || key === 'far') {
+      return getFiniteNumber(clip.source.cameraSettings?.[key]);
+    }
+  }
+
+  if (property.startsWith('gaussian.render.') && clip.source?.type === 'gaussian-splat') {
+    const key = property.slice('gaussian.render.'.length) as keyof typeof DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render;
+    const settings = clip.source.gaussianSplatSettings ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS;
+    return getFiniteNumber(settings.render[key]);
+  }
+
+  if (property.startsWith('splatEffector.') && clip.source?.type === 'splat-effector') {
+    const key = property.slice('splatEffector.'.length) as keyof typeof DEFAULT_SPLAT_EFFECTOR_SETTINGS;
+    const settings = clip.source.splatEffectorSettings ?? DEFAULT_SPLAT_EFFECTOR_SETTINGS;
+    return getFiniteNumber(settings[key]);
+  }
+
+  if (property.startsWith('text3d.')) {
+    const key = property.slice('text3d.'.length) as keyof Text3DProperties;
+    const text3DProperties = clip.text3DProperties ?? clip.source?.text3DProperties ?? DEFAULT_TEXT_3D_PROPERTIES;
+    return getFiniteNumber(text3DProperties[key]);
+  }
+
+  if (property.startsWith('blendshape.') && clip.source?.type === 'gaussian-avatar') {
+    const blendshapeName = property.slice('blendshape.'.length);
+    return getFiniteNumber(clip.source.gaussianBlendshapes?.[blendshapeName]) ?? 0;
+  }
+
+  if (property.startsWith('mask.')) {
+    const [, maskId, ...keyParts] = property.split('.');
+    const key = keyParts.join('.');
+    const mask = clip.masks?.find((candidate) => candidate.id === maskId);
+
+    if (!mask) {
+      return null;
+    }
+
+    if (key === 'opacity') {
+      return getFiniteNumber(mask.opacity);
+    }
+
+    if (key === 'feather') {
+      return getFiniteNumber(mask.feather);
+    }
+
+    if (key === 'featherQuality') {
+      return getFiniteNumber(mask.featherQuality);
+    }
+
+    if (key === 'position.x') {
+      return getFiniteNumber(mask.position?.x);
+    }
+
+    if (key === 'position.y') {
+      return getFiniteNumber(mask.position?.y);
+    }
+  }
+
+  return null;
+}
+
+function resolveMIDIParameterCurrentValue(binding: MIDIParameterBinding, fallbackValue: number): number {
+  const clip = useTimelineStore.getState().clips.find((candidate) => candidate.id === binding.clipId);
+  if (!clip) {
+    return fallbackValue;
+  }
+
+  const value =
+    resolveTransformParameterValue(clip, binding.property) ??
+    resolveEffectParameterValue(clip, binding.property) ??
+    resolveCustomMIDIParameterValue(clip, binding.property) ??
+    getFiniteNumber(binding.currentValue);
+
+  return value ?? fallbackValue;
+}
+
 function applyCustomMIDIParameter(clip: TimelineClip, property: string, value: number): boolean {
   return (
     applyCameraLookTransformParameter(clip, property, value) ||
@@ -487,17 +780,13 @@ function applyCustomMIDIParameter(clip: TimelineClip, property: string, value: n
   );
 }
 
-export async function triggerMIDIParameterBinding(
-  binding: MIDIParameterBinding,
-  midiValue: number
-): Promise<void> {
+function applyMIDIParameterBindingValue(binding: MIDIParameterBinding, value: number): boolean {
   const timelineStore = useTimelineStore.getState();
   const clip = timelineStore.clips.find((candidate) => candidate.id === binding.clipId);
   if (!clip) {
-    return;
+    return false;
   }
 
-  const value = mapMIDIValueToParameter(binding, midiValue);
   const properties = binding.properties && binding.properties.length > 0
     ? binding.properties
     : [binding.property];
@@ -509,4 +798,101 @@ export async function triggerMIDIParameterBinding(
 
     timelineStore.setPropertyValue(binding.clipId, property as AnimatableProperty, value);
   });
+
+  return true;
+}
+
+function scheduleDampedMIDIParameterFrame(bindingId: string): void {
+  const state = dampedMIDIParameterStates.get(bindingId);
+  if (!state || state.frameId !== null) {
+    return;
+  }
+
+  if (typeof globalThis.requestAnimationFrame !== 'function') {
+    applyMIDIParameterBindingValue(state.binding, state.targetValue);
+    dampedMIDIParameterStates.delete(bindingId);
+    return;
+  }
+
+  state.frameId = globalThis.requestAnimationFrame((timestamp) => {
+    runDampedMIDIParameterFrame(bindingId, timestamp);
+  });
+}
+
+function runDampedMIDIParameterFrame(bindingId: string, timestamp: number): void {
+  const state = dampedMIDIParameterStates.get(bindingId);
+  if (!state) {
+    return;
+  }
+
+  state.frameId = null;
+  const deltaMs = state.lastTimestamp === null
+    ? 0
+    : Math.max(0, timestamp - state.lastTimestamp);
+  state.lastTimestamp = timestamp;
+
+  const epsilon = resolveDampingEpsilon(state.binding);
+  const diff = state.targetValue - state.currentValue;
+  if (Math.abs(diff) <= epsilon) {
+    applyMIDIParameterBindingValue(state.binding, state.targetValue);
+    dampedMIDIParameterStates.delete(bindingId);
+    return;
+  }
+
+  const nextValue = state.currentValue + diff * getDampingStepFactor(deltaMs);
+  state.currentValue = nextValue;
+
+  const didApply = applyMIDIParameterBindingValue(state.binding, nextValue);
+  if (!didApply) {
+    dampedMIDIParameterStates.delete(bindingId);
+    return;
+  }
+
+  if (Math.abs(state.targetValue - nextValue) <= epsilon) {
+    applyMIDIParameterBindingValue(state.binding, state.targetValue);
+    dampedMIDIParameterStates.delete(bindingId);
+    return;
+  }
+
+  scheduleDampedMIDIParameterFrame(bindingId);
+}
+
+function startDampedMIDIParameterBinding(binding: MIDIParameterBinding, targetValue: number): void {
+  const existingState = dampedMIDIParameterStates.get(binding.id);
+  const currentValue = existingState?.currentValue ?? resolveMIDIParameterCurrentValue(binding, targetValue);
+  const state: MIDIParameterDampingState = existingState ?? {
+    binding,
+    currentValue,
+    targetValue,
+    lastTimestamp: null,
+    frameId: null,
+  };
+
+  state.binding = binding;
+  state.targetValue = targetValue;
+  state.currentValue = currentValue;
+  dampedMIDIParameterStates.set(binding.id, state);
+
+  if (Math.abs(targetValue - currentValue) <= resolveDampingEpsilon(binding)) {
+    applyMIDIParameterBindingValue(binding, targetValue);
+    cancelDampedMIDIParameterBinding(binding.id);
+    return;
+  }
+
+  scheduleDampedMIDIParameterFrame(binding.id);
+}
+
+export async function triggerMIDIParameterBinding(
+  binding: MIDIParameterBinding,
+  midiValue: number
+): Promise<void> {
+  const value = mapMIDIValueToParameter(binding, midiValue);
+
+  if (binding.damping) {
+    startDampedMIDIParameterBinding(binding, value);
+    return;
+  }
+
+  cancelDampedMIDIParameterBinding(binding.id);
+  applyMIDIParameterBindingValue(binding, value);
 }

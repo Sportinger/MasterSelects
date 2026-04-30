@@ -1051,8 +1051,20 @@ export class ModelRuntimeCache {
     return this.requests.has(url) || this.runtimes.has(url);
   }
 
-  isLoaded(url: string): boolean {
-    return this.runtimes.has(url);
+  isLoaded(url: string, options: ModelRuntimePreloadOptions = {}): boolean {
+    const runtime = this.runtimes.get(url);
+    if (!runtime) {
+      return false;
+    }
+    return !options.normalizationKey || runtime.normalizationKey === options.normalizationKey;
+  }
+
+  isLoading(url: string): boolean {
+    return this.loading.has(url);
+  }
+
+  loadingCount(): number {
+    return this.loading.size;
   }
 
   get(url: string): ModelRuntimeData | undefined {
@@ -1082,7 +1094,15 @@ export class ModelRuntimeCache {
 
     const pending = this.loading.get(url);
     if (pending) {
-      return !!(await pending);
+      const runtime = await pending;
+      if (!runtime) {
+        return false;
+      }
+      if (!options.normalizationKey || runtime.normalizationKey === options.normalizationKey) {
+        return true;
+      }
+      this.runtimes.delete(url);
+      return this.preload(url, fileName, options);
     }
 
     const loadPromise = this.resolveNormalizationBounds(url, fileName, options)

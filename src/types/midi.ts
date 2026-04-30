@@ -50,6 +50,7 @@ export interface MIDIParameterBinding extends MIDIParameterTarget {
   id: string;
   message: MIDIParameterMessageBinding;
   invert?: boolean;
+  damping?: boolean;
 }
 
 export interface MIDILastMessage {

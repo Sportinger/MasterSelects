@@ -1,5 +1,26 @@
 [
   {
+    "date": "2026-04-30",
+    "type": "fix",
+    "title": "3D Sequence Playback and Scrubbing Stay Responsive",
+    "description": "GLB frame sequences now throttle realtime model loading and hold the last renderable frame while the next asset prepares. PLY splat scrubbing keeps requesting the dragged target frame in the background instead of freezing on held frames.",
+    "section": "3D / Native Scene"
+  },
+  {
+    "date": "2026-04-30",
+    "type": "improve",
+    "title": "Sequence Imports Keep Project Raw Folders Tidy",
+    "description": "PLY and GLB frame sequences copied into project storage now land in stable Raw subfolders and skip duplicate copies when matching files are already present.",
+    "section": "Project Persistence"
+  },
+  {
+    "date": "2026-04-30",
+    "type": "improve",
+    "title": "MIDI Mapping Controls Gain Broader Command Coverage",
+    "description": "MIDI mappings now carry richer command metadata, range handling, and panel summaries so live-control setups are easier to inspect and restore.",
+    "section": "MIDI"
+  },
+  {
     "date": "2026-04-27",
     "type": "new",
     "title": "Camera NO KF Live Override Mode",

@@ -17,6 +17,7 @@ type NativeSceneRendererTestAccess = NativeSceneRenderer & {
   sceneView: GPUTextureView;
   modelRuntimeCache: {
     runtimes: Map<string, unknown>;
+    loading: Map<string, Promise<unknown>>;
   };
 };
 
@@ -310,6 +311,7 @@ function makeModelLayer(layerId: string, opacity = 1): SceneModelLayer {
 describe('NativeSceneRenderer shared depth contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
     mockGaussianRenderer.isInitialized = true;
     mockGaussianRenderer.hasScene.mockReturnValue(true);
     mockGaussianRenderer.renderToTexture.mockImplementation((clipId: string) => ({
@@ -725,5 +727,105 @@ describe('NativeSceneRenderer shared depth contract', () => {
     expect(meshPass?.setIndexBuffer).toHaveBeenCalledTimes(1);
     expect(meshPass?.drawIndexed).toHaveBeenCalledTimes(1);
     expect(device.queue.writeBuffer).toHaveBeenCalled();
+  });
+
+  it('holds the last loaded model sequence frame while the next realtime frame is loading', async () => {
+    const renderer = await createInitializedRenderer();
+    const sequence = {
+      sequenceName: 'seq',
+      frameCount: 2,
+      fps: 30,
+      playbackMode: 'clamp' as const,
+      frames: [
+        { name: 'frame0000000.glb', modelUrl: 'blob:model-0' },
+        { name: 'frame0000001.glb', modelUrl: 'blob:model-1' },
+      ],
+    };
+    (renderer as NativeSceneRendererTestAccess).modelRuntimeCache.runtimes.set('blob:model-0', {
+      url: 'blob:model-0',
+      fileName: 'frame0000000.glb',
+      format: 'glb',
+      normalizationKey: 'seq|2|30|frame0000000.glb|blob:model-0',
+      primitives: [{
+        vertices: new Float32Array([
+          -0.5, -0.5, 0, 0, 0, 1, 0, 0,
+           0.5, -0.5, 0, 0, 0, 1, 0, 0,
+           0.0,  0.5, 0, 0, 0, 1, 0, 0,
+        ]),
+        indices: new Uint32Array([0, 1, 2]),
+        baseColor: [0.2, 0.4, 0.8, 1] as const,
+      }],
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })) as typeof fetch);
+
+    const firstLayer = {
+      ...makeModelLayer('hero-sequence', 1),
+      clipId: 'hero-sequence-clip',
+      modelUrl: 'blob:model-0',
+      modelFileName: 'frame0000000.glb',
+      modelSequence: sequence,
+    };
+    const secondLayer = {
+      ...firstLayer,
+      modelUrl: 'blob:model-1',
+      modelFileName: 'frame0000001.glb',
+    };
+
+    const { device } = createFakeDevice();
+    const first = renderer.renderScene(device, [firstLayer], makeCamera(), [], true);
+    const second = renderer.renderScene(device, [secondLayer], makeCamera(), [], true);
+
+    expect(first).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
+    expect(second).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
+  });
+
+  it('throttles realtime model sequence loading so playback does not queue every GLB frame', async () => {
+    const renderer = await createInitializedRenderer();
+    const sequence = {
+      sequenceName: 'seq',
+      frameCount: 3,
+      fps: 30,
+      playbackMode: 'clamp' as const,
+      frames: [
+        { name: 'frame0000000.glb', modelUrl: 'blob:model-0' },
+        { name: 'frame0000001.glb', modelUrl: 'blob:model-1' },
+        { name: 'frame0000002.glb', modelUrl: 'blob:model-2' },
+      ],
+    };
+    (renderer as NativeSceneRendererTestAccess).modelRuntimeCache.runtimes.set('blob:model-0', {
+      url: 'blob:model-0',
+      fileName: 'frame0000000.glb',
+      format: 'glb',
+      normalizationKey: 'seq|3|30|frame0000000.glb|blob:model-0',
+      primitives: [{
+        vertices: new Float32Array([
+          -0.5, -0.5, 0, 0, 0, 1, 0, 0,
+           0.5, -0.5, 0, 0, 0, 1, 0, 0,
+           0.0,  0.5, 0, 0, 0, 1, 0, 0,
+        ]),
+        indices: new Uint32Array([0, 1, 2]),
+        baseColor: [0.2, 0.4, 0.8, 1] as const,
+      }],
+    });
+
+    const pending = new Promise<Response>(() => {});
+    const fetchMock = vi.fn(() => pending);
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const baseLayer = {
+      ...makeModelLayer('hero-sequence', 1),
+      clipId: 'hero-sequence-clip',
+      modelSequence: sequence,
+    };
+
+    const { device } = createFakeDevice();
+    renderer.renderScene(device, [{ ...baseLayer, modelUrl: 'blob:model-0', modelFileName: 'frame0000000.glb' }], makeCamera(), [], true);
+    renderer.renderScene(device, [{ ...baseLayer, modelUrl: 'blob:model-1', modelFileName: 'frame0000001.glb' }], makeCamera(), [], true);
+    renderer.renderScene(device, [{ ...baseLayer, modelUrl: 'blob:model-2', modelFileName: 'frame0000002.glb' }], makeCamera(), [], true);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect((renderer as NativeSceneRendererTestAccess).modelRuntimeCache.loading.size).toBe(1);
   });
 });

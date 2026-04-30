@@ -53,6 +53,7 @@ const engineState = {
   sceneNavClipId: null,
   sceneNavFpsMode: false,
   sceneNavFpsMoveSpeed: 1,
+  sceneNavNoKeyframes: false,
   previewCameraOverride: null,
   activeGaussianSplatLoadProgress: null,
   setPreviewCameraOverride: vi.fn(),
@@ -65,6 +66,7 @@ vi.mock('../../src/stores/engineStore', () => ({
   selectSceneNavClipId: (state: typeof engineState) => state.sceneNavClipId,
   selectSceneNavFpsMode: (state: typeof engineState) => state.sceneNavFpsMode,
   selectSceneNavFpsMoveSpeed: (state: typeof engineState) => state.sceneNavFpsMoveSpeed,
+  selectSceneNavNoKeyframes: (state: typeof engineState) => state.sceneNavNoKeyframes,
   stepSceneNavFpsMoveSpeed: vi.fn((speed: number) => speed),
   useEngineStore: Object.assign(vi.fn((selector: (state: typeof engineState) => unknown) => selector(engineState)), {
     getState: vi.fn(() => engineState),

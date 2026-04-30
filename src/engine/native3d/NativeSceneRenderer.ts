@@ -11,7 +11,8 @@ import type {
   SceneSplatEffectorRuntimeData,
   SceneSplatLayer,
 } from '../scene/types';
-import { ModelRuntimeCache } from './assets/ModelRuntimeCache';
+import type { ModelSequenceData } from '../../types';
+import { ModelRuntimeCache, type ModelRuntimePreloadOptions } from './assets/ModelRuntimeCache';
 import { EffectorCompute } from './passes/EffectorCompute';
 import { GizmoPass } from './passes/GizmoPass';
 import { MeshPass, type SceneNativeMeshLayer } from './passes/MeshPass';
@@ -25,6 +26,12 @@ const PLANE_UNIFORM_SIZE = 80;
 const SCENE_DEPTH_FORMAT: GPUTextureFormat = 'depth24plus';
 const WORLD_HEIGHT = 2.0;
 const SPLAT_SOFT_DEPTH_ALPHA_CUTOFF = 0.42;
+const MODEL_SEQUENCE_CPU_PRELOAD_AHEAD = 4;
+const MODEL_SEQUENCE_CPU_PRELOAD_BEHIND = 1;
+const MODEL_SEQUENCE_MAX_NEW_PRELOADS_PER_FRAME = 1;
+const MODEL_SEQUENCE_MAX_REALTIME_LOADS = 1;
+const MODEL_SEQUENCE_GPU_RETAIN_AHEAD = 8;
+const MODEL_SEQUENCE_GPU_RETAIN_BEHIND = 3;
 
 interface CachedPlaneTexture {
   source: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement;
@@ -55,6 +62,7 @@ export class NativeSceneRenderer {
   private readonly splatPass = new SplatPass();
   private readonly effectorCompute = new EffectorCompute();
   private readonly modelRuntimeCache = new ModelRuntimeCache();
+  private readonly lastRenderableModelSequenceUrls = new Map<string, string>();
 
   private getSplatSceneKey(layer: SceneSplatLayer): string {
     return resolveSharedSplatSceneKey({
@@ -72,13 +80,13 @@ export class NativeSceneRenderer {
     return true;
   }
 
-  async preloadModel(url: string, fileName: string): Promise<boolean> {
+  async preloadModel(url: string, fileName: string, modelSequence?: ModelSequenceData): Promise<boolean> {
     if (!url) {
       return false;
     }
 
     this.modelRuntimeCache.touch(url, fileName);
-    return this.modelRuntimeCache.preload(url, fileName);
+    return this.modelRuntimeCache.preload(url, fileName, this.getModelSequencePreloadOptions(modelSequence));
   }
 
   renderScene(
@@ -95,23 +103,13 @@ export class NativeSceneRenderer {
 
     const planeLayers = this.planePass.collect(layers);
     const meshLayers = this.meshPass.collect(layers);
-    const nativeMeshLayers = this.meshPass.collectNativeLayers(layers);
     const splatLayers = this.splatPass.collect(layers);
-
-    for (const layer of meshLayers) {
-      if (layer.kind !== 'model' || !layer.modelUrl) {
-        continue;
-      }
-      this.modelRuntimeCache.touch(layer.modelUrl, layer.modelFileName);
-      if (!this.modelRuntimeCache.isLoaded(layer.modelUrl)) {
-        void this.modelRuntimeCache.preload(
-          layer.modelUrl,
-          layer.modelFileName,
-          this.getModelPreloadOptions(layer),
-        );
-      }
-      this.preloadNearbyModelSequenceFrames(layer, realtimePlayback);
-    }
+    const preparedMeshLayers = meshLayers.map((layer) =>
+      layer.kind === 'model'
+        ? this.prepareModelLayerForRender(layer, realtimePlayback)
+        : layer,
+    );
+    const nativeMeshLayers = this.meshPass.collectNativeLayers(preparedMeshLayers);
 
     if (!this.canRenderNativeScene(layers, planeLayers, nativeMeshLayers, splatLayers)) {
       return null;
@@ -262,13 +260,7 @@ export class NativeSceneRenderer {
         this.getSceneLayerDepth(a.worldMatrix, camera.viewMatrix) -
         this.getSceneLayerDepth(b.worldMatrix, camera.viewMatrix),
       );
-    const activeModelUrls = new Set(
-      nativeMeshLayers
-        .filter((layer): layer is Extract<SceneNativeMeshLayer, { kind: 'model' }> =>
-          layer.kind === 'model' && !!layer.modelUrl,
-        )
-        .map((layer) => layer.modelUrl!),
-    );
+    const activeModelUrls = this.collectRetainedModelUrls(nativeMeshLayers);
     const opaquePlanes = planeLayers.filter((layer) => this.isDepthWritingPlane(layer));
     const transparentPlanes = planeLayers
       .filter((layer) => !this.isDepthWritingPlane(layer))
@@ -757,15 +749,18 @@ export class NativeSceneRenderer {
     return cached.view;
   }
 
-  private getModelPreloadOptions(layer: SceneModelLayer) {
-    const sequence = layer.modelSequence;
+  private getModelPreloadOptions(layer: SceneModelLayer): ModelRuntimePreloadOptions {
+    return this.getModelSequencePreloadOptions(layer.modelSequence);
+  }
+
+  private getModelSequencePreloadOptions(sequence: ModelSequenceData | undefined): ModelRuntimePreloadOptions {
     if (!sequence || sequence.frames.length <= 1) {
-      return undefined;
+      return {};
     }
 
     const anchorFrame = sequence.frames.find((frame) => !!frame.modelUrl);
     if (!anchorFrame?.modelUrl) {
-      return undefined;
+      return {};
     }
 
     const sequenceKey = [
@@ -783,7 +778,84 @@ export class NativeSceneRenderer {
     };
   }
 
-  private preloadNearbyModelSequenceFrames(layer: SceneModelLayer, realtimePlayback: boolean): void {
+  private prepareModelLayerForRender(layer: SceneModelLayer, realtimePlayback: boolean): SceneModelLayer {
+    if (!layer.modelUrl) {
+      return layer;
+    }
+
+    const options = this.getModelPreloadOptions(layer);
+    this.modelRuntimeCache.touch(layer.modelUrl, layer.modelFileName);
+    if (!this.modelRuntimeCache.isLoaded(layer.modelUrl, options)) {
+      this.scheduleModelRuntimePreload(layer.modelUrl, layer.modelFileName, options, realtimePlayback && !!layer.modelSequence);
+    }
+    this.preloadNearbyModelSequenceFrames(layer, realtimePlayback, options);
+
+    const sequence = layer.modelSequence;
+    if (!sequence || sequence.frames.length <= 1) {
+      return layer;
+    }
+
+    if (this.modelRuntimeCache.isLoaded(layer.modelUrl, options)) {
+      this.lastRenderableModelSequenceUrls.set(layer.clipId, layer.modelUrl);
+      return layer;
+    }
+
+    if (!realtimePlayback) {
+      return layer;
+    }
+
+    const fallbackFrame = this.findRenderableModelSequenceFrame(layer, options);
+    if (!fallbackFrame?.modelUrl || fallbackFrame.modelUrl === layer.modelUrl) {
+      return layer;
+    }
+
+    return {
+      ...layer,
+      modelUrl: fallbackFrame.modelUrl,
+      modelFileName: fallbackFrame.name,
+    };
+  }
+
+  private findRenderableModelSequenceFrame(
+    layer: SceneModelLayer,
+    options: ModelRuntimePreloadOptions,
+  ): NonNullable<SceneModelLayer['modelSequence']>['frames'][number] | null {
+    const sequence = layer.modelSequence;
+    if (!sequence || sequence.frames.length === 0) {
+      return null;
+    }
+
+    const lastUrl = this.lastRenderableModelSequenceUrls.get(layer.clipId);
+    if (lastUrl && this.modelRuntimeCache.isLoaded(lastUrl, options)) {
+      return sequence.frames.find((frame) => frame.modelUrl === lastUrl) ?? null;
+    }
+
+    const currentIndex = layer.modelUrl
+      ? sequence.frames.findIndex((frame) => frame.modelUrl === layer.modelUrl)
+      : -1;
+    if (currentIndex < 0) {
+      return null;
+    }
+
+    for (let offset = 1; offset < sequence.frames.length; offset += 1) {
+      const previous = sequence.frames[currentIndex - offset];
+      if (previous?.modelUrl && this.modelRuntimeCache.isLoaded(previous.modelUrl, options)) {
+        return previous;
+      }
+      const next = sequence.frames[currentIndex + offset];
+      if (next?.modelUrl && this.modelRuntimeCache.isLoaded(next.modelUrl, options)) {
+        return next;
+      }
+    }
+
+    return null;
+  }
+
+  private preloadNearbyModelSequenceFrames(
+    layer: SceneModelLayer,
+    realtimePlayback: boolean,
+    options: ModelRuntimePreloadOptions,
+  ): void {
     const sequence = layer.modelSequence;
     if (!realtimePlayback || !sequence || sequence.frames.length <= 1 || !layer.modelUrl) {
       return;
@@ -794,14 +866,78 @@ export class NativeSceneRenderer {
       return;
     }
 
-    const options = this.getModelPreloadOptions(layer);
-    for (const offset of [1, 2, -1]) {
+    const offsets = [
+      ...Array.from({ length: MODEL_SEQUENCE_CPU_PRELOAD_AHEAD }, (_, index) => index + 1),
+      ...Array.from({ length: MODEL_SEQUENCE_CPU_PRELOAD_BEHIND }, (_, index) => -(index + 1)),
+    ];
+    let scheduled = 0;
+    for (const offset of offsets) {
+      if (scheduled >= MODEL_SEQUENCE_MAX_NEW_PRELOADS_PER_FRAME) {
+        break;
+      }
       const frame = sequence.frames[currentIndex + offset];
-      if (!frame?.modelUrl || this.modelRuntimeCache.isLoaded(frame.modelUrl)) {
+      if (
+        !frame?.modelUrl ||
+        this.modelRuntimeCache.isLoaded(frame.modelUrl, options) ||
+        this.modelRuntimeCache.isLoading(frame.modelUrl)
+      ) {
         continue;
       }
-      void this.modelRuntimeCache.preload(frame.modelUrl, frame.name, options);
+      if (this.scheduleModelRuntimePreload(frame.modelUrl, frame.name, options, true)) {
+        scheduled += 1;
+      }
     }
+  }
+
+  private scheduleModelRuntimePreload(
+    url: string,
+    fileName: string | undefined,
+    options: ModelRuntimePreloadOptions,
+    realtimeSequence: boolean,
+  ): boolean {
+    if (this.modelRuntimeCache.isLoaded(url, options) || this.modelRuntimeCache.isLoading(url)) {
+      return false;
+    }
+    if (realtimeSequence && this.modelRuntimeCache.loadingCount() >= MODEL_SEQUENCE_MAX_REALTIME_LOADS) {
+      return false;
+    }
+    void this.modelRuntimeCache.preload(url, fileName, options);
+    return true;
+  }
+
+  private collectRetainedModelUrls(nativeMeshLayers: SceneNativeMeshLayer[]): Set<string> {
+    const activeModelUrls = new Set<string>();
+    for (const layer of nativeMeshLayers) {
+      if (layer.kind !== 'model' || !layer.modelUrl) {
+        continue;
+      }
+
+      activeModelUrls.add(layer.modelUrl);
+      const lastUrl = this.lastRenderableModelSequenceUrls.get(layer.clipId);
+      if (lastUrl) {
+        activeModelUrls.add(lastUrl);
+      }
+
+      const sequence = layer.modelSequence;
+      if (!sequence || sequence.frames.length <= 1) {
+        continue;
+      }
+
+      const currentIndex = sequence.frames.findIndex((frame) => frame.modelUrl === layer.modelUrl);
+      if (currentIndex < 0) {
+        continue;
+      }
+
+      const start = Math.max(0, currentIndex - MODEL_SEQUENCE_GPU_RETAIN_BEHIND);
+      const end = Math.min(sequence.frames.length - 1, currentIndex + MODEL_SEQUENCE_GPU_RETAIN_AHEAD);
+      for (let index = start; index <= end; index += 1) {
+        const frameUrl = sequence.frames[index]?.modelUrl;
+        if (frameUrl) {
+          activeModelUrls.add(frameUrl);
+        }
+      }
+    }
+    return activeModelUrls;
   }
 
   private resolvePlaneTextureSource(

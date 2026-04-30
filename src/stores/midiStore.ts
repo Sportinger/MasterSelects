@@ -26,6 +26,7 @@ interface MIDIStoreState {
   transportBindings: MIDITransportBindings;
   slotBindings: MIDISlotBindings;
   parameterBindings: MIDIParameterBindings;
+  activeMappingIds: Record<string, number>;
   setSupported: (supported: boolean) => void;
   setEnabled: (enabled: boolean) => void;
   setConnectionStatus: (status: MIDIConnectionStatus, error?: string | null) => void;
@@ -35,6 +36,8 @@ interface MIDIStoreState {
   setSlotBinding: (slotIndex: number, binding: MIDINoteBinding | null) => void;
   setParameterBinding: (binding: MIDIParameterBinding) => void;
   removeParameterBinding: (bindingId: string) => void;
+  markMappingActive: (mappingId: string, activatedAt?: number) => void;
+  clearActiveMapping: (mappingId: string, activatedAt?: number) => void;
   startLearning: (target: MIDILearnTarget) => void;
   cancelLearning: () => void;
   resetRuntimeState: () => void;
@@ -59,6 +62,7 @@ export const useMIDIStore = create<MIDIStoreState>()(
         transportBindings: initialTransportBindings,
         slotBindings: {},
         parameterBindings: {},
+        activeMappingIds: {},
         setSupported: (isSupported) => set({ isSupported }),
         setEnabled: (isEnabled) => set({ isEnabled }),
         setConnectionStatus: (connectionStatus, connectionError = null) =>
@@ -98,6 +102,28 @@ export const useMIDIStore = create<MIDIStoreState>()(
             delete nextBindings[bindingId];
             return { parameterBindings: nextBindings };
           }),
+        markMappingActive: (mappingId, activatedAt = Date.now()) =>
+          set((state) => ({
+            activeMappingIds: {
+              ...state.activeMappingIds,
+              [mappingId]: activatedAt,
+            },
+          })),
+        clearActiveMapping: (mappingId, activatedAt) =>
+          set((state) => {
+            const currentActivatedAt = state.activeMappingIds[mappingId];
+            if (currentActivatedAt === undefined) {
+              return {};
+            }
+
+            if (activatedAt !== undefined && currentActivatedAt !== activatedAt) {
+              return {};
+            }
+
+            const nextActiveMappingIds = { ...state.activeMappingIds };
+            delete nextActiveMappingIds[mappingId];
+            return { activeMappingIds: nextActiveMappingIds };
+          }),
         startLearning: (learnTarget) => set({ learnTarget }),
         cancelLearning: () => set({ learnTarget: null }),
         resetRuntimeState: () =>
@@ -107,6 +133,7 @@ export const useMIDIStore = create<MIDIStoreState>()(
             devices: [],
             lastMessage: null,
             learnTarget: null,
+            activeMappingIds: {},
           }),
       }),
       {

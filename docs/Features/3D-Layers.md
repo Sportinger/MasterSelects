@@ -55,6 +55,7 @@ Prepared splat runtime metadata, native splat rasterization, preview, nested com
 - glTF / GLB base color textures are loaded from data URIs, external image URIs, or embedded bufferViews when `baseColorTexture` and `TEXCOORD_0` are present.
 - Textured glTF / GLB materials render unlit in the native pass, matching scan/photogrammetry assets better than the simple fallback directional light.
 - GLB sequences normalize every frame against the first renderable frame's bounds and preload nearby playback frames, avoiding per-frame center/scale jumps and visible current-frame loading flicker.
+- GLB sequences imported into an open project are copied to `Raw/<sequence-name>/` using the original frame names; existing same-size frame files are reused instead of written again.
 - Untextured models use ambient plus directional fallback lighting.
 - The Transform panel exposes a wireframe debug toggle for model clips.
 - Imported models use a native runtime/cache path.
@@ -117,6 +118,7 @@ Gaussian splat clips are imported through the SuperSplat-compatible `@playcanvas
 - Gaussian splats participate in scene cameras, object transforms, object-level effectors, preview, nested compositions, export, preload, and readiness checks through the same native shared-scene path.
 - Realtime splat rendering uses a worker-backed back-to-front order buffer based on the SuperSplat/PlayCanvas sorter approach. Precise export can still fall back to the existing GPU sort path.
 - Sequence splats follow the same shared runtime contract and preload nearby frames without replacing foreground playback with repeated loading overlays.
+- PLY/splat sequences imported into an open project are copied to `Raw/<sequence-name>/` using the original frame names; existing same-size frame files are reused instead of written again.
 - Imported splats and numbered splat sequences store media-panel stats: container label, file size, per-frame splat count, and total sequence splat count.
 - The Transform tab now exposes normal object transforms for gaussian splats. Scene navigation lives on camera clips.
 - Large gaussian splats show viewport loading progress during project restore, URL fetch, parser work, normalization, and GPU upload.
