@@ -148,6 +148,7 @@ export async function preloadGaussianSplatsForExport(options: PreloadOptions): P
           url,
           fileName,
           file,
+          showProgress: false,
         }),
       ),
   );
@@ -194,14 +195,25 @@ export async function preload3DAssetsForExport(options: Preload3DOptions): Promi
   const modelPreloads = [...new Map(
     clips
       .filter((clip) => clip.source?.type === 'model' && !!clip.source.modelUrl)
-      .map((clip) => [
-        clip.source!.modelUrl!,
-        {
-          clipId: clip.id,
-          modelUrl: clip.source!.modelUrl!,
-          fileName: clip.file?.name ?? clip.name,
-        },
-      ]),
+      .map((clip) => {
+        const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
+        const mediaFile = mediaFileId
+          ? useMediaStore.getState().files.find((file) => file.id === mediaFileId) ?? null
+          : null;
+        const modelSequence = clip.source?.modelSequence ?? mediaFile?.modelSequence;
+        const preloadKey = modelSequence
+          ? `${clip.source!.modelUrl!}|sequence|${modelSequence.sequenceName ?? ''}|${modelSequence.frameCount}|${modelSequence.fps}`
+          : clip.source!.modelUrl!;
+        return [
+          preloadKey,
+          {
+            clipId: clip.id,
+            modelUrl: clip.source!.modelUrl!,
+            fileName: clip.file?.name ?? clip.name,
+            ...(modelSequence ? { modelSequence } : {}),
+          },
+        ] as const;
+      }),
   ).values()];
 
   if (modelPreloads.length === 0) {
@@ -209,9 +221,11 @@ export async function preload3DAssetsForExport(options: Preload3DOptions): Promi
   }
 
   const results = await Promise.allSettled(
-    modelPreloads.map((preload) =>
-      engine.preloadSceneModelAsset(preload.modelUrl, preload.fileName),
-    ),
+    modelPreloads.map((preload) => (
+      preload.modelSequence
+        ? engine.preloadSceneModelAsset(preload.modelUrl, preload.fileName, preload.modelSequence)
+        : engine.preloadSceneModelAsset(preload.modelUrl, preload.fileName)
+    )),
   );
   results.forEach((result, index) => {
     const clip = modelPreloads[index];

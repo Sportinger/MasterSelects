@@ -2,6 +2,12 @@
 
 import { Logger } from '../../logger';
 import { PROJECT_FOLDERS } from '../core/constants';
+import {
+  addFileNameSuffix,
+  buildRawTargetPath,
+  getRawRelativePath,
+  parseRawRelativePath,
+} from '../core/rawPath';
 
 const log = Logger.create('RawMedia');
 import { FileStorageService } from '../core/FileStorageService';
@@ -16,6 +22,18 @@ export class RawMediaService {
 
   constructor(fileStorage: FileStorageService) {
     this.fileStorage = fileStorage;
+  }
+
+  private async getRawTargetFolder(
+    rawFolder: FileSystemDirectoryHandle,
+    folderPath: string,
+    create: boolean,
+  ): Promise<FileSystemDirectoryHandle | null> {
+    if (!folderPath) {
+      return rawFolder;
+    }
+
+    return this.fileStorage.navigateToFolder(rawFolder, folderPath, create);
   }
 
   // ============================================
@@ -33,54 +51,39 @@ export class RawMediaService {
     fileName?: string
   ): Promise<{ handle: FileSystemFileHandle; relativePath: string; alreadyExisted: boolean } | null> {
     try {
-      // Get or create Raw folder
       const rawFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.RAW, { create: true });
-
-      // Use provided fileName or original file name
-      const targetName = fileName || file.name;
-
-      // Check if file already exists with same name and size
-      try {
-        const existingHandle = await rawFolder.getFileHandle(targetName, { create: false });
-        const existingFile = await existingHandle.getFile();
-
-        if (existingFile.size === file.size) {
-          // File with same name and size already exists - reuse it
-          const relativePath = `${PROJECT_FOLDERS.RAW}/${targetName}`;
-          log.debug(`File already exists in Raw folder with same size: ${relativePath}`);
-          return { handle: existingHandle, relativePath, alreadyExisted: true };
-        }
-      } catch {
-        // File doesn't exist, will create new one
+      const target = buildRawTargetPath(fileName, file.name);
+      const targetFolder = await this.getRawTargetFolder(rawFolder, target.folderPath, true);
+      if (!targetFolder) {
+        return null;
       }
 
-      // Check if file already exists - if so, add suffix
-      let finalName = targetName;
-      let counter = 1;
+      let finalName = target.fileName;
+      let counter = 0;
       while (true) {
         try {
-          await rawFolder.getFileHandle(finalName, { create: false });
-          // File exists (but different size), try with suffix
-          const ext = targetName.lastIndexOf('.');
-          if (ext > 0) {
-            finalName = `${targetName.slice(0, ext)}_${counter}${targetName.slice(ext)}`;
-          } else {
-            finalName = `${targetName}_${counter}`;
+          const existingHandle = await targetFolder.getFileHandle(finalName, { create: false });
+          const existingFile = await existingHandle.getFile();
+
+          if (existingFile.size === file.size) {
+            const relativePath = getRawRelativePath(target.folderPath, finalName);
+            log.debug(`File already exists in Raw folder with same size: ${relativePath}`);
+            return { handle: existingHandle, relativePath, alreadyExisted: true };
           }
-          counter++;
+
+          counter += 1;
+          finalName = addFileNameSuffix(target.fileName, counter);
         } catch {
-          // File doesn't exist, we can use this name
           break;
         }
       }
 
-      // Create and write the file
-      const fileHandle = await rawFolder.getFileHandle(finalName, { create: true });
+      const fileHandle = await targetFolder.getFileHandle(finalName, { create: true });
       const writable = await fileHandle.createWritable();
       await writable.write(file);
       await writable.close();
 
-      const relativePath = `${PROJECT_FOLDERS.RAW}/${finalName}`;
+      const relativePath = getRawRelativePath(target.folderPath, finalName);
       log.debug(`Copied ${file.name} to ${relativePath} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
 
       return { handle: fileHandle, relativePath, alreadyExisted: false };
@@ -98,14 +101,18 @@ export class RawMediaService {
     relativePath: string
   ): Promise<{ file: File; handle: FileSystemFileHandle } | null> {
     try {
-      // Parse the relative path (e.g., "Raw/video.mp4")
-      const parts = relativePath.split('/');
-      if (parts[0] !== PROJECT_FOLDERS.RAW || parts.length !== 2) {
+      const target = parseRawRelativePath(relativePath);
+      if (!target) {
         return null;
       }
 
       const rawFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.RAW);
-      const fileHandle = await rawFolder.getFileHandle(parts[1]);
+      const targetFolder = await this.getRawTargetFolder(rawFolder, target.folderPath, false);
+      if (!targetFolder) {
+        return null;
+      }
+
+      const fileHandle = await targetFolder.getFileHandle(target.fileName);
       const file = await fileHandle.getFile();
 
       return { file, handle: fileHandle };
@@ -123,7 +130,13 @@ export class RawMediaService {
   ): Promise<boolean> {
     try {
       const rawFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.RAW);
-      await rawFolder.getFileHandle(fileName, { create: false });
+      const target = buildRawTargetPath(fileName, fileName);
+      const targetFolder = await this.getRawTargetFolder(rawFolder, target.folderPath, false);
+      if (!targetFolder) {
+        return false;
+      }
+
+      await targetFolder.getFileHandle(target.fileName, { create: false });
       return true;
     } catch {
       return false;
@@ -142,11 +155,20 @@ export class RawMediaService {
     try {
       const rawFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.RAW);
 
-      for await (const entry of (rawFolder as IterableDirectoryHandle).values()) {
-        if (entry.kind === 'file') {
-          foundFiles.set(entry.name.toLowerCase(), entry);
+      const scanDirectory = async (directory: FileSystemDirectoryHandle): Promise<void> => {
+        for await (const entry of (directory as IterableDirectoryHandle).values()) {
+          if (entry.kind === 'file') {
+            const key = entry.name.toLowerCase();
+            if (!foundFiles.has(key)) {
+              foundFiles.set(key, entry);
+            }
+          } else if (entry.kind === 'directory') {
+            await scanDirectory(entry);
+          }
         }
-      }
+      };
+
+      await scanDirectory(rawFolder);
     } catch {
       // Raw folder doesn't exist or can't be read
     }

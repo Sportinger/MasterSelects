@@ -99,6 +99,7 @@ describe('export asset preload helpers', () => {
         clipId: 'splat-in-range',
         url: 'blob:splat-in-range',
         fileName: 'hero.splat',
+        showProgress: false,
       }),
     );
   });
@@ -182,6 +183,7 @@ describe('export asset preload helpers', () => {
         clipId: 'splat-sequence',
         url: 'blob:splat-sequence-frame-1',
         fileName: 'hero_0001.ply',
+        showProgress: false,
       }),
     );
   });

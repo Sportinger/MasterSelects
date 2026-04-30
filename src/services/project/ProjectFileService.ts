@@ -16,6 +16,12 @@ import { CacheService } from './domains/CacheService';
 import { ProxyStorageService } from './domains/ProxyStorageService';
 import { RawMediaService } from './domains/RawMediaService';
 import { PROJECT_FOLDERS, type ProjectFolderKey } from './core/constants';
+import {
+  addFileNameSuffix,
+  buildRawTargetPath,
+  getRawRelativePath,
+  parseRawRelativePath,
+} from './core/rawPath';
 import type { ProjectFile, ProjectMediaFile, ProjectComposition, ProjectFolder } from './types';
 
 export type ProjectBackend = 'fsa' | 'native';
@@ -49,13 +55,6 @@ class ProjectFileService {
     return parts
       .map((part) => part.replace(/\\/g, '/').replace(/\/+$/, ''))
       .join('/');
-  }
-
-  private normalizeProjectRelativePath(path: string): string {
-    return path
-      .replace(/\\/g, '/')
-      .replace(/^\/+/, '')
-      .replace(/\/+/g, '/');
   }
 
   private getMimeTypeFromFileName(fileName: string): string {
@@ -106,32 +105,35 @@ class ProjectFileService {
     }
 
     const rawFolderPath = this.joinPath(projectPath, PROJECT_FOLDERS.RAW);
-    const targetName = fileName || file.name;
+    const target = buildRawTargetPath(fileName, file.name);
+    const targetFolderPath = target.folderPath
+      ? this.joinPath(rawFolderPath, target.folderPath)
+      : rawFolderPath;
 
-    await NativeHelperClient.createDir(rawFolderPath);
+    await NativeHelperClient.createDir(targetFolderPath);
 
-    const entries = await NativeHelperClient.listDir(rawFolderPath);
-    const exactMatch = entries.find((entry) => entry.kind === 'file' && entry.name === targetName);
+    const entries = await NativeHelperClient.listDir(targetFolderPath);
 
-    if (exactMatch && exactMatch.size === file.size) {
-      return {
-        relativePath: `${PROJECT_FOLDERS.RAW}/${targetName}`,
-        alreadyExisted: true,
-      };
-    }
+    let finalName = target.fileName;
+    let counter = 0;
+    while (true) {
+      const existing = entries.find((entry) => entry.kind === 'file' && entry.name === finalName);
+      if (!existing) {
+        break;
+      }
 
-    let finalName = targetName;
-    let counter = 1;
+      if (existing.size === file.size) {
+        return {
+          relativePath: getRawRelativePath(target.folderPath, finalName),
+          alreadyExisted: true,
+        };
+      }
 
-    while (entries.some((entry) => entry.kind === 'file' && entry.name === finalName)) {
-      const extensionIndex = targetName.lastIndexOf('.');
-      finalName = extensionIndex > 0
-        ? `${targetName.slice(0, extensionIndex)}_${counter}${targetName.slice(extensionIndex)}`
-        : `${targetName}_${counter}`;
       counter += 1;
+      finalName = addFileNameSuffix(target.fileName, counter);
     }
 
-    const fullPath = this.joinPath(projectPath, PROJECT_FOLDERS.RAW, finalName);
+    const fullPath = this.joinPath(targetFolderPath, finalName);
     const success = await NativeHelperClient.writeFileBinary(fullPath, file);
 
     if (!success) {
@@ -139,7 +141,7 @@ class ProjectFileService {
     }
 
     return {
-      relativePath: `${PROJECT_FOLDERS.RAW}/${finalName}`,
+      relativePath: getRawRelativePath(target.folderPath, finalName),
       alreadyExisted: false,
     };
   }
@@ -153,19 +155,21 @@ class ProjectFileService {
       return null;
     }
 
-    const normalizedPath = this.normalizeProjectRelativePath(relativePath);
-    const fullPath = this.joinPath(projectPath, normalizedPath);
+    const target = parseRawRelativePath(relativePath);
+    if (!target) {
+      return null;
+    }
+
+    const fullPath = this.joinPath(projectPath, target.relativePath);
     const fileBuffer = await NativeHelperClient.getDownloadedFile(fullPath);
 
     if (!fileBuffer) {
       return null;
     }
 
-    const fileName = normalizedPath.split('/').pop() || 'project-media.bin';
-
     return {
-      file: new File([fileBuffer], fileName, {
-        type: this.getMimeTypeFromFileName(fileName),
+      file: new File([fileBuffer], target.fileName, {
+        type: this.getMimeTypeFromFileName(target.fileName),
       }),
     };
   }

@@ -21,6 +21,13 @@ import {
   setSlotMIDIBinding,
   setTransportMIDIBinding,
 } from '../services/midi/midiBindingMutations';
+import {
+  createMIDIMarkerMappingId,
+  createMIDISlotMappingId,
+  createMIDITransportMappingId,
+} from '../services/midi/midiMappingSummary';
+
+const MIDI_MAPPING_ACTIVE_HIGHLIGHT_MS = 450;
 
 function buildDeviceList(access: MIDIAccess): MIDIDeviceInfo[] {
   const devices: MIDIDeviceInfo[] = [];
@@ -54,6 +61,15 @@ export function useMIDIRuntime() {
 
     let cancelled = false;
     let midiAccess: MIDIAccess | null = null;
+
+    const markMappingActive = (mappingId: string) => {
+      const activatedAt = Date.now();
+      const midiStore = useMIDIStore.getState();
+      midiStore.markMappingActive(mappingId, activatedAt);
+      window.setTimeout(() => {
+        useMIDIStore.getState().clearActiveMapping(mappingId, activatedAt);
+      }, MIDI_MAPPING_ACTIVE_HIGHLIGHT_MS);
+    };
 
     const attachInputListeners = (access: MIDIAccess) => {
       const handleMessage = (event: MIDIMessageEvent) => {
@@ -124,16 +140,22 @@ export function useMIDIRuntime() {
           ]>).find(([, binding]) => binding && midiBindingsMatch(binding, learnedBinding))?.[0];
 
           if (matchedTransportAction) {
+            markMappingActive(createMIDITransportMappingId(matchedTransportAction, learnedBinding));
             void triggerMIDITransportAction(matchedTransportAction);
             return;
           }
 
-          const markerBinding = useTimelineStore.getState().markers
-            .flatMap((marker) => marker.midiBindings ?? [])
-            .find((binding) => midiBindingsMatch(binding, learnedBinding));
+          const markerMatch = useTimelineStore.getState().markers
+            .flatMap((marker) => (marker.midiBindings ?? []).map((binding) => ({ marker, binding })))
+            .find(({ binding }) => midiBindingsMatch(binding, learnedBinding));
 
-          if (markerBinding) {
-            void triggerMarkerMIDIBinding(markerBinding);
+          if (markerMatch) {
+            markMappingActive(createMIDIMarkerMappingId(
+              markerMatch.marker.id,
+              markerMatch.binding.action,
+              markerMatch.binding
+            ));
+            void triggerMarkerMIDIBinding(markerMatch.binding);
             return;
           }
 
@@ -141,6 +163,7 @@ export function useMIDIRuntime() {
             .find(([, binding]) => binding && midiBindingsMatch(binding, learnedBinding));
 
           if (slotBindingEntry) {
+            markMappingActive(createMIDISlotMappingId(Number(slotBindingEntry[0]), slotBindingEntry[1]!));
             void triggerSlotMIDIAction(Number(slotBindingEntry[0]));
             return;
           }
@@ -153,6 +176,7 @@ export function useMIDIRuntime() {
             }));
 
           if (parameterBinding) {
+            markMappingActive(parameterBinding.id);
             void triggerMIDIParameterBinding(parameterBinding, data2);
           }
           return;
@@ -205,6 +229,7 @@ export function useMIDIRuntime() {
             }));
 
           if (parameterBinding) {
+            markMappingActive(parameterBinding.id);
             void triggerMIDIParameterBinding(parameterBinding, data2);
           }
         }

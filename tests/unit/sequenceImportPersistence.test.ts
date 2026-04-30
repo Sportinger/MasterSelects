@@ -110,7 +110,9 @@ describe('sequence import persistence', () => {
     });
 
     expect(mocks.copyToRawFolder).toHaveBeenCalledTimes(2);
-    expect(result.projectPath).toBe('Raw/scan-splat-seq-1_000000_scan000000.ply');
+    expect(mocks.copyToRawFolder).toHaveBeenNthCalledWith(1, frameA, 'scan/scan000000.ply');
+    expect(mocks.copyToRawFolder).toHaveBeenNthCalledWith(2, frameB, 'scan/scan000001.ply');
+    expect(result.projectPath).toBe('Raw/scan/scan000000.ply');
     expect(result.hasFileHandle).toBe(true);
     expect(mocks.loadGaussianSplatAsset).toHaveBeenCalledTimes(1);
     expect(mocks.loadGaussianSplatAsset).toHaveBeenCalledWith(frameA);
@@ -121,12 +123,12 @@ describe('sequence import persistence', () => {
     expect(result.gaussianSplatSequence?.frames).toEqual([
       expect.objectContaining({
         name: 'scan000000.ply',
-        projectPath: 'Raw/scan-splat-seq-1_000000_scan000000.ply',
+        projectPath: 'Raw/scan/scan000000.ply',
         splatUrl: 'blob:scan000000.ply',
       }),
       expect.objectContaining({
         name: 'scan000001.ply',
-        projectPath: 'Raw/scan-splat-seq-1_000001_scan000001.ply',
+        projectPath: 'Raw/scan/scan000001.ply',
         splatUrl: 'blob:scan000001.ply',
       }),
     ]);
@@ -153,20 +155,49 @@ describe('sequence import persistence', () => {
     });
 
     expect(mocks.copyToRawFolder).toHaveBeenCalledTimes(2);
-    expect(result.projectPath).toBe('Raw/hero-model-seq-1_000000_hero000000.glb');
+    expect(mocks.copyToRawFolder).toHaveBeenNthCalledWith(1, frameA, 'hero/hero000000.glb');
+    expect(mocks.copyToRawFolder).toHaveBeenNthCalledWith(2, frameB, 'hero/hero000001.glb');
+    expect(result.projectPath).toBe('Raw/hero/hero000000.glb');
     expect(result.hasFileHandle).toBe(true);
     expect(mocks.loadGaussianSplatAsset).not.toHaveBeenCalled();
     expect(result.modelSequence?.frames).toEqual([
       expect.objectContaining({
         name: 'hero000000.glb',
-        projectPath: 'Raw/hero-model-seq-1_000000_hero000000.glb',
+        projectPath: 'Raw/hero/hero000000.glb',
         modelUrl: 'blob:hero000000.glb',
       }),
       expect.objectContaining({
         name: 'hero000001.glb',
-        projectPath: 'Raw/hero-model-seq-1_000001_hero000001.glb',
+        projectPath: 'Raw/hero/hero000001.glb',
         modelUrl: 'blob:hero000001.glb',
       }),
     ]);
+  });
+
+  it('copies model sequences into project RAW even when source handles exist', async () => {
+    const { processModelSequenceImport } = await import('../../src/stores/mediaStore/helpers/modelSequenceImport');
+    const frameA = new File(['a'], 'hero000000.glb', { type: 'model/gltf-binary' });
+    const frameB = new File(['b'], 'hero000001.glb', { type: 'model/gltf-binary' });
+    const handleA = { name: frameA.name } as FileSystemFileHandle;
+    const handleB = { name: frameB.name } as FileSystemFileHandle;
+
+    await processModelSequenceImport({
+      id: 'model-seq-handles',
+      sequence: {
+        entries: [
+          { file: frameA, handle: handleA, absolutePath: 'C:/hero000000.glb' },
+          { file: frameB, handle: handleB, absolutePath: 'C:/hero000001.glb' },
+        ],
+        extension: '.glb',
+        frameCount: 2,
+        prefix: 'hero',
+        sequenceName: 'hero',
+        displayName: 'hero (2f)',
+      },
+    });
+
+    expect(mocks.copyToRawFolder).toHaveBeenCalledTimes(2);
+    expect(mocks.copyToRawFolder).toHaveBeenNthCalledWith(1, frameA, 'hero/hero000000.glb');
+    expect(mocks.copyToRawFolder).toHaveBeenNthCalledWith(2, frameB, 'hero/hero000001.glb');
   });
 });

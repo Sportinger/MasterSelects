@@ -98,6 +98,12 @@ MyProject/
 +-- Raw/                   # Auto-copied media files (portable)
 |   +-- Interview_01.mp4
 |   +-- Music.wav
+|   +-- hero/              # Imported GLB sequence frames
+|   |   +-- hero000000.glb
+|   |   +-- hero000001.glb
+|   +-- scan/              # Imported PLY/splat sequence frames
+|   |   +-- scan000000.ply
+|   |   +-- scan000001.ply
 +-- Downloads/             # Downloaded videos (platform subfolders)
 |   +-- YT/
 |   |   +-- video_title.mp4
@@ -141,6 +147,8 @@ const PROJECT_FOLDERS = {
 ### Auto-Copy to Raw Folder
 When importing media files (controlled by `copyMediaToProject` setting):
 - Files are **copied** to the project's `Raw/` folder
+- Numbered `.glb`, `.ply`, and `.splat` sequences are copied whenever a project is open, even when global auto-copy is off, so sequence frames survive reloads and project moves
+- Sequence frames are stored under `Raw/<sequence-name>/` with their original frame filenames
 - Original files remain untouched at their source location
 - If a file with the same name and size already exists, reuses the existing copy
 - If a file with the same name but different size exists, adds a numeric suffix
@@ -327,7 +335,7 @@ interface ProjectFile {
 - Composition view state per composition (playhead, zoom, scroll, in/out points)
 - Media panel column order and name width
 - Transcript language preference
-- Global MIDI state: enabled flag, transport bindings (`Play / Pause`, `Stop`), parameter mappings, mapping ranges, and invert flags
+- Global MIDI state: enabled flag, transport bindings (`Play / Pause`, `Stop`), parameter mappings, mapping ranges, invert flags, and damping flags
 - View toggles: thumbnails, waveforms, proxy, transcript markers
 - Changelog preferences (`showChangelogOnStartup`, `lastSeenChangelogVersion`)
 - Export panel state: live export settings, named export presets, and the selected preset

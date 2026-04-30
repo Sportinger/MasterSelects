@@ -35,6 +35,7 @@ describe('midiBindingMutations', () => {
       },
       slotBindings: {},
       parameterBindings: {},
+      activeMappingIds: {},
     });
 
     useTimelineStore.setState({
@@ -211,5 +212,18 @@ describe('midiBindingMutations', () => {
       channel: 1,
       control: 7,
     });
+  });
+
+  it('keeps active mapping highlights transient and timestamp-safe', () => {
+    const state = useMIDIStore.getState();
+    state.markMappingActive('parameter:clip-param:opacity', 100);
+    state.markMappingActive('parameter:clip-param:opacity', 200);
+    state.clearActiveMapping('parameter:clip-param:opacity', 100);
+
+    expect(useMIDIStore.getState().activeMappingIds['parameter:clip-param:opacity']).toBe(200);
+
+    useMIDIStore.getState().clearActiveMapping('parameter:clip-param:opacity', 200);
+
+    expect(useMIDIStore.getState().activeMappingIds['parameter:clip-param:opacity']).toBeUndefined();
   });
 });

@@ -14,6 +14,7 @@ import {
   midiBindingsMatch,
   midiParameterMessagesMatch,
 } from '../../types/midi';
+import { cancelDampedMIDIParameterBinding } from './midiCommands';
 
 interface ConflictOptions {
   transportAction?: MIDITransportAction;
@@ -37,6 +38,7 @@ function removeConflictingMIDIParameterMessageBinding(
   Object.values(midiStore.parameterBindings).forEach((existingBinding) => {
     const isSameTarget = options?.parameterBindingId === existingBinding.id;
     if (!isSameTarget && midiParameterMessagesMatch(existingBinding.message, message)) {
+      cancelDampedMIDIParameterBinding(existingBinding.id);
       midiStore.removeParameterBinding(existingBinding.id);
     }
   });
@@ -176,6 +178,7 @@ export function setParameterMIDIBinding(
   const existingBinding = midiStore.parameterBindings[bindingId];
 
   if (!message) {
+    cancelDampedMIDIParameterBinding(bindingId);
     midiStore.removeParameterBinding(bindingId);
     return;
   }
@@ -198,17 +201,22 @@ export function setParameterMIDIBinding(
     min: existingBinding?.min ?? target.min,
     max: existingBinding?.max ?? target.max,
     invert: existingBinding?.invert,
+    damping: existingBinding?.damping,
   });
 }
 
 export function updateParameterMIDIBinding(
   bindingId: string,
-  updates: Partial<Pick<MIDIParameterBinding, 'min' | 'max' | 'invert'>>
+  updates: Partial<Pick<MIDIParameterBinding, 'min' | 'max' | 'invert' | 'damping'>>
 ): void {
   const midiStore = useMIDIStore.getState();
   const binding = midiStore.parameterBindings[bindingId];
   if (!binding) {
     return;
+  }
+
+  if (updates.damping === false) {
+    cancelDampedMIDIParameterBinding(bindingId);
   }
 
   midiStore.setParameterBinding({

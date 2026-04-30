@@ -122,6 +122,7 @@ describe('collectMIDIMappingSummary', () => {
         min: 0,
         max: 1,
         invert: true,
+        damping: true,
         message: {
           type: 'control-change',
           channel: 2,
@@ -169,7 +170,7 @@ describe('collectMIDIMappingSummary', () => {
       action: 'setParameter',
       targetLabel: 'Opacity',
       bindingLabel: 'Ch 2 / CC 74',
-      behaviorLabel: 'Set parameter value over 0 to 1 (inverted)',
+      behaviorLabel: 'Set parameter value over 0 to 1 (inverted, damped)',
       parameterBindingId: 'parameter:clip-1:opacity',
     });
   });

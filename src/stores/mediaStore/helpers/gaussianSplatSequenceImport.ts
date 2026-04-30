@@ -23,19 +23,21 @@ function shouldCopyFramesToProject(
 ): boolean {
   const { copyMediaToProject } = useSettingsStore.getState();
   const hasVolatileFrames = entries.some((entry) => !entry.handle);
-  // Sequence imports created from plain File objects die on refresh unless we
-  // persist the raw frames somewhere. Handles or an explicit copy setting are
-  // enough, otherwise force a project RAW copy when a project is open.
-  return projectFileService.isProjectOpen() && (copyMediaToProject || forceCopyToProject || hasVolatileFrames);
+  return projectFileService.isProjectOpen() && (
+    copyMediaToProject ||
+    forceCopyToProject ||
+    hasVolatileFrames ||
+    entries.length > 1
+  );
 }
 
-function buildSequenceSlug(id: string, sequenceName: string): string {
+function buildSequenceRawFolderName(sequenceName: string): string {
   const normalized = sequenceName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 40);
-  return normalized ? `${normalized}-${id}` : `splat-sequence-${id}`;
+  return normalized || 'splat-sequence';
 }
 
 function getSequenceFrameHandleCacheKey(id: string, index: number): string {
@@ -62,7 +64,6 @@ async function resolveSequenceSharedBounds(
 }
 
 async function maybeCopyFramesToProject(
-  id: string,
   sequenceName: string,
   entries: GaussianSplatSequenceImportEntry[],
   forceCopyToProject = false,
@@ -72,14 +73,14 @@ async function maybeCopyFramesToProject(
     return entries.map(() => ({}));
   }
 
-  const slug = buildSequenceSlug(id, sequenceName);
+  const folderName = buildSequenceRawFolderName(sequenceName);
   const copies: Array<{ handle?: FileSystemFileHandle; relativePath?: string }> = [];
 
   for (let index = 0; index < entries.length; index += 1) {
     const entry = entries[index];
     const copied = await projectFileService.copyToRawFolder(
       entry.file,
-      `${slug}_${index.toString().padStart(6, '0')}_${entry.file.name}`,
+      `${folderName}/${entry.file.name}`,
     );
     copies.push({
       handle: copied?.handle,
@@ -122,7 +123,6 @@ export async function processGaussianSplatSequenceImport<T extends GaussianSplat
   reportProgress(0);
 
   const copiedFrames = await maybeCopyFramesToProject(
-    id,
     sequence.sequenceName,
     sequence.entries,
     forceCopyToProject === true,

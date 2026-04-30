@@ -369,6 +369,7 @@ describe('project media persistence', () => {
         label: 'Opacity',
         min: 0,
         max: 1,
+        damping: true,
         message: { type: 'control-change', channel: 2, control: 7 },
       },
     };
@@ -385,6 +386,7 @@ describe('project media persistence', () => {
           'parameter:clip-1:opacity': expect.objectContaining({
             clipId: 'clip-1',
             property: 'opacity',
+            damping: true,
             message: { type: 'control-change', channel: 2, control: 7 },
           }),
         },
@@ -1029,6 +1031,7 @@ describe('project media persistence', () => {
               label: 'Opacity',
               min: 0,
               max: 1,
+              damping: true,
               message: { type: 'control-change', channel: 4, control: 9 },
             },
           },
@@ -1052,6 +1055,7 @@ describe('project media persistence', () => {
         'parameter:clip-1:opacity': expect.objectContaining({
           clipId: 'clip-1',
           property: 'opacity',
+          damping: true,
           message: { type: 'control-change', channel: 4, control: 9 },
         }),
       },
