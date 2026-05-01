@@ -14,6 +14,7 @@ import { useRenderTargetStore } from '../../stores/renderTargetStore';
 import { layerPlaybackManager } from '../layerPlaybackManager';
 import { layerBuilder } from '../layerBuilder';
 import { projectFileService } from '../projectFileService';
+import { loadProjectToStores } from '../project/projectLoad';
 
 const tabId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
   ? crypto.randomUUID()
@@ -199,6 +200,31 @@ async function runDebugAction(action: string, args: Record<string, unknown> = {}
     case 'deactivate-all-slots': {
       mediaState.deactivateAllLayers();
       mediaState.selectSlotComposition(null);
+      return { success: true, data: { action } };
+    }
+    case 'load-project-path': {
+      const projectPath = typeof args.path === 'string' ? args.path : '';
+      if (!projectPath) {
+        return { success: false, error: 'Missing path' };
+      }
+
+      const loaded = await projectFileService.loadProject(projectPath);
+      if (!loaded) {
+        return { success: false, error: `Failed to load project: ${projectPath}` };
+      }
+
+      await loadProjectToStores();
+      return {
+        success: true,
+        data: {
+          action,
+          projectPath,
+          projectName: projectFileService.getProjectData()?.name ?? null,
+        },
+      };
+    }
+    case 'reload-page': {
+      window.location.reload();
       return { success: true, data: { action } };
     }
     default:

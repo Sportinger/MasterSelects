@@ -55,6 +55,15 @@ export function isProjectStoreSyncInProgress(): boolean {
   return projectStoreSyncInProgress;
 }
 
+export async function withProjectStoreSyncGuard<T>(work: () => Promise<T>): Promise<T> {
+  projectStoreSyncInProgress = true;
+  try {
+    return await work();
+  } finally {
+    projectStoreSyncInProgress = false;
+  }
+}
+
 // ============================================
 // CONVERTER HELPERS (store → project format)
 // ============================================
@@ -351,8 +360,7 @@ function readMediaPanelViewMode(): 'classic' | 'icons' | 'board' | undefined {
  * Sync current store state to projectFileService
  */
 export async function syncStoresToProject(): Promise<void> {
-  projectStoreSyncInProgress = true;
-  try {
+  await withProjectStoreSyncGuard(async () => {
     const mediaState = useMediaStore.getState();
     const timelineStore = useTimelineStore.getState();
 
@@ -480,9 +488,7 @@ export async function syncStoresToProject(): Promise<void> {
     }
 
     log.info(' Synced stores to project');
-  } finally {
-    projectStoreSyncInProgress = false;
-  }
+  });
 }
 
 /**

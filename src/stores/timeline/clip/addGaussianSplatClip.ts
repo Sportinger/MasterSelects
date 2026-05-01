@@ -1,4 +1,4 @@
-// Gaussian Splat clip addition — PLY/splat/ksplat scene files
+// Gaussian Splat clip addition - PLY/splat/ksplat scene files
 // Creates a timeline clip with is3D=true that renders via the gaussian splat pipeline
 
 import type { GaussianSplatSequenceData, TimelineClip } from '../../../types';
@@ -20,6 +20,9 @@ export interface AddGaussianSplatClipParams {
   estimatedDuration: number;
   mediaFileId?: string;
   gaussianSplatSequence?: GaussianSplatSequenceData;
+  gaussianSplatUrl?: string;
+  gaussianSplatFileName?: string;
+  gaussianSplatRuntimeKey?: string;
 }
 
 /**
@@ -27,7 +30,16 @@ export interface AddGaussianSplatClipParams {
  * Auto-sets is3D=true so it renders via the 3D pipeline.
  */
 export function createGaussianSplatClipPlaceholder(params: AddGaussianSplatClipParams): TimelineClip {
-  const { trackId, file, startTime, estimatedDuration, gaussianSplatSequence } = params;
+  const {
+    trackId,
+    file,
+    startTime,
+    estimatedDuration,
+    gaussianSplatSequence,
+    gaussianSplatUrl,
+    gaussianSplatFileName,
+    gaussianSplatRuntimeKey,
+  } = params;
   const clipId = generateClipId('clip-gsplat');
   const naturalDuration = gaussianSplatSequence
     ? estimatedDuration || DEFAULT_SPLAT_DURATION
@@ -48,16 +60,19 @@ export function createGaussianSplatClipPlaceholder(params: AddGaussianSplatClipP
       mediaFileId: params.mediaFileId,
       threeDEffectorsEnabled: true,
       ...(gaussianSplatSequence ? { gaussianSplatSequence } : {}),
+      ...(gaussianSplatUrl ? { gaussianSplatUrl } : {}),
+      ...(gaussianSplatFileName ? { gaussianSplatFileName } : {}),
+      ...(gaussianSplatRuntimeKey ? { gaussianSplatRuntimeKey } : {}),
       gaussianSplatSettings: resolveGaussianSplatSettingsForSource(undefined, {
-        fileName: file.name,
+        fileName: gaussianSplatFileName ?? file.name,
         sequence: gaussianSplatSequence,
       }),
     },
     mediaFileId: params.mediaFileId,
     transform: { ...DEFAULT_TRANSFORM },
     effects: [],
-    is3D: true,  // Auto-enable 3D for gaussian splat clips
-    isLoading: true,  // Splat takes time to load
+    is3D: true,
+    isLoading: true,
   };
 }
 
@@ -67,38 +82,48 @@ export interface LoadGaussianSplatMediaParams {
 }
 
 /**
- * "Load" gaussian splat media — creates blob URL for the renderer to load later.
- * No HTMLVideoElement or HTMLImageElement needed.
+ * "Load" gaussian splat media by attaching a URL for the renderer to fetch.
+ * Restored Native projects may only have a reference URL, so an empty
+ * placeholder File must not be preferred over that URL.
  */
 export function loadGaussianSplatMedia(params: LoadGaussianSplatMediaParams): void {
   const { clip, updateClip } = params;
 
-  if (!clip.file) {
-    console.error('[GaussianSplat] loadGaussianSplatMedia: clip.file is missing — cannot create blob URL', clip.id);
-    updateClip(clip.id, { isLoading: false });
-    return;
-  }
-
   try {
-    // Create a blob URL that the gaussian splat renderer can fetch
     const sequenceFrame = clip.source?.gaussianSplatSequence?.frames[0];
-    const gaussianSplatUrl = sequenceFrame?.splatUrl ?? blobUrlManager.create(clip.id, clip.file, 'model');
+    const renderableFile = clip.file?.size ? clip.file : undefined;
+    const gaussianSplatUrl = sequenceFrame?.splatUrl
+      ?? clip.source?.gaussianSplatUrl
+      ?? (renderableFile ? blobUrlManager.create(clip.id, renderableFile, 'model') : undefined);
+    const gaussianSplatFileName =
+      sequenceFrame?.name ??
+      clip.source?.gaussianSplatFileName ??
+      clip.file?.name ??
+      'gaussian-splat';
     const runtimeKey =
       sequenceFrame?.projectPath ??
       sequenceFrame?.absolutePath ??
       sequenceFrame?.sourcePath ??
-      sequenceFrame?.name;
+      sequenceFrame?.name ??
+      clip.source?.gaussianSplatRuntimeKey ??
+      clip.source?.gaussianSplatUrl;
+
+    if (!gaussianSplatUrl) {
+      console.error('[GaussianSplat] loadGaussianSplatMedia: no renderable file or URL', clip.id);
+      updateClip(clip.id, { isLoading: false });
+      return;
+    }
 
     updateClip(clip.id, {
       source: {
         ...clip.source!,
         gaussianSplatUrl,
-        gaussianSplatFileName: sequenceFrame?.name ?? clip.file.name,
+        gaussianSplatFileName,
         gaussianSplatRuntimeKey: runtimeKey,
         gaussianSplatSettings: resolveGaussianSplatSettingsForSource(
           clip.source?.gaussianSplatSettings,
           {
-            fileName: sequenceFrame?.name ?? clip.file.name,
+            fileName: gaussianSplatFileName,
             sequence: clip.source?.gaussianSplatSequence,
           },
         ),
@@ -108,9 +133,9 @@ export function loadGaussianSplatMedia(params: LoadGaussianSplatMediaParams): vo
 
     prewarmGaussianSplatRuntime({
       cacheKey: runtimeKey || clip.mediaFileId || clip.source?.mediaFileId || clip.id,
-      file: clip.file,
+      file: renderableFile,
       url: gaussianSplatUrl,
-      fileName: sequenceFrame?.name ?? clip.file.name,
+      fileName: gaussianSplatFileName,
       gaussianSplatSequence: clip.source?.gaussianSplatSequence,
       requestedMaxSplats: clip.source?.gaussianSplatSettings?.render.maxSplats ?? 0,
     });

@@ -131,6 +131,12 @@ pub enum Command {
         new_path: String,
     },
 
+    /// Grant access to a path the browser already persisted from a user-picked project
+    GrantPath {
+        id: String,
+        path: String,
+    },
+
     /// Open a native OS folder picker dialog
     PickFolder {
         id: String,

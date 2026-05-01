@@ -230,6 +230,12 @@ export interface RenameCommand {
   new_path: string;
 }
 
+export interface GrantPathCommand {
+  cmd: 'grant_path';
+  id: string;
+  path: string;
+}
+
 export interface DirEntry {
   name: string;
   kind: 'file' | 'directory';
@@ -312,6 +318,7 @@ export type Command =
   | DeleteCommand
   | ExistsCommand
   | RenameCommand
+  | GrantPathCommand
   | MatAnyoneStatusCommand
   | MatAnyoneSetupCommand
   | MatAnyoneDownloadModelCommand

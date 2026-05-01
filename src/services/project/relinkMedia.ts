@@ -37,6 +37,14 @@ function normalizePath(value: string): string {
   return value.replace(/\\/g, '/');
 }
 
+function isAbsolutePath(value: string | undefined): boolean {
+  return Boolean(value && (value.startsWith('/') || /^[A-Za-z]:[/\\]/.test(value)));
+}
+
+function getNativeHandlePath(handle: FileSystemFileHandle | undefined): string | undefined {
+  return (handle as (FileSystemFileHandle & { __nativePath?: string }) | undefined)?.__nativePath;
+}
+
 function getBaseName(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const normalized = normalizePath(value);
@@ -156,6 +164,7 @@ export async function createRelinkCandidateMapFromHandles(
     const candidate: RelinkCandidate = {
       name: handle.name,
       handle,
+      absolutePath: getNativeHandlePath(handle),
     };
     candidates.set(candidate.name.toLowerCase(), candidate);
   }
@@ -241,6 +250,46 @@ async function copyCandidateToProject(
   return { file, handle, projectPath };
 }
 
+function hasResolvableFramePath(frame: ModelSequenceFrame | GaussianSplatSequenceFrame): boolean {
+  return Boolean(
+    frame.projectPath ||
+    isAbsolutePath(frame.absolutePath) ||
+    isAbsolutePath(frame.sourcePath),
+  );
+}
+
+export function isNativeProjectLinkedMedia(mediaFile: MediaFile): boolean {
+  if (projectFileService.activeBackend !== 'native') {
+    return false;
+  }
+
+  if (mediaFile.file) {
+    return true;
+  }
+
+  if (
+    mediaFile.projectPath ||
+    isAbsolutePath(mediaFile.absolutePath) ||
+    isAbsolutePath(mediaFile.filePath)
+  ) {
+    return true;
+  }
+
+  if (mediaFile.modelSequence?.frames.length) {
+    return mediaFile.modelSequence.frames.every(hasResolvableFramePath);
+  }
+
+  if (mediaFile.gaussianSplatSequence?.frames.length) {
+    return mediaFile.gaussianSplatSequence.frames.every(hasResolvableFramePath);
+  }
+
+  return false;
+}
+
+export function mediaNeedsRelink(mediaFile: MediaFile): boolean {
+  return !mediaFile.file && !isNativeProjectLinkedMedia(mediaFile);
+}
+
 function isBlobUrl(url: string | undefined): boolean {
   return typeof url === 'string' && url.startsWith('blob:');
 }
@@ -261,7 +310,35 @@ function replaceMediaFile(mediaFileId: string, nextFile: Partial<MediaFile>): vo
   }));
 }
 
+async function applyNativeSingleRelink(
+  mediaFile: MediaFile,
+  match: Extract<RelinkMatch, { kind: 'single' }>,
+): Promise<boolean> {
+  const targetPath = mediaFile.projectPath ?? match.candidate.name;
+  const absolutePath =
+    match.candidate.absolutePath ??
+    projectFileService.resolveRawFilePath(targetPath) ??
+    mediaFile.absolutePath;
+
+  await storeHandle(mediaFile.id, match.candidate.handle);
+
+  replaceMediaFile(mediaFile.id, {
+    file: undefined,
+    url: '',
+    filePath: absolutePath ?? targetPath,
+    absolutePath,
+    projectPath: targetPath,
+    fileSize: mediaFile.fileSize,
+  });
+
+  return true;
+}
+
 async function applySingleRelink(mediaFile: MediaFile, match: Extract<RelinkMatch, { kind: 'single' }>): Promise<boolean> {
+  if (projectFileService.activeBackend === 'native' && !match.candidate.file) {
+    return applyNativeSingleRelink(mediaFile, match);
+  }
+
   const targetPath = mediaFile.projectPath ?? match.candidate.name;
   const restored = await copyCandidateToProject(match.candidate, targetPath);
   const url = URL.createObjectURL(restored.file);
@@ -284,10 +361,69 @@ async function applySingleRelink(mediaFile: MediaFile, match: Extract<RelinkMatc
   return true;
 }
 
+async function applyNativeModelSequenceRelink(
+  mediaFile: MediaFile,
+  match: Extract<RelinkMatch, { kind: 'model-sequence' }>,
+): Promise<boolean> {
+  const sequence = mediaFile.modelSequence;
+  if (!sequence) return false;
+
+  const frames = [...sequence.frames];
+  for (const { index, candidate } of match.frames) {
+    const existingFrame = frames[index];
+    if (!existingFrame) continue;
+
+    const projectPath = buildSequenceRawTarget(
+      existingFrame.projectPath,
+      sequence.sequenceName,
+      candidate.name,
+      'glb-sequence',
+    );
+    const absolutePath =
+      candidate.absolutePath ??
+      projectFileService.resolveRawFilePath(projectPath) ??
+      existingFrame.absolutePath;
+
+    await storeHandle(`${mediaFile.id}_frame_${index}`, candidate.handle);
+    if (index === 0) {
+      await storeHandle(mediaFile.id, candidate.handle);
+      await storeHandle(`${mediaFile.id}_project`, candidate.handle);
+    }
+
+    frames[index] = {
+      ...existingFrame,
+      name: candidate.name,
+      sourcePath: absolutePath ?? candidate.name,
+      absolutePath,
+      projectPath,
+    };
+  }
+
+  const firstFrame = frames[0];
+  replaceMediaFile(mediaFile.id, {
+    file: undefined,
+    url: '',
+    modelSequence: {
+      ...sequence,
+      frames,
+    },
+    filePath: firstFrame?.sourcePath,
+    absolutePath: firstFrame?.absolutePath,
+    projectPath: firstFrame?.projectPath,
+    fileSize: mediaFile.fileSize,
+  });
+
+  return true;
+}
+
 async function applyModelSequenceRelink(
   mediaFile: MediaFile,
   match: Extract<RelinkMatch, { kind: 'model-sequence' }>,
 ): Promise<boolean> {
+  if (projectFileService.activeBackend === 'native' && match.frames.every(({ candidate }) => !candidate.file)) {
+    return applyNativeModelSequenceRelink(mediaFile, match);
+  }
+
   const sequence = mediaFile.modelSequence;
   if (!sequence) return false;
 
@@ -349,10 +485,72 @@ async function applyModelSequenceRelink(
   return true;
 }
 
+async function applyNativeGaussianSplatSequenceRelink(
+  mediaFile: MediaFile,
+  match: Extract<RelinkMatch, { kind: 'gaussian-splat-sequence' }>,
+): Promise<boolean> {
+  const sequence = mediaFile.gaussianSplatSequence;
+  if (!sequence) return false;
+
+  const frames = [...sequence.frames];
+  for (const { index, candidate } of match.frames) {
+    const existingFrame = frames[index];
+    if (!existingFrame) continue;
+
+    const projectPath = buildSequenceRawTarget(
+      existingFrame.projectPath,
+      sequence.sequenceName,
+      candidate.name,
+      'splat-sequence',
+    );
+    const absolutePath =
+      candidate.absolutePath ??
+      projectFileService.resolveRawFilePath(projectPath) ??
+      existingFrame.absolutePath;
+
+    await storeHandle(`${mediaFile.id}_frame_${index}`, candidate.handle);
+    if (index === 0) {
+      await storeHandle(mediaFile.id, candidate.handle);
+      await storeHandle(`${mediaFile.id}_project`, candidate.handle);
+    }
+
+    frames[index] = {
+      ...existingFrame,
+      name: candidate.name,
+      sourcePath: absolutePath ?? candidate.name,
+      absolutePath,
+      projectPath,
+    };
+  }
+
+  const firstFrame = frames[0];
+  const totalFileSize = frames.reduce((sum, frame) => sum + (frame.fileSize ?? 0), 0);
+  replaceMediaFile(mediaFile.id, {
+    file: undefined,
+    url: '',
+    gaussianSplatSequence: {
+      ...sequence,
+      frames,
+      totalFileSize: totalFileSize || sequence.totalFileSize,
+    },
+    filePath: firstFrame?.sourcePath,
+    absolutePath: firstFrame?.absolutePath,
+    projectPath: firstFrame?.projectPath,
+    fileSize: totalFileSize || mediaFile.fileSize,
+    splatFrameCount: sequence.frameCount,
+  });
+
+  return true;
+}
+
 async function applyGaussianSplatSequenceRelink(
   mediaFile: MediaFile,
   match: Extract<RelinkMatch, { kind: 'gaussian-splat-sequence' }>,
 ): Promise<boolean> {
+  if (projectFileService.activeBackend === 'native' && match.frames.every(({ candidate }) => !candidate.file)) {
+    return applyNativeGaussianSplatSequenceRelink(mediaFile, match);
+  }
+
   const sequence = mediaFile.gaussianSplatSequence;
   if (!sequence) return false;
 

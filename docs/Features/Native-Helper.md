@@ -23,6 +23,8 @@ The browser client can discover the auth token automatically from `GET /startup-
 - **Format selection** -- List available formats and choose quality/codec before downloading
 - **File system operations** -- Write files, create directories, list/delete/rename, check existence
 - **Folder picker** -- Native OS folder picker dialog (for Firefox project folder selection)
+- **Picked-folder grants** -- Folder picker and restore paths are registered as allowed roots so projects outside the default Documents folder can be opened and served through the helper
+- **Manual path fallback** -- If the helper cannot show a native folder picker on the current platform, the web app prompts for the project folder path instead
 - **Firefox persistence** -- Enables full project save/load on Firefox via file system commands
 - **External AI control** -- Local `POST /api/ai-tools` bridge for Claude Code, curl, and other local agents
 - **System tray** -- On Windows, runs as a system tray app with auto-start and self-update support
@@ -242,6 +244,7 @@ cargo build --release
 1. Check firewall allows localhost:9876
 2. Ensure only one instance running
 3. On Windows, try `--console` flag to see log output
+4. If Firefox reports the helper as disconnected after refresh, press Check connection; the web client now refreshes the helper startup token on every reconnect, times out stalled reconnects, and retries every few seconds after a previously connected session
 
 ---
 

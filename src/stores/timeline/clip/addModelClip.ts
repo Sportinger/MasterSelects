@@ -16,6 +16,8 @@ export interface AddModelClipParams {
   estimatedDuration: number;
   mediaFileId?: string;
   modelSequence?: ModelSequenceData;
+  modelUrl?: string;
+  modelFileName?: string;
 }
 
 /**
@@ -23,7 +25,7 @@ export interface AddModelClipParams {
  * Auto-sets is3D=true so it renders via the shared 3D scene.
  */
 export function createModelClipPlaceholder(params: AddModelClipParams): TimelineClip {
-  const { trackId, file, startTime, estimatedDuration, modelSequence } = params;
+  const { trackId, file, startTime, estimatedDuration, modelSequence, modelUrl, modelFileName } = params;
   const clipId = generateClipId('clip-3d');
   const naturalDuration = modelSequence
     ? estimatedDuration || DEFAULT_MODEL_DURATION
@@ -44,6 +46,8 @@ export function createModelClipPlaceholder(params: AddModelClipParams): Timeline
       mediaFileId: params.mediaFileId,
       threeDEffectorsEnabled: true,
       ...(modelSequence ? { modelSequence } : {}),
+      ...(modelUrl ? { modelUrl } : {}),
+      ...(modelFileName ? { modelFileName } : {}),
     },
     mediaFileId: params.mediaFileId,
     transform: { ...DEFAULT_TRANSFORM },
@@ -65,14 +69,23 @@ export interface LoadModelMediaParams {
 export function loadModelMedia(params: LoadModelMediaParams): void {
   const { clip, updateClip } = params;
   const sequenceModelUrl = clip.source?.modelSequence?.frames[0]?.modelUrl;
+  const renderableFile = clip.file?.size ? clip.file : undefined;
 
   // Create a blob URL that the shared scene renderer can fetch
-  const modelUrl = sequenceModelUrl ?? blobUrlManager.create(clip.id, clip.file, 'model');
+  const modelUrl = sequenceModelUrl
+    ?? clip.source?.modelUrl
+    ?? (renderableFile ? blobUrlManager.create(clip.id, renderableFile, 'model') : undefined);
+
+  if (!modelUrl) {
+    updateClip(clip.id, { isLoading: false });
+    return;
+  }
 
   updateClip(clip.id, {
     source: {
       ...clip.source!,
       modelUrl,
+      modelFileName: clip.source?.modelFileName ?? clip.file.name,
     },
     isLoading: false,
   });

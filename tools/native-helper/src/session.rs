@@ -1,8 +1,8 @@
 //! Per-connection session management
 
 use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 use tokio::sync::{oneshot, Mutex};
 use tracing::{debug, info, warn};
 
@@ -98,6 +98,7 @@ pub struct AppState {
     pub auth_token: Option<String>,
     editor_client: Mutex<Option<EditorClient>>,
     pending_ai_requests: Mutex<HashMap<String, oneshot::Sender<serde_json::Value>>>,
+    granted_paths: RwLock<Vec<PathBuf>>,
     pub matanyone_process: Mutex<matanyone::process::MatAnyoneProcess>,
 }
 
@@ -107,8 +108,26 @@ impl AppState {
             auth_token,
             editor_client: Mutex::new(None),
             pending_ai_requests: Mutex::new(HashMap::new()),
+            granted_paths: RwLock::new(Vec::new()),
             matanyone_process: Mutex::new(matanyone::process::MatAnyoneProcess::new()),
         }
+    }
+
+    pub fn grant_path(&self, path: PathBuf) {
+        if !path.is_absolute() {
+            return;
+        }
+
+        let mut granted = self.granted_paths.write().unwrap_or_else(|e| e.into_inner());
+        if !granted.iter().any(|existing| existing == &path) {
+            info!("Granted file access root: {}", path.display());
+            granted.push(path);
+        }
+    }
+
+    pub fn is_path_allowed(&self, path: &Path) -> bool {
+        let granted = self.granted_paths.read().unwrap_or_else(|e| e.into_inner());
+        utils::is_path_allowed_with_extra(path, &granted)
     }
 
     pub async fn register_editor_client(&self, client: EditorClient) {
@@ -232,6 +251,20 @@ impl Session {
                 Some(self.handle_rename(&id, &old_path, &new_path))
             }
 
+            Command::GrantPath { id, path } => {
+                let path = PathBuf::from(path);
+                if !path.is_absolute() {
+                    Some(Response::error(
+                        &id,
+                        error_codes::INVALID_PATH,
+                        "Path must be absolute",
+                    ))
+                } else {
+                    self.state.grant_path(path);
+                    Some(Response::ok(&id, serde_json::json!({ "granted": true })))
+                }
+            }
+
             Command::PickFolder { id, title, default_path } => {
                 let title = title.unwrap_or_else(|| "Select folder".to_string());
                 let default_path = default_path.clone();
@@ -243,10 +276,13 @@ impl Session {
                     .await;
 
                 match result {
-                    Ok(Ok(Some(path))) => Some(Response::ok(
-                        &id,
-                        serde_json::json!({ "path": path.to_string_lossy() }),
-                    )),
+                    Ok(Ok(Some(path))) => {
+                        self.state.grant_path(path.clone());
+                        Some(Response::ok(
+                            &id,
+                            serde_json::json!({ "path": path.to_string_lossy() }),
+                        ))
+                    }
                     Ok(Ok(None)) => Some(Response::ok(
                         &id,
                         serde_json::json!({ "path": serde_json::Value::Null, "cancelled": true }),
@@ -376,7 +412,7 @@ impl Session {
         // within the helper's allowed directory policy.
         for dir in extra_dirs {
             let p = PathBuf::from(dir);
-            if p.is_absolute() && p.is_dir() && utils::is_path_allowed(&p) {
+            if p.is_absolute() && p.is_dir() && self.state.is_path_allowed(&p) {
                 search_dirs.push(p);
             }
         }
@@ -472,7 +508,7 @@ impl Session {
             return Response::error(id, error_codes::INVALID_PATH, "Path must be absolute");
         }
 
-        if !utils::is_path_allowed(path) {
+        if !self.state.is_path_allowed(path) {
             return Response::error(
                 id,
                 error_codes::PERMISSION_DENIED,
@@ -518,7 +554,7 @@ impl Session {
             return Response::error(id, error_codes::INVALID_PATH, "Path must be absolute");
         }
 
-        if !utils::is_path_allowed(path) {
+        if !self.state.is_path_allowed(path) {
             return Response::error(id, error_codes::PERMISSION_DENIED, "Path not in allowed directory");
         }
 
@@ -574,7 +610,7 @@ impl Session {
             return Response::error(id, error_codes::INVALID_PATH, "Path must be absolute");
         }
 
-        if !utils::is_path_allowed(path) {
+        if !self.state.is_path_allowed(path) {
             return Response::error(id, error_codes::PERMISSION_DENIED, "Path not in allowed directory");
         }
 
@@ -607,7 +643,7 @@ impl Session {
             return Response::error(id, error_codes::INVALID_PATH, "Path must be absolute");
         }
 
-        if !utils::is_path_allowed(path) {
+        if !self.state.is_path_allowed(path) {
             return Response::error(id, error_codes::PERMISSION_DENIED, "Path not in allowed directory");
         }
 
@@ -651,7 +687,7 @@ impl Session {
             return Response::error(id, error_codes::INVALID_PATH, "Path must be absolute");
         }
 
-        if !utils::is_path_allowed(path) {
+        if !self.state.is_path_allowed(path) {
             return Response::error(id, error_codes::PERMISSION_DENIED, "Path not in allowed directory");
         }
 
@@ -692,7 +728,7 @@ impl Session {
             return Response::error(id, error_codes::INVALID_PATH, "Path must be absolute");
         }
 
-        if !utils::is_path_allowed(path) {
+        if !self.state.is_path_allowed(path) {
             return Response::error(id, error_codes::PERMISSION_DENIED, "Path not in allowed directory");
         }
 
@@ -798,7 +834,7 @@ impl Session {
             return Response::error(id, error_codes::INVALID_PATH, "Paths must be absolute");
         }
 
-        if !utils::is_path_allowed(old) || !utils::is_path_allowed(new) {
+        if !self.state.is_path_allowed(old) || !self.state.is_path_allowed(new) {
             return Response::error(id, error_codes::PERMISSION_DENIED, "Path not in allowed directory");
         }
 

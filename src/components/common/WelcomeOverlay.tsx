@@ -12,6 +12,7 @@ import { openExistingProject } from '../../services/projectSync';
 import { NativeHelperClient } from '../../services/nativeHelper/NativeHelperClient';
 import { loadProjectToStores } from '../../services/project/projectLoad';
 import { syncStoresToProject } from '../../services/project/projectSave';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 type NativeStatus = 'checking' | 'available' | 'outdated' | 'unavailable';
 type DirectoryPickerWindow = Window & typeof globalThis & {
@@ -88,7 +89,8 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
 
   // Native Helper state (for Firefox project persistence)
   const [nativeStatus, setNativeStatus] = useState<NativeStatus>('checking');
-  const [nativeProjectRoot, setNativeProjectRoot] = useState<string>('');
+  const nativeHelperPort = useSettingsStore((state) => state.nativeHelperPort);
+  const setNativeHelperConnected = useSettingsStore((state) => state.setNativeHelperConnected);
 
   const isSupported = isFileSystemAccessSupported();
   const browser = useMemo(() => detectBrowser(), []);
@@ -105,13 +107,19 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
 
     async function checkNativeHelper() {
       try {
+        NativeHelperClient.configure({ port: nativeHelperPort });
+
         // Try to connect if not already
         if (!NativeHelperClient.isConnected()) {
-          await NativeHelperClient.connect();
+          const connected = await NativeHelperClient.connect();
+          setNativeHelperConnected(connected);
         }
 
         if (!NativeHelperClient.isConnected()) {
-          if (!cancelled) setNativeStatus('unavailable');
+          if (!cancelled) {
+            setNativeStatus('unavailable');
+            setNativeHelperConnected(false);
+          }
           return;
         }
 
@@ -129,20 +137,18 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
         // Activate native backend
         projectFileService.activateNativeBackend();
 
-        // Get project root path (used as default for folder picker)
-        const root = await NativeHelperClient.getProjectRoot();
-        if (!cancelled && root) {
-          setNativeProjectRoot(root.replace(/\\/g, '/'));
-        }
       } catch (e) {
         log.warn('Native helper check failed', e);
-        if (!cancelled) setNativeStatus('unavailable');
+        if (!cancelled) {
+          setNativeStatus('unavailable');
+          setNativeHelperConnected(false);
+        }
       }
     }
 
     checkNativeHelper();
     return () => { cancelled = true; };
-  }, [needsNativeHelper]);
+  }, [needsNativeHelper, nativeHelperPort, setNativeHelperConnected]);
 
   // Typewriter effect
   useEffect(() => {
@@ -317,33 +323,14 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
     }
   }, [isSelecting, isClosing, onComplete, noFadeOnClose]);
 
-  // Native Helper: Create new project (opens OS folder picker, like Chrome)
+  // Native Helper: Create new project through the ProjectFileService native backend.
   const handleNativeNewProject = useCallback(async () => {
     if (isSelecting || isClosing) return;
     setIsSelecting(true);
     setError(null);
 
     try {
-      // Open OS folder picker — same UX as Chrome's showDirectoryPicker()
-      const folderPath = await NativeHelperClient.pickFolder(
-        'Choose where to save your project',
-        nativeProjectRoot || undefined,
-      );
-
-      if (!folderPath) {
-        // User cancelled
-        return;
-      }
-
-      const nativeCore = projectFileService.getNativeCoreService();
-      if (!nativeCore) {
-        setError('Native backend not active.');
-        return;
-      }
-
-      // Create "Untitled" project in the selected folder (matches Chrome behavior)
-      const normalizedPath = folderPath.replace(/\\/g, '/');
-      const success = await nativeCore.createProjectAtPath(normalizedPath, 'Untitled');
+      const success = await projectFileService.createProject('Untitled');
 
       if (success) {
         setSelectedFolder('Untitled');
@@ -361,28 +348,16 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
     } finally {
       setIsSelecting(false);
     }
-  }, [isSelecting, isClosing, nativeProjectRoot, onComplete, noFadeOnClose]);
+  }, [isSelecting, isClosing, onComplete, noFadeOnClose]);
 
-  // Native Helper: Open existing project (opens OS folder picker, like Chrome)
+  // Native Helper: Open existing project through the ProjectFileService native backend.
   const handleNativeOpenProject = useCallback(async () => {
     if (isSelecting || isClosing) return;
     setIsSelecting(true);
     setError(null);
 
     try {
-      // Open OS folder picker — user selects existing project folder
-      const folderPath = await NativeHelperClient.pickFolder(
-        'Select an existing project folder',
-        nativeProjectRoot || undefined,
-      );
-
-      if (!folderPath) {
-        // User cancelled
-        return;
-      }
-
-      const normalizedPath = folderPath.replace(/\\/g, '/');
-      const success = await projectFileService.loadProject(normalizedPath);
+      const success = await projectFileService.openProject();
 
       if (success) {
         const projectData = projectFileService.getProjectData();
@@ -400,7 +375,7 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
     } finally {
       setIsSelecting(false);
     }
-  }, [isSelecting, isClosing, nativeProjectRoot, onComplete, noFadeOnClose]);
+  }, [isSelecting, isClosing, onComplete, noFadeOnClose]);
 
   const handleContinue = useCallback(() => {
     if (isClosing) return;

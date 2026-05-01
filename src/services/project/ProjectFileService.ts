@@ -61,6 +61,74 @@ class ProjectFileService {
       .join('/');
   }
 
+  private normalizeNativePath(path: string): string {
+    return path.trim().replace(/\\/g, '/').replace(/\/+$/, '');
+  }
+
+  private ensureNativeBackend(): NativeProjectCoreService {
+    if (!this.nativeCoreService) {
+      this.nativeCoreService = new NativeProjectCoreService();
+      this.nativeFileStorage = nativeFileStorageService;
+    }
+    this._activeBackend = 'native';
+    return this.nativeCoreService;
+  }
+
+  private async ensureNativeBackendReady(): Promise<NativeProjectCoreService | null> {
+    const nativeCore = this.ensureNativeBackend();
+
+    if (!NativeHelperClient.isConnected()) {
+      const connected = await NativeHelperClient.connect();
+      if (!connected) {
+        log.warn('Native Helper backend requested but helper is not connected');
+        return null;
+      }
+    }
+
+    const hasFsCommands = await NativeHelperClient.hasFsCommands();
+    if (!hasFsCommands) {
+      log.error('Native Helper does not support project file-system commands');
+      return null;
+    }
+
+    return nativeCore;
+  }
+
+  private async pickNativeFolder(title: string, defaultPath?: string | null): Promise<string | null> {
+    const fallbackPath = defaultPath ? this.normalizeNativePath(defaultPath) : '';
+    const result = await NativeHelperClient.pickFolderDetailed(title, fallbackPath || undefined);
+
+    if (result.path) {
+      const selectedPath = this.normalizeNativePath(result.path);
+      await NativeHelperClient.grantPath(selectedPath);
+      return selectedPath;
+    }
+
+    if (result.cancelled) {
+      return null;
+    }
+
+    log.warn('Native folder picker unavailable, falling back to manual path entry', {
+      title,
+      error: result.error,
+    });
+
+    const detectedRoot = fallbackPath || (await NativeHelperClient.getProjectRoot());
+    const promptDefault = detectedRoot || '';
+    const enteredPath = window.prompt(
+      `${title}\n\nNative folder picker is unavailable here. Enter the folder path manually:`,
+      promptDefault,
+    );
+
+    if (!enteredPath?.trim()) {
+      return null;
+    }
+
+    const selectedPath = this.normalizeNativePath(enteredPath);
+    await NativeHelperClient.grantPath(selectedPath);
+    return selectedPath;
+  }
+
   private getMimeTypeFromFileName(fileName: string): string {
     const extension = fileName.split('.').pop()?.toLowerCase() ?? '';
 
@@ -197,8 +265,9 @@ class ProjectFileService {
       isSameEntry: async (other: FileSystemHandle) => other === handle,
       queryPermission: async () => 'granted' as PermissionState,
       requestPermission: async () => 'granted' as PermissionState,
-    } as FileSystemFileHandle;
+    } as FileSystemFileHandle & { __nativePath?: string };
 
+    handle.__nativePath = fullPath;
     return handle;
   }
 
@@ -265,16 +334,14 @@ class ProjectFileService {
 
   /** Check if FSA (File System Access API) is available */
   get isFsaAvailable(): boolean {
-    return 'showDirectoryPicker' in window && 'showSaveFilePicker' in window;
+    return typeof window !== 'undefined'
+      && 'showDirectoryPicker' in window
+      && 'showSaveFilePicker' in window;
   }
 
   /** Switch to native helper backend (for Firefox) */
   activateNativeBackend(): void {
-    if (!this.nativeCoreService) {
-      this.nativeCoreService = new NativeProjectCoreService();
-      this.nativeFileStorage = nativeFileStorageService;
-    }
-    this._activeBackend = 'native';
+    this.ensureNativeBackend();
     log.info('Switched to Native Helper backend');
   }
 
@@ -307,7 +374,7 @@ class ProjectFileService {
   }
 
   isSupported(): boolean {
-    if (this._activeBackend === 'native') {
+    if (this._activeBackend === 'native' || !this.isFsaAvailable) {
       return this.nativeCoreService?.isSupported() ?? false;
     }
     return this.coreService.isSupported();
@@ -315,7 +382,7 @@ class ProjectFileService {
 
   getProjectHandle(): FileSystemDirectoryHandle | null {
     // Only FSA backend has a handle
-    if (this._activeBackend === 'fsa') {
+    if (this._activeBackend === 'fsa' && this.isFsaAvailable) {
       return this.coreService.getProjectHandle();
     }
     return null;
@@ -358,6 +425,20 @@ class ProjectFileService {
   }
 
   async createProject(name: string): Promise<boolean> {
+    if (this._activeBackend === 'native' || !this.isFsaAvailable) {
+      const nativeCore = await this.ensureNativeBackendReady();
+      if (!nativeCore) return false;
+
+      const projectRoot = await NativeHelperClient.getProjectRoot();
+      const parentPath = await this.pickNativeFolder(
+        'Choose where to save your project',
+        projectRoot,
+      );
+
+      if (!parentPath) return false;
+      return nativeCore.createProjectAtPath(parentPath, name);
+    }
+
     return this.core.createProject(name);
   }
 
@@ -367,21 +448,28 @@ class ProjectFileService {
   }
 
   async openProject(): Promise<boolean> {
-    if (this._activeBackend === 'fsa') {
+    if (this._activeBackend === 'fsa' && this.isFsaAvailable) {
       return this.coreService.openProject();
     }
-    // Native backend doesn't have a directory picker — use loadProject with a path
-    log.warn('openProject() called on native backend — use loadProject(path) instead');
-    return false;
+    const nativeCore = await this.ensureNativeBackendReady();
+    if (!nativeCore) return false;
+
+    const projectRoot = await NativeHelperClient.getProjectRoot();
+    const projectPath = await this.pickNativeFolder(
+      'Select an existing project folder',
+      projectRoot,
+    );
+
+    if (!projectPath) return false;
+    return nativeCore.loadProject(projectPath);
   }
 
   async loadProject(handleOrPath: FileSystemDirectoryHandle | string): Promise<boolean> {
     if (typeof handleOrPath === 'string') {
-      // Native path
-      if (this.nativeCoreService) {
-        return this.nativeCoreService.loadProject(handleOrPath);
-      }
-      return false;
+      const nativeCore = await this.ensureNativeBackendReady();
+      return nativeCore
+        ? nativeCore.loadProject(this.normalizeNativePath(handleOrPath))
+        : false;
     }
     // FSA handle
     return this.coreService.loadProject(handleOrPath);
@@ -404,6 +492,11 @@ class ProjectFileService {
   }
 
   async restoreLastProject(): Promise<boolean> {
+    if (this._activeBackend === 'native' || !this.isFsaAvailable) {
+      const nativeCore = await this.ensureNativeBackendReady();
+      return nativeCore ? nativeCore.restoreLastProject() : false;
+    }
+
     return this.core.restoreLastProject();
   }
 
@@ -544,6 +637,25 @@ class ProjectFileService {
     return this.rawMediaService.getFileFromRaw(handle, relativePath);
   }
 
+  resolveRawFilePath(relativePath: string | undefined): string | null {
+    if (this._activeBackend !== 'native' || !this.nativeCoreService || !relativePath) {
+      return null;
+    }
+
+    const projectPath = this.nativeCoreService.getProjectPath();
+    const target = parseRawRelativePath(relativePath);
+    if (!projectPath || !target) {
+      return null;
+    }
+
+    return this.joinPath(projectPath, target.relativePath);
+  }
+
+  resolveRawFileUrl(relativePath: string | undefined): string | null {
+    const fullPath = this.resolveRawFilePath(relativePath);
+    return fullPath ? NativeHelperClient.getFileReferenceUrl(fullPath) : null;
+  }
+
   async hasFileInRaw(fileName: string): Promise<boolean> {
     const handle = this.coreService.getProjectHandle();
     if (!handle) return false;
@@ -574,8 +686,37 @@ class ProjectFileService {
     return this.scanDirectoryHandle(handle);
   }
 
+  async pickAndScanFolder(title = 'Search folder for media'): Promise<{
+    name: string;
+    path?: string;
+    files: Map<string, FileSystemFileHandle>;
+  } | null> {
+    if (this._activeBackend !== 'native') {
+      return null;
+    }
+
+    const nativeCore = await this.ensureNativeBackendReady();
+    if (!nativeCore) {
+      return null;
+    }
+
+    const defaultPath = nativeCore.getProjectPath() ?? await NativeHelperClient.getProjectRoot();
+    const folderPath = await this.pickNativeFolder(title, defaultPath);
+    if (!folderPath) {
+      return null;
+    }
+
+    const normalizedPath = this.normalizeNativePath(folderPath);
+    const name = normalizedPath.split('/').filter(Boolean).pop() ?? normalizedPath;
+    return {
+      name,
+      path: normalizedPath,
+      files: await this.scanNativeFolder(normalizedPath),
+    };
+  }
+
   async importMediaFile(file: File, fileHandle?: FileSystemFileHandle): Promise<ProjectMediaFile | null> {
-    const projectData = this.coreService.getProjectData();
+    const projectData = this.core.getProjectData();
     if (!projectData) return null;
 
     const mediaFile = await this.rawMediaService.importMediaFile(file, fileHandle);
@@ -583,7 +724,7 @@ class ProjectFileService {
 
     // Add to project
     projectData.media.push(mediaFile);
-    this.coreService.markDirty();
+    this.core.markDirty();
 
     return mediaFile;
   }

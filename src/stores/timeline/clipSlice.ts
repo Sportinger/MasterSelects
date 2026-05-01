@@ -101,6 +101,11 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         modelSequence?: import('../../types').ModelSequenceData;
         gaussianSplatSequence?: import('../../types').GaussianSplatSequenceData;
         vectorAnimation?: import('../../types').VectorAnimationMetadata;
+        url?: string;
+        name?: string;
+        projectPath?: string;
+        absolutePath?: string;
+        filePath?: string;
       }
       | undefined;
     if (mediaFileId) {
@@ -285,6 +290,8 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         estimatedDuration: modelSequenceDuration ?? providedDuration ?? 10,
         mediaFileId,
         modelSequence: sourceMediaFile?.modelSequence,
+        modelUrl: sourceMediaFile?.url,
+        modelFileName: sourceMediaFile?.name ?? file.name,
       });
       modelClip.mediaFileId = mediaFileId;  // Link to MediaFile for nested comp lookup
       set({ clips: [...clips, modelClip] });
@@ -314,6 +321,13 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         estimatedDuration: gaussianSplatSequenceDuration ?? providedDuration ?? 30,
         mediaFileId,
         gaussianSplatSequence: sourceMediaFile?.gaussianSplatSequence,
+        gaussianSplatUrl: sourceMediaFile?.url,
+        gaussianSplatFileName: sourceMediaFile?.name ?? file.name,
+        gaussianSplatRuntimeKey:
+          sourceMediaFile?.projectPath ??
+          sourceMediaFile?.absolutePath ??
+          sourceMediaFile?.filePath ??
+          sourceMediaFile?.url,
       });
       splatClip.mediaFileId = mediaFileId;  // Link to MediaFile for nested comp lookup
       set({ clips: [...clips, splatClip] });

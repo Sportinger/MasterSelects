@@ -1,4 +1,5 @@
 import { Logger } from '../../../services/logger';
+import { NativeHelperClient } from '../../../services/nativeHelper/NativeHelperClient';
 
 const log = Logger.create('ModelRuntimeCache');
 
@@ -8,6 +9,54 @@ const GLB_JSON_CHUNK = 0x4e4f534a;
 const GLB_BIN_CHUNK = 0x004e4942;
 
 type ModelColor = readonly [number, number, number, number];
+
+type NativeFileReferenceClient = {
+  parseFileReferenceUrl?: (url: string | undefined) => string | null;
+  getDownloadedFile?: (path: string) => Promise<ArrayBuffer | null>;
+};
+
+function parseNativeFileReferenceUrl(url: string): string | null {
+  const client = NativeHelperClient as NativeFileReferenceClient;
+  return typeof client.parseFileReferenceUrl === 'function'
+    ? client.parseFileReferenceUrl(url)
+    : null;
+}
+
+async function getNativeFileBytes(path: string): Promise<ArrayBuffer | null> {
+  const client = NativeHelperClient as NativeFileReferenceClient;
+  return typeof client.getDownloadedFile === 'function'
+    ? client.getDownloadedFile(path)
+    : null;
+}
+
+async function fetchModelBytes(url: string): Promise<{ bytes: ArrayBuffer; contentType?: string } | null> {
+  const nativePath = parseNativeFileReferenceUrl(url);
+  if (nativePath) {
+    const bytes = await getNativeFileBytes(nativePath);
+    return bytes ? { bytes } : null;
+  }
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    return null;
+  }
+
+  return {
+    bytes: await response.arrayBuffer(),
+    contentType: response.headers?.get('content-type') ?? undefined,
+  };
+}
+
+async function fetchModelText(url: string): Promise<string | null> {
+  const nativePath = parseNativeFileReferenceUrl(url);
+  if (nativePath) {
+    const bytes = await getNativeFileBytes(nativePath);
+    return bytes ? new TextDecoder().decode(bytes) : null;
+  }
+
+  const response = await fetch(url);
+  return response.ok ? response.text() : null;
+}
 
 export interface ModelRuntimeTexture {
   image: ImageBitmap;
@@ -724,11 +773,11 @@ async function resolveGltfBuffers(gltf: GltfAsset, sourceUrl: string, embeddedGl
     } catch {
       return null;
     }
-    const response = await fetch(resolvedUrl);
-    if (!response.ok) {
+    const fetched = await fetchModelBytes(resolvedUrl);
+    if (!fetched) {
       return null;
     }
-    resolved.push(await response.arrayBuffer());
+    resolved.push(fetched.bytes);
   }
 
   return resolved;
@@ -754,9 +803,9 @@ async function resolveGltfTextures(
     if (image.uri) {
       try {
         const imageUrl = new URL(image.uri, sourceUrl).toString();
-        const response = await fetch(imageUrl);
-        imageTextures[index] = response.ok
-          ? await createTextureFromBytes(await response.arrayBuffer(), image.mimeType ?? response.headers.get('content-type') ?? undefined)
+        const fetched = await fetchModelBytes(imageUrl);
+        imageTextures[index] = fetched
+          ? await createTextureFromBytes(fetched.bytes, image.mimeType ?? fetched.contentType)
           : null;
       } catch (error) {
         log.warn('Failed to fetch model texture', { uri: image.uri, error });
@@ -1177,13 +1226,13 @@ export class ModelRuntimeCache {
   ): Promise<ModelRuntimeData | null> {
     const resolvedFileName = fileName ?? this.requests.get(url)?.fileName ?? url;
     const extension = resolvedFileName.split('.').pop()?.toLowerCase() ?? '';
-    const response = await fetch(url);
-    if (!response.ok) {
-      return null;
-    }
 
     if (extension === 'obj') {
-      const parsedPrimitives = parseObj(await response.text());
+      const text = await fetchModelText(url);
+      if (!text) {
+        return null;
+      }
+      const parsedPrimitives = parseObj(text);
       const sourceBounds = computeModelBounds(parsedPrimitives) ?? undefined;
       const primitives = normalizeModelPrimitives(parsedPrimitives, normalizationBounds ?? sourceBounds ?? null);
       return primitives.length > 0
@@ -1198,7 +1247,11 @@ export class ModelRuntimeCache {
         : null;
     }
 
-    const buffer = await response.arrayBuffer();
+    const fetched = await fetchModelBytes(url);
+    if (!fetched) {
+      return null;
+    }
+    const buffer = fetched.bytes;
     let gltf: GltfAsset | null = null;
     let binaryChunk: ArrayBuffer | undefined;
     let format: 'gltf' | 'glb' = extension === 'gltf' ? 'gltf' : 'glb';

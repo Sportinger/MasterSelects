@@ -39,6 +39,7 @@ On first launch or when no project is open, the Welcome Overlay appears:
 For Firefox users:
 - The overlay checks if the Native Helper is running and connected
 - If available, activates the native backend and shows "New Project" / "Open Existing" buttons (using the OS folder picker via Native Helper)
+- If the helper cannot show an OS folder picker on the current platform, MasterSelects falls back to a manual path prompt seeded with the helper's project root
 - If unavailable or outdated, persistence is unavailable until the helper is installed and connected
 
 ### Select Project Folder
@@ -69,12 +70,15 @@ The project system supports two backends, selected automatically based on browse
 ### Native Helper Backend (Firefox)
 - Uses a local Rust helper (`tools/native-helper`) communicating via WebSocket (port 9876) and HTTP (port 9877)
 - OS folder picker via `NativeHelperClient.pickFolder()`
+- Manual project path fallback via `ProjectFileService` when the helper reports that no native picker is available
+- User-picked project paths are granted to the helper at runtime, so external drives and non-default project folders remain readable through both WebSocket and HTTP file routes
 - File I/O via `NativeHelperClient.writeFile()` / `readFileText()` / `writeFileBinary()` plus `createDir()`, `deleteFile()`, `rename()`, `exists()`, `listDir()`, and `pickFolder()`
 - Project files are written through the helper's path-based storage layer; the browser never needs a `FileSystemDirectoryHandle`
 - Last project path stored in `localStorage` key `ms-native-last-project-path`
 - No permission prompts needed -- the Native Helper has full filesystem access
 - Project listing: `NativeProjectCoreService.listProjects()` scans the project root for directories containing `project.json`
 - The default project root comes from the helper (`Documents/MasterSelects` when available, otherwise `Home/MasterSelects`, or `MASTERSELECTS_PROJECT_ROOT` when set to an absolute path)
+- On Firefox refresh, `ProjectFileService.restoreLastProject()` now activates the Native backend before attempting restore, so it no longer depends on the Welcome Overlay running first
 
 ### Backend Switching
 The `ProjectFileService` facade routes all calls to the active backend:
@@ -401,7 +405,7 @@ Temporary camera `NO KF` live offsets are intentionally not saved. They only aff
 ### Restore Last Project
 On app load, attempts to restore the previously opened project:
 - **FSA**: Retrieves `lastProject` handle from IndexedDB, checks permission
-- **Native**: Reads path from `localStorage` key `ms-native-last-project-path`
+- **Native**: Activates the helper backend, reconnects to the helper with a bounded timeout, grants the stored project path to the helper, then reads path from `localStorage` key `ms-native-last-project-path`
 - If permission is needed, shows a "Grant Access" prompt
 - If the project folder no longer exists, the saved path is cleared and the user must choose/open another project
 

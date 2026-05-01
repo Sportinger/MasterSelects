@@ -6,6 +6,7 @@ import { Logger } from '../../logger';
 import { apiKeyManager } from '../../apiKeyManager';
 import { NativeHelperClient } from '../../nativeHelper/NativeHelperClient';
 import { PROJECT_FOLDER_PATHS, MAX_BACKUPS } from './constants';
+import { shouldPreferAutosave, shouldSkipEmptyProjectSave } from './autosaveRecovery';
 import type { ProjectFile, ProjectMediaFile, ProjectComposition, ProjectFolder } from '../types';
 
 const log = Logger.create('NativeProjectCore');
@@ -114,6 +115,7 @@ export class NativeProjectCoreService {
     }
 
     try {
+      await this.client.grantPath(basePath);
       const projectPath = this.joinPath(basePath, name);
       return await this.initializeProject(projectPath, name);
     } catch (e) {
@@ -198,6 +200,7 @@ export class NativeProjectCoreService {
 
   async loadProject(projectPath: string): Promise<boolean> {
     try {
+      await this.client.grantPath(projectPath);
       const projectData = await this.readLatestProjectData(projectPath);
 
       if (!projectData) {
@@ -258,6 +261,15 @@ export class NativeProjectCoreService {
 
     try {
       const savedRevision = this.dirtyRevision;
+      const autosaveData = await this.readProjectFile(this.projectPath, PROJECT_AUTOSAVE_FILE_NAME);
+      if (shouldSkipEmptyProjectSave(this.projectData, autosaveData)) {
+        log.warn('Skipped empty project save because project.autosave.json contains recoverable project data');
+        if (this.dirtyRevision === savedRevision) {
+          this.isDirty = false;
+        }
+        return true;
+      }
+
       this.projectData.updatedAt = new Date().toISOString();
       const jsonPath = this.joinPath(this.projectPath, PROJECT_FILE_NAME);
 
@@ -432,6 +444,7 @@ export class NativeProjectCoreService {
     }
 
     try {
+      await this.client.grantPath(lastPath);
       const { exists, kind } = await this.client.exists(lastPath);
       if (!exists || kind !== 'directory') {
         log.info('Last project folder no longer exists');
@@ -562,11 +575,9 @@ export class NativeProjectCoreService {
     if (!projectData) return null;
 
     const autosaveData = await this.readProjectFile(projectPath, PROJECT_AUTOSAVE_FILE_NAME);
-    const projectUpdatedAt = Date.parse(projectData.updatedAt);
-    const autosaveUpdatedAt = autosaveData ? Date.parse(autosaveData.updatedAt) : NaN;
 
-    if (autosaveData && autosaveUpdatedAt > projectUpdatedAt) {
-      log.warn('Loaded newer project.autosave.json because project.json was older');
+    if (shouldPreferAutosave(projectData, autosaveData)) {
+      log.warn('Loaded project.autosave.json because it is newer or project.json appears empty');
       return autosaveData;
     }
 

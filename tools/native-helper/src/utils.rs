@@ -137,48 +137,53 @@ fn path_is_within_allowed_prefix(path: &Path, prefix: &Path) -> bool {
             .all(|(path_component, prefix_component)| path_component == prefix_component)
 }
 
+fn canonicalize_existing_ancestor(path: &Path) -> Option<PathBuf> {
+    if let Ok(canonical) = path.canonicalize() {
+        return Some(canonical);
+    }
+
+    for ancestor in path.ancestors().skip(1) {
+        if let Ok(canonical_ancestor) = ancestor.canonicalize() {
+            let suffix = path.strip_prefix(ancestor).ok()?;
+            return Some(canonical_ancestor.join(suffix));
+        }
+    }
+
+    None
+}
+
 /// Check if a path is within allowed directories.
 ///
 /// Rejects paths with `..` traversal segments and attempts path canonicalization
-/// to prevent symlink or alias-based escapes. Fails closed: if canonicalization
-/// fails and the path doesn't exist, the path is rejected.
-pub fn is_path_allowed(path: &std::path::Path) -> bool {
+/// to prevent symlink or alias-based escapes. For new files or directories, it
+/// canonicalizes the nearest existing ancestor and appends the missing suffix so
+/// project roots can be created lazily under approved parent folders.
+pub fn is_path_allowed_with_extra(path: &std::path::Path, extra_prefixes: &[PathBuf]) -> bool {
+    if !path.is_absolute() {
+        return false;
+    }
+
     // Reject any path with traversal segments
     if has_traversal_segments(path) {
         return false;
     }
 
-    let allowed = get_allowed_prefixes();
+    let mut allowed = get_allowed_prefixes();
+    allowed.extend(extra_prefixes.iter().cloned());
 
-    // Try to canonicalize the path for safer comparison.
-    // If the path exists, use the canonical version.
-    // If the path doesn't exist, use the raw path but only if it has no suspicious segments.
-    let effective_path = match path.canonicalize() {
-        Ok(canonical) => canonical,
-        Err(_) => {
-            // Path doesn't exist yet (e.g., writing a new file).
-            // Check the parent directory instead if possible.
-            if let Some(parent) = path.parent() {
-                if let Ok(canonical_parent) = parent.canonicalize() {
-                    if let Some(file_name) = path.file_name() {
-                        canonical_parent.join(file_name)
-                    } else {
-                        return false; // No filename component
-                    }
-                } else {
-                    // Neither path nor parent can be canonicalized — fail closed
-                    return false;
-                }
-            } else {
-                return false; // No parent (root path or relative)
-            }
-        }
+    let effective_path = match canonicalize_existing_ancestor(path) {
+        Some(canonical) => canonical,
+        None => return false,
     };
 
     allowed.iter().any(|prefix| {
-        let prefix_canonical = prefix.canonicalize().unwrap_or_else(|_| prefix.clone());
+        let prefix_canonical = canonicalize_existing_ancestor(prefix).unwrap_or_else(|| prefix.clone());
         path_is_within_allowed_prefix(&effective_path, &prefix_canonical)
     })
+}
+
+pub fn is_path_allowed(path: &std::path::Path) -> bool {
+    is_path_allowed_with_extra(path, &[])
 }
 
 #[cfg(test)]
@@ -289,5 +294,38 @@ mod tests {
 
         let _ = std::fs::remove_file(&sibling_path);
         let _ = std::fs::remove_dir_all(&sibling_dir);
+    }
+
+    #[test]
+    fn test_allowed_nonexistent_project_dir_under_documents() {
+        if let Some(docs) = dirs::document_dir() {
+            let test_path = docs
+                .join(format!("masterselects-missing-{}", std::process::id()))
+                .join("Untitled")
+                .join("project.json");
+
+            assert!(!test_path.exists(), "test path should not already exist");
+            assert!(
+                is_path_allowed(&test_path),
+                "new project paths under Documents should be allowed before the project folder exists"
+            );
+        }
+    }
+
+    #[test]
+    fn test_allowed_by_extra_picked_root() {
+        if let Some(home) = dirs::home_dir() {
+            let picked_root = home.join(format!("masterselects-picked-{}", std::process::id()));
+            let test_path = picked_root.join("project.json");
+
+            assert!(
+                !is_path_allowed(&test_path),
+                "picked root should not be statically allowed before it is granted"
+            );
+            assert!(
+                is_path_allowed_with_extra(&test_path, &[picked_root]),
+                "paths under a user-picked root should be allowed"
+            );
+        }
     }
 }

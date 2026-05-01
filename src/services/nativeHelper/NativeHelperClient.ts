@@ -30,11 +30,13 @@ import {
 // In production, use a proper LZ4 library like 'lz4js'
 
 const log = Logger.create('NativeHelper');
+const NATIVE_FILE_REFERENCE_PREFIX = 'native-helper-file://';
 
 export interface NativeHelperConfig {
   port?: number;
   autoReconnect?: boolean;
   reconnectInterval?: number;
+  connectTimeoutMs?: number;
   token?: string;
   /** Only reconnect if we were previously connected */
   onlyReconnectIfWasConnected?: boolean;
@@ -51,6 +53,11 @@ export interface DecodedFrame {
 }
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+export interface NativeFolderPickResult {
+  path: string | null;
+  cancelled: boolean;
+  error?: string;
+}
 
 type ResponseCallback = (response: Response) => void;
 type FrameCallback = (frame: DecodedFrame) => void;
@@ -101,7 +108,8 @@ class NativeHelperClientImpl {
     this.config = {
       port: 9876,
       autoReconnect: true,
-      reconnectInterval: 10000, // 10 seconds between reconnect attempts
+      reconnectInterval: 2500,
+      connectTimeoutMs: 5000,
       token: '',
       onlyReconnectIfWasConnected: true, // Don't spam reconnects if never connected
     };
@@ -150,11 +158,16 @@ class NativeHelperClientImpl {
 
     const connectPromise = new Promise<boolean>((resolve) => {
       let settled = false;
+      let connectTimeout: ReturnType<typeof setTimeout> | null = null;
       const finish = (result: boolean) => {
         if (settled) {
           return;
         }
         settled = true;
+        if (connectTimeout) {
+          clearTimeout(connectTimeout);
+          connectTimeout = null;
+        }
         resolve(result);
       };
 
@@ -163,41 +176,75 @@ class NativeHelperClientImpl {
         this.ws = ws;
         ws.binaryType = 'arraybuffer'; // Ensure binary data comes as ArrayBuffer, not Blob
 
+        connectTimeout = setTimeout(() => {
+          if (settled) {
+            return;
+          }
+          if (this.ws === ws) {
+            this.ws = null;
+          }
+          try {
+            ws.close();
+          } catch {
+            // Ignore close errors while unwinding a timed-out connection attempt.
+          }
+          this.setStatus('disconnected');
+          log.warn(`Native helper connection timed out after ${this.config.connectTimeoutMs}ms`);
+          finish(false);
+        }, this.config.connectTimeoutMs);
+
         ws.onopen = async () => {
           log.info('Connected to native helper');
           this.wasEverConnected = true;
 
-          // If no token configured, try to discover it from the startup endpoint
-          if (!this.config.token) {
-            try {
-              const httpPort = this.config.port + 1;
-              const resp = await fetch(`http://127.0.0.1:${httpPort}/startup-token`);
-              if (resp.ok) {
-                const data = await resp.json();
-                if (data.token) {
-                  this.config.token = data.token;
-                  log.info('Auth token discovered from startup endpoint');
-                }
+          // Refresh the token on every new socket. Helper restarts generate a
+          // new startup token, so a cached token from the previous process is stale.
+          try {
+            const httpPort = this.config.port + 1;
+            const resp = await this.fetchWithTimeout(
+              `http://127.0.0.1:${httpPort}/startup-token`,
+              undefined,
+              Math.min(this.config.connectTimeoutMs, 1500),
+            );
+            if (resp.ok) {
+              const data = await resp.json();
+              if (typeof data.token === 'string' && data.token.length > 0) {
+                this.config.token = data.token;
+                log.info('Auth token discovered from startup endpoint');
               }
-            } catch {
-              log.debug('Could not discover auth token from startup endpoint');
             }
+          } catch {
+            log.debug('Could not discover auth token from startup endpoint');
           }
 
           // Authenticate with token
           if (this.config.token) {
+            let authenticated = false;
             try {
               const authResp = await this.send({ cmd: 'auth', id: this.nextId(), token: this.config.token });
-              if (okField<boolean>(authResp, 'authenticated') !== true) {
-                log.warn('Auth response did not confirm authentication');
-              }
+              authenticated = okField<boolean>(authResp, 'authenticated') === true;
             } catch {
               log.warn('Auth failed');
+            }
+
+            if (!authenticated) {
+              log.warn('Auth response did not confirm authentication');
+              if (this.ws === ws) {
+                this.ws = null;
+              }
+              try {
+                ws.close();
+              } catch {
+                // Ignore close errors while unwinding a failed auth attempt.
+              }
+              this.setStatus('disconnected');
+              finish(false);
+              return;
             }
           }
 
           try {
-            await this.send({
+            const registerResponse = await this.send({
               cmd: 'register_client',
               id: this.nextId(),
               role: 'editor',
@@ -205,8 +252,22 @@ class NativeHelperClientImpl {
               session_name: 'masterselects-editor',
               app_version: APP_VERSION,
             });
+            if (registerResponse.ok !== true) {
+              throw new Error(getErrorMessage(registerResponse, 'Registration failed'));
+            }
           } catch (error) {
             log.warn('Editor registration with native helper failed', error);
+            if (this.ws === ws) {
+              this.ws = null;
+            }
+            try {
+              ws.close();
+            } catch {
+              // Ignore close errors while unwinding a failed registration attempt.
+            }
+            this.setStatus('disconnected');
+            finish(false);
+            return;
           }
 
           this.setStatus('connected');
@@ -227,6 +288,9 @@ class NativeHelperClientImpl {
 
         ws.onerror = () => {
           // Don't log errors when helper isn't running - it's optional
+          if (this.ws === ws) {
+            this.ws = null;
+          }
           this.setStatus('disconnected');
           finish(false);
         };
@@ -429,9 +493,9 @@ class NativeHelperClientImpl {
   /**
    * Get system info
    */
-  async getInfo(): Promise<SystemInfo> {
+  async getInfo(timeoutMs = 30000): Promise<SystemInfo> {
     const id = this.nextId();
-    const response = await this.send({ cmd: 'info', id });
+    const response = await this.send({ cmd: 'info', id }, timeoutMs);
 
     if (!response.ok) {
       throw new Error(getErrorMessage(response, 'Failed to get info'));
@@ -443,10 +507,10 @@ class NativeHelperClientImpl {
   /**
    * Ping the server
    */
-  async ping(): Promise<boolean> {
+  async ping(timeoutMs = 3000): Promise<boolean> {
     try {
       const id = this.nextId();
-      const response = await this.send({ cmd: 'ping', id });
+      const response = await this.send({ cmd: 'ping', id }, timeoutMs);
       return response.ok === true;
     } catch {
       return false;
@@ -663,9 +727,9 @@ class NativeHelperClientImpl {
   /**
    * Get the default project root path from the native helper
    */
-  async getProjectRoot(): Promise<string | null> {
+  async getProjectRoot(timeoutMs = 1500): Promise<string | null> {
     try {
-      const response = await this.fetchWithAuth(`${this.getHttpBaseUrl()}/project-root`);
+      const response = await this.fetchWithTimeout(`${this.getHttpBaseUrl()}/project-root`, undefined, timeoutMs);
       if (response.ok) {
         const data = await response.json();
         return data.path || null;
@@ -673,7 +737,7 @@ class NativeHelperClientImpl {
     } catch {
       // Fallback to info command
       try {
-        const info = await this.getInfo();
+        const info = await this.getInfo(timeoutMs);
         return info.project_root || null;
       } catch {
         return null;
@@ -682,12 +746,21 @@ class NativeHelperClientImpl {
     return null;
   }
 
-  /**
+   /**
    * Check if the native helper supports file system commands
    */
-  async hasFsCommands(): Promise<boolean> {
+  async hasFsCommands(timeoutMs = 1500): Promise<boolean> {
     try {
-      const info = await this.getInfo();
+      const response = await this.fetchWithTimeout(`${this.getHttpBaseUrl()}/project-root`, undefined, timeoutMs);
+      if (response.ok) {
+        return true;
+      }
+    } catch {
+      // Fall back to the older info-based check below.
+    }
+
+    try {
+      const info = await this.getInfo(timeoutMs);
       return info.fs_commands === true;
     } catch {
       return false;
@@ -768,6 +841,12 @@ class NativeHelperClientImpl {
     const id = this.nextId();
     try {
       const response = await this.send({ cmd: 'create_dir', id, path, recursive });
+      if (response.ok !== true) {
+        log.warn('createDir rejected', {
+          path,
+          error: getErrorMessage(response, 'Create directory failed'),
+        });
+      }
       return response.ok === true;
     } catch (e) {
       log.error('createDir failed', e);
@@ -840,24 +919,59 @@ class NativeHelperClientImpl {
 
   /**
    * Open a native OS folder picker dialog via the Native Helper.
-   * Returns the selected folder path, or null if the user cancelled.
+   * Returns detailed picker state so callers can distinguish cancellation from
+   * platforms where the helper cannot show a native picker.
    */
-  async pickFolder(title?: string, defaultPath?: string): Promise<string | null> {
+  async pickFolderDetailed(title?: string, defaultPath?: string): Promise<NativeFolderPickResult> {
     const id = this.nextId();
     try {
       const cmd = { cmd: 'pick_folder', id, title, default_path: defaultPath } satisfies JsonObject;
       if (title) cmd.title = title;
       if (defaultPath) cmd.default_path = defaultPath;
-      const response = await this.send(cmd as unknown as Command);
+      const response = await this.send(cmd as unknown as Command, 5 * 60 * 1000);
       const path = okField<string>(response, 'path');
       if (response.ok && path) {
-        return path;
+        return { path, cancelled: false };
       }
-      return null; // cancelled
+      if (response.ok) {
+        return { path: null, cancelled: okField<boolean>(response, 'cancelled') !== false };
+      }
+      return {
+        path: null,
+        cancelled: false,
+        error: getErrorMessage(response, 'Folder picker failed'),
+      };
     } catch (e) {
       log.error('pickFolder failed', e);
-      return null;
+      return {
+        path: null,
+        cancelled: false,
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
+  }
+
+  /**
+   * Grant helper file access to a user-approved project path.
+   * Used after restoring paths persisted by the browser between sessions.
+   */
+  async grantPath(path: string): Promise<boolean> {
+    const id = this.nextId();
+    try {
+      const response = await this.send({ cmd: 'grant_path', id, path });
+      return response.ok === true;
+    } catch (e) {
+      log.error('grantPath failed', e);
+      return false;
+    }
+  }
+
+  /**
+   * Open a native OS folder picker dialog via the Native Helper.
+   * Returns the selected folder path, or null if cancelled or unavailable.
+   */
+  async pickFolder(title?: string, defaultPath?: string): Promise<string | null> {
+    return (await this.pickFolderDetailed(title, defaultPath)).path;
   }
 
   /**
@@ -866,6 +980,40 @@ class NativeHelperClientImpl {
    */
   getFileUrl(absolutePath: string): string {
     return `${this.getHttpBaseUrl()}/file?path=${encodeURIComponent(absolutePath)}`;
+  }
+
+  /**
+   * Build an app-internal URL for files that must be fetched through the
+   * authenticated Native Helper client rather than by a DOM element.
+   */
+  getFileReferenceUrl(absolutePath: string): string {
+    return `${NATIVE_FILE_REFERENCE_PREFIX}${encodeURIComponent(absolutePath)}`;
+  }
+
+  parseFileReferenceUrl(url: string | undefined): string | null {
+    if (!url?.startsWith(NATIVE_FILE_REFERENCE_PREFIX)) {
+      return null;
+    }
+
+    try {
+      return decodeURIComponent(url.slice(NATIVE_FILE_REFERENCE_PREFIX.length));
+    } catch {
+      return null;
+    }
+  }
+
+  async getReferencedFile(url: string, fileName: string): Promise<File | null> {
+    const path = this.parseFileReferenceUrl(url);
+    if (!path) {
+      return null;
+    }
+
+    const fileBuffer = await this.getDownloadedFile(path);
+    if (!fileBuffer) {
+      return null;
+    }
+
+    return new File([fileBuffer], fileName || path.split(/[\\/]/).pop() || 'file');
   }
 
   /**
@@ -1163,6 +1311,26 @@ class NativeHelperClientImpl {
     return fetch(url, { ...init, headers });
   }
 
+  private fetchWithTimeout(
+    url: string,
+    init?: RequestInit,
+    timeoutMs = 3000,
+  ): Promise<globalThis.Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    if (init?.signal) {
+      if (init.signal.aborted) {
+        controller.abort();
+      } else {
+        init.signal.addEventListener('abort', () => controller.abort(), { once: true });
+      }
+    }
+
+    return fetch(url, { ...init, signal: controller.signal })
+      .finally(() => clearTimeout(timeout));
+  }
+
   private nextId(): string {
     return `req_${++this.requestId}`;
   }
@@ -1193,8 +1361,9 @@ class NativeHelperClientImpl {
       this.status !== 'connecting' &&
       (!this.config.onlyReconnectIfWasConnected || this.wasEverConnected);
 
-    if (shouldReconnect) {
+    if (shouldReconnect && !this.reconnectTimer) {
       this.reconnectTimer = window.setTimeout(() => {
+        this.reconnectTimer = null;
         log.debug('Attempting reconnect...');
         this.connect();
       }, this.config.reconnectInterval);
@@ -1323,7 +1492,7 @@ class NativeHelperClientImpl {
     }
   }
 
-  private async send(cmd: Command): Promise<Response> {
+  private async send(cmd: Command, timeoutMs = 30000): Promise<Response> {
     if (!this.isConnected()) {
       throw new Error('Not connected');
     }
@@ -1335,7 +1504,7 @@ class NativeHelperClientImpl {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(id);
         reject(new Error('Request timeout'));
-      }, 30000);
+      }, timeoutMs);
 
       // Register callback
       this.pendingRequests.set(id, (response) => {

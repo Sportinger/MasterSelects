@@ -1,5 +1,35 @@
 import { useTimelineStore } from './stores/timeline';
 import { AI_TOOLS, executeAITool, getQuickTimelineSummary } from './services/aiTools';
+import { isFileSystemAccessSupported } from './services/fileSystemService';
+import { NativeHelperClient } from './services/nativeHelper/NativeHelperClient';
+import { useSettingsStore } from './stores/settingsStore';
+
+function warmNativeHelperForProjectBackend(): void {
+  if (typeof window === 'undefined' || isFileSystemAccessSupported()) {
+    return;
+  }
+
+  const {
+    turboModeEnabled,
+    nativeHelperPort,
+    setNativeHelperConnected,
+  } = useSettingsStore.getState();
+
+  if (!turboModeEnabled) {
+    return;
+  }
+
+  NativeHelperClient.configure({ port: nativeHelperPort });
+  NativeHelperClient.onStatusChange((status) => {
+    setNativeHelperConnected(status === 'connected');
+  });
+
+  void NativeHelperClient.connect()
+    .then((connected) => setNativeHelperConnected(connected))
+    .catch(() => setNativeHelperConnected(false));
+}
+
+warmNativeHelperForProjectBackend();
 
 // Expose AI tools API for browser console, Claude skills, and external agents
 // Only available in development mode to prevent production exposure

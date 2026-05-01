@@ -18,6 +18,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import { useDockStore } from '../../stores/dockStore';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { RelinkDialog } from '../common/RelinkDialog';
+import { mediaNeedsRelink } from '../../services/project/relinkMedia';
 import {
   clearExternalDragPayload,
   dispatchExternalDragBridgeEvent,
@@ -1199,7 +1200,7 @@ export function MediaPanel() {
     } else if ((item.type === 'video' || item.type === 'image') && 'file' in item && (item as MediaFile).file) {
       // Open in source monitor
       useMediaStore.getState().setSourceMonitorFile(item.id);
-    } else if ('file' in item && !item.file) {
+    } else if ('file' in item && mediaNeedsRelink(item as MediaFile)) {
       // Media file needs reload - request permission
       const success = await reloadFile(item.id);
       if (success) {
@@ -1567,8 +1568,8 @@ export function MediaPanel() {
 
     // Handle media file drag
     const mediaFile = item as MediaFile;
-    if (!mediaFile.file || mediaFile.isImporting) {
-      // File not available or still importing - only allow internal move
+    if (mediaFile.isImporting || mediaNeedsRelink(mediaFile)) {
+      // File still importing or truly unresolved - only allow internal move
       e.dataTransfer.effectAllowed = 'move';
       if (e.currentTarget instanceof HTMLElement) {
         e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
@@ -1577,9 +1578,11 @@ export function MediaPanel() {
     }
 
     // Set the media file ID so Timeline can look it up
+    const fileName = mediaFile.file?.name ?? mediaFile.name;
     const isAudioOnly =
-      mediaFile.file.type.startsWith('audio/') ||
-      /\.(mp3|wav|ogg|aac|m4a|flac|wma|aiff|alac|opus)$/i.test(mediaFile.file.name);
+      mediaFile.type === 'audio' ||
+      mediaFile.file?.type.startsWith('audio/') ||
+      /\.(mp3|wav|ogg|aac|m4a|flac|wma|aiff|alac|opus)$/i.test(fileName);
     setExternalDragPayload({
       kind: 'media-file',
       id: mediaFile.id,
@@ -1970,7 +1973,7 @@ export function MediaPanel() {
     const isRenaming = renamingId === item.id;
     const isExpanded = isFolder && expandedFolderIds.includes(item.id);
     const isMediaFile = isImportedMediaFileItem(item);
-    const hasFile = isMediaFile && !!item.file;
+    const needsRelink = isMediaFile && mediaNeedsRelink(item);
     const isImporting = isMediaFile && !!item.isImporting;
     const isDragTarget = isFolder && dragOverFolderId === item.id;
     const isBeingDragged = internalDragId === item.id;
@@ -1980,7 +1983,7 @@ export function MediaPanel() {
       <div key={item.id} data-item-id={item.id}>
         <div
           data-media-panel-anim-id={item.id}
-          className={`media-item ${isSelected ? 'selected' : ''} ${isFolder ? 'folder' : ''} ${isMediaFile && !hasFile ? 'no-file' : ''} ${isImporting ? 'importing' : ''} ${isDragTarget ? 'drag-target' : ''} ${isBeingDragged ? 'dragging' : ''}`}
+          className={`media-item ${isSelected ? 'selected' : ''} ${isFolder ? 'folder' : ''} ${needsRelink ? 'no-file' : ''} ${isImporting ? 'importing' : ''} ${isDragTarget ? 'drag-target' : ''} ${isBeingDragged ? 'dragging' : ''}`}
           draggable={!isImporting}
           onDragStart={(e) => handleDragStart(e, item)}
           onDragEnd={handleDragEnd}
@@ -3557,7 +3560,7 @@ export function MediaPanel() {
         data-item-id={item.id}
         data-board-group-key={getMediaBoardOrderKey(placement.groupId)}
         data-media-panel-anim-id={item.id}
-        className={`media-board-node ${isSelected ? 'selected' : ''} ${isMediaFile && !mediaFile?.file ? 'no-file' : ''} ${importProgress !== null ? 'importing' : ''} ${isTextItem ? 'text' : ''} ${placement.isDraggingPreview ? 'drag-source-preview' : ''}`}
+        className={`media-board-node ${isSelected ? 'selected' : ''} ${mediaFile && mediaNeedsRelink(mediaFile) ? 'no-file' : ''} ${importProgress !== null ? 'importing' : ''} ${isTextItem ? 'text' : ''} ${placement.isDraggingPreview ? 'drag-source-preview' : ''}`}
         style={{
           left: layout.x,
           top: layout.y,
@@ -3790,9 +3793,11 @@ export function MediaPanel() {
     gridBreadcrumb.push(...path);
   }
 
-  // Check if any files need reload (lost permission after refresh)
-  const filesNeedReload = files.some(f => !f.file);
-  const filesNeedReloadCount = files.filter(f => !f.file).length;
+  // Check if any files need relinking (lost permission after refresh).
+  // Native-helper projects can be linked by project/absolute paths without
+  // eagerly materializing browser File objects for every media item.
+  const filesNeedReload = files.some(mediaNeedsRelink);
+  const filesNeedReloadCount = files.filter(mediaNeedsRelink).length;
 
   // Relink dialog state
   const [showRelinkDialog, setShowRelinkDialog] = useState(false);
