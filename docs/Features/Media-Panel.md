@@ -529,9 +529,10 @@ When media files lose access (e.g., after browser restart):
 ### Reload Strategy
 Files are reloaded in priority order:
 1. **Project RAW folder** - If the asset was copied into the project and the project is open
-2. **Stored file handle** - Re-access the original file location, including permission re-checks
+2. **Project folder scan** - Recursively scans the opened project folder and all subfolders, keeping `Raw/` matches first when duplicate names exist
+3. **Stored file handle** - Re-access the original file location, including permission re-checks
 
-On project load, the app also tries to auto-relink missing files silently from `Raw/` and then falls back to stored handles in IndexedDB. This is case-insensitive on filename only; there is no content-hash relink pass.
+On project load and in the Relink dialog, missing files are matched case-insensitively by expected filenames. Sequence assets match their frame filenames (`.glb`, `.ply`, `.splat`) instead of the media-panel display name. There is no content-hash relink pass.
 
 ### Double-Click Reload
 Double-clicking a file that has lost access triggers a single-file reload attempt with permission request.

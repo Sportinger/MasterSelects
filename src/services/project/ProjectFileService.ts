@@ -24,6 +24,10 @@ import {
 } from './core/rawPath';
 import type { ProjectFile, ProjectMediaFile, ProjectComposition, ProjectFolder } from './types';
 
+type IterableDirectoryHandle = FileSystemDirectoryHandle & {
+  values(): AsyncIterableIterator<FileSystemDirectoryHandle | FileSystemFileHandle>;
+};
+
 export type ProjectBackend = 'fsa' | 'native';
 
 class ProjectFileService {
@@ -172,6 +176,82 @@ class ProjectFileService {
         type: this.getMimeTypeFromFileName(target.fileName),
       }),
     };
+  }
+
+  private createNativeFileHandle(fullPath: string, name: string): FileSystemFileHandle {
+    const handle = {
+      kind: 'file',
+      name,
+      getFile: async () => {
+        const fileBuffer = await NativeHelperClient.getDownloadedFile(fullPath);
+        if (!fileBuffer) {
+          throw new DOMException(`Could not read ${fullPath}`, 'NotFoundError');
+        }
+        return new File([fileBuffer], name, {
+          type: this.getMimeTypeFromFileName(name),
+        });
+      },
+      createWritable: async () => {
+        throw new DOMException('Native helper file handles are read-only', 'NotAllowedError');
+      },
+      isSameEntry: async (other: FileSystemHandle) => other === handle,
+      queryPermission: async () => 'granted' as PermissionState,
+      requestPermission: async () => 'granted' as PermissionState,
+    } as FileSystemFileHandle;
+
+    return handle;
+  }
+
+  private async scanNativeFolder(rootPath: string): Promise<Map<string, FileSystemFileHandle>> {
+    const foundFiles = new Map<string, FileSystemFileHandle>();
+
+    const scanDirectory = async (directoryPath: string): Promise<void> => {
+      const entries = await NativeHelperClient.listDir(directoryPath);
+      for (const entry of entries) {
+        const fullPath = this.joinPath(directoryPath, entry.name);
+        if (entry.kind === 'file') {
+          const key = entry.name.toLowerCase();
+          if (!foundFiles.has(key)) {
+            foundFiles.set(key, this.createNativeFileHandle(fullPath, entry.name));
+          }
+        } else if (entry.kind === 'directory') {
+          await scanDirectory(fullPath);
+        }
+      }
+    };
+
+    try {
+      await scanDirectory(rootPath);
+    } catch (error) {
+      log.debug('Native folder scan failed', { rootPath, error });
+    }
+
+    return foundFiles;
+  }
+
+  private async scanDirectoryHandle(root: FileSystemDirectoryHandle): Promise<Map<string, FileSystemFileHandle>> {
+    const foundFiles = new Map<string, FileSystemFileHandle>();
+
+    const scanDirectory = async (directory: FileSystemDirectoryHandle): Promise<void> => {
+      for await (const entry of (directory as IterableDirectoryHandle).values()) {
+        if (entry.kind === 'file') {
+          const key = entry.name.toLowerCase();
+          if (!foundFiles.has(key)) {
+            foundFiles.set(key, entry);
+          }
+        } else if (entry.kind === 'directory') {
+          await scanDirectory(entry);
+        }
+      }
+    };
+
+    try {
+      await scanDirectory(root);
+    } catch (error) {
+      log.debug('Project folder scan failed', { folder: root.name, error });
+    }
+
+    return foundFiles;
   }
 
   // ============================================
@@ -471,9 +551,27 @@ class ProjectFileService {
   }
 
   async scanRawFolder(): Promise<Map<string, FileSystemFileHandle>> {
+    if (this._activeBackend === 'native' && this.nativeCoreService) {
+      const projectPath = this.nativeCoreService.getProjectPath();
+      if (!projectPath) return new Map();
+      return this.scanNativeFolder(this.joinPath(projectPath, PROJECT_FOLDERS.RAW));
+    }
+
     const handle = this.coreService.getProjectHandle();
     if (!handle) return new Map();
     return this.rawMediaService.scanRawFolder(handle);
+  }
+
+  async scanProjectFolder(): Promise<Map<string, FileSystemFileHandle>> {
+    if (this._activeBackend === 'native' && this.nativeCoreService) {
+      const projectPath = this.nativeCoreService.getProjectPath();
+      if (!projectPath) return new Map();
+      return this.scanNativeFolder(projectPath);
+    }
+
+    const handle = this.coreService.getProjectHandle();
+    if (!handle) return new Map();
+    return this.scanDirectoryHandle(handle);
   }
 
   async importMediaFile(file: File, fileHandle?: FileSystemFileHandle): Promise<ProjectMediaFile | null> {

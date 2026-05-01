@@ -9,6 +9,12 @@ import type {
 } from '../../engine/scene/types';
 import { getSharedSceneDefaultCameraDistance, resolveRenderableSharedSceneCamera } from '../../engine/scene/SceneCameraUtils';
 import { resolveSceneClipTransform } from '../../engine/scene/SceneTimelineUtils';
+import {
+  buildSceneWorldMatrix,
+  getSplatOrientationMatrix,
+  multiplyMat4,
+  resolveAxisBasisFromWorldMatrix,
+} from '../../engine/scene/SceneTransformUtils';
 import { resolveOrbitCameraFrame } from '../../engine/gaussian/core/SplatCameraUtils';
 import {
   SCENE_GIZMO_AXIS_HIT_START_OFFSET,
@@ -214,38 +220,34 @@ function resolveClipWorldPosition(
   };
 }
 
-function resolveClipAxisBasis(transform: TimelineClip['transform']): Record<SceneGizmoAxis, SceneVector3> {
-  const x = (transform.rotation.x * Math.PI) / 180;
-  const y = (transform.rotation.y * Math.PI) / 180;
-  const z = (transform.rotation.z * Math.PI) / 180;
-  const a = Math.cos(x);
-  const b = Math.sin(x);
-  const c = Math.cos(y);
-  const d = Math.sin(y);
-  const e = Math.cos(z);
-  const f = Math.sin(z);
-  const ae = a * e;
-  const af = a * f;
-  const be = b * e;
-  const bf = b * f;
+function degreesToRadians(value: number): number {
+  return (value * Math.PI) / 180;
+}
 
-  return {
-    x: {
-      x: c * e,
-      y: af + be * d,
-      z: bf - ae * d,
+function resolveClipAxisBasis(
+  clip: TimelineClip,
+  transform: TimelineClip['transform'],
+): Record<SceneGizmoAxis, SceneVector3> {
+  const worldMatrix = buildSceneWorldMatrix({
+    position: transform.position,
+    rotationRadians: {
+      x: degreesToRadians(transform.rotation.x),
+      y: degreesToRadians(transform.rotation.y),
+      z: degreesToRadians(transform.rotation.z),
     },
-    y: {
-      x: -c * f,
-      y: ae - bf * d,
-      z: be + af * d,
+    rotationDegrees: transform.rotation,
+    scale: {
+      x: transform.scale.x,
+      y: transform.scale.y,
+      z: transform.scale.z ?? 1,
     },
-    z: {
-      x: d,
-      y: -b * c,
-      z: a * c,
-    },
-  };
+  });
+  const orientationMatrix = clip.source?.type === 'gaussian-splat'
+    ? getSplatOrientationMatrix(clip.source.gaussianSplatSettings?.render.orientationPreset)
+    : null;
+  return resolveAxisBasisFromWorldMatrix(
+    orientationMatrix ? multiplyMat4(worldMatrix, orientationMatrix) : worldMatrix,
+  );
 }
 
 function addSceneVector(a: SceneVector3, b: SceneVector3): SceneVector3 {
@@ -442,7 +444,7 @@ export function collectPreviewSceneObjects({
         { clips, clipKeyframes },
       );
       const { position, transformSpace } = resolveClipWorldPosition(kind, transform, viewport);
-      const axisBasis = resolveClipAxisBasis(transform);
+      const axisBasis = resolveClipAxisBasis(clip, transform);
       const screen = projectWorldToCanvas(position, camera, canvasSize);
 
       return {
