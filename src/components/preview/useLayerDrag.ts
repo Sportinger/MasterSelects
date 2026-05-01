@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Layer, TimelineClip } from '../../types';
+import {
+  getLayerOverlayHandles,
+  resolvePositionDeltaForCanvasDelta,
+  scaleLayerOverlayBounds,
+  type LayerOverlayBounds,
+  type OverlayPoint,
+} from './editModeOverlayMath';
 
 interface UseLayerDragParams {
   editMode: boolean;
@@ -17,10 +24,50 @@ interface UseLayerDragParams {
   selectLayer: (id: string | null) => void;
   updateClipTransform: (clipId: string, transform: Partial<{ position: { x: number; y: number; z: number }; scale: { x: number; y: number } }>) => void;
   updateLayer: (layerId: string, updates: Partial<Layer>) => void;
-  calculateLayerBounds: (layer: Layer, canvasW: number, canvasH: number, forcePos?: { x: number; y: number }) => { x: number; y: number; width: number; height: number; rotation: number };
+  calculateLayerBounds: (layer: Layer, canvasW: number, canvasH: number, forcePos?: { x: number; y: number }) => LayerOverlayBounds;
   findLayerAtPosition: (containerX: number, containerY: number) => Layer | null;
   findHandleAtPosition: (containerX: number, containerY: number, layer: Layer) => string | null;
 }
+
+function drawOverlayPath(ctx: CanvasRenderingContext2D, corners: LayerOverlayBounds['corners']): void {
+  ctx.beginPath();
+  ctx.moveTo(corners.tl.x, corners.tl.y);
+  ctx.lineTo(corners.tr.x, corners.tr.y);
+  ctx.lineTo(corners.br.x, corners.br.y);
+  ctx.lineTo(corners.bl.x, corners.bl.y);
+  ctx.closePath();
+  ctx.stroke();
+}
+
+function drawHandle(ctx: CanvasRenderingContext2D, point: OverlayPoint, size: number): void {
+  ctx.fillRect(point.x - size / 2, point.y - size / 2, size, size);
+}
+
+function findClipForLayer(clips: TimelineClip[], layer: Layer): TimelineClip | undefined {
+  return layer.sourceClipId
+    ? clips.find((clip) => clip.id === layer.sourceClipId)
+    : clips.find((clip) => clip.name === layer.name);
+}
+
+interface MovePositionBasis {
+  baseBounds: LayerOverlayBounds;
+  xPlusBounds: LayerOverlayBounds;
+  yPlusBounds: LayerOverlayBounds;
+}
+
+type PendingDragUpdate =
+  | {
+      mode: 'move';
+      layerId: string;
+      clipId?: string;
+      position: { x: number; y: number; z: number };
+    }
+  | {
+      mode: 'scale';
+      layerId: string;
+      clipId?: string;
+      scale: { x: number; y: number };
+    };
 
 export function useLayerDrag({
   editMode,
@@ -47,6 +94,63 @@ export function useLayerDrag({
   const [hoverHandle, setHoverHandle] = useState<string | null>(null);
   const dragStart = useRef({ x: 0, y: 0, layerPosX: 0, layerPosY: 0, layerScaleX: 1, layerScaleY: 1 });
   const currentDragPos = useRef({ x: 0, y: 0 });
+  const layersRef = useRef(layers);
+  const clipsRef = useRef(clips);
+  const movePositionBasis = useRef<MovePositionBasis | null>(null);
+  const pendingDragUpdate = useRef<PendingDragUpdate | null>(null);
+  const dragUpdateFrame = useRef<number | null>(null);
+
+  useEffect(() => {
+    layersRef.current = layers;
+  }, [layers]);
+
+  useEffect(() => {
+    clipsRef.current = clips;
+  }, [clips]);
+
+  const flushPendingDragUpdate = useCallback(() => {
+    dragUpdateFrame.current = null;
+    const pending = pendingDragUpdate.current;
+    pendingDragUpdate.current = null;
+
+    if (!pending) return;
+
+    if (pending.mode === 'move') {
+      updateLayer(pending.layerId, { position: pending.position });
+      if (pending.clipId) {
+        updateClipTransform(pending.clipId, { position: pending.position });
+      }
+      return;
+    }
+
+    updateLayer(pending.layerId, { scale: pending.scale });
+    if (pending.clipId) {
+      updateClipTransform(pending.clipId, { scale: pending.scale });
+    }
+  }, [updateClipTransform, updateLayer]);
+
+  const scheduleDragUpdate = useCallback((update: PendingDragUpdate) => {
+    pendingDragUpdate.current = update;
+
+    if (dragUpdateFrame.current === null) {
+      dragUpdateFrame.current = requestAnimationFrame(flushPendingDragUpdate);
+    }
+  }, [flushPendingDragUpdate]);
+
+  const flushPendingDragUpdateNow = useCallback(() => {
+    if (dragUpdateFrame.current !== null) {
+      cancelAnimationFrame(dragUpdateFrame.current);
+      dragUpdateFrame.current = null;
+    }
+
+    flushPendingDragUpdate();
+  }, [flushPendingDragUpdate]);
+
+  useEffect(() => () => {
+    if (dragUpdateFrame.current !== null) {
+      cancelAnimationFrame(dragUpdateFrame.current);
+    }
+  }, []);
 
   // Draw overlay with bounding boxes (full-container overlay)
   useEffect(() => {
@@ -78,74 +182,49 @@ export function useLayerDrag({
         const isSelected = layer.id === selectedLayerId ||
           clips.find(c => c.id === selectedClipId)?.name === layer.name;
 
-        const forcePos = (isDragging && layer.id === dragLayerId) ? currentDragPos.current : undefined;
+        const forcePos = (isDragging && dragMode === 'move' && layer.id === dragLayerId)
+          ? currentDragPos.current
+          : undefined;
         const bounds = calculateLayerBounds(layer, canvasSize.width, canvasSize.height, forcePos);
-
-        const containerX = canvasInContainer.x + bounds.x * viewZoom;
-        const containerY = canvasInContainer.y + bounds.y * viewZoom;
-        const containerWidth = bounds.width * viewZoom;
-        const containerHeight = bounds.height * viewZoom;
+        const containerBounds = scaleLayerOverlayBounds(bounds, viewZoom, {
+          x: canvasInContainer.x,
+          y: canvasInContainer.y,
+        });
 
         ctx.save();
-        ctx.translate(containerX, containerY);
-        ctx.rotate(bounds.rotation);
-
-        const halfW = containerWidth / 2;
-        const halfH = containerHeight / 2;
-
         ctx.strokeStyle = isSelected ? '#2997E5' : 'rgba(255, 255, 255, 0.5)';
         ctx.lineWidth = isSelected ? 2 : 1;
         ctx.setLineDash(isSelected ? [] : [5, 5]);
-        ctx.strokeRect(-halfW, -halfH, containerWidth, containerHeight);
+        drawOverlayPath(ctx, containerBounds.corners);
 
         if (isSelected) {
           const handleSize = 8;
           ctx.fillStyle = '#2997E5';
+          const handles = getLayerOverlayHandles(containerBounds);
 
-          ctx.fillRect(-halfW - handleSize/2, -halfH - handleSize/2, handleSize, handleSize);
-          ctx.fillRect(halfW - handleSize/2, -halfH - handleSize/2, handleSize, handleSize);
-          ctx.fillRect(-halfW - handleSize/2, halfH - handleSize/2, handleSize, handleSize);
-          ctx.fillRect(halfW - handleSize/2, halfH - handleSize/2, handleSize, handleSize);
-
-          ctx.fillRect(-handleSize/2, -halfH - handleSize/2, handleSize, handleSize);
-          ctx.fillRect(-handleSize/2, halfH - handleSize/2, handleSize, handleSize);
-          ctx.fillRect(-halfW - handleSize/2, -handleSize/2, handleSize, handleSize);
-          ctx.fillRect(halfW - handleSize/2, -handleSize/2, handleSize, handleSize);
+          Object.values(handles).forEach((handle) => drawHandle(ctx, handle, handleSize));
 
           ctx.strokeStyle = '#2997E5';
           ctx.lineWidth = 1;
           ctx.setLineDash([]);
           ctx.beginPath();
-          ctx.moveTo(-10, 0);
-          ctx.lineTo(10, 0);
-          ctx.moveTo(0, -10);
-          ctx.lineTo(0, 10);
+          ctx.moveTo(containerBounds.x - 10, containerBounds.y);
+          ctx.lineTo(containerBounds.x + 10, containerBounds.y);
+          ctx.moveTo(containerBounds.x, containerBounds.y - 10);
+          ctx.lineTo(containerBounds.x, containerBounds.y + 10);
           ctx.stroke();
         }
 
         ctx.fillStyle = isSelected ? '#2997E5' : 'rgba(255, 255, 255, 0.7)';
         ctx.font = '11px sans-serif';
-        ctx.fillText(layer.name, -halfW + 4, -halfH - 6);
+        ctx.fillText(layer.name, containerBounds.corners.tl.x + 4, containerBounds.corners.tl.y - 6);
 
         ctx.restore();
       });
     };
 
     draw();
-
-    let animId: number | null = null;
-    if (isDragging) {
-      const loop = () => {
-        draw();
-        animId = requestAnimationFrame(loop);
-      };
-      animId = requestAnimationFrame(loop);
-    }
-
-    return () => {
-      if (animId !== null) cancelAnimationFrame(animId);
-    };
-  }, [editMode, layers, selectedLayerId, selectedClipId, clips, canvasSize, canvasInContainer, viewZoom, calculateLayerBounds, isDragging, dragLayerId, overlayRef]);
+  }, [editMode, layers, selectedLayerId, selectedClipId, clips, canvasSize, canvasInContainer, viewZoom, calculateLayerBounds, isDragging, dragMode, dragLayerId, overlayRef]);
 
   // Handle mouse down on overlay
   const handleOverlayMouseDown = useCallback((e: React.MouseEvent) => {
@@ -160,6 +239,8 @@ export function useLayerDrag({
     if (selectedLayer) {
       const handle = findHandleAtPosition(x, y, selectedLayer);
       if (handle) {
+        movePositionBasis.current = null;
+        currentDragPos.current = { x: selectedLayer.position.x, y: selectedLayer.position.y };
         setIsDragging(true);
         setDragLayerId(selectedLayer.id);
         setDragMode('scale');
@@ -179,11 +260,24 @@ export function useLayerDrag({
     const layer = findLayerAtPosition(x, y);
 
     if (layer) {
-      const clip = clips.find(c => c.name === layer.name);
+      const clip = findClipForLayer(clips, layer);
       if (clip) {
         selectClip(clip.id);
       }
       selectLayer(layer.id);
+      currentDragPos.current = { x: layer.position.x, y: layer.position.y };
+
+      movePositionBasis.current = {
+        baseBounds: calculateLayerBounds(layer, canvasSize.width, canvasSize.height, layer.position),
+        xPlusBounds: calculateLayerBounds(layer, canvasSize.width, canvasSize.height, {
+          x: layer.position.x + 1,
+          y: layer.position.y,
+        }),
+        yPlusBounds: calculateLayerBounds(layer, canvasSize.width, canvasSize.height, {
+          x: layer.position.x,
+          y: layer.position.y + 1,
+        }),
+      };
 
       setIsDragging(true);
       setDragLayerId(layer.id);
@@ -200,8 +294,9 @@ export function useLayerDrag({
     } else {
       selectClip(null);
       selectLayer(null);
+      movePositionBasis.current = null;
     }
-  }, [editMode, findLayerAtPosition, findHandleAtPosition, clips, layers, selectedLayerId, selectClip, selectLayer, overlayRef]);
+  }, [editMode, findLayerAtPosition, findHandleAtPosition, clips, layers, selectedLayerId, selectClip, selectLayer, calculateLayerBounds, canvasSize, overlayRef]);
 
   // Handle mouse move on overlay — detect handle hover
   const handleOverlayMouseMove = useCallback((e: React.MouseEvent) => {
@@ -222,10 +317,12 @@ export function useLayerDrag({
 
   // Handle mouse up
   const handleOverlayMouseUp = useCallback(() => {
+    flushPendingDragUpdateNow();
     setIsDragging(false);
     setDragLayerId(null);
+    movePositionBasis.current = null;
     currentDragPos.current = { x: 0, y: 0 };
-  }, []);
+  }, [flushPendingDragUpdateNow]);
 
   // Document-level listeners during drag
   useEffect(() => {
@@ -234,8 +331,9 @@ export function useLayerDrag({
     const handleDocumentMouseMove = (e: MouseEvent) => {
       if (!dragLayerId) return;
 
-      const layer = layers.find(l => l?.id === dragLayerId);
+      const layer = layersRef.current.find(l => l?.id === dragLayerId);
       if (!layer) return;
+      const clip = findClipForLayer(clipsRef.current, layer);
 
       const dx = e.clientX - dragStart.current.x;
       const dy = e.clientY - dragStart.current.y;
@@ -288,43 +386,56 @@ export function useLayerDrag({
         newScaleX = Math.max(0.01, Math.min(10, newScaleX));
         newScaleY = Math.max(0.01, Math.min(10, newScaleY));
 
-        updateLayer(dragLayerId, {
+        scheduleDragUpdate({
+          mode: 'scale',
+          layerId: dragLayerId,
+          clipId: clip?.id,
           scale: { x: newScaleX, y: newScaleY },
         });
-
-        const clip = clips.find(c => c.name === layer.name);
-        if (clip) {
-          updateClipTransform(clip.id, {
-            scale: { x: newScaleX, y: newScaleY },
-          });
-        }
       } else {
-        const normalizedDx = (dx / viewZoom) / canvasSize.width;
-        const normalizedDy = (dy / viewZoom) / canvasSize.height;
+        const basis = movePositionBasis.current ?? {
+          baseBounds: calculateLayerBounds(layer, canvasSize.width, canvasSize.height, {
+            x: dragStart.current.layerPosX,
+            y: dragStart.current.layerPosY,
+          }),
+          xPlusBounds: calculateLayerBounds(layer, canvasSize.width, canvasSize.height, {
+            x: dragStart.current.layerPosX + 1,
+            y: dragStart.current.layerPosY,
+          }),
+          yPlusBounds: calculateLayerBounds(layer, canvasSize.width, canvasSize.height, {
+            x: dragStart.current.layerPosX,
+            y: dragStart.current.layerPosY + 1,
+          }),
+        };
+        movePositionBasis.current = basis;
+        const positionDelta = resolvePositionDeltaForCanvasDelta(
+          basis.baseBounds,
+          basis.xPlusBounds,
+          basis.yPlusBounds,
+          { x: dx / viewZoom, y: dy / viewZoom },
+        );
 
-        const newPosX = dragStart.current.layerPosX + normalizedDx;
-        const newPosY = dragStart.current.layerPosY + normalizedDy;
+        const newPosX = dragStart.current.layerPosX + positionDelta.x;
+        const newPosY = dragStart.current.layerPosY + positionDelta.y;
 
         currentDragPos.current = { x: newPosX, y: newPosY };
 
-        updateLayer(dragLayerId, {
+        scheduleDragUpdate({
+          mode: 'move',
+          layerId: dragLayerId,
+          clipId: clip?.id,
           position: { x: newPosX, y: newPosY, z: layer.position.z },
         });
-
-        const clip = clips.find(c => c.name === layer.name);
-        if (clip) {
-          updateClipTransform(clip.id, {
-            position: { x: newPosX, y: newPosY, z: 0 },
-          });
-        }
       }
     };
 
     const handleDocumentMouseUp = () => {
+      flushPendingDragUpdateNow();
       setIsDragging(false);
       setDragLayerId(null);
       setDragMode('move');
       setDragHandle(null);
+      movePositionBasis.current = null;
       currentDragPos.current = { x: 0, y: 0 };
     };
 
@@ -335,7 +446,17 @@ export function useLayerDrag({
       document.removeEventListener('mousemove', handleDocumentMouseMove);
       document.removeEventListener('mouseup', handleDocumentMouseUp);
     };
-  }, [isDragging, dragLayerId, dragMode, dragHandle, viewZoom, canvasSize, layers, clips, updateClipTransform, updateLayer]);
+  }, [
+    isDragging,
+    dragLayerId,
+    dragMode,
+    dragHandle,
+    viewZoom,
+    canvasSize,
+    calculateLayerBounds,
+    flushPendingDragUpdateNow,
+    scheduleDragUpdate,
+  ]);
 
   return {
     isDragging,

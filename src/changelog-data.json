@@ -2,6 +2,27 @@
   {
     "date": "2026-05-01",
     "type": "fix",
+    "title": "Preview Edit Handles Track Scaled and Rotated 2D Layers",
+    "description": "2D edit-mode outlines, handles, hit testing, and drag movement now use the same transform geometry as the WebGPU compositor, so scaled or rotated clips stay aligned while being moved.",
+    "section": "Preview / Edit Mode"
+  },
+  {
+    "date": "2026-05-01",
+    "type": "fix",
+    "title": "Export Range Honors Timeline Out Points",
+    "description": "Exports now resolve the active in/out selection before rendering so an out marker limits the exported duration instead of rendering the full composition.",
+    "section": "Export"
+  },
+  {
+    "date": "2026-05-01",
+    "type": "improve",
+    "title": "Native Helper v0.3.14 Release Target",
+    "description": "MasterSelects now targets Native Helper v0.3.14, with the helper dialog and updater looking for the new published release. The splash screen also calls out finished MatAnyone2 support and the helper update.",
+    "section": "Native Helper"
+  },
+  {
+    "date": "2026-05-01",
+    "type": "fix",
     "title": "Firefox Native Project Restore Is Fast Again",
     "description": "Native Helper project open now connects quickly in Firefox, restores project media without eager-loading every Raw asset, keeps relinked GLB and PLY sequences available after refresh, and lets restored media import into the timeline again.",
     "section": "Native Helper / Project Persistence",

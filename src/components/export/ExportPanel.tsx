@@ -31,6 +31,7 @@ import type {
   DnxhrProfile,
 } from '../../engine/ffmpeg';
 import { FFmpegFrameRenderer } from './exportHelpers';
+import { resolveExportRange } from './exportRange';
 import { useExportState, type EncoderType } from './useExportState';
 import {
   useExportStore,
@@ -196,9 +197,21 @@ export function ExportPanel() {
     handleFFmpegContainerChange, handleFFmpegCodecChange,
   } = useExportState(composition);
 
-  // Compute actual start/end based on In/Out markers
-  const startTime = useInOut && inPoint !== null ? inPoint : 0;
-  const endTime = useInOut && outPoint !== null ? outPoint : duration;
+  // Compute actual start/end based on In/Out markers for display.
+  const { startTime, endTime } = resolveExportRange({ duration, inPoint, outPoint }, useInOut);
+
+  const getCurrentExportRange = useCallback(() => {
+    const timelineState = useTimelineStore.getState();
+    const exportSettings = useExportStore.getState().settings;
+    return resolveExportRange(
+      {
+        duration: timelineState.duration,
+        inPoint: timelineState.inPoint,
+        outPoint: timelineState.outPoint,
+      },
+      exportSettings.useInOut,
+    );
+  }, []);
 
   // Handle export (WebCodecs)
   const handleExport = useCallback(async () => {
@@ -208,6 +221,7 @@ export function ExportPanel() {
     setError(null);
     setProgress(null);
 
+    const { startTime, endTime } = getCurrentExportRange();
     const actualWidth = useCustomResolution ? customWidth : width;
     const actualHeight = useCustomResolution ? customHeight : height;
 
@@ -281,10 +295,9 @@ export function ExportPanel() {
     setExporter,
     setIsExporting,
     setProgress,
+    getCurrentExportRange,
     stackedAlpha,
     startExport,
-    startTime,
-    endTime,
     useCustomFps,
     useCustomResolution,
     videoCodec,
@@ -329,6 +342,7 @@ export function ExportPanel() {
     setFfmpegProgress(null);
     setExportPhase('rendering');
 
+    const { startTime, endTime } = getCurrentExportRange();
     const actualWidth = useCustomResolution ? customWidth : width;
     const actualHeight = useCustomResolution ? customHeight : height;
     const exportFps = useCustomFps ? customFps : fps;
@@ -575,7 +589,7 @@ export function ExportPanel() {
     }
   }, [
     isExporting, isFFmpegReady, loadFFmpeg, useCustomResolution, customWidth, customHeight,
-    width, height, fps, customFps, useCustomFps, startTime, endTime, ffmpegCodec, ffmpegContainer,
+    width, height, fps, customFps, useCustomFps, getCurrentExportRange, ffmpegCodec, ffmpegContainer,
     ffmpegQuality, proresProfile, dnxhrProfile, filename,
     includeAudio, audioSampleRate, audioBitrate, normalizeAudio,
     startExport, setExportProgress, endExport,
@@ -588,6 +602,7 @@ export function ExportPanel() {
 
     setIsExporting(true);
     setError(null);
+    const { startTime, endTime } = getCurrentExportRange();
     setProgress({
       phase: 'audio',
       currentFrame: 0,
@@ -645,7 +660,7 @@ export function ExportPanel() {
     } finally {
       setIsExporting(false);
     }
-  }, [startTime, endTime, filename, isExporting, audioSampleRate, audioBitrate, normalizeAudio, setError, setIsExporting, setProgress]);
+  }, [getCurrentExportRange, filename, isExporting, audioSampleRate, audioBitrate, normalizeAudio, setError, setIsExporting, setProgress]);
 
   // Handle FCPXML export
   const handleExportFCPXML = useCallback(() => {

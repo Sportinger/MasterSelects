@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '1.6.8';
+export const APP_VERSION = '1.6.9';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -35,21 +35,21 @@ export const FEATURED_VIDEO: {
 
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
-  type: 'warning',
-  title: 'Work in progress',
-  message: '',
+  type: 'success',
+  title: 'MatAnyone2 is ready',
+  message: 'AI video matting is finished in this build, backed by the updated Native Helper runtime.',
   link: {
-    label: 'MatAnyone2',
-    href: 'https://github.com/pq-yang/MatAnyone2',
-    suffix: 'integration',
+    label: 'Native Helper v0.3.14',
+    href: 'https://github.com/Sportinger/MasterSelects/releases/tag/native-helper-v0.3.14',
+    suffix: 'release',
   },
   animated: true,
 };
 
 export const WIP_NOTICE: ChangelogNotice | null = {
-  type: 'success',
-  title: 'Payments are Live',
-  message: 'If you want to buy AI credit, you can do that now. Your own AI key is optional.',
+  type: 'info',
+  title: 'Native Helper updated',
+  message: 'Install v0.3.14 for the latest downloads, Firefox projects, local AI bridge, and MatAnyone2 support.',
   animated: true,
 };
 
