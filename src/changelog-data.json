@@ -1,5 +1,19 @@
 [
   {
+    "date": "2026-05-01",
+    "type": "new",
+    "title": "Lemonade Local AI Chat Provider",
+    "description": "AI Chat now supports local Lemonade Server models with loopback-only endpoints, streamed responses, model discovery, compact local tool schemas, project-saved system prompts, and sturdier fallback handling for FLM tool-call stalls.",
+    "section": "AI / Lemonade",
+    "commits": [
+      "1b8d0aad",
+      "b367ee8a"
+    ],
+    "highlight": "community",
+    "contributorName": "Anthony Mikinka",
+    "contributorUrl": "https://github.com/antmikinka"
+  },
+  {
     "date": "2026-04-30",
     "type": "fix",
     "title": "3D Sequence Playback and Scrubbing Stay Responsive",

@@ -66,6 +66,8 @@ Because local FLM models have a smaller practical prompt budget than hosted mode
 
 Lemonade chat responses use the OpenAI-compatible SSE streaming endpoint, so text appears incrementally in the chat panel while the local model is generating. Tool calls are collected from the streamed deltas and executed after the assistant response finishes. To stay within the 4096-token context used by current FLM models, Lemonade uses a shorter editor system prompt, compact tool results, and a lower completion-token limit than hosted models. If a local model still stalls after a tool result, MasterSelects times out the follow-up request and shows a deterministic tool-result summary instead of leaving the chat empty.
 
+In Lemonade editor mode, each new user request is sent as a fresh tool-capable turn with the current timeline summary rather than replaying prior raw tool-call messages. This keeps small local FLM models from getting stuck on stale tool-call history while still allowing every new prompt to produce fresh tool calls.
+
 The AI Chat header includes a `Prompt` button for provider-specific system prompt overrides. Prompts can be saved into the current project folder under `Prompts/*.prompt.json`, reloaded from the saved prompt list, reset to the built-in prompt, imported from a text/Markdown file, and exported as a `.txt` file. The active override is still mirrored in app settings so the chat can use it immediately.
 
 ### Available Models
