@@ -26,6 +26,7 @@ import {
   type ProjectComposition,
   type ProjectFolder,
 } from '../projectFileService';
+import { withProjectStoreSyncGuard } from './projectSave';
 import { fileSystemService } from '../fileSystemService';
 import { projectDB } from '../projectDB';
 import {
@@ -65,6 +66,29 @@ function removeLocalStorageKey(key: string): void {
     return;
   }
   storage.setItem(key, '');
+}
+
+function isAbsoluteFilePath(value: string | undefined): boolean {
+  return Boolean(value && (value.startsWith('/') || /^[A-Za-z]:[/\\]/.test(value)));
+}
+
+type ProjectFileServiceRawResolver = typeof projectFileService & {
+  resolveRawFilePath?: (relativePath: string | undefined) => string | null;
+  resolveRawFileUrl?: (relativePath: string | undefined) => string | null;
+};
+
+function resolveProjectRawFilePath(relativePath: string | undefined): string | null {
+  const resolver = (projectFileService as ProjectFileServiceRawResolver).resolveRawFilePath;
+  return typeof resolver === 'function'
+    ? resolver.call(projectFileService, relativePath)
+    : null;
+}
+
+function resolveProjectRawFileUrl(relativePath: string | undefined): string | null {
+  const resolver = (projectFileService as ProjectFileServiceRawResolver).resolveRawFileUrl;
+  return typeof resolver === 'function'
+    ? resolver.call(projectFileService, relativePath)
+    : null;
 }
 
 /**
@@ -147,7 +171,15 @@ async function restoreSequenceFrameFromHandle(
 /**
  * Convert ProjectMediaFile to MediaFile format
  */
-async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Promise<MediaFile[]> {
+type ConvertProjectMediaOptions = {
+  hydrateFiles?: boolean;
+};
+
+async function convertProjectMediaToStore(
+  projectMedia: ProjectMediaFile[],
+  options: ConvertProjectMediaOptions = {},
+): Promise<MediaFile[]> {
+  const hydrateFiles = options.hydrateFiles !== false;
   const files: MediaFile[] = [];
 
   for (const pm of projectMedia) {
@@ -157,18 +189,20 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
     let url = '';
     let thumbnailUrl: string | undefined;
 
-    // Prefer the project-local RAW copy. This is the canonical source for imported media.
-    const storedProjectHandle = await getStoredProjectFileHandle(pm.id);
-    if (storedProjectHandle) {
-      try {
-        file = await storedProjectHandle.getFile();
-        handle = storedProjectHandle;
-        url = URL.createObjectURL(file);
-        resolvedProjectPath = resolvedProjectPath || `Raw/${storedProjectHandle.name}`;
-        await cacheProjectFileHandle(pm.id, storedProjectHandle, true);
-        log.info('Restored file from project RAW handle:', pm.name);
-      } catch (e) {
-        log.warn(`Could not access project RAW handle: ${pm.name}`, e);
+    if (hydrateFiles) {
+      // Prefer the project-local RAW copy. This is the canonical source for imported media.
+      const storedProjectHandle = await getStoredProjectFileHandle(pm.id);
+      if (storedProjectHandle) {
+        try {
+          file = await storedProjectHandle.getFile();
+          handle = storedProjectHandle;
+          url = URL.createObjectURL(file);
+          resolvedProjectPath = resolvedProjectPath || `Raw/${storedProjectHandle.name}`;
+          await cacheProjectFileHandle(pm.id, storedProjectHandle, true);
+          log.info('Restored file from project RAW handle:', pm.name);
+        } catch (e) {
+          log.warn(`Could not access project RAW handle: ${pm.name}`, e);
+        }
       }
     }
 
@@ -179,8 +213,12 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
         const frame = pm.modelSequence.frames[frameIndex];
         let frameFile = frame.file;
         let modelUrl = frame.modelUrl;
+        const frameFileUrl = resolveProjectRawFileUrl(frame.projectPath);
+        if (!hydrateFiles && !modelUrl && frameFileUrl) {
+          modelUrl = frameFileUrl;
+        }
 
-        if (!frameFile && frame.projectPath && projectFileService.isProjectOpen()) {
+        if (hydrateFiles && !frameFile && frame.projectPath && projectFileService.isProjectOpen()) {
           try {
             const result = await projectFileService.getFileFromRaw(frame.projectPath);
             if (result?.file) {
@@ -195,7 +233,7 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
           }
         }
 
-        if (!frameFile) {
+        if (hydrateFiles && !frameFile) {
           const restoredFrame = await restoreSequenceFrameFromHandle(pm.id, frameIndex);
           if (restoredFrame) {
             frameFile = restoredFrame.file;
@@ -207,7 +245,7 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
           name: frame.name,
           projectPath: frame.projectPath,
           sourcePath: frame.sourcePath,
-          absolutePath: frame.absolutePath,
+          absolutePath: frame.absolutePath ?? resolveProjectRawFilePath(frame.projectPath) ?? undefined,
           file: frameFile,
           modelUrl,
         });
@@ -225,8 +263,12 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
         const frame = pm.gaussianSplatSequence.frames[frameIndex];
         let frameFile = frame.file;
         let splatUrl = frame.splatUrl;
+        const frameFileUrl = resolveProjectRawFileUrl(frame.projectPath);
+        if (!hydrateFiles && !splatUrl && frameFileUrl) {
+          splatUrl = frameFileUrl;
+        }
 
-        if (!frameFile && frame.projectPath && projectFileService.isProjectOpen()) {
+        if (hydrateFiles && !frameFile && frame.projectPath && projectFileService.isProjectOpen()) {
           try {
             const result = await projectFileService.getFileFromRaw(frame.projectPath);
             if (result?.file) {
@@ -241,7 +283,7 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
           }
         }
 
-        if (!frameFile) {
+        if (hydrateFiles && !frameFile) {
           const restoredFrame = await restoreSequenceFrameFromHandle(pm.id, frameIndex);
           if (restoredFrame) {
             frameFile = restoredFrame.file;
@@ -253,7 +295,7 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
           name: frame.name,
           projectPath: frame.projectPath,
           sourcePath: frame.sourcePath,
-          absolutePath: frame.absolutePath,
+          absolutePath: frame.absolutePath ?? resolveProjectRawFilePath(frame.projectPath) ?? undefined,
           file: frameFile,
           splatUrl,
           splatCount: frame.splatCount,
@@ -268,7 +310,7 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
         frames: sequenceFrames,
       };
     }
-    if (!file && projectFileService.isProjectOpen()) {
+    if (hydrateFiles && !file && projectFileService.isProjectOpen()) {
       for (const candidatePath of getProjectRawPathCandidates({
         mediaFileId: pm.id,
         projectPath: pm.projectPath,
@@ -298,18 +340,28 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
     }
 
     const representativeFile = file ?? modelSequence?.frames[0]?.file ?? gaussianSplatSequence?.frames[0]?.file;
-    const representativeUrl =
-      url ||
-      modelSequence?.frames[0]?.modelUrl ||
-      gaussianSplatSequence?.frames[0]?.splatUrl ||
-      '';
     const representativeProjectPath =
       resolvedProjectPath ??
       modelSequence?.frames[0]?.projectPath ??
       gaussianSplatSequence?.frames[0]?.projectPath;
+    const nativeRepresentativeUrl =
+      !hydrateFiles && representativeProjectPath
+        ? resolveProjectRawFileUrl(representativeProjectPath) ?? ''
+        : '';
+    const representativeUrl =
+      url ||
+      modelSequence?.frames[0]?.modelUrl ||
+      gaussianSplatSequence?.frames[0]?.splatUrl ||
+      nativeRepresentativeUrl ||
+      '';
+    const representativeAbsolutePath =
+      resolveProjectRawFilePath(representativeProjectPath) ??
+      (isAbsoluteFilePath(pm.sourcePath) ? pm.sourcePath : undefined) ??
+      modelSequence?.frames[0]?.absolutePath ??
+      gaussianSplatSequence?.frames[0]?.absolutePath;
 
     // Fall back to the primary file handle for non-project media or legacy data.
-    if (!file) {
+    if (hydrateFiles && !file) {
       handle = fileSystemService.getFileHandle(pm.id);
 
       if (!handle) {
@@ -411,8 +463,9 @@ async function convertProjectMediaToStore(projectMedia: ProjectMediaFile[]): Pro
       modelSequence,
       gaussianSplatSequence,
       proxyStatus: pm.hasProxy ? 'ready' : 'none',
-      hasFileHandle: !!handle,
+      hasFileHandle: !!handle || (!!representativeAbsolutePath && projectFileService.activeBackend === 'native'),
       filePath: pm.sourcePath,
+      absolutePath: representativeAbsolutePath,
       projectPath: representativeProjectPath,
       vectorAnimation: pm.vectorAnimation,
       labelColor: pm.labelColor as import('../../stores/mediaStore/types').LabelColor | undefined,
@@ -658,19 +711,27 @@ function hydrateFlashBoardFromProject(data: ProjectFlashBoardState): void {
  * Load project data from projectFileService into stores
  */
 export async function loadProjectToStores(): Promise<void> {
-  const projectData = projectFileService.getProjectData();
-  if (!projectData) {
-    log.error(' No project data to load');
-    return;
-  }
+  await withProjectStoreSyncGuard(async () => {
+    const projectData = projectFileService.getProjectData();
+    if (!projectData) {
+      log.error(' No project data to load');
+      return;
+    }
 
-  // Convert and load data
-  const files = await convertProjectMediaToStore(projectData.media);
-  const compositions = convertProjectCompositionToStore(
-    projectData.compositions,
-    projectData.uiState?.compositionViewState
-  );
-  const folders = convertProjectFolderToStore(projectData.folders);
+    // Firefox/native helper must not synchronously download every RAW file or
+    // 3D sequence frame before the project appears in the UI.
+    const hydrateFiles = projectFileService.activeBackend !== 'native';
+    if (!hydrateFiles) {
+      log.info('Native backend detected; deferring media file hydration until after project metadata is loaded');
+    }
+
+    // Convert and load data
+    const files = await convertProjectMediaToStore(projectData.media, { hydrateFiles });
+    const compositions = convertProjectCompositionToStore(
+      projectData.compositions,
+      projectData.uiState?.compositionViewState
+    );
+    const folders = convertProjectFolderToStore(projectData.folders);
 
   // Clear timeline first
   const timelineStore = useTimelineStore.getState();
@@ -832,12 +893,17 @@ export async function loadProjectToStores(): Promise<void> {
 
   log.info(' Loaded project to stores:', projectData.name);
 
-  // Auto-relink missing files from Raw folder
-  await autoRelinkFromRawFolder();
+    if (hydrateFiles) {
+      // Auto-relink missing files from Raw folder
+      await autoRelinkFromRawFolder();
+    } else {
+      log.info('Skipping eager auto-relink for native backend during initial project load');
+    }
 
-  // Restore thumbnails and refresh metadata in the background
-  restoreMediaThumbnails();
-  refreshMediaMetadata();
+    // Restore thumbnails and refresh metadata in the background
+    restoreMediaThumbnails();
+    refreshMediaMetadata();
+  });
 }
 
 // ============================================

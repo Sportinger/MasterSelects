@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react
 import { NativeHelperClient, isNativeHelperAvailable } from '../../../services/nativeHelper';
 import type { SystemInfo, ConnectionStatus } from '../../../services/nativeHelper';
 import {
+  compareNativeHelperVersions,
   fetchLatestPublishedNativeHelperRelease,
   NATIVE_HELPER_RELEASES_URL,
   NATIVE_HELPER_TARGET_VERSION,
@@ -128,6 +129,7 @@ export function NativeHelperSettings() {
     }
     setChecking(true);
     try {
+      NativeHelperClient.configure({ port: nativeHelperPort });
       const available = await isNativeHelperAvailable();
       setStatus(available ? 'connected' : 'disconnected');
       setNativeHelperConnected(available);
@@ -136,7 +138,7 @@ export function NativeHelperSettings() {
       setNativeHelperConnected(false);
     }
     setChecking(false);
-  }, [helperEnabled, setNativeHelperConnected]);
+  }, [helperEnabled, nativeHelperPort, setNativeHelperConnected]);
 
   useEffect(() => {
     queueMicrotask(() => void checkConnection());
@@ -149,7 +151,17 @@ export function NativeHelperSettings() {
 
   useEffect(() => {
     if (status === 'connected') {
-      NativeHelperClient.getInfo().then(setInfo).catch(() => setInfo(null));
+      let cancelled = false;
+      NativeHelperClient.getInfo(3000)
+        .then((nextInfo) => {
+          if (!cancelled) setInfo(nextInfo);
+        })
+        .catch(() => {
+          if (!cancelled) setInfo(null);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
   }, [status]);
 
@@ -164,7 +176,11 @@ export function NativeHelperSettings() {
   const isConnected = status === 'connected';
   const connectedVersion = helperInfo?.version ?? null;
   const publishedVersion = publishedRelease?.version ?? null;
-  const expectedVersionInstalled = connectedVersion === NATIVE_HELPER_VERSION;
+  const versionKnown = connectedVersion !== null;
+  const helperVersionCompare = compareNativeHelperVersions(connectedVersion, NATIVE_HELPER_VERSION);
+  const expectedVersionInstalled = versionKnown && helperVersionCompare >= 0;
+  const helperNeedsUpdate = isConnected && versionKnown && helperVersionCompare < 0;
+  const publishedMatchesTarget = compareNativeHelperVersions(publishedVersion, NATIVE_HELPER_VERSION) >= 0;
   const downloadLink = publishedRelease?.url || NATIVE_HELPER_RELEASES_URL;
 
   const capabilities: Array<{ label: string; tone: CapTone }> = isConnected && helperInfo
@@ -235,20 +251,20 @@ export function NativeHelperSettings() {
         <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
             <span className="settings-label" style={{ flex: 1 }}>
-              {isConnected && connectedVersion
-                ? `Helper v${connectedVersion}`
+              {isConnected
+                ? (connectedVersion ? `Helper v${connectedVersion}` : 'Helper connected')
                 : publishedVersion
                   ? `GitHub release v${publishedVersion}`
                   : 'Native Helper'}
             </span>
-            <CapPill tone={isConnected ? (expectedVersionInstalled ? 'good' : 'warn') : 'neutral'}>
+            <CapPill tone={isConnected ? (helperNeedsUpdate ? 'warn' : 'good') : 'neutral'}>
               {isConnected
-                ? (expectedVersionInstalled ? 'Up to date' : 'Update available')
+                ? (versionKnown ? (expectedVersionInstalled ? 'Up to date' : 'Update available') : 'Connected')
                 : (helperEnabled ? 'Waiting...' : 'Disabled')}
             </CapPill>
           </div>
 
-          {isConnected && publishedVersion && publishedVersion !== NATIVE_HELPER_VERSION && (
+          {isConnected && publishedVersion && !publishedMatchesTarget && (
             <p className="settings-hint" style={{ margin: 0 }}>
               GitHub publishes v{publishedVersion}, app targets v{NATIVE_HELPER_VERSION}.
             </p>
@@ -265,10 +281,10 @@ export function NativeHelperSettings() {
         {/* Version pills */}
         {publishedVersion && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingBottom: 6 }}>
-            <CapPill tone={publishedVersion === NATIVE_HELPER_VERSION ? 'good' : 'warn'}>
+            <CapPill tone={publishedMatchesTarget ? 'good' : 'warn'}>
               Public GitHub: v{publishedVersion}
             </CapPill>
-            {publishedVersion !== NATIVE_HELPER_VERSION && (
+            {!publishedMatchesTarget && (
               <CapPill tone="neutral">App target: v{NATIVE_HELPER_VERSION}</CapPill>
             )}
           </div>

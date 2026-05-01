@@ -21,6 +21,7 @@ import { useSliceStore } from '../../stores/sliceStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { reportRenderTime } from '../../services/performanceMonitor';
 import { Logger } from '../../services/logger';
+import { NativeHelperClient } from '../../services/nativeHelper/NativeHelperClient';
 import { scrubSettleState } from '../../services/scrubSettleState';
 import { vfPipelineMonitor } from '../../services/vfPipelineMonitor';
 import { getCopiedHtmlVideoPreviewFrame } from './htmlVideoPreviewFallback';
@@ -1693,6 +1694,23 @@ export class RenderDispatcher {
       loadedBytes: 0,
       message: 'Fetching splat file',
     });
+
+    const nativePath = NativeHelperClient.parseFileReferenceUrl(request.url);
+    if (nativePath) {
+      const arrayBuffer = await NativeHelperClient.getDownloadedFile(nativePath);
+      if (!arrayBuffer) {
+        throw new Error(`Failed to fetch native gaussian splat: ${nativePath}`);
+      }
+
+      this.setGaussianSplatLoadProgress(request, {
+        phase: 'fetching',
+        percent: 0.35,
+        loadedBytes: arrayBuffer.byteLength,
+        totalBytes: arrayBuffer.byteLength,
+        message: 'Fetched splat file',
+      });
+      return new File([arrayBuffer], request.fileName || nativePath.split(/[\\/]/).pop() || 'splat.ply');
+    }
 
     const response = await fetch(request.url);
     if (!response.ok) {

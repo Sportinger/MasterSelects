@@ -73,6 +73,10 @@ export class LayerBuilderService {
       : undefined;
   }
 
+  private getRenderableFile(file: File | undefined): File | undefined {
+    return file && (typeof file.size !== 'number' || file.size > 0) ? file : undefined;
+  }
+
   private getLayerSourceMetadata(
     clip: TimelineClip,
     mediaFile?: { id?: string; width?: number; height?: number },
@@ -132,10 +136,10 @@ export class LayerBuilderService {
     mediaFile?: { file?: File },
   ): File | undefined {
     return (
-      this.resolveClipGaussianSplatFrame(clip, sourceTime)?.file ??
-      mediaFile?.file ??
-      clip.source?.file ??
-      clip.file
+      this.getRenderableFile(this.resolveClipGaussianSplatFrame(clip, sourceTime)?.file) ??
+      this.getRenderableFile(mediaFile?.file) ??
+      this.getRenderableFile(clip.source?.file) ??
+      this.getRenderableFile(clip.file)
     );
   }
 
@@ -926,7 +930,7 @@ export class LayerBuilderService {
         modelUrl,
         modelFileName: modelFrame?.name ?? clip.source?.modelFileName ?? clip.file?.name ?? clip.name,
         ...(modelSequence ? { modelSequence } : {}),
-        file: clip.file,
+        file: this.getRenderableFile(clip.file),
         threeDEffectorsEnabled: resolveSceneEffectorsEnabled(clip.source?.threeDEffectorsEnabled),
         meshType,
         text3DProperties,

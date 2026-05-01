@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react
 import { NativeHelperClient, isNativeHelperAvailable } from '../../services/nativeHelper';
 import type { SystemInfo, ConnectionStatus } from '../../services/nativeHelper';
 import {
+  compareNativeHelperVersions,
   fetchLatestPublishedNativeHelperRelease,
   NATIVE_HELPER_RELEASES_URL,
   NATIVE_HELPER_TARGET_VERSION,
@@ -146,6 +147,7 @@ export function NativeHelperStatus({ variant = 'toolbar' }: NativeHelperStatusPr
 
   const {
     turboModeEnabled,
+    nativeHelperPort,
     nativeDecodeEnabled,
     setNativeDecodeEnabled,
     setNativeHelperConnected,
@@ -161,6 +163,7 @@ export function NativeHelperStatus({ variant = 'toolbar' }: NativeHelperStatusPr
     }
 
     try {
+      NativeHelperClient.configure({ port: nativeHelperPort });
       const available = await isNativeHelperAvailable();
       setStatus(available ? 'connected' : 'disconnected');
       setNativeHelperConnected(available);
@@ -168,7 +171,7 @@ export function NativeHelperStatus({ variant = 'toolbar' }: NativeHelperStatusPr
       setStatus('disconnected');
       setNativeHelperConnected(false);
     }
-  }, [helperEnabled, setNativeHelperConnected]);
+  }, [helperEnabled, nativeHelperPort, setNativeHelperConnected]);
 
   useEffect(() => {
     if (nativeDecodeEnabled) {
@@ -270,7 +273,17 @@ function NativeHelperDialog({
 
   useEffect(() => {
     if (status === 'connected') {
-      NativeHelperClient.getInfo().then(setInfo).catch(() => setInfo(null));
+      let cancelled = false;
+      NativeHelperClient.getInfo(3000)
+        .then((nextInfo) => {
+          if (!cancelled) setInfo(nextInfo);
+        })
+        .catch(() => {
+          if (!cancelled) setInfo(null);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
   }, [status]);
 
@@ -329,13 +342,17 @@ function NativeHelperDialog({
   const downloadLink = publishedRelease?.url || ((platform !== 'unknown' && DOWNLOAD_LINKS[platform]) || NATIVE_HELPER_RELEASES);
   const connectedVersion = helperInfo?.version ?? null;
   const publishedVersion = publishedRelease?.version ?? null;
-  const expectedVersionInstalled = connectedVersion === NATIVE_HELPER_VERSION;
+  const versionKnown = connectedVersion !== null;
+  const helperVersionCompare = compareNativeHelperVersions(connectedVersion, NATIVE_HELPER_VERSION);
+  const expectedVersionInstalled = versionKnown && helperVersionCompare >= 0;
+  const helperNeedsUpdate = isConnected && versionKnown && helperVersionCompare < 0;
+  const publishedMatchesTarget = compareNativeHelperVersions(publishedVersion, NATIVE_HELPER_VERSION) >= 0;
   const statusTone = isConnected ? 'connected' : helperEnabled ? 'offline' : 'disabled';
   const statusLabel = isConnected ? 'Connected' : helperEnabled ? 'Not running' : 'Disabled';
 
   const capabilityPills: Array<{ label: string; tone: PillTone }> = isConnected && helperInfo
     ? [
-        { label: connectedVersion ? `Installed v${connectedVersion}` : 'Connected', tone: expectedVersionInstalled ? 'good' : 'warn' },
+        { label: connectedVersion ? `Installed v${connectedVersion}` : 'Connected', tone: helperNeedsUpdate ? 'warn' : 'good' },
         { label: helperInfo.ytdlp_available ? 'Downloads ready' : 'yt-dlp missing', tone: helperInfo.ytdlp_available ? 'good' : 'warn' },
         { label: helperInfo.fs_commands ? 'Projects ready' : 'Projects unavailable', tone: helperInfo.fs_commands ? 'good' : 'warn' },
         { label: helperInfo.ai_bridge ? 'AI bridge ready' : 'AI bridge unavailable', tone: helperInfo.ai_bridge ? 'good' : 'warn' },
@@ -408,27 +425,29 @@ function NativeHelperDialog({
                   {isConnected ? 'Connected session' : 'Published release'}
                 </div>
                 <div className="native-helper-card-title">
-                  {isConnected && connectedVersion
-                    ? `Helper v${connectedVersion}`
+                  {isConnected
+                    ? (connectedVersion ? `Helper v${connectedVersion}` : 'Helper connected')
                     : publishedVersion
                       ? `GitHub release v${publishedVersion}`
                       : 'Native Helper releases'}
                 </div>
               </div>
-              <span className={`native-helper-chip ${isConnected && !expectedVersionInstalled ? 'is-warn' : ''}`}>
-              {isConnected ? (expectedVersionInstalled ? 'Up to date' : 'Update available') : (helperEnabled ? 'Waiting for helper' : 'Helper disabled')}
+              <span className={`native-helper-chip ${helperNeedsUpdate ? 'is-warn' : ''}`}>
+              {isConnected
+                ? (versionKnown ? (expectedVersionInstalled ? 'Up to date' : 'Update available') : 'Connected')
+                : (helperEnabled ? 'Waiting for helper' : 'Helper disabled')}
               </span>
             </div>
 
             <p className="native-helper-card-note">
               {isConnected
                 ? (
-                  publishedVersion && publishedVersion !== NATIVE_HELPER_VERSION
+                  publishedVersion && !publishedMatchesTarget
                     ? `The helper is reachable from MasterSelects. GitHub still only publishes v${publishedVersion}, while this app build already targets v${NATIVE_HELPER_VERSION}.`
                     : 'The helper is reachable from MasterSelects on this machine.'
                 )
                 : (
-                  publishedVersion && publishedVersion !== NATIVE_HELPER_VERSION
+                  publishedVersion && !publishedMatchesTarget
                     ? `GitHub currently only has v${publishedVersion} published. MasterSelects already targets helper v${NATIVE_HELPER_VERSION}, but that release is not public yet.`
                     : 'Install the current helper build and keep it running in the background.'
                 )}
@@ -441,11 +460,11 @@ function NativeHelperDialog({
                 </StatusPill>
               ))}
               {publishedVersion && (
-                <StatusPill tone={publishedVersion === NATIVE_HELPER_VERSION ? 'good' : 'warn'}>
+                <StatusPill tone={publishedMatchesTarget ? 'good' : 'warn'}>
                   Public GitHub: v{publishedVersion}
                 </StatusPill>
               )}
-              {publishedVersion && publishedVersion !== NATIVE_HELPER_VERSION && (
+              {publishedVersion && !publishedMatchesTarget && (
                 <StatusPill tone="neutral">
                   App target: v{NATIVE_HELPER_VERSION}
                 </StatusPill>

@@ -1,4 +1,4 @@
-export const NATIVE_HELPER_TARGET_VERSION = '0.3.12';
+export const NATIVE_HELPER_TARGET_VERSION = '0.3.13';
 export const NATIVE_HELPER_RELEASES_URL = 'https://github.com/Sportinger/MasterSelects/releases';
 
 const GITHUB_RELEASES_API_URL = 'https://api.github.com/repos/Sportinger/MasterSelects/releases?per_page=20';

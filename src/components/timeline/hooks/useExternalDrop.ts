@@ -23,7 +23,8 @@ import {
 } from '../utils/externalDragSession';
 import type { ExternalDragState } from '../types';
 import type { TimelineTrack, TimelineClip } from '../../../types';
-import type { Composition } from '../../../stores/mediaStore';
+import type { Composition, MediaFile } from '../../../stores/mediaStore';
+import { NativeHelperClient } from '../../../services/nativeHelper/NativeHelperClient';
 import { Logger } from '../../../services/logger';
 
 const log = Logger.create('useExternalDrop');
@@ -36,6 +37,109 @@ type FileSystemDataTransferItem = DataTransferItem & {
 function setDroppedFilePath(file: File, filePath?: string): void {
   if (filePath) {
     (file as FileWithPath).path = filePath;
+  }
+}
+
+const CLIP_TYPED_MEDIA_TYPES = new Set<MediaFile['type']>(['gaussian-splat', 'lottie', 'rive', 'model']);
+
+function getTimelineMediaTypeOverride(mediaFile: MediaFile): string | undefined {
+  return CLIP_TYPED_MEDIA_TYPES.has(mediaFile.type) ? mediaFile.type : undefined;
+}
+
+function getPlaceholderMimeType(mediaFile: MediaFile): string {
+  const name = mediaFile.name.toLowerCase();
+
+  if (mediaFile.type === 'model') {
+    if (name.endsWith('.glb')) return 'model/gltf-binary';
+    if (name.endsWith('.gltf')) return 'model/gltf+json';
+    if (name.endsWith('.obj')) return 'model/obj';
+  }
+
+  if (mediaFile.type === 'gaussian-splat') {
+    if (name.endsWith('.ply')) return 'application/octet-stream';
+    if (name.endsWith('.spz')) return 'application/octet-stream';
+  }
+
+  return '';
+}
+
+function createPlaceholderFileForMedia(mediaFile: MediaFile): File {
+  const file = new File([], mediaFile.name, { type: getPlaceholderMimeType(mediaFile) });
+  setDroppedFilePath(file, mediaFile.absolutePath ?? mediaFile.filePath);
+  return file;
+}
+
+function mediaFileHasLazy3DSource(mediaFile: MediaFile): boolean {
+  if (mediaFile.file || mediaFile.url || mediaFile.absolutePath || mediaFile.projectPath) {
+    return true;
+  }
+
+  if (mediaFile.modelSequence?.frames.some((frame) =>
+    Boolean(frame.file || frame.modelUrl || frame.absolutePath || frame.projectPath || frame.sourcePath)
+  )) {
+    return true;
+  }
+
+  return Boolean(mediaFile.gaussianSplatSequence?.frames.some((frame) =>
+    Boolean(frame.file || frame.splatUrl || frame.absolutePath || frame.projectPath || frame.sourcePath)
+  ));
+}
+
+function isAudioOnlyMediaFile(mediaFile: MediaFile, file?: File): boolean {
+  return mediaFile.type === 'audio' || Boolean(file && isAudioFile(file));
+}
+
+async function resolveMediaFileForTimeline(mediaFile: MediaFile): Promise<File | null> {
+  if (mediaFile.file) {
+    return mediaFile.file;
+  }
+
+  if (mediaFile.type === 'model' || mediaFile.type === 'gaussian-splat') {
+    return mediaFileHasLazy3DSource(mediaFile) ? createPlaceholderFileForMedia(mediaFile) : null;
+  }
+
+  const nativeReferenceUrl = NativeHelperClient.parseFileReferenceUrl(mediaFile.url)
+    ? mediaFile.url
+    : mediaFile.absolutePath
+      ? NativeHelperClient.getFileReferenceUrl(mediaFile.absolutePath)
+      : null;
+
+  if (!nativeReferenceUrl) {
+    return null;
+  }
+
+  try {
+    const file = await NativeHelperClient.getReferencedFile(nativeReferenceUrl, mediaFile.name);
+    if (!file) {
+      return null;
+    }
+
+    const referencedPath = NativeHelperClient.parseFileReferenceUrl(nativeReferenceUrl) ?? mediaFile.absolutePath;
+    setDroppedFilePath(file, referencedPath ?? undefined);
+    const url = URL.createObjectURL(file);
+
+    useMediaStore.setState((state) => ({
+      files: state.files.map((currentFile) =>
+        currentFile.id === mediaFile.id
+          ? {
+              ...currentFile,
+              file,
+              url,
+              hasFileHandle: true,
+              absolutePath: currentFile.absolutePath ?? referencedPath ?? undefined,
+            }
+          : currentFile
+      ),
+    }));
+
+    return file;
+  } catch (error) {
+    log.warn('Could not resolve restored media file for timeline drop', {
+      mediaFileId: mediaFile.id,
+      name: mediaFile.name,
+      error,
+    });
+    return null;
   }
 }
 
@@ -1111,8 +1215,8 @@ export function useExternalDrop({
       if (mediaFileId) {
         const mediaStore = useMediaStore.getState();
         const mediaFile = mediaStore.files.find((f) => f.id === mediaFileId);
-        if (mediaFile?.file) {
-          const fileIsAudio = isAudioFile(mediaFile.file);
+        if (mediaFile) {
+          const fileIsAudio = isAudioOnlyMediaFile(mediaFile, mediaFile.file);
           if (fileIsAudio && trackType === 'video') {
             log.debug('Audio files can only be dropped on audio tracks');
             return;
@@ -1217,12 +1321,17 @@ export function useExternalDrop({
       if (mediaFileId) {
         const mediaStore = useMediaStore.getState();
         const mediaFile = mediaStore.files.find((f) => f.id === mediaFileId);
-        if (mediaFile?.file) {
-          // Pass mediaType override for formats that are intentionally clip-typed.
-          const typeOverride = mediaFile.type === 'gaussian-splat' || mediaFile.type === 'lottie' || mediaFile.type === 'rive' || mediaFile.type === 'model'
-            ? mediaFile.type
-            : undefined;
-          addClip(newTrackId, mediaFile.file, startTime, mediaFile.duration, mediaFileId, typeOverride);
+        if (mediaFile) {
+          const file = await resolveMediaFileForTimeline(mediaFile);
+          if (!file) {
+            log.warn('Could not add media panel item to new track because the file is not resolved', {
+              mediaFileId,
+              name: mediaFile.name,
+            });
+            return;
+          }
+
+          addClip(newTrackId, file, startTime, mediaFile.duration, mediaFileId, getTimelineMediaTypeOverride(mediaFile));
           return;
         }
       }
@@ -1366,8 +1475,8 @@ export function useExternalDrop({
       if (mediaFileId) {
         const mediaStore = useMediaStore.getState();
         const mediaFile = mediaStore.files.find((f) => f.id === mediaFileId);
-        if (mediaFile?.file) {
-          const fileIsAudio = isAudioFile(mediaFile.file);
+        if (mediaFile) {
+          const fileIsAudio = isAudioOnlyMediaFile(mediaFile, mediaFile.file);
           // Audio-only files can only go on audio tracks
           if (fileIsAudio && isVideoTrack) {
             log.debug('Audio files can only be dropped on audio tracks');
@@ -1375,11 +1484,16 @@ export function useExternalDrop({
           }
           // Video+audio files are allowed on both track types
 
-          // Pass mediaType override for formats that are intentionally clip-typed.
-          const typeOverride = mediaFile.type === 'gaussian-splat' || mediaFile.type === 'lottie' || mediaFile.type === 'rive' || mediaFile.type === 'model'
-            ? mediaFile.type
-            : undefined;
-          addClip(trackId, mediaFile.file, resolveDropStartTime(mediaFile.duration), mediaFile.duration, mediaFileId, typeOverride);
+          const file = await resolveMediaFileForTimeline(mediaFile);
+          if (!file) {
+            log.warn('Could not add media panel item to timeline because the file is not resolved', {
+              mediaFileId,
+              name: mediaFile.name,
+            });
+            return;
+          }
+
+          addClip(trackId, file, resolveDropStartTime(mediaFile.duration), mediaFile.duration, mediaFileId, getTimelineMediaTypeOverride(mediaFile));
           return;
         }
       }

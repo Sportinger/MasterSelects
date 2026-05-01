@@ -11,6 +11,7 @@ import {
   applyRelinkMatch,
   createRelinkCandidateMapFromHandles,
   findRelinkMatch,
+  mediaNeedsRelink,
   type RelinkCandidate,
   type RelinkCandidateMap,
   type RelinkMatch,
@@ -43,7 +44,7 @@ function isAbortError(error: unknown): boolean {
 }
 
 function getMissingFiles(files: MediaFile[]): MediaFile[] {
-  return files.filter(f => !f.file);
+  return files.filter(mediaNeedsRelink);
 }
 
 function matchStatuses(
@@ -82,6 +83,8 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
 
   // Initialize file statuses and auto-scan Raw folder
   useEffect(() => {
+    let cancelled = false;
+
     const initializeStatuses = async () => {
       const missingFiles = getMissingFiles(files);
       const initialStatuses: FileStatus[] = missingFiles.map(f => ({
@@ -90,6 +93,7 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
         filePath: f.filePath,
         status: 'missing' as const,
       }));
+      if (cancelled) return;
       setFileStatuses(initialStatuses);
 
       // Auto-scan the project folder for missing files if project is open.
@@ -121,6 +125,7 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
           }
         }
 
+        if (cancelled) return;
         setFileStatuses(updatedStatuses);
         if (searched.length > 0) {
           setSearchedFolders(searched);
@@ -129,6 +134,9 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
     };
 
     initializeStatuses();
+    return () => {
+      cancelled = true;
+    };
   }, [files]);
 
   // Scan a folder for missing files
@@ -165,7 +173,31 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
 
   // Handle browse button
   const handleBrowse = useCallback(async () => {
+    if (projectFileService.activeBackend === 'native') {
+      setIsSearching(true);
+      try {
+        const result = await projectFileService.pickAndScanFolder('Search folder for missing media');
+        if (!result) {
+          return;
+        }
+
+        const candidates = await createRelinkCandidateMapFromHandles(result.files.values());
+        setFileStatuses(prev => matchStatuses(prev, files, candidates));
+        setSearchedFolders(prev => [...prev, result.name]);
+      } catch (e) {
+        log.error('Native browse error', e);
+      } finally {
+        setIsSearching(false);
+      }
+      return;
+    }
+
     try {
+      if (typeof (window as RelinkPickerWindow).showDirectoryPicker !== 'function') {
+        log.warn('Directory picker is not available in this browser');
+        return;
+      }
+
       const dirHandle = await (window as RelinkPickerWindow).showDirectoryPicker({
         mode: 'read',
         startIn: 'videos',
@@ -179,7 +211,7 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
         log.error('Browse error', e);
       }
     }
-  }, [scanFolder]);
+  }, [files, scanFolder]);
 
   // Handle picking individual file - allows multiple selection to relink several at once
   const handlePickFile = useCallback(async (fileStatus: FileStatus) => {

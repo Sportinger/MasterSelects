@@ -2,6 +2,7 @@ import { loadGaussianSplatAsset } from '../../gaussian/loaders';
 import type { GaussianSplatAsset, GaussianSplatFormat } from '../../gaussian/loaders';
 import { Logger } from '../../../services/logger';
 import { projectFileService } from '../../../services/projectFileService';
+import { NativeHelperClient } from '../../../services/nativeHelper/NativeHelperClient';
 import type { GaussianSplatBounds, GaussianSplatSequenceData } from '../../../types';
 import {
   cloneGaussianSplatBounds,
@@ -188,6 +189,19 @@ async function loadAsset(options: RuntimeSourceOptions): Promise<GaussianSplatAs
 
     if (!options.url) {
       throw new Error('Gaussian splat runtime cache requires a file or URL');
+    }
+
+    const nativePath = NativeHelperClient.parseFileReferenceUrl(options.url);
+    if (nativePath) {
+      const buffer = await NativeHelperClient.getDownloadedFile(nativePath);
+      if (!buffer) {
+        throw new Error(`Failed to fetch native gaussian splat asset: ${nativePath}`);
+      }
+
+      const fileName = options.fileName || nativePath.split(/[\\/]/).pop() || 'scene.ply';
+      const file = new File([buffer], fileName);
+      const format = resolveGaussianSplatFormat(fileName, options.url);
+      return loadGaussianSplatAsset(file, format);
     }
 
     const response = await fetch(options.url);

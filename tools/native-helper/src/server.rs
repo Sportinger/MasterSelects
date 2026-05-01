@@ -189,20 +189,24 @@ async fn run_http_server(port: u16, state: Arc<AppState>, allowed_origins: Arc<V
         .untuple_one();
 
     // GET /file?path=... — serve a file (AUTH REQUIRED)
+    let state_for_file = state.clone();
     let require_auth_file = require_auth.clone();
     let file_route = warp::path("file")
         .and(warp::get())
         .and(require_auth_file)
         .and(warp::query::<std::collections::HashMap<String, String>>())
+        .and(with_state(state_for_file))
         .and_then(serve_file);
 
     // POST /upload?path=... — write binary body to file (AUTH REQUIRED)
+    let state_for_upload = state.clone();
     let require_auth_upload = require_auth.clone();
     let upload_route = warp::path("upload")
         .and(warp::post())
         .and(require_auth_upload)
         .and(warp::query::<std::collections::HashMap<String, String>>())
         .and(warp::body::bytes())
+        .and(with_state(state_for_upload))
         .and_then(handle_upload);
 
     // GET /project-root — return the default project root path (NO AUTH - safe metadata)
@@ -421,6 +425,7 @@ fn guess_content_type(path: &std::path::Path) -> &'static str {
 
 async fn serve_file(
     params: std::collections::HashMap<String, String>,
+    state: Arc<AppState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let path = params.get("path").ok_or_else(warp::reject::not_found)?;
     let path = PathBuf::from(path);
@@ -429,7 +434,7 @@ async fn serve_file(
         return Err(warp::reject::not_found());
     }
 
-    if !utils::is_path_allowed(&path) {
+    if !state.is_path_allowed(&path) {
         warn!("HTTP: Rejected file request for: {}", path.display());
         return Err(warp::reject::not_found());
     }
@@ -453,6 +458,7 @@ async fn serve_file(
 async fn handle_upload(
     params: std::collections::HashMap<String, String>,
     body: warp::hyper::body::Bytes,
+    state: Arc<AppState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let path = params.get("path").ok_or_else(warp::reject::not_found)?;
     let path = PathBuf::from(path);
@@ -462,7 +468,7 @@ async fn handle_upload(
         return Err(warp::reject::not_found());
     }
 
-    if !utils::is_path_allowed(&path) {
+    if !state.is_path_allowed(&path) {
         warn!("HTTP upload: Rejected path: {}", path.display());
         return Err(warp::reject::not_found());
     }
@@ -572,6 +578,7 @@ fn get_command_id(cmd: &Command) -> &str {
         | Command::Delete { id, .. }
         | Command::Exists { id, .. }
         | Command::Rename { id, .. }
+        | Command::GrantPath { id, .. }
         | Command::PickFolder { id, .. }
         | Command::MatAnyoneStatus { id }
         | Command::MatAnyoneSetup { id, .. }

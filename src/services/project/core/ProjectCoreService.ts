@@ -4,6 +4,7 @@
 import { Logger } from '../../logger';
 import { projectDB } from '../../projectDB';
 import { apiKeyManager } from '../../apiKeyManager';
+import { shouldPreferAutosave, shouldSkipEmptyProjectSave } from './autosaveRecovery';
 
 const log = Logger.create('ProjectCore');
 import { FileStorageService } from './FileStorageService';
@@ -295,6 +296,15 @@ export class ProjectCoreService {
 
     try {
       const savedRevision = this.dirtyRevision;
+      const autosaveData = await this.readProjectFile(this.projectHandle, PROJECT_AUTOSAVE_FILE_NAME);
+      if (shouldSkipEmptyProjectSave(this.projectData, autosaveData)) {
+        log.warn('Skipped empty project save because project.autosave.json contains recoverable project data');
+        if (this.dirtyRevision === savedRevision) {
+          this.isDirty = false;
+        }
+        return true;
+      }
+
       this.projectData.updatedAt = new Date().toISOString();
       await this.writeProjectJsonWithAutosaveFallback(this.projectHandle, this.projectData);
 
@@ -713,12 +723,10 @@ export class ProjectCoreService {
     }
 
     const autosaveData = await this.readProjectFile(handle, PROJECT_AUTOSAVE_FILE_NAME);
-    const projectUpdatedAt = Date.parse(projectData.updatedAt);
-    const autosaveUpdatedAt = autosaveData ? Date.parse(autosaveData.updatedAt) : NaN;
 
-    if (autosaveData && autosaveUpdatedAt > projectUpdatedAt) {
-      log.warn('Loaded newer project.autosave.json because project.json was older');
-      return autosaveData;
+    if (shouldPreferAutosave(projectData, autosaveData)) {
+      log.warn('Loaded project.autosave.json because it is newer or project.json appears empty');
+      return autosaveData ?? projectData;
     }
 
     return projectData;

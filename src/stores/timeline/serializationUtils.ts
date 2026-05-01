@@ -13,9 +13,11 @@ import { DEFAULT_TRACKS, MAX_NESTING_DEPTH } from './constants';
 import { useMediaStore } from '../mediaStore';
 import { calculateNestedClipBoundaries, buildClipSegments } from './clip/addCompClip';
 import { projectFileService } from '../../services/projectFileService';
+import { mediaNeedsRelink } from '../../services/project/relinkMedia';
 import { Logger } from '../../services/logger';
 import { engine } from '../../engine/WebGPUEngine';
 import { layerBuilder } from '../../services/layerBuilder';
+import { NativeHelperClient } from '../../services/nativeHelper/NativeHelperClient';
 import { sanitizePlayheadPosition } from '../../services/layerBuilder/PlayheadState';
 import { thumbnailCacheService } from '../../services/thumbnailCacheService';
 import type { WebCodecsPlayer } from '../../engine/WebCodecsPlayer';
@@ -547,7 +549,8 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
 
                 const mf = mediaStore.files.find(f => f.id === nsc.mediaFileId);
                 if (!mf) continue;
-                const hf = !!(mf.file);
+                const hasBrowserFile = !!mf.file;
+                const needsReload = mediaNeedsRelink(mf);
                 const nc: TimelineClip = {
                   id: `nested-${parentClipId}-${nsc.id}`,
                   trackId: nsc.trackId,
@@ -557,7 +560,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                   duration: nsc.duration,
                   inPoint: nsc.inPoint,
                   outPoint: nsc.outPoint,
-                  source: hf ? null : {
+                  source: hasBrowserFile ? null : {
                     type: nsc.sourceType || 'video',
                     naturalDuration: nsc.naturalDuration || nsc.duration,
                     mediaFileId: nsc.mediaFileId,
@@ -573,12 +576,12 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                   is3D: nsc.is3D,
                   meshType: nsc.meshType,
                   text3DProperties: nsc.text3DProperties ? { ...nsc.text3DProperties } : undefined,
-                  isLoading: hf,
-                  needsReload: !hf,
+                  isLoading: hasBrowserFile,
+                  needsReload,
                 };
                 result.push(nc);
                 // Load media element for sub-nested clips
-                if (hf) {
+                if (hasBrowserFile) {
                   const subFileUrl = URL.createObjectURL(mf.file!);
                   const subType = nsc.sourceType;
                   if (subType === 'video') {
@@ -689,7 +692,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
               }
 
               const nestedMediaFile = mediaStore.files.find(f => f.id === nestedSerializedClip.mediaFileId);
-              const hasFile = !!(nestedMediaFile?.file);
+              const hasBrowserFile = !!(nestedMediaFile?.file);
 
               if (!nestedMediaFile) {
                 log.warn('Skipping nested clip - media file entry not found', {
@@ -710,7 +713,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                 duration: nestedSerializedClip.duration,
                 inPoint: nestedSerializedClip.inPoint,
                 outPoint: nestedSerializedClip.outPoint,
-                source: hasFile ? null : {
+                source: hasBrowserFile ? null : {
                   type: nestedSerializedClip.sourceType || 'video',
                   naturalDuration: nestedSerializedClip.naturalDuration || nestedSerializedClip.duration,
                   mediaFileId: nestedSerializedClip.mediaFileId,
@@ -725,15 +728,26 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                 is3D: nestedSerializedClip.is3D,
                 meshType: nestedSerializedClip.meshType,
                 text3DProperties: nestedSerializedClip.text3DProperties ? { ...nestedSerializedClip.text3DProperties } : undefined,
-                isLoading: hasFile,
-                needsReload: !hasFile,
+                isLoading: hasBrowserFile,
+                needsReload: mediaNeedsRelink(nestedMediaFile),
               };
 
               nestedClips.push(nestedClip);
 
               // Only load media element if file is available
-              if (!hasFile) {
-                log.warn('Nested clip needs reload - file not available', {
+              if (!hasBrowserFile) {
+                if (nestedClip.needsReload) {
+                  log.warn('Nested clip needs reload - file not available', {
+                    clipName: nestedSerializedClip.name,
+                    trackId: nestedSerializedClip.trackId,
+                    mediaFileId: nestedSerializedClip.mediaFileId,
+                  });
+                }
+                continue;
+              }
+
+              if (!nestedMediaFile.file) {
+                log.warn('Nested clip skipped - file object not available', {
                   clipName: nestedSerializedClip.name,
                   trackId: nestedSerializedClip.trackId,
                   mediaFileId: nestedSerializedClip.mediaFileId,
@@ -1179,8 +1193,9 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         continue;
       }
 
-      // Create the clip - even if file is missing (needs reload after refresh)
-      const needsReload = !mediaFile.file;
+      // Create the clip - even if the browser File object is not in memory.
+      // Native-helper projects can restore from persisted project/absolute paths.
+      const needsReload = mediaNeedsRelink(mediaFile);
       if (needsReload) {
         log.debug('Clip needs reload (file permission required)', { clip: serializedClip.name });
       }
@@ -1289,7 +1304,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         });
       }
 
-      // Skip media loading if file needs reload (no valid File object)
+      // Skip media loading if the media has no stored path/handle to recover from.
       if (needsReload) {
         log.debug('Skipping media load for clip that needs reload', { clip: clip.name });
         continue;
@@ -1297,7 +1312,62 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
 
       // Load media element async
       const type = serializedClip.sourceType;
-      const fileUrl = URL.createObjectURL(mediaFile.file!);
+      let loadFile = mediaFile.file;
+      let fileUrl = loadFile ? URL.createObjectURL(loadFile) : mediaFile.url;
+
+      if (
+        !loadFile &&
+        fileUrl &&
+        (type === 'video' || type === 'audio' || type === 'image' || type === 'lottie') &&
+        NativeHelperClient.parseFileReferenceUrl(fileUrl)
+      ) {
+        const referencedFile = await NativeHelperClient.getReferencedFile(fileUrl, mediaFile.name);
+        if (referencedFile) {
+          loadFile = referencedFile;
+          fileUrl = URL.createObjectURL(referencedFile);
+          useMediaStore.setState((state) => ({
+            files: state.files.map((currentFile) =>
+              currentFile.id === mediaFile.id
+                ? {
+                    ...currentFile,
+                    file: referencedFile,
+                    url: fileUrl,
+                    hasFileHandle: true,
+                  }
+                : currentFile
+            ),
+          }));
+        }
+      }
+
+      if (type === 'video' && !loadFile && mediaFile.absolutePath && projectFileService.activeBackend === 'native') {
+        set(state => ({
+          clips: state.clips.map(c =>
+            c.id === clip.id
+              ? {
+                  ...c,
+                  source: {
+                    type: 'video',
+                    naturalDuration: serializedClip.naturalDuration || mediaFile.duration || clip.duration,
+                    mediaFileId: serializedClip.mediaFileId,
+                    filePath: mediaFile.absolutePath,
+                  },
+                  isLoading: false,
+                  needsReload: false,
+                }
+              : c
+          ),
+        }));
+        continue;
+      }
+
+      if (!fileUrl && (type === 'video' || type === 'audio' || type === 'image' || type === 'model' || type === 'gaussian-splat')) {
+        log.warn('Skipping media load - no file URL available', { clip: clip.name, mediaFileId: mediaFile.id });
+        set(state => ({
+          clips: state.clips.map(c => c.id === clip.id ? { ...c, isLoading: false } : c),
+        }));
+        continue;
+      }
 
       if (type === 'video') {
         const video = document.createElement('video');
@@ -1380,7 +1450,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
             if (hasWebCodecs && mediaId) {
               try {
                 const webCodecsPlayer = await getOrCreateWcp(
-                  mediaId, video, clip.name, mediaFile.file || undefined
+                  mediaId, video, clip.name, loadFile || undefined
                 );
                 if (webCodecsPlayer) {
                   set(state => ({
@@ -1448,11 +1518,23 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           wakePreviewAfterRestore();
         }, { once: true });
       } else if (type === 'lottie') {
+        if (!loadFile) {
+          log.warn('Skipping lottie restore - file object not available', { clip: clip.name });
+          set((state) => ({
+            clips: state.clips.map((currentClip) =>
+              currentClip.id === clip.id
+                ? { ...currentClip, isLoading: false, needsReload: mediaNeedsRelink(mediaFile) }
+                : currentClip
+            ),
+          }));
+          continue;
+        }
+
         void (async () => {
           try {
             const runtimeClip: TimelineClip = {
               ...clip,
-              file: mediaFile.file!,
+              file: loadFile,
               source: {
                 type: 'lottie',
                 mediaFileId: serializedClip.mediaFileId,
@@ -1460,14 +1542,14 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                 vectorAnimationSettings: serializedClip.vectorAnimationSettings,
               },
             };
-            const metadata = await readLottieMetadata(mediaFile.file!);
-            const runtime = await lottieRuntimeManager.prepareClipSource(runtimeClip, mediaFile.file!);
+            const metadata = await readLottieMetadata(loadFile);
+            const runtime = await lottieRuntimeManager.prepareClipSource(runtimeClip, loadFile);
             set((state) => ({
               clips: state.clips.map((currentClip) =>
                 currentClip.id === clip.id
                   ? {
                       ...currentClip,
-                      file: mediaFile.file!,
+                      file: loadFile,
                       source: {
                         type: 'lottie',
                         textCanvas: runtime.canvas,
