@@ -8,9 +8,147 @@ import { useSAM2Store } from '../../stores/sam2Store';
 import { getSAM2Service } from '../../services/sam2/SAM2Service';
 import { useTimelineStore } from '../../stores/timeline';
 import { MatAnyoneSetupDialog } from '../common/MatAnyoneSetupDialog';
+import type { TimelineClip } from '../../types';
 import './SAM2Panel.css';
 
 type MaskMode = 'paint' | 'sam2';
+type FileWithPath = File & { path?: string };
+type MatAnyoneClipSource = NonNullable<TimelineClip['source']> & {
+  file?: File;
+  filePath?: string;
+  mediaFileId?: string;
+};
+type MatAnyoneFileClient = {
+  getProjectRoot(timeoutMs?: number): Promise<string | null>;
+  createDir(path: string, recursive?: boolean): Promise<boolean>;
+};
+
+const VIDEO_EXTENSION_CANDIDATES = ['.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v'];
+const INVALID_NATIVE_FILE_NAME_CHARS = new Set(['<', '>', ':', '"', '/', '\\', '|', '?', '*']);
+
+function isAbsolutePath(path: string | null | undefined): path is string {
+  if (!path) return false;
+  if (/^[A-Za-z]:[\\/]fakepath[\\/]/i.test(path)) return false;
+  return /^[A-Za-z]:[\\/]/.test(path) || path.startsWith('/') || path.startsWith('\\\\');
+}
+
+function getBaseName(path: string | null | undefined): string {
+  const trimmed = path?.trim();
+  if (!trimmed) return '';
+  const parts = trimmed.split(/[\\/]/);
+  return parts[parts.length - 1] || '';
+}
+
+function hasFileExtension(name: string): boolean {
+  return /\.[^./\\]+$/.test(getBaseName(name));
+}
+
+function sanitizeNativeFileName(name: string): string {
+  const cleaned = Array.from(name, char =>
+    char.charCodeAt(0) < 32 || INVALID_NATIVE_FILE_NAME_CHARS.has(char) ? '_' : char
+  )
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const fallback = cleaned || 'video.mp4';
+  if (fallback.length <= 180) return fallback;
+
+  const dotIndex = fallback.lastIndexOf('.');
+  const extension = dotIndex > 0 ? fallback.slice(dotIndex, Math.min(fallback.length, dotIndex + 16)) : '';
+  return `${fallback.slice(0, 180 - extension.length)}${extension}`;
+}
+
+function joinNativePath(root: string, ...parts: string[]): string {
+  const separator = root.includes('\\') ? '\\' : '/';
+  const base = root.replace(/[\\/]+$/, '');
+  const cleanedParts = parts.map(part => part.replace(/^[\\/]+|[\\/]+$/g, ''));
+  return [base || root, ...cleanedParts].filter(Boolean).join(separator);
+}
+
+async function resolveMatAnyoneVideoPath(selectedClip: TimelineClip): Promise<string | null> {
+  const source = selectedClip.source as MatAnyoneClipSource | null;
+  if (!source) return null;
+
+  const [{ useMediaStore }, { NativeHelperClient }] = await Promise.all([
+    import('../../stores/mediaStore'),
+    import('../../services/nativeHelper/NativeHelperClient'),
+  ]);
+
+  const mediaFileId = source.mediaFileId ?? selectedClip.mediaFileId;
+  const mediaFile = mediaFileId
+    ? useMediaStore.getState().files.find(file => file.id === mediaFileId)
+    : undefined;
+  const sourceFile = source.file as FileWithPath | undefined;
+  const clipFile = selectedClip.file as FileWithPath | undefined;
+  const mediaStoreFile = mediaFile?.file as FileWithPath | undefined;
+
+  const directCandidates = [
+    source.filePath,
+    mediaFile?.absolutePath,
+    mediaFile?.filePath,
+    sourceFile?.path,
+    clipFile?.path,
+    mediaStoreFile?.path,
+  ];
+
+  for (const candidate of directCandidates) {
+    if (isAbsolutePath(candidate)) return candidate;
+  }
+
+  const locateCandidates = new Set<string>();
+  const addLocateCandidate = (value: string | null | undefined) => {
+    const name = getBaseName(value);
+    if (name && name !== '.' && name !== '..') {
+      locateCandidates.add(name);
+    }
+  };
+
+  addLocateCandidate(source.filePath);
+  addLocateCandidate(mediaFile?.filePath);
+  addLocateCandidate(mediaFile?.name);
+  addLocateCandidate(sourceFile?.name);
+  addLocateCandidate(clipFile?.name);
+  addLocateCandidate(mediaStoreFile?.name);
+  addLocateCandidate(selectedClip.name);
+
+  for (const candidate of [...locateCandidates]) {
+    if (!hasFileExtension(candidate)) {
+      VIDEO_EXTENSION_CANDIDATES.forEach(extension => locateCandidates.add(`${candidate}${extension}`));
+    }
+  }
+
+  for (const candidate of locateCandidates) {
+    const located = await NativeHelperClient.locateFile(candidate).catch(() => null);
+    if (located) return located;
+  }
+
+  const fileForUpload = sourceFile ?? clipFile ?? mediaStoreFile;
+  if (!fileForUpload) return null;
+
+  const projectRoot = await NativeHelperClient.getProjectRoot().catch(() => null);
+  if (!projectRoot) return null;
+
+  const tempDir = joinNativePath(projectRoot, 'matanyone-temp');
+  const tempDirReady = await NativeHelperClient.createDir(tempDir, true).catch(() => false);
+  if (!tempDirReady) return null;
+
+  const safeClipId = sanitizeNativeFileName(selectedClip.id || 'clip');
+  const safeFileName = sanitizeNativeFileName(fileForUpload.name || selectedClip.name || 'video.mp4');
+  const stagedPath = joinNativePath(tempDir, `${safeClipId}-${safeFileName}`);
+  const uploaded = await NativeHelperClient.writeFileBinary(stagedPath, fileForUpload).catch(() => false);
+  return uploaded ? stagedPath : null;
+}
+
+async function createMatAnyoneJobDir(nativeHelper: MatAnyoneFileClient, clipId: string): Promise<string | null> {
+  const projectRoot = await nativeHelper.getProjectRoot().catch(() => null);
+  if (!projectRoot) return null;
+
+  const safeClipId = sanitizeNativeFileName(clipId || 'clip');
+  const jobName = sanitizeNativeFileName(`job-${safeClipId}-${Date.now().toString(36)}`);
+  const jobDir = joinNativePath(projectRoot, 'matanyone-temp', jobName);
+  const created = await nativeHelper.createDir(jobDir, true).catch(() => false);
+  return created ? jobDir : null;
+}
 
 export function SAM2Panel() {
   const [showSetup, setShowSetup] = useState(false);
@@ -282,20 +420,11 @@ export function SAM2Panel() {
       return;
     }
 
-    // Try multiple sources for the file path
-    let videoPath = (clipSource as { filePath?: string }).filePath;
-
-    // If no filePath on source, check mediaStore for absolutePath
-    if (!videoPath) {
-      const { useMediaStore } = await import('../../stores/mediaStore');
-      const mediaFiles = useMediaStore.getState().files;
-      const mediaFile = mediaFiles.find(f => f.id === selectedClip.mediaFileId);
-      videoPath = mediaFile?.absolutePath;
-    }
+    const videoPath = await resolveMatAnyoneVideoPath(selectedClip);
 
     if (!videoPath) {
       useMatAnyoneStore.getState().setError(
-        'No file path available. The video must be imported from disk (not dragged from browser). ' +
+        'No file path available. Could not locate the original video or stage a temporary helper copy. ' +
         'Try re-importing the file with the Native Helper running.'
       );
       return;
@@ -335,18 +464,36 @@ export function SAM2Panel() {
       if (!maskBlob) return;
 
       const { NativeHelperClient } = await import('../../services/nativeHelper/NativeHelperClient');
-      const maskPath = videoPath.replace(/\.[^.]+$/, '_mask.png');
-      await NativeHelperClient.writeFileBinary(maskPath, maskBlob);
+      const jobDir = await createMatAnyoneJobDir(NativeHelperClient, selectedClip.id);
+      if (!jobDir) {
+        useMatAnyoneStore.getState().setError('Could not create a MatAnyone2 temporary output folder.');
+        return;
+      }
 
-      const outputDir = videoPath.replace(/[/\\][^/\\]+$/, '');
+      const maskPath = joinNativePath(jobDir, 'mask.png');
+      const maskWritten = await NativeHelperClient.writeFileBinary(maskPath, maskBlob);
+      if (!maskWritten) {
+        useMatAnyoneStore.getState().setError('Could not write MatAnyone2 mask image for the native helper.');
+        return;
+      }
+
+      const maskFile = await NativeHelperClient.exists(maskPath);
+      if (!maskFile.exists || maskFile.kind !== 'file') {
+        useMatAnyoneStore.getState().setError('MatAnyone2 mask image was not written to disk.');
+        return;
+      }
+
       await getMatAnyoneService().matte({
         videoPath,
         maskPath,
-        outputDir,
+        outputDir: jobDir,
         sourceClipId: selectedClip.id,
       });
     } catch (e) {
       console.error('MatAnyone2 matting failed:', e);
+      useMatAnyoneStore.getState().setError(
+        `MatAnyone2 matting failed: ${e instanceof Error ? e.message : String(e)}`
+      );
     }
   }, [selectedClip, maskMode]);
 

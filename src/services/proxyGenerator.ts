@@ -25,6 +25,9 @@ const PROXY_MAX_WIDTH = 1280;
 const JPEG_QUALITY = 0.82;
 const CANVAS_POOL_SIZE = 8;       // Parallel encoding canvases
 const DECODE_BATCH_SIZE = 30;     // Feed 30 samples at a time before yielding
+const MIN_FLUSH_TIMEOUT_MS = 30000;
+const MAX_FLUSH_TIMEOUT_MS = 180000;
+const FLUSH_TIMEOUT_PER_SAMPLE_MS = 120;
 
 interface AVCConfigurationBox {
   AVCProfileIndication: number;
@@ -74,6 +77,7 @@ class ProxyGeneratorWebCodecs {
   private outputWidth = 0;
   private outputHeight = 0;
   private duration = 0;
+  private proxyFps = PROXY_FPS;
   private totalFrames = 0;
   private processedFrames = 0;
   private savedFrameIndices = new Set<number>();
@@ -94,7 +98,7 @@ class ProxyGeneratorWebCodecs {
     checkCancelled: () => boolean,
     saveFrame: (frame: { frameIndex: number; blob: Blob }) => Promise<void>,
     existingFrameIndices?: Set<number>,
-  ): Promise<{ frameCount: number; fps: number } | null> {
+  ): Promise<{ frameCount: number; fps: number; frameIndices: Set<number> } | null> {
     this.onProgress = onProgress;
     this.checkCancelled = checkCancelled;
     this.saveFrame = saveFrame;
@@ -102,12 +106,14 @@ class ProxyGeneratorWebCodecs {
     this.samples = [];
     this.decodedFrames.clear();
     this.canvasPool = [];
+    this.proxyFps = PROXY_FPS;
+    let resumeFrameIndices = existingFrameIndices;
 
     // Pre-populate with existing frames for resume
-    if (existingFrameIndices && existingFrameIndices.size > 0) {
-      this.savedFrameIndices = new Set(existingFrameIndices);
-      this.processedFrames = existingFrameIndices.size;
-      log.info(`Resuming: ${existingFrameIndices.size} frames already on disk`);
+    if (resumeFrameIndices && resumeFrameIndices.size > 0) {
+      this.savedFrameIndices = new Set(resumeFrameIndices);
+      this.processedFrames = resumeFrameIndices.size;
+      log.info(`Resuming: ${resumeFrameIndices.size} frames already on disk`);
     } else {
       this.savedFrameIndices.clear();
       this.processedFrames = 0;
@@ -124,7 +130,19 @@ class ProxyGeneratorWebCodecs {
         throw new Error('Failed to parse video file or no supported codec found');
       }
 
-      log.info(`Source: ${this.videoTrack!.video.width}x${this.videoTrack!.video.height} → Proxy: ${this.outputWidth}x${this.outputHeight} @ ${PROXY_FPS}fps`);
+      if (
+        existingFrameIndices &&
+        existingFrameIndices.size > 0 &&
+        this.proxyFps < PROXY_FPS &&
+        this.getMaxFrameIndex(existingFrameIndices) >= this.totalFrames
+      ) {
+        this.savedFrameIndices.clear();
+        this.processedFrames = 0;
+        resumeFrameIndices = undefined;
+        log.warn(`Existing proxy frame layout does not match ${this.proxyFps.toFixed(2)}fps; rebuilding frame indices`);
+      }
+
+      log.info(`Source: ${this.videoTrack!.video.width}x${this.videoTrack!.video.height} → Proxy: ${this.outputWidth}x${this.outputHeight} @ ${this.proxyFps.toFixed(2)}fps`);
 
       // Report initial progress if resuming
       if (this.processedFrames > 0 && this.totalFrames > 0) {
@@ -150,9 +168,9 @@ class ProxyGeneratorWebCodecs {
         log.warn('First decode attempt failed, trying without description...');
         this.closeDecodedFrames();
         // Reset to existing frames only (preserve disk state for resume)
-        const existingCount = existingFrameIndices?.size ?? 0;
+        const existingCount = resumeFrameIndices?.size ?? 0;
         this.processedFrames = existingCount;
-        this.savedFrameIndices = existingFrameIndices ? new Set(existingFrameIndices) : new Set();
+        this.savedFrameIndices = resumeFrameIndices ? new Set(resumeFrameIndices) : new Set();
 
         if (this.codecConfig?.description) {
           const configWithoutDesc: VideoDecoderConfig = {
@@ -186,12 +204,13 @@ class ProxyGeneratorWebCodecs {
         return null;
       }
 
-      log.info(`Proxy complete: ${this.processedFrames} frames saved as JPEG`);
+      log.info(`Proxy complete: ${this.savedFrameIndices.size} frames saved as JPEG`);
       this.cleanup();
 
       return {
-        frameCount: this.processedFrames,
-        fps: PROXY_FPS,
+        frameCount: this.savedFrameIndices.size,
+        fps: this.proxyFps,
+        frameIndices: new Set(this.savedFrameIndices),
       };
     } catch (error) {
       log.error('Generation failed', error);
@@ -238,9 +257,13 @@ class ProxyGeneratorWebCodecs {
         this.outputHeight = height & ~1;
 
         this.duration = track.duration / track.timescale;
-        this.totalFrames = Math.ceil(this.duration * PROXY_FPS);
+        const sourceFps = this.duration > 0 ? expectedSamples / this.duration : PROXY_FPS;
+        this.proxyFps = Number.isFinite(sourceFps) && sourceFps > 0
+          ? Math.min(PROXY_FPS, Math.round(sourceFps * 100) / 100)
+          : PROXY_FPS;
+        this.totalFrames = Math.ceil(this.duration * this.proxyFps);
 
-        log.info(`Duration: ${this.duration.toFixed(3)}s, totalFrames: ${this.totalFrames}, samples: ${expectedSamples}`);
+        log.info(`Duration: ${this.duration.toFixed(3)}s, totalFrames: ${this.totalFrames}, samples: ${expectedSamples}, proxyFps: ${this.proxyFps.toFixed(2)}`);
 
         // Get codec config
         const trak = this.mp4File!.getTrackById(track.id);
@@ -425,7 +448,7 @@ class ProxyGeneratorWebCodecs {
 
   private handleDecodedFrame(frame: VideoFrame) {
     const timestamp = frame.timestamp / 1_000_000;
-    const frameIndex = Math.round(timestamp * PROXY_FPS);
+    const frameIndex = Math.round(timestamp * this.proxyFps);
 
     if (frameIndex >= 0 && frameIndex < this.totalFrames && !this.savedFrameIndices.has(frameIndex)) {
       const existing = this.decodedFrames.get(frameIndex);
@@ -434,6 +457,14 @@ class ProxyGeneratorWebCodecs {
     } else {
       frame.close();
     }
+  }
+
+  private getMaxFrameIndex(frameIndices: Set<number>): number {
+    let maxFrameIndex = -1;
+    for (const frameIndex of frameIndices) {
+      if (frameIndex > maxFrameIndex) maxFrameIndex = frameIndex;
+    }
+    return maxFrameIndex;
   }
 
   /**
@@ -536,15 +567,14 @@ class ProxyGeneratorWebCodecs {
       }
     }
 
-    // Flush decoder
-    try {
-      if (this.decoder.state !== 'closed') {
-        await Promise.race([
-          this.decoder.flush(),
-          new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Flush timeout')), 5000))
-        ]);
-      }
-    } catch { /* ignore */ }
+    const flushTimeoutMs = Math.max(
+      MIN_FLUSH_TIMEOUT_MS,
+      Math.min(MAX_FLUSH_TIMEOUT_MS, sortedSamples.length * FLUSH_TIMEOUT_PER_SAMPLE_MS)
+    );
+    const flushed = await this.flushDecoder(flushTimeoutMs);
+    if (!flushed && !this.isCancelled) {
+      throw new Error(`Decoder flush timed out after ${flushTimeoutMs}ms`);
+    }
 
     try {
       if (this.decoder.state !== 'closed') this.decoder.close();
@@ -561,6 +591,54 @@ class ProxyGeneratorWebCodecs {
     const totalTime = performance.now() - startTime;
     const fps = this.processedFrames / (totalTime / 1000);
     log.info(`Complete: ${this.processedFrames}/${this.totalFrames} frames in ${(totalTime / 1000).toFixed(1)}s (${fps.toFixed(1)} fps encode)`);
+  }
+
+  private async flushDecoder(timeoutMs: number): Promise<boolean> {
+    if (!this.decoder || this.decoder.state === 'closed') return true;
+
+    let settled = false;
+    let succeeded = false;
+    const startedAt = performance.now();
+
+    const flushPromise = this.decoder.flush()
+      .then(() => {
+        succeeded = true;
+      })
+      .catch((error) => {
+        log.warn('Decoder flush failed', error);
+      })
+      .finally(() => {
+        settled = true;
+      });
+
+    while (!settled) {
+      if (this.checkCancelled?.()) {
+        this.isCancelled = true;
+        break;
+      }
+
+      if (this.decodedFrames.size >= CANVAS_POOL_SIZE) {
+        await this.processAccumulatedFrames();
+      } else {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+
+      if (performance.now() - startedAt > timeoutMs) {
+        log.warn('Decoder flush timed out', {
+          decodeQueueSize: this.decoder.decodeQueueSize,
+          decodedFrames: this.decodedFrames.size,
+          processedFrames: this.processedFrames,
+          totalFrames: this.totalFrames,
+          timeoutMs,
+        });
+        break;
+      }
+    }
+
+    if (settled) {
+      await flushPromise;
+    }
+    return succeeded;
   }
 
   private closeDecodedFrames() {

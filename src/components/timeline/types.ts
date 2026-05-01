@@ -173,6 +173,8 @@ export interface TimelineHeaderProps {
   // Curve editor
   expandedCurveProperties: Map<string, Set<AnimatableProperty>>;
   onToggleCurveExpanded: (trackId: string, property: AnimatableProperty) => void;
+  hoveredKeyframeRow?: { trackId: string; property: AnimatableProperty } | null;
+  onKeyframeRowHover?: (trackId: string, property: AnimatableProperty, hovered: boolean) => void;
   // Track parenting (layer linking)
   onSetTrackParent: (trackId: string, parentTrackId: string | null) => void;
   onTrackPickWhipDragStart: (trackId: string, startX: number, startY: number) => void;
@@ -307,8 +309,11 @@ export interface TimelineKeyframesProps {
   onSelectKeyframe: (keyframeId: string, addToSelection: boolean) => void;
   onMoveKeyframe: (keyframeId: string, newTime: number) => void;
   onUpdateKeyframe: (keyframeId: string, updates: { easing?: EasingType }) => void;
+  onToggleCurveExpanded: (trackId: string, property: AnimatableProperty) => void;
   timeToPixel: (time: number) => number;
   pixelToTime: (pixel: number) => number;
+  isRowHovered?: boolean;
+  onKeyframeRowHover?: (trackId: string, property: AnimatableProperty, hovered: boolean) => void;
 }
 
 // Waveform props

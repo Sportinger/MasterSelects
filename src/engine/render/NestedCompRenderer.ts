@@ -1131,8 +1131,12 @@ export class NestedCompRenderer {
         if (texture) {
           result.push({
             layer, isVideo: false, externalTexture: null,
+            isDynamic: layer.source?.proxyFrameIndex !== undefined,
             textureView: this.textureManager.getImageView(texture),
             sourceWidth: img.naturalWidth, sourceHeight: img.naturalHeight,
+            displayedMediaTime: layer.source?.mediaTime,
+            targetMediaTime: layer.source?.targetMediaTime ?? layer.source?.mediaTime,
+            previewPath: layer.source?.previewPath,
           });
           continue;
         }

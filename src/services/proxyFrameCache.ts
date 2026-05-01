@@ -27,6 +27,11 @@ interface CachedFrame {
   timestamp: number; // For LRU eviction
 }
 
+export interface ProxyCachedFrame {
+  frameIndex: number;
+  image: HTMLImageElement;
+}
+
 interface ScrubAudioOptions {
   volume?: number;
   eqGains?: number[];
@@ -76,12 +81,20 @@ class ProxyFrameCache {
   // Returns the closest frame within maxDistance frames
   // Searches in scrub direction first for smoother scrubbing
   getNearestCachedFrame(mediaFileId: string, frameIndex: number, maxDistance: number = 30): HTMLImageElement | null {
+    return this.getNearestCachedFrameEntry(mediaFileId, frameIndex, maxDistance)?.image ?? null;
+  }
+
+  getNearestCachedFrameEntry(
+    mediaFileId: string,
+    frameIndex: number,
+    maxDistance: number = 30
+  ): ProxyCachedFrame | null {
     // Check exact frame first
     const exactKey = this.getKey(mediaFileId, frameIndex);
     const exact = this.cache.get(exactKey);
     if (exact) {
       exact.timestamp = Date.now();
-      return exact.image;
+      return { frameIndex: exact.frameIndex, image: exact.image };
     }
 
     // Search in scrub direction first for visual continuity
@@ -96,7 +109,7 @@ class ProxyFrameCache {
         const primary = this.cache.get(primaryKey);
         if (primary) {
           primary.timestamp = Date.now();
-          return primary.image;
+          return { frameIndex: primary.frameIndex, image: primary.image };
         }
       }
 
@@ -108,7 +121,7 @@ class ProxyFrameCache {
         const secondary = this.cache.get(secondaryKey);
         if (secondary) {
           secondary.timestamp = Date.now();
-          return secondary.image;
+          return { frameIndex: secondary.frameIndex, image: secondary.image };
         }
       }
     }

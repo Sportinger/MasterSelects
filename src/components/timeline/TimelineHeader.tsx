@@ -1,6 +1,6 @@
 // TimelineHeader component - Track headers (left side)
 
-import { memo, useMemo, useState, useRef, useEffect } from 'react';
+import { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import type { TimelineHeaderProps } from './types';
 import type { AnimatableProperty, ClipTransform, Keyframe, TimelineClip } from '../../types';
 import { CurveEditorHeader } from './CurveEditorHeader';
@@ -135,11 +135,25 @@ const getValueFromEffects = (
   return typeof value === 'number' ? value : 0;
 };
 
+type PropertyKeyframeDragSession = {
+  pointerId: number;
+  visited: Set<string>;
+};
+
+let propertyKeyframeDragSession: PropertyKeyframeDragSession | null = null;
+
+function endPropertyKeyframeDrag() {
+  propertyKeyframeDragSession = null;
+  window.removeEventListener('pointerup', endPropertyKeyframeDrag);
+  window.removeEventListener('pointercancel', endPropertyKeyframeDrag);
+  window.removeEventListener('blur', endPropertyKeyframeDrag);
+}
+
 // Single property row with value display and keyframe controls
 function PropertyRow({
   prop,
   clipId,
-  trackId: _trackId,
+  trackId,
   clip,
   keyframes,
   playheadPosition,
@@ -149,7 +163,9 @@ function PropertyRow({
   setPlayheadPosition,
   setPropertyValue,
   isCurveExpanded,
+  isKeyframeRowHovered,
   onToggleCurveExpanded,
+  onKeyframeRowHover,
 }: {
   prop: string;
   clipId: string;
@@ -163,10 +179,14 @@ function PropertyRow({
   setPlayheadPosition: (time: number) => void;
   setPropertyValue: (clipId: string, property: AnimatableProperty, value: number) => void;
   isCurveExpanded: boolean;
+  isKeyframeRowHovered: boolean;
   onToggleCurveExpanded: () => void;
+  onKeyframeRowHover?: (trackId: string, property: AnimatableProperty, hovered: boolean) => void;
 }) {
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ y: 0, value: 0 });
+  const ignoreNextKeyframeButtonClick = useRef(false);
+  const keyframeButtonDragId = `${clipId}:${prop}`;
 
   // Get keyframes for this property only, sorted by time
   const propKeyframes = useMemo(() =>
@@ -320,10 +340,62 @@ function PropertyRow({
   };
 
   // Add/toggle keyframe at current position
-  const toggleKeyframe = () => {
+  const toggleKeyframe = useCallback(() => {
     if (!isWithinClip) return;
     addKeyframe(clipId, prop as AnimatableProperty, currentValue);
-  };
+  }, [addKeyframe, clipId, currentValue, isWithinClip, prop]);
+
+  const applyKeyframeButtonForDrag = useCallback(() => {
+    const session = propertyKeyframeDragSession;
+    if (!session || session.visited.has(keyframeButtonDragId)) return;
+
+    session.visited.add(keyframeButtonDragId);
+    toggleKeyframe();
+  }, [keyframeButtonDragId, toggleKeyframe]);
+
+  const handleKeyframeButtonPointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    ignoreNextKeyframeButtonClick.current = true;
+
+    endPropertyKeyframeDrag();
+    propertyKeyframeDragSession = {
+      pointerId: e.pointerId,
+      visited: new Set([keyframeButtonDragId]),
+    };
+    window.addEventListener('pointerup', endPropertyKeyframeDrag);
+    window.addEventListener('pointercancel', endPropertyKeyframeDrag);
+    window.addEventListener('blur', endPropertyKeyframeDrag);
+
+    toggleKeyframe();
+  }, [keyframeButtonDragId, toggleKeyframe]);
+
+  const handleKeyframeButtonPointerEnter = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    const session = propertyKeyframeDragSession;
+    if (!session) return;
+
+    if ((e.buttons & 1) !== 1 || e.pointerId !== session.pointerId) {
+      endPropertyKeyframeDrag();
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    applyKeyframeButtonForDrag();
+  }, [applyKeyframeButtonForDrag]);
+
+  const handleKeyframeButtonClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (ignoreNextKeyframeButtonClick.current) {
+      ignoreNextKeyframeButtonClick.current = false;
+      e.preventDefault();
+      return;
+    }
+
+    toggleKeyframe();
+  }, [toggleKeyframe]);
 
   // Handle double-click to toggle curve editor
   const handleDoubleClick = (e: React.MouseEvent) => {
@@ -334,7 +406,9 @@ function PropertyRow({
   return (
     <>
       <div
-        className={`property-label-row flat ${isDragging ? 'dragging' : ''} ${isCurveExpanded ? 'curve-expanded' : ''}`}
+        className={`property-label-row flat ${isDragging ? 'dragging' : ''} ${isCurveExpanded ? 'curve-expanded' : ''} ${isKeyframeRowHovered ? 'keyframe-row-highlighted' : ''}`}
+        onMouseEnter={() => onKeyframeRowHover?.(trackId, prop as AnimatableProperty, true)}
+        onMouseLeave={() => onKeyframeRowHover?.(trackId, prop as AnimatableProperty, false)}
         onDoubleClick={handleDoubleClick}
         title="Double-click to toggle curve editor"
       >
@@ -349,7 +423,9 @@ function PropertyRow({
           </button>
           <button
             className={`kf-add-btn ${hasKeyframeAtPlayhead ? 'has-keyframe' : ''}`}
-            onClick={toggleKeyframe}
+            onPointerDown={handleKeyframeButtonPointerDown}
+            onPointerEnter={handleKeyframeButtonPointerEnter}
+            onClick={handleKeyframeButtonClick}
             title={hasKeyframeAtPlayhead ? 'Keyframe exists' : 'Add keyframe'}
           >
             ◆
@@ -401,6 +477,8 @@ function TrackPropertyLabels({
   setPropertyValue,
   expandedCurveProperties,
   onToggleCurveExpanded,
+  hoveredKeyframeRow,
+  onKeyframeRowHover,
 }: {
   trackId: string;
   selectedClip: KeyframeTrackClip | null;
@@ -413,6 +491,8 @@ function TrackPropertyLabels({
   setPropertyValue: (clipId: string, property: AnimatableProperty, value: number) => void;
   expandedCurveProperties: Map<string, Set<AnimatableProperty>>;
   onToggleCurveExpanded: (trackId: string, property: AnimatableProperty) => void;
+  hoveredKeyframeRow?: { trackId: string; property: AnimatableProperty } | null;
+  onKeyframeRowHover?: (trackId: string, property: AnimatableProperty, hovered: boolean) => void;
 }) {
   const clipId = selectedClip?.id;
   const keyframes = useMemo(
@@ -473,6 +553,9 @@ function TrackPropertyLabels({
     <div className="track-property-labels">
       {sortedProperties.map((prop) => {
         const isCurveExpanded = trackCurveProps?.has(prop as AnimatableProperty) ?? false;
+        const isKeyframeRowHovered =
+          hoveredKeyframeRow?.trackId === trackId &&
+          hoveredKeyframeRow.property === prop;
         return (
           <PropertyRow
             key={prop}
@@ -488,7 +571,9 @@ function TrackPropertyLabels({
             setPlayheadPosition={setPlayheadPosition}
             setPropertyValue={setPropertyValue}
             isCurveExpanded={isCurveExpanded}
+            isKeyframeRowHovered={isKeyframeRowHovered}
             onToggleCurveExpanded={() => onToggleCurveExpanded(trackId, prop as AnimatableProperty)}
+            onKeyframeRowHover={onKeyframeRowHover}
           />
         );
       })}
@@ -520,6 +605,8 @@ function TimelineHeaderComponent({
   setPropertyValue,
   expandedCurveProperties,
   onToggleCurveExpanded,
+  hoveredKeyframeRow,
+  onKeyframeRowHover,
 }: TimelineHeaderProps) {
   // Get the first selected clip in this track
   const trackClips = clips.filter((c) => c.trackId === track.id);
@@ -665,6 +752,8 @@ function TimelineHeaderComponent({
           setPropertyValue={setPropertyValue}
           expandedCurveProperties={expandedCurveProperties}
           onToggleCurveExpanded={onToggleCurveExpanded}
+          hoveredKeyframeRow={hoveredKeyframeRow}
+          onKeyframeRowHover={onKeyframeRowHover}
         />
       )}
     </div>

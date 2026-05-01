@@ -19,6 +19,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import sys
 import threading
 import time
@@ -55,6 +56,58 @@ jobs_lock = threading.Lock()
 
 # Serialize GPU access — only one inference job at a time.
 inference_lock = threading.Lock()
+
+
+def _safe_filename_component(value: str, fallback: str) -> str:
+    """Return an ASCII-only filename component for OpenCV output paths."""
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", value).strip("._-")
+    if not cleaned:
+        cleaned = fallback
+    return cleaned[:120]
+
+
+def _windows_short_path(path: str) -> str:
+    """Return a Windows 8.3 short path when available, otherwise path."""
+    if os.name != "nt":
+        return path
+
+    try:
+        import ctypes
+
+        get_short_path_name = ctypes.windll.kernel32.GetShortPathNameW
+        required = get_short_path_name(path, None, 0)
+        if required == 0:
+            return path
+
+        buffer = ctypes.create_unicode_buffer(required)
+        result = get_short_path_name(path, buffer, required)
+        return buffer.value if result else path
+    except Exception:
+        return path
+
+
+def _opencv_path(path: str) -> str:
+    """Normalize paths before handing them to OpenCV on Windows."""
+    return _windows_short_path(path)
+
+
+def _read_grayscale_image(path: str) -> Any:
+    """Read a grayscale image with a Unicode-safe fallback for Windows paths."""
+    import cv2
+    import numpy as np
+
+    image = cv2.imread(_opencv_path(path), cv2.IMREAD_GRAYSCALE)
+    if image is not None:
+        return image
+
+    try:
+        encoded = np.fromfile(path, dtype=np.uint8)
+        if encoded.size == 0:
+            return None
+        return cv2.imdecode(encoded, cv2.IMREAD_GRAYSCALE)
+    except Exception:
+        log.warning("Unicode-safe mask read failed for %s", path, exc_info=True)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +180,7 @@ def _run_inference(job_id: str, video_path: str, mask_path: str,
     job = jobs[job_id]
     cancel_event: threading.Event = job["cancel_event"]
 
-    video_name = Path(video_path).stem
+    video_name = _safe_filename_component(Path(video_path).stem, f"matte_{job_id}")
     fg_output = os.path.join(output_dir, f"{video_name}_foreground.mp4")
     alpha_output = os.path.join(output_dir, f"{video_name}_alpha.mp4")
 
@@ -155,7 +208,14 @@ def _run_inference(job_id: str, video_path: str, mask_path: str,
         log.error("[%s] Inference failed: %s", job_id, exc, exc_info=True)
         with jobs_lock:
             job["status"] = "error"
-            job["message"] = str(exc)
+            job["message"] = _exception_message(exc)
+
+
+def _exception_message(exc: BaseException) -> str:
+    message = str(exc).strip()
+    if message:
+        return message
+    return exc.__class__.__name__
 
 
 def _do_inference(job_id: str, video_path: str, mask_path: str,
@@ -168,7 +228,7 @@ def _do_inference(job_id: str, video_path: str, mask_path: str,
     job = jobs[job_id]
 
     # ------------------------------------------------------------------
-    # Attempt 1: High-level API (model.process / model.run / model.__call__)
+    # Attempt 1: High-level API, if this package version exposes one.
     # ------------------------------------------------------------------
     try:
         log.info("[%s] Trying high-level MatAnyone2 API ...", job_id)
@@ -180,7 +240,6 @@ def _do_inference(job_id: str, video_path: str, mask_path: str,
         process_fn = (
             getattr(model, "process", None)
             or getattr(model, "run", None)
-            or getattr(model, "__call__", None)
         )
         if process_fn is None:
             raise AttributeError("No high-level API found on model object")
@@ -223,7 +282,7 @@ def _do_inference(job_id: str, video_path: str, mask_path: str,
         )
 
     # ------------------------------------------------------------------
-    # Attempt 2: Manual frame-by-frame processing with OpenCV
+    # Attempt 2: Manual frame-by-frame processing with InferenceCore.
     # ------------------------------------------------------------------
     _manual_frame_processing(
         job_id, video_path, mask_path, fg_output, alpha_output,
@@ -231,20 +290,22 @@ def _do_inference(job_id: str, video_path: str, mask_path: str,
     )
 
 
-def _manual_frame_processing(
+def _manual_frame_processing_core(
     job_id: str, video_path: str, mask_path: str,
     fg_output: str, alpha_output: str,
     start_frame: Optional[int], end_frame: Optional[int],
     cancel_event: threading.Event,
 ) -> None:
-    """Frame-by-frame fallback using OpenCV + torch."""
+    """Frame-by-frame inference using MatAnyone2's official InferenceCore."""
     import cv2
     import numpy as np
     import torch
+    from matanyone2.inference.inference_core import InferenceCore
+    from matanyone2.utils.device import safe_autocast
 
     job = jobs[job_id]
 
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(_opencv_path(video_path))
     if not cap.isOpened():
         raise RuntimeError(f"Cannot open video: {video_path}")
 
@@ -255,46 +316,98 @@ def _manual_frame_processing(
 
     actual_start = start_frame if start_frame is not None else 0
     actual_end = end_frame if end_frame is not None else total_frames
+    actual_end = min(actual_end, total_frames)
+    frame_total = max(actual_end - actual_start, 0)
+    if frame_total == 0:
+        cap.release()
+        raise RuntimeError("No video frames selected for matting")
 
     with jobs_lock:
         job["status"] = "processing"
         job["current_frame"] = 0
-        job["total_frames"] = actual_end - actual_start
+        job["total_frames"] = frame_total
 
-    # Read the initial mask (binary, single channel).
-    mask_img = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+    mask_img = _read_grayscale_image(mask_path)
     if mask_img is None:
+        cap.release()
         raise RuntimeError(f"Cannot read mask image: {mask_path}")
     mask_img = cv2.resize(mask_img, (width, height))
-    # Binarize: threshold at 128.
     _, mask_binary = cv2.threshold(mask_img, 128, 255, cv2.THRESH_BINARY)
-
-    # Prepare mask tensor for the model (1, 1, H, W) float in [0, 1].
-    mask_tensor = (
-        torch.from_numpy(mask_binary.astype(np.float32) / 255.0)
-        .unsqueeze(0)
-        .unsqueeze(0)
-        .to(model_device)
-    )
+    mask_tensor = torch.from_numpy(mask_binary.astype(np.float32)).to(model_device)
 
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    fg_writer = cv2.VideoWriter(fg_output, fourcc, fps, (width, height))
-    alpha_writer = cv2.VideoWriter(alpha_output, fourcc, fps, (width, height), False)
+    fg_writer = cv2.VideoWriter(_opencv_path(fg_output), fourcc, fps, (width, height))
+    alpha_writer = cv2.VideoWriter(
+        _opencv_path(alpha_output),
+        fourcc,
+        fps,
+        (width, height),
+        False,
+    )
 
     if not fg_writer.isOpened() or not alpha_writer.isOpened():
         cap.release()
         raise RuntimeError("Failed to open output video writers")
 
-    # Seek to start frame if needed.
     if actual_start > 0:
         cap.set(cv2.CAP_PROP_POS_FRAMES, actual_start)
 
-    # Model state for temporal propagation (if supported).
-    recurrent_state = None
+    ret, first_frame = cap.read()
+    if not ret:
+        cap.release()
+        fg_writer.release()
+        alpha_writer.release()
+        raise RuntimeError(f"Cannot read first video frame: {video_path}")
+
+    processor = InferenceCore(model, cfg=model.cfg, device=model_device)
+    objects = [1]
+    n_warmup = 10
+    background_rgb = (
+        np.array([120, 255, 155], dtype=np.float32) / 255.0
+    ).reshape((1, 1, 3))
     frame_index = 0
 
+    def prepare_frame(frame_bgr: np.ndarray) -> tuple[np.ndarray, torch.Tensor]:
+        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        image = (
+            torch.from_numpy(frame_rgb.astype(np.float32))
+            .permute(2, 0, 1)
+            .contiguous()
+        )
+        return frame_rgb, (image / 255.0).float().to(model_device)
+
+    def write_outputs(frame_rgb: np.ndarray, output_prob: torch.Tensor) -> None:
+        mask = processor.output_prob_to_mask(output_prob)
+        pha = mask.unsqueeze(2).float().cpu().numpy()
+        pha = np.clip(pha, 0.0, 1.0)
+
+        foreground_rgb = (
+            frame_rgb.astype(np.float32) / 255.0 * pha
+            + background_rgb * (1.0 - pha)
+        )
+        foreground_u8 = np.round(np.clip(foreground_rgb * 255.0, 0, 255)).astype(np.uint8)
+        alpha_u8 = np.round(np.clip(pha[:, :, 0] * 255.0, 0, 255)).astype(np.uint8)
+
+        fg_writer.write(cv2.cvtColor(foreground_u8, cv2.COLOR_RGB2BGR))
+        alpha_writer.write(alpha_u8)
+
     try:
-        for abs_frame in range(actual_start, actual_end):
+        first_rgb, first_image = prepare_frame(first_frame)
+        with torch.inference_mode(), safe_autocast():
+            output_prob = processor.step(first_image, mask_tensor, objects=objects)
+            output_prob = processor.step(first_image, first_frame_pred=True)
+            for _ in range(1, n_warmup + 1):
+                if cancel_event.is_set():
+                    _set_job_cancelled(job_id)
+                    return
+                output_prob = processor.step(first_image, first_frame_pred=True)
+
+        write_outputs(first_rgb, output_prob)
+        frame_index = 1
+        with jobs_lock:
+            job["current_frame"] = frame_index
+
+        for abs_frame in range(actual_start + 1, actual_end):
             if cancel_event.is_set():
                 _set_job_cancelled(job_id)
                 return
@@ -304,93 +417,25 @@ def _manual_frame_processing(
                 log.warning("[%s] Video ended at frame %d", job_id, abs_frame)
                 break
 
-            # Convert BGR -> RGB, normalize to [0, 1], shape (1, 3, H, W).
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame_tensor = (
-                torch.from_numpy(frame_rgb.astype(np.float32) / 255.0)
-                .permute(2, 0, 1)
-                .unsqueeze(0)
-                .to(model_device)
-            )
-
-            with torch.no_grad():
-                # Try different model inference signatures.
-                try:
-                    if recurrent_state is not None:
-                        # Propagation mode: use previous state.
-                        result = model(
-                            frame_tensor,
-                            mask_tensor if frame_index == 0 else None,
-                            recurrent_state,
-                        )
-                    else:
-                        result = model(frame_tensor, mask_tensor)
-
-                    # Parse result — adapt to whatever the model returns.
-                    if isinstance(result, tuple):
-                        if len(result) == 3:
-                            alpha_pred, fg_pred, recurrent_state = result
-                        elif len(result) == 2:
-                            alpha_pred, fg_pred = result
-                        else:
-                            alpha_pred = result[0]
-                            fg_pred = None
-                    elif isinstance(result, dict):
-                        alpha_pred = result.get("alpha", result.get("matte"))
-                        fg_pred = result.get("foreground", result.get("fg"))
-                        recurrent_state = result.get("state", result.get("memory"))
-                    else:
-                        alpha_pred = result
-                        fg_pred = None
-
-                except Exception as model_exc:
-                    log.error(
-                        "[%s] Model forward pass failed at frame %d: %s",
-                        job_id, frame_index, model_exc,
-                    )
-                    raise
-
-            # Convert alpha prediction to numpy uint8.
-            alpha_np = (
-                alpha_pred.squeeze().cpu().clamp(0, 1).numpy() * 255
-            ).astype(np.uint8)
-            alpha_np = cv2.resize(alpha_np, (width, height))
-
-            # Foreground: either from model or composited.
-            if fg_pred is not None:
-                fg_np = (
-                    fg_pred.squeeze().cpu().clamp(0, 1)
-                    .permute(1, 2, 0).numpy() * 255
-                ).astype(np.uint8)
-                fg_np = cv2.resize(fg_np, (width, height))
-                fg_bgr = cv2.cvtColor(fg_np, cv2.COLOR_RGB2BGR)
-            else:
-                # Composite foreground: original * alpha.
-                alpha_3ch = cv2.merge([alpha_np, alpha_np, alpha_np])
-                fg_bgr = (
-                    frame.astype(np.float32) * (alpha_3ch.astype(np.float32) / 255.0)
-                ).astype(np.uint8)
-
-            fg_writer.write(fg_bgr)
-            alpha_writer.write(alpha_np)
+            frame_rgb, image = prepare_frame(frame)
+            with torch.inference_mode(), safe_autocast():
+                output_prob = processor.step(image)
+            write_outputs(frame_rgb, output_prob)
 
             frame_index += 1
             with jobs_lock:
                 job["current_frame"] = frame_index
 
-            # Log progress periodically.
             if frame_index % 50 == 0:
                 log.info(
                     "[%s] Progress: %d / %d frames",
                     job_id, frame_index, job["total_frames"],
                 )
-
     finally:
         cap.release()
         fg_writer.release()
         alpha_writer.release()
 
-    # If we were cancelled, the status is already set.
     if cancel_event.is_set():
         return
 
@@ -399,8 +444,19 @@ def _manual_frame_processing(
         job["foreground_path"] = fg_output
         job["alpha_path"] = alpha_output
 
-    log.info(
-        "[%s] Inference complete. %d frames processed.", job_id, frame_index
+    log.info("[%s] Inference complete. %d frames processed.", job_id, frame_index)
+
+
+def _manual_frame_processing(
+    job_id: str, video_path: str, mask_path: str,
+    fg_output: str, alpha_output: str,
+    start_frame: Optional[int], end_frame: Optional[int],
+    cancel_event: threading.Event,
+) -> None:
+    """Frame-by-frame fallback using MatAnyone2 InferenceCore."""
+    return _manual_frame_processing_core(
+        job_id, video_path, mask_path, fg_output, alpha_output,
+        start_frame, end_frame, cancel_event,
     )
 
 

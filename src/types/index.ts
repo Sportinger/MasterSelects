@@ -148,6 +148,9 @@ export interface LayerSource {
   file?: File;
   videoElement?: HTMLVideoElement;
   mediaTime?: number;
+  targetMediaTime?: number;
+  previewPath?: string;
+  proxyFrameIndex?: number;
   mediaFileId?: string;
   intrinsicWidth?: number;
   intrinsicHeight?: number;

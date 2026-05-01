@@ -15,6 +15,7 @@ import { FadeCurve } from './components/FadeCurve';
 import { useThumbnailCache } from '../../hooks/useThumbnailCache';
 
 const log = Logger.create('TimelineClip');
+const KEYFRAME_TICK_SNAP_THRESHOLD_PX = 10;
 
 function canLoopExtendVectorClip(clip: TimelineClipProps['clip']): boolean {
   return clip.source?.type === 'lottie' &&
@@ -298,6 +299,7 @@ function TimelineClipComponent({
 
   const isGeneratingProxy = proxyStatus === 'generating';
   const hasProxy = proxyStatus === 'ready';
+  const hasProxyError = proxyStatus === 'error';
 
   // Check if this clip is linked to the dragging/trimming clip
   const draggedClip = clipDrag
@@ -452,13 +454,30 @@ function TimelineClipComponent({
 
     const handleDocumentMouseMove = (e: MouseEvent) => {
       e.preventDefault();
-      const sensitivity = e.shiftKey ? 0.1 : 1;
-      const deltaX = (e.clientX - keyframeGroupDrag.startX) * sensitivity;
+      const deltaX = e.clientX - keyframeGroupDrag.startX;
       const deltaTime = (deltaX / keyframeGroupDrag.clipWidth) * keyframeGroupDrag.clipDuration;
-      const newTime = Math.max(
+      let newTime = Math.max(
         0,
         Math.min(keyframeGroupDrag.clipDuration, keyframeGroupDrag.startTime + deltaTime)
       );
+
+      if (e.shiftKey) {
+        const movingIds = new Set(keyframeGroupDrag.keyframeIds);
+        let bestDistancePx = KEYFRAME_TICK_SNAP_THRESHOLD_PX;
+
+        for (const group of keyframeTickGroups) {
+          if (group.keyframeIds.some(id => movingIds.has(id))) continue;
+
+          const distancePx = Math.abs(
+            ((group.time - newTime) / keyframeGroupDrag.clipDuration) * keyframeGroupDrag.clipWidth
+          );
+
+          if (distancePx <= bestDistancePx) {
+            bestDistancePx = distancePx;
+            newTime = group.time;
+          }
+        }
+      }
 
       onMoveKeyframeGroup(keyframeGroupDrag.keyframeIds, newTime);
     };
@@ -474,7 +493,7 @@ function TimelineClipComponent({
       document.removeEventListener('mousemove', handleDocumentMouseMove);
       document.removeEventListener('mouseup', handleDocumentMouseUp);
     };
-  }, [keyframeGroupDrag, onMoveKeyframeGroup]);
+  }, [keyframeGroupDrag, keyframeTickGroups, onMoveKeyframeGroup]);
 
   // Track filtering
   if (isDragging && clipDrag && clipDrag.currentTrackId !== trackId) {
@@ -509,6 +528,7 @@ function TimelineClipComponent({
     clip.needsReload ? 'needs-reload' : '',
     hasProxy ? 'has-proxy' : '',
     isGeneratingProxy ? 'generating-proxy' : '',
+    hasProxyError ? 'proxy-error' : '',
     hasKeyframes(clip.id) ? 'has-keyframes' : '',
     clip.reversed ? 'reversed' : '',
     clip.transcriptStatus === 'ready' ? 'has-transcript' : '',
@@ -678,6 +698,11 @@ function TimelineClipComponent({
       {hasProxy && proxyEnabled && !isGeneratingProxy && (
         <div className="clip-proxy-badge" title="Proxy ready">
           P
+        </div>
+      )}
+      {hasProxyError && (
+        <div className="clip-proxy-error" title="Proxy generation failed">
+          P!
         </div>
       )}
       {/* Reversed indicator */}
@@ -1026,7 +1051,7 @@ function TimelineClipComponent({
                 onMouseDown={(e) => handleKeyframeTickMouseDown(e, group)}
                 onClick={(e) => e.stopPropagation()}
                 aria-label={`Move ${keyframeCount} keyframe${keyframeCount === 1 ? '' : 's'} at ${formatTime(group.time)}`}
-                title={`Drag to move ${keyframeCount} keyframe${keyframeCount === 1 ? '' : 's'} at ${formatTime(group.time)}`}
+                title={`Drag to move ${keyframeCount} keyframe${keyframeCount === 1 ? '' : 's'} at ${formatTime(group.time)} (Shift snaps to clip keyframes)`}
               />
             );
           })}

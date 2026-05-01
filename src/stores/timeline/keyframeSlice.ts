@@ -11,6 +11,7 @@ import {
 import { normalizeEasingType } from '../../utils/easing';
 import { composeTransforms } from '../../utils/transformComposition';
 import { calculateSourceTime, getSpeedAtTime, calculateTimelineDuration } from '../../utils/speedIntegration';
+import { dispatchKeyframeRecordingFeedback } from '../../utils/keyframeRecordingFeedback';
 
 export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => ({
   addKeyframe: (clipId, property, value, time, easing = 'linear') => {
@@ -314,7 +315,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
   },
 
   setPropertyValue: (clipId, property, value) => {
-    const { isRecording, addKeyframe, updateClipTransform, updateClipEffect, clips, hasKeyframes } = get();
+    const { isRecording, addKeyframe, updateClipTransform, updateClipEffect, clips, hasKeyframes, isPlaying } = get();
 
     // Check if this property has keyframes (whether recording or not)
     const propertyHasKeyframes = hasKeyframes(clipId, property);
@@ -322,6 +323,9 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     if (isRecording(clipId, property) || propertyHasKeyframes) {
       // Recording mode OR property already has keyframes - create/update keyframe
       addKeyframe(clipId, property, value);
+      if (isPlaying && clips.some(c => c.id === clipId)) {
+        dispatchKeyframeRecordingFeedback(clipId, property);
+      }
       // Also update clip.speed and recalculate duration
       if (property === 'speed') {
         const { invalidateCache, clipKeyframes, updateDuration } = get();

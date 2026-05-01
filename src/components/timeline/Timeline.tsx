@@ -54,8 +54,10 @@ import { usePlayheadSnap } from './hooks/usePlayheadSnap';
 import { useMarkerDrag } from './hooks/useMarkerDrag';
 import { MIN_ZOOM, MAX_ZOOM } from '../../stores/timeline/constants';
 import type { ClipKeyframeTimeGroup, ContextMenuState } from './types';
+import { isProxyFrameCountComplete } from '../../stores/mediaStore/helpers/proxyCompleteness';
 
 const KEYFRAME_TIME_GROUP_PRECISION = 1000;
+const RAM_PREVIEW_FEATURE_ENABLED = false;
 
 function getClipKeyframeTimeGroups(
   keyframes: Array<Pick<Keyframe, 'id' | 'time'>>
@@ -105,6 +107,10 @@ export function Timeline() {
   // Preview/export state
   const { ramPreviewEnabled, ramPreviewProgress, ramPreviewRange, isRamPreviewing, isExporting, exportProgress, exportRange } =
     useTimelineStore(useShallow(selectPreviewExportState));
+  const effectiveRamPreviewEnabled = RAM_PREVIEW_FEATURE_ENABLED && ramPreviewEnabled;
+  const effectiveRamPreviewProgress = RAM_PREVIEW_FEATURE_ENABLED ? ramPreviewProgress : null;
+  const effectiveRamPreviewRange = RAM_PREVIEW_FEATURE_ENABLED ? ramPreviewRange : null;
+  const effectiveIsRamPreviewing = RAM_PREVIEW_FEATURE_ENABLED && isRamPreviewing;
 
   // Keyframe state
   const { selectedKeyframeIds, clipKeyframes, expandedCurveProperties } =
@@ -155,7 +161,7 @@ export function Timeline() {
   // Preview actions
   const {
     toggleLoopPlayback, toggleRamPreviewEnabled, startRamPreview,
-    cancelRamPreview, getCachedRanges, getProxyCachedRanges,
+    cancelRamPreview, clearRamPreview, getCachedRanges, getProxyCachedRanges,
   } = store;
 
   // Tool actions
@@ -207,6 +213,34 @@ export function Timeline() {
   const handleToggleSlotGrid = useCallback(() => {
     animateSlotGrid(slotGridProgress < 0.5 ? 1 : 0);
   }, [slotGridProgress]);
+  const handleToggleRamPreview = useCallback(() => {
+    if (RAM_PREVIEW_FEATURE_ENABLED) {
+      toggleRamPreviewEnabled();
+    }
+  }, [toggleRamPreviewEnabled]);
+
+  useEffect(() => {
+    if (RAM_PREVIEW_FEATURE_ENABLED) return;
+
+    if (isRamPreviewing) {
+      cancelRamPreview();
+    }
+    if (ramPreviewEnabled) {
+      toggleRamPreviewEnabled();
+      return;
+    }
+    if (ramPreviewRange || ramPreviewProgress !== null) {
+      clearRamPreview();
+    }
+  }, [
+    ramPreviewEnabled,
+    ramPreviewProgress,
+    ramPreviewRange,
+    isRamPreviewing,
+    toggleRamPreviewEnabled,
+    cancelRamPreview,
+    clearRamPreview,
+  ]);
 
   // Use store toggle directly (no useCallback needed - stable store reference)
 
@@ -271,7 +305,7 @@ export function Timeline() {
     duration,
     inPoint,
     outPoint,
-    isRamPreviewing,
+    isRamPreviewing: effectiveIsRamPreviewing,
     isPlaying,
     setPlayheadPosition,
     setDraggingPlayhead,
@@ -352,6 +386,10 @@ export function Timeline() {
 
   // Vertical scroll position (custom scrollbar)
   const [scrollY, setScrollY] = useState(0);
+  const [hoveredKeyframeRow, setHoveredKeyframeRow] = useState<{
+    trackId: string;
+    property: AnimatableProperty;
+  } | null>(null);
 
   // Context menu state for clip right-click
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -570,15 +608,15 @@ export function Timeline() {
 
   // Auto-start RAM preview and proxy generation - extracted to hook
   useAutoFeatures({
-    ramPreviewEnabled,
+    ramPreviewEnabled: effectiveRamPreviewEnabled,
     proxyEnabled,
     isPlaying,
     isDraggingPlayhead,
-    isRamPreviewing,
+    isRamPreviewing: effectiveIsRamPreviewing,
     currentlyGeneratingProxyId,
     inPoint,
     outPoint,
-    ramPreviewRange,
+    ramPreviewRange: effectiveRamPreviewRange,
     clips,
     startRamPreview,
     cancelRamPreview,
@@ -592,8 +630,8 @@ export function Timeline() {
     tracks,
     isPlaying,
     isDraggingPlayhead,
-    ramPreviewRange,
-    isRamPreviewing,
+    ramPreviewRange: effectiveRamPreviewRange,
+    isRamPreviewing: effectiveIsRamPreviewing,
     clipKeyframes,
     clipDrag,
     zoom,
@@ -664,9 +702,24 @@ export function Timeline() {
     setDraggingPlayhead,
   });
 
+  const handleKeyframeRowHover = useCallback((trackId: string, property: AnimatableProperty, hovered: boolean) => {
+    if (hovered) {
+      setHoveredKeyframeRow({ trackId, property });
+      return;
+    }
+
+    setHoveredKeyframeRow(current =>
+      current?.trackId === trackId && current.property === property ? null : current
+    );
+  }, []);
+
   // Render keyframe diamonds
   const renderKeyframeDiamonds = useCallback(
     (trackId: string, property: AnimatableProperty) => {
+      const isRowHovered =
+        hoveredKeyframeRow?.trackId === trackId &&
+        hoveredKeyframeRow.property === property;
+
       return (
         <TimelineKeyframes
           trackId={trackId}
@@ -680,12 +733,15 @@ export function Timeline() {
           onSelectKeyframe={selectKeyframe}
           onMoveKeyframe={moveKeyframe}
           onUpdateKeyframe={updateKeyframe}
+          onToggleCurveExpanded={toggleCurveExpanded}
           timeToPixel={timeToPixel}
           pixelToTime={pixelToTime}
+          isRowHovered={isRowHovered}
+          onKeyframeRowHover={handleKeyframeRowHover}
         />
       );
     },
-    [clips, selectedKeyframeIds, clipKeyframes, clipDrag, scrollX, selectKeyframe, moveKeyframe, updateKeyframe, timeToPixel, pixelToTime]
+    [clips, selectedKeyframeIds, clipKeyframes, clipDrag, scrollX, selectKeyframe, moveKeyframe, updateKeyframe, toggleCurveExpanded, timeToPixel, pixelToTime, hoveredKeyframeRow, handleKeyframeRowHover]
   );
 
   // Render a clip
@@ -724,6 +780,11 @@ export function Timeline() {
           f.name === clip.name ||
           f.name === clip.name.replace(' (Audio)', '')
       );
+      const proxyStatus =
+        mediaFile?.proxyStatus === 'ready' &&
+        !isProxyFrameCountComplete(mediaFile.proxyFrameCount, mediaFile.duration, mediaFile.proxyFps ?? mediaFile.fps)
+          ? 'none'
+          : mediaFile?.proxyStatus;
       const clipKeyframeList = getClipKeyframes(clip.id);
       const keyframeTimeGroups = getClipKeyframeTimeGroups(clipKeyframeList);
 
@@ -749,7 +810,7 @@ export function Timeline() {
           scrollX={scrollX}
           timelineRef={timelineRef}
           proxyEnabled={proxyEnabled}
-          proxyStatus={mediaFile?.proxyStatus}
+          proxyStatus={proxyStatus}
           proxyProgress={mediaFile?.proxyProgress || 0}
           showTranscriptMarkers={showTranscriptMarkers}
           toolMode={toolMode}
@@ -893,7 +954,7 @@ export function Timeline() {
           snappingEnabled={snappingEnabled}
           inPoint={inPoint}
           outPoint={outPoint}
-          ramPreviewEnabled={ramPreviewEnabled}
+          ramPreviewEnabled={effectiveRamPreviewEnabled}
           proxyEnabled={proxyEnabled}
           currentlyGeneratingProxyId={currentlyGeneratingProxyId}
           mediaFilesWithProxy={mediaFilesWithProxyCount}
@@ -910,7 +971,7 @@ export function Timeline() {
           onSetInPoint={setInPointAtPlayhead}
           onSetOutPoint={setOutPointAtPlayhead}
           onClearInOut={clearInOut}
-          onToggleRamPreview={toggleRamPreviewEnabled}
+          onToggleRamPreview={handleToggleRamPreview}
           onToggleProxy={toggleProxyEnabled}
           onToggleTranscriptMarkers={toggleTranscriptMarkers}
           onToggleThumbnails={toggleThumbnailsEnabled}
@@ -1035,6 +1096,8 @@ export function Timeline() {
                     setPropertyValue={setPropertyValue}
                     expandedCurveProperties={expandedCurveProperties}
                     onToggleCurveExpanded={toggleCurveExpanded}
+                    hoveredKeyframeRow={hoveredKeyframeRow}
+                    onKeyframeRowHover={handleKeyframeRowHover}
                     onSetTrackParent={setTrackParent}
                     onTrackPickWhipDragStart={handleTrackPickWhipDragStart}
                     onTrackPickWhipDragEnd={handleTrackPickWhipDragEnd}
@@ -1266,8 +1329,8 @@ export function Timeline() {
             markerDrag={markerDrag}
             onMarkerMouseDown={handleMarkerMouseDown}
             clipDrag={clipDrag}
-            isRamPreviewing={isRamPreviewing}
-            ramPreviewProgress={ramPreviewProgress}
+            isRamPreviewing={effectiveIsRamPreviewing}
+            ramPreviewProgress={effectiveRamPreviewProgress}
             playheadPosition={playheadPosition}
             isExporting={isExporting}
             exportProgress={exportProgress}

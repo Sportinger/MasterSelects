@@ -18,7 +18,17 @@ describe('TimelineKeyframes', () => {
     vi.restoreAllMocks();
   });
 
-  function renderKeyframes() {
+  function renderKeyframes({
+    isRowHovered = false,
+    onKeyframeRowHover = vi.fn(),
+    onMoveKeyframe = vi.fn(),
+    onToggleCurveExpanded = vi.fn(),
+  }: {
+    isRowHovered?: boolean;
+    onKeyframeRowHover?: ReturnType<typeof vi.fn>;
+    onMoveKeyframe?: ReturnType<typeof vi.fn>;
+    onToggleCurveExpanded?: ReturnType<typeof vi.fn>;
+  } = {}) {
     const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0, duration: 5 });
     const leftKeyframe = createMockKeyframe({
       id: 'kf-left',
@@ -50,16 +60,22 @@ describe('TimelineKeyframes', () => {
         scrollX={0}
         timelineRef={{ current: timelineEl } as RefObject<HTMLDivElement | null>}
         onSelectKeyframe={vi.fn()}
-        onMoveKeyframe={vi.fn()}
+        onMoveKeyframe={onMoveKeyframe}
         onUpdateKeyframe={onUpdateKeyframe}
+        onToggleCurveExpanded={onToggleCurveExpanded}
         timeToPixel={(time) => time * 20}
         pixelToTime={(pixel) => pixel / 20}
+        isRowHovered={isRowHovered}
+        onKeyframeRowHover={onKeyframeRowHover}
       />
     );
 
     return {
       ...renderResult,
       leftKeyframe,
+      onKeyframeRowHover,
+      onMoveKeyframe,
+      onToggleCurveExpanded,
       onUpdateKeyframe,
     };
   }
@@ -72,6 +88,49 @@ describe('TimelineKeyframes', () => {
     fireEvent.click(screen.getByText('Ease Out'));
 
     expect(onUpdateKeyframe).toHaveBeenCalledWith(leftKeyframe.id, { easing: 'ease-out' });
+  });
+
+  it('highlights every visible keyframe when its property row is hovered', () => {
+    const { container } = renderKeyframes({ isRowHovered: true });
+    const diamonds = container.querySelectorAll('.keyframe-diamond');
+
+    expect(diamonds).toHaveLength(2);
+    diamonds.forEach((diamond) => {
+      expect(diamond).toHaveClass('row-highlighted');
+    });
+  });
+
+  it('reports keyframe hover so the matching property row can highlight', () => {
+    const onKeyframeRowHover = vi.fn();
+    const { container } = renderKeyframes({ onKeyframeRowHover });
+    const diamond = container.querySelector('.keyframe-diamond') as HTMLElement;
+
+    fireEvent.mouseEnter(diamond);
+    expect(onKeyframeRowHover).toHaveBeenLastCalledWith('video-1', 'opacity', true);
+
+    fireEvent.mouseLeave(diamond);
+    expect(onKeyframeRowHover).toHaveBeenLastCalledWith('video-1', 'opacity', false);
+  });
+
+  it('snaps a dragged keyframe to another keyframe in the same clip while shift is held', () => {
+    const onMoveKeyframe = vi.fn();
+    const { container } = renderKeyframes({ onMoveKeyframe });
+    const diamonds = container.querySelectorAll('.keyframe-diamond');
+
+    fireEvent.mouseDown(diamonds[0], { button: 0, clientX: 20 });
+    fireEvent.mouseMove(window, { clientX: 78, shiftKey: true });
+
+    expect(onMoveKeyframe).toHaveBeenLastCalledWith('kf-left', 4);
+  });
+
+  it('toggles the curve editor on left double-clicking a keyframe', () => {
+    const onToggleCurveExpanded = vi.fn();
+    const { container } = renderKeyframes({ onToggleCurveExpanded });
+    const diamond = container.querySelector('.keyframe-diamond') as HTMLElement;
+
+    fireEvent.doubleClick(diamond, { button: 0 });
+
+    expect(onToggleCurveExpanded).toHaveBeenCalledWith('video-1', 'opacity');
   });
 
   it('keeps the menu onscreen and blocks document mousedown handlers during easing changes', async () => {

@@ -2225,7 +2225,18 @@ export class RenderDispatcher {
         let texture = d.textureManager?.getCachedImageTexture(img);
         if (!texture) texture = d.textureManager?.createImageTexture(img) ?? undefined;
         if (texture) {
-          layerData.push({ layer, isVideo: false, externalTexture: null, textureView: d.textureManager!.getImageView(texture), sourceWidth: img.naturalWidth, sourceHeight: img.naturalHeight });
+          layerData.push({
+            layer,
+            isVideo: false,
+            isDynamic: layer.source?.proxyFrameIndex !== undefined,
+            externalTexture: null,
+            textureView: d.textureManager!.getImageView(texture),
+            sourceWidth: img.naturalWidth,
+            sourceHeight: img.naturalHeight,
+            displayedMediaTime: layer.source?.mediaTime,
+            targetMediaTime: layer.source?.targetMediaTime ?? layer.source?.mediaTime,
+            previewPath: layer.source?.previewPath,
+          });
         }
       }
       if (layer.source.textCanvas) {

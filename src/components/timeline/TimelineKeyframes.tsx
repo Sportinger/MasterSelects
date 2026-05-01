@@ -23,6 +23,8 @@ interface KeyframeDisplay {
   absTime: number;
 }
 
+const KEYFRAME_SNAP_THRESHOLD_PX = 10;
+
 // Easing options for context menu
 const EASING_OPTIONS: { value: EasingType; label: string }[] = [
   { value: 'linear', label: 'Linear' },
@@ -41,8 +43,11 @@ function TimelineKeyframesComponent({
   onSelectKeyframe,
   onMoveKeyframe,
   onUpdateKeyframe,
+  onToggleCurveExpanded,
   timeToPixel,
   pixelToTime,
+  isRowHovered = false,
+  onKeyframeRowHover,
 }: TimelineKeyframesProps) {
   // Drag state - includes original times for all selected keyframes
   const [dragState, setDragState] = useState<{
@@ -247,20 +252,46 @@ function TimelineKeyframesComponent({
   useEffect(() => {
     if (!dragState) return;
 
+    const getSnappedTimeDelta = (timeDelta: number) => {
+      const movingIds = new Set(dragState.originalTimes.keys());
+      let snappedTimeDelta = timeDelta;
+      let bestDistancePx = KEYFRAME_SNAP_THRESHOLD_PX;
+
+      for (const [keyframeId, original] of dragState.originalTimes.entries()) {
+        const clip = clips.find(c => c.id === original.clipId);
+        if (!clip) continue;
+
+        const proposedTime = Math.max(0, Math.min(clip.duration, original.time + timeDelta));
+        const proposedPixel = timeToPixel(clip.startTime + proposedTime);
+        const clipTargets = clipKeyframes.get(original.clipId) || [];
+
+        for (const target of clipTargets) {
+          if (movingIds.has(target.id) || target.id === keyframeId) continue;
+
+          const targetPixel = timeToPixel(clip.startTime + target.time);
+          const distancePx = Math.abs(targetPixel - proposedPixel);
+
+          if (distancePx <= bestDistancePx) {
+            bestDistancePx = distancePx;
+            snappedTimeDelta = target.time - original.time;
+          }
+        }
+      }
+
+      return snappedTimeDelta;
+    };
+
     const handleMouseMove = (e: MouseEvent) => {
       const deltaX = e.clientX - dragState.startX;
 
-      // Shift for finer movement (10x slower)
-      const sensitivity = e.shiftKey ? 0.1 : 1;
-      const effectiveDelta = deltaX * sensitivity;
-
       // Convert pixel delta to time delta
       const currentPixel = timeToPixel(dragState.clipStartTime + dragState.startTime);
-      const newPixel = currentPixel + effectiveDelta;
+      const newPixel = currentPixel + deltaX;
       const newAbsTime = pixelToTime(newPixel);
 
       // Calculate time delta from original position
-      const timeDelta = newAbsTime - (dragState.clipStartTime + dragState.startTime);
+      const rawTimeDelta = newAbsTime - (dragState.clipStartTime + dragState.startTime);
+      const timeDelta = e.shiftKey ? getSnappedTimeDelta(rawTimeDelta) : rawTimeDelta;
 
       // Move all selected keyframes by the same time delta
       for (const [keyframeId, original] of dragState.originalTimes.entries()) {
@@ -284,7 +315,7 @@ function TimelineKeyframesComponent({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragState, timeToPixel, pixelToTime, clips, onMoveKeyframe]);
+  }, [dragState, timeToPixel, pixelToTime, clips, clipKeyframes, onMoveKeyframe]);
 
   // Handle right-click context menu
   const handleContextMenu = useCallback((
@@ -302,6 +333,14 @@ function TimelineKeyframesComponent({
       currentEasing,
     });
   }, [getContextMenuTargets]);
+
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragState(null);
+    onToggleCurveExpanded(trackId, property);
+  }, [onToggleCurveExpanded, trackId, property]);
 
   // Close context menu on click outside
   useEffect(() => {
@@ -336,11 +375,14 @@ function TimelineKeyframesComponent({
         return (
           <div
             key={kf.id}
-            className={`keyframe-diamond easing-${easing} ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${aiAnimatedKeyframes.has(kf.id) ? 'ai-keyframe-added' : ''}`}
+            className={`keyframe-diamond easing-${easing} ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isRowHovered ? 'row-highlighted' : ''} ${aiAnimatedKeyframes.has(kf.id) ? 'ai-keyframe-added' : ''}`}
             style={{ left: `${xPos}px` }}
             onMouseDown={(e) => handleMouseDown(e, kf, clip)}
+            onDoubleClick={handleDoubleClick}
+            onMouseEnter={() => onKeyframeRowHover?.(trackId, property, true)}
+            onMouseLeave={() => onKeyframeRowHover?.(trackId, property, false)}
             onContextMenu={(e) => handleContextMenu(e, kf)}
-            title={`${property}: ${kf.value.toFixed(3)} @ ${absTime.toFixed(2)}s\nEasing: ${easing}\nDrag to move (Shift for fine control)\nRight-click to change easing`}
+            title={`${property}: ${kf.value.toFixed(3)} @ ${absTime.toFixed(2)}s\nEasing: ${easing}\nDrag to move (Shift snaps to clip keyframes)\nRight-click to change easing`}
           />
         );
       })}

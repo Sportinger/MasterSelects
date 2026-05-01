@@ -9,10 +9,8 @@ import { generateWaveform, generateWaveformFromBuffer } from './helpers/waveform
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('ClipSlice');
-// Shared-scene planes at z=0 fill the camera target and can depth-mask splats/meshes.
-const DEFAULT_3D_PLANE_INITIAL_Z = -0.5;
 
-function shouldOffsetPlaneWhenEnabling3D(clip: TimelineClip): boolean {
+function isPlaneClip(clip: TimelineClip): boolean {
   return clip.source?.type === 'video' || clip.source?.type === 'image';
 }
 
@@ -996,7 +994,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       clips: clips.map(c => {
         if (c.id !== clipId) return c;
         if (nowIs3D) {
-          if (shouldOffsetPlaneWhenEnabling3D(c)) {
+          if (isPlaneClip(c)) {
             const t = c.transform || DEFAULT_TRANSFORM;
             const currentZ = t.position?.z ?? DEFAULT_TRANSFORM.position.z;
             return {
@@ -1006,7 +1004,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
                 ...t,
                 position: {
                   ...(t.position || DEFAULT_TRANSFORM.position),
-                  z: currentZ === 0 ? DEFAULT_3D_PLANE_INITIAL_Z : currentZ,
+                  z: currentZ,
                 },
                 rotation: { ...(t.rotation || DEFAULT_TRANSFORM.rotation) },
                 scale: { ...(t.scale || DEFAULT_TRANSFORM.scale) },
