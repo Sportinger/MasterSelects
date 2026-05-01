@@ -1308,11 +1308,15 @@ export class LayerCollector {
         layer,
         isVideo: false,
         externalTexture: null,
+        isDynamic: layer.source?.proxyFrameIndex !== undefined,
         textureView: deps.textureManager.getImageView(texture),
         sourceWidth: img.naturalWidth,
         sourceHeight: img.naturalHeight,
+        displayedMediaTime: layer.source?.mediaTime,
+        targetMediaTime: layer.source?.targetMediaTime ?? layer.source?.mediaTime,
+        previewPath: layer.source?.previewPath,
       };
-    }
+      }
     return null;
   }
 

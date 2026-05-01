@@ -78,6 +78,7 @@ const EDIT_CAMERA_ORTHO_MAX_SCALE = 10000;
 
 type EditCameraViewMode = 'camera' | 'front' | 'side' | 'top';
 type EditCameraOrthoViewMode = Exclude<EditCameraViewMode, 'camera'>;
+type PreviewWheelEvent = WheelEvent | React.WheelEvent;
 
 interface EditCameraOrthoFrame {
   clipId: string;
@@ -1677,7 +1678,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     return () => resizeObserver.disconnect();
   }, [effectiveResolution.width, effectiveResolution.height]);
 
-  const zoomEditCameraOrthoView = useCallback((e: React.WheelEvent): boolean => {
+  const zoomEditCameraOrthoView = useCallback((e: PreviewWheelEvent): boolean => {
     if (!editCameraOrthoViewActive || !activeEditCameraOrthoFrame || !editCameraOrthoMode) return false;
     if (!isCanvasInteractionTarget(e.target)) return false;
 
@@ -1758,7 +1759,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   }, [canvasSize.height, isEditCameraOrthoPanning]);
 
   // Handle zoom with scroll wheel in edit mode
-  const handleWheel = useCallback((e: React.WheelEvent) => {
+  const handleWheel = useCallback((e: PreviewWheelEvent) => {
     if (zoomEditCameraOrthoView(e)) {
       return;
     }
@@ -1840,6 +1841,18 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     viewZoom,
     zoomEditCameraOrthoView,
   ]);
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+
+    const handleNativeWheel = (event: WheelEvent) => {
+      handleWheel(event);
+    };
+
+    element.addEventListener('wheel', handleNativeWheel, { capture: true, passive: false });
+    return () => element.removeEventListener('wheel', handleNativeWheel, { capture: true });
+  }, [handleWheel]);
 
   const toggleEditModeFromShortcut = useCallback(() => {
     if (!isPreviewShortcutTarget()) return;
@@ -2067,7 +2080,6 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       ref={containerRef}
       data-preview-panel-id={panelId}
       data-preview-editable={isEditableSource ? 'true' : 'false'}
-      onWheelCapture={handleWheel}
       onMouseDownCapture={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}

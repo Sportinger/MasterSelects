@@ -1,11 +1,11 @@
 // Unified import pipeline - eliminates 3x duplicate import logic
 
 import type { MediaFile, ProxyStatus } from '../types';
-import { PROXY_FPS } from '../constants';
 import { classifyMediaType } from '../../timeline/helpers/mediaTypeHelpers';
 import { calculateFileHash } from './fileHashHelpers';
 import { getMediaInfo } from './mediaInfoHelpers';
 import { createThumbnail, handleThumbnailDedup } from './thumbnailHelpers';
+import { getExpectedProxyFps, getProxyProgressFromFrameIndices, isProxyFrameIndexSetComplete } from './proxyCompleteness';
 import { projectFileService } from '../../../services/projectFileService';
 import { fileSystemService } from '../../../services/fileSystemService';
 import { projectDB } from '../../../services/projectDB';
@@ -92,7 +92,12 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
   const thumbnailUrl = await handleThumbnailDedup(fileHash, rawThumbnail);
 
   // Check for existing proxy (unified - was 3x duplicate)
-  const proxyInfo = await checkExistingProxy(fileHash, type);
+  const proxyInfo = await checkExistingProxy(
+    fileHash,
+    type,
+    info.duration,
+    'fps' in info ? info.fps : undefined
+  );
 
   // Copy to Raw folder if enabled (unified - was 3x duplicate)
   const copyResult = await copyToRawIfEnabled(file, id, forceCopyToProject === true);
@@ -173,7 +178,9 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
  */
 async function checkExistingProxy(
   fileHash: string | undefined,
-  type: string
+  type: string,
+  duration?: number,
+  fps?: number
 ): Promise<{
   proxyStatus: ProxyStatus;
   proxyFrameCount?: number;
@@ -184,14 +191,18 @@ async function checkExistingProxy(
     return { proxyStatus: 'none' };
   }
 
-  const frameCount = await projectFileService.getProxyFrameCount(fileHash);
+  const frameIndices = await projectFileService.getProxyFrameIndices(fileHash);
+  const frameCount = frameIndices.size;
   if (frameCount > 0) {
-    log.debug(`Found existing proxy: ${fileHash.slice(0, 8)} frames: ${frameCount}`);
+    const proxyFps = getExpectedProxyFps(fps);
+    const progress = getProxyProgressFromFrameIndices(frameIndices, duration, proxyFps);
+    const complete = isProxyFrameIndexSetComplete(frameIndices, duration, proxyFps);
+    log.debug(`Found existing proxy: ${fileHash.slice(0, 8)} frames: ${frameCount}, progress: ${progress}%`);
     return {
-      proxyStatus: 'ready',
+      proxyStatus: complete ? 'ready' : 'none',
       proxyFrameCount: frameCount,
-      proxyFps: PROXY_FPS,
-      proxyProgress: 100,
+      proxyFps: complete ? proxyFps : undefined,
+      proxyProgress: progress,
     };
   }
 

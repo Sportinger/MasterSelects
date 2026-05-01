@@ -50,6 +50,7 @@ function TimelineControlsComponent({
   const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
   const durationInputRef = useRef<HTMLInputElement>(null);
   const viewDropdownRef = useRef<HTMLDivElement>(null);
+  const ramPreviewButtonDisabled = true;
 
   // Focus input when editing starts
   useEffect(() => {
@@ -213,14 +214,17 @@ function TimelineControlsComponent({
       <div className="timeline-ram-preview">
         <button
           className={`btn btn-sm ${ramPreviewEnabled ? 'btn-active' : ''}`}
-          onClick={onToggleRamPreview}
+          onClick={ramPreviewButtonDisabled ? undefined : onToggleRamPreview}
+          disabled={ramPreviewButtonDisabled}
           title={
-            ramPreviewEnabled
+            ramPreviewButtonDisabled
+              ? 'RAM Preview temporarily disabled'
+              : ramPreviewEnabled
               ? 'RAM Preview ON - Auto-caches frames for instant scrubbing. Click to disable and clear cache.'
               : 'RAM Preview OFF - Click to enable auto-caching for instant scrubbing'
           }
         >
-          RAM {ramPreviewEnabled ? 'ON' : 'OFF'} <span className="menu-wip-badge">🐛</span>
+          RAM OFF <span className="menu-wip-badge">🐛</span>
         </button>
         <WebCodecsToggle />
         <div className="view-dropdown" ref={viewDropdownRef}>

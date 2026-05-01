@@ -6336,6 +6336,19 @@ input[type="checkbox"] {
   z-index: 10;
 }
 
+.clip-proxy-error {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: var(--danger);
+  color: var(--text-inverse);
+  font-size: 9px;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 2px;
+  z-index: 10;
+}
+
 /* Proxy generating indicator with fill animation */
 .clip-proxy-generating {
   position: absolute;
@@ -6396,6 +6409,10 @@ input[type="checkbox"] {
 
 .timeline-clip.generating-proxy {
   border-color: var(--warning-light) !important;
+}
+
+.timeline-clip.proxy-error {
+  border-color: var(--danger) !important;
 }
 
 /* Loading state takes visual priority over proxy states */
@@ -9553,6 +9570,17 @@ input[type="checkbox"] {
   cursor: pointer;
 }
 
+.media-item-proxy-error {
+  background: var(--danger);
+  color: var(--text-inverse);
+  font-size: 9px;
+  font-weight: bold;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
 .media-item-transcript-badge:hover {
   filter: brightness(1.2);
 }
@@ -10008,20 +10036,54 @@ input[type="checkbox"] {
 }
 
 .keyframe-toggle.recording {
-  background: var(--amber-600);
-  color: var(--text-inverse);
+  background: transparent;
+  color: var(--amber-600);
   border-color: var(--amber-600);
-  animation: keyframe-recording-pulse 1s ease-in-out infinite;
+  animation: keyframe-recording-activate 700ms ease-out;
 }
 
 .keyframe-toggle.recording:hover {
-  background: var(--warning-light);
+  background: transparent;
+  color: var(--warning-light);
   border-color: var(--warning-light);
 }
 
+.keyframe-toggle.recording-feedback {
+  animation: keyframe-recording-pulse 900ms ease-in-out infinite;
+}
+
+@keyframes keyframe-recording-activate {
+  0%, 45% {
+    background: var(--amber-600);
+    color: var(--text-inverse);
+    border-color: var(--amber-600);
+    box-shadow: 0 0 6px var(--amber-600);
+  }
+  100% {
+    background: transparent;
+    color: var(--amber-600);
+    border-color: var(--amber-600);
+    box-shadow: none;
+  }
+}
+
 @keyframes keyframe-recording-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  0%, 100% {
+    background: transparent;
+    border-color: var(--amber-600);
+    color: var(--amber-600);
+    opacity: 1;
+    filter: none;
+    box-shadow: none;
+  }
+  50% {
+    background: rgba(245, 158, 11, 0.22);
+    border-color: var(--warning-light);
+    color: var(--warning-light);
+    opacity: 1;
+    filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.85));
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.45);
+  }
 }
 
 .keyframe-toggle-placeholder {
@@ -10042,7 +10104,7 @@ input[type="checkbox"] {
   cursor: pointer;
   z-index: 5;
   /* Only transition visual properties, not position (left) - for smooth clip dragging */
-  transition: background 0.1s ease, box-shadow 0.1s ease, transform 0.1s ease;
+  transition: background 0.1s ease, box-shadow 0.1s ease, filter 700ms ease, transform 0.1s ease;
 }
 
 .keyframe-diamond:hover {
@@ -10060,6 +10122,11 @@ input[type="checkbox"] {
   background: var(--cyan-500);
   box-shadow: 0 0 10px var(--cyan-500);
   transform: translateX(calc(-50% - 3px)) rotate(45deg) translateY(-50%) scale(1.3);
+}
+
+.keyframe-diamond.row-highlighted {
+  filter: drop-shadow(0 0 5px rgba(245, 158, 11, 0.85)) brightness(1.35) saturate(1.15);
+  transition: background 0.1s ease, box-shadow 0.1s ease, filter 120ms ease, transform 0.1s ease;
 }
 
 /* Keyframe easing type visual styles */
@@ -10376,6 +10443,16 @@ input[type="checkbox"] {
 
 .property-label-row.flat.dragging {
   background: rgba(45, 140, 235, 0.1);
+}
+
+.property-label-row.flat.keyframe-row-highlighted {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--text-primary);
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.property-label-row.flat:not(.keyframe-row-highlighted) {
+  transition: background 700ms ease, color 700ms ease;
 }
 
 .property-keyframe-controls {

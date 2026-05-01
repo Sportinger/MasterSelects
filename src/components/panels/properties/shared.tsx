@@ -1,8 +1,13 @@
 // Shared components for Properties Panel tabs
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { AnimatableProperty } from '../../../types';
 import { createEffectProperty } from '../../../types';
+import {
+  KEYFRAME_RECORDING_FEEDBACK_EVENT,
+  getKeyframeRecordingFeedbackId,
+  type KeyframeRecordingFeedbackDetail,
+} from '../../../utils/keyframeRecordingFeedback';
 import { EQ_BAND_PARAMS } from './sharedConstants';
 export {
   EditableDraggableNumber as DraggableNumber,
@@ -23,6 +28,16 @@ type KeyframeToggleEntry = {
 };
 
 let keyframeToggleDragSession: KeyframeToggleDragSession | null = null;
+
+const STOPWATCH_RECORDING_FEEDBACK_MS = 900;
+
+function getKeyframeRecordingFeedbackIds(clipId: string, properties: AnimatableProperty[]) {
+  return properties.map(property => getKeyframeRecordingFeedbackId(clipId, property));
+}
+
+function getFeedbackValueKey(values: number[]) {
+  return values.map(value => Number.isFinite(value) ? value.toFixed(6) : String(value)).join('|');
+}
 
 function endKeyframeToggleDrag() {
   keyframeToggleDragSession = null;
@@ -45,6 +60,7 @@ function applyKeyframeToggleEntries(
     }
 
     if (store.isRecording(clipId, property) || store.hasKeyframes(clipId, property)) {
+      store.addKeyframe(clipId, property, value);
       return;
     }
 
@@ -68,16 +84,80 @@ function KeyframeStopwatchButton({
   dragId,
   mode,
   className,
+  feedbackIds,
+  feedbackValues,
+  playbackFeedbackEnabled,
   title,
   onApply,
 }: {
   dragId: string;
   mode: KeyframeToggleDragMode;
   className: string;
+  feedbackIds: string[];
+  feedbackValues: number[];
+  playbackFeedbackEnabled: boolean;
   title: string;
   onApply: (mode: KeyframeToggleDragMode) => void;
 }) {
+  const isPlaying = useTimelineStore(state => state.isPlaying);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const ignoreNextClick = useRef(false);
+  const feedbackIdsRef = useRef<Set<string>>(new Set(feedbackIds));
+  const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previousFeedbackValueKeyRef = useRef<string | null>(null);
+  const feedbackValueKey = getFeedbackValueKey(feedbackValues);
+
+  useEffect(() => {
+    feedbackIdsRef.current = new Set(feedbackIds);
+  }, [feedbackIds]);
+
+  const startRecordingFeedback = useCallback(() => {
+    if (feedbackTimeoutRef.current !== null) {
+      clearTimeout(feedbackTimeoutRef.current);
+    }
+
+    buttonRef.current?.classList.add('recording-feedback');
+    feedbackTimeoutRef.current = setTimeout(() => {
+      buttonRef.current?.classList.remove('recording-feedback');
+      feedbackTimeoutRef.current = null;
+    }, STOPWATCH_RECORDING_FEEDBACK_MS);
+  }, []);
+
+  useEffect(() => {
+    const handleRecordingFeedback = (event: Event) => {
+      const detail = (event as CustomEvent<KeyframeRecordingFeedbackDetail>).detail;
+      if (!detail) return;
+
+      const feedbackId = getKeyframeRecordingFeedbackId(detail.clipId, detail.property);
+      if (!feedbackIdsRef.current.has(feedbackId)) return;
+
+      startRecordingFeedback();
+    };
+
+    window.addEventListener(KEYFRAME_RECORDING_FEEDBACK_EVENT, handleRecordingFeedback);
+    return () => {
+      window.removeEventListener(KEYFRAME_RECORDING_FEEDBACK_EVENT, handleRecordingFeedback);
+      if (feedbackTimeoutRef.current !== null) {
+        clearTimeout(feedbackTimeoutRef.current);
+      }
+    };
+  }, [startRecordingFeedback]);
+
+  useEffect(() => {
+    const previousValueKey = previousFeedbackValueKeyRef.current;
+    previousFeedbackValueKeyRef.current = feedbackValueKey;
+
+    if (
+      previousValueKey === null ||
+      previousValueKey === feedbackValueKey ||
+      !isPlaying ||
+      !playbackFeedbackEnabled
+    ) {
+      return;
+    }
+
+    startRecordingFeedback();
+  }, [feedbackValueKey, isPlaying, playbackFeedbackEnabled, startRecordingFeedback]);
 
   const applyOnceForDrag = useCallback(() => {
     const session = keyframeToggleDragSession;
@@ -107,6 +187,13 @@ function KeyframeStopwatchButton({
     onApply(mode);
   }, [dragId, mode, onApply]);
 
+  const handleContextMenu = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    endKeyframeToggleDrag();
+    onApply('disable');
+  }, [onApply]);
+
   const handlePointerEnter = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
     const session = keyframeToggleDragSession;
     if (!session) return;
@@ -134,10 +221,12 @@ function KeyframeStopwatchButton({
 
   return (
     <button
+      ref={buttonRef}
       className={className}
       onPointerDown={handlePointerDown}
       onPointerEnter={handlePointerEnter}
       onClick={handleClick}
+      onContextMenu={handleContextMenu}
       title={title}
     >
       <StopwatchIcon />
@@ -165,9 +254,12 @@ export function KeyframeToggle({ clipId, property, value }: KeyframeToggleProps)
   return (
     <KeyframeStopwatchButton
       dragId={`${clipId}:${property}`}
-      mode={recording || hasKfs ? 'disable' : 'enable'}
+      mode="enable"
       className={`keyframe-toggle ${recording ? 'recording' : ''} ${hasKfs ? 'has-keyframes' : ''}`}
-      title={recording ? 'Stop recording keyframes' : hasKfs ? 'Enable keyframe recording' : 'Add keyframe'}
+      feedbackIds={getKeyframeRecordingFeedbackIds(clipId, [property])}
+      feedbackValues={[value]}
+      playbackFeedbackEnabled={recording || hasKfs}
+      title={recording || hasKfs ? 'Add keyframe (right-click to disable)' : 'Add keyframe'}
       onApply={handleApply}
     />
   );
@@ -209,9 +301,16 @@ export function ScaleKeyframeToggle({
   return (
     <KeyframeStopwatchButton
       dragId={`${clipId}:scale:${scaleZ !== undefined ? 'xyz' : 'xy'}`}
-      mode={anyRecording || anyHasKfs ? 'disable' : 'enable'}
+      mode="enable"
       className={`keyframe-toggle ${anyRecording ? 'recording' : ''} ${anyHasKfs ? 'has-keyframes' : ''}`}
-      title={anyRecording ? 'Stop recording scale keyframes' : anyHasKfs ? 'Enable scale keyframe recording' : 'Add scale keyframes'}
+      feedbackIds={getKeyframeRecordingFeedbackIds(clipId, [
+        'scale.x',
+        'scale.y',
+        ...(scaleZ !== undefined ? ['scale.z' as AnimatableProperty] : []),
+      ])}
+      feedbackValues={[scaleX, scaleY, ...(scaleZ !== undefined ? [scaleZ] : [])]}
+      playbackFeedbackEnabled={anyRecording || anyHasKfs}
+      title={anyRecording || anyHasKfs ? 'Add scale keyframes (right-click to disable)' : 'Add scale keyframes'}
       onApply={handleApply}
     />
   );
@@ -242,9 +341,12 @@ export function PositionKeyframeToggle({ clipId, x, y, z }: { clipId: string; x:
   return (
     <KeyframeStopwatchButton
       dragId={`${clipId}:position`}
-      mode={anyRecording || anyHasKfs ? 'disable' : 'enable'}
+      mode="enable"
       className={`keyframe-toggle ${anyRecording ? 'recording' : ''} ${anyHasKfs ? 'has-keyframes' : ''}`}
-      title={anyRecording ? 'Stop recording position keyframes' : anyHasKfs ? 'Enable position keyframe recording' : 'Add position keyframes'}
+      feedbackIds={getKeyframeRecordingFeedbackIds(clipId, ['position.x', 'position.y', 'position.z'])}
+      feedbackValues={[x, y, z]}
+      playbackFeedbackEnabled={anyRecording || anyHasKfs}
+      title={anyRecording || anyHasKfs ? 'Add position keyframes (right-click to disable)' : 'Add position keyframes'}
       onApply={handleApply}
     />
   );
@@ -275,9 +377,12 @@ export function CameraPositionKeyframeToggle({ clipId, x, y, z }: { clipId: stri
   return (
     <KeyframeStopwatchButton
       dragId={`${clipId}:camera-position`}
-      mode={anyRecording || anyHasKfs ? 'disable' : 'enable'}
+      mode="enable"
       className={`keyframe-toggle ${anyRecording ? 'recording' : ''} ${anyHasKfs ? 'has-keyframes' : ''}`}
-      title={anyRecording ? 'Stop recording camera position keyframes' : anyHasKfs ? 'Enable camera position keyframe recording' : 'Add camera position keyframes'}
+      feedbackIds={getKeyframeRecordingFeedbackIds(clipId, ['position.x', 'position.y', 'scale.z'])}
+      feedbackValues={[x, y, z]}
+      playbackFeedbackEnabled={anyRecording || anyHasKfs}
+      title={anyRecording || anyHasKfs ? 'Add camera position keyframes (right-click to disable)' : 'Add camera position keyframes'}
       onApply={handleApply}
     />
   );
@@ -308,9 +413,12 @@ export function RotationKeyframeToggle({ clipId, x, y, z }: { clipId: string; x:
   return (
     <KeyframeStopwatchButton
       dragId={`${clipId}:rotation`}
-      mode={anyRecording || anyHasKfs ? 'disable' : 'enable'}
+      mode="enable"
       className={`keyframe-toggle ${anyRecording ? 'recording' : ''} ${anyHasKfs ? 'has-keyframes' : ''}`}
-      title={anyRecording ? 'Stop recording rotation keyframes' : anyHasKfs ? 'Enable rotation keyframe recording' : 'Add rotation keyframes'}
+      feedbackIds={getKeyframeRecordingFeedbackIds(clipId, ['rotation.x', 'rotation.y', 'rotation.z'])}
+      feedbackValues={[x, y, z]}
+      playbackFeedbackEnabled={anyRecording || anyHasKfs}
+      title={anyRecording || anyHasKfs ? 'Add rotation keyframes (right-click to disable)' : 'Add rotation keyframes'}
       onApply={handleApply}
     />
   );
@@ -516,9 +624,12 @@ export function EffectKeyframeToggle({ clipId, effectId, paramName, value }: { c
   return (
     <KeyframeStopwatchButton
       dragId={`${clipId}:${property}`}
-      mode={recording || hasKfs ? 'disable' : 'enable'}
+      mode="enable"
       className={`keyframe-toggle ${recording ? 'recording' : ''} ${hasKfs ? 'has-keyframes' : ''}`}
-      title={recording ? 'Stop recording keyframes' : hasKfs ? 'Enable keyframe recording' : 'Add keyframe'}
+      feedbackIds={getKeyframeRecordingFeedbackIds(clipId, [property])}
+      feedbackValues={[value]}
+      playbackFeedbackEnabled={recording || hasKfs}
+      title={recording || hasKfs ? 'Add keyframe (right-click to disable)' : 'Add keyframe'}
       onApply={handleApply}
     />
   );
@@ -547,9 +658,14 @@ export function EQKeyframeToggle({ clipId, effectId, eqBands }: { clipId: string
   return (
     <KeyframeStopwatchButton
       dragId={`${clipId}:effect:${effectId}:eq`}
-      mode={anyRecording || anyHasKfs ? 'disable' : 'enable'}
+      mode="enable"
       className={`keyframe-toggle ${anyRecording ? 'recording' : ''} ${anyHasKfs ? 'has-keyframes' : ''}`}
-      title={anyRecording ? 'Stop recording EQ keyframes' : anyHasKfs ? 'Enable EQ keyframe recording' : 'Add EQ keyframes'}
+      feedbackIds={EQ_BAND_PARAMS.map(param => (
+        getKeyframeRecordingFeedbackId(clipId, createEffectProperty(effectId, param))
+      ))}
+      feedbackValues={eqBands}
+      playbackFeedbackEnabled={anyRecording || anyHasKfs}
+      title={anyRecording || anyHasKfs ? 'Add EQ keyframes (right-click to disable)' : 'Add EQ keyframes'}
       onApply={handleApply}
     />
   );

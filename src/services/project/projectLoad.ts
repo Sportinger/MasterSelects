@@ -5,6 +5,11 @@ import { engine } from '../../engine/WebGPUEngine';
 import { useMediaStore, type MediaFile, type Composition, type MediaFolder } from '../../stores/mediaStore';
 import { getMediaInfo } from '../../stores/mediaStore/helpers/mediaInfoHelpers';
 import { createThumbnail } from '../../stores/mediaStore/helpers/thumbnailHelpers';
+import {
+  getExpectedProxyFps,
+  getProxyProgressFromFrameIndices,
+  isProxyFrameIndexSetComplete,
+} from '../../stores/mediaStore/helpers/proxyCompleteness';
 import { updateTimelineClips } from '../../stores/mediaStore/slices/fileManageSlice';
 import { useTimelineStore } from '../../stores/timeline';
 import { useYouTubeStore } from '../../stores/youtubeStore';
@@ -438,6 +443,21 @@ async function convertProjectMediaToStore(
       } catch { /* no analysis file */ }
     }
 
+    let proxyStatus: MediaFile['proxyStatus'] = 'none';
+    let proxyFrameCount: number | undefined;
+    let proxyProgress = 0;
+    let proxyFps: number | undefined;
+    if (pm.type === 'video' && pm.hasProxy && projectFileService.isProjectOpen()) {
+      const proxyStorageKey = pm.fileHash || pm.id;
+      const frameIndices = await projectFileService.getProxyFrameIndices(proxyStorageKey);
+      if (frameIndices.size > 0) {
+        proxyFps = getExpectedProxyFps(pm.frameRate);
+        proxyStatus = isProxyFrameIndexSetComplete(frameIndices, pm.duration, proxyFps) ? 'ready' : 'none';
+        proxyFrameCount = frameIndices.size;
+        proxyProgress = getProxyProgressFromFrameIndices(frameIndices, pm.duration, proxyFps);
+      }
+    }
+
     files.push({
       id: pm.id,
       name: pm.name,
@@ -462,11 +482,15 @@ async function convertProjectMediaToStore(
       splatFrameCount: pm.splatFrameCount ?? gaussianSplatSequence?.frameCount,
       modelSequence,
       gaussianSplatSequence,
-      proxyStatus: pm.hasProxy ? 'ready' : 'none',
+      proxyStatus,
+      proxyFrameCount,
+      proxyFps: proxyStatus === 'ready' ? proxyFps : undefined,
+      proxyProgress,
       hasFileHandle: !!handle || (!!representativeAbsolutePath && projectFileService.activeBackend === 'native'),
       filePath: pm.sourcePath,
       absolutePath: representativeAbsolutePath,
       projectPath: representativeProjectPath,
+      fileHash: pm.fileHash,
       vectorAnimation: pm.vectorAnimation,
       labelColor: pm.labelColor as import('../../stores/mediaStore/types').LabelColor | undefined,
       transcriptStatus,

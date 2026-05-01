@@ -527,7 +527,7 @@ describe('clipSlice', () => {
   // ========== toggle3D ==========
 
   describe('toggle3D', () => {
-    it('offsets video planes behind the scene target when enabling 3D from default Z', () => {
+    it('preserves default video plane Z when enabling 3D', () => {
       const clip = createMockClip({
         id: 'clip-1',
         trackId: 'video-1',
@@ -539,7 +539,7 @@ describe('clipSlice', () => {
       const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
 
       expect(updated.is3D).toBe(true);
-      expect(updated.transform.position).toEqual({ x: 0, y: 0, z: -0.5 });
+      expect(updated.transform.position).toEqual({ x: 0, y: 0, z: 0 });
       expect(updated.transform.scale).toEqual({ x: 1, y: 1 });
       expect(updated.transform.rotation).toEqual({ x: 0, y: 0, z: 0 });
     });

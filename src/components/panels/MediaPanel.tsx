@@ -10,6 +10,7 @@ import { LabelColorPicker } from './media/LabelColorPicker';
 import { getItemImportProgress, isImportedMediaFileItem } from './media/itemTypeGuards';
 import { handleSubmenuHover, handleSubmenuLeave } from './media/submenuPosition';
 import { collectDroppedMediaFiles, planDroppedMediaImports } from './media/dropImport';
+import { isProxyFrameCountComplete } from '../../stores/mediaStore/helpers/proxyCompleteness';
 
 const log = Logger.create('MediaPanel');
 import { useMediaStore } from '../../stores/mediaStore';
@@ -1862,8 +1863,17 @@ export function MediaPanel() {
                 {importProgress}%
               </span>
             )}
-            {'proxyStatus' in item && item.proxyStatus === 'ready' && (
+            {'proxyStatus' in item &&
+              item.proxyStatus === 'ready' &&
+              isProxyFrameCountComplete(
+                (item as MediaFile).proxyFrameCount,
+                (item as MediaFile).duration,
+                (item as MediaFile).proxyFps ?? (item as MediaFile).fps
+              ) && (
               <span className="media-item-proxy-badge" title="Proxy generated">P</span>
+            )}
+            {'proxyStatus' in item && item.proxyStatus === 'error' && (
+              <span className="media-item-proxy-error" title="Proxy generation failed. Right-click to retry.">P!</span>
             )}
             {'proxyStatus' in item && item.proxyStatus === 'generating' && (
               <span className="media-item-proxy-generating" title={`Generating proxy: ${(item as MediaFile).proxyProgress || 0}%`}>

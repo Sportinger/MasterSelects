@@ -1,10 +1,12 @@
-import { fireEvent, render } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TransformTab } from '../../src/components/panels/properties/TransformTab';
+import { KEYFRAME_RECORDING_FEEDBACK_EVENT } from '../../src/utils/keyframeRecordingFeedback';
 import type { BlendMode } from '../../src/types';
 
 const mockState = vi.hoisted(() => ({
   sourceType: 'gaussian-splat',
+  isPlaying: false,
   setPropertyValue: vi.fn(),
   updateClipTransform: vi.fn(),
   toggle3D: vi.fn(),
@@ -27,6 +29,7 @@ vi.mock('../../src/stores/timeline', () => {
         },
         wireframe: false,
       }],
+      isPlaying: mockState.isPlaying,
     })),
     {
       getState: vi.fn(() => ({
@@ -95,14 +98,21 @@ function numberTexts(container: HTMLElement): string[] {
 }
 
 describe('TransformTab position units', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     mockState.sourceType = 'gaussian-splat';
+    mockState.isPlaying = false;
     mockState.setPropertyValue.mockClear();
     mockState.updateClipTransform.mockClear();
     mockState.toggle3D.mockClear();
     mockState.updateClip.mockClear();
     mockState.isRecording.mockClear();
     mockState.hasKeyframes.mockClear();
+    mockState.isRecording.mockImplementation(() => false);
+    mockState.hasKeyframes.mockImplementation(() => false);
     mockState.addKeyframe.mockClear();
     mockState.toggleKeyframeRecording.mockClear();
     mockState.disablePropertyKeyframes.mockClear();
@@ -165,5 +175,104 @@ describe('TransformTab position units', () => {
     expect(numberTexts(container)).toContain('-0.250');
     expect(numberTexts(container)).toContain('2.000');
     expect(numberTexts(container)).not.toContain('480.0');
+  });
+
+  it('left-clicking an active stopwatch adds a keyframe instead of disabling it', () => {
+    mockState.isRecording.mockImplementation(() => true);
+
+    const { container } = render(
+      <TransformTab
+        clipId="clip-1"
+        transform={makeTransform({ x: 0, y: 0, z: 0 })}
+      />,
+    );
+
+    const stopwatch = container.querySelector('.keyframe-toggle') as HTMLButtonElement;
+    fireEvent.pointerDown(stopwatch, { button: 0, buttons: 1, pointerId: 1 });
+    fireEvent.pointerUp(window, { pointerId: 1 });
+
+    expect(mockState.addKeyframe).toHaveBeenCalledWith('clip-1', 'opacity', 1);
+    expect(mockState.disablePropertyKeyframes).not.toHaveBeenCalled();
+  });
+
+  it('right-clicking a stopwatch disables its keyframes', () => {
+    mockState.isRecording.mockImplementation(() => true);
+
+    const { container } = render(
+      <TransformTab
+        clipId="clip-1"
+        transform={makeTransform({ x: 0, y: 0, z: 0 })}
+      />,
+    );
+
+    const stopwatch = container.querySelector('.keyframe-toggle') as HTMLButtonElement;
+    fireEvent.contextMenu(stopwatch);
+
+    expect(mockState.disablePropertyKeyframes).toHaveBeenCalledWith('clip-1', 'opacity', 1);
+    expect(mockState.addKeyframe).not.toHaveBeenCalled();
+  });
+
+  it('shows stopwatch feedback while playback writes a keyed value', () => {
+    vi.useFakeTimers();
+    mockState.hasKeyframes.mockImplementation((_, property: string) => property === 'opacity');
+
+    const { container } = render(
+      <TransformTab
+        clipId="clip-1"
+        transform={makeTransform({ x: 0, y: 0, z: 0 })}
+      />,
+    );
+
+    const stopwatch = container.querySelector('.keyframe-toggle') as HTMLButtonElement;
+    expect(stopwatch).not.toHaveClass('recording-feedback');
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(KEYFRAME_RECORDING_FEEDBACK_EVENT, {
+        detail: { clipId: 'clip-1', property: 'opacity' },
+      }));
+    });
+
+    expect(stopwatch).toHaveClass('recording-feedback');
+
+    act(() => {
+      vi.advanceTimersByTime(900);
+    });
+
+    expect(stopwatch).not.toHaveClass('recording-feedback');
+  });
+
+  it('shows stopwatch feedback when playback changes the displayed keyed value', () => {
+    vi.useFakeTimers();
+    mockState.isPlaying = true;
+    mockState.hasKeyframes.mockImplementation((_, property: string) => property === 'opacity');
+
+    const view = render(
+      <TransformTab
+        clipId="clip-1"
+        transform={makeTransform({ x: 0, y: 0, z: 0 })}
+      />,
+    );
+
+    let stopwatch = view.container.querySelector('.keyframe-toggle') as HTMLButtonElement;
+    expect(stopwatch).not.toHaveClass('recording-feedback');
+
+    view.rerender(
+      <TransformTab
+        clipId="clip-1"
+        transform={{
+          ...makeTransform({ x: 0, y: 0, z: 0 }),
+          opacity: 0.5,
+        }}
+      />,
+    );
+
+    stopwatch = view.container.querySelector('.keyframe-toggle') as HTMLButtonElement;
+    expect(stopwatch).toHaveClass('recording-feedback');
+
+    act(() => {
+      vi.advanceTimersByTime(900);
+    });
+
+    expect(stopwatch).not.toHaveClass('recording-feedback');
   });
 });

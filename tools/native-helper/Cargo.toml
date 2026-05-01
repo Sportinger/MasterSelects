@@ -1,6 +1,6 @@
 [package]
 name = "masterselects-helper"
-version = "0.3.13"
+version = "0.3.14"
 edition = "2021"
 authors = ["MasterSelects Team"]
 description = "Local control, storage, and download helper for MasterSelects"

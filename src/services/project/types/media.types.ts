@@ -13,6 +13,7 @@ export interface ProjectMediaFile {
 
   // Path to copied file in project folder (e.g., "Raw/video.mp4")
   projectPath?: string;
+  fileHash?: string;
 
   // Metadata
   duration?: number;

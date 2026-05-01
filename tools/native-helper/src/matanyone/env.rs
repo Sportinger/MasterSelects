@@ -719,14 +719,14 @@ async fn install_pytorch(
 ) -> Result<()> {
     let venv_python = get_venv_python();
 
-    // Check if torch is already installed
-    if check_package_importable(&venv_python, "torch").await {
-        info!("PyTorch already installed");
+    // Check if torch is already installed and usable for the current GPU.
+    if validate_pytorch_runtime(&venv_python, cuda.available).await.is_ok() {
+        info!("PyTorch already installed and compatible");
         progress(SetupStep::InstallPyTorch, 1.0, "PyTorch already installed");
         return Ok(());
     }
 
-    let index_url = select_pytorch_index_url(cuda);
+    let index_urls = pytorch_index_candidates(cuda);
     progress(
         SetupStep::InstallPyTorch,
         0.0,
@@ -736,59 +736,110 @@ async fn install_pytorch(
         ),
     );
 
-    info!("Installing PyTorch from {}", index_url);
-
-    let mut args = vec![
-        "pip",
-        "install",
-        "torch",
-        "torchvision",
-        "--index-url",
-        &index_url,
-        "-p",
-    ];
     let venv_str = get_venv_dir().to_string_lossy().to_string();
-    args.push(&venv_str);
+    let mut last_error = String::new();
 
-    let output = silent_cmd(uv_path)
-        .args(&args)
-        .output()
-        .await
-        .context("Failed to run uv pip install for PyTorch")?;
+    for (idx, index_url) in index_urls.iter().enumerate() {
+        info!("Installing PyTorch from {}", index_url);
 
-    if !output.status.success() {
+        let args = [
+            "pip",
+            "install",
+            "torch",
+            "torchvision",
+            "--upgrade",
+            "--index-url",
+            index_url.as_str(),
+            "-p",
+            venv_str.as_str(),
+        ];
+
+        let output = silent_cmd(uv_path)
+            .args(args)
+            .output()
+            .await
+            .context("Failed to run uv pip install for PyTorch")?;
+
+        if output.status.success() {
+            if let Err(reason) = validate_pytorch_runtime(&venv_python, cuda.available).await {
+                last_error = format!(
+                    "PyTorch installed from {} but runtime validation failed: {}",
+                    index_url, reason
+                );
+                warn!("{}", last_error);
+                continue;
+            }
+
+            progress(SetupStep::InstallPyTorch, 1.0, "PyTorch installed");
+            info!("PyTorch installed successfully");
+            return Ok(());
+        }
+
         let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("Failed to install PyTorch: {}", stderr.trim());
+        last_error = stderr.trim().to_string();
+        warn!(
+            "Failed to install PyTorch from {}{}: {}",
+            index_url,
+            if idx + 1 < index_urls.len() {
+                ", trying fallback"
+            } else {
+                ""
+            },
+            last_error
+        );
     }
 
-    progress(SetupStep::InstallPyTorch, 1.0, "PyTorch installed");
-    info!("PyTorch installed successfully");
-    Ok(())
+    bail!("Failed to install PyTorch: {}", last_error);
 }
 
-/// Select the appropriate PyTorch index URL based on CUDA availability.
-fn select_pytorch_index_url(cuda: &CudaInfo) -> String {
+/// Select PyTorch index URLs, ordered from best match to fallback.
+fn pytorch_index_candidates(cuda: &CudaInfo) -> Vec<String> {
     if !cuda.available {
-        return "https://download.pytorch.org/whl/cpu".to_string();
+        return vec!["https://download.pytorch.org/whl/cpu".to_string()];
     }
 
     // Pick the best CUDA wheel version based on the driver's CUDA version
-    match cuda.version.as_deref() {
-        Some(v) if v.starts_with("12.") => {
-            "https://download.pytorch.org/whl/cu121".to_string()
+    let mut candidates = match cuda.version.as_deref().and_then(parse_cuda_version) {
+        Some((major, _minor)) if major >= 13 => {
+            vec![
+                "https://download.pytorch.org/whl/cu130".to_string(),
+                "https://download.pytorch.org/whl/cu128".to_string(),
+            ]
         }
-        Some(v) if v.starts_with("11.8") || v.starts_with("11.9") => {
-            "https://download.pytorch.org/whl/cu118".to_string()
+        Some((12, minor)) if minor >= 8 => {
+            vec!["https://download.pytorch.org/whl/cu128".to_string()]
         }
-        Some(v) if v.starts_with("11.") => {
-            // Older CUDA 11.x — cu118 wheels should still work
-            "https://download.pytorch.org/whl/cu118".to_string()
+        Some((12, minor)) if minor >= 6 => {
+            vec![
+                "https://download.pytorch.org/whl/cu126".to_string(),
+                "https://download.pytorch.org/whl/cu121".to_string(),
+            ]
+        }
+        Some((12, _)) => {
+            vec!["https://download.pytorch.org/whl/cu121".to_string()]
+        }
+        Some((11, _)) => {
+            vec!["https://download.pytorch.org/whl/cu118".to_string()]
+        }
+        Some(_) => {
+            // Unknown CUDA major; use CPU wheels.
+            vec!["https://download.pytorch.org/whl/cpu".to_string()]
         }
         _ => {
-            // Default to CUDA 12.1 for modern drivers
-            "https://download.pytorch.org/whl/cu121".to_string()
+            vec!["https://download.pytorch.org/whl/cu128".to_string()]
         }
-    }
+    };
+
+    candidates.dedup();
+    candidates
+}
+
+/// Parse a CUDA version string like `"12.8"` or `"13.2"`.
+fn parse_cuda_version(version: &str) -> Option<(u32, u32)> {
+    let mut parts = version.split('.');
+    let major = parts.next()?.parse::<u32>().ok()?;
+    let minor = parts.next().unwrap_or("0").parse::<u32>().ok()?;
+    Some((major, minor))
 }
 
 /// Download and install MatAnyone2 from GitHub.
@@ -928,6 +979,63 @@ async fn patch_cchardet_dependency(project_dir: &Path) {
 // Validation
 // ---------------------------------------------------------------------------
 
+const PYTORCH_RUNTIME_CHECK: &str = r#"
+import os
+import sys
+import torch
+
+require_cuda = os.environ.get("MASTERSELECTS_REQUIRE_CUDA") == "1"
+if require_cuda and not torch.cuda.is_available():
+    print("CUDA build is required but torch.cuda.is_available() is false", file=sys.stderr)
+    sys.exit(2)
+
+if torch.cuda.is_available():
+    major, minor = torch.cuda.get_device_capability(0)
+    arch = f"sm_{major}{minor}"
+    arch_list = set(torch.cuda.get_arch_list())
+    if arch_list and arch not in arch_list:
+        supported = ",".join(sorted(arch_list))
+        print(f"GPU architecture {arch} is not supported by this PyTorch wheel ({supported})", file=sys.stderr)
+        sys.exit(3)
+
+print("ok")
+"#;
+
+async fn validate_pytorch_runtime(python: &Path, require_cuda: bool) -> Result<(), String> {
+    if !python.exists() {
+        return Err(format!("Python not found at {}", python.display()));
+    }
+
+    let mut cmd = silent_cmd(python);
+    if require_cuda {
+        cmd.env("MASTERSELECTS_REQUIRE_CUDA", "1");
+    }
+
+    let output = cmd
+        .args(["-c", PYTORCH_RUNTIME_CHECK])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run PyTorch validation: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if output.status.success() && stdout.trim().contains("ok") {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let message = [stdout.trim(), stderr.trim()]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    Err(if message.is_empty() {
+        "PyTorch validation failed without output".to_string()
+    } else {
+        message
+    })
+}
+
 /// Validate that the full environment is operational by importing MatAnyone2.
 async fn validate_installation(
     progress: &impl Fn(SetupStep, f32, &str),
@@ -941,6 +1049,11 @@ async fn validate_installation(
             "Venv Python not found at {}",
             venv_python.display()
         );
+    }
+
+    let cuda = detect_cuda().await;
+    if let Err(reason) = validate_pytorch_runtime(&venv_python, cuda.available).await {
+        bail!("PyTorch runtime validation failed: {}", reason);
     }
 
     let output = silent_cmd(&venv_python)
@@ -998,7 +1111,7 @@ fn check_deps_installed_sync() -> bool {
         return false;
     }
     match silent_cmd_std(&python)
-        .args(["-c", "import torch; print('ok')"])
+        .args(["-c", PYTORCH_RUNTIME_CHECK])
         .output()
     {
         Ok(output) => {
@@ -1141,6 +1254,14 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_cuda_version() {
+        assert_eq!(parse_cuda_version("13.2"), Some((13, 2)));
+        assert_eq!(parse_cuda_version("12.8"), Some((12, 8)));
+        assert_eq!(parse_cuda_version("12"), Some((12, 0)));
+        assert_eq!(parse_cuda_version("CUDA 12.8"), None);
+    }
+
+    #[test]
     fn test_is_version_gte() {
         assert!(is_version_gte("3.12.2", 3, 10));
         assert!(is_version_gte("3.10.0", 3, 10));
@@ -1166,13 +1287,43 @@ mod tests {
 
     #[test]
     fn test_select_pytorch_index_url() {
+        let cuda_132 = CudaInfo {
+            available: true,
+            version: Some("13.2".to_string()),
+            gpu_name: None,
+            vram_mb: None,
+        };
+        assert_eq!(
+            pytorch_index_candidates(&cuda_132),
+            vec![
+                "https://download.pytorch.org/whl/cu130".to_string(),
+                "https://download.pytorch.org/whl/cu128".to_string(),
+            ]
+        );
+
+        let cuda_128 = CudaInfo {
+            available: true,
+            version: Some("12.8".to_string()),
+            gpu_name: None,
+            vram_mb: None,
+        };
+        assert!(pytorch_index_candidates(&cuda_128)[0].contains("cu128"));
+
+        let cuda_126 = CudaInfo {
+            available: true,
+            version: Some("12.6".to_string()),
+            gpu_name: None,
+            vram_mb: None,
+        };
+        assert!(pytorch_index_candidates(&cuda_126)[0].contains("cu126"));
+
         let cuda_121 = CudaInfo {
             available: true,
             version: Some("12.1".to_string()),
             gpu_name: None,
             vram_mb: None,
         };
-        assert!(select_pytorch_index_url(&cuda_121).contains("cu121"));
+        assert!(pytorch_index_candidates(&cuda_121)[0].contains("cu121"));
 
         let cuda_118 = CudaInfo {
             available: true,
@@ -1180,7 +1331,7 @@ mod tests {
             gpu_name: None,
             vram_mb: None,
         };
-        assert!(select_pytorch_index_url(&cuda_118).contains("cu118"));
+        assert!(pytorch_index_candidates(&cuda_118)[0].contains("cu118"));
 
         let no_cuda = CudaInfo {
             available: false,
@@ -1188,7 +1339,7 @@ mod tests {
             gpu_name: None,
             vram_mb: None,
         };
-        assert!(select_pytorch_index_url(&no_cuda).contains("cpu"));
+        assert!(pytorch_index_candidates(&no_cuda)[0].contains("cpu"));
     }
 
     #[test]

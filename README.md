@@ -15,11 +15,11 @@
 <p>
   GPU-first editing with <b>30 effects</b>, <b>37 blend modes</b>, <b>79 AI tools</b>, <b>native WebGPU 3D</b>, and only <b>15 runtime dependencies</b>.<br>
   Built from scratch in <b>2,700+ lines of WGSL</b> and <b>165k lines of TypeScript</b>.<br>
-  Import <b>.lottie, Lottie JSON, OBJ, glTF, GLB, PLY, SPLAT, KSPLAT, SPZ, SOG, LCC</b> assets directly into the timeline.
+  Import <b>.lottie, Lottie JSON, OBJ, glTF, GLB, PLY, SPLAT, KSPLAT, SPZ, SOG, LCC</b> assets and play <b>PLY / GLB sequences</b> directly on the timeline.
 </p>
 
 <p>
-  <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-1.6.7-blue.svg" alt="Version"></a>
+  <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-1.6.9-blue.svg" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
   <a href="https://app.fossa.com/projects/custom%2b61097%2fmasterselects"><img src="https://app.fossa.com/api/projects/custom%2b61097%2fmasterselects.svg?type=shield" alt="FOSSA Status"></a>
 </p>
@@ -57,6 +57,7 @@ Decoding depends on what the **browser** supports — the container is just the 
 <tr><td><b>Image</b></td><td>PNG, JPG/JPEG, WebP, GIF, BMP, SVG</td></tr>
 <tr><td><b>Vector animation</b></td><td><code>.lottie</code> packages and Lottie JSON files (content-sniffed)</td></tr>
 <tr><td><b>3D Models</b></td><td>OBJ, glTF, GLB - rendered through the native WebGPU shared-scene path</td></tr>
+<tr><td><b>3D sequences</b></td><td>PLY and GLB frame sequences played as timeline media</td></tr>
 <tr><td><b>Gaussian Splats</b></td><td>PLY, compressed PLY, SPLAT, KSPLAT, SPZ, SOG, LCC, SOG-style ZIP payloads</td></tr>
 <tr><td><b>Download</b></td><td>YouTube, TikTok, Instagram, Twitter/X, Vimeo + <a href="https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md">all yt-dlp sites</a> via Native Helper</td></tr>
 <tr><th colspan="2">Export (Encode)</th></tr>

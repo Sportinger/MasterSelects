@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createTestTimelineStore } from '../../helpers/storeFactory';
 import { createMockClip } from '../../helpers/mockData';
+import { KEYFRAME_RECORDING_FEEDBACK_EVENT } from '../../../src/utils/keyframeRecordingFeedback';
 
 describe('keyframeSlice', () => {
   let store: ReturnType<typeof createTestTimelineStore>;
@@ -718,6 +719,25 @@ describe('keyframeSlice', () => {
     expect(kfs).toBeDefined();
     expect(kfs!.length).toBe(1);
     expect(kfs![0].value).toBe(0.7);
+  });
+
+  it('setPropertyValue: emits feedback when playback writes a keyed value', () => {
+    const feedbackHandler = vi.fn();
+    window.addEventListener(KEYFRAME_RECORDING_FEEDBACK_EVENT, feedbackHandler);
+
+    try {
+      store.setState({ isPlaying: true, playheadPosition: 3 });
+      store.getState().toggleKeyframeRecording('clip-1', 'opacity');
+      store.getState().setPropertyValue('clip-1', 'opacity', 0.7);
+    } finally {
+      window.removeEventListener(KEYFRAME_RECORDING_FEEDBACK_EVENT, feedbackHandler);
+    }
+
+    expect(feedbackHandler).toHaveBeenCalledTimes(1);
+    expect((feedbackHandler.mock.calls[0][0] as CustomEvent).detail).toEqual({
+      clipId: 'clip-1',
+      property: 'opacity',
+    });
   });
 
   it('setPropertyValue: updates static value when not recording and no keyframes', () => {

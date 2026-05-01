@@ -9,6 +9,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useFlashBoardStore } from '../../stores/flashboardStore';
 import { getExportStoreData, useExportStore } from '../../stores/exportStore';
 import { useMIDIStore } from '../../stores/midiStore';
+import { isProxyFrameCountComplete } from '../../stores/mediaStore/helpers/proxyCompleteness';
 import type {
   FlashBoardGenerationMetadata,
   FlashBoardStoreState,
@@ -112,6 +113,7 @@ function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
     type: file.type as 'video' | 'audio' | 'image' | 'model' | 'gaussian-splat' | 'lottie' | 'rive',
     sourcePath: file.filePath || file.name,
     projectPath: file.projectPath,
+    fileHash: file.fileHash,
     duration: file.duration,
     width: file.width,
     height: file.height,
@@ -125,7 +127,9 @@ function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
     splatCount: file.splatCount ?? file.gaussianSplatSequence?.frames[0]?.splatCount,
     totalSplatCount: file.totalSplatCount ?? file.gaussianSplatSequence?.totalSplatCount,
     splatFrameCount: file.splatFrameCount ?? file.gaussianSplatSequence?.frameCount,
-    hasProxy: file.proxyStatus === 'ready',
+    hasProxy:
+      file.proxyStatus === 'ready' &&
+      isProxyFrameCountComplete(file.proxyFrameCount, file.duration, file.proxyFps ?? file.fps),
     vectorAnimation: file.vectorAnimation,
     modelSequence: serializeModelSequence(file.modelSequence),
     gaussianSplatSequence: serializeGaussianSplatSequence(file.gaussianSplatSequence),

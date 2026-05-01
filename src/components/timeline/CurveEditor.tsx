@@ -1,10 +1,13 @@
 // Curve Editor component for keyframe animation curves with bezier handles
 
-import React, { useCallback, useRef, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import type { AnimatableProperty, Keyframe, BezierHandle, EasingType } from '../../types';
 import { PRESET_BEZIER } from '../../utils/keyframeInterpolation';
 import { BEZIER_HANDLE_SIZE } from '../../stores/timeline/constants';
 import { useTimelineStore } from '../../stores/timeline';
+
+const CURVE_KEYFRAME_SNAP_THRESHOLD_PX = 10;
+const EMPTY_CLIP_KEYFRAMES: Keyframe[] = [];
 
 export interface CurveEditorProps {
   trackId: string;
@@ -127,7 +130,7 @@ function generateBezierPath(
 
 export const CurveEditor: React.FC<CurveEditorProps> = ({
   trackId: _trackId,
-  clipId: _clipId,
+  clipId,
   property,
   keyframes,
   clipStartTime,
@@ -154,7 +157,21 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
 
   const height = useTimelineStore(s => s.curveEditorHeight);
   const setCurveEditorHeight = useTimelineStore(s => s.setCurveEditorHeight);
+  const allClipKeyframes = useTimelineStore(s => s.clipKeyframes.get(clipId) ?? EMPTY_CLIP_KEYFRAMES);
   const padding = useMemo(() => ({ top: 20, right: 10, bottom: 20, left: 10 }), []);
+
+  const getClampedSvgPoint = useCallback((clientX: number, clientY: number) => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+
+    const svgWidth = rect.width || width;
+    const svgHeight = rect.height || height;
+
+    return {
+      x: Math.max(0, Math.min(clientX - rect.left, svgWidth)),
+      y: Math.max(0, Math.min(clientY - rect.top, svgHeight)),
+    };
+  }, [height, width]);
 
   // Sort keyframes by time
   const sortedKeyframes = useMemo(() =>
@@ -192,6 +209,25 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
     return valueRange.min + normalized * range;
   }, [valueRange, height, padding]);
 
+  const snapTimeToClipKeyframe = useCallback((time: number, keyframeId: string) => {
+    const targets = allClipKeyframes.length > 0 ? allClipKeyframes : sortedKeyframes;
+    const proposedPixel = timeToPixel(clipStartTime + time);
+    let snappedTime = time;
+    let bestDistancePx = CURVE_KEYFRAME_SNAP_THRESHOLD_PX;
+
+    for (const target of targets) {
+      if (target.id === keyframeId) continue;
+
+      const distancePx = Math.abs(timeToPixel(clipStartTime + target.time) - proposedPixel);
+      if (distancePx <= bestDistancePx) {
+        bestDistancePx = distancePx;
+        snappedTime = target.time;
+      }
+    }
+
+    return snappedTime;
+  }, [allClipKeyframes, sortedKeyframes, timeToPixel, clipStartTime]);
+
   // Generate grid lines with adaptive step size
   const gridLines = useMemo(() => {
     const lines: { y: number; value: number; major: boolean }[] = [];
@@ -211,6 +247,8 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
 
   // Handle mouse down on keyframe
   const handleKeyframeMouseDown = useCallback((e: React.MouseEvent, kf: Keyframe) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
     e.stopPropagation();
 
     const rect = svgRef.current?.getBoundingClientRect();
@@ -230,6 +268,8 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
 
   // Handle mouse down on bezier handle
   const handleHandleMouseDown = useCallback((e: React.MouseEvent, kf: Keyframe, handleType: 'in' | 'out') => {
+    if (e.button !== 0) return;
+    e.preventDefault();
     e.stopPropagation();
 
     const prevKf = sortedKeyframes.find((_k, i) =>
@@ -287,14 +327,13 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
   }, [sortedKeyframes, onUpdateBezierHandle]);
 
   // Handle mouse move
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+  const handleMouseMove = useCallback((clientX: number, clientY: number, shiftKey: boolean) => {
     if (!dragState) return;
 
-    const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect) return;
+    const point = getClampedSvgPoint(clientX, clientY);
+    if (!point) return;
 
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const { x, y } = point;
 
     if (dragState.type === 'keyframe') {
       // Move keyframe
@@ -302,9 +341,9 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
       let newValue = yToValue(y);
 
       // Constrain to horizontal or vertical if shift held
-      if (e.shiftKey) {
-        const dx = Math.abs(e.clientX - dragState.startX);
-        const dy = Math.abs(e.clientY - dragState.startY);
+      if (shiftKey) {
+        const dx = Math.abs(clientX - dragState.startX);
+        const dy = Math.abs(clientY - dragState.startY);
         if (dx > dy) {
           newValue = dragState.startValue;
         } else {
@@ -314,6 +353,9 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
 
       // Clamp time to clip duration
       newTime = Math.max(0, Math.min(newTime, clipDuration));
+      if (shiftKey) {
+        newTime = snapTimeToClipKeyframe(newTime, dragState.keyframeId);
+      }
 
       onMoveKeyframe(dragState.keyframeId, newTime, newValue);
     } else {
@@ -331,7 +373,7 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
         : Math.max(0, handleTime); // Out handle must be >= 0
 
       // Shift key: snap to horizontal (no vertical offset)
-      if (e.shiftKey) {
+      if (shiftKey) {
         handleValue = 0;
       }
 
@@ -340,12 +382,36 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
         y: handleValue,
       });
     }
-  }, [dragState, xToTime, yToValue, clipDuration, onMoveKeyframe, onUpdateBezierHandle, sortedKeyframes]);
+  }, [dragState, getClampedSvgPoint, xToTime, yToValue, clipDuration, onMoveKeyframe, onUpdateBezierHandle, sortedKeyframes, snapTimeToClipKeyframe]);
 
   // Handle mouse up
   const handleMouseUp = useCallback(() => {
     setDragState(null);
   }, []);
+
+  useEffect(() => {
+    if (!dragState) return;
+
+    const handleWindowMouseMove = (event: MouseEvent) => {
+      if ((event.buttons & 1) !== 1) {
+        setDragState(null);
+        return;
+      }
+
+      event.preventDefault();
+      handleMouseMove(event.clientX, event.clientY, event.shiftKey);
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('blur', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('blur', handleMouseUp);
+    };
+  }, [dragState, handleMouseMove, handleMouseUp]);
 
   // Handle click on empty area
   const handleSvgClick = useCallback((e: React.MouseEvent) => {
@@ -354,15 +420,24 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
     }
   }, [onSelectKeyframe]);
 
-  // Shift+wheel to resize curve editor height
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (e.shiftKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      const delta = e.deltaY > 0 ? 20 : -20;
-      setCurveEditorHeight(height + delta);
-    }
+  // Shift+wheel resizes only the curve editor. Use a native capture listener so
+  // the parent timeline wheel handler cannot scroll the timeline first.
+  const handleWheel = useCallback((e: WheelEvent) => {
+    if (!e.shiftKey) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    const delta = e.deltaY > 0 ? 20 : -20;
+    setCurveEditorHeight(height + delta);
   }, [height, setCurveEditorHeight]);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    svg.addEventListener('wheel', handleWheel, { capture: true, passive: false });
+    return () => svg.removeEventListener('wheel', handleWheel, true);
+  }, [handleWheel]);
 
   return (
     <svg
@@ -370,11 +445,7 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
       className="curve-editor-svg"
       width={width}
       height={height}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
       onClick={handleSvgClick}
-      onWheel={handleWheel}
     >
       {/* Background */}
       <rect x={0} y={0} width={width} height={height} fill="var(--bg-tertiary)" />

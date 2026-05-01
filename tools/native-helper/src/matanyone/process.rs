@@ -363,13 +363,10 @@ fn http_health_check(port: u16) -> bool {
         return false;
     }
 
-    let mut buf = [0u8; 1024];
-    let n = match stream.read(&mut buf) {
-        Ok(n) if n > 0 => n,
-        _ => return false,
-    };
-
-    let response = String::from_utf8_lossy(&buf[..n]);
+    let mut response = String::new();
+    if stream.read_to_string(&mut response).is_err() || response.is_empty() {
+        return false;
+    }
 
     // Check for a 200 status line and that the body contains "ready".
     response.contains("200") && response.contains("\"ready\"")
@@ -470,6 +467,31 @@ mod tests {
     fn test_health_check_fails_on_closed_port() {
         // An unoccupied port should fail the health check.
         assert!(!http_health_check(1));
+    }
+
+    #[test]
+    fn test_health_check_reads_split_response_body() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        use std::thread;
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request_buf = [0u8; 512];
+            let _ = stream.read(&mut request_buf);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n")
+                .unwrap();
+            stream.flush().unwrap();
+            thread::sleep(Duration::from_millis(50));
+            stream.write_all(br#"{"status":"ready"}"#).unwrap();
+        });
+
+        assert!(http_health_check(port));
+        handle.join().unwrap();
     }
 
     #[test]

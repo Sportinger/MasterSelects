@@ -11,6 +11,7 @@ import { VideoSyncManager } from './VideoSyncManager';
 import { AudioTrackSyncManager } from './AudioTrackSyncManager';
 import { proxyFrameCache } from '../proxyFrameCache';
 import { layerPlaybackManager } from '../layerPlaybackManager';
+import { engine } from '../../engine/WebGPUEngine';
 import { DEFAULT_TEXT_3D_PROPERTIES } from '../../stores/timeline/constants';
 import {
   canUseSharedPreviewRuntimeSession,
@@ -54,6 +55,7 @@ export class LayerBuilderService {
 
   // Proxy frame refs for fallback
   private proxyFramesRef = new Map<string, { frameIndex: number; image: HTMLImageElement }>();
+  private proxyLoadingFrames = new Set<string>();
 
   // Lookahead preloading
   private lastLookaheadTime = 0;
@@ -236,6 +238,8 @@ export class LayerBuilderService {
   invalidateCache(): void {
     this.layerCache.invalidate();
     this.transformCache.clear();
+    this.proxyFramesRef.clear();
+    this.proxyLoadingFrames.clear();
   }
 
   /**
@@ -765,23 +769,72 @@ export class LayerBuilderService {
 
     if (cachedFrame) {
       this.proxyFramesRef.set(cacheKey, { frameIndex, image: cachedFrame });
-      return this.buildImageLayerFromElement(clip, layerIndex, cachedFrame, clipTime, ctx, opacityOverride);
+      return this.buildImageLayerFromElement(clip, layerIndex, cachedFrame, clipTime, ctx, opacityOverride, {
+        displayedMediaTime: frameIndex / proxyFps,
+        targetMediaTime: clipTime,
+        previewPath: 'proxy-frame',
+        proxyFrameIndex: frameIndex,
+      });
     }
 
+    this.ensureProxyFrameLoaded(mediaFile.id, frameIndex, clipTime, proxyFps, cacheKey);
+
     // Try to get nearest cached frame for smooth scrubbing
-    const nearestFrame = proxyFrameCache.getNearestCachedFrame(mediaFile.id, frameIndex, 30);
+    const nearestFrame = proxyFrameCache.getNearestCachedFrameEntry(mediaFile.id, frameIndex, 30);
     if (nearestFrame) {
-      return this.buildImageLayerFromElement(clip, layerIndex, nearestFrame, clipTime, ctx, opacityOverride);
+      return this.buildImageLayerFromElement(
+        clip,
+        layerIndex,
+        nearestFrame.image,
+        clipTime,
+        ctx,
+        opacityOverride,
+        {
+          displayedMediaTime: nearestFrame.frameIndex / proxyFps,
+          targetMediaTime: clipTime,
+          previewPath: 'proxy-frame-nearest',
+          proxyFrameIndex: nearestFrame.frameIndex,
+        }
+      );
     }
 
     // Use previous cached frame as fallback
     const cached = this.proxyFramesRef.get(cacheKey);
     if (cached?.image) {
-      return this.buildImageLayerFromElement(clip, layerIndex, cached.image, clipTime, ctx, opacityOverride);
+      return this.buildImageLayerFromElement(clip, layerIndex, cached.image, clipTime, ctx, opacityOverride, {
+        displayedMediaTime: cached.frameIndex / proxyFps,
+        targetMediaTime: clipTime,
+        previewPath: 'proxy-frame-hold',
+        proxyFrameIndex: cached.frameIndex,
+      });
     }
 
     // No proxy frame available - return null to fall back to video
     return null;
+  }
+
+  private ensureProxyFrameLoaded(
+    mediaFileId: string,
+    frameIndex: number,
+    clipTime: number,
+    proxyFps: number,
+    cacheKey: string
+  ): void {
+    const loadKey = `${mediaFileId}_${frameIndex}`;
+    if (this.proxyLoadingFrames.has(loadKey)) return;
+
+    this.proxyLoadingFrames.add(loadKey);
+    proxyFrameCache
+      .getFrame(mediaFileId, clipTime, proxyFps)
+      .then((image) => {
+        if (image) {
+          this.proxyFramesRef.set(cacheKey, { frameIndex, image });
+          engine.requestRender();
+        }
+      })
+      .finally(() => {
+        this.proxyLoadingFrames.delete(loadKey);
+      });
   }
 
   /**
@@ -827,7 +880,13 @@ export class LayerBuilderService {
     imageElement: HTMLImageElement,
     localTime: number,
     ctx: FrameContext,
-    opacityOverride?: number
+    opacityOverride?: number,
+    timing?: {
+      displayedMediaTime: number;
+      targetMediaTime: number;
+      previewPath: string;
+      proxyFrameIndex?: number;
+    }
   ): Layer {
     const mediaFile = getMediaFileForClip(ctx, clip);
     const sourceMetadata = this.getLayerSourceMetadata(clip, mediaFile, {
@@ -852,7 +911,15 @@ export class LayerBuilderService {
       visible: true,
       opacity: finalOpacity,
       blendMode: transform.blendMode as BlendMode,
-      source: { type: 'image', imageElement, ...sourceMetadata },
+      source: {
+        type: 'image',
+        imageElement,
+        ...sourceMetadata,
+        mediaTime: timing?.displayedMediaTime,
+        targetMediaTime: timing?.targetMediaTime,
+        previewPath: timing?.previewPath,
+        proxyFrameIndex: timing?.proxyFrameIndex,
+      },
       effects,
       position: transform.position,
       scale: transform.scale,
