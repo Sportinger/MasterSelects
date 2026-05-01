@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-05-01",
+    "type": "fix",
+    "title": "Firefox Native Project Restore Is Fast Again",
+    "description": "Native Helper project open now connects quickly in Firefox, restores project media without eager-loading every Raw asset, keeps relinked GLB and PLY sequences available after refresh, and lets restored media import into the timeline again.",
+    "section": "Native Helper / Project Persistence",
+    "commits": [
+      "c67aacfb"
+    ]
+  },
+  {
+    "date": "2026-05-01",
     "type": "new",
     "title": "Lemonade Local AI Chat Provider",
     "description": "AI Chat now supports local Lemonade Server models with loopback-only endpoints, streamed responses, model discovery, compact local tool schemas, project-saved system prompts, and sturdier fallback handling for FLM tool-call stalls.",
