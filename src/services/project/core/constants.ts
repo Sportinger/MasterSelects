@@ -12,6 +12,7 @@ export const PROJECT_FOLDERS = {
   RENDERS: 'Renders',
   BACKUPS: 'Backups',
   DOWNLOADS: 'Downloads',
+  PROMPTS: 'Prompts',
 } as const;
 
 export type ProjectFolderKey = keyof typeof PROJECT_FOLDERS;
@@ -31,4 +32,5 @@ export const PROJECT_FOLDER_PATHS = [
   PROJECT_FOLDERS.RENDERS,
   PROJECT_FOLDERS.BACKUPS,
   PROJECT_FOLDERS.DOWNLOADS,
+  PROJECT_FOLDERS.PROMPTS,
 ] as const;

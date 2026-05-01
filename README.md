@@ -108,7 +108,7 @@ Built with Claude as my pair-programmer. Every feature gets debugged, refactored
 
 MasterSelects is being built around the idea that AI should be able to *do the edit*, not just talk about it.
 
-- **Built-in editor chat:** OpenAI/Cloud or local Lemonade chat, with direct access to 79 exported timeline/media/editing tools
+- **Built-in editor chat:** OpenAI/Cloud or local Lemonade chat, compact provider/model menus, project-saved system prompts, and direct access to 79 exported timeline/media/editing tools
 - **Local Lemonade provider:** OpenAI-compatible Lemonade Server support for local chat models such as `gemma4-it-e2b-FLM`; model discovery comes from `/models`, and the endpoint is restricted to loopback hosts
 - **External agent bridge:** Claude Code or any other local agent can drive the running editor via the Native Helper HTTP bridge, and in development the same tool surface is also available through the Vite bridge and `window.aiTools`
 - **AI video and image generation:** Classic AI Video plus FlashBoard route through Kie.ai, hosted cloud, and PiAPI-backed catalogs depending on account and key setup

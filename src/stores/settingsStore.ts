@@ -115,6 +115,7 @@ interface SettingsState {
   aiProvider: AIProvider;
   lemonadeEndpoint: string;
   lemonadeModel: string;
+  aiSystemPromptOverrides: Partial<Record<AIProvider, string>>;
 
   // Media import settings
   copyMediaToProject: boolean;  // Copy imported files to project Raw/ folder
@@ -174,6 +175,7 @@ interface SettingsState {
   setAiProvider: (provider: AIProvider) => void;
   setLemonadeEndpoint: (endpoint: string) => void;
   setLemonadeModel: (model: string) => void;
+  setAiSystemPromptOverride: (provider: AIProvider, prompt: string) => void;
   setCopyMediaToProject: (enabled: boolean) => void;
   setHasCompletedSetup: (completed: boolean) => void;
   setHasSeenTutorial: (seen: boolean) => void;
@@ -244,6 +246,7 @@ export const useSettingsStore = create<SettingsState>()(
       aiProvider: 'openai' as AIProvider,
       lemonadeEndpoint: DEFAULT_LEMONADE_ENDPOINT,
       lemonadeModel: DEFAULT_LEMONADE_MODEL,
+      aiSystemPromptOverrides: {},
       copyMediaToProject: true, // Copy imported files to Raw/ folder by default
       hasCompletedSetup: false, // Show welcome overlay on first run
       hasSeenTutorial: false, // Show tutorial on first run
@@ -358,6 +361,18 @@ export const useSettingsStore = create<SettingsState>()(
 
       setLemonadeModel: (model) => {
         set({ lemonadeModel: model });
+      },
+
+      setAiSystemPromptOverride: (provider, prompt) => {
+        set((state) => {
+          const overrides = { ...state.aiSystemPromptOverrides };
+          if (prompt.trim()) {
+            overrides[provider] = prompt;
+          } else {
+            delete overrides[provider];
+          }
+          return { aiSystemPromptOverrides: overrides };
+        });
       },
 
       setCopyMediaToProject: (enabled) => {
@@ -526,6 +541,7 @@ export const useSettingsStore = create<SettingsState>()(
         aiProvider: state.aiProvider,
         lemonadeEndpoint: state.lemonadeEndpoint,
         lemonadeModel: state.lemonadeModel,
+        aiSystemPromptOverrides: state.aiSystemPromptOverrides,
         copyMediaToProject: state.copyMediaToProject,
         hasCompletedSetup: state.hasCompletedSetup,
         hasSeenTutorial: state.hasSeenTutorial,

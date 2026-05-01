@@ -3,6 +3,7 @@ import type { ToolDefinition } from '../../src/services/aiTools/types';
 import {
   checkLemonadeHealth,
   createLemonadeChatCompletion,
+  createLemonadeChatCompletionStream,
   INVALID_LEMONADE_ENDPOINT_MESSAGE,
   isLoopbackLemonadeEndpoint,
   parseLemonadeChatCompletion,
@@ -14,6 +15,23 @@ function jsonResponse(data: unknown, ok = true, status = 200): Response {
     status,
     json: vi.fn(async () => data),
   } as unknown as Response;
+}
+
+function sseResponse(events: string[]): Response {
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const event of events) {
+        controller.enqueue(encoder.encode(event));
+      }
+      controller.close();
+    },
+  });
+
+  return new Response(body, {
+    headers: { 'Content-Type': 'text/event-stream' },
+    status: 200,
+  });
 }
 
 describe('lemonadeProvider', () => {
@@ -51,6 +69,25 @@ describe('lemonadeProvider', () => {
         },
       ],
     });
+  });
+
+  it('surfaces Lemonade backend errors returned with a 200 response', () => {
+    expect(() => parseLemonadeChatCompletion({
+      error: {
+        details: {
+          response: {
+            error: {
+              code: 400,
+              message: 'Max length reached!',
+              type: 'model_error',
+            },
+          },
+          status_code: 400,
+        },
+        message: 'FastFlowLM request failed',
+        type: 'backend_error',
+      },
+    })).toThrow('Max length reached!');
   });
 
   it('checks configured Lemonade endpoint and parses models', async () => {
@@ -161,6 +198,64 @@ describe('lemonadeProvider', () => {
         arguments: '{"clipId":"clip-1"}',
       },
     ]);
+  });
+
+  it('streams chat completion deltas and tool calls', async () => {
+    const tool: ToolDefinition = {
+      type: 'function',
+      function: {
+        name: 'splitClip',
+        description: 'Split a clip',
+        parameters: {
+          type: 'object',
+          properties: { clipId: { type: 'string' } },
+          required: ['clipId'],
+        },
+      },
+    };
+    const fetchMock = vi.fn(async () => sseResponse([
+      'data: {"choices":[{"delta":{"content":"Hel"}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"lo","tool_calls":[{"index":0,"id":"call_1","function":{"name":"splitClip","arguments":"{\\"clip"}}]}}]}\n\n',
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"Id\\":\\"clip-1\\"}"}}]}}]}\n\n',
+      'data: [DONE]\n\n',
+    ]));
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const deltas: string[] = [];
+    const result = await createLemonadeChatCompletionStream({
+      endpoint: 'http://localhost:13305/api/v1',
+      model: 'user.gemma4-it-e2b-FLM',
+      messages: [{ role: 'user', content: 'Split the selected clip.' }],
+      onContentDelta: (delta) => deltas.push(delta),
+      tools: [tool],
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('http://localhost:13305/api/v1/chat/completions');
+    expect(init.headers).toEqual({
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      Authorization: 'Bearer lemonade',
+    });
+    expect(JSON.parse(init.body as string)).toEqual({
+      model: 'user.gemma4-it-e2b-FLM',
+      messages: [{ role: 'user', content: 'Split the selected clip.' }],
+      max_tokens: 4096,
+      stream: true,
+      tools: [tool],
+      tool_choice: 'auto',
+    });
+    expect(deltas).toEqual(['Hel', 'lo']);
+    expect(result).toEqual({
+      content: 'Hello',
+      toolCalls: [
+        {
+          id: 'call_1',
+          name: 'splitClip',
+          arguments: '{"clipId":"clip-1"}',
+        },
+      ],
+    });
   });
 
   it('rejects remote Lemonade chat completion endpoints before sending data', async () => {

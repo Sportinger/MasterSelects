@@ -31,8 +31,7 @@ GPT-powered editing with 79 exported tools across 15 exported definition groups,
 
 ### Features
 - Interactive chat interface
-- Provider selection for OpenAI/Cloud or Lemonade Local
-- Model selection dropdown
+- Compact provider and model menus for OpenAI/Cloud or Lemonade Local
 - Conversation history
 - Clear chat button
 - Auto-scrolling
@@ -56,12 +55,18 @@ The Lemonade integration is scoped to AI Chat. Transcription providers remain `l
 3. Open Preferences -> General -> AI Features.
 4. Set Chat Provider to `Lemonade Local`.
 5. Keep the default endpoint `http://localhost:13305/api/v1` unless Lemonade is running on another loopback address.
-6. Click `Check` to verify `/models` and populate the model dropdown with installed Lemonade models.
-7. Open AI Chat and use the Lemonade model selector in the panel header.
+6. Click `Check` to verify `/models` and populate the model menu with installed Lemonade models.
+7. Open AI Chat and use the Lemonade model button in the panel header.
 
 Manually imported Lemonade models may be exposed with a `user.` prefix, for example `user.gemma4-it-e2b-FLM`. The app treats `/models` as authoritative and uses the first available Lemonade model when the saved preset name is not present.
 
 Lemonade is a provider, not an editor bridge. It can return OpenAI-compatible tool-call suggestions, but MasterSelects still applies the chat approval mode and routes execution through the shared AI tool dispatcher.
+
+Because local FLM models have a smaller practical prompt budget than hosted models, Lemonade editor mode sends a compact high-use tool set instead of the full 79-tool catalog. The full exported catalog remains available to OpenAI/Cloud and to the local/native bridge.
+
+Lemonade chat responses use the OpenAI-compatible SSE streaming endpoint, so text appears incrementally in the chat panel while the local model is generating. Tool calls are collected from the streamed deltas and executed after the assistant response finishes. To stay within the 4096-token context used by current FLM models, Lemonade uses a shorter editor system prompt, compact tool results, and a lower completion-token limit than hosted models. If a local model still stalls after a tool result, MasterSelects times out the follow-up request and shows a deterministic tool-result summary instead of leaving the chat empty.
+
+The AI Chat header includes a `Prompt` button for provider-specific system prompt overrides. Prompts can be saved into the current project folder under `Prompts/*.prompt.json`, reloaded from the saved prompt list, reset to the built-in prompt, imported from a text/Markdown file, and exported as a `.txt` file. The active override is still mirrored in app settings so the chat can use it immediately.
 
 ### Available Models
 
