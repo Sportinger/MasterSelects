@@ -6,6 +6,14 @@ import { useAccountStore } from '../../stores/accountStore';
 import { AI_TOOLS, executeAITool, getQuickTimelineSummary, getToolPolicy } from '../../services/aiTools';
 import { cloudAiService } from '../../services/cloudAiService';
 import type { ToolPolicyEntry } from '../../services/aiTools';
+import {
+  checkLemonadeHealth,
+  createLemonadeChatCompletion,
+  DEFAULT_LEMONADE_ENDPOINT,
+  DEFAULT_LEMONADE_MODEL,
+  LEMONADE_MODEL_PRESETS,
+  type LemonadeModelInfo,
+} from '../../services/lemonadeProvider';
 import './AIChatPanel.css';
 
 // Available OpenAI models with credit cost per request
@@ -33,6 +41,48 @@ const OPENAI_MODELS = [
   { id: 'gpt-4o', name: 'GPT-4o', credits: 5 },
   { id: 'gpt-4o-mini', name: 'GPT-4o Mini', credits: 1 },
 ];
+
+function getLemonadeModelOptions(
+  availableModels: LemonadeModelInfo[],
+  selectedModel: string,
+): Array<{ id: string; name: string; description?: string; available: boolean }> {
+  if (availableModels.length > 0) {
+    return availableModels.map((model) => ({
+      id: model.id,
+      name: model.name || model.id,
+      available: true,
+    }));
+  }
+
+  const options = new Map<string, { id: string; name: string; description?: string; available: boolean }>();
+
+  for (const preset of LEMONADE_MODEL_PRESETS) {
+    options.set(preset.id, {
+      id: preset.id,
+      name: preset.name,
+      description: preset.description,
+      available: false,
+    });
+  }
+
+  for (const model of availableModels) {
+    options.set(model.id, {
+      id: model.id,
+      name: model.name || model.id,
+      available: true,
+    });
+  }
+
+  if (selectedModel && !options.has(selectedModel)) {
+    options.set(selectedModel, {
+      id: selectedModel,
+      name: selectedModel,
+      available: false,
+    });
+  }
+
+  return Array.from(options.values());
+}
 
 // System prompt for editor mode
 const EDITOR_SYSTEM_PROMPT = `You are an AI video editing assistant with direct access to the timeline AND media panel. You can:
@@ -298,7 +348,16 @@ function parseChatCompletionPayload(data: unknown): {
 }
 
 export function AIChatPanel() {
-  const { apiKeys, openSettings, aiApprovalMode } = useSettingsStore();
+  const {
+    apiKeys,
+    openSettings,
+    aiApprovalMode,
+    aiProvider,
+    lemonadeEndpoint,
+    lemonadeModel,
+    setAiProvider,
+    setLemonadeModel,
+  } = useSettingsStore();
   const hasSeenAIChatOnboarding = useSettingsStore((s) => s.hasSeenAIChatOnboarding);
   const setHasSeenAIChatOnboarding = useSettingsStore((s) => s.setHasSeenAIChatOnboarding);
   const hostedAIEnabled = useAccountStore((s) => s.hostedAIEnabled);
@@ -311,6 +370,8 @@ export function AIChatPanel() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [model, setModel] = useState('gpt-5.1');
+  const [lemonadeStatus, setLemonadeStatus] = useState<'online' | 'offline' | 'checking'>('checking');
+  const [lemonadeModels, setLemonadeModels] = useState<LemonadeModelInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editorMode, setEditorMode] = useState(true); // Enable tools by default
   const [currentToolAction, setCurrentToolAction] = useState<string | null>(null);
@@ -324,10 +385,54 @@ export function AIChatPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, currentToolAction]);
 
+  useEffect(() => {
+    if (aiProvider !== 'lemonade') {
+      return;
+    }
+
+    let cancelled = false;
+    setLemonadeStatus('checking');
+
+    void checkLemonadeHealth(lemonadeEndpoint).then((health) => {
+      if (cancelled) {
+        return;
+      }
+
+      setLemonadeModels(health.models);
+      setLemonadeStatus(health.available ? 'online' : 'offline');
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [aiProvider, lemonadeEndpoint]);
+
   const hasHostedAccess = Boolean(accountSession?.authenticated && hostedAIEnabled);
   const hasApiKey = !!apiKeys.openai;
-  const accessMode: 'hosted' | 'byo' | 'none' = hasHostedAccess ? 'hosted' : hasApiKey ? 'byo' : 'none';
+  const openAiAccessMode: 'hosted' | 'byo' | 'none' = hasHostedAccess ? 'hosted' : hasApiKey ? 'byo' : 'none';
+  const accessMode: 'hosted' | 'byo' | 'lemonade' | 'none' =
+    aiProvider === 'lemonade'
+      ? (lemonadeStatus === 'online' ? 'lemonade' : 'none')
+      : openAiAccessMode;
   const hasAccess = accessMode !== 'none';
+  const lemonadeModelOptions = getLemonadeModelOptions(lemonadeModels, lemonadeModel);
+  const configuredLemonadeModel = lemonadeModel.trim() || DEFAULT_LEMONADE_MODEL;
+  const activeLemonadeModel = lemonadeModelOptions.some((option) => option.id === configuredLemonadeModel)
+    ? configuredLemonadeModel
+    : lemonadeModelOptions[0]?.id || configuredLemonadeModel;
+  const selectedLemonadeModel = lemonadeModelOptions.some((option) => option.id === activeLemonadeModel)
+    ? activeLemonadeModel
+    : '';
+  const accessLabel = accessMode === 'hosted'
+    ? 'Cloud'
+    : accessMode === 'byo'
+      ? 'OpenAI key'
+      : accessMode === 'lemonade'
+        ? 'Local'
+        : 'Locked';
+  const activeModelName = aiProvider === 'lemonade'
+    ? lemonadeModelOptions.find((option) => option.id === activeLemonadeModel)?.name || activeLemonadeModel
+    : OPENAI_MODELS.find((option) => option.id === model)?.name || model;
 
   // Build API messages from chat history
   const buildAPIMessages = useCallback((userContent: string): APIMessage[] => {
@@ -425,7 +530,18 @@ export function AIChatPanel() {
     return parseChatCompletionPayload(await response.json());
   }, [accessMode, model, editorMode, apiKeys.openai]);
 
-  // Send message to OpenAI (with tool calling loop)
+  const callLemonade = useCallback(async (apiMessages: APIMessage[]): Promise<{
+    content: string | null;
+    toolCalls: ToolCall[];
+  }> => createLemonadeChatCompletion({
+    endpoint: lemonadeEndpoint,
+    model: activeLemonadeModel,
+    messages: apiMessages,
+    tools: editorMode ? AI_TOOLS : undefined,
+    maxTokens: 4096,
+  }), [activeLemonadeModel, editorMode, lemonadeEndpoint]);
+
+  // Send message to the selected AI provider (with tool calling loop)
   const sendMessage = useCallback(async () => {
     if (!input.trim() || !hasAccess || isLoading) return;
 
@@ -454,7 +570,9 @@ export function AIChatPanel() {
       while (iterationCount < maxIterations) {
         iterationCount++;
 
-        const { content, toolCalls } = await callOpenAI(apiMessages, hostedPromptIdempotencyKey);
+        const { content, toolCalls } = aiProvider === 'lemonade'
+          ? await callLemonade(apiMessages)
+          : await callOpenAI(apiMessages, hostedPromptIdempotencyKey);
 
         if (toolCalls.length === 0) {
           // No tool calls - add final assistant message
@@ -573,7 +691,7 @@ export function AIChatPanel() {
       setIsLoading(false);
       setCurrentToolAction(null);
     }
-  }, [input, hasAccess, isLoading, buildAPIMessages, callOpenAI, aiApprovalMode, accessMode, loadAccountState]);
+  }, [input, hasAccess, isLoading, buildAPIMessages, accessMode, aiProvider, callLemonade, callOpenAI, aiApprovalMode, loadAccountState]);
 
   // Handle key press
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -599,34 +717,55 @@ export function AIChatPanel() {
 
   return (
     <div className={`ai-chat-panel ${!hasAccess ? 'no-api-key' : ''}`}>
-      {/* API Key Required Overlay */}
+      {/* AI access overlay */}
       {!hasAccess && (
         <div className="ai-panel-overlay">
           <div className="ai-panel-overlay-content">
             <span className="no-key-icon">🔑</span>
-            <p>{accountSession?.authenticated ? 'Hosted AI chat needs a plan' : 'Sign in for hosted AI chat'}</p>
+            <p>
+              {aiProvider === 'lemonade'
+                ? (lemonadeStatus === 'checking' ? 'Checking Lemonade' : 'Lemonade is not ready')
+                : 'Choose an AI provider'}
+            </p>
             <span className="ai-panel-overlay-subtext">
-              MasterSelects Cloud is the default path. Advanced users can still add their own OpenAI key.
+              {aiProvider === 'lemonade'
+                ? `Load a local model in Lemonade, then retry ${lemonadeEndpoint || DEFAULT_LEMONADE_ENDPOINT}.`
+                : 'Use a local Lemonade model, sign in for Cloud, or add your own OpenAI key.'}
             </span>
             <div className="ai-panel-overlay-actions">
-              {!accountSession?.authenticated ? (
-                <button className="btn-settings" onClick={openAuthDialog}>
-                  Sign in
-                </button>
+              {aiProvider === 'lemonade' ? (
+                <>
+                  <button className="btn-settings primary" onClick={openSettings}>
+                    Settings
+                  </button>
+                  <button className="btn-settings secondary" onClick={() => setAiProvider('openai')}>
+                    Use OpenAI
+                  </button>
+                </>
               ) : (
-                <button className="btn-settings" onClick={openPricingDialog}>
-                  View plans
-                </button>
+                <>
+                  <button className="btn-settings primary" onClick={() => setAiProvider('lemonade')}>
+                    Use Lemonade
+                  </button>
+                  {!accountSession?.authenticated ? (
+                    <button className="btn-settings secondary" onClick={openAuthDialog}>
+                      Sign in
+                    </button>
+                  ) : (
+                    <button className="btn-settings secondary" onClick={openPricingDialog}>
+                      View plans
+                    </button>
+                  )}
+                  {accountSession?.authenticated && (
+                    <button className="btn-settings ghost" onClick={openAccountDialog}>
+                      Account
+                    </button>
+                  )}
+                  <button className="btn-settings ghost" onClick={openSettings}>
+                    API Keys
+                  </button>
+                </>
               )}
-              {accountSession?.authenticated && (
-                <button className="btn-settings" onClick={openAccountDialog}>
-                  Account
-                </button>
-              )}
-              <span className="ai-panel-overlay-or">or</span>
-              <button className="btn-settings" onClick={openSettings}>
-                API Keys
-              </button>
             </div>
           </div>
         </div>
@@ -636,10 +775,19 @@ export function AIChatPanel() {
         <div className="ai-chat-title-group">
           <h2>AI Editor</h2>
           <span className={`ai-access-chip ${accessMode}`}>
-            {accessMode === 'hosted' ? 'Cloud' : accessMode === 'byo' ? 'OpenAI key' : 'Locked'}
+            {accessLabel}
           </span>
         </div>
         <div className="ai-chat-controls">
+          <select
+            className="model-select provider-select"
+            value={aiProvider}
+            onChange={(e) => setAiProvider(e.target.value as 'openai' | 'lemonade')}
+            disabled={isLoading}
+          >
+            <option value="openai">OpenAI / Cloud</option>
+            <option value="lemonade">Lemonade Local</option>
+          </select>
           <label className="editor-mode-toggle" title="Enable timeline editing tools">
             <input
               type="checkbox"
@@ -649,16 +797,34 @@ export function AIChatPanel() {
             />
             <span className="toggle-label">Tools</span>
           </label>
-          <select
-            className="model-select"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            disabled={isLoading}
-          >
-            {OPENAI_MODELS.map(m => (
-              <option key={m.id} value={m.id}>{m.name} ({m.credits === 1 ? '1 credit' : `${m.credits} credits`})</option>
-            ))}
-          </select>
+          {aiProvider === 'lemonade' ? (
+            <select
+              className="model-select"
+              value={selectedLemonadeModel}
+              onChange={(e) => setLemonadeModel(e.target.value)}
+              disabled={isLoading || lemonadeModelOptions.length === 0}
+            >
+              {lemonadeModelOptions.length === 0 && (
+                <option value="">No Lemonade models found</option>
+              )}
+              {lemonadeModelOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.available ? option.name : `${option.name} (preset)`}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <select
+              className="model-select"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              disabled={isLoading}
+            >
+              {OPENAI_MODELS.map(m => (
+                <option key={m.id} value={m.id}>{m.name} ({m.credits === 1 ? '1 credit' : `${m.credits} credits`})</option>
+              ))}
+            </select>
+          )}
           <button
             className="btn-clear"
             onClick={clearChat}
@@ -708,8 +874,10 @@ export function AIChatPanel() {
               <p>{editorMode ? 'AI Editor Ready' : 'Start a conversation'}</p>
               <span className="welcome-hint">
                 {editorMode
-                  ? 'Ask me to edit your timeline - cut clips, remove silence, etc.'
-                  : `Using ${OPENAI_MODELS.find(m => m.id === model)?.name}`}
+                  ? (aiProvider === 'lemonade'
+                    ? `Using local ${activeModelName} with timeline tools`
+                    : 'Ask me to edit your timeline - cut clips, remove silence, etc.')
+                  : `Using ${activeModelName}`}
               </span>
             </div>
           </>

@@ -20,7 +20,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 |---|---|
 | **WebGPU Rendering** | Shared render path for main preview, independent targets, output windows, and export |
 | **Timeline Editing** | Multi-track editing, nested compositions, markers, shortcuts, and keyframes |
-| **AI Control** | OpenAI chat with 79 exported tools plus local/native bridge access for external agents |
+| **AI Control** | OpenAI/Cloud or local Lemonade chat with 79 exported tools plus local/native bridge access for external agents |
 | **AI Video Workspace** | Classic AI Video plus FlashBoard board-mode generation and media import |
 | **3D Layers** | Shared-scene 3D layers, camera clips, Gaussian splats, and splat effectors |
 | **Vector Animation** | Lottie clips with deterministic canvas playback, looping, and export |
@@ -68,7 +68,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | Document | Description |
 |---|---|
 | [Landing Page](./Landing-Page.md) | Dev-only front page concept, separate URL strategy, and current landing/editor split |
-| [AI Integration](./AI-Integration.md) | OpenAI chat, 79 exported tools, segmentation, transcription, and bridge behavior |
+| [AI Integration](./AI-Integration.md) | OpenAI/Cloud and Lemonade chat, 79 exported tools, segmentation, transcription, and bridge behavior |
 | [FlashBoard](./FlashBoard.md) | Board-mode AI canvas for text-to-video, image-to-video, and image generation |
 | [Multicam AI](./Multicam-AI.md) | Sync, transcription, multicam analysis, and Anthropic-powered EDL generation |
 | [Debugging](./Debugging.md) | Logger service, runtime monitors, log sync, and AI-facing debug tools |
@@ -87,7 +87,7 @@ State             Zustand with modular timeline and media slices
 Rendering         WebGPU + WGSL + shared-scene 3D runtime
 Media             MediaBunny, WebCodecs, HTML media fallback paths
 Audio             Web Audio API, EQ, drift correction, waveform extraction
-AI                OpenAI chat, Kie.ai, hosted cloud, PiAPI catalog, SAM2, MatAnyone2
+AI                OpenAI/Cloud chat, local Lemonade chat, Kie.ai, PiAPI catalog, SAM2, MatAnyone2
 Persistence       File System Access API, project-local RAW copies, IndexedDB handle/cache storage
 Native Helper     Rust service with HTTP/WebSocket bridge, yt-dlp, helper-backed jobs
 ```

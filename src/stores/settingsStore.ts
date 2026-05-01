@@ -8,6 +8,10 @@ import { apiKeyManager, type ApiKeyType } from '../services/apiKeyManager';
 import { projectFileService } from '../services/project/ProjectFileService';
 import { flags } from '../engine/featureFlags';
 import { Logger } from '../services/logger';
+import {
+  DEFAULT_LEMONADE_ENDPOINT,
+  DEFAULT_LEMONADE_MODEL,
+} from '../services/lemonadeProvider';
 import type { ShortcutPresetId, ShortcutMap, KeyCombo, ShortcutActionId, CustomShortcutPreset } from '../services/shortcutTypes';
 import { PRESETS, DEFAULT_PRESET_ID } from '../services/shortcutPresets';
 const log = Logger.create('SettingsStore');
@@ -48,6 +52,8 @@ export type PreviewQuality = 1 | 0.5 | 0.25;
 
 // GPU power preference options
 export type GPUPowerPreference = 'high-performance' | 'low-power';
+
+export type AIProvider = 'openai' | 'lemonade';
 
 interface APIKeys {
   openai: string;
@@ -106,6 +112,9 @@ interface SettingsState {
 
   // AI approval mode for tool execution
   aiApprovalMode: 'auto' | 'confirm-destructive' | 'confirm-all-mutating';
+  aiProvider: AIProvider;
+  lemonadeEndpoint: string;
+  lemonadeModel: string;
 
   // Media import settings
   copyMediaToProject: boolean;  // Copy imported files to project Raw/ folder
@@ -162,6 +171,9 @@ interface SettingsState {
   setMatAnyoneEnabled: (enabled: boolean) => void;
   setMatAnyonePythonPath: (path: string) => void;
   setAiApprovalMode: (mode: 'auto' | 'confirm-destructive' | 'confirm-all-mutating') => void;
+  setAiProvider: (provider: AIProvider) => void;
+  setLemonadeEndpoint: (endpoint: string) => void;
+  setLemonadeModel: (model: string) => void;
   setCopyMediaToProject: (enabled: boolean) => void;
   setHasCompletedSetup: (completed: boolean) => void;
   setHasSeenTutorial: (seen: boolean) => void;
@@ -229,6 +241,9 @@ export const useSettingsStore = create<SettingsState>()(
       matanyoneEnabled: false, // MatAnyone2 disabled by default
       matanyonePythonPath: '', // Auto-detect Python path
       aiApprovalMode: 'confirm-destructive' as const, // Require confirmation for destructive AI actions
+      aiProvider: 'openai' as AIProvider,
+      lemonadeEndpoint: DEFAULT_LEMONADE_ENDPOINT,
+      lemonadeModel: DEFAULT_LEMONADE_MODEL,
       copyMediaToProject: true, // Copy imported files to Raw/ folder by default
       hasCompletedSetup: false, // Show welcome overlay on first run
       hasSeenTutorial: false, // Show tutorial on first run
@@ -331,6 +346,18 @@ export const useSettingsStore = create<SettingsState>()(
 
       setAiApprovalMode: (mode) => {
         set({ aiApprovalMode: mode });
+      },
+
+      setAiProvider: (provider) => {
+        set({ aiProvider: provider });
+      },
+
+      setLemonadeEndpoint: (endpoint) => {
+        set({ lemonadeEndpoint: endpoint });
+      },
+
+      setLemonadeModel: (model) => {
+        set({ lemonadeModel: model });
       },
 
       setCopyMediaToProject: (enabled) => {
@@ -496,6 +523,9 @@ export const useSettingsStore = create<SettingsState>()(
         matanyoneEnabled: state.matanyoneEnabled,
         matanyonePythonPath: state.matanyonePythonPath,
         aiApprovalMode: state.aiApprovalMode,
+        aiProvider: state.aiProvider,
+        lemonadeEndpoint: state.lemonadeEndpoint,
+        lemonadeModel: state.lemonadeModel,
         copyMediaToProject: state.copyMediaToProject,
         hasCompletedSetup: state.hasCompletedSetup,
         hasSeenTutorial: state.hasSeenTutorial,

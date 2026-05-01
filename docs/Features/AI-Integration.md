@@ -2,13 +2,15 @@
 
 [← Back to Index](./README.md)
 
-GPT-powered editing with 79 exported tools across 15 exported definition groups, multi-provider AI video generation, transcription, multicam EDL generation, browser-local SAM 2 segmentation, and native-helper MatAnyone2 matting.
+GPT-powered editing with 79 exported tools across 15 exported definition groups, OpenAI/Cloud or local Lemonade chat providers, multi-provider AI video generation, transcription, multicam EDL generation, browser-local SAM 2 segmentation, and native-helper MatAnyone2 matting.
 
 ---
 
 ## Table of Contents
 
 - [AI Chat Panel](#ai-chat-panel)
+- [Chat Providers](#chat-providers)
+- [Lemonade Local Setup](#lemonade-local-setup)
 - [AI Video Panel](#ai-video-panel)
 - [AI Segmentation and MatAnyone2](#ai-segmentation-and-matanyone2)
 - [AI Editor Tools](#ai-editor-tools)
@@ -29,13 +31,42 @@ GPT-powered editing with 79 exported tools across 15 exported definition groups,
 
 ### Features
 - Interactive chat interface
+- Provider selection for OpenAI/Cloud or Lemonade Local
 - Model selection dropdown
 - Conversation history
 - Clear chat button
 - Auto-scrolling
 - Tool execution indicators
 
+### Chat Providers
+
+| Provider | Runtime | Configuration |
+|---|---|---|
+| `OpenAI / Cloud` | MasterSelects hosted chat when available, otherwise a user-supplied OpenAI API key | Preferences -> API Keys for BYO OpenAI key |
+| `Lemonade Local` | OpenAI-compatible Lemonade Server running on the user's machine | Preferences -> General -> AI Features |
+
+Lemonade defaults to `http://localhost:13305/api/v1` and sends chat completions to `/chat/completions`. The endpoint and model are stored in local settings, and the settings panel can check `/models` to verify the server and discover locally available models. Lemonade endpoints are restricted to loopback hosts (`localhost`, `127.0.0.1`, or `::1`) so timeline context and tool results are not sent to a remote URL by mistake.
+
+The Lemonade integration is scoped to AI Chat. Transcription providers remain `local`, `openai`, `assemblyai`, and `deepgram`.
+
+### Lemonade Local Setup
+
+1. Install and start Lemonade Server locally.
+2. Download a supported local chat model in Lemonade, for example `gemma4-it-e2b-FLM`.
+3. Open Preferences -> General -> AI Features.
+4. Set Chat Provider to `Lemonade Local`.
+5. Keep the default endpoint `http://localhost:13305/api/v1` unless Lemonade is running on another loopback address.
+6. Click `Check` to verify `/models` and populate the model dropdown with installed Lemonade models.
+7. Open AI Chat and use the Lemonade model selector in the panel header.
+
+Manually imported Lemonade models may be exposed with a `user.` prefix, for example `user.gemma4-it-e2b-FLM`. The app treats `/models` as authoritative and uses the first available Lemonade model when the saved preset name is not present.
+
+Lemonade is a provider, not an editor bridge. It can return OpenAI-compatible tool-call suggestions, but MasterSelects still applies the chat approval mode and routes execution through the shared AI tool dispatcher.
+
 ### Available Models
+
+OpenAI / Cloud:
+
 ```
 GPT-5.2, GPT-5.2 Pro
 GPT-5.1, GPT-5.1 Codex, GPT-5.1 Codex Mini
@@ -46,6 +77,18 @@ o3, o4-mini, o3-pro (reasoning)
 ```
 
 Default model: `gpt-5.1`
+
+Lemonade Local presets:
+
+```
+gemma4-it-e2b-FLM
+gemma3-1b-FLM
+qwen3-0.6b-FLM
+qwen3-4b-FLM
+llama3.2-1b-FLM
+```
+
+Default Lemonade model: `gemma4-it-e2b-FLM`
 
 ### Editor Mode
 When enabled:
@@ -428,6 +471,7 @@ API keys are stored encrypted in IndexedDB via Web Crypto API. SAM 2 model files
 - The `.keys.enc` export/import path remains disabled
 - Log output is redacted before buffering and before being exposed via the AI tool bridge
 - Development AI bridge calls are loopback-only and tokened; the Native Helper bridge uses its own startup token
+- Lemonade chat calls are treated as local-only provider calls and are restricted to loopback endpoints. The static Lemonade bearer header is compatibility metadata, not a MasterSelects auth boundary.
 
 See [Security](./Security.md) for the full security model.
 
