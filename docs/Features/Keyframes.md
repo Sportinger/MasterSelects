@@ -16,6 +16,7 @@ The keyframe system animates clip properties over time using per-clip keyframe m
 | `position.x` | Horizontal position. |
 | `position.y` | Vertical position. |
 | `position.z` | Depth / camera distance when the clip exposes it. |
+| `scale.all` | Independent uniform multiplier applied on top of the axis scale values. Camera clips label this as Zoom. |
 | `scale.x` | Horizontal scale. |
 | `scale.y` | Vertical scale. |
 | `scale.z` | Forward offset / camera zoom style depth control when visible. |
@@ -63,6 +64,8 @@ The diamond button writes a keyframe at the playhead. If a keyframe already exis
 - Dragging the value scrubber updates the static property value when the property is not already keyframed.
 - If recording is enabled for that clip/property, or if keyframes already exist for that property, the same scrub updates keyframes instead of the static value.
 - Right-click on the value field resets the property to its default value.
+- Transform panel stopwatch buttons are per value, including Position X/Y/Z, Scale All/X/Y/Z, and Rotation X/Y/Z. Group stopwatches are not used for these rows.
+- `scale.all` does not overwrite `scale.x`, `scale.y`, or `scale.z`; render, export, and scene-gizmo paths multiply it into the final visible scale only at evaluation time.
 
 ### Recording Mode
 

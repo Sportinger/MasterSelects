@@ -313,7 +313,7 @@ interface ProjectFile {
 - Timeline markers and per-marker MIDI bindings
 - Clip positions and durations
 - Trim points (inPoint/outPoint)
-- Transform properties (position, scale, rotation, anchor, opacity, blend mode)
+- Transform properties (position, independent `scaleAll`/axis scale, rotation, anchor, opacity, blend mode)
 - Keyframe animations
 - Effect parameters
 - Mask shapes (vertices, mode, feather, opacity)

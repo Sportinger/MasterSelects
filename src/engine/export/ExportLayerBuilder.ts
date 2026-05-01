@@ -10,6 +10,7 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
+import { getEffectiveScale } from '../../utils/transformScale';
 import { DEFAULT_TEXT_3D_PROPERTIES, DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS, type GaussianSplatSettings } from '../gaussian/types';
 import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
@@ -314,6 +315,8 @@ function buildBaseLayerProps(
     log.warn(`Effects interpolation failed for clip ${clip.id}`, e);
   }
 
+  const renderScale = getEffectiveScale(transform.scale);
+
   return {
     id: `export_layer_${trackIndex}`,
     name: clip.name,
@@ -327,11 +330,7 @@ function buildBaseLayerProps(
       y: transform.position?.y ?? 0,
       z: transform.position?.z ?? 0,
     },
-    scale: {
-      x: transform.scale?.x ?? 1,
-      y: transform.scale?.y ?? 1,
-      ...(transform.scale?.z !== undefined ? { z: transform.scale.z } : {}),
-    },
+    scale: renderScale,
     rotation: {
       x: ((transform.rotation?.x ?? 0) * Math.PI) / 180,
       y: ((transform.rotation?.y ?? 0) * Math.PI) / 180,
@@ -623,6 +622,7 @@ function buildNestedBaseLayer(nestedClip: TimelineClip, nestedClipLocalTime: num
       z: nestedClip.transform?.position?.z ?? DEFAULT_TRANSFORM.position.z,
     },
     scale: {
+      ...(nestedClip.transform?.scale?.all !== undefined ? { all: nestedClip.transform.scale.all } : {}),
       x: nestedClip.transform?.scale?.x ?? DEFAULT_TRANSFORM.scale.x,
       y: nestedClip.transform?.scale?.y ?? DEFAULT_TRANSFORM.scale.y,
       ...(nestedClip.transform?.scale?.z !== undefined ? { z: nestedClip.transform.scale.z } : {}),
@@ -672,6 +672,8 @@ function buildNestedBaseLayer(nestedClip: TimelineClip, nestedClipLocalTime: num
     });
   }
 
+  const renderScale = getEffectiveScale(transform.scale);
+
   return {
     id: `nested-export-${nestedClip.id}`,
     name: nestedClip.name,
@@ -685,11 +687,7 @@ function buildNestedBaseLayer(nestedClip: TimelineClip, nestedClipLocalTime: num
       y: transform.position?.y || 0,
       z: transform.position?.z || 0,
     },
-    scale: {
-      x: transform.scale?.x ?? 1,
-      y: transform.scale?.y ?? 1,
-      ...(transform.scale?.z !== undefined ? { z: transform.scale.z } : {}),
-    },
+    scale: renderScale,
     rotation: {
       x: ((transform.rotation?.x || 0) * Math.PI) / 180,
       y: ((transform.rotation?.y || 0) * Math.PI) / 180,

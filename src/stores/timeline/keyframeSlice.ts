@@ -173,6 +173,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
         z: clip.transform?.position?.z ?? DEFAULT_TRANSFORM.position.z,
       },
       scale: {
+        ...(clip.transform?.scale?.all !== undefined ? { all: clip.transform.scale.all } : {}),
         x: clip.transform?.scale?.x ?? DEFAULT_TRANSFORM.scale.x,
         y: clip.transform?.scale?.y ?? DEFAULT_TRANSFORM.scale.y,
         ...(clip.transform?.scale?.z !== undefined ? { z: clip.transform.scale.z } : {}),
@@ -376,7 +377,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
         const axis = property.split('.')[1] as 'x' | 'y' | 'z';
         transformUpdate.position = { ...clip.transform.position, [axis]: value };
       } else if (property.startsWith('scale.')) {
-        const axis = property.split('.')[1] as 'x' | 'y' | 'z';
+        const axis = property.split('.')[1] as 'all' | 'x' | 'y' | 'z';
         transformUpdate.scale = { ...clip.transform.scale, [axis]: value };
       } else if (property.startsWith('rotation.')) {
         const axis = property.split('.')[1] as 'x' | 'y' | 'z';
@@ -544,7 +545,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
       const axis = property.split('.')[1] as 'x' | 'y' | 'z';
       updateClipTransform(clipId, { position: { ...clip.transform.position, [axis]: currentValue } });
     } else if (property.startsWith('scale.')) {
-      const axis = property.split('.')[1] as 'x' | 'y';
+      const axis = property.split('.')[1] as 'all' | 'x' | 'y' | 'z';
       updateClipTransform(clipId, { scale: { ...clip.transform.scale, [axis]: currentValue } });
     } else if (property.startsWith('rotation.')) {
       const axis = property.split('.')[1] as 'x' | 'y' | 'z';

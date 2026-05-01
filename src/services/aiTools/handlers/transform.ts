@@ -21,7 +21,11 @@ export async function handleSetTransform(
 
   const updates: Record<string, unknown> = {};
   const hasPosition = args.x !== undefined || args.y !== undefined || args.z !== undefined;
-  const hasScale = args.scaleX !== undefined || args.scaleY !== undefined || args.scaleZ !== undefined;
+  const hasScale =
+    args.scaleAll !== undefined ||
+    args.scaleX !== undefined ||
+    args.scaleY !== undefined ||
+    args.scaleZ !== undefined;
   const hasRotation =
     args.rotation !== undefined ||
     args.rotationX !== undefined ||
@@ -39,6 +43,9 @@ export async function handleSetTransform(
   if (hasScale) {
     const currentScale = clip.transform?.scale || { x: 1, y: 1 };
     updates.scale = {
+      ...(args.scaleAll !== undefined || currentScale.all !== undefined
+        ? { all: args.scaleAll !== undefined ? args.scaleAll as number : currentScale.all }
+        : {}),
       x: args.scaleX !== undefined ? args.scaleX as number : currentScale.x,
       y: args.scaleY !== undefined ? args.scaleY as number : currentScale.y,
       ...(args.scaleZ !== undefined || currentScale.z !== undefined

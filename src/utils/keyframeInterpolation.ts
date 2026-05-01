@@ -233,6 +233,9 @@ export function getInterpolatedClipTransform(
       z: interpolateKeyframes(keyframes, 'position.z', time, baseTransform.position.z),
     },
     scale: {
+      ...(baseTransform.scale.all !== undefined || keyframes.some(k => k.property === 'scale.all')
+        ? { all: interpolateKeyframes(keyframes, 'scale.all' as AnimatableProperty, time, baseTransform.scale.all ?? 1) }
+        : {}),
       x: interpolateKeyframes(keyframes, 'scale.x', time, baseTransform.scale.x),
       y: interpolateKeyframes(keyframes, 'scale.y', time, baseTransform.scale.y),
       ...(baseTransform.scale.z !== undefined || keyframes.some(k => k.property === 'scale.z')
@@ -284,8 +287,10 @@ export function getValueFromTransform(
     case 'position.x': return transform.position.x;
     case 'position.y': return transform.position.y;
     case 'position.z': return transform.position.z;
+    case 'scale.all': return transform.scale.all ?? 1;
     case 'scale.x': return transform.scale.x;
     case 'scale.y': return transform.scale.y;
+    case 'scale.z': return transform.scale.z ?? 1;
     case 'rotation.x': return transform.rotation.x;
     case 'rotation.y': return transform.rotation.y;
     case 'rotation.z': return transform.rotation.z;
@@ -313,11 +318,17 @@ export function setValueInTransform(
     case 'position.z':
       newTransform.position = { ...transform.position, z: value };
       break;
+    case 'scale.all':
+      newTransform.scale = { ...transform.scale, all: value };
+      break;
     case 'scale.x':
       newTransform.scale = { ...transform.scale, x: value };
       break;
     case 'scale.y':
       newTransform.scale = { ...transform.scale, y: value };
+      break;
+    case 'scale.z':
+      newTransform.scale = { ...transform.scale, z: value };
       break;
     case 'rotation.x':
       newTransform.rotation = { ...transform.rotation, x: value };

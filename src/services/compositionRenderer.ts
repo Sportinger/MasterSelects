@@ -25,6 +25,7 @@ import {
 } from './mediaRuntime/runtimePlayback';
 import { mediaRuntimeRegistry } from './mediaRuntime/registry';
 import { lottieRuntimeManager } from './vectorAnimation/LottieRuntimeManager';
+import { getEffectiveScale } from '../utils/transformScale';
 
 type CompositionClipSourceEntry = {
   clipId: string;
@@ -680,7 +681,7 @@ class CompositionRendererService {
         source: layerSource,
         effects: clipAtTime.effects || [],
         position: transform.position || { x: 0, y: 0, z: 0 },
-        scale: transform.scale || { x: 1, y: 1 },
+        scale: getEffectiveScale(transform.scale),
         rotation: typeof transform.rotation === 'number'
           ? transform.rotation
           : transform.rotation?.z || 0,
@@ -756,10 +757,7 @@ class CompositionRendererService {
           y: transform.position?.y || 0,
           z: transform.position?.z || 0,
         },
-        scale: {
-          x: transform.scale?.x ?? 1,
-          y: transform.scale?.y ?? 1,
-        },
+        scale: getEffectiveScale(transform.scale),
         rotation: {
           x: ((transform.rotation?.x || 0) * Math.PI) / 180,
           y: ((transform.rotation?.y || 0) * Math.PI) / 180,
@@ -872,7 +870,7 @@ class CompositionRendererService {
       },
       effects: clip.effects || [],
       position: clipTransform.position || { x: 0, y: 0, z: 0 },
-      scale: clipTransform.scale || { x: 1, y: 1 },
+      scale: getEffectiveScale(clipTransform.scale),
       rotation: typeof clipTransform.rotation === 'number'
         ? clipTransform.rotation
         : (clipTransform.rotation?.z || 0) * Math.PI / 180,

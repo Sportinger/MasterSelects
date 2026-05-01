@@ -67,6 +67,17 @@ describe('composeTransforms', () => {
     expect(result.scale.y).toBeCloseTo(6, 5);
   });
 
+  it('composes scale.all independently from axis scale', () => {
+    const parent = createMockTransform({ scale: { all: 2, x: 1.5, y: 0.5, z: 3 } });
+    const child = createMockTransform({ scale: { all: 0.25, x: 2, y: 4, z: 0.5 } });
+
+    const result = composeTransforms(parent, child);
+    expect(result.scale.all).toBeCloseTo(0.5, 5);
+    expect(result.scale.x).toBeCloseTo(3, 5);
+    expect(result.scale.y).toBeCloseTo(2, 5);
+    expect(result.scale.z).toBeCloseTo(1.5, 5);
+  });
+
   it('rotation addition', () => {
     const parent = createMockTransform({ rotation: { x: 10, y: 20, z: 30 } });
     const child = createMockTransform({ rotation: { x: 5, y: 10, z: 15 } });

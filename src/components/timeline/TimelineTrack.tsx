@@ -32,8 +32,8 @@ const shouldHide3DOnlyProperties = (clip: KeyframeTrackClip | null | undefined):
 
 const getTransformPropertyOrder = (clip: KeyframeTrackClip | null | undefined): string[] => (
   usesCameraPropertyModel(clip)
-    ? ['opacity', 'position.x', 'position.y', 'scale.z', 'position.z', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z']
-    : ['opacity', 'position.x', 'position.y', 'position.z', 'scale.x', 'scale.y', 'scale.z', 'rotation.x', 'rotation.y', 'rotation.z']
+    ? ['opacity', 'position.x', 'position.y', 'scale.z', 'position.z', 'scale.all', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z']
+    : ['opacity', 'position.x', 'position.y', 'position.z', 'scale.all', 'scale.x', 'scale.y', 'scale.z', 'rotation.x', 'rotation.y', 'rotation.z']
 );
 
 // Render keyframe tracks for timeline area (right column) - flat list without folder structure

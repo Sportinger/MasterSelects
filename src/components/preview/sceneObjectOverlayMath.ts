@@ -16,6 +16,7 @@ import {
   resolveAxisBasisFromWorldMatrix,
 } from '../../engine/scene/SceneTransformUtils';
 import { resolveOrbitCameraFrame } from '../../engine/gaussian/core/SplatCameraUtils';
+import { getEffectiveScale } from '../../utils/transformScale';
 import {
   SCENE_GIZMO_AXIS_HIT_START_OFFSET,
   SCENE_GIZMO_AXIS_SCREEN_LENGTH,
@@ -228,6 +229,7 @@ function resolveClipAxisBasis(
   clip: TimelineClip,
   transform: TimelineClip['transform'],
 ): Record<SceneGizmoAxis, SceneVector3> {
+  const effectiveScale = getEffectiveScale(transform.scale);
   const worldMatrix = buildSceneWorldMatrix({
     position: transform.position,
     rotationRadians: {
@@ -237,9 +239,9 @@ function resolveClipAxisBasis(
     },
     rotationDegrees: transform.rotation,
     scale: {
-      x: transform.scale.x,
-      y: transform.scale.y,
-      z: transform.scale.z ?? 1,
+      x: effectiveScale.x,
+      y: effectiveScale.y,
+      z: effectiveScale.z ?? 1,
     },
   });
   const orientationMatrix = clip.source?.type === 'gaussian-splat'

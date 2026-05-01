@@ -46,8 +46,12 @@ export function composeTransforms(
 
     // Scale: Multiply parent and child scales
     scale: {
+      all: (parent.scale.all ?? 1) * (child.scale.all ?? 1),
       x: parent.scale.x * child.scale.x,
       y: parent.scale.y * child.scale.y,
+      ...(parent.scale.z !== undefined || child.scale.z !== undefined
+        ? { z: (parent.scale.z ?? 1) * (child.scale.z ?? 1) }
+        : {}),
     },
 
     // Rotation: Add parent and child rotations

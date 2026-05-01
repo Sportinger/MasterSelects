@@ -93,7 +93,7 @@ export interface VideoCodecOption {
 
 export interface LayerTransformData {
   position: { x: number; y: number; z: number };
-  scale: { x: number; y: number };
+  scale: { x: number; y: number; z?: number };
   rotation: { x: number; y: number; z: number };
   opacity: number;
   blendMode: string;
@@ -108,7 +108,7 @@ export interface BaseLayerProps {
   blendMode: BlendMode;
   effects: Effect[];
   position: { x: number; y: number; z: number };
-  scale: { x: number; y: number };
+  scale: { x: number; y: number; z?: number };
   rotation: { x: number; y: number; z: number };
 }
 

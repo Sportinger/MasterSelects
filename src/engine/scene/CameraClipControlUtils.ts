@@ -17,6 +17,7 @@ export const CAMERA_POSE_TRANSFORM_PROPERTIES: AnimatableProperty[] = [
   'position.x',
   'position.y',
   'position.z',
+  'scale.all',
   'scale.x',
   'scale.y',
   'scale.z',
@@ -56,6 +57,7 @@ export function resolveCameraLookAtFixedEyeUpdates(
       position: transform.position,
       scale: {
         ...transform.scale,
+        all: transform.scale.all ?? 1,
         z: transform.scale.z ?? 0,
       },
       rotation: transform.rotation,
@@ -101,6 +103,7 @@ export function buildCameraTransformPatchFromUpdates(
     if (property === 'position.x') nextPosition.x = value;
     if (property === 'position.y') nextPosition.y = value;
     if (property === 'position.z') nextPosition.z = value;
+    if (property === 'scale.all') nextScale.all = value;
     if (property === 'scale.x') nextScale.x = value;
     if (property === 'scale.y') nextScale.y = value;
     if (property === 'scale.z') nextScale.z = value;

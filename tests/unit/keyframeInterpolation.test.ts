@@ -245,7 +245,7 @@ describe('getInterpolatedClipTransform', () => {
     expect(result.scale.x).toBe(1);
   });
 
-  it('interpolates all 9 properties correctly', () => {
+  it('interpolates transform properties correctly', () => {
     const base = createMockTransform();
     const kfs: Keyframe[] = [
       createMockKeyframe({ property: 'opacity', time: 0, value: 0, easing: 'linear' }),
@@ -256,6 +256,8 @@ describe('getInterpolatedClipTransform', () => {
       createMockKeyframe({ property: 'position.y', time: 2, value: 200 }),
       createMockKeyframe({ property: 'position.z', time: 0, value: 0, easing: 'linear' }),
       createMockKeyframe({ property: 'position.z', time: 2, value: 50 }),
+      createMockKeyframe({ property: 'scale.all', time: 0, value: 1, easing: 'linear' }),
+      createMockKeyframe({ property: 'scale.all', time: 2, value: 1.4 }),
       createMockKeyframe({ property: 'scale.x', time: 0, value: 1, easing: 'linear' }),
       createMockKeyframe({ property: 'scale.x', time: 2, value: 2 }),
       createMockKeyframe({ property: 'scale.y', time: 0, value: 1, easing: 'linear' }),
@@ -273,6 +275,7 @@ describe('getInterpolatedClipTransform', () => {
     expect(result.position.x).toBeCloseTo(50, 5);
     expect(result.position.y).toBeCloseTo(100, 5);
     expect(result.position.z).toBeCloseTo(25, 5);
+    expect(result.scale.all).toBeCloseTo(1.2, 5);
     expect(result.scale.x).toBeCloseTo(1.5, 5);
     expect(result.scale.y).toBeCloseTo(2, 5);
     expect(result.rotation.x).toBeCloseTo(45, 5);
@@ -389,7 +392,7 @@ describe('getValueFromTransform', () => {
   const transform = createMockTransform({
     opacity: 0.5,
     position: { x: 10, y: 20, z: 30 },
-    scale: { x: 2, y: 3 },
+    scale: { all: 1.5, x: 2, y: 3 },
     rotation: { x: 45, y: 90, z: 180 },
   });
 
@@ -398,6 +401,7 @@ describe('getValueFromTransform', () => {
     ['position.x', 10],
     ['position.y', 20],
     ['position.z', 30],
+    ['scale.all', 1.5],
     ['scale.x', 2],
     ['scale.y', 3],
     ['rotation.x', 45],
@@ -436,6 +440,14 @@ describe('setValueInTransform', () => {
     expect(updated.scale.x).toBe(1); // other axis unchanged
   });
 
+  it('sets scale.all without changing axis scale', () => {
+    const original = createMockTransform({ scale: { x: 1.25, y: 0.8 } });
+    const updated = setValueInTransform(original, 'scale.all', 2);
+    expect(updated.scale.all).toBe(2);
+    expect(updated.scale.x).toBe(1.25);
+    expect(updated.scale.y).toBe(0.8);
+  });
+
   it('sets rotation.z', () => {
     const original = createMockTransform();
     const updated = setValueInTransform(original, 'rotation.z', 90);
@@ -445,7 +457,7 @@ describe('setValueInTransform', () => {
   it('roundtrip: get after set returns same value', () => {
     const props: AnimatableProperty[] = [
       'opacity', 'position.x', 'position.y', 'position.z',
-      'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z',
+      'scale.all', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z',
     ];
     for (const prop of props) {
       const t = setValueInTransform(createMockTransform(), prop, 42);

@@ -1,5 +1,6 @@
 import { useTimelineStore } from '../../stores/timeline';
 import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
+import { getEffectiveScale } from '../../utils/transformScale';
 import { resolveSceneClipTransform, type SceneTimelineContext } from './SceneTimelineUtils';
 import type { SceneSplatEffectorRuntimeData, SceneVector3 } from './types';
 
@@ -135,9 +136,10 @@ export function collectActiveSceneSplatEffectors(
         clipKeyframes,
       });
       const settings = clip.source?.splatEffectorSettings ?? DEFAULT_SPLAT_EFFECTOR_SETTINGS;
-      const scaleZ = transform.scale.z ?? 1;
-      const scaleX = Math.abs(transform.scale.x);
-      const scaleY = Math.abs(transform.scale.y);
+      const effectiveScale = getEffectiveScale(transform.scale);
+      const scaleZ = effectiveScale.z ?? 1;
+      const scaleX = Math.abs(effectiveScale.x);
+      const scaleY = Math.abs(effectiveScale.y);
       const scaleZAbs = Math.abs(scaleZ);
 
       return {

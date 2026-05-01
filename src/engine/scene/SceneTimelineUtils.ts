@@ -23,6 +23,7 @@ function buildBaseTransform(clip: TimelineClip): ClipTransform {
       z: clip.transform?.position?.z ?? DEFAULT_TRANSFORM.position.z,
     },
     scale: {
+      ...(clip.transform?.scale?.all !== undefined ? { all: clip.transform.scale.all } : {}),
       x: clip.transform?.scale?.x ?? DEFAULT_TRANSFORM.scale.x,
       y: clip.transform?.scale?.y ?? DEFAULT_TRANSFORM.scale.y,
       ...(clip.transform?.scale?.z !== undefined ? { z: clip.transform.scale.z } : {}),

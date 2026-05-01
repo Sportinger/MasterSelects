@@ -1,5 +1,6 @@
 // Transform Tab - Position, Scale, Rotation, Opacity controls
 import { useCallback } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import {
@@ -21,10 +22,6 @@ import type { BlendMode, AnimatableProperty } from '../../../types';
 import type { MIDIParameterTarget } from '../../../types/midi';
 import {
   KeyframeToggle,
-  ScaleKeyframeToggle,
-  PositionKeyframeToggle,
-  CameraPositionKeyframeToggle,
-  RotationKeyframeToggle,
   DraggableNumber,
 } from './shared';
 import { BLEND_MODE_GROUPS, formatBlendModeName } from './sharedConstants';
@@ -36,7 +33,7 @@ interface TransformTabProps {
     opacity: number;
     blendMode: BlendMode;
     position: { x: number; y: number; z: number };
-    scale: { x: number; y: number; z?: number };
+    scale: { all?: number; x: number; y: number; z?: number };
     rotation: { x: number; y: number; z: number };
   };
   speed?: number;
@@ -48,10 +45,17 @@ function LabeledValue({
   label,
   wip,
   midiTarget,
+  keyframeToggle,
   ...props
-}: { label: string; wip?: boolean; midiTarget?: MIDIParameterTarget | null } & React.ComponentProps<typeof DraggableNumber>) {
+}: {
+  label: string;
+  wip?: boolean;
+  midiTarget?: MIDIParameterTarget | null;
+  keyframeToggle?: ReactNode;
+} & ComponentProps<typeof DraggableNumber>) {
   return (
-    <div className="labeled-value">
+    <div className={`labeled-value ${keyframeToggle ? 'with-keyframe-toggle' : ''}`}>
+      {keyframeToggle}
       <MIDIParameterLabel as="span" className="labeled-value-label" target={midiTarget}>
         {label}
         {wip && <span className="menu-wip-badge">WIP</span>}
@@ -61,19 +65,21 @@ function LabeledValue({
   );
 }
 
-function RotationValue({ label, degrees, onChange, onDragStart, onDragEnd, midiTarget }: {
+function RotationValue({ label, degrees, onChange, onDragStart, onDragEnd, midiTarget, keyframeToggle }: {
   label: string;
   degrees: number;
   onChange: (degrees: number) => void;
   onDragStart?: () => void;
   onDragEnd?: () => void;
   midiTarget?: MIDIParameterTarget | null;
+  keyframeToggle?: ReactNode;
 }) {
   const revolutions = Math.trunc(degrees / 360);
   const remainder = degrees - revolutions * 360;
 
   return (
-    <div className="labeled-value rotation-value-ae">
+    <div className={`labeled-value rotation-value-ae ${keyframeToggle ? 'with-keyframe-toggle' : ''}`}>
+      {keyframeToggle}
       <MIDIParameterLabel as="span" className="labeled-value-label" target={midiTarget}>
         {label}
       </MIDIParameterLabel>
@@ -183,6 +189,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
   const cameraMoveY = transform.position.y;
   const cameraMoveZ = transform.scale.z ?? 0;
   const cameraDist = transform.position.z;
+  const scaleAll = transform.scale.all ?? 1;
   const handlePosXChange = (value: number) => handlePropertyChange(
     'position.x',
     usesScenePositionUnits ? value : value / (compWidth / 2),
@@ -219,32 +226,14 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
     applyCameraPropertyUpdates(updates);
   };
 
+  const scaleAllPct = scaleAll * 100;
   const scaleXPct = transform.scale.x * 100;
   const scaleYPct = transform.scale.y * 100;
   const scaleZPct = (transform.scale.z ?? 1) * 100;
-  const uniformScalePct = (
-    supportsScaleZ
-      ? (transform.scale.x + transform.scale.y + (transform.scale.z ?? 1)) / 3
-      : (transform.scale.x + transform.scale.y) / 2
-  ) * 100;
+  const handleScaleAllChange = (pct: number) => handlePropertyChange('scale.all', pct / 100);
   const handleScaleXChange = (pct: number) => handlePropertyChange('scale.x', pct / 100);
   const handleScaleYChange = (pct: number) => handlePropertyChange('scale.y', pct / 100);
   const handleScaleZChange = (pct: number) => handlePropertyChange('scale.z', pct / 100);
-  const handleCameraZoomChange = (pct: number) => {
-    const value = pct / 100;
-    handlePropertyChange('scale.x', value);
-    handlePropertyChange('scale.y', value);
-  };
-  const handleUniformScaleChange = (pct: number) => {
-    const value = pct / 100;
-    if (usesCameraControls) {
-      handleCameraZoomChange(pct);
-      return;
-    }
-    handlePropertyChange('scale.x', value);
-    handlePropertyChange('scale.y', value);
-    if (supportsScaleZ) handlePropertyChange('scale.z', value);
-  };
 
   const opacityPct = transform.opacity * 100;
   const handleOpacityChange = (pct: number) => handlePropertyChange('opacity', Math.max(0, Math.min(100, pct)) / 100);
@@ -412,11 +401,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
 
       <div className="properties-section">
         <div className="control-row transform-param-row">
-          {usesCameraControls ? (
-            <CameraPositionKeyframeToggle clipId={clipId} x={cameraMoveX} y={cameraMoveY} z={cameraMoveZ} />
-          ) : (
-            <PositionKeyframeToggle clipId={clipId} x={transform.position.x} y={transform.position.y} z={transform.position.z} />
-          )}
+          <span className="keyframe-toggle-placeholder" />
           <label className="prop-label">{usesCameraControls ? 'Move' : 'Position'}</label>
           <div className="multi-value-row">
             <LabeledValue
@@ -428,6 +413,9 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
               sensitivity={positionSensitivity}
               onDragStart={handleBatchStart}
               onDragEnd={handleBatchEnd}
+              keyframeToggle={
+                <KeyframeToggle clipId={clipId} property="position.x" value={usesCameraControls ? cameraMoveX : transform.position.x} />
+              }
               midiTarget={createMIDIParameterTarget(
                 'position.x',
                 usesCameraControls ? 'Camera Pan X' : 'Position X',
@@ -445,6 +433,9 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
               sensitivity={positionSensitivity}
               onDragStart={handleBatchStart}
               onDragEnd={handleBatchEnd}
+              keyframeToggle={
+                <KeyframeToggle clipId={clipId} property="position.y" value={usesCameraControls ? cameraMoveY : transform.position.y} />
+              }
               midiTarget={createMIDIParameterTarget(
                 'position.y',
                 usesCameraControls ? 'Camera Pan Y' : 'Position Y',
@@ -463,6 +454,13 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
                 sensitivity={positionSensitivity}
                 onDragStart={handleBatchStart}
                 onDragEnd={handleBatchEnd}
+                keyframeToggle={
+                  <KeyframeToggle
+                    clipId={clipId}
+                    property={usesCameraControls ? 'scale.z' : 'position.z'}
+                    value={usesCameraControls ? cameraMoveZ : transform.position.z}
+                  />
+                }
                 midiTarget={createMIDIParameterTarget(
                   usesCameraControls ? 'scale.z' : 'position.z',
                   usesCameraControls ? 'Camera Forward' : 'Position Z',
@@ -479,7 +477,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
       {usesCameraControls && (
         <div className="properties-section">
           <div className="control-row transform-param-row">
-            <KeyframeToggle clipId={clipId} property="position.z" value={cameraDist} />
+            <span className="keyframe-toggle-placeholder" />
             <label className="prop-label">Distance</label>
             <LabeledValue
               label="Dist"
@@ -490,6 +488,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
               sensitivity={0.02}
               onDragStart={handleBatchStart}
               onDragEnd={handleBatchEnd}
+              keyframeToggle={<KeyframeToggle clipId={clipId} property="position.z" value={cameraDist} />}
               midiTarget={createMIDIParameterTarget('position.z', 'Camera Distance', cameraDist, -20, 20)}
             />
           </div>
@@ -498,18 +497,13 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
 
       <div className="properties-section">
         <div className="control-row transform-param-row">
-          <ScaleKeyframeToggle
-            clipId={clipId}
-            scaleX={transform.scale.x}
-            scaleY={transform.scale.y}
-            {...(supportsScaleZ ? { scaleZ: transform.scale.z ?? 1 } : {})}
-          />
+          <span className="keyframe-toggle-placeholder" />
           <label className="prop-label">{usesCameraControls ? 'Zoom' : 'Scale'}</label>
           <div className="multi-value-row">
             <LabeledValue
               label={usesCameraControls ? 'Zoom' : 'All'}
-              value={uniformScalePct}
-              onChange={usesCameraControls ? handleCameraZoomChange : handleUniformScaleChange}
+              value={scaleAllPct}
+              onChange={handleScaleAllChange}
               defaultValue={100}
               decimals={1}
               suffix="%"
@@ -517,13 +511,13 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
               sensitivity={1}
               onDragStart={handleBatchStart}
               onDragEnd={handleBatchEnd}
+              keyframeToggle={<KeyframeToggle clipId={clipId} property="scale.all" value={scaleAll} />}
               midiTarget={createMIDIParameterTarget(
-                usesCameraControls ? 'camera.zoom' : 'scale.all',
+                'scale.all',
                 usesCameraControls ? 'Camera Zoom' : 'Scale All',
-                transform.scale.x,
+                scaleAll,
                 usesCameraControls ? 0.05 : 0.01,
                 usesCameraControls ? 40 : 4,
-                usesCameraControls ? ['scale.x', 'scale.y'] : supportsScaleZ ? ['scale.x', 'scale.y', 'scale.z'] : ['scale.x', 'scale.y'],
               )}
             />
             {!usesCameraControls && (
@@ -538,6 +532,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
                 sensitivity={1}
                 onDragStart={handleBatchStart}
                 onDragEnd={handleBatchEnd}
+                keyframeToggle={<KeyframeToggle clipId={clipId} property="scale.x" value={transform.scale.x} />}
                 midiTarget={createMIDIParameterTarget('scale.x', 'Scale X', transform.scale.x, 0.01, 4)}
               />
             )}
@@ -553,6 +548,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
                 sensitivity={1}
                 onDragStart={handleBatchStart}
                 onDragEnd={handleBatchEnd}
+                keyframeToggle={<KeyframeToggle clipId={clipId} property="scale.y" value={transform.scale.y} />}
                 midiTarget={createMIDIParameterTarget('scale.y', 'Scale Y', transform.scale.y, 0.01, 4)}
               />
             )}
@@ -568,6 +564,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
                 sensitivity={1}
                 onDragStart={handleBatchStart}
                 onDragEnd={handleBatchEnd}
+                keyframeToggle={<KeyframeToggle clipId={clipId} property="scale.z" value={transform.scale.z ?? 1} />}
                 midiTarget={createMIDIParameterTarget('scale.z', 'Scale Z', transform.scale.z ?? 1, 0.01, 4)}
               />
             )}
@@ -577,7 +574,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
 
       <div className="properties-section">
         <div className="control-row transform-param-row">
-          <RotationKeyframeToggle clipId={clipId} x={transform.rotation.x} y={transform.rotation.y} z={transform.rotation.z} />
+          <span className="keyframe-toggle-placeholder" />
           <label className="prop-label">{usesCameraControls ? 'Look' : 'Rotation'}</label>
           <div className="multi-value-row rotation-row">
             {isEffectively3D && (
@@ -589,6 +586,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
                   : handlePropertyChange('rotation.x', value)}
                 onDragStart={handleBatchStart}
                 onDragEnd={handleBatchEnd}
+                keyframeToggle={<KeyframeToggle clipId={clipId} property="rotation.x" value={transform.rotation.x} />}
                 midiTarget={createMIDIParameterTarget(
                   'rotation.x',
                   usesCameraControls ? 'Camera Pitch' : 'Rotation X',
@@ -607,6 +605,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
                   : handlePropertyChange('rotation.y', value)}
                 onDragStart={handleBatchStart}
                 onDragEnd={handleBatchEnd}
+                keyframeToggle={<KeyframeToggle clipId={clipId} property="rotation.y" value={transform.rotation.y} />}
                 midiTarget={createMIDIParameterTarget(
                   'rotation.y',
                   usesCameraControls ? 'Camera Yaw' : 'Rotation Y',
@@ -624,6 +623,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
                 : handlePropertyChange('rotation.z', value)}
               onDragStart={handleBatchStart}
               onDragEnd={handleBatchEnd}
+              keyframeToggle={<KeyframeToggle clipId={clipId} property="rotation.z" value={transform.rotation.z} />}
               midiTarget={createMIDIParameterTarget(
                 'rotation.z',
                 usesCameraControls ? 'Camera Roll' : 'Rotation Z',
@@ -643,7 +643,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
             if (usesCameraControls) {
               updateClipTransform(clipId, {
                 position: { x: 0, y: 0, z: 0 },
-                scale: { x: 1, y: 1, z: 0 },
+                scale: { all: 1, x: 1, y: 1, z: 0 },
                 rotation: { x: 0, y: 0, z: 0 },
               });
               return;
@@ -653,7 +653,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
               opacity: 1,
               blendMode: 'normal',
               position: { x: 0, y: 0, z: 0 },
-              scale: supportsScaleZ ? { x: 1, y: 1, z: 1 } : { x: 1, y: 1 },
+              scale: supportsScaleZ ? { all: 1, x: 1, y: 1, z: 1 } : { all: 1, x: 1, y: 1 },
               rotation: { x: 0, y: 0, z: 0 },
             });
           }}

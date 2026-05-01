@@ -4,6 +4,7 @@
 import type { ClipTransform } from '../../types';
 import type { CachedTransform } from './types';
 import { LAYER_BUILDER_CONSTANTS } from './types';
+import { getEffectiveScale } from '../../utils/transformScale';
 
 /**
  * Layer transform data as used in Layer objects
@@ -49,13 +50,7 @@ export class TransformCache {
       z: transform.position.z,
     };
 
-    const scale: { x: number; y: number; z?: number } = {
-      x: transform.scale.x,
-      y: transform.scale.y,
-    };
-    if (transform.scale.z !== undefined) {
-      scale.z = transform.scale.z;
-    }
+    const scale = getEffectiveScale(transform.scale);
 
     // Convert rotation from degrees to radians
     const rotation = {

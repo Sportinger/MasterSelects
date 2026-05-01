@@ -17,6 +17,7 @@ import { flags } from '../engine/featureFlags';
 import { Logger } from './logger';
 import { slotDeckManager } from './slotDeckManager';
 import { lottieRuntimeManager } from './vectorAnimation/LottieRuntimeManager';
+import { getEffectiveScale } from '../utils/transformScale';
 
 const log = Logger.create('LayerPlayback');
 
@@ -575,10 +576,7 @@ class LayerPlaybackManager {
         y: transform.position?.y || 0,
         z: transform.position?.z || 0,
       },
-      scale: {
-        x: transform.scale?.x ?? 1,
-        y: transform.scale?.y ?? 1,
-      },
+      scale: getEffectiveScale(transform.scale),
       rotation: {
         x: ((transform.rotation?.x || 0) * Math.PI) / 180,
         y: ((transform.rotation?.y || 0) * Math.PI) / 180,

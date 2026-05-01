@@ -47,6 +47,7 @@ const CAMERA_POSE_PROPERTIES = new Set([
   'position.x',
   'position.y',
   'position.z',
+  'scale.all',
   'scale.x',
   'scale.y',
   'scale.z',

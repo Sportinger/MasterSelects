@@ -442,7 +442,7 @@ export interface ClipTransform {
   opacity: number;          // 0-1
   blendMode: BlendMode;
   position: { x: number; y: number; z: number };
-  scale: { x: number; y: number; z?: number };
+  scale: { all?: number; x: number; y: number; z?: number };
   rotation: { x: number; y: number; z: number };  // degrees
 }
 
@@ -725,7 +725,7 @@ export type TransformProperty =
   | 'opacity'
   | 'speed'
   | 'position.x' | 'position.y' | 'position.z'
-  | 'scale.x' | 'scale.y' | 'scale.z'
+  | 'scale.all' | 'scale.x' | 'scale.y' | 'scale.z'
   | 'rotation.x' | 'rotation.y' | 'rotation.z';
 
 // Effect property format: effect.{effectId}.{paramName}

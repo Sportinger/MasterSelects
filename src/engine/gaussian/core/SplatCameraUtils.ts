@@ -14,7 +14,7 @@ export interface OrbitCameraPose {
 
 type OrbitCameraLayerInput = {
   position: { x: number; y: number; z: number };
-  scale: { x: number; y: number; z?: number };
+  scale: { all?: number; x: number; y: number; z?: number };
   rotation: number | { x: number; y: number; z: number };
 };
 
@@ -56,7 +56,7 @@ export interface OrbitCameraFrame extends OrbitCameraPose {
  *  - position.x/y -> pan in camera screen space (-1..1 roughly equals full viewport)
  *  - scale.z     -> forward travel in view direction for camera-nav clips
  *  - rotation    -> orbit angles in degrees (x = pitch, y = yaw). Accepts number (yaw only) or {x,y,z}.
- *  - scale.x     -> zoom multiplier (dollies camera distance)
+ *  - scale.all * scale.x -> zoom multiplier (dollies camera distance)
  *  - settings.nearPlane / farPlane  -> clipping planes
  */
 export function buildSplatCamera(
@@ -143,7 +143,7 @@ export function resolveOrbitCameraFrame(
 
   // Zoom from scale.x (default 1). Higher zoom moves the camera closer,
   // lower zoom moves it farther away without introducing extreme fisheye FOV.
-  const zoom = Math.max(0.01, layer.scale.x || 1);
+  const zoom = Math.max(0.01, (layer.scale.x || 1) * (layer.scale.all ?? 1));
   const distance = baseDistance / zoom;
 
   // Keep a stable field of view; "zoom" is handled as a dolly.

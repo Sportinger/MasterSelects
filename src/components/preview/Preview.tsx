@@ -48,6 +48,7 @@ import {
   getPreviewSourceLabel,
   resolvePreviewSourceCompositionId,
 } from '../../utils/previewPanelSource';
+import { getScaleAll } from '../../utils/transformScale';
 
 const CAMERA_NAV_MOVE_CODES = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE']);
 
@@ -57,6 +58,10 @@ function isCameraNavMoveCode(code: string): code is 'KeyW' | 'KeyA' | 'KeyS' | '
 
 function getCameraNavForwardOffset(scaleZ: number | undefined): number {
   return typeof scaleZ === 'number' && Number.isFinite(scaleZ) ? scaleZ : 0;
+}
+
+function getCameraZoomFromScale(scale: ClipTransform['scale']): number {
+  return Math.max(0.01, (scale.x || 1) * getScaleAll(scale));
 }
 
 function getSharedSceneDefaultCameraDistance(fovDegrees: number): number {
@@ -124,6 +129,8 @@ function applySceneCameraLiveOverrideToTransform(
       z: transform.position.z + (override.position?.z ?? 0),
     },
     scale: {
+      ...transform.scale,
+      all: (transform.scale.all ?? 1) + (override.scale?.all ?? 0),
       x: transform.scale.x + (override.scale?.x ?? 0),
       y: transform.scale.y + (override.scale?.y ?? override.scale?.x ?? 0),
       ...(transform.scale.z !== undefined || override.scale?.z !== undefined
@@ -861,6 +868,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     if (engineState.sceneNavNoKeyframes && clip?.source?.type === 'camera') {
       const clipLocalTime = timelineState.playheadPosition - clip.startTime;
       const baseTransform = timelineState.getInterpolatedTransform(clipId, clipLocalTime);
+      const baseScaleX = Math.max(0.01, baseTransform.scale.x || 1);
       engineState.setSceneCameraLiveOverride(clipId, {
         ...(values.positionX !== undefined || values.positionY !== undefined
           ? {
@@ -875,8 +883,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
               scale: {
                 ...(values.scale !== undefined
                   ? {
-                      x: values.scale - baseTransform.scale.x,
-                      y: values.scale - baseTransform.scale.y,
+                      all: values.scale / baseScaleX - getScaleAll(baseTransform.scale),
                     }
                   : {}),
                 ...(values.forwardOffset !== undefined
@@ -898,7 +905,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       return;
     }
 
-    const propertyUpdates: Array<readonly [property: 'position.x' | 'position.y' | 'scale.x' | 'scale.y' | 'scale.z' | 'rotation.x' | 'rotation.y', value: number]> = [];
+    const propertyUpdates: Array<readonly [property: 'position.x' | 'position.y' | 'scale.all' | 'scale.z' | 'rotation.x' | 'rotation.y', value: number]> = [];
 
     if (values.positionX !== undefined) {
       propertyUpdates.push(['position.x', values.positionX]);
@@ -907,7 +914,12 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       propertyUpdates.push(['position.y', values.positionY]);
     }
     if (values.scale !== undefined) {
-      propertyUpdates.push(['scale.x', values.scale], ['scale.y', values.scale]);
+      const clipLocalTime = timelineState.playheadPosition - (clip?.startTime ?? 0);
+      const currentTransform = clip
+        ? timelineState.getInterpolatedTransform(clipId, clipLocalTime)
+        : undefined;
+      const scaleX = Math.max(0.01, currentTransform?.scale.x ?? 1);
+      propertyUpdates.push(['scale.all', values.scale / scaleX]);
     }
     if (values.forwardOffset !== undefined) {
       propertyUpdates.push(['scale.z', values.forwardOffset]);
@@ -930,10 +942,14 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     } else {
       const currentClip = useTimelineStore.getState().clips.find((clip) => clip.id === clipId);
       const currentTransform = currentClip?.transform;
+      const nextScaleAll = values.scale !== undefined
+        ? values.scale / Math.max(0.01, currentTransform?.scale.x ?? 1)
+        : undefined;
       const nextScale = values.scale !== undefined || values.forwardOffset !== undefined
         ? {
-            x: values.scale ?? currentTransform?.scale.x ?? 1,
-            y: values.scale ?? currentTransform?.scale.y ?? 1,
+            all: nextScaleAll ?? currentTransform?.scale.all ?? 1,
+            x: currentTransform?.scale.x ?? 1,
+            y: currentTransform?.scale.y ?? 1,
             ...(values.forwardOffset !== undefined || currentTransform?.scale.z !== undefined
               ? { z: values.forwardOffset ?? currentTransform?.scale.z ?? 0 }
               : {}),
@@ -1109,8 +1125,11 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         z: current.position.z,
       },
       scale: {
-        x: values.scale ?? current.scale.x,
-        y: values.scale ?? current.scale.y,
+        all: values.scale !== undefined
+          ? values.scale / Math.max(0.01, current.scale.x || 1)
+          : current.scale.all ?? 1,
+        x: current.scale.x,
+        y: current.scale.y,
         ...(values.forwardOffset !== undefined || current.scale.z !== undefined
           ? { z: values.forwardOffset ?? current.scale.z ?? 0 }
           : {}),
@@ -1290,7 +1309,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       return;
     }
 
-    const zoom = Math.max(0.01, freshTransform.scale.x || 1);
+    const zoom = getCameraZoomFromScale(freshTransform.scale);
     const zoomDamping = 1 / Math.sqrt(Math.max(0.35, zoom));
     const clipSource = navigationSceneNavClip.source;
     if (!clipSource || clipSource.type !== 'camera') {
@@ -1767,7 +1786,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       e.preventDefault();
       scheduleGaussianWheelBatchEnd();
 
-      const currentZoom = Math.max(0.05, freshTransform.scale.x || 1);
+      const currentZoom = Math.max(0.05, getCameraZoomFromScale(freshTransform.scale));
       const zoomFactor = Math.exp(-e.deltaY * 0.0025);
       const nextZoom = Math.max(0.05, Math.min(40, currentZoom * zoomFactor));
 
@@ -1874,7 +1893,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
             panX: freshTransform.position.x,
             panY: freshTransform.position.y,
             panZ: freshTransform.position.z,
-            zoom: freshTransform.scale.x || 1,
+            zoom: getCameraZoomFromScale(freshTransform.scale),
           };
           setIsGaussianPanning(true);
           return;
@@ -1916,7 +1935,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
           panX: freshTransform.position.x,
           panY: freshTransform.position.y,
           panZ: freshTransform.position.z,
-          zoom: freshTransform.scale.x || 1,
+            zoom: getCameraZoomFromScale(freshTransform.scale),
         };
         setIsGaussianPanning(true);
         return;

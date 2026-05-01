@@ -2,7 +2,7 @@
 // Extracted from Timeline.tsx for better maintainability
 
 import { useEffect, useRef, useCallback } from 'react';
-import type { TimelineClip, TimelineTrack, Layer, Effect, NestedCompositionData, AnimatableProperty, BlendMode, ClipTransform } from '../../../types';
+import type { TimelineClip, TimelineTrack, Layer, Effect, NestedCompositionData, AnimatableProperty, ClipTransform } from '../../../types';
 import type { ClipDragState } from '../types';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
@@ -11,10 +11,21 @@ import { proxyFrameCache } from '../../../services/proxyFrameCache';
 import { audioManager, audioStatusTracker } from '../../../services/audioManager';
 import { Logger } from '../../../services/logger';
 import { getInterpolatedClipTransform } from '../../../utils/keyframeInterpolation';
+import { getEffectiveScale } from '../../../utils/transformScale';
 import { DEFAULT_TRANSFORM } from '../../../stores/timeline/constants';
 import { lottieRuntimeManager } from '../../../services/vectorAnimation/LottieRuntimeManager';
 
 const log = Logger.create('useLayerSync');
+
+function isLayerScaleChanged(layerScale: Layer['scale'] | undefined, transformScale: ClipTransform['scale']): boolean {
+  const renderScale = getEffectiveScale(transformScale);
+  return (
+    !layerScale ||
+    layerScale.x !== renderScale.x ||
+    layerScale.y !== renderScale.y ||
+    layerScale.z !== renderScale.z
+  );
+}
 
 interface UseLayerSyncProps {
   // Refs
@@ -40,13 +51,7 @@ interface UseLayerSyncProps {
 
   // Helper functions
   getClipsAtTime: (time: number) => TimelineClip[];
-  getInterpolatedTransform: (clipId: string, localTime: number) => {
-    position: { x: number; y: number; z: number };
-    scale: { x: number; y: number };
-    rotation: { x: number; y: number; z: number };
-    opacity: number;
-    blendMode: BlendMode;
-  };
+  getInterpolatedTransform: (clipId: string, localTime: number) => ClipTransform;
   getInterpolatedEffects: (clipId: string, localTime: number) => Effect[];
   getInterpolatedSpeed: (clipId: string, localTime: number) => number;
   getSourceTimeForClip: (clipId: string, localTime: number) => number;
@@ -156,8 +161,10 @@ export function useLayerSync({
             z: nestedClip.transform?.position?.z ?? DEFAULT_TRANSFORM.position.z,
           },
           scale: {
+            ...(nestedClip.transform?.scale?.all !== undefined ? { all: nestedClip.transform.scale.all } : {}),
             x: nestedClip.transform?.scale?.x ?? DEFAULT_TRANSFORM.scale.x,
             y: nestedClip.transform?.scale?.y ?? DEFAULT_TRANSFORM.scale.y,
+            ...(nestedClip.transform?.scale?.z !== undefined ? { z: nestedClip.transform.scale.z } : {}),
           },
           rotation: {
             x: nestedClip.transform?.rotation?.x ?? DEFAULT_TRANSFORM.rotation.x,
@@ -205,6 +212,8 @@ export function useLayerSync({
           });
         }
 
+        const renderScale = getEffectiveScale(transform.scale);
+
         if (nestedClip.source?.videoElement) {
           layers.push({
             id: `nested-layer-${nestedClip.id}`,
@@ -223,10 +232,7 @@ export function useLayerSync({
               y: transform.position?.y || 0,
               z: transform.position?.z || 0,
             },
-            scale: {
-              x: transform.scale?.x ?? 1,
-              y: transform.scale?.y ?? 1,
-            },
+            scale: renderScale,
             rotation: {
               x: ((transform.rotation?.x || 0) * Math.PI) / 180,
               y: ((transform.rotation?.y || 0) * Math.PI) / 180,
@@ -250,10 +256,7 @@ export function useLayerSync({
               y: transform.position?.y || 0,
               z: transform.position?.z || 0,
             },
-            scale: {
-              x: transform.scale?.x ?? 1,
-              y: transform.scale?.y ?? 1,
-            },
+            scale: renderScale,
             rotation: {
               x: ((transform.rotation?.x || 0) * Math.PI) / 180,
               y: ((transform.rotation?.y || 0) * Math.PI) / 180,
@@ -281,10 +284,7 @@ export function useLayerSync({
               y: transform.position?.y || 0,
               z: transform.position?.z || 0,
             },
-            scale: {
-              x: transform.scale?.x ?? 1,
-              y: transform.scale?.y ?? 1,
-            },
+            scale: renderScale,
             rotation: {
               x: ((transform.rotation?.x || 0) * Math.PI) / 180,
               y: ((transform.rotation?.y || 0) * Math.PI) / 180,
@@ -431,7 +431,7 @@ export function useLayerSync({
             },
             effects: interpolatedEffects,
             position: { x: interpolatedTransform.position.x, y: interpolatedTransform.position.y, z: interpolatedTransform.position.z },
-            scale: { x: interpolatedTransform.scale.x, y: interpolatedTransform.scale.y },
+            scale: getEffectiveScale(interpolatedTransform.scale),
             rotation: {
               x: (interpolatedTransform.rotation.x * Math.PI) / 180,
               y: (interpolatedTransform.rotation.y * Math.PI) / 180,
@@ -466,8 +466,7 @@ export function useLayerSync({
           layer.position.x !== transform.position.x ||
           layer.position.y !== transform.position.y ||
           layer.position.z !== transform.position.z ||
-          layer.scale.x !== transform.scale.x ||
-          layer.scale.y !== transform.scale.y ||
+          isLayerScaleChanged(layer.scale, transform.scale) ||
           (layer.rotation as { z?: number })?.z !== (transform.rotation.z * Math.PI) / 180 ||
           (layer.rotation as { x?: number })?.x !== (transform.rotation.x * Math.PI) / 180 ||
           (layer.rotation as { y?: number })?.y !== (transform.rotation.y * Math.PI) / 180 ||
@@ -486,7 +485,7 @@ export function useLayerSync({
             },
             effects: nativeInterpolatedEffects,
             position: { x: transform.position.x, y: transform.position.y, z: transform.position.z },
-            scale: { x: transform.scale.x, y: transform.scale.y },
+            scale: getEffectiveScale(transform.scale),
             rotation: {
               x: (transform.rotation.x * Math.PI) / 180,
               y: (transform.rotation.y * Math.PI) / 180,
@@ -570,7 +569,7 @@ export function useLayerSync({
               },
               effects: interpolatedEffectsForProxy,
               position: { x: transform.position.x, y: transform.position.y, z: transform.position.z },
-              scale: { x: transform.scale.x, y: transform.scale.y },
+              scale: getEffectiveScale(transform.scale),
               rotation: {
                 x: (transform.rotation.x * Math.PI) / 180,
                 y: (transform.rotation.y * Math.PI) / 180,
@@ -616,10 +615,7 @@ export function useLayerSync({
                         y: capturedTransform.position.y,
                         z: capturedTransform.position.z,
                       },
-                      scale: {
-                        x: capturedTransform.scale.x,
-                        y: capturedTransform.scale.y,
-                      },
+                      scale: getEffectiveScale(capturedTransform.scale),
                       rotation: {
                         x: (capturedTransform.rotation.x * Math.PI) / 180,
                         y: (capturedTransform.rotation.y * Math.PI) / 180,
@@ -647,7 +643,7 @@ export function useLayerSync({
                 },
                 effects: interpolatedEffectsForProxy,
                 position: { x: transform.position.x, y: transform.position.y, z: transform.position.z },
-                scale: { x: transform.scale.x, y: transform.scale.y },
+                scale: getEffectiveScale(transform.scale),
                 rotation: {
                   x: (transform.rotation.x * Math.PI) / 180,
                   y: (transform.rotation.y * Math.PI) / 180,
@@ -679,7 +675,7 @@ export function useLayerSync({
                 },
                 effects: interpolatedEffectsForProxy,
                 position: { x: transform.position.x, y: transform.position.y, z: transform.position.z },
-                scale: { x: transform.scale.x, y: transform.scale.y },
+                scale: getEffectiveScale(transform.scale),
                 rotation: {
                   x: (transform.rotation.x * Math.PI) / 180,
                   y: (transform.rotation.y * Math.PI) / 180,
@@ -708,8 +704,7 @@ export function useLayerSync({
             layer.position.x !== transform.position.x ||
             layer.position.y !== transform.position.y ||
             layer.position.z !== transform.position.z ||
-            layer.scale.x !== transform.scale.x ||
-            layer.scale.y !== transform.scale.y ||
+            isLayerScaleChanged(layer.scale, transform.scale) ||
             (layer.rotation as { z?: number })?.z !==
               (transform.rotation.z * Math.PI) / 180 ||
             (layer.rotation as { x?: number })?.x !==
@@ -732,7 +727,7 @@ export function useLayerSync({
               },
               effects: videoInterpolatedEffects,
               position: { x: transform.position.x, y: transform.position.y, z: transform.position.z },
-              scale: { x: transform.scale.x, y: transform.scale.y },
+              scale: getEffectiveScale(transform.scale),
               rotation: {
                 x: (transform.rotation.x * Math.PI) / 180,
                 y: (transform.rotation.y * Math.PI) / 180,
@@ -760,8 +755,7 @@ export function useLayerSync({
           layer.position.x !== transform.position.x ||
           layer.position.y !== transform.position.y ||
           layer.position.z !== transform.position.z ||
-          layer.scale.x !== transform.scale.x ||
-          layer.scale.y !== transform.scale.y ||
+          isLayerScaleChanged(layer.scale, transform.scale) ||
           (layer.rotation as { z?: number })?.z !==
             (transform.rotation.z * Math.PI) / 180 ||
           (layer.rotation as { x?: number })?.x !==
@@ -783,7 +777,7 @@ export function useLayerSync({
             },
             effects: imageInterpolatedEffects,
             position: { x: transform.position.x, y: transform.position.y, z: transform.position.z },
-            scale: { x: transform.scale.x, y: transform.scale.y },
+            scale: getEffectiveScale(transform.scale),
             rotation: {
               x: (transform.rotation.x * Math.PI) / 180,
               y: (transform.rotation.y * Math.PI) / 180,
@@ -815,8 +809,7 @@ export function useLayerSync({
           layer.position.x !== transform.position.x ||
           layer.position.y !== transform.position.y ||
           layer.position.z !== transform.position.z ||
-          layer.scale.x !== transform.scale.x ||
-          layer.scale.y !== transform.scale.y ||
+          isLayerScaleChanged(layer.scale, transform.scale) ||
           (layer.rotation as { z?: number })?.z !==
             (transform.rotation.z * Math.PI) / 180 ||
           (layer.rotation as { x?: number })?.x !==
@@ -838,7 +831,7 @@ export function useLayerSync({
             },
             effects: textInterpolatedEffects,
             position: { x: transform.position.x, y: transform.position.y, z: transform.position.z },
-            scale: { x: transform.scale.x, y: transform.scale.y },
+            scale: getEffectiveScale(transform.scale),
             rotation: {
               x: (transform.rotation.x * Math.PI) / 180,
               y: (transform.rotation.y * Math.PI) / 180,

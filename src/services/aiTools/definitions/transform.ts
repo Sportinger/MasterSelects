@@ -13,6 +13,7 @@ export const transformToolDefinitions: ToolDefinition[] = [
           x: { type: 'number', description: 'Horizontal position in pixels (0 = center, e.g. 100 = 100px right). Range depends on composition resolution.' },
           y: { type: 'number', description: 'Vertical position in pixels (0 = center, e.g. -50 = 50px up). Range depends on composition resolution.' },
           z: { type: 'number', description: '3D Z position in scene units. For camera clips this is orbit distance.' },
+          scaleAll: { type: 'number', description: 'Uniform scale multiplier applied on top of axis scale (1 = 100%). For camera clips this is zoom.' },
           scaleX: { type: 'number', description: 'Horizontal scale (1 = 100%)' },
           scaleY: { type: 'number', description: 'Vertical scale (1 = 100%)' },
           scaleZ: { type: 'number', description: '3D scale Z or camera forward offset, depending on clip type.' },

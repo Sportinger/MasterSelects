@@ -22,6 +22,7 @@ import { scrubSettleState } from '../scrubSettleState';
 import { Logger } from '../logger';
 import { flags } from '../../engine/featureFlags';
 import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
+import { getEffectiveScale } from '../../utils/transformScale';
 import {
   getGaussianSplatSequenceFrame,
   getGaussianSplatSequenceFrameRuntimeKey,
@@ -1189,8 +1190,10 @@ export class LayerBuilderService {
         z: nestedClip.transform?.position?.z ?? DEFAULT_TRANSFORM.position.z,
       },
       scale: {
+        ...(nestedClip.transform?.scale?.all !== undefined ? { all: nestedClip.transform.scale.all } : {}),
         x: nestedClip.transform?.scale?.x ?? DEFAULT_TRANSFORM.scale.x,
         y: nestedClip.transform?.scale?.y ?? DEFAULT_TRANSFORM.scale.y,
+        ...(nestedClip.transform?.scale?.z !== undefined ? { z: nestedClip.transform.scale.z } : {}),
       },
       rotation: {
         x: nestedClip.transform?.rotation?.x ?? DEFAULT_TRANSFORM.rotation.x,
@@ -1238,6 +1241,8 @@ export class LayerBuilderService {
       });
     }
 
+    const renderScale = getEffectiveScale(transform.scale);
+
     const baseLayer: Omit<Layer, 'source'> = {
       id: `nested-layer-${nestedClip.id}`,
       name: nestedClip.name,
@@ -1251,10 +1256,7 @@ export class LayerBuilderService {
         y: transform.position?.y || 0,
         z: transform.position?.z || 0,
       },
-      scale: {
-        x: transform.scale?.x ?? 1,
-        y: transform.scale?.y ?? 1,
-      },
+      scale: renderScale,
       rotation: {
         x: ((transform.rotation?.x || 0) * Math.PI) / 180,
         y: ((transform.rotation?.y || 0) * Math.PI) / 180,

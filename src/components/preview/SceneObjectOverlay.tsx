@@ -48,6 +48,11 @@ interface SceneObjectOverlayProps {
 }
 
 type SceneGizmoDragAxis = SceneGizmoAxis | 'all';
+type ClipTransformPatch = Omit<Partial<ClipTransform>, 'position' | 'scale' | 'rotation'> & {
+  position?: Partial<ClipTransform['position']>;
+  scale?: Partial<ClipTransform['scale']>;
+  rotation?: Partial<ClipTransform['rotation']>;
+};
 
 type DisplayCameraWireframePath = {
   key: string;
@@ -209,23 +214,24 @@ function cloneTransform(transform: ClipTransform): ClipTransform {
   };
 }
 
-function resolveTransformPropertyUpdates(transform: Partial<ClipTransform>): Array<[AnimatableProperty, number]> {
+function resolveTransformPropertyUpdates(transform: ClipTransformPatch): Array<[AnimatableProperty, number]> {
   const updates: Array<[AnimatableProperty, number]> = [];
   if (transform.opacity !== undefined) updates.push(['opacity', transform.opacity]);
   if (transform.position) {
-    updates.push(['position.x', transform.position.x]);
-    updates.push(['position.y', transform.position.y]);
-    updates.push(['position.z', transform.position.z]);
+    if (transform.position.x !== undefined) updates.push(['position.x', transform.position.x]);
+    if (transform.position.y !== undefined) updates.push(['position.y', transform.position.y]);
+    if (transform.position.z !== undefined) updates.push(['position.z', transform.position.z]);
   }
   if (transform.scale) {
-    updates.push(['scale.x', transform.scale.x]);
-    updates.push(['scale.y', transform.scale.y]);
+    if (transform.scale.all !== undefined) updates.push(['scale.all', transform.scale.all]);
+    if (transform.scale.x !== undefined) updates.push(['scale.x', transform.scale.x]);
+    if (transform.scale.y !== undefined) updates.push(['scale.y', transform.scale.y]);
     if (transform.scale.z !== undefined) updates.push(['scale.z', transform.scale.z]);
   }
   if (transform.rotation) {
-    updates.push(['rotation.x', transform.rotation.x]);
-    updates.push(['rotation.y', transform.rotation.y]);
-    updates.push(['rotation.z', transform.rotation.z]);
+    if (transform.rotation.x !== undefined) updates.push(['rotation.x', transform.rotation.x]);
+    if (transform.rotation.y !== undefined) updates.push(['rotation.y', transform.rotation.y]);
+    if (transform.rotation.z !== undefined) updates.push(['rotation.z', transform.rotation.z]);
   }
   return updates;
 }
@@ -592,7 +598,7 @@ function resolveAxisPlaneDragUnits(
   );
 }
 
-function applySceneObjectTransform(clipId: string, transform: Partial<ClipTransform>): void {
+function applySceneObjectTransform(clipId: string, transform: ClipTransformPatch): void {
   const store = useTimelineStore.getState();
   const updates = resolveTransformPropertyUpdates(transform);
   const useKeyframePath = updates.some(([property]) =>
@@ -612,8 +618,8 @@ function applySceneObjectTransform(clipId: string, transform: Partial<ClipTransf
 function buildScaleUpdate(
   startScale: ClipTransform['scale'],
   values: { x: number; y: number; z?: number },
-): ClipTransform['scale'] {
-  const scale: ClipTransform['scale'] = {
+): Partial<ClipTransform['scale']> {
+  const scale: Partial<ClipTransform['scale']> = {
     x: Math.max(0.001, values.x),
     y: Math.max(0.001, values.y),
   };
@@ -630,7 +636,7 @@ function buildAxisResetTransform(
   axis: SceneGizmoAxis,
   object: PreviewSceneObject,
   start: ClipTransform,
-): Partial<ClipTransform> {
+): ClipTransformPatch {
   if (mode === 'rotate') {
     return {
       rotation: {
@@ -643,7 +649,7 @@ function buildAxisResetTransform(
   if (mode === 'scale') {
     if (object.kind === 'camera') {
       return {
-        scale: { x: 1, y: 1, z: 0 },
+        scale: axis === 'z' ? { z: 0 } : { all: 1 },
       };
     }
 
@@ -672,7 +678,7 @@ function buildCenterResetTransform(
   mode: SceneGizmoMode,
   object: PreviewSceneObject,
   start: ClipTransform,
-): Partial<ClipTransform> {
+): ClipTransformPatch {
   if (mode === 'rotate') {
     return {
       rotation: { x: 0, y: 0, z: 0 },
@@ -682,16 +688,19 @@ function buildCenterResetTransform(
   if (mode === 'scale') {
     if (object.kind === 'camera') {
       return {
-        scale: { x: 1, y: 1, z: 0 },
+        scale: { all: 1, x: 1, y: 1, z: 0 },
       };
     }
 
     return {
-      scale: buildScaleUpdate(start.scale, {
-        x: 1,
-        y: 1,
-        ...(object.kind !== 'plane' || start.scale.z !== undefined ? { z: 1 } : {}),
-      }),
+      scale: {
+        all: 1,
+        ...buildScaleUpdate(start.scale, {
+          x: 1,
+          y: 1,
+          ...(object.kind !== 'plane' || start.scale.z !== undefined ? { z: 1 } : {}),
+        }),
+      },
     };
   }
 
@@ -703,7 +712,7 @@ function buildCenterResetTransform(
 function resetSceneObjectTransform(
   clipId: string,
   mode: SceneGizmoMode,
-  transform: Partial<ClipTransform>,
+  transform: ClipTransformPatch,
 ): void {
   startBatch(`Reset scene ${mode}`);
   applySceneObjectTransform(clipId, transform);
@@ -907,7 +916,7 @@ function applyDragTransform(
   screenDistance: number,
   screenDelta: { x: number; y: number },
   runtime?: DragRuntime,
-  applyTransform: (clipId: string, transform: Partial<ClipTransform>) => void = applySceneObjectTransform,
+  applyTransform: (clipId: string, transform: ClipTransformPatch) => void = applySceneObjectTransform,
 ): void {
   const start = drag.startTransform;
   const axis = drag.axis;
@@ -937,17 +946,16 @@ function applyDragTransform(
         return;
       }
 
+      const startAll = start.scale.all ?? 1;
       const factor = axis === 'all'
         ? Math.max(0.01, 1 + screenDistance / 160)
-        : Math.max(0.01, (start.scale.x || 1) + scaleDelta);
+        : Math.max(0.01, startAll + scaleDelta);
       const nextZoom = axis === 'all'
-        ? Math.max(0.01, (start.scale.x || 1) * factor)
+        ? Math.max(0.01, startAll * factor)
         : factor;
       applyTransform(drag.clipId, {
         scale: {
-          ...start.scale,
-          x: nextZoom,
-          y: nextZoom,
+          all: nextZoom,
         },
       });
       return;
@@ -955,13 +963,8 @@ function applyDragTransform(
 
     if (axis === 'all') {
       const factor = Math.max(0.001, 1 + screenDistance / 160);
-      const includeZ = drag.kind !== 'plane' || start.scale.z !== undefined;
       applyTransform(drag.clipId, {
-        scale: buildScaleUpdate(start.scale, {
-          x: start.scale.x * factor,
-          y: start.scale.y * factor,
-          ...(includeZ ? { z: (start.scale.z ?? 1) * factor } : {}),
-        }),
+        scale: { all: (start.scale.all ?? 1) * factor },
       });
       return;
     }
@@ -1437,14 +1440,14 @@ export function SceneObjectOverlay({
     return cloneTransform(clip.transform);
   }, [editCameraClip?.id, editCameraTransform]);
 
-  const applyObjectTransform = useCallback((clipId: string, transform: Partial<ClipTransform>) => {
+  const applyObjectTransform = useCallback((clipId: string, transform: ClipTransformPatch) => {
     applySceneObjectTransform(clipId, transform);
   }, []);
 
   const resetObjectTransform = useCallback((
     clipId: string,
     modeToReset: SceneGizmoMode,
-    transform: Partial<ClipTransform>,
+    transform: ClipTransformPatch,
   ) => {
     resetSceneObjectTransform(clipId, modeToReset, transform);
   }, []);

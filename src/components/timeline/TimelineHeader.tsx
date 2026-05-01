@@ -37,8 +37,8 @@ const shouldHide3DOnlyProperties = (clip: KeyframeTrackClip | null | undefined):
 
 const getTransformPropertyOrder = (clip: KeyframeTrackClip | null | undefined): string[] => (
   usesCameraPropertyModel(clip)
-    ? ['opacity', 'position.x', 'position.y', 'scale.z', 'position.z', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z']
-    : ['opacity', 'position.x', 'position.y', 'position.z', 'scale.x', 'scale.y', 'scale.z', 'rotation.x', 'rotation.y', 'rotation.z']
+    ? ['opacity', 'position.x', 'position.y', 'scale.z', 'position.z', 'scale.all', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z']
+    : ['opacity', 'position.x', 'position.y', 'position.z', 'scale.all', 'scale.x', 'scale.y', 'scale.z', 'rotation.x', 'rotation.y', 'rotation.z']
 );
 
 // Get friendly names for properties
@@ -48,6 +48,7 @@ const getPropertyLabel = (prop: string, clip?: KeyframeTrackClip | null): string
     if (prop === 'rotation.x') return 'Pitch';
     if (prop === 'rotation.y') return 'Yaw';
     if (prop === 'scale.z') return 'Move Z';
+    if (prop === 'scale.all') return 'Zoom';
   }
 
   const labels: Record<string, string> = {
@@ -55,6 +56,7 @@ const getPropertyLabel = (prop: string, clip?: KeyframeTrackClip | null): string
     'position.x': 'Pos X',
     'position.y': 'Pos Y',
     'position.z': 'Pos Z',
+    'scale.all': 'Scale All',
     'scale.x': 'Scale X',
     'scale.y': 'Scale Y',
     'scale.z': 'Scale Z',
@@ -92,6 +94,7 @@ const getValueFromTransform = (transform: ClipTransform, prop: string): number =
     case 'position.x': return transform.position.x;
     case 'position.y': return transform.position.y;
     case 'position.z': return transform.position.z;
+    case 'scale.all': return transform.scale.all ?? 1;
     case 'scale.x': return transform.scale.x;
     case 'scale.y': return transform.scale.y;
     case 'scale.z': return transform.scale.z ?? 0;

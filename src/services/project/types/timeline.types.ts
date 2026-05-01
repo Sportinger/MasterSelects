@@ -4,6 +4,7 @@ export interface ProjectTransform {
   x: number;
   y: number;
   z: number;
+  scaleAll?: number;
   scaleX: number;
   scaleY: number;
   scaleZ?: number;

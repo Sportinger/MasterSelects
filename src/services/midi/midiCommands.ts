@@ -543,6 +543,7 @@ function getClipBaseTransform(clip: TimelineClip): ClipTransform {
       z: clip.transform?.position?.z ?? DEFAULT_TRANSFORM.position.z,
     },
     scale: {
+      ...(clip.transform?.scale?.all !== undefined ? { all: clip.transform.scale.all } : {}),
       x: clip.transform?.scale?.x ?? DEFAULT_TRANSFORM.scale.x,
       y: clip.transform?.scale?.y ?? DEFAULT_TRANSFORM.scale.y,
       ...(clip.transform?.scale?.z !== undefined ? { z: clip.transform.scale.z } : {}),
@@ -566,7 +567,10 @@ function getTransformParameterValue(transform: ClipTransform, property: string):
   }
 
   if (property.startsWith('scale.')) {
-    const axis = property.split('.')[1] as 'x' | 'y' | 'z';
+    const axis = property.split('.')[1] as 'all' | 'x' | 'y' | 'z';
+    if (axis === 'all') {
+      return getFiniteNumber(transform.scale?.all ?? 1);
+    }
     return getFiniteNumber(transform.scale?.[axis]);
   }
 
@@ -627,7 +631,10 @@ function resolveTransformParameterValue(clip: TimelineClip, property: string): n
   }
 
   if (property.startsWith('scale.')) {
-    const axis = property.split('.')[1] as 'x' | 'y' | 'z';
+    const axis = property.split('.')[1] as 'all' | 'x' | 'y' | 'z';
+    if (axis === 'all') {
+      return getFiniteNumber(clip.transform?.scale?.all ?? 1);
+    }
     return getFiniteNumber(clip.transform?.scale?.[axis]);
   }
 

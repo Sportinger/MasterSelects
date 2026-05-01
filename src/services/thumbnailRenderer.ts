@@ -6,6 +6,7 @@ import { compositionRenderer } from './compositionRenderer';
 import type { Effect, Layer } from '../types';
 import { useMediaStore } from '../stores/mediaStore';
 import { splitLayerEffects } from '../engine/render/layerEffectStack';
+import { getEffectiveScale } from '../utils/transformScale';
 
 const log = Logger.create('ThumbnailRenderer');
 
@@ -965,7 +966,7 @@ class ThumbnailRendererService {
       source: clip.source as Layer['source'],
       effects: (clip.effects || []) as Effect[],
       position: { x: transform.position?.x || 0, y: transform.position?.y || 0, z: transform.position?.z || 0 },
-      scale: transform.scale || { x: 1, y: 1 },
+      scale: getEffectiveScale(transform.scale),
       rotation: typeof transform.rotation === 'number'
         ? transform.rotation
         : (transform.rotation?.z || 0),

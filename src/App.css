@@ -3771,9 +3771,18 @@ input, textarea {
   column-gap: 6px;
 }
 
+.transform-tab-compact .labeled-value.with-keyframe-toggle {
+  grid-template-columns: 18px minmax(12px, max-content) max-content;
+  column-gap: 4px;
+}
+
 .transform-tab-compact .rotation-value-ae {
   grid-template-columns: minmax(28px, max-content) max-content max-content;
   column-gap: 5px;
+}
+
+.transform-tab-compact .rotation-value-ae.with-keyframe-toggle {
+  grid-template-columns: 18px minmax(28px, max-content) max-content max-content;
 }
 
 .transform-tab-compact .labeled-value-label {

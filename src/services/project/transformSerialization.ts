@@ -20,6 +20,7 @@ type ClipTransformLike = Partial<ClipTransform> & {
   scaleX?: number;
   scaleY?: number;
   scaleZ?: number;
+  scaleAll?: number;
   rotation?: number | { x?: number; y?: number; z?: number };
   rotationX?: number;
   rotationY?: number;
@@ -40,6 +41,9 @@ export function toProjectTransform(transform: ClipTransformLike | undefined): Pr
     x: finiteNumber(position?.x ?? transform?.x, DEFAULT_CLIP_TRANSFORM.position.x),
     y: finiteNumber(position?.y ?? transform?.y, DEFAULT_CLIP_TRANSFORM.position.y),
     z: finiteNumber(position?.z ?? transform?.z, DEFAULT_CLIP_TRANSFORM.position.z),
+    ...(scale?.all !== undefined || transform?.scaleAll !== undefined
+      ? { scaleAll: finiteNumber(scale?.all ?? transform?.scaleAll, 1) }
+      : {}),
     scaleX: finiteNumber(scale?.x ?? transform?.scaleX, DEFAULT_CLIP_TRANSFORM.scale.x),
     scaleY: finiteNumber(scale?.y ?? transform?.scaleY, DEFAULT_CLIP_TRANSFORM.scale.y),
     ...(scaleZ !== undefined ? { scaleZ: finiteNumber(scaleZ, 1) } : {}),
@@ -72,6 +76,9 @@ export function fromProjectTransform(transform: ProjectTransform | ClipTransform
       z: finiteNumber(position?.z ?? normalizedTransform?.z, DEFAULT_CLIP_TRANSFORM.position.z),
     },
     scale: {
+      ...(scale?.all !== undefined || normalizedTransform?.scaleAll !== undefined
+        ? { all: finiteNumber(scale?.all ?? normalizedTransform?.scaleAll, 1) }
+        : {}),
       x: finiteNumber(scale?.x ?? normalizedTransform?.scaleX, DEFAULT_CLIP_TRANSFORM.scale.x),
       y: finiteNumber(scale?.y ?? normalizedTransform?.scaleY, DEFAULT_CLIP_TRANSFORM.scale.y),
       ...(scaleZ !== undefined ? { z: finiteNumber(scaleZ, 1) } : {}),

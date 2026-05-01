@@ -8,7 +8,7 @@ import type { SceneCameraConfig, SceneGizmoAxis, SceneGizmoMode } from '../engin
 
 export interface SceneCameraLiveOverride {
   position?: Partial<{ x: number; y: number; z: number }>;
-  scale?: Partial<{ x: number; y: number; z: number }>;
+  scale?: Partial<{ all: number; x: number; y: number; z: number }>;
   rotation?: Partial<{ x: number; y: number; z: number }>;
 }
 

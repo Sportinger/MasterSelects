@@ -107,7 +107,7 @@ The Transform tab becomes scene-navigation controls for the active camera clip. 
 
 When Edit mode is enabled while the playhead is over a camera clip, the preview switches to a temporary edit-view camera. Orbiting, panning, and zooming this view does not write transform changes back to the real camera clip; entering and leaving Edit mode blends between the edit-view camera and the timeline camera. In that edit-view, shortcuts `1`, `2`, and `3` animate to orthographic Front, Side, and Top views, and `4` animates back to the normal edit-view camera. Edit views draw a projected Blender-style world grid that animates with the camera view instead of snapping as a screen overlay: Front uses XY at `z=0`, Side uses YZ at `x=0`, and Top/free camera uses XZ at `y=0`. In the camera edit views, wheel zoom and Shift-drag/MMB/RMB pan only move the temporary viewport, regular 3D object handles stay visible and selectable, and selecting a non-camera 3D object activates the same native scene gizmo used by the normal preview. The real timeline camera is drawn as a small projected camera wireframe with a direction/frustum indicator. The full viewport gizmo appears only when that camera clip is selected in the normal edit-view camera, and explicit gizmo drags still edit the camera clip through the normal transform/keyframe path. Camera clips do not show a viewport gizmo in the normal view. The 2D layer bounding-box editor is only active in Edit mode when no camera clip is active at the playhead.
 
-Camera rotation keyframes interpolate through the shortest angular path so timeline flights do not spin the long way around when yaw, pitch, or roll crosses a 360-degree wrap. Camera transform keyframes for pan, distance, zoom, forward travel, and rotation render through world-pose interpolation: the camera eye and target are interpolated between keyed world poses, keeping FPS-look moves, zoom-outs, and vertical-look roll moves from drifting away between keyframes.
+Camera rotation keyframes interpolate through the shortest angular path so timeline flights do not spin the long way around when yaw, pitch, or roll crosses a 360-degree wrap. Camera transform keyframes for pan, distance, zoom (`scale.all`), forward travel, and rotation render through world-pose interpolation: the camera eye and target are interpolated between keyed world poses, keeping FPS-look moves, zoom-outs, and vertical-look roll moves from drifting away between keyframes.
 
 ## Gaussian Splats
 
@@ -167,7 +167,7 @@ If you see avatar-specific code paths in the renderer or AI tooling, treat them 
 
 The Transform tab is context-sensitive:
 
-- For normal 3D layers, it shows position, scale, rotation, opacity, blend mode, and 3D toggles.
+- For normal 3D layers, it shows position, scale, rotation, opacity, blend mode, and 3D toggles. Scale All is stored as `scale.all` and multiplies X/Y/Z at render time, so uniform scale and axis scale can be animated independently.
 - 3D object position fields use scene units. Regular 2D clips still display composition pixel units.
 - For camera clips, it becomes scene-navigation controls.
 - For gaussian splats, it now behaves like a normal 3D object transform surface plus 3D effector toggle.

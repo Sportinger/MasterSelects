@@ -129,7 +129,6 @@ export function EditableDraggableNumber({
   const rawDragDistance = useRef(0);
   const startValue = useRef(0);
   const lastClientX = useRef(0);
-  const hasPointerLock = useRef(false);
   const dragStarted = useRef(false);
   const [isEditing, setIsEditing] = useState(false);
   const [draftValue, setDraftValue] = useState(() => formatEditableValue(value, decimals));
@@ -275,25 +274,10 @@ export function EditableDraggableNumber({
     };
   }, [showBoundsPopover, updatePopoverPlacement]);
 
-  const requestPointerLock = useCallback(() => {
-    const element = spanRef.current;
-    if (!element) return;
-
-    try {
-      const result = element.requestPointerLock?.();
-      if (result && typeof (result as Promise<void>).then === 'function') {
-        (result as Promise<void>).then(
-          () => { hasPointerLock.current = true; },
-          () => { hasPointerLock.current = false; },
-        );
-      } else {
-        requestAnimationFrame(() => {
-          hasPointerLock.current = document.pointerLockElement === element;
-        });
-      }
-    } catch {
-      hasPointerLock.current = false;
-    }
+  const readDragDeltaX = useCallback((event: MouseEvent) => {
+    const dx = event.clientX - lastClientX.current;
+    lastClientX.current = event.clientX;
+    return dx;
   }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -311,17 +295,15 @@ export function EditableDraggableNumber({
     rawDragDistance.current = 0;
     startValue.current = value;
     lastClientX.current = e.clientX;
-    hasPointerLock.current = false;
     dragStarted.current = false;
 
     const handleMouseMove = (event: MouseEvent) => {
-      let dx = 0;
-      if (hasPointerLock.current && document.pointerLockElement) {
-        dx = event.movementX;
-      } else {
-        dx = event.clientX - lastClientX.current;
-        lastClientX.current = event.clientX;
+      if ((event.buttons & 1) !== 1) {
+        handleMouseUp();
+        return;
       }
+
+      const dx = readDragDeltaX(event);
 
       if (!dragStarted.current) {
         rawDragDistance.current += dx;
@@ -330,7 +312,10 @@ export function EditableDraggableNumber({
         }
         dragStarted.current = true;
         onDragStart?.();
-        requestPointerLock();
+      }
+
+      if (dx === 0) {
+        return;
       }
 
       let modifierMultiplier = 1;
@@ -347,10 +332,6 @@ export function EditableDraggableNumber({
     };
 
     const handleMouseUp = () => {
-      if (hasPointerLock.current || document.pointerLockElement) {
-        document.exitPointerLock();
-      }
-      hasPointerLock.current = false;
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       if (dragStarted.current) {
@@ -369,7 +350,7 @@ export function EditableDraggableNumber({
     onDragEnd,
     onDragStart,
     openBoundsPopover,
-    requestPointerLock,
+    readDragDeltaX,
     sensitivity,
     showBoundsPopover,
     isEditing,
